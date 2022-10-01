@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+
+import json
+import sys
+
+
+def main():
+    """
+    Read json output of admin socket command 'objecter_requests' from
+    stdin, and check it for internal consistency and presence of
+    fields.
+    """
+    read = sys.stdin.read()
+    reqs = json.loads(read)
+
+    op_types = ['linger_ops', 'ops', 'pool_ops', 'pool_stat_ops', 'statfs_ops', 'command_ops']
+    assert sorted(reqs.keys()) == sorted(op_types)
+
+    found_error = check_osd_ops(reqs['ops'] + reqs['linger_ops'])
+    assert not found_error, "ERRORS FOUND!"
+
+
+def check_osd_ops(ops):
+    pg_map = {}
+    locators = {}
+    osds = {}
+    found_error = [False]
+
+    def add_to_mapping(mapping, key, value, msg):
+        if key in mapping:
+            if mapping[key] != value:
+                print('%s != %s' % (mapping[key], value))
+                print(msg)
+                found_error[0] = True
+        else:
+            mapping[key] = value
+
+    for op in ops:
+        add_to_mapping(
+            mapping=pg_map,
+            key=(op['object_id'], op['object_locator']),
+            value=op['pg'],
+            msg='ERROR: two ops for the same object mapped to different pgs',
+            )
+        add_to_mapping(
+            mapping=locators,
+            key=op['object_id'],
+            value=op['object_locator'],
+            msg='ERROR: requests to the same object had different locators',
+            )
+        add_to_mapping(
+            mapping=osds,
+            key=op['pg'],
+            value=op['osd'],
+            msg='ERROR: two ops mapped a pg to different osds',
+            )
+    return found_error[0]
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,1187 @@
+commit 198236d68deceb16b6b590d807786a140209bfea (tag: refs/tags/v0.80.2, refs/remotes/gh/last)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Wed Jul 9 19:32:26 2014 +0000
+
+    0.80.2
+
+commit 0b6bd2545925b5e8a80d41de1fda13ffe9d30e2b
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Jul 9 12:04:49 2014 -0700
+
+    Revert "rgw: if extra data pool name is empty, use data pool name instead"
+    
+    This breaks multipart uploads on firefly, though not on master.
+    Revert for now so we can release 0.80.2.
+    
+    This reverts commit 5fd8b0d1639c67e355f0fc0d7e6d7036618d87a1.
+
+commit 9426c4faa9ca327f18f20a57ba772b08d6f069e7
+Merge: b81a277 4733178
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 8 10:06:01 2014 -0700
+
+    Merge pull request #2083 from ceph/wip-8727.firefly
+    
+    messages: MForward: fix compat version
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 4733178c3a8f57c54196f176b20154415783dba0
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Tue Jul 8 16:46:27 2014 +0100
+
+    messages: MForward: fix compat version
+    
+    A while ago we bumped the head version and reset the compat version to 0.
+    Doing this so happens to make the messenger assume that the message does
+    not support the compat versioning and sets the compat version to the head
+    version -- thus making compat = 2 when it should have been 1.
+    
+    The nasty side-effect of this is that upgrading from emperor to firefly
+    will have emperor-leaders being unable to decode forwarded messages from
+    firefly-peons.
+    
+    Fixes: #8727
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit c92feebb81f90344a085f8256f0ed03cdc2f14e1)
+
+commit b81a2777aea636ffe544e737cd8e17dc892ba328
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Thu Jul 3 16:11:24 2014 -0700
+
+    ceph.spec.in: add bash completion file for radosgw-admin
+    
+    Signed-off-by: Sandon Van Ness <sandon@inktank.com>
+    (cherry picked from commit b70096307130bcbac176704493a63c5d039d3edc)
+
+commit 4649d7e90ffec89b452aef69cf833522bdb81f88
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Thu Jul 3 16:10:55 2014 -0700
+
+    ceph.spec.in: rhel7-related changes:
+    
+    udev rules: /lib -> /usr/lib
+    /sbin binaries move to /usr/sbin or %{_sbindir}
+    
+    Signed-off-by: Sandon Van Ness <sandon@inktank.com>
+    (cherry picked from commit 235e4c7de8f8efe491edefbdde8e5da4dfc44034)
+    
+    Conflicts:
+    	ceph.spec.in
+
+commit 38a9566e70d3a2de80c7547fd4e84c8372639f80
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Thu Jul 3 16:08:44 2014 -0700
+
+    Fix/add missing dependencies:
+    
+    - rbd-fuse depends on librados2/librbd1
+    - ceph-devel depends on specific releases of libs and libcephfs_jni1
+    - librbd1 depends on librados2
+    - python-ceph does not depend on libcephfs1
+    
+    Signed-off-by: Sandon Van Ness <sandon@inktank.com>
+    (cherry picked from commit 7cf81322391b629b241da90181800ca1f138ce78)
+    
+    Conflicts:
+    	ceph.spec.in
+
+commit 733c89dc6af89321ee58ad78b30bc6a0c4e78291
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Thu Jul 3 16:05:00 2014 -0700
+
+    ceph.spec.in: whitespace fixes
+    
+    Signed-off-by: Sandon Van Ness <sandon@inktank.com>
+    (cherry picked from commit ec8af52a5ede78511423a1455a496d46d580c644)
+    
+    Conflicts:
+    	ceph.spec.in
+
+commit 21b03bc96ab1a0877235f1e3e4a96899cba2b4fa
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Thu Jul 3 16:04:10 2014 -0700
+
+    ceph.spec.in: split out ceph-common as in Debian
+    
+    Move files, postun scriptlet, and add dependencies on ceph-common
+    where appropriate
+    
+    Signed-off-by: Sandon Van Ness <sandon@inktank.com>
+    (cherry picked from commit e131b9d5a5e90e87d8a8346cb96cb5a26135c144)
+
+commit dbee797d1344aec47fedc8d3fdd6c9460e0ffa16
+Merge: 6d6039a 9e81fc1
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 7 09:40:51 2014 -0700
+
+    Merge pull request #2057 from ceph/wip-8593-firefly
+    
+    mon: backport health check improvements
+    
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+
+commit 6d6039a5a56743c006a0d081157cb6ee9e3b7af6
+Author: Greg Farnum <greg@inktank.com>
+Date:   Thu Jul 3 16:30:49 2014 -0700
+
+    mon: check changes to the whole CRUSH map and to tunables against cluster features
+    
+    When we change the tunables, or set a new CRUSH map, we need to make sure it's
+    supported by all the monitors and OSDs currently participating in the cluster.
+    
+    Fixes: #8738
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 54af8104816ccc76aad251aa47a6efc1bf879e7d)
+
+commit 0a8d194f2c44a73c31ae8c52fabb430d66d4a1b1
+Author: Greg Farnum <greg@inktank.com>
+Date:   Thu Jul 3 15:24:30 2014 -0700
+
+    OSDMonitor: fix quorum_features comparison in check_cluster_features
+    
+    We need to see if there's a feature which is not in the quorum_features,
+    not if there are no features in common!
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 2280c0eaa9f3f733062085a5e7f7dc23c3bbe291)
+
+commit a49c61222f8014db533d8f505ec44d10dc5478e6
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 16 12:57:36 2014 -0700
+
+    ceph_test_rados_api_tier: disable LibRadosTierECPP::HitSetWrite
+    
+    Disable this test until hitget-get reliably works on EC pools (currently
+    it does not, and this test usually passes only because we get the in-memory
+    HitSet).
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c5b5ed672c039cc4fa04772e065a59d3b1df803a)
+
+commit 828ce4055c8580e42175159c02a9dfa76bc414ff
+Merge: b9b498e b1a4a7c
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jul 4 21:18:32 2014 -0700
+
+    Merge pull request #2073 from ceph/wip-rgw-firefly-2
+    
+    rgw: more firefly backports
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit b1a4a7cb91e164d1f8af8ce9319e3b3c1949858d
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Jun 11 16:50:41 2014 -0700
+
+    rgw: set a default data extra pool name
+    
+    Fixes: #8585
+    Have a default name for the data extra pool, otherwise it would be empty
+    which means that it'd default to the data pool name (which is a problem
+    with ec backends).
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit b2542f8e880e45bb6d052f13eb3ef6a7c61e4cd4)
+
+commit b9b498e6a7794205af8aa99ffe5266e478c0e711
+Merge: f285266 053c261
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 3 07:00:52 2014 -0700
+
+    Merge pull request #2028 from ceph/wip-rgw-firefly
+    
+    rgw: a couple backports for firefly
+    
+    Passed the rgw suite, modulo a python bootstrap issue.
+    
+    sage-2014-07-01_09:50:22-rgw-wip-rgw-firefly-testing-basic-plana/337393
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 9f06e2c16e409a9a8284af9964f0cfff6e222164
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 30 12:55:45 2014 -0700
+
+    rgw: fix uninit ofs in RGWObjManifect::obj_iterator
+    
+    Valgrind picked this up:
+    
+      <kind>UninitCondition</kind>
+      <what>Conditional jump or move depends on uninitialised value(s)</what>
+      <stack>
+        <frame>
+          <ip>0x5145B8</ip>
+          <obj>/usr/bin/radosgw</obj>
+          <fn>RGWObjManifest::obj_iterator::seek(unsigned long)</fn>
+          <dir>/srv/autobuild-ceph/gitbuilder.git/build/out~/ceph-0.82-354-g62027ec/src/rgw</dir>
+          <file>rgw_rados.cc</file>
+          <line>562</line>
+        </frame>
+        <frame>
+          <ip>0x5672A4</ip>
+          <obj>/usr/bin/radosgw</obj>
+          <fn>list_multipart_parts(RGWRados*, req_state*, std::string const&amp;, std::string&amp;, int, int, std::map&lt;unsigned int, RGWUploadPartInfo, std::less&lt;unsigned int&gt;, std::allocator&lt;std::pair&lt;unsigned int const, RGWUploadPartInfo&gt; &gt; &gt;&amp;, int*, bool*, bool)</fn>
+          <dir>/srv/autobuild-ceph/gitbuilder.git/build/out~/ceph-0.82-354-g62027ec/src/rgw</dir>
+          <file>rgw_rados.h</file>
+          <line>217</line>
+        </frame>
+        <frame>
+          <ip>0x5688EE</ip>
+          <obj>/usr/bin/radosgw</obj>
+          <fn>RGWListMultipart::execute()</fn>
+          <dir>/srv/autobuild-ceph/gitbuilder.git/build/out~/ceph-0.82-354-g62027ec/src/rgw</dir>
+          <file>rgw_op.cc</file>
+          <line>2956</line>
+        </frame>
+    ...
+    
+    Fixes: #8699
+    Backport: firefly
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e0d3b78b6af523ae77b0cee385cd40f67f7a0ab6)
+
+commit 5fd8b0d1639c67e355f0fc0d7e6d7036618d87a1
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri May 30 14:47:25 2014 -0700
+
+    rgw: if extra data pool name is empty, use data pool name instead
+    
+    Fixes: #8311
+    An empty pool name could be used as the extra data pool.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit b300318113b162522759d4794b1cfa3d1d9398e4)
+
+commit cbad09e1907ceac4feb069f9cf257e580f36da91
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue May 6 15:35:20 2014 -0700
+
+    rgw: extend manifest to avoid old style manifest
+    
+    In case we hit issue #8269 we'd like to avoid creating an old style
+    manifest. Since we need to have parts that use different prefix we add a
+    new rule param that overrides the manifest prefix.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 545d8ad1d2dfe53b967ab1bd17dfeb1780abbb5e)
+
+commit ea68b9372319fd0bab40856db26528d36359102e
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri May 2 17:06:05 2014 -0700
+
+    rgw: don't allow multiple writers to same multiobject part
+    
+    Fixes: #8269
+    Backport: firefly, dumpling
+    
+    A client might need to retry a multipart part write. The original thread
+    might race with the new one, trying to clean up after it, clobbering the
+    part's data.
+    The fix is to detect whether an original part already existed, and if so
+    use a different part name for it.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit bd8e026f88b812cc70caf6232c247844df5d99bf)
+
+commit f285266a320bf22df8b09a669d1c1fd400b05765
+Merge: d43e711 6a0dd1b
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 1 16:16:09 2014 -0700
+
+    Merge pull request #2056 from ceph/wip-8010
+    
+    Revert "mon: OSDMonitor: Refuse to delete CephFS pools"
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 9e81fc180a3999ebec95949a2cb31fea970573fb
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 16 17:00:51 2014 -0700
+
+    mon: ensure HealthService warning(s) include a summary
+    
+    The low disk space check would change our status to HEALTH_WARN and include
+    a detail message, but no summary.  We need both.
+    
+    Backport: firefly
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3ed7f2dd4345633ff34017b201082f4c261ef387)
+
+commit e96637c2e33ec092f28af0ce96bfe2e4d7748ff8
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 16 16:58:14 2014 -0700
+
+    mon: refactor check_health()
+    
+    Refactor the get_health() methods to always take both a summary and detail.
+    Eliminate the return value and pull that directly from the summary, as we
+    already do with the PaxosServices.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 82e47db8073b622183a5e33f6e0b999a3a144804)
+
+commit 28584200df36dda5d434d4d7f58585933905de30
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 16 16:40:05 2014 -0700
+
+    mon: fix typos, punctuation for mon disk space warning(s)
+    
+    Backport: firefly
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 98883f6308ce72f69a71feab29ef00e13f319cdb)
+    
+    Conflicts:
+    
+    	src/mon/DataHealthService.cc
+
+commit 4f0666085e2fd553ccc05cef8510aae820849aca
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 16 16:27:05 2014 -0700
+
+    mon/OSDMonitor: make down osd count sensible
+    
+    We currently log something like
+    
+     1/10 in osds are down
+    
+    in the health warning when there are down OSDs, but this is based on a
+    comparison of the number of up vs the number of in osds, and makes no sense
+    when there are up osds that are not in.
+    
+    Instead, count only the number OSDs that are both down and in (relative to
+    the total number of OSDs in) and warn about that.  This means that, if a
+    disk fails, and we mark it out, and the cluster fully repairs itself, it
+    will go back to a HEALTH_OK state.
+    
+    I think that is a good thing, and certainly preferable to the current
+    nonsense.  If we want to distinguish between down+out OSDs that were failed
+    vs those that have been "acknowledged" by an admin to be dead, we will
+    need to add some additional state (possibly reusing the AUTOOUT flag?), but
+    that will require more discussion.
+    
+    Backport: firefly (maybe)
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 55a97787088b79356c678a909b2410b3924e7f5b)
+
+commit 6a0dd1be909b423f52e2c7f11531b278dc8838ae
+Author: John Spray <john.spray@redhat.com>
+Date:   Tue Jul 1 22:04:25 2014 +0100
+
+    Revert "mon: OSDMonitor: Refuse to delete CephFS pools"
+    
+    This reverts commit c7d265a9b276aad5caf9b35f3ce8bc7bdd169f0f.
+    
+    Because this pre-dates the `fs rm` command, this change was
+    preventing firefly users from ever deleting their filesystem pools.
+    
+    Fixes: #8010
+    
+    Signed-off-by: John Spray <john.spray@redhat.com>
+
+commit 053c261e5bfcb4d39770048775515eb6a667f987
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Jun 4 09:24:33 2014 -0700
+
+    rgw: set meta object in extra flag when initializing it
+    
+    As part of the fix for 8452 we moved the meta object initialization.
+    Missed moving the extra flag initialization that is needed. This breaks
+    setups where there's a separate extra pool (needed in ec backends).
+    
+    Reported-by: Sylvain Munaut <s.munaut@whatever-company.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 703d0eb9bffdf6c553b659728a3a07f068fb15ee)
+
+commit d43e7113dd501aea1db33fdae30d56e96e9c3897
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 30 07:05:04 2014 -0700
+
+    qa/workunits/suites/fsx.sh: don't use zero range
+    
+    Zero range is not supported by cephfs.
+    
+    Fixes: #8542
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2dec8a810060f65d022c06e82090b4aa5ccec0cb)
+
+commit ee0d322c0b1ebaba2f225b8bed9af2948fdcf4c3
+Merge: 3ceafcf a7119c3
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Jun 30 17:01:03 2014 +0200
+
+    Merge pull request #1991 from dachary/wip-8307-erasure-code-profile-implicit-creation
+    
+    erasure code profile implicit creation (firefly backport)
+    
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+
+commit a7119c31e9a1b415f56426d2b4cd362357ad8b17
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Jun 11 22:44:57 2014 +0200
+
+    erasure-code: pool create must not create profiles
+    
+    If a non existent profile is provided as an argument to osd pool create,
+    it must exit on error and not create the profile as a side effect.
+    
+    http://tracker.ceph.com/issues/8307 refs: #8307
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit ff2eb234e63cd281b40405cb3397da5babda943f)
+
+commit a67c1c1c51b111f40819643530e07f8026227caa
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Jun 11 22:47:49 2014 +0200
+
+    erasure-code: OSDMonitor::get_erasure_code is a const
+    
+    If it is not, the non const version of OSDMap::get_erasure_code_profile
+    is called and a profile is created as a side effect, which is not
+    intended.
+    
+    http://tracker.ceph.com/issues/8307 refs: #8307
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 3c638111a4943758b6089c63a42aabbf281ac257)
+
+commit 3ceafcf3576efaef58dffbe70654baf1db4f3a1d
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue May 27 10:06:46 2014 +0200
+
+    mon: fix set cache_target_full_ratio
+    
+    It was a noop because it was incorrectly using the variable n. Add a
+    test to protect against regression.
+    
+    http://tracker.ceph.com/issues/8440 Fixes: #8440
+    
+    Reported-by: Geoffrey Hartz <hartz.geoffrey@gmail.com>
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit c2225f874dcf37222d831b65b5a319d598d2fcd9)
+
+commit 5f66a2c99fdef2c8d609126740ca790ce10e67a4
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Jun 16 11:48:24 2014 -0700
+
+    rgw: allocate enough space for bucket instance id
+    
+    Fixes: #8608
+    Backport: dumpling, firefly
+    Bucket instance id is a concatenation of zone name, rados instance id,
+    and a running counter. We need to allocate enough space to account zone
+    name length.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit d2e86a66ca55685e04ffbfaa58452af59f381277)
+
+commit 84d7971c8e50e7d35d7a5fac9353e687f168a1a1
+Author: Alfredo Deza <alfredo.deza@inktank.com>
+Date:   Fri Jun 20 11:14:25 2014 -0400
+
+    log the command that is being run with subprocess
+    
+    Signed-off-by: Alfredo Deza <alfredo.deza@inktank.com>
+    (cherry picked from commit e189a668285f9ab73116bc19f9df1cc515473541)
+
+commit 291d448478360a1be0a9826ada58c94ecd643ad0
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri May 30 16:17:47 2014 -0700
+
+    rgw: fetch object attrs on multipart completion
+    
+    Fixes: #8452
+    Backport: firefly
+    This fixes a regression following a code cleanup.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 70afaaabf979d4cc1a14dbc2b772224cbafcac2f)
+
+commit 2fd808fe93fe0cbd8754eb81d281c83254411039
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu May 22 18:27:58 2014 -0700
+
+    rgw: check appropriate entity permission on put_metadata
+    
+    Fixes: #8428
+    Backport: firefly
+    
+    Cannot use verify_object_permission() to test acls, as the operation
+    here might either be on object or on bucket.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 2ceb13af34bc38b418bb88d81131d770a71159bf)
+
+commit d1afeb38b522baae1b15a7a3548002c830bb7567
+Author: Ilya Dryomov <ilya.dryomov@inktank.com>
+Date:   Thu Jun 5 10:08:42 2014 +0400
+
+    XfsFileStoreBackend: call ioctl(XFS_IOC_FSSETXATTR) less often
+    
+    No need to call ioctl(XFS_IOC_FSSETXATTR) if extsize is already set to
+    the value we want or if any extents are allocated - XFS will refuse to
+    change extsize in that's the case.
+    
+    Fixes: #8241
+    Signed-off-by: Ilya Dryomov <ilya.dryomov@inktank.com>
+    (cherry picked from commit bc3b30ed09b8f3eb86b61e3a05ccacfd928faa95)
+
+commit 7b8e5c99a4a40ae788ad29e36b0d714f529b12eb
+Author: John Spray <john.spray@inktank.com>
+Date:   Tue May 20 16:25:19 2014 +0100
+
+    mon: Fix default replicated pool ruleset choice
+    
+    Specifically, in the case where the configured
+    default ruleset is CEPH_DEFAULT_CRUSH_REPLICATED_RULESET,
+    instead of assuming ruleset 0 exists, choose the lowest
+    numbered ruleset.
+    
+    In the case where an explicit ruleset is passed to
+    OSDMonitor::prepare_pool_crush_ruleset, verify
+    that it really exists.
+    
+    The idea is to eliminate cases where a pool could
+    exist with its crush ruleset set to something
+    other than a value ruleset ID.
+    
+    Fixes: #8373
+    
+    Signed-off-by: John Spray <john.spray@inktank.com>
+    (cherry picked from commit 1d9e4ac2e2bedfd40ee2d91a4a6098150af9b5df)
+    
+    Conflicts:
+    
+    	src/crush/CrushWrapper.h
+
+commit 25a4a874c8e53cd644d6705478fbea4fdb232c4d
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri May 23 14:58:54 2014 -0700
+
+    rgw: calc md5 and compare if user provided appropriate header
+    
+    Fixes: #8436
+    Backport: firefly
+    
+    This was broken in ddc2e1a8e39a5c6b9b224c3eebd1c0e762ca5782. The fix
+    resurrects and old check that was dropped.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 9c56c86bdac6bcb8e76c3f04e7d393e4eaadd721)
+
+commit ad18a45a71be34899d9400c8bdef39d0548f9aaf
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Apr 21 15:07:12 2014 -0700
+
+    rgw: calculate user manifest
+    
+    Fixes: #8169
+    Backport: firefly
+    We didn't calculate the user manifest's object etag at all. The etag
+    needs to be the md5 of the contantenation of all the parts' etags.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit ddc2e1a8e39a5c6b9b224c3eebd1c0e762ca5782)
+
+commit 6aa7f7ee4e082819decc48da1f0eaffc4e616302
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 3 11:45:20 2014 -0700
+
+    librados: simplify/fix rados_pool_list bounds checks
+    
+    We were not breaking out of the loop when we filled up the buffer unless
+    we happened to do so on a pool name boundary.  This means that len would
+    roll over (it was unsigned).  In my case, I was not able to reproduce
+    anything particularly bad since (I think) the strncpy was interpreting the
+    large unsigned value as signed, but in any case this fixes it, simplifies
+    the arithmetic, and adds a simple test.
+    
+    - use a single 'rl' value for the amount of buffer space we want to
+      consume
+    - use this to check that there is room and also as the strncat length
+    - rely on the initial memset to ensure that the trailing 0 is in place.
+    
+    Fixes: #8447
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3ec32a6bb11d92e36a0e6381b40ce2fd1fbb016a)
+
+commit 2ba03e08f1bce0a8af87014583d635eb5c0aa376
+Merge: 50dc246 3ad451e
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jun 25 12:42:11 2014 -0700
+
+    Merge pull request #1982 from accelazh/firefly-fix-issue-8256
+    
+    Make <poolname> in "ceph osd tier --help" clearer (fix issue 8256).
+    
+    Reviewed-by: Loic Dachary <loic@dachary.org>
+
+commit 50dc2462ab96c3457b08c50b4cc07676b50dbf72
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Jun 3 16:14:15 2014 -0700
+
+    OSD::calc_priors_during: handle CRUSH_ITEM_NONE correctly
+    
+    Fixes: #8507
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 0bd6f6797c69af9aff851033c57c42121671c684)
+    
+    Conflicts:
+    	src/osd/OSD.cc
+
+commit a53bcf2357c7f351ad520039774d895b8c27987f
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Jun 3 16:11:32 2014 -0700
+
+    OSD::calc_priors_during: fix confusing for loop bracing (cosmetic)
+    
+    Confusing lack of braces is confusing.
+    
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit d76936b92300be5cc403fd5a36616a2424c7877d)
+    
+    Conflicts:
+    	src/osd/OSD.cc
+
+commit 178e6f0f422c9f1b8a51d0e9c364773397a4555f
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Jun 24 10:11:21 2014 -0700
+
+    rados.cc: fix pool alignment check
+    
+    Only check pool alignment if io_ctx is initialized.
+    
+    Introduced in 304b08a23a3db57010078046955a786fe3589ef8
+    Fixes: #8652
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    
+    (cherry picked from commit d7350a3741bf4cdb270c6361e68090fe280cf36d)
+    
+    Conflicts:
+    	src/tools/rados/rados.cc
+
+commit a9f97f8cae5b9d0245e0b0842c5c581cdacbb2da
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 17 13:33:14 2014 -0700
+
+    osd: fix filestore perf stats update
+    
+    Update the struct we are about to send, not the (unlocked!) one we will
+    send the next time around.
+    
+    Backport: firefly, dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4afffb4a10a0bbf7f2018ef3ed6b167c7921e46b)
+
+commit b758fd5f0ebcccdb1641a852d40ee880bad01107
+Author: Greg Farnum <greg@inktank.com>
+Date:   Thu Apr 24 15:34:24 2014 -0700
+
+    FileStore: set XATTR_NO_SPILL_OUT when creating new files.
+    
+    Fixes: #8205
+    Backport: firefly
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit e3b995e1567f3ccc6d00ae27ab2aa99ca157228a)
+
+commit d6f302314fc3580dfc746c9d82bd2f7f0bc87d42
+Author: Haomai Wang <haomaiwang@gmail.com>
+Date:   Sat Jun 7 14:32:23 2014 +0800
+
+    FileStore: make _clone() copy spill out marker
+    
+    Previously we were not doing so, and that resulted in unpredictable loss
+    of xattrs from the client's perspective.
+    
+    Signed-off-by: Haomai Wang <haomaiwang@gmail.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 239476a92849159d2a8966d90ca055c116bee91e)
+
+commit bb2ed23d8129c8db628475d744656b9b43f839c0
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Jun 18 17:01:54 2014 +0200
+
+    erasure-code: verify that rados put enforces alignment
+    
+    http://tracker.ceph.com/issues/8622 refs: #8622
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit b46c4056014dd6de5e3bd736f2c41f096ea708b4)
+
+commit dece65064d949b5afcc359cd408615883b5e002a
+Author: Lluis Pamies-Juarez <lluis@pamies.cat>
+Date:   Wed Jun 18 10:00:09 2014 -0700
+
+    enforce rados put aligment
+    
+    Signed-off-by: Lluis Pamies-Juarez <lluis.pamies-juarez@hgst.com>
+    (cherry picked from commit 304b08a23a3db57010078046955a786fe3589ef8)
+
+commit 203318b8eb3753723277ec7a459239c81097f090
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 6 13:31:29 2014 -0700
+
+    osd/OSDMap: do not require ERASURE_CODE feature of clients
+    
+    Just because an EC pool exists in the cluster does not mean tha tthe client
+    has to support the feature:
+    
+    1) The way client IO is initiated is no different for EC pools than for
+       replicated pools.
+    2) People may add an EC pool to an existing cluster with old clients and
+       locking those old clients out is very rude when they are not using the
+       new pool.
+    3) The only direct client user of EC pools right now is rgw, and the new
+       versions already need to support various other features like CRUSH_V2
+       in order to work.  These features are present in new kernels.
+    
+    Fixes: #8556
+    Backport: firefly
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3fe1699f9620280d0070cfe6f01cfeb2332e7470)
+
+commit 6340b14b9c9a9c786b5448f2ea2a5556055a02e9
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 12 16:44:53 2014 -0700
+
+    osd/OSDMap: make get_features() take an entity type
+    
+    Make the helper that returns what features are required of the OSDMap take
+    an entity type argument, as the required features may vary between
+    components in the cluster.
+    
+    Backport: firefly
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 250677c965365edf3ecd24ef73700fc6d992ea42)
+
+commit 400fa88f6cf8b1e5b4b15d9e36b1de8c3d1c3970
+Author: Haomai Wang <haomaiwang@gmail.com>
+Date:   Wed May 21 18:12:22 2014 +0800
+
+    Avoid extra check for clean object
+    
+    We needn't to check clean object via buffer state, skip the clean object.
+    
+    Signed-off-by: Haomai Wang <haomaiwang@gmail.com>
+    (cherry picked from commit f51e33bd9c5a8e1cfc7065b30785696dc45918bc)
+
+commit 3ad451ef57e2ab3fc644c94d44c2de7a17cced45
+Author: Accela Zhao <accelazh@gmail.com>
+Date:   Wed Jun 18 17:17:03 2014 +0800
+
+    Make <poolname> in "ceph osd tier --help" clearer.
+    
+    The ceph osd tier --help info on the left always says <poolname>.
+    It is unclear which one to put <tierpool> on the right.
+    
+    $ceph osd tier --help
+    osd tier add <poolname> <poolname> {--   add the tier <tierpool> to base pool
+    force-nonempty}                          <pool>
+    osd tier add-cache <poolname>            add a cache <tierpool> of size <size>
+    <poolname> <int[0-]>                     to existing pool <pool>
+    ...
+    
+    This patch modifies description on the right to tell which <poolname>:
+    
+    osd tier add <poolname> <poolname> {--   add the tier <tierpool> (the second
+     force-nonempty}                          one) to base pool <pool> (the first
+                                               one)
+    ...
+    
+    Fix: http://tracker.ceph.com/issues/8256
+    
+    Signed-off-by: Yilong Zhao <accelazh@gmail.com>
+
+commit f290a021bc8ec31c18b91cb37323345692f2f198
+Merge: 5722419 d02d46e
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 16 09:25:32 2014 -0700
+
+    Merge pull request #1962 from dachary/wip-8599-ruleset-firefly
+    
+    mon: pool set <pool> crush_ruleset must not use rule_exists (firefly)
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit d02d46e25080d5f7bb8ddd4874d9019a078b816b
+Author: John Spray <john.spray@inktank.com>
+Date:   Tue May 20 16:50:18 2014 +0100
+
+    mon: pool set <pool> crush_ruleset must not use rule_exists
+    
+    Implement CrushWrapper::ruleset_exists that iterates over the existing
+    rulesets to find the one matching the ruleset argument.
+    
+    ceph osd pool set <pool> crush_ruleset must not use
+    CrushWrapper::rule_exists, which checks for a *rule* existing, whereas
+    the value being set is a *ruleset*. (cherry picked from commit
+    fb504baed98d57dca8ec141bcc3fd021f99d82b0)
+    
+    A test via ceph osd pool set data crush_ruleset verifies the ruleset
+    argument is accepted.
+    
+    http://tracker.ceph.com/issues/8599 fixes: #8599
+    
+    Backport: firefly, emperor, dumpling
+    Signed-off-by: John Spray <john.spray@inktank.com>
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+
+commit 572241942706e2f845a147f19717bf6c487f23f4
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jun 8 20:18:49 2014 -0700
+
+    init-ceph: continue after failure doing osd data mount
+    
+    If we are starting many daemons and hit an error, we normally note it and
+    move on.  Do the same when doing the pre-mount step.
+    
+    Fixes: #8554
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6a7e20147cc39ed4689809ca7d674d3d408f2a17)
+
+commit e5a291ef69316519b105b57193753f0bf8ac8e62
+Author: Steve Taylor <steve@DES-U1404-STETAY.stc.local>
+Date:   Tue Jun 10 12:42:55 2014 -0600
+
+    Fix for bug #6700
+    
+    When preparing OSD disks with colocated journals, the intialization process
+    fails when using dmcrypt. The kernel fails to re-read the partition table after
+    the storage partition is created because the journal partition is already in use
+    by dmcrypt. This fix unmaps the journal partition from dmcrypt and allows the
+    partition table to be read.
+    
+    Signed-off-by: Stephen F Taylor <steveftaylor@gmail.com>
+    (cherry picked from commit 673394702b725ff3f26d13b54d909208daa56d89)
+
+commit 34d9b2bc659c4107b30e1ebe7a55315512a0222a
+Author: John Wilkins <john.wilkins@inktank.com>
+Date:   Thu Jun 5 11:29:20 2014 -0700
+
+    doc: Added Disable requiretty commentary.
+    
+    Signed-off-by: John Wilkins <john.wilkins@inktank.com>
+
+commit 54a89bab15a945d47b3f44448910521a2ebf41c6
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri May 16 16:56:33 2014 -0700
+
+    ReplicatedPG::start_flush: fix clone deletion case
+    
+    dsnapc.snaps will be non-empty most of the time if there
+    have been snaps before prev_snapc.  What we really want to
+    know is whether there are any snaps between oi.snaps.back()
+    and prev_snapc.
+    
+    Fixes: 8334
+    Backport: firefly
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 29f615b7ac9e92f77cdef9927070727fee9d5e33)
+
+commit 308e2ef5c107bf04d3c5623f3c6bdffa10cf8c21
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon May 12 15:08:07 2014 -0700
+
+    ReplicatedPG::start_flush: send delete even if there are no snaps
+    
+    Even if all snaps for the clone have been removed, we still have to
+    send the delete to ensure that when the object is recreated the
+    new snaps aren't included in the wrong clone.
+    
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 2ec2182745fa7c22526a7cf3dedb25bc314c9db4)
+
+commit 8d04a7ece364c0a95b087990d6365401819b3efa
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu May 15 20:53:27 2014 -0700
+
+    HashIndex: in cleanup, interpret missing dir as completed merge
+    
+    If we stop between unlinking the empty subdir and removing the root
+    merge marker, we get ENOENT on the get_info.  That's actually fine.
+    
+    Backport: firefly
+    Fixes: 8332
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 5ff95dbdd2dbb533d344f37fea722ca4f140e670)
+
+commit b2bf8cb21761d88557fb2d5c0935c4a3678ee01f
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Wed May 28 11:48:12 2014 -0400
+
+    add backport of collections.Counter for python2.6
+    
+    Using Raymond Hettinger's MIT backport
+    
+    Signed-off-by: Alfredo Deza <alfredo.deza@inktank.com>
+    (cherry picked from commit 23b75b550507438c79b3aa75e06721e5f7b134a4)
+
+commit 0b00443eec4c372f2ef245f85dc7c1f497ba3778
+Author: Ailing <ailzhang@users.noreply.github.com>
+Date:   Wed May 28 12:37:48 2014 -0700
+
+    rest-api: key missing for per "rx" and "rwx"
+    
+    commit 85a1cf31e6 and db266a3fb2 introduce new per "rx" and "rwx", but key missing for per "rx" and "rwx" in permmap
+    
+    Signed-off-by: Ailing Zhang <ailzhang@cisco.com>
+    (cherry picked from commit 0b5a67410793ec28cac47e6e44cbbcf5684d77e7)
+
+commit a898ee56e01f971c12c0f7bebc22e59f850f27c0
+Author: Greg Farnum <greg@inktank.com>
+Date:   Wed May 21 21:41:23 2014 -0700
+
+    cephfs-java: build against older jni headers
+    
+    Older versions of the JNI interface expected non-const parameters
+    to their memory move functions. It's unpleasant, but won't actually
+    change the memory in question, to do a cast_const in order to satisfy
+    those older headers. (And even if it *did* modify the memory, that
+    would be okay given our single user.)
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 4d4b77e5b6b923507ec4a0ad9d5c7018e4542a3c)
+
+commit 8a12a940817d957063c21ac71a6128f991801573
+Author: Ilya Dryomov <ilya.dryomov@inktank.com>
+Date:   Fri May 16 19:03:13 2014 +0400
+
+    OSDMonitor: set next commit in mon primary-affinity reply
+    
+    Commit 8c5c55c8b47e ("mon: set next commit in mon command replies")
+    fixed MMonCommand replies to include the right version, but the
+    primary-affinity handler was authored before that.  Fix it.
+    
+    Backport: firefly
+    Signed-off-by: Ilya Dryomov <ilya.dryomov@inktank.com>
+    (cherry picked from commit a78b14ec1769ef37bef82bfda6faabb581b4cd7d)
+
+commit 6ba57da94a6e00040677d6e43abf10a36ed9a931
+Author: Dmitry Smirnov <onlyjob@member.fsf.org>
+Date:   Mon May 12 14:08:44 2014 +1000
+
+    prioritise use of `javac` executable (gcj provides it through alternatives).
+    
+     On Debian this fixes FTBFS when gcj-jdk and openjdk-7-jdk are installed at
+     the same time because build system will use default `javac` executable
+     provided by current JDK through `update-alternatives` instead of blindly
+     calling GCJ when it is present.
+    
+    Signed-off-by: Dmitry Smirnov <onlyjob@member.fsf.org>
+    (cherry picked from commit 8b682d167e4535df582f1c77542e2b1ea0981228)
+
+commit 9e335a494c6eff209cff64bd663b5aa2a7bbc242
+Author: Dmitry Smirnov <onlyjob@member.fsf.org>
+Date:   Mon May 12 14:02:53 2014 +1000
+
+    pass '-classpath' option (gcj/javah ignores CLASSPATH environment variable).
+    
+     This should not affect OpenJDK which understands '-classpath' as well.
+    
+     With gcj-jdk we still get FTBFS later:
+    
+     ~~~~
+        java/native/libcephfs_jni.cc:2878:55: error: invalid conversion from 'const jbyte* {aka const signed char*}' to 'jbyte* {aka signed char*}' [-fpermissive]
+                     reinterpret_cast<const jbyte*>(rawAddress));
+                                                               ^
+        In file included from java/native/libcephfs_jni.cc:27:0:
+        /usr/lib/gcc/x86_64-linux-gnu/4.8/include/jni.h:1471:8: error:   initializing argument 4 of 'void _Jv_JNIEnv::SetByteArrayRegion(jbyteArray, jsize, jsize, jbyte*)' [-fpermissive]
+           void SetByteArrayRegion (jbyteArray val0, jsize val1, jsize val2, jbyte * val3)
+                ^
+        make[5] *** [java/native/libcephfs_jni_la-libcephfs_jni.lo] Error 1
+     ~~~~
+    
+    Signed-off-by: Dmitry Smirnov <onlyjob@member.fsf.org>
+    (cherry picked from commit 89fe0353582bde7e2fbf32f1626d430a20002dd0)
+
+commit fcd30500790eac0266ffb70d83ee17b23aeaf209
+Author: Dmitry Smirnov <onlyjob@member.fsf.org>
+Date:   Mon May 12 13:57:20 2014 +1000
+
+    look for "jni.h" in gcj-jdk path, needed to find "jni.h" with gcj-jdk_4.9.0
+    
+    Signed-off-by: Dmitry Smirnov <onlyjob@member.fsf.org>
+    (cherry picked from commit 0f4120c0115e7977ae7c03458addcc2b2916db07)
+
+commit de43f6d2d813d2c7e5cf915c1b9037fe662d6afc
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 8 08:52:51 2014 -0700
+
+    ceph-disk: partprobe before settle when preparing dev
+    
+    Two users have reported this fixes a problem with using --dmcrypt.
+    
+    Fixes: #6966
+    Tested-by: Eric Eastman <eric0e@aol.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 0f196265f049d432e399197a3af3f90d2e916275)
+
+commit fe1fbfb7a43d6590efce99711e47f986249f0956
+Author: Greg Farnum <greg@inktank.com>
+Date:   Tue May 13 13:15:28 2014 -0700
+
+    test: fix some templates to match new output code
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 00225d739cefa1415524a3de45fb9a5a2db53018)
+
+commit 5c8afaa8861345efbcc5488e0336327a8a38d3bc
+Author: Greg Farnum <greg@inktank.com>
+Date:   Thu May 15 16:50:43 2014 -0700
+
+    OSD: fix an osdmap_subscribe interface misuse
+    
+    When calling osdmap_subscribe, you have to pass an epoch newer than the
+    current map's. _maybe_boot() was not doing this correctly -- we would
+    fail a check for being *in* the monitor's existing map range, and then
+    pass along the map prior to the monitor's range. But if we were exactly
+    one behind, that value would be our current epoch, and the request would
+    get dropped. So instead, make sure we are not *in contact* with the monitor's
+    existing map range.
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 290ac818696414758978b78517b137c226110bb4)
+
+commit eb98f4ab3a27aa8e00e0eb7e504ca7bec7c48a06
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon May 19 10:32:12 2014 -0700
+
+    osd: skip out of order op checks on tiered pools
+    
+    When we send redirected ops, we do not assign a new tid, which means that
+    a given client's ops for a pool may not have strictly ordered tids.  Skip
+    this check if the pool is tiered to avoid false positives.
+    
+    Fixes: #8380
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit cf2b172c843da0599164901956b66c306a59e570)
+
+commit 29ee6faecb9e16c63acae8318a7c8f6b14367af7
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue May 6 11:50:14 2014 -0700
+
+    ReplicatedPG: block scrub on blocked object contexts
+    
+    Fixes: #8011
+    Backport: firefly
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 7411477153219d66625a74c5886530029c516036)
+
+commit 6078726e0b89d0202c3a4bc594be11fc346bed9d
+Author: Guang Yang <yguang@yahoo-inc.com>
+Date:   Fri May 9 09:21:23 2014 +0000
+
+    msg: Fix inconsistent message sequence negotiation during connection reset
+    
+    Backport: firefly, emperor, dumpling
+    
+    Signed-off-by: Guang Yang (yguang@yahoo-inc.com)
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit bdee119076dd0eb65334840d141ccdf06091e3c9)
+
+commit 02557f8bc05ff28013e241611cb046b28f97b4c6
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Apr 15 12:55:47 2014 -0700
+
+    Objecter::_op_submit: only replace the tid if it's 0
+    
+    Otherwise, redirected ops will suddenly have a different tid
+    and will become uncancelable.
+    
+    Fixes: #7588
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 76568aa0db4e16ac1af8fe6405edade1e61cbc81)
+
+commit 788b5fad515c48d4028f5a67d63052e373c81e66
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 8 10:42:42 2014 -0700
+
+    mon/OSDMonitor: force op resend when pool overlay changes
+    
+    If a client is sending a sequence of ops (say, a, b, c, d) and partway
+    through that sequence it receives an OSDMap update that changes the
+    overlay, the ops will get send to different pools, and the replies will
+    come back completely out of order.
+    
+    To fix this, force a resend of all outstanding ops any time the overlay
+    changes.
+    
+    Fixes: #8305
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 63d92ab0969357f78fdade749785136a509bc81b)
+
+commit 268df4862d95bf506ef6f594fdfa8294671babc3
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 8 10:50:51 2014 -0700
+
+    osd: discard client ops sent before last_force_op_resend
+    
+    If an op is sent before last_force_op_resend, and the client's feature is
+    present, drop the op because we know they will resend.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 45e79a17a932192995f8328ae9f6e8a2a6348d10)
+
+commit 8bc4992f434ed0b180d5e4a293d8191f4846358c
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 8 10:52:11 2014 -0700
+
+    osdc/Objecter: resend ops in the last_force_op_resend epoch
+    
+    If we are a client, and process a map that sets last_force_op_resend to
+    the current epoch, force a resend of this op.
+    
+    If the OSD expects us to do this, it will discard our previous op.  If the
+    OSD is old, it will process the old one, this will appear as a dup, and we
+    are no worse off than before.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit dd700bdf7115223cb3e517b851f462d75dd76a2b)
+
+commit 83d03f0e1c65385dcf465108d544da84f8bfad97
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 8 10:40:10 2014 -0700
+
+    osd/osd_types: add last_force_op_resend to pg_pool_t
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3152faf79f498a723ae0fe44301ccb21b15a96ab)
+
+commit c94ac44ab41fc62add3fc93c5c7ce06950eed3f1
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 9 09:20:34 2014 -0700
+
+    osd: handle race between osdmap and prepare_to_stop
+    
+    If we get a MOSDMarkMeDown message and set service.state == STOPPING, we
+    kick the prepare_to_stop() thread.  Normally, it will wake up and then
+    set osd.state == STOPPING, and when we process the map message next we
+    will not warn.  However, if dispatch() takes the lock instead and processes
+    the map, it will fail the preparing_to_stop check and issue a spurious
+    warning.
+    
+    Fix by checking for either preparing_to_stop or stopping.
+    
+    Fixes: #8319
+    Backport: firefly, emperor, dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6b858be0676f937a99dbd51321497f30c3a0097f)
+
+commit 22e2e7cff42970b00dc352513f1f138132f78d04
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat May 10 10:29:11 2014 -0700
+
+    osd/ReplicatedPG: do not queue NULL dup_op
+    
+    We call start_flush() with a NULL op in a couple different places.  Do not
+    put a NULL pointer on the dup_ops list or we will crash later.
+    
+    Fixes: #8328
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 0d67f9b0695765824bdc4a65fbed88edf8ea232e)

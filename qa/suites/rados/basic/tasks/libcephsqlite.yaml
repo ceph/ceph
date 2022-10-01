@@ -1,0 +1,24 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        debug ms: 1
+        debug client: 20
+        debug cephsqlite: 20
+    log-ignorelist:
+    - POOL_APP_NOT_ENABLED
+    - do not have an application enabled
+tasks:
+- exec:
+   client.0:
+   - ceph osd pool create cephsqlite
+   - ceph auth get-or-create client.libcephsqlite mon 'profile simple-rados-client-with-blocklist' osd 'allow rwx pool=cephsqlite' >> /etc/ceph/ceph.keyring
+- exec:
+   client.0:
+   - ceph_test_libcephsqlite --id libcephsqlite --no-log-to-stderr
+- workunit:
+   clients:
+     client.0:
+     - rados/test_libcephsqlite.sh cephsqlite
+   env:
+     CEPH_ARGS: --id libcephsqlite --no-log-to-stderr

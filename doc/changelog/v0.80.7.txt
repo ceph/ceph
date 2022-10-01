@@ -1,0 +1,70 @@
+commit 6c0127fcb58008793d3c8b62d925bc91963672a3 (tag: refs/tags/v0.80.7, refs/remotes/gh/firefly)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Tue Oct 14 12:10:38 2014 -0700
+
+    0.80.7
+
+commit fa599aad2d79e0bbc19e4f6a2ac6771b37bf6beb
+Merge: 805a4ff b8d2fc7
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Oct 13 10:34:47 2014 -0700
+
+    Merge remote-tracking branch 'origin/wip-7588-firefly' into firefly
+
+commit 805a4ff3f32c60798d01beef80e0702a4e9d82ee
+Merge: 4a3bc78 c5fd2d0
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Oct 13 10:34:34 2014 -0700
+
+    Merge remote-tracking branch 'upstream/wip-9696-firefly' into firefly
+
+commit b8d2fc72ea54eb17611d7ac90be4da6c4e4e7485
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 8 14:19:22 2014 -0700
+
+    osd/ReplicatedPG: carry CopyOpRef in copy_from completion
+
+    There is a race with copy_from cancellation.  The internal Objecter
+    completion decodes a bunch of data and copies it into pointers provided
+    when the op is queued.  When we cancel, we need to ensure that we can cope
+    until control passes back to our provided completion.
+
+    Once we *do* get into the (ReplicatedPG) callbacks, we will bail out
+    because the tid in the CopyOp or FlushOp no longer matches.
+
+    Fix this by carrying a ref to keep the copy-from targets alive, and
+    clearing out the tids that we cancel.
+
+    Note that previously, the trigger for this was that the tid changes when
+    we handle a redirect, which made the op_cancel() call fail.  With the
+    coming Objecter changes, this will no longer be the case.  However, there
+    are also locking and threading changes that will make cancellation racy,
+    so we will not be able to rely on it always preventing the callback.
+    Either way, this will avoid the problem.
+
+    Fixes: #7588
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 589b639af7c8834a1e6293d58d77a9c440107bc3)
+
+commit c5fd2d043ed4aa4fdb60fc19a284f51a86cef408 (refs/remotes/gh/wip-9696-firefly)
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Oct 9 16:21:18 2014 -0700
+
+    PG::choose_acting: in mixed cluster case, acting may include backfill
+
+    Fixes: 9696
+    Backport: firefly, giant
+    Introduced: 92cfd370395385ca5537b5bc72220934c9f09026
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 9b18d99817c8b54e30dff45047dfe1b29871d659)
+
+commit 4a3bc78c033ed68183f91824c7942dc54afb8797 (refs/remotes/gh/wip-9731-firefly)
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Oct 10 13:53:29 2014 -0700
+
+    PGLog::IndexedLog::trim(): rollback_info_trimmed_to_riter may be log.rend()
+
+    Fixes: #9731
+    Backport: giant, firefly
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit d458b4f0f31161f561ff98e58ed979cf20c6f588)

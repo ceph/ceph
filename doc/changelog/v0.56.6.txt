@@ -1,0 +1,40 @@
+commit 95a0bda7f007a33b0dc7adf4b330778fa1e5d70c
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Fri May 3 12:53:00 2013 -0700
+
+    v0.56.6
+
+commit 6dbdcf5a210febb5e0dd585e0e599ac807642210
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Fri May 3 12:45:24 2013 -0700
+
+    ceph.spec.in:  Fix platform dependecies
+
+    Picked up an incorrect dependency merging the rbd udev rules update.
+
+    Signed-off-by: Gary Lowell  <gary.lowell@inktank.com>
+
+commit 05af17e697eb95b2a807d9c05cde39106c5ecee9
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Apr 22 12:48:56 2013 -0700
+
+    rgw: don't send tail to gc if copying object to itself
+
+    Fixes: #4776
+    Backport: bobtail
+    Need to make sure that when copying an object into itself we don't
+    send the tail to the garbage collection.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit de5d1da810732ee48f41e8be18257053d862301b)
+
+commit f0eb20a7b0f7c8afadc21cc063f1f289b5092bab
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 3 12:24:21 2013 -0700
+
+    ceph_common.sh: re-sync get_name_list with master
+
+    We backported various items but didn't catch all the changes!  :(
+
+    Signed-off-by: Sage Weil <sage@inktank.com>

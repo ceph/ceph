@@ -1,0 +1,21 @@
+overrides:
+  install:
+    ceph:
+      #debuginfo: true
+  rgw:
+    client.0:
+      valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
+  ceph:
+    conf:
+      global:
+        osd heartbeat grace: 40
+      mon:
+        mon osd crush smoke test: false
+      osd:
+        osd fast shutdown: false
+#    valgrind:
+#      mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
+#      osd: [--tool=memcheck]
+#      mds: [--tool=memcheck]
+## https://tracker.ceph.com/issues/38621
+##      mgr: [--tool=memcheck]

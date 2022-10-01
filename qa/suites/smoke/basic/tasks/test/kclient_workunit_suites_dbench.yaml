@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms die on skipped message: false
+tasks:
+- ceph:
+    fs: xfs
+- kclient:
+- workunit:
+    clients:
+      all:
+        - suites/dbench.sh

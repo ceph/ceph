@@ -1,0 +1,74 @@
+commit e4bfad3a3c51054df7e537a724c8d0bf9be972ff (tag: refs/tags/v0.94.1, refs/remotes/gh/hammer)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Fri Apr 10 12:04:50 2015 -0700
+
+    0.94.1
+
+commit 733864738fa93979727e480e403293e079bb51e9
+Merge: b5921d5 5ca771a
+Author: Loic Dachary <loic@dachary.org>
+Date:   Fri Apr 10 17:51:38 2015 +0200
+
+    Merge pull request #4328 from dachary/wip-11364-hammer
+    
+    v4 bucket feature detection
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 5ca771a7d1df8e78ee503a7063068cf744d5efcc
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Apr 10 08:43:45 2015 -0700
+
+    crush: fix has_v4_buckets()
+    
+    alg, not type!
+    
+    This bug made us incorrectly think we were using v4 features when user type
+    5 was being used.  That's currently 'rack' with recent crush maps, but
+    was other types for clusters that were created with older versions.  This
+    is clearly problematic as it will lock out non-hammer clients incorrectly,
+    breaking deployments on upgrade.
+    
+    Fixes: #11364
+    Backport: hammer
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 38b35ab9d17eb84ac178c4cd3ebcf2ec0f66d8b6)
+
+commit 33e79ab7aa0b5428e8fb82a90eea17d31d363a88
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Apr 9 17:17:59 2015 -0700
+
+    crush: fix dump of has_v4_buckets
+    
+    Backport: hammer
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit d6e23413017fb8f5d7f18d74e993ceeedb82d8bc)
+
+commit b5921d55d16796e12d66ad2c4add7305f9ce2353
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Apr 9 14:42:34 2015 -0700
+
+    crush/mapper: fix divide-by-0 in straw2
+    
+    If the item weight is 0 we don't want to divide; instead draw a minimal
+    value.
+    
+    Fixes: #11357
+    Reported-by: Yann Dupont <yd@objoo.org>
+    Tested-by: Yann Dupont <yd@objoo.org>
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 64d1e900ec4f5831972ec80e8d0129604669f5bb)
+
+commit 93c8f436a4f84ac8088e1a1de82350dd33c68d64
+Author: Guang Yang <yguang@yahoo-inc.com>
+Date:   Thu Feb 26 08:13:12 2015 +0000
+
+    osd: fix negative degraded objects during backfilling
+    
+    When there is deleting requests during backfilling, the reported number of degraded
+    objects could be negative, as the primary's num_objects is the latest (locally) but
+    the number for replicas might not reflect the deletings. A simple fix is to ignore
+    the negative subtracted value.
+    
+    Signed-off-by: Guang Yang <yguang@yahoo-inc.com>
+    (cherry picked from commit 14d7e36d3c978844da73d0e1c8a3a1ec863bac15)

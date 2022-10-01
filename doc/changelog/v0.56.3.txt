@@ -1,0 +1,562 @@
+commit 6eb7e15a4783b122e9b0c85ea9ba064145958aa5
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Wed Feb 13 10:10:20 2013 -0800
+
+    v0.56.3
+
+commit f5eb845a0f7a2c28d3a88a37479bcb34f882f40c
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Feb 8 13:14:49 2013 -0800
+
+    rgw: change json formatting for swift list container
+    
+    Fixes: #4048
+    There is some difference in the way swift formats the
+    xml output and the json output for list container. In
+    xml the entity is named 'name' and in json it is named
+    'subdir'.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 3e4d79fe42dfc3ca70dc4d5d2aff5223f62eb34b)
+
+commit f21543f0d88f7bacb69cef3712b0ce087f386e93
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Feb 11 17:08:55 2013 -0800
+
+    librbd: unprotect any non-unprotected snapshot
+    
+    Include snapshots in the UNPROTECTING state as well, which can occur
+    after an unprotect is interrupted.
+    
+    Fixes: #4100
+    Backport: bobtail
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit fe283813b44a7c45def6768ea0788a3a0635957e)
+
+commit 65969f8fbef02ee39f6c2365fffbcd3f633f4b37
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Feb 8 21:36:13 2013 -0800
+
+    java: make CephMountTest use user.* xattr names
+    
+    Changes to the xattr code in Ceph require
+    a few tweaks to existing test cases.
+    Specifically, there is now a ceph.file.layout
+    xattr by default and user defined xattrs
+    are prepended with "user."
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joe Buck <jbbuck@gmail.com>
+    Reviewed-by: Noah Watkins <noahwatkins@gmail.com>
+
+commit 14fddc3ce85d3695aad9d3597f8f50dba5960a86
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Feb 8 09:59:25 2013 -0800
+
+    mon: fix typo in C_Stats
+    
+    Broken by previous commit.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3cf3710be0b4cccc8de152a97be50d983c35116d)
+
+commit 0453140d187016a61950a8836da57f54d2c34602
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 7 23:13:11 2013 -0800
+
+    mon: retry PGStats message on EAGAIN
+    
+    If we get EAGAIN from a paxos restart/election/whatever, we should
+    restart the message instead of just blindly acking it.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Luis <joao.luis@inktank.com>
+    (cherry picked from commit 4837063d447afb45554f55bb6fde1c97559acd4b)
+
+commit e68fcec78286363935cf731015108b9ea36b50a6
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 7 22:06:14 2013 -0800
+
+    mon: handle -EAGAIN in completion contexts
+    
+    We can get ECANCELED, EAGAIN, or success out of the completion contexts,
+    but in the EAGAIN case (meaning there was an election) we were sending
+    a success to the client.  This resulted in client hangs and all-around
+    confusion when the monitor cluster was thrashing.
+    
+    Backport: bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Luis <joao.luis@inktank.com>
+    (cherry picked from commit 17827769f1fe6d7c4838253fcec3b3a4ad288f41)
+
+commit 20ec490555728251444833520a40b20dc8015216
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Feb 12 14:11:09 2013 -0800
+
+    osd: only share maps on hb connection of OSD_HBMSGS feature is set
+    
+    Back in 1bc419a7affb056540ba8f9b332b6ff9380b37af we started sharing maps
+    with dead osds via the heartbeat connection, but old code will crash on an
+    unexpected message.  Only do this if the OSD_HBMSGS feature is present.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 302b26ff70ee5539da3dcb2e5614e2b7e83b9dcd)
+
+commit cbf63b633e7a59456f503af487fd4ad2607bbd76
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Feb 12 14:10:51 2013 -0800
+
+    osd: tolerate unexpected messages on the heartbeat interface
+    
+    We should note but not crash on unexpected messages.  Announce this awesome
+    new "capability" via a feature bit.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit afda30aeaae0a65f83c6886658354ad2b57c4c43)
+    
+    Conflicts:
+    
+    	src/include/ceph_features.h
+
+commit 102a519632f1b7a0fede9a3fbd4a5c1df0e732a5
+Merge: 2c6afa0 2ebf4d0
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Feb 12 13:39:52 2013 -0800
+
+    Merge remote-tracking branch 'gh/wip-bobtail-osd-msgr' into bobtail
+
+commit 2c6afa058e8b1738c1400392320482945834de86
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jan 30 11:32:23 2013 -0800
+
+    test_libcephfs: fix xattr test
+    
+    Ignore the ceph.*.layout xattrs.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b0d4dd21c7be86eb47728a4702a3c67ca44424ac)
+
+commit f11beb954976f66bfae75e847937f84958ebeaf3
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 7 22:51:29 2013 -0800
+
+    radosgw-admin: fix cli test
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 1b05b0edbac09d1d7cf0da2e536829df05e48573)
+
+commit ec1085e534eb39d999775bebdcdb997f893a04ae
+Merge: 66d7758 62ed62f
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 7 23:25:30 2013 -0800
+
+    Merge remote-tracking branch 'gh/wip-bobtail-vxattrs' into bobtail
+
+commit 66d775858004d1d4e8a138b8d33a3799e03ce26e
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Feb 4 09:14:39 2013 -0800
+
+    mon: enforce reweight be between 0..1
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Luis <joao.luis@inktank.com>
+    (cherry picked from commit 4e29c95d6f61daa838888840cef0cceedc0fcfdd)
+
+commit 8bab3a1c3d0d2f619ddf885bb9050ad9a1c43517
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Feb 7 10:38:00 2013 -0800
+
+    PG: dirty_info on handle_activate_map
+    
+    We need to make sure the pg epoch is persisted during
+    activate_map.
+    
+    Backport: bobtail
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit dbce1d0dc919e221523bd44e1d0834711da1577d)
+
+commit dffa386bc13370c0ef56acf740b5200b2054980f
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 7 10:21:49 2013 -0800
+
+    osd: flush peering queue (consume maps) prior to boot
+    
+    If the osd itself is behind on many maps during boot, it will get more and
+    (as part of that) flush the peering wq to ensure the pgs consume them.
+    However, it is possible for OSD to have latest/recnet maps, but pgs to be
+    behind, and to jump directly to boot and join.  The OSD is then laggy and
+    unresponsive because the peering wq is way behind.
+    
+    To avoid this, call consume_map() (kick the peering wq) at the end of
+    init and flush it to ensure we are *internally* all caught up before we
+    consider joining the cluster.
+    
+    I'm pretty sure this is the root cause of #3905 and possibly #3995.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit af95d934b039d65d3667fc022e2ecaebba107b01)
+
+commit 47c9f46aac4afac37fb6ec72f0482e61f5e0d798
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Feb 6 17:10:00 2013 -0800
+
+    rgw: a tool to fix clobbered bucket info in user's bucket list
+    
+    This fixes bad entries in user's bucket list that may have occured
+    due to issue #4039. Syntax:
+    
+     $ radosgw-admin user check --uid=<uid> [--fix]
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 9cb6c33f0e2281b66cc690a28e08459f2e62ca13)
+    
+    Conflicts:
+    	src/rgw/rgw_admin.cc
+
+commit 6c8d63819fde1b6854f8fc03351465b420ff1bdc
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Feb 6 16:43:48 2013 -0800
+
+    rgw: bucket recreation should not clobber bucket info
+    
+    Fixes: #4039
+    User's list of buckets is getting modified even if bucket already
+    exists. This fix removes the newly created directory object, and
+    makes sure that user info's data points at the correct bucket.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 9d006ec40ced9d97b590ee07ca9171f0c9bec6e9)
+    
+    Conflicts:
+    	src/rgw/rgw_op.cc
+    	src/rgw/rgw_rados.cc
+
+commit cc167914ac9603f87083c63f2cbc8dac9441329f
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Feb 5 14:50:54 2013 -0800
+
+    rgw: a tool to fix buckets with leaked multipart references
+    
+    Checks specified bucket for the #4011 symptoms, optionally fix
+    the issue.
+    
+    sytax:
+      radosgw-admin bucket check --bucket=<bucket> [--fix]
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 2d8faf8e5f15e833e6b556b0f3c4ac92e4a4151e)
+    
+    Conflicts:
+    	src/rgw/rgw_admin.cc
+    	src/rgw/rgw_rados.h
+
+commit 4d6964fc7ddd23806e225c95bcb90ef93e4d23a1
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Feb 5 13:54:11 2013 -0800
+
+    rgw: radosgw-admin object unlink
+    
+    Add a radosgw-admin option to remove object from bucket index
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 16235a7acb9543d60470170bb2a09956364626cd)
+    
+    Conflicts:
+    	src/rgw/rgw_admin.cc
+    	src/rgw/rgw_rados.h
+    	src/test/cli/radosgw-admin/help.t
+
+commit 2ebf4d065af3dc2e581a25b921071af3efb57f8a
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 25 09:30:00 2013 -0800
+
+    osd: kill unused addr-based send_map()
+    
+    Not used, old API, bad.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e359a862199c8a94cb238f7271ba1b0edcc0863c)
+
+commit bac5b144b27f32da306161ae7018ccc337704121
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 25 09:29:37 2013 -0800
+
+    osd: share incoming maps via Connection*, not addrs
+    
+    Kill a set of parallel methods that are using the old addr/inst-based
+    msgr APIs, and instead use Connection handles.  This is much safer and gets
+    us closer to killing the old msgr API.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5e2fab54a4fdf2f59e2b635cbddef8a5909acb7c)
+
+commit 9ca3a165ded62313ba153d7bab89dadf3f73999f
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 25 09:27:00 2013 -0800
+
+    osd: pass new maps to dead osds via existing Connection
+    
+    Previously we were sending these maps to dead osds via their old addrs
+    using a new outgoing connection and setting the flags so that the msgr
+    would clean up.  That mechanism is possibly buggy and fragile, and we can
+    avoid it entirely if we just reuse the existing heartbeat Connection.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 1bc419a7affb056540ba8f9b332b6ff9380b37af)
+
+commit 4cb28b6ed5a702fdac99b8ec71233ef7f877a7a2
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 25 09:25:28 2013 -0800
+
+    osd: requeue osdmaps on heartbeat connections for cluster connection
+    
+    If we receive an OSDMap on the cluster connection, requeue it for the
+    cluster messenger, and process it there where we normally do.  This avoids
+    any concerns about locking and ordering rules.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 76705ace2e9767939aa9acf5d9257c800f838854)
+
+commit e4f7ff8c288eac8a8b57382f11a4b6f93682315a
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 25 09:23:23 2013 -0800
+
+    msgr: add get_loopback_connection() method
+    
+    Return the Connection* for ourselves, so we can queue messages for
+    ourselves.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a7059eb3f3922cf08c1e5bb5958acc2d45952482)
+
+commit 62ed62f5e2fb068cee38612d7974526aa1b3c759
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 19 11:33:04 2013 -0800
+
+    qa: add layout_vxattrs.sh test script
+    
+    Test virtual xattrs for file and directory layouts.
+    
+    TODO: create a data pool, add it to the fs, and make sure we can use it.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 61fbe27a52d12ecd98ddeb5fc0965c4f8ee7841a)
+
+commit d386622c3961a3b57eea42fdb82611cd2e904f4d
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 19 10:11:18 2013 -0800
+
+    mds: allow dir layout/policy to be removed via removexattr on ceph.dir.layout
+    
+    This lets a user remove a policy that was previously set on a dir.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit db31a1f9f27416e4d531fda716e32d42a275e84f)
+
+commit 6af5da7ae2c4ef95c16c6460770b6244d1aa1a6e
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 19 10:09:39 2013 -0800
+
+    mds: handle ceph.*.layout.* setxattr
+    
+    Allow individual fields of file or dir layouts to be set via setxattr.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ebebf72f0993d028e795c78a986e1aee542ca5e0)
+
+commit c0af056eb9bdb62cfd8a6f9054a3a3c78c8e7447
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Feb 4 22:03:32 2013 -0800
+
+    mdsmap: backported is_data_pool()
+    
+    This roughly corresponds to mainline commit 99d9e1d.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 0407af4641ea19697f8feb0f48a92cde8dd4fbe4
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 19 10:04:05 2013 -0800
+
+    mds: fix client view of dir layout when layout is removed
+    
+    We weren't handling the case where the projected node has NULL for the
+    layout properly.  Fixes the client's view when we remove the dir layout.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 09f28541e374ffac198e4d48082b064aae93cb2c)
+
+commit 8ce834d3f50b00fdd59cd237f3fb5fef1d57e1dd
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 19 10:04:39 2013 -0800
+
+    client: note presence of dir layout in inode operator<<
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 84751489ca208964e617516e04556722008ddf67)
+
+commit 99824b93cec93daaa0d536f031eb3b6180f94e3b
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 19 09:05:59 2013 -0800
+
+    client: list only aggregate xattr, but allow setting subfield xattrs
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ba32ea9454d36072ec5ea3e6483dc3daf9199903)
+
+commit 809cff488ea1ffa299edd678ba6260993771bde3
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 18 22:26:00 2013 -0800
+
+    client: implement ceph.file.* and ceph.dir.* vxattrs
+    
+    Display ceph.file.* vxattrs on any regular file, and ceph.dir.* vxattrs
+    on any directory that has a policy set.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3f82912a891536dd7e930f98e28d9a8c18fab756)
+
+commit 13babca354d9fbe255de8bae9608a0c158bf6c40
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 18 17:21:37 2013 -0800
+
+    client: move xattr namespace enforcement into internal method
+    
+    This captures libcephfs users now too.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit febb96509559084357bfaabf7e4d28e494c274aa)
+
+commit 65ab51740175254ba3ee050f0fd97332dffe2eb7
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 18 17:20:22 2013 -0800
+
+    client: allow ceph.* xattrs
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ad7ebad70bf810fde45067f78f316f130a243b9c)
+
+commit 6f3c1cd2cc07d951dfc23e523b9c6400b7c77c72
+Author: caleb miles <caselim@gmail.com>
+Date:   Mon Jan 14 12:16:12 2013 -0500
+
+    rgw_rest: Make fallback uri configurable.
+    
+    Some HTTP servers, notabily lighttp, do not set SCRIPT_URI, make the fallback
+    string configurable.
+    
+    Signed-off-by: caleb miles <caleb.miles@inktank.com>
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit b3a2e7e955547a863d29566aab62bcc480e27a65)
+    
+    Conflicts:
+    	src/rgw/rgw_rest.cc
+
+commit f57d1b4c8cc4d08c6147423d7881be55ed2e88d9
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Feb 1 10:56:11 2013 -0800
+
+    rgw: fix setting of NULL to string
+    
+    Fixes: #3777
+    s->env->get() returns char * and not string and can return NULL.
+    Also, remove some old unused code.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 9019fbbe8f84f530b6a8700dfe99dfeb03e0ed3d)
+
+commit 55687240b2de20185524de07e67f42c3b1ae6592
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Jan 11 10:44:04 2013 -0800
+
+    OSD: check for empty command in do_command
+    
+    Fixes: #3878
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 8cf79f252a1bcea5713065390180a36f31d66dfd)
+
+commit c3468f76a5e68a6426f03e508d8ecf26950fca2a
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed Jan 30 18:52:24 2013 +0100
+
+    PGMap: fix -Wsign-compare warning
+    
+    Fix -Wsign-compare compiler warning:
+    
+    mon/PGMap.cc: In member function 'void PGMap::apply_incremental
+     (CephContext*, const PGMap::Incremental&)':
+    mon/PGMap.cc:247:30: warning: comparison between signed and
+     unsigned integer expressions [-Wsign-compare]
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit b571f8ee2d22a3894120204bc5f119ff37e1de53)
+
+commit 5a6b9af90f00d08ef97b34ee0b5abc7b0b63e72b
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 28 19:46:33 2013 -0800
+
+    mon: smooth pg stat rates over last N pgmaps
+    
+    This smooths the recovery and throughput stats over the last N pgmaps,
+    defaulting to 2.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a7d15afb529615db56bae038b18b66e60d827a96)
+
+commit 7fd7a5eed19d5ab508d5fe11ff8734bc2bc8c565
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 25 19:51:40 2013 -0800
+
+    mon/PGMap: report IO rates
+    
+    This does not appear to be very accurate; probably the stat values we're
+    displaying are not being calculated correctly.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3f6837e022176ec4b530219043cf12e009d1ed6e)
+
+commit 7f149cf6730280f0e633d9f5ef3f0f95c5a5e430
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 25 19:51:14 2013 -0800
+
+    mon/PGMap: report recovery rates
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 208b02a748d97378f312beaa5110d8630c853ced)
+
+commit 8d2d396c6d02bff72aca53920e9ac93fe91428d3
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 25 19:50:45 2013 -0800
+
+    mon/PGMap: include timestamp
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 76e9fe5f06411eb0e96753dcd708dd6e43ab2c02)
+
+commit 8ab77bd4b510149f4df6b3134de0ef59272cec71
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 25 19:49:16 2013 -0800
+
+    osd: track recovery ops in stats
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a2495f658c6d17f56ea0a2ab1043299a59a7115b)
+
+commit 8fd8534b4b808292a4b7c6b9f2f866c431cf9645
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 25 19:06:52 2013 -0800
+
+    osd_types: add recovery counts to object_sum_stats_t
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4aea19ee60fbe1106bdd71de2d172aa2941e8aab)

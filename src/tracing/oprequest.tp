@@ -1,0 +1,47 @@
+#include "include/int_types.h"
+
+TRACEPOINT_EVENT(oprequest, set_rmw_flags,
+    TP_ARGS(
+        // osd_reqid_t
+        uint8_t,  type,
+        int64_t,  num,
+        uint64_t, tid,
+        int32_t,  inc,
+        int,      flag,
+        int,      old_rmw_flags,
+        int,      new_rmw_flags),
+    TP_FIELDS(
+        ctf_integer(uint8_t, type, type)
+        ctf_integer(int64_t, num, num)
+        ctf_integer(uint64_t, tid, tid)
+        ctf_integer(int32_t, inc, inc)
+        ctf_integer_hex(int, flag, flag)
+        ctf_integer_hex(int, old_rmw_flags, old_rmw_flags)
+        ctf_integer_hex(int, new_rmw_flags, new_rmw_flags)
+    )
+)
+
+TRACEPOINT_EVENT(oprequest, mark_flag_point,
+    TP_ARGS(
+        // osd_reqid_t
+        uint8_t,  type,
+        int64_t,  num,
+        uint64_t, tid,
+        int32_t,  inc,
+        int,      rmw_flags,
+        uint8_t,  flag,
+        const char*,    msg,
+        uint8_t,  old_hit_flag_points,
+        uint8_t,  new_hit_flag_points),
+    TP_FIELDS(
+        ctf_integer(uint8_t, type, type)
+        ctf_integer(int64_t, num, num)
+        ctf_integer(uint64_t, tid, tid)
+        ctf_integer(int32_t, inc, inc)
+        ctf_integer_hex(int, rmw_flags, rmw_flags)
+        ctf_integer_hex(uint8_t, flag, flag)
+        ctf_string(msg, msg)
+        ctf_integer_hex(uint8_t, old_hit_flag_points, old_hit_flag_points)
+        ctf_integer_hex(uint8_t, new_hit_flag_points, new_hit_flag_points)
+    )
+)

@@ -1,0 +1,13 @@
+tasks:
+- cephadm.shell:
+    host.a:
+      - |
+        set -e
+        set -x
+        ceph orch ps
+        ceph orch device ls
+        ceph osd tree
+        for osd in `ceph osd ls` ; do
+            ceph orch osd rm $osd --force --zap --replace
+        done
+        while ceph orch osd rm ls | wc | grep ^1 ; do sleep 10 ; done

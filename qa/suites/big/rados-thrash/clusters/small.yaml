@@ -1,0 +1,6 @@
+roles:
+- [host.a, client.0]
+- [host.b, client.1]
+- [host.c, client.2]
+- [host.d, client.3]
+- [host.e, client.4]

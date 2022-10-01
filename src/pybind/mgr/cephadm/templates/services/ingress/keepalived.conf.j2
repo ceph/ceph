@@ -1,0 +1,34 @@
+# {{ cephadm_managed }}
+vrrp_script check_backend {
+    script "{{ script }}"
+    weight -20
+    interval 2
+    rise 2
+    fall 2
+}
+
+{% for x in range(virtual_ips|length) %}
+vrrp_instance VI_{{ x }} {
+  state {{ states[x] }}
+  priority {{ priorities[x] }}
+  interface {{ interface }}
+  virtual_router_id {{ 50 + x }}
+  advert_int 1
+  authentication {
+      auth_type PASS
+      auth_pass {{ password }}
+  }
+  unicast_src_ip {{ host_ip }}
+  unicast_peer {
+    {% for ip in other_ips %}
+    {{ ip }}
+    {% endfor %}
+  }
+  virtual_ipaddress {
+    {{ virtual_ips[x] }} dev {{ interface }}
+  }
+  track_script {
+      check_backend
+  }
+}
+{% endfor %}

@@ -1,0 +1,1258 @@
+commit c71f8a60cf49fb3d4efb5ea75b2366cd7f167497 (tag: refs/tags/v0.67.6)
+Author: Alfredo Deza <alfredo.deza@inktank.com>
+Date:   Thu Feb 13 20:20:42 2014 +0000
+
+    release build 67.6
+    
+    Signed-off-by: Alfredo Deza <alfredo.deza@inktank.com>
+
+commit 1c42a6e34bb8e318e001384270cda003add946a7
+Merge: 3e473d4 c5e12f9
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 13 06:55:37 2014 -0800
+
+    Merge pull request #1232 from ceph/dumpling-7334
+    
+    backport ceph-disk improvements to dumpling
+    
+    http://pulpito.ceph.com/ubuntu-2014-02-12_16:52:33-ceph-deploy-dumpling-7334-testing-basic-plana/
+
+commit 3e473d4237697872498094b41fed19b414f8d3c4
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Fri Sep 27 16:23:09 2013 -0700
+
+    common,os: Remove filestore_xattr_use_omap option
+    
+    Now we operate just like when this was set to true
+    
+    Fixes: #6143
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit dc0dfb9e01d593afdd430ca776cf4da2c2240a20)
+
+commit c5e12f94efc07f0ff174c0f19494ee2e06d88dfa
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Wed Feb 12 16:43:59 2014 -0500
+
+    add support for absence of PATH
+    
+    Note that this commit is actually bisecting the changes from
+    Loic Dachary that touch ceph-disk only (ad515bf). As that changeset
+    also touches other files it causes conflicts that are not resolvable
+    for backporting it to dumpling.
+    
+    Signed-off-by: Alfredo Deza <alfredo@deza.pe>
+
+commit c531d75f7e86cee619e44c247298b50c37b81539
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Sep 9 22:27:23 2013 -0700
+
+    ceph-disk: make initial journal files 0 bytes
+    
+    The ceph-osd will resize journal files up and properly fallocate() them
+    so that the blocks are preallocated and (hopefully) contiguous.  We
+    don't need to do it here too, and getting fallocate() to work from
+    python is a pain in the butt.
+    
+    Fixes: #5981
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a786ad773cd33880075f1deb3691528d1afd03ec)
+
+commit 836ead3e42491597c192c63d3171021c5daecbc0
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Mon Feb 10 15:07:55 2014 -0500
+
+    alert the user about error messages from partx
+    
+    Signed-off-by: Alfredo Deza <alfredo@deza.pe>
+    (cherry picked from commit 9bcc42a3e6b08521694b5c0228b2c6ed7b3d312e)
+
+commit cff3547c60dc6d164f9a95eaa2706633e32756d0
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Fri Feb 7 11:55:01 2014 -0500
+
+    use partx for red hat or centos instead of partprobe
+    
+    Signed-off-by: Alfredo Deza <alfredo@deza.pe>
+    (cherry picked from commit 42900ff9da9f5adcac239a84ebf4d2e407c29699)
+
+commit 5ebd7c4520a9805f985cab1a0ba9311e19efa041
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Tue Jan 28 17:26:58 2014 -0800
+
+    ceph-disk: run the right executables from udev
+    
+    When run by the udev rules, PATH is not defined. Thus,
+    ceph-disk-activate relies on its which() function to locate the
+    correct executable.  The which() function used os.defpath if none was
+    set, and this worked for anything using it.
+    
+    ad6b4b4b08b6ef7ae8086f2be3a9ef521adaa88c added a new default value to
+    PATH, so only /usr/bin was checked by callers that did not use
+    which(). This resulted in the mount command not being found when
+    ceph-disk-activate was run by udev, and thus osds failing to start
+    after being prepared by ceph-deploy.
+    
+    Make ceph-disk consistently use the existing helpers (command() and
+    command_check_call()) that use which(), so lack of PATH does not
+    matter. Simplify _check_output() to use command(),
+    another wrapper around subprocess.Popen.
+    
+    Fixes: #7258
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit d7b0c7faafd37e4ae8a1680edfa60c22b419cbd8)
+
+commit 4a7c4e0a81753dfb811396e7bfa1df72135ee12b
+Author: Loic Dachary <loic@dachary.org>
+Date:   Fri Jan 3 16:06:55 2014 +0100
+
+    ceph-disk: implement --sysconfdir as /etc/ceph
+    
+    Replace hardcoded /etc/ceph with the SYSCONFDIR global variable and
+    implement the --sysconfdir option to override the default value.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit a71025d33621257b6fd6632516cfed2849ff1637)
+
+commit c8b9798a69bd1655a7131c7bce8a14c2c74aba0c
+Author: Loic Dachary <loic@dachary.org>
+Date:   Fri Jan 3 16:03:09 2014 +0100
+
+    ceph-disk: implement --statedir as /var/lib/ceph
+    
+    Replace hardcoded /var/lib/ceph with the STATEDIR global variable and
+    implement the --statedir option to override the default value.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit ca713f48ae7a1fece2869f1a1c97d23ab33fb441)
+
+commit 79564874be35d4414092fbb80df3214d7f282b1c
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Jan 1 22:05:03 2014 +0100
+
+    ceph-disk: add copyright notice
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 51ee3c04777aaf6b9609dde9bc318b5c66c70787)
+
+commit c4b66bbdf09a8bb85ed14fbb643f40f87345463b
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Jan 1 22:11:30 2014 +0100
+
+    ceph-disk: create the data directory if it does not exist
+    
+    Instead of failing if the OSD data directory does not exist, create
+    it. Only do so if the data directory is not enforced to be a device via
+    the use of the --data-dev flag. The directory is not recursively created.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 306b099ab093bfac466d68fe1cb87367bc01e577)
+
+commit c473c65d4b6235fe20a97bd1d4741c12f86858e8
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue Dec 31 00:03:42 2013 +0100
+
+    ceph-disk: run ceph-osd when --mark-init=none
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 0fcc081858fae4febbb6a613a93cfbbcedd5a320)
+
+commit 6ea59a3a0c38c9629036442aff652489eecce51a
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Dec 30 23:57:39 2013 +0100
+
+    ceph-disk: implement --mark-init=none
+    
+    It is meant to be used when preparing and activating a directory that is
+    not to be used with init. No file is created to identify the init
+    system, no symbolic link is made to the directory in /var/lib/ceph
+    and the init scripts are not called.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit e773b68f4c89ac56b425c710d7dcdc3d74a92926)
+
+commit 3aae5b764c5698c665a708a3f6f2243dfee1a28d
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Jan 1 22:07:57 2014 +0100
+
+    ceph-disk: fsid is a known configuration option
+    
+    Use get_conf_with_default instead of get_conf because fsid is a known
+    ceph configuration option. It allows overriding via CEPH_ARGS which is
+    convenient for testing. Only options that are not found in config_opts.h
+    are fetch via get_conf.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit b65eb377f5e93ea85644e4c0939365fd7ac36072)
+
+commit a33ad6d150206232806ee466f301e41f15c631e9
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Jan 1 22:06:29 2014 +0100
+
+    ceph-disk: use CalledProcessError.returncode
+    
+    CalledProcessError has no errno data member
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 97f516a1ddfb2d014e1f7e762c4155e4b9bcb90b)
+
+commit 6ae96d3ce757b05daeb7c1437778149b07248d47
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Jan 1 22:13:15 2014 +0100
+
+    ceph-disk: display the command output on OSD creation failure
+    
+    The string form of a CalledProcessError instance does not include the
+    output datamember. Add it to the Error exception for debug purposes.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit d09af0fa50f322c9e59765f3badd497f5ca184d4)
+
+commit deefb3a05788b308631812c652e9eccaeb999d7f
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Dec 30 23:07:27 2013 +0100
+
+    ceph-disk: which() uses PATH first
+    
+    Instead of relying on a hardcoded set of if paths. Although this has the
+    potential of changing the location of the binary being used by ceph-disk
+    on an existing installation, it is currently only used for sgdisk. It
+    could be disruptive for someone using a modified version of sgdisk but
+    the odds of this happening are very low.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 2b935bbf60bafb6dd488c0eb30f156fce1b9d197)
+
+commit 06bbea187293ac52aefbcf4e98c162bb3286341d
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Dec 30 22:48:46 2013 +0100
+
+    ceph-disk: add --prepend-to-path to control execution
+    
+    /usr/bin is hardcoded in front of some ceph programs which makes it
+    impossible to control where they are located via the PATH.
+    
+    The hardcoded path cannot be removed altogether because it will most
+    likely lead to unexpected and difficult to diagnose problems for
+    existing installations where the PATH finds the program elsewhere.
+    
+    The --prepend-to-path flag is added and defaults to /usr/bin : it prepends
+    to the PATH environment variable. The hardcoded path is removed
+    and the PATH will be used: since /usr/bin is searched first, the
+    legacy behavior will not change.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit ad6b4b4b08b6ef7ae8086f2be3a9ef521adaa88c)
+
+commit ccf182241dc04c79e2377b6ba2f060dbfe6dddae
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Dec 30 17:15:29 2013 +0100
+
+    ceph-disk: make exception handling terse in main_activate_journal
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 908348b8047e8577ecf9133f2683f91423694416)
+
+commit d60e952f3c00d0e551b04c0d6486b11d9761be35
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Dec 30 17:13:47 2013 +0100
+
+    ceph-disk: do not hide main_activate() exceptions
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 55ca7bb2da73f1be1293710a635cfea42abd7682)
+
+commit 827edb93e3971fc7549fe831894776c6bf163346
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Dec 30 17:11:30 2013 +0100
+
+    ceph-disk: fix activate() indent
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 324804a81c37ff89f2488e2ba106033c0e6e119e)
+
+commit 27988cf9ffedf3289099e51f1e7c3f5b8d79d667
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Dec 30 17:09:35 2013 +0100
+
+    ceph-disk: remove noop try:
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit de0050596b5f56863c3486c1cd5e7ffea62e3d00)
+
+commit 75bdb5430d9403bed8bd2ccd6a9c5a30d63a189e
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Dec 30 16:57:36 2013 +0100
+
+    ceph-disk: fix Error() messages formatting
+    
+    Mainly using % instead of ,
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit b82ccfbfa786cd5436b48ec38276c5a48028ce1d)
+
+commit 5df1eaa55bc7ebe68473831d06cf9819fa39baa6
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Dec 30 12:26:20 2013 +0100
+
+    ceph-disk: prepare --data-dir must not override files
+    
+    ceph-disk does nothing when given a device that is already prepared. If
+    given a directory that already contains a successfully prepared OSD, it
+    will however override it.
+    
+    Instead of overriding the files in the osd data directory, return
+    immediately if the magic file exists. Make it so the magic file is
+    created last to accurately reflect the success of the OSD preparation.
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 7dfe550ce18623cde4ae43a2416e31ef81381ab9)
+
+commit 2e8496a6e0b74ff351bc2a4f138ddc665d8c30ca
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Dec 15 15:34:17 2013 +0100
+
+    ceph-disk: zap needs at least one device
+    
+    If given no argument, ceph-disk zap should display the usage instead of
+    silently doing nothing. Silence can be confused with "I zapped all the
+    disks".
+    
+    http://tracker.ceph.com/issues/6981 fixes #6981
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 07888ef3fd4440332c8287d0faa9f23a32cf141c)
+
+commit 0fe2ac47a82d3caa9dca2a9009b68a14b577e35c
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Fri Dec 13 12:06:25 2013 -0500
+
+    use the new get_command helper in check_call
+    
+    Signed-off-by: Alfredo Deza <alfredo@deza.pe>
+    (cherry picked from commit 897dfc113fe3b86f3dda53172933bfd4f8089869)
+
+commit 8fc9f1b791248f08a311d619addc4465cac298f9
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Thu Dec 12 11:16:38 2013 -0500
+
+    use the absolute path for executables if found
+    
+    Signed-off-by: Alfredo Deza <alfredo@deza.pe>
+    (cherry picked from commit a9334a1c8c6681305e76b361377864d0dd1e3d34)
+
+commit a2de2f718c9e341c0b6ec2ebffdf03d0f9da0fbd
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Thu Dec 12 10:26:05 2013 -0500
+
+    remove trailing semicolon
+    
+    Signed-off-by: Alfredo Deza <alfredo@deza.pe>
+    (cherry picked from commit 43561f791607f5fd6f03d5421e1f30a29fb4194e)
+
+commit 2cd22b5d39760ac4b5baad0b05c676b833ae9213
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Wed Dec 11 15:41:45 2013 -0500
+
+    replace sgdisk subprocess calls with a helper
+    
+    Signed-off-by: Alfredo Deza <alfredo@deza.pe>
+    (cherry picked from commit e19e38012bc4579054f63865e682c8c3a7829c7b)
+
+commit e8cc27cc8eb981c71b8cafb58964317687ca5787
+Author: Jonathan Davies <jonathan.davies@canonical.com>
+Date:   Tue Dec 3 21:26:43 2013 +0000
+
+    Call --mbrtogpt on journal run of sgdisk should the drive require a GPT table.
+    
+    Signed-off-by: Jonathan Davies <jonathan.davies@canonical.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 35011e0b01d65e4c001876882d597451f2028345)
+
+commit 3942a93fae3331b2d08f93181eb2c9cf90b50440
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Nov 21 13:21:22 2013 +0100
+
+    ceph-disk: blacklist /dev/fd0
+    
+    blkid -s TYPE /dev/fd0 has been verified to hang forever on a
+    H8DMR-82 supermicro motherboard running
+    
+    3.8.0-33-generic #48~precise1-Ubuntu SMP Thu Oct 24 16:28:06 UTC 2013
+    x86_64
+    
+    It is unlikely that ceph will ever be used on floppy disks, they
+    can be blacklisted.
+    
+    http://tracker.ceph.com/issues/6827 fixes: #6827
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 65701978715237ff5a4c68573c0696fd9d438e4f)
+
+commit ccc6b0c5e6d47eefef5cf1fa17bf69c47c9459c4
+Author: git-harry <git-harry@live.co.uk>
+Date:   Thu Oct 3 10:32:50 2013 +0100
+
+    Make fsid comparison case-insensitive
+    
+    get_fsid and find_cluster_by_uuid are modified so ceph-disk activate and
+    ceph-disk activate-all will work if the fsid uses uppercase characters.
+    
+    Signed-off-by: Harry Harrington <git-harry@live.co.uk>
+    (cherry picked from commit 22f8325dbfce7ef2e97bf015c0f8bba53e75dfe9)
+
+commit 367cf1bbf86233eb20ff2304e7d6caab77b84fcc
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Tue Feb 11 10:14:36 2014 -0800
+
+    librbd: remove limit on number of objects in the cache
+    
+    The number of objects is not a significant indicated of when data
+    should be written out for rbd. Use the highest possible value for
+    number of objects and just rely on the dirty data limits to trigger
+    flushing. When the number of objects is low, and many start being
+    flushed before they accumulate many requests, it hurts average request
+    size and performance for many concurrent sequential writes.
+    
+    Fixes: #7385
+    Backport: emperor, dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 0559d31db29ea83bdb6cec72b830d16b44e3cd35)
+
+commit 4856fc2950442fafc208c967af5131f7874f5441
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Tue Feb 11 11:53:00 2014 -0800
+
+    ObjectCacher: use uint64_t for target and max values
+    
+    All the options are uint64_t, but the ObjectCacher was converting them
+    to int64_t. There's never any reason for these to be negative, so
+    change the type.
+    
+    Adjust a few conditionals so that they only convert known-positive
+    signed values to uint64_t before comparing with the target and max
+    values. Leave the actual stats accounting as loff_t for now, since
+    bugs in accounting will have bad effects if negative values wrap
+    around.
+    
+    Backport: emperor, dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit db034acf546a72739ff6543241543f3bd651f3ae)
+
+commit a572aafe178dfa3ab4d82aa5c7f4a72a63590ccf
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Tue Feb 11 10:35:14 2014 -0800
+
+    ObjectCacher: remove max_bytes and max_ob arguments to trim()
+    
+    These are never passed, so replace them with the defaults.
+    
+    Backport: emperor, dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit bf8cf2d6d21a204a099347f3dcd5b48100b8c445)
+
+commit 4889234f80dbd95e5b2012ff9bfc2d87960034e2
+Merge: 6af657b 30a604d
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Feb 11 08:32:37 2014 -0800
+
+    Merge pull request #1210 from dachary/dumpling
+    
+    common: admin socket fallback to json-pretty format (dumpling)
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit 30a604d2d6a5de7bcbfa0136e9a766cb34f96c0a
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Feb 10 23:42:38 2014 +0100
+
+    common: admin socket fallback to json-pretty format
+    
+    If the format argument to a command sent to the admin socket is not
+    among the supported formats ( json, json-pretty, xml, xml-pretty ) the
+    new_formatter function will return null and the AdminSocketHook::call
+    function must fall back to a sensible default.
+    
+    The CephContextHook::call and HelpHook::call failed to do that and a
+    malformed format argument would cause the mon to crash. A check is added
+    to each of them and fallback to json-pretty if the format is not
+    recognized.
+    
+    To further protect AdminSocketHook::call implementations from similar
+    problems the format argument is checked immediately after accepting the
+    command in AdminSocket::do_accept and replaced with json-pretty if it is
+    not known.
+    
+    A test case is added for both CephContextHook::call and HelpHook::call
+    to demonstrate the problem exists and is fixed by the patch.
+    
+    Three other instances of unsafe calls to new_formatter were found and
+    a fallback to json-pretty was added. All other calls have been audited
+    and appear to be safe.
+    
+    http://tracker.ceph.com/issues/7378 fixes #7378
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 165e76d4d03ffcc490fd3c2ba60fb37372990d0a)
+
+commit 6af657bd4cf87f6f7afe84257941e7e2366183d9
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Feb 5 17:26:02 2014 -0800
+
+    qa: add script for testing rados client timeout options
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 9e62beb80b6c92a97ec36c0db5ea39e417661b35)
+
+commit 21a0b67440eaa07fa051d26321a88654ee9e8ae7
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Feb 5 17:25:24 2014 -0800
+
+    rados: check return values for commands that can now fail
+    
+    A few places were not checking the return values of commands, since
+    they could not fail before timeouts were added.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 79c1874346ff55e2dc74ef860db16ce70242fd00)
+
+commit 2c42dd26b49d01922bd3df3ba26af70da0387a99
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Feb 5 17:24:16 2014 -0800
+
+    librados: check and return on error so timeouts work
+    
+    Some functions could not previously return errors, but they had an
+    int return value, which can now receive ETIMEDOUT.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 8e9459e897b1bc2f97d52ee07701fd22069efcf3)
+
+commit 28fe564cc298b96c063e6cca44304046a86942cd
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Feb 5 17:22:14 2014 -0800
+
+    msg/Pipe: add option to restrict delay injection to specific msg type
+    
+    This makes it possible to test timeouts reliably by delaying certain
+    messages effectively forever, but still being able to e.g. connect and
+    authenticate to the monitors.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit d389e617c1019e44848330bf9570138ac7b0e5d4)
+
+commit 1d2ea9efb844cb902d282c3a752acc45fefeb04c
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Feb 3 18:30:00 2014 -0800
+
+    MonClient: add a timeout on commands for librados
+    
+    Just use the conf option directly, since librados is the only caller.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 671a76d64bc50e4f15f4c2804d99887e22dcdb69)
+
+commit 30dafacd0b54bb98b01284851e0d5abf76324e95
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Feb 3 17:59:21 2014 -0800
+
+    Objecter: implement mon and osd operation timeouts
+    
+    This captures almost all operations from librados other than mon_commands().
+    
+    Get the values for the timeouts from the Objecter constructor, so only
+    librados uses them.
+    
+    Add C_Cancel_*_Op, finish_*_op(), and *_op_cancel() for each type of
+    operation, to mirror those for Op. Create a callback and schedule it
+    in the existing timer thread if the timeouts are specified.
+    
+    Fixes: #6507
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 3e1f7bbb4217d322f4e0ece16e676cd30ee42a20)
+    
+    Conflicts:
+    	src/osd/OSD.cc
+    	src/osd/ReplicatedPG.cc
+    	src/osdc/Objecter.cc
+    	src/osdc/Objecter.h
+
+commit 2aa0d7589283fe5879a966601fbfe690816cc4a1
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Feb 3 12:53:15 2014 -0800
+
+    librados: add timeout to wait_for_osdmap()
+    
+    This is used by several pool operations independent of the objecter,
+    including rados_ioctx_create() to look up the pool id in the first
+    osdmap.
+    
+    Unfortunately we can't just rely on WaitInterval returning ETIMEDOUT,
+    since it may also get interrupted by a signal, so we can't avoid
+    keeping track of time explicitly here.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 1829d2c9fd13f2cbae4e192c9feb553047dad42c)
+    
+    Conflicts:
+    	src/librados/RadosClient.cc
+
+commit 55d254d5ea113d8be29afe18dc9940f14d93ebb4
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Feb 3 12:09:34 2014 -0800
+
+    conf: add options for librados timeouts
+    
+    These will be implemented in subsequent patches.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 0dcceff1378d85ca6d81d102d201890b8a71af6b)
+
+commit ccd9b5eb9bcfe2360e874b306d4decd8815ecf46
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Feb 9 20:53:00 2014 -0800
+
+    test_striper: fix warning
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit bb44c0d5e06c2b699c81a76373a0edde1bf90445
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Feb 8 12:21:26 2014 -0800
+
+    crushtool: add cli test for off-by-one tries vs retries bug
+    
+    See bug #7370.  This passes on dumpling and breaks prior to the #7370 fix.
+    
+    Backport: emperor, dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ed32c4002fb5cb1dd546331651eaf7de1a017471)
+
+commit c301ec689caac5bbcd21e02226045d3454cc82fd
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Feb 3 08:54:14 2014 -0800
+
+    client: use 64-bit value in sync read eof logic
+    
+    The file size can jump to a value that is very much larger than our current
+    position (for example, it could be a disk image file that gets a sparse
+    write at a large offset).  Use a 64-bit value so that 'some' doesn't
+    overflow.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: John Spray <john.spray@inktank.com>
+    (cherry picked from commit 7ff2b541c24d1c81c3bcfbcb347694c2097993d7)
+
+commit 183deb899bc6b1b7b2a1ec639425e45786e56b01
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 4 22:39:35 2014 -0800
+
+    osd: do not send peering messages during init
+    
+    Do not send any peering messages while we are still working our way
+    through init().
+    
+    Fixes: #7093
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 35da8f9d80e0c6c33fb6c6e00f0bf38f1eb87d0e)
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+
+commit 3a1fb17401897b0717cf1d264c6e6fdf99fc703f
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jan 28 18:46:37 2014 -0800
+
+    OSDMap: fix deepish_copy_from
+    
+    Start with a shallow copy!
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d0f13f54146694a197535795da15b8832ef4b56f)
+    
+    Conflicts:
+    
+    	src/osd/OSDMap.h
+
+commit f01bd8a94adc4ce8e7131f74282de5b434a7316a
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jan 23 13:48:28 2014 -0800
+
+    rgw: fix listing of multipart upload parts
+    
+    Fixes: #7169
+    
+    There are two issues here. One is that we may return more entries than
+    we should (as specified by max_parts). Second issue is that the
+    NextPartNumberMarker is set incorrectly. Both of these issues mainly
+    affect uploads with > 1000 parts, although can be triggered with less
+    than that.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 6b657992d2397e399eacf554357ed807fda399fa
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Nov 21 06:52:48 2013 -0800
+
+    rgw: initialize RGWUserAdminOpState::system_specified
+    
+    Fixes: #6829
+    Backport: dumpling, emperor
+    We didn't init this member variable, which might cause that when
+    modifying user info that has this flag set the 'system' flag might
+    inadvertently reset.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 561e7b0b287e65e90b80699e45a52ae44e94684f)
+
+commit 585e0e7eec1bbee60fe352166b593d53476003f8
+Author: Robin H. Johnson <robbat2@gentoo.org>
+Date:   Sun Dec 15 12:26:19 2013 -0800
+
+    rgw: Fix CORS allow-headers validation
+    
+    This fix is needed because Ceph presently validates CORS headers in a
+    case-sensitive manner. Keeps a local cache of lowercased allowed headers
+    to avoid converting the allowed headers to lowercase each time.
+    
+    CORS 6.2.6: If any of the header field-names is not a ASCII
+    case-insensitive match for any of the values in list of headers do not
+    set any additional headers and terminate this set of steps.
+    
+    Signed-off-by: Robin H. Johnson <robbat2@gentoo.org>
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 31b60bfd9347a386ff12b4e4f1812d664bcfff01)
+
+commit da2267a87e37afa28385e915a566de26fd784b70
+Author: Robin H. Johnson <robbat2@gentoo.org>
+Date:   Sun Dec 15 11:40:31 2013 -0800
+
+    rgw: Clarify naming of case-change functions
+    
+    It is not clear that the lowercase_http_attr & uppercase_http_attr
+    functions replace dashes with underscores. Rename them to match the
+    pattern established by the camelcase_dash_http_attr function in
+    preperation for more case-change functions as needed by later fixes.
+    
+    Signed-off-by: Robin H. Johnson <robbat2@gentoo.org>
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 6a7edab2673423c53c6a422a10cb65fe07f9b235)
+
+commit fdea76ef6f7d7c4ee89c30d430f5495072023957
+Author: Robin H. Johnson <robbat2@gentoo.org>
+Date:   Sun Dec 15 11:27:49 2013 -0800
+
+    rgw: Look at correct header about headers for CORS
+    
+    The CORS standard dictates that preflight requests are made with the
+    Access-Control-Request-Headers header containing the headers of the
+    author request. The Access-Control-Allow-Headers header is sent in the
+    response.
+    
+    The present code looks for Access-Control-Allow-Headers in request, so
+    fix it to look at Access-Control-Request-Headers instead.
+    
+    Signed-off-by: Robin H. Johnson <robbat2@gentoo.org>
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 2abacd9678ae04cefac457882ba718a454948915)
+
+commit a5739e3903f8c30c8168199413818922b4a29bad
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Dec 6 11:07:09 2013 -0800
+
+    rgw: fix reading bucket policy in RGWBucket::get_policy()
+    
+    Fixes: 6940
+    Backport: dumpling, emperor
+    
+    We changed the way we keep the bucket policy, and we shouldn't try to
+    access the bucket object directly. This had changed when we added the
+    bucket instance object around dumpling.
+    
+    Reported-by: Gao, Wei M <wei.m.gao@intel.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 7a9a088d82d04f6105d72f6347673724ac16c9f8)
+
+commit ba792cdc8d0c006e260e6a02a33ca1491b35901c
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jan 16 11:45:27 2014 -0800
+
+    rgw: handle racing object puts when object doesn't exist
+    
+    If the object didn't exist before and now we have multiple puts coming
+    in concurrently, we need to make sure that we behave correctly. Only one
+    needs to win, the other one can fail silently. We do that by setting
+    exclusive flag on the object creation and handling the error correctly.
+    Note that we still want to return -EEXIST in some cases (when the
+    exclusive flag is passed to put_obj_meta(), e.g., on bucket creation).
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 86c15480fc3e33b9a3b84d0af68d8398fc732bae)
+
+commit 1e2984ac4a4ed0508e1b5efc8b69ae4da0cac824
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jan 16 11:33:49 2014 -0800
+
+    rgw: don't return -ENOENT in put_obj_meta()
+    
+    Fixes: #7168
+    
+    An object put may race with the same object's delete. In this case just
+    ignore the error, same behavior as if object was created and then
+    removed.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 5c24a7ea905587fd4077e3b0cfc0f5ad2b178c29)
+
+commit 5f1eea2ccf1ee4296530fc754bfd5dfc1571cd62
+Author: Robin H. Johnson <robbat2@gentoo.org>
+Date:   Sat Jan 18 18:01:20 2014 -0800
+
+    rgw: Use correct secret key for POST authn
+    
+    The POST authentication by signature validation looked up a user based
+    on the access key, then used the first secret key for the user. If the
+    access key used was not the first access key, then the expected
+    signature would be wrong, and the POST would be rejected.
+    
+    Signed-off-by: Robin H. Johnson <robbat2@gentoo.org>
+    (cherry picked from commit 586ad1f69e6260ef298805647911b3b49f8be7cf)
+
+commit 14e933eb2e8adf3e7df2aef823d863c593067928
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Tue Jan 28 15:54:33 2014 +0000
+
+    osd: OSDMonitor: ignore pgtemps from removed pool
+    
+    There's a window in-between receiving an MOSDPGTemp message from an OSD
+    and actually handling it that may lead to the pool the pg temps refer to
+    no longer existing. This may happen if the MOSDPGTemp message is queued
+    pending dispatching due to an on-going proposal (maybe even the pool
+    removal).
+    
+    This patch fixes such behavior in two steps:
+    
+    1. Check if the pool exists in the osdmap upon preprocessing
+     - if pool does not exist in the osdmap, then the pool must have been
+       removed prior to handling the message, but after the osd sent it.
+     - safe to ignore the pg update
+    2. If all pg updates in the message have been ignored, ignore the whole
+       message.  Otherwise, let prepare handle the rest.
+    
+    3. Recheck if pool exists in the osdmap upon prepare
+     - We may have ignored this pg back in preprocess, but other pgs in the
+       message may have led the message to be passed on to prepare; ignore
+       pg update once more.
+    4. Check if pool is pending removal and ignore pg update if so.
+    
+    We delegate checking the pending value to prepare_pgtemp() because in this
+    case we should only ignore the update IFF the pending value is in fact
+    committed.  Otherwise we should retry the message.  prepare_pgtemp() is
+    the appropriate place to do so.
+    
+    Fixes: 7116
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit f513f66f48383a07c70ca18a4dba6c2449ea9860)
+
+commit 3672fc49bea5efcef2069673c88fd8e526eeb7e5
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jan 28 11:00:34 2014 -0800
+
+    OSDMonitor: use deepish_copy_from for remove_down_pg_temp
+    
+    This is a backport of 368852f6c0a884b8fdc80a5cd6f9ab72e814d412.
+    
+    Make a deep copy of the OSDMap to avoid clobbering the in-memory copy with
+    the call to apply_incremental.
+    
+    Fixes: #7060
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit e6fef68ee51a2e3be6537086246ce860819788eb
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 24 11:03:26 2014 -0800
+
+    OSDMap: deepish_copy_from()
+    
+    Make a deep(ish) copy of another OSDMap.  Unfortunatley we can't make the
+    compiler-generated copy operator/constructors private until c++11.  :(
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit bd54b9841b9255406e56cdc7269bddb419453304)
+
+commit 2528186c0dd327607b1e76a51581df72aeea52f2
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jan 28 10:26:12 2014 -0800
+
+    buffer: make 0-length splice() a no-op
+    
+    This was causing a problem in the Striper, but fixing it here will avoid
+    corner cases all over the tree.  Note that we have to bail out before
+    the end-of-buffer check to avoid hitting that check when the bufferlist is
+    also empty.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit ff5abfbdae07ae8a56fa83ebaa92000896f793c2)
+
+commit fe9539e118a830aa71bc5846ad2693543213fc59
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jan 28 10:09:17 2014 -0800
+
+    osdc/Striper: test zero-length add_partial_result
+    
+    If we add a partial result that is 0-length, we used to hit an assert in
+    buffer::list::splice().  Add a unit test to verify the fix.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 28c7388d320a47657c2e12c46907f1bf40672b08)
+
+commit 9801718e6e7a335d1aeffb7f3d958b012d8dd79c
+Author: Derek Yarnell <derek@umiacs.umd.edu>
+Date:   Mon Jan 27 12:27:51 2014 -0700
+
+    packaging: apply udev hack rule to RHEL
+    
+    In the RPM spec file there is a test to deploy the uuid hack udev rules
+    for older udev operating systems. This includes CentOS and RHEL, but the
+    check currently only is for CentOS, causing RHEL clients to get a bogus
+    osd rules file.
+    
+    Adjust the conditional to apply to RHEL as well as CentOS. (The %{rhel}
+    macro is defined in both platforms' redhat-rpm-config package.)
+    
+    Fixes http://tracker.ceph.com/issues/7245
+    
+    Signed-off-by: Ken Dreyer <ken.dreyer@inktank.com>
+    (cherry picked from commit 64a0b4fa563795bc22753940aa3a4a2946113109)
+
+commit 5817078ba9b2aa38f39e1f62d8d08e943646c0bb
+Merge: 9fa8d2d abf6441
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jan 23 07:12:37 2014 -0800
+
+    Merge pull request #1129 from ceph/wip-dumpling-backport-6620
+    
+    mds: MDSMap: adjust buffer size for uint64 values with more than 5 chars
+
+commit abf64417bbc63b006c53a07262a5774d0d40550e
+Author: Joao Eduardo Luis <jecluis@gmail.com>
+Date:   Thu Jan 23 11:36:16 2014 +0000
+
+    mds: MDSMap: adjust buffer size for uint64 values with more than 5 chars
+    
+    Fixes: #6620
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 0e8182edd850f061421777988974efbaa3575b9f)
+
+commit 9fa8d2d1bd4a8cf56fdebae484bee35c3930fb62
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jan 21 11:29:56 2014 -0800
+
+    mon/MDSMonitor: do not generate mdsmaps from already-laggy mds
+    
+    There is one path where a mds that is not sending its beacon (e.g.,
+    because it is not running at all) will lead to proposal of new mdsmaps.
+    Fix it.
+    
+    Backport: emperor, dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 584c2dd6bea3fe1a3c7f306874c054ce0cf0d2b5)
+
+commit a2e34b8d322e571600d6c0a3ff363f9910196f28
+Author: John Spray <john.spray@inktank.com>
+Date:   Mon Jan 20 11:08:27 2014 +0000
+
+    Fix #7187: Include all summary items in JSON health output
+    
+    Signed-off-by: John Spray <john.spray@inktank.com>
+    (cherry picked from commit fdf3b5520d150f14d90bdfc569b70c07b0579b38)
+
+commit ee9fc590a556354b54a174a4790c4142949d7409
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Jan 6 18:32:42 2014 -0800
+
+    rgw: convert bucket info if needed
+    
+    Fixes: #7110
+    In dumpling, the bucket info was separated into bucket entry point and
+    bucket instance objects. When setting bucket attrs we only ended up
+    updating the bucket instance object. However, pre-dumpling buckets still
+    keep everything at the entry-point object, so acl changes didn't affect
+    anything (because we never updated the entry point). This change just
+    converts the bucket info into the new format.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit a5f8cc7ec9ec8bef4fbc656066b4d3a08e5b215b)
+
+commit 69a99e6edd67aadaea77fb5ebcf46190dbfcdbc6
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 4 22:40:43 2014 -0800
+
+    osd: ignore OSDMap messages while we are initializing
+    
+    The mon may occasionally send OSDMap messages to random OSDs, but is not
+    very descriminating in that we may not have authenticated yet.  Ignore any
+    messages if that is the case; we will reqeust whatever we need during the
+    BOOTING state.
+    
+    Fixes: #7093
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f68de9f352d53e431b1108774e4a23adb003fe3f)
+
+commit 1545ddbd3b6dfac897d483bd58a4335d68b9b62a
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 4 22:43:26 2014 -0800
+
+    mon: only send messages to current OSDs
+    
+    When choosing a random OSD to send a message to, verify not only that
+    the OSD id is up but that the session is for the same instance of that OSD
+    by checking that the address matches.
+    
+    Fixes: #7093
+    Backport: emperor, dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 98ed9ac5fed6eddf68f163086df72faabd9edcde)
+
+commit 4d88dd10bfab4e5fb45632245be5f79eeba73a30
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Aug 26 13:58:47 2013 -0700
+
+    osd: discriminate based on connection messenger, not peer type
+    
+    Replace ->get_source().is_osd() checks and instead see if it is the
+    cluster_messenger so that we do not confuse ourselves when we get
+    legit requests from other OSDs on our public interface.
+    
+    NOTE: backporting this because a mixed cluster may send OSD requests
+    via the client interface, even though dumpling doesn't do this.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a6b04c5d8ba043727a2e39a62e9d4126485bcfeb)
+    
+    Conflicts:
+    
+    	src/osd/OSD.cc
+
+commit 2354b957b7924af3e81f559d5c975262848c3bf6
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Dec 15 22:59:51 2013 +0100
+
+    qa: test for error when ceph osd rm is EBUSY
+    
+    http://tracker.ceph.com/issues/6824 fixes #6824
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 31507c90f0161c4569a2cc634c0b5f671179440a)
+
+commit 10ad2e01f832ca9293a1bda1c82f7d318e8c3589
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Dec 15 16:27:02 2013 +0100
+
+    mon: set ceph osd (down|out|in|rm) error code on failure
+    
+    Instead of always returning true, the error code is set if at least one
+    operation fails.
+    
+    EINVAL if the OSD id is invalid (osd.foobar for instance).
+    EBUSY if trying to remove and OSD that is up.
+    
+    When used with the ceph command line, it looks like this:
+    
+        ceph -c ceph.conf osd rm osd.0
+        Error EBUSY: osd.0 is still up; must be down before removal.
+        kill PID_OF_osd.0
+        ceph -c ceph.conf osd down osd.0
+        marked down osd.0.
+        ceph -c ceph.conf osd rm osd.0 osd.1
+        Error EBUSY: removed osd.0, osd.1 is still up; must be down before removal.
+    
+    http://tracker.ceph.com/issues/6824 fixes #6824
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 15b8616b13a327701c5d48c6cb7aeab8fcc4cafc)
+
+commit db82bfec50349783c3bb708c65cf89bceff7b2ca
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Tue Oct 29 20:30:37 2013 +0000
+
+    mon: OSDMonitor: fix some annoying whitespace
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 42c4137cbfacad5654f02c6608cc0e81b45c06be)
+
+commit 1abb16988727a21dff61edca48bfcb05c60d26f2
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Dec 26 17:38:52 2013 -0800
+
+    librbd: call user completion after incrementing perfcounters
+    
+    The perfcounters (and the ictx) are only valid while the image is
+    still open.  If the librbd user gets the callback for its last I/O,
+    then closes the image, the ictx and its perfcounters will be
+    invalid. If the AioCompletion object is has not run the rest of its
+    complete() method yet, it will access these now-invalid addresses,
+    possibly leading to a crash.
+    
+    The AioCompletion object is independent of the ictx and does not
+    access it again after incrementing perfcounters, so avoid this race by
+    calling the user's callback after this step. The AioCompletion object
+    will be cleaned up by the rest of complete_request(), independent of
+    the ImageCtx.
+    
+    Fixes: #5426
+    Backport: dumpling, emperor
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 4cea7895da7331b84d8c6079851fdc0ff2f4afb1)
+
+commit 4dae50d8a0ffe3f3491eae62950fe46229aaa0e6
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Fri Dec 6 16:03:20 2013 -0800
+
+    objecter: don't take extra throttle budget for resent ops
+    
+    These ops have already taken their budget in the original op_submit().
+    It will be returned via put_op_budget() when they complete.
+    If there were many localized reads of missing objects from replicas,
+    or cache pool redirects, this would cause the objecter to use up all
+    of its op throttle budget and hang.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 8d0180b1b7b48662daef199931efc7f2a6a1c431)
+    
+    Conflicts:
+    
+    	src/osdc/Objecter.cc
+
+commit 4944618fe74e1875e37a5de9a5bfe3922f906942
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Dec 5 17:44:37 2013 -0800
+
+    rbd: check write return code during bench-write
+    
+    This is allows rbd-bench to detect http://tracker.ceph.com/issues/6938
+    when combined with rapidly changing the mon osd full ratio.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 3caf3effcb113f843b54e06099099909eb335453)
+
+commit 3a7a0353d7c8521a2c3c25778801d45f0ca10957
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Dec 5 17:36:33 2013 -0800
+
+    objecter: resend all writes after osdmap loses the full flag
+    
+    Now that the osd does not respond if it gets a map with the full flag
+    set first, clients need to resend all writes.
+    
+    Clients talking to old osds are still subject to the race condition,
+    so both sides must be upgraded to avoid it.
+    
+    Refs: #6938
+    Backport: dumpling, emperor
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit e32874fc5aa6f59494766b7bbeb2b6ec3d8f190e)
+    
+    Conflicts:
+    
+    	src/osdc/Objecter.h
+
+commit f4d0fc8afac1bcbea76f46744397a8462025f373
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Dec 5 17:34:38 2013 -0800
+
+    osd: drop writes when full instead of returning an error
+    
+    There's a race between the client and osd with a newly marked full
+    osdmap.  If the client gets the new map first, it blocks writes and
+    everything works as expected, with no errors from the osd.
+    
+    If the osd gets the map first, however, it will respond to any writes
+    with -ENOSPC. Clients will pass this up the stack, and not retry these
+    writes later.  -ENOSPC isn't handled well by all clients. RBD, for
+    example, may pass it on to qemu or kernel rbd which will both
+    interpret it as EIO.  Filesystems on top of rbd will not behave well
+    when they receive EIOs like this, especially if the cluster oscillates
+    between full and not full, so some writes succeed.
+    
+    To fix this, never return ENOSPC from the osd because of a map marked
+    full, and rely on the client to retry all writes when the map is no
+    longer marked full.
+    
+    Old clients talking to osds with this fix will hang instead of
+    propagating an error, but only if they run into this race
+    condition. ceph-fuse and rbd with caching enabled are not affected,
+    since the ObjectCacher will retry writes that return errors.
+    
+    Refs: #6938
+    Backport: dumpling, emperor
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 4111729dda7437c23f59e7100b3c4a9ec4101dd0)
+
+commit 2b109803b9434d2d495e65d6a045838ee3ebf169
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Nov 6 16:55:52 2013 -0800
+
+    objecter: clean pause / unpause logic
+    
+    op->paused holds now whether operation should be paused or not, and it's
+    being updated when scanning requests. No need to do a second scan.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 5fe3dc647bf936df8e1eb2892b53f44f68f19821)
+
+commit 7b229fca346b7ab60131b229591d35f63f64a6ad
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Nov 6 16:15:47 2013 -0800
+
+    objecter: set op->paused in recalc_op_target(), resend in not paused
+    
+    When going through scan_requests() in handle_osd_map() we need to make
+    sure that if an op should not be paused anymore then set it on the op
+    itself, and return NEED_RESEND. Otherwise we're going to miss reset of
+    the full flag.
+    Also in handle_osd_map(), make sure that op shouldn't be paused before
+    sending it. There's a lot of cleanup around that area that we should
+    probably be doing, make the code much more tight.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 98ab7d64a191371fa39d840c5f8e91cbaaa1d7b7)
+
+commit a3fdfd77c953a8f9ace4991630599e60f56abc4a
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Nov 6 10:46:37 2013 +0800
+
+    objecter: don't resend paused ops
+    
+    Paused ops are meant to block on the client side until a new map that
+    unpauses them is recieved. If we send paused writes when the FULL flag
+    is set, we'll get -ENOSPC from the osds, which is not what Objecter
+    users expect. This may cause rbd without caching to produce an I/O
+    error instead of waiting for the cluster to have capacity.
+    
+    Fixes: #6725
+    Backport: dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit c5c399d327cfc0d232d9ec7d49ababa914d0b21a)
+
+commit 78037886ae6ae278d8fb2db52d7767b8612313fe
+Merge: a60ac91 4e47a00
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Dec 29 21:10:30 2013 -0800
+
+    Merge pull request #808 from ceph/wip-6152-dumpling
+    
+    rgw: Fix S3 auth when using response-* query string params
+
+commit 4e47a003bb3adcee690067d4037c248a93023c20
+Author: Sylvain Munaut <s.munaut@whatever-company.com>
+Date:   Thu Aug 29 16:17:30 2013 +0200
+
+    rgw: Fix S3 auth when using response-* query string params
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+    Signed-off-by: Sylvain Munaut <s.munaut@whatever-company.com>
+    (cherry picked from commit 7a7361d7e798d94796d4985e2e4b35af22463ae2)

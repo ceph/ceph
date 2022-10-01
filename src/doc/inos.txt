@@ -1,0 +1,11 @@
+
+inodeno_t namespace
+ - relevant both for ino's, and for the (ino) input for Filer and object storage namespace...
+
+1       - root inode
+
+100+mds - mds log/journal
+200+mds - mds ino, fh allocation tables
+300+mds - mds inode files (for non-embedded inodes)
+
+1000+   - regular files and directories

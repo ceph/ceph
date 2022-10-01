@@ -1,0 +1,22 @@
+<ul ngbNav
+    #nav="ngbNav"
+    [activeId]="router.url"
+    (navChange)="router.navigate([$event.nextId])"
+    class="nav-tabs">
+  <li ngbNavItem="/monitoring/active-alerts">
+    <a ngbNavLink
+       i18n>Active Alerts
+    <small *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
+        class="badge badge-danger ml-1">{{ prometheusAlertService.activeCriticalAlerts }}</small>
+    <small *ngIf="prometheusAlertService.activeWarningAlerts > 0"
+        class="badge badge-warning ml-1">{{ prometheusAlertService.activeWarningAlerts }}</small></a>
+  </li>
+  <li ngbNavItem="/monitoring/alerts">
+    <a ngbNavLink
+       i18n>Alerts</a>
+  </li>
+  <li ngbNavItem="/monitoring/silences">
+    <a ngbNavLink
+       i18n>Silences</a>
+  </li>
+</ul>

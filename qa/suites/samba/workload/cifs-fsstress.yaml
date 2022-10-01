@@ -1,0 +1,8 @@
+tasks:
+- cifs-mount:
+    client.1:
+      share: ceph
+- workunit:
+    clients:
+      client.1:
+        - suites/fsstress.sh

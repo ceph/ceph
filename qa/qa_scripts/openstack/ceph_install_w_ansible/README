@@ -1,0 +1,32 @@
+
+ceph_install.sh installs a ceph cluster using the cdn and ceph-ansible.
+
+Right now, it takes 5 parameters -- an admin node, a ceph mon node, and
+three osd nodes.
+
+In order to subscribe to the cdn, in your home directory create a file named
+secrets, (~/secrets), that contains the following lines:
+
+subscrname=Your-Redhat-Cdn-Id
+subscrpassword=Your-Redhat-Cdn-Password
+
+If you want to set the monitor_interface or the public_network values,
+in your home directory create a file named ip_info (~/ip_info), that
+contains the following lines: 
+
+mon_intf=your-monitor-interface (default is eno1)
+pub_netw=public-network (default is 10.8.128.0/21)
+
+This script first subscribes to the cdn, enables the rhel 7 repos, and does
+a yum update.  (multi_action.sh performs all the actions on all nodes at once,
+staller.sh is used to make sure that all updates are complete before exiting,
+and execs/cdn_setup.sh is used to remotely update the cdn information.
+
+After that, it makes sure that all nodes can connect via passwordless ssh
+(using talknice.sh and config) and then installs the appropriate repos and
+runs ceph_ansible on the admin node using execs/ceph_ansible.sh,
+execs/edit_ansible_hosts.sh and execs/edit_groupvars_osds.sh.
+
+repolocs.sh contains the locations of repo files.  These variables can
+be changed if one wishes to use different urls.
+

@@ -1,0 +1,16 @@
+---
+name: "Pull Request Checklist"
+on:
+  pull_request:
+    types:
+      - edited
+      - opened
+      - reopened
+jobs:
+  pr_checklist:
+    runs-on: ubuntu-latest
+    name: Verify
+    steps:
+      - name: Action
+        id: checklist
+        uses: ceph/ceph-pr-checklist-action@32e92d1a2a7c9991ed51de5fccb2296551373d60

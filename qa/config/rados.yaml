@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd op queue: debug_random
+        osd op queue cut off: debug_random
+        osd debug verify missing on start: true
+        osd debug verify cached snaps: true
+        bluestore zero block detection: true
+      mon:
+        mon scrub interval: 300

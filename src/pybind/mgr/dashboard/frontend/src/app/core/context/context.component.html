@@ -1,0 +1,27 @@
+<ng-container *ngIf="{ ftMap: featureToggleMap$ | async, daemons: rgwDaemonService.daemons$ | async, selectedDaemon: rgwDaemonService.selectedDaemon$ | async } as data">
+  <ng-container *ngIf="data.ftMap && data.ftMap.rgw && permissions.rgw.read && isRgwRoute && data.daemons.length > 1">
+    <div class="cd-context-bar pt-3 pb-3">
+      <span class="mr-1"
+            i18n>Selected Object Gateway:</span>
+      <div ngbDropdown
+           placement="bottom-left"
+           class="d-inline-block ml-2">
+        <button ngbDropdownToggle
+                class="btn btn-outline-info ctx-bar-selected-rgw-daemon"
+                i18n-title
+                title="Select Object Gateway">
+          {{ data.selectedDaemon.id }} ( {{ data.selectedDaemon.zonegroup_name }} )
+        </button>
+        <div ngbDropdownMenu>
+          <ng-container *ngFor="let daemon of data.daemons">
+            <button ngbDropdownItem
+                    class="ctx-bar-available-rgw-daemon"
+                    (click)="onDaemonSelection(daemon)">
+              {{ daemon.id }} ( {{ daemon.zonegroup_name }} )
+            </button>
+          </ng-container>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+</ng-container>

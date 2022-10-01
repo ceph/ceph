@@ -1,0 +1,14 @@
+<ul ngbNav
+    #nav="ngbNav"
+    [activeId]="router.url"
+    (navChange)="router.navigate([$event.nextId])"
+    class="nav-tabs">
+  <li ngbNavItem="/block/iscsi/overview">
+    <a ngbNavLink
+       i18n>Overview</a>
+  </li>
+  <li ngbNavItem="/block/iscsi/targets">
+    <a ngbNavLink
+       i18n>Targets</a>
+  </li>
+</ul>

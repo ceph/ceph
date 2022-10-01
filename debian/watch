@@ -1,0 +1,2 @@
+version=3
+https://download.ceph.com/tarballs/ceph-(\d.*)\.tar\.gz

@@ -1,0 +1,28 @@
+rgw_main: contains the web server interface and checks user access keys.
+rgw_user: defines the RGWUserBuckets class and contains global functions
+to get/store user info, get the anon user, and get UIDs from email.
+rgw_user: defines the RGWUID class with some basic bookkeeping operations
+rgw_common: houses data types and functions
+rgw_access: abstract class providing interface for storage mechanisms
+rgw_acl.h: Many different classes, some decoding XML, some encoding XML, some doing checks for owner and permissions.
+rgw_fs: rgw_access based on the local fs.
+rgw_rados:  rgw_access based on an actual RADOS cluster.
+rgw_admin: Administer the cluster -- create users, look at the state, etc.
+rgw_op: Define the different operations as objects for easy tracking.
+rgw_REST: extend the classes in rgw_op for a REST interface
+
+user IDs are strings, as with S3.
+
+buckets:
+ui_email_bucket: hold objects named by email and containing encoded RGWUIDs
+ui_bucket: holds objects named by user_id and containing encoded RGWUserInfos
+root_bucket: holds objects corresponding to the other buckets, with ACLs in their attrs.
+
+Observed schema:
+buckets:
+.rgw -- contains: .users -- empty
+     		  .users.email -- empty
+		  johnny1 -- bucket name -- empty
+.users -- contains: anonymous -- empty
+       	  	    bucket for each user id -- contains binary, key, binary, secret key, binary, user name, binary, user email
+.users.email -- contains bucket for each user email -- contains binary, then user id

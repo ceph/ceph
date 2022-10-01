@@ -1,0 +1,7 @@
+roles:
+- [client.0]
+tasks:
+- install:
+- workunit:
+    clients:
+      all: [rbd/test_rbdmap_RBDMAPFILE.sh]

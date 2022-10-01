@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon max osd: 60000
+tasks:
+- workunit:
+    clients:
+      all:
+        - rbd/krbd_huge_osdmap.sh

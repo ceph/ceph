@@ -1,0 +1,82 @@
+digraph Paxos {
+  concentrate=true
+//  subgraph cluster0 {
+    collect -> state_recovering;
+    collect -> send_mmp_collect -> handle_collect [style=dotted];
+    handle_collect -> send_mmp_last;
+    send_mmp_last -> handle_last [style=dotted];
+    handle_last -> collect [label="collect(last_pn)"];
+    handle_last -> send_mmp_commit;
+    handle_last -> state_active;
+    handle_last -> begin;
+    handle_last -> extend_lease;
+
+//    color=grey;
+//    style=filled;
+//    label="Post-Election call chain";
+//  }
+
+  election_finished -> leader_init;
+  leader_init -> collect [label="collect(0)"];
+  send_mmp_commit -> handle_commit [style=dotted];
+
+  begin -> state_updating;
+  begin -> send_mmp_begin;
+  begin -> commit;
+  
+  send_mmp_begin -> handle_begin [style=dotted];
+  handle_begin -> state_updating;
+  handle_begin -> send_mmp_accept;
+  send_mmp_accept -> handle_accept [style=dotted];
+
+  handle_accept -> extend_lease;
+  handle_accept -> state_active;
+  handle_accept -> commit;
+
+  extend_lease -> send_mmp_lease;
+  send_mmp_lease -> handle_lease [style=dotted];
+  handle_lease -> state_active;
+  handle_lease -> send_mmp_lease_ack;
+  send_mmp_lease_ack -> handle_lease_ack [style=dotted];
+
+  commit -> send_mmp_commit;
+  commit -> "last_committed++" [shape=box];
+  send_mmp_commit -> handle_commit [style=dotted];
+
+  handle_commit -> store_state;
+
+  propose_pending -> propose_new_value;
+  propose_new_value -> begin;
+
+  election_finished [label="Election Finished", shape=box, bgcolor=grey, style=filled];
+  collect	    [label="collect()", shape=box];
+  commit	    [label="commit()", shape=box];
+  begin		    [label="begin()", shape=box];
+  extend_lease	    [label="extend_lease()", shape=box];
+  store_state	    [label="store_state()"]; // peon
+
+  propose_pending   [label="PaxosService::propose_pending()"];
+  propose_new_value [label="propose_new_value"];
+
+  send_mmp_collect  [label="send(OP_COLLECT)", shape=box];
+  send_mmp_last	    [label="send(OP_LAST)"];
+  send_mmp_commit   [label="send(OP_COMMIT)", shape=box];
+  send_mmp_begin    [label="send(OP_BEGIN)", shape=box];
+  send_mmp_accept   [label="send(OP_ACCEPT)"];
+  send_mmp_lease    [label="send(OP_LEASE)", shape=box];
+  send_mmp_lease_ack [label="send(OP_LEASE_ACK)"];
+
+  handle_collect    [label="handle_collect()"];
+  handle_last	    [label="handle_last()", shape=box];
+  handle_begin	    [label="handle_begin()"];
+  handle_accept	    [label="handle_accept()", shape=box];
+  handle_lease	    [label="handle_lease()"];
+  handle_lease_ack  [label="handle_lease_ack()", shape=box];
+  handle_commit	    [label="handle_commit()"];
+
+  leader_init	    [label="Paxos::leader_init()", shape=box];
+
+  state_recovering  [label="RECOVERING", shape=diamond];
+  state_active	    [label="ACTIVE", shape=diamond];
+  state_updating    [label="UPDATING", shape=diamond];
+}

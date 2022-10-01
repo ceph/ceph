@@ -1,0 +1,709 @@
+#!/usr/bin/env bash
+#
+#  ceph-lazy : Be efficient, be lazy !
+#
+#  Author: Gregory Charot <gcharot@redhat.com>
+#
+#  This is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
+#
+
+# Specify exta option for ceph like the username/keyring/etc. Can also be done with CEPH_ARGS global variable
+#CEPH_OPT="-n client.username"
+VERSION="1.1.2"
+
+#
+#  Print info message to stderr
+#
+
+function echoinfo() {
+  printf "INFO: %s\n" "$*" >&2;
+}
+
+
+#
+#  Print error message to stderr
+#
+
+function echoerr() {
+  printf "ERROR: %s\n" "$*" >&2;
+}
+
+
+function help() {
+  >&2 echo "Usage : ceph-lazy [-d | -h] [command] [parameters]
+
+Ceph complex querying tool - Version $VERSION
+
+OPTIONS
+========
+    -d          Activate debug mode
+    -h          Print help
+
+COMMANDS
+=========
+
+    Host
+    -----
+    host-get-osd      hostname                      List all OSD IDs attached to a particular node.
+    host-get-nodes                                  List all storage nodes.
+    host-osd-usage    hostname                      Show total OSD space usage of a particular node (-d for details).
+    host-all-usage                                  Show total OSD space usage of each nodes (-d for details)
+
+    Placement groups
+    -----------------
+    pg-get-host       pgid                          Find PG storage hosts (first is primary)
+    pg-most-write                                   Find most written PG (nb operations)
+    pg-less-write                                   Find less written PG (nb operations)
+    pg-most-write-kb                                Find most written PG (data written)
+    pg-less-write-kb                                Find less written PG (data written)
+    pg-most-read                                    Find most read PG (nb operations)
+    pg-less-read                                    Find less read PG (nb operations)
+    pg-most-read-kb                                 Find most read PG (data read)
+    pg-less-read-kb                                 Find less read PG (data read)
+    pg-empty                                        Find empty PGs (no stored object)
+
+    RBD
+    ----
+    rbd-prefix        pool_name image_name          Return RBD image prefix
+    rbd-count         pool_name image_name          Count number of objects in a RBD image
+    rbd-host          pool_name image_name          Find RBD primary storage hosts
+    rbd-osd           pool_name image_name          Find RBD primary OSDs
+    rbd-size          pool_name image_name          Print RBD image real size
+    rbd-all-size      pool_name                     Print all RBD images size (Top first)
+
+    OSD
+    ----
+    osd-most-used                                   Show the most used OSD (capacity)
+    osd-less-used                                   Show the less used OSD (capacity)
+    osd-get-ppg       osd_id                        Show all primaries PGS hosted on a OSD
+    osd-get-pg        osd_id                        Show all PGS hosted on a OSD
+
+    Objects
+    --------
+    object-get-host   pool_name object_id           Find object storage hosts (first is primary)
+  "
+
+}
+
+#
+#  Check dependencies
+#
+function check_requirements()
+{
+
+  # List of command dependencies
+  local bin_dep="ceph rados rbd osdmaptool jq"
+
+  for cmd in $bin_dep; do
+    [ $DEBUG -eq 1 ] && echoinfo "Checking for $cmd..."
+    $cmd --version  >/dev/null 2>&1 || { echoerr "$cmd cannot be found... Aborting."; return 1; }
+  done
+
+  CEPH="ceph $CEPH_OPT"
+
+  [ $DEBUG -eq 1 ] && echoinfo "Checking Ceph connectivity & basic permissions..."
+
+  if ! $CEPH -s &> /dev/null; then
+    echoerr "Cannot connect to cluster, please check your username & permissions"
+    echoerr "Command $CEPH -s failed"
+    return 1
+  fi
+
+  JQ="jq -M --raw-output"
+}
+
+#
+#  Print the host that hosts a specific PG
+#
+function find_host_from_pg() {
+
+  if [ $# -eq 1 ]; then
+    local PGID=$1
+  else
+    echoerr "This command requires one argument"
+    help
+    exit 1
+  fi
+
+  [ $DEBUG -eq 1 ] && echoinfo "PG $PGID has been found at (first is primary) : "
+
+  for osd in $($CEPH pg $PGID  query | $JQ -cr .up[]); do
+  	echo -n "OSD:osd.$osd | Host:"
+  	$CEPH osd find $osd --format json 2> /dev/null | $JQ .crush_location.host
+  done
+}
+
+
+#
+#  Print the host that hosts a specific object
+#
+function find_host_from_object() {
+
+  if [ $# -eq 2 ]; then
+    local pool=$1
+    local objid=$2
+  else
+    echoerr "This command requires two arguments"
+    help
+    exit 1
+  fi
+
+  local pgid=$($CEPH osd map $pool $objid --format json 2> /dev/null | $JQ -cr .pgid)
+
+  [ $DEBUG -eq 1 ] && echoinfo $objid found into PG $pgid
+
+  while read host; do
+    echo "PG:$pgid | $host"
+  done < <(find_host_from_pg $pgid)
+}
+
+
+#
+#  Print all primary pgs hosted by an OSD
+#
+function find_prim_pg_from_osd() {
+
+  if [ $# -eq 1 ]; then
+    local posd=$1
+  else
+    echoerr "This command requires one argument"
+    help
+    exit 1
+  fi
+
+  [ $DEBUG -eq 1 ] && echoinfo "Looking for primary PGs belonging to OSD $posd"
+  $CEPH pg dump pgs --format json 2>/dev/null | $JQ --argjson posd $posd '.[] | select(.acting_primary==$posd).pgid'
+}
+
+
+#
+#  Print all pgs (primary & secondary) hosted by an OSD
+#
+function find_all_pg_from_osd() {
+
+  if [ $# -eq 1 ]; then
+    local osd=$1
+  else
+    echoerr "This command requires one argument"
+    help
+    exit 1
+  fi
+
+  [ $DEBUG -eq 1 ] && echoinfo "Looking for all PGs mapped to OSD $osd"
+  $CEPH pg dump pgs --format json 2> /dev/null | $JQ -M --argjson osd $osd '.[] | select(.up[]==$osd).pgid'
+}
+
+
+#
+#  Check if a given image exists
+#
+function check_rbd_exists(){
+
+  pool=$1
+  rbd=$2
+
+  if ! rbd info -p $pool $rbd &> /dev/null; then
+    echoerr "Unable to find image $pool/$rbd"
+    exit 1
+  fi
+}
+
+
+#
+#  Return RBD prefix from image name
+#
+function get_rbd_prefix() {
+
+  if [ $# -eq 2 ]; then
+    local pool=$1
+    local rbd=$2
+  else
+    echoerr "This command requires two arguments"
+    help
+    exit 1
+  fi
+
+  check_rbd_exists $pool $rbd
+
+  local prefix=$(rbd --image $rbd -p $pool info --format json 2> /dev/null | jq --raw-output .block_name_prefix)
+  if [ -z $prefix ]; then
+    echoerr "Unable to find RBD Prefix for image $pool/$rbd"
+    exit 1
+  else
+    echo $prefix
+  fi
+
+}
+
+
+#
+#  Count number of object in a RBD image
+#
+function count_rbd_object() {
+
+  if [ $# -eq 2 ]; then
+    local pool=$1
+    local rbd=$2
+  else
+    echoerr "This command requires two arguments"
+    help
+    exit 1
+  fi
+
+  check_rbd_exists $pool $rbd
+
+  local rbd_prefix=$(get_rbd_prefix $pool $rbd)
+
+  [ $DEBUG -eq 1 ] && echoinfo "RBD image $pool/$rbd has prefix $rbd_prefix; now couning objects..."
+
+  local nb_obj=$(rados -p $pool ls | grep $rbd_prefix | wc -l)
+
+  [ $DEBUG -eq 1 ] && echoinfo "RBD image $pool/$rbd has $nb_obj objects"
+  echo $nb_obj
+}
+
+
+#
+#  Find primary storage host for a given RBD image
+#
+function find_prim_host_from_rbd() {
+
+ if [ $# -eq 2 ]; then
+    local pool=$1
+    local rbd=$2
+  else
+    echoerr "This command requires two arguments"
+    help
+    exit 1
+  fi
+
+  check_rbd_exists $pool $rbd
+
+  local osd="null"
+  local osdmap_t=$(mktemp)
+  local osdtree_t=$(mktemp)
+  # Get RBD image prefix
+  local rbd_prefix=$(get_rbd_prefix $pool $rbd)
+# Exit if we received an empty prefix
+  [ -z $rbd_prefix ] && exit 1
+
+# Get pool ID from pool name
+  local pool_id=$(ceph osd lspools -f json | $JQ  -M --arg pool $pool '.[]|select(.poolname==$pool).poolnum')
+  
+  [ $DEBUG -eq 1 ] && echoinfo "RBD image $pool/$rbd has prefix $rbd_prefix; now finding primary host..."
+
+  [ $DEBUG -eq 1 ] && echoinfo "Dumping OSD map to $osdmap_t"
+  if ! $CEPH osd getmap > $osdmap_t 2> /dev/null; then
+    echoerr "Failed to retrieve OSD map"
+    exit 1
+  fi
+
+  [ $DEBUG -eq 1 ] && echoinfo "Dumping OSD tree to $osdtree_t"
+
+  if ! $CEPH osd tree --format json > $osdtree_t; then
+    echoerr "Failed to retrieve OSD tree"
+    exit 1
+  fi
+
+  [ $DEBUG -eq 1 ] && echoinfo "Looking for hosts..."
+
+# For each object in the RBD image
+  for obj in $(rados -p $pool ls | grep $rbd_prefix);
+    do
+# Map object to osd. osdmaptoot does not support json output so using dirty sed.
+      osd=$(osdmaptool  --test-map-object $obj --pool $pool_id $osdmap_t 2>/dev/null | sed -r 's/.*\[([[:digit:]]+),.*/\1/' | grep -v osdmaptool)
+# Map osd to host
+      $JQ --argjson osd $osd  '.nodes[] | select(.type=="host") | select(.children[] == $osd).name' $osdtree_t
+  done | sort -u
+
+# Cleaning files
+  rm -f $osdtree_t $osdmap_t
+}
+
+
+#
+#  Find primary OSDs for a given RBD image
+#
+function find_prim_osd_from_rbd() {
+
+ if [ $# -eq 2 ]; then
+    local pool=$1
+    local rbd=$2
+  else
+    echoerr "This command requires two arguments"
+    help
+    exit 1
+  fi
+
+  check_rbd_exists $pool $rbd
+
+  local osd="null"
+  local osdmap_t=$(mktemp)
+  local osdtree_t=$(mktemp)
+  # Get RBD image prefix
+  local rbd_prefix=$(get_rbd_prefix $pool $rbd)
+
+# Exit if we received an empty prefix
+  [ -z $rbd_prefix ] && exit 1
+
+  [ $DEBUG -eq 1 ] && echoinfo "RBD image $pool/$rbd has prefix $rbd_prefix; now finding primary OSDs..."
+
+  [ $DEBUG -eq 1 ] && echoinfo "Dumping OSD map to $osdmap_t"
+  if ! $CEPH osd getmap > $osdmap_t; then
+    echoerr "Failed to retrieve OSD map"
+    exit 1
+  fi
+
+# For each object in the RBD image
+  for obj in $(rados -p $pool ls | grep $rbd_prefix);
+    do
+# Map object to osd. osdmaptoot does not support json output so using dirty sed.
+      osd=$(osdmaptool  --test-map-object $obj $osdmap_t 2>/dev/null | sed -r 's/.*\[([[:digit:]]+),.*/\1/' | grep -v osdmaptool)
+      echo "osd.${osd}"
+  done | sort -u
+
+# Cleaning files
+  rm -f $osdmap_t
+}
+
+
+#
+#  Print RBD image real size - Source http://ceph.com/planet/real-size-of-a-ceph-rbd-image/
+#
+
+function print_rbd_real_size {
+
+   if [ $# -eq 2 ]; then
+    local pool=$1
+    local rbd=$2
+  else
+    echoerr "This command requires two arguments"
+    help
+    exit 1
+  fi
+
+  [ $DEBUG -eq 1 ] && echoinfo "Checking if RBD image exists..."
+
+  check_rbd_exists $pool $rbd
+
+  rbd diff $pool/$rbd | awk '{ SUM += $2 } END { print SUM/1024/1024 " MB" }'
+
+}
+
+
+#
+#  Print all RBD image real sizes - Top first
+#
+
+function list_all_rbd_real_size {
+
+  if [ $# -eq 1 ]; then
+    local pool=$1
+  else
+    echoerr "This command requires one argument"
+    help
+    exit 1
+  fi
+
+  [ $DEBUG -eq 1 ] && echoinfo "Looking for RBD images in pool $pool"
+
+  while read rbd; do
+    [ $DEBUG -eq 1 ] && echoinfo "Inspecting image $rbd"
+    rbd diff $pool/$rbd | awk -v rbd="$rbd" '{ SUM += $2 } END { print SUM/1024/1024 " MB - " rbd }'
+  done < <(rbd -p $pool ls) | sort -rV
+}
+
+
+#
+#  Print OSDs belonging to a particular storage host
+#
+
+function list_osd_from_host() {
+
+  if [ $# -eq 1 ]; then
+    local host=$1
+  else
+    echoerr "This command requires one argument"
+    help
+    exit 1
+  fi
+
+  $CEPH osd tree --format json-pretty 2> /dev/null | $JQ  --arg host $host '.nodes[] | select(.type=="host") | select(.name == $host).children[]' | sort -V
+
+}
+
+
+#
+#  List all OSD nodes
+#
+
+function list_all_nodes() {
+
+
+  $CEPH osd tree --format json | $JQ  -M --raw-output '.nodes[] | select(.type=="host") | .name' | sort -V
+
+}
+
+
+#
+#  Print Total OSD usage of a particular storage host
+#
+
+function show_host_osd_usage() {
+
+  if [ $# -eq 1 ]; then
+    local host=$1
+  else
+    echoerr "This command requires one argument"
+    help
+    exit 1
+  fi
+
+  local pgmap_t=$(mktemp)
+
+  local osd_used_kb=0
+  local total_used_kb=0
+
+  local total_available_kb=0
+  local osd_available_kb=0
+
+  local total_size_kb=0
+  local osd_size_kb=0
+  local nb_osd=0
+
+  [ $DEBUG -eq 1 ] && echoinfo "Dumping PG map..."
+  if ! $CEPH pg dump osds --format json 2>/dev/null > $pgmap_t; then
+    echoerr "Failed to retrieve PG map"
+    exit 1
+  fi
+
+  [ $DEBUG -eq 1 ] && echoinfo "Looking for all OSDs on host $host..."
+
+  for osd in $(list_osd_from_host $host); do
+
+    osd_used_kb=$($JQ --argjson osd $osd '.[] | select(.osd == $osd).kb_used' $pgmap_t)
+    osd_available_kb=$($JQ --argjson osd $osd '.[] | select(.osd == $osd).kb_avail' $pgmap_t)
+    osd_size_kb=$($JQ --argjson osd $osd '.[] | select(.osd == $osd).kb' $pgmap_t)
+
+    [ $DEBUG -eq 1 ] && echoinfo "OSD:$osd | Size:$(echo "scale=1;$osd_size_kb/1024/1024" | bc -l)GB | Used:$(echo "scale=1;$osd_used_kb /1024/1024" | bc -l)GB | Available:$(echo "scale=1;$osd_available_kb/1024/1024" | bc -l)GB"
+
+    let "total_used_kb=total_used_kb+osd_used_kb"
+    let "total_available_kb=total_available_kb+osd_available_kb"
+    let "total_size_kb=total_size_kb+osd_size_kb"
+    let "nb_osd++"
+
+  done
+
+  echo "Host:$host | OSDs:$nb_osd | Total_Size:$(echo "scale=1;$total_size_kb/1024/1024" | bc -l)GB | Total_Used:$(echo "scale=1;$total_used_kb /1024/1024" | bc -l)GB | Total_Available:$(echo "scale=1;$total_available_kb/1024/1024" | bc -l)GB"
+
+  rm -f $pgmap_t
+}
+
+
+#
+#  Print Total OSD usage of all nodes
+#
+
+function list_all_nodes_osd_usage() {
+
+
+  for host in $(list_all_nodes); do
+
+    [ $DEBUG -eq 1 ] && echoinfo "Looking at node $host..."
+
+    show_host_osd_usage $host
+  done
+
+}
+
+
+#
+#  Find most used (space) OSD
+#
+
+function find_most_used_osd() {
+
+  local osd=$($CEPH pg dump osds --format json 2> /dev/null| $JQ 'max_by(.kb_used) | .osd')
+  local host=$($CEPH osd find $osd 2> /dev/null | $JQ .crush_location.host)
+
+  echo "OSD:osd.${osd} | host:$host"
+}
+
+
+#
+#  Find less used (space) OSD
+#
+
+function find_less_used_osd() {
+
+  local osd=$($CEPH pg dump osds --format json 2> /dev/null| $JQ 'min_by(.kb_used) | .osd')
+  local host=$($CEPH osd find $osd 2> /dev/null | $JQ .crush_location.host)
+
+  echo "OSD:osd.${osd} | host:$host"
+}
+
+
+#
+#  Query PG stats
+#
+
+function pg_stat_query() {
+
+  if [ $# -eq 1 ]; then
+    local query_type=$1
+  else
+    echoerr "This command requires one argument"
+    help
+    exit 1
+  fi
+
+  local pgmap_t=$(mktemp)
+
+  [ $DEBUG -eq 1 ] && echoinfo "Dumping PG map..."
+  if ! $CEPH pg dump pgs --format json 2>/dev/null > $pgmap_t; then
+    echoerr "Failed to retrieve PG map"
+    exit 1
+  fi
+
+  local pgid=$($JQ --arg query_type $query_type "$query_type" $pgmap_t)
+  [ $DEBUG -eq 1 ] && echoinfo "Found PGID $pgid"
+
+  local osd=$($JQ --arg pgid $pgid '.[] | select(.pgid == $pgid).acting_primary' $pgmap_t)
+  [ $DEBUG -eq 1 ] && echoinfo "Found OSD $osd"
+
+  local host=$($CEPH osd find $osd --format json 2> /dev/null | $JQ .crush_location.host)
+  [ $DEBUG -eq 1 ] && echoinfo "Found host $host"
+
+  echo "PG:$pgid | OSD:osd.$osd | Host:$host"
+
+  rm -f $pgmap_t
+}
+
+
+#
+#  Find empty pgs (no object stored)
+#
+
+function find_empty_pg() {
+
+  $CEPH pg dump pgs --format json 2>/dev/null | $JQ '.[] | select(.stat_sum.num_objects == 0).pgid'
+
+}
+
+
+#
+#  MAIN
+#
+
+
+# Print help if no argument is given
+if [ $# -eq 0 ]; then
+  help
+  exit 1
+fi
+
+# Activate debug mode if -d is specified as first parameter
+if [ "$1" = "-d" ]; then
+  echoinfo "Debug mode activated"
+  DEBUG=1
+  shift
+else
+  DEBUG=0
+fi
+
+
+# Check if all requirements are met
+check_requirements || exit 1
+
+
+# Call proper function
+case $1 in
+  "-h")
+    help
+    exit 0
+    ;;
+  "host-get-osd")
+    list_osd_from_host $2
+    ;;
+  "host-get-nodes")
+    list_all_nodes
+    ;;
+  "host-osd-usage")
+    show_host_osd_usage $2
+    ;;
+  "host-all-usage")
+    list_all_nodes_osd_usage
+    ;;
+  "pg-get-host")
+    find_host_from_pg $2
+    ;;
+  "pg-most-write")
+    pg_stat_query "max_by(.stat_sum.num_write).pgid"
+    ;;
+  "pg-less-write")
+    pg_stat_query "min_by(.stat_sum.num_write).pgid"
+    ;;
+  "pg-most-write-kb")
+    pg_stat_query "max_by(.stat_sum.num_write_kb).pgid"
+    ;;
+  "pg-less-write-kb")
+    pg_stat_query "min_by(.stat_sum.num_write_kb).pgid"
+    ;;
+  "pg-most-read")
+    pg_stat_query "max_by(.stat_sum.num_read).pgid"
+    ;;
+  "pg-less-read")
+    pg_stat_query "min_by(.stat_sum.num_read).pgid"
+    ;;
+  "pg-most-read-kb")
+    pg_stat_query "max_by(.stat_sum.num_read_kb).pgid"
+    ;;
+  "pg-less-read-kb")
+    pg_stat_query "min_by(.stat_sum.num_read_kb).pgid"
+    ;;
+  "rbd-prefix")
+    get_rbd_prefix $2 $3
+    ;;
+  "rbd-count")
+    count_rbd_object $2 $3
+    ;;
+  "rbd-host")
+    find_prim_host_from_rbd $2 $3
+    ;;
+  "rbd-osd")
+    find_prim_osd_from_rbd $2 $3
+    ;;
+  "rbd-size")
+    print_rbd_real_size $2 $3
+    ;;
+  "rbd-all-size")
+    list_all_rbd_real_size $2
+    ;;
+  "osd-most-used")
+    find_most_used_osd
+    ;;
+  "osd-less-used")
+    find_less_used_osd
+    ;;
+  "osd-get-ppg")
+    find_prim_pg_from_osd $2
+    ;;
+  "osd-get-pg")
+    find_all_pg_from_osd $2
+    ;;
+  "pg-empty")
+    find_empty_pg
+    ;;
+  "object-get-host")
+    find_host_from_object $2 $3
+    ;;
+  *)
+    echoerr "Unknown command : $1"
+    help
+    exit 1
+    ;;
+esac
+

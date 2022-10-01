@@ -1,0 +1,6 @@
+tasks:
+    - buildpackages:
+        machine:
+          disk: 40 # GB
+          ram: 15000 # MB
+          cpus: 16

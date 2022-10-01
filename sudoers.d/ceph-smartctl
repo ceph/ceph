@@ -1,0 +1,4 @@
+## allow ceph daemons (which run as user ceph) to collect device health metrics
+
+ceph ALL=NOPASSWD: /usr/sbin/smartctl -x --json=o /dev/*
+ceph ALL=NOPASSWD: /usr/sbin/nvme * smart-log-add --json /dev/*

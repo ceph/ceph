@@ -1,0 +1,16 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        debug ms: 1
+        debug client: 20
+      mds:
+        debug ms: 1
+        debug mds: 20
+tasks:
+- ceph:
+- ceph-fuse:
+- workunit:
+    clients:
+      client.0:
+        - libcephfs/test.sh

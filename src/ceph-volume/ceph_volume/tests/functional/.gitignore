@@ -1,0 +1,5 @@
+*.vdi
+.vagrant/
+vagrant_ssh_config
+fetch/
+global_vagrant_variables.yml

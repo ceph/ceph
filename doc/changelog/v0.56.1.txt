@@ -1,0 +1,316 @@
+commit e4a541624df62ef353e754391cbbb707f54b16f7
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Mon Jan 7 13:33:30 2013 -0800
+
+    v0.56.1
+
+commit 9aecacda7fbf07f12b210f87cf3dbb53021b068d
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jan 6 08:38:27 2013 -0800
+
+    msg/Pipe: prepare Message data for wire under pipe_lock
+    
+    We cannot trust the Message bufferlists or other structures to be
+    stable without pipe_lock, as another Pipe may claim and modify the sent
+    list items while we are writing to the socket.
+    
+    Related to #3678.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d16ad9263d7b1d3c096f56c56e9631fae8509651)
+
+commit 299dbad490df5e98c04f17fa8e486a718f3c121f
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jan 6 08:33:01 2013 -0800
+
+    msgr: update Message envelope in encode, not write_message
+    
+    Fill out the Message header, footer, and calculate CRCs during
+    encoding, not write_message().  This removes most modifications from
+    Pipe::write_message().
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 40706afc66f485b2bd40b2b4b1cd5377244f8758)
+
+commit 35d2f58305eab6c9b57a92269598b9729e2d8681
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jan 6 08:25:40 2013 -0800
+
+    msg/Pipe: encode message inside pipe_lock
+    
+    This modifies bufferlists in the Message struct, and it is possible
+    for multiple instances of the Pipe to get references on the Message;
+    make sure they don't modify those bufferlists concurrently.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4cfc4903c6fb130b6ac9105baf1f66fbda797f14)
+
+commit 9b23f195df43589d062da95a11abc07c79f3109b
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 5 10:39:08 2013 -0800
+
+    msg/Pipe: associate sending msgs to con inside lock
+    
+    Associate a sending message with the connection inside the pipe_lock.
+    This way if a racing thread tries to steal these messages it will
+    be sure to reset the con point *after* we do such that it the con
+    pointer is valid in encode_payload() (and later).
+    
+    This may be part of #3678.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a058f16113efa8f32eb5503d5443aa139754d479)
+
+commit 6229b5a06f449a470d3211ea94c1c5faf7100876
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 5 09:29:50 2013 -0800
+
+    msg/Pipe: fix msg leak in requeue_sent()
+    
+    The sent list owns a reference to each message.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2a1eb466d3f8e25ec8906b3ca6118a14c4e269d2)
+
+commit 6a00ce0dc24626fdfa210ddec6334bde3c8a20db
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 7 12:58:39 2013 -0800
+
+    osdc/Objecter: fix linger_ops iterator invalidation on pool deletion
+    
+    The call to check_linger_pool_dne() may unregister the linger request,
+    invalidating the iterator.  To avoid this, increment the iterator at
+    the top of the loop.
+    
+    This mirror the fix in 4bf9078286d58c2cd4e85cb8b31411220a377092 for
+    regular non-linger ops.
+    
+    Fixes: #3734
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 62586884afd56f2148205bdadc5a67037a750a9b)
+
+commit a10950f91e6ba9c1620d8fd00a84fc59f983fcee
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 5 20:53:49 2013 -0800
+
+    os/FileJournal: include limits.h
+    
+    Needed for IOV_MAX.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ce49968938ca3636f48fe543111aa219f36914d8)
+
+commit cd194ef3c7082993cae0892a97494f2a917ce2a7
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 4 17:43:41 2013 -0800
+
+    osd: special case CALL op to not have RD bit effects
+    
+    In commit 20496b8d2b2c3779a771695c6f778abbdb66d92a we treat a CALL as
+    different from a normal "read", but we did not adjust the behavior
+    determined by the RD bit in the op.  We tried to fix that in
+    91e941aef9f55425cc12204146f26d79c444cfae, but changing the op code breaks
+    compatibility, so that was reverted.
+    
+    Instead, special-case CALL in the helper--the only point in the code that
+    actually checks for the RD bit.  (And fix one lingering user to use that
+    helper appropriately.)
+    
+    Fixes: #3731
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 988a52173522e9a410ba975a4e8b7c25c7801123)
+
+commit 921e06decebccc913c0e4f61916d00e62e7e1635
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 4 20:46:48 2013 -0800
+
+    Revert "OSD: remove RD flag from CALL ops"
+    
+    This reverts commit 91e941aef9f55425cc12204146f26d79c444cfae.
+    
+    We cannot change this op code without breaking compatibility
+    with old code (client and server).  We'll have to special case
+    this op code instead.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit d3abd0fe0bb402ff403259d4b1a718a56331fc39)
+
+commit 7513e9719a532dc538d838f68e47c83cc51fef82
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Jan 4 12:43:52 2013 -0800
+
+    ReplicatedPG: remove old-head optization from push_to_replica
+    
+    This optimization allowed the primary to push a clone as a single push in the
+    case that the head object on the replica is old and happens to be at the same
+    version as the clone.  In general, using head in clone_subsets is tricky since
+    we might be writing to head during the push.  calc_clone_subsets does not
+    consider head (probably for this reason).  Handling the clone from head case
+    properly would require blocking writes on head in the interim which is probably
+    a bad trade off anyway.
+    
+    Because the old-head optimization only comes into play if the replica's state
+    happens to fall on the last write to head prior to the snap that caused the
+    clone in question, it's not worth the complexity.
+    
+    Fixes: #3698
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e89b6ade63cdad315ab754789de24008cfe42b37)
+
+commit c63c66463a567e8095711e7c853ac8feb065c5c5
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jan 3 17:15:07 2013 -0800
+
+    os/FileStore: fix non-btrfs op_seq commit order
+    
+    The op_seq file is the starting point for journal replay.  For stable btrfs
+    commit mode, which is using a snapshot as a reference, we should write this
+    file before we take the snap.  We normally ignore current/ contents anyway.
+    
+    On non-btrfs file systems, however, we should only write this file *after*
+    we do a full sync, and we should then fsync(2) it before we continue
+    (and potentially trim anything from the journal).
+    
+    This fixes a serious bug that could cause data loss and corruption after
+    a power loss event.  For a 'kill -9' or crash, however, there was little
+    risk, since the writes were still captured by the host's cache.
+    
+    Fixes: #3721
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 28d59d374b28629a230d36b93e60a8474c902aa5)
+
+commit b8f061dcdb808a6fc5ec01535b37560147b537de
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Jan 3 09:59:45 2013 -0800
+
+    OSD: for old osds, dispatch peering messages immediately
+    
+    Normally, we batch up peering messages until the end of
+    process_peering_events to allow us to combine many notifies, etc
+    to the same osd into the same message.  However, old osds assume
+    that the actiavtion message (log or info) will be _dispatched
+    before the first sub_op_modify of the interval.  Thus, for those
+    peers, we need to send the peering messages before we drop the
+    pg lock, lest we issue a client repop from another thread before
+    activation message is sent.
+    
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4ae4dce5c5bb547c1ff54d07c8b70d287490cae9)
+
+commit 67968d115daf51762dce65af46b9b843eda592b5
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jan 2 22:38:53 2013 -0800
+
+    osd: move common active vs booting code into consume_map
+    
+    Push osdmaps to PGs in separate method from activate_map() (whose name
+    is becoming less and less accurate).
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a32d6c5dca081dcd8266f4ab51581ed6b2755685)
+
+commit 34266e6bde9f36b1c46144d2341b13605eaa9abe
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jan 2 22:20:06 2013 -0800
+
+    osd: let pgs process map advances before booting
+    
+    The OSD deliberate consumes and processes most OSDMaps from while it
+    was down before it marks itself up, as this is can be slow.  The new
+    threading code does this asynchronously in peering_wq, though, and
+    does not let it drain before booting the OSD.  The OSD can get into
+    a situation where it marks itself up but is not responsive or useful
+    because of the backlog, and only makes the situation works by
+    generating more osdmaps as result.
+    
+    Fix this by calling activate_map() even when booting, and when booting
+    draining the peering_wq on each call.  This is harmless since we are
+    not yet processing actual ops; we only need to be async when active.
+    
+    Fixes: #3714
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 0bfad8ef2040a0dd4a0dc1d3abf3ab5b2019d179)
+
+commit 4034f6c817d1efce5fb9eb8cc0a9327f9f7d7910
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Dec 28 13:07:18 2012 -0800
+
+    log: broadcast cond signals
+    
+    We were using a single cond, and only signalling one waiter.  That means
+    that if the flusher and several logging threads are waiting, and we hit
+    a limit, we the logger could signal another logger instead of the flusher,
+    and we could deadlock.
+    
+    Similarly, if the flusher empties the queue, it might signal only a single
+    logger, and that logger could re-signal the flusher, and the other logger
+    could wait forever.
+    
+    Intead, break the single cond into two: one for loggers, and one for the
+    flusher.  Always signal the (one) flusher, and always broadcast to all
+    loggers.
+    
+    Backport: bobtail, argonaut
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 813787af3dbb99e42f481af670c4bb0e254e4432)
+
+commit 2141454eee3a1727706d48f8efef92f8a2b98278
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jan 2 13:58:44 2013 -0800
+
+    log: fix locking typo/stupid for dump_recent()
+    
+    We weren't locking m_flush_mutex properly, which in turn was leading to
+    racing threads calling dump_recent() and garbling the crash dump output.
+    
+    Backport: bobtail, argonaut
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 43cba617aa0247d714632bddf31b9271ef3a1b50)
+
+commit 936560137516a1fd5e55b52ccab59c408ac2c245
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Dec 28 16:48:22 2012 -0800
+
+    test_filejournal: optionally specify journal filename as an argument
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 483c6f76adf960017614a8641c4dcdbd7902ce33)
+
+commit be0473bbb1feb8705be4fa8f827704694303a930
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Dec 28 16:48:05 2012 -0800
+
+    test_filejournal: test journaling bl with >IOV_MAX segments
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c461e7fc1e34fdddd8ff8833693d067451df906b)
+
+commit de61932793c5791c770855e470e3b5b9ebb53dba
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Dec 28 16:47:28 2012 -0800
+
+    os/FileJournal: limit size of aio submission
+    
+    Limit size of each aio submission to IOV_MAX-1 (to be safe).  Take care to
+    only mark the last aio with the seq to signal completion.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit dda7b651895ab392db08e98bf621768fd77540f0)
+
+commit ded454c669171d4038b087cfdad52a57da222c1f
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Dec 28 15:44:51 2012 -0800
+
+    os/FileJournal: logger is optional
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 076b418c7f03c5c62f811fdc566e4e2b776389b7)
