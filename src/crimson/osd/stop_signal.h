@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <seastar/core/sharded.hh>
+#include <seastar/core/abort_source.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/condition-variable.hh>
 
@@ -49,14 +49,15 @@ namespace seastar_apps_lib {
 /// });
 /// \endcode
 class stop_signal {
-    bool _caught = false;
     seastar::condition_variable _cond;
+    seastar::abort_source _abort_source;
+
 private:
     void signaled() {
-        if (_caught) {
+        if (stopping()) {
             return;
         }
-        _caught = true;
+        _abort_source.request_abort();
         _cond.broadcast();
     }
 public:
@@ -70,10 +71,13 @@ public:
         seastar::engine().handle_signal(SIGTERM, [] {});
     }
     seastar::future<> wait() {
-        return _cond.wait([this] { return _caught; });
+        return _cond.wait([this] { return _abort_source.abort_requested(); });
     }
     bool stopping() const {
-        return _caught;
+        return _abort_source.abort_requested();
+    }
+    auto& abort_source() {
+        return _abort_source;
     }
 };
 }
