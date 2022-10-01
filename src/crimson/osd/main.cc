@@ -307,7 +307,8 @@ int main(int argc, const char* argv[])
             local_conf().get_config_values()).get();
 
           crimson::osd::OSD osd(
-	    whoami, nonce, std::ref(*store), cluster_msgr, client_msgr,
+            whoami, nonce, std::ref(should_stop.abort_source()),
+            std::ref(*store), cluster_msgr, client_msgr,
 	    hb_front_msgr, hb_back_msgr);
 
           if (config.count("mkkey")) {
