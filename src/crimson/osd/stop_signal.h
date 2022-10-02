@@ -53,7 +53,7 @@ class stop_signal {
     seastar::abort_source _abort_source;
 
 private:
-    void signaled() {
+    void on_signal() {
         if (stopping()) {
             return;
         }
@@ -62,8 +62,8 @@ private:
     }
 public:
     stop_signal() {
-        seastar::engine().handle_signal(SIGINT, [this] { signaled(); });
-        seastar::engine().handle_signal(SIGTERM, [this] { signaled(); });
+        seastar::engine().handle_signal(SIGINT, [this] { on_signal(); });
+        seastar::engine().handle_signal(SIGTERM, [this] { on_signal(); });
     }
     ~stop_signal() {
         // There's no way to unregister a handler yet, so register a no-op handler instead.
