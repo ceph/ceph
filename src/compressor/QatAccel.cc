@@ -42,35 +42,45 @@ void QzSessionDeleter::operator() (struct QzSession_S *session) {
   delete session;
 }
 
-static bool get_qz_params(const std::string &alg, QzSessionParams_T &params) {
+static bool get_qz_params(const std::string &alg, auto &params) {
   int rc;
+#if QATZIP_API_VERSION_NUM_MAJOR > 1
+  rc = qzGetDefaultsDeflate(&params);
+#else
   rc = qzGetDefaults(&params);
-  if (rc != QZ_OK)
+#endif
+  if (rc != QZ_OK || alg != "zlib")
     return false;
+#if QATZIP_API_VERSION_NUM_MAJOR > 1
+  params.common_params.direction = QZ_DIR_BOTH;
+  params.common_params.comp_algorithm = QZ_DEFLATE;
+  params.common_params.comp_lvl = g_ceph_context->_conf->compressor_zlib_level;
+  params.common_params.polling_mode = QZ_BUSY_POLLING;
+  params.data_fmt = QZ_DEFLATE_RAW;
+  rc = qzSetDefaultsDeflate(&params);
+#else
   params.direction = QZ_DIR_BOTH;
+  params.comp_algorithm = QZ_DEFLATE;
+  params.comp_lvl = g_ceph_context->_conf->compressor_zlib_level;
   params.is_busy_polling = true;
-  if (alg == "zlib") {
-    params.comp_algorithm = QZ_DEFLATE;
-    params.data_fmt = QZ_DEFLATE_RAW;
-    params.comp_lvl = g_ceph_context->_conf->compressor_zlib_level;
-  }
-  else {
-    // later, there also has lz4.
-    return false;
-  }
-
+  params.data_fmt = QZ_DEFLATE_RAW;
   rc = qzSetDefaults(&params);
+#endif
   if (rc != QZ_OK)
       return false;
   return true;
 }
 
-static bool setup_session(QatAccel::session_ptr &session, QzSessionParams_T &params) {
+static bool setup_session(QatAccel::session_ptr &session, auto &params) {
   int rc;
   rc = qzInit(session.get(), QZ_SW_BACKUP_DEFAULT);
   if (rc != QZ_OK && rc != QZ_DUPLICATE)
     return false;
+#if QATZIP_API_VERSION_NUM_MAJOR > 1
+  rc = qzSetupSessionDeflate(session.get(), &params);
+#else
   rc = qzSetupSession(session.get(), &params);
+#endif
   if (rc != QZ_OK) {
     return false;
   }
@@ -113,7 +123,11 @@ QatAccel::session_ptr QatAccel::get_session() {
 
   // If there are no available session to use, we try allocate a new
   // session.
+#if QATZIP_API_VERSION_NUM_MAJOR > 1
+  QzSessionParamsDeflate_T params;
+#else
   QzSessionParams_T params = {(QzHuffmanHdr_T)0,};
+#endif
   session_ptr session(new struct QzSession_S());
   memset(session.get(), 0, sizeof(struct QzSession_S));
   if (get_qz_params(alg_name, params) && setup_session(session, params)) {
