@@ -10,6 +10,13 @@ roles:
 - [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
 tasks:
 - install:
+    extra_packages:
+      deb:
+        - librados-dev
+        - libradospp-dev
+      rpm:
+        - librados-devel
+        - libradospp-devel
 - ceph:
     pre-mgr-commands:
       - sudo ceph config set mgr mgr_pool false --force
