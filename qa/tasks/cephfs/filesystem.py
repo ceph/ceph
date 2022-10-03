@@ -1663,3 +1663,13 @@ class Filesystem(MDSCluster):
 
         # timed out waiting for scrub to complete
         return False
+
+    def get_damage(self, rank=None):
+        if rank is None:
+            result = {}
+            for info in self.get_ranks():
+                rank = info['rank']
+                result[rank] = self.get_damage(rank=rank)
+            return result
+        else:
+            return self.rank_tell(['damage', 'ls'], rank=rank)
