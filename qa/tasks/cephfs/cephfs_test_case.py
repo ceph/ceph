@@ -71,9 +71,6 @@ class CephFSTestCase(CephTestCase):
     # Whether to create the default filesystem during setUp
     REQUIRE_FILESYSTEM = True
 
-    # requires REQUIRE_FILESYSTEM = True
-    REQUIRE_RECOVERY_FILESYSTEM = False
-
     # create a backup filesystem if required.
     # required REQUIRE_FILESYSTEM enabled
     REQUIRE_BACKUP_FILESYSTEM = False
@@ -190,20 +187,6 @@ class CephFSTestCase(CephTestCase):
                                                 '--yes-i-really-mean-it')
             self.backup_fs = self.mds_cluster.newfs(name="backup_fs")
             self.backup_fs.wait_for_daemons()
-
-        if self.REQUIRE_RECOVERY_FILESYSTEM:
-            if not self.REQUIRE_FILESYSTEM:
-                self.skipTest("Recovery filesystem requires a primary filesystem as well")
-            # After Octopus is EOL, we can remove this setting:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'flag', 'set',
-                                                'enable_multiple', 'true',
-                                                '--yes-i-really-mean-it')
-            self.recovery_fs = self.mds_cluster.newfs(name="recovery_fs", create=False)
-            self.recovery_fs.set_metadata_overlay(True)
-            self.recovery_fs.set_data_pool_name(self.fs.get_data_pool_name())
-            self.recovery_fs.create()
-            self.recovery_fs.getinfo(refresh=True)
-            self.recovery_fs.wait_for_daemons()
 
         # Load an config settings of interest
         for setting in self.LOAD_SETTINGS:

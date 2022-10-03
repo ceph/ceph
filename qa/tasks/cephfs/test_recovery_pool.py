@@ -16,11 +16,7 @@ ValidationError = namedtuple("ValidationError", ["exception", "backtrace"])
 
 
 class OverlayWorkload(object):
-    def __init__(self, orig_fs, recovery_fs, orig_mount, recovery_mount):
-        self._orig_fs = orig_fs
-        self._recovery_fs = recovery_fs
-        self._orig_mount = orig_mount
-        self._recovery_mount = recovery_mount
+    def __init__(self):
         self._initial_state = None
 
         # Accumulate backtraces for every failed validation, and return them.  Backtraces
@@ -51,41 +47,40 @@ class OverlayWorkload(object):
         """
         raise NotImplementedError()
 
-    def damage(self):
+    def damage(self, fs):
         """
         Damage the filesystem pools in ways that will be interesting to recover from.  By
         default just wipe everything in the metadata pool
         """
 
-        pool = self._orig_fs.get_metadata_pool_name()
-        self._orig_fs.rados(["purge", pool, '--yes-i-really-really-mean-it'])
+        pool = fs.get_metadata_pool_name()
+        fs.rados(["purge", pool, '--yes-i-really-really-mean-it'])
 
-    def flush(self):
+    def flush(self, fs):
         """
         Called after client unmount, after write: flush whatever you want
         """
-        self._orig_fs.mds_asok(["flush", "journal"])
-        self._recovery_fs.mds_asok(["flush", "journal"])
+        fs.rank_asok(["flush", "journal"])
 
 
 class SimpleOverlayWorkload(OverlayWorkload):
     """
     Single file, single directory, check that it gets recovered and so does its size
     """
-    def write(self):
-        self._orig_mount.run_shell(["mkdir", "subdir"])
-        self._orig_mount.write_n_mb("subdir/sixmegs", 6)
-        self._initial_state = self._orig_mount.stat("subdir/sixmegs")
+    def write(self, mount):
+        mount.run_shell(["mkdir", "subdir"])
+        mount.write_n_mb("subdir/sixmegs", 6)
+        self._initial_state = mount.stat("subdir/sixmegs")
 
-    def validate(self):
-        self._recovery_mount.run_shell(["ls", "subdir"])
-        st = self._recovery_mount.stat("subdir/sixmegs")
+    def validate(self, recovery_mount):
+        recovery_mount.run_shell(["ls", "subdir"])
+        st = recovery_mount.stat("subdir/sixmegs")
         self.assert_equal(st['st_size'], self._initial_state['st_size'])
         return self._errors
 
 class TestRecoveryPool(CephFSTestCase):
     MDSS_REQUIRED = 2
-    CLIENTS_REQUIRED = 2
+    CLIENTS_REQUIRED = 1
     REQUIRE_RECOVERY_FILESYSTEM = True
 
     def is_marked_damaged(self, rank):
@@ -100,95 +95,77 @@ class TestRecoveryPool(CephFSTestCase):
 
         # First, inject some files
 
-        workload.write()
+        workload.write(self.mount_a)
 
         # Unmount the client and flush the journal: the tool should also cope with
         # situations where there is dirty metadata, but we'll test that separately
         self.mount_a.umount_wait()
-        self.mount_b.umount_wait()
-        workload.flush()
-
-        # Create the alternate pool if requested
-        recovery_fs = self.recovery_fs.name
-        recovery_pool = self.recovery_fs.get_metadata_pool_name()
-        self.recovery_fs.data_scan(['init', '--force-init',
-                                    '--filesystem', recovery_fs,
-                                    '--alternate-pool', recovery_pool])
-        self.recovery_fs.mon_manager.raw_cluster_cmd('-s')
-        self.recovery_fs.table_tool([recovery_fs + ":0", "reset", "session"])
-        self.recovery_fs.table_tool([recovery_fs + ":0", "reset", "snap"])
-        self.recovery_fs.table_tool([recovery_fs + ":0", "reset", "inode"])
-
-        # Stop the MDS
-        self.fs.mds_stop() # otherwise MDS will join once the fs is reset
+        workload.flush(self.fs)
         self.fs.fail()
 
         # After recovery, we need the MDS to not be strict about stats (in production these options
         # are off by default, but in QA we need to explicitly disable them)
+        # Note: these have to be written to ceph.conf to override existing ceph.conf values.
         self.fs.set_ceph_conf('mds', 'mds verify scatter', False)
         self.fs.set_ceph_conf('mds', 'mds debug scatterstat', False)
+        self.fs.mds_restart()
 
         # Apply any data damage the workload wants
-        workload.damage()
+        workload.damage(self.fs)
+
+        # Create the alternate pool if requested
+        recovery_fs = self.mds_cluster.newfs(name="recovery_fs", create=False)
+        recovery_fs.set_data_pool_name(self.fs.get_data_pool_name())
+        recovery_fs.create(recover=True, metadata_overlay=True)
+
+        recovery_pool = recovery_fs.get_metadata_pool_name()
+        recovery_fs.mon_manager.raw_cluster_cmd('-s')
 
         # Reset the MDS map in case multiple ranks were in play: recovery procedure
         # only understands how to rebuild metadata under rank 0
-        self.fs.reset()
-
-        self.fs.table_tool([self.fs.name + ":0", "reset", "session"])
-        self.fs.table_tool([self.fs.name + ":0", "reset", "snap"])
-        self.fs.table_tool([self.fs.name + ":0", "reset", "inode"])
+        #self.fs.reset()
+        #self.fs.table_tool([self.fs.name + ":0", "reset", "session"])
+        #self.fs.table_tool([self.fs.name + ":0", "reset", "snap"])
+        #self.fs.table_tool([self.fs.name + ":0", "reset", "inode"])
 
         # Run the recovery procedure
+        recovery_fs.data_scan(['init', '--force-init',
+                               '--filesystem', recovery_fs.name,
+                               '--alternate-pool', recovery_pool])
+        recovery_fs.table_tool([recovery_fs.name + ":0", "reset", "session"])
+        recovery_fs.table_tool([recovery_fs.name + ":0", "reset", "snap"])
+        recovery_fs.table_tool([recovery_fs.name + ":0", "reset", "inode"])
         if False:
             with self.assertRaises(CommandFailedError):
                 # Normal reset should fail when no objects are present, we'll use --force instead
                 self.fs.journal_tool(["journal", "reset"], 0)
 
-        self.fs.data_scan(['scan_extents', '--alternate-pool',
+        recovery_fs.data_scan(['scan_extents', '--alternate-pool',
                            recovery_pool, '--filesystem', self.fs.name,
                            self.fs.get_data_pool_name()])
-        self.fs.data_scan(['scan_inodes', '--alternate-pool',
+        recovery_fs.data_scan(['scan_inodes', '--alternate-pool',
                            recovery_pool, '--filesystem', self.fs.name,
                            '--force-corrupt', '--force-init',
                            self.fs.get_data_pool_name()])
-        self.fs.journal_tool(['event', 'recover_dentries', 'list',
+        recovery_fs.data_scan(['scan_links', '--filesystem', recovery_fs.name])
+        recovery_fs.journal_tool(['event', 'recover_dentries', 'list',
                               '--alternate-pool', recovery_pool], 0)
-
-        self.fs.data_scan(['init', '--force-init', '--filesystem',
-                           self.fs.name])
-        self.fs.data_scan(['scan_inodes', '--filesystem', self.fs.name,
-                           '--force-corrupt', '--force-init',
-                           self.fs.get_data_pool_name()])
-        self.fs.journal_tool(['event', 'recover_dentries', 'list'], 0)
-
-        self.recovery_fs.journal_tool(['journal', 'reset', '--force'], 0)
-        self.fs.journal_tool(['journal', 'reset', '--force'], 0)
-        self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired',
-                                            recovery_fs + ":0")
-
-        # Mark the MDS repaired
-        self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
+        recovery_fs.journal_tool(["journal", "reset", "--force"], 0)
 
         # Start the MDS
-        self.fs.mds_restart()
-        self.fs.set_joinable()
-        self.recovery_fs.mds_restart()
-        self.fs.wait_for_daemons()
-        self.recovery_fs.wait_for_daemons()
-        status = self.recovery_fs.status()
-        for rank in self.recovery_fs.get_ranks(status=status):
-            self.fs.mon_manager.raw_cluster_cmd('tell', "mds." + rank['name'],
-                                                'injectargs', '--debug-mds=20')
-            self.fs.rank_tell(['scrub', 'start', '/', 'recursive,repair'], rank=rank['rank'], status=status)
-        log.info(str(self.mds_cluster.status()))
+        recovery_fs.set_joinable()
+        status = recovery_fs.wait_for_daemons()
+
+        self.config_set('mds', 'debug_mds', '20')
+        for rank in recovery_fs.get_ranks(status=status):
+            recovery_fs.rank_tell(['scrub', 'start', '/', 'force,recursive,repair'], rank=rank['rank'], status=status)
+        log.info(str(recovery_fs.status()))
 
         # Mount a client
-        self.mount_a.mount_wait()
-        self.mount_b.mount_wait(cephfs_name=recovery_fs)
+        self.mount_a.mount_wait(cephfs_name=recovery_fs.name)
 
         # See that the files are present and correct
-        errors = workload.validate()
+        errors = workload.validate(self.mount_a)
         if errors:
             log.error("Validation errors found: {0}".format(len(errors)))
             for e in errors:
@@ -199,5 +176,4 @@ class TestRecoveryPool(CephFSTestCase):
             ))
 
     def test_rebuild_simple(self):
-        self._rebuild_metadata(SimpleOverlayWorkload(self.fs, self.recovery_fs,
-                                                     self.mount_a, self.mount_b))
+        self._rebuild_metadata(SimpleOverlayWorkload())
