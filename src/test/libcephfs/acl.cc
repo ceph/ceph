@@ -280,6 +280,9 @@ TEST(ACL, DefaultACL) {
 
   free(acl1_buf);
   free(acl2_buf);
+  ASSERT_EQ(ceph_unlink(cmount, test_file1), 0);
+  ASSERT_EQ(ceph_rmdir(cmount, test_dir2), 0);
+  ASSERT_EQ(ceph_rmdir(cmount, test_dir1), 0);
   ceph_close(cmount, fd);
   ceph_shutdown(cmount);
 }
