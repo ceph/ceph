@@ -23,6 +23,60 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		has no single point of failure.
 
 	Ceph
+	Ceph Block Device
+	Ceph Block Storage
+                The block storage "product," service or capabilities when used
+                in conjunction with ``librbd``, a hypervisor such as QEMU or
+                Xen, and a hypervisor abstraction layer such as ``libvirt``.
+
+	Ceph Client
+                The collection of Ceph components which can access a Ceph
+                Storage Cluster. These include the Ceph Object Gateway, the
+                Ceph Block Device, the Ceph File System, and their
+                corresponding libraries, kernel modules, and FUSEs.
+
+	Ceph Client Libraries
+                The collection of libraries that can be used to interact with
+                components of the Ceph System.
+
+	Ceph Cluster Map
+	Ceph Dashboard
+	Ceph File System
+                See :term:`CephFS`
+
+	CephFS
+                The POSIX filesystem components of Ceph. Refer :ref:`CephFS
+                Architecture <arch-cephfs>` and :ref:`ceph-file-system` for
+                more details.
+
+	Ceph Interim Release
+                Versions of Ceph that have not yet been put through quality
+                assurance testing, but may contain new features.
+
+	Ceph Kernel Modules
+                The collection of kernel modules which can be used to interact
+                with the Ceph System (e.g., ``ceph.ko``, ``rbd.ko``).
+
+	Ceph Manager
+	Ceph Manager Dashboard
+	Ceph Metadata Server
+	Ceph Monitor
+	Ceph Node
+	Ceph Object Gateway
+	Ceph Object Storage
+                The object storage "product", service or capabilities, which
+                consists essentially of a Ceph Storage Cluster and a Ceph Object
+                Gateway.
+
+	Ceph Object Store
+	Ceph OSD
+		The Ceph OSD software, which interacts with a logical
+		disk (:term:`OSD`). Sometimes, Ceph users use the
+		term "OSD" to refer to "Ceph OSD Daemon", though the
+		proper term is "Ceph OSD".
+
+	Ceph OSD Daemon
+	Ceph OSD Daemons
 	Ceph Platform
 		All Ceph software, which includes any piece of code hosted at
 		`https://github.com/ceph`_.
