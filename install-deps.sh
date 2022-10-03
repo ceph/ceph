@@ -325,6 +325,10 @@ else
 fi
 
 if [ x$(uname)x = xFreeBSDx ]; then
+    if [ "$INSTALL_EXTRA_PACKAGES" ]; then
+        echo "Installing extra packages not supported on FreeBSD" >&2
+        exit 1
+    fi
     $SUDO pkg install -yq \
         devel/babeltrace \
         devel/binutils \
@@ -390,6 +394,9 @@ else
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
         echo "Using apt-get to install dependencies"
+        if [ "$INSTALL_EXTRA_PACKAGES" ]; then
+            $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES
+        fi
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
         ensure_python3_sphinx_on_ubuntu
@@ -493,6 +500,9 @@ EOF
                 fi
                 ;;
         esac
+        if [ "$INSTALL_EXTRA_PACKAGES" ]; then
+            $SUDO dnf install -y $INSTALL_EXTRA_PACKAGES
+        fi
         munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
         $SUDO dnf install -y python3-devel
@@ -516,6 +526,9 @@ EOF
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
         $SUDO $zypp_install systemd-rpm-macros rpm-build || exit 1
+        if [ "$INSTALL_EXTRA_PACKAGES" ]; then
+            $SUDO $zypp_install $INSTALL_EXTRA_PACKAGES
+        fi
         munge_ceph_spec_in $with_seastar false $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
