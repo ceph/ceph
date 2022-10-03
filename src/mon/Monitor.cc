@@ -6602,6 +6602,7 @@ void Monitor::notify_new_monmap(bool can_change_external_state)
 
   if (is_stretch_mode()) {
     if (!monmap->stretch_marked_down_mons.empty()) {
+      dout(20) << __func__ << " stretch_marked_down_mons: " << monmap->stretch_marked_down_mons << dendl;
       set_degraded_stretch_mode();
     }
   }
@@ -6707,10 +6708,14 @@ struct CMonGoRecovery : public Context {
 void Monitor::go_recovery_stretch_mode()
 {
   dout(20) << __func__ << dendl;
+  dout(20) << "is_leader(): " << is_leader() << dendl;
   if (!is_leader()) return;
+  dout(20) << "is_degraded_stretch_mode(): " << is_degraded_stretch_mode() << dendl;
   if (!is_degraded_stretch_mode()) return;
+  dout(20) << "is_recovering_stretch_mode(): " << is_recovering_stretch_mode() << dendl;
   if (is_recovering_stretch_mode()) return;
-
+  dout(20) << "dead_mon_buckets.size(): " << dead_mon_buckets.size() << dendl;
+  dout(20) << "dead_mon_buckets: " << dead_mon_buckets << dendl;
   if (dead_mon_buckets.size()) {
     ceph_assert( 0 == "how did we try and do stretch recovery while we have dead monitor buckets?");
     // we can't recover if we are missing monitors in a zone!
@@ -6791,6 +6796,7 @@ void Monitor::trigger_degraded_stretch_mode(const set<string>& dead_mons,
 
 void Monitor::set_degraded_stretch_mode()
 {
+  dout(20) << __func__ << dendl;
   degraded_stretch_mode = true;
   recovering_stretch_mode = false;
   osdmon()->set_degraded_stretch_mode();
