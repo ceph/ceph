@@ -109,7 +109,7 @@ def task(ctx, config):
                 log.info('proc stdout ', proc.stdout.getvalue())
                 return proc.stdout.getvalue().strip()
             tries += 1
-            if tries > 30:
+            if tries > 120:
                 raise Exception('timed out getting correct exitstatus')
             time.sleep(30)
 
