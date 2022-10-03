@@ -670,19 +670,21 @@
   
   rbd help device unmap
   usage: rbd device unmap [--device-type <device-type>] [--pool <pool>] 
-                          [--image <image>] [--snap <snap>] [--options <options>] 
+                          [--namespace <namespace>] [--image <image>] 
+                          [--snap <snap>] [--options <options>] 
                           <image-or-snap-or-device-spec> 
   
   Unmap a rbd device.
   
   Positional arguments
     <image-or-snap-or-device-spec>  image, snapshot, or device specification
-                                    [<pool-name>/]<image-name>[@<snap-name>] or
-                                    <device-path>
+                                    [<pool-name>/[<namespace>/]]<image-name>[@<sna
+                                    p-name>] or <device-path>
   
   Optional arguments
     -t [ --device-type ] arg        device type [ggate, krbd (default), nbd]
     -p [ --pool ] arg               pool name
+    --namespace arg                 namespace name
     --image arg                     image name
     --snap arg                      snapshot name
     -o [ --options ] arg            device specific options
