@@ -828,7 +828,9 @@ void CDir::try_remove_dentries_for_stray()
 
 bool CDir::try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps)
 {
-  ceph_assert(dn->last != CEPH_NOSNAP);
+  if (dn->last == CEPH_NOSNAP) {
+    return false;
+  }
   set<snapid_t>::const_iterator p = snaps.lower_bound(dn->first);
   CDentry::linkage_t *dnl= dn->get_linkage();
   CInode *in = 0;
@@ -848,23 +850,6 @@ bool CDir::try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps)
     return true;
   }
   return false;
-}
-
-
-void CDir::purge_stale_snap_data(const set<snapid_t>& snaps)
-{
-  dout(10) << __func__ << " " << snaps << dendl;
-
-  auto p = items.begin();
-  while (p != items.end()) {
-    CDentry *dn = p->second;
-    ++p;
-
-    if (dn->last == CEPH_NOSNAP)
-      continue;
-
-    try_trim_snap_dentry(dn, snaps);
-  }
 }
 
 
@@ -1812,6 +1797,11 @@ CDentry *CDir::_load_dentry(
            << " [" << first << "," << last << "]"
            << dendl;
 
+  if (first > last) {
+    go_bad_dentry(last, dname);
+    /* try to continue */
+  }
+
   bool stale = false;
   if (snaps && last != CEPH_NOSNAP) {
     set<snapid_t>::const_iterator p = snaps->lower_bound(first);
@@ -2565,8 +2555,7 @@ void CDir::_omap_commit(int op_prio)
     string key;
     dn->key().encode(key);
 
-    if (dn->last != CEPH_NOSNAP &&
-	snaps && try_trim_snap_dentry(dn, *snaps)) {
+    if (snaps && try_trim_snap_dentry(dn, *snaps)) {
       dout(10) << " rm " << key << dendl;
       to_remove.emplace_back(std::move(key));
       return;
@@ -3753,6 +3742,7 @@ bool CDir::scrub_local()
   if (!good && scrub_infop->header->get_repair()) {
     mdcache->repair_dirfrag_stats(this);
     scrub_infop->header->set_repaired();
+    good = true;
   }
   return good;
 }
