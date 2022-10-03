@@ -517,14 +517,11 @@ public:
       load_obc_ertr>;
   using interruptor = ::crimson::interruptible::interruptor<
     ::crimson::osd::IOInterruptCondition>;
-  load_obc_iertr::future<
-    std::pair<crimson::osd::ObjectContextRef, bool>>
-  get_or_load_clone_obc(
-    hobject_t oid, crimson::osd::ObjectContextRef head_obc);
 
-  load_obc_iertr::future<
-    std::pair<crimson::osd::ObjectContextRef, bool>>
-  get_or_load_head_obc(hobject_t oid);
+  template<RWState::State State>
+  load_obc_iertr::future<crimson::osd::ObjectContextRef>
+  get_or_load_obc(
+    crimson::osd::ObjectContextRef head_obc, bool existed);
 
   load_obc_iertr::future<crimson::osd::ObjectContextRef>
   load_obc(ObjectContextRef obc);
