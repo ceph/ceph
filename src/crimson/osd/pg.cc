@@ -1023,16 +1023,8 @@ PG::with_head_obc(ObjectContextRef obc, bool existed, with_obc_func_t&& func)
   obc->append_to(obc_set_accessing);
   return obc->with_lock<State, IOInterruptCondition>(
     [existed=existed, obc=obc, func=std::move(func), this] {
-    auto loaded = load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
-    if (existed) {
-      logger().debug("with_head_obc: found {} in cache", obc->get_oid());
-    } else {
-      logger().debug("with_head_obc: cache miss on {}", obc->get_oid());
-      loaded = obc->with_promoted_lock<State, IOInterruptCondition>([this, obc] {
-        return load_obc(obc);
-      });
-    }
-    return loaded.safe_then_interruptible([func = std::move(func)](auto obc) {
+    return get_or_load_obc<State>(obc, existed).safe_then_interruptible(
+      [func = std::move(func)](auto obc) {
       return std::move(func)(std::move(obc));
     });
   }).finally([this, pgref=boost::intrusive_ptr<PG>{this}, obc=std::move(obc)] {
@@ -1080,16 +1072,7 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
     return clone->template with_lock<State, IOInterruptCondition>(
       [existed=existed, head=std::move(head), clone=std::move(clone),
        func=std::move(func), this]() -> load_obc_iertr::future<> {
-      auto loaded = load_obc_iertr::make_ready_future<ObjectContextRef>(clone);
-      if (existed) {
-        logger().debug("with_clone_obc: found {} in cache", clone->get_oid());
-      } else {
-        logger().debug("with_clone_obc: cache miss on {}", clone->get_oid());
-        loaded = clone->template with_promoted_lock<State, IOInterruptCondition>(
-          [clone, this] {
-          return load_obc(clone);
-        });
-      }
+      auto loaded = get_or_load_obc<State>(clone, existed);
       clone->head = head;
       return loaded.safe_then_interruptible([func = std::move(func)](auto clone) {
         return std::move(func)(std::move(clone));
@@ -1144,6 +1127,25 @@ PG::load_obc(ObjectContextRef obc)
     return load_obc_ertr::make_ready_future<
       crimson::osd::ObjectContextRef>(obc);
   });
+}
+
+template<RWState::State State>
+PG::load_obc_iertr::future<crimson::osd::ObjectContextRef>
+PG::get_or_load_obc(
+    crimson::osd::ObjectContextRef obc,
+    bool existed)
+{
+  auto loaded = load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
+  if (existed) {
+    logger().debug("{}: found {} in cache", __func__, obc->get_oid());
+  } else {
+    logger().debug("{}: cache miss on {}", __func__, obc->get_oid());
+    loaded = obc->template with_promoted_lock<State, IOInterruptCondition>(
+      [obc, this] {
+      return load_obc(obc);
+    });
+  }
+  return loaded;
 }
 
 PG::load_obc_iertr::future<>
