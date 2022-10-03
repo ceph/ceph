@@ -59,7 +59,7 @@ service interfaces built on top of ``librados``.
 Storing Data
 ------------
 
-The Ceph Storage Cluster receives data from :term:`Ceph Clients`--whether it
+The Ceph Storage Cluster receives data from :term:`Ceph Client`\s--whether it
 comes through a :term:`Ceph Block Device`, :term:`Ceph Object Storage`, the
 :term:`Ceph File System` or a custom implementation you create using
 ``librados``-- which is stored as RADOS objects. Each object is stored on an
@@ -80,7 +80,7 @@ stored in a monolithic database-like fashion.
 Ceph OSD Daemons store data as objects in a flat namespace (e.g., no
 hierarchy of directories). An object has an identifier, binary data, and
 metadata consisting of a set of name/value pairs. The semantics are completely
-up to :term:`Ceph Clients`. For example, CephFS uses metadata to store file
+up to :term:`Ceph Client`\s. For example, CephFS uses metadata to store file
 attributes such as the file owner, created date, last modified date, and so
 forth.
 
