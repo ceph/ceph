@@ -527,7 +527,7 @@ public:
   get_or_load_head_obc(hobject_t oid);
 
   load_obc_iertr::future<crimson::osd::ObjectContextRef>
-  load_head_obc(ObjectContextRef obc);
+  load_obc(ObjectContextRef obc);
 
   load_obc_iertr::future<>
   reload_obc(crimson::osd::ObjectContext& obc) const;

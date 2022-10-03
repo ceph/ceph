@@ -1029,7 +1029,7 @@ PG::with_head_obc(ObjectContextRef obc, bool existed, with_obc_func_t&& func)
     } else {
       logger().debug("with_head_obc: cache miss on {}", obc->get_oid());
       loaded = obc->with_promoted_lock<State, IOInterruptCondition>([this, obc] {
-        return load_head_obc(obc);
+        return load_obc(obc);
       });
     }
     return loaded.safe_then_interruptible([func = std::move(func)](auto obc) {
@@ -1085,16 +1085,12 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
         logger().debug("with_clone_obc: found {} in cache", clone->get_oid());
       } else {
         logger().debug("with_clone_obc: cache miss on {}", clone->get_oid());
-        //TODO: generalize load_head_obc -> load_obc (support head/clone obc)
         loaded = clone->template with_promoted_lock<State, IOInterruptCondition>(
-          [clone, head, this] {
-          return backend->load_metadata(clone->get_oid()).safe_then_interruptible(
-            [clone=std::move(clone), head=std::move(head)](auto md) mutable {
-            clone->set_clone_state(std::move(md->os), std::move(head));
-            return clone;
-          });
+          [clone, this] {
+          return load_obc(clone);
         });
       }
+      clone->head = head;
       return loaded.safe_then_interruptible([func = std::move(func)](auto clone) {
         return std::move(func)(std::move(clone));
       });
@@ -1124,23 +1120,26 @@ PG::with_existing_clone_obc(ObjectContextRef clone, with_obc_func_t&& func)
 }
 
 PG::load_obc_iertr::future<crimson::osd::ObjectContextRef>
-PG::load_head_obc(ObjectContextRef obc)
+PG::load_obc(ObjectContextRef obc)
 {
   return backend->load_metadata(obc->get_oid()).safe_then_interruptible(
     [obc=std::move(obc)](auto md)
     -> load_obc_ertr::future<crimson::osd::ObjectContextRef> {
     const hobject_t& oid = md->os.oi.soid;
     logger().debug(
-      "load_head_obc: loaded obs {} for {}", md->os.oi, oid);
-    if (!md->ssc) {
-      logger().error(
-        "load_head_obc: oid {} missing snapsetcontext", oid);
-      return crimson::ct_error::object_corrupted::make();
-
+      "load_obc: loaded obs {} for {}", md->os.oi, oid);
+    if (oid.is_head()) {
+      if (!md->ssc) {
+        logger().error(
+          "load_obc: oid {} missing snapsetcontext", oid);
+        return crimson::ct_error::object_corrupted::make();
+      }
+      obc->set_head_state(std::move(md->os), std::move(md->ssc));
+    } else {
+      obc->set_clone_state(std::move(md->os));
     }
-    obc->set_head_state(std::move(md->os), std::move(md->ssc));
     logger().debug(
-      "load_head_obc: returning obc {} for {}",
+      "load_obc: returning obc {} for {}",
       obc->obs.oi, obc->obs.oi.soid);
     return load_obc_ertr::make_ready_future<
       crimson::osd::ObjectContextRef>(obc);

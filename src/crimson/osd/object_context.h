@@ -104,10 +104,9 @@ public:
     ssc = std::move(_ssc);
   }
 
-  void set_clone_state(ObjectState &&_obs, Ref &&_head) {
+  void set_clone_state(ObjectState &&_obs) {
     ceph_assert(!is_head());
     obs = std::move(_obs);
-    head = _head;
   }
 
   /// pass the provided exception to any waiting consumers of this ObjectContext
