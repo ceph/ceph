@@ -957,12 +957,18 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       dout(20) << "Degraded stretch mode set in this map" << dendl;
       if (!osdmap.recovering_stretch_mode) {
 	mon.set_degraded_stretch_mode();
+  dout(20) << "prev_num_up_osd: " << prev_num_up_osd << dendl;
+  dout(20) << "osdmap.num_up_osd: " << osdmap.num_up_osd << dendl;
+  dout(20) << "osdmap.num_osd: " << osdmap.num_osd << dendl;
+  dout(20) << "mon_stretch_cluster_recovery_ratio: " << cct->_conf.get_val<double>("mon_stretch_cluster_recovery_ratio") << dendl;
 	if (prev_num_up_osd < osdmap.num_up_osd &&
 	    (osdmap.num_up_osd / (double)osdmap.num_osd) >
-	    cct->_conf.get_val<double>("mon_stretch_cluster_recovery_ratio")) {
+	    cct->_conf.get_val<double>("mon_stretch_cluster_recovery_ratio") &&
+      mon.dead_mon_buckets.size() == 0) {
 	  // TODO: This works for 2-site clusters when the OSD maps are appropriately
 	  // trimmed and everything is "normal" but not if you have a lot of out OSDs
 	  // you're ignoring or in some really degenerate failure cases
+
 	  dout(10) << "Enabling recovery stretch mode in this map" << dendl;
 	  mon.go_recovery_stretch_mode();
 	}
