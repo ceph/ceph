@@ -3585,6 +3585,10 @@ int RGWPutObj::init_processing(optional_yield y) {
 
 int RGWPutObj::verify_permission(optional_yield y)
 {
+  if (rgw::sal::Bucket::empty(s->bucket)) {
+    return -EACCES;
+  }
+
   if (! copy_source.empty()) {
 
     RGWAccessControlPolicy cs_acl(s->cct);
@@ -4286,6 +4290,9 @@ void RGWPutObj::execute(optional_yield y)
 
 int RGWPostObj::verify_permission(optional_yield y)
 {
+  if (rgw::sal::Bucket::empty(s->bucket)) {
+    return -EACCES;
+  }
   return 0;
 }
 
@@ -7978,6 +7985,7 @@ int RGWHandler::do_init_permissions(const DoutPrefixProvider *dpp, optional_yiel
 
 int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket, optional_yield y)
 {
+
   if (only_bucket) {
     /* already read bucket info */
     return 0;

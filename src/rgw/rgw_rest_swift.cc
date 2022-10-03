@@ -1975,8 +1975,10 @@ void RGWFormPost::init(rgw::sal::Store* const store,
                        req_state* const s,
                        RGWHandler* const dialect_handler)
 {
-  prefix = std::move(s->object->get_name());
-  s->object->set_key(rgw_obj_key());
+  if (!rgw::sal::Object::empty(s->object)) {
+    prefix = std::move(s->object->get_name());
+    s->object->set_key(rgw_obj_key());
+  }
 
   return RGWPostObj_ObjStore::init(store, s, dialect_handler);
 }
