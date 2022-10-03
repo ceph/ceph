@@ -594,7 +594,7 @@ class Module(MgrModule):
                     else:
                         self.log.error("Incorrect mode specified in get_mempool: {}".format(mode))
                 except (json.decoder.JSONDecodeError, KeyError) as e:
-                    self.log.error("Error caught on {}.{}: {}".format(daemon_type, daemon_id, e))
+                    self.log.exception("Error caught on {}.{}: {}".format(daemon_type, daemon_id, e))
                     continue
 
         if anonymized_daemons:
@@ -711,7 +711,7 @@ class Module(MgrModule):
                 # schema when it doesn't. In either case, we'll handle that
                 # by continuing and collecting what we can from other osds.
                 except (json.decoder.JSONDecodeError, KeyError) as e:
-                    self.log.error("Error caught on osd.{}: {}".format(osd_id, e))
+                    self.log.exception("Error caught on osd.{}: {}".format(osd_id, e))
                     continue
 
         return list(result.values())
@@ -926,7 +926,7 @@ class Module(MgrModule):
             try:
                 host = d['location'][0]['host']
             except (KeyError, IndexError) as e:
-                self.log.error('Unable to get host from device with id "{}": {}'.format(devid, e))
+                self.log.exception('Unable to get host from device with id "{}": {}'.format(devid, e))
                 continue
             anon_host = self.get_store('host-id/%s' % host)
             if not anon_host:
