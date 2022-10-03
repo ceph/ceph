@@ -428,7 +428,16 @@ else
 	# up in a broken case.
         clean_boost_on_ubuntu
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
-            $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES
+            if ! $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES ; then
+                # try again. ported over from run-make.sh (orignally e278295)
+                # In the case that apt-get is interrupted, like when a jenkins
+                # job is cancelled, the package manager will be in an inconsistent
+                # state. Run the command again after `dpkg --configure -a` to
+                # bring package manager back into a clean state.
+                $SUDO dpkg --configure -a
+                in_jenkins && echo "CI_DEBUG: trying to install $INSTALL_EXTRA_PACKAGES again"
+                $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES
+            fi
         fi
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
