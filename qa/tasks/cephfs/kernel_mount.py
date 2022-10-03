@@ -27,19 +27,23 @@ class KernelMount(CephFSMount):
         super(KernelMount, self).__init__(ctx=ctx, test_dir=test_dir,
             client_id=client_id, client_remote=client_remote,
             client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
-            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
+            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet,
+            client_config=client_config)
 
-        self.client_config = client_config
-        self.dynamic_debug = client_config.get('dynamic_debug', False)
-        self.rbytes = client_config.get('rbytes', False)
+        if client_config.get('debug', False):
+            self.client_remote.run(args=["sudo", "bash", "-c", "echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control"])
+            self.client_remote.run(args=["sudo", "bash", "-c", "echo 'module libceph +p' > /sys/kernel/debug/dynamic_debug/control"])
+
+        self.dynamic_debug = self.client_config.get('dynamic_debug', False)
+        self.rbytes = self.client_config.get('rbytes', False)
         self.snapdirname = client_config.get('snapdirname', '.snap')
-        self.syntax_style = client_config.get('syntax', 'v2')
+        self.syntax_style = self.client_config.get('syntax', 'v2')
         self.inst = None
         self.addr = None
         self._mount_bin = ['adjust-ulimits', 'ceph-coverage', self.test_dir +\
                            '/archive/coverage', '/bin/mount', '-t', 'ceph']
 
-    def mount(self, mntopts=[], check_status=True, **kwargs):
+    def mount(self, mntopts=None, check_status=True, **kwargs):
         self.update_attrs(**kwargs)
         self.assert_and_log_minimum_mount_details()
 

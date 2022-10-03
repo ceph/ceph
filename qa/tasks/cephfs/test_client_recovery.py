@@ -644,7 +644,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.umount_wait()
 
         if isinstance(self.mount_a, FuseMount):
-            self.mount_a.mount_wait(mntopts=['--client_reconnect_stale=1', '--fuse_disable_pagecache=1'])
+            self.mount_a.mount_wait(mntargs=['--client_reconnect_stale=1', '--fuse_disable_pagecache=1'])
         else:
             try:
                 self.mount_a.mount_wait(mntopts=['recover_session=clean'])
