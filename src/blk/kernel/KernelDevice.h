@@ -24,6 +24,7 @@
 
 #include "aio/aio.h"
 #include "BlockDevice.h"
+#include "extblkdev/ExtBlkDevPlugin.h"
 
 #define RW_IO_MAX (INT_MAX & CEPH_PAGE_MASK)
 
@@ -35,8 +36,7 @@ private:
   bool enable_wrt = true;
   bool aio, dio;
 
-  int vdo_fd = -1;      ///< fd for vdo sysfs directory
-  std::string vdo_name;
+  ExtBlkDevInterfaceRef ebd_impl;  // structure for retrieving compression state from extended block device
 
   std::string devname;  ///< kernel dev name (/sys/block/$devname), if any
 
@@ -109,7 +109,6 @@ private:
   void debug_aio_link(aio_t& aio);
   void debug_aio_unlink(aio_t& aio);
 
-  void _detect_vdo();
   int choose_fd(bool buffered, int write_hint) const;
 
   ceph::unique_leakable_ptr<buffer::raw> create_custom_aligned(size_t len, IOContext* ioc) const;
@@ -130,7 +129,7 @@ public:
   }
   int get_devices(std::set<std::string> *ls) const override;
 
-  bool get_thin_utilization(uint64_t *total, uint64_t *avail) const override;
+  int get_ebd_state(ExtBlkDevState &state) const override;
 
   int read(uint64_t off, uint64_t len, ceph::buffer::list *pbl,
 	   IOContext *ioc,

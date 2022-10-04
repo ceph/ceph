@@ -22,6 +22,7 @@
 #include "common/signal.h"
 #include "common/version.h"
 #include "erasure-code/ErasureCodePlugin.h"
+#include "extblkdev/ExtBlkDevPlugin.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "global/pidfile.h"
@@ -317,6 +318,13 @@ global_init(const std::map<std::string,std::string> *defaults,
 	     << std::endl;
 	exit(1);
       }
+#if defined(HAVE_SYS_PRCTL_H)
+      if (g_conf().get_val<bool>("set_keepcaps")) {
+	if (prctl(PR_SET_KEEPCAPS, 1) == -1) {
+	  cerr << "warning: unable to set keepcaps flag: " << cpp_strerror(errno) << std::endl;
+	}
+      }
+#endif
       if (setuid(uid) != 0) {
 	cerr << "unable to setuid " << uid << ": " << cpp_strerror(errno)
 	     << std::endl;
