@@ -37,12 +37,12 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
                 The collection of libraries that can be used to interact with
                 components of the Ceph System.
 
-	Ceph Clients
 	Ceph Cluster Map
 	Ceph Dashboard
 	Ceph File System
+                See :term:`CephFS`
+
 	CephFS
-	Ceph FS
                 The POSIX filesystem components of Ceph. Refer :ref:`CephFS
                 Architecture <arch-cephfs>` and :ref:`ceph-file-system` for
                 more details.
