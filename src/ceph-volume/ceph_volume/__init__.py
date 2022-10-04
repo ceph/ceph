@@ -19,4 +19,4 @@ conf.ceph = UnloadedConfig()
 
 __version__ = "1.0.0"
 
-__release__ = "quincy"
+__release__ = "reef"

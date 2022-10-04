@@ -113,6 +113,20 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "telemetry",
     }
   },
+  {
+    CEPH_RELEASE_REEF, {
+      "crash",
+      "status",
+      "progress",
+      "balancer",
+      "devicehealth",
+      "orchestrator",
+      "rbd_support",
+      "volumes",
+      "pg_autoscaler",
+      "telemetry",
+    }
+  },
 };
 
 // Prefix for mon store of active mgr's command descriptions
