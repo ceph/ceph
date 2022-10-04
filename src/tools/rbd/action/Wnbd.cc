@@ -126,26 +126,17 @@ int execute_unmap(const po::variables_map &vm,
   std::cerr << "rbd: wnbd is only supported on Windows" << std::endl;
   return -EOPNOTSUPP;
 #else
-  std::string device_name = utils::get_positional_argument(vm, 0);
-
   std::string image_name;
-  if (device_name.empty()) {
-    int r = utils::get_image_or_snap_spec(vm, &image_name);
-    if (r < 0) {
-      return r;
-    }
-  }
 
-  if (device_name.empty() && image_name.empty()) {
-    std::cerr << "rbd: unmap requires either image name or device path"
-              << std::endl;
-    return -EINVAL;
+  int r = utils::get_image_or_snap_spec(vm, &image_name);
+  if (r < 0) {
+    return r;
   }
 
   std::vector<std::string> args;
 
   args.push_back("unmap");
-  args.push_back(device_name.empty() ? image_name : device_name);
+  args.push_back(image_name);
 
   if (vm.count("options")) {
     utils::append_options_as_args(vm["options"].as<std::vector<std::string>>(),
