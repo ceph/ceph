@@ -699,6 +699,9 @@ public:
 
       return op;
     }
+    std::size_t get_data_offset() const {
+      return data_bl_p.get_off();
+    }
     std::string decode_string() {
 	using ceph::decode;
       std::string s;
