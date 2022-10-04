@@ -1404,6 +1404,31 @@ other performance issue with the OSDs.
 The exact size of the snapshot trim queue is reported by the ``snaptrimq_len``
 field of ``ceph pg ls -f json-detail``.
 
+Stretch Mode
+------------
+
+INCORRECT_NUM_BUCKETS_STRETCH_MODE
+__________________________________
+
+Stretch mode currently only support 2 dividing buckets with OSDs, this warning suggests
+that the number of dividing buckets is not equal to 2 after stretch mode is enabled.
+You can expect unpredictable failures and MON assertions until the condition is fixed.
+
+We encourage you to fix this by removing additional dividing buckets or bump the
+number of dividing buckets to 2.
+
+UNEVEN_WEIGHTS_STRETCH_MODE
+___________________________
+
+The 2 dividing buckets must have equal weights when stretch mode is enabled.
+This warning suggests that the 2 dividing buckets have uneven weights after
+stretch mode is enabled. This is not immediately fatal, however, you can expect
+Ceph to be confused when trying to process transitions between dividing buckets.
+
+We encourage you to fix this by making the weights even on both dividing buckets.
+This can be done by making sure the combined weight of the OSDs on each dividing
+bucket are the same.
+
 Miscellaneous
 -------------
 
