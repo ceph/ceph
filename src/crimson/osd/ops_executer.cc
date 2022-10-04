@@ -609,12 +609,19 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
     return do_const_op([this, &osd_op] (/* const */auto& backend, const auto& os) {
       return backend.stat(os, osd_op, delta_stats);
     });
+
+  case CEPH_OSD_OP_TMAPPUT:
+    return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
+      return backend.tmapput(os, osd_op, txn, delta_stats, *osd_op_params);
+    });
   case CEPH_OSD_OP_TMAPUP:
-    // TODO: there was an effort to kill TMAP in ceph-osd. According to
-    // @dzafman this isn't possible yet. Maybe it could be accomplished
-    // before crimson's readiness and we'd luckily don't need to carry.
-    logger().info("crimson explicitly does not support CEPH_OSD_OP_TMAPUP");
-    return dont_do_legacy_op();
+    return do_write_op([this, &osd_op](auto& backend, auto& os, auto &txn) {
+      return backend.tmapup(os, osd_op, txn, delta_stats, *osd_op_params);
+    });
+  case CEPH_OSD_OP_TMAPGET:
+    return do_read_op([this, &osd_op](auto& backend, const auto& os) {
+      return backend.tmapget(os, osd_op, delta_stats);
+    });
 
   // OMAP
   case CEPH_OSD_OP_OMAPGETKEYS:

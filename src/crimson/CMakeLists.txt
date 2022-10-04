@@ -22,6 +22,7 @@ set(crimson_common_srcs
   common/logclient.cc
   common/operation.cc
   common/throttle.cc
+  common/tmap_helpers.cc
   common/tri_mutex.cc)
 
 # the specialized version of ceph-common, where
