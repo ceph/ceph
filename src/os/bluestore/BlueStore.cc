@@ -6786,6 +6786,18 @@ void BlueStore::_close_db()
     auto t = db->get_transaction();
     store_statfs_t s;
     if (per_pool_stat_collection) {
+      KeyValueDB::Iterator it = db->get_iterator(PREFIX_STAT, KeyValueDB::ITERATOR_NOCACHE);
+      uint64_t pool_id;
+      for (it->upper_bound(string()); it->valid(); it->next()) {
+        int r = get_key_pool_stat(it->key(), &pool_id);
+        if (r >= 0) {
+          dout(10) << __func__ << " wiping statfs for: " << pool_id << dendl;
+        } else {
+          derr << __func__ << " wiping invalid statfs key: " << it->key() << dendl;
+        }
+        t->rmkey(PREFIX_STAT, it->key());
+      }
+
       std::lock_guard l(vstatfs_lock);
       for(auto &p : osd_pools) {
         string key;
@@ -6795,13 +6807,8 @@ void BlueStore::_close_db()
           p.second.encode(bl);
           p.second.publish(&s);
           t->set(PREFIX_STAT, key, bl);
-          dout(10) << __func__ << "persisting: "
+          dout(10) << __func__ << " persisting: "
                    << p.first << "->"  << s
-                   << dendl;
-        } else {
-          t->rmkey(PREFIX_STAT, key);
-          dout(10) << __func__ << "persisting: "
-                   << p.first << "-> <empty>"
                    << dendl;
         }
       }
@@ -6970,7 +6977,7 @@ void BlueStore::_open_statfs()
         st.decode(p);
         vstatfs += st;
 
-        dout(30) << __func__ << " pool " << std::hex << pool_id
+        dout(10) << __func__ << " pool " << std::hex << pool_id
 		 << " statfs(hex) " << st
 		 << std::dec << dendl;
       } catch (ceph::buffer::error& e) {
@@ -6979,7 +6986,7 @@ void BlueStore::_open_statfs()
       }   
     }
   }
-  dout(30) << __func__ << " statfs " << std::hex
+  dout(10) << __func__ << " statfs " << std::hex
            << vstatfs  << std::dec << dendl;
 
 }
