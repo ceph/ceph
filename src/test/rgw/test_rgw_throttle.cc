@@ -37,6 +37,7 @@ struct RadosEnv : public ::testing::Environment {
     ASSERT_EQ(0, r);
   }
   void TearDown() override {
+    ASSERT_EQ(0, rados->get_rados_handle()->pool_delete(poolname));
     rados->shutdown();
     rados.reset();
   }
