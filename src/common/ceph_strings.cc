@@ -110,6 +110,8 @@ const char *ceph_release_name(int r)
 		return "pacific";
 	case CEPH_RELEASE_QUINCY:
 		return "quincy";
+	case CEPH_RELEASE_REEF:
+		return "reef";
 	default:
 		if (r < 0)
 			return "unspecified";
