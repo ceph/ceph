@@ -27,6 +27,16 @@ options:
   - osd_numa_auto_affinity
   flags:
   - startup
+- name: set_keepcaps
+  type: bool
+  level: advanced
+  desc: set the keepcaps flag before changing UID, preserving the permitted capability set
+  long_desc: When ceph switches from root to the ceph uid, all capabilities in all sets are eraseed. If
+    a component that is capability aware needs a specific capability, the keepcaps flag maintains
+     the permitted capability set, allowing the capabilities in the effective set to be activated as needed.
+  default: false
+  flags:
+  - startup
 - name: osd_smart_report_timeout
   type: uint
   level: advanced
@@ -1267,6 +1277,13 @@ options:
   default: 512
   fmt_desc: The maximum number of objects per backfill scan.p
   with_legacy: true
+- name: osd_extblkdev_plugins
+  type: str
+  level: advanced
+  desc: extended block device plugins to load, provide compression feedback at runtime
+  default: vdo
+  flags:
+  - startup
 # minimum number of peers
 - name: osd_heartbeat_min_peers
   type: int
