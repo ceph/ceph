@@ -16,6 +16,7 @@ Versions and tags
 -----------------
 
 - [x] Update CMakeLists.txt VERSION (right at the top to X.0.0)
+- [x] Update src/librbd/CMakeLists.txt VERSION (librbd target at the bottom to 1.X.0)
 - [x] Update src/ceph_release with the new release name, number, and type ('dev')
 - [x] Initial tag vX.0.0 (so that we can distinguish from (and sort
       after) the backported (X-1).2.Z versions.
@@ -35,6 +36,7 @@ Make sure X (and, ideally, X+1) is defined:
 - [x] src/common/ceph_releases.h (`ceph_release_t`)
 - [x] src/common/ceph_strings.cc (`ceph_release_name()`)
 - [x] src/include/rados.h (`CEPH_RELEASE_*` and `MAX`)
+- [x] src/include/rbd/librbd.h (`LIBRBD_VER_MINOR` to X)
 - [x] src/mon/mon_types.h (`ceph::features::mon::FEATURE_*` and related structs and helpers; note that monmaptool CLI test output will need adjustment)
 - [x] src/mds/cephfs_features.h (`CEPHFS_CURRENT_RELEASE`)
 
