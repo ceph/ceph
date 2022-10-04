@@ -77,26 +77,30 @@ public:
     return txn.get_object_index();
   }
 
-  template <class IteratorT>
-  void reorder_back(IteratorT it) {
-    auto idx = std::distance(begin(), &*it);
-    logger().trace("{}: txn op={} buff={}", __func__, it->op, op_data_locators[idx]);
-    tmp_vec.emplace_back(*it);
-    tmp_bl.claim_append(op_data_locators[idx]);
+  void reorder_back(Op& op) {
+    const auto idx = std::distance(begin(), &op);
+    std::swap(*std::next(std::begin(*this), idx),
+              *std::next(std::begin(*this), ordered_tail_idx));
+    std::swap(op_data_locators[idx], op_data_locators[ordered_tail_idx]);
+    ++ordered_tail_idx;
   }
 
   ceph::os::Transaction& get_lltransaction() && {
-    // TODO: this can happen in-place
-    logger().debug("{}: txn.get_num_ops()={}, tmp_vec.size()={}",
-                   __func__, txn.get_num_ops(), tmp_vec.size());
-    ceph_assert_always(static_cast<size_t>(txn.get_num_ops()) == std::size(tmp_vec));
-    std::move(std::begin(tmp_vec), std::end(tmp_vec), std::begin(*this));
-    txn.data_bl = std::move(tmp_bl);
+    ceph_assert_always(
+      std::cmp_equal(txn.get_num_ops(), std::size(op_data_locators)));
+    ceph_assert_always(
+      std::cmp_equal(txn.get_num_ops(), ordered_tail_idx));
+    txn.data_bl.clear();
+    std::ranges::for_each(op_data_locators, [this](auto& dloc) {
+      txn.data_bl.claim_append(dloc);
+    });
     return txn;
   }
 
+  // dump() shall not be called after the reoder-in-place started
   template <class... Args>
   decltype(auto) dump(Args&&... args) {
+    assert(!ordered_tail_idx);
     return txn.dump(std::forward<Args>(args)...);
   }
 
@@ -109,11 +113,9 @@ private:
   // resides in the big `os::Transaction::data_bl` buffer.
   std::vector<ceph::bufferlist> op_data_locators;
 
-  void scan_data_locators();
+  size_t ordered_tail_idx = 0;
 
-  // TODO: kill these
-  std::vector<Op> tmp_vec;
-  ceph::bufferlist tmp_bl;
+  void scan_data_locators();
 };
 
 void HLTransaction::scan_data_locators()
@@ -331,7 +333,7 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
     throw crimson::common::actingset_changed(peering->is_primary);
   }
 
-  safe_create_traverse(hltxn, [&hltxn](auto rng) {
+  safe_create_traverse(hltxn, [&hltxn](auto&& rng) {
     logger().debug("_submit_transaction: subrange");
 #if 0
     std::ranges::stable_sort(rng, [](const auto& lhs, const auto& rhs) {
@@ -351,9 +353,9 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
       return false;
     });
 #else
-    for (auto it = std::ranges::begin(rng); it != std::ranges::end(rng); ++it) {
-      hltxn.reorder_back(it);
-    }
+    std::ranges::for_each(std::move(rng), [&hltxn](auto& op) {
+      hltxn.reorder_back(op);
+    });
 #endif
   });
 
