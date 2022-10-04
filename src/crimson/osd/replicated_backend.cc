@@ -55,7 +55,7 @@ class HLTransaction {
 public:
   using Op = ceph::os::Transaction::Op;
 
-  HLTransaction(ceph::os::Transaction& txn)
+  HLTransaction(ceph::os::Transaction&& txn)
     : txn(txn) {
     if (!this->txn.empty()) {
       // doing this in the transition period. The goal is to have
@@ -93,6 +93,11 @@ public:
     std::move(std::begin(tmp_vec), std::end(tmp_vec), std::begin(*this));
     txn.data_bl = std::move(tmp_bl);
     return txn;
+  }
+
+  template <class... Args>
+  decltype(auto) dump(Args&&... args) {
+    return txn.dump(std::forward<Args>(args)...);
   }
 
 private:
@@ -295,7 +300,8 @@ static void safe_create_traverse(crimson::osd::HLTransaction& txn, F&& f)
   }
 }
 
-static std::string dump_txn(ceph::os::Transaction& txn)
+template <class TxnT>
+static std::string dump_txn(TxnT& txn)
 {
   std::unique_ptr<Formatter> f{Formatter::create("json-pretty", "json-pretty", "json-pretty")};
   std::stringstream ss;
@@ -316,7 +322,8 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                        epoch_t min_epoch, epoch_t map_epoch,
 				       std::vector<pg_log_entry_t>&& log_entries)
 {
-  logger().debug("{}: txn={}", __func__, dump_txn(_txn));
+  crimson::osd::HLTransaction hltxn(std::move(_txn));
+  logger().debug("{}: txn={}", __func__, dump_txn(hltxn));
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
   }
@@ -324,7 +331,6 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
     throw crimson::common::actingset_changed(peering->is_primary);
   }
 
-  crimson::osd::HLTransaction hltxn(_txn);
   safe_create_traverse(hltxn, [&hltxn](auto rng) {
     logger().debug("_submit_transaction: subrange");
 #if 0
@@ -350,12 +356,12 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
     }
 #endif
   });
-  logger().debug("{}: txn_after={}", __func__, dump_txn(_txn));
 
   const ceph_tid_t tid = shard_services.get_tid();
   auto pending_txn =
     pending_trans.try_emplace(tid, pg_shards.size(), osd_op_p.at_version).first;
   auto& txn = std::move(hltxn).get_lltransaction();
+  logger().debug("{}: txn_after={}", __func__, dump_txn(txn));
   bufferlist encoded_txn;
   encode(txn, encoded_txn);
 
