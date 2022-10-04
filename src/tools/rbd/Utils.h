@@ -104,6 +104,12 @@ std::string get_positional_argument(
 void normalize_pool_name(std::string* pool_name);
 std::string get_default_pool_name();
 
+int get_image_or_snap_spec(const boost::program_options::variables_map &vm,
+                           std::string *spec);
+
+void append_options_as_args(const std::vector<std::string> &options,
+                            std::vector<std::string> *args);
+
 int get_pool_and_namespace_names(
     const boost::program_options::variables_map &vm, bool validate_pool_name,
     std::string* pool_name, std::string* namespace_name, size_t *arg_index);

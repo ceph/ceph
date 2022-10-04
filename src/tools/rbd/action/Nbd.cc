@@ -60,61 +60,6 @@ static int call_nbd_cmd(const po::variables_map &vm,
   #endif
 }
 
-#if !defined(__FreeBSD__) && !defined(_WIN32)
-int get_image_or_snap_spec(const po::variables_map &vm, std::string *spec) {
-  size_t arg_index = 0;
-  std::string pool_name;
-  std::string nspace_name;
-  std::string image_name;
-  std::string snap_name;
-  int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &nspace_name,
-    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_PERMITTED,
-    utils::SPEC_VALIDATION_NONE);
-  if (r < 0) {
-    return r;
-  }
-
-  if (pool_name.empty()) {
-    // connect to the cluster to get the default pool
-    librados::Rados rados;
-    r = utils::init_rados(&rados);
-    if (r < 0) {
-      return r;
-    }
-
-    utils::normalize_pool_name(&pool_name);
-  }
-
-  spec->append(pool_name);
-  spec->append("/");
-  if (!nspace_name.empty()) {
-    spec->append(nspace_name);
-    spec->append("/");
-  }
-  spec->append(image_name);
-  if (!snap_name.empty()) {
-    spec->append("@");
-    spec->append(snap_name);
-  }
-
-  return 0;
-}
-
-int parse_options(const std::vector<std::string> &options,
-                  std::vector<std::string> *args) {
-  for (auto &opts : options) {
-    std::vector<std::string> args_;
-    boost::split(args_, opts, boost::is_any_of(","));
-    for (auto &o : args_) {
-      args->push_back("--" + o);
-    }
-  }
-
-  return 0;
-}
-#endif
-
 int execute_list(const po::variables_map &vm,
                  const std::vector<std::string> &ceph_global_init_args) {
 #if defined(__FreeBSD__) || defined(_WIN32)
@@ -148,7 +93,7 @@ int execute_attach(const po::variables_map &vm,
 
   args.push_back("attach");
   std::string img;
-  int r = get_image_or_snap_spec(vm, &img);
+  int r = utils::get_image_or_snap_spec(vm, &img);
   if (r < 0) {
     return r;
   }
@@ -195,10 +140,8 @@ int execute_attach(const po::variables_map &vm,
   }
 
   if (vm.count("options")) {
-    r = parse_options(vm["options"].as<std::vector<std::string>>(), &args);
-    if (r < 0) {
-      return r;
-    }
+    utils::append_options_as_args(vm["options"].as<std::vector<std::string>>(),
+                                  &args);
   }
 
   return call_nbd_cmd(vm, args, ceph_global_init_args);
@@ -218,7 +161,7 @@ int execute_detach(const po::variables_map &vm,
 
   std::string image_name;
   if (device_name.empty()) {
-    int r = get_image_or_snap_spec(vm, &image_name);
+    int r = utils::get_image_or_snap_spec(vm, &image_name);
     if (r < 0) {
       return r;
     }
@@ -236,10 +179,8 @@ int execute_detach(const po::variables_map &vm,
   args.push_back(device_name.empty() ? image_name : device_name);
 
   if (vm.count("options")) {
-    int r = parse_options(vm["options"].as<std::vector<std::string>>(), &args);
-    if (r < 0) {
-      return r;
-    }
+    utils::append_options_as_args(vm["options"].as<std::vector<std::string>>(),
+                                  &args);
   }
 
   return call_nbd_cmd(vm, args, ceph_global_init_args);
@@ -256,7 +197,7 @@ int execute_map(const po::variables_map &vm,
 
   args.push_back("map");
   std::string img;
-  int r = get_image_or_snap_spec(vm, &img);
+  int r = utils::get_image_or_snap_spec(vm, &img);
   if (r < 0) {
     return r;
   }
@@ -289,10 +230,8 @@ int execute_map(const po::variables_map &vm,
   }
 
   if (vm.count("options")) {
-    r = parse_options(vm["options"].as<std::vector<std::string>>(), &args);
-    if (r < 0) {
-      return r;
-    }
+    utils::append_options_as_args(vm["options"].as<std::vector<std::string>>(),
+                                  &args);
   }
 
   return call_nbd_cmd(vm, args, ceph_global_init_args);
@@ -312,7 +251,7 @@ int execute_unmap(const po::variables_map &vm,
 
   std::string image_name;
   if (device_name.empty()) {
-    int r = get_image_or_snap_spec(vm, &image_name);
+    int r = utils::get_image_or_snap_spec(vm, &image_name);
     if (r < 0) {
       return r;
     }
@@ -330,10 +269,8 @@ int execute_unmap(const po::variables_map &vm,
   args.push_back(device_name.empty() ? image_name : device_name);
 
   if (vm.count("options")) {
-    int r = parse_options(vm["options"].as<std::vector<std::string>>(), &args);
-    if (r < 0) {
-      return r;
-    }
+    utils::append_options_as_args(vm["options"].as<std::vector<std::string>>(),
+                                  &args);
   }
 
   return call_nbd_cmd(vm, args, ceph_global_init_args);
