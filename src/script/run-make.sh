@@ -58,74 +58,22 @@ function detect_ceph_dev_pkgs() {
     echo "$cmake_opts"
 }
 
-function do_install() {
-    local install_cmd
-    local pkgs
-    local ret
-    install_cmd=$1
-    shift
-    pkgs=$@
-    shift
-    ret=0
-    SUDO=""
-    if [ "$EUID" -ne 0 ]; then
-        SUDO="sudo"
-    fi
-    $DRY_RUN $SUDO $install_cmd $pkgs || ret=$?
-    if test $ret -eq 0 ; then
-        return
-    fi
-    # try harder if apt-get, and it was interrutped
-    if [[ $install_cmd == *"apt-get"* ]]; then
-        if test $ret -eq 100 ; then
-            # dpkg was interrupted
-            $DRY_RUN $SUDO dpkg --configure -a
-            in_jenkins && echo "CI_DEBUG: Running '$SUDO $install_cmd $pkgs'"
-            $DRY_RUN $SUDO $install_cmd $pkgs
-        else
-            return $ret
-        fi
-    fi
-}
 function prepare() {
-    local install_cmd
     local which_pkg="which"
-    source /etc/os-release
-    if test -f /etc/redhat-release ; then
-        if [ "$VERSION_ID" -ge "22" ]; then
-            install_cmd="dnf -y install"
-        else
-            install_cmd="yum install -y"
-        fi
-    elif type zypper > /dev/null 2>&1 ; then
-        install_cmd="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
-    elif type apt-get > /dev/null 2>&1 ; then
-        install_cmd="apt-get install -y"
+    if command -v apt-get > /dev/null 2>&1 ; then
         which_pkg="debianutils"
     fi
 
-    if [ "$EUID" -ne 0 ] && ! type sudo > /dev/null 2>&1 ; then
-        echo "Please install sudo and re-run. This script assumes it is running"
-        echo "as a normal user with the ability to run commands as root via sudo."
-        exit 1
-    fi
-    if [ -n "$install_cmd" ]; then
-        in_jenkins && echo "CI_DEBUG: Running '$install_cmd ccache $which_pkg clang'"
-        do_install "$install_cmd" ccache git $which_pkg clang
-    else
-        echo "WARNING: Don't know how to install packages" >&2
-        echo "This probably means distribution $ID is not supported by run-make-check.sh" >&2
+    if test -f ./install-deps.sh ; then
+        in_jenkins && echo "CI_DEBUG: Running install-deps.sh"
+        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang"
+        $DRY_RUN source ./install-deps.sh || return 1
+        trap clean_up_after_myself EXIT
     fi
 
     if ! type ccache > /dev/null 2>&1 ; then
         echo "ERROR: ccache could not be installed"
         exit 1
-    fi
-
-    if test -f ./install-deps.sh ; then
-        in_jenkins && echo "CI_DEBUG: Running install-deps.sh"
-        $DRY_RUN source ./install-deps.sh || return 1
-        trap clean_up_after_myself EXIT
     fi
 }
 
