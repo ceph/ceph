@@ -169,7 +169,7 @@ media.
 To add a bucket type to the CRUSH map, create a new line under your list of
 bucket types. Enter ``type`` followed by a unique numeric ID and a bucket name.
 By convention, there is one leaf bucket and it is ``type 0``;  however, you may
-give it any name you like (e.g., osd, disk, drive, storage, etc.)::
+give it any name you like (e.g., osd, disk, drive, storage)::
 
 	# types
 	type {num} {bucket-name}
@@ -663,7 +663,7 @@ There are three types of transformations possible:
    single bucket.  For example, in the previous example, we want the
    ``ssd`` bucket to be mapped to the ``default`` bucket.
 
-The final command to convert the map comprised of the above fragments would be something like:
+The final command to convert the map comprising the above fragments would be something like:
 
 .. prompt:: bash $
 
@@ -675,7 +675,7 @@ The final command to convert the map comprised of the above fragments would be s
     --reclassify-bucket ssd ssd default \
     -o adjusted
 
-In order to ensure that the conversion is correct, there is a ``--compare`` command that will test a large sample of inputs to the CRUSH map and ensure that the same result comes back out.  These inputs are controlled by the same options that apply to the ``--test`` command.  For the above example,:
+In order to ensure that the conversion is correct, there is a ``--compare`` command that will test a large sample of inputs against the CRUSH map and check that the same result is output. These inputs are controlled by the same options that apply to the ``--test`` command.  For the above example,:
 
 .. prompt:: bash $
 
@@ -687,10 +687,10 @@ In order to ensure that the conversion is correct, there is a ``--compare`` comm
   rule 1 had 0/10240 mismatched mappings (0)
   maps appear equivalent
 
-If there were difference, you'd see what ratio of inputs are remapped
-in the parentheses.
+If there were differences, the ratio of remapped inputs would be reported in
+the parentheses.
 
-If you are satisfied with the adjusted map, you can apply it to the cluster with something like:
+When you are satisfied with the adjusted map, apply it to the cluster with a command of the form:
 
 .. prompt:: bash $
 
