@@ -748,9 +748,9 @@ void OpsExecuter::make_writeable(std::vector<pg_log_entry_t>& log_entries)
                  obc->ssc->snapset, snapc);
 
   // clone?
-  if (head_os.exists &&                          // old obs.exists
-      snapc.snaps.size() &&                      // there are snaps
-      snapc.snaps[0] > obc->ssc->snapset.seq) {  // existing obj is old
+  if (initial_os.existed && !initial_os.is_whiteout &&  // old obs.exists
+      snapc.snaps.size() &&                             // there are snaps
+      snapc.snaps[0] > obc->ssc->snapset.seq) {         // existing obj is old
 
     // clone object, the snap field is set to the seq of the SnapContext
     // at its creation.
