@@ -596,7 +596,8 @@ seastar::future<> OSD::start_asok_admin()
     asok->register_command(make_asok_hook<OsdStatusHook>(std::as_const(*this)));
     asok->register_command(make_asok_hook<SendBeaconHook>(*this));
     asok->register_command(make_asok_hook<FlushPgStatsHook>(*this));
-    asok->register_command(make_asok_hook<DumpPGStateHistory>(std::as_const(*this)));
+    asok->register_command(
+      make_asok_hook<DumpPGStateHistory>(std::as_const(pg_shard_manager)));
     asok->register_command(make_asok_hook<DumpMetricsHook>());
     asok->register_command(make_asok_hook<DumpPerfCountersHook>());
     asok->register_command(make_asok_hook<InjectDataErrorHook>(get_shard_services()));
@@ -607,7 +608,7 @@ seastar::future<> OSD::start_asok_admin()
     // ops commands
     asok->register_command(
       make_asok_hook<DumpInFlightOpsHook>(
-	std::as_const(get_shard_services().get_registry())));
+	std::as_const(pg_shard_manager)));
     asok->register_command(
       make_asok_hook<DumpHistoricOpsHook>(
 	std::as_const(get_shard_services().get_registry())));
@@ -666,21 +667,6 @@ void OSD::dump_status(Formatter* f) const
   f->dump_unsigned("oldest_map", superblock.oldest_map);
   f->dump_unsigned("newest_map", superblock.newest_map);
   f->dump_unsigned("num_pgs", pg_shard_manager.get_num_pgs());
-}
-
-seastar::future<> OSD::dump_pg_state_history(Formatter* f) const
-{
-  f->open_array_section("pgs");
-  return pg_shard_manager.for_each_pg([f](auto &pgid, auto &pg) {
-    f->open_object_section("pg");
-    f->dump_stream("pg") << pgid;
-    const auto& peering_state = pg->get_peering_state();
-    f->dump_string("currently", peering_state.get_current_state());
-    peering_state.dump_history(f);
-    f->close_section();
-  }).then([f] {
-    f->close_section();
-  });
 }
 
 void OSD::print(std::ostream& out) const

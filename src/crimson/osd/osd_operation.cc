@@ -102,17 +102,6 @@ void OSDOperationRegistry::put_historic(const ClientRequest& op)
   }
 }
 
-size_t OSDOperationRegistry::dump_client_requests(ceph::Formatter* f) const
-{
-  const auto& client_registry =
-    get_registry<static_cast<size_t>(ClientRequest::type)>();
-  logger().warn("{} num_ops={}", __func__, std::size(client_registry));
-  for (const auto& op : client_registry) {
-    op.dump(f);
-  }
-  return std::size(client_registry);
-}
-
 size_t OSDOperationRegistry::dump_historic_client_requests(ceph::Formatter* f) const
 {
   const auto& historic_client_registry =

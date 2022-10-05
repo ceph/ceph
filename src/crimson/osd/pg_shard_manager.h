@@ -239,6 +239,23 @@ public:
   seastar::future<std::map<pg_t, pg_stat_t>> get_pg_stats() const;
 
   /**
+   * invoke_method_on_each_shard_seq
+   *
+   * Invokes shard_services method on each shard sequentially.
+   */
+  template <typename F, typename... Args>
+  seastar::future<> invoke_on_each_shard_seq(
+    F &&f) const {
+    return sharded_map_seq(
+      shard_services,
+      [f=std::forward<F>(f)](const ShardServices &shard_services) mutable {
+	return std::invoke(
+	  f,
+	  shard_services);
+      });
+  }
+
+  /**
    * for_each_pg
    *
    * Invokes f on each pg sequentially.  Caller may rely on f not being
@@ -246,8 +263,7 @@ public:
    */
   template <typename F>
   seastar::future<> for_each_pg(F &&f) const {
-    return sharded_map_seq(
-      shard_services,
+    return invoke_on_each_shard_seq(
       [f=std::move(f)](const auto &local_service) mutable {
 	for (auto &pg: local_service.local_state.pg_map.get_pgs()) {
 	  std::apply(f, pg);
