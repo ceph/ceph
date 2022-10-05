@@ -807,15 +807,14 @@ void OpsExecuter::make_writeable(std::vector<pg_log_entry_t>& log_entries)
     osd_op_params->at_version.version++;
 
     // TODO: update most recent clone_overlap and usage stats
-
-    if (snapc.seq > obc->ssc->snapset.seq) {
-       // update snapset with latest snap context
-       obc->ssc->snapset.seq = snapc.seq;
-       obc->ssc->snapset.snaps.clear();
-    }
-    logger().debug("{} {} done, snapset={}",
-      __func__, soid, obc->ssc->snapset);
   }
+  if (snapc.seq > obc->ssc->snapset.seq) {
+     // update snapset with latest snap context
+     obc->ssc->snapset.seq = snapc.seq;
+     obc->ssc->snapset.snaps.clear();
+  }
+  logger().debug("{} {} done, snapset={}",
+    __func__, soid, obc->ssc->snapset);
 }
 
 const object_info_t OpsExecuter::prepare_clone(
