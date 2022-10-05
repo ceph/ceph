@@ -18,9 +18,10 @@
 
 // SUMMARY: shec's gtest for each argument of minimum_to_decode()/decode()
 
+#include <algorithm>
 #include <bit>
-#include <errno.h>
-#include <stdlib.h>
+#include <cerrno>
+#include <cstdlib>
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
@@ -40,16 +41,12 @@ unsigned int value_count = 0;
 
 map<set<int>,set<set<int> > > shec_table;
 
-int getint(int a, int b) {
-  return ((1 << a) | (1 << b));
-}
-
-int getint(int a, int b, int c) {
-  return ((1 << a) | (1 << b) | (1 << c));
-}
-
-int getint(int a, int b, int c, int d) {
-  return ((1 << a) | (1 << b) | (1 << c) | (1 << d));
+constexpr int getint(std::initializer_list<int> is) {
+  int a = 0;
+  for (const auto i : is) {
+    a |= 1 << i;
+  }
+  return a;
 }
 
 void create_table_shec432() {
@@ -77,48 +74,29 @@ void create_table_shec432() {
         }
         if (std::popcount(avails) == 2 &&
             std::popcount(want) == 1) {
-          if ((want | avails) == getint(0,1,5) ||
-              (want | avails) == getint(2,3,6)) {
+	  if (std::cmp_equal(want | avails, getint({0,1,5})) ||
+	      std::cmp_equal(want | avails, getint({2,3,6}))) {
             vec.push_back(avails);
           }
         }
       }
-      
+
       for (unsigned avails = 0; avails < (1<<7); ++avails) {
         if (want & avails) {
           continue;
         }
         if (std::popcount(avails) == 4) {
-          if ((avails) == getint(0,1,2,3) ||
-              (avails) == getint(0,1,2,4) ||
-              (avails) == getint(0,1,2,6) ||
-              (avails) == getint(0,1,3,4) ||
-              (avails) == getint(0,1,3,6) ||
-              (avails) == getint(0,1,4,6) ||
-              (avails) == getint(0,2,3,4) ||
-              (avails) == getint(0,2,3,5) ||
-              (avails) == getint(0,2,4,5) ||
-              (avails) == getint(0,2,4,6) ||
-              (avails) == getint(0,2,5,6) ||
-              (avails) == getint(0,3,4,5) ||
-              (avails) == getint(0,3,4,6) ||
-              (avails) == getint(0,3,5,6) ||
-              (avails) == getint(0,4,5,6) ||
-              (avails) == getint(1,2,3,4) ||
-              (avails) == getint(1,2,3,5) ||
-              (avails) == getint(1,2,4,5) ||
-              (avails) == getint(1,2,4,6) ||
-              (avails) == getint(1,2,5,6) ||
-              (avails) == getint(1,3,4,5) ||
-              (avails) == getint(1,3,4,6) ||
-              (avails) == getint(1,3,5,6) ||
-              (avails) == getint(1,4,5,6) ||
-              (avails) == getint(2,3,4,5) ||
-              (avails) == getint(2,4,5,6) ||
-              (avails) == getint(3,4,5,6)) {
-            vec.push_back(avails);
-          }
-        }
+	  auto a = to_array<std::initializer_list<int>>({
+	      {0,1,2,3}, {0,1,2,4}, {0,1,2,6}, {0,1,3,4}, {0,1,3,6}, {0,1,4,6},
+	      {0,2,3,4}, {0,2,3,5}, {0,2,4,5}, {0,2,4,6}, {0,2,5,6}, {0,3,4,5},
+	      {0,3,4,6}, {0,3,5,6}, {0,4,5,6}, {1,2,3,4}, {1,2,3,5}, {1,2,4,5},
+	      {1,2,4,6}, {1,2,5,6}, {1,3,4,5}, {1,3,4,6}, {1,3,5,6}, {1,4,5,6},
+	      {2,3,4,5}, {2,4,5,6}, {3,4,5,6}});
+          if (ranges::any_of(a, std::bind_front(cmp_equal<uint, int>, avails),
+			     getint)) {
+	    vec.push_back(avails);
+	  }
+	}
       }
       for (int i = 0; i < (int)vec.size(); ++i) {
         for (int j = i + 1; j < (int)vec.size(); ++j) {

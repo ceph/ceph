@@ -2316,7 +2316,7 @@ TEST(LibRadosAio, PoolEIOFlag) {
 	});
     }
 
-    sleep(.01);
+    std::this_thread::sleep_for(10'000us);
     my_lock.lock();
     if (r < 0) {
       inflight.erase(i);

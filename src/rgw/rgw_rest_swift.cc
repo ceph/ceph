@@ -2012,7 +2012,7 @@ bool RGWFormPost::is_non_expired()
   }
 
   const utime_t now = ceph_clock_now();
-  if (expires_timestamp <= static_cast<uint64_t>(now.sec())) {
+  if (std::cmp_less_equal(expires_timestamp, now.sec())) {
     ldpp_dout(this, 5) << "FormPost form expired: "
             << expires_timestamp << " <= " << now.sec() << dendl;
     return false;
