@@ -646,7 +646,7 @@ class Module(MgrModule):
         begin_weekday = cast(int, self.get_module_option('begin_weekday'))
         end_weekday = cast(int, self.get_module_option('end_weekday'))
         if begin_weekday < end_weekday:
-            permit = begin_weekday <= weekday < end_weekday
+            permit = begin_weekday <= weekday <= end_weekday
         elif begin_weekday == end_weekday:
             permit = True
         else:
