@@ -149,7 +149,7 @@ static void get_bucket_index_objects(const string& bucket_oid_base,
         bucket_objects[i] = buf;
       }
     } else {
-      if (static_cast<uint32_t>(shard_id) > num_shards) {
+      if (std::cmp_greater(shard_id, num_shards)) {
         return;
       } else {
         if (gen_id) {
