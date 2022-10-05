@@ -375,12 +375,18 @@ public:
     bool do_create);
   seastar::future<Ref<PG>> handle_pg_create_info(
     std::unique_ptr<PGCreateInfo> info);
-  seastar::future<Ref<PG>> get_or_create_pg(
+
+  using get_or_create_pg_ertr = PGMap::wait_for_pg_ertr;
+  using get_or_create_pg_ret = get_or_create_pg_ertr::future<Ref<PG>>;
+  get_or_create_pg_ret get_or_create_pg(
     PGMap::PGCreationBlockingEvent::TriggerI&&,
     spg_t pgid,
     epoch_t epoch,
     std::unique_ptr<PGCreateInfo> info);
-  seastar::future<Ref<PG>> wait_for_pg(
+
+  using wait_for_pg_ertr = PGMap::wait_for_pg_ertr;
+  using wait_for_pg_ret = wait_for_pg_ertr::future<Ref<PG>>;
+  wait_for_pg_ret wait_for_pg(
     PGMap::PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
 

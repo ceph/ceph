@@ -93,11 +93,6 @@ class error_t {
     return ConcreteErrorT::exception_ptr_type_info();
   }
 
-  std::exception_ptr to_exception_ptr() const {
-    const auto* concrete_error = static_cast<const ConcreteErrorT*>(this);
-    return concrete_error->to_exception_ptr();
-  }
-
   decltype(auto) static from_exception_ptr(std::exception_ptr ep) {
     return ConcreteErrorT::from_exception_ptr(std::move(ep));
   }
@@ -107,6 +102,12 @@ class error_t {
 
   template <class ErrorVisitorT, class FuturatorT>
   friend class maybe_handle_error_t;
+
+protected:
+  std::exception_ptr to_exception_ptr() const {
+    const auto* concrete_error = static_cast<const ConcreteErrorT*>(this);
+    return concrete_error->to_exception_ptr();
+  }
 
 public:
   template <class Func>
@@ -125,6 +126,10 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
   [[nodiscard]] static const auto& make() {
     static constexpr unthrowable_wrapper instance{};
     return instance;
+  }
+
+  static auto exception_ptr() {
+    return make().to_exception_ptr();
   }
 
   template<class Func>
