@@ -499,6 +499,7 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 		"{} ignoring pgid {}, pool dne",
 		__func__,
 		pgid);
+	      local_state.pg_map.pg_creation_canceled(pgid);
 	      return seastar::make_ready_future<
 		std::tuple<Ref<PG>, OSDMapService::cached_map_t>
 		>(std::make_tuple(Ref<PG>(), startmap));
@@ -513,6 +514,7 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 		"{} dropping {} create, pool does not have CREATING flag set",
 		__func__,
 		pgid);
+	      local_state.pg_map.pg_creation_canceled(pgid);
 	      return seastar::make_ready_future<
 		std::tuple<Ref<PG>, OSDMapService::cached_map_t>
 		>(std::make_tuple(Ref<PG>(), startmap));
@@ -571,7 +573,7 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 }
 
 
-seastar::future<Ref<PG>>
+ShardServices::get_or_create_pg_ret
 ShardServices::get_or_create_pg(
   PGMap::PGCreationBlockingEvent::TriggerI&& trigger,
   spg_t pgid,
@@ -588,12 +590,14 @@ ShardServices::get_or_create_pg(
     }
     return std::move(fut);
   } else {
-    return seastar::make_ready_future<Ref<PG>>(
+    return get_or_create_pg_ret(
+      get_or_create_pg_ertr::ready_future_marker{},
       local_state.pg_map.get_pg(pgid));
   }
 }
 
-seastar::future<Ref<PG>> ShardServices::wait_for_pg(
+ShardServices::wait_for_pg_ret
+ShardServices::wait_for_pg(
   PGMap::PGCreationBlockingEvent::TriggerI&& trigger, spg_t pgid)
 {
   return local_state.pg_map.wait_for_pg(std::move(trigger), pgid).first;
