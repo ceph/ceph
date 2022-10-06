@@ -884,7 +884,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         else:
             metadata['device_nodes'] = devname
 
-        metadata['actuators'] = ""
+        metadata['actuators'] = None
         if os.path.isdir(sysdir + "/queue/independent_access_ranges/"):
             actuators = 0
             while os.path.isdir(sysdir + "/queue/independent_access_ranges/" + str(actuators)):

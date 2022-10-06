@@ -26,10 +26,11 @@ class DeviceSelection(object):
     """
 
     _supported_filters = [
-            "paths", "size", "vendor", "model", "rotational", "limit", "all"
+            "actuators", "paths", "size", "vendor", "model", "rotational", "limit", "all"
     ]
 
     def __init__(self,
+                 actuators=None,  # type: Optional[int]
                  paths=None,  # type: Optional[List[str]]
                  model=None,  # type: Optional[str]
                  size=None,  # type: Optional[str]
@@ -41,6 +42,8 @@ class DeviceSelection(object):
         """
         ephemeral drive group device specification
         """
+        self.actuators = actuators
+
         #: List of Device objects for devices paths.
         self.paths = [] if paths is None else [Device(path) for path in paths]  # type: List[Device]
 
@@ -66,7 +69,8 @@ class DeviceSelection(object):
         self.all = all
 
     def validate(self, name: str) -> None:
-        props = [self.model, self.vendor, self.size, self.rotational]  # type: List[Any]
+        props = [self.actuators, self.model, self.vendor, self.size,
+                 self.rotational]  # type: List[Any]
         if self.paths and any(p is not None for p in props):
             raise DriveGroupValidationError(
                 name,
