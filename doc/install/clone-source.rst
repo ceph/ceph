@@ -3,7 +3,7 @@
 =========================================
 
 You may clone a Ceph branch of the Ceph source code by going to `github Ceph
-Repository`_,  selecting a branch (``master`` by default), and clicking the
+Repository`_,  selecting a branch (``main`` by default), and clicking the
 **Download ZIP** button.
 
 .. _github Ceph Repository: https://github.com/ceph/ceph
@@ -89,13 +89,13 @@ Choose a Branch
 ===============
 
 Once you clone the source code and submodules, your Ceph repository 
-will be on the ``master`` branch by default, which is the unstable 
+will be on the ``main`` branch by default, which is the unstable 
 development branch. You may choose other branches too.
 
-- ``master``: The unstable development branch.
+- ``main``: The unstable development branch.
 - ``stable-release-name``: The name of the stable, :ref:`active release <ceph-releases-index>`. e.g. ``Pacific``
 - ``next``: The release candidate branch.
 
 ::
 
-	git checkout master
+	git checkout main
