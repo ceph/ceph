@@ -405,6 +405,14 @@ private:
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats,
     unsigned flags);
+  write_iertr::future<> _truncate(
+    ObjectState& os,
+    ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params,
+    object_stat_sum_t& delta_stats,
+    size_t offset,
+    size_t truncate_size,
+    uint32_t truncate_seq);
 
   bool maybe_create_new_object(ObjectState& os,
     ceph::os::Transaction& txn,
