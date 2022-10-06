@@ -495,7 +495,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 "On": "On",
                 "Off": "Off",
                 True: "Yes",
-                False: "",
+                False: "No",
             }
 
             out = []
