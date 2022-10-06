@@ -27,32 +27,6 @@ class FuturizedCollection;
 class FuturizedStore {
 
 public:
-  class OmapIterator {
-  public:
-    virtual seastar::future<> seek_to_first() = 0;
-    virtual seastar::future<> upper_bound(const std::string &after) = 0;
-    virtual seastar::future<> lower_bound(const std::string &to) = 0;
-    virtual bool valid() const {
-      return false;
-    }
-    virtual seastar::future<> next() = 0;
-    virtual std::string key() {
-      return {};
-    }
-    virtual ceph::buffer::list value() {
-      return {};
-    }
-    virtual int status() const {
-      return 0;
-    }
-    virtual ~OmapIterator() {}
-  private:
-    unsigned count = 0;
-    friend void intrusive_ptr_add_ref(FuturizedStore::OmapIterator* iter);
-    friend void intrusive_ptr_release(FuturizedStore::OmapIterator* iter);
-  };
-  using OmapIteratorRef = boost::intrusive_ptr<OmapIterator>;
-
   static seastar::future<std::unique_ptr<FuturizedStore>> create(const std::string& type,
                                                 const std::string& data,
                                                 const ConfigValues& values);
@@ -175,9 +149,6 @@ public:
     return seastar::now();
   }
 
-  virtual seastar::future<OmapIteratorRef> get_omap_iterator(
-    CollectionRef ch,
-    const ghobject_t& oid) = 0;
   virtual read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
     CollectionRef ch,
     const ghobject_t& oid,
@@ -191,19 +162,6 @@ public:
   virtual uuid_d get_fsid() const  = 0;
   virtual unsigned get_max_attr_name_length() const = 0;
 };
-
-inline void intrusive_ptr_add_ref(FuturizedStore::OmapIterator* iter) {
-  assert(iter);
-  iter->count++;
-}
-
-inline void intrusive_ptr_release(FuturizedStore::OmapIterator* iter) {
-  assert(iter);
-  assert(iter->count > 0);
-  if ((--iter->count) == 0) {
-    delete iter;
-  }
-}
 
 /**
  * ShardedStoreProxy
@@ -230,60 +188,6 @@ class ShardedStoreProxy : public FuturizedStore {
     return proxy_method_on_core(
       core, *impl, method, std::forward<Args>(args)...);
   }
-
-  /**
-   * _OmapIterator
-   *
-   * Proxies OmapIterator operations to store's core.  Assumes that
-   * syncronous methods are safe to call directly from calling core
-   * since remote store should only be touching that memory during
-   * a method invocation.
-   *
-   * TODO: We don't really need OmapIterator at all, replace it with
-   * an appropriately paged omap_get_values variant.
-   */
-  class _OmapIterator : public OmapIterator {
-    using fref_t = seastar::foreign_ptr<OmapIteratorRef>;
-    const core_id_t core;
-    fref_t impl;
-
-    template <typename Method, typename... Args>
-    decltype(auto) proxy(Method method, Args&&... args) {
-      return proxy_method_on_core(
-	core, *impl, method, std::forward<Args>(args)...);
-    }
-
-  public:
-    _OmapIterator(core_id_t core, fref_t &&impl)
-      : core(core), impl(std::move(impl)) {}
-
-    seastar::future<> seek_to_first() final {
-      return proxy(&OmapIterator::seek_to_first);
-    }
-    seastar::future<> upper_bound(const std::string &after) final {
-      return proxy(&OmapIterator::upper_bound, after);
-    }
-    seastar::future<> lower_bound(const std::string &to) final {
-      return proxy(&OmapIterator::lower_bound, to);
-    }
-    bool valid() const final {
-      return impl->valid();
-    }
-    seastar::future<> next() final {
-      return proxy(&OmapIterator::next);
-    }
-    std::string key() final {
-      return impl->key();
-    }
-    ceph::buffer::list value() final {
-      return impl->value();
-    }
-    int status() const final {
-      return impl->status();
-    }
-    ~_OmapIterator() = default;
-  };
-
 
 public:
   ShardedStoreProxy(T *t)
@@ -412,21 +316,6 @@ public:
     return proxy(&T::inject_mdata_error, o);
   }
 
-  seastar::future<OmapIteratorRef> get_omap_iterator(
-    CollectionRef ch,
-    const ghobject_t &oid) final {
-    return crimson::submit_to(
-      core,
-      [this, ch=std::move(ch), oid]() mutable {
-	return impl->get_omap_iterator(
-	  std::move(ch), oid
-	).then([](auto iref) {
-	  return seastar::foreign_ptr(iref);
-	});
-      }).then([this](auto iref) {
-	return OmapIteratorRef(new _OmapIterator(core, std::move(iref)));
-      });
-  }
   read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
     CollectionRef ch,
     const ghobject_t &oid,
