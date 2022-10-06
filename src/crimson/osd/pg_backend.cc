@@ -423,11 +423,6 @@ PGBackend::cmp_ext_ierrorator::future<>
 PGBackend::cmp_ext(const ObjectState& os, OSDOp& osd_op)
 {
   const ceph_osd_op& op = osd_op.op;
-  // return the index of the first unmatched byte in the payload, hence the
-  // strange limit and check
-  if (op.extent.length > MAX_ERRNO) {
-    return crimson::ct_error::invarg::make();
-  }
   uint64_t obj_size = os.oi.size;
   if (os.oi.truncate_seq < op.extent.truncate_seq &&
       op.extent.offset + op.extent.length > op.extent.truncate_size) {
