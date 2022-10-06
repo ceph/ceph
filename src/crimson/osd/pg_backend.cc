@@ -513,6 +513,51 @@ PGBackend::write_iertr::future<> PGBackend::_writefull(
   return seastar::now();
 }
 
+PGBackend::write_iertr::future<> PGBackend::_truncate(
+  ObjectState& os,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params,
+  object_stat_sum_t& delta_stats,
+  size_t offset,
+  size_t truncate_size,
+  uint32_t truncate_seq)
+{
+  if (truncate_seq) {
+    assert(offset == truncate_size);
+    if (truncate_seq <= os.oi.truncate_seq) {
+      logger().debug("{} truncate seq {} <= current {}, no-op",
+                     __func__, truncate_seq, os.oi.truncate_seq);
+      return write_ertr::make_ready_future<>();
+    } else {
+      logger().debug("{} truncate seq {} > current {}, truncating",
+                     __func__, truncate_seq, os.oi.truncate_seq);
+      os.oi.truncate_seq = truncate_seq;
+      os.oi.truncate_size = truncate_size;
+    }
+  }
+  maybe_create_new_object(os, txn, delta_stats);
+  if (os.oi.size != offset) {
+    txn.truncate(
+      coll->get_cid(),
+      ghobject_t{os.oi.soid}, offset);
+    if (os.oi.size > offset) {
+      // TODO: modified_ranges.union_of(trim);
+      osd_op_params.clean_regions.mark_data_region_dirty(
+        offset,
+	os.oi.size - offset);
+    } else {
+      // os.oi.size < offset
+      osd_op_params.clean_regions.mark_data_region_dirty(
+        os.oi.size,
+        offset - os.oi.size);
+    }
+    truncate_update_size_and_usage(delta_stats, os.oi, offset);
+    os.oi.clear_data_digest();
+  }
+  delta_stats.num_wr++;
+  return write_ertr::now();
+}
+
 bool PGBackend::maybe_create_new_object(
   ObjectState& os,
   ceph::os::Transaction& txn,
@@ -760,41 +805,9 @@ PGBackend::write_iertr::future<> PGBackend::truncate(
   if (!is_offset_and_length_valid(op.extent.offset, op.extent.length)) {
     return crimson::ct_error::file_too_large::make();
   }
-  if (op.extent.truncate_seq) {
-    assert(op.extent.offset == op.extent.truncate_size);
-    if (op.extent.truncate_seq <= os.oi.truncate_seq) {
-      logger().debug("{} truncate seq {} <= current {}, no-op",
-                     __func__, op.extent.truncate_seq, os.oi.truncate_seq);
-      return write_ertr::make_ready_future<>();
-    } else {
-      logger().debug("{} truncate seq {} > current {}, truncating",
-                     __func__, op.extent.truncate_seq, os.oi.truncate_seq);
-      os.oi.truncate_seq = op.extent.truncate_seq;
-      os.oi.truncate_size = op.extent.truncate_size;
-    }
-  }
-  maybe_create_new_object(os, txn, delta_stats);
-  if (os.oi.size != op.extent.offset) {
-    txn.truncate(coll->get_cid(),
-                 ghobject_t{os.oi.soid}, op.extent.offset);
-    if (os.oi.size > op.extent.offset) {
-      // TODO: modified_ranges.union_of(trim);
-      osd_op_params.clean_regions.mark_data_region_dirty(
-        op.extent.offset,
-	os.oi.size - op.extent.offset);
-    } else {
-      // os.oi.size < op.extent.offset
-      osd_op_params.clean_regions.mark_data_region_dirty(
-        os.oi.size,
-        op.extent.offset - os.oi.size);
-    }
-    truncate_update_size_and_usage(delta_stats, os.oi, op.extent.offset);
-    os.oi.clear_data_digest();
-  }
-  delta_stats.num_wr++;
-  // ----
-  // do no set exists, or we will break above DELETE -> TRUNCATE munging.
-  return write_ertr::now();
+  return _truncate(
+    os, txn, osd_op_params, delta_stats,
+    op.extent.offset, op.extent.truncate_size, op.extent.truncate_seq);
 }
 
 PGBackend::write_iertr::future<> PGBackend::zero(
@@ -812,7 +825,17 @@ PGBackend::write_iertr::future<> PGBackend::zero(
   if (!is_offset_and_length_valid(op.extent.offset, op.extent.length)) {
     return crimson::ct_error::file_too_large::make();
   }
-  assert(op.extent.length);
+
+  if (op.extent.offset >= os.oi.size || op.extent.length == 0) {
+    return write_iertr::now(); // noop
+  }
+
+  if (op.extent.offset + op.extent.length >= os.oi.size) {
+    return _truncate(
+      os, txn, osd_op_params, delta_stats,
+      op.extent.offset, op.extent.truncate_size, op.extent.truncate_seq);
+  }
+
   txn.zero(coll->get_cid(),
            ghobject_t{os.oi.soid},
            op.extent.offset,
