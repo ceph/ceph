@@ -431,6 +431,7 @@ int main(int argc, char** argv)
   auto addr = vm["addr"].as<std::string>();
   entity_addr_t cmd_peer_addr;
   cmd_peer_addr.parse(addr.c_str(), nullptr);
+  ceph_assert_always(cmd_peer_addr.is_msgr2());
   auto nonstop = vm["nonstop"].as<bool>();
 
   std::vector<const char*> args(argv, argv + argc);
@@ -439,8 +440,6 @@ int main(int argc, char** argv)
                          CODE_ENVIRONMENT_UTILITY,
                          CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(cct.get());
-  cct->_conf.set_val("ms_crc_header", "false");
-  cct->_conf.set_val("ms_crc_data", "false");
 
   auto test_peer = FailoverTestPeer::create(cct.get(), cmd_peer_addr, nonstop);
   test_peer->wait();

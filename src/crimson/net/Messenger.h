@@ -36,7 +36,6 @@ using Throttle = crimson::common::Throttle;
 using SocketPolicy = ceph::net::Policy<Throttle>;
 
 class Messenger {
-  uint32_t crc_flags = 0;
   crimson::auth::AuthClient* auth_client = nullptr;
   crimson::auth::AuthServer* auth_server = nullptr;
   bool require_authorizer = true;
@@ -98,16 +97,6 @@ public:
   // free internal resources before destruction, must be called after stopped,
   // and must be called if is bound.
   virtual seastar::future<> shutdown() = 0;
-
-  uint32_t get_crc_flags() const {
-    return crc_flags;
-  }
-  void set_crc_data() {
-    crc_flags |= MSG_CRC_DATA;
-  }
-  void set_crc_header() {
-    crc_flags |= MSG_CRC_HEADER;
-  }
 
   crimson::auth::AuthClient* get_auth_client() const { return auth_client; }
   void set_auth_client(crimson::auth::AuthClient *ac) {

@@ -3458,8 +3458,8 @@ seastar::future<>
 test_v2_protocol(entity_addr_t test_addr,
                  entity_addr_t test_peer_addr,
                  bool test_peer_islocal) {
-  ceph_assert(test_addr.is_msgr2());
-  ceph_assert(test_peer_addr.is_msgr2());
+  ceph_assert_always(test_addr.is_msgr2());
+  ceph_assert_always(test_peer_addr.is_msgr2());
 
   if (test_peer_islocal) {
     // initiate crimson test peer locally
@@ -3591,20 +3591,20 @@ seastar::future<int> do_test(seastar::app_template& app)
     verbose = config["verbose"].as<bool>();
     auto rounds = config["rounds"].as<unsigned>();
     auto keepalive_ratio = config["keepalive-ratio"].as<double>();
-    entity_addr_t v2_test_addr;
-    ceph_assert(v2_test_addr.parse(
-        config["v2-test-addr"].as<std::string>().c_str(), nullptr));
-    entity_addr_t v2_testpeer_addr;
-    ceph_assert(v2_testpeer_addr.parse(
-        config["v2-testpeer-addr"].as<std::string>().c_str(), nullptr));
-    auto v2_testpeer_islocal = config["v2-testpeer-islocal"].as<bool>();
+    entity_addr_t test_addr;
+    ceph_assert(test_addr.parse(
+        config["test-addr"].as<std::string>().c_str(), nullptr));
+    entity_addr_t testpeer_addr;
+    ceph_assert(testpeer_addr.parse(
+        config["testpeer-addr"].as<std::string>().c_str(), nullptr));
+    auto testpeer_islocal = config["testpeer-islocal"].as<bool>();
     return test_echo(rounds, keepalive_ratio)
     .then([] {
       return test_concurrent_dispatch();
     }).then([] {
       return test_preemptive_shutdown();
-    }).then([v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal] {
-      return test_v2_protocol(v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal);
+    }).then([test_addr, testpeer_addr, testpeer_islocal] {
+      return test_v2_protocol(test_addr, testpeer_addr, testpeer_islocal);
     }).then([] {
       logger().info("All tests succeeded");
       // Seastar has bugs to have events undispatched during shutdown,
@@ -3631,12 +3631,12 @@ int main(int argc, char** argv)
      "number of pingpong rounds")
     ("keepalive-ratio", bpo::value<double>()->default_value(0.1),
      "ratio of keepalive in ping messages")
-    ("v2-test-addr", bpo::value<std::string>()->default_value("v2:127.0.0.1:9012"),
+    ("test-addr", bpo::value<std::string>()->default_value("v2:127.0.0.1:9012"),
      "address of v2 failover tests")
-    ("v2-testpeer-addr", bpo::value<std::string>()->default_value("v2:127.0.0.1:9013"),
+    ("testpeer-addr", bpo::value<std::string>()->default_value("v2:127.0.0.1:9013"),
      "addresses of v2 failover testpeer"
      " (CmdSrv address and TestPeer address with port+=1)")
-    ("v2-testpeer-islocal", bpo::value<bool>()->default_value(true),
+    ("testpeer-islocal", bpo::value<bool>()->default_value(true),
      "create a local crimson testpeer, or connect to a remote testpeer");
   return app.run(argc, argv, [&app] {
     // This test normally succeeds within 60 seconds, so kill it after 300
