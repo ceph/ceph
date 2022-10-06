@@ -92,7 +92,7 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_prometheus(self):
         mgr = FakeMgr()
-        root = Root(mgr)
+        root = Root(mgr, 5000, '0.0.0.0')
         cfg = root.get_sd_config('mgr-prometheus')
 
         # check response structure
@@ -106,7 +106,7 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_node_exporter(self):
         mgr = FakeMgr()
-        root = Root(mgr)
+        root = Root(mgr, 5000, '0.0.0.0')
         cfg = root.get_sd_config('node-exporter')
 
         # check response structure
@@ -123,7 +123,7 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_alertmgr(self):
         mgr = FakeMgr()
-        root = Root(mgr)
+        root = Root(mgr, 5000, '0.0.0.0')
         cfg = root.get_sd_config('alertmanager')
 
         # check response structure
@@ -137,7 +137,7 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_haproxy(self):
         mgr = FakeMgr()
-        root = Root(mgr)
+        root = Root(mgr, 5000, '0.0.0.0')
         cfg = root.get_sd_config('haproxy')
 
         # check response structure
@@ -152,6 +152,6 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_invalid_service(self):
         mgr = FakeMgr()
-        root = Root(mgr)
+        root = Root(mgr, 5000, '0.0.0.0')
         cfg = root.get_sd_config('invalid-service')
         assert cfg == []

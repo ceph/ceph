@@ -308,6 +308,7 @@ class CephadmServe:
         refresh(self.mgr.cache.get_hosts())
 
         self.mgr.agent_helpers._update_agent_down_healthcheck(agents_down)
+        self.mgr.http_server.config_update()
 
         self.mgr.config_checker.run_checks()
 
