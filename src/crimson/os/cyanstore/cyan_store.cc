@@ -844,19 +844,6 @@ unsigned CyanStore::get_max_attr_name_length() const
   return 256;
 }
 
-seastar::future<FuturizedStore::OmapIteratorRef> CyanStore::get_omap_iterator(
-    CollectionRef ch,
-    const ghobject_t& oid)
-{
-  auto c = static_cast<Collection*>(ch.get());
-  auto o = c->get_object(oid);
-  if (!o) {
-    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
-  }
-  return seastar::make_ready_future<FuturizedStore::OmapIteratorRef>(
-	    new CyanStore::CyanOmapIterator(o));
-}
-
 CyanStore::read_errorator::future<std::map<uint64_t, uint64_t>>
 CyanStore::fiemap(
     CollectionRef ch,
@@ -887,35 +874,6 @@ CyanStore::stat(
   struct stat st;
   st.st_size = o->get_size();
   return seastar::make_ready_future<struct stat>(std::move(st));
-}
-
-seastar::future<> CyanStore::CyanOmapIterator::seek_to_first()
-{
-  iter = obj->omap.begin();
-  return seastar::make_ready_future<>();
-}
-
-seastar::future<> CyanStore::CyanOmapIterator::upper_bound(const std::string& after)
-{
-  iter = obj->omap.upper_bound(after);
-  return seastar::make_ready_future<>();
-}
-
-seastar::future<> CyanStore::CyanOmapIterator::lower_bound(const std::string &to)
-{
-  iter = obj->omap.lower_bound(to);
-  return seastar::make_ready_future<>();
-}
-
-bool CyanStore::CyanOmapIterator::valid() const
-{
-  return iter != obj->omap.end();
-}
-
-seastar::future<> CyanStore::CyanOmapIterator::next()
-{
-  ++iter;
-  return seastar::make_ready_future<>();
 }
 
 }
