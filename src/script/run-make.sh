@@ -161,7 +161,11 @@ function build() {
     if test -n "$targets"; then
         targets="--target $targets"
     fi
-    $DRY_RUN cd build
+    local bdir=build
+    if [ "$BUILD_DIR" ]; then
+        bdir="$BUILD_DIR"
+    fi
+    $DRY_RUN cd "${bdir}"
     BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     test "$BUILD_MAKEOPTS" && echo "make will run with option(s) $BUILD_MAKEOPTS"
     # older cmake does not support --parallel or -j, so pass it to underlying generator
