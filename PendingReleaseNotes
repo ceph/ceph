@@ -10,6 +10,9 @@
 * RBD: compare-and-write operation is no longer limited to 512-byte sectors.
   Assuming proper alignment, it now allows operating on stripe units (4M by
   default).
+* RBD: New `rbd_aio_compare_and_writev` API method to support scatter/gather
+  on both compare and write buffers.  This compliments existing `rbd_aio_readv`
+  and `rbd_aio_writev` methods.
 
 >=17.2.4
 --------
