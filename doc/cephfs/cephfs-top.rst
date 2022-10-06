@@ -9,7 +9,7 @@ in realtime. `cephfs-top` is a curses based python script which makes use of `st
 plugin in Ceph Manager to fetch (and display) metrics.
 
 Manager Plugin
---------------
+==============
 
 Ceph Filesystem clients periodically forward various metrics to Ceph Metadata Servers (MDS)
 which in turn get forwarded to Ceph Manager by MDS rank zero. Each active MDS forward its
@@ -29,9 +29,8 @@ metrics are for a particular MDS rank (e.g., number of subtrees handled by an MD
 Once enabled, Ceph Filesystem metrics can be fetched via::
 
   $ ceph fs perf stats
-  {"version": 1, "global_counters": ["cap_hit", "read_latency", "write_latency", "metadata_latency", "dentry_lease", "opened_files", "pinned_icaps", "opened_inodes", "avg_read_latency", "stdev_read_latency", "avg_write_latency", "stdev_write_latency", "avg_metadata_latency", "stdev_metadata_latency"], "counters": [], "client_metadata": {"client.324130": {"IP": "192.168.1.100", "hostname": "ceph-host1", "root": "/", "mount_point": "/mnt/cephfs", "valid_metrics": ["cap_hit", "read_latency", "write_latency", "metadata_latency", "dentry_lease, "opened_files", "pinned_icaps", "opened_inodes", "avg_read_latency", "stdev_read_latency", "avg_write_latency", "stdev_write_latency", "avg_metadata_latency", "stdev_metadata_latency"]}}, "global_metrics": {"client.324130": [[309785, 1280], [0, 0], [197, 519015022], [88, 279074768], [12, 70147], [0, 3], [3, 3], [0, 3], [0, 0], [0, 0], [0, 11699223], [0, 88245], [0, 6596951], [0, 9539]]}, "metrics": {"delayed_ranks": [], "mds.0": {"client.324130": []}}}
 
-Details of the JSON command output are as follows:
+The output format is JSON and contains fields as follows:
 
 - `version`: Version of stats output
 - `global_counters`: List of global performance metrics
@@ -54,7 +53,7 @@ To fetch metrics only for a subset of active MDSs (e.g., MDS rank 1 and 2)::
   $ ceph fs perf stats --mds_rank=1,2
 
 `cephfs-top`
-------------
+============
 
 `cephfs-top` utility relies on `stats` plugin to fetch performance metrics and display in
 `top(1)` like format. `cephfs-top` is available as part of `cephfs-top` package.
@@ -63,6 +62,9 @@ By default, `cephfs-top` uses `client.fstop` user to connect to a Ceph cluster::
 
   $ ceph auth get-or-create client.fstop mon 'allow r' mds 'allow r' osd 'allow r' mgr 'allow r'
   $ cephfs-top
+
+Command-Line Options
+--------------------
 
 To use a non-default user (other than `client.fstop`) use::
 
@@ -78,8 +80,16 @@ By default, `cephfs-top` connects to cluster name `ceph`. To use a non-default c
 
 Interval should be greater than or equal to 0.5 seconds. Fractional seconds are honoured.
 
-Sample screenshot running `cephfs-top` with 2 clients:
+Interactive Commands
+--------------------
+
+1. m : Filesystem selection
+      Displays a menu of filesystems for selection.
+
+2. q : Quit
+      Exit the utility if you are at the home screen (all filesystem info),
+      otherwise escape back to the home screen.
+
+Sample screenshot running `cephfs-top` with 2 filesystems:
 
 .. image:: cephfs-top.png
-
-.. note:: As of now, `cephfs-top` does not reliably work with multiple Ceph Filesystems.
