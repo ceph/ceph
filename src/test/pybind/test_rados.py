@@ -1328,6 +1328,7 @@ class TestCommand(object):
         eq(u"pool '\u9ec5' created", out)
 
 
+@attr('watch')
 class TestWatchNotify(object):
     OID = "test_watch_notify"
 
@@ -1356,8 +1357,9 @@ class TestWatchNotify(object):
         def callback(notify_id, notifier_id, watch_id, data):
             with self.lock:
                 if watch_id not in self.notify_cnt:
-                    self.notify_cnt[watch_id] = 0
-                self.notify_cnt[watch_id] += 1
+                    self.notify_cnt[watch_id] = 1
+                elif  self.notify_data[watch_id] != data:
+                    self.notify_cnt[watch_id] += 1
                 self.notify_data[watch_id] = data
         return callback
 
