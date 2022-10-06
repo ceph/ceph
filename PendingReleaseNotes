@@ -55,6 +55,9 @@
 * RBD: compare-and-write operation is no longer limited to 512-byte sectors.
   Assuming proper alignment, it now allows operating on stripe units (4M by
   default).
+* RBD: New `rbd_aio_compare_and_writev` API method to support scatter/gather
+  on both compare and write buffers.  This compliments existing `rbd_aio_readv`
+  and `rbd_aio_writev` methods.
 * The 'AT_NO_ATTR_SYNC' macro is deprecated, please use the standard 'AT_STATX_DONT_SYNC'
   macro. The 'AT_NO_ATTR_SYNC' macro will be removed in the future.
 * Trimming of PGLog dups is now controlled by the size instead of the version.

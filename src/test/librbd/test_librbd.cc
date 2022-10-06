@@ -3099,6 +3099,174 @@ TEST_F(TestLibRBD, TestAioCompareAndWriteStripeUnitSuccess)
   rados_ioctx_destroy(ioctx);
 }
 
+TEST_F(TestLibRBD, TestAioCompareAndWriteVIovecLenDiffers)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+  off_t off = 512;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  std::string cmp_buffer("This is a test");
+  size_t cmp_len = cmp_buffer.length();
+
+  std::string write_buffer("Write this !!!");
+  struct iovec write_iovs[] = {
+    {.iov_base = &write_buffer[0], .iov_len = 6},
+    {.iov_base = &write_buffer[6], .iov_len = 5},
+    {.iov_base = &write_buffer[11], .iov_len = 3}
+  };
+
+  ASSERT_EQ(cmp_len, rbd_write(image, off, cmp_len, cmp_buffer.data()));
+
+  // should fail because compare iovec len cannot be different to write iovec len
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  uint64_t mismatch_off = 0;
+  int ret = rbd_aio_compare_and_writev(image, off,
+                                       write_iovs /* cmp_iovs */, 1,
+                                       write_iovs, std::size(write_iovs),
+                                       comp, &mismatch_off, 0);
+  ASSERT_EQ(-EINVAL, ret);
+  ASSERT_EQ(0U, mismatch_off);
+  rbd_aio_release(comp);
+
+  // check nothing was written
+  std::string read_buffer(cmp_buffer.length(), '1');
+  ssize_t read = rbd_read(image, off, read_buffer.length(), read_buffer.data());
+  ASSERT_EQ(read_buffer.length(), read);
+  ASSERT_EQ(cmp_buffer, read_buffer);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteVMismatch)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+  off_t off = 512;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  std::string cmp_buffer("This is a test");
+  int cmp_len = cmp_buffer.length();
+
+  std::string write_buffer("Write this !!!");
+  struct iovec write_iovs[] = {
+    {.iov_base = &write_buffer[0], .iov_len = 6},
+    {.iov_base = &write_buffer[6], .iov_len = 5},
+    {.iov_base = &write_buffer[11], .iov_len = 3}
+  };
+
+  std::string mismatch_buffer("This will fail");
+  struct iovec mismatch_iovs[] = {
+    {.iov_base = &mismatch_buffer[0], .iov_len = 5},
+    {.iov_base = &mismatch_buffer[5], .iov_len = 5},
+    {.iov_base = &mismatch_buffer[10], .iov_len = 4}
+  };
+
+  ASSERT_EQ(cmp_len, rbd_write(image, off, cmp_len, cmp_buffer.data()));
+
+  // this should execute the compare but fail because of mismatch
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  uint64_t mismatch_off = 0;
+  int ret = rbd_aio_compare_and_writev(image, off,
+                                       mismatch_iovs /* cmp_iovs */,
+                                       std::size(mismatch_iovs),
+                                       write_iovs, std::size(write_iovs),
+                                       comp, &mismatch_off, 0);
+  ASSERT_EQ(0, ret);
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EILSEQ, rbd_aio_get_return_value(comp));
+  ASSERT_EQ(5U, mismatch_off);
+  rbd_aio_release(comp);
+
+  // check nothing was written
+  std::string read_buffer(cmp_buffer.length(), '1');
+  ssize_t read = rbd_read(image, off, read_buffer.length(), read_buffer.data());
+  ASSERT_EQ(read_buffer.length(), read);
+  ASSERT_EQ(cmp_buffer, read_buffer);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteVSuccess)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+  off_t off = 512;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  std::string cmp_buffer("This is a test");
+  struct iovec cmp_iovs[] = {
+    {.iov_base = &cmp_buffer[0], .iov_len = 5},
+    {.iov_base = &cmp_buffer[5], .iov_len = 3},
+    {.iov_base = &cmp_buffer[8], .iov_len = 2},
+    {.iov_base = &cmp_buffer[10], .iov_len = 4}
+  };
+  size_t cmp_len = cmp_buffer.length();
+
+  std::string write_buffer("Write this !!!");
+  struct iovec write_iovs[] = {
+    {.iov_base = &write_buffer[0], .iov_len = 6},
+    {.iov_base = &write_buffer[6], .iov_len = 5},
+    {.iov_base = &write_buffer[11], .iov_len = 3}
+  };
+
+  ASSERT_EQ(cmp_len, rbd_write(image, off, cmp_len, cmp_buffer.data()));
+
+  // compare against the buffer written before => should succeed
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  uint64_t mismatch_off = 0;
+  int ret = rbd_aio_compare_and_writev(image, off,
+                                       cmp_iovs, std::size(cmp_iovs),
+                                       write_iovs, std::size(write_iovs),
+                                       comp, &mismatch_off, 0);
+  ASSERT_EQ(0, ret);
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(0, rbd_aio_get_return_value(comp));
+  ASSERT_EQ(0U, mismatch_off);
+  rbd_aio_release(comp);
+
+  // check data was successfully written
+  std::string read_buffer(cmp_buffer.length(), '1');
+  ssize_t read = rbd_read(image, off, read_buffer.length(), read_buffer.data());
+  ASSERT_EQ(read_buffer.length(), read);
+  ASSERT_EQ(write_buffer, read_buffer);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
 TEST_F(TestLibRBD, TestScatterGatherIO)
 {
   rados_ioctx_t ioctx;
