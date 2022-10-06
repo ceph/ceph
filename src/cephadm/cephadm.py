@@ -3317,7 +3317,7 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
     # Open ports explicitly required for the daemon
     if ports:
         fw = Firewalld(ctx)
-        fw.open_ports(ports)
+        fw.open_ports(ports + fw.external_ports.get(daemon_type, []))
         fw.apply_rules()
 
     if reconfig and daemon_type not in Ceph.daemons:
@@ -3553,6 +3553,18 @@ def deploy_daemon_units(
 
 
 class Firewalld(object):
+
+    # for specifying ports we should always open when opening
+    # ports for a daemon of that type. Main use case is for ports
+    # that we should open when deploying the daemon type but that
+    # the daemon itself may not necessarily need to bind to the port.
+    # This needs to be handed differently as we don't want to fail
+    # deployment if the port cannot be bound to but we still want to
+    # open the port in the firewall.
+    external_ports: Dict[str, List[int]] = {
+        'iscsi': [3260]  # 3260 is the well known iSCSI port
+    }
+
     def __init__(self, ctx):
         # type: (CephadmContext) -> None
         self.ctx = ctx
