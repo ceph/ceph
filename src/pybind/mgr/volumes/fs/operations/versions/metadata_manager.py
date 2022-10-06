@@ -2,22 +2,55 @@ import os
 import errno
 import logging
 import sys
-
-if sys.version_info >= (3, 2):
-    import configparser
-else:
-    import ConfigParser as configparser
-
-try:
-    from StringIO import StringIO
-except ImportError:
-    from io import StringIO
+import threading
+import configparser
+import re
 
 import cephfs
 
 from ...exception import MetadataMgrException
 
 log = logging.getLogger(__name__)
+
+# _lock needs to be shared across all instances of MetadataManager.
+# that is why we have a file level instance
+_lock = threading.Lock()
+
+
+def _conf_reader(fs, fd, offset=0, length=4096):
+    while True:
+        buf = fs.read(fd, offset, length)
+        offset += len(buf)
+        if not buf:
+            return
+        yield buf.decode('utf-8')
+
+
+class _ConfigWriter:
+    def __init__(self, fs, fd):
+        self._fs = fs
+        self._fd = fd
+        self._wrote = 0
+
+    def write(self, value):
+        buf = value.encode('utf-8')
+        wrote = self._fs.write(self._fd, buf, -1)
+        self._wrote += wrote
+        return wrote
+
+    def fsync(self):
+        self._fs.fsync(self._fd, 0)
+
+    @property
+    def wrote(self):
+        return self._wrote
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb):
+        self._fs.close(self._fd)
+
 
 class MetadataManager(object):
     GLOBAL_SECTION = "GLOBAL"
@@ -31,28 +64,20 @@ class MetadataManager(object):
     CLONE_FAILURE_META_KEY_ERRNO = "errno"
     CLONE_FAILURE_META_KEY_ERROR_MSG = "error_msg"
 
-    MAX_IO_BYTES = 8 * 1024
-
     def __init__(self, fs, config_path, mode):
         self.fs = fs
         self.mode = mode
         self.config_path = config_path
-        if sys.version_info >= (3, 2):
-            self.config = configparser.ConfigParser()
-        else:
-            self.config = configparser.SafeConfigParser()
+        self.config = configparser.ConfigParser()
 
     def refresh(self):
         fd = None
-        conf_data = StringIO()
-        log.debug("opening config {0}".format(self.config_path))
         try:
-            fd = self.fs.open(self.config_path, os.O_RDONLY)
-            while True:
-                data = self.fs.read(fd, -1, MetadataManager.MAX_IO_BYTES)
-                if not len(data):
-                    break
-                conf_data.write(data.decode('utf-8'))
+            log.debug("opening config {0}".format(self.config_path))
+            with _lock:
+                fd = self.fs.open(self.config_path, os.O_RDONLY)
+                cfg = ''.join(_conf_reader(self.fs, fd))
+            self.config.read_string(cfg, source=self.config_path)
         except UnicodeDecodeError:
             raise MetadataMgrException(-errno.EINVAL,
                     "failed to decode, erroneous metadata config '{0}'".format(self.config_path))
@@ -60,19 +85,12 @@ class MetadataManager(object):
             raise MetadataMgrException(-errno.ENOENT, "metadata config '{0}' not found".format(self.config_path))
         except cephfs.Error as e:
             raise MetadataMgrException(-e.args[0], e.args[1])
-        finally:
-            if fd is not None:
-                self.fs.close(fd)
-
-        conf_data.seek(0)
-        try:
-            if sys.version_info >= (3, 2):
-                self.config.read_file(conf_data)
-            else:
-                self.config.readfp(conf_data)
         except configparser.Error:
             raise MetadataMgrException(-errno.EINVAL, "failed to parse, erroneous metadata config "
                     "'{0}'".format(self.config_path))
+        finally:
+            if fd is not None:
+                self.fs.close(fd)
 
     def flush(self):
         # cull empty sections
@@ -80,26 +98,18 @@ class MetadataManager(object):
             if len(self.config.items(section)) == 0:
                 self.config.remove_section(section)
 
-        conf_data = StringIO()
-        self.config.write(conf_data)
-        conf_data.seek(0)
-
-        fd = None
         try:
-            fd = self.fs.open(self.config_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, self.mode)
-            wrote = 0
-            while True:
-                data = conf_data.read()
-                if not len(data):
-                    break
-                wrote += self.fs.write(fd, data.encode('utf-8'), -1)
-            self.fs.fsync(fd, 0)
-            log.info("wrote {0} bytes to config {1}".format(wrote, self.config_path))
+            with _lock:
+                tmp_config_path = self.config_path + b'.tmp'
+                fd = self.fs.open(tmp_config_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, self.mode)
+                with _ConfigWriter(self.fs, fd) as cfg_writer:
+                    self.config.write(cfg_writer)
+                    cfg_writer.fsync()
+                self.fs.rename(tmp_config_path, self.config_path)
+            log.info(f"wrote {cfg_writer.wrote} bytes to config {tmp_config_path}")
+            log.info(f"Renamed {tmp_config_path} to config {self.config_path}")
         except cephfs.Error as e:
             raise MetadataMgrException(-e.args[0], e.args[1])
-        finally:
-            if fd is not None:
-                self.fs.close(fd)
 
     def init(self, version, typ, path, state):
         # you may init just once before refresh (helps to overwrite conf)
@@ -162,7 +172,29 @@ class MetadataManager(object):
                 metadata_dict[option] = self.config.get(section,option)
         return metadata_dict
 
+    def list_all_keys_with_specified_values_from_section(self, section, value):
+        keys = []
+        if self.config.has_section(section):
+            options = self.config.options(section)
+            for option in options:
+                if (value == self.config.get(section, option)) :
+                    keys.append(option)
+        return keys
+
     def section_has_item(self, section, item):
         if not self.config.has_section(section):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
         return item in [v[1] for v in self.config.items(section)]
+
+    def has_snap_metadata_section(self):
+        sections = self.config.sections()
+        r = re.compile('SNAP_METADATA_.*')
+        for section in sections:
+            if r.match(section):
+                return True
+        return False
+
+    def list_snaps_with_metadata(self):
+        sections = self.config.sections()
+        r = re.compile('SNAP_METADATA_.*')
+        return [section[len("SNAP_METADATA_"):] for section in sections if r.match(section)]
