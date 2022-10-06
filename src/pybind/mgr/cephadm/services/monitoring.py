@@ -405,6 +405,7 @@ class PrometheusService(CephadmService):
         port = cast(int, self.mgr.get_module_option_ex(
             'prometheus', 'server_port', self.DEFAULT_MGR_PROMETHEUS_PORT))
         deps.append(str(port))
+        deps.append(str(self.mgr.service_discovery_port))
         # add an explicit dependency on the active manager. This will force to
         # re-deploy prometheus if the mgr has changed (due to a fail-over i.e).
         deps.append(self.mgr.get_active_mgr().name())
@@ -444,6 +445,7 @@ class PrometheusService(CephadmService):
 
 class NodeExporterService(CephadmService):
     TYPE = 'node-exporter'
+    DEFAULT_SERVICE_PORT = 9100
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type

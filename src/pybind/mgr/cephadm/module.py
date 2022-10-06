@@ -2487,8 +2487,8 @@ Then run the following:
             # this way we force a redeploy after a mgr failover
             deps.append(self.get_active_mgr().name())
             deps.append(str(self.get_module_option_ex('prometheus', 'server_port', 9283)))
-            deps += [s for s in ['node-exporter', 'alertmanager', 'ingress']
-                     if self.cache.get_daemons_by_service(s)]
+            deps.append(str(self.service_discovery_port))
+            deps += [s for s in ['node-exporter', 'alertmanager', 'ingress'] if self.cache.get_daemons_by_service(s)]
         else:
             need = {
                 'grafana': ['prometheus', 'loki'],
