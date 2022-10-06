@@ -484,6 +484,75 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
   return seastar::now();
 }
 
+OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
+  OSDOp& osd_op,
+  const ObjectState& os,
+  const SnapSet& ss)
+{
+  obj_list_snap_response_t resp;
+  resp.clones.reserve(ss.clones.size() + 1);
+  for (auto &clone: ss.clones) {
+    clone_info ci;
+    ci.cloneid = clone;
+
+    {
+      auto p = ss.clone_snaps.find(clone);
+      if (p == ss.clone_snaps.end()) {
+	logger().error(
+	  "OpsExecutor::do_list_snaps: {} has inconsistent "
+	  "clone_overlap, missing clone {}",
+	  os.oi.soid,
+	  clone);
+	return crimson::ct_error::invarg::make();
+      }
+      ci.snaps.reserve(p->second.size());
+      ci.snaps.insert(ci.snaps.end(), p->second.rbegin(), p->second.rend());
+    }
+
+    {
+      auto p = ss.clone_overlap.find(clone);
+      if (p == ss.clone_overlap.end()) {
+	logger().error(
+	  "OpsExecutor::do_list_snaps: {} has inconsistent "
+	  "clone_overlap, missing clone {}",
+	  os.oi.soid,
+	  clone);
+	return crimson::ct_error::invarg::make();
+      }
+      ci.overlap.reserve(p->second.num_intervals());
+      ci.overlap.insert(ci.overlap.end(), p->second.begin(), p->second.end());
+    }
+
+    {
+      auto p = ss.clone_size.find(clone);
+      if (p == ss.clone_size.end()) {
+	logger().error(
+	  "OpsExecutor::do_list_snaps: {} has inconsistent "
+	  "clone_size, missing clone {}",
+	  os.oi.soid,
+	  clone);
+	return crimson::ct_error::invarg::make();
+      }
+      ci.size = p->second;
+    }
+    resp.clones.push_back(std::move(ci));
+  }
+
+  if (!os.oi.is_whiteout()) {
+    clone_info ci;
+    ci.cloneid = CEPH_NOSNAP;
+    ci.size = os.oi.size;
+    resp.clones.push_back(std::move(ci));
+  }
+  resp.seq = ss.seq;
+  logger().error(
+    "OpsExecutor::do_list_snaps: {}, resp.clones.size(): {}",
+    os.oi.soid,
+    resp.clones.size());
+  resp.encode(osd_op.outdata);
+  return read_ierrorator::now();
+}
+
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::execute_op(OSDOp& osd_op)
 {
@@ -705,6 +774,10 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_ASSERT_VER:
     return do_read_op([this, &osd_op](auto&, const auto& os) {
       return do_assert_ver(osd_op, os);
+    });
+  case CEPH_OSD_OP_LIST_SNAPS:
+    return do_snapset_op([this, &osd_op](const auto &os, const auto &ss) {
+      return do_list_snaps(osd_op, os, ss);
     });
 
   default:
