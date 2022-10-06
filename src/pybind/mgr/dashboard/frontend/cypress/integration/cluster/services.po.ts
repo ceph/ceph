@@ -195,10 +195,6 @@ export class ServicesPageHelper extends PageHelper {
     cy.get('cd-service-daemon-list').within(() => {
       this.getTableRow(daemon).click();
       this.clickActionButton(action);
-
-      // unselect it to avoid colliding with any other selection
-      // in different steps
-      this.getTableRow(daemon).click();
     });
   }
 }
