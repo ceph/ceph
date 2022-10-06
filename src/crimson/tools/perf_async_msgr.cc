@@ -90,12 +90,12 @@ int main(int argc, char** argv)
   po::options_description desc{"Allowed options"};
   desc.add_options()
     ("help,h", "show help message")
-    ("addr", po::value<std::string>()->default_value("v1:127.0.0.1:9010"),
-     "server address")
+    ("addr", po::value<std::string>()->default_value("v2:127.0.0.1:9010"),
+     "server address(crimson only supports msgr v2 protocol)")
     ("bs", po::value<unsigned>()->default_value(0),
      "server block size")
-    ("v1-crc-enabled", po::value<bool>()->default_value(false),
-     "enable v1 CRC checks");
+    ("crc-enabled", po::value<bool>()->default_value(false),
+     "enable CRC checks");
   po::variables_map vm;
   std::vector<std::string> unrecognized_options;
   try {
@@ -118,8 +118,9 @@ int main(int argc, char** argv)
   auto addr = vm["addr"].as<std::string>();
   entity_addr_t target_addr;
   target_addr.parse(addr.c_str(), nullptr);
+  ceph_assert_always(target_addr.is_msgr2());
   auto bs = vm["bs"].as<unsigned>();
-  auto v1_crc_enabled = vm["v1-crc-enabled"].as<bool>();
+  auto crc_enabled = vm["crc-enabled"].as<bool>();
 
   std::vector<const char*> args(argv, argv + argc);
   auto cct = global_init(nullptr, args,
@@ -128,7 +129,7 @@ int main(int argc, char** argv)
                          CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(cct.get());
 
-  if (v1_crc_enabled) {
+  if (crc_enabled) {
     cct->_conf.set_val("ms_crc_header", "true");
     cct->_conf.set_val("ms_crc_data", "true");
   } else {
