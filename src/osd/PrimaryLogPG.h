@@ -572,7 +572,7 @@ public:
   }
   void send_message_osd_cluster(
     MessageRef m, Connection *con) override {
-    osd->send_message_osd_cluster(m, con);
+    osd->send_message_osd_cluster(std::move(m), con);
   }
   void send_message_osd_cluster(
     Message *m, const ConnectionRef& con) override {
