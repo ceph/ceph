@@ -609,8 +609,7 @@ class RGWAM:
 
     def realm_rm_zone_creds(self, realm_token_b64):
         if not realm_token_b64:
-            print('missing realm token')
-            return False
+            raise RGWAMException('missing realm token')
 
         realm_token = RealmToken.from_base64_str(realm_token_b64)
         try:
@@ -744,7 +743,7 @@ class RGWAM:
     def zonegroup_create(self, realm_token_b64, zonegroup_name=None,
                          endpoints=None, zonegroup_is_master=True):
         if not realm_token_b64:
-            print('missing realm access config')
+            raise RGWAMException('missing realm access config')
             return False
 
         realm_token = RealmToken.from_base64_str(realm_token_b64)
@@ -791,7 +790,6 @@ class RGWAM:
         logging.info(f"Pulled realm {realm_info['name']} ({realm_info['id']})")
         realm_name = realm_info['name']
         realm_id = realm_info['id']
-        logging.info(f"Pulled realm {realm_name} ({realm_id})")
 
         realm = EntityID(realm_id)
         period_info = self.period_op().get(realm)
