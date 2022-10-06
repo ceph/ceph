@@ -89,6 +89,27 @@ class CephFSTestCase(CephTestCase):
         self._orig_mount_details = [MountDetails(m) for m in self.mounts]
         log.info(self._orig_mount_details)
 
+    def _remove_blocklist(self):
+        # In case anything is in the OSD blocklist list, clear it out.  This is to avoid
+        # the OSD map changing in the background (due to blocklist expiry) while tests run.
+        try:
+            self.mds_cluster.mon_manager.run_cluster_cmd(args="osd blocklist clear")
+        except CommandFailedError:
+            # Fallback for older Ceph cluster
+            try:
+                blocklist = json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd("osd",
+                                      "dump", "--format=json-pretty"))['blocklist']
+                log.info(f"Removing {len(blocklist)} blocklist entries")
+                for addr, blocklisted_at in blocklist.items():
+                    self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blocklist", "rm", addr)
+            except KeyError:
+                # Fallback for more older Ceph clusters, who will use 'blacklist' instead.
+                blacklist = json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd("osd",
+                                      "dump", "--format=json-pretty"))['blacklist']
+                log.info(f"Removing {len(blacklist)} blacklist entries")
+                for addr, blocklisted_at in blacklist.items():
+                    self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blacklist", "rm", addr)
+
     def setUp(self):
         super(CephFSTestCase, self).setUp()
 
@@ -128,17 +149,7 @@ class CephFSTestCase(CephTestCase):
         self.backup_fs = None
         self.recovery_fs = None
 
-        # In case anything is in the OSD blocklist list, clear it out.  This is to avoid
-        # the OSD map changing in the background (due to blocklist expiry) while tests run.
-        try:
-            self.mds_cluster.mon_manager.run_cluster_cmd(args="osd blocklist clear")
-        except CommandFailedError:
-            # Fallback for older Ceph cluster
-            blocklist = json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd("osd",
-                                  "dump", "--format=json-pretty"))['blocklist']
-            log.info("Removing {0} blocklist entries".format(len(blocklist)))
-            for addr, blocklisted_at in blocklist.items():
-                self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blocklist", "rm", addr)
+        self._remove_blocklist()
 
         client_mount_ids = [m.client_id for m in self.mounts]
         # In case there were any extra auth identities around from a previous
