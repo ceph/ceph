@@ -13,7 +13,7 @@ export class MirroringPageHelper extends PageHelper {
    */
   @PageHelper.restrictTo(pages.index.url)
   editMirror(name: string, option: string) {
-    // Select the pool in the table
+    // Clicks the pool in the table
     this.getFirstTableCell(name).click();
 
     // Clicks the Edit Mode button
@@ -28,8 +28,5 @@ export class MirroringPageHelper extends PageHelper {
     cy.contains('.modal-dialog', 'Edit pool mirror mode').should('not.exist');
     const val = option.toLowerCase(); // used since entries in table are lower case
     this.getFirstTableCell(val).should('be.visible');
-
-    // unselect the pool in the table
-    this.getFirstTableCell(name).click();
   }
 }
