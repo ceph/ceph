@@ -41,7 +41,7 @@ class DirectoryFixture: public ::testing::Test {
 TEST_F(DirectoryFixture, DirectoryInit) {
   ASSERT_NE(blk_dir, nullptr);
   ASSERT_NE(c_blk, nullptr);
-  ASSERT_NE(portStr.length(), static_cast<long unsigned int>(0));
+  ASSERT_NE((int)portStr.length(), 0);
 }
 
 /* Successful setValue Call and Redis Check */
@@ -140,7 +140,7 @@ TEST_F(DirectoryFixture, GetValueTest) {
   /* Check if object name in directory instance matches redis update */
   client.hset("rgw-object:" + oid + ":directory", "obj_name", "newoid", [](cpp_redis::reply& reply) {
     if (reply.is_integer()) {
-      ASSERT_EQ(reply.as_integer(), 0); // Zero keys exist
+      ASSERT_EQ(reply.as_integer(), 0); /* Zero keys exist */
     }
   });
 

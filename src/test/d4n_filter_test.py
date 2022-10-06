@@ -114,7 +114,6 @@ class D4NFilterTestCase(unittest.TestCase):
         self.assertEqual(response_put.get('ResponseMetadata').get('HTTPStatusCode'), 200) 
 
         data = r.hgetall('rgw-object:test.txt:cache')
-        print(data)
         output = subprocess.check_output(['./bin/radosgw-admin', 'object', 'stat', '--bucket=bkt', '--object=test.txt'])
         attrs = json.loads(output)
         

@@ -35,6 +35,9 @@
 #ifdef WITH_RADOSGW_D4N_FILTER
 #include "rgw_sal_d4n.h" 
 #endif
+#ifdef WITH_RADOSGW_D4N_FILTER
+#include "rgw_sal_d4n.h" 
+#endif
 
 #ifdef WITH_RADOSGW_MOTR
 #include "rgw_sal_motr.h"
@@ -62,6 +65,9 @@ extern rgw::sal::Store* newDaosStore(CephContext *cct);
 extern rgw::sal::Store* newD4NFilter(rgw::sal::Store* next);
 #endif
 extern rgw::sal::Store* newBaseFilter(rgw::sal::Store* next);
+#ifdef WITH_RADOSGW_D4N_FILTER
+extern rgw::sal::Store* newD4NFilter(rgw::sal::Store* next);
+#endif
 }
 
 RGWObjState::RGWObjState() {

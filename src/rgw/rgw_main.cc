@@ -126,6 +126,17 @@ int main(int argc, char *argv[])
     derr << "ERROR: unable to initialize signal fds" << dendl;
   exit(1);
   }
+#ifdef WITH_RADOSGW_D4N_FILTER
+  else if (config_filter == "d4n") {
+    rgw_filter = "d4n";
+  }
+#endif
+
+#ifdef WITH_RADOSGW_TRACER
+  else if (config_filter == "d4n") {
+    rgw_filter = "d4n";
+  }
+#endif
 
   register_async_signal_handler(SIGTERM, rgw::signal::handle_sigterm);
   register_async_signal_handler(SIGINT, rgw::signal::handle_sigterm);

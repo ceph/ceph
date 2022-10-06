@@ -69,7 +69,6 @@ class D4NFilterUser : public FilterUser {
     D4NFilterUser(std::unique_ptr<User> _next, D4NFilterStore* _filter) : 
       FilterUser(std::move(_next)),
       filter(_filter) {}
-    //D4NFilterUser(FilterUser& u) : FilterUser(u.next->clone()) {}
     virtual ~D4NFilterUser() = default;
 
     virtual int create_bucket(const DoutPrefixProvider* dpp,
