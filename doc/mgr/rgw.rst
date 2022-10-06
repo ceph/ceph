@@ -21,8 +21,7 @@ Bootstrapping RGW realm creates a new RGW realm entity, a new zonegroup,
 and a new zone. It configures a new system user that can be used for
 multisite sync operations. Under the hood this module instructs the
 orchestrator to create and deploy the corresponding RGW daemons. The module
-supports both passing the arguments in the cmd line as in the form of a spec
-file:
+supports both passing the arguments through the cmd line or as a spec file:
 
 .. prompt:: bash #
 
@@ -48,15 +47,15 @@ Following is an example of RGW mutlisite spec file:
   spec:
     rgw_frontend_port: 5500
 
-.. note:: The spec file used by RGW has the same format as the one used by cephadm. Thus,
-          the user can provide any cephadm rgw supported parameter as any other advanced
-          configuration items such as SSL certificates etc.
+.. note:: The spec file used by RGW has the same format as the one used by the orchestrator. Thus,
+          the user can provide any orchestration supported rgw parameters including advanced
+          configuration features such as SSL certificates etc.
 
 
 Realm Credentials Token
 -----------------------
 
-User can list the available tokens for the created (or already existing) realms.
+Users can list the available tokens for the created (or already existing) realms.
 The token is a base64 string that encapsulates the realm information and its
 master zone endpoint authentication data. Following is an example of
 the `ceph rgw realm tokens` output:
