@@ -1,0 +1,28 @@
+tasks:
+- exec:
+    client.0:
+      - sudo ceph osd pool create low_tier 4
+- rados:
+    clients: [client.0]
+    low_tier_pool: 'low_tier'
+    ops: 1500
+    objects: 50
+    set_chunk: true
+    enable_dedup: true
+    dedup_chunk_size: '131072'
+    dedup_chunk_algo: 'fastcdc'
+    op_weights:
+      read: 100
+      write: 50
+      # TODO: CEPH_OSD_OP_SET_CHUNK
+      set_chunk: 0
+      # TODO: CEPH_OSD_OP_TIER_PROMOTE
+      tier_promote: 0
+      # TODO: CEPH_OSD_OP_TIER_FLUSH
+      tier_flush: 0
+      # TODO: CEPH_OSD_OP_CACHE_EVICT
+      cache_evict: 0
+      snap_create: 10
+      snap_remove: 10
+      # TODO: CEPH_OSD_OP_ROLLBACK
+      rollback: 0
