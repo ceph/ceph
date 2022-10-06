@@ -25,6 +25,14 @@
 #include "rgw_sal.h"
 #include "rgw_sal_dbstore.h"
 #include "rgw_bucket.h"
+#include "rgw_rest_admin.h"
+#include "rgw_rest_bucket.h"
+#include "rgw_rest_metadata.h"
+#include "rgw_rest_log.h"
+#include "rgw_rest_config.h"
+#include "rgw_rest_ratelimit.h"
+#include "rgw_rest_realm.h"
+#include "rgw_rest_user.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -1988,6 +1996,18 @@ namespace rgw::sal {
 
     return ret;
   }
+
+  void DBStore::register_admin_apis(RGWRESTMgr* mgr) {
+      mgr->register_resource("user", new RGWRESTMgr_User);
+      mgr->register_resource("bucket", new RGWRESTMgr_Bucket);
+      /*Registering resource for /admin/metadata */
+      mgr->register_resource("metadata", new RGWRESTMgr_Metadata);
+      mgr->register_resource("log", new RGWRESTMgr_Log);
+      /* XXX These may become global when cbodley is done with his zone work */
+      mgr->register_resource("config", new RGWRESTMgr_Config);
+      mgr->register_resource("realm", new RGWRESTMgr_Realm);
+      mgr->register_resource("ratelimit", new RGWRESTMgr_Ratelimit);
+  };
 
   int DBLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
   {
