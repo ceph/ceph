@@ -397,7 +397,7 @@ ReplicatedRecoveryBackend::build_push_op(
       return read_omap_for_push_op(recovery_info.soid,
                                    progress,
                                    new_progress,
-                                   &available, &pop);
+                                   available, &pop);
     }).then_interruptible([this, &recovery_info, &progress, &available, &pop]() mutable {
       logger().debug("build_push_op: available: {}, copy_subset: {}",
 		     available, recovery_info.copy_subset);
@@ -548,16 +548,16 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
     const hobject_t& oid,
     const ObjectRecoveryProgress& progress,
     ObjectRecoveryProgress& new_progress,
-    uint64_t* max_len,
+    uint64_t& max_len,
     PushOp* push_op)
 {
   if (progress.omap_complete) {
     return seastar::make_ready_future<>();
   }
-  return seastar::repeat([&new_progress, max_len, push_op, &oid, this] {
+  return seastar::repeat([&new_progress, &max_len, push_op, &oid, this] {
     return shard_services.get_store().omap_get_values(
       coll, ghobject_t{oid}, nullopt_if_empty(new_progress.omap_recovered_to)
-    ).safe_then([&new_progress, max_len, push_op](const auto& ret) {
+    ).safe_then([&new_progress, &max_len, push_op](const auto& ret) {
       const auto& [done, kvs] = ret;
       bool stop = done;
       // assuming "values.empty() only if done" holds here!
@@ -567,11 +567,11 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
           break;
         }
         if (const uint64_t entry_size = key.size() + value.length();
-            entry_size > *max_len) {
+            entry_size > max_len) {
           stop = true;
           break;
         } else {
-          *max_len -= std::min(*max_len, entry_size);
+          max_len -= std::min(max_len, entry_size);
         }
         push_op->omap_entries.emplace(key, value);
       }
