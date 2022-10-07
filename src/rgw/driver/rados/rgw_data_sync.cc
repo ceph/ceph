@@ -2053,6 +2053,16 @@ public:
       }
       *reset_backoff = true;
       tn->log(10, "took lease");
+      /* Reread data sync status to fech latest marker and objv */
+      objv.clear();
+      yield call(new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
+                                                             rgw_raw_obj(pool, status_oid),
+                                                             &sync_marker, true, &objv));
+      if (retcode < 0) {
+        lease_cr->go_down();
+        drain_all();
+        return set_cr_error(retcode);
+      }
 
       while (true) {
 	if (sync_marker.state == rgw_data_sync_marker::FullSync) {
