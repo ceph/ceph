@@ -469,8 +469,14 @@ public:
     local_cancel_reservation,
     local_reserver.cancel_reservation)
   FORWARD_TO_OSD_SINGLETON_TARGET(
+    local_dump_reservations,
+    local_reserver.dump)
+  FORWARD_TO_OSD_SINGLETON_TARGET(
     remote_cancel_reservation,
     remote_reserver.cancel_reservation)
+  FORWARD_TO_OSD_SINGLETON_TARGET(
+    remote_dump_reservations,
+    remote_reserver.dump)
 
   Context *invoke_context_on_core(core_id_t core, Context *c) {
     if (!c) return nullptr;
