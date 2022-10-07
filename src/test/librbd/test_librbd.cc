@@ -2531,6 +2531,49 @@ TEST_F(TestLibRBD, TestCloneEncryption)
   rados_ioctx_destroy(ioctx);
 }
 
+TEST_F(TestLibRBD, EncryptionFormatNoData)
+{
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  auto name = get_temp_image_name();
+  uint64_t luks1_meta_size = 4 << 20;
+  std::string passphrase = "some passphrase";
+
+  {
+    int order = 0;
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), luks1_meta_size - 1,
+                                 &order));
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+
+    librbd::encryption_luks1_format_options_t opts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, passphrase};
+    ASSERT_EQ(-ENOSPC, image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1,
+                                               &opts, sizeof(opts)));
+    uint64_t size;
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(luks1_meta_size - 1, size);
+  }
+
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+    ASSERT_EQ(0, image.resize(luks1_meta_size));
+
+    librbd::encryption_luks1_format_options_t opts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, passphrase};
+    ASSERT_EQ(0, image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, &opts,
+                                         sizeof(opts)));
+    uint64_t size;
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(0, size);
+  }
+}
+
 #endif
 
 TEST_F(TestLibRBD, TestIOWithIOHint)
