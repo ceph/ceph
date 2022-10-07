@@ -384,30 +384,41 @@ struct seastore_test_t :
     }
 
     void check_omap(SeaStore &seastore) {
-      auto iter = seastore.get_omap_iterator(coll, oid).get0();
-      iter->seek_to_first().get0();
       auto refiter = omap.begin();
-      while (true) {
-	if (!iter->valid() && refiter == omap.end())
-	  break;
-
-	if (!iter->valid() || refiter->first < iter->key()) {
-	  logger().debug(
-	    "check_omap: missing omap key {}",
-	    refiter->first);
-	  GTEST_FAIL() << "missing omap key " << refiter->first;
-	  ++refiter;
-	} else if (refiter == omap.end() || refiter->first > iter->key()) {
-	  logger().debug(
-	    "check_omap: extra omap key {}",
-	    iter->key());
-	  GTEST_FAIL() << "extra omap key" << iter->key();
-	  iter->next().get0();
-	} else {
-	  EXPECT_EQ(iter->value(), refiter->second);
-	  iter->next().get0();
-	  ++refiter;
-	}
+      std::optional<std::string> start;
+      while(true) {
+        auto [done, kvs] = seastore.omap_get_values(
+          coll,
+          oid,
+          start).unsafe_get0();
+        auto iter = kvs.begin();
+        while (true) {
+	  if ((done && iter == kvs.end()) && refiter == omap.end()) {
+	    return; // finished
+          } else if (!done && iter == kvs.end()) {
+	    break; // reload kvs
+          }
+          if (iter == kvs.end() || refiter->first < iter->first) {
+	    logger().debug(
+	      "check_omap: missing omap key {}",
+	      refiter->first);
+	    GTEST_FAIL() << "missing omap key " << refiter->first;
+	    ++refiter;
+          } else if (refiter == omap.end() || refiter->first > iter->first) {
+	    logger().debug(
+	      "check_omap: extra omap key {}",
+	      iter->first);
+	    GTEST_FAIL() << "extra omap key " << iter->first;
+            ++iter;
+          } else {
+	    EXPECT_EQ(iter->second, refiter->second);
+            ++iter;
+            ++refiter;
+          }
+        }
+        if (!done) {
+          start = kvs.rbegin()->first;
+        }
       }
     }
   };
