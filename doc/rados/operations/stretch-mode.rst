@@ -85,10 +85,8 @@ named ``site1`` and ``site2``::
           min_size 1
           max_size 10
           type replicated
-          step take site1
-          step chooseleaf firstn 2 type host
-          step emit
-          step take site2
+          step take default
+          step choose firstn 2 type datacenter 
           step chooseleaf firstn 2 type host
           step emit
   }
