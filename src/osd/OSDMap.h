@@ -371,6 +371,13 @@ public:
     bool stretch_mode_enabled{false};
     bool change_stretch_mode{false};
 
+    enum class mutate_allow_crimson_t : uint8_t {
+      NONE = 0,
+      SET = 1,
+      // Monitor won't allow CLEAR to be set currently, but we may allow it later
+      CLEAR = 2
+    } mutate_allow_crimson = mutate_allow_crimson_t::NONE;
+
     // full (rare)
     ceph::buffer::list fullmap;  // in lieu of below.
     ceph::buffer::list crush;
@@ -517,6 +524,8 @@ public:
       }
       return p->second.contains(snap);
     }
+
+    void set_allow_crimson() { mutate_allow_crimson = mutate_allow_crimson_t::SET; }
   };
   
 private:
@@ -652,6 +661,7 @@ private:
   uint32_t degraded_stretch_mode; // 0 if not degraded; else count of up sites
   uint32_t recovering_stretch_mode; // 0 if not recovering; else 1
   int32_t stretch_mode_bucket; // the bucket type we're stretched across
+  bool allow_crimson{false};
 private:
   uint32_t crush_version = 1;
 
@@ -853,6 +863,10 @@ public:
   }
   const mempool::osdmap::map<std::string,std::map<std::string,std::string>> &get_erasure_code_profiles() const {
     return erasure_code_profiles;
+  }
+
+  bool get_allow_crimson() const {
+    return allow_crimson;
   }
 
   bool exists(int osd) const {
