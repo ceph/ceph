@@ -34,32 +34,6 @@ class CyanStore final : public FuturizedStore {
   uuid_d osd_fsid;
 
 public:
-  class CyanOmapIterator final : public OmapIterator {
-  public:
-    CyanOmapIterator() {}
-    CyanOmapIterator(ObjectRef obj) : obj(obj) {
-      iter = obj->omap.begin();
-    }
-    seastar::future<> seek_to_first() final;
-    seastar::future<> upper_bound(const std::string &after) final;
-    seastar::future<> lower_bound(const std::string &to) final;
-    bool valid() const final;
-    seastar::future<> next() final;
-    std::string key() final {
-      return iter->first;
-    }
-    virtual ceph::buffer::list value() {
-      return iter->second;
-    }
-    virtual int status() const {
-      return iter != obj->omap.end() ? 0 : -1;
-    }
-    virtual ~CyanOmapIterator() {}
-  private:
-    std::map<std::string, bufferlist>::const_iterator iter;
-    ObjectRef obj;
-  };
-
   CyanStore(const std::string& path);
   ~CyanStore() final;
 
@@ -131,10 +105,6 @@ public:
   read_meta(const std::string& key) final;
   uuid_d get_fsid() const final;
   unsigned get_max_attr_name_length() const final;
-
-  seastar::future<OmapIteratorRef> get_omap_iterator(
-    CollectionRef c,
-    const ghobject_t& oid);
 
   read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(CollectionRef c,
 						       const ghobject_t& oid,

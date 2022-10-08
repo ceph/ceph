@@ -155,9 +155,6 @@ public:
    * stages and locks as do_transaction. */
   seastar::future<> flush(CollectionRef ch) final;
 
-  seastar::future<OmapIteratorRef> get_omap_iterator(
-    CollectionRef ch,
-    const ghobject_t& oid) final;
   read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
     CollectionRef ch,
     const ghobject_t& oid,
