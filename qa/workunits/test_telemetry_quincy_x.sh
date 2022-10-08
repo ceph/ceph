@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/bin/bash -ex
 
 # For quincy, the last_opt_revision remains at 1 since last_opt_revision
 # was phased out for fresh installs of quincy.

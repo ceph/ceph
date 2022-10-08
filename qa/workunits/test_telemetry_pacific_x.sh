@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/bin/bash -ex
 
 # Assert that we're still opted in
 LAST_OPT_REVISION=$(ceph config get mgr mgr/telemetry/last_opt_revision)

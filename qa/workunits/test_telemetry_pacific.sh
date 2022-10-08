@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/bin/bash -ex
 
 # Set up ident details for cluster
 ceph config set mgr mgr/telemetry/contact 'ceph-org'
