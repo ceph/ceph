@@ -953,7 +953,7 @@ release notes and documentation carefully before changing the profile on a
 running cluster, and consider throttling recovery/backfill parameters to
 limit the impact of a bolus of backfill.
 
-.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/assets/pdfs/weil-crush-sc06.pdf
+.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.io/assets/pdfs/weil-crush-sc06.pdf
 
 
 Primary Affinity
