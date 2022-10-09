@@ -119,7 +119,20 @@ Detailed information on all releases, past and present, can be found at :ref:`ce
 Release timeline
 ----------------
 
-.. ceph_timeline:: releases.yml development octopus nautilus mimic luminous kraken jewel infernalis hammer giant firefly
+.. ceph_timeline:: releases.yml development pacific octopus nautilus mimic luminous kraken jewel infernalis hammer giant 
+
+.. _Pacific: ../pacific
+.. _16.2.10: ../pacific#v16-2-10-pacific
+.. _16.2.9: ../pacific#v16-2-9-pacific
+.. _16.2.8: ../pacific#v16-2-8-pacific
+.. _16.2.7: ../pacific#v16-2-7-pacific
+.. _16.2.6: ../pacific#v16-2-6-pacific
+.. _16.2.5: ../pacific#v16-2-5-pacific
+.. _16.2.4: ../pacific#v16-2-4-pacific
+.. _16.2.3: ../pacific#v16-2-3-pacific
+.. _16.2.2: ../pacific#v16-2-2-pacific
+.. _16.2.1: ../pacific#v16-2-1-pacific
+.. _16.2.0: ../pacific#v16-2-0-pacific
 
 .. _Octopus: ../octopus
 .. _15.2.7: ../octopus#v15-2-7-octopus
