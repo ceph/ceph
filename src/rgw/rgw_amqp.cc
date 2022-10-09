@@ -322,6 +322,10 @@ std::string to_string(amqp_status_enum s) {
       return "AMQP_STATUS_SSL_CONNECTION_FAILED";
     case _AMQP_STATUS_SSL_NEXT_VALUE:
       return "AMQP_STATUS_INTERNAL"; 
+#if AMQP_VERSION >= AMQP_VERSION_CODE(0, 11, 0, 0)
+    case AMQP_STATUS_SSL_SET_ENGINE_FAILED:
+      return "AMQP_STATUS_SSL_SET_ENGINE_FAILED";
+#endif
     default:
       return "AMQP_STATUS_UNKNOWN";
   }
