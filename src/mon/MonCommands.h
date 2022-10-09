@@ -1173,6 +1173,13 @@ COMMAND("osd force_recovery_stretch_mode " \
 	"pool size to its non-failure value if currently degraded and "
 	"all monitor buckets are up",
 	"osd", "rw")
+COMMAND("osd set-allow-crimson " \
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
+	"Allow crimson-osds to boot and join the cluster.  Note, crimson-osd is "
+	"not yet considered stable and may crash or cause data loss -- should "
+	"be avoided outside of testing and development.  This setting is "
+	"irrevocable",
+	"osd", "rw")
 
 
 // tiering
