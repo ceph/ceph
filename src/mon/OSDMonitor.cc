@@ -13886,6 +13886,31 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "Triggering recovery stretch mode";
     err = 0;
     goto reply;
+  } else if (prefix == "osd set-allow-crimson") {
+
+    bool sure = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+
+    bool experimental_enabled =
+      g_ceph_context->check_experimental_feature_enabled("crimson");
+    if (!sure || !experimental_enabled) {
+      ss << "This command will allow usage of crimson-osd osd daemons.  "
+	 << "crimson-osd is not considered stable and will likely cause "
+	 << "crashes or data corruption.  At this time, crimson-osd is mainly "
+	 << "useful for performance evaluation, testing, and development.  "
+	 << "If you are sure, add --yes-i-really-mean-it and add 'crimson' to "
+	 << "the experimental features config.  This setting is irrevocable.";
+      err = -EPERM;
+      goto reply;
+    }
+
+    err = 0;
+    if (osdmap.get_allow_crimson()) {
+      goto reply;
+    } else {
+      pending_inc.set_allow_crimson();
+      goto update;
+    }
   } else {
     err = -EINVAL;
   }
