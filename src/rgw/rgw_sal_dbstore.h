@@ -202,7 +202,12 @@ protected:
       virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual int update_container_stats(const DoutPrefixProvider *dpp) override;
       virtual int check_bucket_shards(const DoutPrefixProvider *dpp) override;
-      virtual int chown(const DoutPrefixProvider *dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker = nullptr) override;
+      virtual int chown(const DoutPrefixProvider* dpp,
+                        User* new_user,
+                        User* old_user,
+                        optional_yield y,
+                        const std::string* marker = nullptr,
+                        RGWFormatterFlusher* flusher = nullptr) override;
       virtual int put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time mtime) override;
       virtual bool is_owner(User* user) override;
       virtual int check_empty(const DoutPrefixProvider *dpp, optional_yield y) override;

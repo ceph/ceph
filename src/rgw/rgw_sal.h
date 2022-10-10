@@ -681,7 +681,12 @@ class Bucket {
     /** Check if this bucket needs resharding, and schedule it if it does */
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp) = 0;
     /** Change the owner of this bucket in the backing store */
-    virtual int chown(const DoutPrefixProvider* dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker = nullptr) = 0;
+    virtual int chown(const DoutPrefixProvider* dpp,
+                      User* new_user,
+                      User* old_user,
+                      optional_yield y,
+                      const std::string* marker = nullptr,
+                      RGWFormatterFlusher* flusher = nullptr) = 0;
     /** Store the cached bucket info into the backing store */
     virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime) = 0;
     /** Check to see if the given user is the owner of this bucket */

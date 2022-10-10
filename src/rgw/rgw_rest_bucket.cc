@@ -197,6 +197,45 @@ void RGWOp_Bucket_Unlink::execute(optional_yield y)
   op_ret = RGWBucketAdminOp::unlink(driver, op_state, s);
 }
 
+class RGWOp_Set_Bucket_Owner : public RGWRESTOp {
+
+public:
+  RGWOp_Set_Bucket_Owner() {}
+
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("buckets", RGW_CAP_WRITE);
+  }
+
+  void execute(optional_yield y) override;
+
+  const char* name() const override { return "set_bucket_owner"; }
+};
+
+void RGWOp_Set_Bucket_Owner::execute(optional_yield y)
+{
+  bool uid_arg_existed = false;
+  std::string uid_str;
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str, &uid_arg_existed);
+  if (! uid_arg_existed) {
+    op_ret = -EINVAL;
+    return;
+  }
+  rgw_user uid(uid_str);
+  bool bucket_arg_existed = false;
+  std::string bucket_name;
+  RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name, &bucket_arg_existed);
+  if (! bucket_arg_existed) {
+    op_ret = -EINVAL;
+    return;
+  }
+
+  RGWBucketAdminOpState op_state;
+  op_state.set_user_id(uid);
+  op_state.set_bucket_name(bucket_name);
+
+  op_ret = RGWBucketAdminOp::chown(driver, op_state, flusher, "", s);
+}
+
 class RGWOp_Bucket_Remove : public RGWRESTOp {
 
 public:
@@ -396,6 +435,9 @@ RGWOp *RGWHandler_Bucket::op_put()
   if (s->info.args.sub_resource_exists("sync"))
     return new RGWOp_Sync_Bucket;
   
+  if (s->info.args.sub_resource_exists("owner"))
+    return new RGWOp_Set_Bucket_Owner;
+
   return new RGWOp_Bucket_Link;
 }
 

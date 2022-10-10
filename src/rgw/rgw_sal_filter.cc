@@ -741,11 +741,14 @@ int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp)
   return next->check_bucket_shards(dpp);
 }
 
-int FilterBucket::chown(const DoutPrefixProvider* dpp, User* new_user,
-			User* old_user, optional_yield y,
-			const std::string* marker)
+int FilterBucket::chown(const DoutPrefixProvider* dpp,
+                        User* new_user,
+			                  User* old_user,
+                        optional_yield y,
+			                  const std::string* marker,
+                        RGWFormatterFlusher* flusher)
 {
-  return next->chown(dpp, new_user, old_user, y, marker);
+  return next->chown(dpp, new_user, old_user, y, marker, flusher);
 }
 
 int FilterBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive,

@@ -619,7 +619,12 @@ int MotrBucket::check_bucket_shards(const DoutPrefixProvider *dpp)
   return 0;
 }
 
-int MotrBucket::chown(const DoutPrefixProvider *dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker)
+int MotrBucket::chown(const DoutPrefixProvider* dpp,
+                      User* new_user,
+                      User* old_user,
+                      optional_yield y,
+                      const std::string* marker,
+                      RGWFormatterFlusher* flusher)
 {
   // TODO: update bucket with new owner
 

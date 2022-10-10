@@ -1642,6 +1642,85 @@ Special Error Responses
 :Description: Unable to link bucket to specified user.
 :Code: 409 Conflict
 
+Change the Owner of a Bucket
+============================
+
+Change the bucket's owner.
+By changing the bucket's owner to a specified user, the owner
+is changed for all objects held by the bucket.
+
+:caps: buckets=write
+
+Syntax
+~~~~~~
+
+::
+
+	PUT /{admin}/bucket?owner&format=json HTTP/1.1
+	Host: {fqdn}
+
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+``bucket``
+
+:Description: The name of the bucket whose owner is to be changed.
+:Type: String
+:Example: ``foo_bucket``
+:Required: Yes
+
+``uid``
+
+:Description: The user ID of the bucket's new owner.
+:Type: String
+:Example: ``foo_user``
+:Required: Yes
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
+``new_user_id``
+
+:Description: The user ID of the bucket's new owner.
+:Type: String
+
+``old_user_id``
+
+:Description: The user ID of the bucket's old owner.
+:Type: String
+
+``processed_objects``
+
+:Description: The total number of objects processed in this bucket.
+:Type: Integer
+
+``object_progression``
+
+:Description: Progress of the on-going operation.
+              Every entry in the array represents a block of 100 processed objects.
+:Type: Container
+
+``processed_objects``
+
+:Description: The number of objects processed so far.
+:Type: Integer
+:Parent: ``object_progression``
+
+``processing_object``
+
+:Description: The name of the object currently being processed.
+:Type: Integer
+:Parent: ``object_progression``
+
+Special Error Responses
+~~~~~~~~~~~~~~~~~~~~~~~
+
+``NoSuchKey``
+
+:Description: Specified bucket does not exist.
+:Code: 404 Not Found
+
 Remove Object
 =============
 

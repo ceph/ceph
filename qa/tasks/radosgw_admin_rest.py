@@ -28,7 +28,7 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
     perform a rest command
     """
     log.info('radosgw-admin-rest: %s %s' % (cmd, params))
-    put_cmds = ['create', 'link', 'add']
+    put_cmds = ['create', 'link', 'add', 'chown']
     post_cmds = ['unlink', 'modify']
     delete_cmds = ['trim', 'rm', 'process']
     get_cmds = ['check', 'info', 'show', 'list', '']
@@ -813,3 +813,35 @@ def task(ctx, config):
     # TESTCASE 'ratelimit' 'global' 'modify' 'anonymous' 'enabled' 'succeeds'
     (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'global': 'true', 'enabled' : 'true'})
     assert ret == 200
+
+    # TESTCASE 'bucket-chown','bucket','modify','administrative user','succeeds'
+
+    # create a first bucket with foo user
+    foo_bucket = connection.create_bucket('foo_bucket')
+
+    # create 201 objects in foo_bucket
+    for i in range(201):
+        key = boto.s3.key.Key(foo_bucket, 'obj-%s' % i)
+        key.set_contents_from_string('obj-data-%s' % i)
+
+    # expected owner == foo
+    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'info'], {'bucket' : 'foo_bucket'})
+    assert ret == 200
+    assert out['owner'] == user1
+
+    # change bucket's owner to fud
+    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'chown'],
+         {'uid' : user2,
+         'bucket' :  'foo_bucket',
+         'owner' : True
+        })
+
+    assert ret == 200
+    assert out['new_user_id'] == user2
+    assert out['old_user_id'] == user1
+    assert out['processed_objects'] == 201
+
+    # expected owner == fud
+    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'info'], {'bucket' : 'foo_bucket'})
+    assert ret == 200
+    assert out['owner'] == user2

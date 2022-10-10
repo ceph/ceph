@@ -243,16 +243,21 @@ bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw:
   return false;
 }
 
-int RGWBucket::chown(RGWBucketAdminOpState& op_state, const string& marker,
-                     optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
+int RGWBucket::chown(RGWBucketAdminOpState& op_state,
+                     const string& marker,
+                     RGWFormatterFlusher& flusher,
+                     optional_yield y,
+                     const DoutPrefixProvider *dpp,
+                     std::string *err_msg)
 {
-  int ret = bucket->chown(dpp, user.get(), user.get(), y, &marker);
-  if (ret < 0) {
-    set_err_msg(err_msg, "Failed to change object ownership: " + cpp_strerror(-ret));
-  }
-  
-  return ret;
-}
+  std::unique_ptr<rgw::sal::User> old_user = driver->get_user(bucket->get_info().owner);
+  int ret = bucket->chown(dpp, user.get(), old_user.get(), y, &marker, &flusher);
+   if (ret < 0) {
+     set_err_msg(err_msg, "Failed to change object ownership: " + cpp_strerror(-ret));
+   }
+
+   return ret;
+ }
 
 int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg)
 {
@@ -771,7 +776,12 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
   return 0;
 }
 
-int RGWBucketAdminOp::chown(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const string& marker, const DoutPrefixProvider *dpp, string *err)
+int RGWBucketAdminOp::chown(rgw::sal::Driver* driver,
+                            RGWBucketAdminOpState& op_state,
+                            RGWFormatterFlusher& flusher,
+                            const string& marker,
+                            const DoutPrefixProvider *dpp,
+                            string *err)
 {
   RGWBucket bucket;
 
@@ -779,8 +789,7 @@ int RGWBucketAdminOp::chown(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_
   if (ret < 0)
     return ret;
 
-  return bucket.chown(op_state, marker, null_yield, dpp, err);
-
+  return bucket.chown(op_state, marker, flusher, null_yield, dpp, err);
 }
 
 int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
@@ -2739,9 +2748,15 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
 }
 
 // TODO: remove RGWRados dependency for bucket listing
-int RGWBucketCtl::chown(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
-                        const rgw_user& user_id, const std::string& display_name,
-                        const std::string& marker, optional_yield y, const DoutPrefixProvider *dpp)
+int RGWBucketCtl::chown(rgw::sal::Driver* driver,
+                        rgw::sal::Bucket* bucket,
+                        const rgw_user& user_id,
+                        const std::string& display_name,
+                        const std::string& marker,
+                        RGWFormatterFlusher* flusher,
+                        int &processed_object_count,
+                        optional_yield y,
+                        const DoutPrefixProvider *dpp)
 {
   map<string, bool> common_prefixes;
 
@@ -2752,8 +2767,12 @@ int RGWBucketCtl::chown(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
   params.allow_unordered = true;
   params.marker = marker;
 
-  int count = 0;
   int max_entries = 1000;
+
+  Formatter *formatter = flusher ? flusher->get_formatter() : nullptr;
+  if(formatter){
+    formatter->open_array_section("object_progression");
+  }
 
   //Loop through objects and update object acls to point to bucket owner
 
@@ -2767,9 +2786,17 @@ int RGWBucketCtl::chown(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
     }
 
     params.marker = results.next_marker;
-    count += results.objs.size();
 
     for (const auto& obj : results.objs) {
+      if(formatter && processed_object_count && !(processed_object_count % 100)){
+        formatter->open_object_section("");
+        formatter->dump_int("processed_objects", processed_object_count);
+        formatter->dump_string("processing_object", obj.key.name);
+        formatter->close_section();
+        flusher->flush();
+      }
+      ++processed_object_count;
+
       std::unique_ptr<rgw::sal::Object> r_obj = bucket->get_object(obj.key);
 
       ret = r_obj->get_obj_attrs(y, dpp);
@@ -2823,9 +2850,12 @@ int RGWBucketCtl::chown(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
         }
       }
     }
-    cerr << count << " objects processed in " << bucket
-        << ". Next marker " << params.marker.name << std::endl;
   } while(results.is_truncated);
+
+  if(formatter){
+    formatter->close_section();
+  }
+
   return 0;
 }
 

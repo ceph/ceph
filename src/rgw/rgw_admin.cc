@@ -7286,7 +7286,7 @@ int main(int argc, const char **argv)
     bucket_op.set_new_bucket_name(new_bucket_name);
     string err;
 
-    int r = RGWBucketAdminOp::chown(driver, bucket_op, marker, dpp(), &err);
+    int r = RGWBucketAdminOp::chown(driver, bucket_op, stream_flusher, marker, dpp(), &err);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;

@@ -349,8 +349,13 @@ public:
           std::map<RGWObjCategory, RGWStorageStats>& calculated_stats,
           std::string *err_msg = NULL);
 
-  int chown(RGWBucketAdminOpState& op_state, const std::string& marker,
-            optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+  int chown(RGWBucketAdminOpState& op_state,
+            const std::string& marker,
+            RGWFormatterFlusher& flusher,
+            optional_yield y,
+            const DoutPrefixProvider *dpp,
+            std::string *err_msg = NULL);
+
   int set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 
   int remove_object(const DoutPrefixProvider *dpp, RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
@@ -374,7 +379,7 @@ public:
 
   static int unlink(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp);
   static int link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
-  static int chown(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const std::string& marker, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+  static int chown(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher, const std::string& marker, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 
   static int check_index(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, optional_yield y, const DoutPrefixProvider *dpp);
@@ -688,9 +693,15 @@ public:
                     const DoutPrefixProvider *dpp,
                     bool update_entrypoint = true);
 
-  int chown(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
-            const rgw_user& user_id, const std::string& display_name,
-            const std::string& marker, optional_yield y, const DoutPrefixProvider *dpp);
+  int chown(rgw::sal::Driver* driver,
+            rgw::sal::Bucket* bucket,
+            const rgw_user& user_id,
+            const std::string& display_name,
+            const std::string& marker,
+            RGWFormatterFlusher* flusher,
+            int &processed_object_count,
+            optional_yield y,
+            const DoutPrefixProvider *dpp);
 
   int read_buckets_stats(std::map<std::string, RGWBucketEnt>& m,
                          optional_yield y,

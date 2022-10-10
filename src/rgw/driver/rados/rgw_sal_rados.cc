@@ -746,7 +746,12 @@ int RadosBucket::unlink(const DoutPrefixProvider* dpp, User* new_user, optional_
   return store->ctl()->bucket->unlink_bucket(new_user->get_id(), info.bucket, y, dpp, update_entrypoint);
 }
 
-int RadosBucket::chown(const DoutPrefixProvider* dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker)
+int RadosBucket::chown(const DoutPrefixProvider* dpp,
+                       User* new_user,
+                       User* old_user,
+                       optional_yield y,
+                       const std::string* marker,
+                       RGWFormatterFlusher* flusher)
 {
   std::string obj_marker;
 
@@ -761,8 +766,30 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp, User* new_user, User* old_
     return r;
   }
 
-  return store->ctl()->bucket->chown(store, this, new_user->get_id(),
-			   old_user->get_display_name(), *marker, y, dpp);
+  Formatter *formatter = flusher ? flusher->get_formatter() : nullptr;
+  if(formatter){
+    flusher->start(0);
+    formatter->open_object_section("");
+    formatter->dump_string("old_user_id", old_user->get_id().id);
+    formatter->dump_string("new_user_id", new_user->get_id().id);
+  }
+
+  int processed_object_count = 0;
+  r = store->ctl()->bucket->chown(store,
+                                  this,
+                                  new_user->get_id(),
+			                            new_user->get_display_name(),
+                                  *marker,
+                                  flusher,
+                                  processed_object_count,
+                                  y, dpp);
+
+  if(formatter){
+    formatter->dump_int("processed_objects", processed_object_count);
+    formatter->close_section();
+    flusher->flush();
+  }
+  return r;
 }
 
 int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime)
