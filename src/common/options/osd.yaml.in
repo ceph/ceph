@@ -973,7 +973,7 @@ options:
     cost factor in QoS calculations. Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: Cost per IO in microseconds to consider per OSD (for rotational
     media)
-  default: 25000
+  default: 11400
   flags:
   - runtime
 - name: osd_mclock_cost_per_io_usec_ssd
@@ -1012,7 +1012,7 @@ options:
     = mclock_scheduler
   fmt_desc: Cost per byte in microseconds to consider per OSD (for rotational
     media)
-  default: 5.2
+  default: 2.6
   flags:
   - runtime
 - name: osd_mclock_cost_per_byte_usec_ssd
