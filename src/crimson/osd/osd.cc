@@ -75,6 +75,7 @@ using crimson::os::FuturizedStore;
 namespace crimson::osd {
 
 OSD::OSD(int id, uint32_t nonce,
+	 seastar::abort_source& abort_source,
          crimson::os::FuturizedStore& store,
          crimson::net::MessengerRef cluster_msgr,
          crimson::net::MessengerRef public_msgr,
@@ -82,6 +83,7 @@ OSD::OSD(int id, uint32_t nonce,
          crimson::net::MessengerRef hb_back_msgr)
   : whoami{id},
     nonce{nonce},
+    abort_source{abort_source},
     // do this in background
     beacon_timer{[this] { (void)send_beacon(); }},
     cluster_msgr{cluster_msgr},
@@ -1166,9 +1168,8 @@ seastar::future<> OSD::restart()
 
 seastar::future<> OSD::shutdown()
 {
-  // TODO
-  superblock.mounted = boot_epoch;
-  superblock.clean_thru = osdmap->get_epoch();
+  logger().info("shutting down per osdmap");
+  abort_source.request_abort();
   return seastar::now();
 }
 
