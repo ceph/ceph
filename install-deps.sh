@@ -53,9 +53,9 @@ function munge_debian_control {
     local control=$1
     case "$version" in
         *squeeze*|*wheezy*)
-	    control="/tmp/control.$$"
-	    grep -v babeltrace debian/control > $control
-	    ;;
+            control="/tmp/control.$$"
+            grep -v babeltrace debian/control > $control
+            ;;
     esac
     echo $control
 }
@@ -68,16 +68,16 @@ function ensure_decent_gcc_on_ubuntu {
     local new=$1
     local codename=$2
     if dpkg --compare-versions $old ge ${new}.0; then
-	return
+        return
     fi
 
     if [ ! -f /usr/bin/g++-${new} ]; then
-	$SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
+        $SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
 deb [lang=none] http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
 deb [arch=amd64 lang=none] http://mirror.nullivex.com/ppa/ubuntu-toolchain-r-test $codename main
 EOF
-	# import PPA's signing key into APT's keyring
-	cat << ENDOFKEY | $SUDO apt-key add -
+        # import PPA's signing key into APT's keyring
+        cat << ENDOFKEY | $SUDO apt-key add -
 -----BEGIN PGP PUBLIC KEY BLOCK-----
 Version: SKS 1.1.6
 Comment: Hostname: keyserver.ubuntu.com
@@ -92,8 +92,8 @@ msyaQpNl/m/lNtOLhR64v5ZybofB2EWkMxUzX8D/FQ==
 =LcUQ
 -----END PGP PUBLIC KEY BLOCK-----
 ENDOFKEY
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
     fi
 }
 
@@ -121,20 +121,20 @@ function install_pkg_on_ubuntu {
     local pkgs=$@
     local missing_pkgs
     if [ $force = "force" ]; then
-	missing_pkgs="$@"
+        missing_pkgs="$@"
     else
-	for pkg in $pkgs; do
-	    if ! apt -qq list $pkg 2>/dev/null | grep -q installed; then
-		missing_pkgs+=" $pkg"
+        for pkg in $pkgs; do
+            if ! apt -qq list $pkg 2>/dev/null | grep -q installed; then
+                missing_pkgs+=" $pkg"
                 in_jenkins && echo "CI_DEBUG: missing_pkgs=$missing_pkgs"
-	    fi
-	done
+            fi
+        done
     fi
     if test -n "$missing_pkgs"; then
-	local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
-	$SUDO curl --silent --location $shaman_url --output /etc/apt/sources.list.d/$project.list
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y $missing_pkgs
+        local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
+        $SUDO curl --silent --location $shaman_url --output /etc/apt/sources.list.d/$project.list
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y $missing_pkgs
     fi
 }
 
@@ -157,26 +157,26 @@ function install_boost_on_ubuntu {
     local project=libboost
     local sha1=892ab89e76b91b505ffbf083f6fb7f2a666d4132
     install_pkg_on_ubuntu \
-	$project \
-	$sha1 \
-	$codename \
-	check \
-	ceph-libboost-atomic$ver-dev \
-	ceph-libboost-chrono$ver-dev \
-	ceph-libboost-container$ver-dev \
-	ceph-libboost-context$ver-dev \
-	ceph-libboost-coroutine$ver-dev \
-	ceph-libboost-date-time$ver-dev \
-	ceph-libboost-filesystem$ver-dev \
-	ceph-libboost-iostreams$ver-dev \
-	ceph-libboost-program-options$ver-dev \
-	ceph-libboost-python$ver-dev \
-	ceph-libboost-random$ver-dev \
-	ceph-libboost-regex$ver-dev \
-	ceph-libboost-system$ver-dev \
-	ceph-libboost-test$ver-dev \
-	ceph-libboost-thread$ver-dev \
-	ceph-libboost-timer$ver-dev
+        $project \
+        $sha1 \
+        $codename \
+        check \
+        ceph-libboost-atomic$ver-dev \
+        ceph-libboost-chrono$ver-dev \
+        ceph-libboost-container$ver-dev \
+        ceph-libboost-context$ver-dev \
+        ceph-libboost-coroutine$ver-dev \
+        ceph-libboost-date-time$ver-dev \
+        ceph-libboost-filesystem$ver-dev \
+        ceph-libboost-iostreams$ver-dev \
+        ceph-libboost-program-options$ver-dev \
+        ceph-libboost-python$ver-dev \
+        ceph-libboost-random$ver-dev \
+        ceph-libboost-regex$ver-dev \
+        ceph-libboost-system$ver-dev \
+        ceph-libboost-test$ver-dev \
+        ceph-libboost-thread$ver-dev \
+        ceph-libboost-timer$ver-dev
 }
 
 function install_libzbd_on_ubuntu {
@@ -204,8 +204,8 @@ function install_cortx_motr_on_ubuntu {
         39f89fa1c6945040433a913f2687c4b4e6cbeb3f \
         jammy \
         check \
-	cortx-motr \
-	cortx-motr-dev
+        cortx-motr \
+        cortx-motr-dev
     else
         local deb_arch=$(dpkg --print-architecture)
         local motr_pkg="cortx-motr_2.0.0.git3252d623_$deb_arch.deb"
@@ -233,9 +233,9 @@ function ensure_decent_gcc_on_rh {
     local old=$(gcc -dumpversion)
     local dts_ver=$1
     if version_lt $old $dts_ver; then
-	if test -t 1; then
-	    # interactive shell
-	    cat <<EOF
+        if test -t 1; then
+            # interactive shell
+            cat <<EOF
 Your GCC is too old. Please run following command to add DTS to your environment:
 
 scl enable gcc-toolset-$dts_ver bash
@@ -244,10 +244,10 @@ Or add the following line to the end of ~/.bashrc and run "source ~/.bashrc" to 
 
 source scl_source enable gcc-toolset-$dts_ver
 EOF
-	else
-	    # non-interactive shell
-	    source /opt/rh/gcc-toolset-$dts_ver/enable
-	fi
+        else
+            # non-interactive shell
+            source /opt/rh/gcc-toolset-$dts_ver/enable
+        fi
     fi
 }
 
@@ -314,8 +314,8 @@ if [ x$(uname)x = xFreeBSDx ]; then
         sysutils/flock \
         sysutils/fusefs-libs \
 
-	# Now use pip to install some extra python modules
-	pip install pecan
+        # Now use pip to install some extra python modules
+        pip install pecan
 
     exit
 else
@@ -356,27 +356,27 @@ else
         touch $DIR/status
 
         in_jenkins && echo "CI_DEBUG: Running munge_debian_control() in install-deps.sh"
-	backports=""
-	control=$(munge_debian_control "$VERSION" "debian/control")
+        backports=""
+        control=$(munge_debian_control "$VERSION" "debian/control")
         case "$VERSION" in
             *squeeze*|*wheezy*)
                 backports="-t $codename-backports"
                 ;;
         esac
 
-	# make a metapackage that expresses the build dependencies,
-	# install it, rm the .deb; then uninstall the package as its
-	# work is done
-	build_profiles=""
-	if $for_make_check; then
-	    build_profiles+=",pkg.ceph.check"
-	fi
-	if $with_seastar; then
-	    build_profiles+=",pkg.ceph.crimson"
-	fi
-	if $with_pmem; then
-	    build_profiles+=",pkg.ceph.pmdk"
-	fi
+        # make a metapackage that expresses the build dependencies,
+        # install it, rm the .deb; then uninstall the package as its
+        # work is done
+        build_profiles=""
+        if $for_make_check; then
+            build_profiles+=",pkg.ceph.check"
+        fi
+        if $with_seastar; then
+            build_profiles+=",pkg.ceph.crimson"
+        fi
+        if $with_pmem; then
+            build_profiles+=",pkg.ceph.pmdk"
+        fi
 
         in_jenkins && cat <<EOF
 CI_DEBUG: for_make_check=$for_make_check
@@ -386,13 +386,13 @@ CI_DEBUG: build_profiles=$build_profiles
 CI_DEBUG: Now running 'mk-build-deps' and installing ceph-build-deps package
 EOF
 
-	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
-	      --build-profiles "${build_profiles#,}" \
-	      --install --remove \
-	      --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
+        $SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
+              --build-profiles "${build_profiles#,}" \
+              --install --remove \
+              --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
         in_jenkins && echo "CI_DEBUG: Removing ceph-build-deps"
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
-	if [ "$control" != "debian/control" ] ; then rm $control; fi
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
+        if [ "$control" != "debian/control" ] ; then rm $control; fi
 
         # for rgw motr backend build checks
         if $with_rgw_motr; then
@@ -410,23 +410,23 @@ EOF
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
                 $SUDO dnf install -y dnf-utils selinux-policy-targeted
                 rpm --quiet --query epel-release || \
-		    $SUDO dnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
+                    $SUDO dnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-		if test $ID = centos -a $MAJOR_VERSION = 8 ; then
+                if test $ID = centos -a $MAJOR_VERSION = 8 ; then
                     # Enable 'powertools' or 'PowerTools' repo
                     $SUDO dnf config-manager --set-enabled $(dnf repolist --all 2>/dev/null|gawk 'tolower($0) ~ /^powertools\s/{print $1}')
-		    dts_ver=11
-		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
+                    dts_ver=11
+                    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     dts_ver=11
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
-		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
-		    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
-		    $SUDO dnf -y module enable javapackages-tools
+                    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
+                    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
+                    $SUDO dnf -y module enable javapackages-tools
                 fi
                 ;;
         esac
@@ -435,9 +435,9 @@ EOF
         $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
-	if [ -n "$dts_ver" ]; then
+        if [ -n "$dts_ver" ]; then
             ensure_decent_gcc_on_rh $dts_ver
-	fi
+        fi
         IGNORE_YUM_BUILDEP_ERRORS="ValueError: SELinux policy is not managed or store cannot be accessed."
         sed "/$IGNORE_YUM_BUILDEP_ERRORS/d" $DIR/yum-builddep.out | grep -i "error:" && exit 1
         # for rgw motr backend build checks
@@ -458,7 +458,7 @@ EOF
         ;;
     *)
         echo "$ID is unknown, dependencies will have to be installed manually."
-	exit 1
+        exit 1
         ;;
     esac
 fi
