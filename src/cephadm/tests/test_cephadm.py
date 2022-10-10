@@ -18,6 +18,7 @@ from .fixtures import (
     import_cephadm,
 )
 
+from pyfakefs import fake_filesystem
 from pyfakefs import fake_filesystem_unittest
 
 _cephadm = import_cephadm()
@@ -2565,6 +2566,9 @@ class TestRescan(fake_filesystem_unittest.TestCase):
 
     def setUp(self):
         self.setUpPyfakefs()
+        if not fake_filesystem.is_root():
+            fake_filesystem.set_uid(0)
+
         self.fs.create_dir('/sys/class')
         self.ctx = _cephadm.CephadmContext()
         self.ctx.func = _cephadm.command_rescan_disks
