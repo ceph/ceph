@@ -46,6 +46,10 @@
   If that is the case, in OSD logs the "You can be hit by THE DUPS BUG" warning
   will be visible.
   Relevant tracker: https://tracker.ceph.com/issues/53729
+* RBD: `rbd device unmap` command gained `--namespace` option.  Support for
+  namespaces was added to RBD in Nautilus 14.2.0 and it has been possible to
+  map and unmap images in namespaces using the `image-spec` syntax since then
+  but the corresponding option available in most other commands was missing.
 
 >=16.2.8
 --------
