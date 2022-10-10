@@ -18,7 +18,9 @@ mkdir -p $DIR
 if test $(id -u) != 0 ; then
     SUDO=sudo
 fi
-export LC_ALL=en_US.UTF-8 # the following is vulnerable to i18n
+# enable UTF-8 encoding for programs like pip that expect to
+# print more than just ascii chars
+export LC_ALL=C.UTF-8
 
 ARCH=$(uname -m)
 
