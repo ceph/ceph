@@ -9,25 +9,25 @@ This is a hotfix release that resolves two security flaws.
 
 Notable Changes
 ---------------
-* Users who were running OpenStack Manila to export native CephFS, who
+* Users who were running OpenStack Manila to export native CephFS and who
   upgraded their Ceph cluster from Nautilus (or earlier) to a later
-  major version, were vulnerable to an attack by malicious users. The
+  major version were vulnerable to an attack by malicious users. The
   vulnerability allowed users to obtain access to arbitrary portions of
-  the CephFS filesystem hierarchy, instead of being properly restricted
+  the CephFS filesystem hierarchy instead of being properly restricted
   to their own subvolumes. The vulnerability is due to a bug in the
   "volumes" plugin in Ceph Manager. This plugin is responsible for
-  managing Ceph File System subvolumes which are used by OpenStack
+  managing Ceph File System subvolumes, which are used by OpenStack
   Manila services as a way to provide shares to Manila users.
   
   With this hotfix, the vulnerability is fixed. Administrators who are
   concerned they may have been impacted should audit the CephX keys in
   their cluster for proper path restrictions.
   
-  Again, this vulnerability only impacts OpenStack Manila clusters which
+  Again, this vulnerability impacts only OpenStack Manila clusters that 
   provided native CephFS access to their users.
 
 * A regression made it possible to dereference a null pointer for
-  for s3website requests that don't refer to a bucket resulting in an RGW
+  s3website requests that don't refer to a bucket resulting in an RGW
   segfault.
 
 Changelog
