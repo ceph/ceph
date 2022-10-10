@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# -*- mode:sh; tab-width:8; indent-tabs-mode:t -*-
 #
 # Ceph distributed storage system
 #
