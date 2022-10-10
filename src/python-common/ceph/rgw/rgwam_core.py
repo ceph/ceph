@@ -522,7 +522,7 @@ class RGWAM:
         if zone_name in self.zone_op().list():
             raise RGWAMException(f'Zone {zone_name} already exists')
 
-        # Create RGW multisite entities and update the period
+        # Create RGW entities and update the period
         realm = self.create_realm(realm_name)
         zonegroup = self.create_zonegroup(realm, zonegroup_name, zonegroup_is_master=True)
         zone = self.create_zone(realm, zonegroup, zone_name, zone_is_master=True)
