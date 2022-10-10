@@ -420,7 +420,9 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
     return r;
   }
   if (trim) {
-    b->discard(0, b->get_size());
+    interval_set<uint64_t> whole_device;
+    whole_device.insert(0, b->get_size());
+    b->try_discard(whole_device, false);
   }
 
   dout(1) << __func__ << " bdev " << id << " path " << path
@@ -2912,18 +2914,13 @@ void BlueFS::_clear_dirty_set_stable_D(uint64_t seq)
 void BlueFS::_release_pending_allocations(vector<interval_set<uint64_t>>& to_release)
 {
   for (unsigned i = 0; i < to_release.size(); ++i) {
-    if (!to_release[i].empty()) {
-      /* OK, now we have the guarantee alloc[i] won't be null. */
-      int r = 0;
-      if (cct->_conf->bdev_enable_discard && cct->_conf->bdev_async_discard) {
-	r = bdev[i]->queue_discard(to_release[i]);
-	if (r == 0)
-	  continue;
-      } else if (cct->_conf->bdev_enable_discard) {
-	for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
-	  bdev[i]->discard(p.get_start(), p.get_len());
-	}
-      }
+    if (to_release[i].empty()) {
+        continue;
+    }
+    /* OK, now we have the guarantee alloc[i] won't be null. */
+
+    bool discard_queued = bdev[i]->try_discard(to_release[i]);
+    if (!discard_queued) {
       alloc[i]->release(to_release[i]);
       if (is_shared_alloc(i)) {
         shared_alloc->bluefs_used -= to_release[i].size();
