@@ -88,6 +88,14 @@ Users can choose between the following built-in profile types:
 .. note:: The values mentioned in the tables below represent the percentage
           of the total IOPS capacity of the OSD allocated for the service type.
 
+By default, the *high_client_ops* profile is enabled to ensure that a larger
+chunk of the bandwidth allocation goes to client ops. Background recovery ops
+are given lower allocation (and therefore take a longer time to complete). But
+there might be instances that necessitate giving higher allocations to either
+client ops or recovery ops. In order to deal with such a situation, the
+alternate built-in profiles may be enabled by following the steps mentioned
+in next sections.
+
 high_client_ops (*default*)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 This profile optimizes client performance over background activities by
@@ -143,10 +151,7 @@ within the OSD.
 +------------------------+-------------+--------+-------+
 
 .. note:: Across the built-in profiles, internal background best-effort clients
-          of mclock ("scrub", "snap trim", and "pg deletion") are given lower
-          reservations but no limits(MAX). This ensures that requests from such
-          clients are able to complete quickly if there are no other competing
-          operations.
+          of mclock include "scrub", "snap trim", and "pg deletion" operations.
 
 
 Custom Profile
@@ -158,9 +163,13 @@ users, who understand mclock and Ceph related configuration options.
 
 .. index:: mclock; built-in profiles
 
-mClock Built-in Profiles
-========================
+mClock Built-in Profiles -  Locked Config Options
+=================================================
+The below sections describe the config options that are locked to certain values
+in order to ensure mClock scheduler is able to provide predictable QoS.
 
+mClock Config Options
+---------------------
 When a built-in profile is enabled, the mClock scheduler calculates the low
 level mclock parameters [*reservation*, *weight*, *limit*] based on the profile
 enabled for each client type. The mclock parameters are calculated based on
@@ -177,24 +186,40 @@ config parameters cannot be modified when using any of the built-in profiles:
 - :confval:`osd_mclock_scheduler_background_best_effort_wgt`
 - :confval:`osd_mclock_scheduler_background_best_effort_lim`
 
-The following Ceph options will not be modifiable by the user:
+Recovery/Backfill Options
+-------------------------
+The following recovery and backfill related Ceph options are set to new defaults
+for mClock:
 
 - :confval:`osd_max_backfills`
 - :confval:`osd_recovery_max_active`
+- :confval:`osd_recovery_max_active_hdd`
+- :confval:`osd_recovery_max_active_ssd`
 
-This is because the above options are internally modified by the mclock
-scheduler in order to maximize the impact of the set profile.
+The following table shows the new mClock defaults. This is done to maximize the
+impact of the built-in profile:
 
-By default, the *high_client_ops* profile is enabled to ensure that a larger
-chunk of the bandwidth allocation goes to client ops. Background recovery ops
-are given lower allocation (and therefore take a longer time to complete). But
-there might be instances that necessitate giving higher allocations to either
-client ops or recovery ops. In order to deal with such a situation, the
-alternate built-in profiles may be enabled by following the steps mentioned
-in the next section.
++----------------------------------------+------------------+----------------+
+|  Config Option                         | Original Default | mClock Default |
++========================================+==================+================+
+| :confval:`osd_max_backfills`           | 1                | 10             |
++----------------------------------------+------------------+----------------+
+| :confval:`osd_recovery_max_active`     | 0                | 0              |
++----------------------------------------+------------------+----------------+
+| :confval:`osd_recovery_max_active_hdd` | 3                | 10             |
++----------------------------------------+------------------+----------------+
+| :confval:`osd_recovery_max_active_ssd` | 10               | 20             |
++----------------------------------------+------------------+----------------+
 
+The above mClock defaults, can be modified if necessary by enabling
+:confval:`osd_mclock_override_recovery_settings` (default: false). The
+steps for this is discussed in the
+`Steps to Modify mClock Max Backfills/Recovery Limits`_ section.
+
+Sleep Options
+-------------
 If any mClock profile (including "custom") is active, the following Ceph config
-sleep options will be disabled,
+sleep options are disabled (set to 0),
 
 - :confval:`osd_recovery_sleep`
 - :confval:`osd_recovery_sleep_hdd`
@@ -386,6 +411,70 @@ The individual QoS-related config options for the *custom* profile can also be
 modified ephemerally using the above commands.
 
 
+Steps to Modify mClock Max Backfills/Recovery Limits
+====================================================
+
+This section describes the steps to modify the default max backfills or recovery
+limits if the need arises.
+
+.. warning:: This section is for advanced users or for experimental testing. The
+   recommendation is to retain the defaults as is on a running cluster as
+   modifying them could have unexpected performance outcomes. The values may
+   be modified only if the cluster is unable to cope/showing poor performance
+   with the default settings or for performing experiments on a test cluster.
+
+.. important:: The max backfill/recovery options that can be modified are listed
+   in section `Recovery/Backfill Options`_. The modification of the mClock
+   default backfills/recovery limit is gated by the
+   :confval:`osd_mclock_override_recovery_settings` option, which is set to
+   *false* by default. Attempting to modify any default recovery/backfill
+   limits without setting the gating option will reset that option back to the
+   mClock defaults along with a warning message logged in the cluster log. Note
+   that it may take a few seconds for the default value to come back into
+   effect. Verify the limit using the *config show* command as shown below.
+
+#. Set the :confval:`osd_mclock_override_recovery_settings` config option on all
+   osds to *true* using:
+
+   .. prompt:: bash #
+
+     ceph config set osd osd_mclock_override_recovery_settings true
+
+#. Set the desired max backfill/recovery option using:
+
+   .. prompt:: bash #
+
+     ceph config set osd osd_max_backfills <value>
+
+   For example, the following command modifies the :confval:`osd_max_backfills`
+   option on all osds to 5.
+
+   .. prompt:: bash #
+
+     ceph config set osd osd_max_backfills 5
+
+#. Wait for a few seconds and verify the running configuration for a specific
+   OSD using:
+
+   .. prompt:: bash #
+
+     ceph config show osd.N | grep osd_max_backfills
+
+   For example, the following command shows the running configuration of
+   :confval:`osd_max_backfills` on osd.0.
+
+   .. prompt:: bash #
+
+     ceph config show osd.0 | grep osd_max_backfills
+
+#. Reset the :confval:`osd_mclock_override_recovery_settings` config option on
+   all osds to *false* using:
+
+   .. prompt:: bash #
+
+     ceph config set osd osd_mclock_override_recovery_settings false
+
+
 OSD Capacity Determination (Automated)
 ======================================
 
@@ -413,6 +502,46 @@ node whose underlying device type is SSD:
 
     ceph config show osd.0 osd_mclock_max_capacity_iops_ssd
 
+Mitigation of Unrealistic OSD Capacity From Automated Test
+----------------------------------------------------------
+In certain conditions, the OSD bench tool may show unrealistic/inflated result
+depending on the drive configuration and other environment related conditions.
+To mitigate the performance impact due to this unrealistic capacity, a couple
+of threshold config options depending on the osd's device type are defined and
+used:
+
+- :confval:`osd_mclock_iops_capacity_threshold_hdd` = 500
+- :confval:`osd_mclock_iops_capacity_threshold_ssd` = 80000
+
+The following automated step is performed:
+
+Fallback to using default OSD capacity (automated)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+If OSD bench reports a measurement that exceeds the above threshold values
+depending on the underlying device type, the fallback mechanism reverts to the
+default value of :confval:`osd_mclock_max_capacity_iops_hdd` or
+:confval:`osd_mclock_max_capacity_iops_ssd`. The threshold config options
+can be reconfigured based on the type of drive used. Additionally, a cluster
+warning is logged in case the measurement exceeds the threshold. For example, ::
+
+    2022-10-27T15:30:23.270+0000 7f9b5dbe95c0  0 log_channel(cluster) log [WRN]
+    : OSD bench result of 39546.479392 IOPS exceeded the threshold limit of
+    25000.000000 IOPS for osd.1. IOPS capacity is unchanged at 21500.000000
+    IOPS. The recommendation is to establish the osd's IOPS capacity using other
+    benchmark tools (e.g. Fio) and then override
+    osd_mclock_max_capacity_iops_[hdd|ssd].
+
+If the default capacity doesn't accurately represent the OSD's capacity, the
+following additional step is recommended to address this:
+
+Run custom drive benchmark if defaults are not accurate (manual)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+If the default OSD capacity is not accurate, the recommendation is to run a
+custom benchmark using your preferred tool (e.g. Fio) on the drive and then
+override the ``osd_mclock_max_capacity_iops_[hdd, ssd]`` option as described
+in the `Specifying  Max OSD Capacity`_ section.
+
+This step is highly recommended until an alternate mechansim is worked upon.
 
 Steps to Manually Benchmark an OSD (Optional)
 =============================================
@@ -426,9 +555,10 @@ Steps to Manually Benchmark an OSD (Optional)
          `Specifying  Max OSD Capacity`_.
 
 
-Any existing benchmarking tool can be used for this purpose. In this case, the
-steps use the *Ceph OSD Bench* command described in the next section. Regardless
-of the tool/command used, the steps outlined further below remain the same.
+Any existing benchmarking tool (e.g. Fio) can be used for this purpose. In this
+case, the steps use the *Ceph OSD Bench* command described in the next section.
+Regardless of the tool/command used, the steps outlined further below remain the
+same.
 
 As already described in the :ref:`dmclock-qos` section, the number of
 shards and the bluestore's throttle parameters have an impact on the mclock op
@@ -551,5 +681,8 @@ mClock Config Options
 .. confval:: osd_mclock_cost_per_byte_usec_ssd
 .. confval:: osd_mclock_force_run_benchmark_on_init
 .. confval:: osd_mclock_skip_benchmark
+.. confval:: osd_mclock_override_recovery_settings
+.. confval:: osd_mclock_iops_capacity_threshold_hdd
+.. confval:: osd_mclock_iops_capacity_threshold_ssd
 
 .. _the dmClock algorithm: https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Gulati.pdf
