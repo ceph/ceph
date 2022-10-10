@@ -8,7 +8,6 @@
 #include <fstream>
 #include <random>
 
-#include <seastar/apps/lib/stop_signal.hh>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/print.hh>
 #include <seastar/core/prometheus.hh>
@@ -27,6 +26,7 @@
 #include "crimson/common/fatal_signal.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
+#include "crimson/osd/stop_signal.h"
 #include "global/pidfile.h"
 #include "osd.h"
 
@@ -295,7 +295,8 @@ int main(int argc, const char* argv[])
             local_conf().get_config_values()).get();
 
           crimson::osd::OSD osd(
-	    whoami, nonce, std::ref(*store), cluster_msgr, client_msgr,
+            whoami, nonce, std::ref(should_stop.abort_source()),
+            std::ref(*store), cluster_msgr, client_msgr,
 	    hb_front_msgr, hb_back_msgr);
 
           if (config.count("mkkey")) {
