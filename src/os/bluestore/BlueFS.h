@@ -400,7 +400,7 @@ private:
   int _allocate(uint8_t bdev, uint64_t len,
 		bluefs_fnode_t* node);
   int _allocate_without_fallback(uint8_t id, uint64_t len,
-				 PExtentVector* extents);
+				 bluefs_fnode_t* node);
 
   /* signal replay log to include h->file in nearest log flush */
   int _signal_dirty_to_log_D(FileWriter *h);

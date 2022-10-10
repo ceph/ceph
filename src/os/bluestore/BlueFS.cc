@@ -1041,11 +1041,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
   if (!noop) {
     log_file->vselector_hint =
       vselector->get_hint_for_log();
-  } else {
-    // do not use fnode from superblock in 'noop' mode - log_file's one should
-    // be fine and up-to-date
-    ceph_assert(log_file->fnode.ino == 1);
-    ceph_assert(log_file->fnode.extents.size() != 0);
   }
   dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
   if (unlikely(to_stdout)) {
@@ -1606,26 +1601,27 @@ int BlueFS::device_migrate_to_existing(
 
   for (auto& [ino, file_ref] : nodes.file_map) {
     //do not copy log
-    if (file_ref->fnode.ino == 1) {
+    if (ino == 1) {
       continue;
     }
     dout(10) << __func__ << " " << ino << " " << file_ref->fnode << dendl;
 
-    auto& fnode_extents = file_ref->fnode.extents;
     vselector->sub_usage(file_ref->vselector_hint, file_ref->fnode);
 
     bool rewrite = std::any_of(
-      fnode_extents.begin(),
-      fnode_extents.end(),
+      file_ref->fnode.extents.begin(),
+      file_ref->fnode.extents.end(),
       [=](auto& ext) {
 	return ext.bdev != dev_target && devs_source.count(ext.bdev);
       });
     if (rewrite) {
       dout(10) << __func__ << "  migrating" << dendl;
-
+      bluefs_fnode_t old_fnode;
+      old_fnode.swap_extents(file_ref->fnode);
+      auto& old_fnode_extents = old_fnode.extents;
       // read entire file
       bufferlist bl;
-      for (auto old_ext : fnode_extents) {
+      for (const auto &old_ext : old_fnode_extents) {
 	buf.resize(old_ext.length);
 	int r = bdev[old_ext.bdev]->read_random(
 	  old_ext.offset,
@@ -1642,8 +1638,8 @@ int BlueFS::device_migrate_to_existing(
       }
 
       // write entire file
-      PExtentVector extents;
-      auto l = _allocate_without_fallback(dev_target, bl.length(), &extents);
+      auto l = _allocate_without_fallback(dev_target, bl.length(),
+        &file_ref->fnode);
       if (l < 0) {
 	derr << __func__ << " unable to allocate len 0x" << std::hex
 	     << bl.length() << std::dec << " from " << (int)dev_target
@@ -1652,7 +1648,7 @@ int BlueFS::device_migrate_to_existing(
       }
 
       uint64_t off = 0;
-      for (auto& i : extents) {
+      for (auto& i : file_ref->fnode.extents) {
 	bufferlist cur;
 	uint64_t cur_len = std::min<uint64_t>(i.length, bl.length() - off);
 	ceph_assert(cur_len > 0);
@@ -1663,7 +1659,7 @@ int BlueFS::device_migrate_to_existing(
       }
 
       // release old extents
-      for (auto old_ext : fnode_extents) {
+      for (const auto &old_ext : old_fnode_extents) {
 	PExtentVector to_release;
 	to_release.emplace_back(old_ext.offset, old_ext.length);
 	alloc[old_ext.bdev]->release(to_release);
@@ -1673,12 +1669,11 @@ int BlueFS::device_migrate_to_existing(
       }
 
       // update fnode
-      fnode_extents.clear();
-      for (auto& i : extents) {
-	fnode_extents.emplace_back(dev_target_new, i.offset, i.length);
+      for (auto& i : file_ref->fnode.extents) {
+	i.bdev = dev_target_new;
       }
     } else {
-      for (auto& ext : fnode_extents) {
+      for (auto& ext : file_ref->fnode.extents) {
 	if (dev_target != dev_target_new && ext.bdev == dev_target) {
 	  dout(20) << __func__ << "  " << " ... adjusting extent 0x"
 		   << std::hex << ext.offset << std::dec
@@ -1744,30 +1739,29 @@ int BlueFS::device_migrate_to_new(
   flags |= devs_source.count(BDEV_WAL) ? REMOVE_WAL : 0;
   int dev_target_new = dev_target; //FIXME: remove, makes no sense
 
-  for (auto& p : nodes.file_map) {
+  for (auto& [ino, file_ref] : nodes.file_map) {
     //do not copy log
-    if (p.second->fnode.ino == 1) {
+    if (ino == 1) {
       continue;
     }
-    dout(10) << __func__ << " " << p.first << " " << p.second->fnode << dendl;
+    dout(10) << __func__ << " " << ino << " " << file_ref->fnode << dendl;
 
-    auto& fnode_extents = p.second->fnode.extents;
+    vselector->sub_usage(file_ref->vselector_hint, file_ref->fnode);
 
-    bool rewrite = false;
-    for (auto ext_it = fnode_extents.begin();
-	 ext_it != p.second->fnode.extents.end();
-	 ++ext_it) {
-      if (ext_it->bdev != dev_target && devs_source.count(ext_it->bdev)) {
-	rewrite = true;
-	break;
-      }
-    }
+    bool rewrite = std::any_of(
+      file_ref->fnode.extents.begin(),
+      file_ref->fnode.extents.end(),
+      [=](auto& ext) {
+	return ext.bdev != dev_target && devs_source.count(ext.bdev);
+      });
     if (rewrite) {
       dout(10) << __func__ << "  migrating" << dendl;
-
+      bluefs_fnode_t old_fnode;
+      old_fnode.swap_extents(file_ref->fnode);
+      auto& old_fnode_extents = old_fnode.extents;
       // read entire file
       bufferlist bl;
-      for (auto old_ext : fnode_extents) {
+      for (const auto &old_ext : old_fnode_extents) {
 	buf.resize(old_ext.length);
 	int r = bdev[old_ext.bdev]->read_random(
 	  old_ext.offset,
@@ -1784,8 +1778,8 @@ int BlueFS::device_migrate_to_new(
       }
 
       // write entire file
-      PExtentVector extents;
-      auto l = _allocate_without_fallback(dev_target, bl.length(), &extents);
+      auto l = _allocate_without_fallback(dev_target, bl.length(),
+        &file_ref->fnode);
       if (l < 0) {
 	derr << __func__ << " unable to allocate len 0x" << std::hex
 	     << bl.length() << std::dec << " from " << (int)dev_target
@@ -1794,7 +1788,7 @@ int BlueFS::device_migrate_to_new(
       }
 
       uint64_t off = 0;
-      for (auto& i : extents) {
+      for (auto& i : file_ref->fnode.extents) {
 	bufferlist cur;
 	uint64_t cur_len = std::min<uint64_t>(i.length, bl.length() - off);
 	ceph_assert(cur_len > 0);
@@ -1805,7 +1799,7 @@ int BlueFS::device_migrate_to_new(
       }
 
       // release old extents
-      for (auto old_ext : fnode_extents) {
+      for (const auto &old_ext : old_fnode_extents) {
 	PExtentVector to_release;
 	to_release.emplace_back(old_ext.offset, old_ext.length);
 	alloc[old_ext.bdev]->release(to_release);
@@ -1815,9 +1809,8 @@ int BlueFS::device_migrate_to_new(
       }
 
       // update fnode
-      fnode_extents.clear();
-      for (auto& i : extents) {
-	fnode_extents.emplace_back(dev_target_new, i.offset, i.length);
+      for (auto& i : file_ref->fnode.extents) {
+	i.bdev = dev_target_new;
       }
     }
   }
@@ -2355,20 +2348,10 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
   int r;
   vselector->sub_usage(log_file->vselector_hint, log_file->fnode);
   log_file->fnode.swap_extents(old_fnode);
-  if (allocate_with_fallback) {
-    r = _allocate(log_dev, need, &log_file->fnode);
-    ceph_assert(r == 0);
-  } else {
-    PExtentVector extents;
-    r = _allocate_without_fallback(log_dev,
-			       need,
-			       &extents);
-    ceph_assert(r == 0);
-    for (auto& p : extents) {
-      log_file->fnode.append_extent(
-	bluefs_extent_t(log_dev, p.offset, p.length));
-    }
-  }
+  r = allocate_with_fallback ?
+    _allocate(log_dev, need, &log_file->fnode) :
+    _allocate_without_fallback(log_dev, need, &log_file->fnode);
+  ceph_assert(r == 0);
 
   _close_writer(log.writer);
 
@@ -2541,6 +2524,11 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   // todo - maybe improve _allocate so we will give clear set of new allocations
   uint64_t processed = 0;
   mempool::bluefs::vector<bluefs_extent_t> old_extents;
+dout(0) << __func__ << " " << std::hex
+        << log.writer->pos << " "
+        << log.writer->file->fnode.size << " "
+        << old_log_jump_to
+        << std::dec << dendl;
   for (auto& e : log_file->fnode.extents) {
     if (processed + e.length <= old_log_jump_to) {
       // drop whole extent
@@ -3366,7 +3354,7 @@ const char* BlueFS::get_device_name(unsigned id)
 }
 
 int BlueFS::_allocate_without_fallback(uint8_t id, uint64_t len,
-		      PExtentVector* extents)
+		      bluefs_fnode_t* node)
 {
   dout(10) << __func__ << " len 0x" << std::hex << len << std::dec
            << " from " << (int)id << dendl;
@@ -3374,12 +3362,13 @@ int BlueFS::_allocate_without_fallback(uint8_t id, uint64_t len,
   if (!alloc[id]) {
     return -ENOENT;
   }
-  extents->reserve(4);  // 4 should be (more than) enough for most allocations
+  PExtentVector extents;
+  extents.reserve(4);  // 4 should be (more than) enough for most allocations
   int64_t need = round_up_to(len, alloc_size[id]);
-  int64_t alloc_len = alloc[id]->allocate(need, alloc_size[id], 0, extents);
+  int64_t alloc_len = alloc[id]->allocate(need, alloc_size[id], 0, &extents);
   if (alloc_len < 0 || alloc_len < need) {
     if (alloc_len > 0) {
-      alloc[id]->release(*extents);
+      alloc[id]->release(extents);
     }
     derr << __func__ << " unable to allocate 0x" << std::hex << need
 	 << " on bdev " << (int)id
@@ -3396,6 +3385,9 @@ int BlueFS::_allocate_without_fallback(uint8_t id, uint64_t len,
   }
   if (is_shared_alloc(id)) {
     shared_alloc->bluefs_used += alloc_len;
+  }
+  for (auto& p : extents) {
+    node->append_extent(bluefs_extent_t(id, p.offset, p.length));
   }
 
   return 0;
