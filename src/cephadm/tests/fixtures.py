@@ -1,3 +1,4 @@
+from calendar import c
 import mock
 import os
 import pytest
@@ -68,17 +69,17 @@ def cephadm_fs(
          mock.patch('platform.processor', return_value='x86_64'), \
          mock.patch('cephadm.extract_uid_gid', return_value=(uid, gid)):
 
-            if not fake_filesystem.is_root():
-                fake_filesystem.set_uid(0)
+        if not fake_filesystem.is_root():
+            fake_filesystem.set_uid(0)
 
-            fs.create_dir(cd.DATA_DIR)
-            fs.create_dir(cd.LOG_DIR)
-            fs.create_dir(cd.LOCK_DIR)
-            fs.create_dir(cd.LOGROTATE_DIR)
-            fs.create_dir(cd.UNIT_DIR)
-            fs.create_dir('/sys/block')
+        fs.create_dir(cd.DATA_DIR)
+        fs.create_dir(cd.LOG_DIR)
+        fs.create_dir(cd.LOCK_DIR)
+        fs.create_dir(cd.LOGROTATE_DIR)
+        fs.create_dir(cd.UNIT_DIR)
+        fs.create_dir('/sys/block')
 
-            yield fs
+        yield fs
 
 
 @contextmanager
