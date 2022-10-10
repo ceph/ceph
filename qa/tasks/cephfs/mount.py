@@ -188,7 +188,12 @@ class CephFSMount(object):
     def is_blocked(self):
         self.fs = Filesystem(self.ctx, name=self.cephfs_name)
 
-        output = self.fs.mon_manager.raw_cluster_cmd(args='osd blocklist ls')
+        try:
+            output = self.fs.mon_manager.raw_cluster_cmd(args='osd blocklist ls')
+        except CommandFailedError:
+            # Fallback for older Ceph cluster
+            output = self.fs.mon_manager.raw_cluster_cmd(args='osd blacklist ls')
+
         return self.addr in output
 
     def is_stuck(self):
