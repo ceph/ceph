@@ -97,6 +97,9 @@ public:
   /// Returns rval once the Context is called
   int wait() {
     std::unique_lock l{lock};
+    if (done) {
+      return rval;
+    }
     cond.wait(l, [this] { return done;});
     return rval;
   }
