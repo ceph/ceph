@@ -85,8 +85,6 @@ Following is an example of zone spec file:
 
 .. code-block:: yaml
 
-  rgw_realm: myrealm
-  rgw_zonegroup: myzonegroup
   rgw_zone: my-secondary-zone
   rgw_realm_token: <token>
   placement:
@@ -124,7 +122,7 @@ List the tokens of all the available realms
 
   ceph rgw zone create -i spec.yaml
 
-Create a new zone and join existing realm (using the realm token)
+Join an existing realm by creating a new secondary zone (using the realm token)
 
 ::
 
