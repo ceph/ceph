@@ -3930,17 +3930,28 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key,
 							  const string& marker_version_id, int ret)
 {
   if (!key.empty()) {
-    if (ret == 0 && !quiet) {
-      s->formatter->open_object_section("Deleted");
-      s->formatter->dump_string("Key", key.name);
-      if (!key.instance.empty()) {
-	s->formatter->dump_string("VersionId", key.instance);
-      }
+    delete_multi_obj_entry ops_log_entry;
+    ops_log_entry.key = key.name;
+    ops_log_entry.version_id = key.instance;
+    if (ret == 0) {
+      ops_log_entry.error = false;
+      ops_log_entry.http_status = 200;
+      ops_log_entry.delete_marker = delete_marker;
       if (delete_marker) {
-	s->formatter->dump_bool("DeleteMarker", true);
-	s->formatter->dump_string("DeleteMarkerVersionId", marker_version_id);
+        ops_log_entry.marker_version_id = marker_version_id;
       }
-      s->formatter->close_section();
+      if (!quiet) {
+        s->formatter->open_object_section("Deleted");
+        s->formatter->dump_string("Key", key.name);
+        if (!key.instance.empty()) {
+            s->formatter->dump_string("VersionId", key.instance);
+        }
+        if (delete_marker) {
+            s->formatter->dump_bool("DeleteMarker", true);
+            s->formatter->dump_string("DeleteMarkerVersionId", marker_version_id);
+        }
+        s->formatter->close_section();
+      }
     } else if (ret < 0) {
       struct rgw_http_error r;
       int err_no;
@@ -3950,6 +3961,10 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key,
       err_no = -ret;
       rgw_get_errno_s3(&r, err_no);
 
+      ops_log_entry.error = true;
+      ops_log_entry.http_status = r.http_ret;
+      ops_log_entry.error_message = r.s3_code;
+
       s->formatter->dump_string("Key", key.name);
       s->formatter->dump_string("VersionId", key.instance);
       s->formatter->dump_string("Code", r.s3_code);
@@ -3957,6 +3972,7 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key,
       s->formatter->close_section();
     }
 
+    ops_log_entries.push_back(std::move(ops_log_entry));
     rgw_flush_formatter(s, s->formatter);
   }
 }

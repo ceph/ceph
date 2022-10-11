@@ -250,7 +250,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read pre request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
+      rc = rgw::lua::request::execute(store, rest, olog, s, op, script);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute pre request script. error: " << rc << dendl;
       }
@@ -318,7 +318,7 @@ done:
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read post request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
+      rc = rgw::lua::request::execute(store, rest, olog, s, op, script);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
       }
@@ -333,7 +333,7 @@ done:
   }
 
   if (should_log) {
-    rgw_log_op(rest, s, (op ? op->name() : "unknown"), olog);
+    rgw_log_op(rest, s, op, olog);
   }
 
   if (http_ret != nullptr) {

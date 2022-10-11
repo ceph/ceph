@@ -321,6 +321,29 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
     formatter->dump_string("subuser", entry.subuser);
   }
   formatter->dump_bool("temp_url", entry.temp_url);
+
+  if (entry.op == "multi_object_delete") {
+    formatter->open_object_section("op_data");
+    formatter->dump_int("num_ok", entry.delete_multi_obj_meta.num_ok);
+    formatter->dump_int("num_err", entry.delete_multi_obj_meta.num_err);
+    formatter->open_array_section("objects");
+    for (const auto& iter: entry.delete_multi_obj_meta.objects) {
+      formatter->open_object_section("");
+      formatter->dump_string("key", iter.key);
+      formatter->dump_string("version_id", iter.version_id);
+      formatter->dump_int("http_status", iter.http_status);
+      formatter->dump_bool("error", iter.error);
+      if (iter.error) {
+        formatter->dump_string("error_message", iter.error_message);
+      } else {
+        formatter->dump_bool("delete_marker", iter.delete_marker);
+        formatter->dump_string("marker_version_id", iter.marker_version_id);
+      }
+      formatter->close_section();
+    }
+    formatter->close_section();
+    formatter->close_section();
+  }
   formatter->close_section();
 }
 
@@ -525,10 +548,11 @@ done:
   return ret;
 }
 
-int rgw_log_op(RGWREST* const rest, struct req_state *s, const string& op_name, OpsLogSink *olog)
+int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *olog)
 {
   struct rgw_log_entry entry;
   string bucket_id;
+  string op_name = (op ? op->name() : "unknown");
 
   if (s->enable_usage_log)
     log_usage(s, op_name);
@@ -603,6 +627,9 @@ int rgw_log_op(RGWREST* const rest, struct req_state *s, const string& op_name, 
   entry.uri = std::move(uri);
 
   entry.op = op_name;
+  if (op) {
+    op->write_ops_log_entry(entry);
+  }
 
   if (s->auth.identity) {
     entry.identity_type = s->auth.identity->get_identity_type();

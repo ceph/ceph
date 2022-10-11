@@ -27,9 +27,9 @@ int RequestLog(lua_State* L)
   const auto rest = reinterpret_cast<RGWREST*>(lua_touserdata(L, lua_upvalueindex(1)));
   const auto olog = reinterpret_cast<OpsLogSink*>(lua_touserdata(L, lua_upvalueindex(2)));
   const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(3)));
-  const std::string op_name(reinterpret_cast<const char*>(lua_touserdata(L, lua_upvalueindex(4))));
+  const auto op(reinterpret_cast<RGWOp*>(lua_touserdata(L, lua_upvalueindex(4))));
   if (s) {
-    const auto rc = rgw_log_op(rest, s, op_name, olog);
+    const auto rc = rgw_log_op(rest, s, op, olog);
     lua_pushinteger(L, rc);
   } else {
     ldpp_dout(s, 1) << "Lua ERROR: missing request state, cannot use ops log"  << dendl;
@@ -772,11 +772,11 @@ int execute(
     RGWREST* rest,
     OpsLogSink* olog,
     req_state* s, 
-    const char* op_name,
+    RGWOp* op,
     const std::string& script)
-
 {
   auto L = luaL_newstate();
+  const char* op_name = op ? op->name() : "Unknown";
   lua_state_guard lguard(L);
 
   open_standard_libs(L);
@@ -795,7 +795,7 @@ int execute(
   lua_pushlightuserdata(L, rest);
   lua_pushlightuserdata(L, olog);
   lua_pushlightuserdata(L, s);
-  lua_pushlightuserdata(L, const_cast<char*>(op_name));
+  lua_pushlightuserdata(L, op);
   lua_pushcclosure(L, RequestLog, FOUR_UPVALS);
   lua_rawset(L, -3);
 
