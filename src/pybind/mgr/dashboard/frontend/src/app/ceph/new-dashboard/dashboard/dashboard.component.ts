@@ -1,8 +1,9 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
-import { Observable, Subscription } from 'rxjs';
+import { Observable, Subscription, timer } from 'rxjs';
 import { take } from 'rxjs/operators';
+import moment from 'moment';
 
 import { ClusterService } from '~/app/shared/api/cluster.service';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
@@ -10,6 +11,7 @@ import { HealthService } from '~/app/shared/api/health.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { Promqls as queries } from '~/app/shared/enum/dashboard-promqls.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { DashboardDetails } from '~/app/shared/models/cd-details';
 import { Permissions } from '~/app/shared/models/permissions';
