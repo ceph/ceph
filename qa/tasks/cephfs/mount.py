@@ -238,8 +238,8 @@ class CephFSMount(object):
                                timeout=60)
         # Use 0000 mode to prevent undesired modifications to the mountpoint on
         # the local file system.
-        self.client_remote.run(args=f'chmod 0000 {self.hostfs_mntpt}',
-                               timeout=60)
+        self.client_remote.run(args=f'sudo chmod 0000 {self.hostfs_mntpt}',
+                               timeout=60, omit_sudo=False)
 
     @property
     def _nsenter_args(self):
