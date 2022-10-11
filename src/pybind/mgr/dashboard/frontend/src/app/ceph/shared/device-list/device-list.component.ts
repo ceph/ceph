@@ -18,8 +18,13 @@ export class DeviceListComponent implements OnChanges, OnInit {
   @Input()
   osdId: number = null;
 
+  @Input()
+  osdList = false;
+
   @ViewChild('deviceLocation', { static: true })
   locationTemplate: TemplateRef<any>;
+  @ViewChild('daemonName', { static: true })
+  daemonNameTemplate: TemplateRef<any>;
   @ViewChild('lifeExpectancy', { static: true })
   lifeExpectancyTemplate: TemplateRef<any>;
   @ViewChild('lifeExpectancyTimestamp', { static: true })
@@ -69,16 +74,16 @@ export class DeviceListComponent implements OnChanges, OnInit {
         isHidden: true
       },
       { prop: 'location', name: $localize`Device Name`, cellTemplate: this.locationTemplate },
-      { prop: 'readableDaemons', name: $localize`Daemons` }
+      { prop: 'daemons', name: $localize`Daemons`, cellTemplate: this.daemonNameTemplate }
     ];
   }
 
   ngOnChanges() {
     const updateDevicesFn = (devices: CdDevice[]) => (this.devices = devices);
-    if (this.hostname) {
-      this.hostService.getDevices(this.hostname).subscribe(updateDevicesFn);
-    } else if (this.osdId !== null) {
+    if (this.osdList && this.osdId !== null) {
       this.osdService.getDevices(this.osdId).subscribe(updateDevicesFn);
+    } else if (this.hostname) {
+      this.hostService.getDevices(this.hostname).subscribe(updateDevicesFn);
     }
   }
 }
