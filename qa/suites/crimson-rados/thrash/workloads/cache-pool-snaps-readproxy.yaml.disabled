@@ -1,0 +1,44 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - must scrub before tier agent can activate
+    conf:
+      osd:
+        # override short_pg_log_entries.yaml (which sets these under [global])
+        osd_min_pg_log_entries: 3000
+        osd_max_pg_log_entries: 3000
+tasks:
+- exec:
+    client.0:
+      - sudo ceph osd pool create base 4
+      - sudo ceph osd pool application enable base rados
+      - sudo ceph osd pool create cache 4
+      - sudo ceph osd tier add base cache
+      - sudo ceph osd tier cache-mode cache readproxy
+      - sudo ceph osd tier set-overlay base cache
+      - sudo ceph osd pool set cache hit_set_type bloom
+      - sudo ceph osd pool set cache hit_set_count 8
+      - sudo ceph osd pool set cache hit_set_period 3600
+      - sudo ceph osd pool set cache target_max_objects 250
+- rados:
+    clients: [client.0]
+    pools: [base]
+    ops: 4000
+    objects: 500
+    pool_snaps: true
+    op_weights:
+      read: 100
+      write: 100
+      delete: 50
+      # TODO: CEPH_OSD_OP_COPY_FROM
+      copy_from: 0
+      # TODO: CEPH_OSD_OP_CACHE_FLUSH
+      cache_flush: 0
+      # TODO: CEPH_OSD_OP_CACHE_TRY_FLUSH
+      cache_try_flush: 0
+      # TODO: CEPH_OSD_OP_CACHE_EVICT
+      cache_evict: 0
+      snap_create: 50
+      snap_remove: 0
+      # TODO: CEPH_OSD_OP_ROLLBACK
+      rollback: 0

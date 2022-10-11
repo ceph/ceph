@@ -39,27 +39,21 @@ seastar::logger& logger()
 class OnCommit final: public Context
 {
   const int cpuid;
-  Context *oncommit;
   seastar::alien::instance &alien;
   seastar::promise<> &alien_done;
 public:
   OnCommit(
     int id,
     seastar::promise<> &done,
-    Context *oncommit,
     seastar::alien::instance &alien,
     ceph::os::Transaction& txn)
     : cpuid(id),
-      oncommit(oncommit),
       alien(alien),
       alien_done(done) {
   }
 
   void finish(int) final {
     return seastar::alien::submit_to(alien, cpuid, [this] {
-      if (oncommit) {
-        oncommit->complete(0);
-      }
       alien_done.set_value();
       return seastar::make_ready_future<>();
     }).wait();
@@ -437,8 +431,9 @@ auto AlienStore::omap_get_values(CollectionRef ch,
   });
 }
 
-seastar::future<> AlienStore::do_transaction(CollectionRef ch,
-                                             ceph::os::Transaction&& txn)
+seastar::future<> AlienStore::do_transaction_no_callbacks(
+  CollectionRef ch,
+  ceph::os::Transaction&& txn)
 {
   logger().debug("{}", __func__);
   auto id = seastar::this_shard_id();
@@ -450,13 +445,10 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
 	AlienCollection* alien_coll = static_cast<AlienCollection*>(ch.get());
         // moving the `ch` is crucial for buildability on newer S* versions.
 	return alien_coll->with_lock([this, ch=std::move(ch), id, &txn, &done] {
-	  Context *crimson_wrapper =
-	    ceph::os::Transaction::collect_all_contexts(txn);
 	  assert(tp);
 	  return tp->submit(ch->get_cid().hash_to_shard(tp->size()),
-	    [this, ch, id, crimson_wrapper, &txn, &done, &alien=seastar::engine().alien()] {
-	    txn.register_on_commit(new OnCommit(id, done, crimson_wrapper,
-						alien, txn));
+	    [this, ch, id, &txn, &done, &alien=seastar::engine().alien()] {
+	    txn.register_on_commit(new OnCommit(id, done, alien, txn));
 	    auto c = static_cast<AlienCollection*>(ch.get());
 	    return store->queue_transaction(c->collection, std::move(txn));
 	  });
@@ -612,94 +604,6 @@ AlienStore::read_errorator::future<std::map<uint64_t, uint64_t>> AlienStore::fie
       }
     });
   });
-}
-
-seastar::future<FuturizedStore::OmapIteratorRef> AlienStore::get_omap_iterator(
-  CollectionRef ch,
-  const ghobject_t& oid)
-{
-  assert(tp);
-  return tp->submit(ch->get_cid().hash_to_shard(tp->size()),
-    [this, ch, oid] {
-    auto c = static_cast<AlienCollection*>(ch.get());
-    auto iter = store->get_omap_iterator(c->collection, oid);
-    return FuturizedStore::OmapIteratorRef(
-	      new AlienStore::AlienOmapIterator(iter,
-						this,
-						ch));
-  });
-}
-
-//TODO: each iterator op needs one submit, this is not efficient,
-//      needs further optimization.
-seastar::future<> AlienStore::AlienOmapIterator::seek_to_first()
-{
-  assert(store->tp);
-  return store->tp->submit(ch->get_cid().hash_to_shard(store->tp->size()),
-    [this] {
-    return iter->seek_to_first();
-  }).then([] (int r) {
-    assert(r == 0);
-    return seastar::now();
-  });
-}
-
-seastar::future<> AlienStore::AlienOmapIterator::upper_bound(
-  const std::string& after)
-{
-  assert(store->tp);
-  return store->tp->submit(ch->get_cid().hash_to_shard(store->tp->size()),
-    [this, after] {
-    return iter->upper_bound(after);
-  }).then([] (int r) {
-    assert(r == 0);
-    return seastar::now();
-  });
-}
-
-seastar::future<> AlienStore::AlienOmapIterator::lower_bound(
-  const std::string& to)
-{
-  assert(store->tp);
-  return store->tp->submit(ch->get_cid().hash_to_shard(store->tp->size()),
-    [this, to] {
-    return iter->lower_bound(to);
-  }).then([] (int r) {
-    assert(r == 0);
-    return seastar::now();
-  });
-}
-
-seastar::future<> AlienStore::AlienOmapIterator::next()
-{
-  assert(store->tp);
-  return store->tp->submit(ch->get_cid().hash_to_shard(store->tp->size()),
-    [this] {
-    return iter->next();
-  }).then([] (int r) {
-    assert(r == 0);
-    return seastar::now();
-  });
-}
-
-bool AlienStore::AlienOmapIterator::valid() const
-{
-  return iter->valid();
-}
-
-std::string AlienStore::AlienOmapIterator::key()
-{
-  return iter->key();
-}
-
-ceph::buffer::list AlienStore::AlienOmapIterator::value()
-{
-  return iter->value();
-}
-
-int AlienStore::AlienOmapIterator::status() const
-{
-  return iter->status();
 }
 
 std::vector<uint64_t> AlienStore::_parse_cpu_cores()

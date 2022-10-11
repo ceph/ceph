@@ -8,11 +8,40 @@
 
 <ng-template #deviceLocation
              let-value="value">
-  <span *ngFor="let location of value">{{location.dev}}</span>
+  <ng-container *ngFor="let location of value">
+    <cd-label *ngIf="location.host === hostname"
+              [value]="location.dev"></cd-label>
+  </ng-container>
 </ng-template>
+
+<ng-template #daemonName
+             let-value="value">
+  <ng-container [ngTemplateOutlet]="osdId !== null ? osdIdDaemon : readableDaemons"
+                [ngTemplateOutletContext]="{daemons: value}">
+  </ng-container>
+</ng-template>
+
+<ng-template #osdIdDaemon
+             let-daemons="daemons">
+  <ng-container *ngFor="let daemon of daemons">
+    <cd-label *ngIf="daemon.includes(osdId)"
+              [value]="daemon"></cd-label>
+  </ng-container>
+</ng-template>
+
+<ng-template #readableDaemons
+             let-daemons="daemons">
+  <ng-container *ngFor="let daemon of daemons">
+    <cd-label class="mr-1"
+              [value]="daemon"></cd-label>
+  </ng-container>
+</ng-template>
+
 
 <ng-template #lifeExpectancy
              let-value="value">
+  <span *ngIf="!value.life_expectancy_enabled"
+        i18n>{{ "" | notAvailable }}</span>
   <span *ngIf="value.min && !value.max">&gt; {{value.min | i18nPlural: translationMapping}}</span>
   <span *ngIf="value.max && !value.min">&lt; {{value.max | i18nPlural: translationMapping}}</span>
   <span *ngIf="value.max && value.min">{{value.min}} to {{value.max | i18nPlural: translationMapping}}</span>

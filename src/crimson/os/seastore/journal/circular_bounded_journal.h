@@ -91,7 +91,7 @@ public:
   close_ertr::future<> close() final;
 
   journal_type_t get_type() final {
-    return journal_type_t::CIRCULAR;
+    return journal_type_t::RANDOM_BLOCK;
   }
 
   submit_record_ret submit_record(
@@ -291,7 +291,7 @@ public:
   device_id_t get_device_id() const {
     return header.device_id;
   }
-  size_t get_block_size() const {
+  extent_len_t get_block_size() const {
     return header.block_size;
   }
   rbm_abs_addr get_journal_end() const {

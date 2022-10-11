@@ -8,7 +8,6 @@
 #include <fstream>
 #include <random>
 
-#include <seastar/apps/lib/stop_signal.hh>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/print.hh>
 #include <seastar/core/prometheus.hh>
@@ -27,6 +26,7 @@
 #include "crimson/common/fatal_signal.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
+#include "crimson/osd/stop_signal.h"
 #include "global/pidfile.h"
 #include "osd.h"
 
@@ -109,16 +109,6 @@ static uint64_t get_nonce()
   }
 }
 
-static void configure_crc_handling(crimson::net::Messenger& msgr)
-{
-  if (local_conf()->ms_crc_data) {
-    msgr.set_crc_data();
-  }
-  if (local_conf()->ms_crc_header) {
-    msgr.set_crc_header();
-  }
-}
-
 seastar::future<> fetch_config()
 {
   // i don't have any client before joining the cluster, so no need to have
@@ -134,7 +124,6 @@ seastar::future<> fetch_config()
     auto msgr = crimson::net::Messenger::create(entity_name_t::CLIENT(),
                                                 "temp_mon_client",
                                                 get_nonce());
-    configure_crc_handling(*msgr);
     crimson::mon::Client monc{*msgr, *auth_handler};
     msgr->set_auth_client(&monc);
     msgr->start({&monc}).get();
@@ -224,7 +213,6 @@ int main(int argc, const char* argv[])
                                               CEPH_ENTITY_TYPE_OSD,
                                               &cluster_name,
                                               &conf_file_list);
-  seastar::sharded<crimson::osd::OSD> osd;
   using crimson::common::sharded_conf;
   using crimson::common::sharded_perf_coll;
   try {
@@ -246,6 +234,7 @@ int main(int argc, const char* argv[])
             );
           }
           sharded_conf().start(init_params.name, cluster_name).get();
+          local_conf().start().get();
           auto stop_conf = seastar::deferred_stop(sharded_conf());
           sharded_perf_coll().start().get();
           auto stop_perf_coll = seastar::deferred_stop(sharded_perf_coll());
@@ -299,18 +288,17 @@ int main(int argc, const char* argv[])
             msgr = crimson::net::Messenger::create(entity_name_t::OSD(whoami),
                                                    name,
                                                    nonce);
-            configure_crc_handling(*msgr);
           }
           auto store = crimson::os::FuturizedStore::create(
             local_conf().get_val<std::string>("osd_objectstore"),
             local_conf().get_val<std::string>("osd_data"),
             local_conf().get_config_values()).get();
 
-          osd.start_single(whoami, nonce,
-                           std::ref(*store),
-                           cluster_msgr, client_msgr,
-                           hb_front_msgr, hb_back_msgr).get();
-          auto stop_osd = seastar::deferred_stop(osd);
+          crimson::osd::OSD osd(
+            whoami, nonce, std::ref(should_stop.abort_source()),
+            std::ref(*store), cluster_msgr, client_msgr,
+	    hb_front_msgr, hb_back_msgr);
+
           if (config.count("mkkey")) {
             make_keyring().get();
           }
@@ -325,9 +313,9 @@ int main(int argc, const char* argv[])
               // use a random osd uuid if not specified
               osd_uuid.generate_random();
             }
-            osd.invoke_on(
-              0,
-              &crimson::osd::OSD::mkfs,
+            osd.mkfs(
+	      *store,
+	      whoami,
               osd_uuid,
               local_conf().get_val<uuid_d>("fsid"),
               config["osdspec-affinity"].as<std::string>()).get();
@@ -335,11 +323,12 @@ int main(int argc, const char* argv[])
           if (config.count("mkkey") || config.count("mkfs")) {
             return EXIT_SUCCESS;
           } else {
-            osd.invoke_on(0, &crimson::osd::OSD::start).get();
+            osd.start().get();
           }
           logger().info("crimson startup completed");
           should_stop.wait().get();
           logger().info("crimson shutting down");
+          osd.stop().get();
           // stop()s registered using defer() are called here
         } catch (...) {
           logger().error("startup failed: {}", std::current_exception());

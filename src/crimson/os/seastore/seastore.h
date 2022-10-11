@@ -147,7 +147,7 @@ public:
   seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
   seastar::future<std::vector<coll_t>> list_collections() final;
 
-  seastar::future<> do_transaction(
+  seastar::future<> do_transaction_no_callbacks(
     CollectionRef ch,
     ceph::os::Transaction&& txn) final;
 
@@ -155,9 +155,6 @@ public:
    * stages and locks as do_transaction. */
   seastar::future<> flush(CollectionRef ch) final;
 
-  seastar::future<OmapIteratorRef> get_omap_iterator(
-    CollectionRef ch,
-    const ghobject_t& oid) final;
   read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
     CollectionRef ch,
     const ghobject_t& oid,

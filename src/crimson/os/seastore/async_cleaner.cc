@@ -61,7 +61,7 @@ void segment_info_t::set_closed()
 void segment_info_t::init_closed(
     segment_seq_t _seq, segment_type_t _type,
     data_category_t _category, reclaim_gen_t _generation,
-    std::size_t seg_size)
+    segment_off_t seg_size)
 {
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
@@ -144,7 +144,7 @@ void segments_info_t::add_segment_manager(
     ceph_assert(ssize > 0);
     segment_size = ssize;
   } else {
-    ceph_assert(segment_size == (std::size_t)ssize);
+    ceph_assert(segment_size == ssize);
   }
 
   // NOTE: by default the segments are empty
@@ -279,7 +279,7 @@ void segments_info_t::mark_closed(
   }
   ceph_assert(get_segment_size() >= segment_info.written_to);
   auto seg_avail_bytes = get_segment_size() - segment_info.written_to;
-  ceph_assert(avail_bytes_in_open >= seg_avail_bytes);
+  ceph_assert(avail_bytes_in_open >= (std::size_t)seg_avail_bytes);
   avail_bytes_in_open -= seg_avail_bytes;
 
   if (segment_info.modify_time != NULL_TIME) {
@@ -304,7 +304,7 @@ void segments_info_t::update_written_to(
     ceph_abort();
   }
 
-  auto new_written_to = static_cast<std::size_t>(saddr.get_segment_off());
+  auto new_written_to = saddr.get_segment_off();
   ceph_assert(new_written_to <= get_segment_size());
   if (segment_info.written_to > new_written_to) {
     ERROR("written_to should not decrease! type={}, offset={}, {}",
@@ -315,7 +315,7 @@ void segments_info_t::update_written_to(
   DEBUG("type={}, offset={}, {}", type, offset, segment_info);
   ceph_assert(type == segment_info.type);
   auto avail_deduction = new_written_to - segment_info.written_to;
-  ceph_assert(avail_bytes_in_open >= avail_deduction);
+  ceph_assert(avail_bytes_in_open >= (std::size_t)avail_deduction);
   avail_bytes_in_open -= avail_deduction;
   segment_info.written_to = new_written_to;
 }
@@ -339,7 +339,7 @@ std::ostream &operator<<(std::ostream &os, const segments_info_t &infos)
 
 void JournalTrimmerImpl::config_t::validate() const
 {
-  ceph_assert(max_journal_bytes <= MAX_SEG_OFF);
+  ceph_assert(max_journal_bytes <= DEVICE_OFF_MAX);
   ceph_assert(max_journal_bytes > target_journal_dirty_bytes);
   ceph_assert(max_journal_bytes > target_journal_alloc_bytes);
   ceph_assert(rewrite_dirty_bytes_per_cycle > 0);
@@ -359,7 +359,7 @@ JournalTrimmerImpl::config_t::get_default(
     target_alloc_bytes = 2 * roll_size;
     max_journal_bytes = 16 * roll_size;
   } else {
-    assert(type == journal_type_t::CIRCULAR);
+    assert(type == journal_type_t::RANDOM_BLOCK);
     target_dirty_bytes = roll_size / 4;
     target_alloc_bytes = roll_size / 4;
     max_journal_bytes = roll_size / 2;
@@ -386,7 +386,7 @@ JournalTrimmerImpl::config_t::get_test(
     target_alloc_bytes = 2 * roll_size;
     max_journal_bytes = 4 * roll_size;
   } else {
-    assert(type == journal_type_t::CIRCULAR);
+    assert(type == journal_type_t::RANDOM_BLOCK);
     target_dirty_bytes = roll_size / 4;
     target_alloc_bytes = roll_size / 4;
     max_journal_bytes = roll_size / 2;
@@ -404,8 +404,8 @@ JournalTrimmerImpl::JournalTrimmerImpl(
   BackrefManager &backref_manager,
   config_t config,
   journal_type_t type,
-  seastore_off_t roll_start,
-  seastore_off_t roll_size)
+  device_off_t roll_start,
+  device_off_t roll_size)
   : backref_manager(backref_manager),
     config(config),
     journal_type(type),
@@ -494,7 +494,7 @@ journal_seq_t JournalTrimmerImpl::get_tail_limit() const
   assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
       journal_type,
-      -static_cast<seastore_off_t>(config.max_journal_bytes),
+      -static_cast<device_off_t>(config.max_journal_bytes),
       roll_start,
       roll_size);
   return ret;
@@ -505,7 +505,7 @@ journal_seq_t JournalTrimmerImpl::get_dirty_tail_target() const
   assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
       journal_type,
-      -static_cast<seastore_off_t>(config.target_journal_dirty_bytes),
+      -static_cast<device_off_t>(config.target_journal_dirty_bytes),
       roll_start,
       roll_size);
   return ret;
@@ -516,7 +516,7 @@ journal_seq_t JournalTrimmerImpl::get_alloc_tail_target() const
   assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
       journal_type,
-      -static_cast<seastore_off_t>(config.target_journal_alloc_bytes),
+      -static_cast<device_off_t>(config.target_journal_alloc_bytes),
       roll_start,
       roll_size);
   return ret;
@@ -687,7 +687,7 @@ bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
 
 int64_t SpaceTrackerDetailed::SegmentMap::allocate(
   device_segment_id_t segment,
-  seastore_off_t offset,
+  segment_off_t offset,
   extent_len_t len,
   const extent_len_t block_size)
 {
@@ -714,7 +714,7 @@ int64_t SpaceTrackerDetailed::SegmentMap::allocate(
 
 int64_t SpaceTrackerDetailed::SegmentMap::release(
   device_segment_id_t segment,
-  seastore_off_t offset,
+  segment_off_t offset,
   extent_len_t len,
   const extent_len_t block_size)
 {

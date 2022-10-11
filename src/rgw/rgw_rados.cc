@@ -1038,6 +1038,12 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
 void RGWRados::finalize()
 {
+  /* Before joining any sync threads, drain outstanding requests &
+   * mark the async_processor as going_down() */
+  if (svc.rados) {
+    svc.rados->stop_processor();
+  }
+
   if (run_sync_thread) {
     std::lock_guard l{meta_sync_thread_lock};
     meta_sync_processor_thread->stop();
@@ -2401,19 +2407,25 @@ std::string RGWRados::get_cluster_fsid(const DoutPrefixProvider *dpp, optional_y
   return svc.rados->cluster_fsid();
 }
 
-int RGWRados::get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx)
+int RGWRados::get_obj_head_ioctx(const DoutPrefixProvider *dpp,
+				 const RGWBucketInfo& bucket_info,
+				 const rgw_obj& obj,
+				 librados::IoCtx *ioctx)
 {
-  string oid, key;
+  std::string oid, key;
   get_obj_bucket_and_oid_loc(obj, oid, key);
 
   rgw_pool pool;
   if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool)) {
-    ldpp_dout(dpp, 0) << "ERROR: cannot get data pool for obj=" << obj << ", probably misconfiguration" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: cannot get data pool for obj=" << obj <<
+      ", probably misconfiguration" << dendl;
     return -EIO;
   }
 
   int r = open_pool_ctx(dpp, pool, *ioctx, false);
   if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: unable to open data-pool=" << pool.to_str() <<
+      " for obj=" << obj << " with error-code=" << r << dendl;
     return r;
   }
 
@@ -4453,12 +4465,6 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     ++miter;
   }
 
-  rgw_rados_ref ref;
-  ret = get_raw_obj_ref(dpp, miter.get_location().get_raw_obj(store), &ref);
-  if (ret < 0) {
-    return ret;
-  }
-
   bufferlist first_chunk;
 
   const bool copy_itself = (dest_obj->get_obj() == src_obj->get_obj());
@@ -4478,7 +4484,10 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     append_rand_alpha(cct, tag, tag, 32);
   }
 
+  std::unique_ptr<rgw::Aio> aio;
+  rgw::AioResultList all_results;
   if (!copy_itself) {
+    aio = rgw::make_throttle(cct->_conf->rgw_max_copy_obj_concurrent_io, y);
     attrs.erase(RGW_ATTR_TAIL_TAG);
     manifest = *amanifest;
     const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
@@ -4490,17 +4499,31 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       ObjectWriteOperation op;
       ref_tag = tag + '\0';
       cls_refcount_get(op, ref_tag, true);
-      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store);
 
-      auto& ioctx = ref.pool.ioctx();
-      ioctx.locator_set_key(loc.loc);
-
-      ret = rgw_rados_operate(dpp, ioctx, loc.oid, &op, null_yield);
+      auto obj = svc.rados->obj(miter.get_location().get_raw_obj(store));
+      ret = obj.open(dpp);
       if (ret < 0) {
+        ldpp_dout(dpp, 0) << "failed to open rados context for " << obj << dendl;
         goto done_ret;
       }
 
-      ref_objs.push_back(loc);
+      static constexpr uint64_t cost = 1; // 1 throttle unit per request
+      static constexpr uint64_t id = 0; // ids unused
+      rgw::AioResultList completed = aio->get(obj, rgw::Aio::librados_op(std::move(op), y), cost, id);
+      ret = rgw::check_for_errors(completed);
+      all_results.splice(all_results.end(), completed);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: failed to copy obj=" << obj << ", the error code = " << ret << dendl;
+        goto done_ret;
+      }
+    }
+
+    rgw::AioResultList completed = aio->drain();
+    ret = rgw::check_for_errors(completed);
+    all_results.splice(all_results.end(), completed);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to drain ios, the error code = " << ret <<dendl;
+      goto done_ret;
     }
 
     pmanifest = &manifest;
@@ -4541,20 +4564,33 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
 done_ret:
   if (!copy_itself) {
-    vector<rgw_raw_obj>::iterator riter;
+
+    /* wait all pending op done */
+    rgw::AioResultList completed = aio->drain();
+    all_results.splice(all_results.end(), completed);
 
     /* rollback reference */
     string ref_tag = tag + '\0';
-    for (riter = ref_objs.begin(); riter != ref_objs.end(); ++riter) {
+    int ret2 = 0;
+    for (auto& r : all_results) {
+      if (r.result < 0) {
+        continue; // skip errors
+      }
       ObjectWriteOperation op;
       cls_refcount_put(op, ref_tag, true);
 
-      ref.pool.ioctx().locator_set_key(riter->loc);
-
-      int r = rgw_rados_operate(dpp, ref.pool.ioctx(), riter->oid, &op, null_yield);
-      if (r < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: cleanup after error failed to drop reference on obj=" << *riter << dendl;
+      static constexpr uint64_t cost = 1; // 1 throttle unit per request
+      static constexpr uint64_t id = 0; // ids unused
+      rgw::AioResultList completed = aio->get(r.obj, rgw::Aio::librados_op(std::move(op), y), cost, id);
+      ret2 = rgw::check_for_errors(completed);
+      if (ret2 < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: cleanup after error failed to drop reference on obj=" << r.obj << dendl;
       }
+    }
+    completed = aio->drain();
+    ret2 = rgw::check_for_errors(completed);
+    if (ret2 < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to drain rollback ios, the error code = " << ret2 <<dendl;
     }
   }
   return ret;
@@ -9335,8 +9371,8 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   list_state.meta.storage_class = storage_class;
 
   librados::IoCtx head_obj_ctx; // initialize to data pool so we can get pool id
-  int ret = get_obj_head_ioctx(dpp, bucket_info, obj->get_obj(), &head_obj_ctx);
-  if (ret < 0) {
+  r = get_obj_head_ioctx(dpp, bucket_info, obj->get_obj(), &head_obj_ctx);
+  if (r < 0) {
     ldpp_dout(dpp, 0) << __func__ <<
       " WARNING: unable to find head object data pool for \"" <<
       obj << "\", not updating version pool/epoch" << dendl;

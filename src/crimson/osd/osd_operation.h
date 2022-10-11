@@ -194,7 +194,6 @@ struct OSDOperationRegistry : OperationRegistryT<
 
   void put_historic(const class ClientRequest& op);
 
-  size_t dump_client_requests(ceph::Formatter* f) const;
   size_t dump_historic_client_requests(ceph::Formatter* f) const;
   size_t dump_slowest_historic_client_requests(ceph::Formatter* f) const;
 

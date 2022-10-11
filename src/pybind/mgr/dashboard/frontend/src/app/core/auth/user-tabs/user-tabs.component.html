@@ -1,14 +1,18 @@
-<ul ngbNav
-    #nav="ngbNav"
-    [activeId]="router.url"
-    (navChange)="router.navigate([$event.nextId])"
-    class="nav-tabs">
-  <li ngbNavItem="/user-management/users">
-    <a ngbNavLink
+<ul class="nav nav-tabs">
+  <li class="nav-item">
+    <a class="nav-link"
+       routerLink="/user-management/users"
+       routerLinkActive="active"
+       ariaCurrentWhenActive="page"
+       [routerLinkActiveOptions]="{exact: true}"
        i18n>Users</a>
   </li>
-  <li ngbNavItem="/user-management/roles">
-    <a ngbNavLink
+  <li class="nav-item">
+    <a class="nav-link"
+       routerLink="/user-management/roles"
+       routerLinkActive="active"
+       ariaCurrentWhenActive="page"
+       [routerLinkActiveOptions]="{exact: true}"
        i18n>Roles</a>
   </li>
 </ul>

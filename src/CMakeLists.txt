@@ -134,7 +134,6 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   string(PREPEND CMAKE_CXX_FLAGS_DEBUG "-Og ")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wstrict-null-sentinel>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-new-ttp-matching>)
   # cmake does not add '-pie' for executables even if
   # CMAKE_POSITION_INDEPENDENT_CODE is TRUE.
   if(EXE_LINKER_USE_PIE)
@@ -185,12 +184,13 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
         -D_FORTIFY_SOURCE=2)
     endif()
   endif()
-  if(NOT WIN32)
     CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
     if (HAS_STACK_PROTECT)
       add_compile_options(-fstack-protector-strong)
+      if(WIN32)
+        add_link_options(-fstack-protector-strong)
+      endif(WIN32)
     endif()
-  endif(NOT WIN32)
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
 CHECK_C_COMPILER_FLAG("-D_GLIBCXX_ASSERTIONS" HAS_GLIBCXX_ASSERTIONS)
@@ -248,6 +248,12 @@ if(COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
   add_compile_options(
     "$<$<COMPILE_LANGUAGE:C>:-fdiagnostics-color=${DIAGNOSTICS_COLOR}>"
     "$<$<COMPILE_LANGUAGE:CXX>:-fdiagnostics-color=${DIAGNOSTICS_COLOR}>")
+endif()
+
+if(MINGW)
+  # Fedora and RHEL set CMAKE_DL_LIBS on MINGW, which we must un-set here.
+  # Details at https://bugzilla.redhat.com/show_bug.cgi?id=2127529
+  set(CMAKE_DL_LIBS "")
 endif()
 
 set(EXTRALIBS ${CMAKE_DL_LIBS})
@@ -434,6 +440,7 @@ add_subdirectory(common)
 add_subdirectory(crush)
 add_subdirectory(msg)
 add_subdirectory(arch)
+add_subdirectory(extblkdev)
 
 set(ceph_common_objs
   $<TARGET_OBJECTS:common-auth-objs>
@@ -447,7 +454,7 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:crush_objs>)
 set(ceph_common_deps
-  json_spirit erasure_code arch crc32
+  json_spirit erasure_code extblkdev arch crc32
   ${LIB_RESOLV}
   Boost::thread
   Boost::system
@@ -679,7 +686,7 @@ set(ceph_osd_srcs
   ceph_osd.cc)
 
 add_executable(ceph-osd ${ceph_osd_srcs})
-add_dependencies(ceph-osd erasure_code_plugins)
+add_dependencies(ceph-osd erasure_code_plugins extblkdev_plugins)
 target_link_libraries(ceph-osd osd os global-static common
   ${ALLOC_LIBS}
   ${BLKID_LIBRARIES})
@@ -953,6 +960,10 @@ endif()
 
 if(WITH_MGR)
   add_dependencies(vstart ceph-volume-venv-setup)
+endif()
+
+if(WITH_MGR)
+  add_dependencies(vstart cephadm)
 endif()
 
 # Everything you need to run CephFS tests

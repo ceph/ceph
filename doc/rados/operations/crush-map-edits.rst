@@ -35,7 +35,9 @@ Pool Values`_.
 Get a CRUSH Map
 ---------------
 
-To get the CRUSH map for your cluster, execute the following::
+To get the CRUSH map for your cluster, execute the following:
+
+.. prompt:: bash $
 
 	ceph osd getcrushmap -o {compiled-crushmap-filename}
 
@@ -48,7 +50,9 @@ edit it.
 Decompile a CRUSH Map
 ---------------------
 
-To decompile a CRUSH map, execute the following::
+To decompile a CRUSH map, execute the following:
+
+.. prompt:: bash $
 
 	crushtool -d {compiled-crushmap-filename} -o {decompiled-crushmap-filename}
 
@@ -57,7 +61,9 @@ To decompile a CRUSH map, execute the following::
 Recompile a CRUSH Map
 ---------------------
 
-To compile a CRUSH map, execute the following::
+To compile a CRUSH map, execute the following:
+
+.. prompt:: bash $
 
 	crushtool -c {decompiled-crushmap-filename} -o {compiled-crushmap-filename}
 
@@ -66,7 +72,9 @@ To compile a CRUSH map, execute the following::
 Set the CRUSH Map
 -----------------
 
-To set the CRUSH map for your cluster, execute the following::
+To set the CRUSH map for your cluster, execute the following:
+
+.. prompt:: bash $
 
 	ceph osd setcrushmap -i {compiled-crushmap-filename}
 
@@ -118,14 +126,22 @@ Devices may also have a *device class* associated with them (e.g.,
 ``hdd`` or ``ssd``), allowing them to be conveniently targeted by a
 crush rule.
 
+.. prompt:: bash #
+
+	devices
+
 ::
 
-	# devices
 	device {num} {osd.name} [class {class}]
 
-For example::
+For example:
 
-	# devices
+.. prompt:: bash #
+
+	devices
+
+::
+
 	device 0 osd.0 class ssd
 	device 1 osd.1 class hdd
 	device 2 osd.2
@@ -135,10 +151,6 @@ In most cases, each device maps to a single ``ceph-osd`` daemon.  This
 is normally a single storage device, a pair of devices (for example,
 one for data and one for a journal or metadata), or in some cases a
 small RAID device.
-
-
-
-
 
 CRUSH Map Bucket Types
 ----------------------
@@ -157,9 +169,9 @@ media.
 To add a bucket type to the CRUSH map, create a new line under your list of
 bucket types. Enter ``type`` followed by a unique numeric ID and a bucket name.
 By convention, there is one leaf bucket and it is ``type 0``;  however, you may
-give it any name you like (e.g., osd, disk, drive, storage, etc.)::
+give it any name you like (e.g., osd, disk, drive, storage)::
 
-	#types
+	# types
 	type {num} {bucket-name}
 
 For example::
@@ -629,29 +641,38 @@ There are three types of transformations possible:
    single bucket.  For example, in the previous example, we want the
    ``ssd`` bucket to be mapped to the ``default`` bucket.
 
-The final command to convert the map comprised of the above fragments would be something like::
+The final command to convert the map comprising the above fragments would be something like:
 
-  $ ceph osd getcrushmap -o original
-  $ crushtool -i original --reclassify \
-      --set-subtree-class default hdd \
-      --reclassify-root default hdd \
-      --reclassify-bucket %-ssd ssd default \
-      --reclassify-bucket ssd ssd default \
-      -o adjusted
+.. prompt:: bash $
 
-In order to ensure that the conversion is correct, there is a ``--compare`` command that will test a large sample of inputs to the CRUSH map and ensure that the same result comes back out.  These inputs are controlled by the same options that apply to the ``--test`` command.  For the above example,::
+  ceph osd getcrushmap -o original
+  crushtool -i original --reclassify \
+    --set-subtree-class default hdd \
+    --reclassify-root default hdd \
+    --reclassify-bucket %-ssd ssd default \
+    --reclassify-bucket ssd ssd default \
+    -o adjusted
 
-  $ crushtool -i original --compare adjusted
+In order to ensure that the conversion is correct, there is a ``--compare`` command that will test a large sample of inputs against the CRUSH map and check that the same result is output. These inputs are controlled by the same options that apply to the ``--test`` command.  For the above example,:
+
+.. prompt:: bash $
+
+   crushtool -i original --compare adjusted
+
+::
+
   rule 0 had 0/10240 mismatched mappings (0)
   rule 1 had 0/10240 mismatched mappings (0)
   maps appear equivalent
 
-If there were difference, you'd see what ratio of inputs are remapped
-in the parentheses.
+If there were differences, the ratio of remapped inputs would be reported in
+the parentheses.
 
-If you are satisfied with the adjusted map, you can apply it to the cluster with something like::
+When you are satisfied with the adjusted map, apply it to the cluster with a command of the form:
 
-  ceph osd setcrushmap -i adjusted
+.. prompt:: bash $
+
+   ceph osd setcrushmap -i adjusted
 
 Tuning CRUSH, the hard way
 --------------------------
@@ -660,7 +681,9 @@ If you can ensure that all clients are running recent code, you can
 adjust the tunables by extracting the CRUSH map, modifying the values,
 and reinjecting it into the cluster.
 
-* Extract the latest CRUSH map::
+* Extract the latest CRUSH map:
+
+  .. prompt:: bash $
 
 	ceph osd getcrushmap -o /tmp/crush
 
@@ -668,19 +691,25 @@ and reinjecting it into the cluster.
   for both large and small clusters we tested with.  You will need to
   additionally specify the ``--enable-unsafe-tunables`` argument to
   ``crushtool`` for this to work.  Please use this option with
-  extreme care.::
+  extreme care.:
 
-	crushtool -i /tmp/crush --set-choose-local-tries 0 --set-choose-local-fallback-tries 0 --set-choose-total-tries 50 -o /tmp/crush.new
+  .. prompt:: bash $
 
-* Reinject modified map::
+     crushtool -i /tmp/crush --set-choose-local-tries 0 --set-choose-local-fallback-tries 0 --set-choose-total-tries 50 -o /tmp/crush.new
 
-	ceph osd setcrushmap -i /tmp/crush.new
+* Reinject modified map:
+
+  .. prompt:: bash $
+
+     ceph osd setcrushmap -i /tmp/crush.new
 
 Legacy values
 -------------
 
 For reference, the legacy values for the CRUSH tunables can be set
-with::
+with:
+
+.. prompt:: bash $
 
    crushtool -i /tmp/crush --set-choose-local-tries 2 --set-choose-local-fallback-tries 5 --set-choose-total-tries 19 --set-chooseleaf-descend-once 0 --set-chooseleaf-vary-r 0 -o /tmp/crush.legacy
 
@@ -689,4 +718,4 @@ Further, as noted above, be careful running old versions of the
 ``ceph-osd`` daemon after reverting to legacy values as the feature
 bit is not perfectly enforced.
 
-.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/assets/pdfs/weil-crush-sc06.pdf
+.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.io/assets/pdfs/weil-crush-sc06.pdf

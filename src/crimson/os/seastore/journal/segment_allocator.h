@@ -45,7 +45,7 @@ class SegmentAllocator {
     return segment_provider;
   }
 
-  seastore_off_t get_block_size() const {
+  extent_len_t get_block_size() const {
     return sm_group.get_block_size();
   }
 
@@ -69,7 +69,7 @@ class SegmentAllocator {
     return current_segment_nonce;
   }
 
-  seastore_off_t get_written_to() const {
+  segment_off_t get_written_to() const {
     assert(can_write());
     return written_to;
   }
@@ -126,7 +126,7 @@ class SegmentAllocator {
   SegmentProvider &segment_provider;
   SegmentManagerGroup &sm_group;
   SegmentRef current_segment;
-  seastore_off_t written_to;
+  segment_off_t written_to;
   SegmentSeqAllocator &segment_seq_allocator;
   segment_nonce_t current_segment_nonce;
   JournalTrimmer *trimmer;
@@ -265,12 +265,12 @@ private:
 
   record_group_t pending;
   std::size_t submitting_size = 0;
-  seastore_off_t submitting_length = 0;
-  seastore_off_t submitting_mdlength = 0;
+  extent_len_t submitting_length = 0;
+  extent_len_t submitting_mdlength = 0;
 
   struct promise_result_t {
     write_result_t write_result;
-    seastore_off_t mdlength;
+    extent_len_t mdlength;
   };
   using maybe_promise_result_t = std::optional<promise_result_t>;
   std::optional<seastar::shared_promise<maybe_promise_result_t> > io_promise;

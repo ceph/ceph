@@ -36,7 +36,6 @@
 namespace rgw {
 
 bool global_stop = false;
-
 static std::mutex librgw_mtx;
 static RGWLib rgwlib;
 

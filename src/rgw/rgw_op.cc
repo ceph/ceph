@@ -30,7 +30,6 @@
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_acl_swift.h"
-#include "rgw_aio_throttle.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_log.h"
@@ -3975,8 +3974,6 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   // create the object processor
-  auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
-                                s->yield);
   std::unique_ptr<rgw::sal::Writer> processor;
 
   rgw_placement_rule *pdest_placement = &s->dest_placement;
@@ -4417,9 +4414,6 @@ void RGWPostObj::execute(optional_yield y)
     if (s->bucket->versioning_enabled()) {
       obj->gen_rand_obj_instance_name();
     }
-
-    auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
-                                  s->yield);
 
     std::unique_ptr<rgw::sal::Writer> processor;
     processor = store->get_atomic_writer(this, s->yield, std::move(obj),
@@ -6131,16 +6125,15 @@ void RGWSetRequestPayment::pre_exec()
 void RGWSetRequestPayment::execute(optional_yield y)
 {
 
+  op_ret = get_params(y);
+  if (op_ret < 0)
+    return;
+  
   op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-
-  op_ret = get_params(y);
-
-  if (op_ret < 0)
-    return;
 
   s->bucket->get_info().requester_pays = requester_pays;
   op_ret = s->bucket->put_info(this, false, real_time());
@@ -6823,6 +6816,23 @@ int RGWDeleteMultiObj::verify_permission(optional_yield y)
 void RGWDeleteMultiObj::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
+}
+
+void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
+  int num_err = 0;
+  int num_ok = 0;
+  for (auto iter = ops_log_entries.begin();
+       iter != ops_log_entries.end();
+       ++iter) {
+    if (iter->error) {
+      num_err++;
+    } else {
+      num_ok++;
+    }
+  }
+  entry.delete_multi_obj_meta.num_err = num_err;
+  entry.delete_multi_obj_meta.num_ok = num_ok;
+  entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
 }
 
 void RGWDeleteMultiObj::execute(optional_yield y)

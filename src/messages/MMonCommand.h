@@ -38,7 +38,14 @@ public:
       fsid(f)
   { }
 
-private:
+  MMonCommand(const MMonCommand &other)
+    : PaxosServiceMessage(MSG_MON_COMMAND, 0),
+      fsid(other.fsid),
+      cmd(other.cmd) {
+    set_tid(other.get_tid());
+    set_data(other.get_data());
+  }
+
   ~MMonCommand() final {}
 
 public:
@@ -81,6 +88,7 @@ public:
     decode(fsid, p);
     decode(cmd, p);
   }
+
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);

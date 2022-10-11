@@ -100,7 +100,7 @@ public:
     return background_process.get_journal_type();
   }
 
-  seastore_off_t get_block_size() const {
+  extent_len_t get_block_size() const {
     assert(primary_device != nullptr);
     // assume all the devices have the same block size
     return primary_device->get_block_size();
@@ -141,7 +141,7 @@ public:
   alloc_result_t alloc_new_extent(
     Transaction& t,
     extent_types_t type,
-    seastore_off_t length,
+    extent_len_t length,
     placement_hint_t hint,
     reclaim_gen_t gen
   ) {
@@ -236,7 +236,7 @@ public:
   // Testing interfaces
 
   void test_init_no_background(Device *test_device) {
-    assert(test_device->get_device_type() == device_type_t::SEGMENTED);
+    assert(test_device->get_backend_type() == backend_type_t::SEGMENTED);
     add_device(test_device);
     set_primary_device(test_device);
   }

@@ -93,11 +93,6 @@ class error_t {
     return ConcreteErrorT::exception_ptr_type_info();
   }
 
-  std::exception_ptr to_exception_ptr() const {
-    const auto* concrete_error = static_cast<const ConcreteErrorT*>(this);
-    return concrete_error->to_exception_ptr();
-  }
-
   decltype(auto) static from_exception_ptr(std::exception_ptr ep) {
     return ConcreteErrorT::from_exception_ptr(std::move(ep));
   }
@@ -107,6 +102,12 @@ class error_t {
 
   template <class ErrorVisitorT, class FuturatorT>
   friend class maybe_handle_error_t;
+
+protected:
+  std::exception_ptr to_exception_ptr() const {
+    const auto* concrete_error = static_cast<const ConcreteErrorT*>(this);
+    return concrete_error->to_exception_ptr();
+  }
 
 public:
   template <class Func>
@@ -125,6 +126,10 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
   [[nodiscard]] static const auto& make() {
     static constexpr unthrowable_wrapper instance{};
     return instance;
+  }
+
+  static auto exception_ptr() {
+    return make().to_exception_ptr();
   }
 
   template<class Func>
@@ -473,6 +478,10 @@ private:
     [[gnu::always_inline]]
     _future(base_t&& base)
       : base_t(std::move(base)) {
+    }
+
+    base_t to_base() && {
+      return std::move(*this);
     }
 
     template <class... A>
@@ -1198,6 +1207,20 @@ namespace ct_error {
 using stateful_errc = stateful_error_t<std::errc>;
 using stateful_errint = stateful_error_t<int>;
 using stateful_ec = stateful_error_t<std::error_code>;
+
+template <typename F>
+struct is_errorated_future {
+  static constexpr bool value = false;
+};
+template <template <class...> class ErroratedFutureT,
+	  class ValueT>
+struct is_errorated_future<
+  ErroratedFutureT<::crimson::errorated_future_marker<ValueT>>
+  > {
+  static constexpr bool value = true;
+};
+template <typename T>
+constexpr bool is_errorated_future_v = is_errorated_future<T>::value;
 
 } // namespace crimson
 

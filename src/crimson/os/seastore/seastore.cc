@@ -179,7 +179,7 @@ SeaStore::mount_ertr::future<> SeaStore::mount()
       device_type_t dtype = device_entry.second.dtype;
       std::ostringstream oss;
       oss << root << "/block." << dtype << "." << std::to_string(id);
-      return Device::make_device(oss.str()
+      return Device::make_device(oss.str(), dtype
       ).then([this, magic](DeviceRef sec_dev) {
         return sec_dev->mount(
         ).safe_then([this, sec_dev=std::move(sec_dev), magic]() mutable {
@@ -283,7 +283,7 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
                 auto id = std::stoi(entry_name.substr(dtype_end + 1));
                 std::ostringstream oss;
                 oss << root << "/" << entry_name;
-                return Device::make_device(oss.str()
+                return Device::make_device(oss.str(), dtype
                 ).then([this, &sds, id, dtype, new_osd_fsid](DeviceRef sec_dev) {
                   magic_t magic = (magic_t)std::rand();
                   sds.emplace(
@@ -315,7 +315,7 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
               true,
               device_spec_t{
                 (magic_t)std::rand(),
-                device_type_t::SEGMENTED,
+                device_type_t::SSD,
                 0},
               seastore_meta_t{new_osd_fsid},
               sds}
@@ -940,110 +940,6 @@ SeaStore::omap_get_values_ret_t SeaStore::omap_get_values(
   });
 }
 
-class SeaStoreOmapIterator : public FuturizedStore::OmapIterator {
-  using omap_values_t = FuturizedStore::omap_values_t;
-
-  SeaStore &seastore;
-  CollectionRef ch;
-  const ghobject_t oid;
-
-  omap_values_t current;
-  omap_values_t::iterator iter;
-
-  seastar::future<> repopulate_from(
-    std::optional<std::string> from,
-    bool inclusive) {
-    return seastar::do_with(
-      from,
-      [this, inclusive](auto &from) {
-	return seastore.omap_list(
-	  ch,
-	  oid,
-	  from,
-	  OMapManager::omap_list_config_t::with_inclusive(inclusive)
-	).safe_then([this](auto p) {
-	  auto &[complete, values] = p;
-	  current.swap(values);
-	  if (current.empty()) {
-	    assert(complete);
-	  }
-	  iter = current.begin();
-	});
-      }).handle_error(
-	crimson::ct_error::assert_all{
-	  "Invalid error in SeaStoreOmapIterator::repopulate_from"
-        }
-      );
-  }
-public:
-  SeaStoreOmapIterator(
-    SeaStore &seastore,
-    CollectionRef ch,
-    const ghobject_t &oid) :
-    seastore(seastore),
-    ch(ch),
-    oid(oid),
-    iter(current.begin())
-  {}
-
-  seastar::future<> seek_to_first() final {
-    return repopulate_from(
-      std::nullopt,
-      false);
-  }
-  seastar::future<> upper_bound(const std::string &after) final {
-    return repopulate_from(
-      after,
-      false);
-  }
-  seastar::future<> lower_bound(const std::string &from) final {
-    return repopulate_from(
-      from,
-      true);
-  }
-  bool valid() const {
-    return iter != current.end();
-  }
-  seastar::future<> next() final {
-    assert(valid());
-    auto prev = iter++;
-    if (iter == current.end()) {
-      return repopulate_from(
-	prev->first,
-	false);
-    } else {
-      return seastar::now();
-    }
-  }
-  std::string key() {
-    return iter->first;
-  }
-  ceph::buffer::list value() {
-    return iter->second;
-  }
-  int status() const {
-    return 0;
-  }
-  ~SeaStoreOmapIterator() {}
-};
-
-seastar::future<FuturizedStore::OmapIteratorRef> SeaStore::get_omap_iterator(
-  CollectionRef ch,
-  const ghobject_t& oid)
-{
-  LOG_PREFIX(SeaStore::get_omap_iterator);
-  DEBUG("oid: {}", oid);
-  auto ret = FuturizedStore::OmapIteratorRef(
-    new SeaStoreOmapIterator(
-      *this,
-      ch,
-      oid));
-  return ret->seek_to_first(
-  ).then([ret]() mutable {
-    return std::move(ret);
-  });
-}
-
 SeaStore::_fiemap_ret SeaStore::_fiemap(
   Transaction &t,
   Onode &onode,
@@ -1104,7 +1000,7 @@ void SeaStore::on_error(ceph::os::Transaction &t) {
   abort();
 }
 
-seastar::future<> SeaStore::do_transaction(
+seastar::future<> SeaStore::do_transaction_no_callbacks(
   CollectionRef _ch,
   ceph::os::Transaction&& _t)
 {
@@ -1141,16 +1037,6 @@ seastar::future<> SeaStore::do_transaction(
         }).si_then([this, &ctx] {
           return transaction_manager->submit_transaction(*ctx.transaction);
         });
-      }).safe_then([&ctx]() {
-        for (auto i : {
-            ctx.ext_transaction.get_on_applied(),
-            ctx.ext_transaction.get_on_commit(),
-            ctx.ext_transaction.get_on_applied_sync()}) {
-          if (i) {
-            i->complete(0);
-          }
-        }
-        return seastar::now();
       });
     });
 }
@@ -1882,7 +1768,7 @@ seastar::future<std::unique_ptr<SeaStore>> make_seastore(
   const ConfigValues &config)
 {
   return Device::make_device(
-    device
+    device, device_type_t::SSD
   ).then([&device](DeviceRef device_obj) {
 #ifndef NDEBUG
     bool is_test = true;

@@ -17,11 +17,13 @@ from tarfile import ReadError
 from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from teuthology import packaging
 from teuthology.orchestra import run
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
 from textwrap import dedent
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
+from tasks.util import chacra
 
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons, healthy
@@ -123,83 +125,154 @@ def download_cephadm(ctx, config, ref):
     cluster_name = config['cluster']
 
     if config.get('cephadm_mode') != 'cephadm-package':
-        ref = config.get('cephadm_branch', ref)
-        git_url = config.get('cephadm_git_url', teuth_config.get_ceph_git_url())
-        log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
         if ctx.config.get('redhat'):
-            log.info("Install cephadm using RPM")
-            # cephadm already installed from redhat.install task
-            ctx.cluster.run(
-                args=[
-                    'cp',
-                    run.Raw('$(which cephadm)'),
-                    ctx.cephadm,
-                    run.Raw('&&'),
-                    'ls', '-l',
-                    ctx.cephadm,
-                ]
-            )
-        elif git_url.startswith('https://github.com/'):
-            # git archive doesn't like https:// URLs, which we use with github.
-            rest = git_url.split('https://github.com/', 1)[1]
-            rest = re.sub(r'\.git/?$', '', rest).strip() # no .git suffix
-            ctx.cluster.run(
-                args=[
-                    'curl', '--silent',
-                    'https://raw.githubusercontent.com/' + rest + '/' + ref + '/src/cephadm/cephadm',
-                    run.Raw('>'),
-                    ctx.cephadm,
-                    run.Raw('&&'),
-                    'ls', '-l',
-                    ctx.cephadm,
-                ],
-            )
+            _fetch_cephadm_from_rpm(ctx)
+        # TODO: come up with a sensible way to detect if we need an "old, uncompiled"
+        # cephadm
+        elif 'cephadm_git_url' in config and 'cephadm_branch' in config:
+            _fetch_cephadm_from_github(ctx, config, ref)
         else:
-            ctx.cluster.run(
-                args=[
-                    'git', 'archive',
-                    '--remote=' + git_url,
-                    ref,
-                    'src/cephadm/cephadm',
-                    run.Raw('|'),
-                    'tar', '-xO', 'src/cephadm/cephadm',
-                    run.Raw('>'),
-                    ctx.cephadm,
-                ],
-            )
-        # sanity-check the resulting file and set executable bit
-        cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
-        ctx.cluster.run(
-            args=[
-                'test', '-s', ctx.cephadm,
-                run.Raw('&&'),
-                'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
-                run.Raw('&&'),
-                'chmod', '+x', ctx.cephadm,
-            ],
-        )
+            _fetch_cephadm_from_chachra(ctx, config, cluster_name)
 
     try:
         yield
     finally:
-        log.info('Removing cluster...')
-        ctx.cluster.run(args=[
-            'sudo',
-            ctx.cephadm,
-            'rm-cluster',
-            '--fsid', ctx.ceph[cluster_name].fsid,
-            '--force',
-        ])
-
+        _rm_cluster(ctx, cluster_name)
         if config.get('cephadm_mode') == 'root':
-            log.info('Removing cephadm ...')
-            ctx.cluster.run(
-                args=[
-                    'rm',
-                    '-rf',
-                    ctx.cephadm,
-                ],
-            )
+            _rm_cephadm(ctx)
+
+
+def _fetch_cephadm_from_rpm(ctx):
+    log.info("Copying cephadm installed from an RPM package")
+    # cephadm already installed from redhat.install task
+    ctx.cluster.run(
+        args=[
+            'cp',
+            run.Raw('$(which cephadm)'),
+            ctx.cephadm,
+            run.Raw('&&'),
+            'ls', '-l',
+            ctx.cephadm,
+        ]
+    )
+
+
+def _fetch_cephadm_from_github(ctx, config, ref):
+    ref = config.get('cephadm_branch', ref)
+    git_url = config.get('cephadm_git_url', teuth_config.get_ceph_git_url())
+    log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
+    if git_url.startswith('https://github.com/'):
+        # git archive doesn't like https:// URLs, which we use with github.
+        rest = git_url.split('https://github.com/', 1)[1]
+        rest = re.sub(r'\.git/?$', '', rest).strip() # no .git suffix
+        ctx.cluster.run(
+            args=[
+                'curl', '--silent',
+                'https://raw.githubusercontent.com/' + rest + '/' + ref + '/src/cephadm/cephadm',
+                run.Raw('>'),
+                ctx.cephadm,
+                run.Raw('&&'),
+                'ls', '-l',
+                ctx.cephadm,
+            ],
+        )
+    else:
+        ctx.cluster.run(
+            args=[
+                'git', 'archive',
+                '--remote=' + git_url,
+                ref,
+                'src/cephadm/cephadm',
+                run.Raw('|'),
+                'tar', '-xO', 'src/cephadm/cephadm',
+                run.Raw('>'),
+                ctx.cephadm,
+            ],
+        )
+    # sanity-check the resulting file and set executable bit
+    cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
+    ctx.cluster.run(
+        args=[
+            'test', '-s', ctx.cephadm,
+            run.Raw('&&'),
+            'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
+            run.Raw('&&'),
+            'chmod', '+x', ctx.cephadm,
+        ],
+    )
+
+
+def _fetch_cephadm_from_chachra(ctx, config, cluster_name):
+    log.info('Downloading "compiled" cephadm from cachra')
+    bootstrap_remote = ctx.ceph[cluster_name].bootstrap_remote
+    bp = packaging.get_builder_project()(
+        config.get('project', 'ceph'),
+        config,
+        ctx=ctx,
+        remote=bootstrap_remote,
+    )
+    log.info('builder_project result: %s' % (bp._result.json()))
+
+    flavor = config.get('flavor', 'default')
+    branch = config.get('branch')
+    sha1 = config.get('sha1')
+
+    # pull the cephadm binary from chacra
+    url = chacra.get_binary_url(
+            'cephadm',
+            project=bp.project,
+            distro=bp.distro.split('/')[0],
+            release=bp.distro.split('/')[1],
+            arch=bp.arch,
+            flavor=flavor,
+            branch=branch,
+            sha1=sha1,
+    )
+    log.info("Discovered cachra url: %s", url)
+    ctx.cluster.run(
+        args=[
+            'curl', '--silent', '-L', url,
+            run.Raw('>'),
+            ctx.cephadm,
+            run.Raw('&&'),
+            'ls', '-l',
+            ctx.cephadm,
+        ],
+    )
+
+    # sanity-check the resulting file and set executable bit
+    cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
+    ctx.cluster.run(
+        args=[
+            'test', '-s', ctx.cephadm,
+            run.Raw('&&'),
+            'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
+            run.Raw('&&'),
+            'chmod', '+x', ctx.cephadm,
+        ],
+    )
+
+
+def _rm_cluster(ctx, cluster_name):
+    log.info('Removing cluster...')
+    ctx.cluster.run(args=[
+        'sudo',
+        ctx.cephadm,
+        'rm-cluster',
+        '--fsid', ctx.ceph[cluster_name].fsid,
+        '--force',
+    ])
+
+
+def _rm_cephadm(ctx):
+    log.info('Removing cephadm ...')
+    ctx.cluster.run(
+        args=[
+            'rm',
+            '-rf',
+            ctx.cephadm,
+        ],
+    )
 
 
 @contextlib.contextmanager
@@ -780,10 +853,12 @@ def ceph_osds(ctx, config):
                 osd, remote.shortname, dev))
             _shell(ctx, cluster_name, remote, [
                 'ceph-volume', 'lvm', 'zap', dev])
-            _shell(ctx, cluster_name, remote, [
-                'ceph', 'orch', 'daemon', 'add', 'osd',
-                remote.shortname + ':' + short_dev
-            ])
+            add_osd_args = ['ceph', 'orch', 'daemon', 'add', 'osd',
+                            remote.shortname + ':' + short_dev]
+            osd_method = config.get('osd_method')
+            if osd_method:
+                add_osd_args.append(osd_method)
+            _shell(ctx, cluster_name, remote, add_osd_args)
             ctx.daemons.register_daemon(
                 remote, 'osd', id_,
                 cluster=cluster_name,
@@ -1533,7 +1608,7 @@ def task(ctx, config):
 
     if not hasattr(ctx.ceph[cluster_name], 'image'):
         ctx.ceph[cluster_name].image = config.get('image')
-    ref = None
+    ref = ctx.config.get("branch", "main")
     if not ctx.ceph[cluster_name].image:
         if not container_image_name:
             raise Exception("Configuration error occurred. "
@@ -1551,10 +1626,8 @@ def task(ctx, config):
                 ctx.ceph[cluster_name].image = container_image_name + ':' + sha1
             ref = sha1
         else:
-            # hmm, fall back to branch?
-            branch = config.get('branch', 'master')
-            ref = branch
-            ctx.ceph[cluster_name].image = container_image_name + ':' + branch
+            # fall back to using the branch value
+            ctx.ceph[cluster_name].image = container_image_name + ':' + ref
     log.info('Cluster image is %s' % ctx.ceph[cluster_name].image)
 
 

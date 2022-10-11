@@ -561,8 +561,10 @@ on appropriate hosts, proceed with the following steps.
       services run on a manager host will be restarted automatically on a different
       manager host if one Ceph Manager goes down.
 
-#.  Add Prometheus as data source to Grafana `using the Grafana Web UI
-    <https://grafana.com/docs/grafana/latest/features/datasources/add-a-data-source/>`_.
+#. Add Prometheus as data source to Grafana `using the Grafana Web UI <https://grafana.com/docs/grafana/latest/features/datasources/add-a-data-source/>`_.
+
+   .. IMPORTANT:: 
+      The data source must be named "Dashboard1".
 
 #.  Install the `vonage-status-panel and grafana-piechart-panel` plugins using:
 
@@ -1232,6 +1234,23 @@ code of standby dashboards. To do so you need to run the command:
 .. prompt:: bash $
 
    ceph config set mgr mgr/dashboard/standby_error_status_code 503
+
+Resolve IP address to hostname before redirect
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The redirect from a standby to the active dashboard is done via the IP
+address. This is done because resolving IP addresses to hostnames can be error
+prone in containerized environments. It is also the reason why the option is
+disabled by default.
+However, in some situations it might be helpful to redirect via the hostname.
+For example if the configured TLS certificate matches only the hostnames. To
+activate the redirection via the hostname run the following command::
+
+  $ ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr True
+
+You can disable it again by::
+
+  $ ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr False
 
 HAProxy example configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

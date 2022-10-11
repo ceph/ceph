@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(ceph
-  VERSION 17.0.0
+  VERSION 18.0.0
   LANGUAGES CXX C ASM)
 
 cmake_policy(SET CMP0028 NEW)
@@ -399,8 +399,10 @@ else()
   set(EXE_LINKER_USE_PIE ${ENABLE_SHARED})
 endif()
 
-# require libcurl with good curl_multi_wait(), see https://tracker.ceph.com/issues/15915
-find_package(CURL 7.32 REQUIRED)
+if(NOT WIN32)
+  # require libcurl with good curl_multi_wait(), see https://tracker.ceph.com/issues/15915
+  find_package(CURL 7.32 REQUIRED)
+endif()
 
 find_package(OpenSSL REQUIRED)
 set(CRYPTO_LIBS OpenSSL::Crypto)

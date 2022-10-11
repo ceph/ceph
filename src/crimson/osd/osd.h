@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/gate.hh>
@@ -62,11 +63,17 @@ class OSD final : public crimson::net::Dispatcher,
 		  private crimson::mgr::WithStats {
   const int whoami;
   const uint32_t nonce;
+  seastar::abort_source& abort_source;
   seastar::timer<seastar::lowres_clock> beacon_timer;
   // talk with osd
   crimson::net::MessengerRef cluster_msgr;
   // talk with client/mon/mgr
   crimson::net::MessengerRef public_msgr;
+
+  // HB Messengers
+  crimson::net::MessengerRef hb_front_msgr;
+  crimson::net::MessengerRef hb_back_msgr;
+
   std::unique_ptr<crimson::mon::Client> monc;
   std::unique_ptr<crimson::mgr::Client> mgrc;
 
@@ -95,14 +102,13 @@ class OSD final : public crimson::net::Dispatcher,
   osd_stat_t osd_stat;
   uint32_t osd_stat_seq = 0;
   void update_stats();
-  MessageURef get_stats() const final;
+  seastar::future<MessageURef> get_stats() const final;
 
   // AuthHandler methods
   void handle_authentication(const EntityName& name,
 			     const AuthCapsInfo& caps) final;
 
   crimson::osd::PGShardManager pg_shard_manager;
-  crimson::osd::ShardServices &shard_services;
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> tick_timer;
@@ -112,6 +118,7 @@ class OSD final : public crimson::net::Dispatcher,
 
 public:
   OSD(int id, uint32_t nonce,
+      seastar::abort_source& abort_source,
       crimson::os::FuturizedStore& store,
       crimson::net::MessengerRef cluster_msgr,
       crimson::net::MessengerRef client_msgr,
@@ -120,27 +127,33 @@ public:
   ~OSD() final;
 
   seastar::future<> open_meta_coll();
-  seastar::future<> open_or_create_meta_coll();
-  seastar::future<> mkfs(uuid_d osd_uuid,
-                         uuid_d cluster_fsid,
-                         std::string osdspec_affinity);
+  static seastar::future<OSDMeta> open_or_create_meta_coll(
+    crimson::os::FuturizedStore &store
+  );
+  static seastar::future<> mkfs(
+    crimson::os::FuturizedStore &store,
+    unsigned whoami,
+    uuid_d osd_uuid,
+    uuid_d cluster_fsid,
+    std::string osdspec_affinity);
 
   seastar::future<> start();
   seastar::future<> stop();
 
   void dump_status(Formatter*) const;
-  void dump_pg_state_history(Formatter*) const;
   void print(std::ostream&) const;
-
-  seastar::future<> send_incremental_map(crimson::net::ConnectionRef conn,
-					 epoch_t first);
 
   /// @return the seq id of the pg stats being sent
   uint64_t send_pg_stats();
 
 private:
-  seastar::future<> _write_superblock();
-  seastar::future<> _write_key_meta();
+  static seastar::future<> _write_superblock(
+    crimson::os::FuturizedStore &store,
+    OSDMeta meta,
+    OSDSuperblock superblock);
+  static seastar::future<> _write_key_meta(
+    crimson::os::FuturizedStore &store
+  );
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
   seastar::future<> _send_boot();
@@ -155,6 +168,8 @@ private:
 
   seastar::future<> handle_osd_map(crimson::net::ConnectionRef conn,
                                    Ref<MOSDMap> m);
+  seastar::future<> handle_pg_create(crimson::net::ConnectionRef conn,
+				     Ref<MOSDPGCreate2> m);
   seastar::future<> handle_osd_op(crimson::net::ConnectionRef conn,
 				  Ref<MOSDOp> m);
   seastar::future<> handle_rep_op(crimson::net::ConnectionRef conn,
@@ -203,7 +218,7 @@ private:
   bool should_restart() const;
   seastar::future<> restart();
   seastar::future<> shutdown();
-  void update_heartbeat_peers();
+  seastar::future<> update_heartbeat_peers();
   friend class PGAdvanceMap;
 
 public:

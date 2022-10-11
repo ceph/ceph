@@ -1,23 +1,35 @@
-<ul ngbNav
-    #nav="ngbNav"
-    [activeId]="router.url"
-    (navChange)="router.navigate([$event.nextId])"
-    class="nav-tabs">
-  <li ngbNavItem="/block/rbd">
-    <a ngbNavLink
+<ul class="nav nav-tabs">
+  <li class="nav-item">
+    <a class="nav-link"
+       routerLink="/block/rbd"
+       routerLinkActive="active"
+       ariaCurrentWhenActive="page"
+       [routerLinkActiveOptions]="{exact: true}"
        i18n>Images</a>
   </li>
-  <li ngbNavItem="/block/rbd/namespaces">
-    <a ngbNavLink
+  <li class="nav-item">
+    <a class="nav-link"
+       routerLink="/block/rbd/namespaces"
+       routerLinkActive="active"
+       ariaCurrentWhenActive="page"
+       [routerLinkActiveOptions]="{exact: true}"
        i18n>Namespaces</a>
   </li>
-  <li ngbNavItem="/block/rbd/trash">
-    <a ngbNavLink
+  <li class="nav-item">
+    <a class="nav-link"
+       routerLink="/block/rbd/trash"
+       routerLinkActive="active"
+       ariaCurrentWhenActive="page"
+       [routerLinkActiveOptions]="{exact: true}"
        i18n>Trash</a>
   </li>
-  <li ngbNavItem="/block/rbd/performance"
+  <li class="nav-item"
       *ngIf="grafanaPermission.read">
-    <a ngbNavLink
+    <a class="nav-link"
+       routerLink="/block/rbd/performance"
+       routerLinkActive="active"
+       ariaCurrentWhenActive="page"
+       [routerLinkActiveOptions]="{exact: true}"
        i18n>Overall Performance</a>
   </li>
 </ul>

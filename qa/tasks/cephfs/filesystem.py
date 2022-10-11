@@ -255,7 +255,14 @@ class CephCluster(object):
         proc = self.mon_manager.admin_socket(service_type, service_id, command, timeout=timeout)
         response_data = proc.stdout.getvalue().strip()
         if len(response_data) > 0:
-            j = json.loads(response_data)
+
+            def get_nonnumeric_values(value):
+                c = {"NaN": float("nan"), "Infinity": float("inf"),
+                     "-Infinity": -float("inf")}
+                return c[value]
+
+            j = json.loads(response_data.replace('inf', 'Infinity'),
+                           parse_constant=get_nonnumeric_values)
             pretty = json.dumps(j, sort_keys=True, indent=2)
             log.debug(f"_json_asok output\n{pretty}")
             return j
@@ -495,7 +502,6 @@ class Filesystem(MDSCluster):
         self.name = name
         self.id = None
         self.metadata_pool_name = None
-        self.metadata_overlay = False
         self.data_pool_name = None
         self.data_pools = None
         self.fs_config = fs_config
@@ -548,11 +554,6 @@ class Filesystem(MDSCluster):
         self.name = fsmap['mdsmap']['fs_name']
         self.get_pool_names(status = status, refresh = refresh)
         return status
-
-    def set_metadata_overlay(self, overlay):
-        if self.id is not None:
-            raise RuntimeError("cannot specify fscid when configuring overlay")
-        self.metadata_overlay = overlay
 
     def reach_max_mds(self):
         status = self.wait_for_daemons()
@@ -623,7 +624,7 @@ class Filesystem(MDSCluster):
     target_size_ratio = 0.9
     target_size_ratio_ec = 0.9
 
-    def create(self):
+    def create(self, recover=False, metadata_overlay=False):
         if self.name is None:
             self.name = "cephfs"
         if self.metadata_pool_name is None:
@@ -635,7 +636,7 @@ class Filesystem(MDSCluster):
 
         # will use the ec pool to store the data and a small amount of
         # metadata still goes to the primary data pool for all files.
-        if not self.metadata_overlay and self.ec_profile and 'disabled' not in self.ec_profile:
+        if not metadata_overlay and self.ec_profile and 'disabled' not in self.ec_profile:
             self.target_size_ratio = 0.05
 
         log.debug("Creating filesystem '{0}'".format(self.name))
@@ -662,16 +663,14 @@ class Filesystem(MDSCluster):
             else:
                 raise
 
-        if self.metadata_overlay:
-            self.mon_manager.raw_cluster_cmd('fs', 'new',
-                                             self.name, self.metadata_pool_name, data_pool_name,
-                                             '--allow-dangerous-metadata-overlay')
-        else:
-            self.mon_manager.raw_cluster_cmd('fs', 'new',
-                                             self.name,
-                                             self.metadata_pool_name,
-                                             data_pool_name)
+        args = ["fs", "new", self.name, self.metadata_pool_name, data_pool_name]
+        if recover:
+            args.append('--recover')
+        if metadata_overlay:
+            args.append('--allow-dangerous-metadata-overlay')
+        self.mon_manager.raw_cluster_cmd(*args)
 
+        if not recover:
             if self.ec_profile and 'disabled' not in self.ec_profile:
                 ec_data_pool_name = data_pool_name + "_ec"
                 log.debug("EC profile is %s", self.ec_profile)
@@ -1077,6 +1076,9 @@ class Filesystem(MDSCluster):
 
     def rank_freeze(self, yes, rank=0):
         self.mon_manager.raw_cluster_cmd("mds", "freeze", "{}:{}".format(self.id, rank), str(yes).lower())
+
+    def rank_repaired(self, rank):
+        self.mon_manager.raw_cluster_cmd("mds", "repaired", "{}:{}".format(self.id, rank))
 
     def rank_fail(self, rank=0):
         self.mon_manager.raw_cluster_cmd("mds", "fail", "{}:{}".format(self.id, rank))
@@ -1528,7 +1530,7 @@ class Filesystem(MDSCluster):
         if quiet:
             base_args = [os.path.join(self._prefix, tool), '--debug-mds=1', '--debug-objecter=1']
         else:
-            base_args = [os.path.join(self._prefix, tool), '--debug-mds=4', '--debug-objecter=1']
+            base_args = [os.path.join(self._prefix, tool), '--debug-mds=20', '--debug-ms=1', '--debug-objecter=1']
 
         if rank is not None:
             base_args.extend(["--rank", "%s" % str(rank)])
@@ -1668,3 +1670,13 @@ class Filesystem(MDSCluster):
 
         # timed out waiting for scrub to complete
         return False
+
+    def get_damage(self, rank=None):
+        if rank is None:
+            result = {}
+            for info in self.get_ranks():
+                rank = info['rank']
+                result[rank] = self.get_damage(rank=rank)
+            return result
+        else:
+            return self.rank_tell(['damage', 'ls'], rank=rank)

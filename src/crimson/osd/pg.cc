@@ -171,8 +171,14 @@ pg_stat_t PG::get_stats() const
 void PG::queue_check_readable(epoch_t last_peering_reset, ceph::timespan delay)
 {
   // handle the peering event in the background
+  logger().debug(
+    "{}: PG::queue_check_readable lpr: {}, delay: {}",
+    *this, last_peering_reset, delay);
   check_readable_timer.cancel();
   check_readable_timer.set_callback([last_peering_reset, this] {
+    logger().debug(
+      "{}: PG::queue_check_readable callback lpr: {}",
+      *this, last_peering_reset);
     (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
       pg_whoami,
@@ -192,11 +198,16 @@ void PG::recheck_readable()
   if (peering_state.state_test(PG_STATE_WAIT)) {
     auto prior_readable_until_ub = peering_state.get_prior_readable_until_ub();
     if (mnow < prior_readable_until_ub) {
-      logger().info("{} will wait (mnow {} < prior_readable_until_ub {})",
-		    __func__, mnow, prior_readable_until_ub);
+      logger().info(
+	"{}: {} will wait (mnow {} < prior_readable_until_ub {})",
+	*this, __func__, mnow, prior_readable_until_ub);
+      queue_check_readable(
+	peering_state.get_last_peering_reset(),
+	prior_readable_until_ub - mnow);
     } else {
-      logger().info("{} no longer wait (mnow {} >= prior_readable_until_ub {})",
-		    __func__, mnow, prior_readable_until_ub);
+      logger().info(
+	"{}:{} no longer wait (mnow {} >= prior_readable_until_ub {})",
+	*this, __func__, mnow, prior_readable_until_ub);
       peering_state.state_clear(PG_STATE_WAIT);
       peering_state.clear_prior_readable_until_ub();
       changed = true;
@@ -205,14 +216,17 @@ void PG::recheck_readable()
   if (peering_state.state_test(PG_STATE_LAGGY)) {
     auto readable_until = peering_state.get_readable_until();
     if (readable_until == readable_until.zero()) {
-      logger().info("{} still laggy (mnow {}, readable_until zero)",
-		    __func__, mnow);
+      logger().info(
+	"{}:{} still laggy (mnow {}, readable_until zero)",
+	*this, __func__, mnow);
     } else if (mnow >= readable_until) {
-      logger().info("{} still laggy (mnow {} >= readable_until {})",
-		    __func__, mnow, readable_until);
+      logger().info(
+	"{}:{} still laggy (mnow {} >= readable_until {})",
+	*this, __func__, mnow, readable_until);
     } else {
-      logger().info("{} no longer laggy (mnow {} < readable_until {})",
-		    __func__, mnow, readable_until);
+      logger().info(
+	"{}:{} no longer laggy (mnow {} < readable_until {})",
+	*this, __func__, mnow, readable_until);
       peering_state.state_clear(PG_STATE_LAGGY);
       changed = true;
     }
@@ -228,12 +242,13 @@ void PG::recheck_readable()
 
 unsigned PG::get_target_pg_log_entries() const
 {
-  const unsigned num_pgs = shard_services.get_pg_num();
-  const unsigned target =
-    local_conf().get_val<uint64_t>("osd_target_pg_log_entries_per_osd");
+  const unsigned local_num_pgs = shard_services.get_num_local_pgs();
+  const unsigned local_target =
+    local_conf().get_val<uint64_t>("osd_target_pg_log_entries_per_osd") /
+    seastar::smp::count;
   const unsigned min_pg_log_entries =
     local_conf().get_val<uint64_t>("osd_min_pg_log_entries");
-  if (num_pgs > 0 && target > 0) {
+  if (local_num_pgs > 0 && local_target > 0) {
     // target an even spread of our budgeted log entries across all
     // PGs.  note that while we only get to control the entry count
     // for primary PGs, we'll normally be responsible for a mix of
@@ -241,7 +256,7 @@ unsigned PG::get_target_pg_log_entries() const
     // will work out.
     const unsigned max_pg_log_entries =
       local_conf().get_val<uint64_t>("osd_max_pg_log_entries");
-    return std::clamp(target / num_pgs,
+    return std::clamp(local_target / local_num_pgs,
 		      min_pg_log_entries,
 		      max_pg_log_entries);
   } else {
@@ -339,7 +354,6 @@ std::pair<ghobject_t, bool>
 PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
 {
   // TODO
-  shard_services.dec_pg_num();
   return {_next, false};
 }
 
@@ -1242,8 +1256,7 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
     });
 }
 
-void PG::handle_rep_op_reply(crimson::net::ConnectionRef conn,
-			     const MOSDRepOpReply& m)
+void PG::handle_rep_op_reply(const MOSDRepOpReply& m)
 {
   if (!can_discard_replica_op(m)) {
     backend->got_rep_op_reply(m);
@@ -1431,7 +1444,7 @@ bool PG::is_degraded_or_backfilling_object(const hobject_t& soid) const {
   return false;
 }
 
-PG::interruptible_future<std::tuple<bool, int>>
+PG::interruptible_future<std::optional<PG::complete_op_t>>
 PG::already_complete(const osd_reqid_t& reqid)
 {
   eversion_t version;
@@ -1441,11 +1454,15 @@ PG::already_complete(const osd_reqid_t& reqid)
 
   if (peering_state.get_pg_log().get_log().get_request(
 	reqid, &version, &user_version, &ret, &op_returns)) {
-    return backend->request_committed(reqid, version).then([ret] {
-      return seastar::make_ready_future<std::tuple<bool, int>>(true, ret);
+    complete_op_t dupinfo{
+      user_version,
+      version,
+      ret};
+    return backend->request_committed(reqid, version).then([dupinfo] {
+      return seastar::make_ready_future<std::optional<complete_op_t>>(dupinfo);
     });
   } else {
-    return seastar::make_ready_future<std::tuple<bool, int>>(false, 0);
+    return seastar::make_ready_future<std::optional<complete_op_t>>(std::nullopt);
   }
 }
 

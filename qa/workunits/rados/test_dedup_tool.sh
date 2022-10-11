@@ -342,10 +342,114 @@ function test_dedup_object()
   $RADOS_TOOL -p $POOL rm bar
 }
 
+function test_sample_dedup()
+{
+  CHUNK_POOL=dedup_chunk_pool
+  $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+  $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+
+  sleep 2
+
+  run_expect_succ "$CEPH_TOOL" osd pool create "$POOL" 8
+  run_expect_succ "$CEPH_TOOL" osd pool create "$CHUNK_POOL" 8
+  run_expect_succ "$CEPH_TOOL" osd pool set "$POOL" dedup_tier "$CHUNK_POOL"
+  run_expect_succ "$CEPH_TOOL" osd pool set "$POOL" dedup_chunk_algorithm fastcdc
+  run_expect_succ "$CEPH_TOOL" osd pool set "$POOL" dedup_cdc_chunk_size 8192
+  run_expect_succ "$CEPH_TOOL" osd pool set "$POOL" fingerprint_algorithm sha1
+
+  # 8 Dedupable objects
+  CONTENT_1="There hiHI"
+  echo $CONTENT_1 > foo
+  for num in `seq 1 8`
+  do
+    $RADOS_TOOL -p $POOL put foo_$num ./foo
+  done
+
+  # 1 Unique object
+  CONTENT_3="There hiHI3"
+  echo $CONTENT_3 > foo3
+  $RADOS_TOOL -p $POOL put foo3_1 ./foo3
+
+  sleep 2
+
+  # Execute dedup crawler
+  RESULT=$($DEDUP_TOOL --pool $POOL --chunk-pool $CHUNK_POOL --op sample-dedup --chunk-algorithm fastcdc --fingerprint-algorithm sha1 --chunk-dedup-threshold 3 --sampling-ratio 50)
+
+  CHUNK_OID_1=$(echo $CONTENT_1 | sha1sum | awk '{print $1}')
+  CHUNK_OID_3=$(echo $CONTENT_3 | sha1sum | awk '{print $1}')
+
+  # Find chunk object has references of 8 dedupable meta objects
+  RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID_1)
+  DEDUP_COUNT=0
+  for num in `seq 1 8`
+  do
+    GREP_RESULT=$(echo $RESULT | grep foo_$num)
+    if [ -n "$GREP_RESULT" ]; then
+      DEDUP_COUNT=$(($DEDUP_COUNT + 1))
+    fi
+  done
+  if [ $DEDUP_COUNT -lt 2 ]; then
+    $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+    die "Chunk object has no reference of first meta object"
+  fi
+
+  # 7 Duplicated objects but less than chunk dedup threshold
+  CONTENT_2="There hiHI2"
+  echo $CONTENT_2 > foo2
+  for num in `seq 1 7`
+  do
+    $RADOS_TOOL -p $POOL put foo2_$num ./foo2
+  done
+  CHUNK_OID_2=$(echo $CONTENT_2 | sha1sum | awk '{print $1}')
+
+  RESULT=$($DEDUP_TOOL --pool $POOL --chunk-pool $CHUNK_POOL --op sample-dedup --chunk-algorithm fastcdc --fingerprint-algorithm sha1 --sampling-ratio 100 --chunk-dedup-threshold 2)
+
+  # Objects duplicates less than chunk dedup threshold should be deduplicated because of they satisfies object-dedup-threshold
+  # The only object, which is crawled at the very first, should not be deduplicated because it was not duplicated at initial time
+  RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID_2)
+  DEDUP_COUNT=0
+  for num in `seq 1 7`
+  do
+    GREP_RESULT=$(echo $RESULT | grep foo2_$num)
+    if [ -n "$GREP_RESULT" ]; then
+      DEDUP_COUNT=$(($DEDUP_COUNT + 1))
+    fi
+  done
+  if [ $DEDUP_COUNT -ne 6 ]; then
+    $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+    die "Chunk object has no reference of first meta object"
+  fi
+
+  # Unique object should not be deduplicated
+  RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID_3)
+  GREP_RESULT=$($RESULT | grep $CHUNK_OID_3)
+  if [ -n "$GREP_RESULT" ]; then
+    $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+    die "Chunk object has no reference of second meta object"
+  fi
+
+  rm -rf ./foo ./foo2 ./foo3
+  for num in `seq 1 8`
+  do
+    $RADOS_TOOL -p $POOL rm foo_$num
+  done
+  for num in `seq 1 2`
+  do
+    $RADOS_TOOL -p $POOL rm foo2_$num
+  done
+  $RADOS_TOOL -p $POOL rm foo3_1
+
+  $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+}
+
 test_dedup_ratio_fixed
 test_dedup_chunk_scrub
 test_dedup_chunk_repair
 test_dedup_object
+test_sample_dedup
 
 $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
 

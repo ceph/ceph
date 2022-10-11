@@ -38,6 +38,7 @@ void OSDOperationRegistry::do_stop()
 }
 
 OSDOperationRegistry::OSDOperationRegistry()
+  : OperationRegistryT(seastar::this_shard_id())
 {
   constexpr auto historic_reg_index =
     static_cast<size_t>(OperationTypeCode::historic_client_request);
@@ -99,17 +100,6 @@ void OSDOperationRegistry::put_historic(const ClientRequest& op)
     ClientRequest::ICRef(&fastest_historic_op, /* add_ref= */false);
     --num_slow_ops;
   }
-}
-
-size_t OSDOperationRegistry::dump_client_requests(ceph::Formatter* f) const
-{
-  const auto& client_registry =
-    get_registry<static_cast<size_t>(ClientRequest::type)>();
-  logger().warn("{} num_ops={}", __func__, std::size(client_registry));
-  for (const auto& op : client_registry) {
-    op.dump(f);
-  }
-  return std::size(client_registry);
 }
 
 size_t OSDOperationRegistry::dump_historic_client_requests(ceph::Formatter* f) const

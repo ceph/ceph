@@ -44,7 +44,7 @@ struct segment_info_t {
 
   std::size_t num_extents = 0;
 
-  std::size_t written_to = 0;
+  segment_off_t written_to = 0;
 
   bool is_in_journal(journal_seq_t tail_committed) const {
     return type == segment_type_t::JOURNAL &&
@@ -65,7 +65,7 @@ struct segment_info_t {
 
   void init_closed(segment_seq_t, segment_type_t,
                    data_category_t, reclaim_gen_t,
-                   std::size_t);
+                   segment_off_t);
 
   void set_open(segment_seq_t, segment_type_t,
                 data_category_t, reclaim_gen_t);
@@ -118,7 +118,7 @@ public:
     assert(segments.size() > 0);
     return segments.size();
   }
-  std::size_t get_segment_size() const {
+  segment_off_t get_segment_size() const {
     assert(segment_size > 0);
     return segment_size;
   }
@@ -239,7 +239,7 @@ private:
   // See reset() for member initialization
   segment_map_t<segment_info_t> segments;
 
-  std::size_t segment_size;
+  segment_off_t segment_size;
 
   segment_id_t journal_segment_id;
   std::size_t num_in_journal_open;
@@ -348,7 +348,7 @@ public:
     extent_types_t type,
     paddr_t addr,
     laddr_t laddr,
-    seastore_off_t len) = 0;
+    extent_len_t len) = 0;
 
   /**
    * submit_transaction_direct
@@ -483,8 +483,8 @@ public:
     BackrefManager &backref_manager,
     config_t config,
     journal_type_t type,
-    seastore_off_t roll_start,
-    seastore_off_t roll_size);
+    device_off_t roll_start,
+    device_off_t roll_size);
 
   ~JournalTrimmerImpl() = default;
 
@@ -549,8 +549,8 @@ public:
       BackrefManager &backref_manager,
       config_t config,
       journal_type_t type,
-      seastore_off_t roll_start,
-      seastore_off_t roll_size) {
+      device_off_t roll_start,
+      device_off_t roll_size) {
     return std::make_unique<JournalTrimmerImpl>(
         backref_manager, config, type, roll_start, roll_size);
   }
@@ -575,8 +575,8 @@ private:
 
   config_t config;
   journal_type_t journal_type;
-  seastore_off_t roll_start;
-  seastore_off_t roll_size;
+  device_off_t roll_start;
+  device_off_t roll_size;
 
   journal_seq_t journal_head;
   journal_seq_t journal_dirty_tail;
@@ -615,12 +615,12 @@ class SpaceTrackerI {
 public:
   virtual int64_t allocate(
     segment_id_t segment,
-    seastore_off_t offset,
+    segment_off_t offset,
     extent_len_t len) = 0;
 
   virtual int64_t release(
     segment_id_t segment,
-    seastore_off_t offset,
+    segment_off_t offset,
     extent_len_t len) = 0;
 
   virtual int64_t get_usage(
@@ -643,7 +643,7 @@ using SpaceTrackerIRef = std::unique_ptr<SpaceTrackerI>;
 class SpaceTrackerSimple : public SpaceTrackerI {
   struct segment_bytes_t {
     int64_t live_bytes = 0;
-    seastore_off_t total_bytes = 0;
+    segment_off_t total_bytes = 0;
   };
   // Tracks live space for each segment
   segment_map_t<segment_bytes_t> live_bytes_by_segment;
@@ -666,14 +666,14 @@ public:
 
   int64_t allocate(
     segment_id_t segment,
-    seastore_off_t offset,
+    segment_off_t offset,
     extent_len_t len) final {
     return update_usage(segment, len);
   }
 
   int64_t release(
     segment_id_t segment,
-    seastore_off_t offset,
+    segment_off_t offset,
     extent_len_t len) final {
     return update_usage(segment, -(int64_t)len);
   }
@@ -707,13 +707,13 @@ public:
 class SpaceTrackerDetailed : public SpaceTrackerI {
   class SegmentMap {
     int64_t used = 0;
-    seastore_off_t total_bytes = 0;
+    segment_off_t total_bytes = 0;
     std::vector<bool> bitmap;
 
   public:
     SegmentMap(
       size_t blocks,
-      seastore_off_t total_bytes)
+      segment_off_t total_bytes)
     : total_bytes(total_bytes),
       bitmap(blocks, false) {}
 
@@ -724,13 +724,13 @@ class SpaceTrackerDetailed : public SpaceTrackerI {
 
     int64_t allocate(
       device_segment_id_t segment,
-      seastore_off_t offset,
+      segment_off_t offset,
       extent_len_t len,
       const extent_len_t block_size);
 
     int64_t release(
       device_segment_id_t segment,
-      seastore_off_t offset,
+      segment_off_t offset,
       extent_len_t len,
       const extent_len_t block_size);
 
@@ -774,7 +774,7 @@ public:
 
   int64_t allocate(
     segment_id_t segment,
-    seastore_off_t offset,
+    segment_off_t offset,
     extent_len_t len) final {
     return segment_usage[segment].allocate(
       segment.device_segment_id(),
@@ -785,7 +785,7 @@ public:
 
   int64_t release(
     segment_id_t segment,
-    seastore_off_t offset,
+    segment_off_t offset,
     extent_len_t len) final {
     return segment_usage[segment].release(
       segment.device_segment_id(),
@@ -1077,14 +1077,14 @@ private:
   struct reclaim_state_t {
     reclaim_gen_t generation;
     reclaim_gen_t target_generation;
-    std::size_t segment_size;
+    segment_off_t segment_size;
     paddr_t start_pos;
     paddr_t end_pos;
 
     static reclaim_state_t create(
         segment_id_t segment_id,
         reclaim_gen_t generation,
-        std::size_t segment_size) {
+        segment_off_t segment_size) {
       ceph_assert(generation < RECLAIM_GENERATIONS);
       return {generation,
               (reclaim_gen_t)(generation == RECLAIM_GENERATIONS - 1 ?
@@ -1099,7 +1099,7 @@ private:
     }
 
     bool is_complete() const {
-      return (std::size_t)end_pos.as_seg_paddr().get_segment_off() >= segment_size;
+      return end_pos.as_seg_paddr().get_segment_off() >= segment_size;
     }
 
     void advance(std::size_t bytes) {
@@ -1107,7 +1107,7 @@ private:
       start_pos = end_pos;
       auto &end_seg_paddr = end_pos.as_seg_paddr();
       auto next_off = end_seg_paddr.get_segment_off() + bytes;
-      if (next_off > segment_size) {
+      if (next_off > (std::size_t)segment_size) {
         end_seg_paddr.set_segment_off(segment_size);
       } else {
         end_seg_paddr.set_segment_off(next_off);

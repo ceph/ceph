@@ -133,6 +133,7 @@ set(librgw_common_srcs
   rgw_rest_realm.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
+  rgw_rest_user.cc
   rgw_s3select.cc
   rgw_role.cc
   rgw_sal.cc
@@ -173,6 +174,17 @@ set(librgw_common_srcs
   rgw_bucket_encryption.cc
   rgw_tracer.cc
   rgw_lua_background.cc)
+
+list(APPEND librgw_common_srcs
+  store/immutable_config/store.cc
+  store/json_config/store.cc
+  store/rados/config/impl.cc
+  store/rados/config/period.cc
+  store/rados/config/period_config.cc
+  store/rados/config/realm.cc
+  store/rados/config/store.cc
+  store/rados/config/zone.cc
+  store/rados/config/zonegroup.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
@@ -317,7 +329,6 @@ set(rgw_a_srcs
   rgw_rest_sts.cc
   rgw_rest_swift.cc
   rgw_rest_usage.cc
-  rgw_rest_user.cc
   rgw_signal.cc
   rgw_swift_auth.cc
   rgw_usage.cc

@@ -1,25 +1,25 @@
 <ng-container *ngIf="selection">
-  <ul ngbNav
-      #nav="ngbNav"
-      class="nav-tabs"
-      cdStatefulTab="host-details">
-    <li ngbNavItem="devices">
+  <nav ngbNav
+       #nav="ngbNav"
+       class="nav-tabs"
+       cdStatefulTab="host-details">
+    <ng-container ngbNavItem="devices">
       <a ngbNavLink
          i18n>Devices</a>
       <ng-template ngbNavContent>
         <cd-device-list [hostname]="selection['hostname']"></cd-device-list>
       </ng-template>
-    </li>
-    <li ngbNavItem="inventory"
-        *ngIf="permissions.hosts.read">
+    </ng-container>
+    <ng-container ngbNavItem="inventory"
+                  *ngIf="permissions.hosts.read">
       <a ngbNavLink
          i18n>Physical Disks</a>
       <ng-template ngbNavContent>
         <cd-inventory [hostname]="selectedHostname"></cd-inventory>
       </ng-template>
-    </li>
-    <li ngbNavItem="daemons"
-        *ngIf="permissions.hosts.read">
+    </ng-container>
+    <ng-container ngbNavItem="daemons"
+                  *ngIf="permissions.hosts.read">
       <a ngbNavLink
          i18n>Daemons</a>
       <ng-template ngbNavContent>
@@ -28,9 +28,9 @@
                                 [hiddenColumns]="['hostname']">
         </cd-service-daemon-list>
       </ng-template>
-    </li>
-    <li ngbNavItem="performance-details"
-        *ngIf="permissions.grafana.read">
+    </ng-container>
+    <ng-container ngbNavItem="performance-details"
+                  *ngIf="permissions.grafana.read">
       <a ngbNavLink
          i18n>Performance Details</a>
       <ng-template ngbNavContent>
@@ -42,16 +42,16 @@
                     grafanaStyle="four">
         </cd-grafana>
       </ng-template>
-    </li>
-    <li ngbNavItem="device-health">
+    </ng-container>
+    <ng-container ngbNavItem="device-health">
       <a ngbNavLink
          i18n>Device health</a>
       <ng-template ngbNavContent>
         <cd-smart-list *ngIf="selectedHostname; else noHostname"
                        [hostname]="selectedHostname"></cd-smart-list>
       </ng-template>
-    </li>
-  </ul>
+    </ng-container>
+  </nav>
 
   <div [ngbNavOutlet]="nav"></div>
 </ng-container>

@@ -19,10 +19,6 @@ sslTag="OpenSSL_1_1_1c"
 sslDir="${depsToolsetDir}/openssl"
 sslSrcDir="${depsSrcDir}/openssl"
 
-curlTag="curl-7_84_0"
-curlSrcDir="${depsSrcDir}/curl"
-curlDir="${depsToolsetDir}/curl"
-
 # For now, we'll keep the version number within the file path when not using git.
 boostUrl="https://boostorg.jfrog.io/artifactory/main/release/1.79.0/source/boost_1_79_0.tar.gz"
 boostSrcDir="${depsSrcDir}/boost_1_79_0"
@@ -49,7 +45,7 @@ dokanLibDir="${depsToolsetDir}/dokany/lib"
 
 # Allow for OS specific customizations through the OS flag (normally
 # passed through from win32_build).
-# Valid options are currently "ubuntu" and "suse".
+# Valid options are currently "ubuntu", "rhel", and "suse".
 OS=${OS:-"ubuntu"}
 
 function _make() {
@@ -67,11 +63,32 @@ mkdir -p $depsSrcDir
 
 echo "Installing required packages."
 case "$OS" in
+    rhel)
+        # pkgconf needs https://bugzilla.redhat.com/show_bug.cgi?id=1975416
+        sudo yum -y --setopt=skip_missing_names_on_install=False install \
+            mingw64-gcc-c++ \
+            cmake \
+            pkgconf \
+            python3-devel \
+            autoconf \
+            libtool \
+            ninja-build \
+            zip \
+            python3-Cython \
+            python3-PyYAML \
+            gcc \
+            diffutils \
+            patch \
+            wget \
+            perl \
+            git-core
+        ;;
     ubuntu)
         sudo apt-get update
-        sudo apt-get -y install mingw-w64 cmake pkg-config \
+        sudo env DEBIAN_FRONTEND=noninteractive apt-get -y install \
+            mingw-w64 cmake pkg-config \
             python3-dev python3-pip python3-yaml \
-                autoconf libtool ninja-build zip
+                autoconf libtool ninja-build wget zip
         sudo python3 -m pip install cython
         ;;
     suse)
@@ -126,21 +143,7 @@ CROSS_COMPILE="${MINGW_PREFIX}" ./Configure \
     mingw64 shared --prefix=$sslDir --libdir="$sslDir/lib"
 _make depend
 _make
-_make install
-
-echo "Building libcurl."
-cd $depsSrcDir
-if [[ ! -d $curlSrcDir ]]; then
-    git clone --branch $curlTag --depth 1 https://github.com/curl/curl
-    cd $curlSrcDir
-fi
-cd $curlSrcDir
-./buildconf
-./configure --prefix=$curlDir --with-ssl=$sslDir --with-zlib=$zlibDir \
-            --host=${MINGW_BASE} --libdir="$curlDir/lib"
-_make
-_make install
-
+_make install_sw
 
 echo "Building boost."
 cd $depsSrcDir

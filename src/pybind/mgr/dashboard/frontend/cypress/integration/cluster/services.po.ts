@@ -39,7 +39,7 @@ export class ServicesPageHelper extends PageHelper {
   addService(
     serviceType: string,
     exist?: boolean,
-    count = '1',
+    count = 1,
     snmpVersion?: string,
     snmpPrivProtocol?: boolean,
     unmanaged = false
@@ -49,7 +49,7 @@ export class ServicesPageHelper extends PageHelper {
       switch (serviceType) {
         case 'rgw':
           cy.get('#service_id').type('foo');
-          unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(count);
+          unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(String(count));
           break;
 
         case 'ingress':
@@ -65,7 +65,7 @@ export class ServicesPageHelper extends PageHelper {
 
         case 'nfs':
           cy.get('#service_id').type('testnfs');
-          unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(count);
+          unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(String(count));
           break;
 
         case 'snmp-gateway':
@@ -89,7 +89,7 @@ export class ServicesPageHelper extends PageHelper {
 
         default:
           cy.get('#service_id').type('test');
-          unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(count);
+          unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(String(count));
           break;
       }
       if (serviceType === 'snmp-gateway') {
@@ -195,10 +195,6 @@ export class ServicesPageHelper extends PageHelper {
     cy.get('cd-service-daemon-list').within(() => {
       this.getTableRow(daemon).click();
       this.clickActionButton(action);
-
-      // unselect it to avoid colliding with any other selection
-      // in different steps
-      this.getTableRow(daemon).click();
     });
   }
 }

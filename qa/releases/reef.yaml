@@ -1,0 +1,6 @@
+tasks:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release reef
+      - ceph osd set-require-min-compat-client reef
+- ceph.healthy:

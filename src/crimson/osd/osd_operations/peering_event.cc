@@ -42,6 +42,13 @@ void PeeringEvent<T>::dump_detail(Formatter *f) const
   f->dump_int("sent", evt.get_epoch_sent());
   f->dump_int("requested", evt.get_epoch_requested());
   f->dump_string("evt", evt.get_desc());
+  f->open_array_section("events");
+  {
+    std::apply([f](auto&... events) {
+      (..., events.dump(f));
+    }, static_cast<const T*>(this)->tracking_events);
+  }
+  f->close_section();
   f->close_section();
 }
 
@@ -87,13 +94,13 @@ seastar::future<> PeeringEvent<T>::with_pg(
       return complete_rctx(shard_services, pg);
     }).then_interruptible([pg, &shard_services]()
 			  -> typename T::template interruptible_future<> {
-        if (!pg->get_need_up_thru()) {
-          return seastar::now();
-        }
-        return shard_services.send_alive(pg->get_same_interval_since());
-      }).then_interruptible([&shard_services] {
-        return shard_services.send_pg_temp();
-      });
+      if (!pg->get_need_up_thru()) {
+	return seastar::now();
+      }
+      return shard_services.send_alive(pg->get_same_interval_since());
+    }).then_interruptible([&shard_services] {
+      return shard_services.send_pg_temp();
+    });
   }, [this](std::exception_ptr ep) {
     logger().debug("{}: interrupted with {}", *this, ep);
   }, pg);
@@ -125,7 +132,7 @@ void RemotePeeringEvent::on_pg_absent(ShardServices &shard_services)
   if (auto& e = get_event().get_event();
       e.dynamic_type() == MQuery::static_type()) {
     const auto map_epoch =
-      shard_services.get_osdmap_service().get_map()->get_epoch();
+      shard_services.get_map()->get_epoch();
     const auto& q = static_cast<const MQuery&>(e);
     const pg_info_t empty{spg_t{pgid.pgid, q.query.to}};
     if (q.query.type == q.query.LOG ||

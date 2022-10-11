@@ -118,7 +118,8 @@ protected:
   {
     auto config =
       journal::CircularBoundedJournal::mkfs_config_t::get_default();
-    rb_device.reset(new random_block_device::TestMemory(config.total_size));
+    rb_device.reset(new random_block_device::TestMemory(
+          config.total_size + config.block_size));
     rb_device->set_device_id(
       1 << (std::numeric_limits<device_id_t>::digits - 1));
     return rb_device->mount().handle_error(crimson::ct_error::assert_all{}
@@ -136,7 +137,7 @@ protected:
     if (journal_type == journal_type_t::SEGMENTED) {
       return segment_setup();
     } else {
-      assert(journal_type == journal_type_t::CIRCULAR);
+      assert(journal_type == journal_type_t::RANDOM_BLOCK);
       return randomblock_setup();
     }
   }
@@ -172,7 +173,7 @@ protected:
     for (auto &sec_sm : secondary_segment_managers) {
       sec_devices.emplace_back(sec_sm.get());
     }
-    if (journal_type == journal_type_t::CIRCULAR) {
+    if (journal_type == journal_type_t::RANDOM_BLOCK) {
       // FIXME: should not initialize segment_manager with circularbounded-journal
       // FIXME: no secondary device in the single device test
       sec_devices.emplace_back(segment_manager.get());
@@ -325,8 +326,8 @@ public:
   }
 
   size_t get_available_size() const final { return sm.get_available_size(); }
-  seastore_off_t get_block_size() const final { return sm.get_block_size(); }
-  seastore_off_t get_segment_size() const final {
+  extent_len_t get_block_size() const final { return sm.get_block_size(); }
+  segment_off_t get_segment_size() const final {
     return sm.get_segment_size();
   }
   const seastore_meta_t &get_meta() const final {

@@ -534,6 +534,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OCTOPUS);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_PACIFIC);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_QUINCY);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_REEF);
   return compat;
 }
 
@@ -2493,6 +2494,13 @@ void Monitor::apply_monmap_to_compatset_features()
     ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_QUINCY));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_QUINCY);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_REEF)) {
+    ceph_assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_REEF));
+    // this feature should only ever be set if the quorum supports it.
+    ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_REEF));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_REEF);
+  }
 
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
@@ -2527,6 +2535,9 @@ void Monitor::calc_quorum_requirements()
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_QUINCY)) {
     required_features |= CEPH_FEATUREMASK_SERVER_QUINCY;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_REEF)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_REEF;
   }
 
   // monmap
@@ -6602,6 +6613,7 @@ void Monitor::notify_new_monmap(bool can_change_external_state)
 
   if (is_stretch_mode()) {
     if (!monmap->stretch_marked_down_mons.empty()) {
+      dout(20) << __func__ << " stretch_marked_down_mons: " << monmap->stretch_marked_down_mons << dendl;
       set_degraded_stretch_mode();
     }
   }
@@ -6707,10 +6719,14 @@ struct CMonGoRecovery : public Context {
 void Monitor::go_recovery_stretch_mode()
 {
   dout(20) << __func__ << dendl;
+  dout(20) << "is_leader(): " << is_leader() << dendl;
   if (!is_leader()) return;
+  dout(20) << "is_degraded_stretch_mode(): " << is_degraded_stretch_mode() << dendl;
   if (!is_degraded_stretch_mode()) return;
+  dout(20) << "is_recovering_stretch_mode(): " << is_recovering_stretch_mode() << dendl;
   if (is_recovering_stretch_mode()) return;
-
+  dout(20) << "dead_mon_buckets.size(): " << dead_mon_buckets.size() << dendl;
+  dout(20) << "dead_mon_buckets: " << dead_mon_buckets << dendl;
   if (dead_mon_buckets.size()) {
     ceph_assert( 0 == "how did we try and do stretch recovery while we have dead monitor buckets?");
     // we can't recover if we are missing monitors in a zone!
@@ -6791,6 +6807,7 @@ void Monitor::trigger_degraded_stretch_mode(const set<string>& dead_mons,
 
 void Monitor::set_degraded_stretch_mode()
 {
+  dout(20) << __func__ << dendl;
   degraded_stretch_mode = true;
   recovering_stretch_mode = false;
   osdmon()->set_degraded_stretch_mode();

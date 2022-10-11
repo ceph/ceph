@@ -21,24 +21,6 @@ class Transaction;
 namespace crimson::os {
 class AlienStore final : public FuturizedStore {
 public:
-  class AlienOmapIterator final : public OmapIterator {
-  public:
-    AlienOmapIterator(ObjectMap::ObjectMapIterator& it,
-        AlienStore* store, const CollectionRef& ch)
-      : iter(it), store(store), ch(ch) {}
-    seastar::future<> seek_to_first();
-    seastar::future<> upper_bound(const std::string& after);
-    seastar::future<> lower_bound(const std::string& to);
-    bool valid() const;
-    seastar::future<> next();
-    std::string key();
-    ceph::buffer::list value();
-    int status() const;
-  private:
-    ObjectMap::ObjectMapIterator iter;
-    AlienStore* store;
-    CollectionRef ch;
-  };
   AlienStore(const std::string& type,
              const std::string& path,
              const ConfigValues& values);
@@ -89,8 +71,9 @@ public:
   seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
   seastar::future<std::vector<coll_t>> list_collections() final;
 
-  seastar::future<> do_transaction(CollectionRef c,
-                                   ceph::os::Transaction&& txn) final;
+  seastar::future<> do_transaction_no_callbacks(
+    CollectionRef c,
+    ceph::os::Transaction&& txn) final;
 
   // error injection
   seastar::future<> inject_data_error(const ghobject_t& o) final;
@@ -114,9 +97,6 @@ public:
     const ghobject_t&,
     uint64_t off,
     uint64_t len) final;
-  seastar::future<FuturizedStore::OmapIteratorRef> get_omap_iterator(
-    CollectionRef ch,
-    const ghobject_t& oid) final;
 
 private:
   template <class... Args>

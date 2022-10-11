@@ -518,7 +518,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         path = self.get_ceph_option('cephadm_path')
         try:
             assert isinstance(path, str)
-            with open(path, 'r') as f:
+            with open(path, 'rb') as f:
                 self._cephadm = f.read()
         except (IOError, TypeError) as e:
             raise RuntimeError("unable to read cephadm at '%s': %s" % (
@@ -621,7 +621,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _get_cephadm_binary_path(self) -> str:
         import hashlib
         m = hashlib.sha256()
-        m.update(self._cephadm.encode())
+        m.update(self._cephadm)
         return f'/var/lib/ceph/{self._cluster_fsid}/cephadm.{m.hexdigest()}'
 
     def _kick_serve_loop(self) -> None:
@@ -2487,8 +2487,8 @@ Then run the following:
             # this way we force a redeploy after a mgr failover
             deps.append(self.get_active_mgr().name())
             deps.append(str(self.get_module_option_ex('prometheus', 'server_port', 9283)))
-            deps += [s for s in ['node-exporter', 'alertmanager', 'ingress']
-                     if self.cache.get_daemons_by_service(s)]
+            deps.append(str(self.service_discovery_port))
+            deps += [s for s in ['node-exporter', 'alertmanager', 'ingress'] if self.cache.get_daemons_by_service(s)]
         else:
             need = {
                 'grafana': ['prometheus', 'loki'],
