@@ -561,7 +561,7 @@ public:
       sc->env->async_rados, sc->env->driver,
       { sc->env->svc->zone->get_zone_params().log_pool,
 	RGWDataSyncStatusManager::sync_status_oid(sc->source_zone) },
-      string(lock_name), lock_duration, caller);
+      string(lock_name), lock_duration, caller, &sc->lcc);
   }
 
   int operate(const DoutPrefixProvider *dpp) override {
@@ -1534,7 +1534,7 @@ public:
           tn->log(10, SSTR("writing shard_id " << sid << " of gen " << each->gen << " to error repo for retry"));
           yield_spawn_window(rgw::error_repo::write_cr(sync_env->driver->svc()->rados, error_repo,
                             rgw::error_repo::encode_key(bs, each->gen),
-                            timestamp), cct->_conf->rgw_data_sync_spawn_window,
+			    timestamp), sc->lcc.adj_concurrency(cct->_conf->rgw_data_sync_spawn_window),
                             [&](uint64_t stack_id, int ret) {
                               if (ret < 0) {
                                 retcode = ret;
@@ -1660,7 +1660,7 @@ public:
             tn->log(10, SSTR("Write " << source_bs.shard_id << " to error repo for retry"));
             yield_spawn_window(rgw::error_repo::write_cr(sync_env->driver->svc()->rados, error_repo,
                 rgw::error_repo::encode_key(source_bs, each->gen),
-                timestamp), cct->_conf->rgw_data_sync_spawn_window, std::nullopt);
+		timestamp), sc->lcc.adj_concurrency(cct->_conf->rgw_data_sync_spawn_window), std::nullopt);
           } else {
           shard_cr = data_sync_single_entry(sc, source_bs, each->gen, key, timestamp,
                       lease_cr, bucket_shard_cache, nullptr, error_repo, tn, false);
@@ -1669,7 +1669,7 @@ public:
             yield call(shard_cr);
             first_shard = false;
           } else {
-            yield_spawn_window(shard_cr, cct->_conf->rgw_data_sync_spawn_window,
+            yield_spawn_window(shard_cr, sc->lcc.adj_concurrency(cct->_conf->rgw_data_sync_spawn_window),
                               [&](uint64_t stack_id, int ret) {
                                 if (ret < 0) {
                                   retcode = ret;
@@ -1807,7 +1807,7 @@ public:
 				 sc, pool, source_bs, iter->first, sync_status,
 				 error_repo, entry_timestamp, lease_cr,
 				 bucket_shard_cache, &*marker_tracker, tn),
-			       cct->_conf->rgw_data_sync_spawn_window,
+			       sc->lcc.adj_concurrency(cct->_conf->rgw_data_sync_spawn_window),
 			       std::nullopt);
           }
 	  sync_marker.marker = iter->first;
@@ -2026,7 +2026,7 @@ public:
 				     log_iter->log_id, log_iter->log_timestamp,
 				     lease_cr,bucket_shard_cache,
 				     &*marker_tracker, error_repo, tn, false),
-	      cct->_conf->rgw_data_sync_spawn_window, std::nullopt);
+	      sc->lcc.adj_concurrency(cct->_conf->rgw_data_sync_spawn_window), std::nullopt);
           }
         }
 
@@ -2179,7 +2179,8 @@ public:
     auto driver = sync_env->driver;
     lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, driver,
                                             rgw_raw_obj(pool, status_oid),
-                                            lock_name, lock_duration, this));
+                                            lock_name, lock_duration, this,
+					    &sc->lcc));
     lease_stack.reset(spawn(lease_cr.get(), false));
   }
 };
@@ -4511,7 +4512,7 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
                                  entry->key, &marker_tracker, zones_trace, tn),
                       false);
         }
-        drain_with_cb(cct->_conf->rgw_bucket_sync_spawn_window,
+        drain_with_cb(sc->lcc.adj_concurrency(cct->_conf->rgw_bucket_sync_spawn_window),
                       [&](uint64_t stack_id, int ret) {
                 if (ret < 0) {
                   tn->log(10, "a sync operation returned error");
@@ -4908,7 +4909,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
                   false);
           }
         // }
-        drain_with_cb(cct->_conf->rgw_bucket_sync_spawn_window,
+	  drain_with_cb(sc->lcc.adj_concurrency(cct->_conf->rgw_bucket_sync_spawn_window),
                       [&](uint64_t stack_id, int ret) {
                 if (ret < 0) {
                   tn->log(10, "a sync operation returned error");
@@ -5169,7 +5170,7 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
 
       yield_spawn_window(sync_bucket_shard_cr(sc, lease_cr, sync_pair,
                                               gen, tn, &*cur_shard_progress),
-                         cct->_conf->rgw_bucket_sync_spawn_window,
+                         sc->lcc.adj_concurrency(cct->_conf->rgw_bucket_sync_spawn_window),
                          [&](uint64_t stack_id, int ret) {
                            if (ret < 0) {
                              tn->log(10, SSTR("ERROR: a sync operation returned error: " << ret));
@@ -5662,7 +5663,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
           tn->log(20, "remote bilog indicates that sync was stopped");
           if (!bucket_lease_cr) {
             bucket_lease_cr.reset(new RGWContinuousLeaseCR(env->async_rados, env->driver, status_obj,
-                                                         lock_name, lock_duration, this));
+							   lock_name, lock_duration, this, &sc->lcc));
             yield spawn(bucket_lease_cr.get(), false);
             while (!bucket_lease_cr->is_locked()) {
               if (bucket_lease_cr->is_done()) {
@@ -5720,7 +5721,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
         // different shards from duplicating the init and full sync
         if (!bucket_lease_cr) {
           bucket_lease_cr.reset(new RGWContinuousLeaseCR(env->async_rados, env->driver, status_obj,
-                                                       lock_name, lock_duration, this));
+							 lock_name, lock_duration, this, &sc->lcc));
           yield spawn(bucket_lease_cr.get(), false);
           while (!bucket_lease_cr->is_locked()) {
             if (bucket_lease_cr->is_done()) {
