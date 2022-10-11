@@ -59,6 +59,14 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Ceph Manager Dashboard
 	Ceph Metadata Server
 	Ceph Monitor
+                A daemon that maintains a map of the state of the cluster. This
+                "cluster state" includes the monitor map, the manager map, the
+                OSD map, and the CRUSH map. A minimum of three monitors is
+                required in order for the Ceph cluster to be both redundant and
+                highly-available. Ceph monitors and the nodes on which they run
+                are often referred to as "mon"s. **SEE** :ref:`Monitor Config
+                Reference <monitor-config-reference>`.
+
 	Ceph Node
 	Ceph Object Gateway
 	Ceph Object Storage
