@@ -15,6 +15,7 @@
 #include "common/likely.h"
 
 #include "rgw_coroutine.h"
+#include "rgw_cr_rados.h"
 #include "rgw_http_client.h"
 #include "rgw_sal_rados.h"
 
@@ -347,6 +348,37 @@ void pretty_print(const RGWDataSyncEnv* env, T&& ...t) {
   }
 }
 
+/// \brief Adjust concurrency based on latency
+///
+/// Keep a running average of operation latency and scale concurrency
+/// down when latency rises.
+class LatencyConcurrencyControl : public LatencyMonitor {
+public:
+  CephContext* cct;
+
+  LatencyConcurrencyControl(CephContext* cct)
+    : cct(cct)  {}
+
+  /// \brief Lower concurrency when latency rises
+  ///
+  /// Since we have multiple spawn windows (data sync overall and
+  /// bucket), accept a number of concurrent operations to spawn and,
+  /// if latency is high, cut it in half. If latency is really high,
+  /// cut it to 1.
+  int64_t adj_concurrency(int64_t concurrency) {
+    using namespace std::literals;
+    auto threshold = (cct->_conf->rgw_sync_lease_period * 1s) / 12;
+
+    if (avg_latency() >= 2 * threshold) [[unlikely]] {
+      return 1;
+    } else if (avg_latency() >= threshold) [[unlikely]] {
+      return concurrency / 2;
+    } else [[likely]] {
+      return concurrency;
+    }
+  }
+};
+
 struct RGWDataSyncCtx {
   RGWDataSyncEnv *env{nullptr};
   CephContext *cct{nullptr};
@@ -354,12 +386,14 @@ struct RGWDataSyncCtx {
   RGWRESTConn *conn{nullptr};
   rgw_zone_id source_zone;
 
+  LatencyConcurrencyControl lcc{nullptr};
+
   RGWDataSyncCtx() = default;
 
   RGWDataSyncCtx(RGWDataSyncEnv* env,
 		 RGWRESTConn* conn,
 		 const rgw_zone_id& source_zone)
-    : env(env), cct(env->cct), conn(conn), source_zone(source_zone) {}
+    : env(env), cct(env->cct), conn(conn), source_zone(source_zone), lcc(cct) {}
 
   void init(RGWDataSyncEnv *_env,
             RGWRESTConn *_conn,
@@ -368,6 +402,7 @@ struct RGWDataSyncCtx {
     env = _env;
     conn = _conn;
     source_zone = _source_zone;
+    lcc.cct = cct;
   }
 };
 

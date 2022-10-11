@@ -1401,6 +1401,31 @@ public:
   }
 };
 
+/// \brief Collect average latency
+///
+/// Used in data sync to back off on concurrency when latency of lock
+/// operations rises.
+///
+/// \warning This class is not thread safe. We do not use a mutex
+/// because all coroutines spawned by RGWDataSyncCR share a single thread.
+class LatencyMonitor {
+  ceph::timespan total;
+  std::uint64_t count = 0;
+
+public:
+
+  LatencyMonitor() = default;
+  void add_latency(ceph::timespan latency) {
+    total += latency;
+    ++count;
+  }
+
+  ceph::timespan avg_latency() {
+    using namespace std::literals;
+    return count == 0 ? 0s : total / count;
+  }
+};
+
 class RGWContinuousLeaseCR : public RGWCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   rgw::sal::RadosStore* store;
@@ -1424,15 +1449,18 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   ceph::coarse_mono_time last_renew_try_time;
   ceph::coarse_mono_time current_time;
 
+  LatencyMonitor* latency;
+
 public:
   RGWContinuousLeaseCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
                        const rgw_raw_obj& _obj,
-                       const std::string& _lock_name, int _interval, RGWCoroutine *_caller)
+                       const std::string& _lock_name, int _interval, RGWCoroutine *_caller,
+		       LatencyMonitor* const latency)
     : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
     obj(_obj), lock_name(_lock_name),
     cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
     interval(_interval), interval_tolerance(ceph::make_timespan(9*interval/10)), ts_interval(ceph::make_timespan(interval)),
-      caller(_caller)
+      caller(_caller), latency(latency)
   {}
 
   virtual ~RGWContinuousLeaseCR() override;
