@@ -41,6 +41,10 @@ struct fixed_kv_node_meta_t {
       (end > other.begin);
   }
 
+  bool is_in_range(const bound_t key) const {
+    return begin <= key && end > key;
+  }
+
   std::pair<fixed_kv_node_meta_t, fixed_kv_node_meta_t> split_into(bound_t pivot) const {
     return std::make_pair(
       fixed_kv_node_meta_t{begin, pivot, depth},
@@ -116,9 +120,13 @@ struct fixed_kv_node_meta_le_t {
 template <typename T>
 class btree_pin_set_t;
 
+template <typename node_key_t>
+class FixedKVNode;
+
 template <typename node_bound_t>
 class btree_range_pin_t : public boost::intrusive::set_base_hook<> {
   friend class btree_pin_set_t<node_bound_t>;
+  friend class FixedKVNode<node_bound_t>;
   fixed_kv_node_meta_t<node_bound_t> range;
 
   btree_pin_set_t<node_bound_t> *pins = nullptr;

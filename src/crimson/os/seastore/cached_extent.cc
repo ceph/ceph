@@ -79,6 +79,17 @@ CachedExtent::~CachedExtent()
   }
 }
 
+CachedExtent* CachedExtent::get_transactional_view(Transaction &t) {
+  auto it = mutation_pendings.find(
+    t.get_trans_id(),
+    trans_spec_view_t::cmp_t());
+  if (it != mutation_pendings.end()) {
+    return (CachedExtent*)&(*it);
+  } else {
+    return this;
+  }
+}
+
 std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
 {
   out << ", laddr=" << laddr;
