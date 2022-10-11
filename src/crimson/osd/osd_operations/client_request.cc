@@ -194,6 +194,21 @@ ClientRequest::process_pg_op(
   });
 }
 
+auto ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
+{
+  logger().debug("{}: replying with error {}", *this, err);
+  auto reply = crimson::make_message<MOSDOpReply>(
+    m.get(), err, pg->get_osdmap_epoch(),
+    m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK),
+    !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
+  reply->set_reply_versions(eversion_t(), 0);
+  reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
+  return conn->send(std::move(reply)).then([] {
+    return seastar::make_ready_future<ClientRequest::seq_mode_t>
+      (seq_mode_t::OUT_OF_ORDER);
+  });
+}
+
 ClientRequest::interruptible_future<ClientRequest::seq_mode_t>
 ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
 {
@@ -251,21 +266,6 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
     logger().error("ClientRequest saw error code {}", code);
     return seastar::make_ready_future<seq_mode_t>(seq_mode_t::OUT_OF_ORDER);
   }));
-}
-
-auto ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
-{
-  logger().debug("{}: replying with error {}", *this, err);
-  auto reply = crimson::make_message<MOSDOpReply>(
-    m.get(), err, pg->get_osdmap_epoch(),
-    m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK),
-    !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
-  reply->set_reply_versions(eversion_t(), 0);
-  reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
-  return conn->send(std::move(reply)).then([] {
-    return seastar::make_ready_future<ClientRequest::seq_mode_t>
-      (seq_mode_t::OUT_OF_ORDER);
-  });
 }
 
 ClientRequest::interruptible_future<ClientRequest::seq_mode_t>
