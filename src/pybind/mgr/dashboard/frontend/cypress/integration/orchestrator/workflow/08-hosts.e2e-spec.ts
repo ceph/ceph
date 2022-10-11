@@ -18,7 +18,7 @@ describe('Host Page', () => {
   // rgw is needed for testing the force maintenance
   it('should create rgw services', () => {
     services.navigateTo('create');
-    services.addService('rgw', false, '4');
+    services.addService('rgw', false, 4);
     services.checkExist('rgw.foo', true);
   });
 
