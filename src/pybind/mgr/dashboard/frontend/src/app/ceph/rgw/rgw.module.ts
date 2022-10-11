@@ -12,6 +12,7 @@ import { PerformanceCounterModule } from '../performance-counter/performance-cou
 import { RgwBucketDetailsComponent } from './rgw-bucket-details/rgw-bucket-details.component';
 import { RgwBucketFormComponent } from './rgw-bucket-form/rgw-bucket-form.component';
 import { RgwBucketListComponent } from './rgw-bucket-list/rgw-bucket-list.component';
+import { RgwConfigModalComponent } from './rgw-config-modal/rgw-config-modal.component';
 import { RgwDaemonDetailsComponent } from './rgw-daemon-details/rgw-daemon-details.component';
 import { RgwDaemonListComponent } from './rgw-daemon-list/rgw-daemon-list.component';
 import { RgwUserCapabilityModalComponent } from './rgw-user-capability-modal/rgw-user-capability-modal.component';
@@ -56,7 +57,8 @@ import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal/rgw-us
     RgwUserSwiftKeyModalComponent,
     RgwUserS3KeyModalComponent,
     RgwUserCapabilityModalComponent,
-    RgwUserSubuserModalComponent
+    RgwUserSubuserModalComponent,
+    RgwConfigModalComponent
   ]
 })
 export class RgwModule {}

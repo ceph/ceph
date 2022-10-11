@@ -49,20 +49,44 @@ describe('RgwBucketService', () => {
 
   it('should call create', () => {
     service
-      .create('foo', 'bar', 'default', 'default-placement', false, 'COMPLIANCE', '5')
+      .create(
+        'foo',
+        'bar',
+        'default',
+        'default-placement',
+        false,
+        'COMPLIANCE',
+        '5',
+        true,
+        'aws:kms',
+        'qwerty1'
+      )
       .subscribe();
     const req = httpTesting.expectOne(
-      `api/rgw/bucket?bucket=foo&uid=bar&zonegroup=default&placement_target=default-placement&lock_enabled=false&lock_mode=COMPLIANCE&lock_retention_period_days=5&${RgwHelper.DAEMON_QUERY_PARAM}`
+      `api/rgw/bucket?bucket=foo&uid=bar&zonegroup=default&placement_target=default-placement&lock_enabled=false&lock_mode=COMPLIANCE&lock_retention_period_days=5&encryption_state=true&encryption_type=aws%253Akms&key_id=qwerty1&${RgwHelper.DAEMON_QUERY_PARAM}`
     );
     expect(req.request.method).toBe('POST');
   });
 
   it('should call update', () => {
     service
-      .update('foo', 'bar', 'baz', 'Enabled', 'Enabled', '1', '223344', 'GOVERNANCE', '10')
+      .update(
+        'foo',
+        'bar',
+        'baz',
+        'Enabled',
+        true,
+        'aws:kms',
+        'qwerty1',
+        'Enabled',
+        '1',
+        '223344',
+        'GOVERNANCE',
+        '10'
+      )
       .subscribe();
     const req = httpTesting.expectOne(
-      `api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}&bucket_id=bar&uid=baz&versioning_state=Enabled&mfa_delete=Enabled&mfa_token_serial=1&mfa_token_pin=223344&lock_mode=GOVERNANCE&lock_retention_period_days=10`
+      `api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}&bucket_id=bar&uid=baz&versioning_state=Enabled&encryption_state=true&encryption_type=aws%253Akms&key_id=qwerty1&mfa_delete=Enabled&mfa_token_serial=1&mfa_token_pin=223344&lock_mode=GOVERNANCE&lock_retention_period_days=10`
     );
     expect(req.request.method).toBe('PUT');
   });
