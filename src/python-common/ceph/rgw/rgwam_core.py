@@ -195,7 +195,8 @@ class RealmOp:
             params = ['realm', 'list']
             output = RGWAdminJSONCmd(ze).run(params)
             return output.get('realms') or []
-        except RGWAMException:
+        except RGWAMException as e:
+            logging.info(f'Exception while listing realms {e.message}')
             # in case the realm list is empty an exception is raised
             return []
 
@@ -229,7 +230,8 @@ class ZonegroupOp:
             params = ['zonegroup', 'list']
             output = RGWAdminJSONCmd(ze).run(params)
             return output.get('zonegroups') or []
-        except RGWAMException:
+        except RGWAMException as e:
+            logging.info(f'Exception while listing zonegroups {e.message}')
             return []
 
     def get(self, zonegroup: EntityKey = None):
@@ -262,7 +264,8 @@ class ZoneOp:
             params = ['zone', 'list']
             output = RGWAdminJSONCmd(ze).run(params)
             return output.get('zones') or []
-        except RGWAMException:
+        except RGWAMException as e:
+            logging.info(f'Exception while listing zones {e.message}')
             return []
 
     def get(self, zone: EntityKey):
@@ -483,7 +486,7 @@ class RGWAM:
                                                   uid_prefix='user-sys',
                                                   is_system=True)
             sys_user = RGWUser(sys_user_info)
-            logging.info('Created system user: %s' % sys_user.uid)
+            logging.info(f'Created system user: {sys_user.uid} on {realm.name}/{zonegroup.name}/{zone.name}')
             access_key = sys_user.keys[0].access_key if sys_user and sys_user.keys else ''
             secret_key = sys_user.keys[0].secret_key if sys_user and sys_user.keys else ''
             sys_user.add_key(access_key, secret_key)
@@ -495,7 +498,7 @@ class RGWAM:
         try:
             user_info = self.user_op().create(zone, zg, uid=uid, is_system=False)
             user = RGWUser(user_info)
-            logging.info('Created regular user: %s' % user.uid)
+            logging.info('Created regular user {user.uid} on {realm.name}/{zonegroup.name}/{zone.name}')
             return user
         except RGWAMException as e:
             raise RGWAMException('failed to create user', e)

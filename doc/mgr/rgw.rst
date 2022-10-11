@@ -77,9 +77,9 @@ the `ceph rgw realm tokens` output:
     }
   ]
 
-User can use the token to create and synchronize a secondary zones
-on another cluster with the master zone by using `ceph rgw zone create`
-command and proving the corresponding token.
+User can use the token to pull a realm to create secondary zone on a
+different cluster that syncs with the master zone on the primary cluster
+by using `ceph rgw zone create` command and providing the corresponding token.
 
 Following is an example of zone spec file:
 
@@ -101,9 +101,9 @@ Following is an example of zone spec file:
 
   ceph rgw zone create -i zone-spec.yaml
 
-.. note:: The spec file used by RGW has the same format as the one used by cephadm. Thus,
-          the user can provide any cephadm rgw supported parameter as any other advanced
-          configuration items such as SSL certificates etc.
+.. note:: The spec file used by RGW has the same format as the one used by the orchestrator. Thus,
+          the user can provide any orchestration supported rgw parameters including advanced
+          configuration features such as SSL certificates etc.
 
 Commands
 --------
