@@ -910,6 +910,8 @@ public:
 };
 
 class RGWRadosBILogTrimCR : public RGWSimpleCoroutine {
+  const RGWBucketInfo& bucket_info;
+  int shard_id;
   RGWRados::BucketShard bs;
   std::string start_marker;
   std::string end_marker;
