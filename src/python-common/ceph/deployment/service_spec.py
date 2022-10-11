@@ -932,13 +932,7 @@ class RGWSpec(ServiceSpec):
             raise SpecValidationError(
                     'Cannot add RGW: Realm specified but no zone specified')
         if self.rgw_zone and not self.rgw_realm:
-            raise SpecValidationError(
-                    'Cannot add RGW: Zone specified but no realm specified')
-        if not (self.rgw_realm and not self.rgw_zonegroup):
-            if self.rgw_realm_token and not self.rgw_zone:
-                raise SpecValidationError('Cannot add RGW: Token specified but no zone specified')
-            elif self.rgw_zone and not self.rgw_realm_token:
-                raise SpecValidationError('Cannot add RGW: Zone specified but no token specified')
+            raise SpecValidationError('Cannot add RGW: Zone specified but no realm specified')
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)

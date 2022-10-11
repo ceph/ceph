@@ -8,12 +8,16 @@ import functools
 from mgr_module import MgrModule, CLICommand, HandleCommandResult
 import orchestrator
 
-from ceph.deployment.service_spec import RGWSpec, PlacementSpec
+from ceph.deployment.service_spec import RGWSpec, PlacementSpec, SpecValidationError
 from typing import Any, Optional, Sequence, Iterator, List
 
 from ceph.rgw.types import RGWAMException, RGWAMEnvMgr, RealmToken
 from ceph.rgw.rgwam_core import EnvArgs, RGWAM
 from orchestrator import OrchestratorClientMixin, OrchestratorError
+
+
+class RGWSpecParsingError(Exception):
+    pass
 
 
 class OrchestratorAPI(OrchestratorClientMixin):
@@ -27,6 +31,7 @@ class OrchestratorAPI(OrchestratorClientMixin):
             return dict(available=status, message=message)
         except (RuntimeError, OrchestratorError, ImportError) as e:
             return dict(available=False, message=f'Orchestrator is unavailable: {e}')
+
 
 class RGWAMOrchMgr(RGWAMEnvMgr):
     def __init__(self, mgr):
@@ -130,7 +135,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Bootstrap new rgw realm, zonegroup, and zone"""
 
         if inbuf:
-            rgw_specs = self._parse_rgw_specs(inbuf)
+            try:
+                rgw_specs = self._parse_rgw_specs(inbuf)
+            except RGWSpecParsingError as e:
+                return HandleCommandResult(retval=-errno.EINVAL, stderr=f'{e}')
         elif (realm_name and zonegroup_name and zone_name):
             placement_spec = PlacementSpec.from_string(placement) if placement else None
             rgw_specs = [RGWSpec(rgw_realm=realm_name,
@@ -147,7 +155,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 RGWAM(self.env).realm_bootstrap(spec, start_radosgw)
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
-            return (e.retcode, e.message, e.stderr)
+            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
         return HandleCommandResult(retval=0, stdout="Realm(s) created correctly. Please, use 'ceph rgw realm tokens' to get the token.", stderr='')
 
@@ -159,9 +167,22 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         specs = [o for o in yaml_objs if o is not None]
         rgw_specs = []
         for spec in specs:
-            rgw_spec = RGWSpec.from_json(spec)
-            rgw_spec.validate()
-            rgw_specs.append(rgw_spec)
+            # A secondary zone spec normally contains only the zone and the reaml token
+            # since no rgw_realm is specified in this case we extract it from the token
+            if 'rgw_realm_token' in spec:
+                realm_token = RealmToken.from_base64_str(spec['rgw_realm_token'])
+                if realm_token is None:
+                    raise RGWSpecParsingError(f"Invalid realm token: {spec['rgw_realm_token']}")
+                spec['rgw_realm'] = realm_token.realm_name
+
+            try:
+                rgw_spec = RGWSpec.from_json(spec)
+                rgw_spec.validate()
+            except SpecValidationError as e:
+                raise RGWSpecParsingError(f'RGW Spec parsing/validation error: {e}')
+            else:
+                rgw_specs.append(rgw_spec)
+
         return rgw_specs
 
     @CLICommand('rgw realm zone-creds create', perm='rw')
@@ -175,7 +196,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             retval, out, err = RGWAM(self.env).realm_new_zone_creds(realm_name, endpoints, sys_uid)
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
-            return (e.retcode, e.message, e.stderr)
+            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
@@ -187,7 +208,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             retval, out, err = RGWAM(self.env).realm_rm_zone_creds(realm_token)
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
-            return (e.retcode, e.message, e.stderr)
+            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
@@ -210,7 +231,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                     realms_info.append({'realm': realm_info['realm_name'], 'token': realm_token_s})
         except RGWAMException as e:
             self.log.error(f'cmd run exception: ({e.retcode}) {e.message}')
-            return (e.retcode, e.message, e.stderr)
+            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
         return HandleCommandResult(retval=0, stdout=json.dumps(realms_info, indent=4), stderr='')
 
@@ -225,7 +246,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             return (retval, 'Zone updated successfully', '')
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
-            return (e.retcode, e.message, e.stderr)
+            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
     @CLICommand('rgw zone create', perm='rw')
     @check_orchestrator()
@@ -239,11 +260,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Bootstrap new rgw zone that syncs with zone on another cluster in the same realm"""
 
         if inbuf:
-            rgw_specs = self._parse_rgw_specs(inbuf)
+            try:
+                rgw_specs = self._parse_rgw_specs(inbuf)
+            except RGWSpecParsingError as e:
+                return HandleCommandResult(retval=-errno.EINVAL, stderr=f'{e}')
         elif (zone_name and realm_token):
+            token = RealmToken.from_base64_str(realm_token)
             placement_spec = PlacementSpec.from_string(placement) if placement else None
-            rgw_specs = [RGWSpec(rgw_realm_token=realm_token,
+            rgw_specs = [RGWSpec(rgw_realm=token.realm_name,
                                  rgw_zone=zone_name,
+                                 rgw_realm_token=realm_token,
                                  rgw_frontend_port=port,
                                  placement=placement_spec)]
         else:
@@ -257,7 +283,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                     break
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
-            return (e.retcode, e.message, e.stderr)
+            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
@@ -276,7 +302,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                                                 zonegroup_is_master)
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
-            return (e.retcode, e.message, e.stderr)
+            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
@@ -293,7 +319,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                                                zone_name, update)
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
-            return (e.retcode, e.message, e.stderr)
+            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
