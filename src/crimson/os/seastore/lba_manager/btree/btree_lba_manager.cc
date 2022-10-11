@@ -435,7 +435,7 @@ BtreeLBAManager::get_physical_extent_if_live(
   extent_types_t type,
   paddr_t addr,
   laddr_t laddr,
-  seastore_off_t len)
+  extent_len_t len)
 {
   LOG_PREFIX(BtreeLBAManager::get_physical_extent_if_live);
   DEBUGT("{}, laddr={}, paddr={}, length={}",

@@ -19,7 +19,7 @@ seastar::future<> TMDriver::write(
 {
   logger().debug("Writing offset {}", offset);
   assert(offset % device->get_block_size() == 0);
-  assert((ptr.length() % (size_t)device->get_block_size()) == 0);
+  assert((ptr.length() % device->get_block_size()) == 0);
   return seastar::do_with(ptr, [this, offset](auto& ptr) {
     return repeat_eagain([this, offset, &ptr] {
       return tm->with_transaction_intr(
@@ -94,7 +94,7 @@ seastar::future<bufferlist> TMDriver::read(
 {
   logger().debug("Reading offset {}", offset);
   assert(offset % device->get_block_size() == 0);
-  assert(size % (size_t)device->get_block_size() == 0);
+  assert(size % device->get_block_size() == 0);
   auto blptrret = std::make_unique<bufferlist>();
   auto &blret = *blptrret;
   return repeat_eagain([=, &blret, this] {

@@ -20,6 +20,15 @@ struct ephemeral_config_t {
   size_t size = 0;
   size_t block_size = 0;
   size_t segment_size = 0;
+
+  void validate() const {
+    ceph_assert_always(size > 0);
+    ceph_assert_always(size <= DEVICE_OFF_MAX);
+    ceph_assert_always(segment_size > 0);
+    ceph_assert_always(segment_size <= SEGMENT_OFF_MAX);
+    ceph_assert_always(size / segment_size > 0);
+    ceph_assert_always(size / segment_size <= DEVICE_SEGMENT_ID_MAX);
+  }
 };
 
 constexpr ephemeral_config_t DEFAULT_TEST_EPHEMERAL = {
@@ -39,16 +48,16 @@ class EphemeralSegment final : public Segment {
   friend class EphemeralSegmentManager;
   EphemeralSegmentManager &manager;
   const segment_id_t id;
-  seastore_off_t write_pointer = 0;
+  segment_off_t write_pointer = 0;
 public:
   EphemeralSegment(EphemeralSegmentManager &manager, segment_id_t id);
 
   segment_id_t get_segment_id() const final { return id; }
-  seastore_off_t get_write_capacity() const final;
-  seastore_off_t get_write_ptr() const final { return write_pointer; }
+  segment_off_t get_write_capacity() const final;
+  segment_off_t get_write_ptr() const final { return write_pointer; }
   close_ertr::future<> close() final;
-  write_ertr::future<> write(seastore_off_t offset, ceph::bufferlist bl) final;
-  write_ertr::future<> advance_wp(seastore_off_t offset) final;
+  write_ertr::future<> write(segment_off_t offset, ceph::bufferlist bl) final;
+  write_ertr::future<> advance_wp(segment_off_t offset) final;
 
   ~EphemeralSegment() {}
 };
@@ -75,7 +84,10 @@ class EphemeralSegmentManager final : public SegmentManager {
 public:
   EphemeralSegmentManager(
     ephemeral_config_t config)
-    : config(config) {}
+    : config(config) {
+    config.validate();
+  }
+
   ~EphemeralSegmentManager();
 
   close_ertr::future<> close() final {
@@ -105,10 +117,10 @@ public:
   size_t get_available_size() const final {
     return config.size;
   }
-  seastore_off_t get_block_size() const final {
+  extent_len_t get_block_size() const final {
     return config.block_size;
   }
-  seastore_off_t get_segment_size() const final {
+  segment_off_t get_segment_size() const final {
     return config.segment_size;
   }
 

@@ -386,7 +386,7 @@ BlockSegment::BlockSegment(
   BlockSegmentManager &manager, segment_id_t id)
   : manager(manager), id(id) {}
 
-seastore_off_t BlockSegment::get_write_capacity() const
+segment_off_t BlockSegment::get_write_capacity() const
 {
   return manager.get_segment_size();
 }
@@ -397,7 +397,7 @@ Segment::close_ertr::future<> BlockSegment::close()
 }
 
 Segment::write_ertr::future<> BlockSegment::write(
-  seastore_off_t offset, ceph::bufferlist bl)
+  segment_off_t offset, ceph::bufferlist bl)
 {
   LOG_PREFIX(BlockSegment::write);
   auto paddr = paddr_t::make_seg_paddr(id, offset);
@@ -424,12 +424,12 @@ Segment::write_ertr::future<> BlockSegment::write(
 }
 
 Segment::write_ertr::future<> BlockSegment::advance_wp(
-  seastore_off_t offset) {
+  segment_off_t offset) {
   return write_ertr::now();
 }
 
 Segment::close_ertr::future<> BlockSegmentManager::segment_close(
-    segment_id_t id, seastore_off_t write_pointer)
+    segment_id_t id, segment_off_t write_pointer)
 {
   LOG_PREFIX(BlockSegmentManager::segment_close);
   auto s_id = id.device_segment_id();

@@ -71,7 +71,7 @@ public:
 
   virtual const seastore_meta_t &get_meta() const = 0;
 
-  virtual seastore_off_t get_block_size() const = 0;
+  virtual extent_len_t get_block_size() const = 0;
 
   virtual std::size_t get_available_size() const = 0;
 

@@ -92,7 +92,7 @@ public:
   virtual write_ertr::future<> complete_allocation(Transaction &t) = 0;
 
   virtual size_t get_size() const = 0;
-  virtual size_t get_block_size() const = 0;
+  virtual extent_len_t get_block_size() const = 0;
   virtual uint64_t get_free_blocks() const = 0;
   virtual device_id_t get_device_id() const = 0;
   virtual ~RandomBlockManager() {}
@@ -103,7 +103,7 @@ using rbm_abs_addr = uint64_t;
 
 inline rbm_abs_addr convert_paddr_to_abs_addr(const paddr_t& paddr) {
   const blk_paddr_t& blk_addr = paddr.as_blk_paddr();
-  return blk_addr.get_block_off();
+  return blk_addr.get_device_off();
 }
 
 inline paddr_t convert_abs_addr_to_paddr(rbm_abs_addr addr, device_id_t d_id) {

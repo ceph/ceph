@@ -197,7 +197,7 @@ public:
     extent_types_t type,
     paddr_t addr,
     laddr_t laddr,
-    seastore_off_t len) = 0;
+    extent_len_t len) = 0;
 
   virtual void add_pin(LBAPin &pin) = 0;
 
