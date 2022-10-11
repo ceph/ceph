@@ -113,10 +113,10 @@ function get_pid()
 
 unmap_device()
 {
-    local dev=$1
+    local args=$1
     local pid=$2
 
-    _sudo rbd device --device-type nbd unmap ${dev}
+    _sudo rbd device --device-type nbd unmap ${args}
     rbd device --device-type nbd list | expect_false grep "^${pid}\\b" || return 1
     ps -C rbd-nbd | expect_false grep "^ *${pid}\\b" || return 1
 
@@ -258,6 +258,15 @@ rbd snap create ${POOL}/${NS}/${IMAGE}@snap
 DEV=`_sudo rbd device --device-type nbd map ${POOL}/${NS}/${IMAGE}@snap`
 get_pid ${POOL} ${NS}
 unmap_device "${POOL}/${NS}/${IMAGE}@snap" ${PID}
+DEV=
+
+# map/unmap namespace using options test
+DEV=`_sudo rbd device --device-type nbd map --pool ${POOL} --namespace ${NS} --image ${IMAGE}`
+get_pid ${POOL} ${NS}
+unmap_device "--pool ${POOL} --namespace ${NS} --image ${IMAGE}" ${PID}
+DEV=`_sudo rbd device --device-type nbd map --pool ${POOL} --namespace ${NS} --image ${IMAGE} --snap snap`
+get_pid ${POOL} ${NS}
+unmap_device "--pool ${POOL} --namespace ${NS} --image ${IMAGE} --snap snap" ${PID}
 DEV=
 
 # unmap by image name test 2
