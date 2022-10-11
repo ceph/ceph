@@ -1591,17 +1591,11 @@ public:
             tn->log(0, SSTR("ERROR: cannot start syncing " << iter->first << ". Duplicate entry?"));
           } else {
             // fetch remote and write locally
-            spawn(sync_single_entry(source_bs, iter->first, iter->first,
-                                    entry_timestamp, false), false);
+            yield_spawn_window(sync_single_entry(source_bs, iter->first, iter->first,
+                                                 entry_timestamp, false),
+                               spawn_window, std::nullopt);
           }
           sync_marker.marker = iter->first;
-
-          drain_all_but_stack_cb(lease_stack.get(),
-                                 [&](uint64_t stack_id, int ret) {
-                                   if (ret < 0) {
-                                     tn->log(10, "a sync operation returned error");
-                                   }
-                                 });
         }
       } while (omapvals->more);
       omapvals.reset();
@@ -1740,16 +1734,10 @@ public:
           if (!marker_tracker->start(log_iter->log_id, 0, log_iter->log_timestamp)) {
             tn->log(0, SSTR("ERROR: cannot start syncing " << log_iter->log_id << ". Duplicate entry?"));
           } else {
-            spawn(sync_single_entry(source_bs, log_iter->entry.key, log_iter->log_id,
-                                    log_iter->log_timestamp, false), false);
+            yield_spawn_window(sync_single_entry(source_bs, log_iter->entry.key, log_iter->log_id,
+                                                 log_iter->log_timestamp, false),
+                               spawn_window, std::nullopt);
           }
-
-          drain_all_but_stack_cb(lease_stack.get(),
-                                 [&](uint64_t stack_id, int ret) {
-                                   if (ret < 0) {
-                                     tn->log(10, "a sync operation returned error");
-                                   }
-                                 });
         }
 
         tn->log(20, SSTR("shard_id=" << shard_id << " sync_marker=" << sync_marker.marker
