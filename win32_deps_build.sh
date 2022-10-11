@@ -107,7 +107,7 @@ source "$SCRIPT_DIR/mingw_conf.sh"
 echo "Building zlib."
 cd $depsSrcDir
 if [[ ! -d $zlibSrcDir ]]; then
-    git clone https://github.com/madler/zlib
+    git clone --depth 1 https://github.com/madler/zlib
 fi
 cd $zlibSrcDir
 # Apparently the configure script is broken...
@@ -213,7 +213,7 @@ EOL
 echo "Building libbacktrace."
 cd $depsSrcDir
 if [[ ! -d $backtraceSrcDir ]]; then
-    git clone https://github.com/ianlancetaylor/libbacktrace
+    git clone --depth 1 https://github.com/ianlancetaylor/libbacktrace
 fi
 mkdir -p $backtraceSrcDir/build
 cd $backtraceSrcDir/build
@@ -290,8 +290,7 @@ $MINGW_DLLTOOL -d $winLibDir/mswsock.def \
 echo "Fetching libwnbd."
 cd $depsSrcDir
 if [[ ! -d $wnbdSrcDir ]]; then
-    git clone $wnbdUrl
-    cd $wnbdSrcDir && git checkout $wnbdTag
+    git clone --branch $wnbdTag --depth 1 $wnbdUrl
 fi
 cd $wnbdSrcDir
 mkdir -p $wnbdLibDir
@@ -302,10 +301,8 @@ $MINGW_DLLTOOL -d $wnbdSrcDir/libwnbd/libwnbd.def \
 echo "Fetching dokany."
 cd $depsSrcDir
 if [[ ! -d $dokanSrcDir ]]; then
-    git clone $dokanUrl
+    git clone --branch $dokanTag --depth 1 $dokanUrl
 fi
-cd $dokanSrcDir
-git checkout $dokanTag
 
 mkdir -p $dokanLibDir
 $MINGW_DLLTOOL -d $dokanSrcDir/dokan/dokan.def \
