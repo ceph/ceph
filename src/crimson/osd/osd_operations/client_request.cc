@@ -253,7 +253,7 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
   }));
 }
 
-auto ClientRequest::reply_op_error(Ref<PG>& pg, int err)
+auto ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
 {
   logger().debug("{}: replying with error {}", *this, err);
   auto reply = crimson::make_message<MOSDOpReply>(
