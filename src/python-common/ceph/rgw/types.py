@@ -1,5 +1,7 @@
 import json
 import base64
+import binascii
+import errno
 
 from abc import abstractmethod
 
@@ -13,9 +15,9 @@ class RGWAMException(Exception):
             self.stderr = orig.stdout
         else:
             self.message = message
-            self.retcode = 0
-            self.stdout = None
-            self.stderr = None
+            self.retcode = -errno.EINVAL
+            self.stdout = ''
+            self.stderr = message
 
 
 class RGWAMCmdRunException(RGWAMException):
@@ -58,11 +60,13 @@ class RealmToken(JSONObj):
 
     @classmethod
     def from_base64_str(cls, realm_token_b64):
-        realm_token_b = base64.b64decode(realm_token_b64)
-        realm_token_s = realm_token_b.decode('utf-8')
-        realm_token = json.loads(realm_token_s)
-        return cls(**realm_token)
-
+        try:
+            realm_token_b = base64.b64decode(realm_token_b64)
+            realm_token_s = realm_token_b.decode('utf-8')
+            realm_token = json.loads(realm_token_s)
+            return cls(**realm_token)
+        except binascii.Error:
+            return None
 
 class RGWZone(JSONObj):
     def __init__(self, zone_dict):
