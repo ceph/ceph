@@ -892,10 +892,16 @@ class RGWSpec(ServiceSpec):
             custom_configs=custom_configs)
 
         #: The RGW realm associated with this service. Needs to be manually created
+        #: if the spec is being applied directly to cephdam. In case of rgw module
+        #: the realm is created automatically.
         self.rgw_realm: Optional[str] = rgw_realm
         #: The RGW zonegroup associated with this service. Needs to be manually created
+        #: if the spec is being applied directly to cephdam. In case of rgw module
+        #: the zonegroup is created automatically.
         self.rgw_zonegroup: Optional[str] = rgw_zonegroup
         #: The RGW zone associated with this service. Needs to be manually created
+        #: if the spec is being applied directly to cephdam. In case of rgw module
+        #: the zone is created automatically.
         self.rgw_zone: Optional[str] = rgw_zone
         #: Port of the RGW daemons
         self.rgw_frontend_port: Optional[int] = rgw_frontend_port
