@@ -487,9 +487,6 @@ class RGWAM:
                                                   is_system=True)
             sys_user = RGWUser(sys_user_info)
             logging.info(f'Created system user: {sys_user.uid} on {realm.name}/{zonegroup.name}/{zone.name}')
-            access_key = sys_user.keys[0].access_key if sys_user and sys_user.keys else ''
-            secret_key = sys_user.keys[0].secret_key if sys_user and sys_user.keys else ''
-            sys_user.add_key(access_key, secret_key)
             return sys_user
         except RGWAMException as e:
             raise RGWAMException('failed to create system user', e)
@@ -533,8 +530,9 @@ class RGWAM:
 
         # Create system user, normal user and update the master zone
         sys_user = self.create_system_user(realm, zonegroup, zone)
-        access_key = sys_user.keys[0].access_key
-        secret = sys_user.keys[0].secret_key
+        rgw_acces_key = sys_user.get_key(0)
+        access_key = rgw_acces_key.access_key if rgw_acces_key else ''
+        secret = rgw_acces_key.secret_key if rgw_acces_key else ''
         self.zone_op().modify(zone, zonegroup, None, None, access_key, secret)
         self.update_period(realm, zonegroup)
 
