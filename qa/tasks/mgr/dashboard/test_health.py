@@ -23,6 +23,7 @@ class HealthTest(DashboardTestCase):
     __mdsmap_schema = JObj({
         'session_autoclose': int,
         'balancer': str,
+        'bal_rank_mask': str,
         'up': JObj({}, allow_unknown=True),
         'last_failure_osd_epoch': int,
         'in': JList(int),
