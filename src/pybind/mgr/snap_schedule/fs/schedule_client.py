@@ -193,6 +193,7 @@ class SnapSchedClient(CephfsClient):
             db.execute('PRAGMA JOURNAL_MODE = PERSIST')
             db.execute('PRAGMA PAGE_SIZE = 65536')
             db.execute('PRAGMA CACHE_SIZE = 256')
+            db.execute('PRAGMA TEMP_STORE = memory')
             db.row_factory = sqlite3.Row
             # check for legacy dump store
             pool_param = cast(Union[int, str], poolid)
