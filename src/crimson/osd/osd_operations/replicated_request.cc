@@ -61,7 +61,7 @@ seastar::future<> RepRequest::with_pg(
 
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
-    return pg->handle_rep_op(std::move(req));
+    return pg->handle_rep_op(req);
   }, [ref](std::exception_ptr) { return seastar::now(); }, pg);
 }
 
