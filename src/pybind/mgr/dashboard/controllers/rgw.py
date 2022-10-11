@@ -569,15 +569,32 @@ class RgwUser(RgwRESTController):
     def create_subuser(self, uid, subuser, access, key_type='s3',
                        generate_secret='true', access_key=None,
                        secret_key=None, daemon_name=None):
-        return self.proxy(daemon_name, 'PUT', 'user', {
-            'uid': uid,
-            'subuser': subuser,
-            'key-type': key_type,
-            'access': access,
-            'generate-secret': generate_secret,
-            'access-key': access_key,
-            'secret-key': secret_key
-        })
+        # pylint: disable=R1705
+        subusr_array = []
+        user = json.loads(self.get(uid, daemon_name))  # type: ignore
+        subusers = user["subusers"]
+        for sub_usr in subusers:
+            subusr_array.append(sub_usr["id"])
+        if subuser in subusr_array:
+            return self.proxy(daemon_name, 'POST', 'user', {
+                'uid': uid,
+                'subuser': subuser,
+                'key-type': key_type,
+                'access': access,
+                'generate-secret': generate_secret,
+                'access-key': access_key,
+                'secret-key': secret_key
+            })
+        else:
+            return self.proxy(daemon_name, 'PUT', 'user', {
+                'uid': uid,
+                'subuser': subuser,
+                'key-type': key_type,
+                'access': access,
+                'generate-secret': generate_secret,
+                'access-key': access_key,
+                'secret-key': secret_key
+            })
 
     @RESTController.Resource(method='DELETE', path='/subuser/{subuser}', status=204)
     def delete_subuser(self, uid, subuser, purge_keys='true', daemon_name=None):
