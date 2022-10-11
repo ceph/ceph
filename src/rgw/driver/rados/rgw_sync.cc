@@ -637,7 +637,7 @@ public:
 	rgw::sal::RadosStore* store = sync_env->store;
         lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
                                                 rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env->status_oid()),
-                                                lock_name, lock_duration, this));
+                                                lock_name, lock_duration, this, nullptr));
         lease_stack.reset(spawn(lease_cr.get(), false));
       }
       while (!lease_cr->is_locked()) {
@@ -883,7 +883,7 @@ public:
         lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados,
                                                 sync_env->store,
                                                 rgw_raw_obj(sync_env->store->svc()->zone->get_zone_params().log_pool, sync_env->status_oid()),
-                                                lock_name, lock_duration, this));
+                                                lock_name, lock_duration, this, nullptr));
         lease_stack.reset(spawn(lease_cr.get(), false));
       }
       while (!lease_cr->is_locked()) {
@@ -1553,7 +1553,7 @@ public:
 	rgw::sal::RadosStore* store = sync_env->store;
         lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
                                                 rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
-                                                lock_name, lock_duration, this));
+                                                lock_name, lock_duration, this, nullptr));
         lease_stack.reset(spawn(lease_cr.get(), false));
         lost_lock = false;
       }
@@ -1709,7 +1709,7 @@ public:
 	  rgw::sal::RadosStore* store = sync_env->store;
           lease_cr.reset( new RGWContinuousLeaseCR(sync_env->async_rados, store,
                                                    rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
-                                                   lock_name, lock_duration, this));
+                                                   lock_name, lock_duration, this, nullptr));
           lease_stack.reset(spawn(lease_cr.get(), false));
           lost_lock = false;
         }

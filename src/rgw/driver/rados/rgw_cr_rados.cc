@@ -937,7 +937,11 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
   reenter(this) {
     last_renew_try_time = ceph::coarse_mono_clock::now();
     while (!going_down) {
+      current_time = ceph::coarse_mono_clock::now();
       yield call(new RGWSimpleRadosLockCR(async_rados, store, obj, lock_name, cookie, interval));
+      if (latency) {
+	latency->add_latency(ceph::coarse_mono_clock::now() - current_time);
+      }
       current_time = ceph::coarse_mono_clock::now();
       if (current_time - last_renew_try_time > interval_tolerance) {
         // renewal should happen between 50%-90% of interval
@@ -957,7 +961,11 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
       yield wait(utime_t(interval / 2, 0));
     }
     set_locked(false); /* moot at this point anyway */
+    current_time = ceph::coarse_mono_clock::now();
     yield call(new RGWSimpleRadosUnlockCR(async_rados, store, obj, lock_name, cookie));
+    if (latency) {
+      latency->add_latency(ceph::coarse_mono_clock::now() - current_time);
+    }
     return set_state(RGWCoroutine_Done);
   }
   return 0;
