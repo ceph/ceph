@@ -236,7 +236,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                              placement: Optional[str] = None,
                              start_radosgw: Optional[bool] = True,
                              inbuf: Optional[str] = None):
-        """Bootstrap new rgw zone that syncs with existing zone"""
+        """Bootstrap new rgw zone that syncs with zone on another cluster in the same realm"""
 
         if inbuf:
             rgw_specs = self._parse_rgw_specs(inbuf)
