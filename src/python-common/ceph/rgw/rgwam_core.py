@@ -537,7 +537,6 @@ class RGWAM:
         secret = sys_user.keys[0].secret_key
         self.zone_op().modify(zone, zonegroup, None, None, access_key, secret)
         self.update_period(realm, zonegroup)
-        self.create_normal_user(zonegroup, zone)
 
         if start_radosgw:
             # Instruct the orchestrator to start RGW daemons, asynchronically, this will
