@@ -742,31 +742,6 @@ class RGWAM:
                                 "secret": secret})
         return realms_info
 
-    def zonegroup_create(self, realm_token_b64, zonegroup_name=None,
-                         endpoints=None, zonegroup_is_master=True):
-        if not realm_token_b64:
-            raise RGWAMException('missing realm access config')
-            return False
-
-        realm_token = RealmToken.from_base64_str(realm_token_b64)
-        access_key = realm_token.access_key
-        secret = realm_token.secret
-        try:
-            realm_info = self.realm_op().pull(EntityName(realm_token.realm_name),
-                                              realm_token.endpoint, access_key, secret)
-        except RGWAMException as e:
-            raise RGWAMException('failed to pull realm', e)
-
-        realm_name = realm_info['name']
-        realm_id = realm_info['id']
-        logging.info(f"Pulled realm {realm_name} ({realm_id})")
-
-        realm = EntityID(realm_id)
-        zonegroup = self.create_zonegroup(realm, zonegroup_name, zonegroup_is_master, endpoints)
-        self.update_period(realm, zonegroup)
-
-        return (0, f'Created zonegroup {zonegroup_name} on realm {realm.name}', '')
-
     def zone_create(self, rgw_spec, start_radosgw):
 
         if not rgw_spec.rgw_realm_token:

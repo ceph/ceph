@@ -287,25 +287,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
-    @CLICommand('rgw zonegroup create', perm='rw')
-    def _cmd_rgw_zonegroup_create(self,
-                                  realm_token: Optional[str] = None,
-                                  zonegroup_name: Optional[str] = None,
-                                  endpoints: Optional[str] = None,
-                                  zonegroup_is_master: Optional[bool] = True):
-        """Bootstrap new rgw zonegroup"""
-
-        try:
-            retval, out, err = RGWAM(self.env).zonegroup_create(realm_token,
-                                                                zonegroup_name,
-                                                                endpoints,
-                                                                zonegroup_is_master)
-        except RGWAMException as e:
-            self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
-            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
-
-        return HandleCommandResult(retval=retval, stdout=out, stderr=err)
-
     @CLICommand('rgw realm reconcile', perm='rw')
     def _cmd_rgw_realm_reconcile(self,
                                  realm_name: Optional[str] = None,
