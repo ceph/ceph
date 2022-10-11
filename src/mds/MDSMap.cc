@@ -223,6 +223,7 @@ void MDSMap::dump(Formatter *f) const
   f->dump_bool("enabled", enabled);
   f->dump_string("fs_name", fs_name);
   f->dump_string("balancer", balancer);
+  f->dump_string("bal_rank_mask", bal_rank_mask);
   f->dump_int("standby_count_wanted", std::max(0, standby_count_wanted));
 }
 
@@ -280,6 +281,7 @@ void MDSMap::print(ostream& out) const
   out << "metadata_pool\t" << metadata_pool << "\n";
   out << "inline_data\t" << (inline_data_enabled ? "enabled" : "disabled") << "\n";
   out << "balancer\t" << balancer << "\n";
+  out << "bal_rank_mask\t" << bal_rank_mask << "\n";
   out << "standby_count_wanted\t" << std::max(0, standby_count_wanted) << "\n";
 
   multimap< pair<mds_rank_t, unsigned>, mds_gid_t > foo;
@@ -758,7 +760,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(data_pools, bl);
   encode(cas_pool, bl);
 
-  __u16 ev = 16;
+  __u16 ev = 17;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -785,6 +787,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     encode(min_compat_client, bl);
   }
   encode(required_client_features, bl);
+  encode(bal_rank_mask, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -930,6 +933,10 @@ void MDSMap::decode(bufferlist::const_iterator& p)
     } else {
       set_min_compat_client(min_compat_client);
     }
+  }
+
+  if (ev >= 17) {
+    decode(bal_rank_mask, p);
   }
 
   /* All MDS since at least v14.0.0 understand INLINE */
@@ -1168,4 +1175,100 @@ void MDSMap::set_min_compat_client(ceph_release_t version)
 
   std::sort(bits.begin(), bits.end());
   required_client_features = feature_bitset_t(bits);
+}
+
+const std::bitset<MAX_MDS>& MDSMap::get_bal_rank_mask_bitset() const {
+  return bal_rank_mask_bitset;
+}
+
+void MDSMap::set_bal_rank_mask(std::string val)
+{
+  bal_rank_mask = val;
+  dout(10) << "set bal_rank_mask to \"" << bal_rank_mask << "\""<< dendl;
+}
+
+const bool MDSMap::check_special_bal_rank_mask(std::string val, bal_rank_mask_type_t type) const
+{
+  if ((type == BAL_RANK_MASK_TYPE_ANY || type == BAL_RANK_MASK_TYPE_ALL) && (val == "-1" || val == "all")) {
+    return true;
+  }
+  if ((type == BAL_RANK_MASK_TYPE_ANY || type == BAL_RANK_MASK_TYPE_NONE) && (val == "0x0" || val == "0")) {
+    return true;
+  }
+  return false;
+}
+
+void MDSMap::update_num_mdss_in_rank_mask_bitset()
+{
+  int r = -EINVAL;
+
+  if (bal_rank_mask.length() && !check_special_bal_rank_mask(bal_rank_mask, BAL_RANK_MASK_TYPE_ANY)) {
+    std::string bin_string;
+    CachedStackStringStream css;
+
+    r = hex2bin(bal_rank_mask, bin_string, MAX_MDS, *css);
+    if (r == 0) {
+      auto _mds_bal_mask_bitset = std::bitset<MAX_MDS>(bin_string);
+      bal_rank_mask_bitset = _mds_bal_mask_bitset;
+      num_mdss_in_rank_mask_bitset = _mds_bal_mask_bitset.count();
+    } else {
+      dout(10) << css->str() << dendl;
+    }
+  }
+
+  if (r == -EINVAL) {
+    if (check_special_bal_rank_mask(bal_rank_mask, BAL_RANK_MASK_TYPE_NONE)) {
+      dout(10) << "Balancer is disabled with bal_rank_mask " << bal_rank_mask << dendl;
+      bal_rank_mask_bitset.reset();
+      num_mdss_in_rank_mask_bitset = 0;
+    } else {
+      dout(10) << "Balancer distributes mds workloads to all ranks as bal_rank_mask is empty or invalid" << dendl;
+      bal_rank_mask_bitset.set();
+      num_mdss_in_rank_mask_bitset = get_max_mds();
+    }
+  }
+
+  dout(10) << "update num_mdss_in_rank_mask_bitset to " << num_mdss_in_rank_mask_bitset << dendl;
+}
+
+int MDSMap::hex2bin(std::string hex_string, std::string &bin_string, unsigned int max_bits, std::ostream& ss) const
+{
+  static const unsigned int BITS_PER_QUARTET = CHAR_BIT / 2;
+  static const unsigned int BITS_PER_ULLONG = sizeof(unsigned long long) * CHAR_BIT ;
+  static const unsigned int QUARTETS_PER_ULLONG = BITS_PER_ULLONG/BITS_PER_QUARTET;
+  unsigned int offset = 0;
+
+  std::transform(hex_string.begin(), hex_string.end(), hex_string.begin(), ::tolower);
+
+  if (hex_string.substr(0, 2) == "0x") {
+    offset = 2;
+  }
+
+  for (unsigned int i = offset; i < hex_string.size(); i += QUARTETS_PER_ULLONG) {
+    unsigned long long value;
+    try {
+      value = stoull(hex_string.substr(i, QUARTETS_PER_ULLONG), nullptr, 16);
+    } catch (std::invalid_argument const& ex) {
+      ss << "invalid hex value ";
+      return -EINVAL;
+    }
+    auto bit_str = std::bitset<BITS_PER_ULLONG>(value);
+    bin_string += bit_str.to_string();
+  }
+
+  if (bin_string.length() > max_bits) {
+    ss << "a value exceeds max_mds " << max_bits;
+    return -EINVAL;
+  }
+
+  if (bin_string.find('1') == std::string::npos) {
+    ss << "at least one rank must be set";
+    return -EINVAL;
+  }
+
+  if (bin_string.length() < max_bits) {
+    bin_string.insert(0, max_bits - bin_string.length(), '0');
+  }
+
+  return 0;
 }
