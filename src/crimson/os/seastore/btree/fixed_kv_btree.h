@@ -823,6 +823,21 @@ public:
         n_fixed_kv_extent->get_bptr().c_str());
       n_fixed_kv_extent->set_modify_time(fixed_kv_extent.get_modify_time());
       n_fixed_kv_extent->pin.set_range(n_fixed_kv_extent->get_node_meta());
+
+      if (fixed_kv_extent.get_type() == internal_node_t::TYPE) {
+        if (!fixed_kv_extent.is_pending()) {
+          n_fixed_kv_extent->copy_sources.emplace(&fixed_kv_extent);
+          n_fixed_kv_extent->prior_instance = &fixed_kv_extent;
+        } else {
+          ceph_assert(fixed_kv_extent.is_mutation_pending());
+          n_fixed_kv_extent->copy_sources.emplace(
+            (typename internal_node_t::base_t*
+             )fixed_kv_extent.get_prior_instance().get());
+          n_fixed_kv_extent->children = std::move(fixed_kv_extent.children);
+          n_fixed_kv_extent->prior_instance = fixed_kv_extent.get_prior_instance();
+          n_fixed_kv_extent->adjust_ptracker_for_children();
+        }
+      }
       
       /* This is a bit underhanded.  Any relative addrs here must necessarily
        * be record relative as we are rewriting a dirty extent.  Thus, we
@@ -853,7 +868,8 @@ public:
         n_fixed_kv_extent->get_node_meta().depth,
         n_fixed_kv_extent->get_node_meta().begin,
         e->get_paddr(),
-        n_fixed_kv_extent->get_paddr()
+        n_fixed_kv_extent->get_paddr(),
+        n_fixed_kv_extent
       ).si_then([c, e] {
         c.cache.retire_extent(c.trans, e);
       });
@@ -877,17 +893,19 @@ public:
     depth_t depth,
     node_key_t laddr,
     paddr_t old_addr,
-    paddr_t new_addr)
+    paddr_t new_addr,
+    typename internal_node_t::base_ref nextent)
   {
     LOG_PREFIX(FixedKVBtree::update_internal_mapping);
     SUBTRACET(
       seastore_fixedkv_tree,
-      "updating laddr {} at depth {} from {} to {}",
+      "updating laddr {} at depth {} from {} to {}, nextent {}",
       c.trans,
       laddr,
       depth,
       old_addr,
-      new_addr);
+      new_addr,
+      *nextent);
 
     return lower_bound(
       c, laddr
@@ -970,7 +988,7 @@ public:
           parent.node
         );
         typename internal_node_t::Ref mparent = mut->cast<internal_node_t>();
-        mparent->update(piter, new_addr);
+        mparent->update(piter, new_addr, nextent.get());
 
         /* Note, iter is now invalid as we didn't udpate either the parent
          * node reference to the new mutable instance nor did we update the
@@ -1439,11 +1457,13 @@ private:
 
       parent_node->update(
         parent_iter,
-        left->get_paddr());
+        left->get_paddr(),
+        left.get());
       parent_node->insert(
         parent_iter + 1,
         pivot,
-        right->get_paddr());
+        right->get_paddr(),
+        right.get());
 
       SUBTRACET(
         seastore_fixedkv_tree,
@@ -1669,7 +1689,8 @@ private:
 
         parent_pos.node->update(
           liter,
-          replacement->get_paddr());
+          replacement->get_paddr(),
+          replacement.get());
         parent_pos.node->remove(riter);
 
         pos.node = replacement;
@@ -1692,11 +1713,13 @@ private:
 
         parent_pos.node->update(
           liter,
-          replacement_l->get_paddr());
+          replacement_l->get_paddr(),
+          replacement_l.get());
         parent_pos.node->replace(
           riter,
           pivot,
-          replacement_r->get_paddr());
+          replacement_r->get_paddr(),
+          replacement_r.get());
 
         if (donor_is_left) {
           assert(parent_pos.pos > 0);
