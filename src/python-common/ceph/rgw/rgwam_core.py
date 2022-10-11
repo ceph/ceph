@@ -210,7 +210,7 @@ class RealmOp:
         params = ['realm', 'create']
         return RGWAdminJSONCmd(ze).run(params)
 
-    def pull(self, realm, url, access_key, secret, set_default=False):
+    def pull(self, realm, url, access_key, secret):
         params = ['realm',
                   'pull',
                   '--url', url,
@@ -637,7 +637,7 @@ class RGWAM:
         try:
             user_info = self.user_op().info(master_zone, master_zg, access_key=access_key)
         except RGWAMException as e:
-            raise RGWAMException('failed to create system user', e)
+            raise RGWAMException('failed to get the system user information', e)
 
         user = RGWUser(user_info)
 
@@ -754,8 +754,7 @@ class RGWAM:
         secret = realm_token.secret
         try:
             realm_info = self.realm_op().pull(EntityName(realm_token.realm_name),
-                                              realm_token.endpoint, access_key,
-                                              secret, set_default=True)
+                                              realm_token.endpoint, access_key, secret)
         except RGWAMException as e:
             raise RGWAMException('failed to pull realm', e)
 

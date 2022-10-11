@@ -91,15 +91,15 @@ you can use :ref:`mgr-rgw-module` or manually using something like:
 
 .. prompt:: bash #
 
-  radosgw-admin realm create --rgw-realm=<realm-name> --default
+  radosgw-admin realm create --rgw-realm=<realm-name>
 
 .. prompt:: bash #
 
-  radosgw-admin zonegroup create --rgw-zonegroup=<zonegroup-name>  --master --default
+  radosgw-admin zonegroup create --rgw-zonegroup=<zonegroup-name>  --master
 
 .. prompt:: bash #
 
-  radosgw-admin zone create --rgw-zonegroup=<zonegroup-name> --rgw-zone=<zone-name> --master --default
+  radosgw-admin zone create --rgw-zonegroup=<zonegroup-name> --rgw-zone=<zone-name> --master
 
 .. prompt:: bash #
 
