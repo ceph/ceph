@@ -260,11 +260,12 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
 	  });
       }
       });
-  }).safe_then_interruptible([pg=std::move(pg)] (const seq_mode_t mode) {
+  }).safe_then_interruptible([pg] (const seq_mode_t mode) {
     return seastar::make_ready_future<seq_mode_t>(mode);
-  }, PG::load_obc_ertr::all_same_way([](auto &code) {
+  }, PG::load_obc_ertr::all_same_way([this, pg=std::move(pg)](const auto &code) {
     logger().error("ClientRequest saw error code {}", code);
-    return seastar::make_ready_future<seq_mode_t>(seq_mode_t::OUT_OF_ORDER);
+    assert(code.value() > 0);
+    return reply_op_error(pg, -code.value());
   }));
 }
 
