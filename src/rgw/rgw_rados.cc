@@ -2330,19 +2330,25 @@ bool RGWRados::obj_to_raw(const rgw_placement_rule& placement_rule, const rgw_ob
   return get_obj_data_pool(placement_rule, obj, &raw_obj->pool);
 }
 
-int RGWRados::get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx)
+int RGWRados::get_obj_head_ioctx(const DoutPrefixProvider *dpp,
+				 const RGWBucketInfo& bucket_info,
+				 const rgw_obj& obj,
+				 librados::IoCtx *ioctx)
 {
-  string oid, key;
+  std::string oid, key;
   get_obj_bucket_and_oid_loc(obj, oid, key);
 
   rgw_pool pool;
   if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool)) {
-    ldpp_dout(dpp, 0) << "ERROR: cannot get data pool for obj=" << obj << ", probably misconfiguration" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: cannot get data pool for obj=" << obj <<
+      ", probably misconfiguration" << dendl;
     return -EIO;
   }
 
   int r = open_pool_ctx(dpp, pool, *ioctx, false);
   if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: unable to open data-pool=" << pool.to_str() <<
+      " for obj=" << obj << " with error-code=" << r << dendl;
     return r;
   }
 
@@ -9044,15 +9050,14 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   list_state.meta.storage_class = storage_class;
 
   librados::IoCtx head_obj_ctx; // initialize to data pool so we can get pool id
-  const bool head_pool_found =
-    get_obj_head_ioctx(dpp, bucket_info, obj, &head_obj_ctx);
-  if (head_pool_found) {
-    list_state.ver.pool = head_obj_ctx.get_id();
-    list_state.ver.epoch = astate->epoch;
-  } else {
-    ldpp_dout(dpp, 0) << __PRETTY_FUNCTION__ <<
+  r = get_obj_head_ioctx(dpp, bucket_info, obj, &head_obj_ctx);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << __func__ <<
       " WARNING: unable to find head object data pool for \"" <<
       obj << "\", not updating version pool/epoch" << dendl;
+  } else {
+    list_state.ver.pool = head_obj_ctx.get_id();
+    list_state.ver.epoch = astate->epoch;
   }
 
   if (astate->obj_tag.length() > 0) {
