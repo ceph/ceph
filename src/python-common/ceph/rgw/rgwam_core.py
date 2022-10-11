@@ -795,8 +795,6 @@ class RGWAM:
             rgw_spec.rgw_token = realm_token_s
             self.env.mgr.apply_rgw(rgw_spec)
 
-        return (0, f'Created zone {zone.name} {zone.id}', '')
-
     def _get_daemon_eps(self, realm_name=None, zonegroup_name=None, zone_name=None):
         # get running daemons info
         service_name = None
