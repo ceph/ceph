@@ -370,6 +370,10 @@ public:
            state == extent_state_t::EXIST_CLEAN;
   }
 
+  bool is_clean_pending() const {
+    return state == extent_state_t::CLEAN_PENDING;
+  }
+
   /// Ruturns true if data is persisted while metadata isn't
   bool is_exist_clean() const {
     return state == extent_state_t::EXIST_CLEAN;
@@ -563,6 +567,8 @@ private:
   rewrite_gen_t rewrite_generation = NULL_GENERATION;
 
 protected:
+  trans_view_set_t mutation_pendings;
+
   CachedExtent(CachedExtent &&other) = delete;
   CachedExtent(ceph::bufferptr &&ptr) : ptr(std::move(ptr)) {}
   CachedExtent(const CachedExtent &other)
@@ -582,6 +588,8 @@ protected:
 
   struct retired_placeholder_t{};
   CachedExtent(retired_placeholder_t) : state(extent_state_t::INVALID) {}
+
+  CachedExtent& get_transactional_view(Transaction &t);
 
   friend class Cache;
   template <typename T, typename... Args>
