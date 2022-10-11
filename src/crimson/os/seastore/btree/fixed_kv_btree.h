@@ -722,7 +722,7 @@ public:
     op_context_t<node_key_t> c,
     paddr_t addr,
     node_key_t laddr,
-    seastore_off_t len)
+    extent_len_t len)
   {
     LOG_PREFIX(FixedKVBtree::get_leaf_if_live);
     return lower_bound(
@@ -760,7 +760,7 @@ public:
     op_context_t<node_key_t> c,
     paddr_t addr,
     node_key_t laddr,
-    seastore_off_t len)
+    extent_len_t len)
   {
     LOG_PREFIX(FixedKVBtree::get_internal_if_live);
     return lower_bound(

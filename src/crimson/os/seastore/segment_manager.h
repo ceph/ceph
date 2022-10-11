@@ -47,9 +47,12 @@ struct block_sm_superblock_t {
     ceph_assert(block_size > 0);
     ceph_assert(segment_size > 0 &&
                 segment_size % block_size == 0);
+    ceph_assert_always(segment_size <= SEGMENT_OFF_MAX);
     ceph_assert(size > segment_size &&
                 size % block_size == 0);
+    ceph_assert_always(size <= DEVICE_OFF_MAX);
     ceph_assert(segments > 0);
+    ceph_assert_always(segments <= DEVICE_SEGMENT_ID_MAX);
     ceph_assert(tracker_offset > 0 &&
                 tracker_offset % block_size == 0);
     ceph_assert(first_segment_offset > tracker_offset &&
@@ -92,12 +95,12 @@ public:
   /**
    * min next write location
    */
-  virtual seastore_off_t get_write_ptr() const = 0;
+  virtual segment_off_t get_write_ptr() const = 0;
 
   /**
    * max capacity
    */
-  virtual seastore_off_t get_write_capacity() const = 0;
+  virtual segment_off_t get_write_capacity() const = 0;
 
   /**
    * close
@@ -126,7 +129,7 @@ public:
     crimson::ct_error::enospc              // write exceeds segment size
     >;
   virtual write_ertr::future<> write(
-    seastore_off_t offset, ceph::bufferlist bl) = 0;
+    segment_off_t offset, ceph::bufferlist bl) = 0;
 
   /**
    * advance_wp
@@ -136,7 +139,7 @@ public:
    * @param offset: advance write pointer till the given offset
    */
   virtual write_ertr::future<> advance_wp(
-    seastore_off_t offset) = 0;
+    segment_off_t offset) = 0;
 
   virtual ~Segment() {}
 };
@@ -172,7 +175,7 @@ public:
   virtual release_ertr::future<> release(segment_id_t id) = 0;
 
   /* Methods for discovering device geometry, segmentid set, etc */
-  virtual seastore_off_t get_segment_size() const = 0;
+  virtual segment_off_t get_segment_size() const = 0;
   virtual device_segment_id_t get_num_segments() const {
     ceph_assert(get_available_size() % get_segment_size() == 0);
     return ((device_segment_id_t)(get_available_size() / get_segment_size()));

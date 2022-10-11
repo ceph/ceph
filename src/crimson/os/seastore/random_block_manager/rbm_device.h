@@ -119,8 +119,8 @@ public:
   secondary_device_set_t& get_secondary_devices() final {
     return devices;
   }
-  std::size_t get_available_size() const { return size; }
-  seastore_off_t get_block_size() const { return block_size; }
+  std::size_t get_available_size() const final { return size; }
+  extent_len_t get_block_size() const final { return block_size; }
 
   virtual read_ertr::future<> read(
     uint64_t offset,

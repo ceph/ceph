@@ -527,7 +527,7 @@ TransactionManager::get_extents_if_live(
   extent_types_t type,
   paddr_t paddr,
   laddr_t laddr,
-  seastore_off_t len)
+  extent_len_t len)
 {
   LOG_PREFIX(TransactionManager::get_extent_if_live);
   TRACET("{} {}~{} {}", t, type, laddr, len, paddr);
@@ -539,7 +539,7 @@ TransactionManager::get_extents_if_live(
   return cache->get_extent_if_cached(t, paddr, type
   ).si_then([=, this, &t](auto extent)
 	    -> get_extents_if_live_ret {
-    if (extent && extent->get_length() == (extent_len_t)len) {
+    if (extent && extent->get_length() == len) {
       DEBUGT("{} {}~{} {} is live in cache -- {}",
              t, type, laddr, len, paddr, *extent);
       std::list<CachedExtentRef> res;
@@ -642,8 +642,8 @@ TransactionManagerRef make_transaction_manager(
   }
 
   auto journal_type = p_backend_type;
-  seastore_off_t roll_size;
-  seastore_off_t roll_start;
+  device_off_t roll_size;
+  device_off_t roll_start;
   if (journal_type == journal_type_t::SEGMENTED) {
     roll_size = static_cast<SegmentManager*>(primary_device)->get_segment_size();
     roll_start = 0;
@@ -654,6 +654,9 @@ TransactionManagerRef make_transaction_manager(
     // see CircularBoundedJournal::get_start_addr()
     roll_start = journal::CBJOURNAL_START_ADDRESS +
                  primary_device->get_block_size();
+    ceph_assert_always(roll_size <= DEVICE_OFF_MAX);
+    ceph_assert_always((std::size_t)roll_size + roll_start <=
+                       primary_device->get_available_size());
   }
   ceph_assert(roll_size % primary_device->get_block_size() == 0);
   ceph_assert(roll_start % primary_device->get_block_size() == 0);

@@ -125,8 +125,8 @@ BtreeBackrefManager::new_mapping(
     is_aligned(
       key.get_addr_type() == paddr_types_t::SEGMENT ?
 	key.as_seg_paddr().get_segment_off() :
-	key.as_blk_paddr().get_block_off(),
-      (uint64_t)cache.get_block_size()));
+	key.as_blk_paddr().get_device_off(),
+      cache.get_block_size()));
   struct state_t {
     paddr_t last_end;
 
@@ -322,7 +322,7 @@ BtreeBackrefManager::scan_mapped_space(
           c,
           btree.lower_bound(
             c,
-            paddr_t::make_seg_paddr(segment_id_t{0, 0}, 0),
+            P_ADDR_MIN,
             &tree_visitor),
           [c, &scan_visitor, block_size, FNAME](auto &pos) {
             if (pos.is_end()) {

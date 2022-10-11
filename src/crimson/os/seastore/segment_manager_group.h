@@ -50,12 +50,12 @@ public:
    *
    * Assume all segment managers share the same following information.
    */
-  seastore_off_t get_block_size() const {
+  extent_len_t get_block_size() const {
     assert(device_ids.size());
     return segment_managers[*device_ids.begin()]->get_block_size();
   }
 
-  seastore_off_t get_segment_size() const {
+  segment_off_t get_segment_size() const {
     assert(device_ids.size());
     return segment_managers[*device_ids.begin()]->get_segment_size();
   }

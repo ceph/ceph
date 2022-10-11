@@ -291,7 +291,7 @@ public:
   device_id_t get_device_id() const {
     return header.device_id;
   }
-  size_t get_block_size() const {
+  extent_len_t get_block_size() const {
     return header.block_size;
   }
   rbm_abs_addr get_journal_end() const {

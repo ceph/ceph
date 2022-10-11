@@ -58,6 +58,15 @@ namespace crimson::os::seastore::segment_manager::zns {
       }
       DENC_FINISH(p);
     }
+
+    void validate() const {
+      ceph_assert_always(size > 0);
+      ceph_assert_always(size <= DEVICE_OFF_MAX);
+      ceph_assert_always(segment_capacity > 0);
+      ceph_assert_always(segment_capacity <= SEGMENT_OFF_MAX);
+      ceph_assert_always(segments > 0);
+      ceph_assert_always(segments <= DEVICE_SEGMENT_ID_MAX);
+    }
   };
 
   using write_ertr = crimson::errorator<crimson::ct_error::input_output_error>;
@@ -70,18 +79,18 @@ namespace crimson::os::seastore::segment_manager::zns {
     ZNSSegment(ZNSSegmentManager &man, segment_id_t i) : manager(man), id(i){};
 
     segment_id_t get_segment_id() const final { return id; }
-    seastore_off_t get_write_capacity() const final;
-    seastore_off_t get_write_ptr() const final { return write_pointer; }
+    segment_off_t get_write_capacity() const final;
+    segment_off_t get_write_ptr() const final { return write_pointer; }
     close_ertr::future<> close() final;
-    write_ertr::future<> write(seastore_off_t offset, ceph::bufferlist bl) final;
-    write_ertr::future<> advance_wp(seastore_off_t offset) final;
+    write_ertr::future<> write(segment_off_t offset, ceph::bufferlist bl) final;
+    write_ertr::future<> advance_wp(segment_off_t offset) final;
 
     ~ZNSSegment() {}
   private:
     friend class ZNSSegmentManager;
     ZNSSegmentManager &manager;
     const segment_id_t id;
-    seastore_off_t write_pointer = 0;
+    segment_off_t write_pointer = 0;
     write_ertr::future<> write_padding_bytes(size_t padding_bytes);
   };
 
@@ -103,11 +112,11 @@ namespace crimson::os::seastore::segment_manager::zns {
       return metadata.size;
     };
 
-    seastore_off_t get_block_size() const final {
+    extent_len_t get_block_size() const final {
       return metadata.block_size;
     };
 
-    seastore_off_t get_segment_size() const final {
+    segment_off_t get_segment_size() const final {
       return metadata.segment_capacity;
     };
 
@@ -164,7 +173,7 @@ namespace crimson::os::seastore::segment_manager::zns {
     seastar::metrics::metric_group metrics;
 
     Segment::close_ertr::future<> segment_close(
-      segment_id_t id, seastore_off_t write_pointer);
+      segment_id_t id, segment_off_t write_pointer);
 
     uint64_t get_offset(paddr_t addr) {
       auto& seg_addr = addr.as_seg_paddr();

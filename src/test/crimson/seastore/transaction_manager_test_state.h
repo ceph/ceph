@@ -118,7 +118,8 @@ protected:
   {
     auto config =
       journal::CircularBoundedJournal::mkfs_config_t::get_default();
-    rb_device.reset(new random_block_device::TestMemory(config.total_size));
+    rb_device.reset(new random_block_device::TestMemory(
+          config.total_size + config.block_size));
     rb_device->set_device_id(
       1 << (std::numeric_limits<device_id_t>::digits - 1));
     return rb_device->mount().handle_error(crimson::ct_error::assert_all{}
@@ -325,8 +326,8 @@ public:
   }
 
   size_t get_available_size() const final { return sm.get_available_size(); }
-  seastore_off_t get_block_size() const final { return sm.get_block_size(); }
-  seastore_off_t get_segment_size() const final {
+  extent_len_t get_block_size() const final { return sm.get_block_size(); }
+  segment_off_t get_segment_size() const final {
     return sm.get_segment_size();
   }
   const seastore_meta_t &get_meta() const final {
