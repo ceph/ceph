@@ -277,15 +277,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             return HandleCommandResult(retval=-errno.EINVAL, stdout='', stderr=err_msg)
 
         try:
+            created_zones = []
             for rgw_spec in rgw_specs:
-                retval, out, err = RGWAM(self.env).zone_create(rgw_spec, start_radosgw)
-                if retval != 0:
-                    break
+                RGWAM(self.env).zone_create(rgw_spec, start_radosgw)
+                created_zones.append(rgw_spec.rgw_zone)
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
             return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
-        return HandleCommandResult(retval=retval, stdout=out, stderr=err)
+        return HandleCommandResult(retval=0, stdout=f"Zones {', '.join(created_zones)} created successfully")
 
     @CLICommand('rgw realm reconcile', perm='rw')
     def _cmd_rgw_realm_reconcile(self,
