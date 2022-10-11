@@ -17,6 +17,7 @@ from .fixtures import (
     mock_bad_firewalld,
 )
 
+from pyfakefs import fake_filesystem
 from pyfakefs import fake_filesystem_unittest
 
 with mock.patch('builtins.open', create=True):
@@ -2446,6 +2447,9 @@ class TestRescan(fake_filesystem_unittest.TestCase):
 
     def setUp(self):
         self.setUpPyfakefs()
+        if not fake_filesystem.is_root():
+            fake_filesystem.set_uid(0)
+
         self.fs.create_dir('/sys/class')
         self.ctx = cd.CephadmContext()
         self.ctx.func = cd.command_rescan_disks
