@@ -178,3 +178,6 @@ class RGWUser(JSONObj):
         self.keys.append(RGWAccessKey({'user': self.uid,
                                        'access_key': access_key,
                                        'secret_key': secret}))
+
+    def get_key(self, index):
+        return self.keys[index] if index < len(self.keys) else None
