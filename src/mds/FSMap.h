@@ -34,6 +34,22 @@
 #include "common/Formatter.h"
 #include "mds/mdstypes.h"
 
+#if __cplusplus <= 201703L
+template<class Key, class T, class Compare, class Alloc, class Pred>
+typename std::map<Key, T, Compare, Alloc>::size_type
+erase_if(std::map<Key, T, Compare, Alloc>& c, Pred pred) {
+  auto old_size = c.size();
+  for (auto i = c.begin(), last = c.end(); i != last; ) {
+    if (pred(*i)) {
+      i = c.erase(i);
+    } else {
+      ++i;
+    }
+  }
+  return old_size - c.size();
+}
+#endif
+
 class health_check_map_t;
 
 struct ClusterInfo {
@@ -259,19 +275,13 @@ public:
       return;
     }
 
-    for (auto &f : filesystems) {
-      string_view fs_name = f.second->mds_map.get_fs_name();
-      if (std::find(allowed.begin(), allowed.end(), fs_name) == allowed.end()) {
-	filesystems.erase(f.first);
-      }
-    }
+    erase_if(filesystems, [&](const auto& f) {
+      return std::find(allowed.begin(), allowed.end(), f.second->mds_map.get_fs_name()) == allowed.end();
+    });
 
-    for (auto r : mds_roles) {
-      string_view fs_name = fs_name_from_gid(r.first);
-      if (std::find(allowed.begin(), allowed.end(), fs_name) == allowed.end()) {
-	mds_roles.erase(r.first);
-      }
-    }
+    erase_if(mds_roles, [&](const auto& r) {
+      return std::find(allowed.begin(), allowed.end(), fs_name_from_gid(r.first)) == allowed.end();
+    });
   }
 
   void set_enable_multiple(const bool v)
