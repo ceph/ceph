@@ -353,6 +353,8 @@ void pretty_print(const RGWDataSyncEnv* env, T&& ...t) {
 /// Keep a running average of operation latency and scale concurrency
 /// down when latency rises.
 class LatencyConcurrencyControl : public LatencyMonitor {
+  static constexpr auto dout_subsys = ceph_subsys_rgw;
+  ceph::coarse_mono_time last_warning;
 public:
   CephContext* cct;
 
@@ -370,6 +372,14 @@ public:
     auto threshold = (cct->_conf->rgw_sync_lease_period * 1s) / 12;
 
     if (avg_latency() >= 2 * threshold) [[unlikely]] {
+      auto now = ceph::coarse_mono_clock::now();
+      if (now - last_warning > 5min) {
+        ldout(cct, -1)
+            << "WARNING: The OSD cluster is overloaded and struggling to "
+            << "complete ops. You need more capacity to serve this level "
+	    << "of demand." << dendl;
+	last_warning = now;
+      }
       return 1;
     } else if (avg_latency() >= threshold) [[unlikely]] {
       return concurrency / 2;
