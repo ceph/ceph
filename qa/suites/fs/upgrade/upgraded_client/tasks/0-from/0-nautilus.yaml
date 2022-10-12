@@ -18,6 +18,15 @@ tasks:
       - python-rgw
       - python-rbd
       - python-cephfs
+    # For kernel_untar_build workunit
+    extra_system_packages:
+      - bison
+      - flex
+      - elfutils-libelf-devel
+      - openssl-devel
+      - NetworkManager
+      - iproute
+      - util-linux
 - print: "**** done installing nautilus"
 - ceph:
     log-ignorelist:
