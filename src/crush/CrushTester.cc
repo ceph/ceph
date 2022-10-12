@@ -15,8 +15,13 @@
 #include "include/stringify.h"
 #include "CrushTester.h"
 #include "CrushTreeDumper.h"
+#include "common/ceph_context.h"
 #include "include/ceph_features.h"
+#include "common/debug.h"
 
+#define dout_subsys ceph_subsys_crush
+#undef dout_prefix
+#define dout_prefix *_dout << "CrushTester: "
 
 using std::cerr;
 using std::cout;
@@ -365,11 +370,12 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
   dst.push_back( data_buffer.str() );
 }
 
-int CrushTester::test_with_fork(int timeout)
+int CrushTester::test_with_fork(CephContext* cct, int timeout)
 {
+  ldout(cct, 20) << __func__ << dendl;
   ostringstream sink;
   int r = fork_function(timeout, sink, [&]() {
-      return test();
+      return test(cct);
     });
   if (r == -ETIMEDOUT) {
     err << "timed out during smoke test (" << timeout << " seconds)";
@@ -429,8 +435,9 @@ bool CrushTester::check_name_maps(unsigned max_id) const
   return true;
 }
 
-int CrushTester::test()
+int CrushTester::test(CephContext* cct)
 {
+  ldout(cct, 20) << dendl;
   if (min_rule < 0 || max_rule < 0) {
     min_rule = 0;
     max_rule = crush.get_max_rules() - 1;
@@ -477,6 +484,8 @@ int CrushTester::test()
     crush.start_choose_profile();
   
   for (int r = min_rule; r < crush.get_max_rules() && r <= max_rule; r++) {
+    ldout(cct, 20) << "rule: " << r << dendl;
+
     if (!crush.rule_exists(r)) {
       if (output_statistics)
         err << "rule " << r << " dne" << std::endl;
@@ -490,6 +499,8 @@ int CrushTester::test()
       << std::endl;
 
     for (int nr = min_rep; nr <= max_rep; nr++) {
+      ldout(cct, 20) << "current numrep: " << nr << dendl;
+
       vector<int> per(crush.get_max_devices());
       map<int,int> sizes;
 
@@ -635,6 +646,8 @@ int CrushTester::test()
           }
         }
 
+      ldout(cct, 20) << "output statistics created" << dendl;
+
       if (output_data_file)
         for (unsigned i = 0; i < per.size(); i++) {
           vector_data_buffer_f.clear();
@@ -655,10 +668,13 @@ int CrushTester::test()
         }
       }
 
+      ldout(cct, 20) << "output data file created" << dendl;
       string rule_tag = crush.get_rule_name(r);
 
       if (output_csv)
         write_data_set_to_csv(output_data_file_name+rule_tag,tester_data);
+
+      ldout(cct, 20) << "successfully written csv" << dendl;
     }
   }
 
