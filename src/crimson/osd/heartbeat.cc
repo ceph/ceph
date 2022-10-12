@@ -488,11 +488,19 @@ Heartbeat::Session::failed_since(Heartbeat::clock::time_point now) const
     auto oldest_deadline = ping_history.begin()->second.deadline;
     auto failed_since = std::min(last_rx_back, last_rx_front);
     if (clock::is_zero(failed_since)) {
-      logger().error("Heartbeat::Session::failed_since(): no reply from osd.{} "
-                     "ever on either front or back, first ping sent {} "
-                     "(oldest deadline {})",
-                     peer, first_tx, oldest_deadline);
-      failed_since = first_tx;
+        if (last_rx_front == last_rx_back) {
+            logger().error("Heartbeat::Session::failed_since(): no reply from osd.{} "
+                           "ever on both front and back, first ping sent {} "
+                           "(oldest deadline {})",
+                           peer, first_tx, oldest_deadline);
+            failed_since = clock::zero() + std::chrono::seconds(1);
+        } else {
+            logger().error("Heartbeat::Session::failed_since(): no reply from osd.{} "
+                           "ever on either front or back, first ping sent {} "
+                           "(oldest deadline {})",
+                           peer, first_tx, oldest_deadline);
+            failed_since = first_tx;
+        }
     } else {
       logger().error("Heartbeat::Session::failed_since(): no reply from osd.{} "
                      "since back {} front {} (oldest deadline {})",

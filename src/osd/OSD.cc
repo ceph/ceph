@@ -5841,7 +5841,18 @@ void OSD::heartbeat_check()
 	     << dendl;
     if (p->second.is_unhealthy(now)) {
       utime_t oldest_deadline = p->second.ping_history.begin()->second.first;
-      if (p->second.last_rx_back == utime_t() ||
+      if (p->second.last_rx_back == utime_t() &&
+          p->second.last_rx_front == utime_t()) {
+        derr << "heartbeat_check: no reply from "
+             << p->second.con_front->get_peer_addr().get_sockaddr()
+             << " osd." << p->first
+             << " ever on both front and back, first ping sent "
+             << p->second.first_tx
+             << " (oldest deadline " << oldest_deadline << ")"
+             << dendl;
+        // fail
+        failure_queue[p->first] = utime_t() + utime_t(1,0);
+      } else if (p->second.last_rx_back == utime_t() ||
 	  p->second.last_rx_front == utime_t()) {
         derr << "heartbeat_check: no reply from "
              << p->second.con_front->get_peer_addr().get_sockaddr()
