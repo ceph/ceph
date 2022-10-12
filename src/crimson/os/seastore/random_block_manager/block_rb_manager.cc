@@ -16,34 +16,35 @@ SET_SUBSYS(seastore_device);
 
 namespace crimson::os::seastore {
 
-BlockRBManager::mkfs_ertr::future<> BlockRBManager::mkfs(mkfs_config_t config)
+device_config_t get_rbm_ephemeral_device_config(
+    std::size_t index, std::size_t num_devices)
 {
-  LOG_PREFIX(BlockRBManager::mkfs);
-  super.uuid = uuid_d(); // TODO
-  super.magic = 0xFF; // TODO
-  super.start = convert_paddr_to_abs_addr(
-    config.start);
-  super.end = convert_paddr_to_abs_addr(
-    config.end);
-  super.block_size = config.block_size;
-  super.size = config.total_size;
-  super.start_data_area = 0;
-  super.crc = 0;
-  super.feature |= RBM_BITMAP_BLOCK_CRC;
-  super.device_id = config.device_id;
+  assert(num_devices > index);
+  magic_t magic = 0xfffa;
+  auto type = device_type_t::RANDOM_BLOCK_EPHEMERAL;
+  bool is_major_device;
+  secondary_device_set_t secondary_devices;
+  if (index == 0) {
+    is_major_device = true;
+    for (std::size_t secondary_index = index + 1;
+         secondary_index < num_devices;
+         ++secondary_index) {
+      device_id_t secondary_id = static_cast<device_id_t>(secondary_index);
+      secondary_devices.insert({
+        secondary_index, device_spec_t{magic, type, secondary_id}
+      });
+    }
+  } else { // index > 0
+    is_major_device = false;
+  }
 
-  DEBUG("super {} ", super);
-  // write super block
-  return write_rbm_header(
-  ).safe_then([] {
-    return mkfs_ertr::now();
-  }).handle_error(
-    mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-    "Invalid error write_rbm_header in BlockRBManager::mkfs"
-  });
+  device_id_t id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN + index);
+  seastore_meta_t meta = {};
+  return {is_major_device,
+          device_spec_t{magic, type, id},
+          meta,
+          secondary_devices};
 }
-
 
 /* TODO : block allocator */
 BlockRBManager::allocate_ret BlockRBManager::alloc_extent(
@@ -83,13 +84,9 @@ BlockRBManager::write_ertr::future<> BlockRBManager::complete_allocation(
 
 BlockRBManager::open_ertr::future<> BlockRBManager::open()
 {
-  return read_rbm_header(RBM_START_ADDRESS
+  return device->read_rbm_header(RBM_START_ADDRESS
   ).safe_then([&](auto s)
     -> open_ertr::future<> {
-    if (s.magic != 0xFF) {
-      return crimson::ct_error::enoent::make();
-    }
-    super = s;
     return open_ertr::now();
   }).handle_error(
     open_ertr::pass_further{},
@@ -103,10 +100,14 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
   paddr_t paddr,
   bufferptr &bptr)
 {
+  LOG_PREFIX(BlockRBManager::write);
   ceph_assert(device);
   rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
-  if (addr > super.end || addr < super.start ||
-      bptr.length() > super.end - super.start) {
+  rbm_abs_addr start = 0;
+  rbm_abs_addr end = device->get_available_size();
+  if (addr < start || addr + bptr.length() > end) {
+    ERROR("out of range: start {}, end {}, addr {}, length {}",
+      start, end, addr, bptr.length());
     return crimson::ct_error::erange::make();
   }
   return device->write(
@@ -118,10 +119,14 @@ BlockRBManager::read_ertr::future<> BlockRBManager::read(
   paddr_t paddr,
   bufferptr &bptr)
 {
+  LOG_PREFIX(BlockRBManager::read);
   ceph_assert(device);
   rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
-  if (addr > super.end || addr < super.start ||
-      bptr.length() > super.end - super.start) {
+  rbm_abs_addr start = 0;
+  rbm_abs_addr end = device->get_available_size();
+  if (addr < start || addr + bptr.length() > end) {
+    ERROR("out of range: start {}, end {}, addr {}, length {}",
+      start, end, addr, bptr.length());
     return crimson::ct_error::erange::make();
   }
   return device->read(
@@ -135,82 +140,6 @@ BlockRBManager::close_ertr::future<> BlockRBManager::close()
   return device->close();
 }
 
-
-BlockRBManager::write_ertr::future<> BlockRBManager::write_rbm_header()
-{
-  bufferlist meta_b_header;
-  super.crc = 0;
-  encode(super, meta_b_header);
-  // If NVMeDevice supports data protection, CRC for checksum is not required
-  // NVMeDevice is expected to generate and store checksum internally.
-  // CPU overhead for CRC might be saved.
-  if (device->is_data_protection_enabled()) {
-    super.crc = -1;
-  }
-  else {
-    super.crc = meta_b_header.crc32c(-1);
-  }
-
-  bufferlist bl;
-  encode(super, bl);
-  auto iter = bl.begin();
-  auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
-  assert(bl.length() < super.block_size);
-  iter.copy(bl.length(), bp.c_str());
-
-  return device->write(super.start, bp);
-}
-
-BlockRBManager::read_ertr::future<rbm_metadata_header_t> BlockRBManager::read_rbm_header(
-    rbm_abs_addr addr)
-{
-  LOG_PREFIX(BlockRBManager::read_rbm_header);
-  ceph_assert(device);
-  bufferptr bptr =
-    bufferptr(ceph::buffer::create_page_aligned(RBM_SUPERBLOCK_SIZE));
-  bptr.zero();
-  return device->read(
-    addr,
-    bptr
-  ).safe_then([length=bptr.length(), this, bptr, FNAME]()
-    -> read_ertr::future<rbm_metadata_header_t> {
-    bufferlist bl;
-    bl.append(bptr);
-    auto p = bl.cbegin();
-    rbm_metadata_header_t super_block;
-    try {
-      decode(super_block, p);
-    }
-    catch (ceph::buffer::error& e) {
-      DEBUG("read_rbm_header: unable to decode rbm super block {}",
-	    e.what());
-      return crimson::ct_error::enoent::make();
-    }
-    checksum_t crc = super_block.crc;
-    bufferlist meta_b_header;
-    super_block.crc = 0;
-    encode(super_block, meta_b_header);
-
-    // Do CRC verification only if data protection is not supported.
-    if (device->is_data_protection_enabled() == false) {
-      if (meta_b_header.crc32c(-1) != crc) {
-        DEBUG("bad crc on super block, expected {} != actual {} ",
-              meta_b_header.crc32c(-1), crc);
-        return crimson::ct_error::input_output_error::make();
-      }
-    }
-    DEBUG("got {} ", super);
-    return read_ertr::future<rbm_metadata_header_t>(
-      read_ertr::ready_future_marker{},
-      super_block
-    );
-  }).handle_error(
-    read_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in BlockRBManager::read_rbm_header"
-    }
-  );
-}
 
 BlockRBManager::write_ertr::future<> BlockRBManager::write(
   rbm_abs_addr addr,

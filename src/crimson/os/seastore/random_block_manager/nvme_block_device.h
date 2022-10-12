@@ -207,10 +207,6 @@ public:
     uint64_t offset,
     uint64_t len) override;
 
-  mkfs_ret mkfs(device_config_t) final {
-    return mkfs_ertr::now();
-  }
-
   mount_ret mount() final {
     return mount_ertr::now();
   }

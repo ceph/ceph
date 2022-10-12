@@ -23,23 +23,41 @@
 
 namespace crimson::os::seastore {
 
+struct rbm_metadata_header_t {
+  size_t size = 0;
+  size_t block_size = 0;
+  uint64_t start; // start location of the device
+  uint64_t end;   // end location of the device
+  uint64_t magic; // to indicate randomblock_manager
+  uuid_d uuid;
+  uint32_t start_data_area;
+  uint64_t flag; // reserved
+  uint64_t feature;
+  device_id_t device_id;
+  checksum_t crc;
+
+  DENC(rbm_metadata_header_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.size, p);
+    denc(v.block_size, p);
+    denc(v.start, p);
+    denc(v.end, p);
+    denc(v.magic, p);
+    denc(v.uuid, p);
+    denc(v.start_data_area, p);
+    denc(v.flag, p);
+    denc(v.feature, p);
+    denc(v.device_id, p);
+
+    denc(v.crc, p);
+    DENC_FINISH(p);
+  }
+
+};
+
+class Device;
 class RandomBlockManager {
 public:
-
-  struct mkfs_config_t {
-    std::string path;
-    paddr_t start;
-    paddr_t end;
-    size_t block_size = 0;
-    size_t total_size = 0;
-    device_id_t device_id = 0;
-    seastore_meta_t meta;
-  };
-  using mkfs_ertr = crimson::errorator<
-	crimson::ct_error::input_output_error,
-	crimson::ct_error::invarg
-	>;
-  virtual mkfs_ertr::future<> mkfs(mkfs_config_t) = 0;
 
   using read_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
@@ -109,4 +127,9 @@ inline rbm_abs_addr convert_paddr_to_abs_addr(const paddr_t& paddr) {
 inline paddr_t convert_abs_addr_to_paddr(rbm_abs_addr addr, device_id_t d_id) {
   return paddr_t::make_blk_paddr(d_id, addr);
 }
+std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header);
 }
+
+WRITE_CLASS_DENC_BOUNDED(
+  crimson::os::seastore::rbm_metadata_header_t
+)
