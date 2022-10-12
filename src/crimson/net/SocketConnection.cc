@@ -143,6 +143,7 @@ seastar::socket_address SocketConnection::get_local_address() const {
 }
 
 void SocketConnection::print(ostream& out) const {
+    out << (void*)this << " ";
     messenger.print(out);
     if (!protocol->socket) {
       out << " >> " << get_peer_name() << " " << peer_addr;
