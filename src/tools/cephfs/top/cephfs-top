@@ -651,6 +651,10 @@ class FSTop(object):
                             num_clients=num_clients, num_mounts=num_mounts,
                             num_kclients=num_kclients, num_libs=num_libs), hlen)
         self.header.addnstr(2, 0, headline, hlen)
+        if not stats_json[CLIENT_METADATA_KEY] or not stats_json[GLOBAL_METRICS_KEY]:
+            self.topl.refresh()
+            self.mainw.refresh()
+            self.header.addstr(3, 0, "Waiting for metrics...", curses.A_BOLD | curses.A_BLINK)
         self.header.refresh()
         return True
 
@@ -744,8 +748,10 @@ class FSTop(object):
                         headline = "HELP: All filesystem info"\
                             " [Press 'm' to select a filesystem and 'q' to quit]"
                         if self.refresh_header(stats_json, headline):
-                            x_coord_map = self.refresh_top_line_and_build_coord()
-                            self.refresh_main_window(x_coord_map, stats_json, fs)
+                            if stats_json[CLIENT_METADATA_KEY] \
+                               and stats_json[GLOBAL_METRICS_KEY]:
+                                x_coord_map = self.refresh_top_line_and_build_coord()
+                                self.refresh_main_window(x_coord_map, stats_json, fs)
                 curses.halfdelay(self.refresh_interval_secs * 10)
                 c = self.header.getch()
                 if c in [ord('m'), ord('q')]:
