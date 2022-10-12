@@ -230,9 +230,8 @@ class ContainerEngine:
     def __init__(self) -> None:
         self.path = find_program(self.EXE)
 
-    @classmethod
     @property
-    def EXE(cls) -> str:
+    def EXE(self) -> str:
         raise NotImplementedError()
 
     def __str__(self) -> str:
