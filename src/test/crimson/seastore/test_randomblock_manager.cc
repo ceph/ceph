@@ -46,24 +46,18 @@ struct rbm_test_t :
 
   const uint64_t block_size = DEFAULT_BLOCK_SIZE;
 
-  RandomBlockManager::mkfs_config_t config;
+  device_config_t config;
   paddr_t current;
 
   rbm_test_t() = default;
 
   seastar::future<> set_up_fut() final {
     device.reset(new random_block_device::TestMemory(DEFAULT_TEST_SIZE));
-    device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
-    device->set_device_id(d_id);
     rbm_manager.reset(new BlockRBManager(device.get(), std::string()));
-    config.start = paddr_t::make_blk_paddr(d_id, 0);
-    config.end = paddr_t::make_blk_paddr(d_id, DEFAULT_TEST_SIZE);
-    config.block_size = DEFAULT_BLOCK_SIZE;
-    config.total_size = DEFAULT_TEST_SIZE;
-    config.device_id = d_id;
+    config = get_rbm_ephemeral_device_config(0, 1);
     return device->mount().handle_error(crimson::ct_error::assert_all{}
     ).then([this] {
-      return rbm_manager->mkfs(config).handle_error(crimson::ct_error::assert_all{}
+      return device->mkfs(config).handle_error(crimson::ct_error::assert_all{}
       ).then([this] {
 	return rbm_manager->open().handle_error(crimson::ct_error::assert_all{});
       });
@@ -79,12 +73,11 @@ struct rbm_test_t :
   }
 
   auto mkfs() {
-    return rbm_manager->mkfs(config).unsafe_get0();
+    return device->mkfs(config).unsafe_get0();
   }
 
   auto read_rbm_header() {
-    rbm_abs_addr addr = convert_paddr_to_abs_addr(config.start);
-    return rbm_manager->read_rbm_header(addr).unsafe_get0();
+    return device->read_rbm_header(RBM_START_ADDRESS).unsafe_get0();
   }
 
   auto open() {
@@ -130,7 +123,7 @@ TEST_F(rbm_test_t, mkfs_test)
        super.block_size == DEFAULT_BLOCK_SIZE &&
        super.end == DEFAULT_TEST_SIZE 
    );
-   config.block_size = 8196;
+   device->set_block_size(8196);
    mkfs();
    super = read_rbm_header();
    ASSERT_TRUE(

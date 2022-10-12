@@ -18,6 +18,106 @@ namespace {
     return crimson::get_logger(ceph_subsys_seastore_tm);
   }
 }
+namespace crimson::os::seastore::random_block_device {
+#include "crimson/os/seastore/logging.h"
+SET_SUBSYS(seastore_device);
+
+RBMDevice::mkfs_ret RBMDevice::mkfs(device_config_t config) {
+  LOG_PREFIX(RBMDevice::mkfs);
+  super.start = 0;
+  super.end = get_available_size();
+  super.block_size = get_block_size();
+  super.size = get_available_size();
+
+  super.start_data_area = 0;
+  super.feature |= RBM_BITMAP_BLOCK_CRC;
+  super.device_id = config.spec.id;
+  DEBUG("super {} ", super);
+  // write super block
+  return write_rbm_header(
+  ).safe_then([] {
+    return mkfs_ertr::now();
+  }).handle_error(
+    mkfs_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+    "Invalid error write_rbm_header in RBMDevice::mkfs"
+  });
+}
+
+write_ertr::future<> RBMDevice::write_rbm_header()
+{
+  bufferlist meta_b_header;
+  super.crc = 0;
+  encode(super, meta_b_header);
+  // If NVMeDevice supports data protection, CRC for checksum is not required
+  // NVMeDevice is expected to generate and store checksum internally.
+  // CPU overhead for CRC might be saved.
+  if (is_data_protection_enabled()) {
+    super.crc = -1;
+  } else {
+    super.crc = meta_b_header.crc32c(-1);
+  }
+
+  bufferlist bl;
+  encode(super, bl);
+  auto iter = bl.begin();
+  auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
+  assert(bl.length() < super.block_size);
+  iter.copy(bl.length(), bp.c_str());
+
+  return write(super.start, bp);
+}
+
+read_ertr::future<rbm_metadata_header_t> RBMDevice::read_rbm_header(
+  rbm_abs_addr addr)
+{
+  LOG_PREFIX(RBMDevice::read_rbm_header);
+  bufferptr bptr =
+    bufferptr(ceph::buffer::create_page_aligned(RBM_SUPERBLOCK_SIZE));
+  bptr.zero();
+  return read(
+    addr,
+    bptr
+  ).safe_then([length=bptr.length(), this, bptr, FNAME]()
+    -> read_ertr::future<rbm_metadata_header_t> {
+    bufferlist bl;
+    bl.append(bptr);
+    auto p = bl.cbegin();
+    rbm_metadata_header_t super_block;
+    try {
+      decode(super_block, p);
+    }
+    catch (ceph::buffer::error& e) {
+      DEBUG("read_rbm_header: unable to decode rbm super block {}",
+	    e.what());
+      return crimson::ct_error::enoent::make();
+    }
+    checksum_t crc = super_block.crc;
+    bufferlist meta_b_header;
+    super_block.crc = 0;
+    encode(super_block, meta_b_header);
+
+    // Do CRC verification only if data protection is not supported.
+    if (is_data_protection_enabled() == false) {
+      if (meta_b_header.crc32c(-1) != crc) {
+	DEBUG("bad crc on super block, expected {} != actual {} ",
+	      meta_b_header.crc32c(-1), crc);
+	return crimson::ct_error::input_output_error::make();
+      }
+    } else {
+      ceph_assert_always(crc == (checksum_t)-1);
+    }
+    super_block.crc = crc;
+    super = super_block;
+    DEBUG("got {} ", super);
+    return read_ertr::future<rbm_metadata_header_t>(
+      read_ertr::ready_future_marker{},
+      super_block
+    );
+  });
+}
+
+}
 
 namespace crimson::os::seastore::random_block_device::nvme {
 

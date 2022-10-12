@@ -65,6 +65,13 @@ using nvme_command_ertr = crimson::errorator<
 using discard_ertr = crimson::errorator<
   crimson::ct_error::input_output_error>;
 
+constexpr uint32_t RBM_SUPERBLOCK_SIZE = 4096;
+enum {
+  // TODO: This allows the device to manage crc on a block by itself
+  RBM_NVME_END_TO_END_PROTECTION = 1,
+  RBM_BITMAP_BLOCK_CRC = 2,
+};
+
 class RBMDevice : public Device {
 public:
   using Device::read;
@@ -84,6 +91,7 @@ protected:
   device_id_t device_id;
   seastore_meta_t meta;
   secondary_device_set_t devices;
+  rbm_metadata_header_t super;
 public:
   RBMDevice() {}
   virtual ~RBMDevice() = default;
@@ -98,6 +106,10 @@ public:
   }
   void set_device_id(device_id_t id) {
     device_id = id;
+  }
+
+  void set_block_size(uint64_t bs) {
+    block_size = bs;
   }
 
   magic_t get_magic() const final {
@@ -152,6 +164,12 @@ public:
     uint16_t stream = 0) = 0;
 
   bool is_data_protection_enabled() const { return false; }
+
+  mkfs_ret mkfs(device_config_t) final;
+
+  write_ertr::future<> write_rbm_header();
+
+  read_ertr::future<rbm_metadata_header_t> read_rbm_header(rbm_abs_addr addr);
 };
 
 
@@ -166,10 +184,6 @@ public:
       ::munmap(buf, size);
       buf = nullptr;
     }
-  }
-
-  mkfs_ret mkfs(device_config_t) final {
-    return mkfs_ertr::now();
   }
 
   mount_ret mount() final {
