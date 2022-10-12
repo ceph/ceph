@@ -1157,10 +1157,13 @@ class FailoverSuite : public Dispatcher {
   }
 
   seastar::future<> markdown() {
-    logger().info("[Test] markdown()");
+    logger().info("[Test] markdown() in 100ms ...");
     ceph_assert(tracked_conn);
-    tracked_conn->mark_down();
-    return seastar::now();
+    // sleep to propagate potential remaining acks
+    return seastar::sleep(100ms
+    ).then([this] {
+      tracked_conn->mark_down();
+    });
   }
 
   seastar::future<> wait_blocked() {
@@ -1390,8 +1393,12 @@ class FailoverTest : public Dispatcher {
   }
 
   seastar::future<> markdown_peer() {
-    logger().info("[Test] markdown_peer()");
-    return prepare_cmd(cmd_t::suite_markdown).then([] {
+    logger().info("[Test] markdown_peer() in 150ms ...");
+    // sleep to propagate potential remaining acks
+    return seastar::sleep(50ms
+    ).then([this] {
+      return prepare_cmd(cmd_t::suite_markdown);
+    }).then([] {
       // sleep awhile for peer markdown propagated
       return seastar::sleep(100ms);
     });
@@ -3198,8 +3205,6 @@ test_v2_peer_reuse_connector(FailoverTest& test) {
       logger().info("-- 2 --");
       logger().info("[Test] acceptor markdown...");
       return test.markdown_peer();
-    }).then([] {
-      return seastar::sleep(100ms);
     }).then([&suite] {
       ceph_assert(suite.is_standby());
       logger().info("-- 3 --");
@@ -3262,11 +3267,9 @@ test_v2_peer_reuse_acceptor(FailoverTest& test) {
       results[1].assert_connect(0, 0, 0, 0);
       results[1].assert_accept(1, 1, 0, 0);
       results[1].assert_reset(0, 0);
-    }).then([] {
+    }).then([&suite] {
       logger().info("-- 2 --");
       logger().info("[Test] acceptor markdown...");
-      return seastar::sleep(100ms);
-    }).then([&suite] {
       return suite.markdown();
     }).then([&suite] {
       return suite.wait_results(2);
@@ -3348,8 +3351,6 @@ test_v2_lossless_peer_connector(FailoverTest& test) {
       logger().info("-- 2 --");
       logger().info("[Test] acceptor markdown...");
       return test.markdown_peer();
-    }).then([] {
-      return seastar::sleep(100ms);
     }).then([&suite] {
       ceph_assert(suite.is_standby());
       logger().info("-- 3 --");
@@ -3412,11 +3413,9 @@ test_v2_lossless_peer_acceptor(FailoverTest& test) {
       results[1].assert_connect(0, 0, 0, 0);
       results[1].assert_accept(1, 1, 0, 0);
       results[1].assert_reset(0, 0);
-    }).then([] {
+    }).then([&suite] {
       logger().info("-- 2 --");
       logger().info("[Test] acceptor markdown...");
-      return seastar::sleep(100ms);
-    }).then([&suite] {
       return suite.markdown();
     }).then([&suite] {
       return suite.wait_results(2);
