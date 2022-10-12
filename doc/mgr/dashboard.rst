@@ -1235,6 +1235,23 @@ code of standby dashboards. To do so you need to run the command:
 
    ceph config set mgr mgr/dashboard/standby_error_status_code 503
 
+Resolve IP address to hostname before redirect
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The redirect from a standby to the active dashboard is done via the IP
+address. This is done because resolving IP addresses to hostnames can be error
+prone in containerized environments. It is also the reason why the option is
+disabled by default.
+However, in some situations it might be helpful to redirect via the hostname.
+For example if the configured TLS certificate matches only the hostnames. To
+activate the redirection via the hostname run the following command::
+
+  $ ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr True
+
+You can disable it again by::
+
+  $ ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr False
+
 HAProxy example configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
