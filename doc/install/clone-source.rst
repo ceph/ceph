@@ -92,7 +92,7 @@ Updating Submodules
 
       git status
 
-   #. If your submodules are up to date 
+   A. If your submodules are up to date 
          If your submodules are up to date, the following console output will
          appear: 
 
@@ -107,7 +107,7 @@ Updating Submodules
          You do not need this procedure.
 
 
-   #. If your submodules are not up to date 
+   B. If your submodules are not up to date 
          If your submodules are not up to date, you will see a message that
          includes a list of "untracked files". The example here shows such a
          list, which was generated from a real situation in which the
