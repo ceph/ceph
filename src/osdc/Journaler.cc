@@ -1292,7 +1292,7 @@ void Journaler::wait_for_readable(Context *onreadable)
   }
 
   ceph_assert(on_readable == 0);
-  if (!readable) {
+  if (!readable && read_pos < write_pos) {
     ldout(cct, 10) << "wait_for_readable at " << read_pos << " onreadable "
 		   << onreadable << dendl;
     on_readable = wrap_finisher(onreadable);
