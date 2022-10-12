@@ -13401,7 +13401,7 @@ void MDCache::upkeep_main(void)
         if (active_with_clients) {
           trim_client_leases();
         }
-        if (is_open()) {
+        if (is_open() || mds->is_standby_replay()) {
           trim();
         }
         if (active_with_clients) {
