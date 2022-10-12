@@ -402,7 +402,7 @@ public:
 
   /// Returns true if extent or prior_instance has been invalidated
   bool has_been_invalidated() const {
-    return !is_valid() || (prior_instance && !prior_instance->is_valid());
+    return !is_valid() || (is_mutation_pending() && !prior_instance->is_valid());
   }
 
   /// Returns true if extent is a plcaeholder
