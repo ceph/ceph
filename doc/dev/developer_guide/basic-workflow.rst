@@ -201,6 +201,9 @@ upstream repository:
 This procedure should be followed often, in order to keep your local ``main``
 in sync with upstream ``main``.
 
+If the command ``git status`` returns a line that reads "Untracked files", see
+:ref:`the procedure on updating submodules <update-submodules>`.
+
 .. _bugfix_branch:
 
 Creating a Bugfix branch
