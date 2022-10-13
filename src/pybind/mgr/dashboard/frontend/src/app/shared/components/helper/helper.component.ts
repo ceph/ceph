@@ -12,6 +12,9 @@ export class HelperComponent {
   class: string;
 
   @Input()
+  iconClass = '';
+
+  @Input()
   html: any;
 
   icons = Icons;

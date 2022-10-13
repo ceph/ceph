@@ -5,14 +5,14 @@
   <cd-notifications-sidebar></cd-notifications-sidebar>
   <div class="cd-navbar-top">
     <nav class="navbar navbar-expand-md navbar-dark cd-navbar-brand">
-      <button class="btn btn-link py-0"
+      <button class="btn btn-link py-0 ms-3"
               (click)="showMenuSidebar = !showMenuSidebar"
               aria-label="toggle sidebar visibility">
         <i class="fa fa-bars fa-2x"
            aria-hidden="true"></i>
       </button>
 
-      <a class="navbar-brand ml-2"
+      <a class="navbar-brand ms-2"
          href="#">
         <img src="assets/Ceph_Ceph_Logo_with_text_white.svg"
              alt="Ceph" />
@@ -169,9 +169,9 @@
             <a routerLink="/monitoring">
               <ng-container i18n>Monitoring</ng-container>
               <small *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
-                     class="badge badge-danger ml-1">{{ prometheusAlertService.activeCriticalAlerts }}</small>
+                     class="badge badge-danger ms-1">{{ prometheusAlertService.activeCriticalAlerts }}</small>
               <small *ngIf="prometheusAlertService.activeWarningAlerts > 0"
-                     class="badge badge-warning ml-1">{{ prometheusAlertService.activeWarningAlerts }}</small>
+                     class="badge badge-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</small>
             </a>
           </li>
         </ul>

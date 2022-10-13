@@ -14,7 +14,7 @@
                  for="name"
                  i18n>Name</label>
           <div class="cd-col-form-input">
-            <select class="form-control"
+            <select class="form-select"
                     id="name"
                     formControlName="name"
                     name="name">
@@ -40,11 +40,11 @@
             <input id="value"
                    (focus)="valueFocus.next($any($event).target.value)"
                    (click)="valueClick.next($any($event).target.value)"
-                   container="body"
                    class="form-control"
                    type="text"
                    [ngbTypeahead]="search"
-                   formControlName="value">
+                   formControlName="value"
+                   #instance="ngbTypeahead">
             <span *ngIf="form.showError('value', formDir, 'required')"
                   class="help-block"
                   i18n>This field is required!</span>
