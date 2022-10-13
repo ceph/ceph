@@ -1064,6 +1064,9 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
 	any_finished = true;
 	if (header->get_repaired())
 	  any_repaired = true;
+	auto& ufi = header->get_uninline_failed_info();
+	uninline_failed_meta_info[it->first] = ufi;
+	ufi.clear();
 	scrubbing_map.erase(it++);
       } else {
 	++it;
@@ -1087,7 +1090,32 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
       stat.epoch_acked = m->get_epoch();
       stat.scrubbing_tags = m->get_scrubbing_tags();
       stat.aborting = m->is_aborting();
+      for (auto& [scrub_tag, errno_map] : m->get_uninline_failed_meta_info()) {
+	stat.uninline_failed_meta_info[scrub_tag] = errno_map;
+      }
     }
+  }
+}
+
+void ScrubStack::move_uninline_failures_to_damage_table()
+{
+  auto mds = mdcache->mds;
+
+  for (mds_rank_t rank = 0; rank < (mds_rank_t)mds_scrub_stats.size(); rank++) {
+    auto& ufmi = mds_scrub_stats[rank].uninline_failed_meta_info;
+
+    for (const auto& [scrub_tag, errno_ino_vec_map] : ufmi) {
+      for (const auto& [errno_, ino_vec] : errno_ino_vec_map) {
+	for (auto ino : ino_vec) {
+	  std::string path;
+	  auto in = mdcache->get_inode(ino);
+	  ceph_assert(in);
+	  in->make_path_string(path);
+	  mds->damage_table.notify_uninline_failed(ino, rank, errno_, scrub_tag, path);
+	}
+      }
+    }
+    ufmi.clear();
   }
 }
 
@@ -1154,6 +1182,9 @@ void ScrubStack::advance_scrub_status()
       any_finished = true;
       if (header->get_repaired())
 	any_repaired = true;
+      auto& ufmi = mds_scrub_stats[0].uninline_failed_meta_info;
+      ufmi[it->first] = header->get_uninline_failed_info();
+      move_uninline_failures_to_damage_table();
       scrubbing_map.erase(it++);
     } else {
       ++it;
