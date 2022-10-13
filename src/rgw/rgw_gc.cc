@@ -64,7 +64,57 @@ int RGWGC::tag_index(const string& tag)
   return rgw_shards_mod(XXH64(tag.c_str(), tag.size(), seed), max_objs);
 }
 
-int RGWGC::send_chain(cls_rgw_obj_chain& chain, const string& tag)
+std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag)
+{
+  ldpp_dout(this, 20) << "RGWGC::send_split_chain - tag is: " << tag << dendl;
+
+  if (cct->_conf->rgw_max_chunk_size) {
+    cls_rgw_obj_chain broken_chain;
+    ldpp_dout(this, 20) << "RGWGC::send_split_chain - rgw_max_chunk_size is: " << cct->_conf->rgw_max_chunk_size << dendl;
+
+    for (auto it = chain.objs.begin(); it != chain.objs.end(); it++) {
+      ldpp_dout(this, 20) << "RGWGC::send_split_chain - adding obj with name: " << it->key << dendl;
+      broken_chain.objs.emplace_back(*it);
+      cls_rgw_gc_obj_info info;
+      info.tag = tag;
+      info.chain = broken_chain;
+      cls_rgw_gc_set_entry_op op;
+      op.info = info;
+      size_t total_encoded_size = op.estimate_encoded_size();
+      ldpp_dout(this, 20) << "RGWGC::send_split_chain - total_encoded_size is: " << total_encoded_size << dendl;
+
+      if (total_encoded_size > cct->_conf->rgw_max_chunk_size) { //dont add to chain, and send to gc
+        broken_chain.objs.pop_back();
+        --it;
+        ldpp_dout(this, 20) << "RGWGC::send_split_chain - more than, dont add to broken chain and send chain" << dendl;
+        auto ret = send_chain(broken_chain, tag);
+        if (ret < 0) {
+          broken_chain.objs.insert(broken_chain.objs.end(), it, chain.objs.end()); // add all the remainder objs to the list to be deleted inline
+          ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
+          return {ret, {broken_chain}};
+        }
+        broken_chain.objs.clear();
+      }
+    }
+    if (!broken_chain.objs.empty()) { //when the chain is smaller than or equal to rgw_max_chunk_size
+      ldpp_dout(this, 20) << "RGWGC::send_split_chain - sending leftover objects" << dendl;
+      auto ret = send_chain(broken_chain, tag);
+      if (ret < 0) {
+        ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
+        return {ret, {broken_chain}};
+      }
+    }
+  } else {
+    auto ret = send_chain(chain, tag);
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
+      return {ret, {std::move(chain)}};
+    }
+  }
+  return {0, {}};
+}
+
+int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag)
 {
   ObjectWriteOperation op;
   cls_rgw_gc_obj_info info;
