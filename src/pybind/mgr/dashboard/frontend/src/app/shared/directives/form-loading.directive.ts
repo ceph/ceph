@@ -1,5 +1,4 @@
 import {
-  ComponentFactoryResolver,
   Directive,
   Input,
   TemplateRef,
@@ -16,29 +15,25 @@ import { LoadingStatus } from '../forms/cd-form';
 export class FormLoadingDirective {
   constructor(
     private templateRef: TemplateRef<any>,
-    private viewContainer: ViewContainerRef,
-    private componentFactoryResolver: ComponentFactoryResolver
+    private viewContainer: ViewContainerRef
   ) {}
 
   @Input('cdFormLoading') set cdFormLoading(condition: LoadingStatus) {
-    let factory: any;
     let content: any;
 
     this.viewContainer.clear();
 
     switch (condition) {
       case LoadingStatus.Loading:
-        factory = this.componentFactoryResolver.resolveComponentFactory(LoadingPanelComponent);
         content = this.resolveNgContent($localize`Loading form data...`);
-        this.viewContainer.createComponent(factory, null, null, content);
+        this.viewContainer.createComponent(LoadingPanelComponent, {projectableNodes: content});
         break;
       case LoadingStatus.Ready:
         this.viewContainer.createEmbeddedView(this.templateRef);
         break;
       case LoadingStatus.Error:
-        factory = this.componentFactoryResolver.resolveComponentFactory(AlertPanelComponent);
         content = this.resolveNgContent($localize`Form data could not be loaded.`);
-        const componentRef = this.viewContainer.createComponent(factory, null, null, content);
+        const componentRef = this.viewContainer.createComponent(AlertPanelComponent, {projectableNodes: content});
         (<AlertPanelComponent>componentRef.instance).type = 'error';
         break;
     }

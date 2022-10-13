@@ -38,7 +38,7 @@ export class RulesListComponent extends PrometheusListHelper implements OnInit {
   ngOnInit() {
     super.ngOnInit();
     this.columns = [
-      { prop: 'name', name: $localize`Name`, cellClass: 'font-weight-bold', flexGrow: 2 },
+      { prop: 'name', name: $localize`Name`, cellClass: 'fw-bold', flexGrow: 2 },
       {
         prop: 'labels.severity',
         name: $localize`Severity`,

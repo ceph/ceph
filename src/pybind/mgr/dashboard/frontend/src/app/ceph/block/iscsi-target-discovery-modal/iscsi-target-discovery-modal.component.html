@@ -43,14 +43,12 @@
                      type="password"
                      autocomplete="new-password">
 
-              <span class="input-group-append">
-                <button type="button"
-                        class="btn btn-light"
-                        cdPasswordButton="password">
-                </button>
-                <cd-copy-2-clipboard-button source="password">
-                </cd-copy-2-clipboard-button>
-              </span>
+              <button type="button"
+                      class="btn btn-light"
+                      cdPasswordButton="password">
+              </button>
+              <cd-copy-2-clipboard-button source="password">
+              </cd-copy-2-clipboard-button>
             </div>
             <span class="invalid-feedback"
                   *ngIf="discoveryForm.showError('password', formDir, 'required')"
@@ -100,14 +98,12 @@
                      type="password"
                      autocomplete="new-password">
 
-              <span class="input-group-append">
-                <button type="button"
-                        class="btn btn-light"
-                        cdPasswordButton="mutual_password">
-                </button>
-                <cd-copy-2-clipboard-button source="mutual_password">
-                </cd-copy-2-clipboard-button>
-              </span>
+              <button type="button"
+                      class="btn btn-light"
+                      cdPasswordButton="mutual_password">
+              </button>
+              <cd-copy-2-clipboard-button source="mutual_password">
+              </cd-copy-2-clipboard-button>
             </div>
             <span class="invalid-feedback"
                   *ngIf="discoveryForm.showError('mutual_password', formDir, 'required')"

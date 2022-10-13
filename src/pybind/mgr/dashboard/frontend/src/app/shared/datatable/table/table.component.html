@@ -59,24 +59,20 @@
     <!-- search -->
     <div class="input-group search"
          *ngIf="searchField">
-      <span class="input-group-prepend">
-        <span class="input-group-text">
-          <i [ngClass]="[icons.search]"></i>
-        </span>
+      <span class="input-group-text">
+        <i [ngClass]="[icons.search]"></i>
       </span>
       <input aria-label="search"
              class="form-control"
              type="text"
              [(ngModel)]="search"
              (keyup)="updateFilter()">
-      <div class="input-group-append">
-        <button type="button"
-                class="btn btn-light"
-                title="Clear"
-                (click)="onClearSearch()">
-          <i class="icon-prepend {{ icons.destroy }}"></i>
-        </button>
-      </div>
+      <button type="button"
+              class="btn btn-light"
+              title="Clear"
+              (click)="onClearSearch()">
+        <i class="icon-prepend {{ icons.destroy }}"></i>
+      </button>
     </div>
     <!-- end search -->
 
@@ -147,8 +143,8 @@
     <div class="filter-chips">
       <span *ngFor="let filter of columnFilters">
         <span *ngIf="filter.value"
-              class="badge badge-info mr-2">
-          <span class="mr-2">{{ filter.column.name }}: {{ filter.value.formatted }}</span>
+              class="badge badge-info me-2">
+          <span class="me-2">{{ filter.column.name }}: {{ filter.value.formatted }}</span>
           <a class="badge-remove"
              (click)="onChangeFilter(filter); false">
             <i [ngClass]="[icons.destroy]"

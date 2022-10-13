@@ -12,7 +12,7 @@
       <div class="m-4">
         <h4 class="text-center"
             i18n>Please expand your cluster first</h4>
-        <div class="offset-md-2">
+        <div class="text-center">
           <button class="btn btn-accent m-2"
                   name="expand-cluster"
                   (click)="createCluster()"
@@ -38,7 +38,7 @@
     <div class="card-body vertical-line">
       <ng-container [ngSwitch]="currentStep?.stepIndex">
         <div *ngSwitchCase="'1'"
-             class="ml-5">
+             class="ms-5">
           <h4 class="title"
               i18n>Add Hosts</h4>
           <br>
@@ -48,7 +48,7 @@
                     [showGeneralActionsOnly]="true"></cd-hosts>
         </div>
         <div *ngSwitchCase="'2'"
-             class="ml-5">
+             class="ms-5">
           <h4 class="title"
               i18n>Create OSDs</h4>
           <div class="alignForm">
@@ -60,7 +60,7 @@
           </div>
         </div>
         <div *ngSwitchCase="'3'"
-             class="ml-5">
+             class="ms-5">
           <h4 class="title"
               i18n>Create Services</h4>
           <br>
@@ -70,18 +70,18 @@
                        [routedModal]="false"></cd-services>
         </div>
         <div *ngSwitchCase="'4'"
-             class="ml-5">
+             class="ms-5">
           <cd-create-cluster-review></cd-create-cluster-review>
         </div>
       </ng-container>
     </div>
   </div>
   <div class="card-footer">
-    <button class="btn btn-accent m-2 float-right"
+    <button class="btn btn-accent m-2 float-end"
             (click)="onNextStep()"
             aria-label="Next"
             i18n>{{ showSubmitButtonLabel() }}</button>
-    <cd-back-button class="m-2 float-right"
+    <cd-back-button class="m-2 float-end"
                     aria-label="Close"
                     (backAction)="onPreviousStep()"
                     [name]="showCancelButtonLabel()"></cd-back-button>

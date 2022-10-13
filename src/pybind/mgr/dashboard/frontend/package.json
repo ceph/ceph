@@ -85,11 +85,12 @@
     "@angular/platform-browser-dynamic": "13.3.11",
     "@angular/router": "13.3.11",
     "@circlon/angular-tree-component": "10.0.0",
-    "@ng-bootstrap/ng-bootstrap": "10.0.0",
+    "@ng-bootstrap/ng-bootstrap": "12.1.2",
+    "@popperjs/core": "2.10.2",
     "@swimlane/ngx-datatable": "18.0.0",
     "@types/file-saver": "2.0.1",
     "async-mutex": "0.2.4",
-    "bootstrap": "4.6.1",
+    "bootstrap": "5.0.0",
     "chart.js": "2.9.4",
     "detect-browser": "5.2.0",
     "file-saver": "2.0.2",
@@ -156,5 +157,8 @@
   },
   "cypress-cucumber-preprocessor": {
     "nonGlobalStepDefinitions": true
+  },
+  "overrides": {
+    "autoprefixer": "10.4.5"
   }
 }
