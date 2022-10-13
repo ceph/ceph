@@ -6668,6 +6668,13 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
           << " pinned=" << lru.lru_get_num_pinned()
           << dendl;
 
+  dout(20) << "bottom_lru: " << bottom_lru.lru_get_size() << " items"
+              ", " << bottom_lru.lru_get_top() << " top"
+              ", " << bottom_lru.lru_get_bot() << " bot"
+              ", " << bottom_lru.lru_get_pintail() << " pintail"
+              ", " << bottom_lru.lru_get_num_pinned() << " pinned"
+              << dendl;
+
   const uint64_t trim_counter_start = trim_counter.get();
   bool throttled = false;
   while (1) {
@@ -6687,6 +6694,13 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
     bottom_lru.lru_insert_mid(dn);
   }
   unexpirables.clear();
+
+  dout(20) << "lru: " << lru.lru_get_size() << " items"
+              ", " << lru.lru_get_top() << " top"
+              ", " << lru.lru_get_bot() << " bot"
+              ", " << lru.lru_get_pintail() << " pintail"
+              ", " << lru.lru_get_num_pinned() << " pinned"
+              << dendl;
 
   // trim dentries from the LRU until count is reached
   // if mds is in standby_replay and skip trimming the inodes
