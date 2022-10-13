@@ -966,6 +966,7 @@ seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, boo
       more,
       auth_meta->auth_method,
       auth_payload,
+      &conn.peer_global_id,
       &reply);
   switch (r) {
    // successful

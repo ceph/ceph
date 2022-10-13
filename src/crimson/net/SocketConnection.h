@@ -49,6 +49,8 @@ class SocketConnection : public Connection {
   // messages sent, but not yet acked by peer
   std::deque<MessageURef> sent;
 
+  uint64_t peer_global_id = 0;
+
   seastar::shard_id shard_id() const;
 
  public:

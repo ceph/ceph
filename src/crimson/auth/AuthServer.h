@@ -35,6 +35,7 @@ public:
     bool more,           //< true if this is not the first part of the handshake
     uint32_t auth_method,
     const bufferlist& bl,
+    uint64_t *p_peer_global_id,
     bufferlist *reply) = 0;
 };
 

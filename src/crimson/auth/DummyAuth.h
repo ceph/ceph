@@ -70,6 +70,7 @@ public:
     bool more,
     uint32_t auth_method,
     const bufferlist& bl,
+    uint64_t *p_peer_global_id,
     bufferlist *reply) override {
     return 1;
   }
