@@ -589,6 +589,7 @@ int Client::handle_auth_request(crimson::net::Connection &conn,
                                 bool more,
                                 uint32_t auth_method,
                                 const ceph::bufferlist& payload,
+                                uint64_t *p_peer_global_id,
                                 ceph::bufferlist *reply)
 {
   if (payload.length() == 0) {
@@ -626,7 +627,7 @@ int Client::handle_auth_request(crimson::net::Connection &conn,
     auth_meta.get_connection_secret_length(),
     reply,
     &name,
-    &conn.peer_global_id,
+    p_peer_global_id,
     &caps_info,
     &auth_meta.session_key,
     &auth_meta.connection_secret,

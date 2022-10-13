@@ -79,9 +79,6 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
     set_peer_id(name.num());
   }
 
- public:
-  uint64_t peer_global_id = 0;
-
  protected:
   uint64_t features = 0;
 

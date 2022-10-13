@@ -131,6 +131,7 @@ private:
 			  bool more,
 			  uint32_t auth_method,
 			  const ceph::bufferlist& payload,
+			  uint64_t *p_peer_global_id,
 			  ceph::bufferlist *reply) final;
 
   crimson::common::CephContext cct; // for auth_registry
