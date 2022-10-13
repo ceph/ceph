@@ -34,6 +34,20 @@ public:
 void create_deferred_and_terminate() {
   std::unique_ptr<ObjectStore> store;
 
+  std::string temp_dir = "/tmp/bluestore.test_temp_dir";
+  int ret = ::mkdir(temp_dir.c_str(), 0777);
+  if (ret < 0) {
+    char cpath[PATH_MAX];
+    getcwd(cpath, PATH_MAX-1);
+    std::cerr << __func__ \
+      << ": unable to create dir: " << temp_dir \
+      << " cwd: " << cpath \
+      << "uid: " << getuid() << "gid: " << getgid() \
+      << " err: " << cpp_strerror(ret) \
+      << std::endl;
+  }
+  ceph_assert(ret == 0);
+
   g_ceph_context->_conf._clear_safe_to_start_threads();
   g_ceph_context->_conf.set_val_or_die("bluestore_prefer_deferred_size", "4096");
   g_ceph_context->_conf.set_val_or_die("bluestore_allocator", "bitmap");
@@ -44,10 +58,9 @@ void create_deferred_and_terminate() {
   coll_t cid;
   ghobject_t hoid;
   ObjectStore::CollectionHandle ch;
-  ceph_assert(::mkdir("bluestore.test_temp_dir", 0777) == 0);
   store = ObjectStore::create(g_ceph_context,
                               "bluestore",
-                              "bluestore.test_temp_dir",
+                              temp_dir,
                               "store_test_temp_journal");
   ceph_assert(store->mkfs() == 0);
   ceph_assert(store->mount() == 0);
