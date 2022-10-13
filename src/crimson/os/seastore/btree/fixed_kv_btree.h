@@ -1052,13 +1052,13 @@ private:
         c.pins->add_pin(node.pin);
       }
     };
-    return c.cache.template get_extent<internal_node_t>(
+    return c.cache.template get_absent_extent<internal_node_t>(
       c.trans,
       offset,
       node_size,
       init_internal
     ).si_then([FNAME, c, offset, init_internal, depth, begin, end](
-                typename internal_node_t::Ref ret) {
+              typename internal_node_t::Ref ret) {
       SUBTRACET(
         seastore_fixedkv_tree,
         "read internal at offset {} {}",
@@ -1119,7 +1119,7 @@ private:
         c.pins->add_pin(node.pin);
       }
     };
-    return c.cache.template get_extent<leaf_node_t>(
+    return c.cache.template get_absent_extent<leaf_node_t>(
       c.trans,
       offset,
       node_size,
