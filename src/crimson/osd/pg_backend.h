@@ -274,6 +274,31 @@ public:
     uint64_t off,
     uint64_t len);
 
+  write_iertr::future<> tmapput(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans,
+    object_stat_sum_t& delta_stats,
+    osd_op_params_t& osd_op_params);
+
+  using tmapup_ertr = write_ertr::extend<
+    crimson::ct_error::enoent,
+    crimson::ct_error::eexist>;
+  using tmapup_iertr = ::crimson::interruptible::interruptible_errorator<
+    ::crimson::osd::IOInterruptCondition,
+    tmapup_ertr>;
+  tmapup_iertr::future<> tmapup(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans,
+    object_stat_sum_t& delta_stats,
+    osd_op_params_t& osd_op_params);
+
+  read_ierrorator::future<> tmapget(
+    const ObjectState& os,
+    OSDOp& osd_op,
+    object_stat_sum_t& delta_stats);
+
   // OMAP
   ll_read_ierrorator::future<> omap_get_keys(
     const ObjectState& os,
@@ -372,6 +397,22 @@ private:
     size_t offset,
     size_t length,
     uint32_t flags) = 0;
+  write_iertr::future<> _writefull(
+    ObjectState& os,
+    off_t truncate_size,
+    const bufferlist& bl,
+    ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params,
+    object_stat_sum_t& delta_stats,
+    unsigned flags);
+  write_iertr::future<> _truncate(
+    ObjectState& os,
+    ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params,
+    object_stat_sum_t& delta_stats,
+    size_t offset,
+    size_t truncate_size,
+    uint32_t truncate_seq);
 
   bool maybe_create_new_object(ObjectState& os,
     ceph::os::Transaction& txn,

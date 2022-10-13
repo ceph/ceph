@@ -225,6 +225,16 @@ private:
     OSDOp& osd_op,
     const ObjectState& os);
 
+  using list_snaps_ertr = read_errorator::extend<
+    crimson::ct_error::invarg>;
+  using list_snaps_iertr = ::crimson::interruptible::interruptible_errorator<
+    ::crimson::osd::IOInterruptCondition,
+    list_snaps_ertr>;
+  list_snaps_iertr::future<> do_list_snaps(
+    OSDOp& osd_op,
+    const ObjectState& os,
+    const SnapSet& ss);
+
   template <class Func>
   auto do_const_op(Func&& f);
 
@@ -233,6 +243,15 @@ private:
     ++num_read;
     // TODO: pass backend as read-only
     return do_const_op(std::forward<Func>(f));
+  }
+
+  template <class Func>
+  auto do_snapset_op(Func&& f) {
+    ++num_read;
+    return std::invoke(
+      std::forward<Func>(f),
+      std::as_const(obc->obs),
+      std::as_const(obc->ssc->snapset));
   }
 
   enum class modified_by {
