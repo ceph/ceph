@@ -50,10 +50,9 @@ class JSONObj:
 
 
 class RealmToken(JSONObj):
-    def __init__(self, realm_name, realm_id, is_primary, endpoint, access_key, secret):
+    def __init__(self, realm_name, realm_id, endpoint, access_key, secret):
         self.realm_name = realm_name
         self.realm_id = realm_id
-        self.is_primary = is_primary
         self.endpoint = endpoint
         self.access_key = access_key
         self.secret = secret
@@ -67,6 +66,7 @@ class RealmToken(JSONObj):
             return cls(**realm_token)
         except binascii.Error:
             return None
+
 
 class RGWZone(JSONObj):
     def __init__(self, zone_dict):
@@ -137,6 +137,9 @@ class RGWPeriod(JSONObj):
         if not zonegroup:
             return self.find_zonegroup_by_id(self.master_zonegroup)
         return self.zonegroups_by_name.get(zonegroup)
+
+    def get_master_zonegroup(self):
+        return self.find_zonegroup_by_id(self.master_zonegroup)
 
     def find_zonegroup_by_id(self, zonegroup):
         return self.zonegroups_by_id.get(zonegroup)
