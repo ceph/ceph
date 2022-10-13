@@ -13,6 +13,8 @@
 namespace crimson::net {
 
 class ProtocolV2 final : public Protocol {
+  using AuthConnectionMetaRef = seastar::lw_shared_ptr<AuthConnectionMeta>;
+
  public:
   ProtocolV2(ChainedDispatchers& dispatchers,
              SocketConnection& conn,
@@ -42,6 +44,8 @@ class ProtocolV2 final : public Protocol {
 
  private:
   SocketMessenger &messenger;
+
+  AuthConnectionMetaRef auth_meta;
 
   enum class state_t {
     NONE = 0,

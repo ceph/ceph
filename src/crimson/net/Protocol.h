@@ -89,8 +89,6 @@ class Protocol {
   ChainedDispatchers& dispatchers;
   SocketConnection &conn;
 
-  AuthConnectionMetaRef auth_meta;
-
  private:
   bool closed = false;
   // become valid only after closed == true
