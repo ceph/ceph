@@ -1263,7 +1263,7 @@ TEST_F(D4NFilterFixture, StoreDeleteAttrsTest) {
   /* Check the attributes */ 
   rgw::sal::Attrs storeAttrs = nextObject->get_attrs();
 
-  EXPECT_EQ(storeAttrs.size(), static_cast<long unsigned int>(1));
+  EXPECT_EQ(storeAttrs.size(), (int)1);
 
   pair<string, string> value(storeAttrs.begin()->first, storeAttrs.begin()->second.to_str());
 

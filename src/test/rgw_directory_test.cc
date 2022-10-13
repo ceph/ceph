@@ -41,7 +41,7 @@ class DirectoryFixture: public ::testing::Test {
 TEST_F(DirectoryFixture, DirectoryInit) {
   ASSERT_NE(blk_dir, nullptr);
   ASSERT_NE(c_blk, nullptr);
-  ASSERT_NE(portStr.length(), static_cast<long unsigned int>(0));
+  ASSERT_NE(portStr.length(), (int)0);
 }
 
 /* Successful setValue Call and Redis Check */
@@ -140,7 +140,7 @@ TEST_F(DirectoryFixture, GetValueTest) {
   /* Check if object name in directory instance matches redis update */
   client.hset("rgw-object:" + oid + ":directory", "obj_name", "newoid", [](cpp_redis::reply& reply) {
     if (reply.is_integer()) {
-      ASSERT_EQ(reply.as_integer(), 0); // Zero keys exist
+      ASSERT_EQ(reply.as_integer(), 0); /* Zero keys exist */
     }
   });
 
@@ -178,7 +178,7 @@ TEST_F(DirectoryFixture, DelValueTest) {
 int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);
 
-  // Other ports can be passed to the program
+  /* Other ports can be passed to the program */
   if (argc == 1) {
     portStr = "6379";
     hostStr = "127.0.0.1";
