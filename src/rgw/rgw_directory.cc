@@ -40,7 +40,7 @@ int RGWBlockDirectory::existKey(std::string key) {
 }
 
 int RGWBlockDirectory::setValue(cache_block *ptr) {
-  // Creating the index based on obj_name
+  /* Creating the index based on obj_name */
   std::string key = buildIndex(ptr);
   if (!client.is_connected()) { 
     findClient(&client);
@@ -50,7 +50,7 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
   std::vector<std::string> keys;
   keys.push_back(key);
 
-  // Every set will be new
+  /* Every set will be new */
   if (host == "" || port == 0) {
     dout(10) << "RGW D4N Directory: Directory endpoint not configured correctly" << dendl;
     return -2;
@@ -59,7 +59,7 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
   std::string endpoint = host + ":" + std::to_string(port);
   std::vector<std::pair<std::string, std::string>> list;
     
-  // Creating a list of key's properties
+  /* Creating a list of key's properties */
   list.push_back(make_pair("key", key));
   list.push_back(make_pair("size", std::to_string(ptr->size_in_bytes)));
   list.push_back(make_pair("bucket_name", ptr->c_obj.bucket_name));
@@ -124,7 +124,7 @@ int RGWBlockDirectory::getValue(cache_block *ptr) {
         return key_exist;
       }
 
-      // Fix host list -Sam
+      /* Currently, there can only be one host */
       ptr->size_in_bytes = std::stoi(size);
       ptr->c_obj.bucket_name = bucket_name;
       ptr->c_obj.obj_name = obj_name;

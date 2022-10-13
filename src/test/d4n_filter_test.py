@@ -183,7 +183,7 @@ class D4NFilterTestCase(unittest.TestCase):
         self.assertEqual((data.get(b'user.rgw.acl')), tmp5.encode("latin1"))
 
         # Check if object name in directory instance matches redis update
-        r.hset('rgw-object:test.txt:cache', b'user.rgw.source_zone', 'source_zone_1') # Is this ok for test? -Sam
+        r.hset('rgw-object:test.txt:cache', b'user.rgw.source_zone', 'source_zone_1')
         
         response_get = obj.get()
     
