@@ -143,6 +143,7 @@ class ConnectionTracker {
   int rank;
   int persist_interval;
   bufferlist encoding;
+  CephContext *cct;
   int get_my_rank() const { return rank; }
   ConnectionReport *reports(int p);
   const ConnectionReport *reports(int p) const;
@@ -158,14 +159,14 @@ class ConnectionTracker {
 			owner(NULL), rank(-1), persist_interval(10) {
   }
   ConnectionTracker(RankProvider *o, int rank, double hl,
-		    int persist_i) :
+		    int persist_i, CephContext *c) :
     epoch(0), version(0),
-    half_life(hl), owner(o), rank(rank), persist_interval(persist_i) {
+    half_life(hl), owner(o), rank(rank), persist_interval(persist_i), cct(c) {
     my_reports.rank = rank;
   }
-  ConnectionTracker(const bufferlist& bl) :
+  ConnectionTracker(const bufferlist& bl, CephContext *c) :
     epoch(0), version(0),
-    half_life(0), owner(NULL), rank(-1)
+    half_life(0), owner(NULL), rank(-1), persist_interval(10), cct(c)
   {
     auto bi = bl.cbegin();
     decode(bi);
@@ -173,20 +174,13 @@ class ConnectionTracker {
   ConnectionTracker(const ConnectionTracker& o) :
     epoch(o.epoch), version(o.version),
     half_life(o.half_life), owner(o.owner), rank(o.rank),
-    persist_interval(o.persist_interval)
+    persist_interval(o.persist_interval), cct(o.cct)
   {
     peer_reports = o.peer_reports;
     my_reports = o.my_reports;
   }
   void notify_reset() { clear_peer_reports(); }
-  void notify_rank_changed(int new_rank) {
-    if (new_rank == rank) return;
-    peer_reports.erase(rank);
-    peer_reports.erase(new_rank);
-    my_reports.rank = new_rank;
-    rank = new_rank;
-    encoding.clear();
-  }
+  void notify_rank_changed(int new_rank);
   void notify_rank_removed(int rank_removed);
   friend std::ostream& operator<<(std::ostream& o, const ConnectionTracker& c);
   friend ConnectionReport *get_connection_reports(ConnectionTracker& ct);
