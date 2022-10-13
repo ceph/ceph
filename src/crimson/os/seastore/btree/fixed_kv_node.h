@@ -334,6 +334,55 @@ struct FixedKVNode : CachedExtent {
     }
   }
 
+  struct child_pos_t {
+    FixedKVNodeRef stable_parent;
+    uint16_t pos = std::numeric_limits<uint16_t>::max();
+    CachedExtentRef child;
+    child_pos_t(CachedExtentRef child) : child(child) {}
+    child_pos_t(FixedKVNodeRef stable_parent, uint16_t pos)
+      : stable_parent(stable_parent), pos(pos) {}
+  };
+
+  void link_child(FixedKVNode* child, uint16_t pos) {
+    assert(pos < get_node_size());
+    assert(child);
+    ceph_assert(!is_pending());
+    ceph_assert(child->is_valid() && !child->is_pending());
+    assert(!stable_children[pos]);
+    stable_children[pos] = child;
+    set_child_ptracker(child);
+  }
+
+  template <typename iter_t>
+  child_pos_t get_child(Transaction &t, iter_t iter) {
+    if (!is_pending()) {
+      auto pos = iter.get_offset();
+      auto child = stable_children[pos];
+      if (child) {
+	return child_pos_t(child->get_transactional_view(t));
+      } else {
+	return child_pos_t(this, pos);
+      }
+    } else {
+      auto key = iter.get_key();
+      auto it = mutate_state.pending_children.find(
+	key,
+	typename pending_child_tracker_t::cmp_t());
+      if (it != mutate_state.pending_children.end()) {
+	return child_pos_t(it->child);
+      } else {
+	auto &sparent = get_stable_for_key(key);
+	auto spos = sparent.child_pos_for_key(key);
+	auto child = sparent.stable_children[spos];
+	if (child) {
+	  return child_pos_t(child->get_transactional_view(t));
+	} else {
+	  return child_pos_t(&sparent, spos);
+	}
+      }
+    }
+  }
+
   void split_mutate_state(
     FixedKVNode &left,
     FixedKVNode &right)
@@ -811,6 +860,13 @@ struct FixedKVInternalNode
     return this->lower_bound(key).get_offset();
   }
 
+  uint16_t child_pos_for_key(NODE_KEY key) const final {
+    auto it = this->upper_bound(key);
+    assert(it != this->begin());
+    --it;
+    return it.get_offset();
+  }
+
   NODE_KEY get_key_from_idx(uint16_t idx) const final {
     return this->iter_idx(idx).get_key();
   }
@@ -1140,6 +1196,10 @@ struct FixedKVLeafNode
 
   uint16_t lower_bound_offset(NODE_KEY key) const final {
     return this->lower_bound(key).get_offset();
+  }
+
+  uint16_t child_pos_for_key(NODE_KEY key) const final {
+    return lower_bound_offset(key);
   }
 
   NODE_KEY get_key_from_idx(uint16_t idx) const final {

@@ -24,6 +24,15 @@ class SegmentedAllocator;
 class TransactionManager;
 class ExtentPlacementManager;
 
+template <
+  typename node_key_t,
+  typename node_val_t,
+  typename internal_node_t,
+  typename leaf_node_t,
+  typename pin_t,
+  size_t node_size>
+class FixedKVBtree;
+
 // #define DEBUG_CACHED_EXTENT_REF
 #ifdef DEBUG_CACHED_EXTENT_REF
 
@@ -45,11 +54,14 @@ namespace onode {
 
 template <typename T>
 class read_set_item_t {
-  boost::intrusive::list_member_hook<> list_hook;
-  using list_hook_options = boost::intrusive::member_hook<
+  using set_hook_t = boost::intrusive::set_member_hook<
+    boost::intrusive::link_mode<
+      boost::intrusive::auto_unlink>>;
+  set_hook_t trans_hook;
+  using set_hook_options = boost::intrusive::member_hook<
     read_set_item_t,
-    boost::intrusive::list_member_hook<>,
-    &read_set_item_t::list_hook>;
+    set_hook_t,
+    &read_set_item_t::trans_hook>;
 
 public:
   struct cmp_t {
@@ -59,9 +71,29 @@ public:
     bool operator()(const read_set_item_t<T> &lhs, const paddr_t &rhs) const;
   };
 
-  using list =  boost::intrusive::list<
+  struct trans_cmp_t {
+    bool operator()(
+      const read_set_item_t<Transaction> &lhs,
+      const read_set_item_t<Transaction> &rhs) const {
+      return lhs.t < rhs.t;
+    }
+    bool operator()(
+      const Transaction *lhs,
+      const read_set_item_t<Transaction> &rhs) const {
+      return lhs < rhs.t;
+    }
+    bool operator()(
+      const read_set_item_t<Transaction> &lhs,
+      const Transaction *rhs) const {
+      return lhs.t < rhs;
+    }
+  };
+
+  using trans_set_t =  boost::intrusive::set<
     read_set_item_t,
-    list_hook_options>;
+    set_hook_options,
+    boost::intrusive::constant_time_size<false>,
+    boost::intrusive::compare<trans_cmp_t>>;
 
   T *t = nullptr;
   CachedExtentRef ref;
@@ -69,7 +101,7 @@ public:
   read_set_item_t(T *t, CachedExtentRef ref);
   read_set_item_t(const read_set_item_t &) = delete;
   read_set_item_t(read_set_item_t &&) = default;
-  ~read_set_item_t();
+  ~read_set_item_t() = default;
 };
 template <typename T>
 using read_set_t = std::set<
@@ -151,6 +183,14 @@ class CachedExtent
   friend class onode::DummyNodeExtent;
   friend class onode::TestReplayExtent;
 
+  template <
+    typename node_key_t,
+    typename node_val_t,
+    typename internal_node_t,
+    typename leaf_node_t,
+    typename pin_t,
+    size_t node_size>
+  friend class FixedKVBtree;
   uint32_t last_committed_crc = 0;
 
   // Points at current version while in state MUTATION_PENDING
@@ -351,6 +391,11 @@ public:
       state == extent_state_t::EXIST_MUTATION_PENDING;
   }
 
+  bool is_pending_in_trans(transaction_id_t id) const {
+    return (is_pending() || is_exist_clean())
+      && pending_for_transaction == id;
+  }
+
   /// Returns true if extent has a pending delta
   bool is_mutation_pending() const {
     return state == extent_state_t::MUTATION_PENDING;
@@ -486,6 +531,17 @@ public:
   bool is_inline() const {
     return poffset.is_relative();
   }
+
+  seastar::future<> wait_io() {
+    if (!io_wait_promise) {
+      return seastar::now();
+    } else {
+      return io_wait_promise->get_shared_future();
+    }
+  }
+
+  CachedExtent* get_transactional_view(Transaction &t);
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -550,15 +606,7 @@ private:
     io_wait_promise = std::nullopt;
   }
 
-  seastar::future<> wait_io() {
-    if (!io_wait_promise) {
-      return seastar::now();
-    } else {
-      return io_wait_promise->get_shared_future();
-    }
-  }
-
-  read_set_item_t<Transaction>::list transactions;
+  read_set_item_t<Transaction>::trans_set_t transactions;
 
   placement_hint_t user_hint = PLACEMENT_HINT_NULL;
 
@@ -589,8 +637,6 @@ protected:
   struct retired_placeholder_t{};
   CachedExtent(retired_placeholder_t) : state(extent_state_t::INVALID) {}
 
-  CachedExtent& get_transactional_view(Transaction &t);
-
   friend class Cache;
   template <typename T, typename... Args>
   static TCachedExtentRef<T> make_cached_extent_ref(
@@ -600,6 +646,10 @@ protected:
 
   CachedExtentRef get_prior_instance() {
     return prior_instance;
+  }
+
+  void reset_prior_instance() {
+    prior_instance.reset();
   }
 
   /// Sets last_committed_crc
@@ -972,15 +1022,7 @@ struct ref_laddr_cmp {
 template <typename T>
 read_set_item_t<T>::read_set_item_t(T *t, CachedExtentRef ref)
   : t(t), ref(ref)
-{
-  ref->transactions.push_back(*this);
-}
-
-template <typename T>
-read_set_item_t<T>::~read_set_item_t()
-{
-  ref->transactions.erase(ref->transactions.s_iterator_to(*this));
-}
+{}
 
 template <typename T>
 inline bool read_set_item_t<T>::cmp_t::operator()(
