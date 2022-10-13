@@ -12,6 +12,7 @@
 #include "include/buffer.h"
 #include "rbm_device.h"
 #include "nvme_block_device.h"
+#include "block_rb_manager.h"
 
 namespace {
   seastar::logger& logger() {
@@ -25,13 +26,12 @@ SET_SUBSYS(seastore_device);
 RBMDevice::mkfs_ret RBMDevice::mkfs(device_config_t config) {
   LOG_PREFIX(RBMDevice::mkfs);
   super.start = 0;
-  super.end = get_available_size();
   super.block_size = get_block_size();
   super.size = get_available_size();
 
   super.start_data_area = 0;
   super.feature |= RBM_BITMAP_BLOCK_CRC;
-  super.device_id = config.spec.id;
+  super.config = std::move(config);
   DEBUG("super {} ", super);
   // write super block
   return write_rbm_header(
@@ -96,6 +96,8 @@ read_ertr::future<rbm_metadata_header_t> RBMDevice::read_rbm_header(
     bufferlist meta_b_header;
     super_block.crc = 0;
     encode(super_block, meta_b_header);
+    assert(ceph::encoded_sizeof<rbm_metadata_header_t>(super_block) <
+	super_block.block_size);
 
     // Do CRC verification only if data protection is not supported.
     if (is_data_protection_enabled() == false) {

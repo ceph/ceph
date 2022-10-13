@@ -47,7 +47,6 @@ struct rbm_test_t :
   const uint64_t block_size = DEFAULT_BLOCK_SIZE;
 
   device_config_t config;
-  paddr_t current;
 
   rbm_test_t() = default;
 
@@ -121,14 +120,14 @@ TEST_F(rbm_test_t, mkfs_test)
    auto super = read_rbm_header();
    ASSERT_TRUE(
        super.block_size == DEFAULT_BLOCK_SIZE &&
-       super.end == DEFAULT_TEST_SIZE 
+       super.size == DEFAULT_TEST_SIZE 
    );
    device->set_block_size(8196);
    mkfs();
    super = read_rbm_header();
    ASSERT_TRUE(
        super.block_size == 8196 &&
-       super.end == DEFAULT_TEST_SIZE 
+       super.size == DEFAULT_TEST_SIZE 
    );
  });
 }
