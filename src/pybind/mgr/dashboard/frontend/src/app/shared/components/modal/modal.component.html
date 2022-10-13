@@ -2,14 +2,13 @@
   <div [ngClass]="pageURL ? 'modal-dialog' : ''">
     <div class="modal-content">
       <div class="modal-header">
-        <h4 class="modal-title float-left">
+        <h4 class="modal-title float-start">
           <ng-content select=".modal-title"></ng-content>
         </h4>
         <button type="button"
-                class="close float-right"
+                class="btn-close float-end"
                 aria-label="Close"
                 (click)="close()">
-          <span aria-hidden="true">&times;</span>
         </button>
       </div>
 

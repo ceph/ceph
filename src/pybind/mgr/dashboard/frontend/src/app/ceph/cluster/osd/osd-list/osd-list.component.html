@@ -79,7 +79,7 @@
         {{ actionDescription }}!
       </span>
       <br>
-      <ul class="mb-0 pl-4">
+      <ul class="mb-0 ps-4">
         <li *ngIf="active.length > 0"
              i18n>
           {selection.hasSingleSelection, select, true {} other {{{ active | join }} : }}
@@ -118,9 +118,9 @@
 <ng-template #flagsTpl
              let-row="row">
   <span *ngFor="let flag of row.cdClusterFlags;"
-        class="badge badge-hdd mr-1">{{ flag }}</span>
+        class="badge badge-hdd me-1">{{ flag }}</span>
   <span *ngFor="let flag of row.cdIndivFlags;"
-        class="badge badge-info mr-1">{{ flag }}</span>
+        class="badge badge-info me-1">{{ flag }}</span>
 </ng-template>
 
 <ng-template #osdUsageTpl
