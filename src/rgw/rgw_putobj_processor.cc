@@ -310,6 +310,11 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
 
   r = obj_op->prepare(y);
   if (r < 0) {
+    if (r == -ETIMEDOUT) {
+      // The head object write may eventually succeed, clear the set of objects for deletion. if it
+      // doesn't ever succeed, we'll orphan any tail objects as if we'd crashed before that write
+      writer.clear_written();
+    }
     return r;
   }
 
