@@ -91,7 +91,6 @@ int D4NFilterUser::create_bucket(const DoutPrefixProvider* dpp,
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y) 
 {
-  // Currently untested -Sam
   if (setattrs != NULL) {
     /* Ensure setattrs and delattrs do not overlap */
     if (delattrs != NULL) {
@@ -191,7 +190,7 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
   Attrs currentattrs = this->get_attrs();
   std::vector<std::string> currentFields;
   
-  // Extract fields from current attrs
+  /* Extract fields from current attrs */
   for (attrs = currentattrs.begin(); attrs != currentattrs.end(); ++attrs) {
     currentFields.push_back(attrs->first);
   }
@@ -312,8 +311,76 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   } else {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Directory set operation succeeded." << dendl;
   }
+   
+  // Remove later -Sam
+  int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs,
+			delete_at, if_match, if_nomatch, user_data, zones_trace,
+			canceled, y);
+  head_obj->get_obj_attrs(y, save_dpp, NULL);
 
-  int setObjReturn = filter->get_d4n_cache()->setObject(head_obj->get_name(), &(head_obj->get_attrs()), &attrs);
+  /* Append additional metadata to attributes */
+  rgw::sal::Attrs newAttrs = head_obj->get_attrs();
+  rgw::sal::Attrs attrs_temp = head_obj->get_attrs();
+  buffer::list bl;
+  RGWObjState* astate;
+  head_obj->get_obj_state(save_dpp, &astate, y);
+
+  bl.append(to_iso_8601(head_obj->get_mtime()));
+  newAttrs.insert({"mtime", bl});
+  bl.clear();
+
+  bl.append(std::to_string(head_obj->get_obj_size()));
+  newAttrs.insert({"object_size", bl});
+  bl.clear();
+
+  bl.append(std::to_string(accounted_size));
+  newAttrs.insert({"accounted_size", bl});
+  bl.clear();
+ 
+  bl.append(std::to_string(astate->accounted_size));
+  newAttrs.insert({"cur_accounted_size", bl});
+  bl.clear();
+ 
+  bl.append(std::to_string(astate->epoch));
+  newAttrs.insert({"epoch", bl});
+  bl.clear();
+
+  if (head_obj->have_instance()) {
+    bl.append(head_obj->get_instance());
+    newAttrs.insert({"version_id", bl});
+    bl.clear();
+  }
+
+  auto iter = attrs_temp.find(RGW_ATTR_SOURCE_ZONE);
+  if (iter != attrs_temp.end()) {
+    bl.append(std::to_string(astate->zone_short_id));
+    newAttrs.insert({"source_zone_short_id", bl});
+    bl.clear();
+  }
+
+  bl.append(std::to_string(head_obj->get_bucket()->get_count()));
+  newAttrs.insert({"bucket_count", bl});
+  bl.clear();
+
+  bl.append(std::to_string(head_obj->get_bucket()->get_size()));
+  newAttrs.insert({"bucket_size", bl});
+  bl.clear();
+
+  RGWQuota quota;
+  filter->get_quota(quota);
+  bl.append(std::to_string(quota.user_quota.max_size));
+  newAttrs.insert({"user_quota.max_size", bl});
+  bl.clear();
+
+  bl.append(std::to_string(quota.user_quota.max_objects));
+  newAttrs.insert({"user_quota.max_objects", bl});
+  bl.clear();
+
+  bl.append(std::to_string(head_obj->get_bucket()->get_owner()->get_max_buckets()));
+  newAttrs.insert({"max_buckets", bl});
+  bl.clear();
+
+  int setObjReturn = filter->get_d4n_cache()->setObject(head_obj->get_name(), &newAttrs, &attrs);
 
   if (setObjReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set operation failed." << dendl;
@@ -321,9 +388,10 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set operation succeeded." << dendl;
   }
   
-  return next->complete(accounted_size, etag, mtime, set_mtime, attrs,
+  /*return next->complete(accounted_size, etag, mtime, set_mtime, attrs,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
-			canceled, y);
+			canceled, y);*/
+  return ret; // Remove later -Sam
 }
 
 } } // namespace rgw::sal
