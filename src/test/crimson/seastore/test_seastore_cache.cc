@@ -76,7 +76,7 @@ struct cache_test_t : public seastar_test_suite_t {
     return with_trans_intr(
       t,
       [this](auto &&... args) {
-	return cache->get_extent<T>(args...);
+	return cache->get_extent<true, T>(args...);
       },
       std::forward<Args>(args)...);
   }

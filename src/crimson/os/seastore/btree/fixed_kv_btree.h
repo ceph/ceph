@@ -1015,6 +1015,7 @@ private:
 
   using get_internal_node_iertr = base_iertr;
   using get_internal_node_ret = get_internal_node_iertr::future<InternalNodeRef>;
+  template <bool need_check_trans>
   static get_internal_node_ret get_internal_node(
     op_context_t<node_key_t> c,
     depth_t depth,
@@ -1047,7 +1048,7 @@ private:
         c.pins->add_pin(node.pin);
       }
     };
-    return c.cache.template get_extent<internal_node_t>(
+    return c.cache.template get_extent<need_check_trans, internal_node_t>(
       c.trans,
       offset,
       node_size,
@@ -1085,6 +1086,7 @@ private:
 
   using get_leaf_node_iertr = base_iertr;
   using get_leaf_node_ret = get_leaf_node_iertr::future<LeafNodeRef>;
+  template <bool need_check_trans>
   static get_leaf_node_ret get_leaf_node(
     op_context_t<node_key_t> c,
     paddr_t offset,
@@ -1114,7 +1116,7 @@ private:
         c.pins->add_pin(node.pin);
       }
     };
-    return c.cache.template get_extent<leaf_node_t>(
+    return c.cache.template get_extent<need_check_trans, leaf_node_t>(
       c.trans,
       offset,
       node_size,
@@ -1156,7 +1158,7 @@ private:
     iterator &iter,
     mapped_space_visitor_t *visitor) const {
     if (root.get_depth() > 1) {
-      return get_internal_node(
+      return get_internal_node<true>(
 	c,
 	root.get_depth(),
 	root.get_location(),
@@ -1173,7 +1175,7 @@ private:
 	return lookup_root_iertr::now();
       });
     } else {
-      return get_leaf_node(
+      return get_leaf_node<true>(
 	c,
 	root.get_location(),
 	min_max_t<node_key_t>::min,
@@ -1252,7 +1254,7 @@ private:
     auto end = next_iter == parent->end()
       ? parent->get_node_meta().end
       : next_iter->get_key();
-    return get_internal_node(
+    return get_internal_node<false>(
       c,
       depth,
       node_iter->get_val().maybe_relative_to(parent->get_paddr()),
@@ -1325,7 +1327,7 @@ private:
       ? parent->get_node_meta().end
       : next_iter->get_key();
 
-    return get_leaf_node(
+    return get_leaf_node<false>(
       c,
       node_iter->get_val().maybe_relative_to(parent->get_paddr()),
       begin,
@@ -1720,7 +1722,7 @@ private:
     node_key_t end,
     typename std::optional<node_position_t<leaf_node_t>> parent_pos) {
     assert(depth == 1);
-    return get_leaf_node(c, addr, begin, end, std::move(parent_pos));
+    return get_leaf_node<false>(c, addr, begin, end, std::move(parent_pos));
   }
 
   template <typename NodeType,
@@ -1732,7 +1734,7 @@ private:
     node_key_t begin,
     node_key_t end,
     typename std::optional<node_position_t<internal_node_t>> parent_pos) {
-    return get_internal_node(c, depth, addr, begin, end, std::move(parent_pos));
+    return get_internal_node<false>(c, depth, addr, begin, end, std::move(parent_pos));
   }
 
   template <typename NodeType>
