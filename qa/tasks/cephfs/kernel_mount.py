@@ -28,6 +28,7 @@ class KernelMount(CephFSMount):
             client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 
+        self.client_config = config
         self.rbytes = config.get('rbytes', False)
         self.snapdirname = config.get('snapdirname', '.snap')
         self.inst = None

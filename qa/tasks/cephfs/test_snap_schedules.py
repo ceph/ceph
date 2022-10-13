@@ -463,7 +463,7 @@ class TestSnapSchedulesSnapdir(TestSnapSchedulesHelper):
         from tasks.cephfs.kernel_mount import KernelMount
 
         if isinstance(self.mount_a, KernelMount):
-            sdn = self.mount_a.config.get('snapdirname', '.snap')
+            sdn = self.mount_a.client_config.get('snapdirname', '.snap')
         elif isinstance(self.mount_a, FuseMount):
             sdn = self.mount_a.client_config.get('client_snapdir', '.snap')
             self.fs.set_ceph_conf('client', 'client snapdir', sdn)
