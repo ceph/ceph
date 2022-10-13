@@ -130,6 +130,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  zone_name: Optional[str] = None,
                                  port: Optional[int] = None,
                                  placement: Optional[str] = None,
+                                 endpoints: Optional[str] = None,
                                  start_radosgw: Optional[bool] = True,
                                  inbuf: Optional[str] = None):
         """Bootstrap new rgw realm, zonegroup, and zone"""
@@ -145,7 +146,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  rgw_zonegroup=zonegroup_name,
                                  rgw_zone=zone_name,
                                  rgw_frontend_port=port,
-                                 placement=placement_spec)]
+                                 placement=placement_spec,
+                                 endpoints=endpoints)]
         else:
             err_msg = 'Invalid arguments: either pass a spec with -i or provide the realm, zonegroup and zone.'
             return HandleCommandResult(retval=-errno.EINVAL, stdout='', stderr=err_msg)
@@ -224,7 +226,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 elif not (realm_info['access_key'] and realm_info['secret']):
                     realms_info.append({'realm': realm_info['realm_name'], 'token': 'master zone has no access/secret keys'})
                 else:
-                    keys = ['realm_name', 'realm_id', 'is_primary', 'endpoint', 'access_key', 'secret']
+                    keys = ['realm_name', 'realm_id', 'endpoint', 'access_key', 'secret']
                     realm_token = RealmToken(**{k: realm_info[k] for k in keys})
                     realm_token_b = realm_token.to_json().encode('utf-8')
                     realm_token_s = base64.b64encode(realm_token_b).decode('utf-8')
@@ -235,7 +237,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(retval=0, stdout=json.dumps(realms_info, indent=4), stderr='')
 
-    @CLICommand('rgw zone update', perm='rw')
+    @CLICommand('rgw zone modify', perm='rw')
     def update_zone_info(self, realm_name: str, zonegroup_name: str, zone_name: str, realm_token: str, endpoints: List[str]):
         try:
             retval, out, err = RGWAM(self.env).zone_modify(realm_name,
@@ -256,6 +258,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                              port: Optional[int] = None,
                              placement: Optional[str] = None,
                              start_radosgw: Optional[bool] = True,
+                             endpoints: Optional[str] = None,
                              inbuf: Optional[str] = None):
         """Bootstrap new rgw zone that syncs with zone on another cluster in the same realm"""
 
@@ -271,7 +274,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  rgw_zone=zone_name,
                                  rgw_realm_token=realm_token,
                                  rgw_frontend_port=port,
-                                 placement=placement_spec)]
+                                 placement=placement_spec,
+                                 endpoints=endpoints)]
         else:
             err_msg = 'Invalid arguments: either pass a spec with -i or provide the zone_name and realm_token.'
             return HandleCommandResult(retval=-errno.EINVAL, stdout='', stderr=err_msg)

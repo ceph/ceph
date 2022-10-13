@@ -877,6 +877,7 @@ class RGWSpec(ServiceSpec):
                  custom_configs: Optional[List[CustomConfig]] = None,
                  rgw_realm_token: Optional[str] = None,
                  update_endpoints: Optional[bool] = False,
+                 endpoints: Optional[str] = None  # commad separated endpoints list
                  ):
         assert service_type == 'rgw', service_type
 
@@ -913,6 +914,7 @@ class RGWSpec(ServiceSpec):
         self.ssl = ssl
         self.rgw_realm_token = rgw_realm_token
         self.update_endpoints = update_endpoints
+        self.endpoints = endpoints
 
     def get_port_start(self) -> List[int]:
         return [self.get_port()]

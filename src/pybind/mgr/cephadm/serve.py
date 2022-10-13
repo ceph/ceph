@@ -575,7 +575,7 @@ class CephadmServe:
                 for p in s.ports:
                     ep.append(f'{protocol}://{s.hostname}:{p}')
         zone_update_cmd = {
-            'prefix': 'rgw zone update',
+            'prefix': 'rgw zone modify',
             'realm_name': rgw_spec.rgw_realm,
             'zonegroup_name': rgw_spec.rgw_zonegroup,
             'zone_name': rgw_spec.rgw_zone,
@@ -586,7 +586,7 @@ class CephadmServe:
         rc, out, err = self.mgr.mon_command(zone_update_cmd)
         rgw_spec.update_endpoints = (rc != 0)  # keep trying on failure
         if rc != 0:
-            self.log.error(f'Error when trying to update rgw zone {err}')
+            self.log.error(f'Error when trying to update rgw zone: {err}')
             self.mgr.set_health_warning('CEPHADM_RGW', 'Cannot update rgw endpoints', 1,
                                         [f'Cannot update rgw endpoints for daemon {rgw_spec.service_name()}'])
         else:
