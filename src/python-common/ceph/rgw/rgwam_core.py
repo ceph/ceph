@@ -253,6 +253,12 @@ class ZonegroupOp:
 
         return json.loads(stdout)
 
+    def modify(self, realm: EntityKey, zg: EntityKey, endpoints=None):
+        ze = ZoneEnv(self.env, realm=realm, zg=zg)
+        params = ['zonegroup', 'modify']
+        opt_arg(params, '--endpoints', endpoints)
+        return RGWAdminJSONCmd(ze).run(params)
+
 
 class ZoneOp:
     def __init__(self, env: EnvArgs):
@@ -292,8 +298,8 @@ class ZoneOp:
 
         return RGWAdminJSONCmd(ze).run(params)
 
-    def modify(self, zone: EntityKey, zg: EntityKey, endpoints=None, is_master=None,
-               access_key=None, secret=None):
+    def modify(self, zone: EntityKey, zg: EntityKey, is_master=None,
+               access_key=None, secret=None, endpoints=None):
         ze = ZoneEnv(self.env, zone=zone, zg=zg)
 
         params = ['zone',
@@ -486,7 +492,8 @@ class RGWAM:
                                                   uid_prefix='user-sys',
                                                   is_system=True)
             sys_user = RGWUser(sys_user_info)
-            logging.info(f'Created system user: {sys_user.uid} on {realm.name}/{zonegroup.name}/{zone.name}')
+            logging.info(f'Created system user: {sys_user.uid} on'
+                         '{realm.name}/{zonegroup.name}/{zone.name}')
             return sys_user
         except RGWAMException as e:
             raise RGWAMException('failed to create system user', e)
@@ -495,7 +502,8 @@ class RGWAM:
         try:
             user_info = self.user_op().create(zone, zg, uid=uid, is_system=False)
             user = RGWUser(user_info)
-            logging.info('Created regular user {user.uid} on {realm.name}/{zonegroup.name}/{zone.name}')
+            logging.info('Created regular user {user.uid} on'
+                         '{realm.name}/{zonegroup.name}/{zone.name}')
             return user
         except RGWAMException as e:
             raise RGWAMException('failed to create user', e)
@@ -533,15 +541,15 @@ class RGWAM:
         rgw_acces_key = sys_user.get_key(0)
         access_key = rgw_acces_key.access_key if rgw_acces_key else ''
         secret = rgw_acces_key.secret_key if rgw_acces_key else ''
-        self.zone_op().modify(zone, zonegroup, None, None, access_key, secret)
+        self.zone_op().modify(zone, zonegroup, None,
+                              access_key, secret, endpoints=rgw_spec.endpoints)
         self.update_period(realm, zonegroup)
 
-        if start_radosgw:
+        if start_radosgw and rgw_spec.endpoints is None:
             # Instruct the orchestrator to start RGW daemons, asynchronically, this will
             # call back the rgw module to update the master zone with the corresponding endpoints
             realm_token = RealmToken(realm_name,
                                      realm.id,
-                                     True,   # primary cluster
                                      None,   # no endpoint
                                      access_key, secret)
             realm_token_b = realm_token.to_json().encode('utf-8')
@@ -678,14 +686,6 @@ class RGWAM:
         realm_token = RealmToken.from_base64_str(realm_token_b64)
         access_key = realm_token.access_key
         secret = realm_token.secret
-        try:
-            # We only pull the realm if we are on a secondary cluster
-            if not realm_token.is_primary and realm_token.endpoint is not None:
-                self.realm_op().pull(EntityName(realm_name),
-                                     realm_token.endpoint, access_key, secret)
-        except RGWAMException as e:
-            raise RGWAMException('failed to pull realm', e)
-
         realm_name = realm_token.realm_name
         realm_id = realm_token.realm_id
         logging.info(f'Using realm {realm_name} {realm_id}')
@@ -700,11 +700,16 @@ class RGWAM:
 
         zg = EntityName(zonegroup.name)
         zone = EntityName(zone_name)
+        master_zone_info = self.period_op().get_master_zone(realm, zg)
         success_message = f'Modified zone {realm_name} {zonegroup_name} {zone_name}'
         logging.info(success_message)
         try:
-            self.zone_op().modify(zone, zg, endpoints=','.join(endpoints),
-                                  access_key=access_key, secret=secret)
+            self.zone_op().modify(zone, zg, access_key=access_key,
+                                  secret=secret, endpoints=','.join(endpoints))
+            # we only update the zonegroup endpoints if the zone being
+            # modified is a master zone
+            if zone_name == master_zone_info['name']:
+                self.zonegroup_op().modify(realm, zg, endpoints=','.join(endpoints))
         except RGWAMException as e:
             raise RGWAMException('failed to modify zone', e)
 
@@ -733,7 +738,6 @@ class RGWAM:
                 secret = ''
             realms_info.append({"realm_name": realm_name,
                                 "realm_id": realm.id,
-                                "is_primary": False,
                                 "master_zone_id": master_zone_inf['id'] if master_zone_inf else '',
                                 "endpoint": zone_ep[0] if zone_ep else None,
                                 "access_key": access_key,
@@ -770,20 +774,21 @@ class RGWAM:
         period = RGWPeriod(period_info)
         logging.info('Period: ' + period.id)
 
-        zonegroup = period.find_zonegroup_by_name(rgw_spec.rgw_zonegroup)
+        zonegroup = period.get_master_zonegroup()
         if not zonegroup:
-            raise RGWAMException(f'zonegroup {rgw_spec.rgw_zonegroup}')
+            raise RGWAMException('Cannot find master zonegroup of realm {realm_name}')
 
-        zone = self.create_zone(realm, zonegroup, rgw_spec.rgw_zone, False, access_key, secret)
+        zone = self.create_zone(realm, zonegroup, rgw_spec.rgw_zone,
+                                False,  # secondary zone
+                                access_key, secret, endpoints=rgw_spec.endpoints)
         self.update_period(realm, zonegroup, zone)
 
         period = RGWPeriod(period_info)
         logging.debug(period.to_json())
 
-        if start_radosgw:
+        if start_radosgw and rgw_spec.endpoints is None:
             secondary_realm_token = RealmToken(realm_name,
                                                realm_id,
-                                               False,  # is_primary
                                                None,   # no endpoint
                                                realm_token.access_key,
                                                realm_token.secret)
@@ -791,6 +796,7 @@ class RGWAM:
             realm_token_s = base64.b64encode(realm_token_b).decode('utf-8')
             rgw_spec.update_endpoints = True
             rgw_spec.rgw_token = realm_token_s
+            rgw_spec.rgw_zonegroup = zonegroup.name  # master zonegroup is used
             self.env.mgr.apply_rgw(rgw_spec)
 
     def _get_daemon_eps(self, realm_name=None, zonegroup_name=None, zone_name=None):

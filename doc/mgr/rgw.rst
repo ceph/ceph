@@ -126,25 +126,6 @@ Join an existing realm by creating a new secondary zone (using the realm token)
 
 ::
 
-  ceph rgw zone-creds create
-
-Create new credentials and return a token for new zone connection
-
-::
-
-  ceph rgw zone-creds remove
-
-Remove credentials and/or user that are associated with the specified
-token
-
-::
-
-  ceph rgw realm reconcile
-
-Update the realm configuration to match the orchestrator deployment
-
-::
-
   ceph rgw admin [*]
 
 RGW admin command
