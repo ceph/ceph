@@ -26,10 +26,7 @@
 
 #include "crimson/common/errorator.h"
 
-using auth_proto_t = int;
-
 class AuthConnectionMeta;
-using AuthConnectionMetaRef = seastar::lw_shared_ptr<AuthConnectionMeta>;
 
 namespace crimson::net {
 
