@@ -410,7 +410,7 @@ class SyntheticWorkload {
          if (!p.first->get_default_policy().server &&
              !p.second->get_default_policy().server) {
              //verify that equal-to operator applies here
-           ceph_assert(conn->get_messenger() == p.first.get());
+           ceph_assert(p.first->owns_connection(*conn));
            crimson::net::ConnectionRef peer = p.second->connect(
              p.first->get_myaddr(), p.first->get_mytype());
            peer->mark_down();

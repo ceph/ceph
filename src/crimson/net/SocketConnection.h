@@ -56,8 +56,6 @@ class SocketConnection : public Connection {
                    ChainedDispatchers& dispatchers);
   ~SocketConnection() override;
 
-  Messenger* get_messenger() const override;
-
   bool is_connected() const override;
 
 #ifdef UNIT_TESTS_BUILT
@@ -98,6 +96,10 @@ class SocketConnection : public Connection {
   }
 
   seastar::socket_address get_local_address() const;
+
+  SocketMessenger &get_messenger() const {
+    return messenger;
+  }
 
   friend class Protocol;
   friend class ProtocolV2;
