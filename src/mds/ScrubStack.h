@@ -104,6 +104,8 @@ public:
 
   bool remove_inode_if_stacked(CInode *in);
 
+  void move_uninline_failures_to_damage_table();
+
   MDCache *mdcache;
 
 protected:
