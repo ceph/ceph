@@ -1004,7 +1004,9 @@ std::optional<hobject_t> PG::resolve_oid(
     if (std::find(
 	  citer->second.begin(),
 	  citer->second.end(),
-	  *clone) == citer->second.end()) {
+	  oid.snap) == citer->second.end()) {
+      logger().debug("{} {} does not contain {} -- DNE",
+                     __func__, ss.clone_snaps, oid.snap);
       return std::nullopt;
     } else {
       auto soid = oid;
