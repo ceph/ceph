@@ -242,10 +242,8 @@ Connection::do_auth_single(Connection::request_t what)
       logger().info("do_auth_single: connection closed");
       return std::make_optional(auth_result_t::canceled);
     }
-    logger().info(
-      "do_auth_single: mon {} => {} returns {}: {}",
-      conn->get_messenger()->get_myaddr(),
-      conn->get_peer_addr(), *m, m->result);
+    logger().info("do_auth_single: {} returns {}: {}",
+                  *conn, *m, m->result);
     auto p = m->result_bl.cbegin();
     auto ret = auth->handle_response(m->result, p,
 				     nullptr, nullptr);
@@ -805,10 +803,8 @@ seastar::future<> Client::handle_monmap(crimson::net::ConnectionRef conn,
 seastar::future<> Client::handle_auth_reply(crimson::net::ConnectionRef conn,
                                             Ref<MAuthReply> m)
 {
-  logger().info(
-    "handle_auth_reply mon {} => {} returns {}: {}",
-    conn->get_messenger()->get_myaddr(),
-    conn->get_peer_addr(), *m, m->result);
+  logger().info("handle_auth_reply {} returns {}: {}",
+                *conn, *m, m->result);
   auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
                             [peer_addr = conn->get_peer_addr()](auto& mc) {
                               return mc->is_my_peer(peer_addr);

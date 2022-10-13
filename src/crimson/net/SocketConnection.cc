@@ -41,11 +41,6 @@ SocketConnection::SocketConnection(SocketMessenger& messenger,
 
 SocketConnection::~SocketConnection() {}
 
-crimson::net::Messenger*
-SocketConnection::get_messenger() const {
-  return &messenger;
-}
-
 bool SocketConnection::is_connected() const
 {
   assert(seastar::this_shard_id() == shard_id());

@@ -104,7 +104,6 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   Interceptor *interceptor = nullptr;
 #endif
 
-  virtual Messenger* get_messenger() const = 0;
   const entity_addr_t& get_peer_addr() const { return peer_addr; }
   const entity_addrvec_t get_peer_addrs() const {
     return entity_addrvec_t(peer_addr);

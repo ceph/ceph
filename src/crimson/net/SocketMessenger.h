@@ -72,6 +72,11 @@ class SocketMessenger final : public Messenger {
 
   ConnectionRef connect(const entity_addr_t& peer_addr,
                         const entity_name_t& peer_name) override;
+
+  bool owns_connection(Connection &conn) const override {
+    return this == &static_cast<SocketConnection&>(conn).get_messenger();
+  }
+
   // can only wait once
   seastar::future<> wait() override {
     assert(seastar::this_shard_id() == master_sid);

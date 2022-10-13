@@ -85,6 +85,8 @@ public:
     return connect(peer_addr, entity_name_t(peer_type, -1));
   }
 
+  virtual bool owns_connection(Connection &) const = 0;
+
   // wait for messenger shutdown
   virtual seastar::future<> wait() = 0;
 
