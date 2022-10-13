@@ -345,7 +345,6 @@ class SyntheticWorkload {
      crimson::net::MessengerRef msgr =
        crimson::net::Messenger::create(name, lname, nonce);
      msgr->set_default_policy(server_policy);
-     msgr->set_require_authorizer(false);
      msgr->set_auth_client(&dummy_auth);
      msgr->set_auth_server(&dummy_auth);
      available_servers.insert(msgr);
