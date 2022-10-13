@@ -530,8 +530,9 @@ private:
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
                        FastReadType fast_read,
-		       const std::string& pg_autoscale_mode,
+		       std::string pg_autoscale_mode,
 		       bool bulk,
+		       bool crimson,
 		       std::ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 
