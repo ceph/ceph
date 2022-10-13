@@ -77,6 +77,12 @@ RGWOp *RGWHandler_REST_IAM::op_post()
       return new RGWGetOIDCProvider;
     if (action.compare("DeleteOpenIDConnectProvider") == 0)
       return new RGWDeleteOIDCProvider;
+    if (action.compare("TagRole") == 0)
+      return new RGWTagRole;
+    if (action.compare("ListRoleTags") == 0)
+      return new RGWListRoleTags;
+    if (action.compare("UntagRole") == 0)
+      return new RGWUntagRole;
   }
 
   return nullptr;

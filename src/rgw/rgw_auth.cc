@@ -351,15 +351,14 @@ rgw::auth::Strategy::add_engine(const Control ctrl_flag,
 
 void rgw::auth::WebIdentityApplier::to_str(std::ostream& out) const
 {
-  out << "rgw::auth::WebIdentityApplier(sub =" << token_claims.sub
-      << ", user_name=" << token_claims.user_name
-      << ", aud =" << token_claims.aud
-      << ", provider_id =" << token_claims.iss << ")";
+  out << "rgw::auth::WebIdentityApplier(sub =" << sub
+      << ", user_name=" << user_name
+      << ", provider_id =" << iss << ")";
 }
 
 string rgw::auth::WebIdentityApplier::get_idp_url() const
 {
-  string idp_url = token_claims.iss;
+  string idp_url = this->iss;
   idp_url = url_remove_prefix(idp_url);
   return idp_url;
 }
@@ -389,7 +388,7 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
 
 void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const {
   rgw_user federated_user;
-  federated_user.id = token_claims.sub;
+  federated_user.id = this->sub;
   federated_user.tenant = role_tenant;
   federated_user.ns = "oidc";
 
@@ -424,24 +423,76 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   }
 
   ldpp_dout(dpp, 0) << "NOTICE: couldn't map oidc federated user " << federated_user << dendl;
-  create_account(dpp, federated_user, token_claims.user_name, user_info);
+  create_account(dpp, federated_user, this->user_name, user_info);
 }
 
 void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
-  s->info.args.append("sub", token_claims.sub);
-  s->info.args.append("aud", token_claims.aud);
-  s->info.args.append("provider_id", token_claims.iss);
-  s->info.args.append("client_id", token_claims.client_id);
+  s->info.args.append("sub", this->sub);
+  s->info.args.append("aud", this->aud);
+  s->info.args.append("provider_id", this->iss);
+  s->info.args.append("client_id", this->client_id);
 
+  string condition;
   string idp_url = get_idp_url();
-  string condition = idp_url + ":app_id";
+  for (auto& claim : token_claims) {
+    if (claim.first == "aud") {
+      condition.clear();
+      condition = idp_url + ":app_id";
+      s->env.emplace(condition, claim.second);
+    }
+    condition.clear();
+    condition = idp_url + ":" + claim.first;
+    s->env.emplace(condition, claim.second);
+  }
 
-  s->env.emplace(condition, token_claims.aud);
+  if (principal_tags) {
+    constexpr size_t KEY_SIZE = 128, VAL_SIZE = 256;
+    std::set<std::pair<string, string>> p_tags = principal_tags.get();
+    for (auto& it : p_tags) {
+      string key = it.first;
+      string val = it.second;
+      if (key.find("aws:") == 0 || val.find("aws:") == 0) {
+        ldpp_dout(dpp, 0) << "ERROR: Tag/Value can't start with aws:, hence skipping it" << dendl;
+        continue;
+      }
+      if (key.size() > KEY_SIZE || val.size() > VAL_SIZE)  {
+        ldpp_dout(dpp, 0) << "ERROR: Invalid tag/value size, hence skipping it" << dendl;
+        continue;
+      }
+      std::string p_key = "aws:PrincipalTag/";
+      p_key.append(key);
+      s->principal_tags.emplace_back(std::make_pair(p_key, val));
+      ldpp_dout(dpp, 10) << "Principal Tag Key: " << p_key << " Value: " << val << dendl;
 
-  condition.clear();
-  condition = idp_url + ":sub";
-  s->env.emplace(condition, token_claims.sub);
+      std::string e_key = "aws:RequestTag/";
+      e_key.append(key);
+      s->env.emplace(e_key, val);
+      ldpp_dout(dpp, 10) << "RGW Env Tag Key: " << e_key << " Value: " << val << dendl;
+
+      s->env.emplace("aws:TagKeys", key);
+        ldpp_dout(dpp, 10) << "aws:TagKeys: " << key << dendl;
+
+      if (s->principal_tags.size() == 50) {
+        ldpp_dout(dpp, 0) << "ERROR: Number of tag/value pairs exceeding 50, hence skipping the rest" << dendl;
+        break;
+      }
+    }
+  }
+
+  if (role_tags) {
+    for (auto& it : role_tags.get()) {
+      std::string p_key = "aws:PrincipalTag/";
+      p_key.append(it.first);
+      s->principal_tags.emplace_back(std::make_pair(p_key, it.second));
+      ldpp_dout(dpp, 10) << "Principal Tag Key: " << p_key << " Value: " << it.second << dendl;
+
+      std::string e_key = "iam:ResourceTag/";
+      e_key.append(it.first);
+      s->env.emplace(e_key, it.second);
+      ldpp_dout(dpp, 10) << "RGW Env Tag Key: " << e_key << " Value: " << it.second << dendl;
+    }
+  }
 }
 
 bool rgw::auth::WebIdentityApplier::is_identity(const idset_t& ids) const
@@ -760,11 +811,11 @@ void rgw::auth::LocalApplier::write_ops_log_entry(rgw_log_entry& entry) const
 }
 
 void rgw::auth::RoleApplier::to_str(std::ostream& out) const {
-  out << "rgw::auth::LocalApplier(role name =" << role.name;
+  out << "rgw::auth::RoleApplier(role name =" << role.name;
   for (auto& policy: role.role_policies) {
     out << ", role policy =" << policy;
   }
-  out << ", token policy =" << token_policy;
+  out << ", token policy =" << token_attrs.token_policy;
   out << ")";
 }
 
@@ -780,7 +831,7 @@ bool rgw::auth::RoleApplier::is_identity(const idset_t& ids) const {
       }
     } else if (p.is_assumed_role()) {
       string tenant = p.get_tenant();
-      string role_session = role.name + "/" + role_session_name; //role/role-session
+      string role_session = role.name + "/" + token_attrs.role_session_name; //role/role-session
       if (role.tenant == tenant && role_session == p.get_role_session()) {
         return true;
       }
@@ -788,12 +839,12 @@ bool rgw::auth::RoleApplier::is_identity(const idset_t& ids) const {
       string id = p.get_id();
       string tenant = p.get_tenant();
       string oidc_id;
-      if (user_id.ns.empty()) {
-        oidc_id = user_id.id;
+      if (token_attrs.user_id.ns.empty()) {
+        oidc_id = token_attrs.user_id.id;
       } else {
-        oidc_id = user_id.ns + "$" + user_id.id;
+        oidc_id = token_attrs.user_id.ns + "$" + token_attrs.user_id.id;
       }
-      if (oidc_id == id && user_id.tenant == tenant) {
+      if (oidc_id == id && token_attrs.user_id.tenant == tenant) {
         return true;
       }
     }
@@ -804,7 +855,7 @@ bool rgw::auth::RoleApplier::is_identity(const idset_t& ids) const {
 void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const /* out */
 {
   /* Load the user id */
-  user_info.user_id = this->user_id;
+  user_info.user_id = this->token_attrs.user_id;
 }
 
 void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
@@ -821,9 +872,9 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
     }
   }
 
-  if (!this->token_policy.empty()) {
+  if (!this->token_attrs.token_policy.empty()) {
     try {
-      string policy = this->token_policy;
+      string policy = this->token_attrs.token_policy;
       bufferlist bl = bufferlist::static_from_string(policy);
       const rgw::IAM::Policy p(s->cct, role.tenant, bl);
       s->session_policies.push_back(std::move(p));
@@ -835,15 +886,24 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
   }
 
   string condition = "aws:userid";
-  string value = role.id + ":" + role_session_name;
+  string value = role.id + ":" + token_attrs.role_session_name;
   s->env.emplace(condition, value);
 
-  s->env.emplace("aws:TokenIssueTime", token_issued_at);
+  s->env.emplace("aws:TokenIssueTime", token_attrs.token_issued_at);
+
+  for (auto& m : token_attrs.principal_tags) {
+    s->env.emplace(m.first, m.second);
+    ldpp_dout(dpp, 10) << "Principal Tag Key: " << m.first << " Value: " << m.second << dendl;
+    std::size_t pos = m.first.find('/');
+    string key = m.first.substr(pos + 1);
+    s->env.emplace("aws:TagKeys", key);
+    ldpp_dout(dpp, 10) << "aws:TagKeys: " << key << dendl;
+  }
 
   s->token_claims.emplace_back("sts");
   s->token_claims.emplace_back("role_name:" + role.tenant + "$" + role.name);
-  s->token_claims.emplace_back("role_session:" + role_session_name);
-  for (auto& it : token_claims) {
+  s->token_claims.emplace_back("role_session:" + token_attrs.role_session_name);
+  for (auto& it : token_attrs.token_claims) {
     s->token_claims.emplace_back(it);
   }
 }

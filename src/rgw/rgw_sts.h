@@ -45,27 +45,30 @@ public:
 class AssumeRoleWithWebIdentityRequest : public AssumeRoleRequestBase {
   static constexpr uint64_t MIN_PROVIDER_ID_LEN = 4;
   static constexpr uint64_t MAX_PROVIDER_ID_LEN = 2048;
-  string providerId;
-  string iamPolicy;
-  string iss;
-  string sub;
-  string aud;
+  std::string providerId;
+  std::string iamPolicy;
+  std::string iss;
+  std::string sub;
+  std::string aud;
+  std::vector<std::pair<std::string,std::string>> session_princ_tags;
 public:
   AssumeRoleWithWebIdentityRequest( CephContext* cct,
-                      const string& duration,
-                      const string& providerId,
-                      const string& iamPolicy,
-                      const string& roleArn,
-                      const string& roleSessionName,
-                      const string& iss,
-                      const string& sub,
-                      const string& aud)
+                      const std::string& duration,
+                      const std::string& providerId,
+                      const std::string& iamPolicy,
+                      const std::string& roleArn,
+                      const std::string& roleSessionName,
+                      const std::string& iss,
+                      const std::string& sub,
+                      const std::string& aud,
+                      std::vector<std::pair<std::string,std::string>> session_princ_tags)
     : AssumeRoleRequestBase(cct, duration, iamPolicy, roleArn, roleSessionName),
-      providerId(providerId), iss(iss), sub(sub), aud(aud) {}
-  const string& getProviderId() const { return providerId; }
-  const string& getIss() const { return iss; }
-  const string& getAud() const { return aud; }
-  const string& getSub() const { return sub; }
+      providerId(providerId), iss(iss), sub(sub), aud(aud), session_princ_tags(session_princ_tags) {}
+  const std::string& getProviderId() const { return providerId; }
+  const std::string& getIss() const { return iss; }
+  const std::string& getAud() const { return aud; }
+  const std::string& getSub() const { return sub; }
+  const std::vector<std::pair<std::string,std::string>>& getPrincipalTags() const { return session_princ_tags; }
   int validate_input() const;
 };
 
@@ -132,14 +135,15 @@ struct SessionToken {
   uint32_t perm_mask;
   bool is_admin;
   uint32_t acct_type;
-  string role_session;
-  std::vector<string> token_claims;
-  string issued_at;
+  std::string role_session;
+  std::vector<std::string> token_claims;
+  std::string issued_at;
+  std::vector<std::pair<std::string,std::string>> principal_tags;
 
   SessionToken() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     encode(access_key_id, bl);
     encode(secret_access_key, bl);
     encode(expiration, bl);
@@ -153,11 +157,12 @@ struct SessionToken {
     encode(role_session, bl);
     encode(token_claims, bl);
     encode(issued_at, bl);
+    encode(principal_tags, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(4, bl);
+    DECODE_START(5, bl);
     decode(access_key_id, bl);
     decode(secret_access_key, bl);
     decode(expiration, bl);
@@ -177,6 +182,9 @@ struct SessionToken {
     if (struct_v >= 4) {
       decode(issued_at, bl);
     }
+    if (struct_v >= 5) {
+      decode(principal_tags, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -192,10 +200,11 @@ class Credentials {
 public:
   int generateCredentials(CephContext* cct,
                           const uint64_t& duration,
-                          const boost::optional<string>& policy,
-                          const boost::optional<string>& roleId,
-                          const boost::optional<string>& role_session,
-                          const boost::optional<std::vector<string> > token_claims,
+                          const boost::optional<std::string>& policy,
+                          const boost::optional<std::string>& roleId,
+                          const boost::optional<std::string>& role_session,
+                          const boost::optional<std::vector<std::string>>& token_claims,
+                          const boost::optional<std::vector<std::pair<std::string,std::string>>>& session_princ_tags,
                           boost::optional<rgw_user> user,
                           rgw::auth::Identity* identity);
   const string& getAccessKeyId() const { return accessKeyId; }

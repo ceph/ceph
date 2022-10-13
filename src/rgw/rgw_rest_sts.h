@@ -14,11 +14,14 @@
 namespace rgw::auth::sts {
 
 class WebTokenEngine : public rgw::auth::Engine {
+  static constexpr std::string_view princTagsNamespace = "https://aws.amazon.com/tags";
   CephContext* const cct;
   RGWCtl* const ctl;
 
   using result_t = rgw::auth::Engine::result_t;
-  using token_t = rgw::web_idp::WebTokenClaims;
+  using Pair = std::pair<std::string, std::string>;
+  using token_t = std::unordered_multimap<string, string>;
+  using principal_tags_t = std::set<Pair>;
 
   const rgw::auth::TokenExtractor* const extractor;
   const rgw::auth::WebIdentityApplier::Factory* const apl_factory;
@@ -31,9 +34,13 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   boost::optional<RGWOIDCProvider> get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss) const;
 
-  std::string get_role_tenant(const string& role_arn) const;
+  std::string get_role_tenant(const std::string& role_arn) const;
 
-  boost::optional<WebTokenEngine::token_t>
+  std::string get_role_name(const string& role_arn) const;
+
+  std::string get_cert_url(const std::string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
+  
+  std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
 
   void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const;
@@ -41,6 +48,10 @@ class WebTokenEngine : public rgw::auth::Engine {
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string& token,
                         const req_state* s, optional_yield y) const;
+
+  template <typename T>
+  void recurse_and_insert(const string& key, const jwt::claim& c, T& t) const;
+  WebTokenEngine::token_t get_token_claims(const jwt::decoded_jwt& decoded) const;
 
 public:
   WebTokenEngine(CephContext* const cct,
@@ -80,11 +91,13 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
   aplptr_t create_apl_web_identity( CephContext* cct,
                                     const req_state* s,
-                                    const string& role_session,
-                                    const string& role_tenant,
-                                    const rgw::web_idp::WebTokenClaims& token) const override {
+                                    const std::string& role_session,
+                                    const std::string& role_tenant,
+                                    const std::unordered_multimap<std::string, std::string>& token,
+                                    boost::optional<std::multimap<std::string, std::string>> role_tags,
+                                    boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags) const override {
     auto apl = rgw::auth::add_sysreq(cct, ctl, s,
-      rgw::auth::WebIdentityApplier(cct, ctl, role_session, role_tenant, token));
+      rgw::auth::WebIdentityApplier(cct, ctl, role_session, role_tenant, token, role_tags, principal_tags));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 

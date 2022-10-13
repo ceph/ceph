@@ -72,6 +72,39 @@ def install_packages(ctx, config):
             )
 
 @contextlib.contextmanager
+def download_conf(ctx, config):
+    """
+    Downloads confi.py used in run_admin_cmds
+    """
+    assert isinstance(config, dict)
+    log.info('Downloading conf...')
+    testdir = teuthology.get_testdir(ctx)
+    conf_branch = 'main'
+    conf_repo = 'https://github.com/TRYTOBE8TME/scripts.git'
+    for (client, _) in config.items():
+        ctx.cluster.only(client).run(
+            args=[
+                'git', 'clone',
+                '-b', conf_branch,
+                conf_repo,
+                '{tdir}/scripts'.format(tdir=testdir),
+                ],
+            )
+    try:
+        yield
+    finally:
+        log.info('Removing conf...')
+        testdir = teuthology.get_testdir(ctx)
+        for client in config:
+            ctx.cluster.only(client).run(
+                args=[
+                    'rm',
+                    '-rf',
+                    '{tdir}/scripts'.format(tdir=testdir),
+                    ],
+                )
+
+@contextlib.contextmanager
 def build(ctx,config):
     """
     Build process which needs to be done before starting a server.
@@ -161,6 +194,7 @@ def run_admin_cmds(ctx,config):
                 'create', 'clients',
                 '-r', realm_name,
                 '-s', client,
+                '-s', 'directAccessGrantsEnabled=true',
                 '-s', 'redirectUris=["http://localhost:8080/myapp/*"]',
             ],
         )
@@ -201,6 +235,74 @@ def run_admin_cmds(ctx,config):
         ans0= '{client}:{secret}'.format(client=client_name,secret=out2[15:51])
         ans3= 'client_secret={}'.format(out2[15:51])
         clientid='client_id={}'.format(client_name)
+
+        proto_map = pre1+"/protocol-mappers/models"
+        uname = "username=testuser"
+        upass = "password=testuser"
+
+        remote.run(
+            args=[
+                '{tdir}/bin/kcadm.sh'.format(tdir=get_keycloak_dir(ctx,config)),
+                'create', 'users',
+                '-s', uname,
+                '-s', 'enabled=true',
+                '-s', 'attributes.\"https://aws.amazon.com/tags\"=\"{"principal_tags":{"Department":["Engineering", "Marketing"]}}\"',
+                '-r', realm_name, 
+            ],
+        )
+
+        sample = 'testuser'
+
+        remote.run(
+            args=[
+                '{tdir}/bin/kcadm.sh'.format(tdir=get_keycloak_dir(ctx,config)),
+                'set-password',
+                '-r', realm_name,
+                '--username', sample,
+                '--new-password', sample,
+            ],
+        )
+
+        file_path = '{tdir}/scripts/confi.py'.format(tdir=teuthology.get_testdir(ctx))
+
+        remote.run(
+            args=[
+                '{tdir}/bin/kcadm.sh'.format(tdir=get_keycloak_dir(ctx,config)),
+                'create', proto_map,
+                '-r', realm_name,
+                '-f', file_path,
+            ],
+        )
+
+        remote.run(
+            args=[
+                '{tdir}/bin/kcadm.sh'.format(tdir=get_keycloak_dir(ctx,config)),
+                'config', 'credentials',
+                '--server', 'http://localhost:8080/auth',
+                '--realm', realm_name,
+                '--user', sample,
+                '--password', sample,
+                '--client', 'admin-cli',
+            ],
+        )
+
+        out9= toxvenv_sh(ctx, remote,
+                 [
+                  'curl', '-k', '-v',
+                  '-X', 'POST',
+                  '-H', 'Content-Type:application/x-www-form-urlencoded',
+                  '-d', 'scope=openid',
+                  '-d', 'grant_type=password',
+                  '-d', clientid,
+                  '-d', ans3,
+                  '-d', uname,
+                  '-d', upass,
+                  'http://localhost:8080/auth/realms/'+realm_name+'/protocol/openid-connect/token', run.Raw('|'),
+                  'jq', '-r', '.access_token'
+                 ])
+
+        user_token_pre = out9.rstrip()
+        user_token = '{}'.format(user_token_pre)
 
         out3= toxvenv_sh(ctx, remote, 
                  [
@@ -256,21 +358,40 @@ def run_admin_cmds(ctx,config):
             if(character!=':'):
                 ans5+=character
 
-        out6= toxvenv_sh(ctx, remote, 
+        str1 = 'curl'
+        str2 = '-k'
+        str3 = '-v'
+        str4 = '-X'
+        str5 = 'POST'
+        str6 = '-u'
+        str7 = '-d'
+        str8 = 'http://localhost:8080/auth/realms/'+realm_name+'/protocol/openid-connect/token/introspect'
+
+        out6= toxvenv_sh(ctx, remote,
                  [
-                  'curl', '-k', '-v', 
-                  '-X', 'POST', 
-                  '-u', ans0, 
-                  '-d', acc_token, 
-                  'http://localhost:8080/auth/realms/'+realm_name+'/protocol/openid-connect/token/introspect', run.Raw('|'), 
-                  'jq', '-r', '.aud'
+                  str1, str2, str3, str4, str5, str6, ans0, str7, acc_token, str8, run.Raw('|'), 'jq', '-r', '.aud'
+                 ])
+
+        out7= toxvenv_sh(ctx, remote,
+                 [ 
+                  str1, str2, str3, str4, str5, str6, ans0, str7, acc_token, str8, run.Raw('|'), 'jq', '-r', '.sub'
+                 ])
+
+        out8= toxvenv_sh(ctx, remote,
+                 [ 
+                  str1, str2, str3, str4, str5, str6, ans0, str7, acc_token, str8, run.Raw('|'), 'jq', '-r', '.azp'
                  ])
 
         ans6=out6.rstrip()
+        ans7=out7.rstrip()
+        ans8=out8.rstrip()
 
         os.environ['TOKEN']=ans4
         os.environ['THUMBPRINT']=ans5
         os.environ['AUD']=ans6
+        os.environ['SUB']=ans7
+        os.environ['AZP']=ans8
+        os.environ['USER_TOKEN']=user_token
         os.environ['KC_REALM']=realm_name
 
     try:
@@ -282,6 +403,12 @@ def run_admin_cmds(ctx,config):
             remote.run(
                  args=['rm', '-f',
                        '{tdir}/bin/certificate.crt'.format(tdir=get_keycloak_dir(ctx,config)),
+                 ],
+                 )
+
+            remote.run(
+                 args=['rm', '-f',
+                       '{tdir}/confi.py'.format(tdir=teuthology.get_testdir(ctx)),
                  ],
                  )
 
@@ -329,6 +456,7 @@ def task(ctx,config):
         lambda: install_packages(ctx=ctx, config=config),
         lambda: build(ctx=ctx, config=config),
         lambda: run_keycloak(ctx=ctx, config=config),
+        lambda: download_conf(ctx=ctx, config=config),
         lambda: run_admin_cmds(ctx=ctx, config=config),
         ):
         yield

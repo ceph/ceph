@@ -41,6 +41,15 @@ int RGWRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_
   auto svc = ctl->svc;
 
   auto obj_ctx = ctl->svc->sysobj->init_obj_ctx();
+
+  if (!this->tags.empty()) {
+    bufferlist bl_tags;
+    encode(this->tags, bl_tags);
+    map<string, bufferlist> attrs;
+    attrs.emplace("tagging", bl_tags);
+    return rgw_put_system_obj(dpp, obj_ctx, svc->zone->get_zone_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y, &attrs);
+  }
+
   return rgw_put_system_obj(dpp, obj_ctx, svc->zone->get_zone_params().roles_pool, oid,
                             bl, exclusive, NULL, real_time(), y, NULL);
 }
@@ -299,6 +308,18 @@ void RGWRole::dump(Formatter *f) const
   encode_json("CreateDate", creation_date, f);
   encode_json("MaxSessionDuration", max_session_duration, f);
   encode_json("AssumeRolePolicyDocument", trust_policy, f);
+  if (!tags.empty()) {
+    f->open_array_section("Tags");
+    for (const auto& it : tags) {
+      f->open_object_section("Key");
+      encode_json("Key", it.first, f);
+      f->close_section();
+      f->open_object_section("Value");
+      encode_json("Value", it.second, f);
+      f->close_section();
+    }
+    f->close_section();
+  }
 }
 
 void RGWRole::decode_json(JSONObj *obj)
@@ -347,7 +368,9 @@ int RGWRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
   bufferlist bl;
   auto obj_ctx = svc->sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, y, dpp);
+  map<string, bufferlist> attrs;
+
+  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, y, dpp, &attrs, nullptr, boost::none, true);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role info from pool: " << pool.name <<
                   ": " << id << ": " << cpp_strerror(-ret) << dendl;
@@ -362,6 +385,19 @@ int RGWRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
     ldpp_dout(dpp, 0) << "ERROR: failed to decode role info from pool: " << pool.name <<
                   ": " << id << dendl;
     return -EIO;
+  }
+
+  auto it = attrs.find("tagging");
+  if (it != attrs.end()) {
+    bufferlist bl_tags = it->second;
+    try {
+      using ceph::decode;
+      auto iter = bl_tags.cbegin();
+      decode(tags, iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to decode attrs" << id << dendl;
+      return -EIO;
+    }
   }
 
   return 0;
@@ -503,6 +539,33 @@ int RGWRole::get_roles_by_path_prefix(const DoutPrefixProvider *dpp,
   }
 
   return 0;
+}
+
+int RGWRole::set_tags(const DoutPrefixProvider* dpp, const multimap<string,string>& tags_map)
+{
+  for (auto& it : tags_map) {
+    this->tags.emplace(it.first, it.second);
+  }
+  if (this->tags.size() > 50) {
+    ldpp_dout(dpp, 0) << "No. of tags is greater than 50" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+boost::optional<multimap<string,string>> RGWRole::get_tags()
+{
+  if(this->tags.empty()) {
+    return boost::none;
+  }
+  return this->tags;
+}
+
+void RGWRole::erase_tags(const vector<string>& tagKeys)
+{
+  for (auto& it : tagKeys) {
+    this->tags.erase(it);
+  }
 }
 
 const string& RGWRole::get_names_oid_prefix()
