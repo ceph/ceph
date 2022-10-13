@@ -424,38 +424,92 @@ public:
     auto result = t.get_extent(offset, &ret);
     if (result != Transaction::get_extent_ret::ABSENT) {
       SUBTRACET(seastore_cache, "{} {}~{} is {} on t -- {}",
-          t,
-          T::TYPE,
-          offset,
-          length,
-          result == Transaction::get_extent_ret::PRESENT ? "present" : "retired",
-          *ret);
+	  t,
+	  T::TYPE,
+	  offset,
+	  length,
+	  result == Transaction::get_extent_ret::PRESENT ? "present" : "retired",
+	  *ret);
       assert(result != Transaction::get_extent_ret::RETIRED);
       return ret->wait_io().then([ret] {
 	return seastar::make_ready_future<TCachedExtentRef<T>>(
 	  ret->cast<T>());
       });
-    } else {
-      SUBTRACET(seastore_cache, "{} {}~{} is absent on t, query cache ...",
-                t, T::TYPE, offset, length);
-      auto f = [&t, this](CachedExtent &ext) {
-	t.add_to_read_set(CachedExtentRef(&ext));
-	touch_extent(ext);
-      };
-      auto metric_key = std::make_pair(t.get_src(), T::TYPE);
-      return trans_intr::make_interruptible(
-	get_extent<T>(
-	  offset, length, &metric_key,
-	  std::forward<Func>(extent_init_func), std::move(f))
-      );
     }
+
+    SUBTRACET(seastore_cache, "{} {}~{} is absent on t, query cache ...",
+	      t, T::TYPE, offset, length);
+    auto f = [&t, this](CachedExtent &ext) {
+      t.add_to_read_set(CachedExtentRef(&ext));
+      touch_extent(ext);
+    };
+    auto metric_key = std::make_pair(t.get_src(), T::TYPE);
+    return trans_intr::make_interruptible(
+      get_extent<T>(
+	offset, length, &metric_key,
+	std::forward<Func>(extent_init_func), std::move(f))
+    );
   }
+
+  /*
+   * get_absent_extent
+   *
+   * Mostly the same as Cache::get_extent(), with the only difference
+   * that get_absent_extent won't search the transaction's context for
+   * the specific CachedExtent
+   */
+  template <typename T, typename Func>
+  get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
+    Transaction &t,
+    paddr_t offset,
+    extent_len_t length,
+    Func &&extent_init_func) {
+    CachedExtentRef ret;
+    LOG_PREFIX(Cache::get_extent);
+
+#ifndef NDEBUG
+    auto r = t.get_extent(offset, &ret);
+    if (r != Transaction::get_extent_ret::ABSENT) {
+      SUBERRORT(seastore_cache, "unexpected non-absent extent {}", t, *ret);
+      ceph_abort();
+    }
+#endif
+
+    SUBTRACET(seastore_cache, "{} {}~{} is absent on t, query cache ...",
+	      t, T::TYPE, offset, length);
+    auto f = [&t, this](CachedExtent &ext) {
+      t.add_to_read_set(CachedExtentRef(&ext));
+      touch_extent(ext);
+    };
+    auto metric_key = std::make_pair(t.get_src(), T::TYPE);
+    return trans_intr::make_interruptible(
+      get_extent<T>(
+	offset, length, &metric_key,
+	std::forward<Func>(extent_init_func), std::move(f))
+    );
+  }
+
   template <typename T>
   get_extent_iertr::future<TCachedExtentRef<T>> get_extent(
     Transaction &t,
     paddr_t offset,
     extent_len_t length) {
     return get_extent<T>(t, offset, length, [](T &){});
+  }
+
+  /*
+   * get_absent_extent
+   *
+   * Mostly the same as Cache::get_extent(), with the only difference
+   * that get_absent_extent won't search the transaction's context for
+   * the specific CachedExtent
+   */
+  template <typename T>
+  get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
+    Transaction &t,
+    paddr_t offset,
+    extent_len_t length) {
+    return get_absent_extent<T>(t, offset, length, [](T &){});
   }
 
   extent_len_t get_block_size() const {
@@ -539,6 +593,39 @@ private:
     }
   }
 
+  get_extent_by_type_ret _get_absent_extent_by_type(
+    Transaction &t,
+    extent_types_t type,
+    paddr_t offset,
+    laddr_t laddr,
+    extent_len_t length,
+    extent_init_func_t &&extent_init_func
+  ) {
+    LOG_PREFIX(Cache::_get_absent_extent_by_type);
+
+#ifndef NDEBUG
+    CachedExtentRef ret;
+    auto r = t.get_extent(offset, &ret);
+    if (r != Transaction::get_extent_ret::ABSENT) {
+      SUBERRORT(seastore_cache, "unexpected non-absent extent {}", t, *ret);
+      ceph_abort();
+    }
+#endif
+
+    SUBTRACET(seastore_cache, "{} {}~{} {} is absent on t, query cache ...",
+	      t, type, offset, length, laddr);
+    auto f = [&t, this](CachedExtent &ext) {
+      t.add_to_read_set(CachedExtentRef(&ext));
+      touch_extent(ext);
+    };
+    auto src = t.get_src();
+    return trans_intr::make_interruptible(
+      _get_extent_by_type(
+	type, offset, laddr, length, &src,
+	std::move(extent_init_func), std::move(f))
+    );
+  }
+
   backref_entryrefs_by_seq_t backref_entryrefs_by_seq;
   backref_entry_mset_t backref_entry_mset;
 
@@ -603,6 +690,32 @@ public:
       length,
       extent_init_func_t(std::forward<Func>(extent_init_func)));
   }
+
+  /*
+   * get_absent_extent_by_type
+   *
+   * Mostly the same as Cache::get_extent_by_type(), with the only difference
+   * that get_absent_extent_by_type won't search the transaction's context for
+   * the specific CachedExtent
+   */
+  template <typename Func>
+  get_extent_by_type_ret get_absent_extent_by_type(
+    Transaction &t,         ///< [in] transaction
+    extent_types_t type,    ///< [in] type tag
+    paddr_t offset,         ///< [in] starting addr
+    laddr_t laddr,          ///< [in] logical address if logical
+    extent_len_t length,    ///< [in] length
+    Func &&extent_init_func ///< [in] extent init func
+  ) {
+    return _get_absent_extent_by_type(
+      t,
+      type,
+      offset,
+      laddr,
+      length,
+      extent_init_func_t(std::forward<Func>(extent_init_func)));
+  }
+
   get_extent_by_type_ret get_extent_by_type(
     Transaction &t,
     extent_types_t type,
@@ -611,6 +724,25 @@ public:
     extent_len_t length
   ) {
     return get_extent_by_type(
+      t, type, offset, laddr, length, [](CachedExtent &) {});
+  }
+
+
+  /*
+   * get_absent_extent_by_type
+   *
+   * Mostly the same as Cache::get_extent_by_type(), with the only difference
+   * that get_absent_extent_by_type won't search the transaction's context for
+   * the specific CachedExtent
+   */
+  get_extent_by_type_ret get_absent_extent_by_type(
+    Transaction &t,
+    extent_types_t type,
+    paddr_t offset,
+    laddr_t laddr,
+    extent_len_t length
+  ) {
+    return get_absent_extent_by_type(
       t, type, offset, laddr, length, [](CachedExtent &) {});
   }
 

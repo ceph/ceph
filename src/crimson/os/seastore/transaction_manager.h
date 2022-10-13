@@ -134,7 +134,7 @@ public:
     static_assert(is_logical_type(T::TYPE));
     using ret = pin_to_extent_ret<T>;
     auto &pref = *pin;
-    return cache->get_extent<T>(
+    return cache->get_absent_extent<T>(
       t,
       pref.get_val(),
       pref.get_length(),
@@ -168,7 +168,7 @@ public:
     SUBTRACET(seastore_tm, "getting extent {} type {}", t, *pin, type);
     assert(is_logical_type(type));
     auto &pref = *pin;
-    return cache->get_extent_by_type(
+    return cache->get_absent_extent_by_type(
       t,
       type,
       pref.get_val(),
