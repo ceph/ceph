@@ -166,13 +166,10 @@ std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)
   out << " rbm_metadata_header_t(size=" << header.size
        << ", block_size=" << header.block_size
        << ", start=" << header.start
-       << ", end=" << header.end
-       << ", magic=" << header.magic
-       << ", uuid=" << header.uuid
        << ", start_data_area=" << header.start_data_area
-       << ", flag=" << header.flag
        << ", feature=" << header.feature
-       << ", crc=" << header.crc;
+       << ", crc=" << header.crc
+       << ", config=" << header.config;
   return out << ")";
 }
 

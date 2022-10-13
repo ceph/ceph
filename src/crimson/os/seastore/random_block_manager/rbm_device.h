@@ -88,9 +88,6 @@ protected:
   // LBA Size
   uint64_t block_size = 4096;
 
-  device_id_t device_id;
-  seastore_meta_t meta;
-  secondary_device_set_t devices;
   rbm_metadata_header_t super;
 public:
   RBMDevice() {}
@@ -102,10 +99,10 @@ public:
   }
 
   device_id_t get_device_id() const {
-    return device_id;
+    return super.config.spec.id;
   }
   void set_device_id(device_id_t id) {
-    device_id = id;
+    super.config.spec.id = id;
   }
 
   void set_block_size(uint64_t bs) {
@@ -113,7 +110,7 @@ public:
   }
 
   magic_t get_magic() const final {
-    return magic_t();
+    return super.config.spec.magic;
   }
 
   device_type_t get_device_type() const final {
@@ -125,11 +122,11 @@ public:
   }
 
   const seastore_meta_t &get_meta() const final {
-    return meta;
+    return super.config.meta;
   }
 
   secondary_device_set_t& get_secondary_devices() final {
-    return devices;
+    return super.config.secondary_devices;
   }
   std::size_t get_available_size() const final { return size; }
   extent_len_t get_block_size() const final { return block_size; }

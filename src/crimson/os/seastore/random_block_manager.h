@@ -18,38 +18,29 @@
 
 #include "crimson/common/layout.h"
 #include "include/buffer.h"
-#include "include/uuid.h"
-
+#include "crimson/os/seastore/device.h"
 
 namespace crimson::os::seastore {
 
 struct rbm_metadata_header_t {
   size_t size = 0;
   size_t block_size = 0;
-  uint64_t start; // start location of the device
-  uint64_t end;   // end location of the device
-  uint64_t magic; // to indicate randomblock_manager
-  uuid_d uuid;
-  uint32_t start_data_area;
-  uint64_t flag; // reserved
-  uint64_t feature;
-  device_id_t device_id;
-  checksum_t crc;
+  uint64_t start = 0; // start location of the device
+  uint64_t feature = 0;
+  uint32_t start_data_area = 0;
+  checksum_t crc = 0;
+  device_config_t config;
 
   DENC(rbm_metadata_header_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.size, p);
     denc(v.block_size, p);
     denc(v.start, p);
-    denc(v.end, p);
-    denc(v.magic, p);
-    denc(v.uuid, p);
-    denc(v.start_data_area, p);
-    denc(v.flag, p);
     denc(v.feature, p);
-    denc(v.device_id, p);
 
+    denc(v.start_data_area, p);
     denc(v.crc, p);
+    denc(v.config, p);
     DENC_FINISH(p);
   }
 
