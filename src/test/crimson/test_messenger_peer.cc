@@ -111,7 +111,6 @@ class FailoverSuitePeer : public Dispatcher {
     peer_msgr->set_default_policy(policy);
     peer_msgr->set_auth_client(&dummy_auth);
     peer_msgr->set_auth_server(&dummy_auth);
-    peer_msgr->set_require_authorizer(false);
     peer_msgr->bind(test_peer_addr);
     peer_msgr->add_dispatcher_head(this);
     peer_msgr->start();
@@ -368,7 +367,6 @@ class FailoverTestPeer : public Dispatcher {
     cmd_msgr->set_default_policy(Messenger::Policy::stateless_server(0));
     cmd_msgr->set_auth_client(&dummy_auth);
     cmd_msgr->set_auth_server(&dummy_auth);
-    cmd_msgr->set_require_authorizer(false);
     cmd_msgr->bind(cmd_peer_addr);
     cmd_msgr->add_dispatcher_head(this);
     cmd_msgr->start();

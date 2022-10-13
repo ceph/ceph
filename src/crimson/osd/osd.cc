@@ -1228,7 +1228,6 @@ seastar::future<> OSD::handle_peering_op(
 
 seastar::future<> OSD::check_osdmap_features()
 {
-  heartbeat->set_require_authorizer(true);
   return store.write_meta("require_osd_release",
                           stringify((int)osdmap->require_osd_release));
 }

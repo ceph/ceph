@@ -77,7 +77,6 @@ static seastar::future<> test_echo(unsigned rounds,
                              const entity_addr_t& addr) {
         msgr = crimson::net::Messenger::create(name, lname, nonce);
         msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
-        msgr->set_require_authorizer(false);
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
         return msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
