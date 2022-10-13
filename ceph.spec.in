@@ -61,7 +61,11 @@
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
+%ifarch s390x
+%bcond_with system_pmdk
+%else
 %bcond_without system_pmdk
+%endif
 %bcond_with amqp_endpoint
 %bcond_with cephfs_java
 %bcond_with kafka_endpoint
