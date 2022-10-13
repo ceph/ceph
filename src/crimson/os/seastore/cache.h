@@ -985,6 +985,19 @@ public:
   uint64_t get_omap_tree_depth() {
     return stats.omap_tree_depth;
   }
+
+  /// Update lru for access to ref
+  void touch_extent(
+      CachedExtent &ext,
+      const Transaction::src_t* p_src=nullptr)
+  {
+    if (p_src && is_background_transaction(*p_src))
+      return;
+    if (ext.is_clean() && !ext.is_placeholder()) {
+      lru.move_to_top(ext);
+    }
+  }
+
 private:
   ExtentPlacementManager& epm;
   RootBlockRef root;               ///< ref to current root
@@ -1266,18 +1279,6 @@ private:
       buffer::create_page_aligned(size));
     bp.zero();
     return bp;
-  }
-
-  /// Update lru for access to ref
-  void touch_extent(
-      CachedExtent &ext,
-      const Transaction::src_t* p_src=nullptr)
-  {
-    if (p_src && is_background_transaction(*p_src))
-      return;
-    if (ext.is_clean() && !ext.is_placeholder()) {
-      lru.move_to_top(ext);
-    }
   }
 
   void backref_batch_update(
