@@ -8172,8 +8172,10 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->use_gmt_hitset = true;
   else
     pi->use_gmt_hitset = false;
-  if (crimson)
+  if (crimson) {
     pi->set_flag(pg_pool_t::FLAG_CRIMSON);
+    pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
+  }
 
   pi->size = size;
   pi->min_size = min_size;
@@ -8621,6 +8623,10 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     if (val == "true" || (interr.empty() && n == 1)) {
       p.set_flag(flag);
     } else if (val == "false" || (interr.empty() && n == 0)) {
+      if (flag == pg_pool_t::FLAG_NOPGCHANGE && p.is_crimson()) {
+	ss << "cannot clear FLAG_NOPGCHANGE on a crimson pool";
+	return -EINVAL;
+      }
       p.unset_flag(flag);
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
