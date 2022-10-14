@@ -305,6 +305,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
     bool last_scrub_dirty = false; /// are our stamps dirty with respect to disk state?
     bool scrub_in_progress = false; /// are we currently scrubbing?
+    bool uninline_in_progress = false; /// are we currently uninlining?
 
     fragset_t queued_frags;
 
@@ -437,7 +438,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   }
 
   bool scrub_is_in_progress() const {
-    return (scrub_infop && scrub_infop->scrub_in_progress);
+    return (scrub_infop && (scrub_infop->scrub_in_progress || scrub_infop->uninline_in_progress));
   }
   /**
    * Start scrubbing on this inode. That could be very short if it's
