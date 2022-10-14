@@ -139,6 +139,7 @@ protected:
     unsigned epoch_acked = 0;
     std::set<std::string> scrubbing_tags;
     bool aborting = false;
+    std::unordered_map<std::string, std::unordered_map<int, std::vector<_inodeno_t>>> uninline_failed_meta_info;
   };
   std::vector<scrub_stat_t> mds_scrub_stats;
 

@@ -18,7 +18,7 @@
 #include "messages/MMDSOp.h"
 
 class MMDSScrubStats : public MMDSOp {
-  static constexpr int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -38,6 +38,9 @@ public:
   bool is_finished(const std::string& tag) const {
     return update_scrubbing && !scrubbing_tags.count(tag);
   }
+  const std::unordered_map<std::string, std::unordered_map<int, std::vector<_inodeno_t>>>& get_uninline_failed_meta_info() const {
+    return uninline_failed_meta_info;
+  }
 
   void encode_payload(uint64_t features) override {
     using ceph::encode;
@@ -45,6 +48,7 @@ public:
     encode(scrubbing_tags, payload);
     encode(update_scrubbing, payload);
     encode(aborting, payload);
+    encode_uninline_failed_info();
   }
   void decode_payload() override {
     using ceph::decode;
@@ -53,6 +57,44 @@ public:
     decode(scrubbing_tags, p);
     decode(update_scrubbing, p);
     decode(aborting, p);
+    if (header.version >= 2) {
+      decode_uninline_failed_info(p);
+    }
+  }
+
+  void encode_uninline_failed_info() {
+    using ceph::encode;
+    int count = (int)uninline_failed_meta_info.size();
+    encode(count, payload);
+    for (const auto& [tag, meta_info_map] : uninline_failed_meta_info) {
+      encode(tag, payload);
+      count = (int)meta_info_map.size();
+      encode(count, payload);
+      for (const auto& [error_code, ino_vec] : meta_info_map) {
+	encode(error_code, payload);
+	encode(ino_vec, payload);
+      }
+    }
+  }
+  void decode_uninline_failed_info(ceph::bufferlist::const_iterator& p) {
+    using ceph::decode;
+    int tag_count = 0;
+    decode(tag_count, p);
+    while (tag_count--) {
+      std::string tag;
+      decode(tag, p);
+      int count = 0;
+      decode(count, p);
+      std::unordered_map<int, std::vector<_inodeno_t>> uninline_failed_info;
+      while (count--) {
+	int error_code;
+	std::vector<_inodeno_t> ino_vec;
+	decode(error_code, p);
+	decode(ino_vec, p);
+	uninline_failed_info[error_code] = std::move(ino_vec);
+      }
+      uninline_failed_meta_info[tag] = std::move(uninline_failed_info);
+    }
   }
 
 protected:
@@ -65,6 +107,12 @@ protected:
   MMDSScrubStats(unsigned e, const std::set<std::string>& tags, bool abrt=false) :
     MMDSOp(MSG_MDS_SCRUB_STATS, HEAD_VERSION, COMPAT_VERSION),
     epoch(e), scrubbing_tags(tags), update_scrubbing(true), aborting(abrt) {}
+  MMDSScrubStats(unsigned e, const std::set<std::string>& tags,
+    std::unordered_map<std::string, std::unordered_map<int, std::vector<_inodeno_t>>>&& ufmi,
+    bool abrt = false) :
+    MMDSOp(MSG_MDS_SCRUB_STATS, HEAD_VERSION, COMPAT_VERSION),
+    epoch(e), scrubbing_tags(tags), update_scrubbing(true), aborting(abrt),
+    uninline_failed_meta_info(std::move(ufmi)) {}
   ~MMDSScrubStats() override {}
 
 private:
@@ -72,6 +120,8 @@ private:
   std::set<std::string> scrubbing_tags;
   bool update_scrubbing = false;
   bool aborting = false;
+  // <tag, <error_code, [ino1, ino2, ...]>>
+  std::unordered_map<std::string, std::unordered_map<int, std::vector<_inodeno_t>>> uninline_failed_meta_info;
 
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
