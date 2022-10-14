@@ -57,6 +57,7 @@ class GrafanaService(CephadmService):
             'services/grafana/grafana.ini.j2', {
                 'initial_admin_password': spec.initial_admin_password,
                 'http_port': daemon_spec.ports[0] if daemon_spec.ports else self.DEFAULT_SERVICE_PORT,
+                'protocol': spec.protocol,
                 'http_addr': daemon_spec.ip if daemon_spec.ip else ''
             })
 
@@ -141,7 +142,8 @@ class GrafanaService(CephadmService):
         assert dd.hostname is not None
         addr = dd.ip if dd.ip else self._inventory_get_fqdn(dd.hostname)
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
-        service_url = build_url(scheme='https', host=addr, port=port)
+        spec = cast(GrafanaSpec, self.mgr.spec_store[dd.service_name()].spec)
+        service_url = build_url(scheme=spec.protocol, host=addr, port=port)
         self._set_service_url_on_dashboard(
             'Grafana',
             'dashboard get-grafana-api-url',

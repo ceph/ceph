@@ -1244,6 +1244,7 @@ class GrafanaSpec(MonitoringSpec):
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
+                 protocol: Optional[str] = 'https',
                  initial_admin_password: Optional[str] = None,
                  extra_container_args: Optional[List[str]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -1256,6 +1257,13 @@ class GrafanaSpec(MonitoringSpec):
             extra_container_args=extra_container_args, custom_configs=custom_configs)
 
         self.initial_admin_password = initial_admin_password
+        self.protocol = protocol
+
+    def validate(self) -> None:
+        super(GrafanaSpec, self).validate()
+        if self.protocol not in ['http', 'https']:
+            err_msg = f"Invalid protocol '{self.protocol}'. Valid values are: 'http', 'https'."
+            raise SpecValidationError(err_msg)
 
 
 yaml.add_representer(GrafanaSpec, ServiceSpec.yaml_representer)

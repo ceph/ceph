@@ -30,7 +30,8 @@ from orchestrator import DaemonDescription, OrchestratorError
   "placement": {
     "count": 1
   },
-  "service_type": "grafana"
+  "service_type": "grafana",
+  "protocol": "https"
 },
 {
   "placement": {
