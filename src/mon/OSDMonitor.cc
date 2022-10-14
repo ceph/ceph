@@ -14414,6 +14414,19 @@ bool OSDMonitor::_check_become_tier(
   const std::string &tier_pool_name = osdmap.get_pool_name(tier_pool_id);
   const std::string &base_pool_name = osdmap.get_pool_name(base_pool_id);
 
+  if (tier_pool->is_crimson()) {
+    *ss << "pool '" << tier_pool_name << "' is a crimson pool, tiering "
+	<< "features are not supported";
+    *err = -EINVAL;
+    return false;
+  }
+  if (base_pool->is_crimson()) {
+    *ss << "pool '" << base_pool_name << "' is a crimson pool, tiering "
+	<< "features are not supported";
+    *err = -EINVAL;
+    return false;
+  }
+
   const FSMap &pending_fsmap = mon.mdsmon()->get_pending_fsmap();
   if (pending_fsmap.pool_in_use(tier_pool_id)) {
     *ss << "pool '" << tier_pool_name << "' is in use by CephFS";
