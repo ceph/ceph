@@ -537,13 +537,26 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     return 0;
   }
 
-  uint64_t ImageCtx::get_effective_image_size(snap_t in_snap_id) const {
-    auto raw_size = get_image_size(in_snap_id);
+  uint64_t ImageCtx::get_area_size(io::ImageArea area) const {
+    // image areas are defined only for the "opened at" snap_id
+    // (i.e. where encryption may be loaded)
+    uint64_t raw_size = get_image_size(snap_id);
     if (raw_size == 0) {
       return 0;
     }
 
-    return io::util::raw_to_area_offset(*this, raw_size).first;
+    auto [data_size, data_area] = io::util::raw_to_area_offset(*this, raw_size);
+    ceph_assert(data_size <= raw_size && data_area == io::ImageArea::DATA);
+
+    switch (area) {
+    case io::ImageArea::DATA:
+      return data_size;
+    case io::ImageArea::CRYPTO_HEADER:
+      // CRYPTO_HEADER area ends where DATA area begins
+      return raw_size - data_size;
+    default:
+      ceph_abort();
+    }
   }
 
   uint64_t ImageCtx::get_object_count(snap_t in_snap_id) const {
@@ -680,6 +693,29 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
       return 0;
     }
     return -ENOENT;
+  }
+
+  std::pair<uint64_t, io::ImageArea> ImageCtx::reduce_parent_overlap(
+      uint64_t raw_overlap, bool migration_write) const {
+    ceph_assert(ceph_mutex_is_locked(image_lock));
+    if (migration_write) {
+      // don't reduce migration write overlap -- it may be larger as
+      // it's the largest overlap across snapshots by construction
+      return io::util::remap_offset(*this, raw_overlap);
+    }
+    if (raw_overlap == 0 || parent == nullptr) {
+      // image opened with OPEN_FLAG_SKIP_OPEN_PARENT -> no overlap
+      return io::util::remap_offset(*this, 0);
+    }
+    // DATA area in the parent may be smaller than the part of DATA
+    // area in the clone that is still within the overlap (e.g. for
+    // LUKS2-encrypted parent + LUKS1-encrypted clone, due to LUKS2
+    // header usually being bigger than LUKS1 header)
+    auto overlap = io::util::remap_offset(*this, raw_overlap);
+    std::shared_lock parent_image_locker(parent->image_lock);
+    overlap.first = std::min(overlap.first,
+                             parent->get_area_size(overlap.second));
+    return overlap;
   }
 
   void ImageCtx::register_watch(Context *on_finish) {

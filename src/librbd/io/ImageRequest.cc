@@ -145,10 +145,10 @@ void readahead(I *ictx, const Extents& image_extents, IOContext io_context) {
     return;
   }
 
-  uint64_t image_size = ictx->get_effective_image_size(ictx->snap_id);
+  uint64_t data_size = ictx->get_area_size(ImageArea::DATA);
   ictx->image_lock.unlock_shared();
 
-  auto readahead_extent = ictx->readahead.update(image_extents, image_size);
+  auto readahead_extent = ictx->readahead.update(image_extents, data_size);
   uint64_t readahead_offset = readahead_extent.first;
   uint64_t readahead_length = readahead_extent.second;
 

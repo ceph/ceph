@@ -182,7 +182,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     int obj_order = ictx->order;
     {
       std::shared_lock locker{ictx->image_lock};
-      info.size = ictx->get_effective_image_size(ictx->snap_id);
+      info.size = ictx->get_area_size(io::ImageArea::DATA);
     }
     info.obj_size = 1ULL << obj_order;
     info.num_objs = Striper::get_num_objects(ictx->layout, info.size);
@@ -859,7 +859,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (r < 0)
       return r;
     std::shared_lock l2{ictx->image_lock};
-    *size = ictx->get_effective_image_size(ictx->snap_id);
+    *size = ictx->get_area_size(io::ImageArea::DATA);
     return 0;
   }
 
@@ -878,8 +878,16 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
+
     std::shared_lock image_locker{ictx->image_lock};
-    return ictx->get_parent_overlap(ictx->snap_id, overlap);
+    uint64_t raw_overlap;
+    r = ictx->get_parent_overlap(ictx->snap_id, &raw_overlap);
+    if (r < 0) {
+      return r;
+    }
+    auto _overlap = ictx->reduce_parent_overlap(raw_overlap, false);
+    *overlap = (_overlap.second == io::ImageArea::DATA ? _overlap.first : 0);
+    return 0;
   }
 
   int get_flags(ImageCtx *ictx, uint64_t *flags)
@@ -1596,19 +1604,21 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
         ictx->get_snap_info(ictx->snap_id) == nullptr) {
       return -ENOENT;
     }
-    uint64_t image_size = ictx->get_effective_image_size(ictx->snap_id);
 
     // special-case "len == 0" requests: always valid
     if (*len == 0)
       return 0;
 
+    // TODO: pass area
+    uint64_t area_size = ictx->get_area_size(io::ImageArea::DATA);
+
     // can't start past end
-    if (off >= image_size)
+    if (off >= area_size)
       return -EINVAL;
 
     // clip requests that extend past end to just end
-    if ((off + *len) > image_size)
-      *len = (size_t)(image_size - off);
+    if ((off + *len) > area_size)
+      *len = (size_t)(area_size - off);
 
     return 0;
   }
