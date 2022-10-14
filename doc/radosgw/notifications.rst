@@ -96,6 +96,7 @@ Topics
 .. note::
 
     In all topic actions, the parameters are URL encoded, and sent in the message body using ``application/x-www-form-urlencoded`` content type
+   
 
 Create a Topic
 ``````````````
@@ -106,6 +107,8 @@ Upon a successful request, the response will include the topic ARN that could be
 To update a topic, use the same command used for topic creation, with the topic name of an existing topic and different endpoint values.
 
 .. tip:: Any notification already associated with the topic needs to be re-created for the topic update to take effect
+
+.. note:: For rabbitmq, ``push-endpoint`` (with a hyphen in the middle) must be changed to ``push_endpoint`` (with an underscore in the middle).
 
 ::
 
