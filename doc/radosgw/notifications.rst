@@ -95,20 +95,25 @@ Topics
 
 .. note::
 
-    In all topic actions, the parameters are URL encoded, and sent in the message body using ``application/x-www-form-urlencoded`` content type
+    In all topic actions, the parameters are URL-encoded and sent in the
+    message body using the ``application/x-www-form-urlencoded`` content type.
    
 
 Create a Topic
 ``````````````
 
-This will create a new topic. The topic should be provided with push endpoint parameters that would be used later
-when a notification is created.
-Upon a successful request, the response will include the topic ARN that could be later used to reference this topic in the notification request.
-To update a topic, use the same command used for topic creation, with the topic name of an existing topic and different endpoint values.
+This creates a new topic. Provide the topic with push endpoint parameters,
+which will be used later when a notification is created. Upon a successful
+request, the response will include the topic ARN that could be later used to
+reference this topic in the notification request. To update a topic, use the
+same command that you used to create it (but use the name of an existing topic
+and different endpoint values).
 
-.. tip:: Any notification already associated with the topic needs to be re-created for the topic update to take effect
+.. tip:: Any notification already associated with the topic must be re-created
+   for the topic update to take effect.
 
-.. note:: For rabbitmq, ``push-endpoint`` (with a hyphen in the middle) must be changed to ``push_endpoint`` (with an underscore in the middle).
+.. note:: For rabbitmq, ``push-endpoint`` (with a hyphen in the middle) must be
+   changed to ``push_endpoint`` (with an underscore in the middle).
 
 ::
 
@@ -156,7 +161,7 @@ Request parameters:
   - "broker": message is considered "delivered" if acked by broker (default)
   - "routable": message is considered "delivered" if broker can route to a consumer
 
-.. tip:: The topic-name (see :ref:`radosgw-create-a-topic`) is used for the AMQP topic ("routing key" for a topic exchange)
+.. tip:: The topic-name (see :ref:`radosgw-create-a-topic`) is used for the AMQP topic ("routing key" for a topic exchange).
 
 - Kafka endpoint
 
