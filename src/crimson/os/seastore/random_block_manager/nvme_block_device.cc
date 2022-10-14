@@ -31,7 +31,6 @@ RBMDevice::mkfs_ret RBMDevice::mkfs(device_config_t config) {
   super.block_size = get_block_size();
   super.size = get_available_size();
 
-  super.start_data_area = 0;
   super.feature |= RBM_BITMAP_BLOCK_CRC;
   super.config = std::move(config);
   DEBUG("super {} ", super);
@@ -67,7 +66,7 @@ write_ertr::future<> RBMDevice::write_rbm_header()
   assert(bl.length() < super.block_size);
   iter.copy(bl.length(), bp.c_str());
 
-  return write(super.start, bp);
+  return write(RBM_START_ADDRESS, bp);
 }
 
 read_ertr::future<rbm_metadata_header_t> RBMDevice::read_rbm_header(
