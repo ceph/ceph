@@ -2098,7 +2098,7 @@ class TestPull:
 
 class TestApplySpec:
 
-    def test_parse_yaml(self, cephadm_fs):
+    def test_extract_host_info_from_applied_spec(self, cephadm_fs):
         yaml = '''---
 service_type: host
 hostname: vm-00
@@ -2115,7 +2115,6 @@ labels:
 ---      
 service_type: host
 hostname: vm-02
-addr: 192.168.122.165
 ---
 ---      
 service_type: rgw
@@ -2141,20 +2140,12 @@ spec:
 '''
 
         cephadm_fs.create_file('spec.yml', contents=yaml)
-        retdic = [{'service_type': 'host', 'hostname': 'vm-00', 'addr': '192.168.122.44', 'labels': '- example1- example2'},
-                  {'service_type': 'host', 'hostname': 'vm-01', 'addr': '192.168.122.247', 'labels': '- grafana'},
-                  {'service_type': 'host', 'hostname': 'vm-02', 'addr': '192.168.122.165'},
-                  {'service_id': 'myrgw',
-                   'service_type': 'rgw',
-                   'spec':
-                   'rgw_frontend_ssl_certificate: |-----BEGIN PRIVATE '
-                   'KEY-----V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWduYSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3MgZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=-----END '
-                   'PRIVATE KEY----------BEGIN '
-                   'CERTIFICATE-----V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWduYSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3MgZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=-----END '
-                   'CERTIFICATE-----ssl: true'}]
+        retdic = [{'hostname': 'vm-00', 'addr': '192.168.122.44'},
+                  {'hostname': 'vm-01', 'addr': '192.168.122.247'},
+                  {'hostname': 'vm-02',}]
 
         with open('spec.yml') as f:
-            dic = cd.parse_yaml_objs(f)
+            dic = cd._extract_host_info_from_applied_spec(f)
             assert dic == retdic
 
     @mock.patch('cephadm.call', return_value=('', '', 0))
