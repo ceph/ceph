@@ -132,7 +132,9 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   WritePipeline pipeline;
 
   cbjournal_test_t() {
-    device = new random_block_device::TestMemory(CBTEST_DEFAULT_TEST_SIZE + CBTEST_DEFAULT_BLOCK_SIZE);
+    device = new random_block_device::TestMemory(
+      CBTEST_DEFAULT_TEST_SIZE + CBTEST_DEFAULT_BLOCK_SIZE,
+      CBTEST_DEFAULT_BLOCK_SIZE);
     cbj.reset(new CircularBoundedJournal(*this, device, std::string()));
     device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
     config.block_size = CBTEST_DEFAULT_BLOCK_SIZE;

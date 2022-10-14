@@ -119,7 +119,7 @@ protected:
     auto config =
       journal::CircularBoundedJournal::mkfs_config_t::get_default();
     rb_device.reset(new random_block_device::TestMemory(
-          config.total_size + config.block_size));
+          config.total_size + config.block_size, config.block_size));
     rb_device->set_device_id(
       1 << (std::numeric_limits<device_id_t>::digits - 1));
     return rb_device->mount().handle_error(crimson::ct_error::assert_all{}
