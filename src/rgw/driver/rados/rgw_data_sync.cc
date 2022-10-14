@@ -1919,6 +1919,11 @@ public:
         for (modified_iter = current_modified.begin();
 	     modified_iter != current_modified.end();
 	     ++modified_iter) {
+	  if (!lease_cr->is_locked()) {
+	    yield call(marker_tracker->flush());
+	    drain_all();
+	    return set_cr_error(-ECANCELED);
+	  }
           retcode = parse_bucket_key(modified_iter->key, source_bs);
           if (retcode < 0) {
             tn->log(1, SSTR("failed to parse bucket shard: "
@@ -1944,6 +1949,11 @@ public:
 			   << " entries"));
           iter = error_entries.begin();
           for (; iter != error_entries.end(); ++iter) {
+	    if (!lease_cr->is_locked()) {
+	      yield call(marker_tracker->flush());
+	      drain_all();
+	      return set_cr_error(-ECANCELED);
+	    }
             error_marker = iter->first;
             entry_timestamp = rgw::error_repo::decode_value(iter->second);
             retcode = rgw::error_repo::decode_key(iter->first, source_bs, gen);
@@ -2002,9 +2012,13 @@ public:
         for (log_iter = log_entries.begin();
 	     log_iter != log_entries.end();
 	     ++log_iter) {
-          tn->log(20, SSTR("shard_id=" << shard_id << " log_entry: "
-			   << log_iter->log_id << ":" << log_iter->log_timestamp
-			   << ":" << log_iter->entry.key));
+	  if (!lease_cr->is_locked()) {
+	    yield call(marker_tracker->flush());
+	    drain_all();
+	    return set_cr_error(-ECANCELED);
+	  }
+
+          tn->log(20, SSTR("shard_id=" << shard_id << " log_entry: " << log_iter->log_id << ":" << log_iter->log_timestamp << ":" << log_iter->entry.key));
           retcode = parse_bucket_key(log_iter->entry.key, source_bs);
           if (retcode < 0) {
             tn->log(1, SSTR("failed to parse bucket shard: "
