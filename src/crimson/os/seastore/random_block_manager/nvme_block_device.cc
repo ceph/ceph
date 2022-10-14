@@ -19,6 +19,7 @@ namespace {
     return crimson::get_logger(ceph_subsys_seastore_tm);
   }
 }
+
 namespace crimson::os::seastore::random_block_device {
 #include "crimson/os/seastore/logging.h"
 SET_SUBSYS(seastore_device);
@@ -26,6 +27,7 @@ SET_SUBSYS(seastore_device);
 RBMDevice::mkfs_ret RBMDevice::mkfs(device_config_t config) {
   LOG_PREFIX(RBMDevice::mkfs);
   super.start = 0;
+  // TODO: improve mkfs() based on a file descriptor
   super.block_size = get_block_size();
   super.size = get_available_size();
 
@@ -128,7 +130,8 @@ open_ertr::future<> NVMeBlockDevice::open(
   seastar::open_flags mode) {
   return seastar::do_with(in_path, [this, mode](auto& in_path) {
     return seastar::file_stat(in_path).then([this, mode, in_path](auto stat) {
-      size = stat.size;
+      super.size = stat.size;
+      super.block_size = stat.block_size;
       return seastar::open_file_dma(in_path, mode).then([=, this](auto file) {
         device = file;
         logger().debug("open");
@@ -145,14 +148,14 @@ open_ertr::future<> NVMeBlockDevice::open(
             auto id_namespace_data) {
             // LBA format provides LBA size which is power of 2. LBA is the
             // minimum size of read and write.
-            block_size = (1 << id_namespace_data.lbaf0.lbads);
-            atomic_write_unit = awupf * block_size;
+            super.block_size = (1 << id_namespace_data.lbaf0.lbads);
+            atomic_write_unit = awupf * super.block_size;
             data_protection_type = id_namespace_data.dps.protection_type;
             data_protection_enabled = (data_protection_type > 0);
             if (id_namespace_data.nsfeat.opterf == 1){
               // NPWG and NPWA is 0'based value
-              write_granularity = block_size * (id_namespace_data.npwg + 1);
-              write_alignment = block_size * (id_namespace_data.npwa + 1);
+              write_granularity = super.block_size * (id_namespace_data.npwg + 1);
+              write_alignment = super.block_size * (id_namespace_data.npwa + 1);
             }
             return open_for_io(in_path, mode);
           });
@@ -193,7 +196,7 @@ write_ertr::future<> NVMeBlockDevice::write(
       bptr.length());
   auto length = bptr.length();
 
-  assert((length % block_size) == 0);
+  assert((length % super.block_size) == 0);
   uint16_t supported_stream = stream;
   if (stream >= stream_id_count) {
     supported_stream = WRITE_LIFE_NOT_SET;
@@ -221,7 +224,7 @@ read_ertr::future<> NVMeBlockDevice::read(
       bptr.length());
   auto length = bptr.length();
 
-  assert((length % block_size) == 0);
+  assert((length % super.block_size) == 0);
 
   return device.dma_read(offset, bptr.c_str(), length).handle_exception(
     [](auto e) -> read_ertr::future<size_t> {
@@ -249,7 +252,7 @@ write_ertr::future<> NVMeBlockDevice::writev(
   if (stream >= stream_id_count) {
     supported_stream = WRITE_LIFE_NOT_SET;
   }
-  bl.rebuild_aligned(block_size);
+  bl.rebuild_aligned(super.block_size);
 
   return seastar::do_with(
     bl.prepare_iovs(),

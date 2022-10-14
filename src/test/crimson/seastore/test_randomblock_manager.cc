@@ -51,7 +51,7 @@ struct rbm_test_t :
   rbm_test_t() = default;
 
   seastar::future<> set_up_fut() final {
-    device.reset(new random_block_device::TestMemory(DEFAULT_TEST_SIZE));
+    device.reset(new random_block_device::TestMemory(DEFAULT_TEST_SIZE, DEFAULT_BLOCK_SIZE));
     rbm_manager.reset(new BlockRBManager(device.get(), std::string()));
     config = get_rbm_ephemeral_device_config(0, 1);
     return device->mount().handle_error(crimson::ct_error::assert_all{}
@@ -122,11 +122,11 @@ TEST_F(rbm_test_t, mkfs_test)
        super.block_size == DEFAULT_BLOCK_SIZE &&
        super.size == DEFAULT_TEST_SIZE 
    );
-   device->set_block_size(8196);
+   config.spec.id = DEVICE_ID_NULL;
    mkfs();
    super = read_rbm_header();
    ASSERT_TRUE(
-       super.block_size == 8196 &&
+       super.config.spec.id == DEVICE_ID_NULL &&
        super.size == DEFAULT_TEST_SIZE 
    );
  });

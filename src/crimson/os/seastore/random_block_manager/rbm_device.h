@@ -83,11 +83,6 @@ public:
     return read(rbm_addr, out);
   }
 protected:
-  uint64_t size = 0;
-
-  // LBA Size
-  uint64_t block_size = 4096;
-
   rbm_metadata_header_t super;
 public:
   RBMDevice() {}
@@ -101,12 +96,9 @@ public:
   device_id_t get_device_id() const {
     return super.config.spec.id;
   }
+  // for test
   void set_device_id(device_id_t id) {
     super.config.spec.id = id;
-  }
-
-  void set_block_size(uint64_t bs) {
-    block_size = bs;
   }
 
   magic_t get_magic() const final {
@@ -128,8 +120,8 @@ public:
   secondary_device_set_t& get_secondary_devices() final {
     return super.config.secondary_devices;
   }
-  std::size_t get_available_size() const final { return size; }
-  extent_len_t get_block_size() const final { return block_size; }
+  std::size_t get_available_size() const { return super.size; }
+  extent_len_t get_block_size() const { return super.block_size; }
 
   virtual read_ertr::future<> read(
     uint64_t offset,
@@ -172,9 +164,11 @@ public:
 
 class TestMemory : public RBMDevice {
 public:
+  uint64_t size = 0;
+  uint64_t block_size = 0;
 
-  TestMemory(size_t size) : buf(nullptr) {
-    RBMDevice::size = size;
+  TestMemory(size_t size, uint64_t block_size) :
+    size(size), block_size(block_size), buf(nullptr) {
   }
   ~TestMemory() {
     if (buf) {
@@ -182,6 +176,9 @@ public:
       buf = nullptr;
     }
   }
+
+  std::size_t get_available_size() const final { return size; }
+  extent_len_t get_block_size() const final { return block_size; }
 
   mount_ret mount() final {
     return open("", seastar::open_flags::rw
