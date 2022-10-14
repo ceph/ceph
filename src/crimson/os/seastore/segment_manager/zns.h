@@ -72,6 +72,13 @@ namespace crimson::os::seastore::segment_manager::zns {
   using write_ertr = crimson::errorator<crimson::ct_error::input_output_error>;
   using read_ertr = crimson::errorator<crimson::ct_error::input_output_error>;
 
+  enum class zone_op {
+    OPEN,
+    FINISH,
+    CLOSE,
+    RESET,
+  };
+
   class ZNSSegmentManager;
 
   class ZNSSegment final : public Segment {
