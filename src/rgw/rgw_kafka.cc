@@ -249,6 +249,20 @@ connection_ptr_t& create_connection(connection_ptr_t& conn) {
     // if (rd_kafka_conf_set(conn->temp_conf, "enable.ssl.certificate.verification", "0", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
     ldout(conn->cct, 20) << "Kafka connect: successfully configured security" << dendl;
+  } else if (!conn->user.empty()) {
+      // use SASL+PLAINTEXT
+      if (rd_kafka_conf_set(conn->temp_conf, "security.protocol", "SASL_PLAINTEXT", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+              rd_kafka_conf_set(conn->temp_conf, "sasl.username", conn->user.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+              rd_kafka_conf_set(conn->temp_conf, "sasl.password", conn->password.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: successfully configured SASL_PLAINTEXT" << dendl;
+
+      if (conn->mechanism) {
+        if (rd_kafka_conf_set(conn->temp_conf, "sasl.mechanism", conn->mechanism->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+        ldout(conn->cct, 20) << "Kafka connect: successfully configured SASL mechanism" << dendl;
+      } else {
+        if (rd_kafka_conf_set(conn->temp_conf, "sasl.mechanism", "PLAIN", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+        ldout(conn->cct, 20) << "Kafka connect: using default SASL mechanism" << dendl;
+      }
   }
 
   // set the global callback for delivery success/fail
@@ -560,7 +574,7 @@ public:
     // this should be validated by the regex in parse_url()
     ceph_assert(user.empty() == password.empty());
 
-	if (!user.empty() && !use_ssl) {
+	if (!user.empty() && !use_ssl && !g_conf().get_val<bool>("rgw_allow_notification_secrets_in_cleartext")) {
       ldout(cct, 1) << "Kafka connect: user/password are only allowed over secure connection" << dendl;
       return nullptr;
 	}
