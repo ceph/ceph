@@ -85,7 +85,7 @@ BlockRBManager::write_ertr::future<> BlockRBManager::complete_allocation(
 BlockRBManager::open_ertr::future<> BlockRBManager::open()
 {
   return device->read_rbm_header(RBM_START_ADDRESS
-  ).safe_then([&](auto s)
+  ).safe_then([](auto s)
     -> open_ertr::future<> {
     return open_ertr::now();
   }).handle_error(
@@ -165,9 +165,8 @@ std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)
 {
   out << " rbm_metadata_header_t(size=" << header.size
        << ", block_size=" << header.block_size
-       << ", start=" << header.start
-       << ", start_data_area=" << header.start_data_area
        << ", feature=" << header.feature
+       << ", journal_size=" << header.journal_size
        << ", crc=" << header.crc
        << ", config=" << header.config;
   return out << ")";

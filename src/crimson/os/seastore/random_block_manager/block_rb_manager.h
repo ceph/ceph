@@ -25,8 +25,6 @@
 
 namespace crimson::os::seastore {
 
-constexpr rbm_abs_addr RBM_START_ADDRESS = 0;
-
 using RBMDevice = random_block_device::RBMDevice;
 using RBMDeviceRef = std::unique_ptr<RBMDevice>;
 

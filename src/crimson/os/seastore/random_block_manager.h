@@ -25,9 +25,8 @@ namespace crimson::os::seastore {
 struct rbm_metadata_header_t {
   size_t size = 0;
   size_t block_size = 0;
-  uint64_t start = 0; // start location of the device
   uint64_t feature = 0;
-  uint32_t start_data_area = 0;
+  uint64_t journal_size = 0;
   checksum_t crc = 0;
   device_config_t config;
 
@@ -35,10 +34,9 @@ struct rbm_metadata_header_t {
     DENC_START(1, 1, p);
     denc(v.size, p);
     denc(v.block_size, p);
-    denc(v.start, p);
     denc(v.feature, p);
 
-    denc(v.start_data_area, p);
+    denc(v.journal_size, p);
     denc(v.crc, p);
     denc(v.config, p);
     DENC_FINISH(p);
@@ -47,6 +45,8 @@ struct rbm_metadata_header_t {
 };
 
 class Device;
+using rbm_abs_addr = uint64_t;
+constexpr rbm_abs_addr RBM_START_ADDRESS = 0;
 class RandomBlockManager {
 public:
 
@@ -107,8 +107,6 @@ public:
   virtual ~RandomBlockManager() {}
 };
 using RandomBlockManagerRef = std::unique_ptr<RandomBlockManager>;
-using blk_no_t = uint64_t;
-using rbm_abs_addr = uint64_t;
 
 inline rbm_abs_addr convert_paddr_to_abs_addr(const paddr_t& paddr) {
   const blk_paddr_t& blk_addr = paddr.as_blk_paddr();
