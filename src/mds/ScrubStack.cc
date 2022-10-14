@@ -1054,6 +1054,8 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
     bool any_finished = false;
     bool any_repaired = false;
     std::set<std::string> scrubbing_tags;
+    std::unordered_map<std::string, unordered_map<int, std::vector<_inodeno_t>>> uninline_failed_meta_info;
+
     for (auto it = scrubbing_map.begin(); it != scrubbing_map.end(); ) {
       auto& header = it->second;
       if (header->get_num_pending() ||
@@ -1076,7 +1078,9 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
     scrub_epoch = m->get_epoch();
 
     auto ack = make_message<MMDSScrubStats>(scrub_epoch,
-					    std::move(scrubbing_tags), clear_stack);
+					    std::move(scrubbing_tags),
+					    std::move(uninline_failed_meta_info),
+					    clear_stack);
     mdcache->mds->send_message_mds(ack, 0);
 
     if (any_finished)
@@ -1192,7 +1196,6 @@ void ScrubStack::advance_scrub_status()
   }
 
   ++scrub_epoch;
-
   for (auto& r : up_mds) {
     if (r == 0)
       continue;

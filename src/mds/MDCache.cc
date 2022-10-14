@@ -13189,10 +13189,13 @@ class C_MDC_DataUninlinedSubmitted : public MDCacheLogContext {
     if (r) {
       dout(20) << "(uninline_data) log submission failed; r=" << r
 	       << " (" << cpp_strerror(r) << ") for " << *in << dendl;
+      ceph_assert(in->get_scrub_header());
+      in->get_scrub_header()->record_uninline_status(in->ino(), r);
     } else {
       dout(20) << "(uninline_data) log submission succeeded for " << *in << dendl;
       in->mdcache->logger->inc(l_mdc_uninline_succeeded);
     }
+    const_cast<CInode::scrub_info_t*>(in->scrub_info())->uninline_in_progress = false;
 
     mdr->apply();
     mds->server->respond_to_request(mdr, r);
@@ -13218,6 +13221,8 @@ struct C_IO_DataUninlined : public MDSIOContext {
       derr << "(uninline_data) mutation failed: r=" << r
 	   << " (" << cpp_strerror(r) << ") for " << *in << dendl;
       in->mdcache->logger->inc(l_mdc_uninline_write_failed);
+      ceph_assert(in->get_scrub_header());
+      in->get_scrub_header()->record_uninline_status(in->ino(), r);
       mds->server->respond_to_request(mdr, r);
       return;
     }
@@ -13277,6 +13282,7 @@ void MDCache::uninline_data_work(MDRequestRef mdr)
 
   if (!in->has_inline_data()) {
     dout(20) << "(uninline_data) inode doesn't have inline data anymore " << *in << dendl;
+    const_cast<CInode::scrub_info_t*>(in->scrub_info())->uninline_in_progress = false;
     mds->server->respond_to_request(mdr, 0);
     return;
   }
