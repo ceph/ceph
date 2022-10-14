@@ -322,7 +322,7 @@ namespace librbd {
     std::string get_parent_image_id(librados::snap_t in_snap_id) const;
     uint64_t get_parent_snap_id(librados::snap_t in_snap_id) const;
     int get_parent_overlap(librados::snap_t in_snap_id,
-			   uint64_t *overlap) const;
+                           uint64_t* raw_overlap) const;
     void register_watch(Context *on_finish);
     uint64_t prune_parent_extents(std::vector<std::pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);

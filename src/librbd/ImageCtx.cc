@@ -672,12 +672,11 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     return CEPH_NOSNAP;
   }
 
-  int ImageCtx::get_parent_overlap(snap_t in_snap_id, uint64_t *overlap) const
-  {
-    ceph_assert(ceph_mutex_is_locked(image_lock));
+  int ImageCtx::get_parent_overlap(snap_t in_snap_id,
+                                   uint64_t* raw_overlap) const {
     const auto info = get_parent_info(in_snap_id);
     if (info) {
-      *overlap = info->overlap;
+      *raw_overlap = info->overlap;
       return 0;
     }
     return -ENOENT;
