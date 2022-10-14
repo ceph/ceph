@@ -34,6 +34,15 @@ cdef nogil:
         _LIBRADOS_OP_FLAG_FADVISE_NOCACHE "LIBRADOS_OP_FLAG_FADVISE_NOCACHE"
 
 
+    enum: 
+        _LIBRADOS_CMPXATTR_OP_EQ "LIBRADOS_CMPXATTR_OP_EQ"
+        _LIBRADOS_CMPXATTR_OP_NE "LIBRADOS_CMPXATTR_OP_NE"
+        _LIBRADOS_CMPXATTR_OP_GT "LIBRADOS_CMPXATTR_OP_GT"
+        _LIBRADOS_CMPXATTR_OP_GTE "LIBRADOS_CMPXATTR_OP_GTE"
+        _LIBRADOS_CMPXATTR_OP_LT "LIBRADOS_CMPXATTR_OP_LT"
+        _LIBRADOS_CMPXATTR_OP_LTE "LIBRADOS_CMPXATTR_OP_LTE"
+
+      
     enum:
         _LIBRADOS_OPERATION_NOFLAG "LIBRADOS_OPERATION_NOFLAG"
         _LIBRADOS_OPERATION_BALANCE_READS "LIBRADOS_OPERATION_BALANCE_READS"
@@ -379,6 +388,8 @@ cdef nogil:
     int rados_aio_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, time_t *mtime, int flags):
         pass
     void rados_write_op_cmpext(rados_write_op_t write_op, const char *cmp_buf, size_t cmp_len, uint64_t off, int *prval):
+        pass
+    void rados_write_op_omap_cmp(rados_write_op_t write_op, const char *key, uint8_t comparison_operator, const char *val, size_t val_len, int *prval):
         pass
     void rados_write_op_omap_set(rados_write_op_t write_op, const char * const* keys, const char * const* vals, const size_t * lens, size_t num):
         pass
