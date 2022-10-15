@@ -153,9 +153,9 @@ bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
   parent_extents->clear();
   *area = ImageArea::DATA;
 
-  uint64_t parent_overlap;
+  uint64_t raw_overlap;
   int r = m_ictx->get_parent_overlap(
-    m_io_context->read_snap().value_or(CEPH_NOSNAP), &parent_overlap);
+      m_io_context->read_snap().value_or(CEPH_NOSNAP), &raw_overlap);
   if (r < 0) {
     // NOTE: it's possible for a snapshot to be deleted while we are
     // still reading from it
@@ -163,24 +163,20 @@ bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
                        << cpp_strerror(r) << dendl;
     return false;
   }
-
-  if (!read_request && !m_ictx->migration_info.empty()) {
-    parent_overlap = m_ictx->migration_info.overlap;
+  bool migration_write = !read_request && !m_ictx->migration_info.empty();
+  if (migration_write) {
+    raw_overlap = m_ictx->migration_info.overlap;
   }
-
-  if (parent_overlap == 0) {
+  if (raw_overlap == 0) {
     return false;
   }
 
   std::tie(*parent_extents, *area) = io::util::object_to_area_extents(
       m_ictx, m_object_no, {{0, m_ictx->layout.object_size}});
-  uint64_t object_overlap = m_ictx->prune_parent_extents(*parent_extents,
-                                                         parent_overlap);
+  uint64_t object_overlap = m_ictx->prune_parent_extents(
+      *parent_extents, *area, raw_overlap, migration_write);
   if (object_overlap > 0) {
-    ldout(m_ictx->cct, 20) << "overlap=" << parent_overlap
-                           << " extents=" << *parent_extents
-                           << " area=" << *area << dendl;
-    m_has_parent = !parent_extents->empty();
+    m_has_parent = true;
     return true;
   }
   return false;
@@ -959,19 +955,17 @@ void ObjectListSnapsRequest<I>::list_from_parent() {
     return;
   }
 
-  // calculate reverse mapping onto the parent image
   Extents parent_extents;
-  std::tie(parent_extents, m_image_area) = io::util::object_to_area_extents(
-      image_ctx, this->m_object_no, m_object_extents);
-
-  uint64_t parent_overlap = 0;
+  uint64_t raw_overlap = 0;
   uint64_t object_overlap = 0;
-  int r = image_ctx->get_parent_overlap(snap_id_end, &parent_overlap);
-  if (r == 0) {
-    object_overlap = image_ctx->prune_parent_extents(parent_extents,
-                                                     parent_overlap);
+  image_ctx->get_parent_overlap(snap_id_end, &raw_overlap);
+  if (raw_overlap > 0) {
+    // calculate reverse mapping onto the parent image
+    std::tie(parent_extents, m_image_area) = io::util::object_to_area_extents(
+        image_ctx, this->m_object_no, m_object_extents);
+    object_overlap = image_ctx->prune_parent_extents(
+        parent_extents, m_image_area, raw_overlap, false);
   }
-
   if (object_overlap == 0) {
     image_locker.unlock();
 

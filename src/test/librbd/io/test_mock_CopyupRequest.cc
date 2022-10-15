@@ -197,7 +197,7 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
 
   void expect_prune_parent_extents(MockTestImageCtx& mock_image_ctx,
                                    uint64_t overlap, uint64_t object_overlap) {
-    EXPECT_CALL(mock_image_ctx, prune_parent_extents(_, overlap))
+    EXPECT_CALL(mock_image_ctx, prune_parent_extents(_, _, overlap, _))
       .WillOnce(WithoutArgs(Invoke([object_overlap]() {
                               return object_overlap;
                             })));

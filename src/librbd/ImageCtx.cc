@@ -545,15 +545,15 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
       return 0;
     }
 
-    auto [data_size, data_area] = io::util::raw_to_area_offset(*this, raw_size);
-    ceph_assert(data_size <= raw_size && data_area == io::ImageArea::DATA);
+    auto size = io::util::raw_to_area_offset(*this, raw_size);
+    ceph_assert(size.first <= raw_size && size.second == io::ImageArea::DATA);
 
     switch (area) {
     case io::ImageArea::DATA:
-      return data_size;
+      return size.first;
     case io::ImageArea::CRYPTO_HEADER:
       // CRYPTO_HEADER area ends where DATA area begins
-      return raw_size - data_size;
+      return raw_size - size.first;
     default:
       ceph_abort();
     }
@@ -701,48 +701,74 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     if (migration_write) {
       // don't reduce migration write overlap -- it may be larger as
       // it's the largest overlap across snapshots by construction
-      return io::util::remap_offset(*this, raw_overlap);
+      return io::util::raw_to_area_offset(*this, raw_overlap);
     }
     if (raw_overlap == 0 || parent == nullptr) {
       // image opened with OPEN_FLAG_SKIP_OPEN_PARENT -> no overlap
-      return io::util::remap_offset(*this, 0);
+      return io::util::raw_to_area_offset(*this, 0);
     }
     // DATA area in the parent may be smaller than the part of DATA
     // area in the clone that is still within the overlap (e.g. for
     // LUKS2-encrypted parent + LUKS1-encrypted clone, due to LUKS2
     // header usually being bigger than LUKS1 header)
-    auto overlap = io::util::remap_offset(*this, raw_overlap);
+    auto overlap = io::util::raw_to_area_offset(*this, raw_overlap);
     std::shared_lock parent_image_locker(parent->image_lock);
     overlap.first = std::min(overlap.first,
                              parent->get_area_size(overlap.second));
     return overlap;
   }
 
+  uint64_t ImageCtx::prune_parent_extents(io::Extents& image_extents,
+                                          io::ImageArea area,
+                                          uint64_t raw_overlap,
+                                          bool migration_write) const {
+    ceph_assert(ceph_mutex_is_locked(image_lock));
+    ldout(cct, 10) << __func__ << ": image_extents=" << image_extents
+                   << " area=" << area << " raw_overlap=" << raw_overlap
+                   << " migration_write=" << migration_write << dendl;
+    if (raw_overlap == 0) {
+      image_extents.clear();
+      return 0;
+    }
+
+    auto overlap = reduce_parent_overlap(raw_overlap, migration_write);
+    if (area == overlap.second) {
+      // drop extents completely beyond the overlap
+      while (!image_extents.empty() &&
+             image_extents.back().first >= overlap.first) {
+        image_extents.pop_back();
+      }
+      if (!image_extents.empty()) {
+        // trim final overlapping extent
+        auto& last_extent = image_extents.back();
+        if (last_extent.first + last_extent.second > overlap.first) {
+          last_extent.second = overlap.first - last_extent.first;
+        }
+      }
+    } else if (area == io::ImageArea::DATA &&
+               overlap.second == io::ImageArea::CRYPTO_HEADER) {
+      // all extents completely beyond the overlap
+      image_extents.clear();
+    } else {
+      // all extents completely within the overlap
+      ceph_assert(area == io::ImageArea::CRYPTO_HEADER &&
+                  overlap.second == io::ImageArea::DATA);
+    }
+
+    uint64_t overlap_bytes = 0;
+    for (auto [_, len] : image_extents) {
+      overlap_bytes += len;
+    }
+    ldout(cct, 10) << __func__ << ": overlap=" << overlap.first
+                   << "/" << overlap.second
+                   << " got overlap_bytes=" << overlap_bytes
+                   << " at " << image_extents << dendl;
+    return overlap_bytes;
+  }
+
   void ImageCtx::register_watch(Context *on_finish) {
     ceph_assert(image_watcher != NULL);
     image_watcher->register_watch(on_finish);
-  }
-
-  uint64_t ImageCtx::prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
-					  uint64_t overlap)
-  {
-    // drop extents completely beyond the overlap
-    while (!objectx.empty() && objectx.back().first >= overlap)
-      objectx.pop_back();
-
-    // trim final overlapping extent
-    if (!objectx.empty() && objectx.back().first + objectx.back().second > overlap)
-      objectx.back().second = overlap - objectx.back().first;
-
-    uint64_t len = 0;
-    for (vector<pair<uint64_t,uint64_t> >::iterator p = objectx.begin();
-	 p != objectx.end();
-	 ++p)
-      len += p->second;
-    ldout(cct, 10) << "prune_parent_extents image overlap " << overlap
-		   << ", object overlap " << len
-		   << " from image extents " << objectx << dendl;
-    return len;
   }
 
   void ImageCtx::cancel_async_requests() {

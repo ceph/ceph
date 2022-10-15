@@ -88,8 +88,9 @@ struct MockImageCtx {
                                              uint64_t *raw_overlap));
   MOCK_CONST_METHOD2(reduce_parent_overlap,
                      std::pair<uint64_t, io::ImageArea>(uint64_t, bool));
-  MOCK_CONST_METHOD2(prune_parent_extents, uint64_t(std::vector<std::pair<uint64_t,uint64_t> >& ,
-                                                    uint64_t));
+  MOCK_CONST_METHOD4(prune_parent_extents,
+                     uint64_t(std::vector<std::pair<uint64_t, uint64_t>>&,
+                              io::ImageArea, uint64_t, bool));
 
   MOCK_CONST_METHOD2(is_snap_protected, int(librados::snap_t in_snap_id,
                                             bool *is_protected));

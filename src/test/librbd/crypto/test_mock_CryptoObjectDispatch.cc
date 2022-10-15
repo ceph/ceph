@@ -239,7 +239,7 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
   }
 
   void expect_prune_parent_extents(uint64_t object_overlap) {
-    EXPECT_CALL(*mock_image_ctx, prune_parent_extents(_, _))
+    EXPECT_CALL(*mock_image_ctx, prune_parent_extents(_, _, _, _))
             .WillOnce(Return(object_overlap));
   }
 
