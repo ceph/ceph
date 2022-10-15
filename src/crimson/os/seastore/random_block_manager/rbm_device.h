@@ -159,8 +159,11 @@ public:
   write_ertr::future<> write_rbm_header();
 
   read_ertr::future<rbm_metadata_header_t> read_rbm_header(rbm_abs_addr addr);
-};
 
+  using stat_device_ret =
+    read_ertr::future<seastar::stat_data>;
+  virtual stat_device_ret stat_device() = 0;
+};
 
 class TestMemory : public RBMDevice {
 public:
@@ -213,6 +216,15 @@ public:
     ceph::bufferlist bl,
     uint16_t stream = 0) final;
 
+  stat_device_ret stat_device() final {
+    seastar::stat_data stat;
+    stat.block_size = block_size;
+    stat.size = size;
+    return stat_device_ret(
+      read_ertr::ready_future_marker{},
+      stat
+    );
+  }
   char *buf;
 };
 }
