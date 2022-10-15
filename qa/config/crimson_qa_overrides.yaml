@@ -3,6 +3,7 @@ overrides:
     conf:
       mon:
         osd pool default crimson: true
+    flavor: crimson
   workunit:
     env:
       CRIMSON_COMPAT: '1'
