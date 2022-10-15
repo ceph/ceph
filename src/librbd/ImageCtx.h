@@ -326,9 +326,11 @@ namespace librbd {
                            uint64_t* raw_overlap) const;
     std::pair<uint64_t, io::ImageArea> reduce_parent_overlap(
         uint64_t raw_overlap, bool migration_write) const;
+    uint64_t prune_parent_extents(
+        std::vector<std::pair<uint64_t, uint64_t>>& image_extents,
+        io::ImageArea area, uint64_t raw_overlap, bool migration_write) const;
+
     void register_watch(Context *on_finish);
-    uint64_t prune_parent_extents(std::vector<std::pair<uint64_t,uint64_t> >& objectx,
-				  uint64_t overlap);
 
     void cancel_async_requests();
     void cancel_async_requests(Context *on_finish);

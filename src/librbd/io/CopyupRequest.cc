@@ -649,20 +649,19 @@ void CopyupRequest<I>::compute_deep_copy_snap_ids() {
         return false;
       }
 
-      uint64_t parent_overlap = 0;
-      int r = m_image_ctx->get_parent_overlap(snap_id, &parent_overlap);
+      uint64_t raw_overlap = 0;
+      uint64_t object_overlap = 0;
+      int r = m_image_ctx->get_parent_overlap(snap_id, &raw_overlap);
       if (r < 0) {
         ldout(cct, 5) << "failed getting parent overlap for snap_id: "
                       << snap_id << ": " << cpp_strerror(r) << dendl;
+      } else if (raw_overlap > 0) {
+        auto [parent_extents, area] = util::object_to_area_extents(
+            m_image_ctx, m_object_no, {{0, m_image_ctx->layout.object_size}});
+        object_overlap = m_image_ctx->prune_parent_extents(parent_extents, area,
+                                                           raw_overlap, false);
       }
-      if (parent_overlap == 0) {
-        return false;
-      }
-      auto [parent_extents, _] = util::object_to_area_extents(
-          m_image_ctx, m_object_no, {{0, m_image_ctx->layout.object_size}});
-      auto overlap = m_image_ctx->prune_parent_extents(parent_extents,
-                                                       parent_overlap);
-      return overlap > 0;
+      return object_overlap > 0;
     });
 }
 

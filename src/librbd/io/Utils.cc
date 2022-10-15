@@ -92,22 +92,22 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* read_extents,
 
   std::shared_lock image_locker{image_ctx->image_lock};
 
-  // calculate reverse mapping onto the image
-  Extents extents;
-  for (const auto& extent : *read_extents) {
-    extents.emplace_back(extent.offset, extent.length);
-  }
-  auto [parent_extents, area] = object_to_area_extents(image_ctx, object_no,
-                                                       extents);
-
-  uint64_t parent_overlap = 0;
+  Extents parent_extents;
+  ImageArea area;
+  uint64_t raw_overlap = 0;
   uint64_t object_overlap = 0;
-  int r = image_ctx->get_parent_overlap(snap_id, &parent_overlap);
-  if (r == 0) {
-    object_overlap = image_ctx->prune_parent_extents(parent_extents,
-                                                     parent_overlap);
+  image_ctx->get_parent_overlap(snap_id, &raw_overlap);
+  if (raw_overlap > 0) {
+    // calculate reverse mapping onto the parent image
+    Extents extents;
+    for (const auto& extent : *read_extents) {
+      extents.emplace_back(extent.offset, extent.length);
+    }
+    std::tie(parent_extents, area) = object_to_area_extents(image_ctx,
+                                                            object_no, extents);
+    object_overlap = image_ctx->prune_parent_extents(parent_extents, area,
+                                                     raw_overlap, false);
   }
-
   if (object_overlap == 0) {
     image_locker.unlock();
 

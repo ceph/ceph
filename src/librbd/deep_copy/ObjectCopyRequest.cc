@@ -538,26 +538,21 @@ void ObjectCopyRequest<I>::compute_read_ops() {
     WriteReadSnapIds write_read_snap_ids{src_snap_seq, src_snap_seq};
 
     // prepare to prune the extents to the maximum parent overlap
-    m_src_image_ctx->image_lock.lock_shared();
-    uint64_t src_parent_overlap = 0;
-    int r = m_src_image_ctx->get_parent_overlap(src_snap_seq,
-                                                &src_parent_overlap);
-    m_src_image_ctx->image_lock.unlock_shared();
-
+    std::shared_lock image_locker(m_src_image_ctx->image_lock);
+    uint64_t raw_overlap = 0;
+    int r = m_src_image_ctx->get_parent_overlap(src_snap_seq, &raw_overlap);
     if (r < 0) {
       ldout(m_cct, 5) << "failed getting parent overlap for snap_id: "
                       << src_snap_seq << ": " << cpp_strerror(r) << dendl;
-    } else {
-      ldout(m_cct, 20) << "parent overlap=" << src_parent_overlap << dendl;
-      for (auto& [image_offset, image_length] : dne_image_interval) {
-        auto end_image_offset = std::min(
-          image_offset + image_length, src_parent_overlap);
-        if (image_offset >= end_image_offset) {
-          // starting offset is beyond the end of the parent overlap
-          continue;
-        }
-
-        image_length = end_image_offset - image_offset;
+    } else if (raw_overlap > 0) {
+      ldout(m_cct, 20) << "raw_overlap=" << raw_overlap << dendl;
+      io::Extents parent_extents;
+      for (auto [image_offset, image_length] : dne_image_interval) {
+        parent_extents.emplace_back(image_offset, image_length);
+      }
+      m_src_image_ctx->prune_parent_extents(parent_extents, m_image_area,
+                                            raw_overlap, false);
+      for (auto [image_offset, image_length] : parent_extents) {
         ldout(m_cct, 20) << "parent read op: "
                          << "snap_ids=" << write_read_snap_ids << " "
                          << image_offset << "~" << image_length << dendl;
@@ -672,24 +667,20 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
 
     if (hide_parent) {
       std::shared_lock image_locker{m_dst_image_ctx->image_lock};
-      uint64_t parent_overlap = 0;
-      int r = m_dst_image_ctx->get_parent_overlap(dst_snap_seq,
-                                                  &parent_overlap);
+      uint64_t raw_overlap = 0;
+      uint64_t object_overlap = 0;
+      int r = m_dst_image_ctx->get_parent_overlap(dst_snap_seq, &raw_overlap);
       if (r < 0) {
         ldout(m_cct, 5) << "failed getting parent overlap for snap_id: "
                         << dst_snap_seq << ": " << cpp_strerror(r) << dendl;
+      } else if (raw_overlap > 0) {
+        auto parent_extents = m_image_extents;
+        object_overlap = m_dst_image_ctx->prune_parent_extents(
+            parent_extents, m_image_area, raw_overlap, false);
       }
-      if (parent_overlap == 0) {
+      if (object_overlap == 0) {
         ldout(m_cct, 20) << "no parent overlap" << dendl;
         hide_parent = false;
-      } else {
-        auto image_extents = m_image_extents;
-        uint64_t overlap = m_dst_image_ctx->prune_parent_extents(
-          image_extents, parent_overlap);
-        if (overlap == 0) {
-          ldout(m_cct, 20) << "no parent overlap" << dendl;
-          hide_parent = false;
-        }
       }
     }
 

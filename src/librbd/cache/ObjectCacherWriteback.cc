@@ -160,19 +160,17 @@ bool ObjectCacherWriteback::may_copy_on_write(const object_t& oid,
                                               uint64_t read_len,
                                               snapid_t snapid)
 {
-  m_ictx->image_lock.lock_shared();
-  librados::snap_t snap_id = m_ictx->snap_id;
-  uint64_t overlap = 0;
-  m_ictx->get_parent_overlap(snap_id, &overlap);
-  m_ictx->image_lock.unlock_shared();
-
-  uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
-
-  // reverse map this object extent onto the parent
-  auto [parent_extents, _] = io::util::object_to_area_extents(
-      m_ictx, object_no, {{0, m_ictx->layout.object_size}});
-  uint64_t object_overlap = m_ictx->prune_parent_extents(parent_extents,
-                                                         overlap);
+  std::shared_lock image_locker(m_ictx->image_lock);
+  uint64_t raw_overlap = 0;
+  uint64_t object_overlap = 0;
+  m_ictx->get_parent_overlap(m_ictx->snap_id, &raw_overlap);
+  if (raw_overlap > 0) {
+    uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
+    auto [parent_extents, area] = io::util::object_to_area_extents(
+        m_ictx, object_no, {{0, m_ictx->layout.object_size}});
+    object_overlap = m_ictx->prune_parent_extents(parent_extents, area,
+                                                  raw_overlap, false);
+  }
   bool may = object_overlap > 0;
   ldout(m_ictx->cct, 10) << "may_copy_on_write " << oid << " " << read_off
                          << "~" << read_len << " = " << may << dendl;
