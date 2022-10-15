@@ -184,7 +184,7 @@ public:
    * atomic_write_unit does not require fsync().
    */
 
-  NVMeBlockDevice() {}
+  NVMeBlockDevice(std::string device_path) : device_path(device_path) {}
   ~NVMeBlockDevice() = default;
 
   open_ertr::future<> open(
@@ -215,6 +215,16 @@ public:
     uint64_t offset,
     ceph::bufferlist bl,
     uint16_t stream = 0) final;
+
+  stat_device_ret stat_device() final {
+    return seastar::file_stat(device_path, seastar::follow_symlink::yes
+    ).then([](auto stat) {
+      return stat_device_ret(
+	  read_ertr::ready_future_marker{},
+	  stat
+      );
+    });
+  }
 
   uint64_t get_preffered_write_granularity() const { return write_granularity; }
   uint64_t get_preffered_write_alignment() const { return write_alignment; }
@@ -292,6 +302,7 @@ private:
   uint32_t atomic_write_unit = 4096;
 
   bool data_protection_enabled = false;
+  std::string device_path;
 };
 
 }

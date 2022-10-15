@@ -26,22 +26,27 @@ SET_SUBSYS(seastore_device);
 
 RBMDevice::mkfs_ret RBMDevice::mkfs(device_config_t config) {
   LOG_PREFIX(RBMDevice::mkfs);
-  super.start = 0;
-  // TODO: improve mkfs() based on a file descriptor
-  super.block_size = get_block_size();
-  super.size = get_available_size();
-
-  super.feature |= RBM_BITMAP_BLOCK_CRC;
-  super.config = std::move(config);
-  DEBUG("super {} ", super);
-  // write super block
-  return write_rbm_header(
-  ).safe_then([] {
-    return mkfs_ertr::now();
-  }).handle_error(
+  return stat_device(
+  ).handle_error(
     mkfs_ertr::pass_further{},
     crimson::ct_error::assert_all{
-    "Invalid error write_rbm_header in RBMDevice::mkfs"
+    "Invalid error stat_device in RBMDevice::mkfs"}
+  ).safe_then([this, FNAME, config=std::move(config)](auto st) {
+    super.block_size = st.block_size;
+    super.size = st.size;
+
+    super.feature |= RBM_BITMAP_BLOCK_CRC;
+    super.config = std::move(config);
+    DEBUG("super {} ", super);
+    // write super block
+    return write_rbm_header(
+    ).safe_then([] {
+      return mkfs_ertr::now();
+    }).handle_error(
+      mkfs_ertr::pass_further{},
+      crimson::ct_error::assert_all{
+      "Invalid error write_rbm_header in RBMDevice::mkfs"
+    });
   });
 }
 
