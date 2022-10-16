@@ -552,6 +552,17 @@
           },
         },
         {
+          alert: 'CephNodeNetworkBondDegraded',
+          expr: |||
+            node_bonding_slaves - node_bonding_active != 0
+          |||,
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Degraded Bond on Node {{ $labels.instance }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'Bond {{ $labels.master }} is degraded on Node {{ $labels.instance }}.',
+          },
+        },
+        {
           alert: 'CephNodeDiskspaceWarning',
           expr: 'predict_linear(node_filesystem_free_bytes{device=~"/.*"}[2d], 3600 * 24 * 5) *on(instance) group_left(nodename) node_uname_info < 0',
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.8.4' },
