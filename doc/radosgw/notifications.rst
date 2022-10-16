@@ -6,23 +6,29 @@ Bucket Notifications
 
 .. contents::
 
-Bucket notifications provide a mechanism for sending information out of the radosgw when certain events are happening on the bucket.
-Currently, notifications could be sent to: HTTP, AMQP0.9.1 and Kafka endpoints.
+Bucket notifications provide a mechanism for sending information out of radosgw
+when certain events happen on the bucket. Notifications can be sent to HTTP
+endpoints, AMQP0.9.1 endpoints, and Kafka endpoints.
 
-Note, that if the events should be stored in Ceph, in addition, or instead of being pushed to an endpoint,
-the `PubSub Module`_ should be used instead of the bucket notification mechanism.
+The `PubSub Module`_ (and *not* the bucket-notification mechanism) should be
+used for events stored in Ceph. 
 
-A user can create different topics. A topic entity is defined by its name and is per tenant. A
-user can only associate its topics (via notification configuration) with buckets it owns.
+A user can create topics. A topic entity is defined by its name and is "per
+tenant". A user can associate its topics (via notification configuration) only
+with buckets it owns.
 
-In order to send notifications for events for a specific bucket, a notification entity needs to be created. A
-notification can be created on a subset of event types, or for all event types (default).
-The notification may also filter out events based on prefix/suffix and/or regular expression matching of the keys. As well as,
-on the metadata attributes attached to the object, or the object tags.
-There can be multiple notifications for any specific topic, and the same topic could be used for multiple notifications.
+A notification entity must be created in order to send event notifications for
+a specific bucket. A notification entity can be created either for a subset
+of event types or for all event types (which is the default). The
+notification may also filter out events based on matches of the prefixes and
+suffixes of (1) the keys, (2) the metadata attributes attached to the object,
+or (3) the object tags. Regular-expression matching can also be used on these
+to create filters. There can be multiple notifications for any specific topic,
+and the same topic can used for multiple notifications.
 
-REST API has been defined to provide configuration and control interfaces for the bucket notification
-mechanism. This API is similar to the one defined as the S3-compatible API of the pubsub sync module.
+REST API has been defined so as to provide configuration and control interfaces
+for the bucket notification mechanism. This API is similar to the one defined
+as the S3-compatible API of the `PubSub Module`_.
 
 .. toctree::
    :maxdepth: 1
