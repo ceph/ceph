@@ -378,7 +378,7 @@ seastar::future<> OSD::start()
     );
   }).then([this](OSDSuperblock&& sb) {
     superblock = std::move(sb);
-    pg_shard_manager.set_superblock(sb);
+    pg_shard_manager.set_superblock(superblock);
     return pg_shard_manager.get_local_map(superblock.current_epoch);
   }).then([this](OSDMapService::local_cached_map_t&& map) {
     osdmap = make_local_shared_foreign(OSDMapService::local_cached_map_t(map));
