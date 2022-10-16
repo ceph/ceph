@@ -103,11 +103,12 @@ Create a Topic
 ``````````````
 
 This creates a new topic. Provide the topic with push endpoint parameters,
-which will be used later when a notification is created. Upon a successful
-request, the response will include the topic ARN that could be later used to
-reference this topic in the notification request. To update a topic, use the
-same command that you used to create it (but use the name of an existing topic
-and different endpoint values).
+which will be used later when a notification is created. A response is
+generated. A successful response includes the the topic's `ARN
+<https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_
+(the "Amazon Resource Name", a unique identifier used to reference the topic).
+To update a topic, use the same command that you used to create it (but use the
+name of an existing topic and different endpoint values).
 
 .. tip:: Any notification already associated with the topic must be re-created
    for the topic update to take effect.
