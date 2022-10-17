@@ -8,6 +8,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+#define METADATA_LENGTH 20
+
 using namespace std;
 
 string portStr;
@@ -199,7 +201,8 @@ TEST_F(D4NFilterFixture, CreateBucket) {
 
 TEST_F(D4NFilterFixture, PutObject) {
   cpp_redis::client client;
-  int key_exist = -1;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_0");
   clientSetUp(&client); 
 
   ASSERT_EQ(createUser(), 0);
@@ -211,26 +214,33 @@ TEST_F(D4NFilterFixture, PutObject) {
   EXPECT_EQ(putObject(0), 0);
   EXPECT_NE(testWriter, nullptr);
 
-  client.hgetall("rgw-object:test_object_0:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_0:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_0");
-      EXPECT_EQ((int)arr.size(), 2);
+      EXPECT_EQ((int)arr.size(), 2 + METADATA_LENGTH);
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
+  client.sync_commit();
 
-  EXPECT_EQ(key_exist, 0);
+  client.hmget("rgw-object:test_object_0:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_0");
+    }
+  });
+
+  client.sync_commit();
 
   clientReset(&client);
 }
 
 TEST_F(D4NFilterFixture, GetObject) {
   cpp_redis::client client;
-  int key_exist = -1;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_1");
   clientSetUp(&client); 
 
   ASSERT_EQ(createUser(), 0);
@@ -255,19 +265,25 @@ TEST_F(D4NFilterFixture, GetObject) {
   EXPECT_NE(testROp, nullptr);
   EXPECT_EQ(testROp->prepare(null_yield, dpp), 0);
 
-  client.hgetall("rgw-object:test_object_1:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_1:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_1");
-      EXPECT_EQ((int)arr.size(), 2);
+      EXPECT_EQ((int)arr.size(), 2 + METADATA_LENGTH);
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
+  client.sync_commit();
 
-  EXPECT_EQ(key_exist, 0);
+  client.hmget("rgw-object:test_object_1:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_1");
+    }
+  });
+
+  client.sync_commit();
 
   clientReset(&client);
 }
@@ -294,7 +310,7 @@ TEST_F(D4NFilterFixture, DelObject) {
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
+  client.sync_commit();
 
   unique_ptr<rgw::sal::Object> testObject_2 = testBucket->get_object(rgw_obj_key("test_object_2"));
 
@@ -312,7 +328,7 @@ TEST_F(D4NFilterFixture, DelObject) {
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
+  client.sync_commit();
 
   clientReset(&client);
 }
@@ -320,7 +336,8 @@ TEST_F(D4NFilterFixture, DelObject) {
 /* Attribute-related tests */
 TEST_F(D4NFilterFixture, SetObjectAttrs) {
   cpp_redis::client client;
-  int key_exist = -1;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_3");
   clientSetUp(&client); 
 
   createUser();
@@ -333,30 +350,38 @@ TEST_F(D4NFilterFixture, SetObjectAttrs) {
   buffer::list bl;
   bl.append("test_attrs_value_extra");
   map<string, bufferlist> test_attrs{{"test_attrs_key_extra", bl}};
+  fields.push_back("test_attrs_key_extra");
 
   EXPECT_EQ(testObject_3->set_obj_attrs(dpp, &test_attrs, NULL, null_yield), 0);
 
-  client.hgetall("rgw-object:test_object_3:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_3:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_3");
-      EXPECT_EQ(arr[3].as_string(), "test_attrs_value_extra");
-      EXPECT_EQ((int)arr.size(), 4);
+      EXPECT_EQ((int)arr.size(), 4 + METADATA_LENGTH);
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
+  client.sync_commit();
 
-  EXPECT_EQ(key_exist, 0);
+  client.hmget("rgw-object:test_object_3:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_3");
+      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_extra");
+    }
+  });
+
+  client.sync_commit();
 
   clientReset(&client);
 }
 
 TEST_F(D4NFilterFixture, GetObjectAttrs) {
   cpp_redis::client client;
-  int key_exist = -1;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_4");
   clientSetUp(&client); 
 
   createUser();
@@ -369,6 +394,7 @@ TEST_F(D4NFilterFixture, GetObjectAttrs) {
   buffer::list bl;
   bl.append("test_attrs_value_extra");
   map<string, bufferlist> test_attrs{{"test_attrs_key_extra", bl}};
+  fields.push_back("test_attrs_key_extra");
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_4.get())->get_next();
 
@@ -377,28 +403,33 @@ TEST_F(D4NFilterFixture, GetObjectAttrs) {
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
   EXPECT_EQ(testObject_4->get_obj_attrs(null_yield, dpp, NULL), 0);
- 
-  client.hgetall("rgw-object:test_object_4:cache", [&key_exist](cpp_redis::reply& reply) {
+
+  client.hgetall("rgw-object:test_object_4:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_4");
-      EXPECT_EQ(arr[3].as_string(), "test_attrs_value_extra");
-      EXPECT_EQ((int)arr.size(), 4);
+      EXPECT_EQ((int)arr.size(), 4 + METADATA_LENGTH);
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
+  client.sync_commit();
 
-  EXPECT_EQ(key_exist, 0);
+  client.hmget("rgw-object:test_object_4:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_4");
+      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_extra");
+    }
+  });
+
+  client.sync_commit();
 
   clientReset(&client);
 }
 
 TEST_F(D4NFilterFixture, DelObjectAttrs) {
   cpp_redis::client client;
-  int key_exist = -1;
   clientSetUp(&client); 
 
   createUser();
@@ -419,46 +450,45 @@ TEST_F(D4NFilterFixture, DelObjectAttrs) {
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
   /* Check that the attributes exist before deletion */ 
-  client.hgetall("rgw-object:test_object_5:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_5:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_5");
-      EXPECT_EQ(arr[3].as_string(), "test_attrs_value_extra");
-      EXPECT_EQ((int)arr.size(), 4);
+      EXPECT_EQ((int)arr.size(), 4 + METADATA_LENGTH);
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
-
-  EXPECT_EQ(key_exist, 0);
-  key_exist = -1;
+  client.sync_commit();
 
   EXPECT_EQ(testObject_5->set_obj_attrs(dpp, NULL, &test_attrs, null_yield), 0);
 
-  /* Check that the attributes do not exist after deletion */ 
-  client.hgetall("rgw-object:test_object_5:cache", [&key_exist](cpp_redis::reply& reply) {
+  /* Check that the attribute does not exist after deletion */ 
+  client.hgetall("rgw-object:test_object_5:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_5");
-      EXPECT_EQ((int)arr.size(), 2);
+      EXPECT_EQ((int)arr.size(), 2 + METADATA_LENGTH);
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
+  client.sync_commit();
 
-  EXPECT_EQ(key_exist, 0);
+  client.hexists("rgw-object:test_object_5:cache", "test_attrs_key_extra", [](cpp_redis::reply& reply) {
+    if (reply.is_integer()) {
+      EXPECT_EQ(reply.as_integer(), 0);
+    }
+  });
+
+  client.sync_commit();
 
   clientReset(&client);
 }
 
 TEST_F(D4NFilterFixture, SetLongObjectAttrs) {
   cpp_redis::client client;
-  int key_exist = -1;
   map<string, bufferlist> test_attrs_long;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_6");
   clientSetUp(&client); 
 
   createUser();
@@ -475,35 +505,43 @@ TEST_F(D4NFilterFixture, SetLongObjectAttrs) {
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_long.insert({tmp_key, bl_tmp});
+    fields.push_back(tmp_key);
   }
 
   EXPECT_EQ(testObject_6->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
 
-  client.hgetall("rgw-object:test_object_6:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_6:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_6");
-      EXPECT_EQ((int)arr.size(), 22);
+      EXPECT_EQ((int)arr.size(), 22 + METADATA_LENGTH);
+    }
+  });
 
-      for (int i = 3; i < 22; i += 2) {
-	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i / 2 - 1));
+  client.sync_commit();
+
+  client.hmget("rgw-object:test_object_6:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_6");
+
+      for (int i = 1; i < 11; ++i) {
+	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i - 1));
       }
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
-
-  EXPECT_EQ(key_exist, 0);
+  client.sync_commit();
 
   clientReset(&client);
 }
 
 TEST_F(D4NFilterFixture, GetLongObjectAttrs) {
   cpp_redis::client client;
-  int key_exist = -1;
   map<string, bufferlist> test_attrs_long;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_7");
   clientSetUp(&client); 
 
   createUser();
@@ -520,6 +558,7 @@ TEST_F(D4NFilterFixture, GetLongObjectAttrs) {
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_long.insert({tmp_key, bl_tmp});
+    fields.push_back(tmp_key);
   }
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_7.get())->get_next();
@@ -530,31 +569,38 @@ TEST_F(D4NFilterFixture, GetLongObjectAttrs) {
 
   EXPECT_EQ(testObject_7->get_obj_attrs(null_yield, dpp, NULL), 0);
 
-  client.hgetall("rgw-object:test_object_7:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_7:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_7");
-      EXPECT_EQ((int)arr.size(), 22);
+      EXPECT_EQ((int)arr.size(), 22 + METADATA_LENGTH);
+    }
+  });
 
-      for (int i = 3; i < 22; i += 2) {
-	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i / 2 - 1));
+  client.sync_commit();
+
+  client.hmget("rgw-object:test_object_7:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_7");
+
+      for (int i = 1; i < 11; ++i) {
+	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i - 1));
       }
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
-
-  EXPECT_EQ(key_exist, 0);
+  client.sync_commit();
 
   clientReset(&client);
 }
 
 TEST_F(D4NFilterFixture, ModifyObjectAttr) {
   cpp_redis::client client;
-  int key_exist = -1;
   map<string, bufferlist> test_attrs_long;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_8");
   clientSetUp(&client); 
 
   createUser();
@@ -571,6 +617,7 @@ TEST_F(D4NFilterFixture, ModifyObjectAttr) {
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_long.insert({tmp_key, bl_tmp});
+    fields.push_back(tmp_key);
   }
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_8.get())->get_next();
@@ -585,35 +632,42 @@ TEST_F(D4NFilterFixture, ModifyObjectAttr) {
 
   EXPECT_EQ(testObject_8->modify_obj_attrs("test_attrs_key_extra_5", bl_tmp, null_yield, dpp), 0);
 
-  client.hgetall("rgw-object:test_object_8:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_8:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_8");
-      EXPECT_EQ((int)arr.size(), 22);
+      EXPECT_EQ((int)arr.size(), 22 + METADATA_LENGTH);
+    }
+  });
 
-      for (int i = 3; i < 22; i += 2) {
-        if (i == 13) {
-	  EXPECT_EQ(arr[i].as_string(), "new_test_attrs_value_extra_" + to_string(i / 2 - 1));
-	} else {
-	  EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i / 2 - 1));
-        }
+  client.sync_commit();
+
+  client.hmget("rgw-object:test_object_8:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_8");
+
+      for (int i = 1; i < 11; ++i) {
+	if (i == 6) {
+          EXPECT_EQ(arr[i].as_string(), "new_test_attrs_value_extra_" + to_string(i - 1));
+        } else {
+          EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i - 1));
+	}
       }
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
-
-  EXPECT_EQ(key_exist, 0);
+  client.sync_commit();
 
   clientReset(&client);
 }
 
 TEST_F(D4NFilterFixture, DelLongObjectAttrs) {
   cpp_redis::client client;
-  int key_exist = -1;
   map<string, bufferlist> test_attrs_long;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_9");
   clientSetUp(&client); 
 
   createUser();
@@ -630,6 +684,7 @@ TEST_F(D4NFilterFixture, DelLongObjectAttrs) {
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_long.insert({tmp_key, bl_tmp});
+    fields.push_back(tmp_key);
   }
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_9.get())->get_next();
@@ -639,49 +694,41 @@ TEST_F(D4NFilterFixture, DelLongObjectAttrs) {
   ASSERT_NE(nextObject->get_attrs().empty(), true);
   
   /* Check that the attributes exist before deletion */
-  client.hgetall("rgw-object:test_object_9:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_9:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_9");
-      EXPECT_EQ((int)arr.size(), 22);
-
-      for (int i = 3; i < 22; i += 2) {
-	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i / 2 - 1));
-      }
+      EXPECT_EQ((int)arr.size(), 22 + METADATA_LENGTH);
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
-
-  EXPECT_EQ(key_exist, 0);
-  key_exist = -1;
+  client.sync_commit();
 
   EXPECT_EQ(testObject_9->set_obj_attrs(dpp, NULL, &test_attrs_long, null_yield), 0);
 
   /* Check that the attributes do not exist after deletion */
-  client.hgetall("rgw-object:test_object_9:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_9:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_9");
-      EXPECT_EQ((int)arr.size(), 2);
+      EXPECT_EQ((int)arr.size(), 2 + METADATA_LENGTH);
+
+      for (int i = 0; i < (int)arr.size(); ++i) {
+          EXPECT_EQ((int)arr[i].as_string().find("extra"), -1);
+      }
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
-
-  EXPECT_EQ(key_exist, 0);
+  client.sync_commit();
 
   clientReset(&client);
 }
 
 TEST_F(D4NFilterFixture, DelObjectAttr) {
   cpp_redis::client client;
-  int key_exist = -1;
   map<string, bufferlist> test_attrs_long;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_10");
   clientSetUp(&client); 
 
   createUser();
@@ -698,6 +745,7 @@ TEST_F(D4NFilterFixture, DelObjectAttr) {
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_long.insert({tmp_key, bl_tmp});
+    fields.push_back(tmp_key);
   }
   
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_10.get())->get_next();
@@ -707,51 +755,36 @@ TEST_F(D4NFilterFixture, DelObjectAttr) {
   ASSERT_NE(nextObject->get_attrs().empty(), true);
   
   /* Check that the attribute exists before deletion */
-  client.hgetall("rgw-object:test_object_10:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_10:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_10");
-      EXPECT_EQ((int)arr.size(), 22);
-
-      for (int i = 3; i < 22; i += 2) {
-	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i / 2 - 1));
-      }
+      EXPECT_EQ((int)arr.size(), 22 + METADATA_LENGTH);
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
-
-  EXPECT_EQ(key_exist, 0);
-  key_exist = -1;
+  client.sync_commit();
 
   EXPECT_EQ(testObject_10->delete_obj_attrs(dpp, "test_attrs_key_extra_5", null_yield), 0);
 
   /* Check that the attribute does not exist after deletion */
-  client.hgetall("rgw-object:test_object_10:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_10:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_10");
-      EXPECT_EQ((int)arr.size(), 20);
-
-      for (int i = 3; i < 22; i += 2) {
-        if (i > 13) {
-	  EXPECT_EQ(arr[i - 2].as_string(), "test_attrs_value_extra_" + to_string(i / 2 - 1));
-	} else if (i == 13) {
-	  i += 2;
-	} else {
-	  EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i / 2 - 1));
-        }
-      }
+      EXPECT_EQ((int)arr.size(), 20 + METADATA_LENGTH);
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
+  client.sync_commit();
 
-  EXPECT_EQ(key_exist, 0);
+  client.hexists("rgw-object:test_object_10:cache", "test_attrs_key_extra_5", [](cpp_redis::reply& reply) {
+    if (reply.is_integer()) {
+      EXPECT_EQ(reply.as_integer(), 0);
+    }
+  });
+
+  client.sync_commit();
 
   clientReset(&client);
 }
@@ -759,8 +792,9 @@ TEST_F(D4NFilterFixture, DelObjectAttr) {
 /* Edge cases */
 TEST_F(D4NFilterFixture, SetDeleteAttrsTest) {
   cpp_redis::client client;
-  int key_exist = -1;
   map<string, bufferlist> test_attrs_base;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_11");
   clientSetUp(&client); 
 
   createUser();
@@ -789,31 +823,39 @@ TEST_F(D4NFilterFixture, SetDeleteAttrsTest) {
   buffer::list bl;
   bl.append("test_attrs_value_extra");
   map<string, bufferlist> test_attrs_new{{"test_attrs_key_extra", bl}};
+  fields.push_back("test_attrs_key_extra");
   
   EXPECT_EQ(testObject_11->set_obj_attrs(dpp, &test_attrs_new, &test_attrs_base, null_yield), 0);
 
-  client.hgetall("rgw-object:test_object_11:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_11:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_11");
-      EXPECT_EQ(arr[3].as_string(), "test_attrs_value_extra");
-      EXPECT_EQ((int)arr.size(), 4);
+      EXPECT_EQ((int)arr.size(), 4 + METADATA_LENGTH);
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
+  client.sync_commit();
 
-  EXPECT_EQ(key_exist, 0);
+  client.hmget("rgw-object:test_object_11:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_11");
+      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_extra");
+    }
+  });
+
+  client.sync_commit();
 
   clientReset(&client);
 }
 
 TEST_F(D4NFilterFixture, ModifyNonexistentAttrTest) {
   cpp_redis::client client;
-  int key_exist = -1;
   map<string, bufferlist> test_attrs_base;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_12");
   clientSetUp(&client); 
 
   createUser();
@@ -830,6 +872,7 @@ TEST_F(D4NFilterFixture, ModifyNonexistentAttrTest) {
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_base.insert({tmp_key, bl_tmp});
+    fields.push_back(tmp_key);
   }
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_12.get())->get_next();
@@ -843,34 +886,42 @@ TEST_F(D4NFilterFixture, ModifyNonexistentAttrTest) {
 
   EXPECT_EQ(testObject_12->modify_obj_attrs("test_attrs_key_extra_12", bl_tmp, null_yield, dpp), 0);
 
-  client.hgetall("rgw-object:test_object_12:cache", [&key_exist](cpp_redis::reply& reply) {
+  fields.push_back("test_attrs_key_extra_12");
+  client.hgetall("rgw-object:test_object_12:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_12");
-      EXPECT_EQ((int)arr.size(), 24);
-
-      for (int i = 3; i < 22; i += 2) {
-	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i / 2 - 1));
-      }
-
-      /* New attribute will be created and stored since it was not found in the existing attributes */
-      EXPECT_EQ(arr[23].as_string(), "new_test_attrs_value_extra_12");
+      EXPECT_EQ((int)arr.size(), 24 + METADATA_LENGTH);
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
+  client.sync_commit();
 
-  EXPECT_EQ(key_exist, 0);
+  client.hmget("rgw-object:test_object_12:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_12");
+
+      for (int i = 1; i < 11; ++i) {
+	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i - 1));
+      }
+
+      /* New attribute will be created and stored since it was not found in the existing attributes */
+      EXPECT_EQ(arr[11].as_string(), "new_test_attrs_value_extra_12");
+    }
+  });
+
+  client.sync_commit();
 
   clientReset(&client);
 }
 
 TEST_F(D4NFilterFixture, ModifyGetTest) {
   cpp_redis::client client;
-  int key_exist = -1;
   map<string, bufferlist> test_attrs_base;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_13");
   clientSetUp(&client); 
 
   createUser();
@@ -887,6 +938,7 @@ TEST_F(D4NFilterFixture, ModifyGetTest) {
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_base.insert({tmp_key, bl_tmp});
+    fields.push_back(tmp_key);
   }
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_13.get())->get_next();
@@ -903,35 +955,42 @@ TEST_F(D4NFilterFixture, ModifyGetTest) {
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   EXPECT_EQ(testObject_13->get_obj_attrs(null_yield, dpp, NULL), 0);
 
-  client.hgetall("rgw-object:test_object_13:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_13:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_13");
-      EXPECT_EQ((int)arr.size(), 22);
+      EXPECT_EQ((int)arr.size(), 22 + METADATA_LENGTH);
+    }
+  });
 
-      for (int i = 3; i < 22; i += 2) {
-        if (i == 13) {
-	  EXPECT_EQ(arr[i].as_string(), "new_test_attrs_value_extra_5");
-	} else {
-	  EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i / 2 - 1));
-        }
+  client.sync_commit();
+
+  client.hmget("rgw-object:test_object_13:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_13");
+
+      for (int i = 1; i < 11; ++i) {
+	if (i == 6) {
+          EXPECT_EQ(arr[i].as_string(), "new_test_attrs_value_extra_5");
+        } else {
+          EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i - 1));
+	}
       }
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
-
-  EXPECT_EQ(key_exist, 0);
+  client.sync_commit();
 
   clientReset(&client);
 }
 
 TEST_F(D4NFilterFixture, DeleteNonexistentAttrTest) {
   cpp_redis::client client;
-  int key_exist = -1;
   map<string, bufferlist> test_attrs_base;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_14");
   clientSetUp(&client); 
 
   createUser();
@@ -948,6 +1007,7 @@ TEST_F(D4NFilterFixture, DeleteNonexistentAttrTest) {
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_base.insert({tmp_key, bl_tmp});
+    fields.push_back(tmp_key);
   }
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_14.get())->get_next();
@@ -959,31 +1019,38 @@ TEST_F(D4NFilterFixture, DeleteNonexistentAttrTest) {
   /* Attempt to delete an attribute that does not exist */
   ASSERT_EQ(testObject_14->delete_obj_attrs(dpp, "test_attrs_key_extra_12", null_yield), 0);
 
-  client.hgetall("rgw-object:test_object_14:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_14:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_14");
-      EXPECT_EQ((int)arr.size(), 22);
+      EXPECT_EQ((int)arr.size(), 22 + METADATA_LENGTH);
+    }
+  });
 
-      for (int i = 3; i < 22; i += 2) {
-	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i / 2 - 1));
+  client.sync_commit();
+
+  client.hmget("rgw-object:test_object_14:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_14");
+
+      for (int i = 1; i < 11; ++i) {
+	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i - 1));
       }
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
-
-  EXPECT_EQ(key_exist, 0);
+  client.sync_commit();
 
   clientReset(&client);
 }
 
 TEST_F(D4NFilterFixture, DeleteSetWithNonexisentAttrTest) {
   cpp_redis::client client;
-  int key_exist = -1;
   map<string, bufferlist> test_attrs_base;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_15");
   clientSetUp(&client); 
 
   createUser();
@@ -1014,19 +1081,15 @@ TEST_F(D4NFilterFixture, DeleteSetWithNonexisentAttrTest) {
   /* Attempt to delete a set of attrs, including one that does not exist */
   EXPECT_EQ(testObject_15->set_obj_attrs(dpp, NULL, &test_attrs_base, null_yield), 0);
 
-  client.hgetall("rgw-object:test_object_15:cache", [&key_exist](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_15:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      key_exist = 0;
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_value_15");
-      EXPECT_EQ((int)arr.size(), 2);
+      EXPECT_EQ((int)arr.size(), 2 + METADATA_LENGTH);
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
-
-  EXPECT_EQ(key_exist, 0);
+  client.sync_commit();
 
   clientReset(&client);
 }
@@ -1099,7 +1162,7 @@ TEST_F(D4NFilterFixture, StoreSetAttrsTest) {
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
 
-    EXPECT_EQ(pair, make_pair(tmp_key, tmp_value)); // Double check -Sam
+    EXPECT_EQ(pair, make_pair(tmp_key, tmp_value));
     ++i;
   }
 }
@@ -1150,7 +1213,7 @@ TEST_F(D4NFilterFixture, StoreGetAttrsTest) {
     }
   });
 
-  client.sync_commit(std::chrono::milliseconds(1000));
+  client.sync_commit();
 
   EXPECT_EQ(result, "OK");
 
@@ -1263,7 +1326,7 @@ TEST_F(D4NFilterFixture, StoreDeleteAttrsTest) {
   /* Check the attributes */ 
   rgw::sal::Attrs storeAttrs = nextObject->get_attrs();
 
-  EXPECT_EQ(storeAttrs.size(), (int)1);
+  EXPECT_EQ(storeAttrs.size(), (long unsigned int)1);
 
   pair<string, string> value(storeAttrs.begin()->first, storeAttrs.begin()->second.to_str());
 
