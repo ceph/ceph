@@ -114,8 +114,6 @@ namespace librbd {
   int break_lock(ImageCtx *ictx, const std::string& client,
 		 const std::string& cookie);
 
-  void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx);
-
   int read_header_bl(librados::IoCtx& io_ctx, const std::string& md_oid,
 		     ceph::bufferlist& header, uint64_t *ver);
   int read_header(librados::IoCtx& io_ctx, const std::string& md_oid,

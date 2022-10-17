@@ -206,26 +206,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return num;
   }
 
-  void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx)
-  {
-    ceph_assert(ceph_mutex_is_locked(ictx->owner_lock));
-    ceph_assert(ictx->exclusive_lock == nullptr ||
-                ictx->exclusive_lock->is_lock_owner());
-
-    C_SaferCond ctx;
-    ictx->image_lock.lock_shared();
-    operation::TrimRequest<> *req = operation::TrimRequest<>::create(
-      *ictx, &ctx, ictx->size, newsize, prog_ctx);
-    ictx->image_lock.unlock_shared();
-    req->send();
-
-    int r = ctx.wait();
-    if (r < 0) {
-      lderr(ictx->cct) << "warning: failed to remove some object(s): "
-		       << cpp_strerror(r) << dendl;
-    }
-  }
-
   int read_header_bl(IoCtx& io_ctx, const string& header_oid,
 		     bufferlist& header, uint64_t *ver)
   {
