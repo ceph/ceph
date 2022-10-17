@@ -163,6 +163,14 @@ public:
   using stat_device_ret =
     read_ertr::future<seastar::stat_data>;
   virtual stat_device_ret stat_device() = 0;
+
+  uint64_t get_journal_size() const {
+    return super.journal_size;
+  }
+
+  void set_journal_size(uint64_t size) {
+    super.journal_size = size;
+  }
 };
 
 class TestMemory : public RBMDevice {
