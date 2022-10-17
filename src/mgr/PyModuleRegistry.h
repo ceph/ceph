@@ -227,5 +227,15 @@ public:
     return v;
   }
 
+  bool is_module_active(const std::string &name) {
+    ceph_assert(active_modules);
+    return active_modules->module_exists(name);
+  }
+
+  auto& get_active_module_finisher(const std::string &name) {
+    ceph_assert(active_modules);
+    return active_modules->get_module_finisher(name);
+  }
+
   // <<< (end of ActivePyModules cheeky call-throughs)
 };
