@@ -404,7 +404,8 @@ class TestCephadm(object):
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    def test_daemon_check(self, cephadm_module: CephadmOrchestrator, action):
+    @mock.patch("cephadm.module.HostCache.save_host")
+    def test_daemon_check(self, _save_host, cephadm_module: CephadmOrchestrator, action):
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, ServiceSpec(service_type='grafana'), CephadmOrchestrator.apply_grafana, 'test') as d_names:
                 [daemon_name] = d_names
@@ -416,6 +417,7 @@ class TestCephadm(object):
 
                 CephadmServe(cephadm_module)._check_daemons()
 
+                assert _save_host.called_with('test')
                 assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) is None
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
