@@ -59,23 +59,23 @@ Topic Management via CLI
 
 Configuration of all topics, associated with a tenant, could be fetched using the following command:
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin topic list [--tenant={tenant}]
+   radosgw-admin topic list [--tenant={tenant}]
 
 
 Configuration of a specific topic could be fetched using:
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin topic get --topic={topic-name} [--tenant={tenant}]
+   radosgw-admin topic get --topic={topic-name} [--tenant={tenant}]
 
 
 And removed using:
 
-::
+.. prompt:: bash #
 
-   # radosgw-admin topic rm --topic={topic-name} [--tenant={tenant}]
+   radosgw-admin topic rm --topic={topic-name} [--tenant={tenant}]
 
 
 Notification Performance Stats
