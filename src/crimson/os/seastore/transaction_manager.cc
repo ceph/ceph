@@ -649,8 +649,7 @@ TransactionManagerRef make_transaction_manager(
     roll_start = 0;
   } else {
     // FIXME: get from runtime configration instead of static defaults
-    roll_size = journal::CircularBoundedJournal::mkfs_config_t
-                       ::get_default().total_size;
+    roll_size = journal::DEFAULT_TEST_CBJOURNAL_SIZE;
     // see CircularBoundedJournal::get_start_addr()
     roll_start = journal::CBJOURNAL_START_ADDRESS +
                  primary_device->get_block_size();

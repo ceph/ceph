@@ -16,12 +16,9 @@ namespace crimson::os::seastore::journal {
 std::ostream &operator<<(std::ostream &out,
     const CircularBoundedJournal::cbj_header_t &header)
 {
-  return out << "cbj_header_t(magic=" << header.magic
-	     << ", uuid=" << header.uuid
-	     << ", block_size=" << header.block_size
-	     << ", size=" << header.size
+  return out << "cbj_header_t(" 
 	     << ", dirty_tail=" << header.dirty_tail
-	     << ", "<< device_id_printer_t{header.device_id}
+	     << ", alloc_tail=" << header.alloc_tail
              << ")";
 }
 
@@ -31,23 +28,19 @@ CircularBoundedJournal::CircularBoundedJournal(
     const std::string &path)
   : trimmer(trimmer), device(device), path(path) {}
 
-CircularBoundedJournal::mkfs_ret
-CircularBoundedJournal::mkfs(const mkfs_config_t& config)
+CircularBoundedJournal::mkfs_ret CircularBoundedJournal::mkfs()
 {
   LOG_PREFIX(CircularBoundedJournal::mkfs);
   assert(device);
-  assert(config.block_size == device->get_block_size());
   ceph::bufferlist bl;
   CircularBoundedJournal::cbj_header_t head;
-  head.block_size = config.block_size;
-  head.size = config.total_size - device->get_block_size();
+  assert(device->get_journal_size());
   head.dirty_tail =
     journal_seq_t{0,
       convert_abs_addr_to_paddr(
 	device->get_block_size(),
-	config.device_id)};
+	device->get_device_id())};
   head.alloc_tail = head.dirty_tail;
-  head.device_id = config.device_id;
   encode(head, bl);
   header = head;
   set_written_to(head.dirty_tail);
@@ -131,7 +124,7 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
     DEBUG("roll");
     paddr_t paddr = convert_abs_addr_to_paddr(
       get_start_addr(),
-      header.device_id);
+      get_device_id());
     set_written_to(
       journal_seq_t{++written_to.segment_seq, paddr});
     if (encoded_size > get_available_size()) {
@@ -153,13 +146,13 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
     DEBUG("roll");
     paddr_t paddr = convert_abs_addr_to_paddr(
       get_start_addr(),
-      header.device_id);
+      get_device_id());
     set_written_to(
       journal_seq_t{++written_to.segment_seq, paddr});
   } else {
     paddr_t paddr = convert_abs_addr_to_paddr(
       new_written_to,
-      header.device_id);
+      get_device_id());
     set_written_to(
       journal_seq_t{written_to.segment_seq, paddr});
   }
@@ -185,7 +178,7 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
 
     paddr_t paddr = convert_abs_addr_to_paddr(
       target + r_size.get_mdlength(),
-      header.device_id);
+      get_device_id());
     auto submit_result = record_locator_t{
       paddr,
       write_result
@@ -286,7 +279,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	-> replay_ertr::future<seastar::stop_iteration> {
 	paddr_t record_paddr = convert_abs_addr_to_paddr(
 	  cursor_addr,
-	  header.device_id);
+	  get_device_id());
 	return read_record(record_paddr, expected_seq
 	).safe_then([this, &is_rolled, &cursor_addr, &d_handler, &expected_seq, FNAME](auto ret)
 	    -> replay_ertr::future<seastar::stop_iteration> {
@@ -307,7 +300,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	  bufferlist mdbuf;
 	  mdbuf.substr_of(bl, 0, r_header.mdlength);
 	  paddr_t record_block_base = paddr_t::make_blk_paddr(
-	    header.device_id, cursor_addr + r_header.mdlength);
+	    get_device_id(), cursor_addr + r_header.mdlength);
 	  auto maybe_record_deltas_list = try_decode_deltas(
 	    r_header, mdbuf, record_block_base);
 	  if (!maybe_record_deltas_list) {
@@ -335,7 +328,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	  }
 	  paddr_t addr = convert_abs_addr_to_paddr(
 	    cursor_addr,
-	    header.device_id);
+	    get_device_id());
 	  set_written_to(
 	    journal_seq_t{expected_seq, addr});
 	  return seastar::do_with(

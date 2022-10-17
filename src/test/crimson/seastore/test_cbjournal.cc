@@ -13,6 +13,7 @@
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
+#include "crimson/os/seastore/random_block_manager/block_rb_manager.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -128,7 +129,6 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 
   std::default_random_engine generator;
   uint64_t block_size;
-  CircularBoundedJournal::mkfs_config_t config;
   WritePipeline pipeline;
 
   cbjournal_test_t() {
@@ -136,10 +136,6 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
       CBTEST_DEFAULT_TEST_SIZE + CBTEST_DEFAULT_BLOCK_SIZE,
       CBTEST_DEFAULT_BLOCK_SIZE);
     cbj.reset(new CircularBoundedJournal(*this, device, std::string()));
-    device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
-    config.block_size = CBTEST_DEFAULT_BLOCK_SIZE;
-    config.total_size = CBTEST_DEFAULT_TEST_SIZE;
-    config.device_id = d_id;
     block_size = CBTEST_DEFAULT_BLOCK_SIZE;
     cbj->set_write_pipeline(&pipeline);
   }
@@ -252,9 +248,14 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   auto mkfs() {
     return device->mount(
     ).safe_then([this]() {
-      return cbj->mkfs(config
-      ).safe_then([]() {
-	return seastar::now();
+      device_config_t config = get_rbm_ephemeral_device_config(0, 1);
+      device->set_journal_size(CBTEST_DEFAULT_TEST_SIZE);
+      return device->mkfs(config
+      ).safe_then([this]() {
+	return cbj->mkfs(
+	).safe_then([]() {
+	  return seastar::now();
+	});
       });
     }).unsafe_get0();
   }
@@ -440,8 +441,6 @@ TEST_F(cbjournal_test_t, update_header)
     replay();
 
     ASSERT_EQ(update_header.dirty_tail.offset, update_header.dirty_tail.offset);
-    ASSERT_EQ(header.block_size, update_header.block_size);
-    ASSERT_EQ(header.size, update_header.size);
   });
 }
 
