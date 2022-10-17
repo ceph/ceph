@@ -65,6 +65,13 @@ using namespace std;
 
 using std::chrono::seconds;
 
+#define ASSERT_PASSED0(x)         \
+  do {                            \
+    bool passed = false;          \
+    x(&passed);                   \
+    ASSERT_TRUE(passed);          \
+  } while(0)
+
 #define ASSERT_PASSED(x, args...) \
   do {                            \
     bool passed = false;          \
@@ -3044,6 +3051,513 @@ TEST_F(TestLibRBD, EncryptedFlattenSmallData)
     ceph::bufferlist read_bl;
     ASSERT_EQ(data_size, clone.read(0, data_size, read_bl));
     ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+  }
+}
+
+struct LUKSOnePassphrase {
+  int load(librbd::Image& clone) {
+    librbd::encryption_luks_format_options_t opts = {m_passphrase};
+    return clone.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS, &opts,
+                                 sizeof(opts));
+  }
+
+  int load_flattened(librbd::Image& clone) {
+    return load(clone);
+  }
+
+  std::string m_passphrase = "some passphrase";
+};
+
+struct LUKSTwoPassphrases {
+  int load(librbd::Image& clone) {
+    librbd::encryption_luks_format_options_t opts1 = {m_parent_passphrase};
+    librbd::encryption_luks_format_options_t opts2 = {m_clone_passphrase};
+    librbd::encryption_spec_t specs[] = {
+        {RBD_ENCRYPTION_FORMAT_LUKS, &opts2, sizeof(opts2)},
+        {RBD_ENCRYPTION_FORMAT_LUKS, &opts1, sizeof(opts1)}};
+    return clone.encryption_load2(specs, std::size(specs));
+  }
+
+  int load_flattened(librbd::Image& clone) {
+    librbd::encryption_luks_format_options_t opts = {m_clone_passphrase};
+    return clone.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS, &opts,
+                                 sizeof(opts));
+  }
+
+  std::string m_parent_passphrase = "parent passphrase";
+  std::string m_clone_passphrase = "clone passphrase";
+};
+
+struct PlaintextUnderLUKS1 : LUKSOnePassphrase {
+protected:
+  void setup_parent(librbd::Image& parent, uint64_t data_size, bool* passed) {
+    ceph::bufferlist bl;
+    bl.append(std::string(data_size, 'a'));
+    ASSERT_EQ(data_size, parent.write(0, data_size, bl));
+
+    // before taking a parent snapshot, (temporarily) add extra space
+    // to the parent to account for upcoming LUKS1 header in the clone,
+    // making the clone able to reach all parent data
+    uint64_t luks1_meta_size = 4 << 20;
+    ASSERT_EQ(0, parent.resize(data_size + luks1_meta_size));
+    *passed = true;
+  }
+
+  void setup_clone(librbd::Image& clone, uint64_t data_size, bool* passed) {
+    librbd::encryption_luks1_format_options_t fopts =
+        {RBD_ENCRYPTION_ALGORITHM_AES256, m_passphrase};
+    ASSERT_EQ(0, clone.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, &fopts,
+                                         sizeof(fopts)));
+    *passed = true;
+  }
+};
+
+struct PlaintextUnderLUKS2 : LUKSOnePassphrase {
+  void setup_parent(librbd::Image& parent, uint64_t data_size, bool* passed) {
+    ceph::bufferlist bl;
+    bl.append(std::string(data_size, 'a'));
+    ASSERT_EQ(data_size, parent.write(0, data_size, bl));
+
+    // before taking a parent snapshot, (temporarily) add extra space
+    // to the parent to account for upcoming LUKS2 header in the clone,
+    // making the clone able to reach all parent data
+    uint64_t luks2_meta_size = 16 << 20;
+    ASSERT_EQ(0, parent.resize(data_size + luks2_meta_size));
+    *passed = true;
+  }
+
+  void setup_clone(librbd::Image& clone, uint64_t data_size, bool* passed) {
+    librbd::encryption_luks2_format_options_t fopts =
+        {RBD_ENCRYPTION_ALGORITHM_AES256, m_passphrase};
+    ASSERT_EQ(0, clone.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, &fopts,
+                                         sizeof(fopts)));
+    *passed = true;
+  }
+};
+
+struct UnformattedLUKS1 : LUKSOnePassphrase {
+  void setup_parent(librbd::Image& parent, uint64_t data_size, bool* passed) {
+    uint64_t luks1_meta_size = 4 << 20;
+    ASSERT_EQ(0, parent.resize(data_size + luks1_meta_size));
+    librbd::encryption_luks1_format_options_t fopts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, m_passphrase};
+    ASSERT_EQ(0, parent.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, &fopts,
+                                          sizeof(fopts)));
+
+    ceph::bufferlist bl;
+    bl.append(std::string(data_size, 'a'));
+    ASSERT_EQ(data_size, parent.write(0, data_size, bl));
+    *passed = true;
+  }
+
+  void setup_clone(librbd::Image& clone, uint64_t data_size, bool* passed) {
+    *passed = true;
+  }
+};
+
+struct LUKS1UnderLUKS1 : LUKSTwoPassphrases {
+  void setup_parent(librbd::Image& parent, uint64_t data_size, bool* passed) {
+    uint64_t luks1_meta_size = 4 << 20;
+    ASSERT_EQ(0, parent.resize(data_size + luks1_meta_size));
+    librbd::encryption_luks1_format_options_t fopts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, m_parent_passphrase};
+    ASSERT_EQ(0, parent.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, &fopts,
+                                          sizeof(fopts)));
+
+    ceph::bufferlist bl;
+    bl.append(std::string(data_size, 'a'));
+    ASSERT_EQ(data_size, parent.write(0, data_size, bl));
+    *passed = true;
+  }
+
+  void setup_clone(librbd::Image& clone, uint64_t data_size, bool* passed) {
+    librbd::encryption_luks1_format_options_t fopts =
+        {RBD_ENCRYPTION_ALGORITHM_AES256, m_clone_passphrase};
+    ASSERT_EQ(0, clone.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, &fopts,
+                                         sizeof(fopts)));
+    *passed = true;
+  }
+};
+
+struct LUKS1UnderLUKS2 : LUKSTwoPassphrases {
+  void setup_parent(librbd::Image& parent, uint64_t data_size, bool* passed) {
+    uint64_t luks1_meta_size = 4 << 20;
+    ASSERT_EQ(0, parent.resize(data_size + luks1_meta_size));
+    librbd::encryption_luks1_format_options_t fopts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, m_parent_passphrase};
+    ASSERT_EQ(0, parent.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, &fopts,
+                                          sizeof(fopts)));
+
+    ceph::bufferlist bl;
+    bl.append(std::string(data_size, 'a'));
+    ASSERT_EQ(data_size, parent.write(0, data_size, bl));
+
+    // before taking a parent snapshot, (temporarily) add extra space
+    // to the parent to account for upcoming LUKS2 header in the clone,
+    // making the clone able to reach all parent data
+    // space taken by LUKS1 header in the parent would be reused
+    uint64_t luks2_meta_size = 16 << 20;
+    ASSERT_EQ(0, parent.resize(data_size + luks2_meta_size - luks1_meta_size));
+    *passed = true;
+  }
+
+  void setup_clone(librbd::Image& clone, uint64_t data_size, bool* passed) {
+    librbd::encryption_luks2_format_options_t fopts =
+        {RBD_ENCRYPTION_ALGORITHM_AES256, m_clone_passphrase};
+    ASSERT_EQ(0, clone.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, &fopts,
+                                         sizeof(fopts)));
+    *passed = true;
+  }
+};
+
+struct UnformattedLUKS2 : LUKSOnePassphrase {
+  void setup_parent(librbd::Image& parent, uint64_t data_size, bool* passed) {
+    uint64_t luks2_meta_size = 16 << 20;
+    ASSERT_EQ(0, parent.resize(data_size + luks2_meta_size));
+    librbd::encryption_luks2_format_options_t fopts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, m_passphrase};
+    ASSERT_EQ(0, parent.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, &fopts,
+                                          sizeof(fopts)));
+
+    ceph::bufferlist bl;
+    bl.append(std::string(data_size, 'a'));
+    ASSERT_EQ(data_size, parent.write(0, data_size, bl));
+    *passed = true;
+  }
+
+  void setup_clone(librbd::Image& clone, uint64_t data_size, bool* passed) {
+    *passed = true;
+  }
+};
+
+struct LUKS2UnderLUKS2 : LUKSTwoPassphrases {
+  void setup_parent(librbd::Image& parent, uint64_t data_size, bool* passed) {
+    uint64_t luks2_meta_size = 16 << 20;
+    ASSERT_EQ(0, parent.resize(data_size + luks2_meta_size));
+    librbd::encryption_luks2_format_options_t fopts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, m_parent_passphrase};
+    ASSERT_EQ(0, parent.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, &fopts,
+                                          sizeof(fopts)));
+
+    ceph::bufferlist bl;
+    bl.append(std::string(data_size, 'a'));
+    ASSERT_EQ(data_size, parent.write(0, data_size, bl));
+    *passed = true;
+  }
+
+  void setup_clone(librbd::Image& clone, uint64_t data_size, bool* passed) {
+    librbd::encryption_luks2_format_options_t fopts =
+        {RBD_ENCRYPTION_ALGORITHM_AES256, m_clone_passphrase};
+    ASSERT_EQ(0, clone.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, &fopts,
+                                         sizeof(fopts)));
+    *passed = true;
+  }
+};
+
+struct LUKS2UnderLUKS1 : LUKSTwoPassphrases {
+  void setup_parent(librbd::Image& parent, uint64_t data_size, bool* passed) {
+    uint64_t luks2_meta_size = 16 << 20;
+    ASSERT_EQ(0, parent.resize(data_size + luks2_meta_size));
+    librbd::encryption_luks2_format_options_t fopts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, m_parent_passphrase};
+    ASSERT_EQ(0, parent.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, &fopts,
+                                          sizeof(fopts)));
+
+    ceph::bufferlist bl;
+    bl.append(std::string(data_size, 'a'));
+    ASSERT_EQ(data_size, parent.write(0, data_size, bl));
+    *passed = true;
+  }
+
+  void setup_clone(librbd::Image& clone, uint64_t data_size, bool* passed) {
+    librbd::encryption_luks1_format_options_t fopts =
+        {RBD_ENCRYPTION_ALGORITHM_AES256, m_clone_passphrase};
+    ASSERT_EQ(0, clone.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, &fopts,
+                                         sizeof(fopts)));
+
+    // after loading encryption on the clone, one can get rid of
+    // unneeded space allowance in the clone arising from LUKS2 header
+    // in the parent being bigger than LUKS1 header in the clone
+    ASSERT_EQ(0, load(clone));
+    ASSERT_EQ(0, clone.resize(data_size));
+    *passed = true;
+  }
+};
+
+template <typename FormatPolicy>
+class EncryptedFlattenTest : public TestLibRBD, FormatPolicy {
+protected:
+  void create_and_setup(bool* passed) {
+    ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), m_ioctx));
+
+    int order = 22;
+    ASSERT_EQ(0, create_image_pp(m_rbd, m_ioctx, m_parent_name.c_str(),
+                                 m_data_size, &order));
+    librbd::Image parent;
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, parent, m_parent_name.c_str(), nullptr));
+    ASSERT_PASSED(FormatPolicy::setup_parent, parent, m_data_size);
+
+    ASSERT_EQ(0, parent.snap_create("snap"));
+    ASSERT_EQ(0, parent.snap_protect("snap"));
+    uint64_t features;
+    ASSERT_EQ(0, parent.features(&features));
+    ASSERT_EQ(0, m_rbd.clone(m_ioctx, m_parent_name.c_str(), "snap", m_ioctx,
+                             m_clone_name.c_str(), features, &order));
+    librbd::Image clone;
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, clone, m_clone_name.c_str(), nullptr));
+    ASSERT_PASSED(FormatPolicy::setup_clone, clone, m_data_size);
+
+    *passed = true;
+  }
+
+  void open_and_load(librbd::Image& clone, bool* passed) {
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, clone, m_clone_name.c_str(), nullptr));
+    ASSERT_EQ(0, FormatPolicy::load(clone));
+    *passed = true;
+  }
+
+  void open_and_load_flattened(librbd::Image& clone, bool* passed) {
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, clone, m_clone_name.c_str(), nullptr));
+    ASSERT_EQ(0, FormatPolicy::load_flattened(clone));
+    *passed = true;
+  }
+
+  void verify_size_and_overlap(librbd::Image& image, uint64_t expected_size,
+                               uint64_t expected_overlap) {
+    uint64_t size;
+    ASSERT_EQ(0, image.size(&size));
+    EXPECT_EQ(expected_size, size);
+    uint64_t overlap;
+    ASSERT_EQ(0, image.overlap(&overlap));
+    EXPECT_EQ(expected_overlap, overlap);
+  }
+
+  void verify_data(librbd::Image& image, const ceph::bufferlist& expected_bl) {
+    ceph::bufferlist read_bl;
+    ASSERT_EQ(expected_bl.length(),
+              image.read(0, expected_bl.length(), read_bl));
+    EXPECT_TRUE(expected_bl.contents_equal(read_bl));
+  }
+
+  librados::IoCtx m_ioctx;
+  librbd::RBD m_rbd;
+  std::string m_parent_name = get_temp_image_name();
+  std::string m_clone_name = get_temp_image_name();
+  uint64_t m_data_size = 25 << 20;
+};
+
+using EncryptedFlattenTestTypes =
+    ::testing::Types<PlaintextUnderLUKS1, PlaintextUnderLUKS2,
+                     UnformattedLUKS1, LUKS1UnderLUKS1, LUKS1UnderLUKS2,
+                     UnformattedLUKS2, LUKS2UnderLUKS2, LUKS2UnderLUKS1>;
+TYPED_TEST_SUITE(EncryptedFlattenTest, EncryptedFlattenTestTypes);
+
+TYPED_TEST(EncryptedFlattenTest, Simple)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  ASSERT_PASSED0(this->create_and_setup);
+
+  ceph::bufferlist expected_bl;
+  expected_bl.append(std::string(this->m_data_size, 'a'));
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load, clone);
+    this->verify_size_and_overlap(clone, this->m_data_size, this->m_data_size);
+    this->verify_data(clone, expected_bl);
+    ASSERT_EQ(0, clone.flatten());
+    this->verify_data(clone, expected_bl);
+  }
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load_flattened, clone);
+    this->verify_size_and_overlap(clone, this->m_data_size, 0);
+    this->verify_data(clone, expected_bl);
+  }
+}
+
+TYPED_TEST(EncryptedFlattenTest, Grow)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  ASSERT_PASSED0(this->create_and_setup);
+
+  ceph::bufferlist expected_bl;
+  expected_bl.append(std::string(this->m_data_size, 'a'));
+  expected_bl.append_zero(1);
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load, clone);
+    ASSERT_EQ(0, clone.resize(this->m_data_size + 1));
+    this->verify_size_and_overlap(clone, this->m_data_size + 1,
+                                  this->m_data_size);
+    this->verify_data(clone, expected_bl);
+    ASSERT_EQ(0, clone.flatten());
+    this->verify_data(clone, expected_bl);
+  }
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load_flattened, clone);
+    this->verify_size_and_overlap(clone, this->m_data_size + 1, 0);
+    this->verify_data(clone, expected_bl);
+  }
+}
+
+TYPED_TEST(EncryptedFlattenTest, Shrink)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  ASSERT_PASSED0(this->create_and_setup);
+
+  ceph::bufferlist expected_bl;
+  expected_bl.append(std::string(this->m_data_size - 1, 'a'));
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load, clone);
+    ASSERT_EQ(0, clone.resize(this->m_data_size - 1));
+    this->verify_size_and_overlap(clone, this->m_data_size - 1,
+                                  this->m_data_size - 1);
+    this->verify_data(clone, expected_bl);
+    ASSERT_EQ(0, clone.flatten());
+    this->verify_data(clone, expected_bl);
+  }
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load_flattened, clone);
+    this->verify_size_and_overlap(clone, this->m_data_size - 1, 0);
+    this->verify_data(clone, expected_bl);
+  }
+}
+
+TYPED_TEST(EncryptedFlattenTest, ShrinkToOne)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  ASSERT_PASSED0(this->create_and_setup);
+
+  ceph::bufferlist expected_bl;
+  expected_bl.append(std::string(1, 'a'));
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load, clone);
+    ASSERT_EQ(0, clone.resize(1));
+    this->verify_size_and_overlap(clone, 1, 1);
+    this->verify_data(clone, expected_bl);
+    ASSERT_EQ(0, clone.flatten());
+    this->verify_data(clone, expected_bl);
+  }
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load_flattened, clone);
+    this->verify_size_and_overlap(clone, 1, 0);
+    this->verify_data(clone, expected_bl);
+  }
+}
+
+TYPED_TEST(EncryptedFlattenTest, ShrinkToOneAfterSnapshot)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  ASSERT_PASSED0(this->create_and_setup);
+
+  ceph::bufferlist expected_bl;
+  expected_bl.append(std::string(1, 'a'));
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load, clone);
+    ASSERT_EQ(0, clone.snap_create("snap"));
+    ASSERT_EQ(0, clone.resize(1));
+    this->verify_size_and_overlap(clone, 1, 1);
+    this->verify_data(clone, expected_bl);
+    ASSERT_EQ(0, clone.flatten());
+    this->verify_data(clone, expected_bl);
+  }
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load_flattened, clone);
+    this->verify_size_and_overlap(clone, 1, 0);
+    this->verify_data(clone, expected_bl);
+  }
+}
+
+TYPED_TEST(EncryptedFlattenTest, MinOverlap)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  ASSERT_PASSED0(this->create_and_setup);
+
+  ceph::bufferlist expected_bl;
+  expected_bl.append(std::string(1, 'a'));
+  expected_bl.append_zero(this->m_data_size - 1);
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load, clone);
+    ASSERT_EQ(0, clone.resize(1));
+    ASSERT_EQ(0, clone.resize(this->m_data_size));
+    this->verify_size_and_overlap(clone, this->m_data_size, 1);
+    this->verify_data(clone, expected_bl);
+    ASSERT_EQ(0, clone.flatten());
+    this->verify_data(clone, expected_bl);
+  }
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load_flattened, clone);
+    this->verify_size_and_overlap(clone, this->m_data_size, 0);
+    this->verify_data(clone, expected_bl);
+  }
+}
+
+TYPED_TEST(EncryptedFlattenTest, ZeroOverlap)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  ASSERT_PASSED0(this->create_and_setup);
+
+  ceph::bufferlist expected_bl;
+  expected_bl.append_zero(this->m_data_size);
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load, clone);
+    ASSERT_EQ(0, clone.resize(0));
+    ASSERT_EQ(0, clone.resize(this->m_data_size));
+    this->verify_size_and_overlap(clone, this->m_data_size, 0);
+    this->verify_data(clone, expected_bl);
+    ASSERT_EQ(0, clone.flatten());
+    this->verify_data(clone, expected_bl);
+  }
+
+  {
+    librbd::Image clone;
+    ASSERT_PASSED(this->open_and_load_flattened, clone);
+    this->verify_size_and_overlap(clone, this->m_data_size, 0);
+    this->verify_data(clone, expected_bl);
   }
 }
 
