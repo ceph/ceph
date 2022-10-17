@@ -123,8 +123,8 @@ function prepare() {
     fi
 
     if test -f ./install-deps.sh ; then
-            in_jenkins && echo "CI_DEBUG: Running install-deps.sh"
-	    $DRY_RUN source ./install-deps.sh || return 1
+        in_jenkins && echo "CI_DEBUG: Running install-deps.sh"
+        $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
 
