@@ -83,10 +83,8 @@ namespace rgw {
 			      (void*) &ldap_ver);
 	if (ret == LDAP_SUCCESS) {
 	  ret = ldap_simple_bind_s(tldap, dn, pwd.c_str());
-	  if (ret == LDAP_SUCCESS) {
-	    (void) ldap_unbind(tldap);
-	  }
 	}
+	(void) ldap_unbind(tldap);
       }
       return ret; // OpenLDAP client error space
     }
