@@ -1,3 +1,19 @@
+>=17.2.5
+--------
+
+* RBD: The semantics of compare-and-write C++ API (`Image::compare_and_write`
+  and `Image::aio_compare_and_write` methods) now match those of C API.  Both
+  compare and write steps operate only on `len` bytes even if the respective
+  buffers are larger. The previous behavior of comparing up to the size of
+  the compare buffer was prone to subtle breakage upon straddling a stripe
+  unit boundary.
+* RBD: compare-and-write operation is no longer limited to 512-byte sectors.
+  Assuming proper alignment, it now allows operating on stripe units (4M by
+  default).
+* RBD: New `rbd_aio_compare_and_writev` API method to support scatter/gather
+  on both compare and write buffers.  This compliments existing `rbd_aio_readv`
+  and `rbd_aio_writev` methods.
+
 >=17.2.4
 --------
 

@@ -712,13 +712,16 @@ public:
 
     ASSERT_PASSED(write_test_data, image, zero_data, 0, TEST_IO_SIZE,
                   LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
+    mismatch_offset = 123;
     ASSERT_EQ(-EILSEQ, rbd_compare_and_write(image, 0, TEST_IO_SIZE,
               mismatch_data, mismatch_data, &mismatch_offset, 0));
     ASSERT_EQ(0U, mismatch_offset);
     rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+    mismatch_offset = 123;
     ASSERT_EQ(0, rbd_aio_compare_and_write(image, 0, TEST_IO_SIZE, mismatch_data,
               mismatch_data, comp, &mismatch_offset, 0));
     ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+    ASSERT_EQ(-EILSEQ, rbd_aio_get_return_value(comp));
     ASSERT_EQ(0U, mismatch_offset);
     rbd_aio_release(comp);
 
@@ -2458,13 +2461,16 @@ TEST_F(TestLibRBD, TestIOWithIOHint)
   rbd_aio_release(comp);
 
   ASSERT_PASSED(write_test_data, image, zero_data, 0, TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
+  mismatch_offset = 123;
   ASSERT_EQ(-EILSEQ, rbd_compare_and_write(image, 0, TEST_IO_SIZE, mismatch_data, mismatch_data,
                                            &mismatch_offset, LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
   ASSERT_EQ(0U, mismatch_offset);
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+  mismatch_offset = 123;
   ASSERT_EQ(0, rbd_aio_compare_and_write(image, 0, TEST_IO_SIZE, mismatch_data, mismatch_data,
                                          comp, &mismatch_offset, LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
   ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EILSEQ, rbd_aio_get_return_value(comp));
   ASSERT_EQ(0U, mismatch_offset);
   rbd_aio_release(comp);
 
@@ -2567,6 +2573,693 @@ TEST_F(TestLibRBD, TestDataPoolIO)
   ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
   ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
   rbd_aio_release(comp);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestCompareAndWriteMismatch)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+  off_t off = 512;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  // We only support to compare and write the same amount of (len) bytes
+  std::string cmp_buffer("This is a test");
+  std::string write_buffer("Write this !!!");
+  std::string mismatch_buffer("This will fail");
+  std::string read_buffer(cmp_buffer.length(), '1');
+
+  ssize_t written = rbd_write(image, off, cmp_buffer.length(),
+                              cmp_buffer.data());
+  ASSERT_EQ(cmp_buffer.length(), written);
+
+  // Compare should fail because of mismatch
+  uint64_t mismatch_off = 0;
+  written = rbd_compare_and_write(image, off, write_buffer.length(),
+                                  mismatch_buffer.data(), write_buffer.data(),
+                                  &mismatch_off, 0);
+  ASSERT_EQ(-EILSEQ, written);
+  ASSERT_EQ(5U, mismatch_off);
+
+  // check nothing was written
+  ssize_t read = rbd_read(image, off, read_buffer.length(), read_buffer.data());
+  ASSERT_EQ(read_buffer.length(), read);
+  ASSERT_EQ(cmp_buffer, read_buffer);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteMismatch)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+  off_t off = 512;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  // We only support to compare and write the same amount of (len) bytes
+  std::string cmp_buffer("This is a test");
+  std::string write_buffer("Write this !!!");
+  std::string mismatch_buffer("This will fail");
+  std::string read_buffer(cmp_buffer.length(), '1');
+
+  ssize_t written = rbd_write(image, off, cmp_buffer.length(),
+                              cmp_buffer.data());
+  ASSERT_EQ(cmp_buffer.length(), written);
+
+  // Compare should fail because of mismatch
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  uint64_t mismatch_off = 0;
+  int ret = rbd_aio_compare_and_write(image, off, write_buffer.length(),
+                                      mismatch_buffer.data(),
+                                      write_buffer.data(), comp,
+                                      &mismatch_off, 0);
+  ASSERT_EQ(0, ret);
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EILSEQ, rbd_aio_get_return_value(comp));
+  ASSERT_EQ(5U, mismatch_off);
+  rbd_aio_release(comp);
+
+  // check nothing was written
+  ssize_t read = rbd_read(image, off, read_buffer.length(), read_buffer.data());
+  ASSERT_EQ(read_buffer.length(), read);
+  ASSERT_EQ(cmp_buffer, read_buffer);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestCompareAndWriteSuccess)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+  off_t off = 512;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  // We only support to compare and write the same amount of (len) bytes
+  std::string cmp_buffer("This is a test");
+  std::string write_buffer("Write this !!!");
+  std::string read_buffer(cmp_buffer.length(), '1');
+
+  ssize_t written = rbd_write(image, off, cmp_buffer.length(),
+                              cmp_buffer.data());
+  ASSERT_EQ(cmp_buffer.length(), written);
+
+  /*
+   * we compare against the written buffer (cmp_buffer) and write the buffer
+   * We expect: len bytes written
+   */
+  uint64_t mismatch_off = 0;
+  written = rbd_compare_and_write(image, off, write_buffer.length(),
+                                  cmp_buffer.data(), write_buffer.data(),
+                                  &mismatch_off, 0);
+  ASSERT_EQ(write_buffer.length(), written);
+  ASSERT_EQ(0U, mismatch_off);
+
+  ssize_t read = rbd_read(image, off, read_buffer.length(), read_buffer.data());
+  ASSERT_EQ(read_buffer.length(), read);
+  ASSERT_EQ(write_buffer, read_buffer);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteSuccess)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+  off_t off = 512;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  // We only support to compare and write the same amount of (len) bytes
+  std::string cmp_buffer("This is a test");
+  std::string write_buffer("Write this !!!");
+  std::string read_buffer(cmp_buffer.length(), '1');
+
+  ssize_t written = rbd_write(image, off, cmp_buffer.length(),
+                              cmp_buffer.data());
+  ASSERT_EQ(cmp_buffer.length(), written);
+
+  /*
+   * we compare against the written buffer (cmp_buffer) and write the buffer
+   * We expect: len bytes written
+   */
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  uint64_t mismatch_off = 0;
+  int ret = rbd_aio_compare_and_write(image, off, write_buffer.length(),
+                                      cmp_buffer.data(), write_buffer.data(),
+                                      comp, &mismatch_off, 0);
+  ASSERT_EQ(0, ret);
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(0, rbd_aio_get_return_value(comp));
+  ASSERT_EQ(0U, mismatch_off);
+  rbd_aio_release(comp);
+
+  ssize_t read = rbd_read(image, off, read_buffer.length(), read_buffer.data());
+  ASSERT_EQ(read_buffer.length(), read);
+  ASSERT_EQ(write_buffer, read_buffer);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+
+TEST_F(TestLibRBD, TestCompareAndWriteStripeUnitUnaligned)
+{
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  // large write test => we allow stripe unit size writes (aligned)
+  uint64_t stripe_unit;
+  rbd_get_stripe_unit(image, &stripe_unit);
+  std::string large_write_buffer(stripe_unit, '2');
+  std::string large_cmp_buffer(stripe_unit * 2, '4');
+
+  ssize_t written = rbd_write(image, stripe_unit, large_cmp_buffer.length(),
+                              large_cmp_buffer.data());
+  ASSERT_EQ(large_cmp_buffer.length(), written);
+
+  /*
+    * compare and write at offset stripe_unit + 1 and stripe unit size
+    * Expect fail because access exceeds stripe (unaligned)
+    */
+  uint64_t mismatch_off = 0;
+  written = rbd_compare_and_write(image, stripe_unit + 1, stripe_unit,
+                                  large_cmp_buffer.data(),
+                                  large_write_buffer.data(),
+                                  &mismatch_off, 0);
+  ASSERT_EQ(-EINVAL, written);
+  ASSERT_EQ(0U, mismatch_off);
+
+  // check nothing has been written
+  std::string large_read_buffer(large_cmp_buffer.length(), '5');
+  ssize_t read = rbd_read(image, stripe_unit, large_read_buffer.length(),
+                          large_read_buffer.data());
+  ASSERT_EQ(large_read_buffer.length(), read);
+  auto buffer_mismatch = std::mismatch(large_cmp_buffer.begin(),
+                                       large_cmp_buffer.end(),
+                                       large_read_buffer.begin());
+  ASSERT_EQ(large_read_buffer.end(), buffer_mismatch.second);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteStripeUnitUnaligned)
+{
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  // large write test => we allow stripe unit size writes (aligned)
+  uint64_t stripe_unit;
+  rbd_get_stripe_unit(image, &stripe_unit);
+  std::string large_write_buffer(stripe_unit, '2');
+  std::string large_cmp_buffer(stripe_unit * 2, '4');
+
+  ssize_t written = rbd_write(image, stripe_unit, large_cmp_buffer.length(),
+                              large_cmp_buffer.data());
+  ASSERT_EQ(large_cmp_buffer.length(), written);
+
+  /*
+    * compare and write at offset stripe_unit + 1 and stripe unit size
+    * Expect fail because access spans stripe unit boundary (unaligned)
+    */
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  uint64_t mismatch_off = 0;
+  int ret = rbd_aio_compare_and_write(image, stripe_unit + 1, stripe_unit,
+                                      large_cmp_buffer.data(),
+                                      large_write_buffer.data(),
+                                      comp, &mismatch_off, 0);
+  ASSERT_EQ(0, ret);
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
+  ASSERT_EQ(0U, mismatch_off);
+  rbd_aio_release(comp);
+
+  // check nothing has been written
+  std::string large_read_buffer(large_cmp_buffer.length(), '5');
+  ssize_t read = rbd_read(image, stripe_unit, large_read_buffer.length(),
+                          large_read_buffer.data());
+  ASSERT_EQ(large_read_buffer.length(), read);
+  auto buffer_mismatch = std::mismatch(large_cmp_buffer.begin(),
+                                       large_cmp_buffer.end(),
+                                       large_read_buffer.begin());
+  ASSERT_EQ(large_read_buffer.end(), buffer_mismatch.second);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestCompareAndWriteTooLarge)
+{
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  // large write test => we allow stripe unit size writes (aligned)
+  uint64_t stripe_unit;
+  rbd_get_stripe_unit(image, &stripe_unit);
+  std::string large_write_buffer(stripe_unit * 2, '2');
+  std::string large_cmp_buffer(large_write_buffer.length(), '4');
+
+  ssize_t written = rbd_write(image, stripe_unit, large_cmp_buffer.length(),
+                              large_cmp_buffer.data());
+  ASSERT_EQ(large_cmp_buffer.length(), written);
+
+  /*
+    * compare and write at offset stripe_unit and stripe unit size + 1
+    * Expect fail because access is larger than stripe unit size
+    */
+  uint64_t mismatch_off = 0;
+  written = rbd_compare_and_write(image, stripe_unit, stripe_unit + 1,
+                                  large_cmp_buffer.data(),
+                                  large_write_buffer.data(),
+                                  &mismatch_off, 0);
+  ASSERT_EQ(-EINVAL, written);
+  ASSERT_EQ(0U, mismatch_off);
+
+  // check nothing has been written
+  std::string large_read_buffer(large_cmp_buffer.length(), '5');
+  ssize_t read = rbd_read(image, stripe_unit, large_read_buffer.length(),
+                          large_read_buffer.data());
+  ASSERT_EQ(large_read_buffer.length(), read);
+  auto buffer_mismatch = std::mismatch(large_cmp_buffer.begin(),
+                                       large_cmp_buffer.end(),
+                                       large_read_buffer.begin());
+  ASSERT_EQ(large_read_buffer.end(), buffer_mismatch.second);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteTooLarge)
+{
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  // large write test => we allow stripe unit size writes (aligned)
+  uint64_t stripe_unit;
+  rbd_get_stripe_unit(image, &stripe_unit);
+  std::string large_write_buffer(stripe_unit * 2, '2');
+  std::string large_cmp_buffer(large_write_buffer.length(), '4');
+
+  ssize_t written = rbd_write(image, stripe_unit, large_cmp_buffer.length(),
+                              large_cmp_buffer.data());
+  ASSERT_EQ(large_cmp_buffer.length(), written);
+
+  /*
+    * compare and write at offset stripe_unit and stripe unit size + 1
+    * Expect fail because access is larger than stripe unit size
+    */
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  uint64_t mismatch_off = 0;
+  int ret = rbd_aio_compare_and_write(image, stripe_unit, stripe_unit + 1,
+                                      large_cmp_buffer.data(),
+                                      large_write_buffer.data(),
+                                      comp, &mismatch_off, 0);
+  ASSERT_EQ(0, ret);
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
+  ASSERT_EQ(0U, mismatch_off);
+  rbd_aio_release(comp);
+
+  // check nothing has been written
+  std::string large_read_buffer(large_cmp_buffer.length(), '5');
+  ssize_t read = rbd_read(image, stripe_unit, large_read_buffer.length(),
+                          large_read_buffer.data());
+  ASSERT_EQ(large_read_buffer.length(), read);
+  auto buffer_mismatch = std::mismatch(large_cmp_buffer.begin(),
+                                       large_cmp_buffer.end(),
+                                       large_read_buffer.begin());
+  ASSERT_EQ(large_read_buffer.end(), buffer_mismatch.second);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestCompareAndWriteStripeUnitSuccess)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  // large write test => we allow stripe unit size writes (aligned)
+  uint64_t stripe_unit;
+  rbd_get_stripe_unit(image, &stripe_unit);
+  std::string large_write_buffer(stripe_unit, '2');
+  std::string large_cmp_buffer(stripe_unit * 2, '4');
+
+  ssize_t written = rbd_write(image, stripe_unit, large_cmp_buffer.length(),
+                              large_cmp_buffer.data());
+  ASSERT_EQ(large_cmp_buffer.length(), written);
+
+  // aligned stripe unit size access => expect success
+  uint64_t mismatch_off = 0;
+  written = rbd_compare_and_write(image, stripe_unit, stripe_unit,
+                                  large_cmp_buffer.data(),
+                                  large_write_buffer.data(),
+                                  &mismatch_off, 0);
+  ASSERT_EQ(stripe_unit, written);
+  ASSERT_EQ(0U, mismatch_off);
+
+  // check stripe_unit bytes of large_write_buffer were written
+  std::string large_read_buffer(large_cmp_buffer.length(), '5');
+  ssize_t read = rbd_read(image, stripe_unit, large_read_buffer.length(),
+                          large_read_buffer.data());
+  ASSERT_EQ(large_read_buffer.length(), read);
+  auto buffer_mismatch = std::mismatch(large_read_buffer.begin(),
+                                       large_read_buffer.begin() + stripe_unit,
+                                       large_write_buffer.begin());
+  ASSERT_EQ(large_write_buffer.end(), buffer_mismatch.second);
+  // check data beyond stripe_unit size was not overwritten
+  buffer_mismatch = std::mismatch(large_read_buffer.begin() + stripe_unit,
+                                  large_read_buffer.end(),
+                                  large_cmp_buffer.begin());
+  ASSERT_EQ(large_cmp_buffer.begin() + stripe_unit, buffer_mismatch.second);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteStripeUnitSuccess)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  // large write test => we allow stripe unit size writes (aligned)
+  uint64_t stripe_unit;
+  rbd_get_stripe_unit(image, &stripe_unit);
+  std::string large_write_buffer(stripe_unit, '2');
+  std::string large_cmp_buffer(stripe_unit * 2, '4');
+
+  ssize_t written = rbd_write(image, stripe_unit, large_cmp_buffer.length(),
+                              large_cmp_buffer.data());
+  ASSERT_EQ(large_cmp_buffer.length(), written);
+
+  // aligned stripe unit size access => expect success
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  uint64_t mismatch_off = 0;
+  int ret = rbd_aio_compare_and_write(image, stripe_unit, stripe_unit,
+                                      large_cmp_buffer.data(),
+                                      large_write_buffer.data(),
+                                      comp, &mismatch_off, 0);
+  ASSERT_EQ(0, ret);
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(0, rbd_aio_get_return_value(comp));
+  ASSERT_EQ(0U, mismatch_off);
+  rbd_aio_release(comp);
+
+  // check stripe_unit bytes of large_write_buffer were written
+  std::string large_read_buffer(large_cmp_buffer.length(), '5');
+  ssize_t read = rbd_read(image, stripe_unit, large_read_buffer.length(),
+                          large_read_buffer.data());
+  ASSERT_EQ(large_read_buffer.length(), read);
+  auto buffer_mismatch = std::mismatch(large_read_buffer.begin(),
+                                       large_read_buffer.begin() + stripe_unit,
+                                       large_write_buffer.begin());
+  ASSERT_EQ(large_write_buffer.end(), buffer_mismatch.second);
+  // check data beyond stripe_unit size was not overwritten
+  buffer_mismatch = std::mismatch(large_read_buffer.begin() + stripe_unit,
+                                  large_read_buffer.end(),
+                                  large_cmp_buffer.begin());
+  ASSERT_EQ(large_cmp_buffer.begin() + stripe_unit, buffer_mismatch.second);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteVIovecLenDiffers)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+  off_t off = 512;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  std::string cmp_buffer("This is a test");
+  size_t cmp_len = cmp_buffer.length();
+
+  std::string write_buffer("Write this !!!");
+  struct iovec write_iovs[] = {
+    {.iov_base = &write_buffer[0], .iov_len = 6},
+    {.iov_base = &write_buffer[6], .iov_len = 5},
+    {.iov_base = &write_buffer[11], .iov_len = 3}
+  };
+
+  ASSERT_EQ(cmp_len, rbd_write(image, off, cmp_len, cmp_buffer.data()));
+
+  // should fail because compare iovec len cannot be different to write iovec len
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  uint64_t mismatch_off = 0;
+  int ret = rbd_aio_compare_and_writev(image, off,
+                                       write_iovs /* cmp_iovs */, 1,
+                                       write_iovs, std::size(write_iovs),
+                                       comp, &mismatch_off, 0);
+  ASSERT_EQ(-EINVAL, ret);
+  ASSERT_EQ(0U, mismatch_off);
+  rbd_aio_release(comp);
+
+  // check nothing was written
+  std::string read_buffer(cmp_buffer.length(), '1');
+  ssize_t read = rbd_read(image, off, read_buffer.length(), read_buffer.data());
+  ASSERT_EQ(read_buffer.length(), read);
+  ASSERT_EQ(cmp_buffer, read_buffer);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteVMismatch)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+  off_t off = 512;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  std::string cmp_buffer("This is a test");
+  int cmp_len = cmp_buffer.length();
+
+  std::string write_buffer("Write this !!!");
+  struct iovec write_iovs[] = {
+    {.iov_base = &write_buffer[0], .iov_len = 6},
+    {.iov_base = &write_buffer[6], .iov_len = 5},
+    {.iov_base = &write_buffer[11], .iov_len = 3}
+  };
+
+  std::string mismatch_buffer("This will fail");
+  struct iovec mismatch_iovs[] = {
+    {.iov_base = &mismatch_buffer[0], .iov_len = 5},
+    {.iov_base = &mismatch_buffer[5], .iov_len = 5},
+    {.iov_base = &mismatch_buffer[10], .iov_len = 4}
+  };
+
+  ASSERT_EQ(cmp_len, rbd_write(image, off, cmp_len, cmp_buffer.data()));
+
+  // this should execute the compare but fail because of mismatch
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  uint64_t mismatch_off = 0;
+  int ret = rbd_aio_compare_and_writev(image, off,
+                                       mismatch_iovs /* cmp_iovs */,
+                                       std::size(mismatch_iovs),
+                                       write_iovs, std::size(write_iovs),
+                                       comp, &mismatch_off, 0);
+  ASSERT_EQ(0, ret);
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EILSEQ, rbd_aio_get_return_value(comp));
+  ASSERT_EQ(5U, mismatch_off);
+  rbd_aio_release(comp);
+
+  // check nothing was written
+  std::string read_buffer(cmp_buffer.length(), '1');
+  ssize_t read = rbd_read(image, off, read_buffer.length(), read_buffer.data());
+  ASSERT_EQ(read_buffer.length(), read);
+  ASSERT_EQ(cmp_buffer, read_buffer);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteVSuccess)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20; /* 20MiB */
+  off_t off = 512;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  std::string cmp_buffer("This is a test");
+  struct iovec cmp_iovs[] = {
+    {.iov_base = &cmp_buffer[0], .iov_len = 5},
+    {.iov_base = &cmp_buffer[5], .iov_len = 3},
+    {.iov_base = &cmp_buffer[8], .iov_len = 2},
+    {.iov_base = &cmp_buffer[10], .iov_len = 4}
+  };
+  size_t cmp_len = cmp_buffer.length();
+
+  std::string write_buffer("Write this !!!");
+  struct iovec write_iovs[] = {
+    {.iov_base = &write_buffer[0], .iov_len = 6},
+    {.iov_base = &write_buffer[6], .iov_len = 5},
+    {.iov_base = &write_buffer[11], .iov_len = 3}
+  };
+
+  ASSERT_EQ(cmp_len, rbd_write(image, off, cmp_len, cmp_buffer.data()));
+
+  // compare against the buffer written before => should succeed
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  uint64_t mismatch_off = 0;
+  int ret = rbd_aio_compare_and_writev(image, off,
+                                       cmp_iovs, std::size(cmp_iovs),
+                                       write_iovs, std::size(write_iovs),
+                                       comp, &mismatch_off, 0);
+  ASSERT_EQ(0, ret);
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(0, rbd_aio_get_return_value(comp));
+  ASSERT_EQ(0U, mismatch_off);
+  rbd_aio_release(comp);
+
+  // check data was successfully written
+  std::string read_buffer(cmp_buffer.length(), '1');
+  ssize_t read = rbd_read(image, off, read_buffer.length(), read_buffer.data());
+  ASSERT_EQ(read_buffer.length(), read);
+  ASSERT_EQ(write_buffer, read_buffer);
 
   ASSERT_PASSED(validate_object_map, image);
   ASSERT_EQ(0, rbd_close(image));
@@ -3040,6 +3733,1043 @@ TEST_F(TestLibRBD, TestIOPP)
         ASSERT_PASSED(aio_writesame_test_data, image, zero_data, TEST_IO_SIZE * i, TEST_IO_SIZE * i * 32, TEST_IO_SIZE, 0);
       }
     }
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+static void compare_written(librbd::Image& image, off_t off, size_t len,
+                            const std::string& buffer, bool *passed)
+{
+  bufferlist read_bl;
+  ssize_t read = image.read(off, len, read_bl);
+  ASSERT_EQ(len, read);
+  std::string read_buffer(read_bl.c_str(), read);
+  ASSERT_EQ(buffer.substr(0, len), read_buffer);
+  *passed = true;
+}
+
+TEST_F(TestLibRBD, TestCompareAndWriteCompareTooSmallPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+    off_t off = 512;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    std::string cmp_buffer("This is a test");
+    ceph::bufferlist cmp_bl;
+    cmp_bl.append(&cmp_buffer[0], 5);
+    cmp_bl.append(&cmp_buffer[5], 3);
+    cmp_bl.append(&cmp_buffer[8], 2);
+    cmp_bl.append(&cmp_buffer[10], 4);
+
+    std::string write_buffer("Write this !!!");
+    ceph::bufferlist write_bl;
+    write_bl.append(&write_buffer[0], 6);
+    write_bl.append(&write_buffer[6], 5);
+    write_bl.append(&write_buffer[11], 3);
+
+    ssize_t written = image.write(off, cmp_bl.length(), cmp_bl);
+    ASSERT_EQ(cmp_bl.length(), written);
+
+    std::string small_buffer("Too small");
+    ceph::bufferlist small_bl;
+    small_bl.append(&small_buffer[0], 4);
+    small_bl.append(&small_buffer[4], 4);
+
+    // should fail because compare bufferlist cannot be smaller than len
+    uint64_t mismatch_off = 0;
+    written = image.compare_and_write(off, cmp_bl.length(),
+                                      small_bl, /* cmp_bl */
+                                      write_bl,
+                                      &mismatch_off, 0);
+    ASSERT_EQ(-EINVAL, written);
+    ASSERT_EQ(0U, mismatch_off);
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteCompareTooSmallPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+    off_t off = 512;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    std::string cmp_buffer("This is a test");
+    ceph::bufferlist cmp_bl;
+    cmp_bl.append(&cmp_buffer[0], 5);
+    cmp_bl.append(&cmp_buffer[5], 3);
+    cmp_bl.append(&cmp_buffer[8], 2);
+    cmp_bl.append(&cmp_buffer[10], 4);
+
+    std::string write_buffer("Write this !!!");
+    ceph::bufferlist write_bl;
+    write_bl.append(&write_buffer[0], 6);
+    write_bl.append(&write_buffer[6], 5);
+    write_bl.append(&write_buffer[11], 3);
+
+    ssize_t written = image.write(off, cmp_bl.length(), cmp_bl);
+    ASSERT_EQ(cmp_bl.length(), written);
+
+    std::string small_buffer("Too small");
+    ceph::bufferlist small_bl;
+    small_bl.append(&small_buffer[0], 4);
+    small_bl.append(&small_buffer[4], 4);
+
+    // should fail because compare bufferlist cannot be smaller than len
+    librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(
+        NULL, (librbd::callback_t) simple_write_cb_pp);
+    uint64_t mismatch_off = 0;
+    int ret = image.aio_compare_and_write(off, cmp_bl.length(),
+                                          small_bl, /* cmp_bl */
+                                          write_bl,
+                                          comp, &mismatch_off, 0);
+    ASSERT_EQ(-EINVAL, ret);
+    ASSERT_EQ(0U, mismatch_off);
+    comp->release();
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestCompareAndWriteWriteTooSmallPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+    off_t off = 512;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    std::string cmp_buffer("This is a test");
+    ceph::bufferlist cmp_bl;
+    cmp_bl.append(&cmp_buffer[0], 5);
+    cmp_bl.append(&cmp_buffer[5], 3);
+    cmp_bl.append(&cmp_buffer[8], 2);
+    cmp_bl.append(&cmp_buffer[10], 4);
+
+    ssize_t written = image.write(off, cmp_bl.length(), cmp_bl);
+    ASSERT_EQ(cmp_bl.length(), written);
+
+    std::string small_buffer("Too small");
+    ceph::bufferlist small_bl;
+    small_bl.append(&small_buffer[0], 4);
+    small_bl.append(&small_buffer[4], 4);
+
+    // should fail because write bufferlist cannot be smaller than len
+    uint64_t mismatch_off = 0;
+    written = image.compare_and_write(off, cmp_bl.length(),
+                                      cmp_bl,
+                                      small_bl, /* write_bl */
+                                      &mismatch_off, 0);
+    ASSERT_EQ(-EINVAL, written);
+    ASSERT_EQ(0U, mismatch_off);
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteWriteTooSmallPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+    off_t off = 512;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    std::string cmp_buffer("This is a test");
+    ceph::bufferlist cmp_bl;
+    cmp_bl.append(&cmp_buffer[0], 5);
+    cmp_bl.append(&cmp_buffer[5], 3);
+    cmp_bl.append(&cmp_buffer[8], 2);
+    cmp_bl.append(&cmp_buffer[10], 4);
+
+    ssize_t written = image.write(off, cmp_bl.length(), cmp_bl);
+    ASSERT_EQ(cmp_bl.length(), written);
+
+    std::string small_buffer("Too small");
+    ceph::bufferlist small_bl;
+    small_bl.append(&small_buffer[0], 4);
+    small_bl.append(&small_buffer[4], 4);
+
+    // should fail because write bufferlist cannot be smaller than len
+    librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(
+        NULL, (librbd::callback_t) simple_write_cb_pp);
+    uint64_t mismatch_off = 0;
+    int ret = image.aio_compare_and_write(off, cmp_bl.length(),
+                                          cmp_bl,
+                                          small_bl, /* write_bl */
+                                          comp, &mismatch_off, 0);
+    ASSERT_EQ(-EINVAL, ret);
+    ASSERT_EQ(0U, mismatch_off);
+    comp->release();
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestCompareAndWriteMismatchPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+    off_t off = 512;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    std::string cmp_buffer("This is a test");
+    ceph::bufferlist cmp_bl;
+    cmp_bl.append(&cmp_buffer[0], 5);
+    cmp_bl.append(&cmp_buffer[5], 3);
+    cmp_bl.append(&cmp_buffer[8], 2);
+    cmp_bl.append(&cmp_buffer[10], 4);
+
+    std::string write_buffer("Write this !!!");
+    ceph::bufferlist write_bl;
+    write_bl.append(&write_buffer[0], 6);
+    write_bl.append(&write_buffer[6], 5);
+    write_bl.append(&write_buffer[11], 3);
+
+    std::string mismatch_buffer("This will fail");
+    ceph::bufferlist mismatch_bl;
+    mismatch_bl.append(&mismatch_buffer[0], 5);
+    mismatch_bl.append(&mismatch_buffer[5], 5);
+    mismatch_bl.append(&mismatch_buffer[10], 4);
+
+    ssize_t written = image.write(off, cmp_bl.length(), cmp_bl);
+    ASSERT_EQ(cmp_bl.length(), written);
+
+    // this should execute the compare but fail because of mismatch
+    uint64_t mismatch_off = 0;
+    written = image.compare_and_write(off, write_bl.length(),
+                                      mismatch_bl, /* cmp_bl */
+                                      write_bl,
+                                      &mismatch_off, 0);
+    ASSERT_EQ(-EILSEQ, written);
+    ASSERT_EQ(5U, mismatch_off);
+
+    // check that nothing was written
+    ASSERT_PASSED(compare_written, image, off, cmp_bl.length(), cmp_buffer);
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteMismatchPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+    off_t off = 512;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    std::string cmp_buffer("This is a test");
+    ceph::bufferlist cmp_bl;
+    cmp_bl.append(&cmp_buffer[0], 5);
+    cmp_bl.append(&cmp_buffer[5], 3);
+    cmp_bl.append(&cmp_buffer[8], 2);
+    cmp_bl.append(&cmp_buffer[10], 4);
+
+    std::string write_buffer("Write this !!!");
+    ceph::bufferlist write_bl;
+    write_bl.append(&write_buffer[0], 6);
+    write_bl.append(&write_buffer[6], 5);
+    write_bl.append(&write_buffer[11], 3);
+
+    std::string mismatch_buffer("This will fail");
+    ceph::bufferlist mismatch_bl;
+    mismatch_bl.append(&mismatch_buffer[0], 5);
+    mismatch_bl.append(&mismatch_buffer[5], 5);
+    mismatch_bl.append(&mismatch_buffer[10], 4);
+
+    ssize_t written = image.write(off, cmp_bl.length(), cmp_bl);
+    ASSERT_EQ(cmp_bl.length(), written);
+
+    // this should execute the compare but fail because of mismatch
+    librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(
+        NULL, (librbd::callback_t) simple_write_cb_pp);
+    uint64_t mismatch_off = 0;
+    int ret = image.aio_compare_and_write(off, write_bl.length(),
+                                          mismatch_bl, /* cmp_bl */
+                                          write_bl,
+                                          comp, &mismatch_off, 0);
+    ASSERT_EQ(0, ret);
+    comp->wait_for_complete();
+    ssize_t aio_ret = comp->get_return_value();
+    ASSERT_EQ(-EILSEQ, aio_ret);
+    ASSERT_EQ(5U, mismatch_off);
+    comp->release();
+
+    // check that nothing was written
+    ASSERT_PASSED(compare_written, image, off, cmp_bl.length(), cmp_buffer);
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestCompareAndWriteMismatchBufferlistGreaterLenPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+    off_t off = 512;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    std::string cmp_buffer("This is a test");
+    ceph::bufferlist cmp_bl;
+    cmp_bl.append(&cmp_buffer[0], 5);
+    cmp_bl.append(&cmp_buffer[5], 3);
+    cmp_bl.append(&cmp_buffer[8], 2);
+    cmp_bl.append(&cmp_buffer[10], 4);
+
+    std::string write_buffer("Write this !!!");
+    ceph::bufferlist write_bl;
+    write_bl.append(&write_buffer[0], 6);
+    write_bl.append(&write_buffer[6], 5);
+    write_bl.append(&write_buffer[11], 3);
+
+    std::string mismatch_buffer("This will fail");
+    ceph::bufferlist mismatch_bl;
+    mismatch_bl.append(&mismatch_buffer[0], 5);
+    mismatch_bl.append(&mismatch_buffer[5], 5);
+    mismatch_bl.append(&mismatch_buffer[10], 4);
+
+    ssize_t written = image.write(off, cmp_bl.length(), cmp_bl);
+    ASSERT_EQ(cmp_bl.length(), written);
+
+    /*
+     * we allow cmp_bl and write_bl to be greater than len so this
+     * should execute the compare but fail because of mismatch
+     */
+    uint64_t mismatch_off = 0;
+    written = image.compare_and_write(off, cmp_bl.length() - 1,
+                                      mismatch_bl, /* cmp_bl */
+                                      write_bl,
+                                      &mismatch_off, 0);
+    ASSERT_EQ(-EILSEQ, written);
+    ASSERT_EQ(5U, mismatch_off);
+
+    // check that nothing was written
+    ASSERT_PASSED(compare_written, image, off, cmp_bl.length(), cmp_buffer);
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteMismatchBufferlistGreaterLenPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+    off_t off = 512;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    std::string cmp_buffer("This is a test");
+    ceph::bufferlist cmp_bl;
+    cmp_bl.append(&cmp_buffer[0], 5);
+    cmp_bl.append(&cmp_buffer[5], 3);
+    cmp_bl.append(&cmp_buffer[8], 2);
+    cmp_bl.append(&cmp_buffer[10], 4);
+
+    std::string write_buffer("Write this !!!");
+    ceph::bufferlist write_bl;
+    write_bl.append(&write_buffer[0], 6);
+    write_bl.append(&write_buffer[6], 5);
+    write_bl.append(&write_buffer[11], 3);
+
+    std::string mismatch_buffer("This will fail");
+    ceph::bufferlist mismatch_bl;
+    mismatch_bl.append(&mismatch_buffer[0], 5);
+    mismatch_bl.append(&mismatch_buffer[5], 5);
+    mismatch_bl.append(&mismatch_buffer[10], 4);
+
+    ssize_t written = image.write(off, cmp_bl.length(), cmp_bl);
+    ASSERT_EQ(cmp_bl.length(), written);
+
+    /*
+     * we allow cmp_bl and write_bl to be greater than len so this
+     * should execute the compare but fail because of mismatch
+     */
+    librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(
+        NULL, (librbd::callback_t) simple_write_cb_pp);
+    uint64_t mismatch_off = 0;
+    int ret = image.aio_compare_and_write(off, cmp_bl.length() - 1,
+                                          mismatch_bl, /* cmp_bl */
+                                          write_bl,
+                                          comp, &mismatch_off, 0);
+    ASSERT_EQ(0, ret);
+    comp->wait_for_complete();
+    ssize_t aio_ret = comp->get_return_value();
+    ASSERT_EQ(-EILSEQ, aio_ret);
+    ASSERT_EQ(5U, mismatch_off);
+    comp->release();
+
+    // check that nothing was written
+    ASSERT_PASSED(compare_written, image, off, cmp_bl.length(), cmp_buffer);
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestCompareAndWriteSuccessPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+    off_t off = 512;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    std::string cmp_buffer("This is a test");
+    ceph::bufferlist cmp_bl;
+    cmp_bl.append(&cmp_buffer[0], 5);
+    cmp_bl.append(&cmp_buffer[5], 3);
+    cmp_bl.append(&cmp_buffer[8], 2);
+    cmp_bl.append(&cmp_buffer[10], 4);
+
+    std::string write_buffer("Write this !!!");
+    ceph::bufferlist write_bl;
+    write_bl.append(&write_buffer[0], 6);
+    write_bl.append(&write_buffer[6], 5);
+    write_bl.append(&write_buffer[11], 3);
+
+    ssize_t written = image.write(off, cmp_bl.length(), cmp_bl);
+    ASSERT_EQ(cmp_bl.length(), written);
+
+    // compare against the buffer written before => should succeed
+    uint64_t mismatch_off = 0;
+    written = image.compare_and_write(off, cmp_bl.length(),
+                                      cmp_bl,
+                                      write_bl,
+                                      &mismatch_off, 0);
+    ASSERT_EQ(write_bl.length(), written);
+    ASSERT_EQ(0U, mismatch_off);
+
+    // check write_bl was written
+    ASSERT_PASSED(compare_written, image, off, write_bl.length(), write_buffer);
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteSuccessPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+    off_t off = 512;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    std::string cmp_buffer("This is a test");
+    ceph::bufferlist cmp_bl;
+    cmp_bl.append(&cmp_buffer[0], 5);
+    cmp_bl.append(&cmp_buffer[5], 3);
+    cmp_bl.append(&cmp_buffer[8], 2);
+    cmp_bl.append(&cmp_buffer[10], 4);
+
+    std::string write_buffer("Write this !!!");
+    ceph::bufferlist write_bl;
+    write_bl.append(&write_buffer[0], 6);
+    write_bl.append(&write_buffer[6], 5);
+    write_bl.append(&write_buffer[11], 3);
+
+    ssize_t written = image.write(off, cmp_bl.length(), cmp_bl);
+    ASSERT_EQ(cmp_bl.length(), written);
+
+    // compare against the buffer written before => should succeed
+    librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(
+        NULL, (librbd::callback_t) simple_write_cb_pp);
+    uint64_t mismatch_off = 0;
+    int ret = image.aio_compare_and_write(off, write_bl.length(),
+                                          cmp_bl,
+                                          write_bl,
+                                          comp, &mismatch_off, 0);
+    ASSERT_EQ(0, ret);
+    comp->wait_for_complete();
+    ssize_t aio_ret = comp->get_return_value();
+    ASSERT_EQ(0, aio_ret);
+    ASSERT_EQ(0U, mismatch_off);
+    comp->release();
+
+    // check write_bl was written
+    ASSERT_PASSED(compare_written, image, off, write_bl.length(), write_buffer);
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestCompareAndWriteSuccessBufferlistGreaterLenPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+    off_t off = 512;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    std::string cmp_buffer("This is a test");
+    ceph::bufferlist cmp_bl;
+    cmp_bl.append(&cmp_buffer[0], 5);
+    cmp_bl.append(&cmp_buffer[5], 3);
+    cmp_bl.append(&cmp_buffer[8], 2);
+    cmp_bl.append(&cmp_buffer[10], 4);
+
+    std::string write_buffer("Write this !!!");
+    ceph::bufferlist write_bl;
+    write_bl.append(&write_buffer[0], 6);
+    write_bl.append(&write_buffer[6], 5);
+    write_bl.append(&write_buffer[11], 3);
+
+    std::string mismatch_buffer("This will fail");
+    ceph::bufferlist mismatch_bl;
+    mismatch_bl.append(&mismatch_buffer[0], 5);
+    mismatch_bl.append(&mismatch_buffer[5], 5);
+    mismatch_bl.append(&mismatch_buffer[10], 4);
+
+    /*
+     * Test len < cmp_bl & write_bl => should succeed but only compare
+     * len bytes resp. only write len bytes
+     */
+    ssize_t written = image.write(off, mismatch_bl.length(), mismatch_bl);
+    ASSERT_EQ(mismatch_bl.length(), written);
+
+    size_t len_m1 = cmp_bl.length() - 1;
+    written = image.write(off, len_m1, cmp_bl);
+    ASSERT_EQ(len_m1, written);
+    // the content of the image at off should now be "This is a tesl"
+
+    uint64_t mismatch_off = 0;
+    written = image.compare_and_write(off, len_m1,
+                                      cmp_bl,
+                                      write_bl,
+                                      &mismatch_off, 0);
+    ASSERT_EQ(len_m1, written);
+    ASSERT_EQ(0U, mismatch_off);
+
+    // check that only write_bl.length() - 1 bytes were written
+    ASSERT_PASSED(compare_written, image, off, len_m1, write_buffer);
+    ASSERT_PASSED(compare_written, image, off + len_m1, 1, std::string("l"));
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteSuccessBufferlistGreaterLenPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+    off_t off = 512;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    std::string cmp_buffer("This is a test");
+    ceph::bufferlist cmp_bl;
+    cmp_bl.append(&cmp_buffer[0], 5);
+    cmp_bl.append(&cmp_buffer[5], 3);
+    cmp_bl.append(&cmp_buffer[8], 2);
+    cmp_bl.append(&cmp_buffer[10], 4);
+
+    std::string write_buffer("Write this !!!");
+    ceph::bufferlist write_bl;
+    write_bl.append(&write_buffer[0], 6);
+    write_bl.append(&write_buffer[6], 5);
+    write_bl.append(&write_buffer[11], 3);
+
+    std::string mismatch_buffer("This will fail");
+    ceph::bufferlist mismatch_bl;
+    mismatch_bl.append(&mismatch_buffer[0], 5);
+    mismatch_bl.append(&mismatch_buffer[5], 5);
+    mismatch_bl.append(&mismatch_buffer[10], 4);
+
+    ssize_t written = image.write(off, cmp_bl.length(), cmp_bl);
+    ASSERT_EQ(cmp_bl.length(), written);
+
+    /*
+     * Test len < cmp_bl & write_bl => should succeed but only compare
+     * len bytes resp. only write len bytes
+     */
+    written = image.write(off, mismatch_bl.length(), mismatch_bl);
+    ASSERT_EQ(mismatch_bl.length(), written);
+
+    size_t len_m1 = cmp_bl.length() - 1;
+    written = image.write(off, len_m1, cmp_bl);
+    ASSERT_EQ(len_m1, written);
+    // the content of the image at off should now be "This is a tesl"
+
+    librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(
+        NULL, (librbd::callback_t) simple_write_cb_pp);
+    uint64_t mismatch_off = 0;
+    int ret = image.aio_compare_and_write(off, len_m1,
+                                          cmp_bl,
+                                          write_bl,
+                                          comp, &mismatch_off, 0);
+    ASSERT_EQ(0, ret);
+    comp->wait_for_complete();
+    ssize_t aio_ret = comp->get_return_value();
+    ASSERT_EQ(0, aio_ret);
+    ASSERT_EQ(0U, mismatch_off);
+    comp->release();
+
+    // check that only write_bl.length() - 1 bytes were written
+    ASSERT_PASSED(compare_written, image, off, len_m1, write_buffer);
+    ASSERT_PASSED(compare_written, image, off + len_m1, 1, std::string("l"));
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestCompareAndWriteStripeUnitUnalignedPP)
+{
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    // large write test => we allow stripe unit size writes (aligned)
+    uint64_t stripe_unit = image.get_stripe_unit();
+    std::string large_write_buffer(stripe_unit, '2');
+    ceph::bufferlist large_write_bl;
+    large_write_bl.append(large_write_buffer.data(),
+                          large_write_buffer.length());
+
+    std::string large_cmp_buffer(stripe_unit * 2, '3');
+    ceph::bufferlist large_cmp_bl;
+    large_cmp_bl.append(large_cmp_buffer.data(), large_cmp_buffer.length());
+
+    ssize_t written = image.write(stripe_unit, large_cmp_bl.length(),
+                                  large_cmp_bl);
+    ASSERT_EQ(large_cmp_bl.length(), written);
+
+    /*
+     * compare and write at offset stripe_unit + 1 and stripe unit size
+     * Expect fail because access exceeds stripe
+     */
+    uint64_t mismatch_off = 0;
+    written = image.compare_and_write(stripe_unit + 1, stripe_unit,
+                                      large_cmp_bl,
+                                      large_write_bl,
+                                      &mismatch_off, 0);
+    ASSERT_EQ(-EINVAL, written);
+    ASSERT_EQ(0U, mismatch_off);
+
+    // check nothing has been written
+    ASSERT_PASSED(compare_written, image, stripe_unit, large_cmp_bl.length(),
+                  large_cmp_buffer);
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteStripeUnitUnalignedPP)
+{
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    // large write test => we allow stripe unit size writes (aligned)
+    uint64_t stripe_unit = image.get_stripe_unit();
+    std::string large_write_buffer(stripe_unit, '2');
+    ceph::bufferlist large_write_bl;
+    large_write_bl.append(large_write_buffer.data(),
+                          large_write_buffer.length());
+
+    std::string large_cmp_buffer(stripe_unit * 2, '3');
+    ceph::bufferlist large_cmp_bl;
+    large_cmp_bl.append(large_cmp_buffer.data(), large_cmp_buffer.length());
+
+    ssize_t written = image.write(stripe_unit, large_cmp_bl.length(),
+                                  large_cmp_bl);
+    ASSERT_EQ(large_cmp_bl.length(), written);
+
+    /*
+     * compare and write at offset stripe_unit + 1 and stripe unit size
+     * Expect fail because access exceeds stripe
+     */
+    librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(
+        NULL, (librbd::callback_t) simple_write_cb_pp);
+    uint64_t mismatch_off = 0;
+    int ret = image.aio_compare_and_write(stripe_unit + 1, stripe_unit,
+                                          large_cmp_bl,
+                                          large_write_bl,
+                                          comp, &mismatch_off, 0);
+    ASSERT_EQ(0, ret);
+    comp->wait_for_complete();
+    ssize_t aio_ret = comp->get_return_value();
+    ASSERT_EQ(-EINVAL, aio_ret);
+    ASSERT_EQ(0U, mismatch_off);
+    comp->release();
+
+    // check nothing has been written
+    ASSERT_PASSED(compare_written, image, stripe_unit, large_cmp_bl.length(),
+                  large_cmp_buffer);
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestCompareAndWriteTooLargePP)
+{
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    // large write test => we allow stripe unit size writes (aligned)
+    uint64_t stripe_unit = image.get_stripe_unit();
+    std::string large_write_buffer(stripe_unit * 2, '2');
+    ceph::bufferlist large_write_bl;
+    large_write_bl.append(large_write_buffer.data(),
+                          large_write_buffer.length());
+
+    std::string large_cmp_buffer(stripe_unit * 2, '3');
+    ceph::bufferlist large_cmp_bl;
+    large_cmp_bl.append(large_cmp_buffer.data(), large_cmp_buffer.length());
+
+    ssize_t written = image.write(stripe_unit, large_cmp_bl.length(),
+                                  large_cmp_bl);
+    ASSERT_EQ(large_cmp_bl.length(), written);
+
+    /*
+     * compare and write at offset stripe_unit and stripe unit size + 1
+     * Expect fail because access is larger than stripe unit size
+     */
+    uint64_t mismatch_off = 0;
+    written = image.compare_and_write(stripe_unit, stripe_unit + 1,
+                                      large_cmp_bl,
+                                      large_write_bl,
+                                      &mismatch_off, 0);
+    ASSERT_EQ(-EINVAL, written);
+    ASSERT_EQ(0U, mismatch_off);
+
+    // check nothing has been written
+    ASSERT_PASSED(compare_written, image, stripe_unit, large_cmp_bl.length(),
+                  large_cmp_buffer);
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteTooLargePP)
+{
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    // large write test => we allow stripe unit size writes (aligned)
+    uint64_t stripe_unit = image.get_stripe_unit();
+    std::string large_write_buffer(stripe_unit * 2, '2');
+    ceph::bufferlist large_write_bl;
+    large_write_bl.append(large_write_buffer.data(),
+                          large_write_buffer.length());
+
+    std::string large_cmp_buffer(stripe_unit * 2, '3');
+    ceph::bufferlist large_cmp_bl;
+    large_cmp_bl.append(large_cmp_buffer.data(), large_cmp_buffer.length());
+
+    ssize_t written = image.write(stripe_unit, large_cmp_bl.length(),
+                                  large_cmp_bl);
+    ASSERT_EQ(large_cmp_bl.length(), written);
+
+    /*
+     * compare and write at offset stripe_unit and stripe unit size + 1
+     * Expect fail because access is larger than stripe unit size
+     */
+    librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(
+        NULL, (librbd::callback_t) simple_write_cb_pp);
+    uint64_t mismatch_off = 0;
+    int ret = image.aio_compare_and_write(stripe_unit, stripe_unit + 1,
+                                          large_cmp_bl,
+                                          large_write_bl,
+                                          comp, &mismatch_off, 0);
+    ASSERT_EQ(0, ret);
+    comp->wait_for_complete();
+    ssize_t aio_ret = comp->get_return_value();
+    ASSERT_EQ(-EINVAL, aio_ret);
+    ASSERT_EQ(0U, mismatch_off);
+    comp->release();
+
+    // check nothing has been written
+    ASSERT_PASSED(compare_written, image, stripe_unit, large_cmp_bl.length(),
+                  large_cmp_buffer);
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestCompareAndWriteStripeUnitSuccessPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    // large write test => we allow stripe unit size writes (aligned)
+    uint64_t stripe_unit = image.get_stripe_unit();
+    std::string large_write_buffer(stripe_unit * 2, '2');
+    ceph::bufferlist large_write_bl;
+    large_write_bl.append(large_write_buffer.data(),
+                          large_write_buffer.length());
+
+    std::string large_cmp_buffer(stripe_unit * 2, '3');
+    ceph::bufferlist large_cmp_bl;
+    large_cmp_bl.append(large_cmp_buffer.data(), large_cmp_buffer.length());
+
+    ssize_t written = image.write(stripe_unit, large_cmp_bl.length(),
+                                  large_cmp_bl);
+    ASSERT_EQ(large_cmp_bl.length(), written);
+
+    // aligned stripe unit size access => expect success
+    uint64_t mismatch_off = 0;
+    written = image.compare_and_write(stripe_unit, stripe_unit,
+                                      large_cmp_bl,
+                                      large_write_bl,
+                                      &mismatch_off, 0);
+    ASSERT_EQ(stripe_unit, written);
+    ASSERT_EQ(0U, mismatch_off);
+
+    // check large_write_bl was written and nothing beyond
+    ASSERT_PASSED(compare_written, image, stripe_unit, stripe_unit,
+                  large_write_buffer);
+    ASSERT_PASSED(compare_written, image, stripe_unit * 2, stripe_unit,
+                  large_cmp_buffer);
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, TestAioCompareAndWriteStripeUnitSuccessPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 20 << 20; /* 20MiB */
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    // large write test => we allow stripe unit size writes (aligned)
+    uint64_t stripe_unit = image.get_stripe_unit();
+    std::string large_write_buffer(stripe_unit * 2, '2');
+    ceph::bufferlist large_write_bl;
+    large_write_bl.append(large_write_buffer.data(),
+                          large_write_buffer.length());
+
+    std::string large_cmp_buffer(stripe_unit * 2, '3');
+    ceph::bufferlist large_cmp_bl;
+    large_cmp_bl.append(large_cmp_buffer.data(),
+                        large_cmp_buffer.length());
+
+    ssize_t written = image.write(stripe_unit, large_cmp_bl.length(),
+                                  large_cmp_bl);
+    ASSERT_EQ(large_cmp_bl.length(), written);
+
+    // aligned stripe unit size access => expect success
+    librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(
+        NULL, (librbd::callback_t) simple_write_cb_pp);
+    uint64_t mismatch_off = 0;
+    int ret = image.aio_compare_and_write(stripe_unit, stripe_unit,
+                                          large_cmp_bl,
+                                          large_write_bl,
+                                          comp, &mismatch_off, 0);
+    ASSERT_EQ(0, ret);
+    comp->wait_for_complete();
+    ssize_t aio_ret = comp->get_return_value();
+    ASSERT_EQ(0, aio_ret);
+    ASSERT_EQ(0U, mismatch_off);
+    comp->release();
+
+    // check large_write_bl was written and nothing beyond
+    ASSERT_PASSED(compare_written, image, stripe_unit, stripe_unit,
+                  large_write_buffer);
+    ASSERT_PASSED(compare_written, image, stripe_unit * 2, stripe_unit,
+                  large_cmp_buffer);
 
     ASSERT_PASSED(validate_object_map, image);
   }
@@ -5127,14 +6857,14 @@ void compare_and_write_copyup(librados::IoCtx &ioctx, bool deep_copyup,
   }
 
   bufferlist cmp_bl;
-  cmp_bl.append(std::string(96, '1'));
+  cmp_bl.append(std::string(512, '1'));
   bufferlist write_bl;
   write_bl.append(std::string(512, '2'));
-  uint64_t mismatch_off;
+  uint64_t mismatch_off = 0;
   ASSERT_EQ((ssize_t)write_bl.length(),
             clone_image.compare_and_write(512, write_bl.length(), cmp_bl,
                                           write_bl, &mismatch_off, 0));
-
+  ASSERT_EQ(0U, mismatch_off);
   bufferlist read_bl;
   ASSERT_EQ(4096, clone_image.read(0, 4096, read_bl));
 
@@ -5191,10 +6921,10 @@ void compare_and_write_copyup_mismatch(librados::IoCtx &ioctx,
 
   bufferlist cmp_bl;
   cmp_bl.append(std::string(48, '1'));
-  cmp_bl.append(std::string(48, '3'));
+  cmp_bl.append(std::string(464, '3'));
   bufferlist write_bl;
   write_bl.append(std::string(512, '2'));
-  uint64_t mismatch_off;
+  uint64_t mismatch_off = 0;
   ASSERT_EQ(-EILSEQ,
             clone_image.compare_and_write(512, write_bl.length(), cmp_bl,
                                           write_bl, &mismatch_off, 0));
