@@ -97,15 +97,6 @@ void FlattenRequest<I>::flatten_objects() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << dendl;
 
-  auto encryption_format = image_ctx.encryption_format.get();
-  uint64_t start_object_no = 0;
-  if (encryption_format != nullptr) {
-    // leave encryption header flattening to format-specific handler
-    start_object_no = Striper::get_num_objects(
-            image_ctx.layout,
-            encryption_format->get_crypto()->get_data_offset());
-  }
-
   assert(ceph_mutex_is_locked(image_ctx.owner_lock));
   auto ctx = create_context_callback<
     FlattenRequest<I>,
@@ -115,8 +106,8 @@ void FlattenRequest<I>::flatten_objects() {
       boost::lambda::_1, &image_ctx, image_ctx.get_data_io_context(),
       boost::lambda::_2));
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
-    this, image_ctx, context_factory, ctx, &m_prog_ctx, start_object_no,
-    m_overlap_objects);
+      this, image_ctx, context_factory, ctx, &m_prog_ctx, m_start_object_no,
+      m_start_object_no + m_overlap_objects);
   throttle->start_ops(
     image_ctx.config.template get_val<uint64_t>("rbd_concurrent_management_ops"));
 }

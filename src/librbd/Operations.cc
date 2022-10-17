@@ -541,19 +541,24 @@ void Operations<I>::execute_flatten(ProgressContext &prog_ctx,
     return;
   }
 
-  uint64_t overlap;
-  int r = m_image_ctx.get_parent_overlap(CEPH_NOSNAP, &overlap);
-  ceph_assert(r == 0);
-  ceph_assert(overlap <= m_image_ctx.size);
+  uint64_t crypto_header_objects = Striper::get_num_objects(
+      m_image_ctx.layout,
+      m_image_ctx.get_area_size(io::ImageArea::CRYPTO_HEADER));
 
-  uint64_t overlap_objects = Striper::get_num_objects(m_image_ctx.layout,
-                                                      overlap);
+  uint64_t raw_overlap;
+  int r = m_image_ctx.get_parent_overlap(CEPH_NOSNAP, &raw_overlap);
+  ceph_assert(r == 0);
+  auto overlap = m_image_ctx.reduce_parent_overlap(raw_overlap, false);
+  uint64_t data_overlap_objects = Striper::get_num_objects(
+      m_image_ctx.layout,
+      (overlap.second == io::ImageArea::DATA ? overlap.first : 0));
 
   m_image_ctx.image_lock.unlock_shared();
 
+  // leave encryption header flattening to format-specific handler
   operation::FlattenRequest<I> *req = new operation::FlattenRequest<I>(
-    m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), overlap_objects,
-    prog_ctx);
+      m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish),
+      crypto_header_objects, data_overlap_objects, prog_ctx);
   req->send();
 }
 
