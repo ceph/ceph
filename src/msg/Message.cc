@@ -85,12 +85,10 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGInfo2.h"
-#include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGLease.h"
 #include "messages/MOSDPGLeaseAck.h"
-#include "messages/MOSDScrub.h"
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDRepScrub.h"
@@ -117,6 +115,7 @@
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 #include "messages/MMonGlobalID.h"
+#include "messages/MMonUsedPendingKeys.h"
 #include "messages/MClientSession.h"
 #include "messages/MClientReconnect.h"
 #include "messages/MClientRequest.h"
@@ -190,6 +189,7 @@
 #include "messages/MMgrDigest.h"
 #include "messages/MMgrReport.h"
 #include "messages/MMgrOpen.h"
+#include "messages/MMgrUpdate.h"
 #include "messages/MMgrClose.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MMonMgrReport.h"
@@ -567,9 +567,6 @@ Message *decode_message(CephContext *cct,
   case MSG_OSD_PG_INFO2:
     m = make_message<MOSDPGInfo2>();
     break;
-  case MSG_OSD_PG_CREATE:
-    m = make_message<MOSDPGCreate>();
-    break;
   case MSG_OSD_PG_CREATE2:
     m = make_message<MOSDPGCreate2>();
     break;
@@ -583,9 +580,6 @@ Message *decode_message(CephContext *cct,
     m = make_message<MOSDPGLeaseAck>();
     break;
 
-  case MSG_OSD_SCRUB:
-    m = make_message<MOSDScrub>();
-    break;
   case MSG_OSD_SCRUB2:
     m = make_message<MOSDScrub2>();
     break;
@@ -650,6 +644,9 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MON_GLOBAL_ID:
     m = make_message<MMonGlobalID>();
+    break; 
+  case MSG_MON_USED_PENDING_KEYS:
+    m = make_message<MMonUsedPendingKeys>();
     break; 
 
     // clients
@@ -821,6 +818,9 @@ Message *decode_message(CephContext *cct,
     break;
 
 
+  case MSG_MDS_DENTRYUNLINK_ACK:
+    m = make_message<MDentryUnlinkAck>();
+    break;
   case MSG_MDS_DENTRYUNLINK:
     m = make_message<MDentryUnlink>();
     break;
@@ -891,6 +891,10 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MGR_OPEN:
     m = make_message<MMgrOpen>();
+    break;
+
+  case MSG_MGR_UPDATE:
+    m = make_message<MMgrUpdate>();
     break;
 
   case MSG_MGR_CLOSE:

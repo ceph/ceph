@@ -20,7 +20,8 @@
         <cd-inventory-devices #inventoryDevices
                               [devices]="devices"
                               [filterColumns]="filterColumns"
-                              [showAvailDeviceOnly]="true"
+                              [hostname]="hostname"
+                              [diskType]="diskType"
                               [hiddenColumns]="['available', 'osd_ids']"
                               (filterChange)="onFilterChange($event)">
         </cd-inventory-devices>

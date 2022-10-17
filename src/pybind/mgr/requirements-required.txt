@@ -5,7 +5,7 @@ cryptography
 jsonpatch
 Jinja2
 pecan
-prettytable
+prettytable<3.4.0
 pyfakefs
 pyOpenSSL
 pytest-cov==2.7.1
@@ -13,3 +13,4 @@ pyyaml
 requests-mock
 scipy
 werkzeug
+natsort

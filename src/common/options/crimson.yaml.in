@@ -32,7 +32,7 @@ options:
   type: size
   desc: Total size to use for SegmentManager block file if created
   level: dev
-  default: 100_G
+  default: 50_G
 - name: seastore_block_create
   type: bool
   level: dev
@@ -40,11 +40,6 @@ options:
   default: true
   see_also:
   - seastore_device_size
-- name: seastore_init_rewrite_segments_num_per_device
-  type: uint
-  level: dev
-  desc: Initial number of segments for rewriting extents per device
-  default: 6
 - name: seastore_journal_batch_capacity
   type: uint
   level: dev
@@ -75,3 +70,13 @@ options:
   level: dev
   desc: default logical address space reservation for seastore objects' metadata
   default: 16777216
+- name: seastore_cache_lru_size
+  type: size
+  level: advanced
+  desc: Size in bytes of extents to keep in cache.
+  default: 64_M
+- name: seastore_obj_data_write_amplification
+  type: float
+  level: advanced
+  desc: split extent if ratio of total extent size to write size exceeds this value
+  default: 1.25

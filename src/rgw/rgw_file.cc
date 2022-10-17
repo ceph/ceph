@@ -39,8 +39,6 @@ using namespace rgw;
 
 namespace rgw {
 
-  extern RGWLib rgwlib;
-
   const string RGWFileHandle::root_name = "/";
 
   std::atomic<uint32_t> RGWLibFS::fs_inst_counter;
@@ -105,7 +103,7 @@ namespace rgw {
     std::string bucket_name{path};
     RGWStatBucketRequest req(cct, user->clone(), bucket_name, bs);
 
-    int rc = rgwlib.get_fe()->execute_req(&req);
+    int rc = g_rgwlib->get_fe()->execute_req(&req);
     if ((rc == 0) &&
 	(req.get_ret() == 0) &&
 	(req.matched())) {
@@ -201,7 +199,7 @@ namespace rgw {
 	RGWStatObjRequest req(cct, user->clone(),
 			      parent->bucket_name(), obj_path,
 			      RGWStatObjRequest::FLAG_NONE);
-	int rc = rgwlib.get_fe()->execute_req(&req);
+	int rc = g_rgwlib->get_fe()->execute_req(&req);
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
 	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_CREATE);
@@ -238,7 +236,7 @@ namespace rgw {
 	RGWStatObjRequest req(cct, user->clone(),
 			      parent->bucket_name(), obj_path,
 			      RGWStatObjRequest::FLAG_NONE);
-	int rc = rgwlib.get_fe()->execute_req(&req);
+	int rc = g_rgwlib->get_fe()->execute_req(&req);
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
 	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_DIRECTORY);
@@ -269,7 +267,7 @@ namespace rgw {
 	std::string object_name{path};
 	RGWStatLeafRequest req(cct, user->clone(),
 			       parent, object_name);
-	int rc = rgwlib.get_fe()->execute_req(&req);
+	int rc = g_rgwlib->get_fe()->execute_req(&req);
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
 	  if (req.matched) {
@@ -322,7 +320,7 @@ namespace rgw {
 
     RGWReadRequest req(get_context(), user->clone(), rgw_fh, offset, length, buffer);
 
-    int rc = rgwlib.get_fe()->execute_req(&req);
+    int rc = g_rgwlib->get_fe()->execute_req(&req);
     if ((rc == 0) &&
         ((rc = req.get_ret()) == 0)) {
       lock_guard guard(rgw_fh->mtx);
@@ -344,7 +342,7 @@ namespace rgw {
 
     RGWReadRequest req(get_context(), user->clone(), rgw_fh, offset, length, buffer);
 
-    int rc = rgwlib.get_fe()->execute_req(&req);
+    int rc = g_rgwlib->get_fe()->execute_req(&req);
     if ((rc == 0) &&
         ((rc = req.get_ret()) == 0)) {
       lock_guard(rgw_fh->mtx);
@@ -400,14 +398,14 @@ namespace rgw {
 	/* delete object w/key "<bucket>/" (uxattrs), if any */
 	string oname{"/"};
 	RGWDeleteObjRequest req(cct, user->clone(), bkt_fh->bucket_name(), oname);
-	rc = rgwlib.get_fe()->execute_req(&req);
+	rc = g_rgwlib->get_fe()->execute_req(&req);
 	/* don't care if ENOENT */
 	unref(bkt_fh);
       }
 
       string bname{name};
       RGWDeleteBucketRequest req(cct, user->clone(), bname);
-      rc = rgwlib.get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req);
       if (! rc) {
 	rc = req.get_ret();
       }
@@ -443,7 +441,7 @@ namespace rgw {
 	oname += "/";
       }
       RGWDeleteObjRequest req(cct, user->clone(), parent->bucket_name(), oname);
-      rc = rgwlib.get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req);
       if (! rc) {
 	rc = req.get_ret();
       }
@@ -520,7 +518,7 @@ namespace rgw {
       case 0:
       {
 	RGWCopyObjRequest req(cct, user->clone(), src_fh, dst_fh, src_name, dst_name);
-	int rc = rgwlib.get_fe()->execute_req(&req);
+	int rc = g_rgwlib->get_fe()->execute_req(&req);
 	if ((rc != 0) ||
 	    ((rc = req.get_ret()) != 0)) {
 	  ldout(get_context(), 1)
@@ -646,7 +644,7 @@ namespace rgw {
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
       req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-      rc = rgwlib.get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req);
       rc2 = req.get_ret();
     } else {
       /* create an object representing the directory */
@@ -672,7 +670,7 @@ namespace rgw {
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
       req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-      rc = rgwlib.get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req);
       rc2 = req.get_ret();
     }
 
@@ -728,7 +726,7 @@ namespace rgw {
     RGWPutObjRequest req(cct, user->clone(), parent->bucket_name(), obj_name, bl);
     MkObjResult mkr{nullptr, -EINVAL};
 
-    rc = rgwlib.get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req);
     rc2 = req.get_ret();
 
     if ((rc == 0) &&
@@ -754,6 +752,7 @@ namespace rgw {
         rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL))); 
 
 	get<0>(mkr) = rgw_fh;
+	rgw_fh->file_ondisk_version = 0; // inital version
 	rgw_fh->mtx.unlock();
       } else
 	rc = -EIO;
@@ -842,7 +841,7 @@ namespace rgw {
     req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
     req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-    rc = rgwlib.get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req);
     rc2 = req.get_ret();
     if (! ((rc == 0) &&
         (rc2 == 0))) {
@@ -921,7 +920,7 @@ namespace rgw {
     req.emplace_attr(RGW_ATTR_ETAG, std::move(etag));
     req.emplace_attr(RGW_ATTR_ACL, std::move(acls));
 
-    rc = rgwlib.get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req);
     rc2 = req.get_ret();
 
     if (rc == -ENOENT) {
@@ -935,7 +934,7 @@ namespace rgw {
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
       req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-      rc = rgwlib.get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req);
       rc2 = req.get_ret();
     }
 
@@ -1007,7 +1006,7 @@ namespace rgw {
       }
     }
 
-    rc = rgwlib.get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req);
     rc2 = req.get_ret();
     rc3 = ((rc == 0) && (rc2 == 0)) ? 0 : -EIO;
 
@@ -1066,7 +1065,7 @@ namespace rgw {
 
     RGWGetAttrsRequest req(cct, user->clone(), rgw_fh->bucket_name(), obj_name);
 
-    rc = rgwlib.get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req);
     rc2 = req.get_ret();
     rc3 = ((rc == 0) && (rc2 == 0)) ? 0 : -EIO;
 
@@ -1136,7 +1135,7 @@ namespace rgw {
       return -EINVAL;
     }
 
-    rc = rgwlib.get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req);
     rc2 = req.get_ret();
 
     return (((rc == 0) && (rc2 == 0)) ? 0 : -EIO);
@@ -1172,7 +1171,7 @@ namespace rgw {
       return -EINVAL;
     }
 
-    rc = rgwlib.get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req);
     rc2 = req.get_ret();
 
     return (((rc == 0) && (rc2 == 0)) ? 0 : -EIO);
@@ -1198,12 +1197,12 @@ namespace rgw {
 
     RGWSetAttrsRequest req(cct, user->clone(), rgw_fh->bucket_name(), obj_name);
 
-    rgw_fh->encode_attrs(ux_key, ux_attrs);
+    rgw_fh->encode_attrs(ux_key, ux_attrs, false);
 
     req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
     req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-    rc = rgwlib.get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req);
     rc2 = req.get_ret();
 
     if ((rc != 0) || (rc2 != 0)) {
@@ -1236,7 +1235,7 @@ namespace rgw {
     /* force cache drain, forces objects to evict */
     fh_cache.drain(ObjUnref(this),
 		  RGWFileHandle::FHCache::FLAG_LOCK);
-    rgwlib.get_fe()->get_process()->unregister_fs(this);
+    g_rgwlib->get_fe()->get_process()->unregister_fs(this);
     rele();
   } /* RGWLibFS::close */
 
@@ -1432,12 +1431,23 @@ namespace rgw {
   }
 
   void RGWFileHandle::encode_attrs(ceph::buffer::list& ux_key1,
-				   ceph::buffer::list& ux_attrs1)
+				   ceph::buffer::list& ux_attrs1,
+				   bool inc_ov)
   {
     using ceph::encode;
     fh_key fhk(this->fh.fh_hk);
     encode(fhk, ux_key1);
+    bool need_ondisk_version =
+      (fh.fh_type == RGW_FS_TYPE_FILE ||
+       fh.fh_type == RGW_FS_TYPE_SYMBOLIC_LINK);
+    if (need_ondisk_version &&
+	file_ondisk_version < 0) {
+      file_ondisk_version = 0;
+    }
     encode(*this, ux_attrs1);
+    if (need_ondisk_version && inc_ov) {
+      file_ondisk_version++;
+    }
   } /* RGWFileHandle::encode_attrs */
 
   DecodeAttrsResult RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
@@ -1450,8 +1460,35 @@ namespace rgw {
     decode(fhk, bl_iter_key1);
     get<0>(dar) = true;
 
+    // decode to a temporary file handle which may not be
+    // copied to the current file handle if its file_ondisk_version
+    // is not newer
+    RGWFileHandle tmp_fh(fs);
+    tmp_fh.fh.fh_type = fh.fh_type;
     auto bl_iter_unix1 = ux_attrs1->cbegin();
-    decode(*this, bl_iter_unix1);
+    decode(tmp_fh, bl_iter_unix1);
+
+    fh.fh_type = tmp_fh.fh.fh_type;
+    // for file handles that represent files and whose file_ondisk_version
+    // is newer, no updates are need, otherwise, go updating the current
+    // file handle
+    if (!((fh.fh_type == RGW_FS_TYPE_FILE ||
+	    fh.fh_type == RGW_FS_TYPE_SYMBOLIC_LINK) &&
+	  file_ondisk_version >= tmp_fh.file_ondisk_version)) {
+      // make sure the following "encode" always encode a greater version
+      file_ondisk_version = tmp_fh.file_ondisk_version + 1;
+      state.dev = tmp_fh.state.dev;
+      state.size = tmp_fh.state.size;
+      state.nlink = tmp_fh.state.nlink;
+      state.owner_uid = tmp_fh.state.owner_uid;
+      state.owner_gid = tmp_fh.state.owner_gid;
+      state.unix_mode = tmp_fh.state.unix_mode;
+      state.ctime = tmp_fh.state.ctime;
+      state.mtime = tmp_fh.state.mtime;
+      state.atime = tmp_fh.state.atime;
+      state.version = tmp_fh.state.version;
+    }
+
     if (this->state.version < 2) {
       get<1>(dar) = true;
     }
@@ -1487,9 +1524,9 @@ namespace rgw {
       return false;
 
     RGWRMdirCheck req(fs->get_context(),
-		      rgwlib.get_store()->get_user(fs->get_user()->user_id),
+		      g_rgwlib->get_store()->get_user(fs->get_user()->user_id),
 		      this);
-    int rc = rgwlib.get_fe()->execute_req(&req);
+    int rc = g_rgwlib->get_fe()->execute_req(&req);
     if (! rc) {
       return req.valid && req.has_children;
     }
@@ -1543,9 +1580,9 @@ namespace rgw {
     }
 
     if (is_root()) {
-      RGWListBucketsRequest req(cct, rgwlib.get_store()->get_user(fs->get_user()->user_id),
+      RGWListBucketsRequest req(cct, g_rgwlib->get_store()->get_user(fs->get_user()->user_id),
 				this, rcb, cb_arg, offset);
-      rc = rgwlib.get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req);
       if (! rc) {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 	lock_guard guard(mtx);
@@ -1556,9 +1593,9 @@ namespace rgw {
 	*eof = req.eof();
       }
     } else {
-      RGWReaddirRequest req(cct, rgwlib.get_store()->get_user(fs->get_user()->user_id),
+      RGWReaddirRequest req(cct, g_rgwlib->get_store()->get_user(fs->get_user()->user_id),
 			    this, rcb, cb_arg, offset);
-      rc = rgwlib.get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req);
       if (! rc) {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 	lock_guard guard(mtx);
@@ -1625,10 +1662,10 @@ namespace rgw {
       /* start */
       std::string object_name = relative_object_name();
       f->write_req =
-	new RGWWriteRequest(rgwlib.get_store(),
-			    rgwlib.get_store()->get_user(fs->get_user()->user_id),
+	new RGWWriteRequest(g_rgwlib->get_store(),
+			    g_rgwlib->get_store()->get_user(fs->get_user()->user_id),
 			    this, bucket_name(), object_name);
-      rc = rgwlib.get_fe()->start_req(f->write_req);
+      rc = g_rgwlib->get_fe()->start_req(f->write_req);
       if (rc < 0) {
 	lsubdout(fs->get_context(), rgw, 5)
 	  << __func__
@@ -1715,7 +1752,7 @@ namespace rgw {
 	<< __func__
 	<< " finishing write trans on " << object_name()
 	<< dendl;
-      rc = rgwlib.get_fe()->finish_req(f->write_req);
+      rc = g_rgwlib->get_fe()->finish_req(f->write_req);
       if (! rc) {
 	rc = f->write_req->get_ret();
       }
@@ -1781,14 +1818,13 @@ namespace rgw {
   }
 
   int RGWWriteRequest::exec_start() {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
 
     /* Object needs a bucket from this point */
     state->object->set_bucket(state->bucket.get());
 
     auto compression_type =
-      get_store()->get_zone()->get_params().get_compression_type(
-	state->bucket->get_placement_rule());
+      get_store()->get_compression_type(state->bucket->get_placement_rule());
 
     /* not obviously supportable */
     ceph_assert(! dlo_manifest);
@@ -1827,7 +1863,7 @@ namespace rgw {
       }
     }
     processor = get_store()->get_atomic_writer(this, state->yield, state->object->clone(),
-					 state->bucket_owner.get_id(), *state->obj_ctx,
+					 state->bucket_owner.get_id(),
 					 &state->dest_placement, 0, state->req_id);
 
     op_ret = processor->prepare(state->yield);
@@ -1854,7 +1890,7 @@ namespace rgw {
 
   int RGWWriteRequest::exec_continue()
   {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     op_ret = 0;
 
     /* check guards (e.g., contig write) */
@@ -1866,7 +1902,7 @@ namespace rgw {
       return -EIO;
     }
 
-    op_ret = state->bucket->check_quota(this, user_quota, bucket_quota, real_ofs, null_yield, true);
+    op_ret = state->bucket->check_quota(this, quota, real_ofs, null_yield, true);
     /* max_size exceed */
     if (op_ret < 0)
       return -EIO;
@@ -1892,7 +1928,7 @@ namespace rgw {
     map<string, string>::iterator iter;
     char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    struct req_state* state = get_state();
+    req_state* state = get_state();
 
     size_t osize = rgw_fh->get_size();
     struct timespec octime = rgw_fh->get_ctime();
@@ -1908,7 +1944,7 @@ namespace rgw {
       goto done;
     }
 
-    op_ret = state->bucket->check_quota(this, user_quota, bucket_quota, state->obj_size, null_yield, true);
+    op_ret = state->bucket->check_quota(this, quota, state->obj_size, null_yield, true);
     /* max_size exceed */
     if (op_ret < 0) {
       goto done;
@@ -2016,15 +2052,15 @@ void rgwfile_version(int *major, int *minor, int *extra)
 				  sec_key, "/");
   ceph_assert(new_fs);
 
-  const DoutPrefix dp(rgwlib.get_store()->ctx(), dout_subsys, "rgw mount: ");
-  rc = new_fs->authorize(&dp, rgwlib.get_store());
+  const DoutPrefix dp(g_rgwlib->get_store()->ctx(), dout_subsys, "rgw mount: ");
+  rc = new_fs->authorize(&dp, g_rgwlib->get_store());
   if (rc != 0) {
     delete new_fs;
     return -EINVAL;
   }
 
   /* register fs for shared gc */
-  rgwlib.get_fe()->get_process()->register_fs(new_fs);
+  g_rgwlib->get_fe()->get_process()->register_fs(new_fs);
 
   struct rgw_fs *fs = new_fs->get_fs();
   fs->rgw = rgw;
@@ -2059,15 +2095,15 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
 
   ceph_assert(new_fs); /* should we be using ceph_assert? */
 
-  const DoutPrefix dp(rgwlib.get_store()->ctx(), dout_subsys, "rgw mount2: ");
-  rc = new_fs->authorize(&dp, rgwlib.get_store());
+  const DoutPrefix dp(g_rgwlib->get_store()->ctx(), dout_subsys, "rgw mount2: ");
+  rc = new_fs->authorize(&dp, g_rgwlib->get_store());
   if (rc != 0) {
     delete new_fs;
     return -EINVAL;
   }
 
   /* register fs for shared gc */
-  rgwlib.get_fe()->get_process()->register_fs(new_fs);
+  g_rgwlib->get_fe()->get_process()->register_fs(new_fs);
 
   struct rgw_fs *fs = new_fs->get_fs();
   fs->rgw = rgw;
@@ -2112,9 +2148,9 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
   struct rados_cluster_stat_t stats;
 
   RGWGetClusterStatReq req(fs->get_context(),
-			   rgwlib.get_store()->get_user(fs->get_user()->user_id),
+			   g_rgwlib->get_store()->get_user(fs->get_user()->user_id),
 			   stats);
-  int rc = rgwlib.get_fe()->execute_req(&req);
+  int rc = g_rgwlib->get_fe()->execute_req(&req);
   if (rc < 0) {
     lderr(fs->get_context()) << "ERROR: getting total cluster usage"
                              << cpp_strerror(-rc) << dendl;
@@ -2617,7 +2653,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
 		      bl);
   req.do_hexdump = false;
 
-  rc = rgwlib.get_fe()->execute_req(&req);
+  rc = g_rgwlib->get_fe()->execute_req(&req);
 
   if (! rc) {
     RGWReadV* rdv = static_cast<RGWReadV*>(
@@ -2677,10 +2713,10 @@ int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
   }
 
   std::string oname = rgw_fh->relative_object_name();
-  RGWPutObjRequest req(cct, rgwlib.get_store()->get_user(fs->get_user()->user_id),
+  RGWPutObjRequest req(cct, g_rgwlib->get_store()->get_user(fs->get_user()->user_id),
 		       rgw_fh->bucket_name(), oname, bl);
 
-  int rc = rgwlib.get_fe()->execute_req(&req);
+  int rc = g_rgwlib->get_fe()->execute_req(&req);
 
   /* XXX update size (in request) */
 

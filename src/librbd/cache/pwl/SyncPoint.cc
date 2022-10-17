@@ -29,16 +29,16 @@ SyncPoint::~SyncPoint() {
 
 std::ostream &operator<<(std::ostream &os,
                          const SyncPoint &p) {
-  os << "log_entry=[" << *p.log_entry << "], "
-     << "earlier_sync_point=" << p.earlier_sync_point << ", "
-     << "later_sync_point=" << p.later_sync_point << ", "
-     << "m_final_op_sequence_num=" << p.m_final_op_sequence_num << ", "
-     << "m_prior_log_entries_persisted=" << p.m_prior_log_entries_persisted << ", "
-     << "m_prior_log_entries_persisted_complete=" << p.m_prior_log_entries_persisted_complete << ", "
-     << "m_append_scheduled=" << p.m_append_scheduled << ", "
-     << "appending=" << p.appending << ", "
-     << "on_sync_point_appending=" << p.on_sync_point_appending.size() << ", "
-     << "on_sync_point_persisted=" << p.on_sync_point_persisted.size() << "";
+  os << "log_entry=[" << *p.log_entry
+     << "], earlier_sync_point=" << p.earlier_sync_point
+     << ", later_sync_point=" << p.later_sync_point
+     << ", m_final_op_sequence_num=" << p.m_final_op_sequence_num
+     << ", m_prior_log_entries_persisted=" << p.m_prior_log_entries_persisted
+     << ", m_prior_log_entries_persisted_complete=" << p.m_prior_log_entries_persisted_complete
+     << ", m_append_scheduled=" << p.m_append_scheduled
+     << ", appending=" << p.appending
+     << ", on_sync_point_appending=" << p.on_sync_point_appending.size()
+     << ", on_sync_point_persisted=" << p.on_sync_point_persisted.size();
   return os;
 }
 

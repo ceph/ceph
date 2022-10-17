@@ -83,7 +83,7 @@ while read type; do
 		echo "**** $type test $n binary reencode check failed ****"
 		echo "   ceph-dencoder type $type select_test $n encode export $tmp1"
 		echo "   ceph-dencoder type $type select_test $n encode decode encode export $tmp2"
-		echo "   cmp $tmp1 $tmp2"
+		diff <(hexdump -C $tmp1) <(hexdump -C $tmp2)
 		failed=$(($failed + 1))
 	    fi
 	fi

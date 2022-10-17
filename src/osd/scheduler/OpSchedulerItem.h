@@ -25,7 +25,7 @@
 
 
 class OSD;
-class OSDShard;
+struct OSDShard;
 
 namespace ceph::osd::scheduler {
 
@@ -35,6 +35,8 @@ enum class op_scheduler_class : uint8_t {
   immediate,
   client,
 };
+
+std::ostream& operator<<(std::ostream& out, const op_scheduler_class& class_id);
 
 class OpSchedulerItem {
 public:
@@ -104,6 +106,8 @@ private:
   utime_t start_time;
   uint64_t owner;  ///< global id (e.g., client.XXX)
   epoch_t map_epoch;    ///< an epoch we expect the PG to exist in
+  int qos_cost;  ///< scaled cost calculated by the mclock scheduler
+  bool qos_item;  ///< set to true if item is scheduled by mclock scheduler
 
 public:
   OpSchedulerItem(
@@ -119,7 +123,7 @@ public:
       start_time(start_time),
       owner(owner),
       map_epoch(e)
-  {}
+  { qos_cost = 0; qos_item = false; }
   OpSchedulerItem(OpSchedulerItem &&) = default;
   OpSchedulerItem(const OpSchedulerItem &) = delete;
   OpSchedulerItem &operator=(OpSchedulerItem &&) = default;
@@ -169,15 +173,45 @@ public:
     return qitem->get_scheduler_class();
   }
 
+  void maybe_set_is_qos_item() {
+    if (get_scheduler_class() != op_scheduler_class::immediate) {
+      qos_item = true ;
+    }
+  }
+
+  bool is_qos_item() const {
+    return qos_item;
+  }
+
+  void set_qos_cost(int scaled_cost) {
+    qos_cost = scaled_cost;
+  }
+
+  int get_qos_cost() const {
+    return qos_cost;
+  }
+
   friend std::ostream& operator<<(std::ostream& out, const OpSchedulerItem& item) {
-     out << "OpSchedulerItem("
-	 << item.get_ordering_token() << " " << *item.qitem
-	 << " prio " << item.get_priority()
-	 << " cost " << item.get_cost()
-	 << " e" << item.get_map_epoch();
-     if (item.get_reserved_pushes()) {
-       out << " reserved_pushes " << item.get_reserved_pushes();
-     }
+    out << "OpSchedulerItem("
+        << item.get_ordering_token() << " " << *item.qitem;
+
+    if (item.is_qos_item()) {
+      out << " class_id " << item.get_scheduler_class();
+    } else {
+      out << " prio " << item.get_priority();
+    }
+
+    if (item.get_qos_cost()) {
+      out << " qos_cost " << item.get_qos_cost();
+    }
+
+    out << " cost " << item.get_cost()
+        << " e" << item.get_map_epoch();
+
+    if (item.get_reserved_pushes()) {
+      out << " reserved_pushes " << item.get_reserved_pushes();
+    }
+
     return out << ")";
   }
 }; // class OpSchedulerItem

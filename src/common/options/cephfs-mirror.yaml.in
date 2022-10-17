@@ -15,7 +15,7 @@ options:
 - name: cephfs_mirror_action_update_interval
   type: secs
   level: advanced
-  desc: interval for driving asynchornous mirror actions
+  desc: interval for driving asynchronous mirror actions
   long_desc: Interval in seconds to process pending mirror update actions.
   default: 2
   services:
@@ -55,7 +55,7 @@ options:
   level: advanced
   desc: consecutive failed directory synchronization attempts before marking a directory
     as "failed"
-  long_desc: number of consecutive snapshot synchronization failues to mark a directory
+  long_desc: number of consecutive snapshot synchronization failures to mark a directory
     as "failed". failed directories are retried for synchronization less frequently.
   default: 10
   services:
@@ -83,7 +83,7 @@ options:
 - name: cephfs_mirror_mount_timeout
   type: secs
   level: advanced
-  desc: timeout for mounting primary/seconday ceph file system
+  desc: timeout for mounting primary/secondary ceph file system
   long_desc: Timeout in seconds for mounting primary or secondary (remote) ceph file system
     by the cephfs-mirror daemon. Setting this to a higher value could result in the mirror
     daemon getting stalled when mounting a file system if the cluster is not reachable. This

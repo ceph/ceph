@@ -49,10 +49,10 @@ template <typename T>
 std::ostream &operator<<(std::ostream &os,
                          const C_CompAndWriteRequest<T> &req) {
   os << (C_WriteRequest<T>&)req
-     << "cmp_bl=" << req.cmp_bl << ", "
-     << "read_bl=" << req.read_bl << ", "
-     << "compare_succeeded=" << req.compare_succeeded << ", "
-     << "mismatch_offset=" << req.mismatch_offset;
+     << " cmp_bl=" << req.cmp_bl
+     << ", read_bl=" << req.read_bl
+     << ", compare_succeeded=" << req.compare_succeeded
+     << ", mismatch_offset=" << req.mismatch_offset;
   return os;
 }
 

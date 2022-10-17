@@ -1,5 +1,16 @@
 @use './src/styles/vendor/variables' as vv;
 
+/* --------------------------------------------------
+   MAIN NAVBAR STYLE
+--------------------------------------------------- */
+
+.cd-navbar-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  height: 100%;
+}
+
 /* ---------------------------------------------------
     NAVBAR STYLE
 --------------------------------------------------- */
@@ -7,7 +18,7 @@
 ::ng-deep cd-navigation .cd-navbar-top {
   .cd-navbar-brand {
     background: vv.$secondary;
-    border-top: 4px solid vv.$primary;
+    border-top: 4px solid vv.$primary-wcag-aa-large-text;
 
     .navbar-brand,
     .navbar-brand:hover {
@@ -38,7 +49,7 @@
     }
 
     .cd-navbar-utility > .active > a {
-      background-color: vv.$primary;
+      background-color: vv.$primary-wcag-aa-large-text;
       color: vv.$gray-200;
     }
 
@@ -72,7 +83,7 @@
   .navbar-nav > li > .cd-navbar > a:hover,
   .navbar-nav > li > a:hover,
   .navbar-nav > li:hover {
-    background-color: vv.$primary;
+    background-color: vv.$primary-wcag-aa-large-text;
   }
 
   .navbar-nav > .open > .cd-navbar > [ngbDropdown] > a,
@@ -108,7 +119,7 @@
       }
 
       .open .dropdown-menu {
-        background-color: vv.$primary;
+        background-color: vv.$primary-wcag-aa-large-text;
         border: 0;
         padding-bottom: 0;
         padding-top: 0;
@@ -120,12 +131,12 @@
       }
 
       .open .dropdown-menu > .active > a {
-        background-color: vv.$primary;
+        background-color: vv.$primary-wcag-aa-large-text;
       }
     }
 
     .navbar-nav > li > a:hover {
-      background-color: vv.$primary;
+      background-color: vv.$primary-wcag-aa-large-text;
     }
   }
 }
@@ -139,23 +150,24 @@ $sidebar-width: 200px;
 .cd-navbar-primary .active > a,
 .cd-navbar-primary > .active > a:focus,
 .cd-navbar-primary > .active > a:hover {
-  background-color: vv.$primary !important;
+  background-color: vv.$primary-wcag-aa-large-text !important;
   border: 0 !important;
-  color: vv.$gray-200 !important;
+  color: vv.$white !important;
 }
 
 .wrapper {
   display: flex;
+  height: 100%;
   width: 100%;
 
   #sidebar {
     background: vv.$secondary;
     bottom: 0;
     color: vv.$white;
+    height: auto;
     left: 0;
     overflow-y: auto;
-    position: fixed;
-    top: vv.$navbar-height;
+    position: relative;
     transition: all 0.3s;
     width: $sidebar-width;
     z-index: 999;
@@ -178,14 +190,14 @@ $sidebar-width: 200px;
       li a {
         color: vv.$white;
         display: block;
-        font-size: 1.1em;
+        font-size: 1.3em;
         padding: 10px;
         padding-left: 27px;
 
         text-decoration: none;
 
         &:hover {
-          background: vv.$primary;
+          background: vv.$primary-wcag-aa-large-text;
           color: vv.$white;
         }
 
@@ -221,7 +233,7 @@ $sidebar-width: 200px;
 
   ul ul a {
     background: lighten(vv.$secondary, 10);
-    font-size: 0.9em !important;
+    font-size: 1.1em !important;
     padding-left: 40px !important;
   }
 
@@ -240,37 +252,12 @@ $sidebar-width: 200px;
 
 #content {
   bottom: 0;
-  position: absolute;
+  position: relative;
   right: 0;
-  top: vv.$navbar-height;
   transition: all 0.3s;
   width: calc(100% - #{$sidebar-width});
 
   &.active {
     width: 100vw;
-  }
-}
-
-/* ---------------------------------------------------
-    topNotification settings
---------------------------------------------------- */
-
-@for $i from 1 through 2 {
-  :host.top-notification-#{$i} {
-    .cd-navbar-top .cd-navbar-brand {
-      top: vv.$top-notification-height * $i;
-    }
-
-    #sidebar {
-      top: vv.$navbar-height + vv.$top-notification-height * $i;
-    }
-
-    #content {
-      top: vv.$navbar-height + vv.$top-notification-height * $i;
-    }
-
-    cd-notifications-sidebar {
-      top: vv.$navbar-height + vv.$top-notification-height * $i + 10px;
-    }
   }
 }

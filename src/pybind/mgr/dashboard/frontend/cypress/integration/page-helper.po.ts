@@ -72,11 +72,11 @@ export abstract class PageHelper {
   }
 
   getTabs() {
-    return cy.get('.nav.nav-tabs li');
+    return cy.get('.nav.nav-tabs a');
   }
 
   getTab(tabName: string) {
-    return cy.contains('.nav.nav-tabs li', tabName);
+    return cy.contains('.nav.nav-tabs a', tabName);
   }
 
   getTabText(index: number) {
@@ -196,10 +196,16 @@ export abstract class PageHelper {
     }
   }
 
-  getTableCell(columnIndex: number, exactContent: string) {
+  getTableCell(columnIndex: number, exactContent: string, partialMatch = false) {
     this.waitDataTableToLoad();
     this.clearTableSearchInput();
     this.searchTable(exactContent);
+    if (partialMatch) {
+      return cy.contains(
+        `datatable-body-row datatable-body-cell:nth-child(${columnIndex})`,
+        exactContent
+      );
+    }
     return cy.contains(
       `datatable-body-row datatable-body-cell:nth-child(${columnIndex})`,
       new RegExp(`^${exactContent}$`)

@@ -124,7 +124,7 @@ Partial Application Peering/Recovery modifications
 --------------------------------------------------
 
 Some writes will be small enough to not require updating all of the
-shards holding data blocks.  For write amplification minization
+shards holding data blocks.  For write amplification minimization
 reasons, it would be best to avoid writing to those shards at all,
 and delay even sending the log entries until the next write which
 actually hits that shard.

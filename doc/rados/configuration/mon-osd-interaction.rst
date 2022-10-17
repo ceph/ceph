@@ -233,7 +233,7 @@ Monitor Settings
 .. confval:: mon_osd_min_down_reporters
 .. confval:: mon_osd_reporter_subtree_level
 
-.. index:: OSD hearbeat
+.. index:: OSD heartbeat
 
 OSD Settings
 ------------

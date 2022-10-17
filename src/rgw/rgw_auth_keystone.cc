@@ -38,7 +38,7 @@ TokenEngine::is_applicable(const std::string& token) const noexcept
 }
 
 boost::optional<TokenEngine::token_envelope_t>
-TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string& token) const
+TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string& token, bool allow_expired) const
 {
   /* Unfortunately, we can't use the short form of "using" here. It's because
    * we're aliasing a class' member, not namespace. */
@@ -60,6 +60,11 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
     url.append("v2.0/tokens/" + token);
   } else if (keystone_version == rgw::keystone::ApiVersion::VER_3) {
     url.append("v3/auth/tokens");
+
+    if (allow_expired) {
+      url.append("?allow_expired=1");
+    }
+
     validate.append_header("X-Subject-Token", token);
   }
 
@@ -134,8 +139,10 @@ TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token,
      * the access rights through the perm_mask. At least at this layer. */
     RGW_PERM_FULL_CONTROL,
     level,
-    TYPE_KEYSTONE,
-  };
+    rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY,
+    rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
+    TYPE_KEYSTONE
+};
 }
 
 static inline const std::string
@@ -186,8 +193,10 @@ TokenEngine::get_acl_strategy(const TokenEngine::token_envelope_t& token) const
 TokenEngine::result_t
 TokenEngine::authenticate(const DoutPrefixProvider* dpp,
                           const std::string& token,
+                          const std::string& service_token,
                           const req_state* const s) const
 {
+  bool allow_expired = false;
   boost::optional<TokenEngine::token_envelope_t> t;
 
   /* This will be initialized on the first call to this method. In C++11 it's
@@ -204,6 +213,14 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     std::vector<std::string> plain;
     std::vector<std::string> admin;
   } roles(cct);
+
+  static const struct ServiceTokenRolesCacher {
+    explicit ServiceTokenRolesCacher(CephContext* const cct) {
+      get_str_vec(cct->_conf->rgw_keystone_service_token_accepted_roles, plain);
+    }
+
+    std::vector<std::string> plain;
+  } service_token_roles(cct);
 
   if (! is_applicable(token)) {
     return result_t::deny();
@@ -226,10 +243,73 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     return result_t::grant(std::move(apl));
   }
 
-  /* Not in cache. Go to the Keystone for validation. This happens even
+  /* We have a service token and a token so we verify the service
+   * token and if it's invalid the request is invalid. If it's valid
+   * we allow an expired token to be used when doing lookup in Keystone.
+   * We never get to this if the token is in the cache. */
+  if (g_conf()->rgw_keystone_service_token_enabled && ! service_token.empty()) {
+    boost::optional<TokenEngine::token_envelope_t> st;
+
+    const auto& service_token_id = rgw_get_token_id(service_token);
+    ldpp_dout(dpp, 20) << "service_token_id=" << service_token_id << dendl;
+
+    /* Check cache for service token first. */
+    st = token_cache.find_service(service_token_id);
+    if (st) {
+      ldpp_dout(dpp, 20) << "cached service_token.project.id=" << st->get_project_id()
+                     << dendl;
+
+      /* We found the service token in the cache so we allow using an expired
+       * token for this request. */
+      allow_expired = true;
+      ldpp_dout(dpp, 20) << "allowing expired tokens because service_token_id="
+                     << service_token_id
+                     << " was found in cache" << dendl;
+    } else {
+      /* Service token was not found in cache. Go to Keystone for validating
+       * the token. The allow_expired here must always be false. */
+      ceph_assert(allow_expired == false);
+      st = get_from_keystone(dpp, service_token, allow_expired);
+
+      if (! st) {
+        return result_t::deny(-EACCES);
+      }
+
+      /* Verify expiration of service token. */
+      if (st->expired()) {
+        ldpp_dout(dpp, 0) << "got expired service token: " << st->get_project_name()
+                       << ":" << st->get_user_name()
+                       << " expired " << st->get_expires() << dendl;
+        return result_t::deny(-EPERM);
+      }
+
+      /* Check for necessary roles for service token. */
+      for (const auto& role : service_token_roles.plain) {
+        if (st->has_role(role) == true) {
+          /* Service token is valid so we allow using an expired token for
+           * this request. */
+          ldpp_dout(dpp, 20) << "allowing expired tokens because service_token_id="
+                         << service_token_id
+                         << " is valid, role: "
+                         << role << dendl;
+          allow_expired = true;
+          token_cache.add_service(service_token_id, *st);
+          break;
+        }
+      }
+
+      if (!allow_expired) {
+        ldpp_dout(dpp, 0) << "service token user does not hold a matching role; required roles: "
+                  << g_conf()->rgw_keystone_service_token_accepted_roles << dendl;
+        return result_t::deny(-EPERM);
+      }
+    }
+  }
+
+  /* Token not in cache. Go to the Keystone for validation. This happens even
    * for the legacy PKI/PKIz token types. That's it, after the PKI/PKIz
    * RadosGW-side validation has been removed, we always ask Keystone. */
-  t = get_from_keystone(dpp, token);
+  t = get_from_keystone(dpp, token, allow_expired);
 
   if (! t) {
     return result_t::deny(-EACCES);
@@ -237,15 +317,34 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   /* Verify expiration. */
   if (t->expired()) {
-    ldpp_dout(dpp, 0) << "got expired token: " << t->get_project_name()
-                  << ":" << t->get_user_name()
-                  << " expired: " << t->get_expires() << dendl;
-    return result_t::deny(-EPERM);
+    if (allow_expired) {
+      ldpp_dout(dpp, 20) << "allowing expired token: " << t->get_project_name()
+                    << ":" << t->get_user_name()
+                    << " expired: " << t->get_expires()
+                    << " because of valid service token" << dendl;
+    } else {
+      ldpp_dout(dpp, 0) << "got expired token: " << t->get_project_name()
+                    << ":" << t->get_user_name()
+                    << " expired: " << t->get_expires() << dendl;
+      return result_t::deny(-EPERM);
+    }
   }
 
   /* Check for necessary roles. */
   for (const auto& role : roles.plain) {
     if (t->has_role(role) == true) {
+      /* If this token was an allowed expired token because we got a
+       * service token we need to update the expiration before we cache it. */
+      if (allow_expired) {
+        time_t now = ceph_clock_now().sec();
+        time_t new_expires = now + g_conf()->rgw_keystone_expired_token_cache_expiration;
+        ldpp_dout(dpp, 20) << "updating expiration of allowed expired token"
+                           << " from old " << t->get_expires() << " to now " << now << " + "
+                           << g_conf()->rgw_keystone_expired_token_cache_expiration
+                           << " secs = "
+                           << new_expires << dendl;
+        t->set_expires(new_expires);
+      }
       ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
                     << ":" << t->get_user_name()
                     << " expires: " << t->get_expires() << dendl;
@@ -498,7 +597,8 @@ EC2Engine::get_acl_strategy(const EC2Engine::token_envelope_t&) const
 
 EC2Engine::auth_info_t
 EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
-                          const std::vector<std::string>& admin_roles
+                          const std::vector<std::string>& admin_roles,
+                          const std::string& access_key_id
                          ) const noexcept
 {
   using acct_privilege_t = \
@@ -522,7 +622,9 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
      * the access rights through the perm_mask. At least at this layer. */
     RGW_PERM_FULL_CONTROL,
     level,
-    TYPE_KEYSTONE,
+    access_key_id,
+    rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
+    TYPE_KEYSTONE
   };
 }
 
@@ -590,7 +692,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
                   << " expires: " << t->get_expires() << dendl;
 
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                              get_creds_info(*t, accepted_roles.admin));
+                                              get_creds_info(*t, accepted_roles.admin, std::string(access_key_id)));
     return result_t::grant(std::move(apl), completer_factory(boost::none));
   }
 }

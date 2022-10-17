@@ -1,5 +1,9 @@
 @use './src/styles/vendor/variables' as vv;
 
+::ng-deep cd-wizard {
+  width: 15%;
+}
+
 .card-body {
   padding-left: 0;
 }

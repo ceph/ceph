@@ -76,7 +76,7 @@
           <div class="cd-col-form-input">
             <select id="owner"
                     name="owner"
-                    class="form-control custom-select"
+                    class="form-control"
                     formControlName="owner"
                     [autofocus]="editing">
               <option i18n
@@ -105,7 +105,7 @@
               <select id="placement-target"
                       name="placement-target"
                       formControlName="placement-target"
-                      class="form-control custom-select">
+                      class="form-control">
                 <option i18n
                         *ngIf="placementTargets === null"
                         [ngValue]="null">Loading...</option>
@@ -243,7 +243,7 @@
                    for="lock_mode"
                    i18n>Mode</label>
             <div class="cd-col-form-input">
-              <select class="form-control custom-select"
+              <select class="form-control"
                       formControlName="lock_mode"
                       name="lock_mode"
                       id="lock_mode">
@@ -275,6 +275,111 @@
               <span class="invalid-feedback"
                     *ngIf="bucketForm.showError('lock_retention_period_days', frm, 'lockDays')"
                     i18n>Retention Days must be a positive integer.</span>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend class="cd-header"
+                  i18n>Security</legend>
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="encryption_enabled"
+                       name="encryption_enabled"
+                       formControlName="encryption_enabled"
+                       type="checkbox"
+                       [attr.disabled]="!kmsVaultConfig && !s3VaultConfig ? true : null">
+                <label class="custom-control-label"
+                       for="encryption_enabled"
+                       i18n>Encryption</label>
+                <cd-helper>
+                  <span i18n>Enables encryption for the objects in the bucket.
+                     To enable encryption on a bucket you need to set the configuration values for SSE-S3 or SSE-KMS.
+                     To set the configuration values <a href="#/rgw/bucket/create"
+                                                        (click)="openConfigModal()">Click here</a></span>
+                </cd-helper>
+              </div>
+            </div>
+          </div>
+
+          <div *ngIf="bucketForm.getValue('encryption_enabled')">
+            <div class="form-group row">
+              <div class="cd-col-form-offset">
+                <div class="custom-control custom-radio custom-control-inline pl-5">
+                  <input class="custom-control-input"
+                         formControlName="encryption_type"
+                         id="sse_S3_enabled"
+                         type="radio"
+                         name="encryption_type"
+                         value="AES256"
+                         [attr.disabled]="!s3VaultConfig ? true : null">
+                  <label class="custom-control-label"
+                         for="sse_S3_enabled"
+                         i18n>SSE-S3 Encryption</label>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group row">
+              <div class="cd-col-form-offset">
+                <div class="custom-control custom-radio custom-control-inline pl-5">
+                  <input class="custom-control-input"
+                         formControlName="encryption_type"
+                         id="kms_enabled"
+                         name="encryption_type"
+                         value="aws:kms"
+                         [attr.disabled]="!kmsVaultConfig ? true : null"
+                         type="radio">
+                  <label class="custom-control-label"
+                         for="kms_enabled"
+                         i18n>Connect to an external key management service</label>
+                </div>
+              </div>
+            </div>
+
+            <div *ngIf="bucketForm.getValue('encryption_type') == 'aws:kms'">
+              <div class="form-group row">
+                <label class="cd-col-form-label required"
+                       for="kms_provider"
+                       i18n>KMS Provider</label>
+                <div class="cd-col-form-input">
+                  <select id="kms_provider"
+                          name="kms_provider"
+                          class="form-control"
+                          formControlName="kms_provider"
+                          [autofocus]="editing">
+                    <option i18n
+                            *ngIf="kmsProviders !== null"
+                            [ngValue]="null">-- Select a provider --</option>
+                    <option *ngFor="let provider of kmsProviders"
+                            [value]="provider">{{ provider }}</option>
+                  </select>
+                  <span class="invalid-feedback"
+                        *ngIf="bucketForm.showError('kms_provider', frm, 'required')"
+                        i18n>This field is required.</span>
+                </div>
+              </div>
+            </div>
+
+            <div *ngIf="bucketForm.getValue('encryption_type') == 'aws:kms'">
+              <div class="form-group row">
+                <label class="cd-col-form-label required"
+                       for="keyId"
+                       i18n>Key Id
+                </label>
+                <div class="cd-col-form-input">
+                  <input id="keyId"
+                         name="keyId"
+                         class="form-control"
+                         type="text"
+                         formControlName="keyId">
+                  <span class="invalid-feedback"
+                        *ngIf="bucketForm.showError('keyId', frm, 'required')"
+                        i18n>This field is required.</span>
+                </div>
+              </div>
             </div>
           </div>
         </fieldset>

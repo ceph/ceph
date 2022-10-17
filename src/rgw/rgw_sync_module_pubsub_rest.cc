@@ -359,7 +359,8 @@ private:
     std::string events_str = s->info.args.get("events", &exists);
     if (!exists) {
       // if no events are provided, we notify on all of them
-      events_str = "OBJECT_CREATE,OBJECT_DELETE,DELETE_MARKER_CREATE";
+      events_str =
+	"OBJECT_CREATE,OBJECT_DELETE,DELETE_MARKER_CREATE,OBJECT_EXPIRATION";
     }
     rgw::notify::from_string_list(events_str, events);
     if (std::find(events.begin(), events.end(), rgw::notify::UnknownEvent) != events.end()) {
@@ -499,11 +500,11 @@ public:
 
 // factory for ceph specific PubSub REST handlers 
 RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::Store* store,
-						struct req_state* const s,
+						req_state* const s,
 						const rgw::auth::StrategyRegistry& auth_registry,
 						const std::string& frontend_prefix)
 {
-  if (RGWHandler_REST_S3::init_from_header(store, s, RGW_FORMAT_JSON, true) < 0) {
+  if (RGWHandler_REST_S3::init_from_header(store, s, RGWFormat::JSON, true) < 0) {
     return nullptr;
   }
  
@@ -518,7 +519,7 @@ RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::Store* store,
   } else if (s->init_state.url_bucket == "notifications") {
     handler = new RGWHandler_REST_PSNotifs(auth_registry);
   } else if (s->info.args.exists("notification")) {
-    const int ret = RGWHandler_REST::allocate_formatter(s, RGW_FORMAT_XML, true);
+    const int ret = RGWHandler_REST::allocate_formatter(s, RGWFormat::XML, true);
     if (ret == 0) {
         handler = new RGWHandler_REST_PSNotifs_S3(auth_registry);
     }

@@ -7,6 +7,7 @@ import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
+from cephadm.inventory import HostCacheStatus
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
 
 try:
@@ -15,7 +16,8 @@ except ImportError:
     pass
 
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
-    NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec
+    NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec, MDSSpec, \
+    CustomConfig, PrometheusSpec
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from ceph.utils import datetime_to_str, datetime_now
@@ -161,12 +163,26 @@ class TestCephadm(object):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.utils.resolve_ip")
+    def test_re_add_host_receive_loopback(self, resolve_ip, cephadm_module):
+        resolve_ip.side_effect = ['192.168.122.1', '127.0.0.1', '127.0.0.1']
+        assert wait(cephadm_module, cephadm_module.get_hosts()) == []
+        cephadm_module._add_host(HostSpec('test', '192.168.122.1'))
+        assert wait(cephadm_module, cephadm_module.get_hosts()) == [
+            HostSpec('test', '192.168.122.1')]
+        cephadm_module._add_host(HostSpec('test'))
+        assert wait(cephadm_module, cephadm_module.get_hosts()) == [
+            HostSpec('test', '192.168.122.1')]
+        with pytest.raises(OrchestratorError):
+            cephadm_module._add_host(HostSpec('test2'))
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_service_ls(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             assert wait(cephadm_module, c) == []
-            with with_service(cephadm_module, ServiceSpec('mds', 'name', unmanaged=True)) as _, \
-                    with_daemon(cephadm_module, ServiceSpec('mds', 'name'), 'test') as _:
+            with with_service(cephadm_module, MDSSpec('mds', 'name', unmanaged=True)) as _, \
+                    with_daemon(cephadm_module, MDSSpec('mds', 'name'), 'test') as _:
 
                 c = cephadm_module.list_daemons()
 
@@ -227,7 +243,7 @@ class TestCephadm(object):
             with with_host(cephadm_module, 'host2'):
                 with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)),
                                   CephadmOrchestrator.apply_mgr, '', status_running=True):
-                    with with_service(cephadm_module, ServiceSpec('mds', 'test-id', placement=PlacementSpec(count=2)),
+                    with with_service(cephadm_module, MDSSpec('mds', 'test-id', placement=PlacementSpec(count=2)),
                                       CephadmOrchestrator.apply_mds, '', status_running=True):
 
                         # with no service-type. Should provide info fot both services
@@ -435,13 +451,61 @@ class TestCephadm(object):
                 _run_cephadm.assert_called_with(
                     'test', 'mon.test', 'deploy', [
                         '--name', 'mon.test',
-                        '--meta-json', '{"service_name": "mon", "ports": [], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null}',
+                        '--meta-json', '{"service_name": "mon", "ports": [], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
                         '--config-json', '-',
                         '--reconfig',
                     ],
                     stdin='{"config": "\\n\\n[mon]\\nk=v\\n[mon.test]\\npublic network = 127.0.0.0/8\\n", '
                     + '"keyring": "", "files": {"config": "[mon.test]\\npublic network = 127.0.0.0/8\\n"}}',
                     image='')
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_extra_container_args(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='crash', extra_container_args=['--cpus=2', '--quiet']), CephadmOrchestrator.apply_crash):
+                _run_cephadm.assert_called_with(
+                    'test', 'crash.test', 'deploy', [
+                        '--name', 'crash.test',
+                        '--meta-json', '{"service_name": "crash", "ports": [], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": ["--cpus=2", "--quiet"]}',
+                        '--config-json', '-',
+                        '--extra-container-args=--cpus=2',
+                        '--extra-container-args=--quiet'
+                    ],
+                    stdin='{"config": "", "keyring": "[client.crash.test]\\nkey = None\\n"}',
+                    image='',
+                )
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_custom_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        test_cert = ['-----BEGIN PRIVATE KEY-----',
+                     'YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg',
+                     'ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=',
+                     '-----END PRIVATE KEY-----',
+                     '-----BEGIN CERTIFICATE-----',
+                     'YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg',
+                     'ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=',
+                     '-----END CERTIFICATE-----']
+        configs = [
+            CustomConfig(content='something something something',
+                         mount_path='/etc/test.conf'),
+            CustomConfig(content='\n'.join(test_cert), mount_path='/usr/share/grafana/thing.crt')
+        ]
+        conf_outs = [json.dumps(c.to_json()) for c in configs]
+        stdin_str = '{' + \
+            f'"config": "", "keyring": "[client.crash.test]\\nkey = None\\n", "custom_config_files": [{conf_outs[0]}, {conf_outs[1]}]' + '}'
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='crash', custom_configs=configs), CephadmOrchestrator.apply_crash):
+                _run_cephadm.assert_called_with(
+                    'test', 'crash.test', 'deploy', [
+                        '--name', 'crash.test',
+                        '--meta-json', '{"service_name": "crash", "ports": [], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        '--config-json', '-',
+                    ],
+                    stdin=stdin_str,
+                    image='',
+                )
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
@@ -794,6 +858,11 @@ class TestCephadm(object):
             c = cephadm_module.create_osds(dg)
             out = wait(cephadm_module, c)
             assert out == "Created no osd(s) on host test; already created?"
+            bad_dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='invalid_hsot'),
+                                    data_devices=DeviceSelection(paths=['']))
+            c = cephadm_module.create_osds(bad_dg)
+            out = wait(cephadm_module, c)
+            assert "Invalid 'host:device' spec: host not found in cluster" in out
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_create_noncollocated_osd(self, cephadm_module):
@@ -838,29 +907,56 @@ class TestCephadm(object):
             assert isinstance(f1[1], DriveSelection)
 
     @pytest.mark.parametrize(
-        "devices, preview, exp_command",
+        "devices, preview, exp_commands",
         [
             # no preview and only one disk, prepare is used due the hack that is in place.
-            (['/dev/sda'], False, "lvm batch --no-auto /dev/sda --yes --no-systemd"),
+            (['/dev/sda'], False, ["lvm batch --no-auto /dev/sda --yes --no-systemd"]),
             # no preview and multiple disks, uses batch
             (['/dev/sda', '/dev/sdb'], False,
-             "CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd"),
+             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd"]),
             # preview and only one disk needs to use batch again to generate the preview
-            (['/dev/sda'], True, "lvm batch --no-auto /dev/sda --yes --no-systemd --report --format json"),
+            (['/dev/sda'], True, ["lvm batch --no-auto /dev/sda --yes --no-systemd --report --format json"]),
             # preview and multiple disks work the same
             (['/dev/sda', '/dev/sdb'], True,
-             "CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd --report --format json"),
+             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd --report --format json"]),
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    def test_driveselection_to_ceph_volume(self, cephadm_module, devices, preview, exp_command):
+    def test_driveselection_to_ceph_volume(self, cephadm_module, devices, preview, exp_commands):
         with with_host(cephadm_module, 'test'):
             dg = DriveGroupSpec(service_id='test.spec', placement=PlacementSpec(
                 host_pattern='test'), data_devices=DeviceSelection(paths=devices))
             ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
             preview = preview
             out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview)
-            assert out in exp_command
+            assert all(any(cmd in exp_cmd for exp_cmd in exp_commands)
+                       for cmd in out), f'Expected cmds from f{out} in {exp_commands}'
+
+    @pytest.mark.parametrize(
+        "devices, preview, exp_commands",
+        [
+            # one data device, no preview
+            (['/dev/sda'], False, ["raw prepare --bluestore --data /dev/sda"]),
+            # multiple data devices, no preview
+            (['/dev/sda', '/dev/sdb'], False,
+             ["raw prepare --bluestore --data /dev/sda", "raw prepare --bluestore --data /dev/sdb"]),
+            # one data device, preview
+            (['/dev/sda'], True, ["raw prepare --bluestore --data /dev/sda --report --format json"]),
+            # multiple data devices, preview
+            (['/dev/sda', '/dev/sdb'], True,
+             ["raw prepare --bluestore --data /dev/sda --report --format json", "raw prepare --bluestore --data /dev/sdb --report --format json"]),
+        ]
+    )
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_raw_driveselection_to_ceph_volume(self, cephadm_module, devices, preview, exp_commands):
+        with with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(service_id='test.spec', method='raw', placement=PlacementSpec(
+                host_pattern='test'), data_devices=DeviceSelection(paths=devices))
+            ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
+            preview = preview
+            out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview)
+            assert all(any(cmd in exp_cmd for exp_cmd in exp_commands)
+                       for cmd in out), f'Expected cmds from f{out} in {exp_commands}'
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
         json.dumps([
@@ -1090,7 +1186,9 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
-    def test_invalid_config_option_health_warning(self, _run_cephadm, get_foreign_ceph_option, cephadm_module: CephadmOrchestrator):
+    @mock.patch("cephadm.module.HostCache.save_host_devices")
+    def test_invalid_config_option_health_warning(self, _save_devs, _run_cephadm, get_foreign_ceph_option, cephadm_module: CephadmOrchestrator):
+        _save_devs.return_value = None
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         with with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
@@ -1103,6 +1201,144 @@ class TestCephadm(object):
                 'CEPHADM_INVALID_CONFIG_OPTION']['summary']
             assert 'Ignoring invalid mgr config option test' in cephadm_module.health_checks[
                 'CEPHADM_INVALID_CONFIG_OPTION']['detail']
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_save_devices(self, _set_store, _run_cephadm, _get_foreign_ceph_option, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        entry_size = 65536  # default 64k size
+        _get_foreign_ceph_option.return_value = entry_size
+
+        class FakeDev():
+            def __init__(self, c: str = 'a'):
+                # using 1015 here makes the serialized string exactly 1024 bytes if c is one char
+                self.content = {c: c * 1015}
+
+            def to_json(self):
+                return self.content
+
+            def from_json(self, stuff):
+                return json.loads(stuff)
+
+        def byte_len(s):
+            return len(s.encode('utf-8'))
+
+        with with_host(cephadm_module, 'test'):
+            fake_devices = [FakeDev()] * 100  # should be ~100k
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) > entry_size
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) < entry_size * 2
+            cephadm_module.cache.update_host_devices('test', fake_devices)
+            cephadm_module.cache.save_host_devices('test')
+            expected_calls = [
+                mock.call('host.test.devices.0', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 34], 'entries': 3})),
+                mock.call('host.test.devices.1', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 34]})),
+                mock.call('host.test.devices.2', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 32]})),
+            ]
+            _set_store.assert_has_calls(expected_calls)
+
+            fake_devices = [FakeDev()] * 300  # should be ~300k
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) > entry_size * 4
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) < entry_size * 5
+            cephadm_module.cache.update_host_devices('test', fake_devices)
+            cephadm_module.cache.save_host_devices('test')
+            expected_calls = [
+                mock.call('host.test.devices.0', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 50], 'entries': 6})),
+                mock.call('host.test.devices.1', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 50]})),
+                mock.call('host.test.devices.2', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 50]})),
+                mock.call('host.test.devices.3', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 50]})),
+                mock.call('host.test.devices.4', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 50]})),
+                mock.call('host.test.devices.5', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 50]})),
+            ]
+            _set_store.assert_has_calls(expected_calls)
+
+            fake_devices = [FakeDev()] * 62  # should be ~62k, just under cache size
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) < entry_size
+            cephadm_module.cache.update_host_devices('test', fake_devices)
+            cephadm_module.cache.save_host_devices('test')
+            expected_calls = [
+                mock.call('host.test.devices.0', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 62], 'entries': 1})),
+            ]
+            _set_store.assert_has_calls(expected_calls)
+
+            # should be ~64k but just over so it requires more entries
+            fake_devices = [FakeDev()] * 64
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) > entry_size
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) < entry_size * 2
+            cephadm_module.cache.update_host_devices('test', fake_devices)
+            cephadm_module.cache.save_host_devices('test')
+            expected_calls = [
+                mock.call('host.test.devices.0', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 22], 'entries': 3})),
+                mock.call('host.test.devices.1', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 22]})),
+                mock.call('host.test.devices.2', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 20]})),
+            ]
+            _set_store.assert_has_calls(expected_calls)
+
+            # test for actual content being correct using differing devices
+            entry_size = 3072
+            _get_foreign_ceph_option.return_value = entry_size
+            fake_devices = [FakeDev('a'), FakeDev('b'), FakeDev('c'), FakeDev('d'), FakeDev('e')]
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) > entry_size
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) < entry_size * 2
+            cephadm_module.cache.update_host_devices('test', fake_devices)
+            cephadm_module.cache.save_host_devices('test')
+            expected_calls = [
+                mock.call('host.test.devices.0', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev('a'), FakeDev('b')]], 'entries': 3})),
+                mock.call('host.test.devices.1', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev('c'), FakeDev('d')]]})),
+                mock.call('host.test.devices.2', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev('e')]]})),
+            ]
+            _set_store.assert_has_calls(expected_calls)
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.get_store")
+    def test_load_devices(self, _get_store, cephadm_module: CephadmOrchestrator):
+        def _fake_store(key):
+            if key == 'host.test.devices.0':
+                return json.dumps({'devices': [d.to_json() for d in [Device('/path')] * 9], 'entries': 3})
+            elif key == 'host.test.devices.1':
+                return json.dumps({'devices': [d.to_json() for d in [Device('/path')] * 7]})
+            elif key == 'host.test.devices.2':
+                return json.dumps({'devices': [d.to_json() for d in [Device('/path')] * 4]})
+            else:
+                raise Exception(f'Get store with unexpected value {key}')
+
+        _get_store.side_effect = _fake_store
+        devs = cephadm_module.cache.load_host_devices('test')
+        assert devs == [Device('/path')] * 20
+
+    @mock.patch("cephadm.module.Inventory.__contains__")
+    def test_check_stray_host_cache_entry(self, _contains, cephadm_module: CephadmOrchestrator):
+        def _fake_inv(key):
+            if key in ['host1', 'node02', 'host.something.com']:
+                return True
+            return False
+
+        _contains.side_effect = _fake_inv
+        assert cephadm_module.cache._get_host_cache_entry_status('host1') == HostCacheStatus.host
+        assert cephadm_module.cache._get_host_cache_entry_status(
+            'host.something.com') == HostCacheStatus.host
+        assert cephadm_module.cache._get_host_cache_entry_status(
+            'node02.devices.37') == HostCacheStatus.devices
+        assert cephadm_module.cache._get_host_cache_entry_status(
+            'host.something.com.devices.0') == HostCacheStatus.devices
+        assert cephadm_module.cache._get_host_cache_entry_status('hostXXX') == HostCacheStatus.stray
+        assert cephadm_module.cache._get_host_cache_entry_status(
+            'host.nothing.com') == HostCacheStatus.stray
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())
@@ -1272,9 +1508,67 @@ class TestCephadm(object):
             with with_service(cephadm_module, spec, meth, 'test'):
                 pass
 
+    @pytest.mark.parametrize(
+        "spec, raise_exception, msg",
+        [
+            # Valid retention_time values (valid units: 'y', 'w', 'd', 'h', 'm', 's')
+            (PrometheusSpec(retention_time='1y'), False, ''),
+            (PrometheusSpec(retention_time=' 10w '), False, ''),
+            (PrometheusSpec(retention_time=' 1348d'), False, ''),
+            (PrometheusSpec(retention_time='2000h '), False, ''),
+            (PrometheusSpec(retention_time='173847m'), False, ''),
+            (PrometheusSpec(retention_time='200s'), False, ''),
+            (PrometheusSpec(retention_time='  '), False, ''),  # default value will be used
+
+            # Invalid retention_time values
+            (PrometheusSpec(retention_time='100k'), True, '^Invalid retention time'),     # invalid unit
+            (PrometheusSpec(retention_time='10'), True, '^Invalid retention time'),       # no unit
+            (PrometheusSpec(retention_time='100.00y'), True, '^Invalid retention time'),  # invalid value and valid unit
+            (PrometheusSpec(retention_time='100.00k'), True, '^Invalid retention time'),  # invalid value and invalid unit
+            (PrometheusSpec(retention_time='---'), True, '^Invalid retention time'),      # invalid value
+
+            # Valid retention_size values (valid units: 'B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB')
+            (PrometheusSpec(retention_size='123456789B'), False, ''),
+            (PrometheusSpec(retention_size=' 200KB'), False, ''),
+            (PrometheusSpec(retention_size='99999MB '), False, ''),
+            (PrometheusSpec(retention_size=' 10GB '), False, ''),
+            (PrometheusSpec(retention_size='100TB'), False, ''),
+            (PrometheusSpec(retention_size='500PB'), False, ''),
+            (PrometheusSpec(retention_size='200EB'), False, ''),
+            (PrometheusSpec(retention_size='  '), False, ''),  # default value will be used
+
+            # Invalid retention_size values
+            (PrometheusSpec(retention_size='100b'), True, '^Invalid retention size'),      # invalid unit (case sensitive)
+            (PrometheusSpec(retention_size='333kb'), True, '^Invalid retention size'),     # invalid unit (case sensitive)
+            (PrometheusSpec(retention_size='2000'), True, '^Invalid retention size'),      # no unit
+            (PrometheusSpec(retention_size='200.00PB'), True, '^Invalid retention size'),  # invalid value and valid unit
+            (PrometheusSpec(retention_size='400.B'), True, '^Invalid retention size'),     # invalid value and invalid unit
+            (PrometheusSpec(retention_size='10.000s'), True, '^Invalid retention size'),   # invalid value and invalid unit
+            (PrometheusSpec(retention_size='...'), True, '^Invalid retention size'),       # invalid value
+
+            # valid retention_size and valid retention_time
+            (PrometheusSpec(retention_time='1y', retention_size='100GB'), False, ''),
+            # invalid retention_time and valid retention_size
+            (PrometheusSpec(retention_time='1j', retention_size='100GB'), True, '^Invalid retention time'),
+            # valid retention_time and invalid retention_size
+            (PrometheusSpec(retention_time='1y', retention_size='100gb'), True, '^Invalid retention size'),
+            # valid retention_time and invalid retention_size
+            (PrometheusSpec(retention_time='1y', retention_size='100gb'), True, '^Invalid retention size'),
+            # invalid retention_time and invalid retention_size
+            (PrometheusSpec(retention_time='1i', retention_size='100gb'), True, '^Invalid retention time'),
+        ])
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_apply_prometheus(self, spec: PrometheusSpec, raise_exception: bool, msg: str, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'test'):
+            if not raise_exception:
+                cephadm_module._apply(spec)
+            else:
+                with pytest.raises(OrchestratorError, match=msg):
+                    cephadm_module._apply(spec)
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_mds_config_purge(self, cephadm_module: CephadmOrchestrator):
-        spec = ServiceSpec('mds', service_id='fsname')
+        spec = MDSSpec('mds', service_id='fsname', config={'test': 'foo'})
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, spec, host='test'):
                 ret, out, err = cephadm_module.check_mon_command({
@@ -1293,10 +1587,11 @@ class TestCephadm(object):
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.cephadmservice.CephadmService.ok_to_stop")
     def test_daemon_ok_to_stop(self, ok_to_stop, cephadm_module: CephadmOrchestrator):
-        spec = ServiceSpec(
+        spec = MDSSpec(
             'mds',
             service_id='fsname',
-            placement=PlacementSpec(hosts=['host1', 'host2'])
+            placement=PlacementSpec(hosts=['host1', 'host2']),
+            config={'test': 'foo'}
         )
         with with_host(cephadm_module, 'host1'), with_host(cephadm_module, 'host2'):
             c = cephadm_module.apply_mds(spec)
@@ -1447,31 +1742,48 @@ class TestCephadm(object):
             assert cephadm_module.manage_etc_ceph_ceph_conf is True
 
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
-            _write_file.assert_called_with('test', '/etc/ceph/ceph.conf', b'',
-                                           0o644, 0, 0, None)
-
-            assert '/etc/ceph/ceph.conf' in cephadm_module.cache.get_host_client_files('test')
+            # Make sure both ceph conf locations (default and per fsid) are called
+            _write_file.assert_has_calls([mock.call('test', '/etc/ceph/ceph.conf', b'',
+                                          0o644, 0, 0, None),
+                                         mock.call('test', '/var/lib/ceph/fsid/config/ceph.conf', b'',
+                                          0o644, 0, 0, None)]
+                                         )
+            ceph_conf_files = cephadm_module.cache.get_host_client_files('test')
+            assert len(ceph_conf_files) == 2
+            assert '/etc/ceph/ceph.conf' in ceph_conf_files
+            assert '/var/lib/ceph/fsid/config/ceph.conf' in ceph_conf_files
 
             # set extra config and expect that we deploy another ceph.conf
             cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
-            _write_file.assert_called_with('test', '/etc/ceph/ceph.conf',
-                                           b'\n\n[mon]\nk=v\n', 0o644, 0, 0, None)
-
+            _write_file.assert_has_calls([mock.call('test',
+                                                    '/etc/ceph/ceph.conf',
+                                                    b'\n\n[mon]\nk=v\n', 0o644, 0, 0, None),
+                                          mock.call('test',
+                                                    '/var/lib/ceph/fsid/config/ceph.conf',
+                                                    b'\n\n[mon]\nk=v\n', 0o644, 0, 0, None)])
             # reload
             cephadm_module.cache.last_client_files = {}
             cephadm_module.cache.load()
 
-            assert '/etc/ceph/ceph.conf' in cephadm_module.cache.get_host_client_files('test')
+            ceph_conf_files = cephadm_module.cache.get_host_client_files('test')
+            assert len(ceph_conf_files) == 2
+            assert '/etc/ceph/ceph.conf' in ceph_conf_files
+            assert '/var/lib/ceph/fsid/config/ceph.conf' in ceph_conf_files
 
             # Make sure, _check_daemons does a redeploy due to monmap change:
-            before_digest = cephadm_module.cache.get_host_client_files('test')[
+            f1_before_digest = cephadm_module.cache.get_host_client_files('test')[
                 '/etc/ceph/ceph.conf'][0]
+            f2_before_digest = cephadm_module.cache.get_host_client_files(
+                'test')['/var/lib/ceph/fsid/config/ceph.conf'][0]
             cephadm_module._set_extra_ceph_conf('[mon]\nk2=v2')
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
-            after_digest = cephadm_module.cache.get_host_client_files('test')[
+            f1_after_digest = cephadm_module.cache.get_host_client_files('test')[
                 '/etc/ceph/ceph.conf'][0]
-            assert before_digest != after_digest
+            f2_after_digest = cephadm_module.cache.get_host_client_files(
+                'test')['/var/lib/ceph/fsid/config/ceph.conf'][0]
+            assert f1_before_digest != f1_after_digest
+            assert f2_before_digest != f2_after_digest
 
     def test_etc_ceph_init(self):
         with with_cephadm_module({'manage_etc_ceph_ceph_conf': True}) as m:
@@ -1665,6 +1977,15 @@ Traceback (most recent call last):
             with with_osd_daemon(cephadm_module, _run_cephadm, 'test', 1, ceph_volume_lvm_list=_ceph_volume_list):
                 pass
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_osd_count(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        dg = DriveGroupSpec(service_id='', data_devices=DeviceSelection(all=True))
+        with with_host(cephadm_module, 'test', refresh_hosts=False):
+            with with_service(cephadm_module, dg, host='test'):
+                with with_osd_daemon(cephadm_module, _run_cephadm, 'test', 1):
+                    assert wait(cephadm_module, cephadm_module.describe_service())[0].size == 1
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_host_rm_last_admin(self, cephadm_module: CephadmOrchestrator):
         with pytest.raises(OrchestratorError):
@@ -1675,3 +1996,119 @@ Traceback (most recent call last):
         with with_host(cephadm_module, 'test1', refresh_hosts=False, rm_with_force=True):
             with with_host(cephadm_module, 'test2', refresh_hosts=False, rm_with_force=False):
                 cephadm_module.inventory.add_label('test2', '_admin')
+
+    @pytest.mark.parametrize("facts, settings, expected_value",
+                             [
+                                 # All options are available on all hosts
+                                 (
+                                     {
+                                         "host1":
+                                         {
+                                             "sysctl_options":
+                                             {
+                                                 'opt1': 'val1',
+                                                 'opt2': 'val2',
+                                             }
+                                         },
+                                         "host2":
+                                         {
+                                             "sysctl_options":
+                                             {
+                                                 'opt1': '',
+                                                 'opt2': '',
+                                             }
+                                         },
+                                     },
+                                     {'opt1', 'opt2'},  # settings
+                                     {'host1': [], 'host2': []}  # expected_value
+                                 ),
+                                 # opt1 is missing on host 1, opt2 is missing on host2
+                                 ({
+                                     "host1":
+                                     {
+                                         "sysctl_options":
+                                         {
+                                             'opt2': '',
+                                             'optX': '',
+                                         }
+                                     },
+                                     "host2":
+                                     {
+                                         "sysctl_options":
+                                         {
+                                             'opt1': '',
+                                             'opt3': '',
+                                             'opt4': '',
+                                         }
+                                     },
+                                 },
+                                     {'opt1', 'opt2'},  # settings
+                                     {'host1': ['opt1'], 'host2': ['opt2']}  # expected_value
+                                 ),
+                                 # All options are missing on all hosts
+                                 ({
+                                     "host1":
+                                     {
+                                         "sysctl_options":
+                                         {
+                                         }
+                                     },
+                                     "host2":
+                                     {
+                                         "sysctl_options":
+                                         {
+                                         }
+                                     },
+                                 },
+                                     {'opt1', 'opt2'},  # settings
+                                     {'host1': ['opt1', 'opt2'], 'host2': [
+                                         'opt1', 'opt2']}  # expected_value
+                                 ),
+                             ]
+                             )
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_tuned_profiles_settings_validation(self, facts, settings, expected_value, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            spec = mock.Mock()
+            spec.settings = sorted(settings)
+            spec.placement.filter_matching_hostspecs = mock.Mock()
+            spec.placement.filter_matching_hostspecs.return_value = ['host1', 'host2']
+            cephadm_module.cache.facts = facts
+            assert cephadm_module._validate_tunedprofile_settings(spec) == expected_value
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_tuned_profiles_validation(self, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+
+            with pytest.raises(OrchestratorError, match="^Invalid placement specification.+"):
+                spec = mock.Mock()
+                spec.settings = {'a': 'b'}
+                spec.placement = PlacementSpec(hosts=[])
+                cephadm_module._validate_tuned_profile_spec(spec)
+
+            with pytest.raises(OrchestratorError, match="Invalid spec: settings section cannot be empty."):
+                spec = mock.Mock()
+                spec.settings = {}
+                spec.placement = PlacementSpec(hosts=['host1', 'host2'])
+                cephadm_module._validate_tuned_profile_spec(spec)
+
+            with pytest.raises(OrchestratorError, match="^Placement 'count' field is no supported .+"):
+                spec = mock.Mock()
+                spec.settings = {'a': 'b'}
+                spec.placement = PlacementSpec(count=1)
+                cephadm_module._validate_tuned_profile_spec(spec)
+
+            with pytest.raises(OrchestratorError, match="^Placement 'count_per_host' field is no supported .+"):
+                spec = mock.Mock()
+                spec.settings = {'a': 'b'}
+                spec.placement = PlacementSpec(count_per_host=1, label='foo')
+                cephadm_module._validate_tuned_profile_spec(spec)
+
+            with pytest.raises(OrchestratorError, match="^Found invalid host"):
+                spec = mock.Mock()
+                spec.settings = {'a': 'b'}
+                spec.placement = PlacementSpec(hosts=['host1', 'host2'])
+                cephadm_module.inventory = mock.Mock()
+                cephadm_module.inventory.all_specs = mock.Mock(
+                    return_value=[mock.Mock().hostname, mock.Mock().hostname])
+                cephadm_module._validate_tuned_profile_spec(spec)

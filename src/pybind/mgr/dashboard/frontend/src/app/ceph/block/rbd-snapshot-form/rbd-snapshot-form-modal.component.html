@@ -19,11 +19,14 @@
                    placeholder="Snapshot name..."
                    id="snapshotName"
                    name="snapshotName"
+                   [attr.disabled]="(mirroring === 'snapshot') ? true : null"
                    formControlName="snapshotName"
                    autofocus>
             <span class="invalid-feedback"
                   *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')"
-                  i18n>This field is required.</span>
+                  i18n>This field is required.</span><br><br>
+            <span *ngIf="mirroring === 'snapshot'"
+                  i18n>Snapshot mode is enabled on image <b>{{ imageName }}</b>: snapshot names are auto generated</span>
           </div>
         </div>
       </div>

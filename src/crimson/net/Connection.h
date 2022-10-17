@@ -28,6 +28,14 @@ class Interceptor;
 
 using seq_num_t = uint64_t;
 
+/**
+ * Connection
+ *
+ * Abstraction for messenger connections.
+ *
+ * Except when otherwise specified, methods must be invoked from the core on which
+ * the connection originates.
+ */
 class Connection : public seastar::enable_shared_from_this<Connection> {
   entity_name_t peer_name = {0, entity_name_t::NEW};
 
@@ -125,11 +133,22 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   virtual bool peer_wins() const = 0;
 #endif
 
-  /// send a message over a connection that has completed its handshake
+  /**
+   * send
+   *
+   * Send a message over a connection that has completed its handshake.
+   * May be invoked from any core.
+   */
   virtual seastar::future<> send(MessageURef msg) = 0;
 
-  /// send a keepalive message over a connection that has completed its
-  /// handshake
+  /**
+   * keepalive
+   *
+   * Send a keepalive message over a connection that has completed its
+   * handshake.
+   *
+   * May be invoked from any core.
+   */
   virtual seastar::future<> keepalive() = 0;
 
   // close the connection and cancel any any pending futures from read/send,
@@ -157,10 +176,11 @@ public:
     return user_private != nullptr;
   }
   void set_user_private(std::unique_ptr<user_private_t> new_user_private) {
+    assert(!has_user_private());
     user_private = std::move(new_user_private);
   }
   user_private_t &get_user_private() {
-    ceph_assert(user_private);
+    assert(has_user_private());
     return *user_private;
   }
 };

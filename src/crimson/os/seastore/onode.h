@@ -66,11 +66,12 @@ public:
   virtual onode_layout_t &get_mutable_layout(Transaction &t) = 0;
   virtual ~Onode() = default;
 
-  laddr_t get_metadata_hint() const {
+  laddr_t get_metadata_hint(uint64_t block_size) const {
     assert(default_metadata_offset);
     assert(default_metadata_range);
+    uint64_t range_blocks = default_metadata_range / block_size;
     return get_hint() + default_metadata_offset +
-      ((uint32_t)std::rand() % default_metadata_range);
+      (((uint32_t)std::rand() % range_blocks) * block_size);
   }
   laddr_t get_data_hint() const {
     return get_hint();

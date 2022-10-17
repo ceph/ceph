@@ -21,8 +21,6 @@
 
 #include "rgw_sal_rados.h"
 
-#define dout_subsys ceph_subsys_rgw
-
 #define RGW_ORPHAN_INDEX_OID "orphan.index"
 #define RGW_ORPHAN_INDEX_PREFIX "orphan.scan"
 
@@ -291,8 +289,11 @@ public:
 
   int build_linked_oids_index();
 
-  int run(const DoutPrefixProvider *dpp, const std::string& bucket_id);
-  int run(const DoutPrefixProvider *dpp);
+  int run(const DoutPrefixProvider *dpp,
+	  const std::string& bucket_id,
+	  const bool silent_indexless = false);
+  int run(const DoutPrefixProvider *dpp,
+	  const bool yes_i_really_mean_it = false);
 
   // if there's a non-empty field separator, that means we'll display
   // bucket and object names

@@ -32,13 +32,21 @@ endif(CMAKE_INSTALL_PREFIX)
 
 execute_process(
   COMMAND
-  ${Python3_EXECUTABLE} -c "from distutils import sysconfig; print(sysconfig.get_python_lib(prefix='${PYTHON_INSTALL_TEMPLATE}'))"
+  ${Python3_EXECUTABLE} -c
+    "import sysconfig;\
+     print(\
+     sysconfig.get_path(\
+     scheme='deb_system' in sysconfig.get_scheme_names() and 'deb_system' or 'posix_prefix',\
+     name='purelib',\
+     vars=\
+     {'base': '${PYTHON_INSTALL_TEMPLATE}',\
+      'py_version_short': sysconfig.get_config_var('py_version_short')}))"
   OUTPUT_VARIABLE "PYTHON3_INSTDIR"
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 install(FILES
-  ${CMAKE_CURRENT_SOURCE_DIR}/ceph_argparse.py
-  ${CMAKE_CURRENT_SOURCE_DIR}/ceph_daemon.py
+  ceph_argparse.py
+  ceph_daemon.py
   DESTINATION ${PYTHON3_INSTDIR})
 
 if(WITH_MGR)

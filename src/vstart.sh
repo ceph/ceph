@@ -36,13 +36,14 @@ if [ -n "$VSTART_DEST" ]; then
     SRC_PATH=`(cd $SRC_PATH; pwd)`
 
     CEPH_DIR=$SRC_PATH
-    CEPH_BIN=${PWD}/bin
-    CEPH_LIB=${PWD}/lib
+    CEPH_BIN=${CEPH_BIN:-${PWD}/bin}
+    CEPH_LIB=${CEPH_LIB:-${PWD}/lib}
 
     CEPH_CONF_PATH=$VSTART_DEST
     CEPH_DEV_DIR=$VSTART_DEST/dev
     CEPH_OUT_DIR=$VSTART_DEST/out
-    CEPH_ASOK_DIR=$VSTART_DEST/out
+    CEPH_ASOK_DIR=$VSTART_DEST/asok
+    CEPH_OUT_CLIENT_DIR=${CEPH_OUT_CLIENT_DIR:-$CEPH_OUT_DIR}
 fi
 
 get_cmake_variable() {
@@ -128,8 +129,10 @@ fi
 [ -z "$CEPH_DIR" ] && CEPH_DIR="$PWD"
 [ -z "$CEPH_DEV_DIR" ] && CEPH_DEV_DIR="$CEPH_DIR/dev"
 [ -z "$CEPH_OUT_DIR" ] && CEPH_OUT_DIR="$CEPH_DIR/out"
+[ -z "$CEPH_ASOK_DIR" ] && CEPH_ASOK_DIR="$CEPH_DIR/asok"
 [ -z "$CEPH_RGW_PORT" ] && CEPH_RGW_PORT=8000
 [ -z "$CEPH_CONF_PATH" ] && CEPH_CONF_PATH=$CEPH_DIR
+CEPH_OUT_CLIENT_DIR=${CEPH_OUT_CLIENT_DIR:-$CEPH_OUT_DIR}
 
 if [ $CEPH_NUM_OSD -gt 3 ]; then
     OSD_POOL_DEFAULT_SIZE=3
@@ -150,6 +153,7 @@ short=0
 ec=0
 cephadm=0
 parallel=true
+restart=1
 hitset=""
 overwrite_conf=0
 cephx=1 #turn cephx on by default
@@ -164,7 +168,8 @@ ceph_osd=ceph-osd
 rgw_frontend="beast"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
-spdk_enabled=0 #disable SPDK by default
+spdk_enabled=0 # disable SPDK by default
+pmem_enabled=0
 zoned_enabled=0
 io_uring_enabled=0
 with_jaeger=0
@@ -232,6 +237,7 @@ options:
 	--multimds <count> allow multimds with maximum active count
 	--without-dashboard: do not run using mgr dashboard
 	--bluestore-spdk: enable SPDK and with a comma-delimited list of PCI-IDs of NVME device (e.g, 0000:81:00.0)
+	--bluestore-pmem: enable PMEM and with path to a file mapped to PMEM
 	--msgr1: use msgr1 only
 	--msgr2: use msgr2 only
 	--msgr21: use msgr2 and msgr1
@@ -244,9 +250,11 @@ options:
 	--inc-osd: append some more osds into existing vcluster
 	--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]
 	--no-parallel: dont start all OSDs in parallel
+	--no-restart: dont restart process when using ceph-run
 	--jaeger: use jaegertracing for tracing
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
 	--seastore-secondary-des: comma-separated list of secondary blockdevs to use for seastore
+	--crimson-smp: number of cores to use for crimson
 \n
 EOF
 
@@ -285,6 +293,7 @@ parse_secondary_devs() {
     done
 }
 
+crimson_smp=1
 while [ $# -ge 1 ]; do
 case $1 in
     -d | --debug)
@@ -351,6 +360,9 @@ case $1 in
         ;;
     --no-parallel)
         parallel=false
+        ;;
+    --no-restart)
+        restart=0
         ;;
     --valgrind)
         [ -z "$2" ] && usage_exit
@@ -497,10 +509,20 @@ case $1 in
         parse_secondary_devs --seastore-devs "$2"
         shift
         ;;
+    --crimson-smp)
+        crimson_smp=$2
+        shift
+        ;;
     --bluestore-spdk)
         [ -z "$2" ] && usage_exit
         IFS=',' read -r -a bluestore_spdk_dev <<< "$2"
         spdk_enabled=1
+        shift
+        ;;
+    --bluestore-pmem)
+        [ -z "$2" ] && usage_exit
+        bluestore_pmem_file="$2"
+        pmem_enabled=1
         shift
         ;;
     --bluestore-devs)
@@ -575,10 +597,15 @@ run() {
     else
         if [ "$nodaemon" -eq 0 ]; then
             prun "$@"
-        elif [ "$redirect" -eq 0 ]; then
-            prunb ${CEPH_ROOT}/src/ceph-run "$@" -f
         else
-            ( prunb ${CEPH_ROOT}/src/ceph-run "$@" -f ) >$CEPH_OUT_DIR/$type.$num.stdout 2>&1
+            if [ "$restart" -eq 0 ]; then
+                set -- '--no-restart' "$@"
+            fi
+            if [ "$redirect" -eq 0 ]; then
+                prunb ${CEPH_ROOT}/src/ceph-run "$@" -f
+            else
+                ( prunb ${CEPH_ROOT}/src/ceph-run "$@" -f ) >$CEPH_OUT_DIR/$type.$num.stdout 2>&1
+            fi
         fi
     fi
 }
@@ -683,6 +710,7 @@ prepare_conf() {
         debug asok assert abort = true
         $(format_conf "${msgr_conf}")
         $(format_conf "${extra_conf}")
+        $AUTOSCALER_OPTS
 EOF
     if [ "$lockdep" -eq 1 ] ; then
         wconf <<EOF
@@ -715,7 +743,7 @@ EOF
         osd max object namespace len = 64"
     fi
     if [ "$objectstore" == "bluestore" ]; then
-        if [ "$spdk_enabled" -eq 1 ]; then
+        if [ "$spdk_enabled" -eq 1 ] || [ "$pmem_enabled" -eq 1 ]; then
             BLUESTORE_OPTS="        bluestore_block_db_path = \"\"
         bluestore_block_db_size = 0
         bluestore_block_db_create = false
@@ -747,7 +775,7 @@ EOF
     wconf <<EOF
 [client]
         keyring = $keyring_fn
-        log file = $CEPH_OUT_DIR/\$name.\$pid.log
+        log file = $CEPH_OUT_CLIENT_DIR/\$name.\$pid.log
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
 
         ; needed for s3tests
@@ -771,7 +799,7 @@ $DAEMONOPTS
         mgr disabled modules = rook
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
-        cephadm path = $CEPH_ROOT/src/cephadm/cephadm
+        cephadm path = $CEPH_BIN/cephadm
 $DAEMONOPTS
         $(format_conf "${extra_conf}")
 [osd]
@@ -940,8 +968,10 @@ start_osd() {
     do
 	local extra_seastar_args
 	if [ "$ceph_osd" == "crimson-osd" ]; then
-	    # designate a single CPU node $osd for osd.$osd
-	    extra_seastar_args="--smp 1 --cpuset $osd"
+        bottom_cpu=$(( osd * crimson_smp ))
+        top_cpu=$(( bottom_cpu + crimson_smp - 1 ))
+	    # set a single CPU nodes for each osd
+	    extra_seastar_args="--smp $crimson_smp --cpuset $bottom_cpu-$top_cpu"
 	    if [ "$debug" -ne 0 ]; then
 		extra_seastar_args+=" --debug"
 	    fi
@@ -958,8 +988,11 @@ EOF
                 wconf <<EOF
         bluestore_block_path = spdk:${bluestore_spdk_dev[$osd]}
 EOF
+            elif [ "$pmem_enabled" -eq 1 ]; then
+                wconf <<EOF
+        bluestore_block_path = ${bluestore_pmem_file}
+EOF
             fi
-
             rm -rf $CEPH_DEV_DIR/osd$osd || true
             if command -v btrfs > /dev/null; then
                 for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
@@ -991,7 +1024,8 @@ EOF
             echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
             ceph_adm osd new $uuid -i $CEPH_DEV_DIR/osd$osd/new.json
             rm $CEPH_DEV_DIR/osd$osd/new.json
-            prun $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid $extra_seastar_args
+            prun $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid $extra_seastar_args \
+                2>&1 | tee $CEPH_OUT_DIR/osd-mkfs.$osd.log
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
             cat > $key_fn<<EOF
@@ -1001,6 +1035,9 @@ EOF
         fi
         echo start osd.$osd
         local osd_pid
+        echo 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd \
+            $extra_seastar_args $extra_osd_args \
+            -i $osd $ARGS $COSD_ARGS
         run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd \
             $extra_seastar_args $extra_osd_args \
             -i $osd $ARGS $COSD_ARGS &
@@ -1303,6 +1340,12 @@ else
         debug ms = 1'
 fi
 
+# Crimson doesn't support PG merge/split yet.
+if [ "$ceph_osd" == "crimson-osd" ]; then
+    AUTOSCALER_OPTS='
+        osd_pool_default_pg_autoscale_mode = off'
+fi
+
 if [ -n "$MON_ADDR" ]; then
     CMON_ARGS=" -m "$MON_ADDR
     COSD_ARGS=" -m "$MON_ADDR
@@ -1329,6 +1372,7 @@ fi
 [ -d $CEPH_ASOK_DIR ] || mkdir -p $CEPH_ASOK_DIR
 [ -d $CEPH_OUT_DIR  ] || mkdir -p $CEPH_OUT_DIR
 [ -d $CEPH_DEV_DIR  ] || mkdir -p $CEPH_DEV_DIR
+[ -d $CEPH_OUT_CLIENT_DIR ] || mkdir -p $CEPH_OUT_CLIENT_DIR
 if [ $inc_osd_num -eq 0 ]; then
     $SUDO find "$CEPH_OUT_DIR" -type f -delete
 fi
@@ -1566,7 +1610,7 @@ do_rgw_create_users()
         --access-key ABCDEFGHIJKLMNOPQRST \
         --secret abcdefghijklmnopqrstuvwxyzabcdefghijklmn \
         --display-name youruseridhere \
-        --email s3@example.com -c $conf_fn > /dev/null
+        --email s3@example.com --caps="user-policy=*" -c $conf_fn > /dev/null
     $CEPH_BIN/radosgw-admin user create \
         --uid 56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234 \
         --access-key NOPQRSTUVWXYZABCDEFG \
@@ -1747,8 +1791,11 @@ echo ""
     echo "export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON\$PYTHONPATH"
     echo "export LD_LIBRARY_PATH=$CEPH_LIB:\$LD_LIBRARY_PATH"
     echo "export PATH=$CEPH_DIR/bin:\$PATH"
-    echo "export CEPH_CONF=$conf_fn"
-    echo "export CEPH_KEYRING=$keyring_fn"
+
+    if [ "$CEPH_DIR" != "$PWD" ]; then
+        echo "export CEPH_CONF=$conf_fn"
+        echo "export CEPH_KEYRING=$keyring_fn"
+    fi
 
     if [ -n "$CEPHFS_SHELL" ]; then
         echo "alias cephfs-shell=$CEPHFS_SHELL"

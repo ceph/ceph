@@ -6,23 +6,29 @@ Bucket Notifications
 
 .. contents::
 
-Bucket notifications provide a mechanism for sending information out of the radosgw when certain events are happening on the bucket.
-Currently, notifications could be sent to: HTTP, AMQP0.9.1 and Kafka endpoints.
+Bucket notifications provide a mechanism for sending information out of radosgw
+when certain events happen on the bucket. Notifications can be sent to HTTP
+endpoints, AMQP0.9.1 endpoints, and Kafka endpoints.
 
-Note, that if the events should be stored in Ceph, in addition, or instead of being pushed to an endpoint,
-the `PubSub Module`_ should be used instead of the bucket notification mechanism.
+The `PubSub Module`_ (and *not* the bucket-notification mechanism) should be
+used for events stored in Ceph. 
 
-A user can create different topics. A topic entity is defined by its name and is per tenant. A
-user can only associate its topics (via notification configuration) with buckets it owns.
+A user can create topics. A topic entity is defined by its name and is "per
+tenant". A user can associate its topics (via notification configuration) only
+with buckets it owns.
 
-In order to send notifications for events for a specific bucket, a notification entity needs to be created. A
-notification can be created on a subset of event types, or for all event types (default).
-The notification may also filter out events based on prefix/suffix and/or regular expression matching of the keys. As well as,
-on the metadata attributes attached to the object, or the object tags.
-There can be multiple notifications for any specific topic, and the same topic could be used for multiple notifications.
+A notification entity must be created in order to send event notifications for
+a specific bucket. A notification entity can be created either for a subset
+of event types or for all event types (which is the default). The
+notification may also filter out events based on matches of the prefixes and
+suffixes of (1) the keys, (2) the metadata attributes attached to the object,
+or (3) the object tags. Regular-expression matching can also be used on these
+to create filters. There can be multiple notifications for any specific topic,
+and the same topic can used for multiple notifications.
 
-REST API has been defined to provide configuration and control interfaces for the bucket notification
-mechanism. This API is similar to the one defined as the S3-compatible API of the pubsub sync module.
+REST API has been defined so as to provide configuration and control interfaces
+for the bucket notification mechanism. This API is similar to the one defined
+as the S3-compatible API of the `PubSub Module`_.
 
 .. toctree::
    :maxdepth: 1
@@ -38,12 +44,12 @@ Notifications may be sent synchronously, as part of the operation that triggered
 In this mode, the operation is acked only after the notification is sent to the topic's configured endpoint, which means that the
 round trip time of the notification is added to the latency of the operation itself.
 
-.. note:: The original triggering operation will still be considered as successful even if the notification fail with an error, cannot be deliverd or times out
+.. note:: The original triggering operation will still be considered as successful even if the notification fail with an error, cannot be delivered or times out
 
 Notifications may also be sent asynchronously. They will be committed into persistent storage and then asynchronously sent to the topic's configured endpoint.
 In this case, the only latency added to the original operation is of committing the notification to persistent storage.
 
-.. note:: If the notification fail with an error, cannot be deliverd or times out, it will be retried until successfully acked
+.. note:: If the notification fail with an error, cannot be delivered or times out, it will be retried until successfully acked
 
 .. tip:: To minimize the added latency in case of asynchronous notifications, it is recommended to place the "log" pool on fast media
 
@@ -95,17 +101,26 @@ Topics
 
 .. note::
 
-    In all topic actions, the parameters are URL encoded, and sent in the message body using ``application/x-www-form-urlencoded`` content type
+    In all topic actions, the parameters are URL-encoded and sent in the
+    message body using the ``application/x-www-form-urlencoded`` content type.
+   
 
 Create a Topic
 ``````````````
 
-This will create a new topic. The topic should be provided with push endpoint parameters that would be used later
-when a notification is created.
-Upon a successful request, the response will include the topic ARN that could be later used to reference this topic in the notification request.
-To update a topic, use the same command used for topic creation, with the topic name of an existing topic and different endpoint values.
+This creates a new topic. Provide the topic with push endpoint parameters,
+which will be used later when a notification is created. A response is
+generated. A successful response includes the the topic's `ARN
+<https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_
+(the "Amazon Resource Name", a unique identifier used to reference the topic).
+To update a topic, use the same command that you used to create it (but use the
+name of an existing topic and different endpoint values).
 
-.. tip:: Any notification already associated with the topic needs to be re-created for the topic update to take effect
+.. tip:: Any notification already associated with the topic must be re-created
+   for the topic update to take effect.
+
+.. note:: For rabbitmq, ``push-endpoint`` (with a hyphen in the middle) must be
+   changed to ``push_endpoint`` (with an underscore in the middle).
 
 ::
 
@@ -122,6 +137,7 @@ To update a topic, use the same command used for topic creation, with the topic 
    [&Attributes.entry.7.key=OpaqueData&Attributes.entry.7.value=<opaque data>]
    [&Attributes.entry.8.key=push-endpoint&Attributes.entry.8.value=<endpoint>]
    [&Attributes.entry.9.key=persistent&Attributes.entry.9.value=true|false]
+   [&Attributes.entry.10.key=cloudevents&Attributes.entry.10.value=true|false]
 
 Request parameters:
 
@@ -134,6 +150,7 @@ Request parameters:
  - URI: ``http[s]://<fqdn>[:<port]``
  - port defaults to: 80/443 for HTTP/S accordingly
  - verify-ssl: indicate whether the server certificate is validated by the client or not ("true" by default)
+ - cloudevents: indicate whether the HTTP header should contain attributes according to the `S3 CloudEvents Spec`_ ("false" by default)
 
 - AMQP0.9.1 endpoint
 
@@ -151,7 +168,7 @@ Request parameters:
   - "broker": message is considered "delivered" if acked by broker (default)
   - "routable": message is considered "delivered" if broker can route to a consumer
 
-.. tip:: The topic-name (see :ref:`radosgw-create-a-topic`) is used for the AMQP topic ("routing key" for a topic exchange)
+.. tip:: The topic-name (see :ref:`radosgw-create-a-topic`) is used for the AMQP topic ("routing key" for a topic exchange).
 
 - Kafka endpoint
 
@@ -383,7 +400,7 @@ pushed or pulled using the pubsub sync module. For example:
        {
            "eventVersion":"2.1",
            "eventSource":"ceph:s3",
-           "awsRegion":"us-east-1",
+           "awsRegion":"zonegroup1",
            "eventTime":"2019-11-22T13:47:35.124724Z",
            "eventName":"ObjectCreated:Put",
            "userIdentity":{
@@ -404,7 +421,7 @@ pushed or pulled using the pubsub sync module. For example:
                    "ownerIdentity":{
                        "principalId":"tester"
                    },
-                   "arn":"arn:aws:s3:us-east-1::mybucket1",
+                   "arn":"arn:aws:s3:zonegroup1::mybucket1",
                    "id":"503a4c37-85eb-47cd-8681-2817e80b4281.5332.38"
                },
                "object":{
@@ -450,3 +467,4 @@ pushed or pulled using the pubsub sync module. For example:
 .. _S3 Notification Compatibility: ../s3-notification-compatibility
 .. _AWS Create Topic: https://docs.aws.amazon.com/sns/latest/api/API_CreateTopic.html
 .. _Bucket Operations: ../s3/bucketops
+.. _S3 CloudEvents Spec: https://github.com/cloudevents/spec/blob/main/cloudevents/adapters/aws-s3.md

@@ -5,6 +5,7 @@
 
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_future.hh>
+#include <seastar/util/later.hh>
 
 #include "crimson/common/gated.h"
 #include "crimson/common/log.h"
@@ -34,11 +35,18 @@ class Protocol {
   // Reentrant closing
   void close(bool dispatch_reset, std::optional<std::function<void()>> f_accept_new=std::nullopt);
   seastar::future<> close_clean(bool dispatch_reset) {
-    close(dispatch_reset);
-    // it can happen if close_clean() is called inside Dispatcher::ms_handle_reset()
-    // which will otherwise result in deadlock
-    assert(close_ready.valid());
-    return close_ready.get_future();
+    // yield() so that close(dispatch_reset) can be called *after*
+    // close_clean() is applied to all connections in a container using
+    // seastar::parallel_for_each(). otherwise, we could erase a connection in
+    // the container when seastar::parallel_for_each() is still iterating in
+    // it. that'd lead to a segfault.
+    return seastar::yield().then([this, dispatch_reset] {
+      close(dispatch_reset);
+      // it can happen if close_clean() is called inside Dispatcher::ms_handle_reset()
+      // which will otherwise result in deadlock
+      assert(close_ready.valid());
+      return close_ready.get_future();
+    });
   }
 
   virtual void start_connect(const entity_addr_t& peer_addr,

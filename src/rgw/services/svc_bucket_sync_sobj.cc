@@ -303,7 +303,6 @@ class RGWSI_BS_SObj_HintIndexObj
     RGWSI_SysObj *sysobj;
   } svc;
 
-  RGWSysObjectCtx obj_ctx;
   rgw_raw_obj obj;
   RGWSysObj sysobj;
 
@@ -469,9 +468,8 @@ public:
 
   RGWSI_BS_SObj_HintIndexObj(RGWSI_SysObj *_sysobj_svc,
                              const rgw_raw_obj& _obj) : cct(_sysobj_svc->ctx()),
-                                                        obj_ctx(_sysobj_svc->init_obj_ctx()),
                                                         obj(_obj),
-                                                        sysobj(obj_ctx.get_obj(obj))
+                                                        sysobj(_sysobj_svc->get_obj(obj))
   {
     svc.sysobj = _sysobj_svc;
   }

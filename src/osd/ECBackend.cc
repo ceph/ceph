@@ -381,7 +381,7 @@ void ECBackend::handle_recovery_push(
     if ((get_parent()->pgb_is_primary())) {
       ceph_assert(recovery_ops.count(op.soid));
       ceph_assert(recovery_ops[op.soid].obc);
-      if (get_parent()->pg_is_repair())
+      if (get_parent()->pg_is_repair() || is_repair)
         get_parent()->inc_osd_stat_repaired();
       get_parent()->on_local_recover(
 	op.soid,
@@ -951,7 +951,6 @@ void ECBackend::handle_sub_write(
   jspan span;
   if (msg) {
     msg->mark_event("sub_op_started");
-    span = tracing::osd::tracer.add_span(__func__, msg->osd_parent_span);
   }
   trace.event("handle_sub_write");
 
@@ -1553,7 +1552,6 @@ void ECBackend::submit_transaction(
   jspan span;
   if (client_op) {
     op->trace = client_op->pg_trace;
-    span = tracing::osd::tracer.add_span("ECBackend::submit_transaction", client_op->osd_parent_span);
   }
   dout(10) << __func__ << ": op " << *op << " starting" << dendl;
   start_rmw(op, std::move(t));
@@ -2126,10 +2124,6 @@ bool ECBackend::try_reads_to_commit()
       messages.push_back(std::make_pair(i->osd, r));
     }
   }
-  jspan span;
-  if (op->client_op) {
-    span = tracing::osd::tracer.add_span("EC sub write", op->client_op->osd_parent_span);
-  }
 
   if (!messages.empty()) {
     get_parent()->send_message_osd_cluster(messages, get_osdmap_epoch());
@@ -2359,8 +2353,8 @@ struct CallClientContexts :
       pair<uint64_t, uint64_t> adjusted =
 	ec->sinfo.offset_len_to_stripe_bounds(
 	  make_pair(read.get<0>(), read.get<1>()));
-      ceph_assert(res.returned.front().get<0>() == adjusted.first &&
-	     res.returned.front().get<1>() == adjusted.second);
+      ceph_assert(res.returned.front().get<0>() == adjusted.first);
+      ceph_assert(res.returned.front().get<1>() == adjusted.second);
       map<int, bufferlist> to_decode;
       bufferlist bl;
       for (map<pg_shard_t, bufferlist>::iterator j =

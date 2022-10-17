@@ -20,22 +20,29 @@ struct ephemeral_config_t {
   size_t size = 0;
   size_t block_size = 0;
   size_t segment_size = 0;
-  magic_t magic = 0;
-  device_type_t dtype = device_type_t::NONE;
-  device_id_t id = 0;
+
+  void validate() const {
+    ceph_assert_always(size > 0);
+    ceph_assert_always(size <= DEVICE_OFF_MAX);
+    ceph_assert_always(segment_size > 0);
+    ceph_assert_always(segment_size <= SEGMENT_OFF_MAX);
+    ceph_assert_always(size / segment_size > 0);
+    ceph_assert_always(size / segment_size <= DEVICE_SEGMENT_ID_MAX);
+  }
 };
 
 constexpr ephemeral_config_t DEFAULT_TEST_EPHEMERAL = {
   1 << 30,
   4 << 10,
-  8 << 20,
-  0xabcd,
-  device_type_t::SEGMENTED,
-  0
+  8 << 20
 };
 
 std::ostream &operator<<(std::ostream &, const ephemeral_config_t &);
+
 EphemeralSegmentManagerRef create_test_ephemeral();
+
+device_config_t get_ephemeral_device_config(
+    std::size_t index, std::size_t num_devices);
 
 class EphemeralSegment final : public Segment {
   friend class EphemeralSegmentManager;
@@ -50,6 +57,7 @@ public:
   segment_off_t get_write_ptr() const final { return write_pointer; }
   close_ertr::future<> close() final;
   write_ertr::future<> write(segment_off_t offset, ceph::bufferlist bl) final;
+  write_ertr::future<> advance_wp(segment_off_t offset) final;
 
   ~EphemeralSegment() {}
 };
@@ -59,7 +67,7 @@ class EphemeralSegmentManager final : public SegmentManager {
   using segment_state_t = Segment::segment_state_t;
 
   const ephemeral_config_t config;
-  std::optional<seastore_meta_t> meta;
+  std::optional<device_config_t> device_config;
 
   size_t get_offset(paddr_t addr) {
     auto& seg_addr = addr.as_seg_paddr();
@@ -73,35 +81,29 @@ class EphemeralSegmentManager final : public SegmentManager {
 
   Segment::close_ertr::future<> segment_close(segment_id_t id);
 
-  secondary_device_set_t sec_device_set;
-
 public:
   EphemeralSegmentManager(
     ephemeral_config_t config)
-    : config(config) {}
+    : config(config) {
+    config.validate();
+  }
+
   ~EphemeralSegmentManager();
 
   close_ertr::future<> close() final {
     return close_ertr::now();
   }
 
-  device_id_t get_device_id() const {
-    return config.id;
+  device_id_t get_device_id() const final {
+    assert(device_config);
+    return device_config->spec.id;
   }
 
-  using init_ertr = crimson::errorator<
-    crimson::ct_error::enospc,
-    crimson::ct_error::invarg,
-    crimson::ct_error::erange>;
-  init_ertr::future<> init();
-
-  mount_ret mount() {
+  mount_ret mount() final {
     return mount_ertr::now();
   }
 
-  mkfs_ret mkfs(segment_manager_config_t) {
-    return mkfs_ertr::now();
-  }
+  mkfs_ret mkfs(device_config_t) final;
 
   open_ertr::future<SegmentRef> open(segment_id_t id) final;
 
@@ -112,10 +114,10 @@ public:
     size_t len,
     ceph::bufferptr &out) final;
 
-  size_t get_size() const final {
+  size_t get_available_size() const final {
     return config.size;
   }
-  segment_off_t get_block_size() const final {
+  extent_len_t get_block_size() const final {
     return config.block_size;
   }
   segment_off_t get_segment_size() const final {
@@ -123,21 +125,23 @@ public:
   }
 
   const seastore_meta_t &get_meta() const final {
-    assert(meta);
-    return *meta;
+    assert(device_config);
+    return device_config->meta;
   }
 
   secondary_device_set_t& get_secondary_devices() final {
-    return sec_device_set;
-  }
-
-  device_spec_t get_device_spec() const final {
-    return {config.magic, config.dtype, config.id};
+    assert(device_config);
+    return device_config->secondary_devices;
   }
 
   magic_t get_magic() const final {
-    return config.magic;
+    return device_config->spec.magic;
   }
+
+  using init_ertr = crimson::errorator<
+    crimson::ct_error::enospc,
+    crimson::ct_error::invarg>;
+  init_ertr::future<> init();
 
   void remount();
 

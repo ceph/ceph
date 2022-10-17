@@ -326,7 +326,7 @@ For example::
 
         $ rbd --cluster site-a mirror image snapshot image-pool/image-1
 
-By default only ``3`` mirror-snapshots will be created per-image. The most
+By default up to ``5`` mirror-snapshots will be created per-image. The most
 recent mirror-snapshot is automatically pruned if the limit is reached.
 The limit can be overridden via the ``rbd_mirroring_max_mirroring_snapshots``
 configuration option if required. Additionally, mirror-snapshots are

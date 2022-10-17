@@ -70,10 +70,7 @@ extern "C" void mount_ceph_get_config_info(const char *config_file,
 	continue;
     }
 
-    std::string addr;
-    addr += eaddr.ip_only_to_str();
-    addr += ":";
-    addr += std::to_string(eaddr.get_port());
+    std::string addr = eaddr.ip_n_port_to_str();
     /* If this will overrun cci_mons, stop here */
     if (monaddrs.length() + 1 + addr.length() + 1 > sizeof(cci->cci_mons))
       break;

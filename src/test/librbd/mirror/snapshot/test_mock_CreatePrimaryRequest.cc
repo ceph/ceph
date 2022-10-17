@@ -178,7 +178,7 @@ public:
                            auto it = mock_image_ctx.snap_info.find(snap_id);
                            ASSERT_NE(it, mock_image_ctx.snap_info.end());
                            auto info =
-                             boost::get<cls::rbd::MirrorSnapshotNamespace>(
+                             std::get_if<cls::rbd::MirrorSnapshotNamespace>(
                                &it->second.snap_namespace);
                            ASSERT_NE(nullptr, info);
                            ASSERT_EQ(is_linked, info->mirror_peer_uuids.erase(
@@ -293,7 +293,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkPeer) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ictx->config.set_val("conf_rbd_mirroring_max_mirroring_snapshots", "3");
+  ictx->config.set_val("rbd_mirroring_max_mirroring_snapshots", "3");
 
   MockTestImageCtx mock_image_ctx(*ictx);
   for (int i = 0; i < 3; i++) {
@@ -328,7 +328,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkNoPeer) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ictx->config.set_val("conf_rbd_mirroring_max_mirroring_snapshots", "3");
+  ictx->config.set_val("rbd_mirroring_max_mirroring_snapshots", "3");
 
   MockTestImageCtx mock_image_ctx(*ictx);
   cls::rbd::MirrorSnapshotNamespace ns{
@@ -363,7 +363,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkMultiplePeers) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ictx->config.set_val("conf_rbd_mirroring_max_mirroring_snapshots", "3");
+  ictx->config.set_val("rbd_mirroring_max_mirroring_snapshots", "3");
 
   MockTestImageCtx mock_image_ctx(*ictx);
   for (int i = 0; i < 3; i++) {

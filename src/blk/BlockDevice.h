@@ -29,6 +29,7 @@
 #include "acconfig.h"
 #include "common/ceph_mutex.h"
 #include "include/common_fwd.h"
+#include "extblkdev/ExtBlkDevInterface.h"
 
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
 #include "aio/aio.h"
@@ -73,6 +74,10 @@ std::ostream& operator<<(std::ostream& os, const blk_access_mode_t buffered);
 
 /// track in-flight io
 struct IOContext {
+  enum {
+    FLAG_DONT_CACHE = 1
+  };
+
 private:
   ceph::mutex lock = ceph::make_mutex("IOContext::lock");
   ceph::condition_variable cond;
@@ -94,6 +99,7 @@ public:
   std::atomic_int num_pending = {0};
   std::atomic_int num_running = {0};
   bool allow_eio;
+  uint32_t flags = 0;               // FLAG_*
 
   explicit IOContext(CephContext* cct, void *p, bool allow_eio = false)
     : cct(cct), priv(p), allow_eio(allow_eio)
@@ -130,6 +136,10 @@ public:
 
   int get_return_value() const {
     return r;
+  }
+
+  bool skip_cache() const {
+    return flags & FLAG_DONT_CACHE;
   }
 };
 
@@ -228,8 +238,8 @@ public:
   uint64_t get_optimal_io_size() const { return optimal_io_size; }
 
   /// hook to provide utilization of thinly-provisioned device
-  virtual bool get_thin_utilization(uint64_t *total, uint64_t *avail) const {
-    return false;
+  virtual int get_ebd_state(ExtBlkDevState &state) const {
+    return -ENOENT;
   }
 
   virtual int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const = 0;
@@ -285,6 +295,8 @@ public:
   virtual int invalidate_cache(uint64_t off, uint64_t len) = 0;
   virtual int open(const std::string& path) = 0;
   virtual void close() = 0;
+
+  struct hugepaged_raw_marker_t {};
 
 protected:
   bool is_valid_io(uint64_t off, uint64_t len) const;

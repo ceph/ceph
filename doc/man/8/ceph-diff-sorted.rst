@@ -27,7 +27,7 @@ containing billions of lines) that the standard `diff` tool cannot
 handle efficiently. Knowing that the lines are sorted allows this to
 be done efficiently with minimal memory overhead.
 
-The sorting of each file needs to be done lexcially. Most POSIX
+The sorting of each file needs to be done lexically. Most POSIX
 systems use the *LANG* environment variable to determine the `sort`
 tool's sorting order. To sort lexically we would need something such
 as:

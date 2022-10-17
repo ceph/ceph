@@ -470,7 +470,7 @@ TEST(LibCephFS, DirLs) {
     struct dirent rdent;
     struct ceph_statx stx;
     int len = ceph_readdirplus_r(cmount, ls_dir, &rdent, &stx,
-				 CEPH_STATX_SIZE, AT_NO_ATTR_SYNC, NULL);
+				 CEPH_STATX_SIZE, AT_STATX_DONT_SYNC, NULL);
     if (len == 0)
       break;
     ASSERT_EQ(len, 1);
@@ -1811,13 +1811,13 @@ TEST(LibCephFS, LazyStatx) {
 
   /*
    * Now sleep, do a chmod on the first client and the see whether we get a
-   * different ctime with a statx that uses AT_NO_ATTR_SYNC
+   * different ctime with a statx that uses AT_STATX_DONT_SYNC
    */
   sleep(1);
   stx.stx_mode = 0644;
   ASSERT_EQ(ceph_ll_setattr(cmount1, file1, &stx, CEPH_SETATTR_MODE, perms1), 0);
 
-  ASSERT_EQ(ceph_ll_getattr(cmount2, file2, &stx, CEPH_STATX_CTIME, AT_NO_ATTR_SYNC, perms2), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount2, file2, &stx, CEPH_STATX_CTIME, AT_STATX_DONT_SYNC, perms2), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_CTIME);
   ASSERT_TRUE(stx.stx_ctime.tv_sec == old_ctime.tv_sec &&
 	      stx.stx_ctime.tv_nsec == old_ctime.tv_nsec);
@@ -2385,85 +2385,6 @@ TEST(LibCephFS, SnapXattrs) {
   int found = 0;
   while (len > 0) {
     if (strcmp(p, "ceph.snap.btime") == 0)
-      found++;
-    len -= strlen(p) + 1;
-    p += strlen(p) + 1;
-  }
-  ASSERT_EQ(found, 0);
-
-  ceph_shutdown(cmount);
-}
-
-TEST(LibCephFS, SnapQuota) {
-  struct ceph_mount_info *cmount;
-  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
-  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
-  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
-  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
-
-  char test_snap_dir_quota_xattr[256];
-  char test_snap_subdir_quota_xattr[256];
-  char test_snap_subdir_noquota_xattr[256];
-  char xattrk[128];
-  char xattrv[128];
-  char c_temp[PATH_MAX];
-  char gxattrv[128];
-  int xbuflen = sizeof(gxattrv);
-  pid_t mypid = getpid();
-
-  // create dir and set quota
-  sprintf(test_snap_dir_quota_xattr, "test_snap_dir_quota_xattr_%d", mypid);
-  ASSERT_EQ(0, ceph_mkdir(cmount, test_snap_dir_quota_xattr, 0777));
-
-  sprintf(xattrk, "ceph.quota.max_bytes");
-  sprintf(xattrv, "65536");
-  ASSERT_EQ(0, ceph_setxattr(cmount, test_snap_dir_quota_xattr, xattrk, (void *)xattrv, 5, XATTR_CREATE));
-
-  // create subdir and set quota
-  sprintf(test_snap_subdir_quota_xattr, "test_snap_dir_quota_xattr_%d/subdir_quota", mypid);
-  ASSERT_EQ(0, ceph_mkdirs(cmount, test_snap_subdir_quota_xattr, 0777));
-
-  sprintf(xattrk, "ceph.quota.max_bytes");
-  sprintf(xattrv, "32768");
-  ASSERT_EQ(0, ceph_setxattr(cmount, test_snap_subdir_quota_xattr, xattrk, (void *)xattrv, 5, XATTR_CREATE));
-
-  // create subdir with no quota
-  sprintf(test_snap_subdir_noquota_xattr, "test_snap_dir_quota_xattr_%d/subdir_noquota", mypid);
-  ASSERT_EQ(0, ceph_mkdirs(cmount, test_snap_subdir_noquota_xattr, 0777));
-
-  // snapshot dir
-  sprintf(c_temp, "/.snap/test_snap_dir_quota_xattr_snap_%d", mypid);
-  ASSERT_EQ(0, ceph_mkdirs(cmount, c_temp, 0777));
-
-  // check dir quota under snap
-  sprintf(c_temp, "/.snap/test_snap_dir_quota_xattr_snap_%d/test_snap_dir_quota_xattr_%d", mypid, mypid);
-  int alen = ceph_getxattr(cmount, c_temp, "ceph.quota.max_bytes", (void *)gxattrv, xbuflen);
-  ASSERT_LT(0, alen);
-  ASSERT_LT(alen, xbuflen);
-  gxattrv[alen] = '\0';
-  ASSERT_STREQ(gxattrv, "65536");
-
-  // check subdir quota under snap
-  sprintf(c_temp, "/.snap/test_snap_dir_quota_xattr_snap_%d/test_snap_dir_quota_xattr_%d/subdir_quota", mypid, mypid);
-  alen = ceph_getxattr(cmount, c_temp, "ceph.quota.max_bytes", (void *)gxattrv, xbuflen);
-  ASSERT_LT(0, alen);
-  ASSERT_LT(alen, xbuflen);
-  gxattrv[alen] = '\0';
-  ASSERT_STREQ(gxattrv, "32768");
-
-  // ensure subdir noquota xattr under snap
-  sprintf(c_temp, "/.snap/test_snap_dir_quota_xattr_snap_%d/test_snap_dir_quota_xattr_%d/subdir_noquota", mypid, mypid);
-  EXPECT_EQ(-ENODATA, ceph_getxattr(cmount, c_temp, "ceph.quota.max_bytes", (void *)gxattrv, xbuflen));
-
-  // listxattr() shouldn't return ceph.quota.max_bytes vxattr
-  sprintf(c_temp, "/.snap/test_snap_dir_quota_xattr_snap_%d/test_snap_dir_quota_xattr_%d", mypid, mypid);
-  char xattrlist[512];
-  int len = ceph_listxattr(cmount, c_temp, xattrlist, sizeof(xattrlist));
-  ASSERT_GE(sizeof(xattrlist), (size_t)len);
-  char *p = xattrlist;
-  int found = 0;
-  while (len > 0) {
-    if (strcmp(p, "ceph.quota.max_bytes") == 0)
       found++;
     len -= strlen(p) + 1;
     p += strlen(p) + 1;
@@ -3573,6 +3494,101 @@ TEST(LibCephFS, SetMountTimeout) {
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_set_mount_timeout(cmount, 5));
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+  ceph_shutdown(cmount);
+}
 
+TEST(LibCephFS, FsCrypt) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_xattr_file[NAME_MAX];
+  sprintf(test_xattr_file, "test_fscrypt_%d", getpid());
+  int fd = ceph_open(cmount, test_xattr_file, O_RDWR|O_CREAT, 0666);
+  ASSERT_GT(fd, 0);
+
+  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "ceph.fscrypt.auth", "foo", 3, CEPH_XATTR_CREATE));
+  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "ceph.fscrypt.file", "foo", 3, CEPH_XATTR_CREATE));
+
+  char buf[64];
+  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.fscrypt.auth", buf, sizeof(buf)));
+  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.fscrypt.file", buf, sizeof(buf)));
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  fd = ceph_open(cmount, test_xattr_file, O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.fscrypt.auth", buf, sizeof(buf)));
+  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.fscrypt.file", buf, sizeof(buf)));
+
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, SnapdirAttrs) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char dir_name[128];
+  char dir_path[256];
+  char snap_dir_path[512];
+
+  pid_t mypid = getpid();
+  sprintf(dir_name, "dir_%d", mypid);
+  sprintf(dir_path, "/%s", dir_name);
+  sprintf(snap_dir_path, "%s/.snap", dir_path);
+
+  Inode *dir, *root;
+  struct ceph_statx stx_dir;
+  struct ceph_statx stx_snap_dir;
+  UserPerm *perms = ceph_mount_perms(cmount);
+
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &root), 0);
+  ASSERT_EQ(ceph_ll_mkdir(cmount, root, dir_name, 0755, &dir, &stx_dir, 0, 0, perms), 0);
+
+  ASSERT_EQ(ceph_statx(cmount, dir_path, &stx_dir,
+                       CEPH_STATX_MTIME|CEPH_STATX_ATIME|CEPH_STATX_MODE|CEPH_STATX_MODE|CEPH_STATX_GID|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir,
+                       CEPH_STATX_MTIME|CEPH_STATX_ATIME|CEPH_STATX_MODE|CEPH_STATX_MODE|CEPH_STATX_GID|CEPH_STATX_VERSION, 0), 0);
+
+  ASSERT_EQ(utime_t(stx_dir.stx_atime), utime_t(stx_snap_dir.stx_atime));
+  ASSERT_EQ(utime_t(stx_dir.stx_mtime), utime_t(stx_snap_dir.stx_mtime));
+  ASSERT_EQ(stx_dir.stx_mode, stx_snap_dir.stx_mode);
+  ASSERT_EQ(stx_dir.stx_uid, stx_snap_dir.stx_uid);
+  ASSERT_EQ(stx_dir.stx_gid, stx_snap_dir.stx_gid);
+  ASSERT_EQ(stx_dir.stx_version, stx_snap_dir.stx_version);
+
+  // chown  -- for this we need to be "root"
+  UserPerm *rootcred = ceph_userperm_new(0, 0, 0, NULL);
+  ASSERT_TRUE(rootcred);
+  stx_dir.stx_uid++;
+  stx_dir.stx_gid++;
+  ASSERT_EQ(ceph_ll_setattr(cmount, dir, &stx_dir, CEPH_SETATTR_UID|CEPH_SETATTR_GID, rootcred), 0);
+
+  memset(&stx_dir, 0, sizeof(stx_dir));
+  memset(&stx_snap_dir, 0, sizeof(stx_snap_dir));
+
+  ASSERT_EQ(ceph_statx(cmount, dir_path, &stx_dir,
+                       CEPH_STATX_MTIME|CEPH_STATX_ATIME|CEPH_STATX_MODE|CEPH_STATX_MODE|CEPH_STATX_GID|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir,
+                       CEPH_STATX_MTIME|CEPH_STATX_ATIME|CEPH_STATX_MODE|CEPH_STATX_MODE|CEPH_STATX_GID|CEPH_STATX_VERSION, 0), 0);
+
+  ASSERT_EQ(utime_t(stx_dir.stx_atime), utime_t(stx_snap_dir.stx_atime));
+  ASSERT_EQ(utime_t(stx_dir.stx_mtime), utime_t(stx_snap_dir.stx_mtime));
+  ASSERT_EQ(stx_dir.stx_mode, stx_snap_dir.stx_mode);
+  ASSERT_EQ(stx_dir.stx_uid, stx_snap_dir.stx_uid);
+  ASSERT_EQ(stx_dir.stx_gid, stx_snap_dir.stx_gid);
+  ASSERT_EQ(stx_dir.stx_version, stx_snap_dir.stx_version);
+
+  ASSERT_EQ(ceph_ll_rmdir(cmount, root, dir_name, rootcred), 0);
+  ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
 }

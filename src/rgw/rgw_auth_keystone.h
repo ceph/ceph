@@ -30,7 +30,8 @@ class TokenEngine : public rgw::auth::Engine {
   using result_t = rgw::auth::Engine::result_t;
   using token_envelope_t = rgw::keystone::TokenEnvelope;
 
-  const rgw::auth::TokenExtractor* const extractor;
+  const rgw::auth::TokenExtractor* const auth_token_extractor;
+  const rgw::auth::TokenExtractor* const service_token_extractor;
   const rgw::auth::RemoteApplier::Factory* const apl_factory;
   rgw::keystone::Config& config;
   rgw::keystone::TokenCache& token_cache;
@@ -39,7 +40,7 @@ class TokenEngine : public rgw::auth::Engine {
   bool is_applicable(const std::string& token) const noexcept;
 
   boost::optional<token_envelope_t>
-  get_from_keystone(const DoutPrefixProvider* dpp, const std::string& token) const;
+  get_from_keystone(const DoutPrefixProvider* dpp, const std::string& token, bool allow_expired) const;
 
   acl_strategy_t get_acl_strategy(const token_envelope_t& token) const;
   auth_info_t get_creds_info(const token_envelope_t& token,
@@ -47,16 +48,19 @@ class TokenEngine : public rgw::auth::Engine {
                             ) const noexcept;
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string& token,
+                        const std::string& service_token,
                         const req_state* s) const;
 
 public:
   TokenEngine(CephContext* const cct,
-              const rgw::auth::TokenExtractor* const extractor,
+              const rgw::auth::TokenExtractor* const auth_token_extractor,
+              const rgw::auth::TokenExtractor* const service_token_extractor,
               const rgw::auth::RemoteApplier::Factory* const apl_factory,
               rgw::keystone::Config& config,
               rgw::keystone::TokenCache& token_cache)
     : cct(cct),
-      extractor(extractor),
+      auth_token_extractor(auth_token_extractor),
+      service_token_extractor(service_token_extractor),
       apl_factory(apl_factory),
       config(config),
       token_cache(token_cache) {
@@ -68,7 +72,7 @@ public:
 
   result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s,
 			optional_yield y) const override {
-    return authenticate(dpp, extractor->get_token(s), s);
+    return authenticate(dpp, auth_token_extractor->get_token(s), service_token_extractor->get_token(s), s);
   }
 }; /* class TokenEngine */
 
@@ -138,7 +142,8 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
   /* Helper methods. */
   acl_strategy_t get_acl_strategy(const token_envelope_t& token) const;
   auth_info_t get_creds_info(const token_envelope_t& token,
-                             const std::vector<std::string>& admin_roles
+                             const std::vector<std::string>& admin_roles,
+                             const std::string& access_key_id
                             ) const noexcept;
   std::pair<boost::optional<token_envelope_t>, int>
   get_from_keystone(const DoutPrefixProvider* dpp,

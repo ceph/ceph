@@ -4,8 +4,10 @@
 #ifndef CEPH_RGW_KEYSTONE_H
 #define CEPH_RGW_KEYSTONE_H
 
-#include <type_traits>
+#include <atomic>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 
 #include <boost/optional.hpp>
 
@@ -14,7 +16,6 @@
 #include "common/ceph_mutex.h"
 #include "global/global_init.h"
 
-#include <atomic>
 
 bool rgw_is_pki_token(const std::string& token);
 void rgw_get_token_id(const std::string& token, std::string& token_id);
@@ -187,6 +188,7 @@ public:
   /* We really need the default ctor because of the internals of TokenCache. */
   TokenEnvelope() = default;
 
+  void set_expires(time_t expires) { token.expires = expires; }
   time_t get_expires() const { return token.expires; }
   const std::string& get_domain_id() const {return project.domain.id;};
   const std::string& get_domain_name() const {return project.domain.name;};
@@ -197,7 +199,7 @@ public:
   bool has_role(const std::string& r) const;
   bool expired() const {
     const uint64_t now = ceph_clock_now().sec();
-    return now >= static_cast<uint64_t>(get_expires());
+    return std::cmp_greater_equal(now, get_expires());
   }
   int parse(const DoutPrefixProvider *dpp, CephContext* cct,
             const std::string& token_str,
@@ -218,7 +220,9 @@ class TokenCache {
   std::string admin_token_id;
   std::string barbican_token_id;
   std::map<std::string, token_entry> tokens;
+  std::map<std::string, token_entry> service_tokens;
   std::list<std::string> tokens_lru;
+  std::list<std::string> service_tokens_lru;
 
   ceph::mutex lock = ceph::make_mutex("rgw::keystone::TokenCache");
 
@@ -248,6 +252,7 @@ public:
   }
 
   bool find(const std::string& token_id, TokenEnvelope& token);
+  bool find_service(const std::string& token_id, TokenEnvelope& token);
   boost::optional<TokenEnvelope> find(const std::string& token_id) {
     TokenEnvelope token_envlp;
     if (find(token_id, token_envlp)) {
@@ -255,17 +260,26 @@ public:
     }
     return boost::none;
   }
+  boost::optional<TokenEnvelope> find_service(const std::string& token_id) {
+    TokenEnvelope token_envlp;
+    if (find_service(token_id, token_envlp)) {
+      return token_envlp;
+    }
+    return boost::none;
+  }
   bool find_admin(TokenEnvelope& token);
   bool find_barbican(TokenEnvelope& token);
   void add(const std::string& token_id, const TokenEnvelope& token);
+  void add_service(const std::string& token_id, const TokenEnvelope& token);
   void add_admin(const TokenEnvelope& token);
   void add_barbican(const TokenEnvelope& token);
   void invalidate(const DoutPrefixProvider *dpp, const std::string& token_id);
   bool going_down() const;
 private:
-  void add_locked(const std::string& token_id, const TokenEnvelope& token);
-  bool find_locked(const std::string& token_id, TokenEnvelope& token);
-
+  void add_locked(const std::string& token_id, const TokenEnvelope& token,
+                  std::map<std::string, token_entry>& tokens, std::list<std::string>& tokens_lru);
+  bool find_locked(const std::string& token_id, TokenEnvelope& token,
+                   std::map<std::string, token_entry>& tokens, std::list<std::string>& tokens_lru);
 };
 
 

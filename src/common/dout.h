@@ -99,11 +99,12 @@ namespace ceph::dout {
 template<typename T>
 struct dynamic_marker_t {
   T value;
-  operator T() const { return value; }
+  // constexpr ctor isn't needed as it's an aggregate type
+  constexpr operator T() const { return value; }
 };
 
 template<typename T>
-dynamic_marker_t<T> need_dynamic(T&& t) {
+constexpr dynamic_marker_t<T> need_dynamic(T&& t) {
   return dynamic_marker_t<T>{ std::forward<T>(t) };
 }
 
@@ -131,16 +132,6 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
       _logger.log(crimson::to_log_level(_lv),   \
                   "{}", _out.str().c_str());    \
     }                                           \
-  } while (0)
-#elif defined(WITH_SEASTAR) && defined(WITH_ALIEN)
-#define dout_impl(cct, sub, v)						\
-  do {									\
-  if (0) {							\
-    ceph::logging::MutableEntry _dout_e(v, sub);                        \
-    std::ostream* _dout = &_dout_e.get_ostream();
-
-#define dendl_impl std::flush;                                          \
-  }                                                                     \
   } while (0)
 #else
 #define dout_impl(cct, sub, v)						\

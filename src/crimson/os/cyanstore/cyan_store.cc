@@ -17,7 +17,7 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_cyanstore);
   }
 }
 
@@ -107,7 +107,7 @@ CyanStore::mkfs_ertr::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
   static const char read_meta_errmsg[]{"read_meta"};
   static const char parse_fsid_errmsg[]{"failed to parse fsid"};
   static const char match_ofsid_errmsg[]{"unmatched osd_fsid"};
-  return read_meta("fsid").then([=](auto&& ret) -> mkfs_ertr::future<> {
+  return read_meta("fsid").then([=, this](auto&& ret) -> mkfs_ertr::future<> {
     auto& [r, fsid_str] = ret;
     if (r == -ENOENT) {
       if (new_osd_fsid.is_zero()) {
@@ -311,7 +311,7 @@ CyanStore::omap_get_values(CollectionRef ch,
   }
   omap_values_t values;
   for (auto i = start ? o->omap.upper_bound(*start) : o->omap.begin();
-       values.size() < MAX_KEYS_PER_OMAP_GET_CALL && i != o->omap.end();
+       i != o->omap.end();
        ++i) {
     values.insert(*i);
   }
@@ -322,7 +322,7 @@ CyanStore::omap_get_values(CollectionRef ch,
 auto
 CyanStore::omap_get_header(CollectionRef ch,
 			   const ghobject_t& oid)
-  -> read_errorator::future<ceph::bufferlist>
+  -> get_attr_errorator::future<ceph::bufferlist>
 {
   auto c = static_cast<Collection*>(ch.get());
   auto o = c->get_object(oid);
@@ -330,12 +330,13 @@ CyanStore::omap_get_header(CollectionRef ch,
     return crimson::ct_error::enoent::make();
   }
 
-  return read_errorator::make_ready_future<ceph::bufferlist>(
+  return get_attr_errorator::make_ready_future<ceph::bufferlist>(
     o->omap_header);
 }
 
-seastar::future<> CyanStore::do_transaction(CollectionRef ch,
-                                            ceph::os::Transaction&& t)
+seastar::future<> CyanStore::do_transaction_no_callbacks(
+  CollectionRef ch,
+  ceph::os::Transaction&& t)
 {
   using ceph::os::Transaction;
   int r = 0;
@@ -357,6 +358,7 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
       }
       break;
       case Transaction::OP_TOUCH:
+      case Transaction::OP_CREATE:
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
@@ -390,6 +392,14 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
         ghobject_t oid = i.get_oid(op->oid);
         uint64_t off = op->off;
         r = _truncate(cid, oid, off);
+      }
+      break;
+      case Transaction::OP_CLONE:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        ghobject_t noid = i.get_oid(op->dest_oid);
+        r = _clone(cid, oid, noid);
       }
       break;
       case Transaction::OP_SETATTR:
@@ -512,14 +522,6 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
     f.flush(str);
     logger().error("{}", str.str());
     ceph_assert(r == 0);
-  }
-  for (auto i : {
-      t.get_on_applied(),
-      t.get_on_commit(),
-      t.get_on_applied_sync()}) {
-    if (i) {
-      i->complete(0);
-    }
   }
   return seastar::now();
 }
@@ -679,7 +681,7 @@ int CyanStore::_omap_rmkeyrange(
 
   ObjectRef o = c->get_or_create_object(oid);
   for (auto i = o->omap.lower_bound(first);
-       i != o->omap.end() && i->first <= last;
+       i != o->omap.end() && i->first < last;
        o->omap.erase(i++));
   return 0;
 }
@@ -701,6 +703,30 @@ int CyanStore::_truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size
   int r = o->truncate(size);
   used_bytes += (o->get_size() - old_size);
   return r;
+}
+
+int CyanStore::_clone(const coll_t& cid, const ghobject_t& oid,
+                      const ghobject_t& noid)
+{
+  logger().debug("{} cid={} oid={} noid={}",
+                __func__, cid, oid, noid);
+  auto c = _get_collection(cid);
+  if (!c)
+    return -ENOENT;
+
+  ObjectRef oo = c->get_object(oid);
+  if (!oo)
+    return -ENOENT;
+  if (local_conf()->memstore_debug_omit_block_device_write)
+    return 0;
+  ObjectRef no = c->get_or_create_object(noid);
+  used_bytes += ((ssize_t)oo->get_size() - (ssize_t)no->get_size());
+  no->clone(oo.get(), 0, oo->get_size(), 0);
+
+  no->omap_header = oo->omap_header;
+  no->omap = oo->omap;
+  no->xattr = oo->xattr;
+  return 0;
 }
 
 int CyanStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
@@ -818,20 +844,7 @@ unsigned CyanStore::get_max_attr_name_length() const
   return 256;
 }
 
-seastar::future<FuturizedStore::OmapIteratorRef> CyanStore::get_omap_iterator(
-    CollectionRef ch,
-    const ghobject_t& oid)
-{
-  auto c = static_cast<Collection*>(ch.get());
-  auto o = c->get_object(oid);
-  if (!o) {
-    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
-  }
-  return seastar::make_ready_future<FuturizedStore::OmapIteratorRef>(
-	    new CyanStore::CyanOmapIterator(o));
-}
-
-seastar::future<std::map<uint64_t, uint64_t>>
+CyanStore::read_errorator::future<std::map<uint64_t, uint64_t>>
 CyanStore::fiemap(
     CollectionRef ch,
     const ghobject_t& oid,
@@ -861,35 +874,6 @@ CyanStore::stat(
   struct stat st;
   st.st_size = o->get_size();
   return seastar::make_ready_future<struct stat>(std::move(st));
-}
-
-seastar::future<> CyanStore::CyanOmapIterator::seek_to_first()
-{
-  iter = obj->omap.begin();
-  return seastar::make_ready_future<>();
-}
-
-seastar::future<> CyanStore::CyanOmapIterator::upper_bound(const std::string& after)
-{
-  iter = obj->omap.upper_bound(after);
-  return seastar::make_ready_future<>();
-}
-
-seastar::future<> CyanStore::CyanOmapIterator::lower_bound(const std::string &to)
-{
-  iter = obj->omap.lower_bound(to);
-  return seastar::make_ready_future<>();
-}
-
-bool CyanStore::CyanOmapIterator::valid() const
-{
-  return iter != obj->omap.end();
-}
-
-seastar::future<> CyanStore::CyanOmapIterator::next()
-{
-  ++iter;
-  return seastar::make_ready_future<>();
 }
 
 }

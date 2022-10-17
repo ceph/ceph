@@ -217,10 +217,6 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
         return res['rados_inst']
 
-    def get_blocklisted_instances(self):
-        return json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd(
-            "osd", "dump", "--format=json-pretty"))['blocklist']
-
     def mirror_daemon_command(self, cmd_label, *args):
         asok_path = self.get_daemon_admin_socket()
         try:
@@ -451,8 +447,7 @@ class TestMirroring(CephFSTestCase):
         self.mount_a.run_shell(['kill', '-SIGCONT', pid])
 
         # check if the rados addr is blocklisted
-        blocklist = self.get_blocklisted_instances()
-        self.assertTrue(rados_inst in blocklist)
+        self.assertTrue(self.mds_cluster.is_addr_blocklisted(rados_inst))
 
         # wait enough so that the mirror daemon restarts blocklisted instances
         time.sleep(40)
@@ -619,8 +614,7 @@ class TestMirroring(CephFSTestCase):
         self.mount_a.run_shell(['kill', '-SIGCONT', pid])
 
         # check if the rados addr is blocklisted
-        blocklist = self.get_blocklisted_instances()
-        self.assertTrue(rados_inst in blocklist)
+        self.assertTrue(self.mds_cluster.is_addr_blocklisted(rados_inst))
 
         time.sleep(500)
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
@@ -893,8 +887,7 @@ class TestMirroring(CephFSTestCase):
         time.sleep(40)
 
         # make sure the rados addr is blocklisted
-        blocklist = self.get_blocklisted_instances()
-        self.assertTrue(rados_inst in blocklist)
+        self.assertTrue(self.mds_cluster.is_addr_blocklisted(rados_inst))
 
         # now we are sure that there are no "active" mirror daemons -- add a directory path.
         dir_path_p = "/d0/d1"

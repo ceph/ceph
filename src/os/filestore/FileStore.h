@@ -47,6 +47,7 @@
 #include "WBThrottle.h"
 
 #include "include/uuid.h"
+#include "extblkdev/ExtBlkDevPlugin.h"
 
 #if defined(__linux__)
 # ifndef BTRFS_SUPER_MAGIC
@@ -162,8 +163,7 @@ private:
 
   std::string devname;
 
-  int vdo_fd = -1;
-  std::string vdo_name;
+  ExtBlkDevInterfaceRef ebd_impl;  // structure for retrieving compression state from extended block device
 
   deque<uint64_t> snaps;
 

@@ -17,4 +17,10 @@ export class RbdFormModel {
 
   /* Deletion process */
   source?: string;
+
+  enable_mirror?: boolean;
+  mirror_mode?: string;
+
+  schedule_interval: string;
+  start_time: string;
 }

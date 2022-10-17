@@ -23,10 +23,11 @@ export class DocService {
     });
   }
 
-  urlGenerator(section: string, release = 'master'): string {
-    const docVersion = release === 'master' ? 'latest' : release;
+  urlGenerator(section: string, release = 'main'): string {
+    const docVersion = release === 'main' ? 'latest' : release;
     const domain = `https://docs.ceph.com/en/${docVersion}/`;
-    const domainCeph = `https://ceph.io/`;
+    const domainCeph = `https://ceph.io`;
+    const domainCephOld = `https://old.ceph.com`;
 
     const sections = {
       iscsi: `${domain}mgr/dashboard/#enabling-iscsi-management`,
@@ -37,10 +38,10 @@ export class DocService {
       dashboard: `${domain}mgr/dashboard`,
       grafana: `${domain}mgr/dashboard/#enabling-the-embedding-of-grafana-dashboards`,
       orch: `${domain}mgr/orchestrator`,
-      pgs: `${domainCeph}pgcalc`,
-      help: `${domainCeph}help/`,
-      security: `${domainCeph}security/`,
-      trademarks: `${domainCeph}legal-page/trademarks/`,
+      pgs: `${domainCephOld}/pgcalc`,
+      help: `${domainCeph}/en/users/`,
+      security: `${domainCeph}/en/security/`,
+      trademarks: `${domainCeph}/en/trademarks/`,
       'dashboard-landing-page-status': `${domain}mgr/dashboard/#dashboard-landing-page-status`,
       'dashboard-landing-page-performance': `${domain}mgr/dashboard/#dashboard-landing-page-performance`,
       'dashboard-landing-page-capacity': `${domain}mgr/dashboard/#dashboard-landing-page-capacity`

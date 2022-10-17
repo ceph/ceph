@@ -2,6 +2,8 @@ import errno
 import json
 import logging
 import re
+import socket
+import time
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, TypeVar, \
     Optional, Dict, Any, Tuple, NewType, cast
@@ -24,6 +26,27 @@ ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 AuthEntity = NewType('AuthEntity', str)
 
 
+def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEntity:
+    """
+    Map the daemon id to a cephx keyring entity name
+    """
+    # despite this mapping entity names to daemons, self.TYPE within
+    # the CephService class refers to service types, not daemon types
+    if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ingress']:
+        return AuthEntity(f'client.{daemon_type}.{daemon_id}')
+    elif daemon_type in ['crash', 'agent']:
+        if host == "":
+            raise OrchestratorError(
+                f'Host not provided to generate <{daemon_type}> auth entity name')
+        return AuthEntity(f'client.{daemon_type}.{host}')
+    elif daemon_type == 'mon':
+        return AuthEntity('mon.')
+    elif daemon_type in ['mgr', 'osd', 'mds']:
+        return AuthEntity(f'{daemon_type}.{daemon_id}')
+    else:
+        raise OrchestratorError(f"unknown daemon type {daemon_type}")
+
+
 class CephadmDaemonDeploySpec:
     # typing.NamedTuple + Generic is broken in py36
     def __init__(self, host: str, daemon_id: str,
@@ -37,7 +60,9 @@ class CephadmDaemonDeploySpec:
                  ip: Optional[str] = None,
                  ports: Optional[List[int]] = None,
                  rank: Optional[int] = None,
-                 rank_generation: Optional[int] = None):
+                 rank_generation: Optional[int] = None,
+                 extra_container_args: Optional[List[str]] = None,
+                 ):
         """
         A data struction to encapsulate `cephadm deploy ...
         """
@@ -72,8 +97,13 @@ class CephadmDaemonDeploySpec:
         self.rank: Optional[int] = rank
         self.rank_generation: Optional[int] = rank_generation
 
+        self.extra_container_args = extra_container_args
+
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def entity_name(self) -> str:
+        return get_auth_entity(self.daemon_type, self.daemon_id, host=self.host)
 
     def config_get_files(self) -> Dict[str, Any]:
         files = self.extra_files
@@ -96,6 +126,7 @@ class CephadmDaemonDeploySpec:
             ports=dd.ports,
             rank=dd.rank,
             rank_generation=dd.rank_generation,
+            extra_container_args=dd.extra_container_args,
         )
 
     def to_daemon_description(self, status: DaemonDescriptionStatus, status_desc: str) -> DaemonDescription:
@@ -110,6 +141,7 @@ class CephadmDaemonDeploySpec:
             ports=self.ports,
             rank=self.rank,
             rank_generation=self.rank_generation,
+            extra_container_args=self.extra_container_args,
         )
 
 
@@ -181,6 +213,8 @@ class CephadmService(metaclass=ABCMeta):
             ip=ip,
             rank=rank,
             rank_generation=rank_generation,
+            extra_container_args=spec.extra_container_args if hasattr(
+                spec, 'extra_container_args') else None,
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -227,11 +261,39 @@ class CephadmService(metaclass=ABCMeta):
             })
             if err:
                 self.mgr.log.warning(f"Unable to update caps for {entity}")
+
+            # get keyring anyway
+            ret, keyring, err = self.mgr.mon_command({
+                'prefix': 'auth get',
+                'entity': entity,
+            })
+            if err:
+                raise OrchestratorError(f"Unable to fetch keyring for {entity}: {err}")
+
+        # strip down keyring
+        #  - don't include caps (auth get includes them; get-or-create does not)
+        #  - use pending key if present
+        key = None
+        for line in keyring.splitlines():
+            if ' = ' not in line:
+                continue
+            line = line.strip()
+            (ls, rs) = line.split(' = ', 1)
+            if ls == 'key' and not key:
+                key = rs
+            if ls == 'pending key':
+                key = rs
+        keyring = f'[{entity}]\nkey = {key}\n'
         return keyring
 
-    def _inventory_get_addr(self, hostname: str) -> str:
-        """Get a host's address with its hostname."""
-        return self.mgr.inventory.get_addr(hostname)
+    def _inventory_get_fqdn(self, hostname: str) -> str:
+        """Get a host's FQDN with its hostname.
+
+           If the FQDN can't be resolved, the address from the inventory will
+           be returned instead.
+        """
+        addr = self.mgr.inventory.get_addr(hostname)
+        return socket.getfqdn(addr)
 
     def _set_service_url_on_dashboard(self,
                                       service_name: str,
@@ -435,24 +497,7 @@ class CephService(CephadmService):
         self.remove_keyring(daemon)
 
     def get_auth_entity(self, daemon_id: str, host: str = "") -> AuthEntity:
-        """
-        Map the daemon id to a cephx keyring entity name
-        """
-        # despite this mapping entity names to daemons, self.TYPE within
-        # the CephService class refers to service types, not daemon types
-        if self.TYPE in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ingress']:
-            return AuthEntity(f'client.{self.TYPE}.{daemon_id}')
-        elif self.TYPE in ['crash', 'agent']:
-            if host == "":
-                raise OrchestratorError(
-                    f'Host not provided to generate <{self.TYPE}> auth entity name')
-            return AuthEntity(f'client.{self.TYPE}.{host}')
-        elif self.TYPE == 'mon':
-            return AuthEntity('mon.')
-        elif self.TYPE in ['mgr', 'osd', 'mds']:
-            return AuthEntity(f'{self.TYPE}.{daemon_id}')
-        else:
-            raise OrchestratorError("unknown daemon type")
+        return get_auth_entity(self.TYPE, daemon_id, host=host)
 
     def get_config_and_keyring(self,
                                daemon_type: str,
@@ -509,7 +554,7 @@ class MonService(CephService):
         # get mon. key
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get',
-            'entity': self.get_auth_entity(name),
+            'entity': daemon_spec.entity_name(),
         })
 
         extra_config = '[mon.%s]\n' % name
@@ -656,19 +701,31 @@ class MgrService(CephService):
         return DaemonDescription()
 
     def fail_over(self) -> None:
-        if not self.mgr_map_has_standby():
-            raise OrchestratorError('Need standby mgr daemon', event_kind_subject=(
-                'daemon', 'mgr' + self.mgr.get_mgr_id()))
+        # this has been seen to sometimes transiently fail even when there are multiple
+        # mgr daemons. As long as there are multiple known mgr daemons, we should retry.
+        class NoStandbyError(OrchestratorError):
+            pass
+        no_standby_exc = NoStandbyError('Need standby mgr daemon', event_kind_subject=(
+            'daemon', 'mgr' + self.mgr.get_mgr_id()))
+        for sleep_secs in [2, 8, 15]:
+            try:
+                if not self.mgr_map_has_standby():
+                    raise no_standby_exc
+                self.mgr.events.for_daemon('mgr' + self.mgr.get_mgr_id(),
+                                           'INFO', 'Failing over to other MGR')
+                logger.info('Failing over to other MGR')
 
-        self.mgr.events.for_daemon('mgr' + self.mgr.get_mgr_id(),
-                                   'INFO', 'Failing over to other MGR')
-        logger.info('Failing over to other MGR')
-
-        # fail over
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'mgr fail',
-            'who': self.mgr.get_mgr_id(),
-        })
+                # fail over
+                ret, out, err = self.mgr.check_mon_command({
+                    'prefix': 'mgr fail',
+                    'who': self.mgr.get_mgr_id(),
+                })
+                return
+            except NoStandbyError:
+                logger.info(
+                    f'Failed to find standby mgr for failover. Retrying in {sleep_secs} seconds')
+                time.sleep(sleep_secs)
+        raise no_standby_exc
 
     def mgr_map_has_standby(self) -> bool:
         """
@@ -986,12 +1043,24 @@ class CrashService(CephService):
 class CephfsMirrorService(CephService):
     TYPE = 'cephfs-mirror'
 
+    def config(self, spec: ServiceSpec) -> None:
+        # make sure mirroring module is enabled
+        mgr_map = self.mgr.get('mgr_map')
+        mod_name = 'mirroring'
+        if mod_name not in mgr_map.get('services', {}):
+            self.mgr.check_mon_command({
+                'prefix': 'mgr module enable',
+                'module': mod_name
+            })
+            # we shouldn't get here (mon will tell the mgr to respawn), but no
+            # harm done if we do.
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
 
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': self.get_auth_entity(daemon_spec.daemon_id),
+            'entity': daemon_spec.entity_name(),
             'caps': ['mon', 'profile cephfs-mirror',
                      'mds', 'allow r',
                      'osd', 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*',
@@ -1010,43 +1079,43 @@ class CephadmAgent(CephService):
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
-        if not self.mgr.cherrypy_thread:
+        if not self.mgr.http_server.agent:
             raise OrchestratorError('Cannot deploy agent before creating cephadm endpoint')
 
         keyring = self.get_keyring_with_caps(self.get_auth_entity(daemon_id, host=host), [])
         daemon_spec.keyring = keyring
-        self.mgr.cache.agent_keys[host] = keyring
+        self.mgr.agent_cache.agent_keys[host] = keyring
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        agent = self.mgr.http_server.agent
         try:
-            assert self.mgr.cherrypy_thread
-            assert self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
-            assert self.mgr.cherrypy_thread.server_port
+            assert agent
+            assert agent.ssl_certs.get_root_cert()
+            assert agent.server_port
         except Exception:
             raise OrchestratorError(
                 'Cannot deploy agent daemons until cephadm endpoint has finished generating certs')
 
         cfg = {'target_ip': self.mgr.get_mgr_ip(),
-               'target_port': self.mgr.cherrypy_thread.server_port,
+               'target_port': agent.server_port,
                'refresh_period': self.mgr.agent_refresh_rate,
                'listener_port': self.mgr.agent_starting_port,
                'host': daemon_spec.host,
                'device_enhanced_scan': str(self.mgr.device_enhanced_scan)}
 
-        listener_cert, listener_key = self.mgr.cherrypy_thread.ssl_certs.generate_cert(
-            self.mgr.inventory.get_addr(daemon_spec.host))
+        listener_cert, listener_key = agent.ssl_certs.generate_cert(daemon_spec.host, self.mgr.inventory.get_addr(daemon_spec.host))
         config = {
             'agent.json': json.dumps(cfg),
             'keyring': daemon_spec.keyring,
-            'root_cert.pem': self.mgr.cherrypy_thread.ssl_certs.get_root_cert(),
+            'root_cert.pem': agent.ssl_certs.get_root_cert(),
             'listener.crt': listener_cert,
             'listener.key': listener_key,
         }
 
-        return config, sorted([str(self.mgr.get_mgr_ip()), str(self.mgr.cherrypy_thread.server_port),
-                               self.mgr.cherrypy_thread.ssl_certs.get_root_cert(),
+        return config, sorted([str(self.mgr.get_mgr_ip()), str(agent.server_port),
+                               agent.ssl_certs.get_root_cert(),
                                str(self.mgr.get_module_option('device_enhanced_scan'))])

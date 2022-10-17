@@ -138,9 +138,12 @@ def start_rgw(ctx, config, clients):
             ctx.cluster.only(client).run(args=['sudo', 'chmod', '600', token_path])
             ctx.cluster.only(client).run(args=['sudo', 'chown', 'ceph', token_path])
 
+            vault_addr = "{}:{}".format(*ctx.vault.endpoints[vault_role])
             rgw_cmd.extend([
-                '--rgw_crypt_vault_addr', "{}:{}".format(*ctx.vault.endpoints[vault_role]),
-                '--rgw_crypt_vault_token_file', token_path
+                '--rgw_crypt_vault_addr', vault_addr,
+                '--rgw_crypt_vault_token_file', token_path,
+                '--rgw_crypt_sse_s3_vault_addr', vault_addr,
+                '--rgw_crypt_sse_s3_vault_token_file', token_path,
             ])
         elif pykmip_role is not None:
             if not hasattr(ctx, 'pykmip'):
@@ -149,6 +152,35 @@ def start_rgw(ctx, config, clients):
             rgw_cmd.extend([
                 '--rgw_crypt_kmip_addr', "{}:{}".format(*ctx.pykmip.endpoints[pykmip_role]),
             ])
+
+            clientcert = ctx.ssl_certificates.get('kmip-client')
+            servercert = ctx.ssl_certificates.get('kmip-server')
+            clientca = ctx.ssl_certificates.get('kmiproot')
+
+            clientkey = clientcert.key
+            clientcert = clientcert.certificate
+            serverkey = servercert.key
+            servercert = servercert.certificate
+            rootkey = clientca.key
+            rootcert = clientca.certificate
+
+            cert_path = '/etc/ceph/'
+            ctx.cluster.only(client).run(args=['sudo', 'cp', clientcert, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', clientkey, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', servercert, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', serverkey, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', rootkey, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', rootcert, cert_path])
+
+            clientcert = cert_path + 'kmip-client.crt'
+            clientkey = cert_path + 'kmip-client.key'
+            servercert = cert_path + 'kmip-server.crt'
+            serverkey = cert_path + 'kmip-server.key'
+            rootkey = cert_path + 'kmiproot.key'
+            rootcert = cert_path + 'kmiproot.crt'
+
+            ctx.cluster.only(client).run(args=['sudo', 'chmod', '600', clientcert, clientkey, servercert, serverkey, rootkey, rootcert])
+            ctx.cluster.only(client).run(args=['sudo', 'chown', 'ceph', clientcert, clientkey, servercert, serverkey, rootkey, rootcert])
 
         rgw_cmd.extend([
             '--foreground',
@@ -375,6 +407,7 @@ def task(ctx, config):
     teuthology.deep_merge(config, overrides.get('rgw', {}))
 
     ctx.rgw = argparse.Namespace()
+    ctx.rgw_cloudtier = None
 
     ctx.rgw.ec_data_pool = bool(config.pop('ec-data-pool', False))
     ctx.rgw.erasure_code_profile = config.pop('erasure_code_profile', {})

@@ -42,6 +42,8 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+----------------------------------------+
 | **Bucket Lifecycle**            | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
+| **Bucket Replication**          | Partial         | Only permitted across zones            |
++---------------------------------+-----------------+----------------------------------------+
 | **Policy (Buckets, Objects)**   | Supported       | ACLs & bucket policies are supported   |
 +---------------------------------+-----------------+----------------------------------------+
 | **Bucket Website**              | Supported       |                                        |

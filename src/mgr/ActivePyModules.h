@@ -27,6 +27,7 @@
 #include "mon/MonCommand.h"
 #include "mon/mon_types.h"
 #include "mon/ConfigMap.h"
+#include "mgr/TTLCache.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -55,13 +56,14 @@ class ActivePyModules
   Objecter &objecter;
   Client   &client;
   Finisher &finisher;
+  TTLCache<std::string, PyObject*> ttl_cache;
 public:
   Finisher cmd_finisher;
 private:
   DaemonServer &server;
   PyModuleRegistry &py_module_registry;
 
-  map<std::string,ProgressEvent> progress_events;
+  std::map<std::string,ProgressEvent> progress_events;
 
   mutable ceph::mutex lock = ceph::make_mutex("ActivePyModules::lock");
 
@@ -80,6 +82,7 @@ public:
   MonClient &get_monc() {return monc;}
   Objecter  &get_objecter() {return objecter;}
   Client    &get_client() {return client;}
+  PyObject *cacheable_get_python(const std::string &what);
   PyObject *get_python(const std::string &what);
   PyObject *get_server_python(const std::string &hostname);
   PyObject *list_servers_python();
@@ -98,6 +101,7 @@ public:
   PyObject *get_perf_schema_python(
      const std::string &svc_type,
      const std::string &svc_id);
+  PyObject *get_rocksdb_version();
   PyObject *get_context();
   PyObject *get_osdmap();
   /// @note @c fct is not allowed to acquire locks when holding GIL
@@ -120,6 +124,7 @@ public:
       const MDSPerfMetricQuery &query,
       const std::optional<MDSPerfMetricLimit> &limit);
   void remove_mds_perf_query(MetricQueryID query_id);
+  void reregister_mds_perf_queries();
   PyObject *get_mds_perf_counters(MetricQueryID query_id);
 
   bool get_store(const std::string &module_name,
@@ -217,4 +222,8 @@ public:
 
   void cluster_log(const std::string &channel, clog_type prio,
     const std::string &message);
+
+  bool inject_python_on() const;
+  void update_cache_metrics();
 };
+

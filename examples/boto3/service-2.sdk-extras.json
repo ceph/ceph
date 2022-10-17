@@ -36,6 +36,16 @@
                 }
             }
         },
+        "ListObjectsV2Request": {
+            "members": {
+                "AllowUnordered": {
+                    "shape":"AllowUnordered",
+                    "documentation":"<p>Allow the listing results to be returned in unsorted order. This may be faster when listing very large buckets.</p>",
+                    "location":"querystring",
+                    "locationName":"allow-unordered"
+                }
+            }
+        },
         "AllowUnordered":{"type":"boolean"},
         "PutObjectRequest": {
             "members": {

@@ -66,6 +66,7 @@ public:
 
   void init() {}
   void shutdown() override;
+  void stop_processor();
 
   std::string cluster_fsid();
   uint64_t instance_id();
@@ -108,8 +109,12 @@ public:
       return pool;
     }
 
-    librados::IoCtx& ioctx() {
+    librados::IoCtx& ioctx() & {
       return state.ioctx;
+    }
+
+    librados::IoCtx&& ioctx() && {
+      return std::move(state.ioctx);
     }
 
     struct List {

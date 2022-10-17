@@ -35,21 +35,28 @@ SKIP_ZIP=${SKIP_ZIP:-}
 # well as llvm rely on mspdb*.dll in order to support this proprietary format.
 EMBEDDED_DBG_SYM=${EMBEDDED_DBG_SYM:-}
 # Allow for OS specific customizations through the OS flag.
-# Valid options are currently "ubuntu" and "suse".
+# Valid options are currently "ubuntu", "suse", and "rhel".
 
 OS=${OS}
 if [[ -z $OS ]]; then
-    if [[ -f /etc/os-release ]] && \
-            $(grep -q "^NAME=\".*SUSE.*\"" /etc/os-release);  then
+    source /etc/os-release
+    case "$ID" in
+    opensuse*|suse|sles)
         OS="suse"
-    elif [[ -f /etc/lsb-release ]] && \
-            $(grep -q "^DISTRIB_ID=Ubuntu" /etc/lsb-release);  then
+        ;;
+    rhel|centos)
+        OS="rhel"
+        ;;
+    ubuntu)
         OS="ubuntu"
-    else
-        echo "Unsupported Linux distro, only SUSE and Ubuntu are currently \
-supported. Set the OS variable to override"
+        ;;
+    *)
+        echo "Unsupported Linux distro $ID."
+        echo "only SUSE, Ubuntu and RHEL are supported."
+        echo "Set the OS environment variable to override."
         exit 1
-    fi
+        ;;
+    esac
 fi
 export OS="$OS"
 
@@ -82,7 +89,6 @@ depsToolsetDir="$DEPS_DIR/mingw"
 cmakeGenerator="Ninja"
 lz4Dir="${depsToolsetDir}/lz4"
 sslDir="${depsToolsetDir}/openssl"
-curlDir="${depsToolsetDir}/curl"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 backtraceDir="${depsToolsetDir}/libbacktrace"
@@ -93,7 +99,7 @@ wnbdLibDir="${depsToolsetDir}/wnbd/lib"
 dokanSrcDir="${depsSrcDir}/dokany"
 dokanLibDir="${depsToolsetDir}/dokany/lib"
 
-depsDirs="$lz4Dir;$curlDir;$sslDir;$boostDir;$zlibDir;$backtraceDir;$snappyDir"
+depsDirs="$lz4Dir;$sslDir;$boostDir;$zlibDir;$backtraceDir;$snappyDir"
 depsDirs+=";$winLibDir"
 
 # Cmake recommends using CMAKE_PREFIX_PATH instead of link_directories.
@@ -104,8 +110,6 @@ linkDirs="$zlibDir/lib"
 
 lz4Lib="${lz4Dir}/lib/dll/liblz4-1.dll"
 lz4Include="${lz4Dir}/lib"
-curlLib="${curlDir}/lib/libcurl.dll.a"
-curlInclude="${curlDir}/include"
 
 if [[ -n $CLEAN_BUILD ]]; then
     echo "Cleaning up build dir: $BUILD_DIR"
@@ -162,7 +166,7 @@ cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D WITH_GSSAPI=OFF -D WITH_XFS=OFF \
       -D WITH_FUSE=OFF -D WITH_DOKAN=ON \
       -D WITH_BLUESTORE=OFF -D WITH_LEVELDB=OFF \
-      -D WITH_LTTNG=OFF -D WITH_BABELTRACE=OFF \
+      -D WITH_LTTNG=OFF -D WITH_BABELTRACE=OFF -D WITH_JAEGER=OFF \
       -D WITH_SYSTEM_BOOST=ON -D WITH_MGR=OFF -D WITH_KVS=OFF \
       -D WITH_LIBCEPHFS=ON -D WITH_KRBD=OFF -D WITH_RADOSGW=OFF \
       -D ENABLE_SHARED=$ENABLE_SHARED -D WITH_RBD=ON -D BUILD_GMOCK=ON \
@@ -208,6 +212,7 @@ if [[ -z $SKIP_DLL_COPY ]]; then
         $sslDir/bin/libssl-1_1-x64.dll
         $mingwTargetLibDir/libstdc++-6.dll
         $mingwTargetLibDir/libgcc_s_seh-1.dll
+        $mingwTargetLibDir/libssp*.dll
         $mingwLibpthreadDir/libwinpthread-1.dll
         $boostDir/lib/*.dll)
     echo "Copying required dlls to $binDir."

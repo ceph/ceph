@@ -4,8 +4,11 @@
 #ifndef CEPH_RGW_ZONE_H
 #define CEPH_RGW_ZONE_H
 
+#include <ostream>
 #include "rgw_common.h"
+#include "rgw_sal_fwd.h"
 #include "rgw_sync_policy.h"
+#include "rgw_zone_features.h"
 
 namespace rgw_zone_defaults {
 
@@ -78,7 +81,7 @@ class RGWSI_SysObj;
 class RGWSI_Zone;
 
 class RGWSystemMetaObj {
-protected:
+public:
   std::string id;
   std::string name;
 
@@ -370,7 +373,6 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_pool log_pool;
   rgw_pool intent_log_pool;
   rgw_pool usage_log_pool;
-
   rgw_pool user_keys_pool;
   rgw_pool user_email_pool;
   rgw_pool user_swift_pool;
@@ -379,6 +381,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_pool reshard_pool;
   rgw_pool otp_pool;
   rgw_pool oidc_pool;
+  rgw_pool notif_pool;
 
   RGWAccessKey system_key;
 
@@ -387,8 +390,6 @@ struct RGWZoneParams : RGWSystemMetaObj {
   std::string realm_id;
 
   JSONFormattable tier_config;
-
-  rgw_pool notif_pool;
 
   RGWZoneParams() : RGWSystemMetaObj() {}
   explicit RGWZoneParams(const std::string& name) : RGWSystemMetaObj(name){}
@@ -568,6 +569,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
 };
 WRITE_CLASS_ENCODER(RGWZoneParams)
 
+
 struct RGWZone {
   std::string id;
   std::string name;
@@ -596,13 +598,15 @@ struct RGWZone {
   bool sync_from_all;
   std::set<std::string> sync_from; /* list of zones to sync from */
 
+  rgw::zone_features::set supported_features;
+
   RGWZone()
     : log_meta(false), log_data(false), read_only(false),
       bucket_index_max_shards(default_bucket_index_max_shards),
       sync_from_all(true) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     encode(name, bl);
     encode(endpoints, bl);
     encode(log_meta, bl);
@@ -614,11 +618,12 @@ struct RGWZone {
     encode(sync_from_all, bl);
     encode(sync_from, bl);
     encode(redirect_zone, bl);
+    encode(supported_features, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(7, bl);
+    DECODE_START(8, bl);
     decode(name, bl);
     if (struct_v < 4) {
       id = name;
@@ -645,6 +650,9 @@ struct RGWZone {
     if (struct_v >= 7) {
       decode(redirect_zone, bl);
     }
+    if (struct_v >= 8) {
+      decode(supported_features, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -655,6 +663,10 @@ struct RGWZone {
 
   bool syncs_from(const std::string& zone_name) const {
     return (sync_from_all || sync_from.find(zone_name) != sync_from.end());
+  }
+
+  bool supports(std::string_view feature) const {
+    return supported_features.contains(feature);
   }
 };
 WRITE_CLASS_ENCODER(RGWZone)
@@ -902,6 +914,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   std::string realm_id;
 
   rgw_sync_policy_info sync_policy;
+  rgw::zone_features::set enabled_features;
 
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
@@ -919,7 +932,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   void post_process_params(const DoutPrefixProvider *dpp, optional_yield y);
 
   void encode(bufferlist& bl) const override {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     encode(name, bl);
     encode(api_name, bl);
     encode(is_master, bl);
@@ -933,11 +946,12 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     RGWSystemMetaObj::encode(bl);
     encode(realm_id, bl);
     encode(sync_policy, bl);
+    encode(enabled_features, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
-    DECODE_START(5, bl);
+    DECODE_START(6, bl);
     decode(name, bl);
     decode(api_name, bl);
     decode(is_master, bl);
@@ -961,6 +975,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     if (struct_v >= 5) {
       decode(sync_policy, bl);
     }
+    if (struct_v >= 6) {
+      decode(enabled_features, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -974,6 +991,8 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
                bool *psync_from_all, std::list<std::string>& sync_from,
                std::list<std::string>& sync_from_rm, std::string *predirect_zone,
                std::optional<int> bucket_index_max_shards, RGWSyncModulesManager *sync_mgr,
+               const rgw::zone_features::set& enable_features,
+               const rgw::zone_features::set& disable_features,
 	       optional_yield y);
   int remove_zone(const DoutPrefixProvider *dpp, const std::string& zone_id, optional_yield y);
   int rename_zone(const DoutPrefixProvider *dpp, const RGWZoneParams& zone_params, optional_yield y);
@@ -987,6 +1006,10 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<RGWZoneGroup*>& o);
+
+  bool supports(std::string_view feature) const {
+    return enabled_features.contains(feature);
+  }
 };
 WRITE_CLASS_ENCODER(RGWZoneGroup)
 
@@ -1026,20 +1049,31 @@ WRITE_CLASS_ENCODER(RGWPeriodMap)
 
 struct RGWPeriodConfig
 {
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
+  RGWRateLimitInfo user_ratelimit;
+  RGWRateLimitInfo bucket_ratelimit;
+  // rate limit unauthenticated user
+  RGWRateLimitInfo anon_ratelimit;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(bucket_quota, bl);
-    encode(user_quota, bl);
+    ENCODE_START(2, 1, bl);
+    encode(quota.bucket_quota, bl);
+    encode(quota.user_quota, bl);
+    encode(bucket_ratelimit, bl);
+    encode(user_ratelimit, bl);
+    encode(anon_ratelimit, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(bucket_quota, bl);
-    decode(user_quota, bl);
+    DECODE_START(2, bl);
+    decode(quota.bucket_quota, bl);
+    decode(quota.user_quota, bl);
+    if (struct_v >= 2) {
+      decode(bucket_ratelimit, bl);
+      decode(user_ratelimit, bl);
+      decode(anon_ratelimit, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -1057,50 +1091,12 @@ struct RGWPeriodConfig
 };
 WRITE_CLASS_ENCODER(RGWPeriodConfig)
 
-/* for backward comaptability */
-struct RGWRegionMap {
-
-  std::map<std::string, RGWZoneGroup> regions;
-
-  std::string master_region;
-
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-
-  void dump(Formatter *f) const;
-  void decode_json(JSONObj *obj);
-};
-WRITE_CLASS_ENCODER(RGWRegionMap)
-
-struct RGWZoneGroupMap {
-
-  std::map<std::string, RGWZoneGroup> zonegroups;
-  std::map<std::string, RGWZoneGroup> zonegroups_by_api;
-
-  std::string master_zonegroup;
-
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
-
-  /* construct the map */
-  int read(const DoutPrefixProvider *dpp, CephContext *cct, RGWSI_SysObj *sysobj_svc, optional_yield y);
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-
-  void dump(Formatter *f) const;
-  void decode_json(JSONObj *obj);
-};
-WRITE_CLASS_ENCODER(RGWZoneGroupMap)
-
 class RGWRealm;
 class RGWPeriod;
 
 class RGWRealm : public RGWSystemMetaObj
 {
+public:
   std::string current_period;
   epoch_t epoch{0}; //< realm epoch, incremented for each new period
 
@@ -1213,6 +1209,7 @@ WRITE_CLASS_ENCODER(RGWPeriodLatestEpochInfo)
  */
 class RGWPeriod
 {
+public:
   std::string id; //< a uuid
   epoch_t epoch{0};
   std::string predecessor_uuid;
@@ -1259,6 +1256,7 @@ public:
   const rgw_zone_id& get_master_zone() const { return master_zone; }
   const std::string& get_master_zonegroup() const { return master_zonegroup; }
   const std::string& get_realm() const { return realm_id; }
+  const std::string& get_realm_name() const { return realm_name; }
   const RGWPeriodMap& get_map() const { return period_map; }
   RGWPeriodConfig& get_config() { return period_config; }
   const RGWPeriodConfig& get_config() const { return period_config; }
@@ -1268,11 +1266,11 @@ public:
   const std::string& get_info_oid_prefix() const;
 
   void set_user_quota(RGWQuotaInfo& user_quota) {
-    period_config.user_quota = user_quota;
+    period_config.quota.user_quota = user_quota;
   }
 
   void set_bucket_quota(RGWQuotaInfo& bucket_quota) {
-    period_config.bucket_quota = bucket_quota;
+    period_config.quota.bucket_quota = bucket_quota;
   }
 
   void set_id(const std::string& _id) {
@@ -1388,5 +1386,138 @@ public:
   }
 };
 WRITE_CLASS_ENCODER(RGWPeriod)
+
+namespace rgw {
+
+/// Look up a realm by its id. If no id is given, look it up by name.
+/// If no name is given, fall back to the cluster's default realm.
+int read_realm(const DoutPrefixProvider* dpp, optional_yield y,
+               sal::ConfigStore* cfgstore,
+               std::string_view realm_id,
+               std::string_view realm_name,
+               RGWRealm& info,
+               std::unique_ptr<sal::RealmWriter>* writer = nullptr);
+
+/// Create a realm and its initial period. If the info.id is empty, a
+/// random uuid will be generated.
+int create_realm(const DoutPrefixProvider* dpp, optional_yield y,
+                 sal::ConfigStore* cfgstore, bool exclusive,
+                 RGWRealm& info,
+                 std::unique_ptr<sal::RealmWriter>* writer = nullptr);
+
+/// Set the given realm as the cluster's default realm.
+int set_default_realm(const DoutPrefixProvider* dpp, optional_yield y,
+                      sal::ConfigStore* cfgstore, const RGWRealm& info,
+                      bool exclusive = false);
+
+/// Update the current_period of an existing realm.
+int realm_set_current_period(const DoutPrefixProvider* dpp, optional_yield y,
+                             sal::ConfigStore* cfgstore,
+                             sal::RealmWriter& writer, RGWRealm& realm,
+                             const RGWPeriod& period);
+
+/// Overwrite the local zonegroup and period config objects with the new
+/// configuration contained in the given period.
+int reflect_period(const DoutPrefixProvider* dpp, optional_yield y,
+                   sal::ConfigStore* cfgstore, const RGWPeriod& info);
+
+/// Return the staging period id for the given realm.
+std::string get_staging_period_id(std::string_view realm_id);
+
+/// Convert the given period into a separate staging period, where
+/// radosgw-admin can make changes to it without effecting the running
+/// configuration.
+void fork_period(const DoutPrefixProvider* dpp, RGWPeriod& info);
+
+/// Read all zonegroups in the period's realm and add them to the period.
+int update_period(const DoutPrefixProvider* dpp, optional_yield y,
+                  sal::ConfigStore* cfgstore, RGWPeriod& info);
+
+/// Validates the given 'staging' period and tries to commit it as the
+/// realm's new current period.
+int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
+                  sal::ConfigStore* cfgstore, sal::Store* store,
+                  RGWRealm& realm, sal::RealmWriter& realm_writer,
+                  const RGWPeriod& current_period,
+                  RGWPeriod& info, std::ostream& error_stream,
+                  bool force_if_stale);
+
+
+/// Look up a zonegroup by its id. If no id is given, look it up by name.
+/// If no name is given, fall back to the cluster's default zonegroup.
+int read_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
+                   sal::ConfigStore* cfgstore,
+                   std::string_view zonegroup_id,
+                   std::string_view zonegroup_name,
+                   RGWZoneGroup& info,
+                   std::unique_ptr<sal::ZoneGroupWriter>* writer = nullptr);
+
+/// Initialize and create the given zonegroup. If the given info.id is empty,
+/// a random uuid will be generated. May fail with -EEXIST.
+int create_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
+                     sal::ConfigStore* cfgstore, bool exclusive,
+                     RGWZoneGroup& info);
+
+/// Set the given zonegroup as its realm's default zonegroup.
+int set_default_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
+                          sal::ConfigStore* cfgstore, const RGWZoneGroup& info,
+                          bool exclusive = false);
+
+/// Add a zone to the zonegroup, or update an existing zone entry.
+int add_zone_to_group(const DoutPrefixProvider* dpp,
+                      RGWZoneGroup& zonegroup,
+                      const RGWZoneParams& zone_params,
+                      const bool *pis_master, const bool *pread_only,
+                      const std::list<std::string>& endpoints,
+                      const std::string *ptier_type,
+                      const bool *psync_from_all,
+                      const std::list<std::string>& sync_from,
+                      const std::list<std::string>& sync_from_rm,
+                      const std::string *predirect_zone,
+                      std::optional<int> bucket_index_max_shards,
+                      const rgw::zone_features::set& enable_features,
+                      const rgw::zone_features::set& disable_features);
+
+/// Remove a zone by id from its zonegroup, promoting a new master zone if
+/// necessary.
+int remove_zone_from_group(const DoutPrefixProvider* dpp,
+                           RGWZoneGroup& info,
+                           const rgw_zone_id& zone_id);
+
+
+/// Look up a zone by its id. If no id is given, look it up by name. If no name
+/// is given, fall back to the realm's default zone.
+int read_zone(const DoutPrefixProvider* dpp, optional_yield y,
+              sal::ConfigStore* cfgstore,
+              std::string_view zone_id,
+              std::string_view zone_name,
+              RGWZoneParams& info,
+              std::unique_ptr<sal::ZoneWriter>* writer = nullptr);
+
+/// Initialize and create a new zone. If the given info.id is empty, a random
+/// uuid will be generated. Pool names are initialized with the zone name as a
+/// prefix. If any pool names conflict with existing zones, a random suffix is
+/// added.
+int create_zone(const DoutPrefixProvider* dpp, optional_yield y,
+                sal::ConfigStore* cfgstore, bool exclusive,
+                RGWZoneParams& info,
+                std::unique_ptr<sal::ZoneWriter>* writer = nullptr);
+
+/// Initialize the zone's pool names using the zone name as a prefix. If a pool
+/// name conflicts with an existing zone's pool, add a unique suffix.
+int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
+                         const std::set<rgw_pool>& pools, RGWZoneParams& info);
+
+/// Set the given zone as its realm's default zone.
+int set_default_zone(const DoutPrefixProvider* dpp, optional_yield y,
+                      sal::ConfigStore* cfgstore, const RGWZoneParams& info,
+                      bool exclusive = false);
+
+/// Delete an existing zone and remove it from any zonegroups that contain it.
+int delete_zone(const DoutPrefixProvider* dpp, optional_yield y,
+                sal::ConfigStore* cfgstore, const RGWZoneParams& info,
+                sal::ZoneWriter& writer);
+
+} // namespace rgw
 
 #endif

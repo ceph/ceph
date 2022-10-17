@@ -143,7 +143,7 @@ static const actpair actpairs[] =
  { "iam:CreateRole", iamCreateRole},
  { "iam:DeleteRole", iamDeleteRole},
  { "iam:GetRole", iamGetRole},
- { "iam:ModifyRole", iamModifyRole},
+ { "iam:ModifyRoleTrustPolicy", iamModifyRoleTrustPolicy},
  { "iam:ListRoles", iamListRoles},
  { "iam:PutRolePolicy", iamPutRolePolicy},
  { "iam:GetRolePolicy", iamGetRolePolicy},
@@ -156,6 +156,7 @@ static const actpair actpairs[] =
  { "iam:TagRole", iamTagRole},
  { "iam:ListRoleTags", iamListRoleTags},
  { "iam:UntagRole", iamUntagRole},
+ { "iam:UpdateRole", iamUpdateRole},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
  { "sts:GetSessionToken", stsGetSessionToken},
@@ -1325,8 +1326,8 @@ const char* action_bit_string(uint64_t action) {
   case iamGetRole:
     return "iam:GetRole";
 
-  case iamModifyRole:
-    return "iam:ModifyRole";
+  case iamModifyRoleTrustPolicy:
+    return "iam:ModifyRoleTrustPolicy";
 
   case iamListRoles:
     return "iam:ListRoles";
@@ -1363,6 +1364,9 @@ const char* action_bit_string(uint64_t action) {
 
   case iamUntagRole:
     return "iam:UntagRole";
+
+  case iamUpdateRole:
+    return "iam:UpdateRole";
 
   case stsAssumeRole:
     return "sts:AssumeRole";

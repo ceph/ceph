@@ -59,4 +59,14 @@ do
   let "timeout-=1"
 done
 
+#Set the ratios back for other full tests to run
+ceph osd set-full-ratio 0.95
+ceph osd set-nearfull-ratio 0.95
+ceph osd set-backfillfull-ratio 0.95
+
+#After test
+echo "After test"
+df -h
+ceph osd df
+
 echo OK

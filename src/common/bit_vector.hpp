@@ -223,23 +223,18 @@ public:
 
   static void generate_test_instances(std::list<BitVector *> &o);
 private:
-  struct NoInitAllocator : public std::allocator<__u32> {
-    NoInitAllocator() {}
-    NoInitAllocator(const std::allocator<__u32>& alloc)
-      : std::allocator<__u32>(alloc) {
-    }
-
-    template <class U, class... Args>
-    void construct(U* p, Args&&... args) const {
-    }
-  };
-
   bufferlist m_data;
   uint64_t m_size;
   bool m_crc_enabled;
 
   mutable __u32 m_header_crc;
-  mutable std::vector<__u32, NoInitAllocator> m_data_crcs;
+
+  // inhibit value-initialization when used in std::vector
+  struct u32_struct {
+    u32_struct() {}
+    __u32 val;
+  };
+  mutable std::vector<u32_struct> m_data_crcs;
 
   void resize(uint64_t elements, bool zero);
 
@@ -351,7 +346,7 @@ void BitVector<_b>::encode_data(bufferlist& bl, uint64_t data_byte_offset,
 
     bufferlist bit;
     bit.substr_of(m_data, data_byte_offset, len);
-    m_data_crcs[data_byte_offset / BLOCK_SIZE] = bit.crc32c(0);
+    m_data_crcs[data_byte_offset / BLOCK_SIZE].val = bit.crc32c(0);
 
     bl.claim_append(bit);
     data_byte_offset += BLOCK_SIZE;
@@ -385,7 +380,7 @@ void BitVector<_b>::decode_data(bufferlist::const_iterator& it,
     bufferlist bit;
     bit.append(ptr);
     if (m_crc_enabled &&
-	m_data_crcs[data_byte_offset / BLOCK_SIZE] != bit.crc32c(0)) {
+	m_data_crcs[data_byte_offset / BLOCK_SIZE].val != bit.crc32c(0)) {
       throw buffer::malformed_input("invalid data block CRC");
     }
     data.append(bit);
@@ -499,7 +494,7 @@ void BitVector<_b>::encode_data_crcs(bufferlist& bl, uint64_t offset,
   compute_index(offset + length - 1, &index, &shift);
   uint64_t end_crc_index = index / BLOCK_SIZE;
   while (crc_index <= end_crc_index) {
-    __u32 crc = m_data_crcs[crc_index++];
+    __u32 crc = m_data_crcs[crc_index++].val;
     ceph::encode(crc, bl);
   }
 }
@@ -520,7 +515,7 @@ void BitVector<_b>::decode_data_crcs(bufferlist::const_iterator& it,
   while (remaining > 0) {
     __u32 crc;
     ceph::decode(crc, it);
-    m_data_crcs[crc_index++] = crc;
+    m_data_crcs[crc_index++].val = crc;
     --remaining;
   }
 }

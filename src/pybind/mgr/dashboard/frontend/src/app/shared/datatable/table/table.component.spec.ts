@@ -16,6 +16,7 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
+import { TablePaginationComponent } from '../table-pagination/table-pagination.component';
 import { TableComponent } from './table.component';
 
 describe('TableComponent', () => {
@@ -39,7 +40,7 @@ describe('TableComponent', () => {
   };
 
   configureTestBed({
-    declarations: [TableComponent],
+    declarations: [TableComponent, TablePaginationComponent],
     imports: [
       BrowserAnimationsModule,
       NgxDatatableModule,
@@ -511,6 +512,15 @@ describe('TableComponent', () => {
       expect(component.userConfig.sorts[0].prop).toBe('b');
       expect(component.tableColumns.length).toBe(3);
       equalStorageConfig();
+    });
+
+    it('should toggle on off columns', () => {
+      for (const column of component.columns) {
+        component.toggleColumn(column);
+        expect(column.isHidden).toBeTruthy();
+        component.toggleColumn(column);
+        expect(column.isHidden).toBeFalsy();
+      }
     });
 
     afterEach(() => {

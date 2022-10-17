@@ -24,10 +24,14 @@ cd-info-card {
 
 .logs-link {
   text-align: center;
+
+  a {
+    color: vv.$primary-wcag-aa-large-text;
+  }
 }
 
 .card-text-error {
-  color: vv.$danger;
+  color: vv.$chart-danger;
   display: inline;
 }
 

@@ -20,6 +20,7 @@ using namespace std;
 
 void RGWHandler_REST_IAM::rgw_iam_parse_input()
 {
+  std::string post_body = bl_post_body.to_str();
   if (post_body.size() > 0) {
     ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
 
@@ -46,23 +47,23 @@ RGWOp *RGWHandler_REST_IAM::op_post()
   if (s->info.args.exists("Action")) {
     string action = s->info.args.get("Action");
     if (action.compare("CreateRole") == 0)
-      return new RGWCreateRole;
+      return new RGWCreateRole(this->bl_post_body);
     if (action.compare("DeleteRole") == 0)
-      return new RGWDeleteRole;
+      return new RGWDeleteRole(this->bl_post_body);
     if (action.compare("GetRole") == 0)
       return new RGWGetRole;
     if (action.compare("UpdateAssumeRolePolicy") == 0)
-      return new RGWModifyRole;
+      return new RGWModifyRoleTrustPolicy(this->bl_post_body);
     if (action.compare("ListRoles") == 0)
       return new RGWListRoles;
     if (action.compare("PutRolePolicy") == 0)
-      return new RGWPutRolePolicy;
+      return new RGWPutRolePolicy(this->bl_post_body);
     if (action.compare("GetRolePolicy") == 0)
       return new RGWGetRolePolicy;
     if (action.compare("ListRolePolicies") == 0)
       return new RGWListRolePolicies;
     if (action.compare("DeleteRolePolicy") == 0)
-      return new RGWDeleteRolePolicy;
+      return new RGWDeleteRolePolicy(this->bl_post_body);
     if (action.compare("PutUserPolicy") == 0)
       return new RGWPutUserPolicy;
     if (action.compare("GetUserPolicy") == 0)
@@ -80,23 +81,25 @@ RGWOp *RGWHandler_REST_IAM::op_post()
     if (action.compare("DeleteOpenIDConnectProvider") == 0)
       return new RGWDeleteOIDCProvider;
     if (action.compare("TagRole") == 0)
-      return new RGWTagRole;
+      return new RGWTagRole(this->bl_post_body);
     if (action.compare("ListRoleTags") == 0)
       return new RGWListRoleTags;
     if (action.compare("UntagRole") == 0)
-      return new RGWUntagRole;
+      return new RGWUntagRole(this->bl_post_body);
+    if (action.compare("UpdateRole") == 0)
+      return new RGWUpdateRole(this->bl_post_body);
   }
 
   return nullptr;
 }
 
 int RGWHandler_REST_IAM::init(rgw::sal::Store* store,
-                              struct req_state *s,
+                              req_state *s,
                               rgw::io::BasicClient *cio)
 {
   s->dialect = "iam";
 
-  if (int ret = RGWHandler_REST_IAM::init_from_header(s, RGW_FORMAT_XML, true); ret < 0) {
+  if (int ret = RGWHandler_REST_IAM::init_from_header(s, RGWFormat::XML, true); ret < 0) {
     ldpp_dout(s, 10) << "init_from_header returned err=" << ret <<  dendl;
     return ret;
   }
@@ -109,8 +112,8 @@ int RGWHandler_REST_IAM::authorize(const DoutPrefixProvider* dpp, optional_yield
   return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
 }
 
-int RGWHandler_REST_IAM::init_from_header(struct req_state* s,
-                                          int default_formatter,
+int RGWHandler_REST_IAM::init_from_header(req_state* s,
+                                          RGWFormat default_formatter,
                                           bool configurable_format)
 {
   string req;
@@ -153,9 +156,10 @@ int RGWHandler_REST_IAM::init_from_header(struct req_state* s,
 
 RGWHandler_REST*
 RGWRESTMgr_IAM::get_handler(rgw::sal::Store* store,
-			    struct req_state* const s,
+			    req_state* const s,
 			    const rgw::auth::StrategyRegistry& auth_registry,
 			    const std::string& frontend_prefix)
 {
-  return new RGWHandler_REST_IAM(auth_registry);
+  bufferlist bl;
+  return new RGWHandler_REST_IAM(auth_registry, bl);
 }

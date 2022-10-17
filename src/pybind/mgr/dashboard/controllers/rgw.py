@@ -13,7 +13,7 @@ from ..services.ceph_service import CephService
 from ..services.rgw_client import NoRgwDaemonsException, RgwClient
 from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, allow_empty_body
+    ReadPermission, RESTController, UIRouter, allow_empty_body
 from ._version import APIVersion
 
 try:
@@ -41,7 +41,7 @@ RGW_USER_SCHEMA = {
 }
 
 
-@APIRouter('/rgw', Scope.RGW)
+@UIRouter('/rgw', Scope.RGW)
 @APIDoc("RGW Management API", "Rgw")
 class Rgw(BaseController):
     @Endpoint()
@@ -197,6 +197,28 @@ class RgwBucket(RgwRESTController):
             rgw_client.set_bucket_versioning(bucket_name, versioning_state, mfa_delete,
                                              mfa_token_serial, mfa_token_pin)
 
+    def _set_encryption(self, bid, encryption_type, key_id, daemon_name, owner):
+
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        rgw_client.set_bucket_encryption(bid, key_id, encryption_type)
+
+    # pylint: disable=W0613
+    def _set_encryption_config(self, encryption_type, kms_provider, auth_method, secret_engine,
+                               secret_path, namespace, address, token, daemon_name, owner,
+                               ssl_cert, client_cert, client_key):
+
+        CephService.set_encryption_config(encryption_type, kms_provider, auth_method,
+                                          secret_engine, secret_path, namespace, address,
+                                          token, ssl_cert, client_cert, client_key)
+
+    def _get_encryption(self, bucket_name, daemon_name, owner):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.get_bucket_encryption(bucket_name)
+
+    def _delete_encryption(self, bucket_name, daemon_name, owner):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.delete_bucket_encryption(bucket_name)
+
     def _get_locking(self, owner, daemon_name, bucket_name):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.get_bucket_locking(bucket_name)
@@ -256,6 +278,8 @@ class RgwBucket(RgwRESTController):
 
         # Append the versioning configuration.
         versioning = self._get_versioning(result['owner'], daemon_name, bucket_name)
+        encryption = self._get_encryption(bucket_name, daemon_name, result['owner'])
+        result['encryption'] = encryption['Status']
         result['versioning'] = versioning['Status']
         result['mfa_delete'] = versioning['MfaDelete']
 
@@ -269,8 +293,10 @@ class RgwBucket(RgwRESTController):
     def create(self, bucket, uid, zonegroup=None, placement_target=None,
                lock_enabled='false', lock_mode=None,
                lock_retention_period_days=None,
-               lock_retention_period_years=None, daemon_name=None):
+               lock_retention_period_years=None, encryption_state='false',
+               encryption_type=None, key_id=None, daemon_name=None):
         lock_enabled = str_to_bool(lock_enabled)
+        encryption_state = str_to_bool(encryption_state)
         try:
             rgw_client = RgwClient.instance(uid, daemon_name)
             result = rgw_client.create_bucket(bucket, zonegroup,
@@ -280,15 +306,21 @@ class RgwBucket(RgwRESTController):
                 self._set_locking(uid, daemon_name, bucket, lock_mode,
                                   lock_retention_period_days,
                                   lock_retention_period_years)
+
+            if encryption_state:
+                self._set_encryption(bucket, encryption_type, key_id, daemon_name, uid)
+
             return result
         except RequestException as e:  # pragma: no cover - handling is too obvious
             raise DashboardException(e, http_status_code=500, component='rgw')
 
     @allow_empty_body
     def set(self, bucket, bucket_id, uid, versioning_state=None,
+            encryption_state='false', encryption_type=None, key_id=None,
             mfa_delete=None, mfa_token_serial=None, mfa_token_pin=None,
             lock_mode=None, lock_retention_period_days=None,
             lock_retention_period_years=None, daemon_name=None):
+        encryption_state = str_to_bool(encryption_state)
         # When linking a non-tenant-user owned bucket to a tenanted user, we
         # need to prefix bucket name with '/'. e.g. photos -> /photos
         if '$' in uid and '/' not in bucket:
@@ -322,6 +354,11 @@ class RgwBucket(RgwRESTController):
                               lock_retention_period_days,
                               lock_retention_period_years)
 
+        encryption_status = self._get_encryption(bucket_name, daemon_name, uid)
+        if encryption_state and encryption_status['Status'] != 'Enabled':
+            self._set_encryption(bucket_name, encryption_type, key_id, daemon_name, uid)
+        if encryption_status['Status'] == 'Enabled' and (not encryption_state):
+            self._delete_encryption(bucket_name, daemon_name, uid)
         return self._append_bid(result)
 
     def delete(self, bucket, purge_objects='true', daemon_name=None):
@@ -329,6 +366,32 @@ class RgwBucket(RgwRESTController):
             'bucket': bucket,
             'purge-objects': purge_objects
         }, json_response=False)
+
+    @RESTController.Collection(method='PUT', path='/setEncryptionConfig')
+    @allow_empty_body
+    def set_encryption_config(self, encryption_type=None, kms_provider=None, auth_method=None,
+                              secret_engine=None, secret_path='', namespace='', address=None,
+                              token=None, daemon_name=None, owner=None, ssl_cert=None,
+                              client_cert=None, client_key=None):
+        return self._set_encryption_config(encryption_type, kms_provider, auth_method,
+                                           secret_engine, secret_path, namespace,
+                                           address, token, daemon_name, owner, ssl_cert,
+                                           client_cert, client_key)
+
+    @RESTController.Collection(method='GET', path='/getEncryption')
+    @allow_empty_body
+    def get_encryption(self, bucket_name, daemon_name=None, owner=None):
+        return self._get_encryption(bucket_name, daemon_name, owner)
+
+    @RESTController.Collection(method='DELETE', path='/deleteEncryption')
+    @allow_empty_body
+    def delete_encryption(self, bucket_name, daemon_name=None, owner=None):
+        return self._delete_encryption(bucket_name, daemon_name, owner)
+
+    @RESTController.Collection(method='GET', path='/getEncryptionConfig')
+    @allow_empty_body
+    def get_encryption_config(self):
+        return CephService.get_encryption_config()
 
 
 @APIRouter('/rgw/user', Scope.RGW)
@@ -506,15 +569,32 @@ class RgwUser(RgwRESTController):
     def create_subuser(self, uid, subuser, access, key_type='s3',
                        generate_secret='true', access_key=None,
                        secret_key=None, daemon_name=None):
-        return self.proxy(daemon_name, 'PUT', 'user', {
-            'uid': uid,
-            'subuser': subuser,
-            'key-type': key_type,
-            'access': access,
-            'generate-secret': generate_secret,
-            'access-key': access_key,
-            'secret-key': secret_key
-        })
+        # pylint: disable=R1705
+        subusr_array = []
+        user = json.loads(self.get(uid, daemon_name))  # type: ignore
+        subusers = user["subusers"]
+        for sub_usr in subusers:
+            subusr_array.append(sub_usr["id"])
+        if subuser in subusr_array:
+            return self.proxy(daemon_name, 'POST', 'user', {
+                'uid': uid,
+                'subuser': subuser,
+                'key-type': key_type,
+                'access': access,
+                'generate-secret': generate_secret,
+                'access-key': access_key,
+                'secret-key': secret_key
+            })
+        else:
+            return self.proxy(daemon_name, 'PUT', 'user', {
+                'uid': uid,
+                'subuser': subuser,
+                'key-type': key_type,
+                'access': access,
+                'generate-secret': generate_secret,
+                'access-key': access_key,
+                'secret-key': secret_key
+            })
 
     @RESTController.Resource(method='DELETE', path='/subuser/{subuser}', status=204)
     def delete_subuser(self, uid, subuser, purge_keys='true', daemon_name=None):

@@ -77,7 +77,8 @@ void get_arguments_enable(po::options_description *positional,
                           po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   positional->add_options()
-    ("mode", "mirror image mode (journal or snapshot) [default: journal]");
+    ("mode", po::value<std::string>()->default_value(""),
+     "mirror image mode (journal or snapshot) [default: journal]");
 }
 
 void get_arguments_disable(po::options_description *positional,

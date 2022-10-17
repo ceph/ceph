@@ -41,9 +41,9 @@ void RadosTestPPNS::TearDownTestCase()
 void RadosTestPPNS::SetUp()
 {
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
-  bool requires;
-  ASSERT_EQ(0, ioctx.pool_requires_alignment2(&requires));
-  ASSERT_FALSE(requires);
+  bool req;
+  ASSERT_EQ(0, ioctx.pool_requires_alignment2(&req));
+  ASSERT_FALSE(req);
 }
 
 void RadosTestPPNS::TearDown()
@@ -124,9 +124,9 @@ void RadosTestParamPPNS::SetUp()
   }
 
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
-  bool requires;
-  ASSERT_EQ(0, ioctx.pool_requires_alignment2(&requires));
-  ASSERT_FALSE(requires);
+  bool req;
+  ASSERT_EQ(0, ioctx.pool_requires_alignment2(&req));
+  ASSERT_FALSE(req);
 }
 
 void RadosTestParamPPNS::TearDown()
@@ -166,9 +166,9 @@ void RadosTestECPPNS::TearDownTestCase()
 void RadosTestECPPNS::SetUp()
 {
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
-  bool requires;
-  ASSERT_EQ(0, ioctx.pool_requires_alignment2(&requires));
-  ASSERT_TRUE(requires);
+  bool req;
+  ASSERT_EQ(0, ioctx.pool_requires_alignment2(&req));
+  ASSERT_TRUE(req);
   ASSERT_EQ(0, ioctx.pool_required_alignment2(&alignment));
   ASSERT_NE(0U, alignment);
 }
@@ -201,9 +201,9 @@ void RadosTestPP::SetUp()
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
   nspace = get_temp_pool_name();
   ioctx.set_namespace(nspace);
-  bool requires;
-  ASSERT_EQ(0, ioctx.pool_requires_alignment2(&requires));
-  ASSERT_FALSE(requires);
+  bool req;
+  ASSERT_EQ(0, ioctx.pool_requires_alignment2(&req));
+  ASSERT_FALSE(req);
 }
 
 void RadosTestPP::TearDown()
@@ -322,9 +322,9 @@ void RadosTestParamPP::SetUp()
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
   nspace = get_temp_pool_name();
   ioctx.set_namespace(nspace);
-  bool requires;
-  ASSERT_EQ(0, ioctx.pool_requires_alignment2(&requires));
-  ASSERT_FALSE(requires);
+  bool req;
+  ASSERT_EQ(0, ioctx.pool_requires_alignment2(&req));
+  ASSERT_FALSE(req);
 }
 
 void RadosTestParamPP::TearDown()
@@ -373,9 +373,9 @@ void RadosTestECPP::SetUp()
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
   nspace = get_temp_pool_name();
   ioctx.set_namespace(nspace);
-  bool requires;
-  ASSERT_EQ(0, ioctx.pool_requires_alignment2(&requires));
-  ASSERT_TRUE(requires);
+  bool req;
+  ASSERT_EQ(0, ioctx.pool_requires_alignment2(&req));
+  ASSERT_TRUE(req);
   ASSERT_EQ(0, ioctx.pool_required_alignment2(&alignment));
   ASSERT_NE(0U, alignment);
 }

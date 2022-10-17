@@ -59,7 +59,7 @@ service interfaces built on top of ``librados``.
 Storing Data
 ------------
 
-The Ceph Storage Cluster receives data from :term:`Ceph Clients`--whether it
+The Ceph Storage Cluster receives data from :term:`Ceph Client`\s--whether it
 comes through a :term:`Ceph Block Device`, :term:`Ceph Object Storage`, the
 :term:`Ceph File System` or a custom implementation you create using
 ``librados``-- which is stored as RADOS objects. Each object is stored on an
@@ -80,7 +80,7 @@ stored in a monolithic database-like fashion.
 Ceph OSD Daemons store data as objects in a flat namespace (e.g., no
 hierarchy of directories). An object has an identifier, binary data, and
 metadata consisting of a set of name/value pairs. The semantics are completely
-up to :term:`Ceph Clients`. For example, CephFS uses metadata to store file
+up to :term:`Ceph Client`\s. For example, CephFS uses metadata to store file
 attributes such as the file owner, created date, last modified date, and so
 forth.
 
@@ -603,7 +603,7 @@ name the Ceph OSD Daemons specifically (e.g., ``osd.0``, ``osd.1``, etc.), but
 rather refer to them as *Primary*, *Secondary*, and so forth. By convention, 
 the *Primary* is the first OSD in the *Acting Set*, and is responsible for 
 coordinating the peering process for each placement group where it acts as 
-the *Primary*, and is the **ONLY** OSD that that will accept client-initiated 
+the *Primary*, and is the **ONLY** OSD that will accept client-initiated 
 writes to objects for a given placement group where it acts as the *Primary*.
 
 When a series of OSDs are responsible for a placement group, that series of
@@ -1619,13 +1619,13 @@ instance for high availability.
 
 
 
-.. _RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters: https://ceph.com/wp-content/uploads/2016/08/weil-rados-pdsw07.pdf
+.. _RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters: https://ceph.com/assets/pdfs/weil-rados-pdsw07.pdf
 .. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)
 .. _Monitor Config Reference: ../rados/configuration/mon-config-ref
 .. _Monitoring OSDs and PGs: ../rados/operations/monitoring-osd-pg
 .. _Heartbeats: ../rados/configuration/mon-osd-interaction
 .. _Monitoring OSDs: ../rados/operations/monitoring-osd-pg/#monitoring-osds
-.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/wp-content/uploads/2016/08/weil-crush-sc06.pdf
+.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.io/assets/pdfs/weil-crush-sc06.pdf
 .. _Data Scrubbing: ../rados/configuration/osd-config-ref#scrubbing
 .. _Report Peering Failure: ../rados/configuration/mon-osd-interaction#osds-report-peering-failure
 .. _Troubleshooting Peering Failure: ../rados/troubleshooting/troubleshooting-pg#placement-group-down-peering-failure

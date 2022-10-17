@@ -15,9 +15,8 @@
 
 #include <boost/asio/associated_allocator.hpp>
 #include <boost/asio/associated_executor.hpp>
+#include <boost/asio/bind_allocator.hpp>
 #include <boost/asio/bind_executor.hpp>
-
-#include "common/async/bind_allocator.h"
 
 namespace ceph::async {
 template<typename Executor, typename Allocator, typename Completion>

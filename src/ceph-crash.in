@@ -18,6 +18,7 @@ auth_names = ['client.crash.%s' % socket.gethostname(),
               'client.crash',
               'client.admin']
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -29,7 +30,8 @@ def parse_args():
     )
     parser.add_argument(
         '--name', '-n',
-        help='ceph name to authenticate as (default: try client.crash, client.admin)')
+        help='ceph name to authenticate as '
+             '(default: try client.crash, client.admin)')
     parser.add_argument(
         '--log-level', '-l',
         help='log level output (default: INFO), support INFO or DEBUG')
@@ -79,9 +81,11 @@ def scrape_path(path):
                     (metapath, p, os.path.join('posted/', p))
                 )
 
-def handler(signum):
+
+def handler(signum, frame):
     print('*** Interrupted with signal %d ***' % signum)
     sys.exit(0)
+
 
 def main():
     global auth_names
@@ -100,6 +104,10 @@ def main():
     while not os.path.isdir(postdir):
         log.error("directory %s does not exist; please create" % postdir)
         time.sleep(30)
+
+    log.info("pinging cluster to exercise our key")
+    pr = subprocess.Popen(args=['timeout', '30', 'ceph', '-s'])
+    pr.wait()
 
     log.info("monitoring path %s, delay %ds" % (args.path, args.delay * 60.0))
     while True:

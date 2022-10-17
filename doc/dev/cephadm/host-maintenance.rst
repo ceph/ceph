@@ -58,7 +58,7 @@ The list below shows some of these additional daemons.
 
 By using the --check option first, the Admin can choose whether to proceed. This 
 workflow is obviously optional for the CLI user, but could be integrated into the
-UI workflow to help less experienced Administators manage the cluster.
+UI workflow to help less experienced administrators manage the cluster.
 
 By adopting this two-phase approach, a UI based workflow would look something
 like this.

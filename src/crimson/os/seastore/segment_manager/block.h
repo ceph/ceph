@@ -73,10 +73,12 @@ public:
   }
 
   write_ertr::future<> write_out(
+    device_id_t device_id,
     seastar::file &device,
     uint64_t offset);
 
   read_ertr::future<> read_in(
+    device_id_t device_id,
     seastar::file &device,
     uint64_t offset);
 };
@@ -95,6 +97,7 @@ public:
   segment_off_t get_write_ptr() const final { return write_pointer; }
   close_ertr::future<> close() final;
   write_ertr::future<> write(segment_off_t offset, ceph::bufferlist bl) final;
+  write_ertr::future<> advance_wp(segment_off_t offset) final;
 
   ~BlockSegment() {}
 };
@@ -110,7 +113,7 @@ class BlockSegmentManager final : public SegmentManager {
 public:
   mount_ret mount() final;
 
-  mkfs_ret mkfs(segment_manager_config_t) final;
+  mkfs_ret mkfs(device_config_t) final;
 
   close_ertr::future<> close();
 
@@ -129,10 +132,10 @@ public:
     size_t len,
     ceph::bufferptr &out) final;
 
-  size_t get_size() const final {
+  size_t get_available_size() const final {
     return superblock.size;
   }
-  segment_off_t get_block_size() const {
+  extent_len_t get_block_size() const {
     return superblock.block_size;
   }
   segment_off_t get_segment_size() const {
@@ -140,10 +143,11 @@ public:
   }
 
   device_id_t get_device_id() const final {
-    return superblock.device_id;
+    assert(device_id <= DEVICE_ID_MAX_VALID);
+    return device_id;
   }
   secondary_device_set_t& get_secondary_devices() final {
-    return superblock.secondary_devices;
+    return superblock.config.secondary_devices;
   }
   // public so tests can bypass segment interface when simpler
   Segment::write_ertr::future<> segment_write(
@@ -151,14 +155,8 @@ public:
     ceph::bufferlist bl,
     bool ignore_check=false);
 
-  device_spec_t get_device_spec() const final {
-    return {superblock.magic,
-	    superblock.dtype,
-	    superblock.device_id};
-  }
-
   magic_t get_magic() const final {
-    return superblock.magic;
+    return superblock.config.spec.magic;
   }
 
 private:
@@ -203,7 +201,13 @@ private:
   block_sm_superblock_t superblock;
   seastar::file device;
 
-  device_id_t device_id = 0;
+  void set_device_id(device_id_t id) {
+    assert(id <= DEVICE_ID_MAX_VALID);
+    assert(device_id == DEVICE_ID_NULL ||
+           device_id == id);
+    device_id = id;
+  }
+  device_id_t device_id = DEVICE_ID_NULL;
 
   size_t get_offset(paddr_t addr) {
     auto& seg_addr = addr.as_seg_paddr();
@@ -213,7 +217,7 @@ private:
   }
 
   const seastore_meta_t &get_meta() const {
-    return superblock.meta;
+    return superblock.config.meta;
   }
 
   std::vector<segment_state_t> segment_state;

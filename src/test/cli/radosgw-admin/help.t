@@ -56,10 +56,18 @@
     quota set                  set quota params
     quota enable               enable quota
     quota disable              disable quota
+    ratelimit get              get ratelimit params
+    ratelimit set              set ratelimit params
+    ratelimit enable           enable ratelimit
+    ratelimit disable          disable ratelimit
     global quota get           view global quota params
     global quota set           set global quota params
     global quota enable        enable a global quota
     global quota disable       disable a global quota
+    global ratelimit get       view global ratelimit params
+    global ratelimit set       set global ratelimit params
+    global ratelimit enable    enable a ratelimit quota
+    global ratelimit disable   disable a ratelimit quota
     realm create               create a new realm
     realm rm                   remove a realm
     realm get                  show realm info
@@ -149,18 +157,19 @@
     role delete                remove a role
     role get                   get a role
     role list                  list roles with specified path prefix
-    role modify                modify the assume role policy of an existing role
+    role-trust-policy modify   modify the assume role policy of an existing role
     role-policy put            add/update permission policy to role
     role-policy list           list policies attached to a role
     role-policy get            get the specified inline policy document embedded with the given role
     role-policy delete         remove policy attached to a role
+    role update                update max_session_duration of a role
     reshard add                schedule a resharding of a bucket
     reshard list               list all bucket resharding or scheduled to be resharded
     reshard status             read bucket resharding status
     reshard process            process of scheduled reshard jobs
     reshard cancel             cancel resharding a bucket
     reshard stale-instances list list stale-instances from bucket resharding
-    reshard stale-instances rm   cleanup stale-instances from bucket resharding
+    reshard stale-instances delete   cleanup stale-instances from bucket resharding
     sync error list            list sync error
     sync error trim            trim sync error
     mfa create                 create a new MFA TOTP token
@@ -218,6 +227,10 @@
                                  data sync status
                                required for: 
                                  mdlog trim
+     --gen=<gen-id>            optional for: 
+                                 bilog list
+                                 bilog trim
+                                 bilog status
      --max-entries=<entries>   max entries for listing operations
      --metadata-key=<key>      key to retrieve metadata from with metadata get
      --remote=<remote>         zone or zonegroup id of remote gateway
@@ -302,6 +315,8 @@
      --trim-delay-ms           time interval in msec to limit the frequency of sync error log entries trimming operations,
                                the trimming process will sleep the specified msec for every 1000 entries trimmed
      --max-concurrent-ios      maximum concurrent ios for bucket operations (default: 32)
+     --enable-feature          enable a zone/zonegroup feature
+     --disable-feature         disable a zone/zonegroup feature
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
@@ -309,6 +324,14 @@
      --max-objects             specify max objects (negative value to disable)
      --max-size                specify max size (in B/K/M/G/T, negative value to disable)
      --quota-scope             scope of quota (bucket, user)
+  
+  Rate limiting options:
+     --max-read-ops            specify max requests per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited
+     --max-read-bytes          specify max bytes per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited
+     --max-write-ops           specify max requests per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited
+     --max-write-bytes         specify max bytes per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited
+     --ratelimit-scope         scope of rate limiting: bucket, user, anonymous
+                               anonymous can be configured only with global rate limit
   
   Orphans search options:
      --num-shards              num of shards to use for keeping the temporary scan info
@@ -340,7 +363,7 @@
      --event-id                event id in a pubsub subscription
   
   Script options:
-     --context                 context in which the script runs. one of: preRequest, postRequest
+     --context                 context in which the script runs. one of: prerequest, postrequest, background, getdata, putdata
      --package                 name of the lua package that should be added/removed to/from the allowlist
      --allow-compilation       package is allowed to compile C code as part of its installation
   

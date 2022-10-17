@@ -675,7 +675,8 @@ public:
     ScrubMap &map,
     ScrubMapBuilder &pos,
     ScrubMap::object &o) override;
-  uint64_t be_get_ondisk_size(uint64_t logical_size) override {
+
+  uint64_t be_get_ondisk_size(uint64_t logical_size) const final {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
   void _failed_push(const hobject_t &hoid,

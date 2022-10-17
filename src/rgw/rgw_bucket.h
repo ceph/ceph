@@ -39,8 +39,6 @@ class RGWZone;
 struct RGWZoneParams;
 
 extern void init_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id);
-
-extern int rgw_bucket_parse_bucket_instance(const std::string& bucket_instance, std::string *bucket_name, std::string *bucket_id, int *shard_id);
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const std::string& key,
                                        rgw_bucket* bucket, int *shard_id);
 
@@ -206,7 +204,7 @@ public:
 
 class RGWBucketInstanceMetaHandlerAllocator {
 public:
-  static RGWBucketInstanceMetadataHandlerBase *alloc();
+  static RGWBucketInstanceMetadataHandlerBase *alloc(rgw::sal::Store* store);
 };
 
 class RGWArchiveBucketMetaHandlerAllocator {
@@ -216,7 +214,7 @@ public:
 
 class RGWArchiveBucketInstanceMetaHandlerAllocator {
 public:
-  static RGWBucketInstanceMetadataHandlerBase *alloc();
+  static RGWBucketInstanceMetadataHandlerBase *alloc(rgw::sal::Store* store);
 };
 
 extern int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw::sal::Bucket* bucket, rgw_obj_key& key);
@@ -247,6 +245,7 @@ struct RGWBucketAdminOpState {
   std::unique_ptr<rgw::sal::Bucket>  bucket;
 
   RGWQuotaInfo quota;
+  RGWRateLimitInfo ratelimit_info;
 
   void set_fetch_stats(bool value) { stat_buckets = value; }
   void set_check_objects(bool value) { check_objects = value; }
@@ -273,6 +272,9 @@ struct RGWBucketAdminOpState {
   }
   void set_quota(RGWQuotaInfo& value) {
     quota = value;
+  }
+  void set_bucket_ratelimit(RGWRateLimitInfo& value) {
+    ratelimit_info = value;
   }
 
 
@@ -417,6 +419,7 @@ class RGWBucketCtl {
     RGWSI_Bucket *bucket{nullptr};
     RGWSI_Bucket_Sync *bucket_sync{nullptr};
     RGWSI_BucketIndex *bi{nullptr};
+    RGWSI_User* user = nullptr;
   } svc;
 
   struct Ctl {
@@ -435,7 +438,8 @@ public:
   RGWBucketCtl(RGWSI_Zone *zone_svc,
                RGWSI_Bucket *bucket_svc,
                RGWSI_Bucket_Sync *bucket_sync_svc,
-               RGWSI_BucketIndex *bi_svc);
+               RGWSI_BucketIndex *bi_svc,
+               RGWSI_User* user_svc);
 
   void init(RGWUserCtl *user_ctl,
             RGWBucketMetadataHandler *_bm_handler,
@@ -701,7 +705,7 @@ public:
   int sync_user_stats(const DoutPrefixProvider *dpp, 
                       const rgw_user& user_id, const RGWBucketInfo& bucket_info,
 		      optional_yield y,
-                      RGWBucketEnt* pent = nullptr);
+                      RGWBucketEnt* pent);
 
   /* bucket sync */
   int get_sync_policy_handler(std::optional<rgw_zone_id> zone,

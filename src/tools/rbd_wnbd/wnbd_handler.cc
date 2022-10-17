@@ -62,15 +62,18 @@ int WnbdHandler::wait()
   return err;
 }
 
-int WnbdAdminHook::call (std::string_view command, const cmdmap_t& cmdmap,
-     Formatter *f,
-     std::ostream& errss,
-     bufferlist& out) {
-    if (command == "wnbd stats") {
-      return m_handler->dump_stats(f);
-    }
-    return -ENOSYS;
+int WnbdAdminHook::call (
+  std::string_view command, const cmdmap_t& cmdmap,
+  const bufferlist&,
+  Formatter *f,
+  std::ostream& errss,
+  bufferlist& out)
+{
+  if (command == "wnbd stats") {
+    return m_handler->dump_stats(f);
   }
+  return -ENOSYS;
+}
 
 int WnbdHandler::dump_stats(Formatter *f)
 {

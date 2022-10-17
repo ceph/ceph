@@ -1,20 +1,15 @@
-import { CreateClusterWizardHelper } from 'cypress/integration/cluster/create-cluster.po';
-import { HostsPageHelper } from 'cypress/integration/cluster/hosts.po';
-import { OSDsPageHelper } from 'cypress/integration/cluster/osds.po';
-import { ServicesPageHelper } from 'cypress/integration/cluster/services.po';
+/* tslint:disable*/
+import { CreateClusterWizardHelper } from '../../cluster/create-cluster.po';
+import { HostsPageHelper } from '../../cluster/hosts.po';
+import { ServicesPageHelper } from '../../cluster/services.po';
+/* tslint:enable*/
 
 describe('when cluster creation is completed', () => {
   const createCluster = new CreateClusterWizardHelper();
   const services = new ServicesPageHelper();
   const hosts = new HostsPageHelper();
 
-  const serviceName = 'rgw.foo';
-  const hostnames = [
-    'ceph-node-00.cephlab.com',
-    'ceph-node-01.cephlab.com',
-    'ceph-node-02.cephlab.com',
-    'ceph-node-03.cephlab.com'
-  ];
+  const hostnames = ['ceph-node-00', 'ceph-node-01', 'ceph-node-02', 'ceph-node-03'];
 
   beforeEach(() => {
     cy.login();
@@ -33,6 +28,22 @@ describe('when cluster creation is completed', () => {
   describe('Hosts page', () => {
     beforeEach(() => {
       hosts.navigateTo();
+    });
+
+    it('should add one more host', () => {
+      hosts.navigateTo('add');
+      hosts.add(hostnames[3]);
+      hosts.checkExist(hostnames[3], true);
+    });
+
+    it('should check if monitoring stacks are running on the root host', { retries: 2 }, () => {
+      const monitoringStack = ['alertmanager', 'grafana', 'node-exporter', 'prometheus'];
+      hosts.clickTab('cd-host-details', 'ceph-node-00', 'Daemons');
+      for (const daemon of monitoringStack) {
+        cy.get('cd-host-details').within(() => {
+          services.checkServiceStatus(daemon);
+        });
+      }
     });
 
     it('should have removed "_no_schedule" label', () => {
@@ -55,51 +66,13 @@ describe('when cluster creation is completed', () => {
       });
     });
 
-    it('should check if rgw service is running', () => {
-      hosts.clickTab('cd-host-details', hostnames[3], 'Daemons');
-      cy.get('cd-host-details').within(() => {
-        services.checkServiceStatus('rgw');
-      });
-    });
-  });
-
-  describe('OSDs page', () => {
-    const osds = new OSDsPageHelper();
-
-    beforeEach(() => {
-      osds.navigateTo();
-    });
-
-    it('should check if osds are created', { retries: 1 }, () => {
-      osds.getTableCount('total').should('be.gte', 1);
-    });
-  });
-
-  describe('Services page', () => {
-    beforeEach(() => {
-      services.navigateTo();
-    });
-
-    it('should check if services are created', () => {
-      services.checkExist(serviceName, true);
-    });
-  });
-
-  describe('Host actions', () => {
-    beforeEach(() => {
-      hosts.navigateTo();
-    });
-
-    it('should force maintenance and exit', { retries: 1 }, () => {
-      hosts.maintenance(hostnames[3], true, true);
-    });
-
-    it('should drain, remove and add the host back', () => {
-      hosts.drain(hostnames[1]);
-      hosts.remove(hostnames[1]);
-      hosts.navigateTo('add');
-      hosts.add(hostnames[1]);
-      hosts.checkExist(hostnames[1], true);
+    it('should check if mon daemon is running on all hosts', () => {
+      for (const hostname of hostnames) {
+        hosts.clickTab('cd-host-details', hostname, 'Daemons');
+        cy.get('cd-host-details').within(() => {
+          services.checkServiceStatus('mon');
+        });
+      }
     });
   });
 });

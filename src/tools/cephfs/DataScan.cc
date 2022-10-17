@@ -681,8 +681,9 @@ int DataScan::scan_inodes()
     AccumulateResult accum_res;
     inode_backtrace_t backtrace;
     file_layout_t loaded_layout = file_layout_t::get_default();
+    std::string symlink;
     r = ClsCephFSClient::fetch_inode_accumulate_result(
-        data_io, oid, &backtrace, &loaded_layout, &accum_res);
+        data_io, oid, &backtrace, &loaded_layout, &symlink, &accum_res);
 
     if (r == -EINVAL) {
       dout(4) << "Accumulated metadata missing from '"
@@ -828,7 +829,7 @@ int DataScan::scan_inodes()
     }
 
     InodeStore dentry;
-    build_file_dentry(obj_name_ino, file_size, file_mtime, guessed_layout, &dentry);
+    build_file_dentry(obj_name_ino, file_size, file_mtime, guessed_layout, &dentry, symlink);
 
     // Inject inode to the metadata pool
     if (have_backtrace) {
@@ -950,6 +951,8 @@ int DataScan::scan_links()
     for (auto it = metadata_io.nobjects_begin(); it != it_end; ++it) {
       const std::string oid = it->get_oid();
 
+      dout(10) << "step " << step << ": handling object " << oid << dendl;
+
       uint64_t dir_ino = 0;
       uint64_t frag_id = 0;
       int r = parse_oid(oid, &dir_ino, &frag_id);
@@ -988,7 +991,9 @@ int DataScan::scan_links()
 	try {
 	  snapid_t dnfirst;
 	  decode(dnfirst, q);
-	  if (dnfirst <= CEPH_MAXSNAP) {
+          if (dnfirst == CEPH_NOSNAP) {
+            dout(20) << "injected ino detected" << dendl;
+          } else if (dnfirst <= CEPH_MAXSNAP) {
 	    if (dnfirst - 1 > last_snap)
 	      last_snap = dnfirst - 1;
 	  }
@@ -1011,7 +1016,9 @@ int DataScan::scan_links()
 
 	    if (step == SCAN_INOS) {
 	      if (used_inos.contains(ino, 1)) {
-		dup_primaries[ino].size();
+		dup_primaries.emplace(std::piecewise_construct,
+				      std::forward_as_tuple(ino),
+				      std::forward_as_tuple());
 	      } else {
 		used_inos.insert(ino);
 	      }
@@ -1060,8 +1067,10 @@ int DataScan::scan_links()
 		snaps.insert(make_move_iterator(begin(srnode.snaps)),
 			     make_move_iterator(end(srnode.snaps)));
 	      }
-	      if (dnfirst == CEPH_NOSNAP)
-		injected_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
+	      if (dnfirst == CEPH_NOSNAP) {
+                injected_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
+                dout(20) << "adding " << ino << " for future processing to fix dnfirst" << dendl;
+              }
 	    }
 	  } else if (dentry_type == 'L' || dentry_type == 'l') {
 	    inodeno_t ino;
@@ -1118,7 +1127,13 @@ int DataScan::scan_links()
 
   used_inos.clear();
 
+  dout(10) << "processing " << dup_primaries.size() << " dup_primaries, "
+	   << remote_links.size() << " remote_links" << dendl;
+
   for (auto& p : dup_primaries) {
+
+    dout(10) << "handling dup " << p.first << dendl;
+
     link_info_t newest;
     for (auto& q : p.second) {
       if (q.version > newest.version) {
@@ -1180,8 +1195,13 @@ int DataScan::scan_links()
     }
   }
 
+  dout(10) << "removing dup dentries from " << to_remove.size() << " objects"
+	   << dendl;
+
   for (auto& p : to_remove) {
     object_t frag_oid = InodeStore::get_object_name(p.first.ino, p.first.frag, "");
+
+    dout(10) << "removing dup dentries from " << p.first << dendl;
 
     int r = metadata_io.omap_rm_keys(frag_oid.name, p.second);
     if (r != 0) {
@@ -1191,7 +1211,12 @@ int DataScan::scan_links()
   }
   to_remove.clear();
 
+  dout(10) << "processing " << bad_nlink_inos.size() << " bad_nlink_inos"
+	   << dendl;
+
   for (auto &p : bad_nlink_inos) {
+    dout(10) << "handling bad_nlink_ino " << p.first << dendl;
+
     InodeStore inode;
     snapid_t first;
     int r = read_dentry(p.second.dirino, p.second.frag, p.second.name, &inode, &first);
@@ -1211,9 +1236,15 @@ int DataScan::scan_links()
       return r;
   }
 
+  dout(10) << "processing " << injected_inos.size() << " injected_inos"
+	   << dendl;
+
   for (auto &p : injected_inos) {
+    dout(10) << "handling injected_ino " << p.first << dendl;
+
     InodeStore inode;
     snapid_t first;
+    dout(20) << " fixing linkage (dnfirst) of " << p.second.dirino << ":" << p.second.name << dendl;
     int r = read_dentry(p.second.dirino, p.second.frag, p.second.name, &inode, &first);
     if (r < 0) {
       derr << "Unexpected error reading dentry "
@@ -1222,14 +1253,19 @@ int DataScan::scan_links()
       return r;
     }
 
-    if (first != CEPH_NOSNAP)
+    if (first != CEPH_NOSNAP) {
+      dout(20) << " ????" << dendl;
       continue;
+    }
 
     first = last_snap + 1;
+    dout(20) << " first is now " << first << dendl;
     r = metadata_driver->inject_linkage(p.second.dirino, p.second.name, p.second.frag, inode, first);
     if (r < 0)
       return r;
   }
+
+  dout(10) << "updating inotable" << dendl;
 
   for (auto& p : max_ino_map) {
     InoTable inotable(nullptr);
@@ -1248,6 +1284,8 @@ int DataScan::scan_links()
 	return r;
     }
   }
+
+  dout(10) << "updating snaptable" << dendl;
 
   {
     SnapServer snaptable;
@@ -1839,9 +1877,14 @@ int MetadataDriver::inject_with_backtrace(
           << " at 0x" << parent_ino << "/" << dname << std::dec
           << " with size=" << dentry.inode->size << " bytes" << dendl;
 
+        /* NOTE: dnfirst fixed in scan_links */
         r = inject_linkage(parent_ino, dname, fragment, dentry);
       } else {
         // This is the linkage for an ancestor directory
+        dout(10) << "Linking ancestor directory of inode 0x" << std::hex << ino
+                 << " at 0x" << std::hex << parent_ino
+                 << ":" << dname << dendl;
+
         InodeStore ancestor_dentry;
         auto inode = ancestor_dentry.get_inode();
         inode->mode = 0755 | S_IFDIR;
@@ -1860,6 +1903,7 @@ int MetadataDriver::inject_with_backtrace(
         inode->gid = g_conf()->mds_root_ino_gid;
         inode->version = 1;
         inode->backtrace_version = 1;
+        /* NOTE: dnfirst fixed in scan_links */
         r = inject_linkage(parent_ino, dname, fragment, ancestor_dentry);
       }
 
@@ -2156,12 +2200,19 @@ int LocalFileDriver::check_roots(bool *result)
 
 void MetadataTool::build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
-    const file_layout_t &layout, InodeStore *out)
+    const file_layout_t &layout, InodeStore *out, std::string symlink)
 {
   ceph_assert(out != NULL);
 
   auto inode = out->get_inode();
-  inode->mode = 0500 | S_IFREG;
+  if(!symlink.empty()) {
+    inode->mode = 0777 | S_IFLNK;
+    out->symlink = symlink;
+  }
+  else {
+    inode->mode = 0500 | S_IFREG;
+  }
+
   inode->size = file_size;
   inode->max_size_ever = file_size;
   inode->mtime.tv.tv_sec = file_mtime;

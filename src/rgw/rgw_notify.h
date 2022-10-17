@@ -43,8 +43,9 @@ int remove_persistent_topic(const std::string& topic_name, optional_yield y);
 // then used to commit or abort the reservation
 struct reservation_t {
   struct topic_t {
-    topic_t(const std::string& _configurationId, const rgw_pubsub_topic& _cfg, cls_2pc_reservation::id_t _res_id) :
-        configurationId(_configurationId), cfg(_cfg), res_id(_res_id) {}
+    topic_t(const std::string& _configurationId, const rgw_pubsub_topic& _cfg,
+	    cls_2pc_reservation::id_t _res_id) :
+      configurationId(_configurationId), cfg(_cfg), res_id(_res_id) {}
 
     const std::string configurationId;
     const rgw_pubsub_topic cfg;
@@ -52,18 +53,40 @@ struct reservation_t {
     cls_2pc_reservation::id_t res_id;
   };
 
-  const DoutPrefixProvider *dpp;
+  const DoutPrefixProvider* const dpp;
   std::vector<topic_t> topics;
   rgw::sal::RadosStore* const store;
   const req_state* const s;
   size_t size;
   rgw::sal::Object* const object;
+  rgw::sal::Object* const src_object; // may differ from object
+  rgw::sal::Bucket* const bucket;
   const std::string* const object_name;
-  KeyValueMap cached_metadata;
+  boost::optional<const RGWObjTags&> tagset;
+  meta_map_t x_meta_map; // metadata cached by value
+  const std::string user_id;
+  const std::string user_tenant;
+  const std::string req_id;
+  optional_yield yield;
 
-  reservation_t(const DoutPrefixProvider *_dpp, rgw::sal::RadosStore* _store, const req_state* _s, 
-      rgw::sal::Object* _object, const std::string* _object_name) :
-      dpp(_dpp), store(_store), s(_s), object(_object), object_name(_object_name) {}
+  /* ctor for rgw_op callers */
+  reservation_t(const DoutPrefixProvider* _dpp,
+		rgw::sal::RadosStore* _store,
+		const req_state* _s,
+		rgw::sal::Object* _object,
+		rgw::sal::Object* _src_object,
+		const std::string* _object_name);
+
+  /* ctor for non-request caller (e.g., lifecycle) */
+  reservation_t(const DoutPrefixProvider* _dpp,
+		rgw::sal::RadosStore* _store,
+		rgw::sal::Object* _object,
+		rgw::sal::Object* _src_object,
+		rgw::sal::Bucket* _bucket,
+		const std::string& _user_id,
+		const std::string& _user_tenant,
+		const std::string& _req_id,
+		optional_yield y);
 
   // dtor doing resource leak guarding
   // aborting the reservation if not already committed or aborted
@@ -71,10 +94,10 @@ struct reservation_t {
 };
 
 // create a reservation on the 2-phase-commit queue
-int publish_reserve(const DoutPrefixProvider *dpp, 
-        EventType event_type,
-        reservation_t& reservation,
-        const RGWObjTags* req_tags);
+  int publish_reserve(const DoutPrefixProvider *dpp,
+		      EventType event_type,
+		      reservation_t& reservation,
+		      const RGWObjTags* req_tags);
 
 // commit the reservation to the queue
 int publish_commit(rgw::sal::Object* obj,
@@ -87,7 +110,7 @@ int publish_commit(rgw::sal::Object* obj,
         const DoutPrefixProvider *dpp);
 
 // cancel the reservation
-int publish_abort(const DoutPrefixProvider *dpp, reservation_t& reservation);
+int publish_abort(reservation_t& reservation);
 
 }
 

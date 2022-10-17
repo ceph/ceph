@@ -1,8 +1,8 @@
 import errno
 import logging
-import sys
+import os
 
-from typing import List
+from typing import List, Tuple
 
 from contextlib import contextmanager
 
@@ -10,12 +10,12 @@ import orchestrator
 
 from .lock import GlobalLock
 from ..exception import VolumeException
-from ..fs_util import create_pool, remove_pool, create_filesystem, \
-    remove_filesystem, create_mds, volume_exists
+from ..fs_util import create_pool, remove_pool, rename_pool, create_filesystem, \
+    remove_filesystem, rename_filesystem, create_mds, volume_exists
+from .trash import Trash
 from mgr_util import open_filesystem, CephfsConnectionException
 
 log = logging.getLogger(__name__)
-
 
 def gen_pool_names(volname):
     """
@@ -54,6 +54,22 @@ def get_pool_names(mgr, volname):
     metadata_pool = pools[metadata_pool_id]
     data_pools = [pools[id] for id in data_pool_ids]
     return metadata_pool, data_pools
+
+def get_pool_ids(mgr, volname):
+    """
+    return metadata and data pools (list) id of volume as a tuple
+    """
+    fs_map = mgr.get("fs_map")
+    metadata_pool_id = None
+    data_pool_ids = [] # type: List[int]
+    for f in fs_map['filesystems']:
+        if volname == f['mdsmap']['fs_name']:
+            metadata_pool_id = f['mdsmap']['metadata_pool']
+            data_pool_ids = f['mdsmap']['data_pools']
+            break
+    if metadata_pool_id is None:
+        return None, None
+    return metadata_pool_id, data_pool_ids
 
 def create_volume(mgr, volname, placement):
     """
@@ -117,6 +133,102 @@ def delete_volume(mgr, volname, metadata_pool, data_pools):
     result_str = "metadata pool: {0} data pool: {1} removed".format(metadata_pool, str(data_pools))
     return r, result_str, ""
 
+def rename_volume(mgr, volname: str, newvolname: str) -> Tuple[int, str, str]:
+    """
+    rename volume (orch MDS service, file system, pools)
+    """
+    # To allow volume rename to be idempotent, check whether orch managed MDS
+    # service is already renamed. If so, skip renaming MDS service.
+    completion = None
+    rename_mds_service = True
+    try:
+        completion = mgr.describe_service(
+            service_type='mds', service_name=f"mds.{newvolname}", refresh=True)
+        orchestrator.raise_if_exception(completion)
+    except (ImportError, orchestrator.OrchestratorError):
+        log.warning("Failed to fetch orch service mds.%s", newvolname)
+    except Exception as e:
+        # Don't let detailed orchestrator exceptions (python backtraces)
+        # bubble out to the user
+        log.exception("Failed to fetch orch service mds.%s", newvolname)
+        return -errno.EINVAL, "", str(e)
+    if completion and completion.result:
+        rename_mds_service = False
+
+    # Launch new MDS service matching newvolname
+    completion = None
+    remove_mds_service = False
+    if rename_mds_service:
+        try:
+            completion = mgr.describe_service(
+                service_type='mds', service_name=f"mds.{volname}", refresh=True)
+            orchestrator.raise_if_exception(completion)
+        except (ImportError, orchestrator.OrchestratorError):
+            log.warning("Failed to fetch orch service mds.%s", volname)
+        except Exception as e:
+            # Don't let detailed orchestrator exceptions (python backtraces)
+            # bubble out to the user
+            log.exception("Failed to fetch orch service mds.%s", volname)
+            return -errno.EINVAL, "", str(e)
+        if completion and completion.result:
+            svc = completion.result[0]
+            placement = svc.spec.placement.pretty_str()
+            create_mds(mgr, newvolname, placement)
+            remove_mds_service = True
+
+    # rename_filesytem is idempotent
+    r, outb, outs = rename_filesystem(mgr, volname, newvolname)
+    if r != 0:
+        errmsg = f"Failed to rename file system '{volname}' to '{newvolname}'"
+        log.error("Failed to rename file system '%s' to '%s'", volname, newvolname)
+        outs = f'{errmsg}; {outs}'
+        return r, outb, outs
+
+    # Rename file system's metadata and data pools
+    metadata_pool, data_pools = get_pool_names(mgr, newvolname)
+
+    new_metadata_pool, new_data_pool = gen_pool_names(newvolname)
+    if metadata_pool != new_metadata_pool:
+        r, outb, outs =  rename_pool(mgr, metadata_pool, new_metadata_pool)
+        if r != 0:
+            errmsg = f"Failed to rename metadata pool '{metadata_pool}' to '{new_metadata_pool}'"
+            log.error("Failed to rename metadata pool '%s' to '%s'", metadata_pool, new_metadata_pool)
+            outs = f'{errmsg}; {outs}'
+            return r, outb, outs
+
+    data_pool_rename_failed = False
+    # If file system has more than one data pool, then skip renaming
+    # the data pools, and proceed to remove the old MDS service.
+    if len(data_pools) > 1:
+        data_pool_rename_failed = True
+    else:
+        data_pool = data_pools[0]
+        if data_pool != new_data_pool:
+            r, outb, outs = rename_pool(mgr, data_pool, new_data_pool)
+            if r != 0:
+                errmsg = f"Failed to rename data pool '{data_pool}' to '{new_data_pool}'"
+                log.error("Failed to rename data pool '%s' to '%s'", data_pool, new_data_pool)
+                outs = f'{errmsg}; {outs}'
+                return r, outb, outs
+
+    # Tear down old MDS service
+    if remove_mds_service:
+        try:
+            completion = mgr.remove_service('mds.' + volname)
+            orchestrator.raise_if_exception(completion)
+        except (ImportError, orchestrator.OrchestratorError):
+            log.warning("Failed to tear down orch service mds.%s", volname)
+        except Exception as e:
+            # Don't let detailed orchestrator exceptions (python backtraces)
+            # bubble out to the user
+            log.exception("Failed to tear down orch service mds.%s", volname)
+            return -errno.EINVAL, "", str(e)
+
+    outb = f"FS volume '{volname}' renamed to '{newvolname}'"
+    if data_pool_rename_failed:
+        outb += ". But failed to rename data pools as more than one data pool was found."
+
+    return r, outb, ""
 
 def list_volumes(mgr):
     """
@@ -130,6 +242,20 @@ def list_volumes(mgr):
     for f in fs_map['filesystems']:
         result.append({'name': f['mdsmap']['fs_name']})
     return result
+
+
+def get_pending_subvol_deletions_count(path):
+    """
+    Get the number of pending subvolumes deletions.
+    """
+    trashdir = os.path.join(path, Trash.GROUP_NAME)
+    try:
+        num_pending_subvol_del = len(os.listdir(trashdir))
+    except OSError as e:
+        if e.errno == errno.ENOENT:
+            num_pending_subvol_del = 0
+
+    return {'pending_subvolume_deletions': num_pending_subvol_del}
 
 
 @contextmanager

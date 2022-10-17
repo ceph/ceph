@@ -106,7 +106,7 @@ private:
   bool is_torrent;  // flag
   bufferlist bl;  // bufflist ready to send
 
-  struct req_state *s{nullptr};
+  req_state *s{nullptr};
   rgw::sal::Store* store{nullptr};
   SHA1 h;
 
@@ -116,7 +116,7 @@ public:
   ~seed();
 
   int get_params();
-  void init(struct req_state *p_req, rgw::sal::Store* p_store);
+  void init(req_state *p_req, rgw::sal::Store* p_store);
   int get_torrent_file(rgw::sal::Object* object,
                        uint64_t &total_len,
                        ceph::bufferlist &bl_data,

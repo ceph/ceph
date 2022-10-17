@@ -33,14 +33,13 @@ protected:
   }
   int get_rados_obj(const DoutPrefixProvider *dpp, RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
 
-  virtual int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize,
-                       real_time *pmtime, uint64_t *epoch,
-                       std::map<std::string, bufferlist> *attrs, bufferlist *first_chunk,
+  virtual int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
+                       uint64_t *psize, real_time *pmtime,
+                       std::map<std::string, bufferlist> *attrs,
                        RGWObjVersionTracker *objv_tracker,
                        optional_yield y);
 
   virtual int read(const DoutPrefixProvider *dpp,
-                   RGWSysObjectCtxBase& obj_ctx,
                    RGWSI_SysObj_Obj_GetObjState& read_state,
                    RGWObjVersionTracker *objv_tracker,
                    const rgw_raw_obj& obj,
@@ -52,7 +51,6 @@ protected:
                    optional_yield y);
 
   virtual int remove(const DoutPrefixProvider *dpp, 
-                     RGWSysObjectCtxBase& obj_ctx,
                      RGWObjVersionTracker *objv_tracker,
                      const rgw_raw_obj& obj,
                      optional_yield y);
@@ -82,7 +80,7 @@ protected:
                         std::map<std::string, bufferlist>& attrs,
                         std::map<std::string, bufferlist> *rmattrs,
                         RGWObjVersionTracker *objv_tracker,
-                        optional_yield y);
+                        bool exclusive, optional_yield y);
 
   virtual int omap_get_all(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, std::map<std::string, bufferlist> *m,
                            optional_yield y);
@@ -127,20 +125,7 @@ protected:
   virtual int pool_list_objects_get_marker(RGWSI_SysObj::Pool::ListCtx& _ctx,
                                            std::string *marker);
 
-  /* wrappers */
-  int get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
-                                const rgw_raw_obj& obj, RGWSysObjState **state,
-                                RGWObjVersionTracker *objv_tracker,
-                                optional_yield y,
-                                const DoutPrefixProvider *dpp);
-  int get_system_obj_state(RGWSysObjectCtxBase *rctx, const rgw_raw_obj& obj,
-                           RGWSysObjState **state,
-                           RGWObjVersionTracker *objv_tracker,
-                           optional_yield y,
-                           const DoutPrefixProvider *dpp);
-
-  int stat(RGWSysObjectCtxBase& obj_ctx,
-           RGWSI_SysObj_Obj_GetObjState& state,
+  int stat(RGWSI_SysObj_Obj_GetObjState& state,
            const rgw_raw_obj& obj,
            std::map<std::string, bufferlist> *attrs,
 	   bool raw_attrs,

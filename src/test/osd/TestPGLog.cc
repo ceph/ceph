@@ -1703,8 +1703,8 @@ TEST_F(PGLogTest, proc_replica_log) {
             |        |       |         |
             +--------+-------+---------+
 
-      The log entry (1,3) deletes the object x9 but the olog entry
-      (2,3) modifies it : remove it from omissing.
+      The log entry (2,3) deletes the object x9 but the olog entry
+      (1,3) modifies it : remove it from omissing.
 
   */
   {
@@ -2075,7 +2075,7 @@ TEST_F(PGLogTest, filter_log_1) {
     int num_internal = 10;
 
     // Set up splitting map
-    OSDMap *osdmap = new OSDMap;
+    std::unique_ptr<OSDMap> osdmap(new OSDMap);
     uuid_d test_uuid;
     test_uuid.generate_random();
     osdmap->build_simple_with_pool(g_ceph_context, epoch, test_uuid, max_osd, bits, bits);
@@ -2740,8 +2740,8 @@ TEST_F(PGLogTrimTest, TestPartialTrim)
   EXPECT_EQ(eversion_t(19, 160), write_from_dups2);
   EXPECT_EQ(2u, log.log.size());
   EXPECT_EQ(1u, trimmed2.size());
-  EXPECT_EQ(2u, log.dups.size());
-  EXPECT_EQ(1u, trimmed_dups2.size());
+  EXPECT_EQ(3u, log.dups.size());
+  EXPECT_EQ(0u, trimmed_dups2.size());
 }
 
 
@@ -3024,7 +3024,7 @@ TEST_F(PGLogTrimTest, TestTrimDups) {
 
   EXPECT_EQ(eversion_t(20, 103), write_from_dups) << log;
   EXPECT_EQ(2u, log.log.size()) << log;
-  EXPECT_EQ(3u, log.dups.size()) << log;
+  EXPECT_EQ(4u, log.dups.size()) << log;
 }
 
 // This tests trim() to make copies of
@@ -3068,7 +3068,7 @@ TEST_F(PGLogTrimTest, TestTrimDups2) {
 
   EXPECT_EQ(eversion_t(10, 100), write_from_dups) << log;
   EXPECT_EQ(4u, log.log.size()) << log;
-  EXPECT_EQ(5u, log.dups.size()) << log;
+  EXPECT_EQ(6u, log.dups.size()) << log;
 }
 
 // This tests copy_up_to() to make copies of

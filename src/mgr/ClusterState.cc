@@ -198,6 +198,7 @@ class ClusterSocketHook : public AdminSocketHook {
 public:
   explicit ClusterSocketHook(ClusterState *o) : cluster_state(o) {}
   int call(std::string_view admin_command, const cmdmap_t& cmdmap,
+	   const bufferlist&,
 	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
@@ -239,6 +240,7 @@ bool ClusterState::asok_command(
   ostream& ss)
 {
   std::lock_guard l(lock);
+
   if (admin_command == "dump_osd_network") {
     int64_t value = 0;
     // Default to health warning level if nothing specified

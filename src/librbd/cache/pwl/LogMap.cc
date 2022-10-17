@@ -17,8 +17,8 @@ namespace pwl {
 template <typename T>
 std::ostream &operator<<(std::ostream &os,
                          LogMapEntry<T> &e) {
-  os << "block_extent=" << e.block_extent << ", "
-     << "log_entry=[" << e.log_entry << "]";
+  os << "block_extent=" << e.block_extent
+     << ", log_entry=[" << e.log_entry << "]";
   return os;
 }
 

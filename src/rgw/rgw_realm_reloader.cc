@@ -105,9 +105,12 @@ void RGWRealmReloader::reload()
 
   while (!store) {
     // recreate and initialize a new store
+    StoreManager::Config cfg;
+    cfg.store_name = "rados";
+    cfg.filter_name = "none";
     store =
       StoreManager::get_storage(&dp, cct,
-				   "rados",
+				   cfg,
 				   cct->_conf->rgw_enable_gc_threads,
 				   cct->_conf->rgw_enable_lc_threads,
 				   cct->_conf->rgw_enable_quota_threads,

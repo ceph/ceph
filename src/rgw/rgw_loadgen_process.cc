@@ -11,14 +11,13 @@
 #include "rgw_process.h"
 #include "rgw_loadgen.h"
 #include "rgw_client_io.h"
+#include "rgw_signal.h"
 
 #include <atomic>
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
-
-extern void signal_shutdown();
 
 void RGWLoadGenProcess::checkpoint()
 {
@@ -100,7 +99,7 @@ done:
 
   delete[] objs;
 
-  signal_shutdown();
+  rgw::signal::signal_shutdown();
 } /* RGWLoadGenProcess::run() */
 
 void RGWLoadGenProcess::gen_request(const string& method,
@@ -133,10 +132,13 @@ void RGWLoadGenProcess::handle_request(const DoutPrefixProvider *dpp, RGWRequest
 
   RGWLoadGenIO real_client_io(&env);
   RGWRestfulIO client_io(cct, &real_client_io);
-
+  ActiveRateLimiter ratelimit(cct);
   int ret = process_request(store, rest, req, uri_prefix,
                             *auth_registry, &client_io, olog,
-                            null_yield, nullptr, nullptr, nullptr);
+                            null_yield, nullptr, nullptr, nullptr,
+                            ratelimit.get_active(),
+                            nullptr,
+                            lua_manager);
   if (ret < 0) {
     /* we don't really care about return code */
     dout(20) << "process_request() returned " << ret << dendl;

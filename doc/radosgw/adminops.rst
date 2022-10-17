@@ -1150,7 +1150,7 @@ Request Parameters
 
 :Description: Generate a new key pair and add to the existing keyring.
 :Type: Boolean
-:Example: True [``True``]
+:Example: True [True]
 :Required: No
 
 
@@ -1977,6 +1977,124 @@ as mentioned in Set Bucket Quota section above.
 
 
 
+Rate Limit
+==========
+
+The Admin Operations API enables you to set and get ratelimit configurations on users and on bucket and global rate limit configurations. See `Rate Limit Management`_ for additional details. 
+Rate Limit includes the maximum number of operations and/or bytes per minute, separated by read and/or write, to a bucket and/or by a user and the maximum storage size in megabytes.
+
+To view rate limit, the user must have a ``ratelimit=read`` capability. To set,
+modify or disable a ratelimit, the user must have ``ratelimit=write`` capability.
+See the `Admin Guide`_ for details.
+
+Valid parameters for quotas include:
+
+- **Bucket:** The ``bucket`` option allows you to specify a rate limit for
+  a bucket.
+
+- **User:** The ``uid`` option allows you to specify a rate limit for a user.
+
+- **Maximum Read Bytes:** The ``max-read-bytes`` setting allows you to specify
+  the maximum number of read bytes per minute. A 0 value disables this setting.
+
+- **Maximum Write Bytes:** The ``max-write-bytes`` setting allows you to specify
+  the maximum number of write bytes per minute. A 0 value disables this setting.
+
+- **Maximum Read Ops:** The ``max-read-ops`` setting allows you to specify
+  the maximum number of read ops per minute. A 0 value disables this setting.
+
+- **Maximum Write Ops:** The ``max-write-ops`` setting allows you to specify
+  the maximum number of write ops per minute. A 0 value disables this setting.
+
+- **Global:** The ``global`` option allows you to specify a global rate limit.
+  The value should be either 'True' or 'False'.
+
+- **Rate Limit Scope:** The ``ratelimit-scope`` option sets the scope for the rate limit.
+  The options are ``bucket`` , ``user`` and ``anonymous``.
+  ``anonymous`` is only valid for setting global configuration
+
+- **Enable/Disable Rate Limit:** The ``enabled`` option specifies whether the
+  rate limit should be enabled.  The value should be either 'True' or 'False'.
+
+Get User Rate Limit
+~~~~~~~~~~~~~~~~~~~
+
+To get a rate limit, the user must have ``ratelimit`` capability set with ``read``
+permission. ::
+
+	GET /{admin}/ratelimit?ratelimit-scope=user&uid=<uid>
+
+
+Set User Rate Limit
+~~~~~~~~~~~~~~~~~~~
+
+To set a rate limit, the user must have ``ratelimit`` capability set with ``write``
+permission. ::
+
+	POST /{admin}/ratelimit?ratelimit-scope=user&uid=<uid><[&max-read-bytes=<bytes>][&max-write-bytes=<bytes>][&max-read-ops=<ops>][&max-write-ops=<ops>][enabled=<True|False>]>
+
+
+
+Get Bucket Rate Limit
+~~~~~~~~~~~~~~~~~~~~~
+
+To get a rate limit, the user must have ``users`` capability set with ``read``
+permission. ::
+
+	GET /{admin}/ratelimit?bucket=<bucket>&ratelimit-scope=bucket
+
+
+
+Set Rate Limit for an Individual Bucket
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To set a rate limit, the user must have ``ratelimit`` capability set with ``write``
+permission. ::
+
+	POST /{admin}/ratelimit?bucket=<bucket-name>&ratelimit-scope=bucket<[&max-read-bytes=<bytes>][&max-write-bytes=<bytes>][&max-read-ops=<ops>][&max-write-ops=<ops>]>
+
+
+
+Get Global Rate Limit
+~~~~~~~~~~~~~~~~~~~~~
+
+To get a global rate limit, the user must have ``ratelimit`` capability set with ``read``
+permission. ::
+
+	GET /{admin}/ratelimit?global=<True|False>
+
+
+
+Set Global User Rate Limit
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To set a rate limit, the user must have ``ratelimit`` capability set with ``write``
+permission. ::
+
+	POST /{admin}/ratelimit?ratelimit-scope=user&global=<True|False><[&max-read-bytes=<bytes>][&max-write-bytes=<bytes>][&max-read-ops=<ops>][&max-write-ops=<ops>][enabled=<True|False>]>
+
+
+
+Set Global Rate Limit Bucket
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To set a rate limit, the user must have ``ratelimit`` capability set with ``write``
+permission. ::
+
+	POST /{admin}/ratelimit?ratelimit-scope=bucket&global=<True|False><[&max-read-bytes=<bytes>][&max-write-bytes=<bytes>][&max-read-ops=<ops>][&max-write-ops=<ops>]>
+
+
+
+Set Global Anonymous User Rate Limit
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To set a rate limit, the user must have ``ratelimit`` capability set with ``write``
+permission. ::
+
+	POST /{admin}/ratelimit?ratelimit-scope=anon&global=<True|False><[&max-read-bytes=<bytes>][&max-write-bytes=<bytes>][&max-read-ops=<ops>][&max-write-ops=<ops>][enabled=<True|False>]>
+
+
+
 Standard Error Responses
 ========================
 
@@ -2013,12 +2131,18 @@ Binding libraries
 
 ``Golang``
 
+ - `ceph/go-ceph`_
  - `IrekFasikhov/go-rgwadmin`_
  - `QuentinPerez/go-radosgw`_
-
-``Java``
  
+``Java``
+
  - `twonote/radosgw-admin4j`_
+
+``PHP``
+
+ - `lbausch/php-ceph-radosgw-admin`_
+ - `myENA/php-rgw-api`_
 
 ``Python``
 
@@ -2031,7 +2155,12 @@ Binding libraries
 .. _Quota Management: ../admin#quota-management
 .. _IrekFasikhov/go-rgwadmin: https://github.com/IrekFasikhov/go-rgwadmin
 .. _QuentinPerez/go-radosgw: https://github.com/QuentinPerez/go-radosgw
+.. _ceph/go-ceph: https://github.com/ceph/go-ceph/
+.. _Rate Limit Management: ../admin#rate-limit-management
+.. _IrekFasikhov/go-rgwadmin: https://github.com/IrekFasikhov/go-rgwadmin
+.. _QuentinPerez/go-radosgw: https://github.com/QuentinPerez/go-radosgw
 .. _twonote/radosgw-admin4j: https://github.com/twonote/radosgw-admin4j
+.. _lbausch/php-ceph-radosgw-admin: https://github.com/lbausch/php-ceph-radosgw-admin
+.. _myENA/php-rgw-api: https://github.com/myENA/php-rgw-api
 .. _UMIACS/rgwadmin: https://github.com/UMIACS/rgwadmin
 .. _valerytschopp/python-radosgw-admin: https://github.com/valerytschopp/python-radosgw-admin
-

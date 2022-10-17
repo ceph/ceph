@@ -34,7 +34,7 @@
 	url = https://github.com/facebook/zstd
 [submodule "src/crypto/isa-l/isa-l_crypto"]
 	path = src/crypto/isa-l/isa-l_crypto
-	url = https://github.com/01org/isa-l_crypto
+	url = https://github.com/intel/isa-l_crypto
 [submodule "src/blkin"]
 	path = src/blkin
 	url = https://github.com/ceph/blkin
@@ -66,3 +66,12 @@
 	path = src/libkmip
 	url = https://github.com/ceph/libkmip
 	branch = ceph-master
+[submodule "src/arrow"]
+	path = src/arrow
+	url = https://github.com/apache/arrow.git
+[submodule "src/utf8proc"]
+	path = src/utf8proc
+	url = https://github.com/JuliaStrings/utf8proc
+[submodule "src/jaegertracing/opentelemetry-cpp"]
+	path = src/jaegertracing/opentelemetry-cpp
+	url = https://github.com/open-telemetry/opentelemetry-cpp.git

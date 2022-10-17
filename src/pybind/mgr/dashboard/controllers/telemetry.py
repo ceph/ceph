@@ -213,7 +213,7 @@ class Telemetry(RESTController):
         :return: Ceph and device report data
         :rtype: dict
         """
-        return mgr.remote('telemetry', 'get_report', 'all')
+        return mgr.remote('telemetry', 'get_report_locked', 'all')
 
     def singleton_set(self, enable=True, license_name=None):
         """

@@ -28,7 +28,6 @@ Premier
 -------
 
 * `Bloomberg <https://bloomberg.com>`_
-* `China Mobile <https://www.chinamobileltd.com/>`_
 * `DigitalOcean <https://www.digitalocean.com/>`_
 * `Intel <http://www.intel.com/>`_
 * `OVH <https://www.ovh.com/>`_
@@ -44,6 +43,7 @@ General
 -------
 
 * `ARM <http://www.arm.com/>`_
+* `ArvanCloud <https://www.arvancloud.com>`_
 * `Canonical <https://www.canonical.com/>`_
 * `Cloudbase Solutions <https://cloudbase.it/>`_
 * `Clyso <https://www.clyso.com/en/>`_
@@ -52,7 +52,7 @@ General
 * `ISS <http://iss-integration.com/>`_
 * `Linode <https://linode.com/>`_
 * `OSNexus <https://osnexus.com/>`_
-* `QCT <https://www.qct.io/>`_
+* `Seagate <https://seagate.com/>`_
 * `SinoRail <http://www.sinorail.com/>`_
 * `Vexxhost <https://vexxhost.com>`_
 
@@ -90,27 +90,28 @@ governance body). The board is responsible for:
 The Ceph Foundation board is not responsible for and does not have any
 direct control over the technical governance of Ceph. Development and
 engineering activities are managed through traditional open source
-processes and are overseen by the :ref:`clt`. For more
+processes and are overseen by the :ref:`csc`. For more
 information see :ref:`governance`.
 
 Members
 -------
 
 * Anjaneya "Reddy" Chagam (Intel)
-* Dan van der Ster (CERN) - Associate member representative
+* Carlos Maltzahn (UCSC) - Associate member representative
+* Dan van der Ster (CERN) - Ceph Council representative
 * Haomai Wang (XSKY)
 * James Page (Canonical)
-* Lenz Grimmer (SUSE) - Ceph Leadership Team representative
-* Lars Marowsky-Bree (SUSE)
+* Joao Luis (SUSE)
+* Josh Durgin (Red Hat) - Ceph Council representative
 * Matias Bjorling (Western Digital)
 * Matthew Leonard (Bloomberg)
 * Mike Perez (Red Hat) - Ceph community manager
 * Myoungwon Oh (Samsung Electronics)
-* Martin Verges (croit) - General member representative
+* Neha Ojha (Red Hat) - Ceph Council Representative
+* Steven Umbehocker (OSNexus) - General member representative
 * Pawel Sadowski (OVH)
 * Phil Straw (SoftIron)
 * Robin Johnson (DigitalOcean)
-* Sage Weil (Red Hat) - Ceph project leader
 * Xie Xingguo (ZTE)
 * Zhang Shaowen (China Mobile)
 
@@ -119,4 +120,3 @@ Joining
 
 For information about joining the Ceph Foundation, please contact
 membership@linuxfoundation.org.
-

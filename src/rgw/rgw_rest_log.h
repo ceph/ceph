@@ -20,9 +20,14 @@
 #include "rgw_rest_s3.h"
 #include "rgw_metadata.h"
 #include "rgw_mdlog.h"
+#include "rgw_data_sync.h"
 
 class RGWOp_BILog_List : public RGWRESTOp {
   bool sent_header;
+  uint32_t format_ver{0};
+  bool truncated{false};
+  std::optional<rgw::bucket_log_layout_generation> next_log_layout;
+
 public:
   RGWOp_BILog_List() : sent_header(false) {}
   ~RGWOp_BILog_List() override {}
@@ -47,6 +52,10 @@ class RGWOp_BILog_Info : public RGWRESTOp {
   std::string master_ver;
   std::string max_marker;
   bool syncstopped;
+  uint64_t oldest_gen = 0;
+  uint64_t latest_gen = 0;
+  std::vector<store_gen_shards> generations;
+
 public:
   RGWOp_BILog_Info() : bucket_ver(), master_ver(), syncstopped(false) {}
   ~RGWOp_BILog_Info() override {}
@@ -270,6 +279,22 @@ public:
   RGWOpType get_type() override { return RGW_OP_SYNC_DATALOG_NOTIFY; }
 };
 
+class RGWOp_DATALog_Notify2 : public RGWRESTOp {
+  rgw_data_notify_entry data_notify;
+public:
+  RGWOp_DATALog_Notify2() {}
+  ~RGWOp_DATALog_Notify2() override {}
+
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("datalog", RGW_CAP_WRITE);
+  }
+  void execute(optional_yield y) override;
+  const char* name() const override {
+    return "datalog_notify2";
+  }
+  RGWOpType get_type() override { return RGW_OP_SYNC_DATALOG_NOTIFY2; }
+};
+
 class RGWOp_DATALog_Delete : public RGWRESTOp {
 public:
   RGWOp_DATALog_Delete() {}
@@ -304,7 +329,7 @@ public:
   ~RGWRESTMgr_Log() override = default;
 
   RGWHandler_REST* get_handler(rgw::sal::Store* store,
-			       struct req_state* const,
+			       req_state* const,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefixs) override {
     return new RGWHandler_Log(auth_registry);

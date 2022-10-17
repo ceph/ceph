@@ -1,0 +1,4 @@
+overrides:
+  workunit:
+    env:
+      CRIMSON_COMPAT: '1'

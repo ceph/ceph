@@ -5,7 +5,6 @@ import json
 import logging
 import re
 import xml.etree.ElementTree as ET  # noqa: N814
-from distutils.util import strtobool
 from subprocess import SubprocessError
 
 from mgr_util import build_url
@@ -84,7 +83,7 @@ def _determine_rgw_addr(daemon_info: Dict[str, Any]) -> RgwDaemon:
     Parse RGW daemon info to determine the configured host (IP address) and port.
     """
     daemon = RgwDaemon()
-    daemon.host = _parse_addr(daemon_info['addr'])
+    daemon.host = daemon_info['metadata']['hostname']
     daemon.port, daemon.ssl = _parse_frontend_config(daemon_info['metadata']['frontend_config#0'])
 
     return daemon
@@ -267,6 +266,7 @@ def configure_rgw_credentials():
         raise NoCredentialsException
 
 
+# pylint: disable=R0904
 class RgwClient(RestClient):
     _host = None
     _port = None
@@ -467,7 +467,7 @@ class RgwClient(RestClient):
     def _is_system_user(self, admin_path, userid, request=None) -> bool:
         # pylint: disable=unused-argument
         response = request()
-        return strtobool(response['data']['system'])
+        return response['data']['system']
 
     def is_system_user(self) -> bool:
         return self._is_system_user(self.admin_path, self.userid)
@@ -646,6 +646,50 @@ class RgwClient(RestClient):
                                      http_status_code=error.status_code,
                                      component='rgw')
 
+    @RestClient.api_get('/{bucket_name}?encryption')
+    def get_bucket_encryption(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request()  # type: ignore
+            result['Status'] = 'Enabled'
+            return result
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get(
+                        'Code') == 'ServerSideEncryptionConfigurationNotFoundError':
+                    return {
+                        'Status': 'Disabled',
+                    }
+            raise e
+
+    @RestClient.api_delete('/{bucket_name}?encryption')
+    def delete_bucket_encryption(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        result = request()  # type: ignore
+        return result
+
+    @RestClient.api_put('/{bucket_name}?encryption')
+    def set_bucket_encryption(self, bucket_name, key_id,
+                              sse_algorithm, request: Optional[object] = None):
+        # pylint: disable=unused-argument
+        encryption_configuration = ET.Element('ServerSideEncryptionConfiguration')
+        rule_element = ET.SubElement(encryption_configuration, 'Rule')
+        default_encryption_element = ET.SubElement(rule_element,
+                                                   'ApplyServerSideEncryptionByDefault')
+        sse_algo_element = ET.SubElement(default_encryption_element,
+                                         'SSEAlgorithm')
+        sse_algo_element.text = sse_algorithm
+        if sse_algorithm == 'aws:kms':
+            kms_master_key_element = ET.SubElement(default_encryption_element,
+                                                   'KMSMasterKeyID')
+            kms_master_key_element.text = key_id
+        data = ET.tostring(encryption_configuration, encoding='unicode')
+        try:
+            _ = request(data=data)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+
     @RestClient.api_get('/{bucket_name}?object-lock')
     def get_bucket_locking(self, bucket_name, request=None):
         # type: (str, Optional[object]) -> dict
@@ -706,27 +750,8 @@ class RgwClient(RestClient):
         """
         # pylint: disable=unused-argument
 
-        # Do some validations.
-        try:
-            retention_period_days = int(retention_period_days) if retention_period_days else 0
-            retention_period_years = int(retention_period_years) if retention_period_years else 0
-            if retention_period_days < 0 or retention_period_years < 0:
-                raise ValueError
-        except (TypeError, ValueError):
-            msg = "Retention period must be a positive integer."
-            raise DashboardException(msg=msg, component='rgw')
-        if retention_period_days and retention_period_years:
-            # https://docs.aws.amazon.com/AmazonS3/latest/API/archive-RESTBucketPUTObjectLockConfiguration.html
-            msg = "Retention period requires either Days or Years. "\
-                "You can't specify both at the same time."
-            raise DashboardException(msg=msg, component='rgw')
-        if not retention_period_days and not retention_period_years:
-            msg = "Retention period requires either Days or Years. "\
-                "You must specify at least one."
-            raise DashboardException(msg=msg, component='rgw')
-        if not isinstance(mode, str) or mode.upper() not in ['COMPLIANCE', 'GOVERNANCE']:
-            msg = "Retention mode must be either COMPLIANCE or GOVERNANCE."
-            raise DashboardException(msg=msg, component='rgw')
+        retention_period_days, retention_period_years = self.perform_validations(
+            retention_period_days, retention_period_years, mode)
 
         # Generate the XML data like this:
         # <ObjectLockConfiguration>
@@ -761,3 +786,26 @@ class RgwClient(RestClient):
             _ = request(data=data)  # type: ignore
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
+
+    def perform_validations(self, retention_period_days, retention_period_years, mode):
+        try:
+            retention_period_days = int(retention_period_days) if retention_period_days else 0
+            retention_period_years = int(retention_period_years) if retention_period_years else 0
+            if retention_period_days < 0 or retention_period_years < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            msg = "Retention period must be a positive integer."
+            raise DashboardException(msg=msg, component='rgw')
+        if retention_period_days and retention_period_years:
+            # https://docs.aws.amazon.com/AmazonS3/latest/API/archive-RESTBucketPUTObjectLockConfiguration.html
+            msg = "Retention period requires either Days or Years. "\
+                "You can't specify both at the same time."
+            raise DashboardException(msg=msg, component='rgw')
+        if not retention_period_days and not retention_period_years:
+            msg = "Retention period requires either Days or Years. "\
+                "You must specify at least one."
+            raise DashboardException(msg=msg, component='rgw')
+        if not isinstance(mode, str) or mode.upper() not in ['COMPLIANCE', 'GOVERNANCE']:
+            msg = "Retention mode must be either COMPLIANCE or GOVERNANCE."
+            raise DashboardException(msg=msg, component='rgw')
+        return retention_period_days, retention_period_years

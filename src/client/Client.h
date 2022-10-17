@@ -32,6 +32,7 @@
 #include "include/unordered_set.h"
 #include "include/cephfs/metrics/Types.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/types.h"
 #include "msg/Dispatcher.h"
 #include "msg/MessageRef.h"
 #include "msg/Messenger.h"
@@ -77,6 +78,15 @@ enum {
   l_c_wrlat,
   l_c_read,
   l_c_fsync,
+  l_c_md_avg,
+  l_c_md_sqsum,
+  l_c_md_ops,
+  l_c_rd_avg,
+  l_c_rd_sqsum,
+  l_c_rd_ops,
+  l_c_wr_avg,
+  l_c_wr_sqsum,
+  l_c_wr_ops,
   l_c_last,
 };
 
@@ -259,6 +269,7 @@ public:
   public:
     explicit CommandHook(Client *client);
     int call(std::string_view command, const cmdmap_t& cmdmap,
+	     const bufferlist&,
 	     Formatter *f,
 	     std::ostream& errss,
 	     bufferlist& out) override;
@@ -344,7 +355,7 @@ public:
    * If @a cb returns a negative error code, stop and return that.
    */
   int readdir_r_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
-		   unsigned want=0, unsigned flags=AT_NO_ATTR_SYNC,
+		   unsigned want=0, unsigned flags=AT_STATX_DONT_SYNC,
 		   bool getref=false);
 
   struct dirent * readdir(dir_result_t *d);
@@ -655,7 +666,7 @@ public:
   void _ll_register_callbacks(struct ceph_client_callback_args *args);
   void ll_register_callbacks(struct ceph_client_callback_args *args); // deprecated
   int ll_register_callbacks2(struct ceph_client_callback_args *args);
-  int test_dentry_handling(bool can_invalidate);
+  std::pair<int, bool> test_dentry_handling(bool can_invalidate);
 
   const char** get_tracked_conf_keys() const override;
   void handle_conf_change(const ConfigProxy& conf,
@@ -875,8 +886,6 @@ public:
     return std::make_pair(opened_inodes, inode_map.size());
   }
 
-  xlist<Inode*> &get_dirty_list() { return dirty_list; }
-
   /* timer_lock for 'timer' */
   ceph::mutex timer_lock = ceph::make_mutex("Client::timer_lock");
   SafeTimer timer;
@@ -890,8 +899,10 @@ public:
   std::unique_ptr<MDSMap> mdsmap;
 
   bool fuse_default_permissions;
+  bool _collect_and_send_global_metrics;
 
 protected:
+  std::list<ceph::condition_variable*> waiting_for_reclaim;
   /* Flags for check_caps() */
   static const unsigned CHECK_CAPS_NODELAY = 0x1;
   static const unsigned CHECK_CAPS_SYNCHRONOUS = 0x2;
@@ -925,8 +936,9 @@ protected:
   void dump_mds_sessions(Formatter *f, bool cap_dump=false);
 
   int make_request(MetaRequest *req, const UserPerm& perms,
-		   InodeRef *ptarget = 0, bool *pcreated = 0,
-		   mds_rank_t use_mds=-1, bufferlist *pdirbl=0);
+                   InodeRef *ptarget = 0, bool *pcreated = 0,
+                   mds_rank_t use_mds=-1, bufferlist *pdirbl=0,
+                   size_t feature_needed=ULONG_MAX);
   void put_request(MetaRequest *request);
   void unregister_request(MetaRequest *request);
 
@@ -973,6 +985,7 @@ protected:
   void update_snap_trace(const bufferlist& bl, SnapRealm **realm_ret, bool must_flush=true);
   void invalidate_snaprealm_and_children(SnapRealm *realm);
 
+  void refresh_snapdir_attrs(Inode *in, Inode *diri);
   Inode *open_snapdir(Inode *diri);
 
   int get_fd() {
@@ -1063,7 +1076,7 @@ protected:
 
   int authenticate();
 
-  Inode* get_quota_root(Inode *in, const UserPerm& perms);
+  Inode* get_quota_root(Inode *in, const UserPerm& perms, quota_max_t type=QUOTA_ANY);
   bool check_quota_condition(Inode *in, const UserPerm& perms,
 			     std::function<bool (const Inode &)> test);
   bool is_quota_files_exceeded(Inode *in, const UserPerm& perms);
@@ -1240,6 +1253,8 @@ private:
   struct VXattr {
     const std::string name;
     size_t (Client::*getxattr_cb)(Inode *in, char *val, size_t size);
+    int (Client::*setxattr_cb)(Inode *in, const void *val, size_t size,
+			       const UserPerm& perms);
     bool readonly;
     bool (Client::*exists_cb)(Inode *in);
     unsigned int flags;
@@ -1292,7 +1307,7 @@ private:
   int _release_fh(Fh *fh);
   void _put_fh(Fh *fh);
 
-  int _do_remount(bool retry_on_error);
+  std::pair<int, bool> _do_remount(bool retry_on_error);
 
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
   int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
@@ -1320,7 +1335,8 @@ private:
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
 	     const UserPerm& perms, InodeRef *inp = 0);
   int _do_setattr(Inode *in, struct ceph_statx *stx, int mask,
-		  const UserPerm& perms, InodeRef *inp);
+		  const UserPerm& perms, InodeRef *inp,
+		  std::vector<uint8_t>* aux=nullptr);
   void stat_to_statx(struct stat *st, struct ceph_statx *stx);
   int __setattrx(Inode *in, struct ceph_statx *stx, int mask,
 		 const UserPerm& perms, InodeRef *inp = 0);
@@ -1339,6 +1355,8 @@ private:
 		const UserPerm& perms);
   int _getxattr(InodeRef &in, const char *name, void *value, size_t len,
 		const UserPerm& perms);
+  int _getvxattr(Inode *in, const UserPerm& perms, const char *attr_name,
+                 ssize_t size, void *value, mds_rank_t rank);
   int _listxattr(Inode *in, char *names, size_t len, const UserPerm& perms);
   int _do_setxattr(Inode *in, const char *name, const void *value, size_t len,
 		   int flags, const UserPerm& perms);
@@ -1377,8 +1395,7 @@ private:
   int _flock(Fh *fh, int cmd, uint64_t owner);
   int _lazyio(Fh *fh, int enable);
 
-  int get_or_create(Inode *dir, const char* name,
-		    Dentry **pdn, bool expect_null=false);
+  Dentry *get_or_create(Inode *dir, const char* name);
 
   int xattr_permission(Inode *in, const char *name, unsigned want,
 		       const UserPerm& perms);
@@ -1394,6 +1411,12 @@ private:
 
   vinodeno_t _get_vino(Inode *in);
 
+  bool _vxattrcb_fscrypt_auth_exists(Inode *in);
+  size_t _vxattrcb_fscrypt_auth(Inode *in, char *val, size_t size);
+  int _vxattrcb_fscrypt_auth_set(Inode *in, const void *val, size_t size, const UserPerm& perms);
+  bool _vxattrcb_fscrypt_file_exists(Inode *in);
+  size_t _vxattrcb_fscrypt_file(Inode *in, char *val, size_t size);
+  int _vxattrcb_fscrypt_file_set(Inode *in, const void *val, size_t size, const UserPerm& perms);
   bool _vxattrcb_quota_exists(Inode *in);
   size_t _vxattrcb_quota(Inode *in, char *val, size_t size);
   size_t _vxattrcb_quota_max_bytes(Inode *in, char *val, size_t size);
@@ -1456,6 +1479,10 @@ private:
   void collect_and_send_metrics();
   void collect_and_send_global_metrics();
 
+  void update_io_stat_metadata(utime_t latency);
+  void update_io_stat_read(utime_t latency);
+  void update_io_stat_write(utime_t latency);
+
   uint32_t deleg_timeout = 0;
 
   client_switch_interrupt_callback_t switch_interrupt_cb = nullptr;
@@ -1474,7 +1501,7 @@ private:
   Finisher async_ino_releasor;
   Finisher objecter_finisher;
 
-  utime_t last_cap_renew;
+  ceph::coarse_mono_time last_cap_renew;
 
   CommandHook m_command_hook;
 
@@ -1530,14 +1557,13 @@ private:
   // cap flushing
   ceph_tid_t last_flush_tid = 1;
 
-  // dirty_list keeps all the dirty inodes before flushing.
-  xlist<Inode*> delayed_list, dirty_list;
+  xlist<Inode*> delayed_list;
   int num_flushing_caps = 0;
   ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
   std::map<std::string, std::string> metadata;
 
-  utime_t last_auto_reconnect;
-
+  ceph::coarse_mono_time last_auto_reconnect;
+  std::chrono::seconds caps_release_delay, mount_timeout;
   // trace generation
   std::ofstream traceout;
 
@@ -1549,7 +1575,6 @@ private:
   uint64_t retries_on_invalidate = 0;
 
   // state reclaim
-  std::list<ceph::condition_variable*> waiting_for_reclaim;
   int reclaim_errno = 0;
   epoch_t reclaim_osd_epoch = 0;
   entity_addrvec_t reclaim_target_addrs;
@@ -1574,6 +1599,10 @@ private:
 
   ceph::spinlock delay_i_lock;
   std::map<Inode*,int> delay_i_release;
+
+  uint64_t nr_metadata_request = 0;
+  uint64_t nr_read_request = 0;
+  uint64_t nr_write_request = 0;
 };
 
 /**

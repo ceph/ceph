@@ -27,8 +27,6 @@ namespace crimson::os {
 class Collection;
 
 class CyanStore final : public FuturizedStore {
-  constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
-
   const std::string path;
   std::unordered_map<coll_t, boost::intrusive_ptr<Collection>> coll_map;
   std::map<coll_t, boost::intrusive_ptr<Collection>> new_coll_map;
@@ -36,32 +34,6 @@ class CyanStore final : public FuturizedStore {
   uuid_d osd_fsid;
 
 public:
-  class CyanOmapIterator final : public OmapIterator {
-  public:
-    CyanOmapIterator() {}
-    CyanOmapIterator(ObjectRef obj) : obj(obj) {
-      iter = obj->omap.begin();
-    }
-    seastar::future<> seek_to_first() final;
-    seastar::future<> upper_bound(const std::string &after) final;
-    seastar::future<> lower_bound(const std::string &to) final;
-    bool valid() const final;
-    seastar::future<> next() final;
-    std::string key() final {
-      return iter->first;
-    }
-    virtual ceph::buffer::list value() {
-      return iter->second;
-    }
-    virtual int status() const {
-      return iter != obj->omap.end() ? 0 : -1;
-    }
-    virtual ~CyanOmapIterator() {}
-  private:
-    std::map<std::string, bufferlist>::const_iterator iter;
-    ObjectRef obj;
-  };
-
   CyanStore(const std::string& path);
   ~CyanStore() final;
 
@@ -115,7 +87,7 @@ public:
     const ghobject_t& end,
     uint64_t limit) const final;
 
-  read_errorator::future<ceph::bufferlist> omap_get_header(
+  get_attr_errorator::future<ceph::bufferlist> omap_get_header(
     CollectionRef c,
     const ghobject_t& oid) final;
 
@@ -123,8 +95,9 @@ public:
   seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
   seastar::future<std::vector<coll_t>> list_collections() final;
 
-  seastar::future<> do_transaction(CollectionRef ch,
-				   ceph::os::Transaction&& txn) final;
+  seastar::future<> do_transaction_no_callbacks(
+    CollectionRef ch,
+    ceph::os::Transaction&& txn) final;
 
   seastar::future<> write_meta(const std::string& key,
 		  const std::string& value) final;
@@ -133,11 +106,7 @@ public:
   uuid_d get_fsid() const final;
   unsigned get_max_attr_name_length() const final;
 
-  seastar::future<OmapIteratorRef> get_omap_iterator(
-    CollectionRef c,
-    const ghobject_t& oid);
-
-  seastar::future<std::map<uint64_t, uint64_t>> fiemap(CollectionRef c,
+  read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(CollectionRef c,
 						       const ghobject_t& oid,
 						       uint64_t off,
 						       uint64_t len);
@@ -171,6 +140,8 @@ private:
     const std::string &first,
     const std::string &last);
   int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
+  int _clone(const coll_t& cid, const ghobject_t& oid,
+             const ghobject_t& noid);
   int _setattrs(const coll_t& cid, const ghobject_t& oid,
                 std::map<std::string,bufferlist>&& aset);
   int _rm_attr(const coll_t& cid, const ghobject_t& oid,

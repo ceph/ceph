@@ -56,7 +56,6 @@
       group snap remove (... rm)        Remove a snapshot from a group.
       group snap rename                 Rename group's snapshot.
       group snap rollback               Rollback group to snapshot.
-      image-cache invalidate            Discard existing / dirty image cache
       image-meta get                    Image metadata get the value associated
                                         with the key.
       image-meta list (image-meta ls)   Image metadata list keys with values.
@@ -125,6 +124,9 @@
       object-map rebuild                Rebuild an invalid object map.
       perf image iostat                 Display image IO statistics.
       perf image iotop                  Display a top-like IO monitor.
+      persistent-cache flush            Flush persistent cache.
+      persistent-cache invalidate       Invalidate (discard) existing / dirty
+                                        persistent cache.
       pool init                         Initialize pool for use by RBD.
       pool stats                        Display pool statistics.
       remove (rm)                       Delete an image.
@@ -669,19 +671,21 @@
   
   rbd help device unmap
   usage: rbd device unmap [--device-type <device-type>] [--pool <pool>] 
-                          [--image <image>] [--snap <snap>] [--options <options>] 
+                          [--namespace <namespace>] [--image <image>] 
+                          [--snap <snap>] [--options <options>] 
                           <image-or-snap-or-device-spec> 
   
   Unmap a rbd device.
   
   Positional arguments
     <image-or-snap-or-device-spec>  image, snapshot, or device specification
-                                    [<pool-name>/]<image-name>[@<snap-name>] or
-                                    <device-path>
+                                    [<pool-name>/[<namespace>/]]<image-name>[@<sna
+                                    p-name>] or <device-path>
   
   Optional arguments
     -t [ --device-type ] arg        device type [ggate, krbd (default), nbd]
     -p [ --pool ] arg               pool name
+    --namespace arg                 namespace name
     --image arg                     image name
     --snap arg                      snapshot name
     -o [ --options ] arg            device specific options
@@ -1106,23 +1110,6 @@
     --namespace arg      namespace name
     --group arg          group name
     --snap arg           snapshot name
-  
-  rbd help image-cache invalidate
-  usage: rbd image-cache invalidate [--pool <pool>] [--namespace <namespace>] 
-                                    [--image <image>] [--image-id <image-id>] 
-                                    <image-spec> 
-  
-  Discard existing / dirty image cache
-  
-  Positional arguments
-    <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace>/]]<image-name>)
-  
-  Optional arguments
-    -p [ --pool ] arg    pool name
-    --namespace arg      namespace name
-    --image arg          image name
-    --image-id arg       image id
   
   rbd help image-meta get
   usage: rbd image-meta get [--pool <pool>] [--namespace <namespace>] 
@@ -1665,7 +1652,7 @@
   rbd help mirror image enable
   usage: rbd mirror image enable [--pool <pool>] [--namespace <namespace>] 
                                  [--image <image>] 
-                                 <image-spec> <mode> 
+                                 <image-spec> [<mode>] 
   
   Enable RBD mirroring for an image.
   
@@ -1943,7 +1930,7 @@
                                         [--pool <pool>] 
                                         [--namespace <namespace>] 
                                         [--image <image>] 
-                                        <interval> <start-time> 
+                                        <interval> [<start-time>] 
   
   Add mirror snapshot schedule.
   
@@ -1978,7 +1965,7 @@
                                         [--pool <pool>] 
                                         [--namespace <namespace>] 
                                         [--image <image>] 
-                                        <interval> <start-time> 
+                                        [<interval>] [<start-time>] 
   
   Remove mirror snapshot schedule.
   
@@ -2123,6 +2110,42 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --namespace arg      namespace name
+  
+  rbd help persistent-cache flush
+  usage: rbd persistent-cache flush [--pool <pool>] [--namespace <namespace>] 
+                                    [--image <image>] [--image-id <image-id>] 
+                                    <image-spec> 
+  
+  Flush persistent cache.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --image-id arg       image id
+  
+  rbd help persistent-cache invalidate
+  usage: rbd persistent-cache invalidate
+                                        [--pool <pool>] 
+                                        [--namespace <namespace>] 
+                                        [--image <image>] [--image-id <image-id>] 
+                                        <image-spec> 
+  
+  Invalidate (discard) existing / dirty persistent cache.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --image-id arg       image id
   
   rbd help pool init
   usage: rbd pool init [--pool <pool>] [--force] 
@@ -2514,7 +2537,7 @@
   
   rbd help trash purge schedule add
   usage: rbd trash purge schedule add [--pool <pool>] [--namespace <namespace>] 
-                                      <interval> <start-time> 
+                                      <interval> [<start-time>] 
   
   Add trash purge schedule.
   
@@ -2543,7 +2566,7 @@
   rbd help trash purge schedule remove
   usage: rbd trash purge schedule remove
                                         [--pool <pool>] [--namespace <namespace>] 
-                                        <interval> <start-time> 
+                                        [<interval>] [<start-time>] 
   
   Remove trash purge schedule.
   

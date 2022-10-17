@@ -15,6 +15,7 @@ import { EmptyPipe } from './empty.pipe';
 import { EncodeUriPipe } from './encode-uri.pipe';
 import { FilterPipe } from './filter.pipe';
 import { HealthColorPipe } from './health-color.pipe';
+import { HealthLabelPipe } from './health-label.pipe';
 import { IopsPipe } from './iops.pipe';
 import { IscsiBackstorePipe } from './iscsi-backstore.pipe';
 import { JoinPipe } from './join.pipe';
@@ -27,6 +28,7 @@ import { RbdConfigurationSourcePipe } from './rbd-configuration-source.pipe';
 import { RelativeDatePipe } from './relative-date.pipe';
 import { RoundPipe } from './round.pipe';
 import { SanitizeHtmlPipe } from './sanitize-html.pipe';
+import { SearchHighlightPipe } from './search-highlight.pipe';
 import { TruncatePipe } from './truncate.pipe';
 import { UpperFirstPipe } from './upper-first.pipe';
 
@@ -39,6 +41,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DimlessBinaryPipe,
     DimlessBinaryPerSecondPipe,
     HealthColorPipe,
+    HealthLabelPipe,
     DimlessPipe,
     CephShortVersionPipe,
     CephReleaseNamePipe,
@@ -60,7 +63,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DurationPipe,
     MapPipe,
     TruncatePipe,
-    SanitizeHtmlPipe
+    SanitizeHtmlPipe,
+    SearchHighlightPipe
   ],
   exports: [
     ArrayPipe,
@@ -69,6 +73,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DimlessBinaryPipe,
     DimlessBinaryPerSecondPipe,
     HealthColorPipe,
+    HealthLabelPipe,
     DimlessPipe,
     CephShortVersionPipe,
     CephReleaseNamePipe,
@@ -90,7 +95,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DurationPipe,
     MapPipe,
     TruncatePipe,
-    SanitizeHtmlPipe
+    SanitizeHtmlPipe,
+    SearchHighlightPipe
   ],
   providers: [
     ArrayPipe,

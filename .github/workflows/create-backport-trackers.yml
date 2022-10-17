@@ -1,0 +1,50 @@
+---
+name: Create backport trackers for trackers in "Pending Backport" state
+on:
+  # To manually trigger this: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_dispatch
+  workflow_dispatch:
+    inputs:
+      issues:
+        description: 'whitespace-separated list of issue numbers'
+        type: string
+        default: ''      
+      debug:
+        description: '--debug: Show debug-level messages'
+        default: false
+        type: boolean
+      resolveParent:
+        description: '--resolve-parent: Resolve parent issue if all backports resolved/rejected'
+        default: false
+        type: boolean
+      force:
+        description: >
+          --force: When issue numbers provided, process them even if not in
+          'Pending Backport' status.
+          Otherwise, process all issues in 'Pending Backport' status even if
+          already processed (tag 'backport_processed' added)'
+        default: false
+        type: boolean
+      dryRun:
+        description: '--dry-run: Do not write anything to Redmine'
+        default: false
+        type: boolean
+  schedule:
+    # Every 5 minutes: https://crontab.guru/every-5-minutes
+    - cron: '*/5 * * * *'
+jobs:
+  create-backports:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: Bhacaz/checkout-files@e3e34e7daef91a5f237485bb88a260aee4be29dd
+        with:
+          files: src/script/backport-create-issue src/script/requirements.backport-create-issue.txt
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '>=3.6'
+          cache: 'pip'
+          cache-dependency-path: src/script/requirements.backport-create-issue.txt
+      - run: pip install -r src/script/requirements.backport-create-issue.txt
+      - run: python3 src/script/backport-create-issue ${{ inputs.debug && '--debug' || '' }} ${{ inputs.resolveParent && '--resolve-parent' || '' }} ${{ inputs.force && '--force' || '' }} ${{ inputs.dryRun && '--dry-run' || '' }} ${{ inputs.issues }}
+        env:
+          REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}

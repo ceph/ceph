@@ -1,5 +1,11 @@
-import cherrypy
-import ipaddress
+try:
+    import cherrypy
+    from cherrypy._cpserver import Server
+except ImportError:
+    # to avoid sphinx build crash
+    class Server:  # type: ignore
+        pass
+
 import json
 import logging
 import socket
@@ -8,23 +14,16 @@ import tempfile
 import threading
 import time
 
-# from orchestrator import OrchestratorError
-from mgr_util import verify_tls_files
 from orchestrator import DaemonDescriptionStatus
+from orchestrator._interface import daemon_type_to_service
 from ceph.utils import datetime_now
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.ssl_cert_utils import SSLCerts
+from mgr_util import test_port_allocation, PortAlreadyInUse
 
-from datetime import datetime, timedelta
-from OpenSSL import crypto
-from cryptography import x509
-from cryptography.x509.oid import NameOID
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.backends import default_backend
-
-from typing import Any, Dict, List, Set, Tuple, TYPE_CHECKING
+from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -42,100 +41,73 @@ logging.getLogger('cherrypy.error').addFilter(cherrypy_filter)
 cherrypy.log.access_log.propagate = False
 
 
-class CherryPyThread(threading.Thread):
+class AgentEndpoint:
+
+    KV_STORE_AGENT_ROOT_CERT = 'cephadm_agent/root/cert'
+    KV_STORE_AGENT_ROOT_KEY = 'cephadm_agent/root/key'
+
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
-        self.cherrypy_shutdown_event = threading.Event()
-        self.ssl_certs = SSLCerts(self.mgr)
+        self.ssl_certs = SSLCerts()
         self.server_port = 7150
         self.server_addr = self.mgr.get_mgr_ip()
-        super(CherryPyThread, self).__init__(target=self.run)
 
-    def run(self) -> None:
-        try:
-            self.ssl_certs.generate_root_cert()
-            cert, key = self.ssl_certs.generate_cert()
+    def configure_routes(self) -> None:
+        d = cherrypy.dispatch.RoutesDispatcher()
+        d.connect(name='host-data', route='/data/',
+                  controller=self.host_data.POST,
+                  conditions=dict(method=['POST']))
+        cherrypy.tree.mount(None, '/', config={'/': {'request.dispatch': d}})
 
-            self.key_tmp = tempfile.NamedTemporaryFile()
-            self.key_tmp.write(key.encode('utf-8'))
-            self.key_tmp.flush()  # pkey_tmp must not be gc'ed
-            key_fname = self.key_tmp.name
+    def configure_tls(self, server: Server) -> None:
+        old_cert = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_CERT)
+        old_key = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_KEY)
+        if old_cert and old_key:
+            self.ssl_certs.load_root_credentials(old_cert, old_key)
+        else:
+            self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
+            self.mgr.set_store(self.KV_STORE_AGENT_ROOT_CERT, self.ssl_certs.get_root_cert())
+            self.mgr.set_store(self.KV_STORE_AGENT_ROOT_KEY, self.ssl_certs.get_root_key())
 
-            self.cert_tmp = tempfile.NamedTemporaryFile()
-            self.cert_tmp.write(cert.encode('utf-8'))
-            self.cert_tmp.flush()  # cert_tmp must not be gc'ed
-            cert_fname = self.cert_tmp.name
+        host = self.mgr.get_hostname()
+        addr = self.mgr.get_mgr_ip()
+        server.ssl_certificate, server.ssl_private_key = self.ssl_certs.generate_cert_files(host, addr)
 
-            verify_tls_files(cert_fname, key_fname)
-
-            cherrypy.config.update({
-                'server.socket_host': self.server_addr,
-                'server.socket_port': self.server_port,
-                'engine.autoreload.on': False,
-                'server.ssl_module': 'builtin',
-                'server.ssl_certificate': cert_fname,
-                'server.ssl_private_key': key_fname,
-            })
-            root_conf = {'/': {'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
-                               'tools.response_headers.on': True}}
-            cherrypy.tree.mount(Root(self.mgr), '/', root_conf)
-            self.mgr.log.debug('Starting cherrypy engine...')
-            self.start_engine()
-            self.mgr.log.debug('Cherrypy engine started.')
-            # wait for the shutdown event
-            self.cherrypy_shutdown_event.wait()
-            self.cherrypy_shutdown_event.clear()
-            cherrypy.engine.stop()
-            self.mgr.log.debug('Cherrypy engine stopped.')
-        except Exception as e:
-            self.mgr.log.error(f'Failed to run cephadm cherrypy endpoint: {e}')
-
-    def start_engine(self) -> None:
-        port_connect_attempts = 0
-        while port_connect_attempts < 150:
+    def find_free_port(self) -> None:
+        max_port = self.server_port + 150
+        while self.server_port <= max_port:
             try:
-                cherrypy.engine.start()
-                self.mgr.log.debug(f'Cephadm endpoint connected to port {self.server_port}')
+                test_port_allocation(self.server_addr, self.server_port)
+                self.host_data.socket_port = self.server_port
+                self.mgr.log.debug(f'Cephadm agent endpoint using {self.server_port}')
                 return
-            except cherrypy.process.wspbus.ChannelFailures as e:
-                self.mgr.log.debug(
-                    f'{e}. Trying next port.')
+            except PortAlreadyInUse:
                 self.server_port += 1
-                cherrypy.server.httpserver = None
-                cherrypy.config.update({
-                    'server.socket_port': self.server_port
-                })
-                port_connect_attempts += 1
-        self.mgr.log.error(
-            'Cephadm Endpoint could not find free port in range 7150-7300 and failed to start')
+        self.mgr.log.error(f'Cephadm agent could not find free port in range {max_port - 150}-{max_port} and failed to start')
 
-    def shutdown(self) -> None:
-        self.mgr.log.debug('Stopping cherrypy engine...')
-        self.cherrypy_shutdown_event.set()
+    def configure(self) -> None:
+        self.host_data = HostData(self.mgr, self.server_port, self.server_addr)
+        self.configure_tls(self.host_data)
+        self.configure_routes()
+        self.find_free_port()
 
 
-class Root:
+class HostData(Server):
     exposed = True
 
-    def __init__(self, mgr: "CephadmOrchestrator"):
+    def __init__(self, mgr: "CephadmOrchestrator", port: int, host: str):
         self.mgr = mgr
-        self.data = HostData(self.mgr)
+        super().__init__()
+        self.socket_port = port
+        self.socket_host = host
+        self.subscribe()
 
-    def GET(self) -> str:
-        return '''<!DOCTYPE html>
-<html>
-<head><title>Cephadm HTTP Endpoint</title></head>
-<body>
-<p>Cephadm HTTP Endpoint is up and running</p>
-</body>
-</html>'''
-
-
-class HostData:
-    exposed = True
-
-    def __init__(self, mgr: "CephadmOrchestrator"):
-        self.mgr = mgr
+    def stop(self) -> None:
+        # we must call unsubscribe before stopping the server,
+        # otherwise the port is not released and we will get
+        # an exception when trying to restart it
+        self.unsubscribe()
+        super().stop()
 
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
@@ -165,9 +137,9 @@ class HostData:
         if 'keyring' not in data:
             raise Exception(
                 f'Agent on host {host} not reporting its keyring for validation ("keyring" field). Only received fields {fields}')
-        if host not in self.mgr.cache.agent_keys:
+        if host not in self.mgr.agent_cache.agent_keys:
             raise Exception(f'No agent keyring stored for host {host}. Cannot verify agent')
-        if data['keyring'] != self.mgr.cache.agent_keys[host]:
+        if data['keyring'] != self.mgr.agent_cache.agent_keys[host]:
             raise Exception(f'Got wrong keyring from agent on host {host}.')
         if 'port' not in data:
             raise Exception(
@@ -189,16 +161,16 @@ class HostData:
     def handle_metadata(self, data: Dict[str, Any]) -> str:
         try:
             host = data['host']
-            self.mgr.cache.agent_ports[host] = int(data['port'])
-            if host not in self.mgr.cache.agent_counter:
-                self.mgr.cache.agent_counter[host] = 1
+            self.mgr.agent_cache.agent_ports[host] = int(data['port'])
+            if host not in self.mgr.agent_cache.agent_counter:
+                self.mgr.agent_cache.agent_counter[host] = 1
                 self.mgr.agent_helpers._request_agent_acks({host})
                 res = f'Got metadata from agent on host {host} with no known counter entry. Starting counter at 1 and requesting new metadata'
                 self.mgr.log.debug(res)
                 return res
 
             # update timestamp of most recent agent update
-            self.mgr.cache.agent_timestamp[host] = datetime_now()
+            self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
 
             error_daemons_old = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
             daemon_count_old = len(self.mgr.cache.get_daemons_by_host(host))
@@ -206,11 +178,11 @@ class HostData:
             up_to_date = False
 
             int_ack = int(data['ack'])
-            if int_ack == self.mgr.cache.agent_counter[host]:
+            if int_ack == self.mgr.agent_cache.agent_counter[host]:
                 up_to_date = True
             else:
                 # we got old counter value with message, inform agent of new timestamp
-                if not self.mgr.cache.messaging_agent(host):
+                if not self.mgr.agent_cache.messaging_agent(host):
                     self.mgr.agent_helpers._request_agent_acks({host})
                 self.mgr.log.debug(
                     f'Received old metadata from agent on host {host}. Requested up-to-date metadata.')
@@ -244,6 +216,7 @@ class HostData:
                 self.mgr.log.debug(
                     f'Received up-to-date metadata from agent on host {host}.')
 
+            self.mgr.agent_cache.save_agent(host)
             return 'Successfully processed metadata.'
 
         except Exception as e:
@@ -253,26 +226,29 @@ class HostData:
 
 
 class AgentMessageThread(threading.Thread):
-    def __init__(self, host: str, port: int, data: Dict[Any, Any], mgr: "CephadmOrchestrator") -> None:
+    def __init__(self, host: str, port: int, data: Dict[Any, Any], mgr: "CephadmOrchestrator", daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
         self.mgr = mgr
+        self.agent = mgr.http_server.agent
         self.host = host
         self.addr = self.mgr.inventory.get_addr(host) if host in self.mgr.inventory else host
         self.port = port
         self.data: str = json.dumps(data)
-        super(AgentMessageThread, self).__init__(target=self.run)
+        self.daemon_spec: Optional[CephadmDaemonDeploySpec] = daemon_spec
+        super().__init__(target=self.run)
 
     def run(self) -> None:
         self.mgr.log.debug(f'Sending message to agent on host {self.host}')
-        self.mgr.cache.sending_agent_message[self.host] = True
+        self.mgr.agent_cache.sending_agent_message[self.host] = True
         try:
-            assert self.mgr.cherrypy_thread
-            root_cert = self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
+            assert self.agent
+            root_cert = self.agent.ssl_certs.get_root_cert()
             root_cert_tmp = tempfile.NamedTemporaryFile()
             root_cert_tmp.write(root_cert.encode('utf-8'))
             root_cert_tmp.flush()
             root_cert_fname = root_cert_tmp.name
 
-            cert, key = self.mgr.cherrypy_thread.ssl_certs.generate_cert()
+            cert, key = self.agent.ssl_certs.generate_cert(
+                self.mgr.get_hostname(), self.mgr.get_mgr_ip())
 
             cert_tmp = tempfile.NamedTemporaryFile()
             cert_tmp.write(cert.encode('utf-8'))
@@ -290,7 +266,7 @@ class AgentMessageThread(threading.Thread):
             ssl_ctx.load_cert_chain(cert_fname, key_fname)
         except Exception as e:
             self.mgr.log.error(f'Failed to get certs for connecting to agent: {e}')
-            self.mgr.cache.sending_agent_message[self.host] = False
+            self.mgr.agent_cache.sending_agent_message[self.host] = False
             return
         try:
             bytes_len: str = str(len(self.data.encode('utf-8')))
@@ -301,7 +277,7 @@ class AgentMessageThread(threading.Thread):
                 bytes_len = '0' + bytes_len
         except Exception as e:
             self.mgr.log.error(f'Failed to get length of json payload: {e}')
-            self.mgr.cache.sending_agent_message[self.host] = False
+            self.mgr.agent_cache.sending_agent_message[self.host] = False
             return
         for retry_wait in [3, 5]:
             try:
@@ -312,7 +288,9 @@ class AgentMessageThread(threading.Thread):
                 secure_agent_socket.sendall(msg.encode('utf-8'))
                 agent_response = secure_agent_socket.recv(1024).decode()
                 self.mgr.log.debug(f'Received "{agent_response}" from agent on host {self.host}')
-                self.mgr.cache.sending_agent_message[self.host] = False
+                if self.daemon_spec:
+                    self.mgr.agent_cache.agent_config_successfully_delivered(self.daemon_spec)
+                self.mgr.agent_cache.sending_agent_message[self.host] = False
                 return
             except ConnectionError as e:
                 # if it's a connection error, possibly try to connect again.
@@ -323,32 +301,38 @@ class AgentMessageThread(threading.Thread):
             except Exception as e:
                 # if it's not a connection error, something has gone wrong. Give up.
                 self.mgr.log.error(f'Failed to contact agent on host {self.host}: {e}')
-                self.mgr.cache.sending_agent_message[self.host] = False
+                self.mgr.agent_cache.sending_agent_message[self.host] = False
                 return
         self.mgr.log.error(f'Could not connect to agent on host {self.host}')
-        self.mgr.cache.sending_agent_message[self.host] = False
+        self.mgr.agent_cache.sending_agent_message[self.host] = False
         return
-
-
-class AgentLockException(Exception):
-    pass
 
 
 class CephadmAgentHelpers:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
+        self.agent = mgr.http_server.agent
 
-    def _request_agent_acks(self, hosts: Set[str], increment: bool = False) -> None:
+    def _request_agent_acks(self, hosts: Set[str], increment: bool = False, daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
         for host in hosts:
             if increment:
                 self.mgr.cache.metadata_up_to_date[host] = False
-            if host not in self.mgr.cache.agent_counter:
-                self.mgr.cache.agent_counter[host] = 1
+            if host not in self.mgr.agent_cache.agent_counter:
+                self.mgr.agent_cache.agent_counter[host] = 1
             elif increment:
-                self.mgr.cache.agent_counter[host] = self.mgr.cache.agent_counter[host] + 1
+                self.mgr.agent_cache.agent_counter[host] = self.mgr.agent_cache.agent_counter[host] + 1
+            payload: Dict[str, Any] = {'counter': self.mgr.agent_cache.agent_counter[host]}
+            if daemon_spec:
+                payload['config'] = daemon_spec.final_config
             message_thread = AgentMessageThread(
-                host, self.mgr.cache.agent_ports[host], {'counter': self.mgr.cache.agent_counter[host]}, self.mgr)
+                host, self.mgr.agent_cache.agent_ports[host], payload, self.mgr, daemon_spec)
             message_thread.start()
+
+    def _request_ack_all_not_up_to_date(self) -> None:
+        self.mgr.agent_helpers._request_agent_acks(
+            set([h for h in self.mgr.cache.get_hosts() if
+                 (not self.mgr.cache.host_metadata_up_to_date(h)
+                 and h in self.mgr.agent_cache.agent_ports and not self.mgr.agent_cache.messaging_agent(h))]))
 
     def _agent_down(self, host: str) -> bool:
         # if host is draining or drained (has _no_schedule label) there should not
@@ -361,13 +345,13 @@ class CephadmAgentHelpers:
         # if we don't have a timestamp, it's likely because of a mgr fail over.
         # just set the timestamp to now. However, if host was offline before, we
         # should not allow creating a new timestamp to cause it to be marked online
-        if host not in self.mgr.cache.agent_timestamp:
-            self.mgr.cache.agent_timestamp[host] = datetime_now()
+        if host not in self.mgr.agent_cache.agent_timestamp:
             if host in self.mgr.offline_hosts:
                 return False
+            self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
         # agent hasn't reported in down multiplier * it's refresh rate. Something is likely wrong with it.
         down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
-        time_diff = datetime_now() - self.mgr.cache.agent_timestamp[host]
+        time_diff = datetime_now() - self.mgr.agent_cache.agent_timestamp[host]
         if time_diff.total_seconds() > down_mult * float(self.mgr.agent_refresh_rate):
             return True
         return False
@@ -410,7 +394,7 @@ class CephadmAgentHelpers:
             # we can tell they're in that state if we don't have a keyring for
             # them in the host cache
             for agent in self.mgr.cache.get_daemons_by_service('agent'):
-                if agent.hostname not in self.mgr.cache.agent_keys:
+                if agent.hostname not in self.mgr.agent_cache.agent_keys:
                     self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
             if 'agent' not in self.mgr.spec_store:
                 self.mgr.agent_helpers._apply_agent()
@@ -419,168 +403,69 @@ class CephadmAgentHelpers:
             if 'agent' in self.mgr.spec_store:
                 self.mgr.spec_store.rm('agent')
                 need_apply = True
-            self.mgr.cache.agent_counter = {}
-            self.mgr.cache.agent_timestamp = {}
-            self.mgr.cache.agent_keys = {}
-            self.mgr.cache.agent_ports = {}
+            self.mgr.agent_cache.agent_counter = {}
+            self.mgr.agent_cache.agent_timestamp = {}
+            self.mgr.agent_cache.agent_keys = {}
+            self.mgr.agent_cache.agent_ports = {}
         return need_apply
 
     def _check_agent(self, host: str) -> bool:
+        down = False
         try:
-            assert self.mgr.cherrypy_thread
-            assert self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
+            assert self.agent
+            assert self.agent.ssl_certs.get_root_cert()
         except Exception:
             self.mgr.log.debug(
                 f'Delaying checking agent on {host} until cephadm endpoint finished creating root cert')
-            return False
+            return down
         if self.mgr.agent_helpers._agent_down(host):
-            return True
-        else:
-            try:
-                agent = self.mgr.cache.get_daemons_by_type('agent', host=host)[0]
-                assert agent.daemon_id is not None
-                assert agent.hostname is not None
-            except Exception as e:
-                self.mgr.log.debug(
-                    f'Could not retrieve agent on host {host} from daemon cache: {e}')
-                return False
-            try:
-                spec = self.mgr.spec_store.active_specs.get('agent', None)
-                deps = self.mgr._calc_daemon_deps(spec, 'agent', agent.daemon_id)
-                last_deps, last_config = self.mgr.cache.get_daemon_last_config_deps(
-                    host, agent.name())
-                if not last_config or last_deps != deps:
-                    daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
-                    self.mgr._daemon_action(daemon_spec, action='reconfig')
-                    return False
-            except Exception as e:
-                self.mgr.log.debug(
-                    f'Agent on host {host} not ready to have config and deps checked: {e}')
-            action = self.mgr.cache.get_scheduled_daemon_action(agent.hostname, agent.name())
-            if action:
+            down = True
+        try:
+            agent = self.mgr.cache.get_daemons_by_type('agent', host=host)[0]
+            assert agent.daemon_id is not None
+            assert agent.hostname is not None
+        except Exception as e:
+            self.mgr.log.debug(
+                f'Could not retrieve agent on host {host} from daemon cache: {e}')
+            return down
+        try:
+            spec = self.mgr.spec_store.active_specs.get('agent', None)
+            deps = self.mgr._calc_daemon_deps(spec, 'agent', agent.daemon_id)
+            last_deps, last_config = self.mgr.agent_cache.get_agent_last_config_deps(host)
+            if not last_config or last_deps != deps:
+                # if root cert is the dep that changed, we must use ssh to reconfig
+                # so it's necessary to check this one specifically
+                root_cert_match = False
                 try:
-                    daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
-                    self.mgr._daemon_action(daemon_spec, action=action)
-                    self.mgr.cache.rm_scheduled_daemon_action(agent.hostname, agent.name())
-                except Exception as e:
-                    self.mgr.log.debug(
-                        f'Agent on host {host} not ready to {action}: {e}')
-            return False
-
-
-class SSLCerts:
-    def __init__(self, mgr: "CephadmOrchestrator") -> None:
-        self.mgr = mgr
-        self.root_cert: Any
-        self.root_key: Any
-        self.root_subj: Any
-
-    def generate_root_cert(self) -> Tuple[str, str]:
-        self.root_key = rsa.generate_private_key(
-            public_exponent=65537, key_size=4096, backend=default_backend())
-        root_public_key = self.root_key.public_key()
-
-        root_builder = x509.CertificateBuilder()
-
-        root_builder = root_builder.subject_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
-        ]))
-
-        root_builder = root_builder.issuer_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
-        ]))
-
-        root_builder = root_builder.not_valid_before(datetime.now())
-        root_builder = root_builder.not_valid_after(datetime.now() + timedelta(days=(365 * 10 + 3)))
-        root_builder = root_builder.serial_number(x509.random_serial_number())
-        root_builder = root_builder.public_key(root_public_key)
-        root_builder = root_builder.add_extension(
-            x509.SubjectAlternativeName(
-                [x509.IPAddress(ipaddress.IPv4Address(str(self.mgr.get_mgr_ip())))]
-            ),
-            critical=False
-        )
-        root_builder = root_builder.add_extension(
-            x509.BasicConstraints(ca=True, path_length=None), critical=True,
-        )
-
-        self.root_cert = root_builder.sign(
-            private_key=self.root_key, algorithm=hashes.SHA256(), backend=default_backend()
-        )
-
-        cert_str = crypto.dump_certificate(crypto.FILETYPE_PEM, self.root_cert).decode('utf-8')
-        key_str = self.root_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption()
-        ).decode('utf-8')
-
-        return (cert_str, key_str)
-
-    def generate_cert(self, addr: str = '') -> Tuple[str, str]:
-        have_ip = True
-        if addr:
-            try:
-                ip = x509.IPAddress(ipaddress.IPv4Address(addr))
-            except Exception:
-                try:
-                    ip = x509.IPAddress(ipaddress.IPv6Address(addr))
+                    root_cert = self.agent.ssl_certs.get_root_cert()
+                    if last_deps and root_cert in last_deps:
+                        root_cert_match = True
                 except Exception:
-                    have_ip = False
                     pass
-        else:
-            ip = x509.IPAddress(ipaddress.IPv4Address(self.mgr.get_mgr_ip()))
-
-        private_key = rsa.generate_private_key(
-            public_exponent=65537, key_size=4096, backend=default_backend())
-        public_key = private_key.public_key()
-
-        builder = x509.CertificateBuilder()
-
-        builder = builder.subject_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, addr if addr else str(self.mgr.get_mgr_ip())),
-        ]))
-
-        builder = builder.issuer_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
-        ]))
-
-        builder = builder.not_valid_before(datetime.now())
-        builder = builder.not_valid_after(datetime.now() + timedelta(days=(365 * 10 + 3)))
-        builder = builder.serial_number(x509.random_serial_number())
-        builder = builder.public_key(public_key)
-        if have_ip:
-            builder = builder.add_extension(
-                x509.SubjectAlternativeName(
-                    [ip]
-                ),
-                critical=False
-            )
-        builder = builder.add_extension(
-            x509.BasicConstraints(ca=False, path_length=None), critical=True,
-        )
-
-        cert = builder.sign(
-            private_key=self.root_key, algorithm=hashes.SHA256(), backend=default_backend()
-        )
-
-        cert_str = crypto.dump_certificate(crypto.FILETYPE_PEM, cert).decode('utf-8')
-        key_str = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption()
-        ).decode('utf-8')
-
-        return (cert_str, key_str)
-
-    def get_root_cert(self) -> str:
-        try:
-            return crypto.dump_certificate(crypto.FILETYPE_PEM, self.root_cert).decode('utf-8')
-        except AttributeError:
-            return ''
-
-    def get_root_key(self) -> str:
-        try:
-            return crypto.dump_certificate(crypto.FILETYPE_PEM, self.root_key).decode('utf-8')
-        except AttributeError:
-            return ''
+                daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
+                # we need to know the agent port to try to reconfig w/ http
+                # otherwise there is no choice but a full ssh reconfig
+                if host in self.mgr.agent_cache.agent_ports and root_cert_match and not down:
+                    daemon_spec = self.mgr.cephadm_services[daemon_type_to_service(
+                        daemon_spec.daemon_type)].prepare_create(daemon_spec)
+                    self.mgr.agent_helpers._request_agent_acks(
+                        hosts={daemon_spec.host},
+                        increment=True,
+                        daemon_spec=daemon_spec,
+                    )
+                else:
+                    self.mgr._daemon_action(daemon_spec, action='reconfig')
+                return down
+        except Exception as e:
+            self.mgr.log.debug(
+                f'Agent on host {host} not ready to have config and deps checked: {e}')
+        action = self.mgr.cache.get_scheduled_daemon_action(agent.hostname, agent.name())
+        if action:
+            try:
+                daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
+                self.mgr._daemon_action(daemon_spec, action=action)
+                self.mgr.cache.rm_scheduled_daemon_action(agent.hostname, agent.name())
+            except Exception as e:
+                self.mgr.log.debug(
+                    f'Agent on host {host} not ready to {action}: {e}')
+        return down

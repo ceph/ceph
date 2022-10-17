@@ -21,10 +21,13 @@ import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
 import { AlertPanelComponent } from './alert-panel/alert-panel.component';
 import { BackButtonComponent } from './back-button/back-button.component';
+import { CdLabelComponent } from './cd-label/cd-label.component';
+import { ColorClassFromTextPipe } from './cd-label/color-class-from-text.pipe';
 import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { Copy2ClipboardButtonComponent } from './copy2clipboard-button/copy2clipboard-button.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
+import { CustomLoginBannerComponent } from './custom-login-banner/custom-login-banner.component';
 import { DateTimePickerComponent } from './date-time-picker/date-time-picker.component';
 import { DocComponent } from './doc/doc.component';
 import { DownloadButtonComponent } from './download-button/download-button.component';
@@ -95,7 +98,10 @@ import { WizardComponent } from './wizard/wizard.component';
     DownloadButtonComponent,
     FormButtonPanelComponent,
     MotdComponent,
-    WizardComponent
+    WizardComponent,
+    CustomLoginBannerComponent,
+    CdLabelComponent,
+    ColorClassFromTextPipe
   ],
   providers: [],
   exports: [
@@ -123,7 +129,9 @@ import { WizardComponent } from './wizard/wizard.component';
     DownloadButtonComponent,
     FormButtonPanelComponent,
     MotdComponent,
-    WizardComponent
+    WizardComponent,
+    CustomLoginBannerComponent,
+    CdLabelComponent
   ]
 })
 export class ComponentsModule {}

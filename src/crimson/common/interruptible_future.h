@@ -64,6 +64,18 @@ namespace seastar::internal {
   {};
 }
 
+SEASTAR_CONCEPT(
+namespace crimson::interruptible {
+  template<typename InterruptCond, typename FutureType>
+  class interruptible_future_detail;
+}
+namespace seastar::impl {
+  template <typename InterruptCond, typename FutureType, typename... Rest>
+  struct is_tuple_of_futures<std::tuple<crimson::interruptible::interruptible_future_detail<InterruptCond, FutureType>, Rest...>>
+    : is_tuple_of_futures<std::tuple<Rest...>> {};
+}
+)
+
 namespace crimson::interruptible {
 
 struct ready_future_marker {};
@@ -158,17 +170,17 @@ auto call_with_interruption_impl(
   // global "interrupt_cond" with the interruption condition, and go ahead
   // executing the Func.
   assert(interrupt_condition);
-  auto [interrupt, fut] = interrupt_condition->template may_interrupt<
+  auto fut = interrupt_condition->template may_interrupt<
     typename futurator_t::type>();
   INTR_FUT_DEBUG(
     "call_with_interruption_impl: may_interrupt: {}, "
-    "local interrupt_condintion: {}, "
+    "local interrupt_condition: {}, "
     "global interrupt_cond: {},{}",
-    interrupt,
+    (bool)fut,
     (void*)interrupt_condition.get(),
     (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
     typeid(InterruptCond).name());
-  if (interrupt) {
+  if (fut) {
     return std::move(*fut);
   }
   interrupt_cond<InterruptCond>.set(interrupt_condition);
@@ -259,15 +271,15 @@ Result non_futurized_call_with_interruption(
   Func&& func, T&&... args)
 {
   assert(interrupt_condition);
-  auto [interrupt, fut] = interrupt_condition->template may_interrupt<seastar::future<>>();
+  auto fut = interrupt_condition->template may_interrupt<seastar::future<>>();
   INTR_FUT_DEBUG(
     "non_futurized_call_with_interruption may_interrupt: {}, "
     "interrupt_condition: {}, interrupt_cond: {},{}",
-    interrupt,
+    (bool)fut,
     (void*)interrupt_condition.get(),
     (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
     typeid(InterruptCond).name());
-  if (interrupt) {
+  if (fut) {
     std::rethrow_exception(fut->get_exception());
   }
   interrupt_cond<InterruptCond>.set(interrupt_condition);
@@ -329,7 +341,8 @@ private:
       _incomplete.pop_back();
     }
     if (!_incomplete.empty()) {
-      seastar::internal::set_callback(_incomplete.back(), static_cast<continuation_base<>*>(this));
+      seastar::internal::set_callback(std::move(_incomplete.back()),
+		                      static_cast<continuation_base<>*>(this));
       _incomplete.pop_back();
       return;
     }
@@ -1227,7 +1240,7 @@ public:
       return make_interruptible(
 	  ::crimson::repeat(
 	    [action=std::move(action),
-	    interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond] {
+	    interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]() mutable {
 	    return call_with_interruption(
 		      interrupt_condition,
 		      std::move(action)).to_future();
@@ -1308,7 +1321,7 @@ public:
   }
 
   template <typename Container, typename Func>
-  static inline auto parallel_for_each(Container&& container, Func&& func) noexcept {
+  static inline auto parallel_for_each(Container& container, Func&& func) noexcept {
     return parallel_for_each(
 	    std::begin(container),
 	    std::end(container),
@@ -1544,4 +1557,10 @@ struct continuation_base_from_future<
   using type = typename seastar::continuation_base_from_future<FutureType>::type;
 };
 
+template <typename InterruptCond, typename FutureType>
+struct is_future<
+  ::crimson::interruptible::interruptible_future_detail<
+    InterruptCond,
+    FutureType>>
+ : std::true_type {};
 } // namespace seastar

@@ -351,8 +351,10 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             all_nfs = self.rook_cluster.get_resource("cephnfses")
             nfs_pods = self.rook_cluster.describe_pods('nfs', None, None)
             for nfs in all_nfs:
-                if nfs['spec']['rados']['pool'] != NFS_POOL_NAME:
-                    continue
+                # Starting with V.17.2.0, the 'rados' spec part in 'cephnfs' resources does not contain the 'pool' item
+                if 'pool' in nfs['spec']['rados']:
+                    if nfs['spec']['rados']['pool'] != NFS_POOL_NAME:
+                        continue
                 nfs_name = nfs['metadata']['name']
                 svc = 'nfs.' + nfs_name
                 if svc in spec:
@@ -633,7 +635,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     def add_host_label(self, host: str, label: str) -> OrchResult[str]:
         return self.rook_cluster.add_host_label(host, label)
     
-    def remove_host_label(self, host: str, label: str) -> OrchResult[str]:
+    def remove_host_label(self, host: str, label: str, force: bool = False) -> OrchResult[str]:
         return self.rook_cluster.remove_host_label(host, label)
     """
     @handle_orch_error

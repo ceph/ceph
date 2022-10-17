@@ -64,10 +64,8 @@ class RGWSI_Zone : public RGWServiceInstance
   int do_start(optional_yield y, const DoutPrefixProvider *dpp) override;
   void shutdown() override;
 
-  int replace_region_with_zonegroup(const DoutPrefixProvider *dpp, optional_yield y);
   int init_zg_from_period(const DoutPrefixProvider *dpp, optional_yield y);
   int init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield y);
-  int convert_regionmap(const DoutPrefixProvider *dpp, optional_yield y);
 
   int update_placement_map(const DoutPrefixProvider *dpp, optional_yield y);
 
@@ -129,7 +127,7 @@ public:
     return zone_data_notify_to_map;
   }
 
-  bool find_zone(const rgw_zone_id& id, RGWZone **zone);
+  RGWZone* find_zone(const rgw_zone_id& id);
 
   RGWRESTConn *get_zone_conn(const rgw_zone_id& zone_id);
   RGWRESTConn *get_zone_conn_by_name(const std::string& name);
