@@ -40,18 +40,36 @@ as the S3-compatible API of the `PubSub Module`_.
 Notification Reliability
 ------------------------
 
-Notifications may be sent synchronously, as part of the operation that triggered them.
-In this mode, the operation is acked only after the notification is sent to the topic's configured endpoint, which means that the
-round trip time of the notification is added to the latency of the operation itself.
+Notifications can be sent synchronously or asynchronously. This section
+describes the latency and reliability that you should expect for synchronous
+and asynchronous notifications.
 
-.. note:: The original triggering operation will still be considered as successful even if the notification fail with an error, cannot be delivered or times out
+Synchronous Notifications
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Notifications may also be sent asynchronously. They will be committed into persistent storage and then asynchronously sent to the topic's configured endpoint.
-In this case, the only latency added to the original operation is of committing the notification to persistent storage.
+Notifications can be sent synchronously, as part of the operation that
+triggered them. In this mode, the operation is acknowledged (acked) only after
+the notification is sent to the topic's configured endpoint. This means that
+the round trip time of the notification (the time it takes to send the
+notification to the topic's endpoint plus the time it takes to receive the
+acknowledgement) is added to the latency of the operation itself.
 
-.. note:: If the notification fail with an error, cannot be delivered or times out, it will be retried until successfully acked
+.. note:: The original triggering operation is considered successful even if
+   the notification fails with an error, cannot be delivered, or times out.
 
-.. tip:: To minimize the added latency in case of asynchronous notifications, it is recommended to place the "log" pool on fast media
+Asynchronous Notifications
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notifications can be sent asynchronously. They are committed into persistent
+storage and then asynchronously sent to the topic's configured endpoint. In
+this case, the only latency added to the original operation is the latency
+added when the notification is committed to persistent storage.
+
+.. note:: If the notification fails with an error, cannot be delivered, or
+   times out, it is retried until it is successfully acknowledged.
+
+.. tip:: To minimize the latency added by asynchronous notification, we 
+   recommended placing the "log" pool on fast media.
 
 
 Topic Management via CLI
