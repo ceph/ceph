@@ -204,9 +204,6 @@ void RGWOp_User_Create::execute(optional_yield y)
   if (s->info.args.exists("exclusive"))
     op_state.set_exclusive(exclusive);
 
-  if (gen_key)
-    op_state.set_generate_key();
-
   if (!default_placement_str.empty()) {
     rgw_placement_rule target_rule;
     target_rule.from_str(default_placement_str);
@@ -224,12 +221,27 @@ void RGWOp_User_Create::execute(optional_yield y)
     op_state.set_placement_tags(placement_tags_list);
   }
 
-  bufferlist data;
-  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-    return;
+  if(!(store->is_meta_master())) {
+    bufferlist data;
+    JSONParser jp;
+    RGWUserInfo ui;
+    op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, &jp, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+    ui.decode_json(&jp);
+    std::map<std::string, RGWAccessKey> keys = ui.access_keys;
+    auto keys_itr = keys.begin();
+    RGWAccessKey first_key = keys_itr->second;
+    op_state.id = first_key.id;
+    op_state.key = first_key.key;
   }
+
+  if (gen_key) {
+    op_state.set_generate_key();
+  }
+
   op_ret = RGWUserAdminOp_User::create(s, store, op_state, flusher, y);
 }
 
