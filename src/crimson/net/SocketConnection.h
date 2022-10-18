@@ -49,14 +49,14 @@ class SocketConnection : public Connection {
   // messages sent, but not yet acked by peer
   std::deque<MessageURef> sent;
 
+  uint64_t peer_global_id = 0;
+
   seastar::shard_id shard_id() const;
 
  public:
   SocketConnection(SocketMessenger& messenger,
                    ChainedDispatchers& dispatchers);
   ~SocketConnection() override;
-
-  Messenger* get_messenger() const override;
 
   bool is_connected() const override;
 
@@ -99,8 +99,11 @@ class SocketConnection : public Connection {
 
   seastar::socket_address get_local_address() const;
 
+  SocketMessenger &get_messenger() const {
+    return messenger;
+  }
+
   friend class Protocol;
-  friend class ProtocolV1;
   friend class ProtocolV2;
 };
 

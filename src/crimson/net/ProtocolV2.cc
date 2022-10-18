@@ -153,6 +153,7 @@ ProtocolV2::ProtocolV2(ChainedDispatchers& dispatchers,
                        SocketMessenger& messenger)
   : Protocol(proto_t::v2, dispatchers, conn),
     messenger{messenger},
+    auth_meta{seastar::make_lw_shared<AuthConnectionMeta>()},
     protocol_timer{conn}
 {}
 
@@ -529,7 +530,7 @@ seastar::future<> ProtocolV2::handle_auth_reply()
                         bad_method.allowed_methods(), bad_method.allowed_modes());
           ceph_assert(messenger.get_auth_client());
           int r = messenger.get_auth_client()->handle_auth_bad_method(
-              conn.shared_from_this(), auth_meta,
+              conn, *auth_meta,
               bad_method.method(), bad_method.result(),
               bad_method.allowed_methods(), bad_method.allowed_modes());
           if (r < 0) {
@@ -548,7 +549,7 @@ seastar::future<> ProtocolV2::handle_auth_reply()
           ceph_assert(messenger.get_auth_client());
           // let execute_connecting() take care of the thrown exception
           auto reply = messenger.get_auth_client()->handle_auth_reply_more(
-            conn.shared_from_this(), auth_meta, auth_more.auth_payload());
+            conn, *auth_meta, auth_more.auth_payload());
           auto more_reply = AuthRequestMoreFrame::Encode(reply);
           logger().debug("{} WRITE AuthRequestMoreFrame: payload_len={}",
                          conn, reply.length());
@@ -566,7 +567,8 @@ seastar::future<> ProtocolV2::handle_auth_reply()
                          auth_done.auth_payload().length());
           ceph_assert(messenger.get_auth_client());
           int r = messenger.get_auth_client()->handle_auth_done(
-              conn.shared_from_this(), auth_meta,
+              conn,
+              *auth_meta,
               auth_done.global_id(),
               auth_done.con_mode(),
               auth_done.auth_payload());
@@ -594,7 +596,7 @@ seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods
 
   try {
     auto [auth_method, preferred_modes, bl] =
-      messenger.get_auth_client()->get_auth_request(conn.shared_from_this(), auth_meta);
+      messenger.get_auth_client()->get_auth_request(conn, *auth_meta);
     auth_meta->auth_method = auth_method;
     auto frame = AuthRequestFrame::Encode(auth_method, preferred_modes, bl);
     logger().debug("{} WRITE AuthRequestFrame: method={},"
@@ -959,8 +961,12 @@ seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, boo
   ceph_assert(messenger.get_auth_server());
   bufferlist reply;
   int r = messenger.get_auth_server()->handle_auth_request(
-      conn.shared_from_this(), auth_meta,
-      more, auth_meta->auth_method, auth_payload,
+      conn,
+      *auth_meta,
+      more,
+      auth_meta->auth_method,
+      auth_payload,
+      &conn.peer_global_id,
       &reply);
   switch (r) {
    // successful

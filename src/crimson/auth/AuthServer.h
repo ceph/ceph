@@ -30,11 +30,12 @@ public:
     int auth_method) = 0;
   // Handle an authentication request on an incoming connection
   virtual int handle_auth_request(
-    crimson::net::ConnectionRef conn,
-    AuthConnectionMetaRef auth_meta,
+    crimson::net::Connection &conn,
+    AuthConnectionMeta &auth_meta,
     bool more,           //< true if this is not the first part of the handshake
     uint32_t auth_method,
     const bufferlist& bl,
+    uint64_t *p_peer_global_id,
     bufferlist *reply) = 0;
 };
 

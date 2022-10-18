@@ -47,7 +47,6 @@ public:
 
   crimson::net::Messenger &get_front_msgr() const;
   crimson::net::Messenger &get_back_msgr() const;
-  void set_require_authorizer(bool);
 
   // Dispatcher methods
   std::optional<seastar::future<>> ms_dispatch(

@@ -25,8 +25,7 @@ Protocol::Protocol(proto_t type,
                    SocketConnection& conn)
   : proto_type(type),
     dispatchers(dispatchers),
-    conn(conn),
-    auth_meta{seastar::make_lw_shared<AuthConnectionMeta>()}
+    conn(conn)
 {}
 
 Protocol::~Protocol()

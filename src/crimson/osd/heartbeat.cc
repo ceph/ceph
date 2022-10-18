@@ -117,14 +117,6 @@ crimson::net::Messenger& Heartbeat::get_back_msgr() const
   return back_msgr;
 }
 
-void Heartbeat::set_require_authorizer(bool require_authorizer)
-{
-  if (front_msgr.get_require_authorizer() != require_authorizer) {
-    front_msgr.set_require_authorizer(require_authorizer);
-    back_msgr.set_require_authorizer(require_authorizer);
-  }
-}
-
 void Heartbeat::add_peer(osd_id_t _peer, epoch_t epoch)
 {
   assert(whoami != _peer);

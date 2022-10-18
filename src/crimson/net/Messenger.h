@@ -38,7 +38,6 @@ using SocketPolicy = ceph::net::Policy<Throttle>;
 class Messenger {
   crimson::auth::AuthClient* auth_client = nullptr;
   crimson::auth::AuthServer* auth_server = nullptr;
-  bool require_authorizer = true;
 
 protected:
   entity_name_t my_name;
@@ -86,6 +85,8 @@ public:
     return connect(peer_addr, entity_name_t(peer_type, -1));
   }
 
+  virtual bool owns_connection(Connection &) const = 0;
+
   // wait for messenger shutdown
   virtual seastar::future<> wait() = 0;
 
@@ -119,14 +120,6 @@ public:
 
   virtual void set_policy_throttler(entity_type_t peer_type, Throttle* throttle) = 0;
 
-  // allow unauthenticated connections.  This is needed for compatibility with
-  // pre-nautilus OSDs, which do not authenticate the heartbeat sessions.
-  bool get_require_authorizer() const {
-    return require_authorizer;
-  }
-  void set_require_authorizer(bool r) {
-    require_authorizer = r;
-  }
   static MessengerRef
   create(const entity_name_t& name,
          const std::string& lname,
