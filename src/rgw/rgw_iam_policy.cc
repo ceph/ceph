@@ -21,6 +21,8 @@ namespace {
 constexpr int dout_subsys = ceph_subsys_rgw;
 }
 
+#define dout_context g_ceph_context
+
 using std::bitset;
 using std::dec;
 using std::find;
@@ -1042,7 +1044,18 @@ Effect Statement::eval(const Environment& e,
   }
   if (!resource.empty() && res) {
     if (!std::any_of(resource.begin(), resource.end(),
-          [&res](const ARN& pattern) {
+          [&res,&e](const ARN& pattern) {
+            if(pattern.resource == "${aws:username}"){
+              dout(1) << "Found variable in resource" << dendl;
+              auto search = e.find("aws:username");
+              if (search != e.end()) {
+                  dout(1) << "Found " << search->first << " " << search->second << " in Environment"<< dendl;
+                  ARN newARN = ARN(pattern.partition, pattern.service, pattern.region, pattern.account, search->second);
+                  return newARN.match(*res);
+              } else {
+                  dout(1) << "No Substitute found for " << pattern.resource << "in Environment" << dendl;
+              }
+            }
             return pattern.match(*res);
           })) {
       return Effect::Pass;
