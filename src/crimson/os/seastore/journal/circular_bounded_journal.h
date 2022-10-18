@@ -22,7 +22,6 @@
 
 namespace crimson::os::seastore::journal {
 
-constexpr rbm_abs_addr CBJOURNAL_START_ADDRESS = 0;
 using RBMDevice = random_block_device::RBMDevice;
 
 /**
@@ -195,7 +194,8 @@ public:
     return device->get_journal_size() - get_block_size();
   }
   rbm_abs_addr get_start_addr() const {
-    return CBJOURNAL_START_ADDRESS + get_block_size();
+    assert(device);
+    return device->get_journal_start() + get_block_size();
   }
   size_t get_available_size() const {
     return get_total_size() - get_used_size();
