@@ -151,7 +151,7 @@ seastar::future<> ProtocolV2::Timer::backoff(double seconds)
 ProtocolV2::ProtocolV2(ChainedDispatchers& dispatchers,
                        SocketConnection& conn,
                        SocketMessenger& messenger)
-  : Protocol(proto_t::v2, dispatchers, conn),
+  : Protocol(dispatchers, conn),
     messenger{messenger},
     auth_meta{seastar::make_lw_shared<AuthConnectionMeta>()},
     protocol_timer{conn}
@@ -1137,7 +1137,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
     logger().warn("{} server_connect:"
                   " existing connection {} is a lossy channel. Close existing in favor of"
                   " this connection", conn, *existing_conn);
-    execute_establishing(existing_conn, true);
+    execute_establishing(existing_conn);
     return seastar::make_ready_future<next_step_t>(next_step_t::ready);
   }
 
@@ -1258,19 +1258,9 @@ ProtocolV2::server_connect()
     SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
 
     if (existing_conn) {
-      if (existing_conn->protocol->proto_type != proto_t::v2) {
-        logger().warn("{} existing connection {} proto version is {}, close existing",
-                      conn, *existing_conn,
-                      static_cast<int>(existing_conn->protocol->proto_type));
-        // should unregister the existing from msgr atomically
-        // NOTE: this is following async messenger logic, but we may miss the reset event.
-        execute_establishing(existing_conn, false);
-        return seastar::make_ready_future<next_step_t>(next_step_t::ready);
-      } else {
-        return handle_existing_connection(existing_conn);
-      }
+      return handle_existing_connection(existing_conn);
     } else {
-      execute_establishing(nullptr, true);
+      execute_establishing(nullptr);
       return seastar::make_ready_future<next_step_t>(next_step_t::ready);
     }
   });
@@ -1361,16 +1351,6 @@ ProtocolV2::server_reconnect()
       // session
       logger().warn("{} server_reconnect: no existing connection from address {},"
                     " reseting client", conn, conn.peer_addr);
-      return send_reset(true);
-    }
-
-    if (existing_conn->protocol->proto_type != proto_t::v2) {
-      logger().warn("{} server_reconnect: existing connection {} proto version is {},"
-                    "close existing and reset client.",
-                    conn, *existing_conn,
-                    static_cast<int>(existing_conn->protocol->proto_type));
-      // NOTE: this is following async messenger logic, but we may miss the reset event.
-      existing_conn->mark_down();
       return send_reset(true);
     }
 
@@ -1574,8 +1554,7 @@ seastar::future<> ProtocolV2::finish_auth()
 
 // ESTABLISHING
 
-void ProtocolV2::execute_establishing(
-    SocketConnectionRef existing_conn, bool dispatch_reset) {
+void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
   if (unlikely(state != state_t::ACCEPTING)) {
     logger().debug("{} triggered {} before execute_establishing()",
                    conn, get_state_name(state));
@@ -1593,7 +1572,8 @@ void ProtocolV2::execute_establishing(
 
   trigger_state(state_t::ESTABLISHING, write_state_t::delay, false);
   if (existing_conn) {
-    existing_conn->protocol->close(dispatch_reset, std::move(accept_me));
+    existing_conn->protocol->close(
+        true /* dispatch_reset */, std::move(accept_me));
     if (unlikely(state != state_t::ESTABLISHING)) {
       logger().warn("{} triggered {} during execute_establishing(), "
                     "the accept event will not be delivered!",
