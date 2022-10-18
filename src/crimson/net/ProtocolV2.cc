@@ -2088,7 +2088,7 @@ void ProtocolV2::execute_wait(bool max_backoff)
 
 void ProtocolV2::execute_server_wait()
 {
-  trigger_state(state_t::SERVER_WAIT, write_state_t::delay, false);
+  trigger_state(state_t::SERVER_WAIT, write_state_t::none, false);
   gated_execute("execute_server_wait", [this] {
     return read_exactly(1).then([this] (auto bl) {
       logger().warn("{} SERVER_WAIT got read, abort", conn);
