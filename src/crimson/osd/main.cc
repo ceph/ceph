@@ -27,6 +27,7 @@
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/osd/stop_signal.h"
+#include "crimson/osd/shard_stores.h"
 #include "global/pidfile.h"
 #include "osd.h"
 
@@ -289,14 +290,20 @@ int main(int argc, const char* argv[])
                                                    name,
                                                    nonce);
           }
-          auto store = crimson::os::FuturizedStore::create(
-            local_conf().get_val<std::string>("osd_objectstore"),
-            local_conf().get_val<std::string>("osd_data"),
-            local_conf().get_config_values()).get();
+          seastar::sharded<crimson::osd::ShardStores> shard_stores;
+          shard_stores.start().get();
+          auto stop_stores = seastar::deferred_stop(shard_stores);
+
+	  shard_stores.invoke_on_all([](auto& local_store) {
+	    return local_store.create_store(
+	      local_conf().get_val<std::string>("osd_objectstore"),
+              local_conf().get_val<std::string>("osd_data"),
+              local_conf().get_config_values());
+	  }).get();
 
           crimson::osd::OSD osd(
             whoami, nonce, std::ref(should_stop.abort_source()),
-            std::ref(*store), cluster_msgr, client_msgr,
+            std::ref(shard_stores), cluster_msgr, client_msgr,
 	    hb_front_msgr, hb_back_msgr);
 
           if (config.count("mkkey")) {
@@ -314,7 +321,6 @@ int main(int argc, const char* argv[])
               osd_uuid.generate_random();
             }
             osd.mkfs(
-	      *store,
 	      whoami,
               osd_uuid,
               local_conf().get_val<uuid_d>("fsid"),

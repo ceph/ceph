@@ -20,6 +20,7 @@
 #include "crimson/osd/osd_meta.h"
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/pg_map.h"
+#include "crimson/osd/shard_stores.h"
 #include "crimson/osd/state.h"
 #include "common/AsyncReserver.h"
 
@@ -166,7 +167,7 @@ public:
     ceph::mono_time startup_time,
     PerfCounters *perf,
     PerfCounters *recoverystate_perf,
-    crimson::os::FuturizedStore &store);
+    crimson::osd::ShardStores &local_store);
 };
 
 /**
@@ -376,6 +377,8 @@ public:
   FORWARD_TO_LOCAL_CONST(dump_ops_in_flight);
 
   // Local PG Management
+  seastar::future<> load_pgs();
+
   seastar::future<Ref<PG>> make_pg(
     cached_map_t create_map,
     spg_t pgid,

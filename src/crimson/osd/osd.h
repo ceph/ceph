@@ -24,6 +24,7 @@
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/shard_stores.h"
 
 #include "messages/MOSDOp.h"
 #include "osd/PeeringState.h"
@@ -79,7 +80,8 @@ class OSD final : public crimson::net::Dispatcher,
 
   // TODO: use a wrapper for ObjectStore
   OSDMapService::cached_map_t osdmap;
-  crimson::os::FuturizedStore& store;
+
+  seastar::sharded<crimson::osd::ShardStores> &shard_stores;
 
   /// _first_ epoch we were marked up (after this process started)
   epoch_t boot_epoch = 0;
@@ -119,7 +121,7 @@ class OSD final : public crimson::net::Dispatcher,
 public:
   OSD(int id, uint32_t nonce,
       seastar::abort_source& abort_source,
-      crimson::os::FuturizedStore& store,
+      seastar::sharded<crimson::osd::ShardStores> &shard_stores,
       crimson::net::MessengerRef cluster_msgr,
       crimson::net::MessengerRef client_msgr,
       crimson::net::MessengerRef hb_front_msgr,
@@ -127,11 +129,7 @@ public:
   ~OSD() final;
 
   seastar::future<> open_meta_coll();
-  static seastar::future<OSDMeta> open_or_create_meta_coll(
-    crimson::os::FuturizedStore &store
-  );
-  static seastar::future<> mkfs(
-    crimson::os::FuturizedStore &store,
+  seastar::future<> mkfs(
     unsigned whoami,
     uuid_d osd_uuid,
     uuid_d cluster_fsid,
@@ -147,13 +145,6 @@ public:
   uint64_t send_pg_stats();
 
 private:
-  static seastar::future<> _write_superblock(
-    crimson::os::FuturizedStore &store,
-    OSDMeta meta,
-    OSDSuperblock superblock);
-  static seastar::future<> _write_key_meta(
-    crimson::os::FuturizedStore &store
-  );
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
   seastar::future<> _send_boot();

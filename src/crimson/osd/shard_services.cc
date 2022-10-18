@@ -38,9 +38,9 @@ PerShardState::PerShardState(
   ceph::mono_time startup_time,
   PerfCounters *perf,
   PerfCounters *recoverystate_perf,
-  crimson::os::FuturizedStore &store)
+  crimson::osd::ShardStores &local_store)
   : whoami(whoami),
-    store(store),
+    store(*(local_store.store)),
     perf(perf), recoverystate_perf(recoverystate_perf),
     throttler(crimson::common::local_conf()),
     obc_registry(crimson::common::local_conf()),
@@ -434,6 +434,35 @@ seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
 	return seastar::now();
       }
     });
+}
+
+seastar::future<> ShardServices::load_pgs()
+{
+  return local_state.store.list_collections(
+    ).then([this](auto colls) {
+    return seastar::parallel_for_each(
+      colls,
+      [this](auto coll) {
+      spg_t pgid;
+      if (coll.is_pg(&pgid)) {
+        return load_pg(pgid
+          ).then([this, pgid](auto &&pg) {
+          logger().info("load_pgs: loaded {}", pgid);
+          local_state.pg_map.pg_loaded(pgid, std::move(pg));
+          return seastar::now();
+        });
+      } else if (coll.is_temp(&pgid)) {
+        logger().warn(
+          "found temp collection on crimson osd, should be impossible: {}",
+          coll);
+        ceph_assert(0 == "temp collection on crimson osd, should be impossible");
+        return seastar::now();
+      } else {
+        logger().warn("ignoring unrecognized collection: {}", coll);
+        return seastar::now();
+      }
+    });
+  });
 }
 
 seastar::future<Ref<PG>> ShardServices::make_pg(

@@ -18,13 +18,13 @@ seastar::future<> PGShardManager::start(
   crimson::net::Messenger &public_msgr,
   crimson::mon::Client &monc,
   crimson::mgr::Client &mgrc,
-  crimson::os::FuturizedStore &store)
+  seastar::sharded<ShardStores> &shard_stores)
 {
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   return osd_singleton_state.start_single(
     whoami, std::ref(cluster_msgr), std::ref(public_msgr),
     std::ref(monc), std::ref(mgrc)
-  ).then([this, whoami, &store] {
+  ).then([this, whoami, &shard_stores] {
     ceph::mono_time startup_time = ceph::mono_clock::now();
     return shard_services.start(
       std::ref(osd_singleton_state),
@@ -32,7 +32,7 @@ seastar::future<> PGShardManager::start(
       startup_time,
       osd_singleton_state.local().perf,
       osd_singleton_state.local().recoverystate_perf,
-      std::ref(store));
+      std::ref(shard_stores));
   });
 }
 
@@ -48,40 +48,9 @@ seastar::future<> PGShardManager::stop()
 seastar::future<> PGShardManager::load_pgs()
 {
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
-  return get_local_state().store.list_collections(
-  ).then([this](auto colls) {
-    return seastar::parallel_for_each(
-      colls,
-      [this](auto coll) {
-	spg_t pgid;
-	if (coll.is_pg(&pgid)) {
-	  auto core = get_osd_singleton_state(
-	  ).pg_to_shard_mapping.maybe_create_pg(
-	    pgid);
-	  return with_remote_shard_state(
-	    core,
-	    [pgid](
-	      PerShardState &per_shard_state,
-	      ShardServices &shard_services) {
-	      return shard_services.load_pg(
-		pgid
-	      ).then([pgid, &per_shard_state](auto &&pg) {
-		logger().info("load_pgs: loaded {}", pgid);
-		per_shard_state.pg_map.pg_loaded(pgid, std::move(pg));
-		return seastar::now();
-	      });
-	    });
-	} else if (coll.is_temp(&pgid)) {
-	  logger().warn(
-	    "found temp collection on crimson osd, should be impossible: {}",
-	    coll);
-	  ceph_assert(0 == "temp collection on crimson osd, should be impossible");
-	  return seastar::now();
-	} else {
-	  logger().warn("ignoring unrecognized collection: {}", coll);
-	  return seastar::now();
-	}
-      });
+  return shard_services.invoke_on_all(
+    [this](auto &local_service) {
+    return local_service.load_pgs();
   });
 }
 

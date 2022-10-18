@@ -8,6 +8,7 @@
 #include <seastar/core/sharded.hh>
 
 #include "crimson/osd/shard_services.h"
+#include "crimson/osd/shard_stores.h"
 #include "crimson/osd/pg_map.h"
 
 namespace crimson::osd {
@@ -51,7 +52,7 @@ public:
     crimson::net::Messenger &public_msgr,
     crimson::mon::Client &monc,
     crimson::mgr::Client &mgrc,
-    crimson::os::FuturizedStore &store);
+    seastar::sharded<crimson::osd::ShardStores> &shard_stores);
   seastar::future<> stop();
 
   auto &get_osd_singleton_state() {
