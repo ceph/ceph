@@ -118,7 +118,8 @@ protected:
   seastar::future<> randomblock_setup()
   {
     rb_device.reset(new random_block_device::TestMemory(
-          journal::DEFAULT_TEST_CBJOURNAL_SIZE + journal::DEFAULT_BLOCK_SIZE,
+          journal::DEFAULT_TEST_CBJOURNAL_SIZE + journal::DEFAULT_BLOCK_SIZE +
+	  random_block_device::RBMDevice::get_journal_start(),
 	  journal::DEFAULT_BLOCK_SIZE));
     return rb_device->mount().handle_error(crimson::ct_error::assert_all{}
     ).then([this]() {

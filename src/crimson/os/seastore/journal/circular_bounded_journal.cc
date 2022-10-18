@@ -56,7 +56,7 @@ CircularBoundedJournal::open_for_mkfs()
   head.dirty_tail =
     journal_seq_t{0,
       convert_abs_addr_to_paddr(
-	device->get_block_size(),
+	get_start_addr(),
 	device->get_device_id())};
   head.alloc_tail = head.dirty_tail;
   encode(head, bl);
@@ -208,10 +208,11 @@ CircularBoundedJournal::read_header_ret
 CircularBoundedJournal::read_header()
 {
   LOG_PREFIX(CircularBoundedJournal::read_header);
+  assert(device);
   auto bptr = bufferptr(ceph::buffer::create_page_aligned(
 			device->get_block_size()));
-  DEBUG("reading {}", CBJOURNAL_START_ADDRESS);
-  return device->read(CBJOURNAL_START_ADDRESS, bptr
+  DEBUG("reading {}", device->get_journal_start());
+  return device->read(device->get_journal_start(), bptr
   ).safe_then([bptr, FNAME]() mutable
     -> read_header_ret {
     bufferlist bl;
@@ -465,7 +466,8 @@ CircularBoundedJournal::write_header()
   DEBUG(
     "sync header of CircularBoundedJournal, length {}",
     bl.length());
-  return device_write_bl(CBJOURNAL_START_ADDRESS, bl);
+  assert(device);
+  return device_write_bl(device->get_journal_start(), bl);
 }
 seastar::future<> CircularBoundedJournal::finish_commit(transaction_type_t type) {
   if (is_trim_transaction(type)) {

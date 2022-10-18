@@ -133,7 +133,8 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 
   cbjournal_test_t() {
     device = new random_block_device::TestMemory(
-      CBTEST_DEFAULT_TEST_SIZE + CBTEST_DEFAULT_BLOCK_SIZE,
+      CBTEST_DEFAULT_TEST_SIZE + CBTEST_DEFAULT_BLOCK_SIZE +
+      random_block_device::RBMDevice::get_journal_start(),
       CBTEST_DEFAULT_BLOCK_SIZE);
     cbj.reset(new CircularBoundedJournal(*this, device, std::string()));
     block_size = CBTEST_DEFAULT_BLOCK_SIZE;
@@ -504,7 +505,7 @@ TEST_F(cbjournal_test_t, replay_after_reset)
     set_written_to(
       journal_seq_t{0,
 	convert_abs_addr_to_paddr(
-	  4096,
+	  cbj->get_start_addr(),
 	  cbj->get_device_id())});
     cbj->close().unsafe_get0();
     replay();
