@@ -804,7 +804,7 @@ ProtocolV2::client_reconnect()
 
 void ProtocolV2::execute_connecting()
 {
-  trigger_state(state_t::CONNECTING, write_state_t::delay, true);
+  trigger_state(state_t::CONNECTING, write_state_t::delay, false);
   if (socket) {
     socket->shutdown();
   }
@@ -2035,7 +2035,7 @@ void ProtocolV2::execute_ready(bool dispatch_connect)
 
 void ProtocolV2::execute_standby()
 {
-  trigger_state(state_t::STANDBY, write_state_t::delay, true);
+  trigger_state(state_t::STANDBY, write_state_t::delay, false);
   if (socket) {
     socket->shutdown();
   }
@@ -2054,7 +2054,7 @@ void ProtocolV2::notify_write()
 
 void ProtocolV2::execute_wait(bool max_backoff)
 {
-  trigger_state(state_t::WAIT, write_state_t::delay, true);
+  trigger_state(state_t::WAIT, write_state_t::delay, false);
   if (socket) {
     socket->shutdown();
   }
