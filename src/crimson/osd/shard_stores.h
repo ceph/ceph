@@ -3,8 +3,14 @@
 
 #pragma once
 
+#include "crimson/common/config_proxy.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/osd_meta.h"
+
+static inline bool multicore_store() {
+  return (crimson::common::local_conf().get_val<std::string>
+    ("osd_objectstore") == "cyanstore");
+}
 
 namespace crimson::osd {
 

@@ -26,13 +26,23 @@ seastar::future<> PGShardManager::start(
     std::ref(monc), std::ref(mgrc)
   ).then([this, whoami, &shard_stores] {
     ceph::mono_time startup_time = ceph::mono_clock::now();
-    return shard_services.start(
-      std::ref(osd_singleton_state),
-      whoami,
-      startup_time,
-      osd_singleton_state.local().perf,
-      osd_singleton_state.local().recoverystate_perf,
-      std::ref(shard_stores));
+    if (multicore_store()) {
+      return shard_services.start(
+        std::ref(osd_singleton_state),
+        whoami,
+        startup_time,
+        osd_singleton_state.local().perf,
+        osd_singleton_state.local().recoverystate_perf,
+        std::ref(shard_stores));
+    } else {
+      return shard_services.start(
+        std::ref(osd_singleton_state),
+        whoami,
+        startup_time,
+        osd_singleton_state.local().perf,
+        osd_singleton_state.local().recoverystate_perf,
+        std::ref(shard_stores.local()));
+    }
   });
 }
 
@@ -48,10 +58,14 @@ seastar::future<> PGShardManager::stop()
 seastar::future<> PGShardManager::load_pgs()
 {
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
-  return shard_services.invoke_on_all(
-    [this](auto &local_service) {
-    return local_service.load_pgs();
-  });
+  if (multicore_store()) {
+    return shard_services.invoke_on_all(
+      [this](auto &local_service) {
+      return local_service.load_pgs();
+    });
+  } else {
+    return shard_services.local().load_pgs();
+  }
 }
 
 seastar::future<> PGShardManager::stop_pgs()

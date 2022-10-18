@@ -142,10 +142,14 @@ seastar::future<> OSD::mkfs(
   uuid_d cluster_fsid,
   std::string osdspec_affinity)
 {
-  return shard_stores.invoke_on_all(
-    [=](auto &local_store) {
-    return local_store.mkfs(whoami, osd_uuid, cluster_fsid, osdspec_affinity);
-  });
+  if (multicore_store()) {
+    return shard_stores.invoke_on_all(
+      [=](auto &local_store) {
+      return local_store.mkfs(whoami, osd_uuid, cluster_fsid, osdspec_affinity);
+    });
+  } else {
+    return shard_stores.local().mkfs(whoami, osd_uuid, cluster_fsid, osdspec_affinity);
+  }
 }
 
 namespace {
@@ -204,22 +208,37 @@ seastar::future<> OSD::start()
     heartbeat.reset(new Heartbeat{
 	whoami, get_shard_services(),
 	*monc, *hb_front_msgr, *hb_back_msgr});
-    return shard_stores.invoke_on_all(
-      [](auto &local_store) {
-      return local_store.start();
-    });
+    if (multicore_store()) {
+      return shard_stores.invoke_on_all(
+        [](auto &local_store) {
+        return local_store.start();
+      });
+    } else {
+      return shard_stores.local().start();
+    }
   }).then([this] {
-    return shard_stores.invoke_on_all(
-      [](auto &local_store) {
-      return local_store.mount()
+    if (multicore_store()) {
+      return shard_stores.invoke_on_all(
+        [](auto &local_store) {
+        return local_store.mount()
+          .handle_error(
+            crimson::stateful_ec::handle([] (const auto& ec) {
+            logger().error("error mounting object store in {}: ({}) {}",
+                       local_conf().get_val<std::string>("osd_data"),
+                       ec.value(), ec.message());
+            std::exit(EXIT_FAILURE);
+        }));
+      });
+    } else {
+      return shard_stores.local().mount()
         .handle_error(
           crimson::stateful_ec::handle([] (const auto& ec) {
           logger().error("error mounting object store in {}: ({}) {}",
-                       local_conf().get_val<std::string>("osd_data"),
-                       ec.value(), ec.message());
+                         local_conf().get_val<std::string>("osd_data"),
+                         ec.value(), ec.message());
           std::exit(EXIT_FAILURE);
       }));
-    });
+    }
   }).then([this] {
     return open_meta_coll();
   }).then([this] {
@@ -490,12 +509,18 @@ seastar::future<> OSD::stop()
     }).then([this] {
       return pg_shard_manager.stop_registries();
     }).then([this] {
-      return shard_stores.invoke_on_all(
-	[](auto &local_store) {
-	return local_store.store->umount().then([&local_store] {
-          return local_store.store->stop();
+      if (multicore_store()) {
+        return shard_stores.invoke_on_all(
+	  [](auto &local_store) {
+	  return local_store.store->umount().then([&local_store] {
+            return local_store.store->stop();
+          });
         });
-      });
+      } else {
+        return shard_stores.local().store->umount().then([this] {
+            return shard_stores.local().store->stop();
+        });
+      }
     }).then([this] {
       return pg_shard_manager.stop_pgs();
     }).then([this] {

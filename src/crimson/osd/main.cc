@@ -291,15 +291,23 @@ int main(int argc, const char* argv[])
                                                    nonce);
           }
           seastar::sharded<crimson::osd::ShardStores> shard_stores;
-          shard_stores.start().get();
+	  if (multicore_store()) {
+            shard_stores.start().get();
+	    shard_stores.invoke_on_all([](auto& local_store) {
+	      return local_store.create_store(
+	        local_conf().get_val<std::string>("osd_objectstore"),
+                local_conf().get_val<std::string>("osd_data"),
+                local_conf().get_config_values());
+	    }).get();
+	  } else {
+	    shard_stores.start_single().get();
+	    shard_stores.local().create_store(
+              local_conf().get_val<std::string>("osd_objectstore"),
+              local_conf().get_val<std::string>("osd_data"),
+              local_conf().get_config_values()).get();
+	  }
           auto stop_stores = seastar::deferred_stop(shard_stores);
 
-	  shard_stores.invoke_on_all([](auto& local_store) {
-	    return local_store.create_store(
-	      local_conf().get_val<std::string>("osd_objectstore"),
-              local_conf().get_val<std::string>("osd_data"),
-              local_conf().get_config_values());
-	  }).get();
 
           crimson::osd::OSD osd(
             whoami, nonce, std::ref(should_stop.abort_source()),
