@@ -30,7 +30,6 @@ struct Server {
     msgr->set_default_policy(Messenger::Policy::stateless_server(0));
     msgr->set_auth_client(&dummy_auth);
     msgr->set_auth_server(&dummy_auth);
-    msgr->set_require_authorizer(false);
   }
   DummyAuthClientServer dummy_auth;
   std::unique_ptr<Messenger> msgr;
@@ -89,7 +88,6 @@ struct Client {
     msgr->set_default_policy(Messenger::Policy::lossy_client(0));
     msgr->set_auth_client(&dummy_auth);
     msgr->set_auth_server(&dummy_auth);
-    msgr->set_require_authorizer(false);
   }
   DummyAuthClientServer dummy_auth;
   struct ClientDispatcher : Dispatcher {

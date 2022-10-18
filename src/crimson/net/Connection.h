@@ -79,9 +79,6 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
     set_peer_id(name.num());
   }
 
- public:
-  uint64_t peer_global_id = 0;
-
  protected:
   uint64_t features = 0;
 
@@ -104,7 +101,6 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   Interceptor *interceptor = nullptr;
 #endif
 
-  virtual Messenger* get_messenger() const = 0;
   const entity_addr_t& get_peer_addr() const { return peer_addr; }
   const entity_addrvec_t get_peer_addrs() const {
     return entity_addrvec_t(peer_addr);
