@@ -75,41 +75,43 @@ added when the notification is committed to persistent storage.
 Topic Management via CLI
 ------------------------
 
-Configuration of all topics, associated with a tenant, could be fetched using the following command:
+Fetch the configuration of all topics associated with tenants by running the
+following command:
 
 .. prompt:: bash #
 
    radosgw-admin topic list [--tenant={tenant}]
 
 
-Configuration of a specific topic could be fetched using:
+Fetch the configuration of a specific topic by running the following command:
 
 .. prompt:: bash #
 
    radosgw-admin topic get --topic={topic-name} [--tenant={tenant}]
 
 
-And removed using:
+Remove a topic by running the following command: 
 
 .. prompt:: bash #
 
    radosgw-admin topic rm --topic={topic-name} [--tenant={tenant}]
 
 
-Notification Performance Stats
-------------------------------
-The same counters are shared between the pubsub sync module and the bucket notification mechanism.
+Notification Performance Statistics
+-----------------------------------
+Counters are shared between the `PubSub Module`_ and the bucket notification mechanism:
 
-- ``pubsub_event_triggered``: running counter of events with at least one topic associated with them
-- ``pubsub_event_lost``: running counter of events that had topics associated with them but that were not pushed to any of the endpoints
-- ``pubsub_push_ok``: running counter, for all notifications, of events successfully pushed to their endpoint
-- ``pubsub_push_fail``: running counter, for all notifications, of events failed to be pushed to their endpoint
-- ``pubsub_push_pending``: gauge value of events pushed to an endpoint but not acked or nacked yet
+- ``pubsub_event_triggered``: a running counter of events that have at least one topic associated with them
+- ``pubsub_event_lost``: a running counter of events that had topics associated with them, but that were not pushed to any of the endpoints
+- ``pubsub_push_ok``: a running counter, for all notifications, of events successfully pushed to their endpoints
+- ``pubsub_push_fail``: a running counter, for all notifications, of events that failed to be pushed to their endpoints
+- ``pubsub_push_pending``: the gauge value of events pushed to an endpoint but not acked or nacked yet
 
 .. note::
 
-    ``pubsub_event_triggered`` and ``pubsub_event_lost`` are incremented per event, while:
-    ``pubsub_push_ok``, ``pubsub_push_fail``, are incremented per push action on each notification
+    ``pubsub_event_triggered`` and ``pubsub_event_lost`` are incremented per
+    event on each notification, but ``pubsub_push_ok`` and ``pubsub_push_fail``
+    are incremented per push action on each notification.
 
 Bucket Notification REST API
 ----------------------------
