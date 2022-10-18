@@ -518,7 +518,7 @@ groups:
         annotations:
           description: "Pool '{{ $labels.name }}' will be full in less than 5 days assuming the average fill-up rate of the past 48 hours."
           summary: "Pool growth rate may soon exceed capacity"
-        expr: "(predict_linear(ceph_pool_percent_used[2d], 3600 * 24 * 5) * on(pool_id)    group_right ceph_pool_metadata) >= 95"
+        expr: "(predict_linear(ceph_pool_percent_used[2d], 3600 * 24 * 5) * on(pool_id, instance) group_right() ceph_pool_metadata) >= 95"
         labels:
           oid: "1.3.6.1.4.1.50495.1.2.1.9.2"
           severity: "warning"
