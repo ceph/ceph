@@ -169,6 +169,7 @@ private:
 #ifdef _ARROW_EXIST
   s3selectEngine::parquet_object m_s3_parquet_object;
 #endif
+  s3selectEngine::json_object m_s3_json_object;
   std::string m_column_delimiter;
   std::string m_quot;
   std::string m_row_delimiter;
@@ -188,6 +189,9 @@ private:
 
   //parquet request
   bool m_parquet_type;
+  //json request
+  std::string m_json_datatype;
+  bool m_json_type;
 #ifdef _ARROW_EXIST
   s3selectEngine::rgw_s3select_api m_rgw_api;
 #endif
@@ -217,9 +221,13 @@ private:
 
   int parquet_processing(bufferlist& bl, off_t ofs, off_t len);
 
+  int json_processing(bufferlist& bl, off_t ofs, off_t len);
+
   int run_s3select(const char* query, const char* input, size_t input_length);
 
   int run_s3select_on_parquet(const char* query);
+
+  int run_s3select_on_json(const char* query, const char* input, size_t input_length);
 
   int extract_by_tag(std::string input, std::string tag_name, std::string& result);
 

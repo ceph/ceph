@@ -261,6 +261,8 @@ void aws_response_handler::send_stats_response()
 RGWSelectObj_ObjStore_S3::RGWSelectObj_ObjStore_S3():
   m_buff_header(std::make_unique<char[]>(1000)),
   m_parquet_type(false),
+  m_json_datatype("DOCUMENT"),
+  m_json_type(false),
   chunk_number(0)
 {
   set_get_data(true);
@@ -302,6 +304,7 @@ int RGWSelectObj_ObjStore_S3::get_params(optional_yield y)
     ldpp_dout(this, 10) << "arrow library is not installed" << dendl;
 #endif
   }
+  
   //retrieve s3-select query from payload
   bufferlist data;
   int ret;
@@ -460,6 +463,58 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_parquet(const char* query)
   return status;
 }
 
+int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char* input, size_t input_length)
+{
+    int status = 0;
+  
+    uint32_t length_before_processing, length_post_processing;
+    const char* s3select_resource_id = "resourcse-id";
+    const char* s3select_processTime_error = "s3select-ProcessingTime-Error";
+    
+    m_aws_response_handler.init_response();
+    if (input == nullptr) {
+      input = "";
+    }
+    std::string temp_result;
+    m_aws_response_handler.init_success_response();
+    length_before_processing = temp_result.size();
+    //query is correct(syntax), processing is starting.
+    status = m_s3_json_object.run_s3select_on_stream(temp_result, input, input_length, s->obj_size);
+    m_aws_response_handler.get_sql_result().append(temp_result);
+    length_post_processing = temp_result.size();
+    m_aws_response_handler.update_total_bytes_returned(length_post_processing-length_before_processing);
+    if (status < 0) {
+      //error flow(processing-time)
+      m_aws_response_handler.send_error_response(s3select_processTime_error,
+          m_s3_json_object.get_error_description().c_str(),
+          s3select_resource_id);
+      ldpp_dout(this, 10) << "s3-select query: failed to process query; {" << m_s3_json_object.get_error_description() << "}" << dendl;
+      return -1;
+    }
+    if (chunk_number == 0) {
+      //success flow
+      if (op_ret < 0) {
+        set_req_state_err(s, op_ret);
+      }
+      dump_errno(s);
+      // Explicitly use chunked transfer encoding so that we can stream the result
+      // to the user without having to wait for the full length of it.
+      end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
+    }
+    chunk_number++;
+
+  if (length_post_processing-length_before_processing != 0) {
+    m_aws_response_handler.send_success_response();
+  } else {
+    m_aws_response_handler.send_continuation_response();
+  }
+  if (enable_progress == true) {
+    m_aws_response_handler.init_progress_response();
+    m_aws_response_handler.send_progress_response();
+  }
+  return status;
+}
+
 int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
 {
   std::string input_tag{"InputSerialization"};
@@ -485,6 +540,10 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   extract_by_tag(m_s3select_input, "QuoteCharacter", m_quot);
   extract_by_tag(m_s3select_input, "RecordDelimiter", m_row_delimiter);
   extract_by_tag(m_s3select_input, "FileHeaderInfo", m_header_info);
+  extract_by_tag(m_s3select_input, "Type", m_json_datatype);
+  if(m_json_datatype.compare("DOCUMENT") == 0)  {
+    m_json_type = true;
+  }
   if (m_row_delimiter.size()==0) {
     m_row_delimiter='\n';
   } else if(m_row_delimiter.compare("&#10;") == 0) {
@@ -578,8 +637,8 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
     } else {
       ldout(s->cct, 10) << "S3select: complete query with success " << dendl;
     }
-  } else {
-    //CSV processing
+    }  else  {
+    //CSV or JSON processing
     RGWGetObj::execute(y);
   }
 }
@@ -655,6 +714,70 @@ int RGWSelectObj_ObjStore_S3::csv_processing(bufferlist& bl, off_t ofs, off_t le
   return status;
 }
 
+int RGWSelectObj_ObjStore_S3::json_processing(bufferlist& bl, off_t ofs, off_t len)
+{
+  int status = 0;
+
+  const char* s3select_syntax_error = "s3select-Syntax-Error";
+  const char* s3select_resource_id = "resourcse-id";
+  const char* s3select_json_error = "json-Format-Error";
+
+  s3select_syntax.parse_query(m_sql_query.c_str());
+  m_s3_json_object.set_json_query(&s3select_syntax);
+
+  if (output_row_delimiter.size()) {
+    output_row_delimiter = *output_row_delimiter.c_str();
+  }
+  
+  if(m_json_datatype.compare("DOCUMENT") != 0) {
+    m_aws_response_handler.send_error_response(s3select_json_error,
+        s3select_syntax.get_error_description().c_str(),
+        s3select_resource_id);
+    ldpp_dout(this, 10) << "s3-select query: wrong json format; {" << s3select_syntax.get_error_description() << "}" << dendl;
+    return -1;
+  } 
+
+  if (s3select_syntax.get_error_description().empty() == false) {
+    //error-flow (syntax-error)
+    m_aws_response_handler.send_error_response(s3select_syntax_error,
+        s3select_syntax.get_error_description().c_str(),
+        s3select_resource_id);
+    ldpp_dout(this, 10) << "s3-select query: failed to prase query; {" << s3select_syntax.get_error_description() << "}" << dendl;
+    return -1;
+  }
+  
+  if (s->obj_size == 0) {
+    status = run_s3select_on_json(m_sql_query.c_str(), nullptr, 0);
+  } else {
+    auto bl_len = bl.get_num_buffers();
+    int i=0;
+    for(auto& it : bl.buffers()) {
+      ldpp_dout(this, 10) << "processing segment " << i << " out of " << bl_len << " off " << ofs
+                          << " len " << len << " obj-size " << s->obj_size << dendl;
+      if(it.length() == 0) {
+        ldpp_dout(this, 10) << "s3select:it->_len is zero. segment " << i << " out of " << bl_len
+                            <<  " obj-size " << s->obj_size << dendl;
+        continue;
+      }
+      m_aws_response_handler.update_processed_size(it.length());
+      status = run_s3select_on_json(m_sql_query.c_str(), &(it)[0], it.length());
+      if(status<0) {
+        break;
+      }
+      i++;
+    }
+  }
+  status = run_s3select_on_json(m_sql_query.c_str(), nullptr, 0);
+  if (m_aws_response_handler.get_processed_size() == s->obj_size) {
+    if (status >=0) {
+      m_aws_response_handler.init_stats_response();
+      m_aws_response_handler.send_stats_response();
+      m_aws_response_handler.init_end_response();
+    }
+  }
+  return status;
+}
+
 int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_t len)
 {
   if (!m_aws_response_handler.is_set()) {
@@ -665,6 +788,9 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
   }
   if (m_parquet_type) {
     return parquet_processing(bl,ofs,len);
+  }
+  if (m_json_type) {
+    return json_processing(bl,ofs,len);
   }
   return csv_processing(bl,ofs,len);
 }
