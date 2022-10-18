@@ -1,0 +1,233 @@
+commit ba340a97c3dafc9155023da8d515eecc675c619a (tag: refs/tags/v0.67.9, refs/remotes/gh/dumpling)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Wed May 21 16:57:02 2014 +0000
+
+    0.67.9
+
+commit b638d19d126646d2a8f6da11067c5f392a62525e
+Author: Guang Yang <yguang@yahoo-inc.com>
+Date:   Fri May 9 09:21:23 2014 +0000
+
+    msg: Fix inconsistent message sequence negotiation during connection reset
+    
+    Backport: firefly, emperor, dumpling
+    
+    Signed-off-by: Guang Yang (yguang@yahoo-inc.com)
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit bdee119076dd0eb65334840d141ccdf06091e3c9)
+
+commit 55b1112819ed2e6fd509c09c2c1a2b434d22aac6
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue May 20 10:46:34 2014 -0700
+
+    OSD::handle_pg_query: on dne pg, send lb=hobject_t() if deleting
+    
+    We will set lb=hobject_t() if we resurrect the pg.  In that case,
+    we need to have sent that to the primary before hand.  If we
+    finish the removal before the pg is recreated, we'll just end
+    up backfilling it, which is ok since the pg doesn't exist anyway.
+    
+    Fixes: #7740
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 04de781765dd5ac0e28dd1a43cfe85020c0854f8)
+    
+    Conflicts:
+    
+    	src/osd/OSD.cc
+
+commit 3b8ab41e1ec86f2ab5c6b4bee3fb4030077e2c21
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 2 14:48:35 2014 -0700
+
+    mon/MonClient: remove stray _finish_hunting() calls
+    
+    Callig _finish_hunting() clears out the bool hunting flag, which means we
+    don't retry by connection to another mon periodically.  Instead, we send
+    keepalives every 10s.  But, since we aren't yet in state HAVE_SESSION, we
+    don't check that the keepalives are getting responses.  This means that an
+    ill-timed connection reset (say, after we get a MonMap, but before we
+    finish authenticating) can drop the monc into a black hole that does not
+    retry.
+    
+    Instead, we should *only* call _finish_hunting() when we complete the
+    authentication handshake.
+    
+    Fixes: #8278
+    Backport: firefly, dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 77a6f0aefebebf057f02bfb95c088a30ed93c53f)
+
+commit a915350491092abcd2584d0bbb5f5d8610ed89fc
+Merge: bd5d6f1 d4e67ff
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue May 20 10:19:00 2014 -0700
+
+    Merge pull request #1826 from ceph/wip-8162-dumpling
+    
+    Wip 8162 dumpling
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit bd5d6f116416d1b410d57ce00cb3e2abf6de102b
+Author: Greg Farnum <greg@inktank.com>
+Date:   Thu May 15 16:50:43 2014 -0700
+
+    OSD: fix an osdmap_subscribe interface misuse
+    
+    When calling osdmap_subscribe, you have to pass an epoch newer than the
+    current map's. _maybe_boot() was not doing this correctly -- we would
+    fail a check for being *in* the monitor's existing map range, and then
+    pass along the map prior to the monitor's range. But if we were exactly
+    one behind, that value would be our current epoch, and the request would
+    get dropped. So instead, make sure we are not *in contact* with the monitor's
+    existing map range.
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 290ac818696414758978b78517b137c226110bb4)
+
+commit c5ae8ffc281ac538dd0966a552a6cf729728e925
+Merge: fced056 8d991fa
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon May 19 13:45:50 2014 -0700
+
+    Merge pull request #1827 from ceph/wip-6565-dumpling
+    
+    Wip 6565 dumpling
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit 8d991fa2c3fdbfd9178d93e4ca33d47504a37195
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Oct 16 10:07:37 2013 -0700
+
+    OSD: check for splitting when processing recover/backfill reservations
+    
+    Fixes: 6565
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 15ec5332ba4154930a0447e2bcf1acec02691e97)
+
+commit d4e67ff3037a3cc7ae2ecc9e1d8d086c45ae515a
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu May 8 13:25:32 2014 -0700
+
+    ReplicatedPG::recover_backfill: do not update last_backfill prematurely
+    
+    Previously, we would update last_backfill on the backfill peer to
+    
+    backfills_in_flight.empty() ? backfill_pos :
+      backfills_in_flight.begin()->first
+    
+    which is actually the next backfill to complete.  We want to update
+    last_backfill to the largest completed backfill instead.
+    
+    We use the pending_backfill_updates mapping to identify the most
+    recently completed backfill.  Due to the previous patch, deletes
+    will also be included in that mapping.
+    
+    Related sha1s from master:
+    4139e75d63b0503dbb7fea8036044eda5e8b7cf1
+    7a06a71e0f2023f66d003dfb0168f4fe51eaa058
+    
+    We don't really want to backport those due to the changes in:
+    9ec35d5ccf6a86c380865c7fc96017a1f502560a
+    
+    This patch does essentially the same thing, but using backfill_pos.
+    
+    Fixse: #8162
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+
+commit d620b13c51fc69b509824177af32de55c89c2259
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Oct 28 16:03:25 2013 -0700
+
+    ReplicatedPG: add empty stat when we remove an object in recover_backfill
+    
+    Subsequent updates to that object need to have their stats added
+    to the backfill info stats atomically with the last_backfill
+    update.
+    
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit ecddd12b01be120fba87f5ac60539f98f2c69a28)
+
+commit fced0562f6b80035cd522cc81bdc844ccc92d9bc
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Nov 27 13:34:00 2013 -0800
+
+    rgw: don't error out on empty owner when setting acls
+    
+    Fixes: #6892
+    Backport: dumpling, emperor
+    s3cmd specifies empty owner field when trying to set acls on object
+    / bucket. We errored out as it didn't match the current owner name, but
+    with this change we ignore it.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 14cf4caff58cc2c535101d48c53afd54d8632104)
+
+commit 0e685c68aa6a500aa7fa433cd9b8246f70c5383e
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Apr 21 15:34:04 2014 -0700
+
+    rgw: send user manifest header field
+    
+    Fixes: #8170
+    Backport: firefly
+    If user manifest header exists (swift) send it as part of the object
+    header data.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 5cc5686039a882ad345681133c9c5a4a2c2fd86b)
+
+commit 20383e359cdfbf146838742fa050ec4b6073271d
+Author: Yan, Zheng <zheng.z.yan@intel.com>
+Date:   Fri Apr 11 15:03:37 2014 +0800
+
+    client: add asok command to kick sessions that were remote reset
+    
+    Fixes: #8021
+    Signed-off-by: Yan, Zheng <zheng.z.yan@intel.com>
+    (cherry picked from commit 09a1bc5a4601d356b9cc69be8541e6515d763861)
+
+commit 4e5e41deeaf91c885773d90e6f94da60f6d4efd3
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Apr 18 13:50:11 2014 -0700
+
+    osd: throttle snap trimmming with simple delay
+    
+    This is not particularly smart, but it is *a* knob that lets you make
+    the snap trimmer slow down.  It's a flow and a simple delay, so it is
+    adjustable at runtime.  Default is 0 (no change in behavior).
+    
+    Partial solution for #6278.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4413670d784efc2392359f0f22bca7c9056188f4)
+
+commit 14650b282ecd344025714a4e743b255ae01b3ce0
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Apr 1 16:01:28 2014 -0700
+
+    PG: only complete replicas should count toward min_size
+    
+    Backport: emperor,dumpling,cuttlefish
+    Fixes: #7805
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 0d5d3d1a30685e7c47173b974caa12076c43a9c4)
+
+commit 3f1d7f5e0a67ad646de465335fb7ee00eb07e220
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 2 15:10:43 2014 -0700
+
+    mon/PGMonitor: set tid on no-op PGStatsAck
+    
+    The OSD needs to know the tid.  Both generally, and specifically because
+    the flush_pg_stats may be blocking on it.
+    
+    Fixes: #8280
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 5a6ae2a978dcaf96ef89de3aaa74fe951a64def6)
