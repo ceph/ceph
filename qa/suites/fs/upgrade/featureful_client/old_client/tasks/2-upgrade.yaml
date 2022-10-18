@@ -21,7 +21,9 @@ tasks:
 - print: "**** done mds pre-upgrade sequence"
 - install.upgrade:
     mon.a:
+      branch: quincy
     mon.b:
+      branch: quincy
 - print: "**** done install.upgrade both hosts"
 - ceph.restart:
     daemons: [mon.*, mgr.*]
