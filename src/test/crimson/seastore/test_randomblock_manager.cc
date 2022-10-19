@@ -20,7 +20,6 @@ namespace {
 }
 
 constexpr uint64_t DEFAULT_TEST_SIZE = 1 << 20;
-constexpr uint64_t DEFAULT_BLOCK_SIZE = 4096;
 
 struct rbm_test_t :
   public seastar_test_suite_t {
@@ -44,14 +43,18 @@ struct rbm_test_t :
 
   std::default_random_engine generator;
 
-  const uint64_t block_size = DEFAULT_BLOCK_SIZE;
+  uint64_t block_size = 0;
+  uint64_t size = 0;
 
   device_config_t config;
 
   rbm_test_t() = default;
 
   seastar::future<> set_up_fut() final {
-    device.reset(new random_block_device::TestMemory(DEFAULT_TEST_SIZE, DEFAULT_BLOCK_SIZE));
+    device = random_block_device::create_test_ephemeral(
+      0, DEFAULT_TEST_SIZE);
+    block_size = device->get_block_size();
+    size = device->get_available_size();
     rbm_manager.reset(new BlockRBManager(device.get(), std::string()));
     config = get_rbm_ephemeral_device_config(0, 1);
     return device->mount().handle_error(crimson::ct_error::assert_all{}
@@ -119,15 +122,15 @@ TEST_F(rbm_test_t, mkfs_test)
  run_async([this] {
    auto super = read_rbm_header();
    ASSERT_TRUE(
-       super.block_size == DEFAULT_BLOCK_SIZE &&
-       super.size == DEFAULT_TEST_SIZE 
+       super.block_size == block_size &&
+       super.size == size
    );
    config.spec.id = DEVICE_ID_NULL;
    mkfs();
    super = read_rbm_header();
    ASSERT_TRUE(
        super.config.spec.id == DEVICE_ID_NULL &&
-       super.size == DEFAULT_TEST_SIZE 
+       super.size == size 
    );
  });
 }
@@ -138,12 +141,12 @@ TEST_F(rbm_test_t, open_read_write_test)
    auto content = generate_extent(1);
    {
      write(
-	 DEFAULT_BLOCK_SIZE,
+	 block_size,
 	 content
 	 );
-     auto bp = bufferptr(ceph::buffer::create_page_aligned(DEFAULT_BLOCK_SIZE));
+     auto bp = bufferptr(ceph::buffer::create_page_aligned(block_size));
      read(
-	 DEFAULT_BLOCK_SIZE,
+	 block_size,
 	 bp
 	 );
      bufferlist bl;
@@ -157,9 +160,9 @@ TEST_F(rbm_test_t, open_read_write_test)
    close();
    open();
    {
-     auto bp = bufferptr(ceph::buffer::create_page_aligned(DEFAULT_BLOCK_SIZE));
+     auto bp = bufferptr(ceph::buffer::create_page_aligned(block_size));
      read(
-	 DEFAULT_BLOCK_SIZE,
+	 block_size,
 	 bp
 	 );
      bufferlist bl;

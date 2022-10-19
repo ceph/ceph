@@ -363,7 +363,15 @@ nvme_command_ertr::future<int> NVMeBlockDevice::pass_through_io(
 
 namespace crimson::os::seastore::random_block_device {
 
-open_ertr::future<> TestMemory::open(
+EphemeralRBMDeviceRef create_test_ephemeral(uint64_t journal_size, uint64_t data_size) {
+  return EphemeralRBMDeviceRef(
+    new EphemeralRBMDevice(journal_size + data_size + 
+	EphemeralRBMDevice::TEST_BLOCK_SIZE +
+	random_block_device::RBMDevice::get_journal_start(),
+	EphemeralRBMDevice::TEST_BLOCK_SIZE));
+}
+
+open_ertr::future<> EphemeralRBMDevice::open(
   const std::string &in_path,
    seastar::open_flags mode) {
   if (buf) {
@@ -387,13 +395,13 @@ open_ertr::future<> TestMemory::open(
   return open_ertr::now();
 }
 
-write_ertr::future<> TestMemory::write(
+write_ertr::future<> EphemeralRBMDevice::write(
   uint64_t offset,
   bufferptr &bptr,
   uint16_t stream) {
   ceph_assert(buf);
   logger().debug(
-    "TestMemory: write offset {} len {}",
+    "EphemeralRBMDevice: write offset {} len {}",
     offset,
     bptr.length());
 
@@ -402,12 +410,12 @@ write_ertr::future<> TestMemory::write(
   return write_ertr::now();
 }
 
-read_ertr::future<> TestMemory::read(
+read_ertr::future<> EphemeralRBMDevice::read(
   uint64_t offset,
   bufferptr &bptr) {
   ceph_assert(buf);
   logger().debug(
-    "TestMemory: read offset {} len {}",
+    "EphemeralRBMDevice: read offset {} len {}",
     offset,
     bptr.length());
 
@@ -415,18 +423,18 @@ read_ertr::future<> TestMemory::read(
   return read_ertr::now();
 }
 
-Device::close_ertr::future<> TestMemory::close() {
+Device::close_ertr::future<> EphemeralRBMDevice::close() {
   logger().debug(" close ");
   return close_ertr::now();
 }
 
-write_ertr::future<> TestMemory::writev(
+write_ertr::future<> EphemeralRBMDevice::writev(
   uint64_t offset,
   ceph::bufferlist bl,
   uint16_t stream) {
   ceph_assert(buf);
   logger().debug(
-    "TestMemory: write offset {} len {}",
+    "EphemeralRBMDevice: write offset {} len {}",
     offset,
     bl.length());
 
