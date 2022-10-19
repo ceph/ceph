@@ -54,10 +54,10 @@ public:
     if (!key_existed) {
       // perf counters instance creation code
       PerfCountersBuilder plb(cct, key, l_rgw_metrics_first, l_rgw_metrics_last);
-      plb.add_u64_counter(l_rgw_metrics_req, "req", "number of reqs");
-      plb.add_u64_counter(l_rgw_metrics_failed_req, "failed_req", "Aborted Requests");
-      plb.add_u64_counter(l_rgw_metrics_put_b, "put_b", "Size of puts");
-      plb.add_u64_counter(l_rgw_metrics_get_b, "get_b", "Size of gets");
+      plb.add_u64_counter(l_rgw_metrics_req, "req", "number of reqs", NULL, 8, UNIT_NONE);
+      plb.add_u64_counter(l_rgw_metrics_failed_req, "failed_req", "Aborted Requests", NULL, 8, UNIT_NONE);
+      plb.add_u64_counter(l_rgw_metrics_put_b, "put_b", "Size of puts", NULL, 8, UNIT_NONE);
+      plb.add_u64_counter(l_rgw_metrics_get_b, "get_b", "Size of gets", NULL, 8, UNIT_NONE);
 
       PerfCounters *counters = plb.create_perf_counters();
       cct->get_labeledperfcounters_collection()->add(counters);
