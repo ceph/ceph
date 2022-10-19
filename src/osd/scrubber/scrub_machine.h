@@ -379,8 +379,7 @@ struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine>,
 struct ActiveReplica : sc::state<ActiveReplica, ScrubMachine>, NamedSimply {
   explicit ActiveReplica(my_context ctx);
   using reactions = mpl::list<sc::custom_reaction<SchedReplica>,
-			      sc::custom_reaction<FullReset>,
-			      sc::transition<ScrubFinished, NotActive>>;
+			      sc::custom_reaction<FullReset>>;
 
   sc::result react(const SchedReplica&);
   sc::result react(const FullReset&);
