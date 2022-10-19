@@ -104,6 +104,12 @@ PerfCountersCollectionImpl* CephContext::get_perfcounters_collection()
   return _perf_counters_collection.get_perf_collection();
 }
 
+PerfCountersCollectionImpl* CephContext::get_labeledperfcounters_collection()
+{
+  return _labeled_perf_counters_collection.get_perf_collection();
+}
+
+
 }
 #else  // WITH_SEASTAR
 namespace {
@@ -544,6 +550,14 @@ int CephContext::_do_command(
     command == "perf schema") {
     _perf_counters_collection->dump_formatted(f, true);
   }
+  else if (command == "labeledperfcounters_dump" || command == "3" ||
+      command == "labeledperf dump") {
+    std::string logger;
+    std::string counter;
+    cmd_getval(cmdmap, "logger", logger);
+    cmd_getval(cmdmap, "counter", counter);
+    _labeled_perf_counters_collection->dump_formatted(f, false, logger, counter);
+  }
   else if (command == "perf histogram dump") {
     std::string logger;
     std::string counter;
@@ -707,6 +721,7 @@ CephContext::CephContext(uint32_t module_type_,
     _log_obs(NULL),
     _admin_socket(NULL),
     _perf_counters_collection(NULL),
+    _labeled_perf_counters_collection(NULL),
     _perf_counters_conf_obs(NULL),
     _heartbeat_map(NULL),
     _crypto_none(NULL),
@@ -733,6 +748,7 @@ CephContext::CephContext(uint32_t module_type_,
   _conf.add_observer(_lockdep_obs);
 #endif
   _perf_counters_collection = new PerfCountersCollection(this);
+  _labeled_perf_counters_collection = new PerfCountersCollection(this);
  
   _admin_socket = new AdminSocket(this);
   _heartbeat_map = new HeartbeatMap(this);
@@ -750,6 +766,8 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_socket->register_command("perf histogram dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump perf histogram values");
   _admin_socket->register_command("2", _admin_hook, "");
   _admin_socket->register_command("perf schema", _admin_hook, "dump perfcounters schema");
+  _admin_socket->register_command("labeledperf dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump labeled perfcounters value");
+  _admin_socket->register_command("3", _admin_hook, "");
   _admin_socket->register_command("perf histogram schema", _admin_hook, "dump perf histogram schema");
   _admin_socket->register_command("perf reset name=var,type=CephString", _admin_hook, "perf reset <name>: perf reset all or one perfcounter name");
   _admin_socket->register_command("config show", _admin_hook, "dump current config settings");
@@ -796,6 +814,9 @@ CephContext::~CephContext()
 
   delete _perf_counters_collection;
   _perf_counters_collection = NULL;
+
+  delete _labeled_perf_counters_collection;
+  _labeled_perf_counters_collection = NULL;
 
   delete _perf_counters_conf_obs;
   _perf_counters_conf_obs = NULL;
@@ -924,6 +945,11 @@ int CephContext::get_init_flags() const
 PerfCountersCollection *CephContext::get_perfcounters_collection()
 {
   return _perf_counters_collection;
+}
+
+PerfCountersCollection *CephContext::get_labeledperfcounters_collection()
+{
+  return _labeled_perf_counters_collection;
 }
 
 void CephContext::_enable_perf_counter()
