@@ -580,7 +580,7 @@ class CephadmServe:
             'zonegroup_name': rgw_spec.rgw_zonegroup,
             'zone_name': rgw_spec.rgw_zone,
             'realm_token': rgw_spec.rgw_realm_token,
-            'endpoints': ep,
+            'zone_endpoints': ep,
         }
         self.log.debug(f'rgw cmd: {zone_update_cmd}')
         rc, out, err = self.mgr.mon_command(zone_update_cmd)

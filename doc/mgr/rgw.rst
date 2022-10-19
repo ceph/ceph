@@ -51,6 +51,16 @@ Following is an example of RGW mutlisite spec file:
           the user can provide any orchestration supported rgw parameters including advanced
           configuration features such as SSL certificates etc.
 
+Users can also specify custom zone endpoints in the spec (or through the cmd line). In this case, no
+cephadm daemons will be launched. Following is an example RGW spec file with zone endpoints:
+
+.. code-block:: yaml
+
+  rgw_realm: myrealm
+  rgw_zonegroup: myzonegroup
+  rgw_zone: myzone
+  zone_endpoints: http://<rgw_host1>:<rgw_port1>, http://<rgw_host2>:<rgw_port2>
+
 
 Realm Credentials Token
 -----------------------
