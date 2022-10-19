@@ -282,10 +282,11 @@ options:
 - name: rgw_dns_name
   type: str
   level: advanced
-  desc: The host name that RGW uses.
-  long_desc: This is Needed for virtual hosting of buckets to work properly, unless
+  desc: The host names that RGW uses.
+  long_desc: A comma separated list of DNS names.
+    This is Needed for virtual hosting of buckets to work properly, unless
     configured via zonegroup configuration.
-  fmt_desc: The DNS name of the served domain. See also the ``hostnames`` setting within regions.
+  fmt_desc: The DNS names of the served domains. See also the ``hostnames`` setting within zonegroups.
   services:
   - rgw
   with_legacy: true
