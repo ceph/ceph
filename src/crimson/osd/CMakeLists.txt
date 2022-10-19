@@ -3,6 +3,7 @@ add_executable(crimson-osd
   ec_backend.cc
   heartbeat.cc
   main.cc
+  main_config_bootstrap_helpers.cc
   osd.cc
   osd_meta.cc
   pg.cc
