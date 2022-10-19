@@ -513,7 +513,7 @@ Scrub::schedule_result_t ScrubQueue::select_from_group(
     }
   }
 
-  dout(20) << " returning 'none ready' " << dendl;
+  dout(20) << " returning 'none ready'" << dendl;
   return Scrub::schedule_result_t::none_ready;
 }
 

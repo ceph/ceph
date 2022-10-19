@@ -1062,17 +1062,25 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
                                                      ho.has_snapset());
 
       dout(20) << fmt::format(
-                    "{}: {} {} {} shards: {} {} {}",
-                    __func__,
-                    (m_repair ? " repair " : " "),
-                    (m_is_replicated ? "replicated " : ""),
-                    (srd == auth_sel.auth_shard ? "auth" : ""),
-                    auth_sel.shard_map.size(),
-                    (auth_sel.digest_match ? " digest_match " : " "),
-                    (auth_sel.shard_map[srd].only_data_digest_mismatch_info()
-                       ? "'info mismatch info'"
-                       : ""))
-               << dendl;
+		    "{}: {}{} <{}:{}> shards: {} {} {}", __func__,
+		    (m_repair ? "repair " : ""),
+		    (m_is_replicated ? "replicated " : ""), srd,
+		    (srd == auth_sel.auth_shard ? "auth" : "-"),
+		    auth_sel.shard_map.size(),
+		    (auth_sel.digest_match ? " digest_match " : " "),
+		    (auth_sel.shard_map[srd].only_data_digest_mismatch_info()
+		       ? "'info mismatch info'"
+		       : ""))
+	       << dendl;
+      if (discrep_found) {
+	dout(10) << fmt::format(
+		      "{}: <{}> auth:{} ({}/{}) vs {} ({}/{}) {}", __func__, ho,
+		      auth_sel.auth_shard, auth_object.omap_digest_present,
+		      auth_object.omap_digest, srd,
+		      smap.objects[ho].omap_digest_present ? true : false,
+		      smap.objects[ho].omap_digest, ss.str())
+		 << dendl;
+      }
 
       // If all replicas match, but they don't match object_info we can
       // repair it by using missing_digest mechanism
