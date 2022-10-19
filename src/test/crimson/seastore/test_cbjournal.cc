@@ -252,15 +252,15 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
       device->set_journal_size(CBTEST_DEFAULT_TEST_SIZE);
       return device->mkfs(config
       ).safe_then([this]() {
-	return cbj->mkfs(
-	).safe_then([]() {
+	return cbj->open_for_mkfs(
+	).safe_then([](auto q) {
 	  return seastar::now();
 	});
       });
     }).unsafe_get0();
   }
   void open() {
-    return cbj->open_for_mkfs(
+    return cbj->open_for_mount(
     ).safe_then([](auto q) {
       return seastar::now();
     }).unsafe_get0();
