@@ -25,6 +25,8 @@ class RGWD4NCache {
     int getObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal::Attrs* newAttrs);
     int delObject(std::string oid);
     int delAttrs(std::string oid, std::vector<std::string>& baseFields, std::vector<std::string>& deleteFields);
+    int appendData(std::string oid, buffer::list& data);
+    int deleteData(std::string oid);
 
   private:
     cpp_redis::client client;
