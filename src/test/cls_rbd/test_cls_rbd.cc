@@ -2747,6 +2747,32 @@ TEST_F(TestClsRbd, group_snap_list_max_return) {
   }
 }
 
+TEST_F(TestClsRbd, group_snap_list_max_read) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string group_id = "group_id_snap_list_max_read";
+  ASSERT_EQ(0, ioctx.create(group_id, true));
+
+  // 2 * RBD_MAX_KEYS_READ + a few
+  for (int i = 0; i < 150; ++i) {
+    string snap_id = "snap_id" + hexify(i);
+    cls::rbd::GroupSnapshot snap = {snap_id,
+                                    "test_snapshot" + hexify(i),
+                                    cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+    ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
+  }
+
+  std::vector<cls::rbd::GroupSnapshot> snapshots;
+  ASSERT_EQ(0, group_snap_list(&ioctx, group_id, cls::rbd::GroupSnapshot(), 500, &snapshots));
+  ASSERT_EQ(150U, snapshots.size());
+
+  for (int i = 0; i < 150; ++i) {
+    string snap_id = "snap_id" + hexify(i);
+    ASSERT_EQ(snap_id, snapshots[i].id);
+  }
+}
+
 TEST_F(TestClsRbd, group_snap_remove) {
   librados::IoCtx ioctx;
 
