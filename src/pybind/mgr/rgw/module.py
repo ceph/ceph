@@ -130,7 +130,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  zone_name: Optional[str] = None,
                                  port: Optional[int] = None,
                                  placement: Optional[str] = None,
-                                 endpoints: Optional[str] = None,
+                                 zone_endpoints: Optional[str] = None,
                                  start_radosgw: Optional[bool] = True,
                                  inbuf: Optional[str] = None):
         """Bootstrap new rgw realm, zonegroup, and zone"""
@@ -147,7 +147,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  rgw_zone=zone_name,
                                  rgw_frontend_port=port,
                                  placement=placement_spec,
-                                 endpoints=endpoints)]
+                                 zone_endpoints=zone_endpoints)]
         else:
             err_msg = 'Invalid arguments: either pass a spec with -i or provide the realm, zonegroup and zone.'
             return HandleCommandResult(retval=-errno.EINVAL, stdout='', stderr=err_msg)
@@ -238,12 +238,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return HandleCommandResult(retval=0, stdout=json.dumps(realms_info, indent=4), stderr='')
 
     @CLICommand('rgw zone modify', perm='rw')
-    def update_zone_info(self, realm_name: str, zonegroup_name: str, zone_name: str, realm_token: str, endpoints: List[str]):
+    def update_zone_info(self, realm_name: str, zonegroup_name: str, zone_name: str, realm_token: str, zone_endpoints: List[str]):
         try:
             retval, out, err = RGWAM(self.env).zone_modify(realm_name,
                                                            zonegroup_name,
                                                            zone_name,
-                                                           endpoints,
+                                                           zone_endpoints,
                                                            realm_token)
             return (retval, 'Zone updated successfully', '')
         except RGWAMException as e:
@@ -258,7 +258,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                              port: Optional[int] = None,
                              placement: Optional[str] = None,
                              start_radosgw: Optional[bool] = True,
-                             endpoints: Optional[str] = None,
+                             zone_endpoints: Optional[str] = None,
                              inbuf: Optional[str] = None):
         """Bootstrap new rgw zone that syncs with zone on another cluster in the same realm"""
 
@@ -275,7 +275,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  rgw_realm_token=realm_token,
                                  rgw_frontend_port=port,
                                  placement=placement_spec,
-                                 endpoints=endpoints)]
+                                 zone_endpoints=zone_endpoints)]
         else:
             err_msg = 'Invalid arguments: either pass a spec with -i or provide the zone_name and realm_token.'
             return HandleCommandResult(retval=-errno.EINVAL, stdout='', stderr=err_msg)
