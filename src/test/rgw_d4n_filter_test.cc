@@ -1333,6 +1333,97 @@ TEST_F(D4NFilterFixture, StoreDeleteAttrsTest) {
   EXPECT_EQ(value, make_pair(string("test_attrs_key_20"), string("test_attrs_value_20")));
 }
 
+/* SAL object data storage check */
+TEST_F(D4NFilterFixture, DataCheckTest) {
+  cpp_redis::client client;
+  clientSetUp(&client); 
+
+  createUser();
+  createBucket();
+  
+  /* Prepare, process, and complete object write */
+  unique_ptr<rgw::sal::Object> head_obj = testBucket->get_object(rgw_obj_key("test_object_21"));
+  rgw_user owner;
+  rgw_placement_rule ptail_placement_rule;
+  uint64_t olh_epoch = 123;
+  string unique_tag;
+
+  head_obj->get_obj_attrs(null_yield, dpp);
+
+  testWriter = store->get_atomic_writer(dpp, 
+	    null_yield,
+	    head_obj->clone(),
+	    owner,
+	    &ptail_placement_rule,
+	    olh_epoch,
+	    unique_tag);
+
+  size_t accounted_size = 4;
+  string etag("test_etag");
+  ceph::real_time mtime; 
+  ceph::real_time set_mtime;
+
+  buffer::list bl;
+  string tmp = "test_attrs_value_21";
+  bl.append("test_attrs_value_21");
+  map<string, bufferlist> attrs{{"test_attrs_key_21", bl}};
+  buffer::list data;
+  data.append("test data");
+
+  ceph::real_time delete_at;
+  char if_match;
+  char if_nomatch;
+  string user_data;
+  rgw_zone_set zones_trace;
+  bool canceled;
+
+  ASSERT_EQ(testWriter->prepare(null_yield), 0);
+  
+  ASSERT_EQ(testWriter->process(move(data), 0), 0);
+
+  ASSERT_EQ(testWriter->complete(accounted_size, etag,
+		 &mtime, set_mtime,
+		 attrs,
+		 delete_at,
+		 &if_match, &if_nomatch,
+		 &user_data,
+		 &zones_trace, &canceled,
+		 null_yield), 0);
+ 
+  client.hget("rgw-object:test_object_21:cache", "data", [&data](cpp_redis::reply& reply) {
+    if (reply.is_string()) {
+      EXPECT_EQ(reply.as_string(), data.to_str());
+    }
+  });
+
+  client.sync_commit();
+
+  /* Change data and ensure redis stores the new value */
+  buffer::list dataNew;
+  dataNew.append("new test data");
+
+  ASSERT_EQ(testWriter->prepare(null_yield), 0);
+  
+  ASSERT_EQ(testWriter->process(move(dataNew), 0), 0);
+
+  ASSERT_EQ(testWriter->complete(accounted_size, etag,
+		 &mtime, set_mtime,
+		 attrs,
+		 delete_at,
+		 &if_match, &if_nomatch,
+		 &user_data,
+		 &zones_trace, &canceled,
+		 null_yield), 0);
+
+  client.hget("rgw-object:test_object_21:cache", "data", [&dataNew](cpp_redis::reply& reply) {
+    if (reply.is_string()) {
+      EXPECT_EQ(reply.as_string(), dataNew.to_str());
+    }
+  });
+
+  client.sync_commit();
+}
+
 int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);
 
