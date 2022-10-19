@@ -542,10 +542,10 @@ class RGWAM:
         access_key = rgw_acces_key.access_key if rgw_acces_key else ''
         secret = rgw_acces_key.secret_key if rgw_acces_key else ''
         self.zone_op().modify(zone, zonegroup, None,
-                              access_key, secret, endpoints=rgw_spec.endpoints)
+                              access_key, secret, endpoints=rgw_spec.zone_endpoints)
         self.update_period(realm, zonegroup)
 
-        if start_radosgw and rgw_spec.endpoints is None:
+        if start_radosgw and rgw_spec.zone_endpoints is None:
             # Instruct the orchestrator to start RGW daemons, asynchronically, this will
             # call back the rgw module to update the master zone with the corresponding endpoints
             realm_token = RealmToken(realm_name,
