@@ -87,8 +87,10 @@ Interactive Commands
       Displays a menu of filesystems for selection.
 
 2. q : Quit
-      Exit the utility if you are at the home screen (all filesystem info),
+      Exit the utility if you are at the home screen (All Filesystem Info),
       otherwise escape back to the home screen.
+
+The metrics display can be scrolled using the Arrow Keys, PgUp/PgDn, Home/End and mouse.
 
 Sample screenshot running `cephfs-top` with 2 filesystems:
 
