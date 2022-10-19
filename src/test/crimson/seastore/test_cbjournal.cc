@@ -27,7 +27,6 @@ namespace {
 }
 
 constexpr uint64_t CBTEST_DEFAULT_TEST_SIZE = 1 << 20;
-constexpr uint64_t CBTEST_DEFAULT_BLOCK_SIZE = 4096;
 
 
 std::optional<record_t> decode_record(
@@ -125,19 +124,17 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 {
   std::vector<entry_validator_t> entries;
   std::unique_ptr<CircularBoundedJournal> cbj;
-  random_block_device::RBMDevice *device;
+  random_block_device::EphemeralRBMDeviceRef device;
 
   std::default_random_engine generator;
   uint64_t block_size;
   WritePipeline pipeline;
 
   cbjournal_test_t() {
-    device = new random_block_device::TestMemory(
-      CBTEST_DEFAULT_TEST_SIZE + CBTEST_DEFAULT_BLOCK_SIZE +
-      random_block_device::RBMDevice::get_journal_start(),
-      CBTEST_DEFAULT_BLOCK_SIZE);
-    cbj.reset(new CircularBoundedJournal(*this, device, std::string()));
-    block_size = CBTEST_DEFAULT_BLOCK_SIZE;
+    device = random_block_device::create_test_ephemeral(
+     CBTEST_DEFAULT_TEST_SIZE, 0);
+    cbj.reset(new CircularBoundedJournal(*this, device.get(), std::string()));
+    block_size = device->get_block_size();
     cbj->set_write_pipeline(&pipeline);
   }
 
@@ -180,9 +177,6 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   }
 
   seastar::future<> tear_down_fut() final {
-    if (device) {
-      delete device;
-    }
     return seastar::now();
   }
 
@@ -210,7 +204,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 	paddr_t{},
 	L_ADDR_NULL,
 	0, 0,
-	CBTEST_DEFAULT_BLOCK_SIZE,
+	device->get_block_size(),
 	1,
 	0,
 	segment_type_t::JOURNAL,

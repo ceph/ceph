@@ -177,15 +177,16 @@ public:
   }
 };
 
-class TestMemory : public RBMDevice {
+class EphemeralRBMDevice : public RBMDevice {
 public:
   uint64_t size = 0;
   uint64_t block_size = 0;
+  constexpr static uint32_t TEST_BLOCK_SIZE = 4096;
 
-  TestMemory(size_t size, uint64_t block_size) :
+  EphemeralRBMDevice(size_t size, uint64_t block_size) :
     size(size), block_size(block_size), buf(nullptr) {
   }
-  ~TestMemory() {
+  ~EphemeralRBMDevice() {
     if (buf) {
       ::munmap(buf, size);
       buf = nullptr;
@@ -239,4 +240,7 @@ public:
   }
   char *buf;
 };
+using EphemeralRBMDeviceRef = std::unique_ptr<EphemeralRBMDevice>;
+EphemeralRBMDeviceRef create_test_ephemeral(uint64_t journal_size, uint64_t data_size);
+
 }

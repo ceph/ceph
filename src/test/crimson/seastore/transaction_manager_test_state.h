@@ -117,10 +117,8 @@ protected:
 
   seastar::future<> randomblock_setup()
   {
-    rb_device.reset(new random_block_device::TestMemory(
-          journal::DEFAULT_TEST_CBJOURNAL_SIZE + journal::DEFAULT_BLOCK_SIZE +
-	  random_block_device::RBMDevice::get_journal_start(),
-	  journal::DEFAULT_BLOCK_SIZE));
+    rb_device = random_block_device::create_test_ephemeral(
+      journal::DEFAULT_TEST_CBJOURNAL_SIZE, 0);
     return rb_device->mount().handle_error(crimson::ct_error::assert_all{}
     ).then([this]() {
       device_config_t config = get_rbm_ephemeral_device_config(0, 1);
