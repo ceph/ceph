@@ -227,7 +227,7 @@ std::unique_ptr<Writer> D4NFilterStore::get_atomic_writer(const DoutPrefixProvid
 							   owner, ptail_placement_rule,
 							   olh_epoch, unique_tag);
 
-  return std::make_unique<D4NFilterWriter>(std::move(writer), this, std::move(_head_obj), dpp);
+  return std::make_unique<D4NFilterWriter>(std::move(writer), this, std::move(_head_obj), dpp, true);
 }
 
 std::unique_ptr<Object::ReadOp> D4NFilterObject::get_read_op()
@@ -285,6 +285,33 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
   }
 
   return next->delete_obj(dpp, y);
+}
+
+int D4NFilterWriter::prepare(optional_yield y) 
+{
+  int delDataReturn = filter->get_d4n_cache()->deleteData(head_obj->get_name()); 
+
+  if (delDataReturn < 0) {
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache delete data operation failed." << dendl;
+  } else {
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache delete data operation succeeded." << dendl;
+  }
+
+  return next->prepare(y);
+}
+
+int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
+{
+  bufferlist objectData = data;
+  int appendDataReturn = filter->get_d4n_cache()->appendData(head_obj->get_name(), data);
+
+  if (appendDataReturn < 0) {
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache append data operation failed." << dendl;
+  } else {
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache append data operation succeeded." << dendl;
+  }
+
+  return next->process(std::move(data), offset);
 }
 
 int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,

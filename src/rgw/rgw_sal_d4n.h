@@ -34,7 +34,7 @@ class D4NFilterStore : public FilterStore {
   public:
     D4NFilterStore(Store* _next) : FilterStore(_next) 
     {
-      blk_dir = new RGWBlockDirectory(); // Uses cct to initialize directory address 
+      blk_dir = new RGWBlockDirectory(); /* Initialize directory address with cct */
       c_blk = new cache_block();
       d4n_cache = new RGWD4NCache();
     }
@@ -153,14 +153,21 @@ class D4NFilterWriter : public FilterWriter {
   private:
     D4NFilterStore* filter; 
     const DoutPrefixProvider* save_dpp;
+    bool atomic;
 
   public:
-    D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterStore* _filter, std::unique_ptr<Object> _head_obj, const DoutPrefixProvider* _dpp) 
-    : FilterWriter(std::move(_next), std::move(_head_obj)),
-    filter(_filter),
-    save_dpp(_dpp) {}
+    D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterStore* _filter, std::unique_ptr<Object> _head_obj, 
+	const DoutPrefixProvider* _dpp) : FilterWriter(std::move(_next), std::move(_head_obj)),
+					  filter(_filter),
+					  save_dpp(_dpp), atomic(false) {}
+    D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterStore* _filter, std::unique_ptr<Object> _head_obj, 
+	const DoutPrefixProvider* _dpp, bool _atomic) : FilterWriter(std::move(_next), std::move(_head_obj)),
+							filter(_filter),
+							save_dpp(_dpp), atomic(_atomic) {}
     virtual ~D4NFilterWriter() = default;
 
+    virtual int prepare(optional_yield y);
+    virtual int process(bufferlist&& data, uint64_t offset) override;
     virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
@@ -169,6 +176,7 @@ class D4NFilterWriter : public FilterWriter {
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y) override;
+   bool is_atomic() { return atomic; };
    const DoutPrefixProvider* dpp() { return save_dpp; }
 };
 
