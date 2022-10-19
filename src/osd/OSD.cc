@@ -8970,25 +8970,9 @@ void OSD::handle_fast_pg_create(MOSDPGCreate2 *m)
     utime_t created_stamp = p.second.second;
     auto q = m->pg_extra.find(pgid);
     if (q == m->pg_extra.end()) {
-      dout(20) << __func__ << " " << pgid << " e" << created
-	       << "@" << created_stamp
-	       << " (no history or past_intervals)" << dendl;
-      // pre-octopus ... no pg history.  this can be removed in Q release.
-      enqueue_peering_evt(
-	pgid,
-	PGPeeringEventRef(
-	  std::make_shared<PGPeeringEvent>(
-	    m->epoch,
-	    m->epoch,
-	    NullEvt(),
-	    true,
-	    new PGCreateInfo(
-	      pgid,
-	      created,
-	      pg_history_t(created, created_stamp),
-	      PastIntervals(),
-	      true)
-	    )));
+      clog->error() << __func__ << " " << pgid << " e" << created
+                    << "@" << created_stamp << " with no history or past_intervals"
+                    << ", this should be impossible after octopus.  Ignoring.";
     } else {
       dout(20) << __func__ << " " << pgid << " e" << created
 	       << "@" << created_stamp
