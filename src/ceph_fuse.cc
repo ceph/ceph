@@ -198,12 +198,8 @@ int main(int argc, const char **argv, const char *envp[]) {
       ~RemountTest() override {}
       void *entry() override {
 #if defined(__linux__)
-	int ver = get_linux_version();
-	ceph_assert(ver != 0);
-        bool client_try_dentry_invalidate = g_conf().get_val<bool>(
-          "client_try_dentry_invalidate");
-        bool can_invalidate_dentries =
-          client_try_dentry_invalidate && ver < KERNEL_VERSION(3, 18, 0);
+        bool can_invalidate_dentries = g_conf().get_val<bool>(
+	  "client_try_dentry_invalidate");
         uint64_t max_retries = g_conf().get_val<uint64_t>(
           "client_max_retries_on_remount_failure");
         std::pair<int, bool> test_result;
