@@ -120,7 +120,8 @@ Topics
 .. note::
 
     In all topic actions, the parameters are URL-encoded and sent in the
-    message body using the ``application/x-www-form-urlencoded`` content type.
+    message body using this content type:
+    ``application/x-www-form-urlencoded``.
    
 
 Create a Topic
@@ -131,11 +132,11 @@ which will be used later when a notification is created. A response is
 generated. A successful response includes the the topic's `ARN
 <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_
 (the "Amazon Resource Name", a unique identifier used to reference the topic).
-To update a topic, use the same command that you used to create it (but use the
-name of an existing topic and different endpoint values).
+To update a topic, use the same command that you used to create it (but when
+updating, use the name of an existing topic and different endpoint values).
 
 .. tip:: Any notification already associated with the topic must be re-created
-   for the topic update to take effect.
+   in order for the topic to update.
 
 .. note:: For rabbitmq, ``push-endpoint`` (with a hyphen in the middle) must be
    changed to ``push_endpoint`` (with an underscore in the middle).
@@ -158,54 +159,83 @@ name of an existing topic and different endpoint values).
 
 Request parameters:
 
-- push-endpoint: URI of an endpoint to send push notification to
-- OpaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the topic
-- persistent: indication whether notifications to this endpoint are persistent (=asynchronous) or not ("false" by default)
+- push-endpoint: This is the URI of an endpoint to send push notifications to.
+- OpaqueData: Opaque data is set in the topic configuration and added to all
+  notifications that are triggered by the topic.
+- persistent: This indicates whether notifications to this endpoint are
+  persistent (=asynchronous) or not persistent. (This is "false" by default.)
 
 - HTTP endpoint
 
  - URI: ``http[s]://<fqdn>[:<port]``
- - port defaults to: 80/443 for HTTP/S accordingly
- - verify-ssl: indicate whether the server certificate is validated by the client or not ("true" by default)
+ - port: This defaults to 80 for HTTP and 443 for HTTPS.
+ - verify-ssl: This indicates whether the server certificate is validated by
+   the client. (This is "true" by default.)
+ - cloudevents: This indicates whether the HTTP header should contain
+   attributes according to the `S3 CloudEvents Spec`_. (This is "false" by
+   default.)
 
 - AMQP0.9.1 endpoint
 
  - URI: ``amqp[s]://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
- - user/password defaults to: guest/guest
- - user/password may only be provided over HTTPS. If not, topic creation request will be rejected.
- - port defaults to: 5672/5671 for unencrypted/SSL-encrypted connections
- - vhost defaults to: "/"
- - verify-ssl: indicate whether the server certificate is validated by the client or not ("true" by default)
- - if ``ca-location`` is provided, and secure connection is used, the specified CA will be used, instead of the default one, to authenticate the broker
- - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1). Different topics pointing to the same endpoint must use the same exchange
- - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Three ack methods exist:
+ - user/password: This defaults to "guest/guest".
+ - user/password: This must be provided only over HTTPS. Topic creation
+   requests will otherwise be rejected.
+ - port: This defaults to 5672 for unencrypted connections and 5671 for
+   SSL-encrypted connections.
+ - vhost: This defaults to "/".
+ - verify-ssl: This indicates whether the server certificate is validated by
+   the client. (This is "true" by default.)
+ - If ``ca-location`` is provided and a secure connection is used, the
+   specified CA will be used to authenticate the broker. The default CA will
+   not be used.  
+ - amqp-exchange: The exchanges must exist and must be able to route messages
+   based on topics. This parameter is mandatory.  Different topics that point
+   to the same endpoint must use the same exchange.
+ - amqp-ack-level: No end2end acking is required. Messages may persist in the
+   broker before being delivered to their final destinations. Three ack methods
+   exist:
 
-  - "none": message is considered "delivered" if sent to broker
-  - "broker": message is considered "delivered" if acked by broker (default)
-  - "routable": message is considered "delivered" if broker can route to a consumer
+  - "none": The message is considered "delivered" if it is sent to the broker.
+  - "broker": The message is considered "delivered" if it is acked by the broker (default).
+  - "routable": The message is considered "delivered" if the broker can route to a consumer.
 
-.. tip:: The topic-name (see :ref:`radosgw-create-a-topic`) is used for the AMQP topic ("routing key" for a topic exchange).
+.. tip:: The topic-name (see :ref:`radosgw-create-a-topic`) is used for the
+   AMQP topic ("routing key" for a topic exchange).
 
 - Kafka endpoint
 
  - URI: ``kafka://[<user>:<password>@]<fqdn>[:<port]``
- - if ``use-ssl`` is set to "true", secure connection will be used for connecting with the broker ("false" by default)
- - if ``ca-location`` is provided, and secure connection is used, the specified CA will be used, instead of the default one, to authenticate the broker
- - user/password may only be provided over HTTPS. If not, topic creation request will be rejected.
- - user/password may only be provided together with ``use-ssl``, if not, the connection to the broker would fail.
- - port defaults to: 9092
- - kafka-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
+ - ``use-ssl``: If this is set to "true", a secure connection is used to
+   connect to the broker. (This is "false" by default.)
+ - ``ca-location``: If this is provided and a secure connection is used, the
+   specified CA will be used insted of the default CA to authenticate the
+   broker. 
+ - user/password: This must be provided only over HTTPS. Topic creation
+   requests will otherwise be rejected.
+ - user/password: This must be provided along with ``use-ssl``. Connections to
+   the broker will otherwise fail.
+ - port: This defaults to 9092.
+ - kafka-ack-level: No end2end acking is required. Messages may persist in the
+   broker before being delivered to their final destinations. Two ack methods
+   exist:
 
-  - "none": message is considered "delivered" if sent to broker
-  - "broker": message is considered "delivered" if acked by broker (default)
+  - "none": Messages are considered "delivered" if sent to the broker.
+  - "broker": Messages are considered "delivered" if acked by the broker. (This
+    is the default.)
 
 .. note::
 
-    - The key/value of a specific parameter does not have to reside in the same line, or in any specific order, but must use the same index
-    - Attribute indexing does not need to be sequential or start from any specific value
-    - `AWS Create Topic`_ has a detailed explanation of the endpoint attributes format. However, in our case different keys and values are used
+    - The key-value pair of a specific parameter need not reside in the same
+      line as the parameter, and need not appear in any specific order, but it
+      must use the same index.
+    - Attribute indexing need not be sequential and need not start from any
+      specific value.
+    - `AWS Create Topic`_ provides a detailed explanation of the endpoint
+      attributes format. In our case, however, different keys and values are
+      used.
 
-The response will have the following format:
+The response has the following format:
 
 ::
 
@@ -218,7 +248,9 @@ The response will have the following format:
         </ResponseMetadata>
     </CreateTopicResponse>
 
-The topic ARN in the response will have the following format:
+The topic `ARN
+<https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_
+in the response has the following format:
 
 ::
 
@@ -227,7 +259,8 @@ The topic ARN in the response will have the following format:
 Get Topic Attributes
 ````````````````````
 
-Returns information about a specific topic. This includes push-endpoint information, if provided.
+This returns information about a specific topic. This includes push-endpoint
+information, if provided.
 
 ::
 
@@ -236,7 +269,7 @@ Returns information about a specific topic. This includes push-endpoint informat
    Action=GetTopicAttributes
    &TopicArn=<topic-arn>
 
-Response will have the following format:
+The response has the following format:
 
 ::
 
@@ -270,22 +303,27 @@ Response will have the following format:
         </ResponseMetadata>
     </GetTopicAttributesResponse>
 
-- User: name of the user that created the topic
-- Name: name of the topic
-- EndPoint: JSON formatted endpoint parameters, including:
-   - EndpointAddress: the push-endpoint URL
-   - EndpointArgs: the push-endpoint args
-   - EndpointTopic: the topic name that should be sent to the endpoint (may be different than the above topic name)
-   - HasStoredSecret: "true" if if endpoint URL contain user/password information. In this case request must be made over HTTPS. If not, topic get request will be rejected 
-   - Persistent: "true" is topic is persistent
-- TopicArn: topic ARN
-- OpaqueData: the opaque data set on the topic
+- User: the name of the user that created the topic.
+- Name: the name of the topic.
+- EndPoint: The JSON-formatted endpoint parameters, including:
+   - EndpointAddress: The push-endpoint URL.
+   - EndpointArgs: The push-endpoint args.
+   - EndpointTopic: The topic name to be sent to the endpoint (can be different
+     than the above topic name).
+   - HasStoredSecret: This is "true" if the endpoint URL contains user/password 
+     information. In this case, the request must be made over HTTPS. The "topic
+     get" request will otherwise be rejected.
+   - Persistent: This is "true" if the topic is persistent.
+- TopicArn: topic `ARN
+  <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_.
+- OpaqueData: The opaque data set on the topic.
 
 Get Topic Information
 `````````````````````
 
-Returns information about specific topic. This includes push-endpoint information, if provided.
-Note that this API is now deprecated in favor of the AWS compliant `GetTopicAttributes` API.
+This returns information about a specific topic. This includes push-endpoint
+information, if provided.  Note that this API is now deprecated in favor of the
+AWS compliant `GetTopicAttributes` API.
 
 ::
 
@@ -294,7 +332,7 @@ Note that this API is now deprecated in favor of the AWS compliant `GetTopicAttr
    Action=GetTopic
    &TopicArn=<topic-arn>
 
-Response will have the following format:
+The response has the following format:
 
 ::
 
@@ -319,15 +357,19 @@ Response will have the following format:
         </ResponseMetadata>
     </GetTopicResponse>
 
-- User: name of the user that created the topic
-- Name: name of the topic
-- EndpointAddress: the push-endpoint URL
-- EndpointArgs: the push-endpoint args
-- EndpointTopic: the topic name that should be sent to the endpoint (may be different than the above topic name)
-- HasStoredSecret: "true" if endpoint URL contain user/password information. In this case request must be made over HTTPS. If not, topic get request will be rejected 
-- Persistent: "true" is topic is persistent
-- TopicArn: topic ARN
-- OpaqueData: the opaque data set on the topic
+- User: The name of the user that created the topic.
+- Name: The name of the topic.
+- EndpointAddress: The push-endpoint URL.
+- EndpointArgs: The push-endpoint args.
+- EndpointTopic: The topic name to be sent to the endpoint (which can be
+  different than the above topic name).
+- HasStoredSecret: This is "true" if the endpoint URL contains user/password
+  information. In this case, the request must be made over HTTPS. The "topic
+  get" request will otherwise be rejected.
+- Persistent: "true" if topic is persistent.
+- TopicArn: topic `ARN
+  <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_.
+- OpaqueData: the opaque data set on the topic.
 
 Delete Topic
 ````````````
@@ -339,14 +381,16 @@ Delete Topic
    Action=DeleteTopic
    &TopicArn=<topic-arn>
 
-Delete the specified topic.
+This deletes the specified topic.
 
 .. note::
 
-  - Deleting an unknown notification (e.g. double delete) is not considered an error
-  - Deleting a topic does not automatically delete all notifications associated with it
+  - Deleting an unknown notification (for example, double delete) is not
+    considered an error.
+  - Deleting a topic does not automatically delete all notifications associated
+    with it.
 
-The response will have the following format:
+The response has the following format:
 
 ::
 
@@ -367,7 +411,7 @@ List all topics associated with a tenant.
 
    Action=ListTopics
 
-Response will have the following format:
+The response has the following format:
 
 ::
 
@@ -392,7 +436,9 @@ Response will have the following format:
         </ResponseMetadata>
     </ListTopicsResponse>
 
-- if endpoint URL contain user/password information, in any of the topic, request must be made over HTTPS. If not, topic list request will be rejected.
+- If the endpoint URL contains user/password information in any part of the
+  topic, the request must be made over HTTPS. The "topic list" request will
+  otherwise be rejected.
 
 Notifications
 ~~~~~~~~~~~~~
@@ -481,3 +527,4 @@ pushed or pulled using the pubsub sync module. For example:
 .. _S3 Notification Compatibility: ../s3-notification-compatibility
 .. _AWS Create Topic: https://docs.aws.amazon.com/sns/latest/api/API_CreateTopic.html
 .. _Bucket Operations: ../s3/bucketops
+.. _S3 CloudEvents Spec: https://github.com/cloudevents/spec/blob/main/cloudevents/adapters/aws-s3.md
