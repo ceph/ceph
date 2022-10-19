@@ -28,35 +28,6 @@ CircularBoundedJournal::CircularBoundedJournal(
     const std::string &path)
   : trimmer(trimmer), device(device), path(path) {}
 
-CircularBoundedJournal::mkfs_ret CircularBoundedJournal::mkfs()
-{
-  LOG_PREFIX(CircularBoundedJournal::mkfs);
-  assert(device);
-  ceph::bufferlist bl;
-  CircularBoundedJournal::cbj_header_t head;
-  assert(device->get_journal_size());
-  head.dirty_tail =
-    journal_seq_t{0,
-      convert_abs_addr_to_paddr(
-	device->get_block_size(),
-	device->get_device_id())};
-  head.alloc_tail = head.dirty_tail;
-  encode(head, bl);
-  header = head;
-  set_written_to(head.dirty_tail);
-  initialized = true;
-  DEBUG(
-    "initialize header block in CircularBoundedJournal, length {}",
-    bl.length());
-  return write_header(
-  ).handle_error(
-    mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in CircularBoundedJournal::mkfs"
-    }
-  );
-}
-
 ceph::bufferlist CircularBoundedJournal::encode_header()
 {
   bufferlist bl;
@@ -77,7 +48,33 @@ ceph::bufferlist CircularBoundedJournal::encode_header()
 CircularBoundedJournal::open_for_mkfs_ret
 CircularBoundedJournal::open_for_mkfs()
 {
-  return open_for_mount();
+  LOG_PREFIX(CircularBoundedJournal::open_for_mkfs);
+  assert(device);
+  ceph::bufferlist bl;
+  CircularBoundedJournal::cbj_header_t head;
+  assert(device->get_journal_size());
+  head.dirty_tail =
+    journal_seq_t{0,
+      convert_abs_addr_to_paddr(
+	device->get_block_size(),
+	device->get_device_id())};
+  head.alloc_tail = head.dirty_tail;
+  encode(head, bl);
+  header = head;
+  set_written_to(head.dirty_tail);
+  initialized = true;
+  DEBUG(
+    "initialize header block in CircularBoundedJournal, length {}",
+    bl.length());
+  return write_header(
+  ).safe_then([this]() {
+    return open_for_mount();
+  }).handle_error(
+    open_for_mkfs_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error write_header"
+    }
+  );
 }
 
 CircularBoundedJournal::open_for_mount_ret

@@ -135,21 +135,6 @@ public:
 
   ceph::bufferlist encode_header();
 
-  using mkfs_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg
-  >;
-  using mkfs_ret = mkfs_ertr::future<>;
-
-  /*
-   * mkfs
-   *
-   * make a new journal layout even if old journal exists
-   *
-   *
-   */
-  mkfs_ret mkfs();
-
 
   /**
    * CircularBoundedJournal structure

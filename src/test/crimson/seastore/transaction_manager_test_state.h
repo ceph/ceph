@@ -217,22 +217,10 @@ protected:
   }
 
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() {
-    if (journal_type == journal_type_t::SEGMENTED) {
-      return tm->mkfs(
-      ).handle_error(
-	crimson::ct_error::assert_all{"Error in mkfs"}
-      );
-    } else {
-      return static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->mkfs(
-      ).safe_then([this]() {
-	return tm->mkfs(
-	).handle_error(
-	  crimson::ct_error::assert_all{"Error in mkfs"}
-	);
-      }).handle_error(
-	crimson::ct_error::assert_all{"Error in mkfs"}
-      );
-    }
+    return tm->mkfs(
+    ).handle_error(
+      crimson::ct_error::assert_all{"Error in mkfs"}
+    );
   }
 
   auto create_mutate_transaction() {
