@@ -1313,6 +1313,22 @@ class PrometheusSpec(MonitoringSpec):
         self.retention_time = retention_time.strip() if retention_time else None
         self.retention_size = retention_size.strip() if retention_size else None
 
+    def validate(self) -> None:
+        super(PrometheusSpec, self).validate()
+
+        if self.retention_time:
+            valid_units = ['y', 'w', 'd', 'h', 'm', 's']
+            m = re.search(rf"^(\d+)({'|'.join(valid_units)})$", self.retention_time)
+            if not m:
+                units = ', '.join(valid_units)
+                raise SpecValidationError(f"Invalid retention time. Valid units are: {units}")
+        if self.retention_size:
+            valid_units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB']
+            m = re.search(rf"^(\d+)({'|'.join(valid_units)})$", self.retention_size)
+            if not m:
+                units = ', '.join(valid_units)
+                raise SpecValidationError(f"Invalid retention size. Valid units are: {units}")
+
 
 yaml.add_representer(PrometheusSpec, ServiceSpec.yaml_representer)
 
