@@ -1146,37 +1146,41 @@ namespace {
       on_disk_can_rollback_to = info.last_update;
       missing.may_include_deletes = false;
 
-      return seastar::repeat([ch=std::move(ch),
-                              pgmeta_oid=std::move(pgmeta_oid),
-                              start=std::make_optional<std::string>(),
-                              this]() mutable {
-        return store.omap_get_values(
-          ch, pgmeta_oid, start
-        ).safe_then([this, &start](const auto& ret) mutable {
-          const auto& [done, kvs] = ret;
-          for (const auto& [key, value] : kvs) {
-            process_entry(key, value);
-            // I trust the compiler will optimize this out
-            start = key;
-          }
-          return seastar::make_ready_future<seastar::stop_iteration>(
-            done ? seastar::stop_iteration::yes : seastar::stop_iteration::no
-          );
-        }, crimson::os::FuturizedStore::read_errorator::assert_all{});
-      }).then([this] {
-        if (info.pgid.is_no_shard()) {
-          // replicated pool pg does not persist this key
-          assert(on_disk_rollback_info_trimmed_to == eversion_t());
-          on_disk_rollback_info_trimmed_to = info.last_update;
-        }
-        log = PGLog::IndexedLog(
-             info.last_update,
-             info.log_tail,
-             on_disk_can_rollback_to,
-             on_disk_rollback_info_trimmed_to,
-             std::move(entries),
-             std::move(dups));
-      });
+      return seastar::do_with(
+        std::move(ch),
+        std::move(pgmeta_oid),
+        std::make_optional<std::string>(),
+        [this](crimson::os::CollectionRef &ch,
+               ghobject_t &pgmeta_oid,
+               std::optional<std::string> &start) {
+          return seastar::repeat([this, &ch, &pgmeta_oid, &start]() {
+            return store.omap_get_values(
+              ch, pgmeta_oid, start
+            ).safe_then([this, &start](const auto& ret) {
+              const auto& [done, kvs] = ret;
+              for (const auto& [key, value] : kvs) {
+                process_entry(key, value);
+                start = key;
+              }
+              return seastar::make_ready_future<seastar::stop_iteration>(
+                done ? seastar::stop_iteration::yes : seastar::stop_iteration::no
+              );
+            }, crimson::os::FuturizedStore::read_errorator::assert_all{});
+          }).then([this] {
+            if (info.pgid.is_no_shard()) {
+              // replicated pool pg does not persist this key
+              assert(on_disk_rollback_info_trimmed_to == eversion_t());
+              on_disk_rollback_info_trimmed_to = info.last_update;
+            }
+            log = PGLog::IndexedLog(
+                 info.last_update,
+                 info.log_tail,
+                 on_disk_can_rollback_to,
+                 on_disk_rollback_info_trimmed_to,
+                 std::move(entries),
+                 std::move(dups));
+          });
+        });
     }
   };
 }
