@@ -3,6 +3,7 @@
 
 #include "common/intrusive_lru.h"
 #include "common/perf_counters.h"
+#include "common/labeled_perf_counters.h"
 #include "common/ceph_context.h"
 
 enum {
@@ -26,7 +27,7 @@ struct PerfCountersCacheEntry : public ceph::common::intrusive_lru_base<
   ceph::common::intrusive_lru_config<
     std::string, PerfCountersCacheEntry, item_to_key<PerfCountersCacheEntry>>> {
   std::string instance_labels;
-  PerfCounters *perfcounters_instance = NULL;
+  ceph::common::LabeledPerfCounters *labeled_perfcounters_instance = NULL;
   //CephContext *cct = NULL;
   //PerfCountersCollection *collection = NULL;
 
@@ -34,7 +35,7 @@ struct PerfCountersCacheEntry : public ceph::common::intrusive_lru_base<
 
   ~PerfCountersCacheEntry() {
     // perf counters instance clean up code
-    if(perfcounters_instance) {
+    if(labeled_perfcounters_instance) {
       // TODO: figure out removal from perfcounters_collection
       //ceph_assert(perfcounters_instance);
       //collection->remove(perfcounters_instance);
@@ -53,16 +54,16 @@ public:
     auto [ref, key_existed] = get_or_create(key);
     if (!key_existed) {
       // perf counters instance creation code
-      PerfCountersBuilder plb(cct, key, l_rgw_metrics_first, l_rgw_metrics_last);
-      plb.add_u64_counter(l_rgw_metrics_req, "req", "number of reqs", NULL, 8, UNIT_NONE);
-      plb.add_u64_counter(l_rgw_metrics_failed_req, "failed_req", "Aborted Requests", NULL, 8, UNIT_NONE);
-      plb.add_u64_counter(l_rgw_metrics_put_b, "put_b", "Size of puts", NULL, 8, UNIT_NONE);
-      plb.add_u64_counter(l_rgw_metrics_get_b, "get_b", "Size of gets", NULL, 8, UNIT_NONE);
+      ceph::common::LabeledPerfCountersBuilder lplb(cct, key, l_rgw_metrics_first, l_rgw_metrics_last);
+      lplb.add_u64_counter(l_rgw_metrics_req, "req", "number of reqs", NULL, 8, UNIT_NONE);
+      lplb.add_u64_counter(l_rgw_metrics_failed_req, "failed_req", "Aborted Requests", NULL, 8, UNIT_NONE);
+      lplb.add_u64_counter(l_rgw_metrics_put_b, "put_b", "Size of puts", NULL, 8, UNIT_NONE);
+      lplb.add_u64_counter(l_rgw_metrics_get_b, "get_b", "Size of gets", NULL, 8, UNIT_NONE);
 
-      PerfCounters *counters = plb.create_perf_counters();
-      //cct->get_labeledperfcounters_collection()->add(counters);
-      cct->get_perfcounters_collection()->add(counters);
-      ref->perfcounters_instance = counters;
+      ceph::common::LabeledPerfCounters *labeled_counters = lplb.create_perf_counters();
+      cct->get_labeledperfcounters_collection()->add(labeled_counters);
+      //cct->get_perfcounters_collection()->add(counters);
+      ref->labeled_perfcounters_instance = labeled_counters;
       //ref->collection = cct->get_perfcounters_collection();
       //ref->collection->add(counters);
       //ref->cct = cct;
@@ -72,9 +73,9 @@ public:
   void inc(std::string label, int indx, uint64_t v) {
     auto ref = get(label);
     if(ref) {
-      if(ref->perfcounters_instance) {
-        PerfCounters *counters = ref->perfcounters_instance;
-        counters->inc(indx, v);
+      if(ref->labeled_perfcounters_instance) {
+        ceph::common::LabeledPerfCounters *labeled_counters = ref->labeled_perfcounters_instance;
+        labeled_counters->inc(indx, v);
       }
     }
   }
@@ -82,9 +83,9 @@ public:
   void dec(std::string label, int indx, uint64_t v) {
     auto ref = get(label);
     if(ref) {
-      if(ref->perfcounters_instance) {
-        PerfCounters *counters = ref->perfcounters_instance;
-        counters->dec(indx, v);
+      if(ref->labeled_perfcounters_instance) {
+        ceph::common::LabeledPerfCounters *labeled_counters = ref->labeled_perfcounters_instance;
+        labeled_counters->dec(indx, v);
       }
     }
   }
@@ -92,9 +93,9 @@ public:
   void set_counter(std::string label, int indx, uint64_t val) {
     auto ref = get(label);
     if(ref) {
-      if(ref->perfcounters_instance) {
-        PerfCounters *counters = ref->perfcounters_instance;
-        counters->set(indx, val);
+      if(ref->labeled_perfcounters_instance) {
+        ceph::common::LabeledPerfCounters *labeled_counters = ref->labeled_perfcounters_instance;
+        labeled_counters->set(indx, val);
       }
     }
   }
@@ -103,9 +104,9 @@ public:
     auto ref = get(label);
     uint64_t val= 0;
     if(ref) {
-      if(ref->perfcounters_instance) {
-        PerfCounters *counters = ref->perfcounters_instance;
-        val = counters->get(indx);
+      if(ref->labeled_perfcounters_instance) {
+        ceph::common::LabeledPerfCounters *labeled_counters = ref->labeled_perfcounters_instance;
+        val = labeled_counters->get(indx);
       }
     }
     return val;
