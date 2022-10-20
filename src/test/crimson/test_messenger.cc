@@ -924,7 +924,7 @@ class FailoverSuite : public Dispatcher {
     test_msgr->set_default_policy(policy);
     test_msgr->set_auth_client(&dummy_auth);
     test_msgr->set_auth_server(&dummy_auth);
-    test_msgr->interceptor = &interceptor;
+    test_msgr->set_interceptor(&interceptor);
     return test_msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
       return test_msgr->start({this});
     }, Messenger::bind_ertr::all_same_way([addr] (const std::error_code& e) {
