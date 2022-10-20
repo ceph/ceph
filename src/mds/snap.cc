@@ -136,7 +136,7 @@ ostream& operator<<(ostream& out, const snaplink_t &l)
 
 void sr_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(6, 4, bl);
+  ENCODE_START(7, 4, bl);
   encode(seq, bl);
   encode(created, bl);
   encode(last_created, bl);
@@ -146,6 +146,8 @@ void sr_t::encode(bufferlist& bl) const
   encode(past_parents, bl);
   encode(past_parent_snaps, bl);
   encode(flags, bl);
+  encode(last_modified, bl);
+  encode(change_attr, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -169,6 +171,10 @@ void sr_t::decode(bufferlist::const_iterator& p)
     decode(flags, p);
   else
     flags = 0;
+  if (struct_v >= 7) {
+    decode(last_modified, p);
+    decode(change_attr, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -178,6 +184,8 @@ void sr_t::dump(Formatter *f) const
   f->dump_unsigned("created", created);
   f->dump_unsigned("last_created", last_created);
   f->dump_unsigned("last_destroyed", last_destroyed);
+  f->dump_stream("last_modified") << last_modified;
+  f->dump_unsigned("change_attr", change_attr);
   f->dump_unsigned("current_parent_since", current_parent_since);
 
   f->open_array_section("snaps");
@@ -225,5 +233,7 @@ void sr_t::generate_test_instances(std::list<sr_t*>& ls)
 
   ls.back()->past_parent_snaps.insert(5);
   ls.back()->past_parent_snaps.insert(6);
+  ls.back()->last_modified = utime_t(9, 10);
+  ls.back()->change_attr++;
 }
 
