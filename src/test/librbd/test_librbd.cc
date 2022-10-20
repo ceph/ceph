@@ -2705,6 +2705,105 @@ TEST_F(TestLibRBD, EncryptionLoadBadStripePattern)
   }
 }
 
+TEST_F(TestLibRBD, EncryptedResize)
+{
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  auto name = get_temp_image_name();
+  uint64_t luks2_meta_size = 16 << 20;
+  uint64_t data_size = 10 << 20;
+  std::string passphrase = "some passphrase";
+
+  {
+    int order = 0;
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(),
+                                 luks2_meta_size + data_size, &order));
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+
+    uint64_t size;
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(luks2_meta_size + data_size, size);
+
+    librbd::encryption_luks2_format_options_t opts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, passphrase};
+    ASSERT_EQ(0, image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, &opts,
+                                         sizeof(opts)));
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(data_size, size);
+    ASSERT_EQ(0, image.resize(data_size * 3));
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(data_size * 3, size);
+  }
+
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+
+    uint64_t size;
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(luks2_meta_size + data_size * 3, size);
+
+    librbd::encryption_luks_format_options_t opts = {passphrase};
+    ASSERT_EQ(0, image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS, &opts,
+                                       sizeof(opts)));
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(data_size * 3, size);
+    ASSERT_EQ(0, image.resize(data_size / 2));
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(data_size / 2, size);
+  }
+
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+
+    uint64_t size;
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(luks2_meta_size + data_size / 2, size);
+
+    librbd::encryption_luks_format_options_t opts = {passphrase};
+    ASSERT_EQ(0, image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS, &opts,
+                                       sizeof(opts)));
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(data_size / 2, size);
+    ASSERT_EQ(0, image.resize(0));
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(0, size);
+  }
+
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+
+    uint64_t size;
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(luks2_meta_size, size);
+
+    librbd::encryption_luks_format_options_t opts = {passphrase};
+    ASSERT_EQ(0, image.encryption_load(RBD_ENCRYPTION_FORMAT_LUKS, &opts,
+                                       sizeof(opts)));
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(0, size);
+    ASSERT_EQ(0, image.resize(data_size));
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(data_size, size);
+  }
+
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+
+    uint64_t size;
+    ASSERT_EQ(0, image.size(&size));
+    ASSERT_EQ(luks2_meta_size + data_size, size);
+  }
+}
+
 #endif
 
 TEST_F(TestLibRBD, TestIOWithIOHint)

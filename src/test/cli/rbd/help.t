@@ -2235,22 +2235,27 @@
   rbd help resize
   usage: rbd resize [--pool <pool>] [--namespace <namespace>] 
                     [--image <image>] --size <size> [--allow-shrink] 
-                    [--no-progress] 
+                    [--no-progress] [--encryption-format <encryption-format>] 
+                    [--encryption-passphrase-file <encryption-passphrase-file>] 
                     <image-spec> 
   
   Resize (expand or shrink) image.
   
   Positional arguments
-    <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+    <image-spec>                     image specification
+                                     (example:
+                                     [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
-    -p [ --pool ] arg    pool name
-    --namespace arg      namespace name
-    --image arg          image name
-    -s [ --size ] arg    image size (in M/G/T) [default: M]
-    --allow-shrink       permit shrinking
-    --no-progress        disable progress output
+    -p [ --pool ] arg                pool name
+    --namespace arg                  namespace name
+    --image arg                      image name
+    -s [ --size ] arg                image size (in M/G/T) [default: M]
+    --allow-shrink                   permit shrinking
+    --no-progress                    disable progress output
+    --encryption-format arg          encryption formats [possible values: luks]
+    --encryption-passphrase-file arg path to file containing passphrase for
+                                     unlocking the image
   
   rbd help snap create
   usage: rbd snap create [--pool <pool>] [--namespace <namespace>] 
