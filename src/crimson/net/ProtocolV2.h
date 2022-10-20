@@ -77,7 +77,6 @@ class ProtocolV2 final : public Protocol {
 
   void trigger_state(state_t state, write_state_t write_state, bool reentrant);
 
-  uint64_t connection_features = 0;
   uint64_t peer_supported_features = 0;
 
   uint64_t client_cookie = 0;
