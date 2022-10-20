@@ -1516,7 +1516,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
   // snap trace
   SnapRealm *realm = NULL;
   if (reply->snapbl.length())
-    update_snap_trace(reply->snapbl, &realm);
+    update_snap_trace(session, reply->snapbl, &realm);
 
   ldout(cct, 10) << " hrm " 
 	   << " is_target=" << (int)reply->head.is_target
@@ -5046,8 +5046,31 @@ static bool has_new_snaps(const SnapContext& old_snapc,
   return !new_snapc.snaps.empty() && new_snapc.snaps[0] > old_snapc.seq;
 }
 
+struct SnapRealmInfoMeta {
+  SnapRealmInfoMeta(utime_t last_modified, uint64_t change_attr)
+    : last_modified(last_modified),
+      change_attr(change_attr) {
+  }
 
-void Client::update_snap_trace(const bufferlist& bl, SnapRealm **realm_ret, bool flush)
+  utime_t last_modified;
+  uint64_t change_attr;
+};
+
+static std::pair<SnapRealmInfo, std::optional<SnapRealmInfoMeta>> get_snap_realm_info(
+    MetaSession *session, bufferlist::const_iterator &p) {
+  if (session->mds_features.test(CEPHFS_FEATURE_NEW_SNAPREALM_INFO)) {
+    SnapRealmInfoNew ninfo;
+    decode(ninfo, p);
+    return std::make_pair(ninfo.info, SnapRealmInfoMeta(ninfo.last_modified, ninfo.change_attr));
+  } else {
+    SnapRealmInfo info;
+    decode(info, p);
+    return std::make_pair(info, std::nullopt);
+  }
+}
+
+
+void Client::update_snap_trace(MetaSession *session, const bufferlist& bl, SnapRealm **realm_ret, bool flush)
 {
   SnapRealm *first_realm = NULL;
   ldout(cct, 10) << __func__ << " len " << bl.length() << dendl;
@@ -5056,15 +5079,15 @@ void Client::update_snap_trace(const bufferlist& bl, SnapRealm **realm_ret, bool
 
   auto p = bl.cbegin();
   while (!p.end()) {
-    SnapRealmInfo info;
-    decode(info, p);
+    auto [info, realm_info_meta] = get_snap_realm_info(session, p);
     SnapRealm *realm = get_snap_realm(info.ino());
 
     bool invalidate = false;
 
-    if (info.seq() > realm->seq) {
+    if (info.seq() > realm->seq ||
+        (realm_info_meta && (*realm_info_meta).change_attr > realm->change_attr)) {
       ldout(cct, 10) << __func__ << " " << *realm << " seq " << info.seq() << " > " << realm->seq
-	       << dendl;
+                     << dendl;
 
       if (flush) {
 	// writeback any dirty caps _before_ updating snap list (i.e. with old snap info)
@@ -5092,6 +5115,10 @@ void Client::update_snap_trace(const bufferlist& bl, SnapRealm **realm_ret, bool
       realm->created = info.created();
       realm->parent_since = info.parent_since();
       realm->prior_parent_snaps = info.prior_parent_snaps;
+      if (realm_info_meta) {
+        realm->last_modified = (*realm_info_meta).last_modified;
+        realm->change_attr = (*realm_info_meta).change_attr;
+      }
       realm->my_snaps = info.my_snaps;
       invalidate = true;
     }
@@ -5152,9 +5179,8 @@ void Client::handle_snap(const MConstRef<MClientSnap>& m)
 
   if (m->head.op == CEPH_SNAP_OP_SPLIT) {
     ceph_assert(m->head.split);
-    SnapRealmInfo info;
     auto p = m->bl.cbegin();
-    decode(info, p);
+    auto [info, _] = get_snap_realm_info(session.get(), p);
     ceph_assert(info.ino() == m->head.split);
     
     // flush, then move, ino's.
@@ -5191,7 +5217,7 @@ void Client::handle_snap(const MConstRef<MClientSnap>& m)
     }
   }
 
-  update_snap_trace(m->bl, NULL, m->head.op != CEPH_SNAP_OP_DESTROY);
+  update_snap_trace(session.get(), m->bl, NULL, m->head.op != CEPH_SNAP_OP_DESTROY);
 
   if (realm) {
     for (auto p = to_move.begin(); p != to_move.end(); ++p) {
@@ -5340,7 +5366,7 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, const MConstRef<
 
   // add/update it
   SnapRealm *realm = NULL;
-  update_snap_trace(m->snapbl, &realm);
+  update_snap_trace(session, m->snapbl, &realm);
 
   int issued = m->get_caps();
   int wanted = m->get_wanted();
@@ -11984,12 +12010,12 @@ void Client::refresh_snapdir_attrs(Inode *in, Inode *diri) {
   in->uid = diri->uid;
   in->gid = diri->gid;
   in->nlink = 1;
-  in->mtime = diri->mtime;
-  in->ctime = diri->ctime;
+  in->mtime = diri->snaprealm->last_modified;
+  in->ctime = in->mtime;
+  in->change_attr = diri->snaprealm->change_attr;
   in->btime = diri->btime;
   in->atime = diri->atime;
   in->size = diri->size;
-  in->change_attr = diri->change_attr;
 
   in->dirfragtree.clear();
   in->snapdir_parent = diri;
