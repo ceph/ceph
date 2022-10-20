@@ -883,11 +883,18 @@ class Object {
 
       /** Prepare the Read op.  Must be called first */
       virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) = 0;
-      /** Synchronous read. Read from @a ofs to @a end into @a bl */
-      virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y, const DoutPrefixProvider* dpp) = 0;
-      /** Asynchronous read.  Read from @a ofs to @a end calling @a cb on each read
-       * chunk. */
-      virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end, RGWGetDataCB* cb, optional_yield y) = 0;
+
+      /** Synchronous read. Read from @a ofs to @a end (inclusive)
+       * into @a bl. Length is `end - ofs + 1`. */
+      virtual int read(int64_t ofs, int64_t end, bufferlist& bl,
+		       optional_yield y, const DoutPrefixProvider* dpp) = 0;
+
+      /** Asynchronous read.  Read from @a ofs to @a end (inclusive)
+       * calling @a cb on each read chunk. Length is `end - ofs +
+       * 1`. */
+      virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs,
+			  int64_t end, RGWGetDataCB* cb, optional_yield y) = 0;
+
       /** Get an attribute by name */
       virtual int get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y) = 0;
     };
