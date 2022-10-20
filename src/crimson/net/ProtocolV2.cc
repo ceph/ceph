@@ -1623,6 +1623,7 @@ ProtocolV2::send_server_ident()
 
   // refered to async-conn v2: not assign gs to global_seq
   return messenger.get_global_seq().then([this] (auto gs) {
+    global_seq = gs;
     logger().debug("{} UPDATE: gs={} for server ident", conn, global_seq);
 
     // this is required for the case when this connection is being replaced
@@ -1641,7 +1642,7 @@ ProtocolV2::send_server_ident()
     auto server_ident = ServerIdentFrame::Encode(
             messenger.get_myaddrs(),
             messenger.get_myname().num(),
-            gs,
+            global_seq,
             conn.policy.features_supported,
             conn.policy.features_required | msgr2_required,
             flags,
@@ -1651,7 +1652,7 @@ ProtocolV2::send_server_ident()
                    " gs={}, features_supported={}, features_required={},"
                    " flags={}, cookie={}",
                    conn, messenger.get_myaddrs(), messenger.get_myname().num(),
-                   gs, conn.policy.features_supported,
+                   global_seq, conn.policy.features_supported,
                    conn.policy.features_required | msgr2_required,
                    flags, server_cookie);
 
