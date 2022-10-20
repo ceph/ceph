@@ -96,10 +96,6 @@ public:
   device_id_t get_device_id() const {
     return super.config.spec.id;
   }
-  // for test
-  void set_device_id(device_id_t id) {
-    super.config.spec.id = id;
-  }
 
   magic_t get_magic() const final {
     return super.config.spec.magic;
@@ -168,12 +164,16 @@ public:
     return super.journal_size;
   }
 
-  void set_journal_size(uint64_t size) {
-    super.journal_size = size + get_block_size();
-  }
-
   static rbm_abs_addr get_journal_start() {
     return RBM_SUPERBLOCK_SIZE;
+  }
+
+  // interfaces for test
+  void set_device_id(device_id_t id) {
+    super.config.spec.id = id;
+  }
+  void set_journal_size(uint64_t size) {
+    super.journal_size = size + get_block_size();
   }
 };
 
