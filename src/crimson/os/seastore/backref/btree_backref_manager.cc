@@ -192,10 +192,10 @@ BtreeBackrefManager::new_mapping(
 	    state.last_end,
 	    val
 	  ).si_then([&state, c, addr, len, key](auto &&p) {
-	    LOG_PREFIX(BtreeBackrefManager::alloc_extent);
+	    LOG_PREFIX(BtreeBackrefManager::new_mapping);
 	    auto [iter, inserted] = std::move(p);
-	    TRACET("{}~{}, paddr={}, inserted at {}",
-	           c.trans, addr, len, key, state.last_end);
+	    TRACET("{}~{}, paddr={}, inserted at {}, leaf {}",
+	           c.trans, addr, len, key, state.last_end, *iter.get_leaf_node());
 	    ceph_assert(inserted);
 	    state.ret = iter;
 	  });
@@ -473,7 +473,8 @@ BtreeBackrefManager::remove_mapping(
 		-> remove_mapping_ret {
 	if (iter.is_end() || iter.get_key() != addr) {
 	  LOG_PREFIX(BtreeBackrefManager::remove_mapping);
-	  DEBUGT("paddr={} doesn't exist", c.trans, addr);
+	  WARNT("paddr={} doesn't exist, state: {}, leaf {}",
+	    c.trans, addr, iter.get_key(), *iter.get_leaf_node());
 	  return remove_mapping_iertr::make_ready_future<
 	    remove_mapping_result_t>(remove_mapping_result_t());
 	}
