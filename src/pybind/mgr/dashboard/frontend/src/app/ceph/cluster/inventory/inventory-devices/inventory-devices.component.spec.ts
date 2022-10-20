@@ -105,7 +105,7 @@ describe('InventoryDevicesComponent', () => {
       tableActions.forEach((action) => {
         const actionElement = tableActionElement.query(By.css('button'));
         actions[action.name] = {
-          disabled: actionElement.classes.disabled,
+          disabled: actionElement.classes.disabled ? true : false,
           disableDesc: actionElement.properties.title
         };
       });
