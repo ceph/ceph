@@ -8205,10 +8205,17 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   stat_set_mtime_sec(st, in->mtime.sec());
   stat_set_mtime_nsec(st, in->mtime.nsec());
   if (in->is_dir()) {
-    if (cct->_conf->client_dirsize_rbytes)
+    if (cct->_conf->client_dirsize_rbytes) {
       st->st_size = in->rstat.rbytes;
-    else
+    } else if (in->snapid == CEPH_SNAPDIR) {
+      SnapRealm *realm = get_snap_realm_maybe(in->vino().ino);
+      if (realm) {
+        st->st_size = realm->my_snaps.size();
+        put_snap_realm(realm);
+      }
+    } else {
       st->st_size = in->dirstat.size();
+    }
 // The Windows "stat" structure provides just a subset of the fields that are
 // available on Linux.
 #ifndef _WIN32
@@ -8290,10 +8297,17 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
     in->mtime.to_timespec(&stx->stx_mtime);
 
     if (in->is_dir()) {
-      if (cct->_conf->client_dirsize_rbytes)
+      if (cct->_conf->client_dirsize_rbytes) {
 	stx->stx_size = in->rstat.rbytes;
-      else
+      } else if (in->snapid == CEPH_SNAPDIR) {
+        SnapRealm *realm = get_snap_realm_maybe(in->vino().ino);
+	if (realm) {
+          stx->stx_size = realm->my_snaps.size();
+          put_snap_realm(realm);
+	}
+      } else {
 	stx->stx_size = in->dirstat.size();
+      }
       stx->stx_blocks = 1;
     } else {
       stx->stx_size = in->size;
