@@ -390,9 +390,16 @@ const bufferlist& SnapRealm::get_snap_trace() const
   return cached_snap_trace;
 }
 
+const bufferlist& SnapRealm::get_snap_trace_new() const
+{
+  check_cache();
+  return cached_snap_trace_new;
+}
+
 void SnapRealm::build_snap_trace() const
 {
   cached_snap_trace.clear();
+  cached_snap_trace_new.clear();
 
   if (global) {
     SnapRealmInfo info(inode->ino(), 0, cached_seq, 0);
@@ -401,7 +408,10 @@ void SnapRealm::build_snap_trace() const
       info.my_snaps.push_back(*p);
 
     dout(10) << "build_snap_trace my_snaps " << info.my_snaps << dendl;
+
+    SnapRealmInfoNew ninfo(info, srnode.last_modified, srnode.change_attr);
     encode(info, cached_snap_trace);
+    encode(ninfo, cached_snap_trace_new);
     return;
   }
 
@@ -434,10 +444,15 @@ void SnapRealm::build_snap_trace() const
     info.my_snaps.push_back(p->first);
   dout(10) << "build_snap_trace my_snaps " << info.my_snaps << dendl;
 
-  encode(info, cached_snap_trace);
+  SnapRealmInfoNew ninfo(info, srnode.last_modified, srnode.change_attr);
 
-  if (parent)
+  encode(info, cached_snap_trace);
+  encode(ninfo, cached_snap_trace_new);
+
+  if (parent) {
     cached_snap_trace.append(parent->get_snap_trace());
+    cached_snap_trace_new.append(parent->get_snap_trace_new());
+  }
 }
 
 void SnapRealm::prune_past_parent_snaps()
