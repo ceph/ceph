@@ -79,20 +79,6 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
     set_peer_id(name.num());
   }
 
- protected:
-  uint64_t features = 0;
-
- public:
-  void set_features(uint64_t new_features) {
-    features = new_features;
-  }
-  auto get_features() const {
-    return features;
-  }
-  bool has_feature(uint64_t f) const {
-    return features & f;
-  }
-
  public:
   Connection() {}
   virtual ~Connection() {}
@@ -117,6 +103,12 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   bool peer_is_mds() const { return peer_name.is_mds(); }
   bool peer_is_osd() const { return peer_name.is_osd(); }
   bool peer_is_client() const { return peer_name.is_client(); }
+
+  virtual uint64_t get_features() const = 0;
+
+  bool has_feature(uint64_t f) const {
+    return get_features() & f;
+  }
 
   /// true if the handshake has completed and no errors have been encountered
   virtual bool is_connected() const = 0;
