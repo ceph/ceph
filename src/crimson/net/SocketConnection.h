@@ -33,6 +33,8 @@ class SocketConnection : public Connection {
   SocketMessenger& messenger;
   std::unique_ptr<Protocol> protocol;
 
+  uint64_t features = 0;
+
   ceph::net::Policy<crimson::common::Throttle> policy;
 
   /// the seq num of the last transmitted message
@@ -58,6 +60,10 @@ class SocketConnection : public Connection {
                    ChainedDispatchers& dispatchers);
   ~SocketConnection() override;
 
+  uint64_t get_features() const override {
+    return features;
+  }
+
   bool is_connected() const override;
 
 #ifdef UNIT_TESTS_BUILT
@@ -77,6 +83,10 @@ class SocketConnection : public Connection {
   void mark_down() override;
 
   void print(std::ostream& out) const override;
+
+  void set_features(uint64_t f) {
+    features = f;
+  }
 
   /// start a handshake from the client's perspective,
   /// only call when SocketConnection first construct
