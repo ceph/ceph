@@ -61,7 +61,7 @@ class SocketMessenger final : public Messenger {
                   uint32_t nonce);
   ~SocketMessenger() override;
 
-  seastar::future<> set_myaddrs(const entity_addrvec_t& addr) override;
+  void set_myaddrs(const entity_addrvec_t& addr) override;
 
   bool set_addr_unknowns(const entity_addrvec_t &addr) override;
   // Messenger interfaces are assumed to be called from its own shard, but its
@@ -111,8 +111,9 @@ class SocketMessenger final : public Messenger {
 
  public:
   seastar::future<uint32_t> get_global_seq(uint32_t old=0);
-  seastar::future<> learned_addr(const entity_addr_t &peer_addr_for_me,
-                                 const SocketConnection& conn);
+
+  void learned_addr(const entity_addr_t &peer_addr_for_me,
+                    const SocketConnection& conn);
 
   SocketConnectionRef lookup_conn(const entity_addr_t& addr);
   void accept_conn(SocketConnectionRef);
@@ -121,6 +122,7 @@ class SocketMessenger final : public Messenger {
   void unregister_conn(SocketConnectionRef);
   void closing_conn(SocketConnectionRef);
   void closed_conn(SocketConnectionRef);
+
   seastar::shard_id shard_id() const {
     assert(seastar::this_shard_id() == master_sid);
     return master_sid;

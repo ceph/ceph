@@ -57,10 +57,7 @@ public:
   const entity_name_t& get_myname() const { return my_name; }
   const entity_addrvec_t& get_myaddrs() const { return my_addrs; }
   entity_addr_t get_myaddr() const { return my_addrs.front(); }
-  virtual seastar::future<> set_myaddrs(const entity_addrvec_t& addrs) {
-    my_addrs = addrs;
-    return seastar::now();
-  }
+  virtual void set_myaddrs(const entity_addrvec_t& addrs) = 0;
   virtual bool set_addr_unknowns(const entity_addrvec_t &addrs) = 0;
 
   using bind_ertr = crimson::errorator<
