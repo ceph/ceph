@@ -175,9 +175,9 @@ class SizeMatcher(Matcher):
     """
 
     SUFFIXES = (
-        ["MB", "GB", "TB"],
-        ["M", "G", "T"],
-        [1e+6, 1e+9, 1e+12]
+        ["KB", "MB", "GB", "TB"],
+        ["K", "M", "G", "T"],
+        [1e+3, 1e+6, 1e+9, 1e+12]
     )
 
     supported_suffixes = SUFFIXES[0] + SUFFIXES[1]
