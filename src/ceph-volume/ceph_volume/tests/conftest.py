@@ -215,7 +215,7 @@ def disable_kernel_queries(monkeypatch):
     '''
     This speeds up calls to Device and Disk
     '''
-    monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda: {})
+    monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda device='': {})
     monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: {})
 
 
@@ -297,7 +297,7 @@ def device_info(monkeypatch, patch_bluestore_label):
         udevadm = udevadm if udevadm else {}
         lv = Factory(**lv) if lv else None
         monkeypatch.setattr("ceph_volume.sys_info.devices", {})
-        monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda: devices)
+        monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda device='': devices)
         if not devices:
             monkeypatch.setattr("ceph_volume.util.device.lvm.get_single_lv", lambda filters: lv)
         else:
