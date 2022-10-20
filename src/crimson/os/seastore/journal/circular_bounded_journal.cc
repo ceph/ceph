@@ -56,7 +56,7 @@ CircularBoundedJournal::open_for_mkfs()
   head.dirty_tail =
     journal_seq_t{0,
       convert_abs_addr_to_paddr(
-	get_start_addr(),
+	get_records_start(),
 	device->get_device_id())};
   head.alloc_tail = head.dirty_tail;
   encode(head, bl);
@@ -112,21 +112,21 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
   assert(written_to.segment_seq != NULL_SEG_SEQ);
   auto r_size = record_group_size_t(record.size, get_block_size());
   auto encoded_size = r_size.get_encoded_length();
-  if (encoded_size > get_available_size()) {
+  if (encoded_size > get_records_available_size()) {
     ERROR("record size {}, but available size {}",
-          encoded_size, get_available_size());
+          encoded_size, get_records_available_size());
     return crimson::ct_error::erange::make();
   }
   if (encoded_size + get_rbm_addr(get_written_to()) > get_journal_end()) {
     DEBUG("roll");
     paddr_t paddr = convert_abs_addr_to_paddr(
-      get_start_addr(),
+      get_records_start(),
       get_device_id());
     set_written_to(
       journal_seq_t{++written_to.segment_seq, paddr});
-    if (encoded_size > get_available_size()) {
+    if (encoded_size > get_records_available_size()) {
       ERROR("rolled, record size {}, but available size {}",
-            encoded_size, get_available_size());
+            encoded_size, get_records_available_size());
       return crimson::ct_error::erange::make();
     }
   }
@@ -142,7 +142,7 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
     assert(new_written_to == get_journal_end());
     DEBUG("roll");
     paddr_t paddr = convert_abs_addr_to_paddr(
-      get_start_addr(),
+      get_records_start(),
       get_device_id());
     set_written_to(
       journal_seq_t{++written_to.segment_seq, paddr});
@@ -171,7 +171,7 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
     r_size,
     FNAME] {
     DEBUG("commit target {} used_size {} written length {}",
-          target, get_used_size(), length);
+          target, get_records_used_size(), length);
 
     paddr_t paddr = convert_abs_addr_to_paddr(
       target + r_size.get_mdlength(),
@@ -287,7 +287,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	      return replay_ertr::make_ready_future<
 		seastar::stop_iteration>(seastar::stop_iteration::yes);
 	    } else {
-	      cursor_addr = get_start_addr();
+	      cursor_addr = get_records_start();
 	      ++expected_seq;
 	      is_rolled = true;
 	      return replay_ertr::make_ready_future<
@@ -320,7 +320,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	  cursor_addr += bl.length();
 	  if (cursor_addr >= get_journal_end()) {
 	    assert(cursor_addr == get_journal_end());
-	    cursor_addr = get_start_addr();
+	    cursor_addr = get_records_start();
 	    ++expected_seq;
 	    is_rolled = true;
 	  }
