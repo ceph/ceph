@@ -5,7 +5,8 @@
     "**/orchestrator/**"
   ],
   "supportFile": "cypress/support/index.ts",
-  "video": false,
+  "video": true,
+  "videoUploadOnPasses": false,
   "defaultCommandTimeout": 120000,
   "responseTimeout": 45000,
   "viewportHeight": 1080,
