@@ -169,7 +169,7 @@ public:
   }
 
   void set_journal_size(uint64_t size) {
-    super.journal_size = size;
+    super.journal_size = size + get_block_size();
   }
 
   static rbm_abs_addr get_journal_start() {

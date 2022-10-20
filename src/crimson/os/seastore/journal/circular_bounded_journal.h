@@ -181,26 +181,6 @@ public:
    *
    */
 
-  size_t get_used_size() const {
-    auto rbm_written_to = get_rbm_addr(get_written_to());
-    auto rbm_tail = get_rbm_addr(get_dirty_tail());
-    return rbm_written_to >= rbm_tail ?
-      rbm_written_to - rbm_tail :
-      rbm_written_to + get_total_size() + get_block_size()
-      - rbm_tail;
-  }
-  size_t get_total_size() const {
-    assert(device);
-    return device->get_journal_size() - get_block_size();
-  }
-  rbm_abs_addr get_start_addr() const {
-    assert(device);
-    return device->get_journal_start() + get_block_size();
-  }
-  size_t get_available_size() const {
-    return get_total_size() - get_used_size();
-  }
-
   seastar::future<> update_journal_tail(
     journal_seq_t dirty,
     journal_seq_t alloc) {
@@ -235,7 +215,7 @@ public:
   }
   void set_written_to(journal_seq_t seq) {
     rbm_abs_addr addr = convert_paddr_to_abs_addr(seq.offset);
-    assert(addr >= get_start_addr());
+    assert(addr >= get_records_start());
     assert(addr < get_journal_end());
     written_to = seq;
   }
@@ -246,10 +226,46 @@ public:
     assert(device);
     return device->get_block_size();
   }
+
+  /* 
+    Size-related interfaces
+     +---------------------------------------------------------+
+     |   header      | record | record | record | record | ... | 
+     +---------------------------------------------------------+
+     ^               ^                                         ^
+     |               |                                         |
+   get_journal_start |                                     get_journal_end
+              get_records_start
+                     <-- get_records_total_size + block_size -->
+     <--------------- get_journal_size ------------------------>
+  */
+
+  size_t get_records_used_size() const {
+    auto rbm_written_to = get_rbm_addr(get_written_to());
+    auto rbm_tail = get_rbm_addr(get_dirty_tail());
+    return rbm_written_to >= rbm_tail ?
+      rbm_written_to - rbm_tail :
+      rbm_written_to + get_records_total_size() + get_block_size()
+      - rbm_tail;
+  }
+  size_t get_records_total_size() const {
+    assert(device);
+    // a block is for header and a block is reserved to denote the end
+    return device->get_journal_size() - (2 * get_block_size());
+  }
+  rbm_abs_addr get_records_start() const {
+    assert(device);
+    return device->get_journal_start() + get_block_size();
+  }
+  size_t get_records_available_size() const {
+    return get_records_total_size() - get_records_used_size();
+  }
   rbm_abs_addr get_journal_end() const {
-    return get_start_addr() + get_total_size() + get_block_size(); // journal size + header length
+    assert(device);
+    return device->get_journal_start() + device->get_journal_size();
   }
   seastar::future<> finish_commit(transaction_type_t type) final;
+
 private:
   cbj_header_t header;
   JournalTrimmer &trimmer;
@@ -265,7 +281,7 @@ private:
   bool initialized = false;
 
   // start address where the newest record will be written
-  // should be in range [get_start_addr(), get_journal_end())
+  // should be in range [get_records_start(), get_journal_end())
   // written_to.segment_seq is circulation seq to track 
   // the sequence to written records
   journal_seq_t written_to;

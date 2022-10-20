@@ -260,11 +260,11 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
       return seastar::now();
     }).unsafe_get0();
   }
-  auto get_available_size() {
-    return cbj->get_available_size();
+  auto get_records_available_size() {
+    return cbj->get_records_available_size();
   }
-  auto get_total_size() {
-    return cbj->get_total_size();
+  auto get_records_total_size() {
+    return cbj->get_records_total_size();
   }
   auto get_block_size() {
     return device->get_block_size();
@@ -278,8 +278,8 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   auto get_journal_tail() {
     return cbj->get_dirty_tail();
   }
-  auto get_used_size() {
-    return cbj->get_used_size();
+  auto get_records_used_size() {
+    return cbj->get_records_used_size();
   }
   void update_journal_tail(rbm_abs_addr addr, uint32_t len) {
     paddr_t paddr =
@@ -348,7 +348,7 @@ TEST_F(cbjournal_test_t, submit_full_records)
     auto record_total_size = r_size.get_encoded_length();
 
     submit_record(std::move(rec));
-    while (record_total_size <= get_available_size()) {
+    while (record_total_size <= get_records_available_size()) {
      submit_record(
        record_t {
 	{ generate_extent(1), generate_extent(2) },
@@ -356,10 +356,10 @@ TEST_F(cbjournal_test_t, submit_full_records)
 	});
     }
 
-    uint64_t avail = get_available_size();
+    uint64_t avail = get_records_available_size();
     update_journal_tail(entries.back().addr, record_total_size);
-    ASSERT_EQ(get_total_size(),
-	     get_available_size());
+    ASSERT_EQ(get_records_total_size(),
+	     get_records_available_size());
 
     // will be appended at the begining of log
     submit_record(
@@ -368,14 +368,14 @@ TEST_F(cbjournal_test_t, submit_full_records)
       { generate_delta(20), generate_delta(21) }
       });
 
-    while (record_total_size <= get_available_size()) {
+    while (record_total_size <= get_records_available_size()) {
      submit_record(
        record_t {
 	{ generate_extent(1), generate_extent(2) },
 	{ generate_delta(20), generate_delta(21) }
 	});
     }
-    ASSERT_EQ(avail, get_available_size());
+    ASSERT_EQ(avail, get_records_available_size());
   });
 }
 
@@ -391,7 +391,7 @@ TEST_F(cbjournal_test_t, boudary_check_verify)
     auto r_size = record_group_size_t(rec.size, block_size);
     auto record_total_size = r_size.get_encoded_length();
     submit_record(std::move(rec));
-    while (record_total_size <= get_available_size()) {
+    while (record_total_size <= get_records_available_size()) {
      submit_record(
        record_t {
 	{ generate_extent(1), generate_extent(2) },
@@ -399,18 +399,18 @@ TEST_F(cbjournal_test_t, boudary_check_verify)
 	});
     }
 
-    uint64_t avail = get_available_size();
+    uint64_t avail = get_records_available_size();
     update_journal_tail(entries.front().addr, record_total_size);
     entries.erase(entries.begin());
-    ASSERT_EQ(avail + record_total_size, get_available_size());
-    avail = get_available_size();
+    ASSERT_EQ(avail + record_total_size, get_records_available_size());
+    avail = get_records_available_size();
     // will be appended at the begining of WAL
     submit_record(
      record_t {
       { generate_extent(1), generate_extent(2) },
       { generate_delta(20), generate_delta(21) }
       });
-    ASSERT_EQ(avail - record_total_size, get_available_size());
+    ASSERT_EQ(avail - record_total_size, get_records_available_size());
     replay_and_check();
   });
 }
@@ -451,7 +451,7 @@ TEST_F(cbjournal_test_t, replay)
     auto r_size = record_group_size_t(rec.size, block_size);
     auto record_total_size = r_size.get_encoded_length();
     submit_record(std::move(rec));
-    while (record_total_size <= get_available_size()) {
+    while (record_total_size <= get_records_available_size()) {
     submit_record(
       record_t {
        { generate_extent(1), generate_extent(2) },
@@ -459,17 +459,17 @@ TEST_F(cbjournal_test_t, replay)
        });
     }
     // will be appended at the begining of WAL
-    uint64_t avail = get_available_size();
+    uint64_t avail = get_records_available_size();
     update_journal_tail(entries.front().addr, record_total_size);
     entries.erase(entries.begin());
-    ASSERT_EQ(avail + record_total_size, get_available_size());
-    avail = get_available_size();
+    ASSERT_EQ(avail + record_total_size, get_records_available_size());
+    avail = get_records_available_size();
     submit_record(
       record_t {
        { generate_extent(1), generate_extent(2) },
        { generate_delta(20), generate_delta(21) }
        });
-    ASSERT_EQ(avail - record_total_size, get_available_size());
+    ASSERT_EQ(avail - record_total_size, get_records_available_size());
     cbj->close().unsafe_get0();
     replay();
   });
@@ -487,7 +487,7 @@ TEST_F(cbjournal_test_t, replay_after_reset)
     auto r_size = record_group_size_t(rec.size, block_size);
     auto record_total_size = r_size.get_encoded_length();
     submit_record(std::move(rec));
-    while (record_total_size <= get_available_size()) {
+    while (record_total_size <= get_records_available_size()) {
     submit_record(
       record_t {
        { generate_extent(1), generate_extent(2) },
@@ -495,16 +495,16 @@ TEST_F(cbjournal_test_t, replay_after_reset)
        });
     }
     auto old_written_to = get_written_to();
-    auto old_used_size = get_used_size();
+    auto old_used_size = get_records_used_size();
     set_written_to(
       journal_seq_t{0,
 	convert_abs_addr_to_paddr(
-	  cbj->get_start_addr(),
+	  cbj->get_records_start(),
 	  cbj->get_device_id())});
     cbj->close().unsafe_get0();
     replay();
     ASSERT_EQ(old_written_to, get_written_to());
     ASSERT_EQ(old_used_size,
-      get_used_size());
+      get_records_used_size());
   });
 }
