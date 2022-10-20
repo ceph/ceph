@@ -6,6 +6,7 @@ from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
 from ceph_volume.util import system, disk
 from ceph_volume.util.arg_validators import exclude_group_options
+from ceph_volume.util.device import validate_devices
 from ceph_volume import conf, decorators, terminal
 from ceph_volume.api import lvm as api
 from .common import prepare_parser, rollback_osd
@@ -195,10 +196,13 @@ class Prepare(object):
             self.args = args
 
         try:
-            vgname, lvname = self.args.data.split('/')
-            lv = api.get_single_lv(filters={'lv_name': lvname,
-                                            'vg_name': vgname})
-        except ValueError:
+            if self.args.data.startswith('/dev/mapper'):
+                lv = api.get_single_lv(filters={'lv_path': api.get_lv_path_from_mapper(self.args.data)})
+            else:
+                vgname, lvname = self.args.data.split('/')
+                lv = api.get_single_lv(filters={'lv_name': lvname,
+                                                'vg_name': vgname})
+        except (ValueError, TypeError):
             lv = None
 
         if api.is_ceph_device(lv):
@@ -256,10 +260,13 @@ class Prepare(object):
         }
         if self.args.bluestore:
             try:
-                vg_name, lv_name = self.args.data.split('/')
-                block_lv = api.get_single_lv(filters={'lv_name': lv_name,
-                                                      'vg_name': vg_name})
-            except ValueError:
+                if self.args.data.startswith('/dev/mapper'):
+                    block_lv = api.get_single_lv(filters={'lv_path': api.get_lv_path_from_mapper(self.args.data)})
+                else:
+                    vg_name, lv_name = self.args.data.split('/')
+                    block_lv = api.get_single_lv(filters={'lv_name': lv_name,
+                                                          'vg_name': vg_name})
+            except (ValueError, TypeError):
                 block_lv = None
 
             if not block_lv:
@@ -332,6 +339,7 @@ class Prepare(object):
             return
         exclude_group_options(parser, argv=self.argv, groups=['bluestore'])
         self.args = parser.parse_args(self.argv)
+
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
         if not self.args.bluestore:

@@ -2,14 +2,14 @@
 
 import logging
 import os
+import json
 from functools import total_ordering
-from ceph_volume import sys_info
+from ceph_volume import sys_info, terminal, process, conf
 from ceph_volume.api import lvm
 from ceph_volume.util import disk, system
 from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
 from ceph_volume.util.disk import allow_loop_devices
-
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,7 @@ class Devices(object):
         for device in sorted(self.devices):
             output.append(device.json_report())
         return output
+
 
 @total_ordering
 class Device(object):
@@ -156,7 +157,7 @@ class Device(object):
 
         lsm_disk = LSMDisk(self.path)
 
-        return  lsm_disk.json_report()
+        return lsm_disk.json_report()
 
     def __lt__(self, other):
         '''
@@ -206,7 +207,13 @@ class Device(object):
                         break
         else:
             if self.path[0] == '/':
-                lv = lvm.get_single_lv(filters={'lv_path': self.path})
+                if self.path.startswith('/dev/mapper'):
+                    lv_path = lvm.get_lv_path_from_mapper(self.path)
+                    if not lv_path:
+                        lv_path = self.path
+                else:
+                    lv_path = self.path
+                lv = lvm.get_single_lv(filters={'lv_path': lv_path})
             else:
                 vgname, lvname = self.path.split('/')
                 lv = lvm.get_single_lv(filters={'lv_name': lvname,
@@ -254,6 +261,7 @@ class Device(object):
                 return ', '.join(v)
             else:
                 return v
+
         def format_key(k):
             return k.strip('_').replace('_', ' ')
         output = ['\n====== Device report {} ======\n'.format(self.path)]
@@ -261,7 +269,7 @@ class Device(object):
             [self.pretty_template.format(
                 attr=format_key(k),
                 value=format_value(v)) for k, v in vars(self).items() if k in
-                self.report_fields and k != 'disk_api' and k != 'sys_api'] )
+                self.report_fields and k != 'disk_api' and k != 'sys_api'])
         output.extend(
             [self.pretty_template.format(
                 attr=format_key(k),
@@ -300,7 +308,7 @@ class Device(object):
         props = ['ID_VENDOR', 'ID_MODEL', 'ID_MODEL_ENC', 'ID_SERIAL_SHORT', 'ID_SERIAL',
                  'ID_SCSI_SERIAL']
         p = disk.udevadm_property(self.path, props)
-        if p.get('ID_MODEL','').startswith('LVM PV '):
+        if p.get('ID_MODEL', '').startswith('LVM PV '):
             p['ID_MODEL'] = p.get('ID_MODEL_ENC', '').replace('\\x20', ' ').strip()
         if 'ID_VENDOR' in p and 'ID_MODEL' in p and 'ID_SCSI_SERIAL' in p:
             dev_id = '_'.join([p['ID_VENDOR'], p['ID_MODEL'],
@@ -482,7 +490,7 @@ class Device(object):
         elif self.blkid_api:
             api = self.blkid_api
         if api:
-            valid_types = ['disk', 'device', 'mpath']
+            valid_types = ['disk', 'device', 'mpath', 'lvm']
             if allow_loop_devices():
                 valid_types.append('loop')
             return self.device_type in valid_types
@@ -615,7 +623,8 @@ class Device(object):
             except OSError as e:
                 # likely failed to open the device. assuming the parent is BlueStore is the safest
                 # option so that a possibly-already-existing OSD doesn't get overwritten
-                logger.error('failed to determine if partition {} (parent: {}) has a BlueStore parent. partition should not be used to avoid false negatives. err: {}'.format(self.path, self.parent_device, e))
+                logger.error("failed to determine if partition {} (parent: {}) has a BlueStore parent. ".format(self.path, self.parent_device),
+                             "partition should not be used to avoid false negatives. err: {}".format(e))
                 rejected.append('Failed to determine if parent device is BlueStore')
 
         if self.has_gpt_headers:
@@ -709,3 +718,161 @@ class CephDiskDevice(object):
                 return t
         label = ceph_disk_guids.get(self.parttype, {})
         return label.get('type', 'unknown').split('.')[-1]
+
+
+def get_osd_ids_up():
+    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
+    cmd = ['ceph', '--cluster', conf.cluster,
+           '--name', 'client.bootstrap-osd',
+           '--keyring', bootstrap_keyring,
+           'osd', 'tree', '-f', 'json']
+    stdout, stderr, returncode = process.call(
+        cmd,
+        show_command=False
+    )
+
+    if returncode != 0:
+        raise RuntimeError(f"Couldn't run command: '{' '.join(cmd)}'")
+
+    output = json.loads(''.join(stdout).strip())
+    osds = output['nodes']
+    return [osd["id"] for osd in osds if osd['type'] == "osd"]
+
+
+class ValidDevice(object):
+
+    def __init__(self, dev_path, as_string=False, gpt_ok=False):
+        self.dev_path = dev_path
+        self.as_string = as_string
+        self.gpt_ok = gpt_ok
+        self._device = Device(self.dev_path)
+
+    def check_device(self):
+        error = None
+        if not self._device.exists:
+            error = "Unable to proceed with non-existing device: %s" % self.dev_path
+        # FIXME this is not a nice API, this validator was meant to catch any
+        # non-existing devices upfront, not check for gpt headers. Now this
+        # needs to optionally skip checking gpt headers which is beyond
+        # verifying if the device exists. The better solution would be to
+        # configure this with a list of checks that can be excluded/included on
+        # __init__
+        elif self._device.has_gpt_headers and not self.gpt_ok:
+            error = "GPT headers found, they must be removed on: %s" % self.dev_path
+        if self._device.has_partitions:
+            raise RuntimeError("Device {} has partitions.".format(self.dev_path))
+        if error:
+            raise RuntimeError(error)
+        return self.format_device()
+
+    def format_device(self):
+        if self.as_string:
+            if self._device.is_lv:
+                # all codepaths expect an lv path to be returned in this format
+                return "{}/{}".format(self._device.vg_name, self._device.lv_name)
+            return self.dev_path
+        return self._device
+
+
+class ValidDataDevice(ValidDevice):
+    def __init__(self, dev_path, as_string=False, raise_sys_exit=True):
+        super().__init__(dev_path, as_string=as_string)
+        self.raise_sys_exit = raise_sys_exit
+
+    def check_device(self):
+        super().check_device()
+        if self._device.used_by_ceph:
+            terminal.info('Device {} is already prepared'.format(self.dev_path))
+            if self.raise_sys_exit:
+                raise SystemExit(0)
+        if self._device.has_fs and not self._device.used_by_ceph:
+            raise RuntimeError("Device {} has a filesystem.".format(self.dev_path))
+        if self.dev_path[0] == '/' and disk.has_bluestore_label(self.dev_path) and not self._device.is_lv:
+            raise RuntimeError("Device {} has bluestore signature.".format(self.dev_path))
+        return self.format_device()
+
+
+class ValidZapDevice(ValidDevice):
+    def __init__(self, dev_path, as_string=False):
+        super().__init__(dev_path, as_string=as_string)
+        self.dev_path = dev_path
+
+    def check_device(self):
+        super().check_device()
+        if disk.is_locked_raw_device(self.dev_path):
+            raise RuntimeError(f"{self.dev_path} is locked, won't touch it.")
+        osd_ids_up = get_osd_ids_up()
+        osd_ids = []
+        d = Device(self.dev_path)
+        if d.has_bluestore_label and not d.is_lv:
+            from ceph_volume.devices.raw.list import List
+            dev = List([]).generate([self.dev_path])
+            osd_ids = [dev[d]['osd_id'] for d in dev]
+        if d.lvs:
+            osd_ids = [lv.tags['ceph.osd_id'] for lv in d.lvs]
+
+        for osd_id in osd_ids:
+            if int(osd_id) in osd_ids_up:
+                raise RuntimeError(f"There's an OSD present in the cluster attached to {self.dev_path}")
+
+        return self.format_device()
+
+
+class ValidRawDevice(ValidDevice):
+    def __init__(self, dev_path):
+        super().__init__(dev_path)
+
+    def check_device(self):
+        super().check_device()
+        out, err, rc = process.call(['ceph-bluestore-tool',
+                                     'show-label',
+                                     '--dev',
+                                     self.dev_path],
+                                    verbose_on_failure=False)
+        if not rc:
+            terminal.info("Raw device {} is already prepared.".format(self.dev_path))
+            raise SystemExit(0)
+        if disk.blkid(self.dev_path).get('TYPE') == 'crypto_LUKS':
+            terminal.info("Raw device {} might already be in use for a dmcrypt OSD, skipping.".format(self.dev_path))
+            raise SystemExit(0)
+        return self.format_device()
+
+
+class ValidBatchDevice(ValidDevice):
+    def __init__(self, dev_path, as_string=False, raise_sys_exit=False):
+        super().__init__(dev_path, as_string=as_string)
+
+    def check_device(self):
+        super().check_device()
+        if self._device.is_partition:
+            raise RuntimeError('{} is a partition, please pass '
+                               'LVs or raw block devices'.format(self.dev_path))
+        return self.format_device()
+
+
+class ValidBatchDataDevice(ValidBatchDevice, ValidDataDevice):
+    def __init__(self, dev_path, as_string=False):
+        super().__init__(dev_path, as_string=as_string, raise_sys_exit=False)
+
+    def check_device(self):
+        super().check_device()
+        # if device is already used by ceph,
+        # leave the validation to Batch.get_deployment_layout()
+        # This way the idempotency isn't broken (especially when using --osds-per-device)
+        for lv in self._device.lvs:
+            if lv.tags.get('ceph.type') in ['db', 'wal', 'journal']:
+                return self._device
+        if self._device.used_by_ceph:
+            return self._device
+        return self.format_device()
+
+
+def validate_devices(args, as_string=False):
+    if args.data:
+        args.data = ValidDataDevice(args.data, as_string=as_string).check_device()
+    if args.block_db:
+        args.block_db = ValidDevice(args.block_db, as_string=as_string).check_device()
+    if args.block_wal:
+        args.block_wal = ValidDevice(args.block_wal, as_string=as_string).check_device()
+    if args.journal:
+        args.journal = ValidDevice(args.journal, as_string=as_string).check_device()

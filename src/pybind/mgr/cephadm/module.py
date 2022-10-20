@@ -2455,8 +2455,10 @@ Then run the following:
                 host, 'osd', 'ceph-volume', cv_args, error_ok=True,
                 stdin=json.dumps(config)))
         if code:
-            err = "\n".join(err)
-            raise OrchestratorError(f"Can't zap {path}.\n{err}")
+            msg = ""
+            for line in err:
+                msg += f"\n\n{line}"
+            raise OrchestratorError(f"Can't zap {path}.\n{msg}")
 
         self.cache.invalidate_host_devices(host)
         self.cache.invalidate_host_networks(host)
@@ -2464,6 +2466,8 @@ Then run the following:
             raise OrchestratorError('Zap failed: %s' % '\n'.join(out + err))
         msg = f'zap successful for {path} on {host}'
         self.log.info(msg)
+        self.log.info(out)
+        self.log.info(err)
 
         return msg + '\n'
 

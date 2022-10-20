@@ -14,7 +14,7 @@ def create_parser(prog, description):
     parser.add_argument(
         '--data',
         required=True,
-        type=arg_validators.ValidRawDevice(as_string=True),
+        type=str,
         help='a raw device to use for the OSD',
     )
     parser.add_argument(
@@ -36,13 +36,13 @@ def create_parser(prog, description):
         '--block.db',
         dest='block_db',
         help='Path to bluestore block.db block device',
-        type=arg_validators.ValidRawDevice(as_string=True)
+        type=str
     )
     parser.add_argument(
         '--block.wal',
         dest='block_wal',
         help='Path to bluestore block.wal block device',
-        type=arg_validators.ValidRawDevice(as_string=True)
+        type=str
     )
     parser.add_argument(
         '--dmcrypt',

@@ -4,8 +4,10 @@ import json
 import logging
 from textwrap import dedent
 from ceph_volume import terminal, decorators
-from ceph_volume.util import disk, prompt_bool, arg_validators, templates
+from ceph_volume.util import disk, prompt_bool, templates
 from ceph_volume.util import prepare
+from ceph_volume.util.arg_validators import valid_osd_id, ValidFraction
+from ceph_volume.util.device import ValidBatchDataDevice, ValidBatchDevice
 from . import common
 from .create import Create
 from .prepare import Prepare
@@ -201,21 +203,21 @@ class Batch(object):
             'devices',
             metavar='DEVICES',
             nargs='*',
-            type=arg_validators.ValidBatchDataDevice(),
+            type=str,
             default=[],
             help='Devices to provision OSDs',
         )
         parser.add_argument(
             '--db-devices',
             nargs='*',
-            type=arg_validators.ValidBatchDevice(),
+            type=str,
             default=[],
             help='Devices to provision OSDs db volumes',
         )
         parser.add_argument(
             '--wal-devices',
             nargs='*',
-            type=arg_validators.ValidBatchDevice(),
+            type=str,
             default=[],
             help='Devices to provision OSDs wal volumes',
         )
@@ -286,7 +288,7 @@ class Batch(object):
         )
         parser.add_argument(
             '--data-allocate-fraction',
-            type=arg_validators.ValidFraction(),
+            type=ValidFraction(),
             help='Fraction to allocate from data device (0,1.0]',
             default=1.0
         )
@@ -320,7 +322,7 @@ class Batch(object):
             nargs='*',
             default=[],
             help='Reuse existing OSD ids',
-            type=arg_validators.valid_osd_id
+            type=valid_osd_id
         )
         self.args = parser.parse_args(argv)
         self.parser = parser
@@ -382,6 +384,11 @@ class Batch(object):
     def main(self):
         if not self.args.devices:
             return self.parser.print_help()
+
+        self.args.devices = [ValidBatchDataDevice(device).check_device() for device in self.args.devices]
+        self.args.db_devices = [ValidBatchDevice(device).check_device() for device in self.args.db_devices]
+        self.args.wal_devices = [ValidBatchDevice(device).check_device() for device in self.args.wal_devices]
+        self.args.journal_devices = [ValidBatchDevice(device).check_device() for device in self.args.journal_devices]
 
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True

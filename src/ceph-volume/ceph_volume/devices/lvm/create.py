@@ -3,6 +3,7 @@ from textwrap import dedent
 import logging
 from ceph_volume.util import system
 from ceph_volume.util.arg_validators import exclude_group_options
+from ceph_volume.util.device import ValidDevice, ValidDataDevice, validate_devices
 from ceph_volume import decorators, terminal
 from .common import create_parser, rollback_osd
 from .prepare import Prepare
@@ -74,4 +75,7 @@ class Create(object):
         # cause both to be True
         if not args.bluestore:
             args.bluestore = True
+
+        validate_devices(args, as_string=True)
+
         self.create(args)

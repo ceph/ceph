@@ -7,8 +7,9 @@ from textwrap import dedent
 
 from ceph_volume import decorators, terminal, process
 from ceph_volume.api import lvm as api
-from ceph_volume.util import system, encryption, disk, arg_validators, str_to_int, merge_dict
-from ceph_volume.util.device import Device
+from ceph_volume.util import system, encryption, disk, str_to_int, merge_dict
+from ceph_volume.util.arg_validators import valid_osd_id
+from ceph_volume.util.device import Device, ValidZapDevice
 from ceph_volume.systemd import systemctl
 
 logger = logging.getLogger(__name__)
@@ -268,9 +269,6 @@ class Zap(object):
 
         for device in devices:
             mlogger.info("Zapping: %s", device.path)
-            if device.is_mapper and not device.is_mpath:
-                terminal.error("Refusing to zap the mapper device: {}".format(device))
-                raise SystemExit(1)
             if device.is_lvm_member:
                 self.zap_lvm_member(device)
             if device.is_lv:
@@ -364,7 +362,8 @@ class Zap(object):
             'devices',
             metavar='DEVICES',
             nargs='*',
-            type=arg_validators.ValidZapDevice(gpt_ok=True),
+            # type=arg_validators.ValidZapDevice(gpt_ok=True),
+            type=str,
             default=[],
             help='Path to one or many lv (as vg/lv), partition (as /dev/sda1) or device (as /dev/sda)'
         )
@@ -378,7 +377,7 @@ class Zap(object):
 
         parser.add_argument(
             '--osd-id',
-            type=arg_validators.valid_osd_id,
+            type=valid_osd_id,
             help='Specify an OSD ID to detect associated devices for zapping',
         )
 
@@ -399,6 +398,8 @@ class Zap(object):
             return
 
         self.args = parser.parse_args(self.argv)
+
+        self.args.devices = [ValidZapDevice(device).check_device() for device in self.args.devices]
 
         if self.args.osd_id or self.args.osd_fsid:
             self.zap_osd()

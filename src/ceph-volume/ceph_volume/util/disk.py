@@ -855,7 +855,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
 
     block_devs = get_block_devs_sysfs(_sys_block_path)
 
-    block_types = ['disk', 'mpath']
+    block_types = ['disk', 'mpath', 'lvm']
     if allow_loop_devices():
         block_types.append('loop')
 
@@ -872,9 +872,11 @@ def get_devices(_sys_block_path='/sys/block', device=''):
             continue
 
         # If the mapper device is a logical volume it gets excluded
-        if is_mapper_device(diskname):
-            if lvm.get_device_lvs(diskname):
-                continue
+#        if is_mapper_device(diskname):
+#            if lvm.get_device_lvs(diskname):
+#                continue
+#        if block[2] and has_bluestore_label(diskname):
+#            continue
 
         # all facts that have no defaults
         # (<name>, <path relative to _sys_block_path>)
