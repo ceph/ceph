@@ -60,7 +60,8 @@ public:
       plb.add_u64_counter(l_rgw_metrics_get_b, "get_b", "Size of gets", NULL, 8, UNIT_NONE);
 
       PerfCounters *counters = plb.create_perf_counters();
-      cct->get_labeledperfcounters_collection()->add(counters);
+      //cct->get_labeledperfcounters_collection()->add(counters);
+      cct->get_perfcounters_collection()->add(counters);
       ref->perfcounters_instance = counters;
       //ref->collection = cct->get_perfcounters_collection();
       //ref->collection->add(counters);

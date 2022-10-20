@@ -76,6 +76,8 @@ set(common_srcs
   hostname.cc
   ipaddr.cc
   iso_8601.cc
+  labeled_perf_counters.cc
+  labeled_perf_counters_collection.cc
   mempool.cc
   mime.c
   numa.cc

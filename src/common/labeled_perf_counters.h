@@ -14,8 +14,8 @@
  */
 
 
-#ifndef CEPH_COMMON_PERF_COUNTERS_H
-#define CEPH_COMMON_PERF_COUNTERS_H
+#ifndef CEPH_COMMON_LABELED_PERF_COUNTERS_H
+#define CEPH_COMMON_LABELED_PERF_COUNTERS_H
 
 #include <string>
 #include <vector>
@@ -24,6 +24,7 @@
 #include <cstdint>
 
 #include "common/perf_histogram.h"
+#include "common/perf_counters.h"
 #include "include/utime.h"
 #include "include/common_fwd.h"
 #include "common/ceph_mutex.h"
@@ -31,27 +32,11 @@
 
 namespace TOPNSPC::common {
   class CephContext;
-  class PerfCountersBuilder;
-  class PerfCounters;
+  class LabeledPerfCountersBuilder;
+  class LabeledPerfCounters;
 }
 
-enum perfcounter_type_d : uint8_t
-{
-  PERFCOUNTER_NONE = 0,
-  PERFCOUNTER_TIME = 0x1,       // float (measuring seconds)
-  PERFCOUNTER_U64 = 0x2,        // integer (note: either TIME or U64 *must* be set)
-  PERFCOUNTER_LONGRUNAVG = 0x4, // paired counter + sum (time)
-  PERFCOUNTER_COUNTER = 0x8,    // counter (vs gauge)
-  PERFCOUNTER_HISTOGRAM = 0x10, // histogram (vector) of values
-};
-
-enum unit_t : uint8_t
-{
-  UNIT_BYTES,
-  UNIT_NONE
-};
-
-/* Class for constructing a PerfCounters object.
+/* Class for constructing a LabeledPerfCounters object.
  *
  * This class performs some validation that the parameters we have supplied are
  * correct in create_perf_counters().
@@ -60,12 +45,12 @@ enum unit_t : uint8_t
  * PerfCountersBuilder can deduce them itself.
  */
 namespace TOPNSPC::common {
-class PerfCountersBuilder
+class LabeledPerfCountersBuilder
 {
 public:
-  PerfCountersBuilder(CephContext *cct, const std::string &name,
+  LabeledPerfCountersBuilder(CephContext *cct, const std::string &name,
 		    int first, int last);
-  ~PerfCountersBuilder();
+  ~LabeledPerfCountersBuilder();
 
   // prio values: higher is better, and higher values get included in
   // 'ceph daemonperf' (and similar) results.
@@ -113,15 +98,15 @@ public:
     prio_default = prio_;
   }
 
-  PerfCounters* create_perf_counters();
+  LabeledPerfCounters* create_perf_counters();
 private:
-  PerfCountersBuilder(const PerfCountersBuilder &rhs);
-  PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
+  LabeledPerfCountersBuilder(const PerfCountersBuilder &rhs);
+  LabeledPerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
   void add_impl(int idx, const char *name,
                 const char *description, const char *nick, int prio, int ty, int unit=UNIT_NONE,
                 std::unique_ptr<PerfHistogram<>> histogram = nullptr);
 
-  PerfCounters *m_perf_counters;
+  LabeledPerfCounters *m_perf_counters;
 
   int prio_default = 0;
 };
@@ -151,7 +136,7 @@ private:
  * the "avgcount" member when read off. avgcount is incremented when you call
  * tinc. Calling tset on an average is an error and will assert out.
  */
-class PerfCounters
+class LabeledPerfCounters
 {
 public:
   /** Represents a PerfCounters data element. */
@@ -232,7 +217,7 @@ public:
     }
   };
 
-  ~PerfCounters();
+  ~LabeledPerfCounters();
 
   void inc(int idx, uint64_t v = 1);
   void dec(int idx, uint64_t v = 1);
@@ -274,10 +259,10 @@ public:
   }
 
 private:
-  PerfCounters(CephContext *cct, const std::string &name,
+  LabeledPerfCounters(CephContext *cct, const std::string &name,
 	     int lower_bound, int upper_bound);
-  PerfCounters(const PerfCounters &rhs);
-  PerfCounters& operator=(const PerfCounters &rhs);
+  LabeledPerfCounters(const PerfCounters &rhs);
+  LabeledPerfCounters& operator=(const PerfCounters &rhs);
   void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
                               const std::string &counter = "") const;
 
@@ -298,29 +283,29 @@ private:
 
   perf_counter_data_vec_t m_data;
 
-  friend class PerfCountersBuilder;
-  friend class PerfCountersCollectionImpl;
+  friend class LabeledPerfCountersBuilder;
+  friend class LabeledPerfCountersCollectionImpl;
 };
 
-class SortPerfCountersByName {
+class SortLabeledPerfCountersByName {
 public:
-  bool operator()(const PerfCounters* lhs, const PerfCounters* rhs) const {
+  bool operator()(const LabeledPerfCounters* lhs, const LabeledPerfCounters* rhs) const {
     return (lhs->get_name() < rhs->get_name());
   }
 };
 
-typedef std::set <PerfCounters*, SortPerfCountersByName> perf_counters_set_t;
+typedef std::set <LabeledPerfCounters*, SortLabeledPerfCountersByName> labeled_perf_counters_set_t;
 
 /*
  * PerfCountersCollectionImp manages PerfCounters objects for a Ceph process.
  */
-class PerfCountersCollectionImpl
+class LabeledPerfCountersCollectionImpl
 {
 public:
-  PerfCountersCollectionImpl();
-  ~PerfCountersCollectionImpl();
-  void add(PerfCounters *l);
-  void remove(PerfCounters *l);
+  LabeledPerfCountersCollectionImpl();
+  ~LabeledPerfCountersCollectionImpl();
+  void add(LabeledPerfCounters *l);
+  void remove(LabeledPerfCounters *l);
   void clear();
   bool reset(const std::string &name);
 
@@ -339,14 +324,14 @@ public:
   // A reference to a perf_counter_data_any_d, with an accompanying
   // pointer to the enclosing PerfCounters, in order that the consumer
   // can see the prio_adjust
-  class PerfCounterRef
+  class LabeledPerfCounterRef
   {
     public:
-    PerfCounters::perf_counter_data_any_d *data;
-    PerfCounters *perf_counters;
+    LabeledPerfCounters::perf_counter_data_any_d *data;
+    LabeledPerfCounters *perf_counters;
   };
   typedef std::map<std::string,
-          PerfCounterRef> CounterMap;
+          LabeledPerfCounterRef> CounterMap;
 
   void with_counters(std::function<void(const CounterMap &)>) const;
 
@@ -355,28 +340,9 @@ private:
                               const std::string &logger = "",
                               const std::string &counter = "") const;
 
-  perf_counters_set_t m_loggers;
+  labeled_perf_counters_set_t m_loggers;
 
   CounterMap by_path; 
-};
-
-
-class PerfGuard {
-  const ceph::real_clock::time_point start;
-  PerfCounters* const counters;
-  const int event;
-
-public:
-  PerfGuard(PerfCounters* const counters,
-            const int event)
-  : start(ceph::real_clock::now()),
-    counters(counters),
-    event(event) {
-  }
-
-  ~PerfGuard() {
-    counters->tinc(event, ceph::real_clock::now() - start);
-  }
 };
 
 }

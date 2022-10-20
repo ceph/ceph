@@ -104,7 +104,7 @@ PerfCountersCollectionImpl* CephContext::get_perfcounters_collection()
   return _perf_counters_collection.get_perf_collection();
 }
 
-PerfCountersCollectionImpl* CephContext::get_labeledperfcounters_collection()
+LabeledPerfCountersCollectionImpl* CephContext::get_labeledperfcounters_collection()
 {
   return _labeled_perf_counters_collection.get_perf_collection();
 }
@@ -748,7 +748,7 @@ CephContext::CephContext(uint32_t module_type_,
   _conf.add_observer(_lockdep_obs);
 #endif
   _perf_counters_collection = new PerfCountersCollection(this);
-  _labeled_perf_counters_collection = new PerfCountersCollection(this);
+  _labeled_perf_counters_collection = new LabeledPerfCountersCollection(this);
  
   _admin_socket = new AdminSocket(this);
   _heartbeat_map = new HeartbeatMap(this);
@@ -947,7 +947,7 @@ PerfCountersCollection *CephContext::get_perfcounters_collection()
   return _perf_counters_collection;
 }
 
-PerfCountersCollection *CephContext::get_labeledperfcounters_collection()
+LabeledPerfCountersCollection *CephContext::get_labeledperfcounters_collection()
 {
   return _labeled_perf_counters_collection;
 }

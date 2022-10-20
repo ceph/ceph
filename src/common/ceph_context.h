@@ -41,8 +41,8 @@
 #include "common/config_proxy.h"
 #include "include/spinlock.h"
 #include "common/perf_counters_collection.h"
+#include "common/labeled_perf_counters_collection.h"
 #endif
-
 
 #include "crush/CrushLocation.h"
 
@@ -170,8 +170,8 @@ public:
   /* Get the PerfCountersCollection of this CephContext */
   PerfCountersCollection *get_perfcounters_collection();
 
-  /* Get the PerfCountersCollection of this CephContext */
-  PerfCountersCollection *get_labeledperfcounters_collection();
+  /* Get the LabeledPerfCountersCollection of this CephContext */
+  LabeledPerfCountersCollection *get_labeledperfcounters_collection();
 
   ceph::HeartbeatMap *get_heartbeat_map() {
     return _heartbeat_map;
@@ -329,7 +329,7 @@ private:
 
   /* The collection of profiling loggers associated with this context */
   PerfCountersCollection *_perf_counters_collection;
-  PerfCountersCollection *_labeled_perf_counters_collection;
+  LabeledPerfCountersCollection *_labeled_perf_counters_collection;
 
   md_config_obs_t *_perf_counters_conf_obs;
 
