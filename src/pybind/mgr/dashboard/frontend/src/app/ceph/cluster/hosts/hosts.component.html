@@ -54,8 +54,7 @@
 <ng-template #servicesTpl
              let-value="value">
   <span *ngFor="let instance of value; last as isLast">
-    <span class="badge badge-background-primary" >{{ instance }}</span>
-    <ng-container *ngIf="!isLast">&nbsp;</ng-container>
+    <span class="badge badge-background-primary ms-1" >{{ instance }}</span>
   </span>
 </ng-template>
 

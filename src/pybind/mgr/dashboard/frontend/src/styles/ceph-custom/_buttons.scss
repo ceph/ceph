@@ -5,7 +5,7 @@
 .form-check-input.is-valid {
   border-color: rgba(vv.$primary, 0.8);
 
-  &:checked{
+  &:checked {
     background-color: vv.$primary;
     border-color: rgba(vv.$primary, 0.8);
     box-shadow: 0 0 3px 2px rgba(vv.$primary, 0.5);
@@ -93,10 +93,4 @@
 
 .card-footer button.btn:not(:first-child) {
   margin-left: 5px;
-}
-
-button {
-  &.disabled {
-    pointer-events: none !important;
-  }
 }

@@ -199,7 +199,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: $localize`Service Instances`,
         prop: 'service_instances',
-        flexGrow: 1,
+        flexGrow: 1.5,
         cellTemplate: this.servicesTpl
       },
       {
@@ -214,7 +214,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: $localize`Status`,
         prop: 'status',
-        flexGrow: 1,
+        flexGrow: 0.8,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
