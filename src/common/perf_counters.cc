@@ -452,17 +452,15 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
         d->histogram->dump_formatted(f);
         f->close_section();
       } else {
-        if(d->accessed) {
-          uint64_t v = d->u64;
-          if (d->type & PERFCOUNTER_U64) {
-            f->dump_unsigned(d->name, v);
-          } else if (d->type & PERFCOUNTER_TIME) {
-            f->dump_format_unquoted(d->name, "%" PRId64 ".%09" PRId64,
-                                    v / 1000000000ull,
-                                    v % 1000000000ull);
-          } else {
-            ceph_abort();
-          }
+        uint64_t v = d->u64;
+        if (d->type & PERFCOUNTER_U64) {
+          f->dump_unsigned(d->name, v);
+        } else if (d->type & PERFCOUNTER_TIME) {
+          f->dump_format_unquoted(d->name, "%" PRId64 ".%09" PRId64,
+                                  v / 1000000000ull,
+                                  v % 1000000000ull);
+        } else {
+          ceph_abort();
         }
       }
     }
