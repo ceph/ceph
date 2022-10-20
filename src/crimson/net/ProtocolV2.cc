@@ -483,9 +483,6 @@ ProtocolV2::banner_exchange(bool is_connect)
         abort_in_close(*this, is_connect);
       }
       peer_supported_features = _peer_supported_features;
-      if (_peer_required_features == 0) {
-        this->connection_features = msgr2_required;
-      }
       bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
       tx_frame_asm.set_is_rev1(is_rev1);
       rx_frame_asm.set_is_rev1(is_rev1);
@@ -711,6 +708,7 @@ ProtocolV2::client_connect()
           conn.set_peer_id(server_ident.gid());
           conn.set_features(server_ident.supported_features() &
                             conn.policy.features_supported);
+          logger().debug("{} UPDATE: features={}", conn, conn.get_features());
           peer_global_seq = server_ident.global_seq();
 
           bool lossy = server_ident.flags() & CEPH_MSG_CONNECT_LOSSY;
@@ -1076,7 +1074,7 @@ ProtocolV2::reuse_connection(
                                     peer_global_seq,
                                     client_cookie,
                                     conn.get_peer_name(),
-                                    connection_features,
+                                    conn.get_features(),
                                     peer_supported_features,
                                     conn_seq,
                                     msg_seq);
@@ -1247,9 +1245,9 @@ ProtocolV2::server_connect()
         return next_step_t::wait;
       });
     }
-    connection_features =
-        client_ident.supported_features() & conn.policy.features_supported;
-    logger().debug("{} UPDATE: connection_features={}", conn, connection_features);
+    conn.set_features(client_ident.supported_features() &
+                      conn.policy.features_supported);
+    logger().debug("{} UPDATE: features={}", conn, conn.get_features());
 
     peer_global_seq = client_ident.global_seq();
 
@@ -1657,8 +1655,6 @@ ProtocolV2::send_server_ident()
                    conn.policy.features_required | msgr2_required,
                    flags, server_cookie);
 
-    conn.set_features(connection_features);
-
     return write_frame(server_ident);
   });
 }
@@ -1741,7 +1737,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
         if (conn.get_peer_id() == entity_name_t::NEW) {
           conn.set_peer_id(new_peer_name.num());
         }
-        connection_features = new_conn_features;
+        conn.set_features(new_conn_features);
         peer_supported_features = new_peer_supported_features;
         bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
         tx_frame_asm.set_is_rev1(is_rev1);
