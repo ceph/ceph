@@ -5638,7 +5638,7 @@ void MDCache::prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t i
     snap = make_message<MClientSnap>(CEPH_SNAP_OP_SPLIT);
     splits.emplace(std::piecewise_construct, std::forward_as_tuple(client), std::forward_as_tuple(snap));
     snap->head.split = realm->inode->ino();
-    snap->bl = realm->get_snap_trace();
+    snap->bl = mds->server->get_snap_trace(client, realm);
 
     for (const auto& child : realm->open_children)
       snap->split_realms.push_back(child->inode->ino());
@@ -5669,7 +5669,7 @@ void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
       update->head.split = parent_realm->inode->ino();
       update->split_inos = split_inos;
       update->split_realms = split_realms;
-      update->bl = parent_realm->get_snap_trace();
+      update->bl = mds->server->get_snap_trace(p.first, parent_realm);
       em.first->second = std::move(update);
     }
   }
@@ -5866,7 +5866,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
 					cap->get_last_seq(), cap->pending(), cap->wanted(),
 					0, cap->get_mseq(), mds->get_osd_epoch_barrier());
   in->encode_cap_message(reap, cap);
-  reap->snapbl = realm->get_snap_trace();
+  reap->snapbl = mds->server->get_snap_trace(session, realm);
   reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
   mds->send_message_client_counted(reap, session);
 }
@@ -6033,7 +6033,7 @@ void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snap
     dout(10) << "finish_snaprealm_reconnect client." << client << " has old seq " << seq << " < " 
 	     << realm->get_newest_seq() << " on " << *realm << dendl;
     auto snap = make_message<MClientSnap>(CEPH_SNAP_OP_UPDATE);
-    snap->bl = realm->get_snap_trace();
+    snap->bl = mds->server->get_snap_trace(client, realm);
     updates.emplace(std::piecewise_construct, std::forward_as_tuple(client), std::forward_as_tuple(snap));
   } else {
     dout(10) << "finish_snaprealm_reconnect client." << client << " up to date"
@@ -9812,7 +9812,7 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
 	  update->head.split = in->ino();
 	  update->split_inos = split_inos;
 	  update->split_realms = split_realms;
-	  update->bl = in->snaprealm->get_snap_trace();
+	  update->bl = mds->server->get_snap_trace(em.first->first, in->snaprealm);
 	  em.first->second = std::move(update);
 	}
       }
@@ -9906,7 +9906,7 @@ void MDCache::notify_global_snaprealm_update(int snap_op)
       continue;
     auto update = make_message<MClientSnap>(snap_op);
     update->head.split = global_snaprealm->inode->ino();
-    update->bl = global_snaprealm->get_snap_trace();
+    update->bl = mds->server->get_snap_trace(session, global_snaprealm);
     mds->send_message_client_counted(update, session);
   }
 }

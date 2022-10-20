@@ -2356,7 +2356,7 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
       realm = in->find_snaprealm();
     else
       realm = dn->get_dir()->get_inode()->find_snaprealm();
-    reply->snapbl = realm->get_snap_trace();
+    reply->snapbl = get_snap_trace(session, realm);
     dout(10) << "set_trace_dist snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
   }
 
@@ -4881,7 +4881,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   //  this isn't perfect, but we should capture the main variable/unbounded size items!
   int front_bytes = dirbl.length() + sizeof(__u32) + sizeof(__u8)*2;
   int bytes_left = max_bytes - front_bytes;
-  bytes_left -= realm->get_snap_trace().length();
+  bytes_left -= get_snap_trace(session, realm).length();
 
   // build dir contents
   bufferlist dnbl;
@@ -11417,4 +11417,19 @@ void Server::dump_reconnect_status(Formatter *f) const
   f->open_object_section("reconnect_status");
   f->dump_stream("client_reconnect_gather") << client_reconnect_gather;
   f->close_section();
+}
+
+const bufferlist& Server::get_snap_trace(Session *session, SnapRealm *realm) const {
+  ceph_assert(session);
+  ceph_assert(realm);
+  if (session->info.has_feature(CEPHFS_FEATURE_NEW_SNAPREALM_INFO)) {
+    return realm->get_snap_trace_new();
+  } else {
+    return realm->get_snap_trace();
+  }
+}
+
+const bufferlist& Server::get_snap_trace(client_t client, SnapRealm *realm) const {
+  Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
+  return get_snap_trace(session, realm);
 }
