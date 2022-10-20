@@ -78,7 +78,7 @@ class ProtocolV2 final : public Protocol {
   void trigger_state(state_t state, write_state_t write_state, bool reentrant);
 
   uint64_t connection_features = 0;
-  uint64_t peer_required_features = 0;
+  uint64_t peer_supported_features = 0;
 
   uint64_t client_cookie = 0;
   uint64_t server_cookie = 0;
@@ -212,8 +212,7 @@ class ProtocolV2 final : public Protocol {
                          uint64_t new_client_cookie,
                          entity_name_t new_peer_name,
                          uint64_t new_conn_features,
-                         bool tx_is_rev1,
-                         bool rx_is_rev1,
+                         uint64_t new_peer_supported_features,
                          // reconnect
                          uint64_t new_connect_seq,
                          uint64_t new_msg_seq);

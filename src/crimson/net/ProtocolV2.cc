@@ -454,39 +454,39 @@ ProtocolV2::banner_exchange(bool is_connect)
     }).then([this, is_connect] (bufferlist bl) {
       // 4. process peer banner_payload and send HelloFrame
       auto p = bl.cbegin();
-      uint64_t peer_supported_features;
-      uint64_t peer_required_features;
+      uint64_t _peer_supported_features;
+      uint64_t _peer_required_features;
       try {
-        decode(peer_supported_features, p);
-        decode(peer_required_features, p);
+        decode(_peer_supported_features, p);
+        decode(_peer_required_features, p);
       } catch (const buffer::error &e) {
         logger().warn("{} decode banner payload failed", conn);
         abort_in_fault();
       }
       logger().debug("{} RECV({}) banner features: supported={} required={}",
                      conn, bl.length(),
-                     peer_supported_features, peer_required_features);
+                     _peer_supported_features, _peer_required_features);
 
       // Check feature bit compatibility
       uint64_t supported_features = CRIMSON_MSGR2_SUPPORTED_FEATURES;
       uint64_t required_features = CEPH_MSGR2_REQUIRED_FEATURES;
-      if ((required_features & peer_supported_features) != required_features) {
+      if ((required_features & _peer_supported_features) != required_features) {
         logger().error("{} peer does not support all required features"
                        " required={} peer_supported={}",
-                       conn, required_features, peer_supported_features);
+                       conn, required_features, _peer_supported_features);
         abort_in_close(*this, is_connect);
       }
-      if ((supported_features & peer_required_features) != peer_required_features) {
+      if ((supported_features & _peer_required_features) != _peer_required_features) {
         logger().error("{} we do not support all peer required features"
                        " peer_required={} supported={}",
-                       conn, peer_required_features, supported_features);
+                       conn, _peer_required_features, supported_features);
         abort_in_close(*this, is_connect);
       }
-      this->peer_required_features = peer_required_features;
-      if (this->peer_required_features == 0) {
+      peer_supported_features = _peer_supported_features;
+      if (_peer_required_features == 0) {
         this->connection_features = msgr2_required;
       }
-      const bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
+      bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
       tx_frame_asm.set_is_rev1(is_rev1);
       rx_frame_asm.set_is_rev1(is_rev1);
 
@@ -577,8 +577,9 @@ seastar::future<> ProtocolV2::handle_auth_reply()
             abort_in_fault();
           }
           auth_meta->con_mode = auth_done.con_mode();
+          bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
           session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
-              nullptr, *auth_meta, tx_frame_asm.get_is_rev1(), false);
+              nullptr, *auth_meta, is_rev1, false);
           return finish_auth();
         });
       default: {
@@ -978,8 +979,9 @@ seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, boo
                    ceph_con_mode_name(auth_meta->con_mode), reply.length());
     return write_frame(auth_done).then([this] {
       ceph_assert(auth_meta);
+      bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
       session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
-          nullptr, *auth_meta, tx_frame_asm.get_is_rev1(), true);
+          nullptr, *auth_meta, is_rev1, true);
       return finish_auth();
     });
    }
@@ -1075,8 +1077,7 @@ ProtocolV2::reuse_connection(
                                     client_cookie,
                                     conn.get_peer_name(),
                                     connection_features,
-                                    tx_frame_asm.get_is_rev1(),
-                                    rx_frame_asm.get_is_rev1(),
+                                    peer_supported_features,
                                     conn_seq,
                                     msg_seq);
 #ifdef UNIT_TESTS_BUILT
@@ -1673,8 +1674,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                                    uint64_t new_client_cookie,
                                    entity_name_t new_peer_name,
                                    uint64_t new_conn_features,
-                                   bool tx_is_rev1,
-                                   bool rx_is_rev1,
+                                   uint64_t new_peer_supported_features,
                                    uint64_t new_connect_seq,
                                    uint64_t new_msg_seq)
 {
@@ -1691,9 +1691,9 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                   new_socket = std::move(new_socket),
                   new_auth_meta = std::move(new_auth_meta),
                   new_rxtx = std::move(new_rxtx),
-                  tx_is_rev1, rx_is_rev1,
                   new_client_cookie, new_peer_name,
-                  new_conn_features, new_peer_global_seq,
+                  new_conn_features, new_peer_supported_features,
+                  new_peer_global_seq,
                   new_connect_seq, new_msg_seq] () mutable {
     return wait_write_exit().then([this, do_reset] {
       if (do_reset) {
@@ -1706,9 +1706,9 @@ void ProtocolV2::trigger_replacing(bool reconnect,
              new_socket = std::move(new_socket),
              new_auth_meta = std::move(new_auth_meta),
              new_rxtx = std::move(new_rxtx),
-             tx_is_rev1, rx_is_rev1,
              new_client_cookie, new_peer_name,
-             new_conn_features, new_peer_global_seq,
+             new_conn_features, new_peer_supported_features,
+             new_peer_global_seq,
              new_connect_seq, new_msg_seq] () mutable {
       if (unlikely(state != state_t::REPLACING)) {
         return new_socket->close().then([sock = std::move(new_socket)] {
@@ -1742,8 +1742,10 @@ void ProtocolV2::trigger_replacing(bool reconnect,
           conn.set_peer_id(new_peer_name.num());
         }
         connection_features = new_conn_features;
-        tx_frame_asm.set_is_rev1(tx_is_rev1);
-        rx_frame_asm.set_is_rev1(rx_is_rev1);
+        peer_supported_features = new_peer_supported_features;
+        bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
+        tx_frame_asm.set_is_rev1(is_rev1);
+        rx_frame_asm.set_is_rev1(is_rev1);
         return send_server_ident();
       }
     }).then([this, reconnect] {
