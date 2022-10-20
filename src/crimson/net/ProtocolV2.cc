@@ -1251,6 +1251,12 @@ ProtocolV2::server_connect()
 
     peer_global_seq = client_ident.global_seq();
 
+    bool lossy = client_ident.flags() & CEPH_MSG_CONNECT_LOSSY;
+    if (lossy != conn.policy.lossy) {
+      logger().warn("{} my lossy policy {} doesn't match client {}, ignore",
+                    conn, conn.policy.lossy, lossy);
+    }
+
     // Looks good so far, let's check if there is already an existing connection
     // to this peer.
 
