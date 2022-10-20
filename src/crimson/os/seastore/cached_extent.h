@@ -541,6 +541,7 @@ public:
   }
 
   CachedExtent* get_transactional_view(Transaction &t);
+  CachedExtent* get_transactional_view(transaction_id_t tid);
 
 private:
   template <typename T>

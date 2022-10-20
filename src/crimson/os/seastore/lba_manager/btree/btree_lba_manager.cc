@@ -33,6 +33,91 @@ phy_tree_root_t& get_phy_tree_root<
   return r.lba_root;
 }
 
+template <>
+const CachedExtentRef get_phy_tree_root_node<
+  crimson::os::seastore::lba_manager::btree::LBABtree>(
+  const RootBlockRef &root_block, Transaction &t)
+{
+  auto lba_root = root_block->lba_root_node;
+  if (lba_root) {
+    return lba_root->get_transactional_view(t);
+  } else {
+    return nullptr;
+  }
+}
+
+template <bool set_root_block, typename T, typename ROOT>
+void set_phy_tree_root_node(RootBlockRef &root_block, ROOT* lba_root) {
+  root_block->lba_root_node = lba_root;
+
+  if constexpr (set_root_block) {
+    ceph_assert(lba_root != nullptr);
+    lba_root->root_block = root_block;
+  }
+}
+
+template void set_phy_tree_root_node<
+  true,
+  crimson::os::seastore::lba_manager::btree::LBABtree,
+  lba_manager::btree::LBAInternalNode>(
+  RootBlockRef &root_block, lba_manager::btree::LBAInternalNode* lba_root);
+template void set_phy_tree_root_node<
+  true,
+  laddr_t,
+  lba_manager::btree::LBAInternalNode>(
+  RootBlockRef &root_block, lba_manager::btree::LBAInternalNode* lba_root);
+template void set_phy_tree_root_node<
+  true,
+  crimson::os::seastore::lba_manager::btree::LBABtree,
+  lba_manager::btree::LBALeafNode>(
+  RootBlockRef &root_block, lba_manager::btree::LBALeafNode* lba_root);
+template void set_phy_tree_root_node<
+  true,
+  laddr_t,
+  lba_manager::btree::LBALeafNode>(
+  RootBlockRef &root_block, lba_manager::btree::LBALeafNode* lba_root);
+template void set_phy_tree_root_node<
+  true,
+  crimson::os::seastore::lba_manager::btree::LBABtree,
+  lba_manager::btree::LBANode>(
+  RootBlockRef &root_block, lba_manager::btree::LBANode* lba_root);
+template void set_phy_tree_root_node<
+  true,
+  laddr_t,
+  lba_manager::btree::LBANode>(
+  RootBlockRef &root_block, lba_manager::btree::LBANode* lba_root);
+template void set_phy_tree_root_node<
+  false,
+  crimson::os::seastore::lba_manager::btree::LBABtree,
+  lba_manager::btree::LBAInternalNode>(
+  RootBlockRef &root_block, lba_manager::btree::LBAInternalNode* lba_root);
+template void set_phy_tree_root_node<
+  false,
+  laddr_t,
+  lba_manager::btree::LBAInternalNode>(
+  RootBlockRef &root_block, lba_manager::btree::LBAInternalNode* lba_root);
+template void set_phy_tree_root_node<
+  false,
+  crimson::os::seastore::lba_manager::btree::LBABtree,
+  lba_manager::btree::LBALeafNode>(
+  RootBlockRef &root_block, lba_manager::btree::LBALeafNode* lba_root);
+template void set_phy_tree_root_node<
+  false,
+  laddr_t,
+  lba_manager::btree::LBALeafNode>(
+  RootBlockRef &root_block, lba_manager::btree::LBALeafNode* lba_root);
+template void set_phy_tree_root_node<
+  false,
+  crimson::os::seastore::lba_manager::btree::LBABtree,
+  lba_manager::btree::LBANode>(
+  RootBlockRef &root_block, lba_manager::btree::LBANode* lba_root);
+template void set_phy_tree_root_node<
+  false,
+  laddr_t,
+  lba_manager::btree::LBANode>(
+  RootBlockRef &root_block, lba_manager::btree::LBANode* lba_root);
+
+
 }
 
 namespace crimson::os::seastore::lba_manager::btree {
@@ -43,7 +128,10 @@ BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
   LOG_PREFIX(BtreeLBAManager::mkfs);
   INFOT("start", t);
   return cache.get_root(t).si_then([this, &t](auto croot) {
-    croot->get_root().lba_root = LBABtree::mkfs(get_context(t));
+    assert(croot->is_mutation_pending());
+    auto [root, root_node] = LBABtree::mkfs(get_context(t));
+    croot->get_root().lba_root = root;
+    croot->lba_root_node = root_node.get();
     return mkfs_iertr::now();
   }).handle_error_interruptible(
     mkfs_iertr::pass_further{},
@@ -301,6 +389,8 @@ BtreeLBAManager::base_iertr::future<> _init_cached_extent(
       if (!iter.is_end() &&
 	  iter.get_key() == logn->get_laddr() &&
 	  iter.get_val().paddr == logn->get_paddr()) {
+	assert(!iter.get_leaf_node()->is_pending());
+	iter.get_leaf_node()->link_child(logn.get(), iter.get_leaf_pos());
 	logn->set_pin(iter.get_pin());
 	ceph_assert(iter.get_val().len == e->get_length());
 	if (c.pins) {

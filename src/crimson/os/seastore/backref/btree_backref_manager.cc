@@ -19,6 +19,64 @@ phy_tree_root_t& get_phy_tree_root<
   return r.backref_root;
 }
 
+template<>
+const CachedExtentRef get_phy_tree_root_node<
+  crimson::os::seastore::backref::BackrefBtree>(
+  const RootBlockRef &root_block, Transaction &t) {
+  auto backref_root = root_block->backref_root_node;
+  if (backref_root) {
+    return backref_root->get_transactional_view(t);
+  } else {
+    return nullptr;
+  }
+}
+
+template <bool set_root_block, typename T, typename ROOT>
+void set_phy_tree_root_node(RootBlockRef &root_block, ROOT* backref_root) {
+  root_block->backref_root_node = backref_root;
+  if constexpr (set_root_block) {
+    ceph_assert(backref_root != nullptr);
+    backref_root->root_block = root_block;
+  }
+}
+
+template void set_phy_tree_root_node<
+  true,
+  crimson::os::seastore::backref::BackrefBtree>(
+  RootBlockRef &root_block, backref::BackrefInternalNode* backref_root);
+template void set_phy_tree_root_node<true, paddr_t>(
+  RootBlockRef &root_block, backref::BackrefInternalNode* backref_root);
+template void set_phy_tree_root_node<
+  true,
+  crimson::os::seastore::backref::BackrefBtree>(
+  RootBlockRef &root_block, backref::BackrefLeafNode* backref_root);
+template void set_phy_tree_root_node<true, paddr_t>(
+  RootBlockRef &root_block, backref::BackrefLeafNode* backref_root);
+template void set_phy_tree_root_node<
+  true,
+  crimson::os::seastore::backref::BackrefBtree>(
+  RootBlockRef &root_block, backref::BackrefNode* backref_root);
+template void set_phy_tree_root_node<true, paddr_t>(
+  RootBlockRef &root_block, backref::BackrefNode* backref_root);
+template void set_phy_tree_root_node<
+  false,
+  crimson::os::seastore::backref::BackrefBtree>(
+  RootBlockRef &root_block, backref::BackrefInternalNode* backref_root);
+template void set_phy_tree_root_node<false, paddr_t>(
+  RootBlockRef &root_block, backref::BackrefInternalNode* backref_root);
+template void set_phy_tree_root_node<
+  false,
+  crimson::os::seastore::backref::BackrefBtree>(
+  RootBlockRef &root_block, backref::BackrefLeafNode* backref_root);
+template void set_phy_tree_root_node<false, paddr_t>(
+  RootBlockRef &root_block, backref::BackrefLeafNode* backref_root);
+template void set_phy_tree_root_node<
+  false,
+  crimson::os::seastore::backref::BackrefBtree>(
+  RootBlockRef &root_block, backref::BackrefNode* backref_root);
+template void set_phy_tree_root_node<false, paddr_t>(
+  RootBlockRef &root_block, backref::BackrefNode* backref_root);
+
 }
 
 namespace crimson::os::seastore::backref {
@@ -36,7 +94,10 @@ BtreeBackrefManager::mkfs(
   LOG_PREFIX(BtreeBackrefManager::mkfs);
   INFOT("start", t);
   return cache.get_root(t).si_then([this, &t](auto croot) {
-    croot->get_root().backref_root = BackrefBtree::mkfs(get_context(t));
+    assert(croot->is_mutation_pending());
+    auto [root, root_node] = BackrefBtree::mkfs(get_context(t));
+    croot->get_root().backref_root = root;
+    croot->backref_root_node = root_node.get();
     return mkfs_iertr::now();
   }).handle_error_interruptible(
     mkfs_iertr::pass_further{},

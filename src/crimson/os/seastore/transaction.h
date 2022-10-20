@@ -457,6 +457,10 @@ public:
     return trans_id;
   }
 
+  RootBlockRef &get_root() {
+    return root;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();

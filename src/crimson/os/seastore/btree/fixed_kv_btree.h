@@ -13,12 +13,24 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/btree/btree_range_pin.h"
+#include "crimson/os/seastore/root_block.h"
 
 namespace crimson::os::seastore::lba_manager::btree {
 struct lba_map_val_t;
 }
 
 namespace crimson::os::seastore {
+
+template <typename T>
+phy_tree_root_t& get_phy_tree_root(root_t& r);
+
+template <typename T>
+const CachedExtentRef get_phy_tree_root_node(
+  const RootBlockRef &root_block,
+  Transaction &t);
+
+template <bool, typename T, typename ROOT_T>
+void set_phy_tree_root_node(RootBlockRef &root_block, ROOT_T* root_node);
 
 template <typename node_key_t>
 struct op_context_t {
@@ -303,19 +315,28 @@ public:
     }
   };
 
-  FixedKVBtree(phy_tree_root_t root) : root(root) {}
+  FixedKVBtree(RootBlockRef &root_block) : root_block(root_block) {}
 
-  bool is_root_dirty() const {
-    return root_dirty;
+  auto& get_root() {
+    return get_phy_tree_root<self_type>(root_block->get_root());
   }
-  phy_tree_root_t get_root_undirty() {
-    ceph_assert(root_dirty);
-    root_dirty = false;
-    return root;
+
+  auto& get_root() const {
+    return get_phy_tree_root<self_type>(root_block->get_root());
+  }
+
+  template <typename T>
+  void set_root_node(const TCachedExtentRef<T> &root_node) {
+    static_assert(std::is_base_of_v<typename internal_node_t::base_t, T>);
+    set_phy_tree_root_node<true, self_type>(root_block, root_node.get());
+  }
+
+  auto get_root_node(Transaction &t) const {
+    return get_phy_tree_root_node<self_type>(root_block, t);
   }
 
   /// mkfs
-  using mkfs_ret = phy_tree_root_t;
+  using mkfs_ret = std::pair<phy_tree_root_t, typename leaf_node_t::Ref>;
   static mkfs_ret mkfs(op_context_t<node_key_t> c) {
     auto root_leaf = c.cache.template alloc_new_extent<leaf_node_t>(
       c.trans,
@@ -328,7 +349,7 @@ public:
     root_leaf->pin.set_range(meta);
     get_tree_stats<self_type>(c.trans).depth = 1u;
     get_tree_stats<self_type>(c.trans).extents_num_delta++;
-    return phy_tree_root_t{root_leaf->get_paddr(), 1u};
+    return {phy_tree_root_t{root_leaf->get_paddr(), 1u}, root_leaf};
   }
 
   /**
@@ -929,11 +950,11 @@ public:
             depth,
             old_addr,
             new_addr,
-            root.get_location());
+            get_root().get_location());
           ceph_assert(0 == "impossible");
         }
 
-        if (root.get_location() != old_addr) {
+        if (get_root().get_location() != old_addr) {
           SUBERRORT(
             seastore_fixedkv_tree,
             "updating root laddr {} at depth {} from {} to {},"
@@ -943,12 +964,14 @@ public:
             depth,
             old_addr,
             new_addr,
-            root.get_location());
+            get_root().get_location());
           ceph_assert(0 == "impossible");
         }
 
-        root.set_location(new_addr);
-        root_dirty = true;
+        root_block = c.cache.duplicate_for_write(
+          c.trans, root_block)->template cast<RootBlock>();
+        get_root().set_location(new_addr);
+        set_root_node(nextent);
       } else {
         auto &parent = iter.get_internal(depth + 1);
         assert(parent.node);
@@ -1007,8 +1030,7 @@ public:
 
 
 private:
-  phy_tree_root_t root;
-  bool root_dirty = false;
+  RootBlockRef root_block;
 
   template <typename T>
   using node_position_t = typename iterator::template node_position_t<T>;
@@ -1043,6 +1065,16 @@ private:
       if (parent_pos) {
         auto &parent = parent_pos->node;
         parent->link_child(&node, parent_pos->pos);
+      } else {
+        auto &root_block = c.trans.get_root();
+        if (root_block->is_mutation_pending()) {
+          set_phy_tree_root_node<false, self_type>(root_block, &node);
+          auto &stable_root = (RootBlockRef&)*root_block->get_prior_instance();
+          set_phy_tree_root_node<true, self_type>(stable_root, &node);
+        } else {
+          assert(!root_block->is_pending());
+          set_phy_tree_root_node<true, self_type>(root_block, &node);
+        }
       }
       if (c.pins) {
         c.pins->add_pin(node.pin);
@@ -1111,6 +1143,16 @@ private:
       if (parent_pos) {
         auto &parent = parent_pos->node;
         parent->link_child(&node, parent_pos->pos);
+      } else {
+        auto &root_block = c.trans.get_root();
+        if (root_block->is_mutation_pending()) {
+          set_phy_tree_root_node<false, self_type>(root_block, &node);
+          auto &stable_root = (RootBlockRef&)*root_block->get_prior_instance();
+          set_phy_tree_root_node<true, self_type>(stable_root, &node);
+        } else {
+          assert(!root_block->is_pending());
+          set_phy_tree_root_node<true, self_type>(root_block, &node);
+        }
       }
       if (c.pins) {
         c.pins->add_pin(node.pin);
@@ -1157,40 +1199,80 @@ private:
     op_context_t<node_key_t> c,
     iterator &iter,
     mapped_space_visitor_t *visitor) const {
-    if (root.get_depth() > 1) {
-      return get_internal_node<true>(
-	c,
-	root.get_depth(),
-	root.get_location(),
-	min_max_t<node_key_t>::min,
-	min_max_t<node_key_t>::max,
-        std::nullopt
-      ).si_then([this, visitor, &iter](InternalNodeRef root_node) {
-	iter.get_internal(root.get_depth()).node = root_node;
+    LOG_PREFIX(FixedKVBtree::lookup_root);
+    auto root_node = get_root_node(c.trans);
+    if (root_node) {
+      SUBTRACET(seastore_fixedkv_tree,
+        "got root node on {}, res: {}",
+        c.trans,
+        *root_block,
+        *root_node);
+
+      if (!root_node->is_pending_in_trans(c.trans.get_trans_id())) {
+        c.trans.add_to_read_set(root_node);
+      }
+    }
+
+    if (get_root().get_depth() > 1) {
+      auto on_found =
+        [this, visitor, &iter](InternalNodeRef &root_node) {
+	iter.get_internal(get_root().get_depth()).node = root_node;
 	if (visitor) (*visitor)(
           root_node->get_paddr(),
           root_node->get_node_meta().begin,
           root_node->get_length(),
-          root.get_depth(),
+          get_root().get_depth(),
           internal_node_t::TYPE);
 	return lookup_root_iertr::now();
-      });
-    } else {
-      return get_leaf_node<true>(
+      };
+
+      if (root_node) {
+        return root_node->wait_io().then(
+          [root_node=root_node->template cast<internal_node_t>(),
+          on_found=std::move(on_found)]() mutable {
+          return on_found(root_node);
+        });
+      }
+
+      return get_internal_node<true>(
 	c,
-	root.get_location(),
+	get_root().get_depth(),
+	get_root().get_location(),
 	min_max_t<node_key_t>::min,
 	min_max_t<node_key_t>::max,
         std::nullopt
-      ).si_then([visitor, &iter, this](LeafNodeRef root_node) {
+      ).si_then([on_found=std::move(on_found)](InternalNodeRef root_node) {
+	return on_found(root_node);
+      });
+    } else {
+      auto on_found =
+        [visitor, &iter, this](LeafNodeRef root_node) {
 	iter.leaf.node = root_node;
 	if (visitor) (*visitor)(
           root_node->get_paddr(),
           root_node->get_node_meta().begin,
           root_node->get_length(),
-          root.get_depth(),
+          get_root().get_depth(),
           leaf_node_t::TYPE);
 	return lookup_root_iertr::now();
+      };
+
+      if (root_node) {
+        return root_node->wait_io().then(
+          [root_node=root_node->template cast<leaf_node_t>(),
+          on_found=std::move(on_found)]() mutable {
+          return on_found(root_node);
+        });
+      }
+
+      return get_leaf_node<true>(
+	c,
+	get_root().get_location(),
+	min_max_t<node_key_t>::min,
+	min_max_t<node_key_t>::max,
+        std::nullopt
+      ).si_then([on_found=std::move(on_found)](LeafNodeRef root_node) {
+        return on_found(root_node);
       });
     }
   }
@@ -1414,7 +1496,7 @@ private:
   ) const {
     LOG_PREFIX(FixedKVBtree::lookup);
     return seastar::do_with(
-      iterator{root.get_depth()},
+      iterator{get_root().get_depth()},
       std::forward<LI>(lookup_internal),
       std::forward<LL>(lookup_leaf),
       [FNAME, this, visitor, c](auto &iter, auto &li, auto &ll) {
@@ -1429,11 +1511,12 @@ private:
 	    auto riter = ll(*(root_entry.node));
 	    root_entry.pos = riter->get_offset();
 	  }
-	  SUBTRACET(seastore_fixedkv_tree, "got root, depth {}", c.trans, root.get_depth());
+	  SUBTRACET(seastore_fixedkv_tree, "got root, depth {}",
+            c.trans, get_root().get_depth());
 	  return lookup_depth_range(
 	    c,
 	    iter,
-	    root.get_depth() - 1,
+	    get_root().get_depth() - 1,
 	    0,
 	    li,
 	    ll,
@@ -1532,16 +1615,20 @@ private:
       nroot->journal_insert(
         nroot->begin(),
         min_max_t<node_key_t>::min,
-        root.get_location(),
+        get_root().get_location(),
         nullptr);
       iter.internal.push_back({nroot, 0});
 
-      root.set_location(nroot->get_paddr());
-      root.set_depth(iter.get_depth());
-      ceph_assert(root.get_depth() <= MAX_FIXEDKVBTREE_DEPTH);
       get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
       get_tree_stats<self_type>(c.trans).extents_num_delta++;
-      root_dirty = true;
+
+      root_block = c.cache.duplicate_for_write(
+        c.trans, root_block)->template cast<RootBlock>();
+      get_root().set_location(nroot->get_paddr());
+      get_root().set_depth(iter.get_depth());
+      ceph_assert(get_root().get_depth() <= MAX_FIXEDKVBTREE_DEPTH);
+      set_root_node(nroot);
+      nroot->root_block = root_block;
     }
 
     /* pos may be either node_position_t<leaf_node_t> or
@@ -1683,13 +1770,24 @@ private:
                   c.cache.retire_extent(c.trans, pos.node);
                   assert(pos.pos == 0);
                   auto node_iter = pos.get_iter();
-                  root.set_location(
-                    node_iter->get_val().maybe_relative_to(pos.node->get_paddr()));
                   iter.internal.pop_back();
-                  root.set_depth(iter.get_depth());
                   get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
                   get_tree_stats<self_type>(c.trans).extents_num_delta--;
-                  root_dirty = true;
+
+                  root_block = c.cache.duplicate_for_write(
+                    c.trans, root_block
+                  )->template cast<RootBlock>();
+                  get_root().set_location(
+                    node_iter->get_val().maybe_relative_to(pos.node->get_paddr()));
+                  get_root().set_depth(iter.get_depth());
+                  if (iter.get_depth() > 1) {
+                    auto root_node = iter.get_internal(iter.get_depth()).node;
+                    set_root_node(root_node);
+                    root_node->root_block = root_block;
+                  } else {
+                    set_root_node(iter.leaf.node);
+                    iter.leaf.node->root_block = root_block;
+                  }
                 } else {
                   SUBTRACET(seastore_fixedkv_tree, "no need to collapse root", c.trans);
                 }
@@ -1903,9 +2001,6 @@ struct is_fixed_kv_tree<
     pin_t,
     node_size>> : std::true_type {};
 
-template <typename T>
-phy_tree_root_t& get_phy_tree_root(root_t& r);
-
 template <
   typename tree_type_t,
   typename node_key_t,
@@ -1915,27 +2010,13 @@ auto with_btree(
   Cache &cache,
   op_context_t<node_key_t> c,
   F &&f) {
-  using base_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using base_iertr = trans_iertr<base_ertr>;
   return cache.get_root(
     c.trans
-  ).si_then([c, f=std::forward<F>(f), &cache](RootBlockRef croot) mutable {
+  ).si_then([f=std::forward<F>(f)](RootBlockRef croot) mutable {
     return seastar::do_with(
-      tree_type_t(get_phy_tree_root<tree_type_t>(croot->get_root())),
-      [c, croot, f=std::move(f), &cache](auto &btree) mutable {
-        return f(
-          btree
-        ).si_then([c, croot, &btree, &cache] {
-          if (btree.is_root_dirty()) {
-            auto mut_croot = cache.duplicate_for_write(
-              c.trans, croot
-            )->template cast<RootBlock>();
-            get_phy_tree_root<tree_type_t>(mut_croot->get_root()) =
-              btree.get_root_undirty();
-          }
-          return base_iertr::now();
-        });
+      tree_type_t(croot),
+      [f=std::move(f)](auto &btree) mutable {
+        return f(btree);
       });
   });
 }
