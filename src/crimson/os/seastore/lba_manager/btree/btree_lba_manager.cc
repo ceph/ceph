@@ -33,6 +33,58 @@ phy_tree_root_t& get_phy_tree_root<
   return r.lba_root;
 }
 
+template <>
+const get_phy_tree_root_node_ret get_phy_tree_root_node<
+  crimson::os::seastore::lba_manager::btree::LBABtree>(
+  const RootBlockRef &root_block, op_context_t<laddr_t> c)
+{
+  auto lba_root = root_block->lba_root_node;
+  if (lba_root) {
+    ceph_assert(lba_root->is_initial_pending()
+      == root_block->is_pending());
+    return {true,
+	    trans_intr::make_interruptible(
+	      c.cache.get_extent_viewable_by_trans(c.trans, lba_root))};
+  } else if (root_block->is_pending()) {
+    auto &prior = static_cast<RootBlock&>(*root_block->get_prior_instance());
+    lba_root = prior.lba_root_node;
+    if (lba_root) {
+      return {true,
+	      trans_intr::make_interruptible(
+		c.cache.get_extent_viewable_by_trans(c.trans, lba_root))};
+    } else {
+      return {false,
+	      trans_intr::make_interruptible(
+		seastar::make_ready_future<
+		  CachedExtentRef>(CachedExtentRef()))};
+    }
+  } else {
+    return {false,
+	    trans_intr::make_interruptible(
+	      seastar::make_ready_future<
+		CachedExtentRef>(CachedExtentRef()))};
+  }
+}
+
+template <typename ROOT>
+void link_phy_tree_root_node(RootBlockRef &root_block, ROOT* lba_root) {
+  root_block->lba_root_node = lba_root;
+  ceph_assert(lba_root != nullptr);
+  lba_root->root_block = root_block;
+}
+
+template void link_phy_tree_root_node(
+  RootBlockRef &root_block, lba_manager::btree::LBAInternalNode* lba_root);
+template void link_phy_tree_root_node(
+  RootBlockRef &root_block, lba_manager::btree::LBALeafNode* lba_root);
+template void link_phy_tree_root_node(
+  RootBlockRef &root_block, lba_manager::btree::LBANode* lba_root);
+
+template <>
+void unlink_phy_tree_root_node<laddr_t>(RootBlockRef &root_block) {
+  root_block->lba_root_node = nullptr;
+}
+
 }
 
 namespace crimson::os::seastore::lba_manager::btree {
@@ -43,7 +95,8 @@ BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
   LOG_PREFIX(BtreeLBAManager::mkfs);
   INFOT("start", t);
   return cache.get_root(t).si_then([this, &t](auto croot) {
-    croot->get_root().lba_root = LBABtree::mkfs(get_context(t));
+    assert(croot->is_mutation_pending());
+    croot->get_root().lba_root = LBABtree::mkfs(croot, get_context(t));
     return mkfs_iertr::now();
   }).handle_error_interruptible(
     mkfs_iertr::pass_further{},
@@ -301,6 +354,8 @@ BtreeLBAManager::base_iertr::future<> _init_cached_extent(
       if (!iter.is_end() &&
 	  iter.get_key() == logn->get_laddr() &&
 	  iter.get_val().paddr == logn->get_paddr()) {
+	assert(!iter.get_leaf_node()->is_pending());
+	iter.get_leaf_node()->link_child(logn.get(), iter.get_leaf_pos());
 	logn->set_pin(iter.get_pin());
 	ceph_assert(iter.get_val().len == e->get_length());
 	if (c.pins) {

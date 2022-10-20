@@ -19,6 +19,57 @@ phy_tree_root_t& get_phy_tree_root<
   return r.backref_root;
 }
 
+template<>
+const get_phy_tree_root_node_ret get_phy_tree_root_node<
+  crimson::os::seastore::backref::BackrefBtree>(
+  const RootBlockRef &root_block, op_context_t<paddr_t> c) {
+  auto backref_root = root_block->backref_root_node;
+  if (backref_root) {
+    ceph_assert(backref_root->is_initial_pending()
+      == root_block->is_pending());
+    return {true,
+	    trans_intr::make_interruptible(
+	      c.cache.get_extent_viewable_by_trans(c.trans, backref_root))};
+  } else if (root_block->is_pending()) {
+    auto &prior = static_cast<RootBlock&>(*root_block->get_prior_instance());
+    backref_root = prior.backref_root_node;
+    if (backref_root) {
+      return {true,
+	      trans_intr::make_interruptible(
+		c.cache.get_extent_viewable_by_trans(c.trans, backref_root))};
+    } else {
+      return {false,
+	      trans_intr::make_interruptible(
+		seastar::make_ready_future<
+		  CachedExtentRef>(CachedExtentRef()))};
+    }
+  } else {
+    return {false,
+	    trans_intr::make_interruptible(
+	      seastar::make_ready_future<
+		CachedExtentRef>(CachedExtentRef()))};
+  }
+}
+
+template <typename ROOT>
+void link_phy_tree_root_node(RootBlockRef &root_block, ROOT* backref_root) {
+  root_block->backref_root_node = backref_root;
+  ceph_assert(backref_root != nullptr);
+  backref_root->root_block = root_block;
+}
+
+template void link_phy_tree_root_node(
+  RootBlockRef &root_block, backref::BackrefInternalNode* backref_root);
+template void link_phy_tree_root_node(
+  RootBlockRef &root_block, backref::BackrefLeafNode* backref_root);
+template void link_phy_tree_root_node(
+  RootBlockRef &root_block, backref::BackrefNode* backref_root);
+
+template <>
+void unlink_phy_tree_root_node<paddr_t>(RootBlockRef &root_block) {
+  root_block->backref_root_node = nullptr;
+}
+
 }
 
 namespace crimson::os::seastore::backref {
@@ -36,7 +87,8 @@ BtreeBackrefManager::mkfs(
   LOG_PREFIX(BtreeBackrefManager::mkfs);
   INFOT("start", t);
   return cache.get_root(t).si_then([this, &t](auto croot) {
-    croot->get_root().backref_root = BackrefBtree::mkfs(get_context(t));
+    assert(croot->is_mutation_pending());
+    croot->get_root().backref_root = BackrefBtree::mkfs(croot, get_context(t));
     return mkfs_iertr::now();
   }).handle_error_interruptible(
     mkfs_iertr::pass_further{},
