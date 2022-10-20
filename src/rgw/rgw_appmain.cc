@@ -416,12 +416,10 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     RGWFrontend* fe = nullptr;
 
     if (framework == "loadgen") {
-      int port;
-      config->get_val("port", 80, &port);
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
 
-      RGWProcessEnv env = {driver, &rest, olog, port, uri_prefix,
+      RGWProcessEnv env = {driver, &rest, olog, uri_prefix,
 	    auth_registry, ratelimiter.get(), lua_background.get()};
 
       fe = new RGWLoadGenFrontend(env, config);
@@ -431,13 +429,12 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       config->get_val("port", 80, &port);
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
-      RGWProcessEnv env{driver, &rest, olog, port, uri_prefix,
+      RGWProcessEnv env{driver, &rest, olog, uri_prefix,
 	    auth_registry, ratelimiter.get(), lua_background.get()};
       fe = new RGWAsioFrontend(env, config, *(sched_ctx.get()));
     }
     else if (framework == "rgw-nfs") {
-      int port = 80;
-      RGWProcessEnv env = { driver, &rest, olog, port };
+      RGWProcessEnv env = { driver, &rest, olog };
       fe = new RGWLibFrontend(env, config);
       if (rgwlib) {
         rgwlib->set_fe(static_cast<RGWLibFrontend*>(fe));
