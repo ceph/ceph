@@ -626,6 +626,7 @@ private:
   }
 
   CachedExtent* get_transactional_view(Transaction &t);
+  CachedExtent* get_transactional_view(transaction_id_t tid);
 
   read_set_item_t<Transaction>::trans_set_t transactions;
 

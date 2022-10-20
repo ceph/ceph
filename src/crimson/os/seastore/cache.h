@@ -512,6 +512,34 @@ public:
     return get_absent_extent<T>(t, offset, length, [](T &){});
   }
 
+  seastar::future<CachedExtentRef> get_extent_viewable_by_trans(
+    Transaction &t,
+    CachedExtentRef extent)
+  {
+    auto p_extent = extent->get_transactional_view(t);
+    if (!p_extent->is_pending_in_trans(t.get_trans_id())) {
+      t.add_to_read_set(p_extent);
+      if (!p_extent->is_mutation_pending()) {
+	touch_extent(*p_extent);
+      }
+    }
+    return p_extent->wait_io(
+    ).then([p_extent] {
+      return CachedExtentRef(p_extent);
+    });
+  }
+
+  template <typename T>
+  seastar::future<TCachedExtentRef<T>> get_extent_viewable_by_trans(
+    Transaction &t,
+    TCachedExtentRef<T> extent)
+  {
+    return get_extent_viewable_by_trans(t, CachedExtentRef(extent.get())
+    ).then([](auto p_extent) {
+      return p_extent->template cast<T>();
+    });
+  }
+
   extent_len_t get_block_size() const {
     return epm.get_block_size();
   }
