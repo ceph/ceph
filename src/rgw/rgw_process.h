@@ -32,7 +32,6 @@ struct RGWProcessEnv {
   rgw::sal::Driver* driver;
   RGWREST *rest;
   OpsLogSink *olog;
-  int port;
   std::string uri_prefix;
   std::shared_ptr<rgw::auth::StrategyRegistry> auth_registry;
   //maybe there is a better place to driver the rate limit data structure
