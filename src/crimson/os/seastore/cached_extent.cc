@@ -78,11 +78,12 @@ CachedExtent::~CachedExtent()
     parent_index->erase(*this);
   }
 }
-
 CachedExtent* CachedExtent::get_transactional_view(Transaction &t) {
-  auto it = mutation_pendings.find(
-    t.get_trans_id(),
-    trans_spec_view_t::cmp_t());
+  return get_transactional_view(t.get_trans_id());
+}
+
+CachedExtent* CachedExtent::get_transactional_view(transaction_id_t tid) {
+  auto it = mutation_pendings.find(tid, trans_spec_view_t::cmp_t());
   if (it != mutation_pendings.end()) {
     return (CachedExtent*)&(*it);
   } else {

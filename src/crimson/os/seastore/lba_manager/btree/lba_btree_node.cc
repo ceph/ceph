@@ -35,7 +35,7 @@ std::ostream &LBALeafNode::print_detail(std::ostream &out) const
   if (parent_tracker) {
     return out << ", parent=" << (void*)parent_tracker->parent.get();
   }
-  return out;
+  return out << ", root_block=" << (void*)root_block.get();
 }
 
 void LBALeafNode::resolve_relative_addrs(paddr_t base)

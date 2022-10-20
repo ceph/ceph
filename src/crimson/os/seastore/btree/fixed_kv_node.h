@@ -18,6 +18,7 @@
 
 #include "crimson/os/seastore/btree/btree_range_pin.h"
 #include "crimson/os/seastore/btree/fixed_kv_btree.h"
+#include "crimson/os/seastore/root_block.h"
 
 namespace crimson::os::seastore {
 
@@ -102,6 +103,7 @@ struct FixedKVNode : CachedExtent {
   uint16_t capacity = 0;
   parent_tracker_t* my_tracker = nullptr;
   parent_tracker_ref parent_tracker;
+  RootBlockRef root_block;
 
   FixedKVNode(uint16_t capacity, ceph::bufferptr &&ptr)
     : CachedExtent(std::move(ptr)),
@@ -345,11 +347,16 @@ struct FixedKVNode : CachedExtent {
   }
 
   void set_parent_tracker_from_prior_instance() {
-    if (pin.is_root()) {
-      return;
-    }
     assert(is_mutation_pending());
     auto &prior = (FixedKVNode&)(*get_prior_instance());
+    if (pin.is_root()) {
+      ceph_assert(prior.root_block);
+      ceph_assert(pending_for_transaction);
+      root_block = prior.root_block;
+      link_phy_tree_root_node(root_block, this);
+      return;
+    }
+    ceph_assert(!root_block);
     parent_tracker = prior.parent_tracker;
     auto &parent = parent_tracker->parent;
     assert(parent);
@@ -605,16 +612,19 @@ struct FixedKVInternalNode
   }
 
   virtual ~FixedKVInternalNode() {
-    if (!this->pin.is_root()
-	&& this->is_valid()
-	&& !this->is_pending()) {
-      ceph_assert(this->parent_tracker);
-      auto &parent = this->parent_tracker->parent;
-      ceph_assert(parent);
-      auto off = parent->lower_bound_offset(this->get_meta().begin);
-      assert(parent->get_key_from_idx(off) == get_node_meta().begin);
-      assert(parent->children[off] == this);
-      parent->children[off] = nullptr;
+    if (this->is_valid() && !this->is_pending()) {
+      if (this->pin.is_root()) {
+	ceph_assert(this->root_block);
+	unlink_phy_tree_root_node<NODE_KEY>(this->root_block);
+      } else {
+	ceph_assert(this->parent_tracker);
+	auto &parent = this->parent_tracker->parent;
+	ceph_assert(parent);
+	auto off = parent->lower_bound_offset(this->get_meta().begin);
+	assert(parent->get_key_from_idx(off) == this->get_meta().begin);
+	assert(parent->children[off] == this);
+	parent->children[off] = nullptr;
+      }
     }
   }
 
@@ -855,7 +865,7 @@ struct FixedKVInternalNode
     if (this->my_tracker) {
       out << ", my_tracker->parent=" << (void*)this->my_tracker->parent.get();
     }
-    return out;
+    return out << ", root_block=" << (void*)this->root_block.get();
   }
 
   ceph::bufferlist get_delta() {
@@ -941,16 +951,19 @@ struct FixedKVLeafNode
   }
 
   virtual ~FixedKVLeafNode() {
-    if (!this->pin.is_root()
-	&& this->is_valid()
-	&& !this->is_pending()) {
-      ceph_assert(this->parent_tracker);
-      auto &parent = this->parent_tracker->parent;
-      ceph_assert(parent);
-      auto off = parent->lower_bound_offset(this->get_meta().begin);
-      assert(parent->get_key_from_idx(off) == get_node_meta().begin);
-      assert(parent->children[off] == this);
-      parent->children[off] = nullptr;
+    if (this->is_valid() && !this->is_pending()) {
+      if (this->pin.is_root()) {
+	ceph_assert(this->root_block);
+	unlink_phy_tree_root_node<NODE_KEY>(this->root_block);
+      } else {
+	ceph_assert(this->parent_tracker);
+	auto &parent = this->parent_tracker->parent;
+	ceph_assert(parent);
+	auto off = parent->lower_bound_offset(this->get_meta().begin);
+	assert(parent->get_key_from_idx(off) == this->get_meta().begin);
+	assert(parent->children[off] == this);
+	parent->children[off] = nullptr;
+      }
     }
   }
 
