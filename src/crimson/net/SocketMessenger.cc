@@ -441,13 +441,12 @@ void SocketMessenger::closed_conn(SocketConnectionRef conn)
   }
 }
 
-seastar::future<uint32_t>
-SocketMessenger::get_global_seq(uint32_t old)
+uint32_t SocketMessenger::get_global_seq(uint32_t old)
 {
   if (old > global_seq) {
     global_seq = old;
   }
-  return seastar::make_ready_future<uint32_t>(++global_seq);
+  return ++global_seq;
 }
 
 } // namespace crimson::net
