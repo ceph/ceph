@@ -37,6 +37,7 @@ struct RadosEnv : public ::testing::Environment {
     ASSERT_EQ(0, r);
   }
   void TearDown() override {
+    ASSERT_EQ(0, rados->get_rados_handle()->pool_delete(poolname));
     rados->shutdown();
     rados.reset();
   }
@@ -179,6 +180,7 @@ TEST_F(Aio_Throttle, YieldCostOverWindow)
       ASSERT_EQ(1u, c.size());
       EXPECT_EQ(-EDEADLK, c.front().result);
     });
+  context.run();
 }
 
 TEST_F(Aio_Throttle, YieldingThrottleOverMax)
