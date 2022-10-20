@@ -873,8 +873,7 @@ void ProtocolV2::execute_connecting()
                 make_error_code(crimson::net::error::bad_peer_address));
           }
           _my_addr_from_peer.set_type(entity_addr_t::TYPE_MSGR2);
-          return messenger.learned_addr(_my_addr_from_peer, conn);
-        }).then([this] {
+          messenger.learned_addr(_my_addr_from_peer, conn);
           return client_auth();
         }).then([this] {
           if (server_cookie == 0) {
@@ -1481,8 +1480,7 @@ void ProtocolV2::execute_accepting()
             throw std::system_error(
                 make_error_code(crimson::net::error::bad_peer_address));
           }
-          return messenger.learned_addr(_my_addr_from_peer, conn);
-        }).then([this] {
+          messenger.learned_addr(_my_addr_from_peer, conn);
           return server_auth();
         }).then([this] {
           return read_main_preamble();
