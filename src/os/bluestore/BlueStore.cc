@@ -3678,11 +3678,11 @@ void BlueStore::Onode::get() {
   }
 }
 void BlueStore::Onode::put() {
-  ++put_nref;
   int n = --nref;
   if (n == 1) {
     OnodeCacheShard* ocs = c->get_onode_cache();
     ocs->lock.lock();
+    ++put_nref;
     // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
     while (ocs != c->get_onode_cache()) {
       ocs->lock.unlock();
@@ -3701,10 +3701,11 @@ void BlueStore::Onode::put() {
         c->onode_map._remove(oid);
       }
     }
+    n = nref;
+    --put_nref;
     ocs->lock.unlock();
   }
-  auto pn = --put_nref;
-  if (nref == 0 && pn == 0) {
+  if (n == 0 && put_nref == 0) {
     delete this;
   }
 }
