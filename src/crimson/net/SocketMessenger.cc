@@ -34,10 +34,10 @@ namespace crimson::net {
 SocketMessenger::SocketMessenger(const entity_name_t& myname,
                                  const std::string& logic_name,
                                  uint32_t nonce)
-  : Messenger{myname},
-    master_sid{seastar::this_shard_id()},
+  : master_sid{seastar::this_shard_id()},
     logic_name{logic_name},
-    nonce{nonce}
+    nonce{nonce},
+    my_name{myname}
 {}
 
 SocketMessenger::~SocketMessenger()
