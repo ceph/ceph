@@ -11028,7 +11028,6 @@ void OSDShard::unprime_split_children(spg_t parent, unsigned old_pg_num)
 
 void OSDShard::update_scheduler_config()
 {
-  std::lock_guard l(shard_lock);
   scheduler->update_configuration();
 }
 
