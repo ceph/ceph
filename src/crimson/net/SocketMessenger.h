@@ -110,7 +110,7 @@ class SocketMessenger final : public Messenger {
   void set_policy_throttler(entity_type_t peer_type, Throttle* throttle) override;
 
  public:
-  seastar::future<uint32_t> get_global_seq(uint32_t old=0);
+  uint32_t get_global_seq(uint32_t old=0);
 
   void learned_addr(const entity_addr_t &peer_addr_for_me,
                     const SocketConnection& conn);
