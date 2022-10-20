@@ -20,6 +20,7 @@
     "target": "es2015",
     "module": "es2020",
     "baseUrl": "./",
+    "resolveJsonModule": true,
     "paths": {
       "~/*": ["src/*"]
     },
