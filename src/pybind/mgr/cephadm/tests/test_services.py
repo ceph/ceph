@@ -1,5 +1,6 @@
 from textwrap import dedent
 import json
+import urllib.parse
 import yaml
 from mgr_util import build_url
 
@@ -276,124 +277,72 @@ class TestMonitoring:
           - url: '{url}/api/prometheus_receiver'
         """
 
-    @patch("cephadm.serve.CephadmServe._run_cephadm")
-    @patch("mgr_module.MgrModule.get")
-    def test_alertmanager_config(self, mock_get, _run_cephadm,
-                                 cephadm_module: CephadmOrchestrator):
-        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
-        mock_get.return_value = {"services": {"dashboard": "http://[::1]:8080"}}
-
-        with with_host(cephadm_module, 'test'):
-            with with_service(cephadm_module, AlertManagerSpec()):
-                y = dedent(self._get_config('http://localhost:8080')).lstrip()
-                _run_cephadm.assert_called_with(
-                    'test',
-                    'alertmanager.test',
-                    'deploy',
-                    [
-                        '--name', 'alertmanager.test',
-                        '--meta-json', '{"service_name": "alertmanager", "ports": [9093, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
-                        '--config-json', '-', '--tcp-ports', '9093 9094'
-                    ],
-                    stdin=json.dumps({"files": {"alertmanager.yml": y}, "peers": []}),
-                    image='')
-
-    @patch("cephadm.serve.CephadmServe._run_cephadm")
-    @patch("mgr_module.MgrModule.get")
-    def test_alertmanager_config_v6(self, mock_get, _run_cephadm,
-                                    cephadm_module: CephadmOrchestrator):
-        dashboard_url = "http://[2001:db8:4321:0000:0000:0000:0000:0000]:8080"
-        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
-        mock_get.return_value = {"services": {"dashboard": dashboard_url}}
-
-        with with_host(cephadm_module, 'test'):
-            with with_service(cephadm_module, AlertManagerSpec()):
-                y = dedent(self._get_config(dashboard_url)).lstrip()
-                _run_cephadm.assert_called_with(
-                    'test',
-                    'alertmanager.test',
-                    'deploy',
-                    [
-                        '--name', 'alertmanager.test',
-                        '--meta-json',
-                        '{"service_name": "alertmanager", "ports": [9093, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
-                        '--config-json', '-', '--tcp-ports', '9093 9094'
-                    ],
-                    stdin=json.dumps({"files": {"alertmanager.yml": y}, "peers": []}),
-                    image='')
-
+    @pytest.mark.parametrize(
+        "dashboard_url,expected_yaml_url",
+        [
+            # loopback address
+            ("http://[::1]:8080", "http://localhost:8080"),
+            # IPv6
+            (
+                "http://[2001:db8:4321:0000:0000:0000:0000:0000]:8080",
+                "http://[2001:db8:4321:0000:0000:0000:0000:0000]:8080",
+            ),
+            # IPv6 to FQDN
+            (
+                "http://[2001:db8:4321:0000:0000:0000:0000:0000]:8080",
+                "http://mgr.fqdn.test:8080",
+            ),
+            # IPv4
+            (
+                "http://192.168.0.123:8080",
+                "http://192.168.0.123:8080",
+            ),
+            # IPv4 to FQDN
+            (
+                "http://192.168.0.123:8080",
+                "http://mgr.fqdn.test:8080",
+            ),
+        ],
+    )
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("mgr_module.MgrModule.get")
     @patch("socket.getfqdn")
-    def test_alertmanager_config_v6_fqdn(self, mock_getfqdn, mock_get, _run_cephadm,
-                                         cephadm_module: CephadmOrchestrator):
-        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
-        mock_getfqdn.return_value = "mgr.test.fqdn"
-        mock_get.return_value = {"services": {
-            "dashboard": "http://[2001:db8:4321:0000:0000:0000:0000:0000]:8080"}}
-
-        with with_host(cephadm_module, 'test'):
-            with with_service(cephadm_module, AlertManagerSpec()):
-                y = dedent(self._get_config("http://mgr.test.fqdn:8080")).lstrip()
-                _run_cephadm.assert_called_with(
-                    'test',
-                    'alertmanager.test',
-                    'deploy',
-                    [
-                        '--name', 'alertmanager.test',
-                        '--meta-json',
-                        '{"service_name": "alertmanager", "ports": [9093, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
-                        '--config-json', '-', '--tcp-ports', '9093 9094'
-                    ],
-                    stdin=json.dumps({"files": {"alertmanager.yml": y}, "peers": []}),
-                    image='')
-
-    @patch("cephadm.serve.CephadmServe._run_cephadm")
-    @patch("mgr_module.MgrModule.get")
-    def test_alertmanager_config_v4(self, mock_get, _run_cephadm, cephadm_module: CephadmOrchestrator):
-        dashboard_url = "http://192.168.0.123:8080"
-        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+    def test_alertmanager_config(
+        self,
+        mock_getfqdn,
+        mock_get,
+        _run_cephadm,
+        cephadm_module: CephadmOrchestrator,
+        dashboard_url,
+        expected_yaml_url,
+    ):
+        _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
         mock_get.return_value = {"services": {"dashboard": dashboard_url}}
+        purl = urllib.parse.urlparse(expected_yaml_url)
+        mock_getfqdn.return_value = purl.hostname
 
-        with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, "test"):
             with with_service(cephadm_module, AlertManagerSpec()):
-                y = dedent(self._get_config(dashboard_url)).lstrip()
+                y = dedent(self._get_config(expected_yaml_url)).lstrip()
                 _run_cephadm.assert_called_with(
-                    'test',
-                    'alertmanager.test',
-                    'deploy',
+                    "test",
+                    "alertmanager.test",
+                    "deploy",
                     [
-                        '--name', 'alertmanager.test',
-                        '--meta-json', '{"service_name": "alertmanager", "ports": [9093, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
-                        '--config-json', '-', '--tcp-ports', '9093 9094'
-                    ],
-                    stdin=json.dumps({"files": {"alertmanager.yml": y}, "peers": []}),
-                    image='')
-
-    @patch("cephadm.serve.CephadmServe._run_cephadm")
-    @patch("mgr_module.MgrModule.get")
-    @patch("socket.getfqdn")
-    def test_alertmanager_config_v4_fqdn(self, mock_getfqdn, mock_get, _run_cephadm,
-                                         cephadm_module: CephadmOrchestrator):
-        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
-        mock_getfqdn.return_value = "mgr.test.fqdn"
-        mock_get.return_value = {"services": {"dashboard": "http://192.168.0.123:8080"}}
-
-        with with_host(cephadm_module, 'test'):
-            with with_service(cephadm_module, AlertManagerSpec()):
-                y = dedent(self._get_config("http://mgr.test.fqdn:8080")).lstrip()
-                _run_cephadm.assert_called_with(
-                    'test',
-                    'alertmanager.test',
-                    'deploy',
-                    [
-                        '--name', 'alertmanager.test',
-                        '--meta-json',
+                        "--name",
+                        "alertmanager.test",
+                        "--meta-json",
                         '{"service_name": "alertmanager", "ports": [9093, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
-                        '--config-json', '-', '--tcp-ports', '9093 9094'
+                        "--config-json",
+                        "-",
+                        "--tcp-ports",
+                        "9093 9094",
                     ],
-                    stdin=json.dumps({"files": {"alertmanager.yml": y}, "peers": []}),
-                    image='')
+                    stdin=json.dumps(
+                        {"files": {"alertmanager.yml": y}, "peers": []}
+                    ),
+                    image="",
+                )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_prometheus_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
