@@ -462,6 +462,8 @@ class CephadmUpgrade:
         self.mgr.log.info('Upgrade: Resumed upgrade to %s' % self.target_image)
         self._save_upgrade_state()
         self.mgr.event.set()
+        for alert_id in self.UPGRADE_ERRORS:
+            self.mgr.remove_health_warning(alert_id)
         return 'Resumed upgrade to %s' % self.target_image
 
     def upgrade_stop(self) -> str:
