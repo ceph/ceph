@@ -2989,7 +2989,9 @@ Then run the following:
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None, host_placement: Optional[str] = None,
                       services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
         if self.inventory.get_host_with_state("maintenance"):
-            raise OrchestratorError("upgrade aborted - you have host(s) in maintenance state")
+            raise OrchestratorError("Upgrade aborted - you have host(s) in maintenance state")
+        if self.offline_hosts:
+            raise OrchestratorError(f"Upgrade aborted - Some host(s) are currently offline: {self.offline_hosts}")
         if daemon_types is not None and services is not None:
             raise OrchestratorError('--daemon-types and --services are mutually exclusive')
         if daemon_types is not None:
