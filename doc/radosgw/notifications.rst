@@ -454,8 +454,9 @@ Detailed under: `Bucket Operations`_.
 Events
 ~~~~~~
 
-The events are in JSON format (regardless of the actual endpoint), and share the same structure as the S3-compatible events
-pushed or pulled using the pubsub sync module. For example:
+Events are in JSON format (regardless of the actual endpoint), and share the
+same structure as S3-compatible events that are pushed or pulled using the
+pubsub sync module. For example:
 
 ::
 
@@ -502,29 +503,39 @@ pushed or pulled using the pubsub sync module. For example:
        }
    ]}
 
-- awsRegion: zonegroup
-- eventTime: timestamp indicating when the event was triggered
-- eventName: for list of supported events see: `S3 Notification Compatibility`_. Note that the eventName values do not start with the `s3:` prefix.
-- userIdentity.principalId: user that triggered the change
+- awsRegion: The zonegroup.
+- eventTime: The timestamp, indicating when the event was triggered.
+- eventName: For the list of supported events see: `S3 Notification
+  Compatibility`_. Note that eventName values do not start with the `s3:`
+  prefix.
+- userIdentity.principalId: The user that triggered the change.
 - requestParameters.sourceIPAddress: not supported
-- responseElements.x-amz-request-id: request ID of the original change
-- responseElements.x_amz_id_2: RGW on which the change was made
-- s3.configurationId: notification ID that created the event
-- s3.bucket.name: name of the bucket
-- s3.bucket.ownerIdentity.principalId: owner of the bucket
-- s3.bucket.arn: ARN of the bucket
-- s3.bucket.id: Id of the bucket (an extension to the S3 notification API)
-- s3.object.key: object key
-- s3.object.size: object size
-- s3.object.eTag: object etag
-- s3.object.versionId: object version in case of versioned bucket. 
-  When doing a copy, it would include the version of the target object. 
-  When creating a delete marker, it would include the version of the delete marker.
-- s3.object.sequencer: monotonically increasing identifier of the change per object (hexadecimal format)
-- s3.object.metadata: any metadata set on the object sent as: ``x-amz-meta-`` (an extension to the S3 notification API)
-- s3.object.tags: any tags set on the object (an extension to the S3 notification API)
-- s3.eventId: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
-- s3.opaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the topic (an extension to the S3 notification API)
+- responseElements.x-amz-request-id: The request ID of the original change.
+- responseElements.x_amz_id_2: The RGW on which the change was made.
+- s3.configurationId: The notification ID that created the event.
+- s3.bucket.name: The name of the bucket.
+- s3.bucket.ownerIdentity.principalId: The owner of the bucket.
+- s3.bucket.arn: The ARN of the bucket.
+- s3.bucket.id: The ID of the bucket. (This is an extension to the S3
+  notification API.)
+- s3.object.key: The object key.
+- s3.object.size: The object size.
+- s3.object.eTag: The object etag.
+- s3.object.versionId: The object version, if the bucket is versioned. When a
+  copy is made, it includes the version of the target object. When a delete
+  marker is created, it includes the version of the delete marker.
+- s3.object.sequencer: The monotonically-increasing identifier of the "change
+  per object" (hexadecimal format).
+- s3.object.metadata: Any metadata set on the object that is sent as
+  ``x-amz-meta-`` (that is, any metadata set on the object that is sent as an
+  extension to the S3 notification API).
+- s3.object.tags: Any tags set on the object. (This is an extension to the S3
+  notification API.)
+- s3.eventId: The unique ID of the event, which could be used for acking. (This
+  is an extension to the S3 notification API.)
+- s3.opaqueData: This means that "opaque data" is set in the topic configuration
+  and is added to all notifications triggered by the topic. (This is an
+  extension to the S3 notification API.)
 
 .. _PubSub Module : ../pubsub-module
 .. _S3 Notification Compatibility: ../s3-notification-compatibility
