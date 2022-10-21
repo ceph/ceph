@@ -192,6 +192,7 @@ void LabeledPerfCounters::dec(int idx, uint64_t amt)
   if (!(data.type & PERFCOUNTER_U64))
     return;
   data.u64 -= amt;
+  data.accessed = true;
 }
 
 void LabeledPerfCounters::set(int idx, uint64_t amt)
@@ -216,6 +217,7 @@ void LabeledPerfCounters::set(int idx, uint64_t amt)
   } else {
     data.u64 = amt;
   }
+  data.accessed = true;
 }
 
 uint64_t LabeledPerfCounters::get(int idx) const
@@ -230,6 +232,7 @@ uint64_t LabeledPerfCounters::get(int idx) const
   const perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_U64))
     return 0;
+  data.accessed = true;
   return data.u64;
 }
 
@@ -252,6 +255,7 @@ void LabeledPerfCounters::tinc(int idx, utime_t amt)
   } else {
     data.u64 += amt.to_nsec();
   }
+  data.accessed = true;
 }
 
 void LabeledPerfCounters::tinc(int idx, ceph::timespan amt)
@@ -273,6 +277,7 @@ void LabeledPerfCounters::tinc(int idx, ceph::timespan amt)
   } else {
     data.u64 += amt.count();
   }
+  data.accessed = true;
 }
 
 void LabeledPerfCounters::tset(int idx, utime_t amt)
@@ -290,6 +295,7 @@ void LabeledPerfCounters::tset(int idx, utime_t amt)
   data.u64 = amt.to_nsec();
   if (data.type & PERFCOUNTER_LONGRUNAVG)
     ceph_abort();
+  data.accessed = true;
 }
 
 utime_t LabeledPerfCounters::tget(int idx) const
@@ -305,6 +311,7 @@ utime_t LabeledPerfCounters::tget(int idx) const
   if (!(data.type & PERFCOUNTER_TIME))
     return utime_t();
   uint64_t v = data.u64;
+  data.accessed = true;
   return utime_t(v / 1000000000ull, v % 1000000000ull);
 }
 
@@ -323,6 +330,7 @@ void LabeledPerfCounters::hinc(int idx, int64_t x, int64_t y)
   ceph_assert(data.histogram);
 
   data.histogram->inc(x, y);
+  data.accessed = true;
 }
 
 pair<uint64_t, uint64_t> LabeledPerfCounters::get_tavg_ns(int idx) const
@@ -340,6 +348,7 @@ pair<uint64_t, uint64_t> LabeledPerfCounters::get_tavg_ns(int idx) const
   if (!(data.type & PERFCOUNTER_LONGRUNAVG))
     return make_pair(0, 0);
   pair<uint64_t,uint64_t> a = data.read_avg();
+  data.accessed = true;
   return make_pair(a.second, a.first);
 }
 
