@@ -766,6 +766,55 @@ PGBackend::write_iertr::future<> PGBackend::writefull(
     op.flags);
 }
 
+using mocked_load_clone_obc_ertr = crimson::errorator<
+  crimson::ct_error::enoent,
+  crimson::ct_error::object_corrupted>;
+using mocked_lock_clone_obc_iertr =
+  ::crimson::interruptible::interruptible_errorator<
+    ::crimson::osd::IOInterruptCondition,
+    mocked_load_clone_obc_ertr>;
+
+static mocked_lock_clone_obc_iertr::future<crimson::osd::ObjectContextRef>
+mocked_load_clone_obc(const auto& coid)
+{
+  return crimson::ct_error::enoent::make();
+}
+
+static auto head2clone(const hobject_t& hoid)
+{
+  // TODO: transform hoid into coid
+  return hoid;
+}
+
+PGBackend::rollback_iertr::future<> PGBackend::rollback(
+  const SnapSet &ss,
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params,
+  object_stat_sum_t& delta_stats)
+{
+  assert(os.oi.soid.is_head());
+  logger().debug("{} deleting {} and rolling back to old snap {}",
+                  __func__, os.oi.soid, osd_op.op.snap.snapid);
+  return mocked_load_clone_obc(
+    head2clone(os.oi.soid)
+  ).safe_then_interruptible([](auto clone_obc) {
+    // TODO: implement me!
+    static_cast<void>(clone_obc);
+    return remove_iertr::now();
+  }, crimson::ct_error::enoent::handle([this, &os, &txn, &delta_stats] {
+    // there's no snapshot here, or there's no object.
+    // if there's no snapshot, we delete the object; otherwise, do nothing.
+    logger().debug("rollback: deleting head on {}"
+                   " because got ENOENT|whiteout on obc lookup",
+                   os.oi.soid);
+    return remove(os, txn, delta_stats, true /*whiteout*/);
+  }), mocked_load_clone_obc_ertr::assert_all{
+    "unexpected error code in rollback"
+  });
+}
+
 PGBackend::append_ierrorator::future<> PGBackend::append(
   ObjectState& os,
   OSDOp& osd_op,
