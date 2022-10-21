@@ -22,8 +22,6 @@
 
 namespace crimson::os::seastore::journal {
 
-constexpr rbm_abs_addr CBJOURNAL_START_ADDRESS = 0;
-constexpr uint64_t CBJOURNAL_MAGIC = 0xCCCC;
 using RBMDevice = random_block_device::RBMDevice;
 
 /**
@@ -53,29 +51,11 @@ using RBMDevice = random_block_device::RBMDevice;
  *
  */
 
-constexpr uint64_t DEFAULT_SIZE = 1 << 26;
+constexpr uint64_t DEFAULT_TEST_CBJOURNAL_SIZE = 1 << 26;
 constexpr uint64_t DEFAULT_BLOCK_SIZE = 4096;
 
 class CircularBoundedJournal : public Journal {
 public:
-  struct mkfs_config_t {
-    std::string path;
-    size_t block_size = 0;
-    size_t total_size = 0;
-    device_id_t device_id = 0;
-    seastore_meta_t meta;
-    static mkfs_config_t get_default() {
-      device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
-      return mkfs_config_t {
-	"",
-	DEFAULT_BLOCK_SIZE,
-	DEFAULT_SIZE,
-	d_id,
-	seastore_meta_t {}
-      };
-    }
-  };
-
   CircularBoundedJournal(
       JournalTrimmer &trimmer, RBMDevice* device, const std::string &path);
   ~CircularBoundedJournal() {}
@@ -154,22 +134,6 @@ public:
 
   ceph::bufferlist encode_header();
 
-  using mkfs_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg
-  >;
-  using mkfs_ret = mkfs_ertr::future<>;
-
-  /*
-   * mkfs
-   *
-   * make a new journal layout even if old journal exists
-   *
-   * @param mkfs_config_t
-   *
-   */
-  mkfs_ret mkfs(const mkfs_config_t& config);
-
 
   /**
    * CircularBoundedJournal structure
@@ -194,29 +158,14 @@ public:
    */
 
   struct cbj_header_t {
-    uint64_t magic = CBJOURNAL_MAGIC;
-    uuid_d uuid;
-    uint64_t block_size = 0; // block size of underlying device
-    uint64_t size = 0;   // max length of journal
-
     // start offset of CircularBoundedJournal in the device
     journal_seq_t dirty_tail;
     journal_seq_t alloc_tail;
 
-    device_id_t device_id;
-
     DENC(cbj_header_t, v, p) {
       DENC_START(1, 1, p);
-      denc(v.magic, p);
-      denc(v.uuid, p);
-      denc(v.block_size, p);
-      denc(v.size, p);
-
       denc(v.dirty_tail, p);
       denc(v.alloc_tail, p);
-
-      denc(v.device_id, p);
-
       DENC_FINISH(p);
     }
   };
@@ -231,24 +180,6 @@ public:
    *            applied_to                                        written_to
    *
    */
-
-  size_t get_used_size() const {
-    auto rbm_written_to = get_rbm_addr(get_written_to());
-    auto rbm_tail = get_rbm_addr(get_dirty_tail());
-    return rbm_written_to >= rbm_tail ?
-      rbm_written_to - rbm_tail :
-      rbm_written_to + header.size + get_block_size()
-      - rbm_tail;
-  }
-  size_t get_total_size() const {
-    return header.size;
-  }
-  rbm_abs_addr get_start_addr() const {
-    return CBJOURNAL_START_ADDRESS + get_block_size();
-  }
-  size_t get_available_size() const {
-    return get_total_size() - get_used_size();
-  }
 
   seastar::future<> update_journal_tail(
     journal_seq_t dirty,
@@ -284,20 +215,68 @@ public:
   }
   void set_written_to(journal_seq_t seq) {
     rbm_abs_addr addr = convert_paddr_to_abs_addr(seq.offset);
-    assert(addr >= get_start_addr());
+    assert(addr >= get_records_start());
     assert(addr < get_journal_end());
     written_to = seq;
   }
   device_id_t get_device_id() const {
-    return header.device_id;
+    return device->get_device_id();
   }
   extent_len_t get_block_size() const {
-    return header.block_size;
+    assert(device);
+    return device->get_block_size();
+  }
+
+  /* 
+    Size-related interfaces
+     +---------------------------------------------------------+
+     |   header      | record | record | record | record | ... | 
+     +---------------------------------------------------------+
+     ^               ^                                         ^
+     |               |                                         |
+   get_journal_start |                                     get_journal_end
+              get_records_start
+                     <-- get_records_total_size + block_size -->
+     <--------------- get_journal_size ------------------------>
+  */
+
+  size_t get_records_used_size() const {
+    auto rbm_written_to = get_rbm_addr(get_written_to());
+    auto rbm_tail = get_rbm_addr(get_dirty_tail());
+    return rbm_written_to >= rbm_tail ?
+      rbm_written_to - rbm_tail :
+      rbm_written_to + get_records_total_size() + get_block_size()
+      - rbm_tail;
+  }
+  size_t get_records_total_size() const {
+    assert(device);
+    // a block is for header and a block is reserved to denote the end
+    return device->get_journal_size() - (2 * get_block_size());
+  }
+  rbm_abs_addr get_records_start() const {
+    assert(device);
+    return device->get_journal_start() + get_block_size();
+  }
+  size_t get_records_available_size() const {
+    return get_records_total_size() - get_records_used_size();
+  }
+  bool is_available_size(uint64_t size) {
+    auto rbm_written_to = get_rbm_addr(get_written_to());
+    auto rbm_tail = get_rbm_addr(get_dirty_tail());
+    if (rbm_written_to > rbm_tail && 
+	(get_journal_end() - rbm_written_to) < size &&
+	size > (get_records_used_size() - 
+	(get_journal_end() - rbm_written_to))) {
+      return false;
+    } 
+    return get_records_available_size() >= size;
   }
   rbm_abs_addr get_journal_end() const {
-    return get_start_addr() + header.size + get_block_size(); // journal size + header length
+    assert(device);
+    return device->get_journal_start() + device->get_journal_size();
   }
   seastar::future<> finish_commit(transaction_type_t type) final;
+
 private:
   cbj_header_t header;
   JournalTrimmer &trimmer;
@@ -313,7 +292,7 @@ private:
   bool initialized = false;
 
   // start address where the newest record will be written
-  // should be in range [get_start_addr(), get_journal_end())
+  // should be in range [get_records_start(), get_journal_end())
   // written_to.segment_seq is circulation seq to track 
   // the sequence to written records
   journal_seq_t written_to;

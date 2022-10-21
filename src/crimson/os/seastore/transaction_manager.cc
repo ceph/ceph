@@ -648,12 +648,11 @@ TransactionManagerRef make_transaction_manager(
     roll_size = static_cast<SegmentManager*>(primary_device)->get_segment_size();
     roll_start = 0;
   } else {
-    // FIXME: get from runtime configration instead of static defaults
-    roll_size = journal::CircularBoundedJournal::mkfs_config_t
-                       ::get_default().total_size;
-    // see CircularBoundedJournal::get_start_addr()
-    roll_start = journal::CBJOURNAL_START_ADDRESS +
-                 primary_device->get_block_size();
+    roll_size = static_cast<random_block_device::RBMDevice*>(primary_device)
+		->get_journal_size() - primary_device->get_block_size();
+    // see CircularBoundedJournal::get_records_start()
+    roll_start = static_cast<random_block_device::RBMDevice*>(primary_device)
+		 ->get_journal_start() + primary_device->get_block_size();
     ceph_assert_always(roll_size <= DEVICE_OFF_MAX);
     ceph_assert_always((std::size_t)roll_size + roll_start <=
                        primary_device->get_available_size());

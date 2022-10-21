@@ -68,6 +68,9 @@ constexpr device_id_t DEVICE_ID_ZERO = DEVICE_ID_MAX - 5;
 constexpr device_id_t DEVICE_ID_ROOT = DEVICE_ID_MAX - 6;
 constexpr device_id_t DEVICE_ID_MAX_VALID = DEVICE_ID_MAX - 7;
 constexpr device_id_t DEVICE_ID_MAX_VALID_SEGMENT = DEVICE_ID_MAX >> 1;
+constexpr device_id_t DEVICE_ID_SEGMENTED_MIN = 0;
+constexpr device_id_t DEVICE_ID_RANDOM_BLOCK_MIN = 
+  1 << (std::numeric_limits<device_id_t>::digits - 1);
 
 struct device_id_printer_t {
   device_id_t id;

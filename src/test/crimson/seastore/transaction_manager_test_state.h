@@ -17,6 +17,7 @@
 #include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
+#include "crimson/os/seastore/random_block_manager/block_rb_manager.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -116,15 +117,16 @@ protected:
 
   seastar::future<> randomblock_setup()
   {
-    auto config =
-      journal::CircularBoundedJournal::mkfs_config_t::get_default();
-    rb_device.reset(new random_block_device::TestMemory(
-          config.total_size + config.block_size));
-    rb_device->set_device_id(
-      1 << (std::numeric_limits<device_id_t>::digits - 1));
+    rb_device = random_block_device::create_test_ephemeral(
+      journal::DEFAULT_TEST_CBJOURNAL_SIZE, 0);
     return rb_device->mount().handle_error(crimson::ct_error::assert_all{}
     ).then([this]() {
-      return segment_setup();
+      device_config_t config = get_rbm_ephemeral_device_config(0, 1);
+      rb_device->set_journal_size(journal::DEFAULT_TEST_CBJOURNAL_SIZE);
+      return rb_device->mkfs(config).handle_error(crimson::ct_error::assert_all{}
+      ).then([this]() {
+	return segment_setup();
+      });
     });
   }
 
@@ -214,24 +216,10 @@ protected:
   }
 
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() {
-    if (journal_type == journal_type_t::SEGMENTED) {
-      return tm->mkfs(
-      ).handle_error(
-	crimson::ct_error::assert_all{"Error in mkfs"}
-      );
-    } else {
-      auto config = journal::CircularBoundedJournal::mkfs_config_t::get_default();
-      return static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->mkfs(
-	config
-      ).safe_then([this]() {
-	return tm->mkfs(
-	).handle_error(
-	  crimson::ct_error::assert_all{"Error in mkfs"}
-	);
-      }).handle_error(
-	crimson::ct_error::assert_all{"Error in mkfs"}
-      );
-    }
+    return tm->mkfs(
+    ).handle_error(
+      crimson::ct_error::assert_all{"Error in mkfs"}
+    );
   }
 
   auto create_mutate_transaction() {
