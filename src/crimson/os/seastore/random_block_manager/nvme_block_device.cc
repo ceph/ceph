@@ -366,7 +366,6 @@ namespace crimson::os::seastore::random_block_device {
 EphemeralRBMDeviceRef create_test_ephemeral(uint64_t journal_size, uint64_t data_size) {
   return EphemeralRBMDeviceRef(
     new EphemeralRBMDevice(journal_size + data_size + 
-	EphemeralRBMDevice::TEST_BLOCK_SIZE +
 	random_block_device::RBMDevice::get_journal_start(),
 	EphemeralRBMDevice::TEST_BLOCK_SIZE));
 }

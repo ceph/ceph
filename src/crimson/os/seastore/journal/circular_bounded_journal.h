@@ -260,6 +260,17 @@ public:
   size_t get_records_available_size() const {
     return get_records_total_size() - get_records_used_size();
   }
+  bool is_available_size(uint64_t size) {
+    auto rbm_written_to = get_rbm_addr(get_written_to());
+    auto rbm_tail = get_rbm_addr(get_dirty_tail());
+    if (rbm_written_to > rbm_tail && 
+	(get_journal_end() - rbm_written_to) < size &&
+	size > (get_records_used_size() - 
+	(get_journal_end() - rbm_written_to))) {
+      return false;
+    } 
+    return get_records_available_size() >= size;
+  }
   rbm_abs_addr get_journal_end() const {
     assert(device);
     return device->get_journal_start() + device->get_journal_size();
