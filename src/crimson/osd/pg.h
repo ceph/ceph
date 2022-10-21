@@ -510,6 +510,7 @@ public:
     const hobject_t &oid);
 
   using load_obc_ertr = crimson::errorator<
+    crimson::ct_error::enoent,
     crimson::ct_error::object_corrupted>;
   using load_obc_iertr =
     ::crimson::interruptible::interruptible_errorator<
