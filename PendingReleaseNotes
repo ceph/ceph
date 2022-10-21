@@ -13,6 +13,10 @@
 * RBD: New `rbd_aio_compare_and_writev` API method to support scatter/gather
   on both compare and write buffers.  This compliments existing `rbd_aio_readv`
   and `rbd_aio_writev` methods.
+* RBD: `rbd device unmap` command gained `--namespace` option.  Support for
+  namespaces was added to RBD in Nautilus 14.2.0 and it has been possible to
+  map and unmap images in namespaces using the `image-spec` syntax since then
+  but the corresponding option available in most other commands was missing.
 
 >=17.2.4
 --------
