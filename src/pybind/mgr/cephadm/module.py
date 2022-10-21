@@ -1098,6 +1098,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                                                              error_ok=True, no_fsid=True))
             if code:
                 return 1, '', ('check-host failed:\n' + '\n'.join(err))
+        except ssh.HostConnectionError as e:
+            self.log.exception(f"check-host failed for '{host}' at addr ({e.addr}) due to connection failure: {str(e)}")
+            return 1, '', ('check-host failed:\n'
+                           + f"Failed to connect to {host} at address ({e.addr}): {str(e)}")
         except OrchestratorError:
             self.log.exception(f"check-host failed for '{host}'")
             return 1, '', ('check-host failed:\n'
