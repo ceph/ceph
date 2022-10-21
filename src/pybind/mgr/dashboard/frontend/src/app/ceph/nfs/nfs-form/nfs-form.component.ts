@@ -265,20 +265,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     const fsalValue = this.nfsForm.getValue('name');
     const checkAvailability =
       fsalValue === 'RGW'
-        ? this.rgwSiteService.get('realms').pipe(
-            mergeMap((realms: string[]) =>
-              realms.length === 0
-                ? of(true)
-                : this.rgwSiteService.isDefaultRealm().pipe(
-                    mergeMap((isDefaultRealm) => {
-                      if (!isDefaultRealm) {
-                        throw new Error('Selected realm is not the default.');
-                      }
-                      return of(true);
-                    })
-                  )
-            )
-          )
+        ? this.rgwSiteService.get('realms')
         : this.nfsService.filesystems();
 
     checkAvailability.subscribe({
