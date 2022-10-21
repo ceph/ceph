@@ -348,7 +348,7 @@ TEST_F(cbjournal_test_t, submit_full_records)
     auto record_total_size = r_size.get_encoded_length();
 
     submit_record(std::move(rec));
-    while (record_total_size <= get_records_available_size()) {
+    while (cbj->is_available_size(record_total_size)) {
      submit_record(
        record_t {
 	{ generate_extent(1), generate_extent(2) },
@@ -356,7 +356,6 @@ TEST_F(cbjournal_test_t, submit_full_records)
 	});
     }
 
-    uint64_t avail = get_records_available_size();
     update_journal_tail(entries.back().addr, record_total_size);
     ASSERT_EQ(get_records_total_size(),
 	     get_records_available_size());
@@ -368,14 +367,14 @@ TEST_F(cbjournal_test_t, submit_full_records)
       { generate_delta(20), generate_delta(21) }
       });
 
-    while (record_total_size <= get_records_available_size()) {
+    while (cbj->is_available_size(record_total_size)) {
      submit_record(
        record_t {
 	{ generate_extent(1), generate_extent(2) },
 	{ generate_delta(20), generate_delta(21) }
 	});
     }
-    ASSERT_EQ(avail, get_records_available_size());
+    ASSERT_TRUE(record_total_size > get_records_available_size());
   });
 }
 
@@ -391,7 +390,7 @@ TEST_F(cbjournal_test_t, boudary_check_verify)
     auto r_size = record_group_size_t(rec.size, block_size);
     auto record_total_size = r_size.get_encoded_length();
     submit_record(std::move(rec));
-    while (record_total_size <= get_records_available_size()) {
+    while (cbj->is_available_size(record_total_size)) {
      submit_record(
        record_t {
 	{ generate_extent(1), generate_extent(2) },
@@ -400,9 +399,11 @@ TEST_F(cbjournal_test_t, boudary_check_verify)
     }
 
     uint64_t avail = get_records_available_size();
-    update_journal_tail(entries.front().addr, record_total_size);
+    // forward 2 recod size here because 1 block is reserved between head and tail
+    update_journal_tail(entries.front().addr, record_total_size * 2);
     entries.erase(entries.begin());
-    ASSERT_EQ(avail + record_total_size, get_records_available_size());
+    entries.erase(entries.begin());
+    ASSERT_EQ(avail + (record_total_size * 2), get_records_available_size());
     avail = get_records_available_size();
     // will be appended at the begining of WAL
     submit_record(
@@ -410,7 +411,7 @@ TEST_F(cbjournal_test_t, boudary_check_verify)
       { generate_extent(1), generate_extent(2) },
       { generate_delta(20), generate_delta(21) }
       });
-    ASSERT_EQ(avail - record_total_size, get_records_available_size());
+    ASSERT_TRUE(avail - record_total_size >= get_records_available_size());
     replay_and_check();
   });
 }
@@ -451,7 +452,7 @@ TEST_F(cbjournal_test_t, replay)
     auto r_size = record_group_size_t(rec.size, block_size);
     auto record_total_size = r_size.get_encoded_length();
     submit_record(std::move(rec));
-    while (record_total_size <= get_records_available_size()) {
+    while (cbj->is_available_size(record_total_size)) {
     submit_record(
       record_t {
        { generate_extent(1), generate_extent(2) },
@@ -460,16 +461,17 @@ TEST_F(cbjournal_test_t, replay)
     }
     // will be appended at the begining of WAL
     uint64_t avail = get_records_available_size();
-    update_journal_tail(entries.front().addr, record_total_size);
+    update_journal_tail(entries.front().addr, record_total_size * 2);
     entries.erase(entries.begin());
-    ASSERT_EQ(avail + record_total_size, get_records_available_size());
+    entries.erase(entries.begin());
+    ASSERT_EQ(avail + (record_total_size * 2), get_records_available_size());
     avail = get_records_available_size();
     submit_record(
       record_t {
        { generate_extent(1), generate_extent(2) },
        { generate_delta(20), generate_delta(21) }
        });
-    ASSERT_EQ(avail - record_total_size, get_records_available_size());
+    ASSERT_TRUE(avail - record_total_size >= get_records_available_size());
     cbj->close().unsafe_get0();
     replay();
   });
@@ -487,7 +489,7 @@ TEST_F(cbjournal_test_t, replay_after_reset)
     auto r_size = record_group_size_t(rec.size, block_size);
     auto record_total_size = r_size.get_encoded_length();
     submit_record(std::move(rec));
-    while (record_total_size <= get_records_available_size()) {
+    while (cbj->is_available_size(record_total_size)) {
     submit_record(
       record_t {
        { generate_extent(1), generate_extent(2) },

@@ -173,7 +173,7 @@ public:
     super.config.spec.id = id;
   }
   void set_journal_size(uint64_t size) {
-    super.journal_size = size + get_block_size();
+    super.journal_size = size;
   }
 };
 
