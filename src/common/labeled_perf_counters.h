@@ -186,6 +186,7 @@ public:
       if (histogram) {
         histogram->reset();
       }
+      accessed = false;
     }
 
     // read <sum, count> safely by making sure the post- and pre-count

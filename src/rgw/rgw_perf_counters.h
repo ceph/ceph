@@ -7,7 +7,7 @@
 #include "common/labeled_perf_counters.h"
 
 extern PerfCounters *perfcounter;
-extern PerfCountersCache *perf_counters_cache;
+extern PerfCountersCache2 *perf_counters_cache;
 
 extern int rgw_perf_start(CephContext *cct);
 extern void rgw_perf_stop(CephContext *cct);

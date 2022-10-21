@@ -6,7 +6,7 @@
 #include "common/ceph_context.h"
 
 PerfCounters *perfcounter = NULL;
-PerfCountersCache *perf_counters_cache = NULL;
+PerfCountersCache2 *perf_counters_cache = NULL;
 
 int rgw_perf_start(CephContext *cct)
 {
@@ -116,7 +116,7 @@ int rgw_perf_start(CephContext *cct)
   lplb->add_u64_counter(l_rgw_lua_script_fail, "lua_script_fail", "Failed executions of lua scripts");
 
   uint64_t target_size = cct->_conf.get_val<uint64_t>("rgw_labeled_perfcounters_size");
-  perf_counters_cache = new PerfCountersCache(cct, target_size, lplb);
+  perf_counters_cache = new PerfCountersCache2(cct, target_size, lplb);
   lplb = NULL;
   return 0;
 }
@@ -126,6 +126,7 @@ void rgw_perf_stop(CephContext *cct)
   ceph_assert(perfcounter);
   cct->get_perfcounters_collection()->remove(perfcounter);
   delete perfcounter;
+  perf_counters_cache->clear_cache();
   delete perf_counters_cache;
 }
 
