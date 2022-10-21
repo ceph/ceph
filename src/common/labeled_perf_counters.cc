@@ -420,39 +420,39 @@ void LabeledPerfCounters::dump_formatted_generic(Formatter *f, bool schema,
       }
       f->close_section();
     } else {
-      if (d->type & PERFCOUNTER_LONGRUNAVG) {
-	f->open_object_section(d->name);
-	pair<uint64_t,uint64_t> a = d->read_avg();
-	if (d->type & PERFCOUNTER_U64) {
-	  f->dump_unsigned("avgcount", a.second);
-	  f->dump_unsigned("sum", a.first);
-	} else if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_unsigned("avgcount", a.second);
-	  f->dump_format_unquoted("sum", "%" PRId64 ".%09" PRId64,
-				  a.first / 1000000000ull,
-				  a.first % 1000000000ull);
-          uint64_t count = a.second;
-          uint64_t sum_ns = a.first;
-          if (count) {
-            uint64_t avg_ns = sum_ns / count;
-            f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64,
-                                    avg_ns / 1000000000ull,
-                                    avg_ns % 1000000000ull);
+      if(d->accessed) {
+        if (d->type & PERFCOUNTER_LONGRUNAVG) {
+          f->open_object_section(d->name);
+          pair<uint64_t,uint64_t> a = d->read_avg();
+          if (d->type & PERFCOUNTER_U64) {
+            f->dump_unsigned("avgcount", a.second);
+            f->dump_unsigned("sum", a.first);
+          } else if (d->type & PERFCOUNTER_TIME) {
+            f->dump_unsigned("avgcount", a.second);
+            f->dump_format_unquoted("sum", "%" PRId64 ".%09" PRId64,
+                                    a.first / 1000000000ull,
+                                    a.first % 1000000000ull);
+            uint64_t count = a.second;
+            uint64_t sum_ns = a.first;
+            if (count) {
+              uint64_t avg_ns = sum_ns / count;
+              f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64,
+                                      avg_ns / 1000000000ull,
+                                      avg_ns % 1000000000ull);
+            } else {
+              f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64, 0, 0);
+            }
           } else {
-            f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64, 0, 0);
+            ceph_abort();
           }
-	} else {
-	  ceph_abort();
-	}
-	f->close_section();
-      } else if (d->type & PERFCOUNTER_HISTOGRAM) {
-        ceph_assert(d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
-        ceph_assert(d->histogram);
-        f->open_object_section(d->name);
-        d->histogram->dump_formatted(f);
-        f->close_section();
-      } else {
-        if(d->accessed) {
+          f->close_section();
+        } else if (d->type & PERFCOUNTER_HISTOGRAM) {
+          ceph_assert(d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
+          ceph_assert(d->histogram);
+          f->open_object_section(d->name);
+          d->histogram->dump_formatted(f);
+          f->close_section();
+        } else {
           uint64_t v = d->u64;
           if (d->type & PERFCOUNTER_U64) {
             f->dump_unsigned(d->name, v);

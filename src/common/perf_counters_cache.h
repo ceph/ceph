@@ -2,7 +2,6 @@
 #define RGW_PERFCOUNTERS_CACHE_H
 
 #include "common/intrusive_lru.h"
-#include "common/perf_counters.h"
 #include "common/labeled_perf_counters.h"
 #include "common/ceph_context.h"
 
@@ -28,8 +27,6 @@ struct PerfCountersCacheEntry : public ceph::common::intrusive_lru_base<
     std::string, PerfCountersCacheEntry, item_to_key<PerfCountersCacheEntry>>> {
   std::string instance_labels;
   ceph::common::LabeledPerfCounters *labeled_perfcounters_instance = NULL;
-  //CephContext *cct = NULL;
-  //PerfCountersCollection *collection = NULL;
 
   PerfCountersCacheEntry(std::string key) : instance_labels(key) {}
 
@@ -49,24 +46,19 @@ struct PerfCountersCacheEntry : public ceph::common::intrusive_lru_base<
 class PerfCountersCache : public PerfCountersCacheEntry::lru_t {
 private:
   CephContext *cct;
+  size_t curr_size = 0; 
+  size_t target_size = 0; 
+  ceph::common::LabeledPerfCountersBuilder *lplb;
 public:
   void add(std::string key) {
     auto [ref, key_existed] = get_or_create(key);
     if (!key_existed) {
-      // perf counters instance creation code
-      ceph::common::LabeledPerfCountersBuilder lplb(cct, key, l_rgw_metrics_first, l_rgw_metrics_last);
-      lplb.add_u64_counter(l_rgw_metrics_req, "req", "number of reqs", NULL, 8, UNIT_NONE);
-      lplb.add_u64_counter(l_rgw_metrics_failed_req, "failed_req", "Aborted Requests", NULL, 8, UNIT_NONE);
-      lplb.add_u64_counter(l_rgw_metrics_put_b, "put_b", "Size of puts", NULL, 8, UNIT_NONE);
-      lplb.add_u64_counter(l_rgw_metrics_get_b, "get_b", "Size of gets", NULL, 8, UNIT_NONE);
-
-      ceph::common::LabeledPerfCounters *labeled_counters = lplb.create_perf_counters();
-      cct->get_labeledperfcounters_collection()->add(labeled_counters);
-      //cct->get_perfcounters_collection()->add(counters);
-      ref->labeled_perfcounters_instance = labeled_counters;
-      //ref->collection = cct->get_perfcounters_collection();
-      //ref->collection->add(counters);
-      //ref->cct = cct;
+      if(curr_size < target_size) {
+        // perf counters instance creation code
+        ceph::common::LabeledPerfCounters *labeled_counters = lplb->create_perf_counters();
+        cct->get_labeledperfcounters_collection()->add(labeled_counters);
+        ref->labeled_perfcounters_instance = labeled_counters;
+      }
     }
   }
 
@@ -112,12 +104,17 @@ public:
     return val;
   }
 
-  PerfCountersCache(CephContext *_cct, size_t _cache_size) {
+  PerfCountersCache(CephContext *_cct, size_t _target_size, ceph::common::LabeledPerfCountersBuilder *_lplb) {
     cct = _cct;
-    set_target_size(_cache_size);
+    target_size = _target_size;
+    lplb = _lplb;
+    set_target_size(_target_size);
   }
 
-  ~PerfCountersCache() {}
+  ~PerfCountersCache() {
+    delete lplb;
+    lplb = NULL;
+  }
 };
 
 #endif

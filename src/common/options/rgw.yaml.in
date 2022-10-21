@@ -3692,3 +3692,10 @@ options:
   default: tank
   services:
   - rgw
+- name: rgw_labeled_perfcounters_size
+  type: uint
+  level: advanced
+  desc: number of labeled perfcounters the rgw can store
+  default: -1
+  services:
+  - rgw

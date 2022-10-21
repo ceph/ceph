@@ -4,6 +4,7 @@
 #pragma once
 #include "include/common_fwd.h"
 #include "common/perf_counters_cache.h"
+#include "common/labeled_perf_counters.h"
 
 extern PerfCounters *perfcounter;
 extern PerfCountersCache *perf_counters_cache;
