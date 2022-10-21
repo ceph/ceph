@@ -32,7 +32,6 @@ struct RGWProcessEnv {
   rgw::sal::Driver* driver = nullptr;
   RGWREST *rest = nullptr;
   OpsLogSink *olog = nullptr;
-  std::string uri_prefix;
   std::shared_ptr<rgw::auth::StrategyRegistry> auth_registry;
   ActiveRateLimiter* ratelimiting = nullptr;
   rgw::lua::Background* lua_background = nullptr;
@@ -96,6 +95,7 @@ public:
   RGWProcess(CephContext* const cct,
              RGWProcessEnv* const pe,
              const int num_threads,
+             std::string uri_prefix,
              RGWFrontendConfig* const conf)
     : cct(cct),
       driver(pe->driver),
@@ -106,7 +106,7 @@ public:
       rest(pe->rest),
       conf(conf),
       sock_fd(-1),
-      uri_prefix(pe->uri_prefix),
+      uri_prefix(std::move(uri_prefix)),
       lua_background(pe->lua_background),
       lua_manager(driver->get_lua_manager()),
       req_wq(this,
@@ -155,8 +155,8 @@ class RGWLoadGenProcess : public RGWProcess {
   RGWAccessKey access_key;
 public:
   RGWLoadGenProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
-		  RGWFrontendConfig* _conf) :
-  RGWProcess(cct, pe, num_threads, _conf) {}
+                    std::string uri_prefix, RGWFrontendConfig* _conf)
+    : RGWProcess(cct, pe, num_threads, std::move(uri_prefix), _conf) {}
   void run() override;
   void checkpoint();
   void handle_request(const DoutPrefixProvider *dpp, RGWRequest* req) override;

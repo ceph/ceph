@@ -183,6 +183,7 @@ void handle_connection(boost::asio::io_context& context,
                        parse_buffer& buffer, bool is_ssl,
                        SharedMutex& pause_mutex,
                        rgw::dmclock::Scheduler *scheduler,
+                       const std::string& uri_prefix,
                        std::unique_ptr<rgw::sal::LuaManager>& lua_manager,
                        boost::system::error_code& ec,
                        yield_context yield)
@@ -270,7 +271,7 @@ void handle_connection(boost::asio::io_context& context,
       string user = "-";
       const auto started = ceph::coarse_real_clock::now();
       ceph::coarse_real_clock::duration latency{};
-      process_request(env.driver, env.rest, &req, env.uri_prefix,
+      process_request(env.driver, env.rest, &req, uri_prefix,
                       *env.auth_registry, &client, env.olog, y,
                       scheduler, &user, &latency,
                       env.ratelimiting->get_active(),
@@ -377,6 +378,7 @@ class AsioFrontend {
   RGWProcessEnv env;
   RGWFrontendConfig* conf;
   boost::asio::io_context context;
+  std::string uri_prefix;
   ceph::timespan request_timeout = std::chrono::milliseconds(REQUEST_TIMEOUT);
   size_t header_limit = 16384;
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
@@ -539,6 +541,10 @@ int AsioFrontend::init()
 {
   boost::system::error_code ec;
   auto& config = conf->get_config_map();
+
+  if (auto i = config.find("prefix"); i != config.end()) {
+    uri_prefix = i->second;
+  }
 
 // Setting global timeout
   auto timeout = config.find("request_timeout_ms");
@@ -1013,8 +1019,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         conn->buffer.consume(bytes);
         handle_connection(context, env, stream, timeout, header_limit,
                           conn->buffer, true, pause_mutex, scheduler.get(),
-                          lua_manager,
-                          ec, yield);
+                          uri_prefix, lua_manager, ec, yield);
         if (!ec) {
           // ssl shutdown (ignoring errors)
           stream.async_shutdown(yield[ec]);
@@ -1033,8 +1038,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         boost::system::error_code ec;
         handle_connection(context, env, conn->socket, timeout, header_limit,
                           conn->buffer, false, pause_mutex, scheduler.get(),
-                          lua_manager,
-                          ec, yield);
+                          uri_prefix, lua_manager, ec, yield);
         conn->socket.shutdown(tcp_socket::shutdown_both, ec);
       }, make_stack_allocator());
   }
