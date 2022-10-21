@@ -36,7 +36,7 @@
         </div>
       </div>
 
-      <div *ngIf="configForm.getValue('encryptionType') == 'aws:kms' || configForm.getValue('encryptionType') == 'AES256'">
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
         <div class="form-group row">
           <label class="cd-col-form-label required"
                  for="kms_provider"
@@ -59,7 +59,7 @@
         </div>
       </div>
 
-      <div *ngIf="configForm.getValue('encryptionType') == 'aws:kms' || configForm.getValue('encryptionType') == 'AES256'">
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
         <div class="form-group row">
           <label class="cd-col-form-label required"
                  for="auth_method"
@@ -82,7 +82,7 @@
         </div>
       </div>
 
-      <div *ngIf="configForm.getValue('encryptionType') == 'aws:kms' || configForm.getValue('encryptionType') == 'AES256'">
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
         <div class="form-group row">
           <label class="cd-col-form-label required"
                  for="secret_engine"
@@ -105,7 +105,7 @@
         </div>
       </div>
 
-      <div *ngIf="configForm.getValue('encryptionType') == 'aws:kms' || configForm.getValue('encryptionType') == 'AES256'">
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
         <div class="form-group row">
           <label class="cd-col-form-label"
                  for="secret_path"
@@ -124,7 +124,7 @@
         </div>
       </div>
 
-      <div *ngIf="configForm.getValue('encryptionType') == 'aws:kms' || configForm.getValue('encryptionType') == 'AES256'">
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
         <div class="form-group row">
           <label class="cd-col-form-label"
                  for="namespace"
@@ -140,7 +140,7 @@
         </div>
       </div>
 
-      <div *ngIf="configForm.getValue('encryptionType') == 'aws:kms' || configForm.getValue('encryptionType') == 'AES256'">
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
         <div class="form-group row">
           <label class="cd-col-form-label required"
                  for="address"
@@ -158,7 +158,7 @@
         </div>
       </div>
 
-      <div *ngIf="configForm.getValue('auth_method') == 'token'"
+      <div *ngIf="configForm.getValue('auth_method') === 'token'"
            class="form-group row">
         <label class="cd-col-form-label required"
                for="token">
@@ -174,7 +174,7 @@
         </div>
       </div>
 
-      <div *ngIf="configForm.getValue('auth_method') == 'agent'">
+      <div *ngIf="configForm.getValue('auth_method') === 'agent'">
         <div class="form-group row">
           <label class="cd-col-form-label required"
                  for="role"
@@ -192,7 +192,7 @@
         </div>
       </div>
 
-      <div *ngIf="configForm.getValue('encryptionType') == 'aws:kms' || configForm.getValue('encryptionType') == 'AES256'">
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
         <div class="form-group row">
           <label class="cd-col-form-label"
                  for="ssl_cert">
@@ -210,7 +210,7 @@
         </div>
       </div>
 
-      <div *ngIf="configForm.getValue('encryptionType') == 'aws:kms' || configForm.getValue('encryptionType') == 'AES256'">
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
         <div class="form-group row">
           <label class="cd-col-form-label"
                  for="client_cert">
@@ -228,7 +228,7 @@
         </div>
       </div>
 
-      <div *ngIf="configForm.getValue('encryptionType') == 'aws:kms' || configForm.getValue('encryptionType') == 'AES256'">
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
         <div class="form-group row">
           <label class="cd-col-form-label"
                  for="client_key">
