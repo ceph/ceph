@@ -61,3 +61,10 @@ class SizeAllocationError(Exception):
             self.requested, self.available
         )
         return msg
+
+class CephAuthPermissionDenied(Exception):
+    def __init__(self, command):
+        self.command = command
+
+    def __str__(self):
+        return f"Unable to run command: {self.command}. Permission denied."

@@ -393,13 +393,20 @@ class Zap(object):
             help='Skip systemd unit checks',
         )
 
+        parser.add_argument(
+            '--force',
+            action='store_true',
+            default=False,
+            help='Do not check if the corresponding OSD is present in osd crush tree',
+        )
+
         if len(self.argv) == 0:
             print(sub_command_help)
             return
 
         self.args = parser.parse_args(self.argv)
 
-        self.args.devices = [ValidZapDevice(device).check_device() for device in self.args.devices]
+        self.args.devices = [ValidZapDevice(device, force=self.args.force).check_device() for device in self.args.devices]
 
         if self.args.osd_id or self.args.osd_fsid:
             self.zap_osd()

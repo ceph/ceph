@@ -5,6 +5,7 @@ import os
 import json
 from functools import total_ordering
 from ceph_volume import sys_info, terminal, process, conf
+from ceph_volume.exceptions import CephAuthPermissionDenied
 from ceph_volume.api import lvm
 from ceph_volume.util import disk, system
 from ceph_volume.util.lsmdisk import LSMDisk
@@ -12,7 +13,6 @@ from ceph_volume.util.constants import ceph_disk_guids
 from ceph_volume.util.disk import allow_loop_devices
 
 logger = logging.getLogger(__name__)
-
 
 report_template = """
 {dev:<25} {size:<12} {device_nodes:<15} {rot!s:<7} {available!s:<9} {model}"""
@@ -728,11 +728,16 @@ def get_osd_ids_up():
            'osd', 'tree', '-f', 'json']
     stdout, stderr, returncode = process.call(
         cmd,
-        show_command=False
+        show_command=False,
+        terminal_verbose=False,
+        verbose_on_failure=False
     )
 
     if returncode != 0:
-        raise RuntimeError(f"Couldn't run command: '{' '.join(cmd)}'")
+        if returncode == 13:
+            raise CephAuthPermissionDenied(' '.join(cmd))
+        else:
+            raise RuntimeError(f"Couldn't run command: '{' '.join(cmd)}'. rc={returncode}")
 
     output = json.loads(''.join(stdout).strip())
     osds = output['nodes']
@@ -793,27 +798,33 @@ class ValidDataDevice(ValidDevice):
 
 
 class ValidZapDevice(ValidDevice):
-    def __init__(self, dev_path, as_string=False):
+    def __init__(self, dev_path, as_string=False, force=False):
         super().__init__(dev_path, as_string=as_string)
         self.dev_path = dev_path
+        self.force = force
 
     def check_device(self):
         super().check_device()
         if disk.is_locked_raw_device(self.dev_path):
             raise RuntimeError(f"{self.dev_path} is locked, won't touch it.")
-        osd_ids_up = get_osd_ids_up()
-        osd_ids = []
-        d = Device(self.dev_path)
-        if d.has_bluestore_label and not d.is_lv:
-            from ceph_volume.devices.raw.list import List
-            dev = List([]).generate([self.dev_path])
-            osd_ids = [dev[d]['osd_id'] for d in dev]
-        if d.lvs:
-            osd_ids = [lv.tags['ceph.osd_id'] for lv in d.lvs]
-
-        for osd_id in osd_ids:
-            if int(osd_id) in osd_ids_up:
-                raise RuntimeError(f"There's an OSD present in the cluster attached to {self.dev_path}")
+        if not self.force:
+            d = Device(self.dev_path)
+            if d.has_bluestore_label and not d.is_lv:
+                from ceph_volume.devices.raw.list import List
+                dev = List([]).generate([self.dev_path])
+                osd_ids = [dev[d]['osd_id'] for d in dev]
+            if d.lvs:
+                osd_ids = [lv.tags['ceph.osd_id'] for lv in d.lvs]
+            try:
+                osd_ids_up = get_osd_ids_up()
+            except CephAuthPermissionDenied:
+                raise RuntimeError("Not enough privileges to check device. "
+                                   "Add required keyring or use `--force` parameter "
+                                   "if you know what you are doing.")
+            osd_ids = []
+            for osd_id in osd_ids:
+                if int(osd_id) in osd_ids_up:
+                    raise RuntimeError(f"There's an OSD present in the cluster attached to {self.dev_path}")
 
         return self.format_device()
 
