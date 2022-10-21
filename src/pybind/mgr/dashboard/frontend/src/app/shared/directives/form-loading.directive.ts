@@ -10,7 +10,7 @@ import { LoadingStatus } from '../forms/cd-form';
 export class FormLoadingDirective {
   constructor(private templateRef: TemplateRef<any>, private viewContainer: ViewContainerRef) {}
 
-  @Input('cdFormLoading') set cdFormLoading(condition: LoadingStatus) {
+  @Input() set cdFormLoading(condition: LoadingStatus) {
     let content: any;
 
     this.viewContainer.clear();

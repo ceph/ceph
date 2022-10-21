@@ -339,7 +339,7 @@
               </div>
             </div>
 
-            <div *ngIf="bucketForm.getValue('encryption_type') == 'aws:kms'">
+            <div *ngIf="bucketForm.getValue('encryption_type') === 'aws:kms'">
               <div class="form-group row">
                 <label class="cd-col-form-label required"
                        for="kms_provider"
@@ -363,7 +363,7 @@
               </div>
             </div>
 
-            <div *ngIf="bucketForm.getValue('encryption_type') == 'aws:kms'">
+            <div *ngIf="bucketForm.getValue('encryption_type') === 'aws:kms'">
               <div class="form-group row">
                 <label class="cd-col-form-label required"
                        for="keyId"

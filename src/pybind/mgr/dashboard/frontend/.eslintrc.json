@@ -1,0 +1,87 @@
+{
+  "root": true,
+  "ignorePatterns": [
+    "projects/**/*"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "*.ts"
+      ],
+      "parserOptions": {
+        "project": [
+          "tsconfig.json"
+        ],
+        "createDefaultProgram": true
+      },
+      "extends": [
+        "plugin:@angular-eslint/recommended",
+        "plugin:@angular-eslint/template/process-inline-templates"
+      ],
+      "rules": {
+        "no-multiple-empty-lines": [
+          "error",
+          {
+            "max": 2,
+            "maxEOF": 1
+          }
+        ],
+        "spaced-comment": [
+          "error",
+          "always",
+          {
+            "exceptions": ["-", "+", "*"] 
+          }
+        ],
+        "curly": [
+          "error",
+          "multi-line"
+        ],
+        "guard-for-in": "error",
+        "no-restricted-imports": ["error", {
+          "paths": ["rxjs/Rx", {
+            "name" : "@angular/core/testing",
+            "importNames": ["async"]
+          }],
+          "patterns": ["(\\.{1,2}/){2,}"]
+        }],
+        "no-console": [
+          "error",
+          {
+            "allow": [
+              "debug",
+              "info",
+              "time",
+              "timeEnd",
+              "trace"
+            ]
+          }
+        ],
+        "no-trailing-spaces": "error",
+        "no-caller": "error",
+        "no-bitwise": "error",
+        "no-duplicate-imports": "error",
+        "no-eval": "error",
+        "@angular-eslint/directive-selector": [
+          "error",
+          { "type": "attribute", "prefix": "cd", "style": "camelCase" }
+        ],
+        "@angular-eslint/component-selector": [
+          "error",
+          { "type": "element", "prefix": "cd", "style": "kebab-case" }
+        ]
+      }
+    },
+    {
+      "files": [
+        "*.html"
+      ],
+      "extends": [
+        "plugin:@angular-eslint/template/recommended"
+      ],
+      "rules": {
+        "@angular-eslint/template/eqeqeq": "off"
+      }
+    }
+  ]
+}
