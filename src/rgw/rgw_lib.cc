@@ -449,8 +449,9 @@ namespace rgw {
 
   int RGWLibFrontend::init()
   {
+    std::string uri_prefix; // empty
     pprocess = new RGWLibProcess(g_ceph_context, &env,
-				 g_conf()->rgw_thread_pool_size, conf);
+				 g_conf()->rgw_thread_pool_size, uri_prefix, conf);
     return 0;
   }
 

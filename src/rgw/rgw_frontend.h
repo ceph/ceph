@@ -152,8 +152,11 @@ public:
   int init() override {
     int num_threads;
     conf->get_val("num_threads", g_conf()->rgw_thread_pool_size, &num_threads);
-    RGWLoadGenProcess *pp = new RGWLoadGenProcess(g_ceph_context, &env,
-						  num_threads, conf);
+    std::string uri_prefix;
+    conf->get_val("prefix", "", &uri_prefix);
+
+    RGWLoadGenProcess *pp = new RGWLoadGenProcess(
+        g_ceph_context, &env, num_threads, std::move(uri_prefix), conf);
 
     pprocess = pp;
 

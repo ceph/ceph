@@ -416,10 +416,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     RGWFrontend* fe = nullptr;
 
     if (framework == "loadgen") {
-      std::string uri_prefix;
-      config->get_val("prefix", "", &uri_prefix);
-
-      RGWProcessEnv env = {driver, &rest, olog, uri_prefix,
+      RGWProcessEnv env = {driver, &rest, olog,
 	    auth_registry, ratelimiter.get(), lua_background.get()};
 
       fe = new RGWLoadGenFrontend(env, config);
@@ -427,9 +424,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     else if (framework == "beast") {
       int port;
       config->get_val("port", 80, &port);
-      std::string uri_prefix;
-      config->get_val("prefix", "", &uri_prefix);
-      RGWProcessEnv env{driver, &rest, olog, uri_prefix,
+      RGWProcessEnv env{driver, &rest, olog,
 	    auth_registry, ratelimiter.get(), lua_background.get()};
       fe = new RGWAsioFrontend(env, config, *(sched_ctx.get()));
     }

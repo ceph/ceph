@@ -26,8 +26,9 @@ namespace rgw {
 
   public:
     RGWLibProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
-		  RGWFrontendConfig* _conf) :
-      RGWProcess(cct, pe, num_threads, _conf), gen(0), shutdown(false) {}
+		  std::string uri_prefix, RGWFrontendConfig* _conf) :
+      RGWProcess(cct, pe, num_threads, std::move(uri_prefix), _conf),
+      gen(0), shutdown(false) {}
 
     void run() override;
     void checkpoint();
