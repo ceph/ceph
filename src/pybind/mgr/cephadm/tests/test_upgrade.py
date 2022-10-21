@@ -68,6 +68,19 @@ def test_do_upgrade_offline_hosts(cephadm_module: CephadmOrchestrator):
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.remove_health_warning")
+def test_upgrade_resume_clear_health_warnings(_rm_health_warning, cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0, paused=True)
+            _rm_health_warning.return_value = None
+            assert wait(cephadm_module, cephadm_module.upgrade_resume()
+                        ) == 'Resumed upgrade to target_image'
+            calls_list = [mock.call(alert_id) for alert_id in cephadm_module.upgrade.UPGRADE_ERRORS]
+            _rm_health_warning.assert_has_calls(calls_list, any_order=True)
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 @pytest.mark.parametrize("use_repo_digest",
                          [
                              False,
