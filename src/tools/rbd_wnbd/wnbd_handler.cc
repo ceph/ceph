@@ -21,6 +21,7 @@
 
 #include <boost/thread/tss.hpp>
 
+#include "common/ceph_crypto.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
@@ -387,7 +388,7 @@ void WnbdHandler::LogMessage(
 int WnbdHandler::resize(uint64_t new_size)
 {
   int err = 0;
-  
+
   uint64_t new_block_count = new_size / block_size;
 
   dout(5) << "Resizing disk. Block size: " << block_size
@@ -404,6 +405,29 @@ int WnbdHandler::resize(uint64_t new_size)
   dout(5) << "Successfully resized disk to: " << new_block_count << " blocks"
           << dendl;
   return 0;
+}
+
+void WnbdHandler::generate_naa_id(WNBD_NAA_ID &naa_id)
+{
+  int64_t pool_id;
+  uint64_t snap_id;
+  std::string img_id;
+
+  pool_id = image.get_data_pool_id();
+  image.snap_get_id(snap_name, &snap_id);
+  image.get_id(&img_id);
+
+  bufferlist bl;
+  bl.append((char*)(&pool_id), sizeof(pool_id));
+  bl.append((char*)(&snap_id), sizeof(snap_id));
+  bl.append(img_id.c_str(), img_id.size());
+
+  md5_digest_t md5 = ceph::crypto::digest<ceph::crypto::MD5>(bl);
+
+  // NAA IEEE Registered Extended identifier format
+  naa_id.data[0] = 0x60;
+
+  memcpy(naa_id.data+1, md5.v, sizeof(naa_id.data)-1);
 }
 
 int WnbdHandler::start()
@@ -425,6 +449,12 @@ int WnbdHandler::start()
     wnbd_props.Flags.FUASupported = 1;
     wnbd_props.Flags.FlushSupported = 1;
   }
+  wnbd_props.Flags.NaaIdSpecified = 1;
+
+  WNBD_NAA_ID naa_id = {0};
+  generate_naa_id(naa_id);
+
+  wnbd_props.NaaIdentifier = naa_id;
 
   err = WnbdCreate(&wnbd_props, (const PWNBD_INTERFACE) &RbdWnbdInterface,
                    this, &wnbd_disk);

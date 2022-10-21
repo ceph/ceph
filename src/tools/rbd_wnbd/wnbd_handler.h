@@ -63,6 +63,7 @@ class WnbdHandler
 private:
   librbd::Image &image;
   std::string instance_name;
+  std::string snap_name;
   uint64_t block_count;
   uint32_t block_size;
   bool readonly;
@@ -74,6 +75,7 @@ private:
 
 public:
   WnbdHandler(librbd::Image& _image, std::string _instance_name,
+              std::string _snap_name,
               uint64_t _block_count, uint32_t _block_size,
               bool _readonly, bool _rbd_cache_enabled,
               uint32_t _io_req_workers,
@@ -81,6 +83,7 @@ public:
               AdminSocket* admin_socket)
     : image(_image)
     , instance_name(_instance_name)
+    , snap_name(_snap_name)
     , block_count(_block_count)
     , block_size(_block_size)
     , readonly(_readonly)
@@ -142,6 +145,8 @@ private:
 
   friend WnbdAdminHook;
   friend std::ostream &operator<<(std::ostream &os, const IOContext &ctx);
+
+  void generate_naa_id(WNBD_NAA_ID &id);
 
   void send_io_response(IOContext *ctx);
 

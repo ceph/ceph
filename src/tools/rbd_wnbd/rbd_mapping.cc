@@ -79,7 +79,7 @@ int RbdMapping::init()
   CephContext* cct = reinterpret_cast<CephContext*>(io_ctx.cct());
   ceph_assert(cct != nullptr);
 
-  handler = new WnbdHandler(image, cfg.devpath,
+  handler = new WnbdHandler(image, cfg.devpath, cfg->snapname,
                             info.size / RBD_WNBD_BLKSIZE,
                             RBD_WNBD_BLKSIZE,
                             !cfg.snapname.empty() || cfg.readonly,
