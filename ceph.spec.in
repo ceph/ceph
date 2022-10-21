@@ -202,8 +202,11 @@ BuildRequires:	selinux-policy-devel
 BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
-%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} == 9
+%if 0%{?fedora} || 0%{?suse_version} > 1500 || 0%{?rhel} == 9
 BuildRequires:	gcc-c++ >= 11
+%endif
+%if 0%{?suse_version} == 1500
+BuildRequires: gcc11-c++
 %endif
 %if 0%{?rhel} == 8
 BuildRequires:	%{gts_prefix}-gcc-c++
@@ -1307,6 +1310,10 @@ env | sort
 mkdir -p %{_vpath_builddir}
 pushd %{_vpath_builddir}
 cmake .. \
+%if 0%{?suse_version} == 1500
+    -DCMAKE_C_COMPILER=gcc-11 \
+    -DCMAKE_CXX_COMPILER=g++-11 \
+%endif
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
     -DCMAKE_INSTALL_LIBEXECDIR:PATH=%{_libexecdir} \
