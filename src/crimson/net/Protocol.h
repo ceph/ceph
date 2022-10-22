@@ -110,16 +110,7 @@ class Protocol {
     drop
   };
 
-  static const char* get_state_name(write_state_t state) {
-    uint8_t index = static_cast<uint8_t>(state);
-    static const char *const state_names[] = {"none",
-                                              "delay",
-                                              "open",
-                                              "drop"};
-    assert(index < std::size(state_names));
-    return state_names[index];
-  }
-
+  friend class fmt::formatter<write_state_t>;
   void set_write_state(const write_state_t& state) {
     if (write_state == write_state_t::open &&
         state != write_state_t::open &&
@@ -184,3 +175,28 @@ inline std::ostream& operator<<(std::ostream& out, const Protocol& proto) {
 
 
 } // namespace crimson::net
+
+template <>
+struct fmt::formatter<crimson::net::Protocol::write_state_t>
+  : fmt::formatter<std::string_view> {
+  template <typename FormatContext>
+  auto format(crimson::net::Protocol::write_state_t state, FormatContext& ctx) {
+    using enum crimson::net::Protocol::write_state_t;
+    std::string_view name;
+    switch (state) {
+    case none:
+      name = "none";
+      break;
+    case delay:
+      name = "delay";
+      break;
+    case open:
+      name = "open";
+      break;
+    case drop:
+      name = "drop";
+      break;
+    }
+    return formatter<string_view>::format(name, ctx);
+  }
+};
