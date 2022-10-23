@@ -190,14 +190,14 @@ Rescanning Host Devices
 
 Some servers and external enclosures may not register device removal or insertion with the
 kernel. In these scenarios, you'll need to perform a host rescan. A rescan is typically
-non-disruptive, and can be performed with the following CLI command.:
+non-disruptive, and can be performed with the following CLI command:
 
 .. prompt:: bash #
 
    ceph orch host rescan <hostname> [--with-summary]
 
 The ``with-summary`` flag provides a breakdown of the number of HBAs found and scanned, together
-with any that failed.:
+with any that failed:
 
 .. prompt:: bash [ceph:root@rh9-ceph1/]#
 
