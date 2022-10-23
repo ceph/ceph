@@ -180,9 +180,8 @@ public:
   }
 
   /// in-progress copyfrom ops for this object
-  bool blocked:1;
-  bool requeue_scrub_on_unblock:1;    // true if we need to requeue scrub on unblock
-
+  bool blocked;
+  bool requeue_scrub_on_unblock;    // true if we need to requeue scrub on unblock
 };
 
 inline std::ostream& operator<<(std::ostream& out, const ObjectState& obs)
