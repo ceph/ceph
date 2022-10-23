@@ -56,23 +56,6 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     http_conn.close()
     return data.decode('utf-8'), status
 
-def delete_all_s3_topics(zone, region):
-    try:
-        conn = zone.secure_conn if zone.secure_conn is not None else zone.conn
-        protocol = 'https' if conn.is_secure else 'http'
-        client = boto3.client('sns',
-                endpoint_url=protocol+'://'+conn.host+':'+str(conn.port),
-                aws_access_key_id=conn.aws_access_key_id,
-                aws_secret_access_key=conn.aws_secret_access_key,
-                region_name=region,
-                verify='./cert.pem')
-
-        topics = client.list_topics()['Topics']
-        for topic in topics:
-            print('topic cleanup, deleting: ' + topic['TopicArn'])
-            assert client.delete_topic(TopicArn=topic['TopicArn'])['ResponseMetadata']['HTTPStatusCode'] == 200
-    except Exception as err:
-        print('failed to do topic cleanup: ' + str(err))
 
 def delete_all_objects(conn, bucket_name):
     client = boto3.client('s3',
@@ -149,9 +132,9 @@ class PSTopicS3:
         self.topic_arn = result['TopicArn']
         return self.topic_arn
 
-    def del_config(self):
+    def del_config(self, topic_arn=None):
         """delete topic"""
-        result = self.client.delete_topic(TopicArn=self.topic_arn)
+        result = self.client.delete_topic(TopicArn=(topic_arn if topic_arn is not None else self.topic_arn))
         return result['ResponseMetadata']['HTTPStatusCode']
 
     def get_list(self):
