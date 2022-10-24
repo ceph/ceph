@@ -517,6 +517,17 @@ void PgScrubber::on_primary_change(
     m_osds->get_scrub_services().remove_from_osd_queue(m_scrub_job);
   }
 
+  // is there an interval change we should respond to?
+  if (is_primary() && is_scrub_active()) {
+    if (m_interval_start < m_pg->get_same_interval_since()) {
+      dout(10) << fmt::format(
+		    "{}: interval changed ({} -> {}). Aborting active scrub.",
+		    __func__, m_interval_start, m_pg->get_same_interval_since())
+	       << dendl;
+      scrub_clear_state();
+    }
+  }
+
   dout(10)
     << fmt::format(
 	 "{} (from {} {}): {}. <{:.5}>&<{:.10}> --> <{:.5}>&<{:.14}>",
