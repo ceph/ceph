@@ -37,7 +37,7 @@ class StrategyRegistry {
     s3_main_strategy_boto2_t s3_main_strategy_boto2;
 
     s3_main_strategy_t(CephContext* const cct,
-		       ImplicitTenants& implicit_tenant_context,
+		       const ImplicitTenants& implicit_tenant_context,
 		       rgw::sal::Driver* driver)
       : s3_main_strategy_plain(cct, implicit_tenant_context, driver),
         s3_main_strategy_boto2(cct, implicit_tenant_context, driver) {
@@ -60,7 +60,7 @@ class StrategyRegistry {
 
 public:
   StrategyRegistry(CephContext* const cct,
-                   ImplicitTenants& implicit_tenant_context,
+                   const ImplicitTenants& implicit_tenant_context,
                    rgw::sal::Driver* driver)
     : s3_main_strategy(cct, implicit_tenant_context, driver),
       s3_post_strategy(cct, implicit_tenant_context, driver),
@@ -86,7 +86,7 @@ public:
 
   static std::shared_ptr<StrategyRegistry>
   create(CephContext* const cct,
-         ImplicitTenants& implicit_tenant_context,
+         const ImplicitTenants& implicit_tenant_context,
          rgw::sal::Driver* driver) {
     return std::make_shared<StrategyRegistry>(cct, implicit_tenant_context, driver);
   }

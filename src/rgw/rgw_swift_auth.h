@@ -186,7 +186,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::LocalApplier::Factory,
                         public rgw::auth::swift::TempURLApplier::Factory {
   rgw::sal::Driver* driver;
-  ImplicitTenants& implicit_tenant_context;
+  const ImplicitTenants& implicit_tenant_context;
 
   /* The engines. */
   const rgw::auth::swift::TempURLEngine tempurl_engine;
@@ -255,7 +255,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
 public:
   DefaultStrategy(CephContext* const cct,
-                  ImplicitTenants& implicit_tenant_context,
+                  const ImplicitTenants& implicit_tenant_context,
                   rgw::sal::Driver* _driver)
     : driver(_driver),
       implicit_tenant_context(implicit_tenant_context),
