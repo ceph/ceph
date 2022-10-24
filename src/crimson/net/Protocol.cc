@@ -20,11 +20,9 @@ namespace {
 
 namespace crimson::net {
 
-Protocol::Protocol(proto_t type,
-                   ChainedDispatchers& dispatchers,
+Protocol::Protocol(ChainedDispatchers& dispatchers,
                    SocketConnection& conn)
-  : proto_type(type),
-    dispatchers(dispatchers),
+  : dispatchers(dispatchers),
     conn(conn)
 {}
 

@@ -16,12 +16,6 @@ namespace crimson::net {
 
 class Protocol {
  public:
-  enum class proto_t {
-    none,
-    v1,
-    v2
-  };
-
   Protocol(Protocol&&) = delete;
   virtual ~Protocol();
 
@@ -57,8 +51,7 @@ class Protocol {
 
   virtual void print(std::ostream&) const = 0;
  protected:
-  Protocol(proto_t type,
-           ChainedDispatchers& dispatchers,
+  Protocol(ChainedDispatchers& dispatchers,
            SocketConnection& conn);
 
   virtual void trigger_close() = 0;
@@ -82,7 +75,6 @@ class Protocol {
       bool require_ack); 
 
  public:
-  const proto_t proto_type;
   SocketRef socket;
 
  protected:
