@@ -7,6 +7,7 @@
 #include "rgw_log.h"
 #include "rgw_rest.h"
 #include "rgw_user.h"
+#include "rgw_process.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 
@@ -26,12 +27,12 @@
 static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
 
 
-RGWRealmReloader::RGWRealmReloader(rgw::sal::Driver*& driver, std::map<std::string, std::string>& service_map_meta,
+RGWRealmReloader::RGWRealmReloader(RGWProcessEnv& env, std::map<std::string, std::string>& service_map_meta,
                                    Pauser* frontends)
-  : driver(driver),
+  : env(env),
     service_map_meta(service_map_meta),
     frontends(frontends),
-    timer(driver->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
+    timer(env.driver->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
     mutex(ceph::make_mutex("RGWRealmReloader")),
     reload_scheduled(nullptr)
 {
@@ -54,12 +55,12 @@ class RGWRealmReloader::C_Reload : public Context {
 void RGWRealmReloader::handle_notify(RGWRealmNotify type,
                                      bufferlist::const_iterator& p)
 {
-  if (!driver) {
+  if (!env.driver) {
     /* we're in the middle of reload */
     return;
   }
 
-  CephContext *const cct = driver->ctx();
+  CephContext *const cct = env.driver->ctx();
 
   std::lock_guard lock{mutex};
   if (reload_scheduled) {
@@ -79,7 +80,7 @@ void RGWRealmReloader::handle_notify(RGWRealmNotify type,
 
 void RGWRealmReloader::reload()
 {
-  CephContext *const cct = driver->ctx();
+  CephContext *const cct = env.driver->ctx();
   const DoutPrefix dp(cct, dout_subsys, "rgw realm reloader: ");
   ldpp_dout(&dp, 1) << "Pausing frontends for realm update..." << dendl;
 
@@ -91,8 +92,8 @@ void RGWRealmReloader::reload()
   rgw_log_usage_finalize();
 
   // destroy the existing driver
-  DriverManager::close_storage(driver);
-  driver = nullptr;
+  DriverManager::close_storage(env.driver);
+  env.driver = nullptr;
 
   ldpp_dout(&dp, 1) << "driver closed" << dendl;
   {
@@ -103,12 +104,12 @@ void RGWRealmReloader::reload()
   }
 
 
-  while (!driver) {
+  while (!env.driver) {
     // recreate and initialize a new driver
     DriverManager::Config cfg;
     cfg.store_name = "rados";
     cfg.filter_name = "none";
-    driver =
+    env.driver =
       DriverManager::get_storage(&dp, cct,
 				   cfg,
 				   cct->_conf->rgw_enable_gc_threads,
@@ -128,7 +129,7 @@ void RGWRealmReloader::reload()
       // don't want to assert or abort the entire cluster.  instead, just
       // sleep until we get another notification, and retry until we get
       // a working configuration
-      if (driver == nullptr) {
+      if (env.driver == nullptr) {
         ldpp_dout(&dp, -1) << "Failed to reinitialize RGWRados after a realm "
             "configuration update. Waiting for a new update." << dendl;
 
@@ -145,7 +146,7 @@ void RGWRealmReloader::reload()
 
         // if we successfully created a driver, clean it up outside of the lock,
         // then continue to loop and recreate another
-        std::swap(driver, store_cleanup);
+        std::swap(env.driver, store_cleanup);
       }
     }
 
@@ -157,7 +158,7 @@ void RGWRealmReloader::reload()
     }
   }
 
-  int r = driver->register_to_service_map(&dp, "rgw", service_map_meta);
+  int r = env.driver->register_to_service_map(&dp, "rgw", service_map_meta);
   if (r < 0) {
     ldpp_dout(&dp, -1) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
 
@@ -167,11 +168,11 @@ void RGWRealmReloader::reload()
   ldpp_dout(&dp, 1) << "Finishing initialization of new driver" << dendl;
   // finish initializing the new driver
   ldpp_dout(&dp, 1) << " - REST subsystem init" << dendl;
-  rgw_rest_init(cct, driver->get_zone()->get_zonegroup());
+  rgw_rest_init(cct, env.driver->get_zone()->get_zonegroup());
   ldpp_dout(&dp, 1) << " - usage subsystem init" << dendl;
-  rgw_log_usage_init(cct, driver);
+  rgw_log_usage_init(cct, env.driver);
 
   ldpp_dout(&dp, 1) << "Resuming frontends with new realm configuration." << dendl;
 
-  frontends->resume(driver);
+  frontends->resume(env.driver);
 }

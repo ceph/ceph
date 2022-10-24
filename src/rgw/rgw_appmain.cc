@@ -212,7 +212,7 @@ void rgw::AppMain::init_storage()
       ((!nfs) || (nfs && g_conf()->rgw_nfs_run_sync_thread)));
 
   DriverManager::Config cfg = DriverManager::get_config(false, g_ceph_context);
-  driver = DriverManager::get_storage(dpp, dpp->get_cct(),
+  env.driver = DriverManager::get_storage(dpp, dpp->get_cct(),
           cfg,
           run_gc,
           run_lc,
@@ -238,7 +238,7 @@ void rgw::AppMain::init_http_clients()
 
 void rgw::AppMain::cond_init_apis() 
 {
-   rgw_rest_init(g_ceph_context, driver->get_zone()->get_zonegroup());
+   rgw_rest_init(g_ceph_context, env.driver->get_zone()->get_zonegroup());
 
   if (have_http_frontend) {
     std::vector<std::string> apis;
@@ -272,7 +272,7 @@ void rgw::AppMain::cond_init_apis()
     if (apis_map.count("s3") > 0 || s3website_enabled) {
       if (!swift_at_root) {
         rest.register_default_mgr(set_logging(
-            rest_filter(driver, RGW_REST_S3,
+            rest_filter(env.driver, RGW_REST_S3,
                         new RGWRESTMgr_S3(s3website_enabled, sts_enabled,
                                           iam_enabled, pubsub_enabled))));
       } else {
@@ -297,10 +297,10 @@ void rgw::AppMain::cond_init_apis()
 
       if (! swift_at_root) {
         rest.register_resource(g_conf()->rgw_swift_url_prefix,
-                            set_logging(rest_filter(driver, RGW_REST_SWIFT,
+                            set_logging(rest_filter(env.driver, RGW_REST_SWIFT,
                                                     swift_resource)));
       } else {
-        if (driver->get_zone()->get_zonegroup().get_zone_count() > 1) {
+        if (env.driver->get_zone()->get_zonegroup().get_zone_count() > 1) {
           derr << "Placing Swift API in the root of URL hierarchy while running"
               << " multi-site configuration requires another instance of RadosGW"
               << " with S3 API enabled!" << dendl;
@@ -320,7 +320,7 @@ void rgw::AppMain::cond_init_apis()
       admin_resource->register_resource("info", new RGWRESTMgr_Info);
       admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
       /* Register driver-specific admin APIs */
-      driver->register_admin_apis(admin_resource);
+      env.driver->register_admin_apis(admin_resource);
       rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);
     }
   } /* have_http_frontend */
@@ -328,12 +328,13 @@ void rgw::AppMain::cond_init_apis()
 
 void rgw::AppMain::init_ldap()
 {
-  const string &ldap_uri = driver->ctx()->_conf->rgw_ldap_uri;
-  const string &ldap_binddn = driver->ctx()->_conf->rgw_ldap_binddn;
-  const string &ldap_searchdn = driver->ctx()->_conf->rgw_ldap_searchdn;
-  const string &ldap_searchfilter = driver->ctx()->_conf->rgw_ldap_searchfilter;
-  const string &ldap_dnattr = driver->ctx()->_conf->rgw_ldap_dnattr;
-  std::string ldap_bindpw = parse_rgw_ldap_bindpw(driver->ctx());
+  CephContext* cct = env.driver->ctx();
+  const string &ldap_uri = cct->_conf->rgw_ldap_uri;
+  const string &ldap_binddn = cct->_conf->rgw_ldap_binddn;
+  const string &ldap_searchdn = cct->_conf->rgw_ldap_searchdn;
+  const string &ldap_searchfilter = cct->_conf->rgw_ldap_searchfilter;
+  const string &ldap_dnattr = cct->_conf->rgw_ldap_dnattr;
+  std::string ldap_bindpw = parse_rgw_ldap_bindpw(cct);
 
   ldh.reset(new rgw::LDAPHelper(ldap_uri, ldap_binddn,
             ldap_bindpw.c_str(), ldap_searchdn, ldap_searchfilter, ldap_dnattr));
@@ -343,7 +344,7 @@ void rgw::AppMain::init_ldap()
 
 void rgw::AppMain::init_opslog()
 {
-  rgw_log_usage_init(dpp->get_cct(), driver);
+  rgw_log_usage_init(dpp->get_cct(), env.driver);
 
   OpsLogManifold *olog_manifold = new OpsLogManifold();
   if (!g_conf()->rgw_ops_log_socket_path.empty()) {
@@ -359,7 +360,7 @@ void rgw::AppMain::init_opslog()
     ops_log_file->start();
     olog_manifold->add_sink(ops_log_file);
   }
-  olog_manifold->add_sink(new OpsLogRados(driver));
+  olog_manifold->add_sink(new OpsLogRados(env.driver));
   olog = olog_manifold;
 } /* init_opslog */
 
@@ -390,7 +391,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
   implicit_tenant_context.reset(new rgw::auth::ImplicitTenants{g_conf()});
   g_conf().add_observer(implicit_tenant_context.get());
   auto auth_registry =
-    rgw::auth::StrategyRegistry::create(dpp->get_cct(), *(implicit_tenant_context.get()), driver);
+    rgw::auth::StrategyRegistry::create(dpp->get_cct(), *implicit_tenant_context, env.driver);
 
   /* allocate a mime table (you'd never guess that from the name) */
   rgw_tools_init(dpp, dpp->get_cct());
@@ -401,6 +402,13 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
   sched_ctx.reset(new rgw::dmclock::SchedulerCtx{dpp->get_cct()});
   ratelimiter.reset(new ActiveRateLimiter{dpp->get_cct()});
   ratelimiter->start();
+
+  // initialize RGWProcessEnv
+  env.rest = &rest;
+  env.olog = olog;
+  env.auth_registry = auth_registry;
+  env.ratelimiting = ratelimiter.get();
+  env.lua_background = lua_background.get();
 
   int fe_count = 0;
   for (multimap<string, RGWFrontendConfig *>::iterator fiter = fe_map.begin();
@@ -416,20 +424,12 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     RGWFrontend* fe = nullptr;
 
     if (framework == "loadgen") {
-      RGWProcessEnv env = {driver, &rest, olog,
-	    auth_registry, ratelimiter.get(), lua_background.get()};
-
       fe = new RGWLoadGenFrontend(env, config);
     }
     else if (framework == "beast") {
-      int port;
-      config->get_val("port", 80, &port);
-      RGWProcessEnv env{driver, &rest, olog,
-	    auth_registry, ratelimiter.get(), lua_background.get()};
-      fe = new RGWAsioFrontend(env, config, *(sched_ctx.get()));
+      fe = new RGWAsioFrontend(env, config, *sched_ctx);
     }
     else if (framework == "rgw-nfs") {
-      RGWProcessEnv env = { driver, &rest, olog };
       fe = new RGWLibFrontend(env, config);
       if (rgwlib) {
         rgwlib->set_fe(static_cast<RGWLibFrontend*>(fe));
@@ -460,24 +460,24 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
   }
 
   std::string daemon_type = (nfs) ? "rgw-nfs" : "rgw";
-  r = driver->register_to_service_map(dpp, daemon_type, service_map_meta);
+  r = env.driver->register_to_service_map(dpp, daemon_type, service_map_meta);
   if (r < 0) {
     derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
     /* ignore error */
   }
 
-  if (driver->get_name() == "rados") {
+  if (env.driver->get_name() == "rados") {
     // add a watcher to respond to realm configuration changes
-    pusher = std::make_unique<RGWPeriodPusher>(dpp, driver, null_yield);
+    pusher = std::make_unique<RGWPeriodPusher>(dpp, env.driver, null_yield);
     fe_pauser = std::make_unique<RGWFrontendPauser>(fes, *(implicit_tenant_context.get()), pusher.get());
     rgw_pauser = std::make_unique<RGWPauser>();
     rgw_pauser->add_pauser(fe_pauser.get());
     if (lua_background) {
       rgw_pauser->add_pauser(lua_background.get());
     }
-    reloader = std::make_unique<RGWRealmReloader>(driver, service_map_meta, rgw_pauser.get());
+    reloader = std::make_unique<RGWRealmReloader>(env, service_map_meta, rgw_pauser.get());
     realm_watcher = std::make_unique<RGWRealmWatcher>(dpp, g_ceph_context,
-				  static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_realm());
+				  static_cast<rgw::sal::RadosStore*>(env.driver)->svc()->zone->get_realm());
     realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
     realm_watcher->add_watcher(RGWRealmNotify::ZonesNeedPeriod, *pusher.get());
   }
@@ -508,6 +508,7 @@ void rgw::AppMain::init_notification_endpoints()
 
 void rgw::AppMain::init_lua()
 {
+  rgw::sal::Driver* driver = env.driver;
   int r{0};
   const auto &luarocks_path =
       g_conf().get_val<std::string>("rgw_luarocks_location");
@@ -543,7 +544,7 @@ void rgw::AppMain::init_lua()
 
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
-  if (driver->get_name() == "rados") {
+  if (env.driver->get_name() == "rados") {
     reloader.reset(); // stop the realm reloader
   }
 
@@ -570,7 +571,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
     lua_background->shutdown();
   }
 
-  DriverManager::close_storage(driver);
+  DriverManager::close_storage(env.driver);
 
   rgw_tools_cleanup();
   rgw_shutdown_resolver();
