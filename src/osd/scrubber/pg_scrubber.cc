@@ -2390,7 +2390,7 @@ const OSDMapRef& PgScrubber::get_osdmap() const
   return m_pg->get_osdmap();
 }
 
-LoggerSinkSet& PgScrubber::get_logger() const { return*m_osds->clog.get(); }
+LoggerSinkSet& PgScrubber::get_logger() const { return *m_osds->clog.get(); }
 
 ostream &operator<<(ostream &out, const PgScrubber &scrubber) {
   return out << scrubber.m_flags;
@@ -2799,7 +2799,7 @@ ReplicaReservations::no_reply_t::~no_reply_t()
 LocalReservation::LocalReservation(OSDService* osds) : m_osds{osds}
 {
   if (m_osds->get_scrub_services().inc_scrubs_local()) {
-    // the failure is signalled by not having m_holding_local_reservation set
+    // a failure is signalled by not having m_holding_local_reservation set
     m_holding_local_reservation = true;
   }
 }
