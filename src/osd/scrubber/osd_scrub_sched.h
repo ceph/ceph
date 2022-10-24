@@ -77,7 +77,7 @@
 └─────────────────────────────────┘
 
 
-SqrubQueue interfaces (main functions):
+ScrubQueue interfaces (main functions):
 
 <1> - OSD/PG resources management:
 
@@ -340,7 +340,7 @@ class ScrubQueue {
   void register_with_osd(ScrubJobRef sjob, const sched_params_t& suggested);
 
   /**
-   * modify a scrub-job's schduled time and deadline
+   * modify a scrub-job's scheduled time and deadline
    *
    * There are 3 argument combinations to consider:
    * - 'must' is asserted, and the suggested time is 'scrub_must_stamp':
@@ -468,7 +468,7 @@ class ScrubQueue {
   mutable ceph::mutex resource_lock =
     ceph::make_mutex("ScrubQueue::resource_lock");
 
-  // the counters used to manage scrub activity parallelism:
+  /// the counters used to manage scrub activity parallelism:
   int scrubs_local{0};
   int scrubs_remote{0};
 
