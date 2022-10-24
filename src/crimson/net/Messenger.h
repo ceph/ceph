@@ -36,32 +36,26 @@ using Throttle = crimson::common::Throttle;
 using SocketPolicy = ceph::net::Policy<Throttle>;
 
 class Messenger {
-  crimson::auth::AuthClient* auth_client = nullptr;
-  crimson::auth::AuthServer* auth_server = nullptr;
-
-protected:
-  entity_name_t my_name;
-  entity_addrvec_t my_addrs;
-
 public:
-  Messenger(const entity_name_t& name)
-    : my_name(name)
-  {}
+  Messenger() {}
+
   virtual ~Messenger() {}
 
-#ifdef UNIT_TESTS_BUILT
-  Interceptor *interceptor = nullptr;
-#endif
+  virtual const entity_name_t& get_myname() const = 0;
 
-  entity_type_t get_mytype() const { return my_name.type(); }
-  const entity_name_t& get_myname() const { return my_name; }
-  const entity_addrvec_t& get_myaddrs() const { return my_addrs; }
-  entity_addr_t get_myaddr() const { return my_addrs.front(); }
-  virtual seastar::future<> set_myaddrs(const entity_addrvec_t& addrs) {
-    my_addrs = addrs;
-    return seastar::now();
-  }
+  entity_type_t get_mytype() const { return get_myname().type(); }
+
+  virtual const entity_addrvec_t &get_myaddrs() const = 0;
+
+  entity_addr_t get_myaddr() const { return get_myaddrs().front(); }
+
+  virtual void set_myaddrs(const entity_addrvec_t& addrs) = 0;
+
   virtual bool set_addr_unknowns(const entity_addrvec_t &addrs) = 0;
+
+  virtual void set_auth_client(crimson::auth::AuthClient *) = 0;
+
+  virtual void set_auth_server(crimson::auth::AuthServer *) = 0;
 
   using bind_ertr = crimson::errorator<
     crimson::ct_error::address_in_use, // The address (range) is already bound
@@ -99,15 +93,6 @@ public:
   // and must be called if is bound.
   virtual seastar::future<> shutdown() = 0;
 
-  crimson::auth::AuthClient* get_auth_client() const { return auth_client; }
-  void set_auth_client(crimson::auth::AuthClient *ac) {
-    auth_client = ac;
-  }
-  crimson::auth::AuthServer* get_auth_server() const { return auth_server; }
-  void set_auth_server(crimson::auth::AuthServer *as) {
-    auth_server = as;
-  }
-
   virtual void print(std::ostream& out) const = 0;
 
   virtual SocketPolicy get_policy(entity_type_t peer_type) const = 0;
@@ -124,6 +109,10 @@ public:
   create(const entity_name_t& name,
          const std::string& lname,
          const uint64_t nonce);
+
+#ifdef UNIT_TESTS_BUILT
+  virtual void set_interceptor(Interceptor *) = 0;
+#endif
 };
 
 inline std::ostream& operator<<(std::ostream& out, const Messenger& msgr) {
