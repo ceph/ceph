@@ -44,6 +44,8 @@ int rgw_compression_info_from_attrset(const map<string, bufferlist>& attrs,
 int RGWPutObj_Compress::process(bufferlist&& in, uint64_t logical_offset)
 {
   bufferlist out;
+  compressed_ofs = logical_offset;
+
   if (in.length() > 0) {
     // compression stuff
     if ((logical_offset > 0 && compressed) || // if previous part was compressed
@@ -69,14 +71,20 @@ int RGWPutObj_Compress::process(bufferlist&& in, uint64_t logical_offset)
         newbl.new_ofs = bs > 0 ? blocks[bs-1].len + blocks[bs-1].new_ofs : 0;
         newbl.len = out.length();
         blocks.push_back(newbl);
+
+	compressed_ofs = newbl.new_ofs;
       }
     } else {
       compressed = false;
       out = std::move(in);
     }
     // end of compression stuff
+  } else {
+    size_t bs = blocks.size();
+    compressed_ofs = bs > 0 ? blocks[bs-1].len + blocks[bs-1].new_ofs : logical_offset;
   }
-  return Pipe::process(std::move(out), logical_offset);
+
+  return Pipe::process(std::move(out), compressed_ofs);
 }
 
 //----------------RGWGetObj_Decompress---------------------
@@ -99,7 +107,7 @@ RGWGetObj_Decompress::RGWGetObj_Decompress(CephContext* cct_,
 int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   ldout(cct, 10) << "Compression for rgw is enabled, decompress part "
-      << "bl_ofs="<< bl_ofs << ", bl_len=" << bl_len << dendl;
+      << "bl_ofs=" << bl_ofs << ", bl_len=" << bl_len << dendl;
 
   if (!compressor.get()) {
     // if compressor isn't available - error, because cannot return decompressed data?
