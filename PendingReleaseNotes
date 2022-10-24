@@ -72,6 +72,8 @@
   namespaces was added to RBD in Nautilus 14.2.0 and it has been possible to
   map and unmap images in namespaces using the `image-spec` syntax since then
   but the corresponding option available in most other commands was missing.
+* RGW: Compression is now supported for objects uploaded with Server-Side Encryption.
+  When both are enabled, compression is applied before encryption.
 
 >=17.2.1
 
