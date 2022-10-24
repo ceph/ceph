@@ -11,6 +11,7 @@ from ceph_volume.util import disk, system
 from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
 from ceph_volume.util.disk import allow_loop_devices
+from ceph_volume.devices.raw.list import List
 
 logger = logging.getLogger(__name__)
 
@@ -798,36 +799,42 @@ class ValidDataDevice(ValidDevice):
 
 
 class ValidZapDevice(ValidDevice):
-    def __init__(self, dev_path, as_string=False, force=False):
+    def __init__(self, dev_path=None, osd_id=None, osd_fsid=None, as_string=False, force=False):
         super().__init__(dev_path, as_string=as_string)
+        self.osd_id = osd_id
+        self.osd_fsid = osd_fsid
         self.dev_path = dev_path
+        self.device = Device(self.dev_path)
         self.force = force
+
+    def check_running_osd(self, osd_ids=None):
+        try:
+            osd_ids_up = get_osd_ids_up()
+        except CephAuthPermissionDenied:
+            raise RuntimeError("Not enough privileges to check device. "
+                               "Add required keyring or use `--force` parameter "
+                               "if you know what you are doing.")
+        for osd_id in osd_ids:
+            if int(osd_id) in osd_ids_up:
+                raise RuntimeError(f"There's an OSD present in the cluster attached to {self.dev_path}")
 
     def check_device(self):
         super().check_device()
         if disk.is_locked_raw_device(self.dev_path):
             raise RuntimeError(f"{self.dev_path} is locked, won't touch it.")
         if not self.force:
-            d = Device(self.dev_path)
-            if d.has_bluestore_label and not d.is_lv:
-                from ceph_volume.devices.raw.list import List
-                dev = List([]).generate([self.dev_path])
-                osd_ids = [dev[d]['osd_id'] for d in dev]
-            if d.lvs:
-                osd_ids = [lv.tags['ceph.osd_id'] for lv in d.lvs]
-            try:
-                osd_ids_up = get_osd_ids_up()
-            except CephAuthPermissionDenied:
-                raise RuntimeError("Not enough privileges to check device. "
-                                   "Add required keyring or use `--force` parameter "
-                                   "if you know what you are doing.")
-            osd_ids = []
-            for osd_id in osd_ids:
-                if int(osd_id) in osd_ids_up:
-                    raise RuntimeError(f"There's an OSD present in the cluster attached to {self.dev_path}")
+            if self.device.has_bluestore_label and not self.device.is_lv:
+                if self.osd_id:
+                    osd_ids = [self.osd_id]
+                else:
+                    dev = List([]).generate([self.dev_path])
+                    osd_ids = [dev[d]['osd_id'] for d in dev]
+            if self.device.lvs:
+                osd_ids = [lv.tags['ceph.osd_id'] for lv in self.device.lvs if lv.used_by_ceph]
+
+            self.check_running_osd(osd_ids)
 
         return self.format_device()
-
 
 class ValidRawDevice(ValidDevice):
     def __init__(self, dev_path):

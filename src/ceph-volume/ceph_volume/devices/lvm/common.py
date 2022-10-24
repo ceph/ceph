@@ -1,7 +1,6 @@
 from ceph_volume.util import arg_validators, disk
 from ceph_volume import process, conf
 from ceph_volume import terminal
-from ceph_volume.devices.lvm.zap import Zap
 import argparse
 
 def rollback_osd(args, osd_id=None):
@@ -32,6 +31,7 @@ def rollback_osd(args, osd_id=None):
     ]
 
     process.run(cmd)
+    from ceph_volume.devices.lvm.zap import Zap
     Zap(['--destroy', '--osd-id', osd_id]).main()
 
 
