@@ -15,11 +15,11 @@ Here is a list of some of the things that ``cephadm`` can do:
 ``cephadm`` does not rely on external configuration tools like Ansible, Rook,
 or Salt. However, those external configuration tools can be used to automate
 operations not performed by cephadm itself. To learn more about these external
-configuration tools, visit their GitHub pages:
+configuration tools, visit their pages:
 
  * https://github.com/ceph/cephadm-ansible
  * https://github.com/ceph/ceph-salt
- * https://rook.io/
+ * https://rook.io/docs/rook/v1.10/Getting-Started/intro/
 
 ``cephadm`` manages the full lifecycle of a Ceph cluster. This lifecycle starts
 with the bootstrapping process, when ``cephadm`` creates a tiny Ceph cluster on
@@ -29,7 +29,7 @@ hosts and provisioning Ceph daemons and services. Management of this lifecycle
 can be performed either via the Ceph command-line interface (CLI) or via the
 dashboard (GUI).
 
-To use ``cephadm`` get started with Ceph, follow the instructions in
+To use ``cephadm`` to get started with Ceph, follow the instructions in
 :ref:`cephadm_deploying_new_cluster`.
 
 ``cephadm`` was introduced in Ceph release v15.2.0 (Octopus) and does not
