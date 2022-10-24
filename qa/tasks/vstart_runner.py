@@ -1069,7 +1069,10 @@ class LogRotate():
 
 def teardown_cluster():
     log.info('\ntearing down the cluster...')
-    remote.run(args=[os.path.join(SRC_PREFIX, "stop.sh")], timeout=60)
+    try:
+        remote.run(args=[os.path.join(SRC_PREFIX, "stop.sh")], timeout=60)
+    except CommandFailedError as e:
+        log.error('stop.sh failed: %s', e)
     log.info('\nceph cluster torn down')
     remote.run(args=['rm', '-rf', './dev', './out'])
 
