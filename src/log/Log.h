@@ -29,8 +29,58 @@ class SubsystemMap;
 
 class Log : private Thread
 {
+public:
+  using Thread::is_started;
+
+  Log(const SubsystemMap *s);
+  ~Log() override;
+
+  void set_flush_on_exit();
+
+  void set_coarse_timestamps(bool coarse);
+  void set_max_new(std::size_t n);
+  void set_max_recent(std::size_t n);
+  void set_log_file(std::string_view fn);
+  void reopen_log_file();
+  void chown_log_file(uid_t uid, gid_t gid);
+  void set_log_stderr_prefix(std::string_view p);
+
+  void flush();
+
+  void dump_recent();
+
+  void set_syslog_level(int log, int crash);
+  void set_stderr_level(int log, int crash);
+  void set_graylog_level(int log, int crash);
+
+  void start_graylog(const std::string& host,
+		     const uuid_d& fsid);
+  void stop_graylog();
+
+  void set_journald_level(int log, int crash);
+
+  void start_journald_logger();
+  void stop_journald_logger();
+
+  std::shared_ptr<Graylog> graylog() { return m_graylog; }
+
+  void submit_entry(Entry&& e);
+
+  void start();
+  void stop();
+
+  /// true if the log lock is held by our thread
+  bool is_inside_log_lock();
+
+  /// induce a segv on the next log event
+  void inject_segv();
+  void reset_segv();
+
 protected:
   using EntryVector = std::vector<ConcreteEntry>;
+
+  virtual void _flush(EntryVector& q, bool crash);
+
 private:
   using EntryRing = boost::circular_buffer<ConcreteEntry>;
 
@@ -83,55 +133,8 @@ private:
   void _log_safe_write(std::string_view sv);
   void _flush_logbuf();
   void _log_message(std::string_view s, bool crash);
-protected:
-  virtual void _flush(EntryVector& q, bool crash);
 
-public:
-  using Thread::is_started;
 
-  Log(const SubsystemMap *s);
-  ~Log() override;
-
-  void set_flush_on_exit();
-
-  void set_coarse_timestamps(bool coarse);
-  void set_max_new(std::size_t n);
-  void set_max_recent(std::size_t n);
-  void set_log_file(std::string_view fn);
-  void reopen_log_file();
-  void chown_log_file(uid_t uid, gid_t gid);
-  void set_log_stderr_prefix(std::string_view p);
-
-  void flush();
-
-  void dump_recent();
-
-  void set_syslog_level(int log, int crash);
-  void set_stderr_level(int log, int crash);
-  void set_graylog_level(int log, int crash);
-
-  void start_graylog(const std::string& host,
-		     const uuid_d& fsid);
-  void stop_graylog();
-
-  void set_journald_level(int log, int crash);
-
-  void start_journald_logger();
-  void stop_journald_logger();
-
-  std::shared_ptr<Graylog> graylog() { return m_graylog; }
-
-  void submit_entry(Entry&& e);
-
-  void start();
-  void stop();
-
-  /// true if the log lock is held by our thread
-  bool is_inside_log_lock();
-
-  /// induce a segv on the next log event
-  void inject_segv();
-  void reset_segv();
 };
 
 }
