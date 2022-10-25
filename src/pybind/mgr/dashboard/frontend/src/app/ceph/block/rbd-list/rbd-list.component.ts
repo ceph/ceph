@@ -549,6 +549,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   actionPrimary(primary: boolean) {
     const request = new RbdFormEditRequestModel();
     request.primary = primary;
+    request.features = null;
     const imageSpec = new ImageSpec(
       this.selection.first().pool_name,
       this.selection.first().namespace,
