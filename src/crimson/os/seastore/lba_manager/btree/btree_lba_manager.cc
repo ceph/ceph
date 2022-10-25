@@ -209,7 +209,8 @@ BtreeLBAManager::alloc_extent(
   Transaction &t,
   laddr_t hint,
   extent_len_t len,
-  paddr_t addr)
+  paddr_t addr,
+  LogicalCachedExtent* nextent)
 {
   struct state_t {
     laddr_t last_end;
@@ -229,7 +230,8 @@ BtreeLBAManager::alloc_extent(
     cache,
     c,
     hint,
-    [this, FNAME, c, hint, len, addr, lookup_attempts, &t](auto &btree, auto &state) {
+    [this, FNAME, c, hint, len, addr, lookup_attempts,
+    &t, nextent](auto &btree, auto &state) {
       return LBABtree::iterate_repeat(
 	c,
 	btree.upper_bound_right(c, hint),
@@ -265,12 +267,13 @@ BtreeLBAManager::alloc_extent(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::no);
 	  }
-	}).si_then([FNAME, c, addr, len, hint, &btree, &state] {
+	}).si_then([FNAME, c, addr, len, hint, &btree, &state, nextent] {
 	  return btree.insert(
 	    c,
 	    *state.insert_iter,
 	    state.last_end,
-	    lba_map_val_t{len, addr, 1, 0}
+	    lba_map_val_t{len, addr, 1, 0},
+	    nextent
 	  ).si_then([&state, FNAME, c, addr, len, hint](auto &&p) {
 	    auto [iter, inserted] = std::move(p);
 	    TRACET("{}~{}, hint={}, inserted at {}",
@@ -473,7 +476,8 @@ BtreeLBAManager::update_mapping(
   Transaction& t,
   laddr_t laddr,
   paddr_t prev_addr,
-  paddr_t addr)
+  paddr_t addr,
+  LogicalCachedExtent *nextent)
 {
   LOG_PREFIX(BtreeLBAManager::update_mapping);
   TRACET("laddr={}, paddr {} => {}", t, laddr, prev_addr, addr);
@@ -487,7 +491,8 @@ BtreeLBAManager::update_mapping(
       ceph_assert(in.paddr == prev_addr);
       ret.paddr = addr;
       return ret;
-    }
+    },
+    nextent
   ).si_then([&t, laddr, prev_addr, addr, FNAME](auto result) {
       DEBUGT("laddr={}, paddr {} => {} done -- {}",
              t, laddr, prev_addr, addr, result);
@@ -566,7 +571,8 @@ BtreeLBAManager::update_refcount(
       ceph_assert((int)out.refcount + delta >= 0);
       out.refcount += delta;
       return out;
-    }
+    },
+    nullptr
   ).si_then([&t, addr, delta, FNAME](auto result) {
     DEBUGT("laddr={}, delta={} done -- {}", t, addr, delta, result);
     return ref_update_result_t{
@@ -581,16 +587,17 @@ BtreeLBAManager::_update_mapping_ret
 BtreeLBAManager::_update_mapping(
   Transaction &t,
   laddr_t addr,
-  update_func_t &&f)
+  update_func_t &&f,
+  LogicalCachedExtent* nextent)
 {
   auto c = get_context(t);
   return with_btree_ret<LBABtree, lba_map_val_t>(
     cache,
     c,
-    [f=std::move(f), c, addr](auto &btree) mutable {
+    [f=std::move(f), c, addr, nextent](auto &btree) mutable {
       return btree.lower_bound(
 	c, addr
-      ).si_then([&btree, f=std::move(f), c, addr](auto iter)
+      ).si_then([&btree, f=std::move(f), c, addr, nextent](auto iter)
 		-> _update_mapping_ret {
 	if (iter.is_end() || iter.get_key() != addr) {
 	  LOG_PREFIX(BtreeLBAManager::_update_mapping);
@@ -610,7 +617,8 @@ BtreeLBAManager::_update_mapping(
 	  return btree.update(
 	    c,
 	    iter,
-	    ret
+	    ret,
+	    nextent
 	  ).si_then([ret](auto) {
 	    return ret;
 	  });

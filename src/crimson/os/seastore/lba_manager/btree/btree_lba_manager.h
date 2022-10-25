@@ -30,10 +30,12 @@ public:
   BtreeLBAPin() = default;
   BtreeLBAPin(
     CachedExtentRef parent,
+    uint16_t pos,
     lba_map_val_t &val,
     lba_node_meta_t &&meta)
     : BtreeNodePin(
 	parent,
+	pos,
 	val.paddr,
 	val.len,
 	std::forward<lba_node_meta_t>(meta))
@@ -88,7 +90,8 @@ public:
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
-    paddr_t addr) final;
+    paddr_t addr,
+    LogicalCachedExtent*) final;
 
   ref_ret decref_extent(
     Transaction &t,
@@ -133,7 +136,8 @@ public:
     Transaction& t,
     laddr_t laddr,
     paddr_t prev_addr,
-    paddr_t paddr) final;
+    paddr_t paddr,
+    LogicalCachedExtent*) final;
 
   get_physical_extent_if_live_ret get_physical_extent_if_live(
     Transaction &t,
@@ -198,7 +202,8 @@ private:
   _update_mapping_ret _update_mapping(
     Transaction &t,
     laddr_t addr,
-    update_func_t &&f);
+    update_func_t &&f,
+    LogicalCachedExtent*);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 

@@ -257,7 +257,7 @@ struct lba_btree_test : btree_test_base {
     check.emplace(addr, get_map_val(len));
     lba_btree_update([=, this](auto &btree, auto &t) {
       return btree.insert(
-	get_op_context(t), addr, get_map_val(len)
+	get_op_context(t), addr, get_map_val(len), nullptr
       ).si_then([](auto){});
     });
   }
@@ -324,7 +324,7 @@ TEST_F(lba_btree_test, basic)
 }
 
 struct btree_lba_manager_test : btree_test_base {
-  BtreeLBAManagerRef<false> lba_manager;
+  BtreeLBAManagerRef lba_manager;
 
   btree_lba_manager_test() = default;
 
@@ -426,7 +426,7 @@ struct btree_lba_manager_test : btree_test_base {
     auto ret = with_trans_intr(
       *t.t,
       [=, this](auto &t) {
-	return lba_manager->alloc_extent(t, hint, len, paddr);
+	return lba_manager->alloc_extent(t, hint, len, paddr, nullptr);
       }).unsafe_get0();
     logger().debug("alloc'd: {}", *ret);
     EXPECT_EQ(len, ret->get_length());
