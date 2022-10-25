@@ -88,7 +88,11 @@ function rados_put_get() {
     local -a initial_osds=($(get_osds $poolname $objname))
     local last=$((${#initial_osds[@]} - 1))
     ceph osd out ${initial_osds[$last]} || return 1
+
+    # give the osdmap up to 5 seconds to refresh
+    sleep 5
     ! get_osds $poolname $objname | grep '\<'${initial_osds[$last]}'\>' || return 1
+
     rados --pool $poolname get $objname $dir/COPY || return 1
     diff $dir/ORIGINAL $dir/COPY || return 1
     ceph osd in ${initial_osds[$last]} || return 1
