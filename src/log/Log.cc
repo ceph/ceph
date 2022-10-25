@@ -57,8 +57,10 @@ Log::~Log()
   }
 
   ceph_assert(!is_started());
-  if (m_fd >= 0)
+  if (m_fd >= 0) {
     VOID_TEMP_FAILURE_RETRY(::close(m_fd));
+    m_fd = -1;
+  }
 }
 
 
@@ -115,8 +117,10 @@ void Log::reopen_log_file()
     return;
   }
   m_flush_mutex_holder = pthread_self();
-  if (m_fd >= 0)
+  if (m_fd >= 0) {
     VOID_TEMP_FAILURE_RETRY(::close(m_fd));
+    m_fd = -1;
+  }
   if (m_log_file.length()) {
     m_fd = ::open(m_log_file.c_str(), O_CREAT|O_WRONLY|O_APPEND|O_CLOEXEC, 0644);
     if (m_fd >= 0 && (m_uid || m_gid)) {
@@ -126,8 +130,6 @@ void Log::reopen_log_file()
 	     << std::endl;
       }
     }
-  } else {
-    m_fd = -1;
   }
   m_flush_mutex_holder = 0;
 }
