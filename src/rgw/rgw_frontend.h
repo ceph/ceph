@@ -92,7 +92,7 @@ class RGWProcessFrontend : public RGWFrontend {
 protected:
   RGWFrontendConfig* conf;
   RGWProcess* pprocess;
-  RGWProcessEnv env;
+  RGWProcessEnv& env;
   RGWProcessControlThread* thread;
 
 public:
@@ -156,7 +156,7 @@ public:
     conf->get_val("prefix", "", &uri_prefix);
 
     RGWLoadGenProcess *pp = new RGWLoadGenProcess(
-        g_ceph_context, &env, num_threads, std::move(uri_prefix), conf);
+        g_ceph_context, env, num_threads, std::move(uri_prefix), conf);
 
     pprocess = pp;
 

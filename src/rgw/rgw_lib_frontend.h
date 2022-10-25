@@ -25,7 +25,7 @@ namespace rgw {
     using unique_lock = std::unique_lock<std::mutex>;
 
   public:
-    RGWLibProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
+    RGWLibProcess(CephContext* cct, RGWProcessEnv& pe, int num_threads,
 		  std::string uri_prefix, RGWFrontendConfig* _conf) :
       RGWProcess(cct, pe, num_threads, std::move(uri_prefix), _conf),
       gen(0), shutdown(false) {}

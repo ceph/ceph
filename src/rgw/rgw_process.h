@@ -44,16 +44,12 @@ class RGWProcess {
   std::deque<RGWRequest*> m_req_queue;
 protected:
   CephContext *cct;
-  rgw::sal::Driver* driver;
-  rgw_auth_registry_ptr_t auth_registry;
-  OpsLogSink* olog;
+  RGWProcessEnv& env;
   ThreadPool m_tp;
   Throttle req_throttle;
-  RGWREST* rest;
   RGWFrontendConfig* conf;
   int sock_fd;
   std::string uri_prefix;
-  rgw::lua::Background* lua_background;
   std::unique_ptr<rgw::sal::LuaManager> lua_manager;
 
   struct RGWWQ : public DoutPrefixProvider, public ThreadPool::WorkQueue<RGWRequest> {
@@ -93,22 +89,17 @@ protected:
 
 public:
   RGWProcess(CephContext* const cct,
-             RGWProcessEnv* const pe,
+             RGWProcessEnv& env,
              const int num_threads,
              std::string uri_prefix,
              RGWFrontendConfig* const conf)
-    : cct(cct),
-      driver(pe->driver),
-      auth_registry(pe->auth_registry),
-      olog(pe->olog),
+    : cct(cct), env(env),
       m_tp(cct, "RGWProcess::m_tp", "tp_rgw_process", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
-      rest(pe->rest),
       conf(conf),
       sock_fd(-1),
       uri_prefix(std::move(uri_prefix)),
-      lua_background(pe->lua_background),
-      lua_manager(driver->get_lua_manager()),
+      lua_manager(env.driver->get_lua_manager()),
       req_wq(this,
 	     ceph::make_timespan(g_conf()->rgw_op_thread_timeout),
 	     ceph::make_timespan(g_conf()->rgw_op_thread_suicide_timeout),
@@ -126,8 +117,8 @@ public:
 
   void unpause_with_new_config(rgw::sal::Driver* const driver,
                                rgw_auth_registry_ptr_t auth_registry) {
-    this->driver = driver;
-    this->auth_registry = std::move(auth_registry);
+    env.driver = driver;
+    env.auth_registry = std::move(auth_registry);
     lua_manager = driver->get_lua_manager();
     m_tp.unpause();
   }
@@ -154,9 +145,9 @@ public:
 class RGWLoadGenProcess : public RGWProcess {
   RGWAccessKey access_key;
 public:
-  RGWLoadGenProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
+  RGWLoadGenProcess(CephContext* cct, RGWProcessEnv& env, int num_threads,
                     std::string uri_prefix, RGWFrontendConfig* _conf)
-    : RGWProcess(cct, pe, num_threads, std::move(uri_prefix), _conf) {}
+    : RGWProcess(cct, env, num_threads, std::move(uri_prefix), _conf) {}
   void run() override;
   void checkpoint();
   void handle_request(const DoutPrefixProvider *dpp, RGWRequest* req) override;
