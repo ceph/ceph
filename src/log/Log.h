@@ -26,6 +26,48 @@ class SubsystemMap;
 
 class Log : private Thread
 {
+public:
+  using Thread::is_started;
+
+  Log(const SubsystemMap *s);
+  ~Log() override;
+
+  void set_flush_on_exit();
+
+  void set_coarse_timestamps(bool coarse);
+  void set_max_new(std::size_t n);
+  void set_max_recent(std::size_t n);
+  void set_log_file(std::string_view fn);
+  void reopen_log_file();
+  void chown_log_file(uid_t uid, gid_t gid);
+  void set_log_stderr_prefix(std::string_view p);
+
+  void flush();
+
+  void dump_recent();
+
+  void set_syslog_level(int log, int crash);
+  void set_stderr_level(int log, int crash);
+  void set_graylog_level(int log, int crash);
+
+  void start_graylog();
+  void stop_graylog();
+
+  std::shared_ptr<Graylog> graylog() { return m_graylog; }
+
+  void submit_entry(Entry&& e);
+
+  void start();
+  void stop();
+
+  /// true if the log lock is held by our thread
+  bool is_inside_log_lock();
+
+  /// induce a segv on the next log event
+  void inject_segv();
+  void reset_segv();
+
+private:
   using EntryRing = boost::circular_buffer<ConcreteEntry>;
   using EntryVector = std::vector<ConcreteEntry>;
 
@@ -79,47 +121,6 @@ class Log : private Thread
   void _flush(EntryVector& q, bool crash);
 
   void _log_message(std::string_view s, bool crash);
-
-public:
-  using Thread::is_started;
-
-  Log(const SubsystemMap *s);
-  ~Log() override;
-
-  void set_flush_on_exit();
-
-  void set_coarse_timestamps(bool coarse);
-  void set_max_new(std::size_t n);
-  void set_max_recent(std::size_t n);
-  void set_log_file(std::string_view fn);
-  void reopen_log_file();
-  void chown_log_file(uid_t uid, gid_t gid);
-  void set_log_stderr_prefix(std::string_view p);
-
-  void flush();
-
-  void dump_recent();
-
-  void set_syslog_level(int log, int crash);
-  void set_stderr_level(int log, int crash);
-  void set_graylog_level(int log, int crash);
-
-  void start_graylog();
-  void stop_graylog();
-
-  std::shared_ptr<Graylog> graylog() { return m_graylog; }
-
-  void submit_entry(Entry&& e);
-
-  void start();
-  void stop();
-
-  /// true if the log lock is held by our thread
-  bool is_inside_log_lock();
-
-  /// induce a segv on the next log event
-  void inject_segv();
-  void reset_segv();
 };
 
 }
