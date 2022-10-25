@@ -475,7 +475,8 @@ TransactionManager::rewrite_logical_extent(
     t,
     lextent->get_laddr(),
     lextent->get_paddr(),
-    nlextent->get_paddr());
+    nlextent->get_paddr(),
+    nlextent.get());
 }
 
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
@@ -631,7 +632,7 @@ TransactionManagerRef make_transaction_manager(
 {
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(*epm);
-  auto lba_manager = lba_manager::create_lba_manager(*cache);
+  auto lba_manager = lba_manager::create_lba_manager<true>(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto backref_manager = create_backref_manager(*cache);
 

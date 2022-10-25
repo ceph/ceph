@@ -30,7 +30,9 @@ LBAManager::update_mappings(
           t,
           (*iter_extents)->get_laddr(),
           *iter_original_paddrs,
-          (*iter_extents)->get_paddr()
+          (*iter_extents)->get_paddr(),
+	  nullptr	// all the extents should have already been
+			// added to the fixed_kv_btree
       ).si_then([&iter_extents, &iter_original_paddrs] {
         ++iter_extents;
         ++iter_original_paddrs;

@@ -136,72 +136,160 @@ struct lba_map_val_le_t {
   }
 };
 
+template <bool val>
+struct leaf_node_type_t {};
+
+template<>
+struct leaf_node_type_t<true> {
+  static constexpr extent_types_t type = extent_types_t::LADDR_LEAF;
+};
+
+template<>
+struct leaf_node_type_t<false> {
+  static constexpr extent_types_t type = extent_types_t::DINK_LADDR_LEAF;
+};
+
+template <bool has_children>
 struct LBALeafNode
   : FixedKVLeafNode<
       LEAF_NODE_CAPACITY,
       laddr_t, laddr_le_t,
       lba_map_val_t, lba_map_val_le_t,
       LBA_BLOCK_SIZE,
-      LBALeafNode> {
+      LBALeafNode<has_children>,
+      has_children> {
   using Ref = TCachedExtentRef<LBALeafNode>;
-  using internal_iterator_t = const_iterator;
+  using parent_type_t = FixedKVLeafNode<
+			  LEAF_NODE_CAPACITY,
+			  laddr_t, laddr_le_t,
+			  lba_map_val_t, lba_map_val_le_t,
+			  LBA_BLOCK_SIZE,
+			  LBALeafNode<has_children>,
+			  has_children>;
+  using internal_const_iterator_t =
+    typename parent_type_t::node_layout_t::const_iterator;
+  using internal_iterator_t =
+    typename parent_type_t::node_layout_t::iterator;
   template <typename... T>
   LBALeafNode(T&&... t) :
-    FixedKVLeafNode(std::forward<T>(t)...) {}
+    parent_type_t(std::forward<T>(t)...) {}
 
-  static constexpr extent_types_t TYPE = extent_types_t::LADDR_LEAF;
+  static constexpr extent_types_t TYPE = leaf_node_type_t<has_children>::type;
 
-  void update(
-    const_iterator iter,
-    lba_map_val_t val) final {
-    val.paddr = maybe_generate_relative(val.paddr);
-    return journal_update(
-      iter,
-      val,
-      maybe_get_delta_buffer());
+  bool validate_stable_children() final {
+    LOG_PREFIX(LBALeafNode::validate_stable_children);
+    if constexpr (has_children) {
+      if (this->stable_children.empty()) {
+	return false;
+      }
+
+      for (auto i : *this) {
+	auto child = (LogicalCachedExtent*)this->stable_children[i.get_offset()];
+	if (child && !child->is_clean_pending()
+	    && child->get_laddr() != i.get_key()) {
+	  SUBERROR(seastore_fixedkv_tree,
+	    "stable child not valid: child {}, key {}",
+	    *child,
+	    i.get_key());
+	  ceph_abort();
+	  return false;
+	}
+      }
+    }
+    return true;
   }
 
-  const_iterator insert(
-    const_iterator iter,
+  void update(
+    internal_const_iterator_t iter,
+    lba_map_val_t val,
+    LogicalCachedExtent* nextent) final {
+    LOG_PREFIX(LBALeafNode::update);
+    if constexpr (has_children) {
+      if (nextent) {
+	SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, {}",
+	  this->pending_for_transaction,
+	  iter.get_offset(),
+	  *nextent);
+	this->mutate_state.pending_update(iter, nextent);
+	this->set_child_ptracker(nextent);
+      }
+    }
+    val.paddr = this->maybe_generate_relative(val.paddr);
+    return this->journal_update(
+      iter,
+      val,
+      this->maybe_get_delta_buffer());
+  }
+
+  internal_const_iterator_t insert(
+    internal_const_iterator_t iter,
     laddr_t addr,
-    lba_map_val_t val) final {
-    val.paddr = maybe_generate_relative(val.paddr);
-    journal_insert(
+    lba_map_val_t val,
+    LogicalCachedExtent* nextent) final {
+    if constexpr (has_children) {
+      LOG_PREFIX(LBALeafNode::insert);
+      SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}, extent {}",
+	this->pending_for_transaction,
+	iter.get_offset(),
+	addr,
+	(void*)nextent);
+      this->mutate_state.pending_insert(iter, addr, nextent);
+      if (nextent) {
+	this->set_child_ptracker(nextent);
+      }
+    }
+    val.paddr = this->maybe_generate_relative(val.paddr);
+    this->journal_insert(
       iter,
       addr,
       val,
-      maybe_get_delta_buffer());
+      this->maybe_get_delta_buffer());
     return iter;
   }
 
-  void remove(const_iterator iter) final {
-    return journal_remove(
+  void remove(internal_const_iterator_t iter) final {
+    if constexpr (has_children) {
+      LOG_PREFIX(LBALeafNode::remove);
+      SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}",
+	this->pending_for_transaction,
+	iter.get_offset(),
+	iter.get_key());
+      assert(iter != this->end());
+      this->mutate_state.pending_remove(iter);
+    }
+    return this->journal_remove(
       iter,
-      maybe_get_delta_buffer());
+      this->maybe_get_delta_buffer());
   }
 
   // See LBAInternalNode, same concept
   void resolve_relative_addrs(paddr_t base);
-  void node_resolve_vals(iterator from, iterator to) const final {
-    if (is_initial_pending()) {
+  void node_resolve_vals(
+    internal_iterator_t from,
+    internal_iterator_t to) const final
+  {
+    if (this->is_initial_pending()) {
       for (auto i = from; i != to; ++i) {
 	auto val = i->get_val();
 	if (val.paddr.is_relative()) {
 	  assert(val.paddr.is_block_relative());
-	  val.paddr = get_paddr().add_relative(val.paddr);
+	  val.paddr = this->get_paddr().add_relative(val.paddr);
 	  i->set_val(val);
 	}
       }
     }
   }
-  void node_unresolve_vals(iterator from, iterator to) const final {
-    if (is_initial_pending()) {
+  void node_unresolve_vals(
+    internal_iterator_t from,
+    internal_iterator_t to) const final
+  {
+    if (this->is_initial_pending()) {
       for (auto i = from; i != to; ++i) {
 	auto val = i->get_val();
 	if (val.paddr.is_relative()) {
 	  auto val = i->get_val();
 	  assert(val.paddr.is_record_relative());
-	  val.paddr = val.paddr.block_relative_to(get_paddr());
+	  val.paddr = val.paddr.block_relative_to(this->get_paddr());
 	  i->set_val(val);
 	}
       }
@@ -214,6 +302,7 @@ struct LBALeafNode
 
   std::ostream &print_detail(std::ostream &out) const final;
 };
-using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
+template <bool has_children>
+using LBALeafNodeRef = TCachedExtentRef<LBALeafNode<has_children>>;
 
 }

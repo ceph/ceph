@@ -100,7 +100,8 @@ public:
   const_iterator insert(
     const_iterator iter,
     paddr_t key,
-    backref_map_val_t val) final {
+    backref_map_val_t val,
+    LogicalCachedExtent*) final {
     journal_insert(
       iter,
       key,
@@ -111,7 +112,8 @@ public:
 
   void update(
     const_iterator iter,
-    backref_map_val_t val) final {
+    backref_map_val_t val,
+    LogicalCachedExtent*) final {
     return journal_update(
       iter,
       val,

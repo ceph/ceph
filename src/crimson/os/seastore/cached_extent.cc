@@ -6,6 +6,8 @@
 
 #include "crimson/common/log.h"
 
+#include "crimson/os/seastore/btree/fixed_kv_node.h"
+
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_seastore_tm);
@@ -100,6 +102,37 @@ std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
     out << ", pin=empty";
   }
   return print_detail_l(out);
+}
+
+LogicalCachedExtent::~LogicalCachedExtent() {
+  if (parent_tracker && is_valid() && !is_pending()) {
+    assert(parent_tracker->get_parent());
+    auto parent = parent_tracker->get_parent<FixedKVNode<laddr_t>>();
+    auto off = parent->lower_bound_offset(laddr);
+    assert(parent->get_key_from_idx(off) == laddr);
+    assert(parent->stable_children[off] == this);
+    parent->stable_children[off] = nullptr;
+  }
+}
+
+void LogicalCachedExtent::on_replace_prior(Transaction &t) {
+  assert(is_mutation_pending());
+  auto &prior = (LogicalCachedExtent&)(*get_prior_instance());
+  parent_tracker = prior.parent_tracker;
+  assert(parent_tracker->get_parent());
+  auto parent = parent_tracker->get_parent<FixedKVNode<laddr_t>>();
+  //TODO: can this search be avoided?
+  auto off = parent->lower_bound_offset(laddr);
+  assert(parent->get_key_from_idx(off) == laddr);
+  parent->stable_children[off] = this;
+}
+
+parent_tracker_t::~parent_tracker_t() {
+  // this is parent's tracker, reset it
+  auto &p = (FixedKVNode<laddr_t>&)*parent;
+  if (p.my_tracker == this) {
+   p.my_tracker = nullptr;
+  }
 }
 
 std::ostream &operator<<(std::ostream &out, const LBAPin &rhs)

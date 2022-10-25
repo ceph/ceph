@@ -27,18 +27,27 @@ std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
              << ")";
 }
 
-std::ostream &LBALeafNode::print_detail(std::ostream &out) const
+template <bool has_children>
+std::ostream &LBALeafNode<has_children>::print_detail(std::ostream &out) const
 {
-  out << ", size=" << get_size()
-      << ", meta=" << get_meta()
-      << ", parent_tracker=" << (void*)parent_tracker.get();
-  if (parent_tracker) {
-    return out << ", parent=" << (void*)parent_tracker->parent.get();
+  out << ", size=" << this->get_size()
+      << ", meta=" << this->get_meta()
+      << ", parent_tracker=" << (void*)this->parent_tracker.get();
+  if (this->parent_tracker) {
+    return out << ", parent=" << (void*)this->parent_tracker->get_parent().get();
   }
-  return out << ", root_block=" << (void*)root_block.get();
+  out << ", my_tracker=" << (void*)this->my_tracker;
+  if (this->my_tracker) {
+    out << ", my_tracker->parent=" << (void*)this->my_tracker->get_parent().get();
+  }
+  return out << ", root_block=" << (void*)this->root_block.get();
 }
 
-void LBALeafNode::resolve_relative_addrs(paddr_t base)
+template std::ostream &LBALeafNode<true>::print_detail(std::ostream &out) const;
+template std::ostream &LBALeafNode<false>::print_detail(std::ostream &out) const;
+
+template <bool has_children>
+void LBALeafNode<has_children>::resolve_relative_addrs(paddr_t base)
 {
   LOG_PREFIX(LBALeafNode::resolve_relative_addrs);
   for (auto i: *this) {
@@ -50,5 +59,8 @@ void LBALeafNode::resolve_relative_addrs(paddr_t base)
     }
   }
 }
+
+template void LBALeafNode<true>::resolve_relative_addrs(paddr_t base);
+template void LBALeafNode<false>::resolve_relative_addrs(paddr_t base);
 
 }
