@@ -18,6 +18,8 @@
 
 #include "log/Entry.h"
 
+#include <unistd.h>
+
 struct uuid_d;
 
 namespace ceph {
@@ -44,6 +46,7 @@ public:
   void reopen_log_file();
   void chown_log_file(uid_t uid, gid_t gid);
   void set_log_stderr_prefix(std::string_view p);
+  void set_stderr_fd(int fd);
 
   void flush();
 
@@ -108,6 +111,8 @@ private:
   uid_t m_uid = 0;
   gid_t m_gid = 0;
 
+  int m_fd_stderr = STDERR_FILENO;
+
   int m_fd_last_error = 0;  ///< last error we say writing to fd (if any)
 
   int m_syslog_log = -2, m_syslog_crash = -2;
@@ -116,6 +121,7 @@ private:
   int m_journald_log = -3, m_journald_crash = -3;
 
   std::string m_log_stderr_prefix;
+  bool do_stderr_poll = false;
 
   std::shared_ptr<Graylog> m_graylog;
   std::unique_ptr<JournaldLogger> m_journald;
@@ -133,6 +139,9 @@ private:
   void _log_safe_write(std::string_view sv);
   void _flush_logbuf();
   void _log_message(std::string_view s, bool crash);
+  void _configure_stderr();
+  void _log_stderr(std::string_view strv);
+
 
 
 };
