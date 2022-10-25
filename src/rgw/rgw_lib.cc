@@ -211,7 +211,7 @@ namespace rgw {
     s->cio = io;
 
     /* XXX and -then- stash req_state pointers everywhere they are needed */
-    ret = req->init(rgw_env, driver, io, s);
+    ret = req->init(rgw_env, env.driver, io, s);
     if (ret < 0) {
       ldpp_dout(op, 10) << "failed to initialize request" << dendl;
       abort_req(s, op, ret);
@@ -307,7 +307,7 @@ namespace rgw {
               << e.what() << dendl;
     }
     if (should_log) {
-      rgw_log_op(nullptr /* !rest */, s, op, olog);
+      rgw_log_op(nullptr /* !rest */, s, op, env.olog);
     }
 
     int http_ret = s->err.http_ret;
@@ -347,7 +347,7 @@ namespace rgw {
 
     rgw_env.set("HTTP_HOST", "");
 
-    int ret = req->init(rgw_env, driver, &io_ctx, s);
+    int ret = req->init(rgw_env, env.driver, &io_ctx, s);
     if (ret < 0) {
       ldpp_dout(op, 10) << "failed to initialize request" << dendl;
       abort_req(s, op, ret);
@@ -450,7 +450,7 @@ namespace rgw {
   int RGWLibFrontend::init()
   {
     std::string uri_prefix; // empty
-    pprocess = new RGWLibProcess(g_ceph_context, &env,
+    pprocess = new RGWLibProcess(g_ceph_context, env,
 				 g_conf()->rgw_thread_pool_size, uri_prefix, conf);
     return 0;
   }
