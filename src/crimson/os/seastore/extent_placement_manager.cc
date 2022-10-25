@@ -257,11 +257,11 @@ ExtentPlacementManager::open_for_write()
 }
 
 ExtentPlacementManager::alloc_paddr_iertr::future<>
-ExtentPlacementManager::delayed_alloc_or_ool_write(
+ExtentPlacementManager::delayed_allocate_and_write(
     Transaction &t,
     const std::list<LogicalCachedExtentRef> &delayed_extents)
 {
-  LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
+  LOG_PREFIX(ExtentPlacementManager::delayed_allocate_and_write);
   DEBUGT("start with {} delayed extents",
          t, delayed_extents.size());
   assert(writer_refs.size());
@@ -270,6 +270,33 @@ ExtentPlacementManager::delayed_alloc_or_ool_write(
       [this, &t, &delayed_extents](auto& alloc_map) {
     for (auto& extent : delayed_extents) {
       // For now, just do ool allocation for any delayed extent
+      auto writer_ptr = get_writer(
+          extent->get_user_hint(),
+          get_extent_category(extent->get_type()),
+          extent->get_rewrite_generation());
+      alloc_map[writer_ptr].emplace_back(extent);
+    }
+    return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
+      auto writer = p.first;
+      auto& extents = p.second;
+      return writer->alloc_write_ool_extents(t, extents);
+    });
+  });
+}
+
+ExtentPlacementManager::alloc_paddr_iertr::future<>
+ExtentPlacementManager::write_preallocated_ool_extents(
+    Transaction &t,
+    std::list<LogicalCachedExtentRef> extents)
+{
+  LOG_PREFIX(ExtentPlacementManager::write_preallocated_ool_extents);
+  DEBUGT("start with {} allocated extents",
+         t, extents.size());
+  assert(writer_refs.size());
+  return seastar::do_with(
+      std::map<ExtentOolWriter*, std::list<LogicalCachedExtentRef>>(),
+      [this, &t, extents=std::move(extents)](auto& alloc_map) {
+    for (auto& extent : extents) {
       auto writer_ptr = get_writer(
           extent->get_user_hint(),
           get_extent_category(extent->get_type()),
@@ -537,7 +564,7 @@ RandomBlockOolWriter::do_write(
     ).safe_then([&t, &ex, paddr, FNAME]() {
       TRACET("ool extent written at {} -- {}",
 	     t, paddr, *ex);
-      t.mark_extent_ool(ex, paddr);
+      t.mark_allocated_extent_ool(ex);
       return alloc_write_iertr::now();
     });
   });

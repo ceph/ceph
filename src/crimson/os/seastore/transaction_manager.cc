@@ -315,7 +315,7 @@ TransactionManager::submit_transaction_direct(
       std::move(delayed_paddrs),
       [this, FNAME, &tref](auto& delayed_extents, auto& delayed_paddrs)
     {
-      return epm->delayed_alloc_or_ool_write(tref, delayed_extents
+      return epm->delayed_allocate_and_write(tref, delayed_extents
       ).si_then([this, FNAME, &tref, &delayed_extents, &delayed_paddrs] {
         SUBTRACET(seastore_t, "update delayed extent mappings", tref);
         return lba_manager->update_mappings(tref, delayed_extents, delayed_paddrs);
@@ -324,6 +324,15 @@ TransactionManager::submit_transaction_direct(
         crimson::ct_error::assert_all("invalid error")
       );
     });
+  }).si_then([this, FNAME, &tref] {
+    auto allocated_extents = tref.get_valid_pre_alloc_list();
+    auto num_extents = allocated_extents.size();
+    SUBTRACET(seastore_t, "process {} allocated extents", tref, num_extents);
+    return epm->write_preallocated_ool_extents(tref, allocated_extents
+    ).handle_error_interruptible(
+      crimson::ct_error::input_output_error::pass_further(),
+      crimson::ct_error::assert_all("invalid error")
+    );
   }).si_then([this, FNAME, &tref] {
     SUBTRACET(seastore_t, "about to prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
