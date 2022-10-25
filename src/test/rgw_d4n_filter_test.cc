@@ -8,7 +8,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-#define METADATA_LENGTH 20
+#define METADATA_LENGTH 22
 
 using namespace std;
 
@@ -19,6 +19,11 @@ string redisHost = "";
 vector<const char*> args;
 class Environment* env;
 const DoutPrefixProvider* dpp;
+
+class StoreObject : public rgw::sal::StoreObject {
+  friend class D4NFilterFixture;
+  FRIEND_TEST(D4NFilterFixture, StoreGetMetadata);
+};
 
 class Environment : public ::testing::Environment {
   public:
@@ -63,7 +68,7 @@ class D4NFilterFixture : public ::testing::Test {
     rgw::sal::Store* store;
     unique_ptr<rgw::sal::User> testUser = nullptr;
     unique_ptr<rgw::sal::Bucket> testBucket = nullptr;
-    unique_ptr<rgw::sal::Writer> testWriter  = nullptr;
+    unique_ptr<rgw::sal::Writer> testWriter = nullptr;
 
   public:
     D4NFilterFixture() {}
@@ -87,7 +92,7 @@ class D4NFilterFixture : public ::testing::Test {
 
     int createBucket() {
       rgw_bucket b;
-      std::string zonegroup_id = "test_id";
+      string zonegroup_id = "test_id";
       rgw_placement_rule placement_rule;
       string swift_ver_location = "test_location";
       const RGWAccessControlPolicy policy;
@@ -124,8 +129,8 @@ class D4NFilterFixture : public ::testing::Test {
       return ret;
     }
 
-    int putObject(int i) {
-      string object_name = "test_object_" + to_string(i);
+    int putObject(string name) {
+      string object_name = "test_object_" + name;
       unique_ptr<rgw::sal::Object> head_obj = testBucket->get_object(rgw_obj_key(object_name));
       rgw_user owner;
       rgw_placement_rule ptail_placement_rule;
@@ -148,9 +153,9 @@ class D4NFilterFixture : public ::testing::Test {
       ceph::real_time set_mtime;
 
       buffer::list bl;
-      string tmp = "test_attrs_value_" + to_string(i);
-      bl.append("test_attrs_value_" + to_string(i));
-      map<string, bufferlist> attrs{{"test_attrs_key_" + to_string(i), bl}};
+      string tmp = "test_attrs_value_" + name;
+      bl.append("test_attrs_value_" + name);
+      map<string, bufferlist> attrs{{"test_attrs_key_" + name, bl}};
 
       ceph::real_time delete_at;
       char if_match;
@@ -211,10 +216,10 @@ TEST_F(D4NFilterFixture, PutObject) {
   ASSERT_EQ(createBucket(), 0);
   ASSERT_NE(testBucket, nullptr);
   
-  EXPECT_EQ(putObject(0), 0);
+  EXPECT_EQ(putObject("PutObject"), 0);
   EXPECT_NE(testWriter, nullptr);
 
-  client.hgetall("rgw-object:test_object_0:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_PutObject:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -224,11 +229,11 @@ TEST_F(D4NFilterFixture, PutObject) {
 
   client.sync_commit();
 
-  client.hmget("rgw-object:test_object_0:cache", fields, [](cpp_redis::reply& reply) {
+  client.hmget("rgw-object:test_object_PutObject:cache", fields, [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_0");
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_PutObject");
     }
   });
 
@@ -240,7 +245,7 @@ TEST_F(D4NFilterFixture, PutObject) {
 TEST_F(D4NFilterFixture, GetObject) {
   cpp_redis::client client;
   vector<string> fields;
-  fields.push_back("test_attrs_key_1");
+  fields.push_back("test_attrs_key_GetObject");
   clientSetUp(&client); 
 
   ASSERT_EQ(createUser(), 0);
@@ -249,23 +254,23 @@ TEST_F(D4NFilterFixture, GetObject) {
   ASSERT_EQ(createBucket(), 0);
   ASSERT_NE(testBucket, nullptr);
   
-  ASSERT_EQ(putObject(1), 0);
+  ASSERT_EQ(putObject("GetObject"), 0);
   ASSERT_NE(testWriter, nullptr);
 
-  unique_ptr<rgw::sal::Object> testObject_1 = testBucket->get_object(rgw_obj_key("test_object_1"));
+  unique_ptr<rgw::sal::Object> testObject_GetObject = testBucket->get_object(rgw_obj_key("test_object_GetObject"));
 
-  EXPECT_NE(testObject_1, nullptr);
+  EXPECT_NE(testObject_GetObject, nullptr);
   
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_1.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_GetObject.get())->get_next();
 
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   
-  unique_ptr<rgw::sal::Object::ReadOp> testROp = testObject_1->get_read_op();
+  unique_ptr<rgw::sal::Object::ReadOp> testROp = testObject_GetObject->get_read_op();
 
   EXPECT_NE(testROp, nullptr);
   EXPECT_EQ(testROp->prepare(null_yield, dpp), 0);
 
-  client.hgetall("rgw-object:test_object_1:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_GetObject:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -275,11 +280,327 @@ TEST_F(D4NFilterFixture, GetObject) {
 
   client.sync_commit();
 
-  client.hmget("rgw-object:test_object_1:cache", fields, [](cpp_redis::reply& reply) {
+  client.hmget("rgw-object:test_object_GetObject:cache", fields, [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_1");
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_GetObject");
+    }
+  });
+
+  client.sync_commit();
+
+  clientReset(&client);
+}
+
+TEST_F(D4NFilterFixture, CopyObjectNone) {
+  cpp_redis::client client;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_CopyObjectNone");
+  clientSetUp(&client); 
+
+  createUser();
+  createBucket();
+  putObject("CopyObjectNone");
+  unique_ptr<rgw::sal::Object> testObject_CopyObjectNone = testBucket->get_object(rgw_obj_key("test_object_CopyObjectNone"));
+
+  ASSERT_NE(testObject_CopyObjectNone, nullptr);
+
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_CopyObjectNone.get())->get_next();
+
+  ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
+  ASSERT_NE(nextObject->get_attrs().empty(), true);
+
+  /* Update object */
+  RGWEnv rgw_env;
+  req_info info(get_pointer(env->cct), &rgw_env);
+  rgw_zone_id source_zone;
+  rgw_placement_rule dest_placement; 
+  ceph::real_time src_mtime;
+  ceph::real_time mtime;
+  ceph::real_time mod_ptr;
+  ceph::real_time unmod_ptr;
+  char if_match;
+  char if_nomatch;
+  rgw::sal::AttrsMod attrs_mod = rgw::sal::ATTRSMOD_NONE;
+  rgw::sal::Attrs attrs;
+  RGWObjCategory category = RGWObjCategory::Main;
+  uint64_t olh_epoch = 0;
+  ceph::real_time delete_at;
+  string tag;
+  string etag;
+
+  EXPECT_EQ(testObject_CopyObjectNone->copy_object(testUser.get(),
+			      &info, source_zone, testObject_CopyObjectNone.get(),
+			      testBucket.get(), testBucket.get(),
+                              dest_placement, &src_mtime, &mtime,
+			      &mod_ptr, &unmod_ptr, false,
+			      &if_match, &if_nomatch, attrs_mod,
+			      false, attrs, category, olh_epoch,
+			      delete_at, NULL, &tag, &etag,
+			      NULL, NULL, dpp, null_yield), 0);
+
+  client.hgetall("rgw-object:test_object_CopyObjectNone:cache", [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ((int)arr.size(), 2 + METADATA_LENGTH);
+    }
+  });
+
+  client.sync_commit();
+  
+  client.hmget("rgw-object:test_object_CopyObjectNone:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_CopyObjectNone");
+    }
+  });
+
+  client.sync_commit();
+}
+
+TEST_F(D4NFilterFixture, CopyObjectReplace) {
+  cpp_redis::client client;
+  vector<string> fields;
+  clientSetUp(&client); 
+
+  createUser();
+  createBucket();
+  putObject("CopyObjectReplace");
+  unique_ptr<rgw::sal::Object> testObject_CopyObjectReplace = testBucket->get_object(rgw_obj_key("test_object_CopyObjectReplace"));
+
+  ASSERT_NE(testObject_CopyObjectReplace, nullptr);
+
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_CopyObjectReplace.get())->get_next();
+
+  ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
+  ASSERT_NE(nextObject->get_attrs().empty(), true);
+
+  /* Copy to new object */
+  unique_ptr<rgw::sal::Writer> testWriterCopy = nullptr;
+  unique_ptr<rgw::sal::Object> head_obj = testBucket->get_object(rgw_obj_key("test_object_copy"));
+  rgw_user owner;
+  rgw_placement_rule ptail_placement_rule;
+  uint64_t olh_epoch_copy = 123;
+  string unique_tag;
+
+  head_obj->get_obj_attrs(null_yield, dpp);
+
+  testWriterCopy = store->get_atomic_writer(dpp, 
+	      null_yield,
+	      head_obj->clone(),
+	      owner,
+	      &ptail_placement_rule,
+	      olh_epoch_copy,
+	      unique_tag);
+
+  RGWEnv rgw_env;
+  size_t accounted_size = 0;
+  req_info info(get_pointer(env->cct), &rgw_env);
+  rgw_zone_id source_zone;
+  rgw_placement_rule dest_placement; 
+  ceph::real_time src_mtime;
+  ceph::real_time mtime; 
+  ceph::real_time set_mtime;
+  ceph::real_time mod_ptr;
+  ceph::real_time unmod_ptr;
+  rgw::sal::AttrsMod attrs_mod = rgw::sal::ATTRSMOD_REPLACE;
+  char if_match;
+  char if_nomatch;
+  RGWObjCategory category = RGWObjCategory::Main;
+  uint64_t olh_epoch = 0;
+  ceph::real_time delete_at;
+  string tag;
+  string etag("test_etag_copy");
+
+  /* Attribute to replace */
+  buffer::list bl;
+  bl.append("test_attrs_copy_value");
+  rgw::sal::Attrs attrs{{"test_attrs_key_CopyObjectReplace", bl}};
+
+  string user_data;
+  rgw_zone_set zones_trace;
+  bool canceled;
+  
+  ASSERT_EQ(testWriterCopy->complete(accounted_size, etag,
+		   &mtime, set_mtime,
+		   attrs,
+		   delete_at,
+		   &if_match, &if_nomatch,
+		   &user_data,
+		   &zones_trace, &canceled,
+		   null_yield), 0);
+
+  unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
+
+  EXPECT_EQ(testObject_CopyObjectReplace->copy_object(testUser.get(),
+			      &info, source_zone, testObject_copy.get(),
+			      testBucket.get(), testBucket.get(),
+                              dest_placement, &src_mtime, &mtime,
+			      &mod_ptr, &unmod_ptr, false,
+			      &if_match, &if_nomatch, attrs_mod,
+			      false, attrs, category, olh_epoch,
+			      delete_at, NULL, &tag, &etag,
+			      NULL, NULL, dpp, null_yield), 0);
+
+  /* Ensure the original object is still in the cache */
+  vector<string> keys;
+  keys.push_back("rgw-object:test_object_CopyObjectReplace:cache");
+
+  client.exists(keys, [](cpp_redis::reply& reply) {
+    if (reply.is_integer()) {
+      EXPECT_EQ(reply.as_integer(), 1);
+    }
+  });
+
+  client.sync_commit();
+
+  /* Check copy */
+  client.hgetall("rgw-object:test_object_copy:cache", [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ((int)arr.size(), 4 + METADATA_LENGTH); /* With etag */
+    }
+  });
+
+  client.sync_commit();
+  
+  fields.push_back("test_attrs_key_CopyObjectReplace");
+  
+  client.hmget("rgw-object:test_object_copy:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_copy_value");
+    }
+  });
+
+  client.sync_commit();
+
+  clientReset(&client);
+}
+
+TEST_F(D4NFilterFixture, CopyObjectMerge) {
+  cpp_redis::client client;
+  vector<string> fields;
+  clientSetUp(&client); 
+
+  createUser();
+  createBucket();
+  putObject("CopyObjectMerge");
+  unique_ptr<rgw::sal::Object> testObject_CopyObjectMerge = testBucket->get_object(rgw_obj_key("test_object_CopyObjectMerge"));
+
+  ASSERT_NE(testObject_CopyObjectMerge, nullptr);
+
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_CopyObjectMerge.get())->get_next();
+
+  ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
+  ASSERT_NE(nextObject->get_attrs().empty(), true);
+
+  /* Copy to new object */
+  unique_ptr<rgw::sal::Writer> testWriterCopy = nullptr;
+  string object_name = "test_object_copy";
+  unique_ptr<rgw::sal::Object> head_obj = testBucket->get_object(rgw_obj_key(object_name));
+  rgw_user owner;
+  rgw_placement_rule ptail_placement_rule;
+  uint64_t olh_epoch_copy = 123;
+  string unique_tag;
+
+  head_obj->get_obj_attrs(null_yield, dpp);
+
+  testWriterCopy = store->get_atomic_writer(dpp, 
+	      null_yield,
+	      head_obj->clone(),
+	      owner,
+	      &ptail_placement_rule,
+	      olh_epoch_copy,
+	      unique_tag);
+
+  RGWEnv rgw_env;
+  size_t accounted_size = 4;
+  req_info info(get_pointer(env->cct), &rgw_env);
+  rgw_zone_id source_zone;
+  rgw_placement_rule dest_placement; 
+  ceph::real_time src_mtime;
+  ceph::real_time mtime; 
+  ceph::real_time set_mtime;
+  ceph::real_time mod_ptr;
+  ceph::real_time unmod_ptr;
+  rgw::sal::AttrsMod attrs_mod = rgw::sal::ATTRSMOD_MERGE;
+  char if_match;
+  char if_nomatch;
+  RGWObjCategory category = RGWObjCategory::Main;
+  uint64_t olh_epoch = 0;
+  ceph::real_time delete_at;
+  string tag;
+  string etag("test_etag_copy");
+
+  buffer::list bl;
+  bl.append("bad_value");
+  rgw::sal::Attrs attrs{{"test_attrs_key_CopyObjectMerge", bl}}; /* Existing attr */
+  bl.clear();
+  bl.append("test_attrs_copy_extra_value");
+  attrs.insert({"test_attrs_copy_extra_key", bl}); /* New attr */
+
+  string user_data;
+  rgw_zone_set zones_trace;
+  bool canceled;
+  
+  ASSERT_EQ(testWriterCopy->complete(accounted_size, etag,
+		   &mtime, set_mtime,
+		   attrs,
+		   delete_at,
+		   &if_match, &if_nomatch,
+		   &user_data,
+		   &zones_trace, &canceled,
+		   null_yield), 0);
+
+  unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
+
+  EXPECT_EQ(testObject_CopyObjectMerge->copy_object(testUser.get(),
+			      &info, source_zone, testObject_copy.get(),
+			      testBucket.get(), testBucket.get(),
+                              dest_placement, &src_mtime, &mtime,
+			      &mod_ptr, &unmod_ptr, false,
+			      &if_match, &if_nomatch, attrs_mod,
+			      false, attrs, category, olh_epoch,
+			      delete_at, NULL, &tag, &etag,
+			      NULL, NULL, dpp, null_yield), 0);
+
+  /* Ensure the original object is still in the cache */
+  vector<string> keys;
+  keys.push_back("rgw-object:test_object_CopyObjectMerge:cache");
+
+  client.exists(keys, [](cpp_redis::reply& reply) {
+    if (reply.is_integer()) {
+      EXPECT_EQ(reply.as_integer(), 1);
+    }
+  });
+
+  client.sync_commit();
+
+  client.hgetall("rgw-object:test_object_copy:cache", [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ((int)arr.size(), 6 + METADATA_LENGTH); /* With etag */
+    }
+  });
+
+  client.sync_commit();
+  
+  fields.push_back("test_attrs_key_CopyObjectMerge");
+  fields.push_back("test_attrs_copy_extra_key");
+  
+  client.hmget("rgw-object:test_object_copy:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_CopyObjectMerge");
+      EXPECT_EQ(arr[1].as_string(), "test_attrs_copy_extra_value");
     }
   });
 
@@ -291,7 +612,7 @@ TEST_F(D4NFilterFixture, GetObject) {
 TEST_F(D4NFilterFixture, DelObject) {
   cpp_redis::client client;
   vector<string> keys;
-  keys.push_back("rgw-object:test_object_2:cache");
+  keys.push_back("rgw-object:test_object_DelObject:cache");
   clientSetUp(&client); 
 
   ASSERT_EQ(createUser(), 0);
@@ -300,7 +621,7 @@ TEST_F(D4NFilterFixture, DelObject) {
   ASSERT_EQ(createBucket(), 0);
   ASSERT_NE(testBucket, nullptr);
   
-  ASSERT_EQ(putObject(2), 0);
+  ASSERT_EQ(putObject("DelObject"), 0);
   ASSERT_NE(testWriter, nullptr);
 
   /* Check the object exists before delete op */
@@ -312,11 +633,11 @@ TEST_F(D4NFilterFixture, DelObject) {
 
   client.sync_commit();
 
-  unique_ptr<rgw::sal::Object> testObject_2 = testBucket->get_object(rgw_obj_key("test_object_2"));
+  unique_ptr<rgw::sal::Object> testObject_DelObject = testBucket->get_object(rgw_obj_key("test_object_DelObject"));
 
-  EXPECT_NE(testObject_2, nullptr);
+  EXPECT_NE(testObject_DelObject, nullptr);
   
-  unique_ptr<rgw::sal::Object::DeleteOp> testDOp = testObject_2->get_delete_op();
+  unique_ptr<rgw::sal::Object::DeleteOp> testDOp = testObject_DelObject->get_delete_op();
 
   EXPECT_NE(testDOp, nullptr);
   EXPECT_EQ(testDOp->delete_obj(dpp, null_yield), 0);
@@ -337,24 +658,24 @@ TEST_F(D4NFilterFixture, DelObject) {
 TEST_F(D4NFilterFixture, SetObjectAttrs) {
   cpp_redis::client client;
   vector<string> fields;
-  fields.push_back("test_attrs_key_3");
+  fields.push_back("test_attrs_key_SetObjectAttrs");
   clientSetUp(&client); 
 
   createUser();
   createBucket();
-  putObject(3);
-  unique_ptr<rgw::sal::Object> testObject_3 = testBucket->get_object(rgw_obj_key("test_object_3"));
+  putObject("SetObjectAttrs");
+  unique_ptr<rgw::sal::Object> testObject_SetObjectAttrs = testBucket->get_object(rgw_obj_key("test_object_SetObjectAttrs"));
 
-  ASSERT_NE(testObject_3, nullptr);
+  ASSERT_NE(testObject_SetObjectAttrs, nullptr);
 
   buffer::list bl;
   bl.append("test_attrs_value_extra");
   map<string, bufferlist> test_attrs{{"test_attrs_key_extra", bl}};
   fields.push_back("test_attrs_key_extra");
 
-  EXPECT_EQ(testObject_3->set_obj_attrs(dpp, &test_attrs, NULL, null_yield), 0);
+  EXPECT_EQ(testObject_SetObjectAttrs->set_obj_attrs(dpp, &test_attrs, NULL, null_yield), 0);
 
-  client.hgetall("rgw-object:test_object_3:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_SetObjectAttrs:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -364,11 +685,11 @@ TEST_F(D4NFilterFixture, SetObjectAttrs) {
 
   client.sync_commit();
 
-  client.hmget("rgw-object:test_object_3:cache", fields, [](cpp_redis::reply& reply) {
+  client.hmget("rgw-object:test_object_SetObjectAttrs:cache", fields, [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_3");
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_SetObjectAttrs");
       EXPECT_EQ(arr[1].as_string(), "test_attrs_value_extra");
     }
   });
@@ -381,30 +702,30 @@ TEST_F(D4NFilterFixture, SetObjectAttrs) {
 TEST_F(D4NFilterFixture, GetObjectAttrs) {
   cpp_redis::client client;
   vector<string> fields;
-  fields.push_back("test_attrs_key_4");
+  fields.push_back("test_attrs_key_GetObjectAttrs");
   clientSetUp(&client); 
 
   createUser();
   createBucket();
-  putObject(4);
-  unique_ptr<rgw::sal::Object> testObject_4 = testBucket->get_object(rgw_obj_key("test_object_4"));
+  putObject("GetObjectAttrs");
+  unique_ptr<rgw::sal::Object> testObject_GetObjectAttrs = testBucket->get_object(rgw_obj_key("test_object_GetObjectAttrs"));
 
-  ASSERT_NE(testObject_4, nullptr);
+  ASSERT_NE(testObject_GetObjectAttrs, nullptr);
 
   buffer::list bl;
   bl.append("test_attrs_value_extra");
   map<string, bufferlist> test_attrs{{"test_attrs_key_extra", bl}};
   fields.push_back("test_attrs_key_extra");
 
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_4.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_GetObjectAttrs.get())->get_next();
 
-  ASSERT_EQ(testObject_4->set_obj_attrs(dpp, &test_attrs, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_GetObjectAttrs->set_obj_attrs(dpp, &test_attrs, NULL, null_yield), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
-  EXPECT_EQ(testObject_4->get_obj_attrs(null_yield, dpp, NULL), 0);
+  EXPECT_EQ(testObject_GetObjectAttrs->get_obj_attrs(null_yield, dpp, NULL), 0);
 
-  client.hgetall("rgw-object:test_object_4:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_GetObjectAttrs:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -414,11 +735,11 @@ TEST_F(D4NFilterFixture, GetObjectAttrs) {
 
   client.sync_commit();
 
-  client.hmget("rgw-object:test_object_4:cache", fields, [](cpp_redis::reply& reply) {
+  client.hmget("rgw-object:test_object_GetObjectAttrs:cache", fields, [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_4");
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_GetObjectAttrs");
       EXPECT_EQ(arr[1].as_string(), "test_attrs_value_extra");
     }
   });
@@ -434,23 +755,23 @@ TEST_F(D4NFilterFixture, DelObjectAttrs) {
 
   createUser();
   createBucket();
-  putObject(5);
-  unique_ptr<rgw::sal::Object> testObject_5 = testBucket->get_object(rgw_obj_key("test_object_5"));
+  putObject("DelObjectAttrs");
+  unique_ptr<rgw::sal::Object> testObject_DelObjectAttrs = testBucket->get_object(rgw_obj_key("test_object_DelObjectAttrs"));
 
-  ASSERT_NE(testObject_5, nullptr);
+  ASSERT_NE(testObject_DelObjectAttrs, nullptr);
 
   buffer::list bl;
   bl.append("test_attrs_value_extra");
   map<string, bufferlist> test_attrs{{"test_attrs_key_extra", bl}};
  
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_5.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_DelObjectAttrs.get())->get_next();
 
-  ASSERT_EQ(testObject_5->set_obj_attrs(dpp, &test_attrs, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_DelObjectAttrs->set_obj_attrs(dpp, &test_attrs, NULL, null_yield), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
   /* Check that the attributes exist before deletion */ 
-  client.hgetall("rgw-object:test_object_5:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_DelObjectAttrs:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -460,10 +781,10 @@ TEST_F(D4NFilterFixture, DelObjectAttrs) {
 
   client.sync_commit();
 
-  EXPECT_EQ(testObject_5->set_obj_attrs(dpp, NULL, &test_attrs, null_yield), 0);
+  EXPECT_EQ(testObject_DelObjectAttrs->set_obj_attrs(dpp, NULL, &test_attrs, null_yield), 0);
 
   /* Check that the attribute does not exist after deletion */ 
-  client.hgetall("rgw-object:test_object_5:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_DelObjectAttrs:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -473,7 +794,7 @@ TEST_F(D4NFilterFixture, DelObjectAttrs) {
 
   client.sync_commit();
 
-  client.hexists("rgw-object:test_object_5:cache", "test_attrs_key_extra", [](cpp_redis::reply& reply) {
+  client.hexists("rgw-object:test_object_DelObjectAttrs:cache", "test_attrs_key_extra", [](cpp_redis::reply& reply) {
     if (reply.is_integer()) {
       EXPECT_EQ(reply.as_integer(), 0);
     }
@@ -488,29 +809,29 @@ TEST_F(D4NFilterFixture, SetLongObjectAttrs) {
   cpp_redis::client client;
   map<string, bufferlist> test_attrs_long;
   vector<string> fields;
-  fields.push_back("test_attrs_key_6");
+  fields.push_back("test_attrs_key_SetLongObjectAttrs");
   clientSetUp(&client); 
 
   createUser();
   createBucket();
-  putObject(6);
-  unique_ptr<rgw::sal::Object> testObject_6 = testBucket->get_object(rgw_obj_key("test_object_6"));
+  putObject("SetLongObjectAttrs");
+  unique_ptr<rgw::sal::Object> testObject_SetLongObjectAttrs = testBucket->get_object(rgw_obj_key("test_object_SetLongObjectAttrs"));
 
-  ASSERT_NE(testObject_6, nullptr);
+  ASSERT_NE(testObject_SetLongObjectAttrs, nullptr);
 
   for (int i = 0; i < 10; ++i) {
     buffer::list bl_tmp;
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
-    bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+    bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_long.insert({tmp_key, bl_tmp});
     fields.push_back(tmp_key);
   }
 
-  EXPECT_EQ(testObject_6->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
+  EXPECT_EQ(testObject_SetLongObjectAttrs->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
 
-  client.hgetall("rgw-object:test_object_6:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_SetLongObjectAttrs:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -520,11 +841,11 @@ TEST_F(D4NFilterFixture, SetLongObjectAttrs) {
 
   client.sync_commit();
 
-  client.hmget("rgw-object:test_object_6:cache", fields, [](cpp_redis::reply& reply) {
+  client.hmget("rgw-object:test_object_SetLongObjectAttrs:cache", fields, [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_6");
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_SetLongObjectAttrs");
 
       for (int i = 1; i < 11; ++i) {
 	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i - 1));
@@ -541,35 +862,35 @@ TEST_F(D4NFilterFixture, GetLongObjectAttrs) {
   cpp_redis::client client;
   map<string, bufferlist> test_attrs_long;
   vector<string> fields;
-  fields.push_back("test_attrs_key_7");
+  fields.push_back("test_attrs_key_GetLongObjectAttrs");
   clientSetUp(&client); 
 
   createUser();
   createBucket();
-  putObject(7);
-  unique_ptr<rgw::sal::Object> testObject_7 = testBucket->get_object(rgw_obj_key("test_object_7"));
+  putObject("GetLongObjectAttrs");
+  unique_ptr<rgw::sal::Object> testObject_GetLongObjectAttrs = testBucket->get_object(rgw_obj_key("test_object_GetLongObjectAttrs"));
 
-  ASSERT_NE(testObject_7, nullptr);
+  ASSERT_NE(testObject_GetLongObjectAttrs, nullptr);
 
   for (int i = 0; i < 10; ++i) {
     buffer::list bl_tmp;
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
-    bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+    bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_long.insert({tmp_key, bl_tmp});
     fields.push_back(tmp_key);
   }
 
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_7.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_GetLongObjectAttrs.get())->get_next();
 
-  ASSERT_EQ(testObject_7->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_GetLongObjectAttrs->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
-  EXPECT_EQ(testObject_7->get_obj_attrs(null_yield, dpp, NULL), 0);
+  EXPECT_EQ(testObject_GetLongObjectAttrs->get_obj_attrs(null_yield, dpp, NULL), 0);
 
-  client.hgetall("rgw-object:test_object_7:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_GetLongObjectAttrs:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -579,11 +900,11 @@ TEST_F(D4NFilterFixture, GetLongObjectAttrs) {
 
   client.sync_commit();
 
-  client.hmget("rgw-object:test_object_7:cache", fields, [](cpp_redis::reply& reply) {
+  client.hmget("rgw-object:test_object_GetLongObjectAttrs:cache", fields, [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_7");
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_GetLongObjectAttrs");
 
       for (int i = 1; i < 11; ++i) {
 	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i - 1));
@@ -600,39 +921,39 @@ TEST_F(D4NFilterFixture, ModifyObjectAttr) {
   cpp_redis::client client;
   map<string, bufferlist> test_attrs_long;
   vector<string> fields;
-  fields.push_back("test_attrs_key_8");
+  fields.push_back("test_attrs_key_ModifyObjectAttr");
   clientSetUp(&client); 
 
   createUser();
   createBucket();
-  putObject(8);
-  unique_ptr<rgw::sal::Object> testObject_8 = testBucket->get_object(rgw_obj_key("test_object_8"));
+  putObject("ModifyObjectAttr");
+  unique_ptr<rgw::sal::Object> testObject_ModifyObjectAttr = testBucket->get_object(rgw_obj_key("test_object_ModifyObjectAttr"));
 
-  ASSERT_NE(testObject_8, nullptr);
+  ASSERT_NE(testObject_ModifyObjectAttr, nullptr);
 
   for (int i = 0; i < 10; ++i) {
     buffer::list bl_tmp;
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
-    bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+    bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_long.insert({tmp_key, bl_tmp});
     fields.push_back(tmp_key);
   }
 
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_8.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_ModifyObjectAttr.get())->get_next();
 
-  ASSERT_EQ(testObject_8->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_ModifyObjectAttr->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
   buffer::list bl_tmp;
   string tmp_value = "new_test_attrs_value_extra_5";
-  bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+  bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
 
-  EXPECT_EQ(testObject_8->modify_obj_attrs("test_attrs_key_extra_5", bl_tmp, null_yield, dpp), 0);
+  EXPECT_EQ(testObject_ModifyObjectAttr->modify_obj_attrs("test_attrs_key_extra_5", bl_tmp, null_yield, dpp), 0);
 
-  client.hgetall("rgw-object:test_object_8:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_ModifyObjectAttr:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -642,11 +963,11 @@ TEST_F(D4NFilterFixture, ModifyObjectAttr) {
 
   client.sync_commit();
 
-  client.hmget("rgw-object:test_object_8:cache", fields, [](cpp_redis::reply& reply) {
+  client.hmget("rgw-object:test_object_ModifyObjectAttr:cache", fields, [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_8");
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_ModifyObjectAttr");
 
       for (int i = 1; i < 11; ++i) {
 	if (i == 6) {
@@ -667,34 +988,34 @@ TEST_F(D4NFilterFixture, DelLongObjectAttrs) {
   cpp_redis::client client;
   map<string, bufferlist> test_attrs_long;
   vector<string> fields;
-  fields.push_back("test_attrs_key_9");
+  fields.push_back("test_attrs_key_DelLongObjectAttrs");
   clientSetUp(&client); 
 
   createUser();
   createBucket();
-  putObject(9);
-  unique_ptr<rgw::sal::Object> testObject_9 = testBucket->get_object(rgw_obj_key("test_object_9"));
+  putObject("DelLongObjectAttrs");
+  unique_ptr<rgw::sal::Object> testObject_DelLongObjectAttrs = testBucket->get_object(rgw_obj_key("test_object_DelLongObjectAttrs"));
 
-  ASSERT_NE(testObject_9, nullptr);
+  ASSERT_NE(testObject_DelLongObjectAttrs, nullptr);
 
   for (int i = 0; i < 10; ++i) {
     buffer::list bl_tmp;
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
-    bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+    bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_long.insert({tmp_key, bl_tmp});
     fields.push_back(tmp_key);
   }
 
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_9.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_DelLongObjectAttrs.get())->get_next();
 
-  ASSERT_EQ(testObject_9->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_DelLongObjectAttrs->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
   
   /* Check that the attributes exist before deletion */
-  client.hgetall("rgw-object:test_object_9:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_DelLongObjectAttrs:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -704,10 +1025,10 @@ TEST_F(D4NFilterFixture, DelLongObjectAttrs) {
 
   client.sync_commit();
 
-  EXPECT_EQ(testObject_9->set_obj_attrs(dpp, NULL, &test_attrs_long, null_yield), 0);
+  EXPECT_EQ(testObject_DelLongObjectAttrs->set_obj_attrs(dpp, NULL, &test_attrs_long, null_yield), 0);
 
   /* Check that the attributes do not exist after deletion */
-  client.hgetall("rgw-object:test_object_9:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_DelLongObjectAttrs:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -728,34 +1049,34 @@ TEST_F(D4NFilterFixture, DelObjectAttr) {
   cpp_redis::client client;
   map<string, bufferlist> test_attrs_long;
   vector<string> fields;
-  fields.push_back("test_attrs_key_10");
+  fields.push_back("test_attrs_key_DelObjectAttr");
   clientSetUp(&client); 
 
   createUser();
   createBucket();
-  putObject(10);
-  unique_ptr<rgw::sal::Object> testObject_10 = testBucket->get_object(rgw_obj_key("test_object_10"));
+  putObject("DelObjectAttr");
+  unique_ptr<rgw::sal::Object> testObject_DelObjectAttr = testBucket->get_object(rgw_obj_key("test_object_DelObjectAttr"));
 
-  ASSERT_NE(testObject_10, nullptr);
+  ASSERT_NE(testObject_DelObjectAttr, nullptr);
 
   for (int i = 0; i < 10; ++i) {
     buffer::list bl_tmp;
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
-    bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+    bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_long.insert({tmp_key, bl_tmp});
     fields.push_back(tmp_key);
   }
   
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_10.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_DelObjectAttr.get())->get_next();
 
-  ASSERT_EQ(testObject_10->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_DelObjectAttr->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
   
   /* Check that the attribute exists before deletion */
-  client.hgetall("rgw-object:test_object_10:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_DelObjectAttr:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -765,10 +1086,10 @@ TEST_F(D4NFilterFixture, DelObjectAttr) {
 
   client.sync_commit();
 
-  EXPECT_EQ(testObject_10->delete_obj_attrs(dpp, "test_attrs_key_extra_5", null_yield), 0);
+  EXPECT_EQ(testObject_DelObjectAttr->delete_obj_attrs(dpp, "test_attrs_key_extra_5", null_yield), 0);
 
   /* Check that the attribute does not exist after deletion */
-  client.hgetall("rgw-object:test_object_10:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_DelObjectAttr:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -778,7 +1099,7 @@ TEST_F(D4NFilterFixture, DelObjectAttr) {
 
   client.sync_commit();
 
-  client.hexists("rgw-object:test_object_10:cache", "test_attrs_key_extra_5", [](cpp_redis::reply& reply) {
+  client.hexists("rgw-object:test_object_DelObjectAttr:cache", "test_attrs_key_extra_5", [](cpp_redis::reply& reply) {
     if (reply.is_integer()) {
       EXPECT_EQ(reply.as_integer(), 0);
     }
@@ -790,32 +1111,107 @@ TEST_F(D4NFilterFixture, DelObjectAttr) {
 }
 
 /* Edge cases */
-TEST_F(D4NFilterFixture, SetDeleteAttrsTest) {
+TEST_F(D4NFilterFixture, PrepareCopyObject) {
   cpp_redis::client client;
-  map<string, bufferlist> test_attrs_base;
   vector<string> fields;
-  fields.push_back("test_attrs_key_11");
+  fields.push_back("test_attrs_key_PrepareCopyObject");
   clientSetUp(&client); 
 
   createUser();
   createBucket();
-  putObject(11);
-  unique_ptr<rgw::sal::Object> testObject_11 = testBucket->get_object(rgw_obj_key("test_object_11"));
+  putObject("PrepareCopyObject");
+  unique_ptr<rgw::sal::Object> testObject_PrepareCopyObject = testBucket->get_object(rgw_obj_key("test_object_PrepareCopyObject"));
 
-  ASSERT_NE(testObject_11, nullptr);
+  ASSERT_NE(testObject_PrepareCopyObject, nullptr);
+
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_PrepareCopyObject.get())->get_next();
+
+  ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
+  ASSERT_NE(nextObject->get_attrs().empty(), true);
+
+  unique_ptr<rgw::sal::Object::ReadOp> testROp = testObject_PrepareCopyObject->get_read_op();
+
+  ASSERT_NE(testROp, nullptr);
+  ASSERT_EQ(testROp->prepare(null_yield, dpp), 0);
+
+  /* Update object */
+  RGWEnv rgw_env;
+  req_info info(get_pointer(env->cct), &rgw_env);
+  rgw_zone_id source_zone;
+  rgw_placement_rule dest_placement; 
+  ceph::real_time src_mtime;
+  ceph::real_time mtime;
+  ceph::real_time mod_ptr;
+  ceph::real_time unmod_ptr;
+  char if_match;
+  char if_nomatch;
+  rgw::sal::AttrsMod attrs_mod = rgw::sal::ATTRSMOD_NONE;
+  rgw::sal::Attrs attrs;
+  RGWObjCategory category = RGWObjCategory::Main;
+  uint64_t olh_epoch = 0;
+  ceph::real_time delete_at;
+  string tag;
+  string etag;
+
+  EXPECT_EQ(testObject_PrepareCopyObject->copy_object(testUser.get(),
+			      &info, source_zone, testObject_PrepareCopyObject.get(),
+			      testBucket.get(), testBucket.get(),
+                              dest_placement, &src_mtime, &mtime,
+			      &mod_ptr, &unmod_ptr, false,
+			      &if_match, &if_nomatch, attrs_mod,
+			      false, attrs, category, olh_epoch,
+			      delete_at, NULL, &tag, &etag,
+			      NULL, NULL, dpp, null_yield), 0);
+
+  client.hgetall("rgw-object:test_object_PrepareCopyObject:cache", [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ((int)arr.size(), 2 + METADATA_LENGTH);
+    }
+  });
+
+  client.sync_commit();
+  
+  client.hmget("rgw-object:test_object_PrepareCopyObject:cache", fields, [](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_PrepareCopyObject");
+    }
+  });
+
+  client.sync_commit();
+  
+  clientReset(&client);
+}
+
+TEST_F(D4NFilterFixture, SetDelAttrs) {
+  cpp_redis::client client;
+  map<string, bufferlist> test_attrs_base;
+  vector<string> fields;
+  fields.push_back("test_attrs_key_SetDelAttrs");
+  clientSetUp(&client); 
+
+  createUser();
+  createBucket();
+  putObject("SetDelAttrs");
+  unique_ptr<rgw::sal::Object> testObject_SetDelAttrs = testBucket->get_object(rgw_obj_key("test_object_SetDelAttrs"));
+
+  ASSERT_NE(testObject_SetDelAttrs, nullptr);
 
   for (int i = 0; i < 10; ++i) {
     buffer::list bl_tmp;
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
-    bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+    bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_base.insert({tmp_key, bl_tmp});
   }
 
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_11.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_SetDelAttrs.get())->get_next();
 
-  ASSERT_EQ(testObject_11->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_SetDelAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
@@ -825,9 +1221,9 @@ TEST_F(D4NFilterFixture, SetDeleteAttrsTest) {
   map<string, bufferlist> test_attrs_new{{"test_attrs_key_extra", bl}};
   fields.push_back("test_attrs_key_extra");
   
-  EXPECT_EQ(testObject_11->set_obj_attrs(dpp, &test_attrs_new, &test_attrs_base, null_yield), 0);
+  EXPECT_EQ(testObject_SetDelAttrs->set_obj_attrs(dpp, &test_attrs_new, &test_attrs_base, null_yield), 0);
 
-  client.hgetall("rgw-object:test_object_11:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_SetDelAttrs:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -837,11 +1233,11 @@ TEST_F(D4NFilterFixture, SetDeleteAttrsTest) {
 
   client.sync_commit();
 
-  client.hmget("rgw-object:test_object_11:cache", fields, [](cpp_redis::reply& reply) {
+  client.hmget("rgw-object:test_object_SetDelAttrs:cache", fields, [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_11");
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_SetDelAttrs");
       EXPECT_EQ(arr[1].as_string(), "test_attrs_value_extra");
     }
   });
@@ -851,43 +1247,43 @@ TEST_F(D4NFilterFixture, SetDeleteAttrsTest) {
   clientReset(&client);
 }
 
-TEST_F(D4NFilterFixture, ModifyNonexistentAttrTest) {
+TEST_F(D4NFilterFixture, ModifyNonexistentAttr) {
   cpp_redis::client client;
   map<string, bufferlist> test_attrs_base;
   vector<string> fields;
-  fields.push_back("test_attrs_key_12");
+  fields.push_back("test_attrs_key_ModifyNonexistentAttr");
   clientSetUp(&client); 
 
   createUser();
   createBucket();
-  putObject(12);
-  unique_ptr<rgw::sal::Object> testObject_12 = testBucket->get_object(rgw_obj_key("test_object_12"));
+  putObject("ModifyNonexistentAttr");
+  unique_ptr<rgw::sal::Object> testObject_ModifyNonexistentAttr = testBucket->get_object(rgw_obj_key("test_object_ModifyNonexistentAttr"));
 
-  ASSERT_NE(testObject_12, nullptr);
+  ASSERT_NE(testObject_ModifyNonexistentAttr, nullptr);
 
   for (int i = 0; i < 10; ++i) {
     buffer::list bl_tmp;
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
-    bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+    bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_base.insert({tmp_key, bl_tmp});
     fields.push_back(tmp_key);
   }
 
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_12.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_ModifyNonexistentAttr.get())->get_next();
 
-  ASSERT_EQ(testObject_12->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_ModifyNonexistentAttr->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
   
   buffer::list bl_tmp;
-  bl_tmp.append("new_test_attrs_value_extra_12");
+  bl_tmp.append("new_test_attrs_value_extra_ModifyNonexistentAttr");
 
-  EXPECT_EQ(testObject_12->modify_obj_attrs("test_attrs_key_extra_12", bl_tmp, null_yield, dpp), 0);
+  EXPECT_EQ(testObject_ModifyNonexistentAttr->modify_obj_attrs("test_attrs_key_extra_ModifyNonexistentAttr", bl_tmp, null_yield, dpp), 0);
 
-  fields.push_back("test_attrs_key_extra_12");
-  client.hgetall("rgw-object:test_object_12:cache", [](cpp_redis::reply& reply) {
+  fields.push_back("test_attrs_key_extra_ModifyNonexistentAttr");
+  client.hgetall("rgw-object:test_object_ModifyNonexistentAttr:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -897,18 +1293,18 @@ TEST_F(D4NFilterFixture, ModifyNonexistentAttrTest) {
 
   client.sync_commit();
 
-  client.hmget("rgw-object:test_object_12:cache", fields, [](cpp_redis::reply& reply) {
+  client.hmget("rgw-object:test_object_ModifyNonexistentAttr:cache", fields, [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_12");
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_ModifyNonexistentAttr");
 
       for (int i = 1; i < 11; ++i) {
 	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i - 1));
       }
 
       /* New attribute will be created and stored since it was not found in the existing attributes */
-      EXPECT_EQ(arr[11].as_string(), "new_test_attrs_value_extra_12");
+      EXPECT_EQ(arr[11].as_string(), "new_test_attrs_value_extra_ModifyNonexistentAttr");
     }
   });
 
@@ -917,33 +1313,33 @@ TEST_F(D4NFilterFixture, ModifyNonexistentAttrTest) {
   clientReset(&client);
 }
 
-TEST_F(D4NFilterFixture, ModifyGetTest) {
+TEST_F(D4NFilterFixture, ModifyGetAttrs) {
   cpp_redis::client client;
   map<string, bufferlist> test_attrs_base;
   vector<string> fields;
-  fields.push_back("test_attrs_key_13");
+  fields.push_back("test_attrs_key_ModifyGetAttrs");
   clientSetUp(&client); 
 
   createUser();
   createBucket();
-  putObject(13);
-  unique_ptr<rgw::sal::Object> testObject_13 = testBucket->get_object(rgw_obj_key("test_object_13"));
+  putObject("ModifyGetAttrs");
+  unique_ptr<rgw::sal::Object> testObject_ModifyGetAttrs = testBucket->get_object(rgw_obj_key("test_object_ModifyGetAttrs"));
 
-  ASSERT_NE(testObject_13, nullptr);
+  ASSERT_NE(testObject_ModifyGetAttrs, nullptr);
 
   for (int i = 0; i < 10; ++i) {
     buffer::list bl_tmp;
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
-    bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+    bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_base.insert({tmp_key, bl_tmp});
     fields.push_back(tmp_key);
   }
 
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_13.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_ModifyGetAttrs.get())->get_next();
 
-  ASSERT_EQ(testObject_13->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_ModifyGetAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
@@ -951,11 +1347,11 @@ TEST_F(D4NFilterFixture, ModifyGetTest) {
   buffer::list bl_tmp;
   bl_tmp.append("new_test_attrs_value_extra_5");
 
-  ASSERT_EQ(testObject_13->modify_obj_attrs("test_attrs_key_extra_5", bl_tmp, null_yield, dpp), 0);
+  ASSERT_EQ(testObject_ModifyGetAttrs->modify_obj_attrs("test_attrs_key_extra_5", bl_tmp, null_yield, dpp), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
-  EXPECT_EQ(testObject_13->get_obj_attrs(null_yield, dpp, NULL), 0);
+  EXPECT_EQ(testObject_ModifyGetAttrs->get_obj_attrs(null_yield, dpp, NULL), 0);
 
-  client.hgetall("rgw-object:test_object_13:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_ModifyGetAttrs:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -965,11 +1361,11 @@ TEST_F(D4NFilterFixture, ModifyGetTest) {
 
   client.sync_commit();
 
-  client.hmget("rgw-object:test_object_13:cache", fields, [](cpp_redis::reply& reply) {
+  client.hmget("rgw-object:test_object_ModifyGetAttrs:cache", fields, [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_13");
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_ModifyGetAttrs");
 
       for (int i = 1; i < 11; ++i) {
 	if (i == 6) {
@@ -986,40 +1382,40 @@ TEST_F(D4NFilterFixture, ModifyGetTest) {
   clientReset(&client);
 }
 
-TEST_F(D4NFilterFixture, DeleteNonexistentAttrTest) {
+TEST_F(D4NFilterFixture, DelNonexistentAttr) {
   cpp_redis::client client;
   map<string, bufferlist> test_attrs_base;
   vector<string> fields;
-  fields.push_back("test_attrs_key_14");
+  fields.push_back("test_attrs_key_DelNonexistentAttr");
   clientSetUp(&client); 
 
   createUser();
   createBucket();
-  putObject(14);
-  unique_ptr<rgw::sal::Object> testObject_14 = testBucket->get_object(rgw_obj_key("test_object_14"));
+  putObject("DelNonexistentAttr");
+  unique_ptr<rgw::sal::Object> testObject_DelNonexistentAttr = testBucket->get_object(rgw_obj_key("test_object_DelNonexistentAttr"));
 
-  ASSERT_NE(testObject_14, nullptr);
+  ASSERT_NE(testObject_DelNonexistentAttr, nullptr);
 
   for (int i = 0; i < 10; ++i) {
     buffer::list bl_tmp;
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
-    bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+    bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_base.insert({tmp_key, bl_tmp});
     fields.push_back(tmp_key);
   }
 
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_14.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_DelNonexistentAttr.get())->get_next();
 
-  ASSERT_EQ(testObject_14->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_DelNonexistentAttr->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
  
   /* Attempt to delete an attribute that does not exist */
-  ASSERT_EQ(testObject_14->delete_obj_attrs(dpp, "test_attrs_key_extra_12", null_yield), 0);
+  ASSERT_EQ(testObject_DelNonexistentAttr->delete_obj_attrs(dpp, "test_attrs_key_extra_12", null_yield), 0);
 
-  client.hgetall("rgw-object:test_object_14:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_DelNonexistentAttr:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -1029,11 +1425,11 @@ TEST_F(D4NFilterFixture, DeleteNonexistentAttrTest) {
 
   client.sync_commit();
 
-  client.hmget("rgw-object:test_object_14:cache", fields, [](cpp_redis::reply& reply) {
+  client.hmget("rgw-object:test_object_DelNonexistentAttr:cache", fields, [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_14");
+      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_DelNonexistentAttr");
 
       for (int i = 1; i < 11; ++i) {
 	EXPECT_EQ(arr[i].as_string(), "test_attrs_value_extra_" + to_string(i - 1));
@@ -1046,42 +1442,42 @@ TEST_F(D4NFilterFixture, DeleteNonexistentAttrTest) {
   clientReset(&client);
 }
 
-TEST_F(D4NFilterFixture, DeleteSetWithNonexisentAttrTest) {
+TEST_F(D4NFilterFixture, DelSetWithNonexisentAttr) {
   cpp_redis::client client;
   map<string, bufferlist> test_attrs_base;
   vector<string> fields;
-  fields.push_back("test_attrs_key_15");
+  fields.push_back("test_attrs_key_DelSetWithNonexistentAttr");
   clientSetUp(&client); 
 
   createUser();
   createBucket();
-  putObject(15);
-  unique_ptr<rgw::sal::Object> testObject_15 = testBucket->get_object(rgw_obj_key("test_object_15"));
+  putObject("DelSetWithNonexistentAttr");
+  unique_ptr<rgw::sal::Object> testObject_DelSetWithNonexistentAttr = testBucket->get_object(rgw_obj_key("test_object_DelSetWithNonexistentAttr"));
 
-  ASSERT_NE(testObject_15, nullptr);
+  ASSERT_NE(testObject_DelSetWithNonexistentAttr, nullptr);
 
   for (int i = 0; i < 10; ++i) {
     buffer::list bl_tmp;
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
-    bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+    bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_base.insert({tmp_key, bl_tmp});
   }
 
-  ASSERT_EQ(testObject_15->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_DelSetWithNonexistentAttr->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
 
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_15.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_DelSetWithNonexistentAttr.get())->get_next();
 
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
-  EXPECT_EQ(testObject_15->delete_obj_attrs(dpp, "test_attrs_key_extra_5", null_yield), 0);
+  EXPECT_EQ(testObject_DelSetWithNonexistentAttr->delete_obj_attrs(dpp, "test_attrs_key_extra_5", null_yield), 0);
   
   /* Attempt to delete a set of attrs, including one that does not exist */
-  EXPECT_EQ(testObject_15->set_obj_attrs(dpp, NULL, &test_attrs_base, null_yield), 0);
+  EXPECT_EQ(testObject_DelSetWithNonexistentAttr->set_obj_attrs(dpp, NULL, &test_attrs_base, null_yield), 0);
 
-  client.hgetall("rgw-object:test_object_15:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_DelSetWithNonexistentAttr:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -1095,14 +1491,14 @@ TEST_F(D4NFilterFixture, DeleteSetWithNonexisentAttrTest) {
 }
 
 /* Underlying store attribute check */
-TEST_F(D4NFilterFixture, StoreSetAttrTest) {
+TEST_F(D4NFilterFixture, StoreSetAttr) {
   createUser();
   createBucket();
-  putObject(16);
-  unique_ptr<rgw::sal::Object> testObject_16 = testBucket->get_object(rgw_obj_key("test_object_16"));
+  putObject("StoreSetAttr");
+  unique_ptr<rgw::sal::Object> testObject_StoreSetAttr = testBucket->get_object(rgw_obj_key("test_object_StoreSetAttr"));
 
   /* Get the underlying store */
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_16.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_StoreSetAttr.get())->get_next();
 
   EXPECT_NE(nextObject, nullptr);
 
@@ -1114,22 +1510,22 @@ TEST_F(D4NFilterFixture, StoreSetAttrTest) {
   rgw::sal::Attrs storeAttrs = nextObject->get_attrs();
   pair<string, string> value(storeAttrs.begin()->first, storeAttrs.begin()->second.to_str());
 
-  EXPECT_EQ(value, make_pair(string("test_attrs_key_16"), string("test_attrs_value_16")));
+  EXPECT_EQ(value, make_pair(string("test_attrs_key_StoreSetAttr"), string("test_attrs_value_StoreSetAttr")));
 }
 
-TEST_F(D4NFilterFixture, StoreSetAttrsTest) {
+TEST_F(D4NFilterFixture, StoreSetAttrs) {
   createUser();
   createBucket();
-  putObject(17);
-  unique_ptr<rgw::sal::Object> testObject_17 = testBucket->get_object(rgw_obj_key("test_object_17"));
+  putObject("StoreSetAttrs");
+  unique_ptr<rgw::sal::Object> testObject_StoreSetAttrs = testBucket->get_object(rgw_obj_key("test_object_StoreSetAttrs"));
 
   /* Get the underlying store */
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_17.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_StoreSetAttrs.get())->get_next();
 
   EXPECT_NE(nextObject, nullptr);
 
   /* Delete base attribute for easier comparison */
-  testObject_17->delete_obj_attrs(dpp, "test_attrs_key_17", null_yield);
+  testObject_StoreSetAttrs->delete_obj_attrs(dpp, "test_attrs_key_StoreSetAttrs", null_yield);
 
   /* Set more attributes */
   map<string, bufferlist> test_attrs_base;
@@ -1137,13 +1533,13 @@ TEST_F(D4NFilterFixture, StoreSetAttrsTest) {
   for (int i = 0; i < 10; ++i) {
     buffer::list bl_tmp;
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
-    bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+    bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_base.insert({tmp_key, bl_tmp});
   }
 
-  testObject_17->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield);
+  testObject_StoreSetAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield);
 
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
 
@@ -1167,24 +1563,25 @@ TEST_F(D4NFilterFixture, StoreSetAttrsTest) {
   }
 }
 
-TEST_F(D4NFilterFixture, StoreGetAttrsTest) {
+TEST_F(D4NFilterFixture, StoreGetAttrs) {
   cpp_redis::client client;
-  string result;
   map<string, bufferlist> test_attrs_base;
   clientSetUp(&client); 
 
   createUser();
   createBucket();
-  putObject(18);
-  unique_ptr<rgw::sal::Object> testObject_18 = testBucket->get_object(rgw_obj_key("test_object_18"));
+  putObject("StoreGetAttrs");
+  unique_ptr<rgw::sal::Object> testObject_StoreGetAttrs = testBucket->get_object(rgw_obj_key("test_object_StoreGetAttrs"));
 
   /* Get the underlying store */
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_18.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_StoreGetAttrs.get())->get_next();
 
   EXPECT_NE(nextObject, nullptr);
 
   /* Delete base attribute for easier comparison */
-  testObject_18->delete_obj_attrs(dpp, "test_attrs_key_18", null_yield);
+  ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
+
+  testObject_StoreGetAttrs->delete_obj_attrs(dpp, "test_attrs_key_StoreGetAttrs", null_yield);
 
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
 
@@ -1192,32 +1589,41 @@ TEST_F(D4NFilterFixture, StoreGetAttrsTest) {
   for (int i = 0; i < 10; ++i) {
     buffer::list bl_tmp;
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
-    bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+    bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_base.insert({tmp_key, bl_tmp});
   }
 
-  testObject_18->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield);
+  testObject_StoreGetAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield);
   nextObject->get_obj_attrs(null_yield, dpp, NULL);
 
   /* Change an attribute through redis */
-  buffer::list bl;
-  bl.append("new_test_attrs_value_extra_5");
   vector< pair<string, string> > value;
-  value.push_back(make_pair("test_attrs_key_extra_5", bl.to_str()));
+  value.push_back(make_pair("test_attrs_key_extra_5", "new_test_attrs_value_extra_5"));
 
-  client.hmset("rgw-object:test_object_18:cache", value, [&result](cpp_redis::reply& reply) {
+  client.hmset("rgw-object:test_object_StoreGetAttrs:cache", value, [&](cpp_redis::reply& reply) {
     if (!reply.is_null()) {
-      result = reply.as_string();
+      EXPECT_EQ(reply.as_string(), "OK");
     }
   });
 
   client.sync_commit();
 
-  EXPECT_EQ(result, "OK");
+  /* Artificially adding the data field so getObject will succeed 
+     for the purposes of this test                                */
+  value.clear();
+  value.push_back(make_pair("data", ""));
 
-  ASSERT_EQ(testObject_18->get_obj_attrs(null_yield, dpp, NULL), 0); /* Cache attributes */
+  client.hmset("rgw-object:test_object_StoreGetAttrs:cache", value, [&](cpp_redis::reply& reply) {
+    if (!reply.is_null()) {
+      ASSERT_EQ(reply.as_string(), "OK");
+    }
+  });
+
+  client.sync_commit();
+
+  ASSERT_EQ(testObject_StoreGetAttrs->get_obj_attrs(null_yield, dpp, NULL), 0); /* Cache attributes */
 
   /* Check the attributes on the store layer */ 
   rgw::sal::Attrs storeAttrs = nextObject->get_attrs();
@@ -1237,7 +1643,7 @@ TEST_F(D4NFilterFixture, StoreGetAttrsTest) {
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
 
     if (i == 5) {
-      tmp_value = "new_test_attrs_value_extra_5";
+      tmp_value = "new_" + tmp_value;
     }
 
     EXPECT_EQ(pair, make_pair(tmp_key, tmp_value));
@@ -1268,23 +1674,94 @@ TEST_F(D4NFilterFixture, StoreGetAttrsTest) {
   clientReset(&client);
 }
 
-TEST_F(D4NFilterFixture, StoreModifyAttrTest) {
+TEST_F(D4NFilterFixture, StoreGetMetadata) {
+  cpp_redis::client client;
+  clientSetUp(&client); 
+
   createUser();
   createBucket();
-  putObject(19);
-  unique_ptr<rgw::sal::Object> testObject_19 = testBucket->get_object(rgw_obj_key("test_object_19"));
+  putObject("StoreGetMetadata");
+  unique_ptr<rgw::sal::Object> testObject_StoreGetMetadata = testBucket->get_object(rgw_obj_key("test_object_StoreGetMetadata"));
 
   /* Get the underlying store */
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_19.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_StoreGetMetadata.get())->get_next();
+
+  EXPECT_NE(nextObject, nullptr);
+
+  ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
+
+  /* Change metadata values through redis */
+  vector< pair<string, string> > value;
+  value.push_back(make_pair("mtime", "2021-11-08T21:13:38.334696731Z"));
+  value.push_back(make_pair("object_size", "100"));
+  value.push_back(make_pair("accounted_size", "200"));
+  value.push_back(make_pair("epoch", "3")); /* version_id is not tested because the object does not have an instance */
+  value.push_back(make_pair("source_zone_short_id", "300"));
+  value.push_back(make_pair("bucket_count", "10"));
+  value.push_back(make_pair("bucket_size", "20"));
+  value.push_back(make_pair("user_quota.max_size", "0"));
+  value.push_back(make_pair("user_quota.max_objects", "0"));
+  value.push_back(make_pair("max_buckets", "2000"));
+
+  client.hmset("rgw-object:test_object_StoreGetMetadata:cache", value, [](cpp_redis::reply& reply) {
+    if (!reply.is_null()) {
+      EXPECT_EQ(reply.as_string(), "OK");
+    }
+  });
+
+  client.sync_commit();
+
+  /* Artificially adding the data field so getObject will succeed 
+     for the purposes of this test                                */
+  value.clear();
+  value.push_back(make_pair("data", ""));
+
+  client.hmset("rgw-object:test_object_StoreGetMetadata:cache", value, [](cpp_redis::reply& reply) {
+    if (!reply.is_null()) {
+      ASSERT_EQ(reply.as_string(), "OK");
+    }
+  });
+
+  client.sync_commit();
+
+  unique_ptr<rgw::sal::Object::ReadOp> testROp = testObject_StoreGetMetadata->get_read_op();
+
+  ASSERT_NE(testROp, nullptr);
+  ASSERT_EQ(testROp->prepare(null_yield, dpp), 0);
+
+  /* Check updated metadata values */ 
+  RGWUserInfo info = testObject_StoreGetMetadata->get_bucket()->get_owner()->get_info();
+  static StoreObject* storeObject = static_cast<StoreObject*>(dynamic_cast<rgw::sal::FilterObject*>(testObject_StoreGetMetadata.get())->get_next());
+
+  EXPECT_EQ(to_iso_8601(storeObject->state.mtime), "2021-11-08T21:13:38.334696731Z");
+  EXPECT_EQ(testObject_StoreGetMetadata->get_obj_size(), (uint64_t)100);
+  EXPECT_EQ(storeObject->state.accounted_size, (uint64_t)200);
+  EXPECT_EQ(storeObject->state.epoch, (uint64_t)3);
+  EXPECT_EQ(storeObject->state.zone_short_id, (uint32_t)300);
+  EXPECT_EQ(testObject_StoreGetMetadata->get_bucket()->get_count(), (uint64_t)10);
+  EXPECT_EQ(testObject_StoreGetMetadata->get_bucket()->get_size(), (uint64_t)20);
+  EXPECT_EQ(info.quota.user_quota.max_size, (int64_t)0);
+  EXPECT_EQ(info.quota.user_quota.max_objects, (int64_t)0);
+  EXPECT_EQ(testObject_StoreGetMetadata->get_bucket()->get_owner()->get_max_buckets(), (int32_t)2000);
+}
+
+TEST_F(D4NFilterFixture, StoreModifyAttr) {
+  createUser();
+  createBucket();
+  putObject("StoreModifyAttr");
+  unique_ptr<rgw::sal::Object> testObject_StoreModifyAttr = testBucket->get_object(rgw_obj_key("test_object_StoreModifyAttr"));
+
+  /* Get the underlying store */
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_StoreModifyAttr.get())->get_next();
 
   ASSERT_NE(nextObject, nullptr);
 
   /* Set one attribute */
   buffer::list bl_tmp;
-  string tmp_value = "new_test_attrs_value_19";
-  bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+  string tmp_value = "new_test_attrs_value_StoreModifyAttr";
+  bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
   
-  testObject_19->modify_obj_attrs("test_attrs_key_19", bl_tmp, null_yield, dpp);
+  testObject_StoreModifyAttr->modify_obj_attrs("test_attrs_key_StoreModifyAttr", bl_tmp, null_yield, dpp);
 
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
 
@@ -1292,17 +1769,17 @@ TEST_F(D4NFilterFixture, StoreModifyAttrTest) {
   rgw::sal::Attrs storeAttrs = nextObject->get_attrs();
   pair<string, string> value(storeAttrs.begin()->first, storeAttrs.begin()->second.to_str());
 
-  EXPECT_EQ(value, make_pair(string("test_attrs_key_19"), string("new_test_attrs_value_19")));
+  EXPECT_EQ(value, make_pair(string("test_attrs_key_StoreModifyAttr"), string("new_test_attrs_value_StoreModifyAttr")));
 }
 
-TEST_F(D4NFilterFixture, StoreDeleteAttrsTest) {
+TEST_F(D4NFilterFixture, StoreDelAttrs) {
   createUser();
   createBucket();
-  putObject(20);
-  unique_ptr<rgw::sal::Object> testObject_20 = testBucket->get_object(rgw_obj_key("test_object_20"));
+  putObject("StoreDelAttrs");
+  unique_ptr<rgw::sal::Object> testObject_StoreDelAttrs = testBucket->get_object(rgw_obj_key("test_object_StoreDelAttrs"));
 
   /* Get the underlying store */
-  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_20.get())->get_next();
+  static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_StoreDelAttrs.get())->get_next();
 
   ASSERT_NE(nextObject, nullptr);
 
@@ -1312,14 +1789,14 @@ TEST_F(D4NFilterFixture, StoreDeleteAttrsTest) {
   for (int i = 0; i < 10; ++i) {
     buffer::list bl_tmp;
     string tmp_value = "test_attrs_value_extra_" + to_string(i);
-    bl_tmp.append(tmp_value.data(), std::strlen(tmp_value.data()));
+    bl_tmp.append(tmp_value.data(), strlen(tmp_value.data()));
     
     string tmp_key = "test_attrs_key_extra_" + to_string(i);
     test_attrs_base.insert({tmp_key, bl_tmp});
   }
 
-  testObject_20->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield);
-  testObject_20->set_obj_attrs(dpp, NULL, &test_attrs_base, null_yield);
+  testObject_StoreDelAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield);
+  testObject_StoreDelAttrs->set_obj_attrs(dpp, NULL, &test_attrs_base, null_yield);
 
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
 
@@ -1330,11 +1807,11 @@ TEST_F(D4NFilterFixture, StoreDeleteAttrsTest) {
 
   pair<string, string> value(storeAttrs.begin()->first, storeAttrs.begin()->second.to_str());
 
-  EXPECT_EQ(value, make_pair(string("test_attrs_key_20"), string("test_attrs_value_20")));
+  EXPECT_EQ(value, make_pair(string("test_attrs_key_StoreDelAttrs"), string("test_attrs_value_StoreDelAttrs")));
 }
 
 /* SAL object data storage check */
-TEST_F(D4NFilterFixture, DataCheckTest) {
+TEST_F(D4NFilterFixture, DataCheck) {
   cpp_redis::client client;
   clientSetUp(&client); 
 
@@ -1342,7 +1819,7 @@ TEST_F(D4NFilterFixture, DataCheckTest) {
   createBucket();
   
   /* Prepare, process, and complete object write */
-  unique_ptr<rgw::sal::Object> head_obj = testBucket->get_object(rgw_obj_key("test_object_21"));
+  unique_ptr<rgw::sal::Object> head_obj = testBucket->get_object(rgw_obj_key("test_object_DataCheck"));
   rgw_user owner;
   rgw_placement_rule ptail_placement_rule;
   uint64_t olh_epoch = 123;
@@ -1364,9 +1841,9 @@ TEST_F(D4NFilterFixture, DataCheckTest) {
   ceph::real_time set_mtime;
 
   buffer::list bl;
-  string tmp = "test_attrs_value_21";
-  bl.append("test_attrs_value_21");
-  map<string, bufferlist> attrs{{"test_attrs_key_21", bl}};
+  string tmp = "test_attrs_value_DataCheck";
+  bl.append("test_attrs_value_DataCheck");
+  map<string, bufferlist> attrs{{"test_attrs_key_DataCheck", bl}};
   buffer::list data;
   data.append("test data");
 
@@ -1390,7 +1867,7 @@ TEST_F(D4NFilterFixture, DataCheckTest) {
 		 &zones_trace, &canceled,
 		 null_yield), 0);
  
-  client.hget("rgw-object:test_object_21:cache", "data", [&data](cpp_redis::reply& reply) {
+  client.hget("rgw-object:test_object_DataCheck:cache", "data", [&data](cpp_redis::reply& reply) {
     if (reply.is_string()) {
       EXPECT_EQ(reply.as_string(), data.to_str());
     }
@@ -1415,13 +1892,15 @@ TEST_F(D4NFilterFixture, DataCheckTest) {
 		 &zones_trace, &canceled,
 		 null_yield), 0);
 
-  client.hget("rgw-object:test_object_21:cache", "data", [&dataNew](cpp_redis::reply& reply) {
+  client.hget("rgw-object:test_object_DataCheck:cache", "data", [&dataNew](cpp_redis::reply& reply) {
     if (reply.is_string()) {
       EXPECT_EQ(reply.as_string(), dataNew.to_str());
     }
   });
 
   client.sync_commit();
+
+  clientReset(&client);
 }
 
 int main(int argc, char *argv[]) {
@@ -1435,7 +1914,7 @@ int main(int argc, char *argv[]) {
     hostStr = argv[1];
     portStr = argv[2];
   } else {
-    cout << "Incorrect number of arguments." << std::endl;
+    std::cout << "Incorrect number of arguments." << std::endl;
     return -1;
   }
 
