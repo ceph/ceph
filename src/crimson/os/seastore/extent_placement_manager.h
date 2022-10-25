@@ -253,14 +253,24 @@ public:
   }
 
   /**
-   * delayed_alloc_or_ool_write
+   * delayed_allocate_and_write
    *
    * Performs delayed allocation and do writes for out-of-line extents.
    */
   using alloc_paddr_iertr = ExtentOolWriter::alloc_write_iertr;
-  alloc_paddr_iertr::future<> delayed_alloc_or_ool_write(
+  alloc_paddr_iertr::future<> delayed_allocate_and_write(
     Transaction& t,
     const std::list<LogicalCachedExtentRef>& delayed_extents);
+
+  /**
+   * write_preallocated_ool_extents
+   *
+   * Performs ool writes for extents with pre-allocated addresses.
+   * See Transaction::pre_alloc_list
+   */
+  alloc_paddr_iertr::future<> write_preallocated_ool_extents(
+    Transaction &t,
+    std::list<LogicalCachedExtentRef> extents);
 
   seastar::future<> stop_background() {
     return background_process.stop_background();
