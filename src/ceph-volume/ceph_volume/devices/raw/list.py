@@ -69,16 +69,15 @@ class List(object):
     def generate(self, devs=None):
         logger.debug('Listing block devices via lsblk...')
         info_devices = disk.lsblk_all(abspath=True)
-        if devs is None or devs == []:
-            # If no devs are given initially, we want to list ALL devices including children and
-            # parents. Parent disks with child partitions may be the appropriate device to return if
-            # the parent disk has a bluestore header, but children may be the most appropriate
-            # devices to return if the parent disk does not have a bluestore header.
-            devs = [device['NAME'] for device in info_devices if device.get('NAME',)]
+        # We want to list ALL devices including children and parents.
+        # Parent disks with child partitions may be the appropriate device to return if
+        # the parent disk has a bluestore header, but children may be the most appropriate
+        # devices to return if the parent disk does not have a bluestore header.
+        devices = [device['NAME'] for device in info_devices if device.get('NAME',)]
 
         result = {}
         logger.debug('inspecting devices: {}'.format(devs))
-        for dev in devs:
+        for dev in devices:
             # Linux kernels built with CONFIG_ATARI_PARTITION enabled can falsely interpret
             # bluestore's on-disk format as an Atari partition table. These false Atari partitions
             # can be interpreted as real OSDs if a bluestore OSD was previously created on the false
@@ -114,6 +113,13 @@ class List(object):
             if uuid not in result:
                 result[uuid] = {}
             result[uuid].update(bs_info)
+
+        if devs:
+            res = {}
+            for osd, details in result.items():
+                if details['device'] in devs or details.get('device_db') in devs or details.get('device_wal') in devs:
+                    res[details['osd_uuid']] = details
+            result = res
 
         return result
 
