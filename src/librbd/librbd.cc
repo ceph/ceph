@@ -2097,8 +2097,15 @@ namespace librbd {
                              size_t opts_size)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
+    encryption_spec_t spec = {format, opts, opts_size};
+    return librbd::api::Image<>::encryption_load(ictx, &spec, 1, false);
+  }
+
+  int Image::encryption_load2(encryption_spec_t *specs, size_t spec_count)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
     return librbd::api::Image<>::encryption_load(
-            ictx, format, opts, opts_size, false);
+            ictx, specs, spec_count, false);
   }
 
   int Image::flatten()
@@ -4382,8 +4389,16 @@ extern "C" int rbd_encryption_load(rbd_image_t image,
                                    size_t opts_size)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::api::Image<>::encryption_load(
-          ictx, format, opts, opts_size, true);
+  librbd::encryption_spec_t spec = {format, opts, opts_size};
+  return librbd::api::Image<>::encryption_load(ictx, &spec, 1, true);
+}
+
+extern "C" int rbd_encryption_load2(rbd_image_t image,
+                                    rbd_encryption_spec_t *specs,
+                                    size_t spec_count)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::api::Image<>::encryption_load(ictx, specs, spec_count, true);
 }
 
 extern "C" int rbd_flatten(rbd_image_t image)

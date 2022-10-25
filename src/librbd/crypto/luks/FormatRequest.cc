@@ -11,6 +11,7 @@
 #include "librbd/Utils.h"
 #include "librbd/crypto/Utils.h"
 #include "librbd/crypto/luks/Header.h"
+#include "librbd/crypto/luks/Magic.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
 
@@ -28,11 +29,11 @@ using librbd::util::create_context_callback;
 template <typename I>
 FormatRequest<I>::FormatRequest(
         I* image_ctx, encryption_format_t format, encryption_algorithm_t alg,
-        std::string&& passphrase, ceph::ref_t<CryptoInterface>* result_crypto,
-        Context* on_finish,
+        std::string_view passphrase,
+        std::unique_ptr<CryptoInterface>* result_crypto, Context* on_finish,
         bool insecure_fast_mode) : m_image_ctx(image_ctx), m_format(format),
                                    m_alg(alg),
-                                   m_passphrase(std::move(passphrase)),
+                                   m_passphrase(passphrase),
                                    m_result_crypto(result_crypto),
                                    m_on_finish(on_finish),
                                    m_insecure_fast_mode(insecure_fast_mode),
@@ -94,9 +95,10 @@ void FormatRequest<I>::send() {
   }
 
   // format (create LUKS header)
+  auto stripe_period = m_image_ctx->get_stripe_period();
   r = m_header.format(type, cipher, reinterpret_cast<char*>(key), key_size,
-                      "xts-plain64", sector_size,
-                      m_image_ctx->get_object_size(), m_insecure_fast_mode);
+                      "xts-plain64", sector_size, stripe_period,
+                      m_insecure_fast_mode);
   if (r != 0) {
     finish(r);
     return;
@@ -114,7 +116,7 @@ void FormatRequest<I>::send() {
   }
 
   // add keyslot (volume key encrypted with passphrase)
-  r = m_header.add_keyslot(m_passphrase.c_str(), m_passphrase.size());
+  r = m_header.add_keyslot(m_passphrase.data(), m_passphrase.size());
   if (r != 0) {
     finish(r);
     return;
@@ -137,6 +139,25 @@ void FormatRequest<I>::send() {
     return;
   }
 
+  if (m_image_ctx->parent != nullptr) {
+    // parent is not encrypted with same key
+    // change LUKS magic to prevent decryption by other LUKS implementations
+    r = Magic::replace_magic(m_image_ctx->cct, bl);
+    if (r < 0) {
+      lderr(m_image_ctx->cct) << "error replacing LUKS magic: "
+                              << cpp_strerror(r) << dendl;
+      finish(r);
+      return;
+    }
+  }
+
+  // pad header to stripe period alignment to prevent copyup of parent data
+  // when writing encryption header to the child image
+  auto alignment = bl.length() % stripe_period;
+  if (alignment > 0) {
+    bl.append_zero(stripe_period - alignment);
+  }
+
   // write header to offset 0 of the image
   auto ctx = create_context_callback<
           FormatRequest<I>, &FormatRequest<I>::handle_write_header>(this);
@@ -153,6 +174,8 @@ void FormatRequest<I>::send() {
 
 template <typename I>
 void FormatRequest<I>::handle_write_header(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r < 0) {
     lderr(m_image_ctx->cct) << "error writing header to image: "
                             << cpp_strerror(r) << dendl;
@@ -165,8 +188,8 @@ void FormatRequest<I>::handle_write_header(int r) {
 
 template <typename I>
 void FormatRequest<I>::finish(int r) {
-  ceph_memzero_s(
-          &m_passphrase[0], m_passphrase.capacity(), m_passphrase.size());
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   m_on_finish->complete(r);
   delete this;
 }

@@ -28,7 +28,7 @@ using librbd::util::data_object_name;
 template <typename I>
 struct C_AlignedObjectReadRequest : public Context {
     I* image_ctx;
-    ceph::ref_t<CryptoInterface> crypto;
+    CryptoInterface* crypto;
     uint64_t object_no;
     io::ReadExtents* extents;
     IOContext io_context;
@@ -39,7 +39,7 @@ struct C_AlignedObjectReadRequest : public Context {
     bool disable_read_from_parent;
 
     C_AlignedObjectReadRequest(
-            I* image_ctx, ceph::ref_t<CryptoInterface> crypto,
+            I* image_ctx, CryptoInterface* crypto,
             uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
             int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
             uint64_t* version, int* object_dispatch_flags,
@@ -74,7 +74,8 @@ struct C_AlignedObjectReadRequest : public Context {
     void handle_read(int r) {
       auto cct = image_ctx->cct;
       ldout(cct, 20) << "aligned read r=" << r << dendl;
-      if (r == 0) {
+      if (r >= 0) {
+        r = 0;
         for (auto& extent: *extents) {
           auto crypto_ret = crypto->decrypt_aligned_extent(
                   extent,
@@ -109,7 +110,7 @@ struct C_UnalignedObjectReadRequest : public Context {
     io::ObjectDispatchSpec* req;
 
     C_UnalignedObjectReadRequest(
-            I* image_ctx, ceph::ref_t<CryptoInterface> crypto,
+            I* image_ctx, CryptoInterface* crypto,
             uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
             int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
             uint64_t* version, int* object_dispatch_flags,
@@ -187,7 +188,7 @@ struct C_UnalignedObjectReadRequest : public Context {
 template <typename I>
 struct C_UnalignedObjectWriteRequest : public Context {
     I* image_ctx;
-    ceph::ref_t<CryptoInterface> crypto;
+    CryptoInterface* crypto;
     uint64_t object_no;
     uint64_t object_off;
     ceph::bufferlist data;
@@ -209,7 +210,7 @@ struct C_UnalignedObjectWriteRequest : public Context {
     bool object_exists;
 
     C_UnalignedObjectWriteRequest(
-            I* image_ctx, ceph::ref_t<CryptoInterface> crypto,
+            I* image_ctx, CryptoInterface* crypto,
             uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
             ceph::bufferlist&& cmp_data, uint64_t* mismatch_offset,
             IOContext io_context, int op_flags, int write_flags,
@@ -428,16 +429,12 @@ struct C_UnalignedObjectWriteRequest : public Context {
 
 template <typename I>
 CryptoObjectDispatch<I>::CryptoObjectDispatch(
-    I* image_ctx, ceph::ref_t<CryptoInterface> crypto)
+    I* image_ctx, CryptoInterface* crypto)
   : m_image_ctx(image_ctx), m_crypto(crypto) {
 }
 
 template <typename I>
 void CryptoObjectDispatch<I>::shut_down(Context* on_finish) {
-  if (m_crypto != nullptr) {
-    m_crypto->put();
-    m_crypto = nullptr;
-  }
   on_finish->complete(0);
 }
 

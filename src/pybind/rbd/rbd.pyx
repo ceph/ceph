@@ -21,8 +21,8 @@ import sys
 from cpython cimport PyObject, ref, exc
 from libc cimport errno
 from libc.stdint cimport *
-from libc.stdlib cimport realloc, free
-from libc.string cimport strdup
+from libc.stdlib cimport malloc, realloc, free
+from libc.string cimport strdup, memset
 
 try:
     from collections.abc import Iterable
@@ -161,6 +161,7 @@ RBD_SNAP_REMOVE_FORCE = _RBD_SNAP_REMOVE_FORCE
 
 RBD_ENCRYPTION_FORMAT_LUKS1 = _RBD_ENCRYPTION_FORMAT_LUKS1
 RBD_ENCRYPTION_FORMAT_LUKS2 = _RBD_ENCRYPTION_FORMAT_LUKS2
+RBD_ENCRYPTION_FORMAT_LUKS = _RBD_ENCRYPTION_FORMAT_LUKS
 RBD_ENCRYPTION_ALGORITHM_AES128 = _RBD_ENCRYPTION_ALGORITHM_AES128
 RBD_ENCRYPTION_ALGORITHM_AES256 = _RBD_ENCRYPTION_ALGORITHM_AES256
 
@@ -5172,7 +5173,7 @@ written." % (self.name, ret, length))
         passphrase = cstr(passphrase, "passphrase")
         cdef rbd_encryption_format_t _format = format
         cdef rbd_encryption_luks1_format_options_t _luks1_opts
-        cdef rbd_encryption_luks1_format_options_t _luks2_opts
+        cdef rbd_encryption_luks2_format_options_t _luks2_opts
         cdef char* _passphrase = passphrase
 
         if (format == RBD_ENCRYPTION_FORMAT_LUKS1):
@@ -5205,7 +5206,8 @@ written." % (self.name, ret, length))
         passphrase = cstr(passphrase, "passphrase")
         cdef rbd_encryption_format_t _format = format
         cdef rbd_encryption_luks1_format_options_t _luks1_opts
-        cdef rbd_encryption_luks1_format_options_t _luks2_opts
+        cdef rbd_encryption_luks2_format_options_t _luks2_opts
+        cdef rbd_encryption_luks_format_options_t _luks_opts
         cdef char* _passphrase = passphrase
 
         if (format == RBD_ENCRYPTION_FORMAT_LUKS1):
@@ -5230,8 +5232,84 @@ written." % (self.name, ret, length))
                     ret,
                     ('error loading encryption on image %s '
                      'with format luks2') % self.name)
+        elif (format == RBD_ENCRYPTION_FORMAT_LUKS):
+            _luks_opts.passphrase = _passphrase
+            _luks_opts.passphrase_size = len(passphrase)
+            with nogil:
+                ret = rbd_encryption_load(self.image, _format, &_luks_opts,
+                                          sizeof(_luks_opts))
+            if ret != 0:
+                raise make_ex(
+                    ret,
+                    ('error loading encryption on image %s '
+                     'with format luks') % self.name)
         else:
             raise make_ex(-errno.ENOTSUP, 'Unsupported encryption format')
+
+    @requires_not_closed
+    def encryption_load2(self, specs):
+        cdef rbd_encryption_spec_t *_specs
+        cdef rbd_encryption_luks1_format_options_t* _luks1_opts
+        cdef rbd_encryption_luks2_format_options_t* _luks2_opts
+        cdef rbd_encryption_luks_format_options_t* _luks_opts
+        cdef size_t spec_count = len(specs)
+
+        _specs = <rbd_encryption_spec_t *>malloc(len(specs) *
+                                                 sizeof(rbd_encryption_spec_t))
+        if _specs == NULL:
+            raise MemoryError("malloc failed")
+
+        memset(<void *>_specs, 0, len(specs) * sizeof(rbd_encryption_spec_t))
+        try:
+            for i in range(len(specs)):
+                format, passphrase = specs[i]
+                passphrase = cstr(passphrase, "specs[%d][1]" % i)
+                _specs[i].format = format
+                if (format == RBD_ENCRYPTION_FORMAT_LUKS1):
+                    _luks1_opts = <rbd_encryption_luks1_format_options_t *>malloc(
+                        sizeof(rbd_encryption_luks1_format_options_t))
+                    if _luks1_opts == NULL:
+                        raise MemoryError("malloc failed")
+                    _luks1_opts.passphrase = passphrase
+                    _luks1_opts.passphrase_size = len(passphrase)
+                    _specs[i].opts = <rbd_encryption_options_t> _luks1_opts
+                    _specs[i].opts_size = sizeof(
+                    rbd_encryption_luks1_format_options_t)
+                elif (format == RBD_ENCRYPTION_FORMAT_LUKS2):
+                    _luks2_opts = <rbd_encryption_luks2_format_options_t *>malloc(
+                        sizeof(rbd_encryption_luks2_format_options_t))
+                    if _luks2_opts == NULL:
+                        raise MemoryError("malloc failed")
+                    _luks2_opts.passphrase = passphrase
+                    _luks2_opts.passphrase_size = len(passphrase)
+                    _specs[i].opts = <rbd_encryption_options_t> _luks2_opts
+                    _specs[i].opts_size = sizeof(
+                    rbd_encryption_luks2_format_options_t)
+                elif (format == RBD_ENCRYPTION_FORMAT_LUKS):
+                    _luks_opts = <rbd_encryption_luks_format_options_t *>malloc(
+                        sizeof(rbd_encryption_luks_format_options_t))
+                    if _luks_opts == NULL:
+                        raise MemoryError("malloc failed")
+                    _luks_opts.passphrase = passphrase
+                    _luks_opts.passphrase_size = len(passphrase)
+                    _specs[i].opts = <rbd_encryption_options_t> _luks_opts
+                    _specs[i].opts_size = sizeof(
+                    rbd_encryption_luks_format_options_t)
+                else:
+                    raise make_ex(
+                        -errno.ENOTSUP,
+                        'specs[%d][1]: Unsupported encryption format' % i)
+            with nogil:
+                ret = rbd_encryption_load2(self.image, _specs, spec_count)
+            if ret != 0:
+                raise make_ex(
+                    ret,
+                    'error loading encryption on image %s' % self.name)
+        finally:
+            for i in range(len(specs)):
+                if _specs[i].opts != NULL:
+                    free(_specs[i].opts)
+            free(_specs)
 
 
 cdef class ImageIterator(object):

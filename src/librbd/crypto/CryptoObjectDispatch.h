@@ -18,12 +18,12 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class CryptoObjectDispatch : public io::ObjectDispatchInterface {
 public:
   static CryptoObjectDispatch* create(
-          ImageCtxT* image_ctx, ceph::ref_t<CryptoInterface> crypto) {
+          ImageCtxT* image_ctx, CryptoInterface* crypto) {
     return new CryptoObjectDispatch(image_ctx, crypto);
   }
 
   CryptoObjectDispatch(ImageCtxT* image_ctx,
-                       ceph::ref_t<CryptoInterface> crypto);
+                       CryptoInterface* crypto);
 
   io::ObjectDispatchLayer get_dispatch_layer() const override {
     return io::OBJECT_DISPATCH_LAYER_CRYPTO;
@@ -103,8 +103,7 @@ public:
 
 private:
   ImageCtxT* m_image_ctx;
-  ceph::ref_t<CryptoInterface> m_crypto;
-
+  CryptoInterface* m_crypto;
 };
 
 } // namespace crypto

@@ -73,9 +73,8 @@ struct Image {
   static int encryption_format(ImageCtxT *ictx, encryption_format_t format,
                                encryption_options_t opts, size_t opts_size,
                                bool c_api);
-  static int encryption_load(ImageCtxT *ictx, encryption_format_t format,
-                             encryption_options_t opts, size_t opts_size,
-                             bool c_api);
+  static int encryption_load(ImageCtxT *ictx, encryption_spec_t *specs,
+                             size_t spec_count, bool c_api);
 
 };
 
