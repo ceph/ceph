@@ -119,8 +119,8 @@ struct Config {
   std::string format;
   bool pretty_format = false;
 
-  std::optional<librbd::encryption_format_t> encryption_format;
-  std::optional<std::string> encryption_passphrase_file;
+  std::vector<librbd::encryption_format_t> encryption_format;
+  std::vector<std::string> encryption_passphrase_file;
 
   Command command = None;
   int pid = 0;
@@ -152,7 +152,7 @@ static void usage()
             << "Map and attach options:\n"
             << "  --device <device path>        Specify nbd device path (/dev/nbd{num})\n"
             << "  --encryption-format           Image encryption format\n"
-            << "                                (possible values: luks1, luks2)\n"
+            << "                                (possible values: luks)\n"
             << "  --encryption-passphrase-file  Path of file containing passphrase for unlocking image encryption\n"
             << "  --exclusive                   Forbid writes by other clients\n"
             << "  --notrim                      Turn off trim/discard\n"
@@ -1582,6 +1582,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
   unsigned long size;
   unsigned long blksize = RBD_NBD_BLKSIZE;
   bool use_netlink;
+  auto encryption_format_count = cfg->encryption_format.size();
 
   int fd[2];
 
@@ -1662,55 +1663,68 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
       goto close_fd;
   }
 
-  if (cfg->encryption_format.has_value()) {
-    if (!cfg->encryption_passphrase_file.has_value()) {
-      r = -EINVAL;
-      cerr << "rbd-nbd: missing encryption-passphrase-file" << std::endl;
-      goto close_fd;
-    }
-    std::ifstream file(cfg->encryption_passphrase_file.value().c_str());
-    if (file.fail()) {
-      r = -errno;
-      std::cerr << "rbd-nbd: unable to open passphrase file:"
-                << cpp_strerror(errno) << std::endl;
-      goto close_fd;
-    }
-    std::string passphrase((std::istreambuf_iterator<char>(file)),
-                           (std::istreambuf_iterator<char>()));
+  if (encryption_format_count > 0) {
+    std::vector<librbd::encryption_spec_t> specs(encryption_format_count);
+    std::vector<librbd::encryption_luks_format_options_t> luks_opts;
+
+    luks_opts.reserve(encryption_format_count);
+
     auto sg = make_scope_guard([&] {
-      ceph_memzero_s(&passphrase[0], passphrase.size(), passphrase.size()); });
-    file.close();
-    if (!passphrase.empty() && passphrase[passphrase.length() - 1] == '\n') {
-      passphrase.erase(passphrase.length() - 1);
+      for (auto& opts : luks_opts) {
+        auto& passphrase = opts.passphrase;
+        ceph_memzero_s(&passphrase[0], passphrase.size(), passphrase.size());
+      }
+    });
+
+    for (size_t i = 0; i < encryption_format_count; ++i) {
+      std::ifstream file(cfg->encryption_passphrase_file[i].c_str());
+      auto sg2 = make_scope_guard([&] { file.close(); });
+
+      specs[i].format = cfg->encryption_format[i];
+      std::string* passphrase;
+      switch (specs[i].format) {
+        case RBD_ENCRYPTION_FORMAT_LUKS: {
+          luks_opts.emplace_back();
+          specs[i].opts = &luks_opts.back();
+          specs[i].opts_size = sizeof(luks_opts.back());
+          passphrase = &luks_opts.back().passphrase;
+          break;
+        }
+        default:
+          r = -ENOTSUP;
+          cerr << "rbd-nbd: unsupported encryption format: " << specs[i].format
+               << std::endl;
+          goto close_fd;
+      }
+
+      passphrase->assign((std::istreambuf_iterator<char>(file)),
+                         (std::istreambuf_iterator<char>()));
+
+      if (file.fail()) {
+        r = -errno;
+        std::cerr << "rbd-nbd: unable to open passphrase file '"
+                  << cfg->encryption_passphrase_file[i] << "': "
+                  << cpp_strerror(errno) << std::endl;
+        goto close_fd;
+      }
+
+      if (!passphrase->empty() &&
+          (*passphrase)[passphrase->length() - 1] == '\n') {
+        passphrase->erase(passphrase->length() - 1);
+      }
     }
 
-    switch (cfg->encryption_format.value()) {
-      case RBD_ENCRYPTION_FORMAT_LUKS1: {
-        librbd::encryption_luks1_format_options_t opts = {};
-        opts.passphrase = passphrase;
-        r = image.encryption_load(
-                RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts));
-        break;
-      }
-      case RBD_ENCRYPTION_FORMAT_LUKS2: {
-        librbd::encryption_luks2_format_options_t opts = {};
-        opts.passphrase = passphrase;
-        r = image.encryption_load(
-                RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts));
-        blksize = 4096;
-        break;
-      }
-      default:
-        r = -ENOTSUP;
-        cerr << "rbd-nbd: unsupported encryption format" << std::endl;
-        goto close_fd;
-    }
+    r = image.encryption_load2(&specs[0], encryption_format_count);
 
     if (r != 0) {
       cerr << "rbd-nbd: failed to load encryption: " << cpp_strerror(r)
            << std::endl;
       goto close_fd;
     }
+
+    // luks2 block size can vary upto 4096, while luks1 always uses 512
+    // currently we don't have an rbd API for querying the loaded encryption
+    blksize = 4096;
   }
 
   r = image.stat(info, sizeof(info));
@@ -2103,11 +2117,15 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     } else if (ceph_argparse_witharg(args, i, &arg_value,
                                      "--encryption-format", (char *)NULL)) {
       if (arg_value == "luks1") {
-        cfg->encryption_format =
-                std::make_optional(RBD_ENCRYPTION_FORMAT_LUKS1);
+        cfg->encryption_format.push_back(RBD_ENCRYPTION_FORMAT_LUKS);
+        *err_msg << "rbd-nbd: specifying luks1 when loading encryption "
+                    "is deprecated, use luks";
       } else if (arg_value == "luks2") {
-        cfg->encryption_format =
-                std::make_optional(RBD_ENCRYPTION_FORMAT_LUKS2);
+        cfg->encryption_format.push_back(RBD_ENCRYPTION_FORMAT_LUKS);
+        *err_msg << "rbd-nbd: specifying luks2 when loading encryption "
+                    "is deprecated, use luks";
+      } else if (arg_value == "luks") {
+        cfg->encryption_format.push_back(RBD_ENCRYPTION_FORMAT_LUKS);
       } else {
         *err_msg << "rbd-nbd: Invalid encryption format";
         return -EINVAL;
@@ -2115,10 +2133,16 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     } else if (ceph_argparse_witharg(args, i, &arg_value,
                                      "--encryption-passphrase-file",
                                      (char *)NULL)) {
-      cfg->encryption_passphrase_file = std::make_optional(arg_value);
+      cfg->encryption_passphrase_file.push_back(arg_value);
     } else {
       ++i;
     }
+  }
+
+  if (cfg->encryption_format.size() != cfg->encryption_passphrase_file.size()) {
+    *err_msg << "rbd-nbd: Encryption formats count does not match "
+             << "passphrase files count";
+    return -EINVAL;
   }
 
   Command cmd = None;

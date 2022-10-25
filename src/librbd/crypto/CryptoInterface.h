@@ -4,7 +4,6 @@
 #ifndef CEPH_LIBRBD_CRYPTO_CRYPTO_INTERFACE_H
 #define CEPH_LIBRBD_CRYPTO_CRYPTO_INTERFACE_H
 
-#include "common/RefCountedObj.h"
 #include "include/buffer.h"
 #include "include/intarith.h"
 #include "librbd/io/Types.h"
@@ -12,9 +11,11 @@
 namespace librbd {
 namespace crypto {
 
-class CryptoInterface : public RefCountedObject {
+class CryptoInterface {
 
 public:
+  virtual ~CryptoInterface() = default;
+
   virtual int encrypt(ceph::bufferlist* data, uint64_t image_offset) = 0;
   virtual int decrypt(ceph::bufferlist* data, uint64_t image_offset) = 0;
   virtual uint64_t get_block_size() const = 0;

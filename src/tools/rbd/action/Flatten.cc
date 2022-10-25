@@ -31,6 +31,7 @@ void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_no_progress_option(options);
+  at::add_encryption_options(options);
 }
 
 int execute(const po::variables_map &vm,
@@ -48,6 +49,12 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
+  utils::EncryptionOptions encryption_options;
+  r = utils::get_encryption_options(vm, &encryption_options);
+  if (r < 0) {
+    return r;
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
@@ -55,6 +62,17 @@ int execute(const po::variables_map &vm,
                                  false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
+  }
+
+  auto spec_count = encryption_options.specs.size();
+  if (spec_count > 0) {
+    r = image.encryption_load2(&encryption_options.specs[0], spec_count);
+
+    if (r < 0) {
+      std::cerr << "rbd: encryption load failed: " << cpp_strerror(r)
+                << std::endl;
+      return r;
+    }
   }
 
   r = do_flatten(image, vm[at::NO_PROGRESS].as<bool>());

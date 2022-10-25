@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_CRYPTO_ENCRYPTION_FORMAT_H
 #define CEPH_LIBRBD_CRYPTO_ENCRYPTION_FORMAT_H
 
+#include <memory>
 #include "common/ref.h"
 
 struct Context;
@@ -18,10 +19,13 @@ struct EncryptionFormat {
   virtual ~EncryptionFormat() {
   }
 
+  virtual std::unique_ptr<EncryptionFormat<ImageCtxT>> clone() const = 0;
   virtual void format(ImageCtxT* ictx, Context* on_finish) = 0;
-  virtual void load(ImageCtxT* ictx, Context* on_finish) = 0;
+  virtual void load(ImageCtxT* ictx, std::string* detected_format_name,
+                    Context* on_finish) = 0;
+  virtual void flatten(ImageCtxT* ictx, Context* on_finish) = 0;
 
-  virtual ceph::ref_t<CryptoInterface> get_crypto() = 0;
+  virtual CryptoInterface* get_crypto() = 0;
 };
 
 } // namespace crypto

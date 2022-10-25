@@ -25,7 +25,7 @@ MATCHER_P(CompareArrayToString, s, "") {
 
 struct TestMockCryptoBlockCrypto : public TestFixture {
     MockDataCryptor* cryptor;
-    ceph::ref_t<BlockCrypto<MockCryptoContext>> bc;
+    BlockCrypto<MockCryptoContext>* bc;
     int cryptor_block_size = 16;
     int cryptor_iv_size = 16;
     int block_size = 4096;
@@ -45,7 +45,7 @@ struct TestMockCryptoBlockCrypto : public TestFixture {
 
     void TearDown() override {
       delete expectation_set;
-      bc->put();
+      delete bc;
       TestFixture::TearDown();
     }
 

@@ -40,6 +40,9 @@ private:
    * FLATTEN_OBJECTS
    *    |
    *    v
+   * CRYPTO_FLATTEN
+   *    |
+   *    v
    * DETACH_CHILD
    *    |
    *    v
@@ -56,6 +59,10 @@ private:
 
   void flatten_objects();
   void handle_flatten_objects(int r);
+
+
+  void crypto_flatten();
+  void handle_crypto_flatten(int r);
 
   void detach_child();
   void handle_detach_child(int r);

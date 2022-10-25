@@ -36,9 +36,12 @@ be lower than the raw image size. See the `Supported Formats`_ section for more
 details.
 
 .. note::
-   Currently only flat images (i.e. not cloned) can be formatted.
-   Clones of an encrypted image are inherently encrypted using the same format
-   and secret.
+   Unless explicitly (re-)formatted, clones of an encrypted image are
+   inherently encrypted using the same format and secret.
+
+.. note::
+   Clones of an encrypted image are always encrypted.
+   Re-formatting to plaintext is not supported.
 
 .. note::
    Any data written to the image prior to its format may become unreadable,
@@ -135,7 +138,7 @@ in cases where incoming writes cannot be guaranteed to be sector-aligned.
 
 To mount a LUKS-encrypted image run::
 
-    $ rbd -p {pool-name} device map -t nbd -o encryption-format={luks1|luks2},encryption-passphrase-file={passphrase-file}
+    $ rbd -p {pool-name} device map -t nbd -o encryption-format=luks,encryption-passphrase-file={passphrase-file}
 
 Note that for security reasons, both the encryption format and encryption load
 operations are CPU-intensive, and may take a few seconds to complete. For the
