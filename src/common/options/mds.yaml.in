@@ -534,6 +534,14 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_log_periods_per_segment
+  type: int
+  level: advanced
+  desc: maximum number of periods in an MDS journal segment
+  default: 1
+  services:
+  - mds
+  with_legacy: true
 # segment size for mds log, default to default file_layout_t
 - name: mds_log_segment_size
   type: size

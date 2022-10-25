@@ -314,7 +314,7 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
     // do not insert ESubtreeMap among EImportFinish events that finish
     // disambiguate imports. Because the ESubtreeMap reflects the subtree
     // state when all EImportFinish events are replayed.
-  } else if (ls->end/period != ls->offset/period ||
+  } else if (ls->end/period - ls->offset/period >= g_conf()->mds_log_periods_per_segment ||
 	     ls->num_events >= g_conf()->mds_log_events_per_segment) {
     dout(10) << "submit_entry also starting new segment: last = "
 	     << ls->seq  << "/" << ls->offset << ", event seq = " << event_seq << dendl;
