@@ -210,8 +210,8 @@ available options.
       EOF
       $ ./cephadm bootstrap --config initial-ceph.conf ...
 
-* The ``--ssh-user *<user>*`` option makes it possible to choose which ssh
-  user cephadm will use to connect to hosts. The associated ssh key will be
+* The ``--ssh-user *<user>*`` option makes it possible to choose which SSH 
+  user cephadm will use to connect to hosts. The associated SSH key will be
   added to ``/home/*<user>*/.ssh/authorized_keys``. The user that you 
   designate with this option must have passwordless sudo access.
 
