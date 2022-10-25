@@ -27,15 +27,15 @@ std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
              << ")";
 }
 
-std::ostream &LBALeafNode::print_detail(std::ostream &out) const
+std::ostream &LBALeafNode::_print_detail(std::ostream &out) const
 {
-  out << ", size=" << get_size()
-      << ", meta=" << get_meta()
-      << ", parent_tracker=" << (void*)parent_tracker.get();
-  if (parent_tracker) {
-    return out << ", parent=" << (void*)parent_tracker->parent.get();
+  out << ", size=" << this->get_size()
+      << ", meta=" << this->get_meta()
+      << ", my_tracker=" << (void*)this->my_tracker;
+  if (this->my_tracker) {
+    out << ", my_tracker->parent=" << (void*)this->my_tracker->get_parent().get();
   }
-  return out << ", root_block=" << (void*)root_block.get();
+  return out << ", root_block=" << (void*)this->root_block.get();
 }
 
 void LBALeafNode::resolve_relative_addrs(paddr_t base)

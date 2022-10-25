@@ -17,10 +17,12 @@ public:
   BtreeBackrefPin() = default;
   BtreeBackrefPin(
     CachedExtentRef parent,
+    uint16_t pos,
     backref_map_val_t &val,
     backref_node_meta_t &&meta)
     : BtreeNodePin(
 	parent,
+	pos,
 	val.laddr,
 	val.len,
 	std::forward<backref_node_meta_t>(meta)),

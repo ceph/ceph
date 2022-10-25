@@ -242,7 +242,8 @@ BtreeBackrefManager::new_mapping(
 	    c,
 	    *state.insert_iter,
 	    state.last_end,
-	    val
+	    val,
+	    nullptr
 	  ).si_then([&state, c, addr, len, key](auto &&p) {
 	    LOG_PREFIX(BtreeBackrefManager::new_mapping);
 	    auto [iter, inserted] = std::move(p);

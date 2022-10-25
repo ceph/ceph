@@ -142,6 +142,7 @@ public:
 	assert(!extent.has_pin());
 	assert(!extent.has_been_invalidated());
 	assert(!pin->has_been_invalidated());
+	assert(pin->get_parent());
 	extent.set_pin(std::move(pin));
 	lba_manager->add_pin(extent.get_pin());
       }
@@ -325,7 +326,8 @@ public:
       t,
       laddr_hint,
       len,
-      ext->get_paddr()
+      ext->get_paddr(),
+      ext.get()
     ).si_then([ext=std::move(ext), laddr_hint, &t, FNAME](auto &&ref) mutable {
       ext->set_pin(std::move(ref));
       SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
@@ -380,7 +382,8 @@ public:
       t,
       laddr_hint,
       length,
-      existing_paddr
+      existing_paddr,
+      ext.get()
     ).si_then([ext=std::move(ext), laddr_hint, this](auto &&ref) {
       ceph_assert(laddr_hint == ref->get_key());
       ext->set_pin(std::move(ref));
@@ -409,7 +412,8 @@ public:
       t,
       hint,
       len,
-      P_ADDR_ZERO);
+      P_ADDR_ZERO,
+      nullptr);
   }
 
   /* alloc_extents

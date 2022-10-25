@@ -33,6 +33,8 @@ template <
   size_t node_size,
   bool leaf_has_children>
 class FixedKVBtree;
+template <typename, typename>
+class BtreeNodePin;
 
 // #define DEBUG_CACHED_EXTENT_REF
 #ifdef DEBUG_CACHED_EXTENT_REF
@@ -543,6 +545,8 @@ public:
 
   void set_invalid(Transaction &t);
 
+  // a rewrite extent has an invalid prior_instance,
+  // and a mutation_pending extent has a valid prior_instance
   CachedExtentRef get_prior_instance() {
     return prior_instance;
   }
@@ -715,6 +719,8 @@ protected:
   friend class crimson::os::seastore::SegmentedAllocator;
   friend class crimson::os::seastore::TransactionManager;
   friend class crimson::os::seastore::ExtentPlacementManager;
+  template <typename, typename>
+  friend class BtreeNodePin;
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
@@ -885,6 +891,7 @@ public:
   virtual key_t get_key() const = 0;
   virtual PhysicalNodePinRef<key_t, val_t> duplicate() const = 0;
   virtual bool has_been_invalidated() const = 0;
+  virtual CachedExtentRef get_parent() const = 0;
 
   virtual ~PhysicalNodePin() {}
 };
@@ -957,6 +964,67 @@ public:
   }
 };
 
+class parent_tracker_t
+  : public boost::intrusive_ref_counter<
+     parent_tracker_t, boost::thread_unsafe_counter> {
+public:
+  parent_tracker_t(CachedExtentRef parent)
+    : parent(parent) {}
+  parent_tracker_t(CachedExtent* parent)
+    : parent(parent) {}
+  ~parent_tracker_t();
+  template <typename T = CachedExtent>
+  TCachedExtentRef<T> get_parent() const {
+    ceph_assert(parent);
+    if constexpr (std::is_same_v<T, CachedExtent>) {
+      return parent;
+    } else {
+      return parent->template cast<T>();
+    }
+  }
+  void reset_parent(CachedExtentRef p) {
+    parent = p;
+  }
+  bool is_valid() const {
+    return parent && parent->is_valid();
+  }
+private:
+  CachedExtentRef parent;
+};
+
+std::ostream &operator<<(std::ostream &, const parent_tracker_t &);
+
+using parent_tracker_ref = boost::intrusive_ptr<parent_tracker_t>;
+
+class ChildableCachedExtent : public CachedExtent {
+public:
+  template <typename... T>
+  ChildableCachedExtent(T&&... t) : CachedExtent(std::forward<T>(t)...) {}
+  bool has_parent_tracker() const {
+    return (bool)parent_tracker;
+  }
+  void reset_parent_tracker(parent_tracker_t *p = nullptr) {
+    parent_tracker.reset(p);
+  }
+  bool is_parent_valid() const {
+    return parent_tracker && parent_tracker->is_valid();
+  }
+  template <typename T = CachedExtent>
+  TCachedExtentRef<T> get_parent_node() const {
+    assert(parent_tracker);
+    return parent_tracker->template get_parent<T>();
+  }
+  void take_prior_parent_tracker() {
+    auto &prior = (ChildableCachedExtent&)(*get_prior_instance());
+    parent_tracker = prior.parent_tracker;
+  }
+  std::ostream &print_detail(std::ostream &out) const final;
+private:
+  parent_tracker_ref parent_tracker;
+  virtual std::ostream &_print_detail(std::ostream &out) const {
+    return out;
+  }
+};
 /**
  * LogicalCachedExtent
  *
@@ -965,10 +1033,12 @@ public:
  * Users of TransactionManager should be using extents derived from
  * LogicalCachedExtent.
  */
-class LogicalCachedExtent : public CachedExtent {
+class LogicalCachedExtent : public ChildableCachedExtent {
 public:
   template <typename... T>
-  LogicalCachedExtent(T&&... t) : CachedExtent(std::forward<T>(t)...) {}
+  LogicalCachedExtent(T&&... t)
+    : ChildableCachedExtent(std::forward<T>(t)...)
+  {}
 
   void set_pin(LBAPinRef &&npin) {
     assert(!pin);
@@ -1005,8 +1075,13 @@ public:
     return true;
   }
 
-  std::ostream &print_detail(std::ostream &out) const final;
+  std::ostream &_print_detail(std::ostream &out) const final;
+
+  void on_replace_prior(Transaction &t) final;
+
+  virtual ~LogicalCachedExtent();
 protected:
+
   virtual void apply_delta(const ceph::bufferlist &bl) = 0;
   virtual std::ostream &print_detail_l(std::ostream &out) const {
     return out;
@@ -1026,6 +1101,16 @@ protected:
 private:
   laddr_t laddr = L_ADDR_NULL;
   LBAPinRef pin;
+
+  template <
+    typename node_key_t,
+    typename node_val_t,
+    typename internal_node_t,
+    typename leaf_node_t,
+    typename pin_t,
+    size_t node_size,
+    bool leaf_has_children>
+  friend class FixedKVBtree;
 };
 
 using LogicalCachedExtentRef = TCachedExtentRef<LogicalCachedExtent>;

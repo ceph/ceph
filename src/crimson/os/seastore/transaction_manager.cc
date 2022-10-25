@@ -486,7 +486,8 @@ TransactionManager::rewrite_logical_extent(
     t,
     lextent->get_laddr(),
     lextent->get_paddr(),
-    nlextent->get_paddr());
+    nlextent->get_paddr(),
+    nlextent.get());
 }
 
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
