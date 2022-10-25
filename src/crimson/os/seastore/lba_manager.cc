@@ -17,17 +17,15 @@ LBAManager::update_mappings(
       t,
       extent->get_laddr(),
       extent->get_prior_paddr_and_reset(),
-      extent->get_paddr()
+      extent->get_paddr(),
+      nullptr	// all the extents should have already been
+		// added to the fixed_kv_btree
     );
   });
 }
 
-template <bool leaf_has_children>
 LBAManagerRef lba_manager::create_lba_manager(Cache &cache) {
-  return LBAManagerRef(new btree::BtreeLBAManager<leaf_has_children>(cache));
+  return LBAManagerRef(new btree::BtreeLBAManager(cache));
 }
-
-template  LBAManagerRef lba_manager::create_lba_manager<true>(Cache &cache);
-template  LBAManagerRef lba_manager::create_lba_manager<false>(Cache &cache);
 
 }

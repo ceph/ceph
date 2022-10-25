@@ -1062,7 +1062,7 @@ enum class extent_types_t : uint8_t {
   ROOT = 0,
   LADDR_INTERNAL = 1,
   LADDR_LEAF = 2,
-  DINK_LADDR_LEAF = 3,
+  DINK_LADDR_LEAF = 3, // should only be used for unitttests
   OMAP_INNER = 4,
   OMAP_LEAF = 5,
   ONODE_BLOCK_STAGED = 6,

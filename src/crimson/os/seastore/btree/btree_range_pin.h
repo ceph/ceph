@@ -453,6 +453,7 @@ class BtreeNodePin : public PhysicalNodePin<key_t, val_t> {
   val_t value;
   extent_len_t len;
   btree_range_pin_t<key_t> pin;
+  uint16_t pos = std::numeric_limits<uint16_t>::max();
 
 public:
   using val_type = val_t;
@@ -460,11 +461,16 @@ public:
 
   BtreeNodePin(
     CachedExtentRef parent,
+    uint16_t pos,
     val_t &value,
     extent_len_t len,
     fixed_kv_node_meta_t<key_t> &&meta)
-    : parent(parent), value(value), len(len) {
+    : parent(parent), value(value), len(len), pos(pos) {
     pin.set_range(std::move(meta));
+  }
+
+  CachedExtentRef get_parent() const final {
+    return parent;
   }
 
   btree_range_pin_t<key_t>& get_range_pin() {
@@ -479,9 +485,7 @@ public:
     parent = pin;
   }
 
-  void link_extent(LogicalCachedExtent *ref) final {
-    pin.set_extent(ref);
-  }
+  void link_extent(LogicalCachedExtent *ref) final;
 
   extent_len_t get_length() const final {
     ceph_assert(pin.range.end > pin.range.begin);

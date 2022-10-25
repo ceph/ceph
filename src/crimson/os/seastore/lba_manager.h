@@ -80,7 +80,8 @@ public:
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
-    paddr_t addr) = 0;
+    paddr_t addr,
+    LogicalCachedExtent *nextent) = 0;
 
   struct ref_update_result_t {
     unsigned refcount = 0;
@@ -166,7 +167,8 @@ public:
     Transaction& t,
     laddr_t laddr,
     paddr_t prev_addr,
-    paddr_t paddr) = 0;
+    paddr_t paddr,
+    LogicalCachedExtent *nextent) = 0;
 
   /**
    * update_mappings
@@ -206,7 +208,6 @@ using LBAManagerRef = std::unique_ptr<LBAManager>;
 
 class Cache;
 namespace lba_manager {
-template <bool leaf_has_children>
 LBAManagerRef create_lba_manager(Cache &cache);
 }
 
