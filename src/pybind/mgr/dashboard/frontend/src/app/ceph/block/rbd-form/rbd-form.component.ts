@@ -690,18 +690,17 @@ export class RbdFormComponent extends CdForm implements OnInit {
       }
     });
     request.enable_mirror = this.rbdForm.getValue('mirroring');
-    if (this.poolMirrorMode === 'image') {
-      if (request.enable_mirror) {
+    if (request.enable_mirror) {
+      if (this.rbdForm.getValue('mirroringMode') === 'journal') {
+        request.features.push('journaling');
+      }
+      if (this.poolMirrorMode === 'image') {
         request.mirror_mode = this.rbdForm.getValue('mirroringMode');
       }
     } else {
-      if (request.enable_mirror) {
-        request.features.push('journaling');
-      } else {
-        const index = request.features.indexOf('journaling', 0);
-        if (index > -1) {
-          request.features.splice(index, 1);
-        }
+      const index = request.features.indexOf('journaling', 0);
+      if (index > -1) {
+        request.features.splice(index, 1);
       }
     }
     request.configuration = this.getDirtyConfigurationValues();
