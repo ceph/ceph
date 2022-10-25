@@ -424,7 +424,7 @@ cephadm operations. Use the command:
 
    ceph cephadm set-user <user>
 
-Prior to running this the cluster ssh key needs to be added to this users
+Prior to running this the cluster SSH key needs to be added to this users
 authorized_keys file and non-root users must have passwordless sudo access.
 
 
