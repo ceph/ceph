@@ -526,7 +526,7 @@ class RGWAM:
         if realm_name in self.realm_op().list():
             raise RGWAMException(f'Realm {realm_name} already exists')
         if zonegroup_name in self.zonegroup_op().list():
-            raise RGWAMException(f'ZonegroupOp {zonegroup_name} already exists')
+            raise RGWAMException(f'Zonegroup {zonegroup_name} already exists')
         if zone_name in self.zone_op().list():
             raise RGWAMException(f'Zone {zone_name} already exists')
 

@@ -587,8 +587,8 @@ class CephadmServe:
         rgw_spec.update_endpoints = (rc != 0)  # keep trying on failure
         if rc != 0:
             self.log.error(f'Error when trying to update rgw zone: {err}')
-            self.mgr.set_health_warning('CEPHADM_RGW', 'Cannot update rgw endpoints', 1,
-                                        [f'Cannot update rgw endpoints for daemon {rgw_spec.service_name()}'])
+            self.mgr.set_health_warning('CEPHADM_RGW', 'Cannot update rgw endpoints, error: {err}', 1,
+                                        [f'Cannot update rgw endpoints for daemon {rgw_spec.service_name()}, error: {err}'])
         else:
             self.mgr.remove_health_warning('CEPHADM_RGW')
 

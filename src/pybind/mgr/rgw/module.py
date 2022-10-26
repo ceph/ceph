@@ -106,7 +106,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 if available:
                     return func(self, *args, **kwargs)
                 else:
-                    err_msg = f"Cephadm is not available. Please enable cephadm by 'ceph mgr module enable cephadm'."
+                    err_msg = "Orchestrator is not available. Please enable cephadm by 'ceph mgr module enable cephadm'."
                     return HandleCommandResult(retval=-errno.EINVAL, stdout='', stderr=err_msg)
             return wrapper
         return inner
