@@ -333,10 +333,7 @@ public:
   void on_new_interval() final {
     // Not needed yet
   }
-  Context *on_clean() final {
-    // Not needed yet (will be needed for IO unblocking)
-    return nullptr;
-  }
+  Context *on_clean() final;
   void on_activate_committed() final {
     // Not needed yet (will be needed for IO unblocking)
   }
@@ -357,12 +354,8 @@ public:
   void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {}
   void set_ready_to_merge_source(eversion_t lu) final {}
 
-  void on_active_actmap() final {
-    // Not needed yet
-  }
-  void on_active_advmap(const OSDMapRef &osdmap) final {
-    // Not needed yet
-  }
+  void on_active_actmap() final;
+  void on_active_advmap(const OSDMapRef &osdmap) final;
   epoch_t oldest_stored_osdmap() final {
     // TODO
     return 0;

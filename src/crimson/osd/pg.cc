@@ -374,6 +374,22 @@ PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
   return {_next, false};
 }
 
+Context *PG::on_clean()
+{
+  // Not needed yet (will be needed for IO unblocking)
+  return nullptr;
+}
+
+void PG::on_active_actmap()
+{
+  // Not needed yet
+}
+
+void PG::on_active_advmap(const OSDMapRef &osdmap)
+{
+  // Not needed yet
+}
+
 void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
 {
   // TODO: should update the stats upon finishing the scrub
