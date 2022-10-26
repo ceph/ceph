@@ -182,6 +182,28 @@ def test_servicespec_map_test(s_type, o_spec, s_id):
     assert spec.validate() is None
     ServiceSpec.from_json(spec.to_json())
 
+
+@pytest.mark.parametrize(
+    "realm, zone, frontend_type, raise_exception, msg",
+    [
+        ('realm', 'zone1', 'beast', False, ''),
+        ('realm', 'zone2', 'civetweb', False, ''),
+        ('realm', None, 'beast', True, 'Cannot add RGW: Realm specified but no zone specified'),
+        (None, 'zone1', 'beast', True, 'Cannot add RGW: Zone specified but no realm specified'),
+        ('realm', 'zone', 'invalid-beast', True, '^Invalid rgw_frontend_type value'),
+        ('realm', 'zone', 'invalid-civetweb', True, '^Invalid rgw_frontend_type value'),
+    ])
+def test_rgw_servicespec_parse(realm, zone, frontend_type, raise_exception, msg):
+    spec = RGWSpec(service_id='foo',
+                   rgw_realm=realm,
+                   rgw_zone=zone,
+                   rgw_frontend_type=frontend_type)
+    if raise_exception:
+        with pytest.raises(SpecValidationError, match=msg):
+            spec.validate()
+    else:
+        spec.validate()
+
 def test_osd_unmanaged():
     osd_spec = {"placement": {"host_pattern": "*"},
                 "service_id": "all-available-devices",

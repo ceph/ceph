@@ -18,7 +18,7 @@ from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
 from .utils import resolve_ip
-from .migrations import queue_migrate_nfs_spec
+from .migrations import queue_migrate_nfs_spec, queue_migrate_rgw_spec
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -248,6 +248,13 @@ class SpecStore():
                 ):
                     self.mgr.log.debug(f'found legacy nfs spec {j}')
                     queue_migrate_nfs_spec(self.mgr, j)
+
+                if (
+                        (self.mgr.migration_current or 0) < 6
+                        and j['spec'].get('service_type') == 'rgw'
+                ):
+                    queue_migrate_rgw_spec(self.mgr, j)
+
                 spec = ServiceSpec.from_json(j['spec'])
                 created = str_to_datetime(cast(str, j['created']))
                 self._specs[service_name] = spec
