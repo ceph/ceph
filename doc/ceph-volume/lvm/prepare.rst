@@ -2,25 +2,24 @@
 
 ``prepare``
 ===========
-This subcommand allows a :term:`filestore` or :term:`bluestore` setup. It is
-recommended to pre-provision a logical volume before using it with
-``ceph-volume lvm``.
+This subcommand facilitates the setup of :term:`filestore` or
+:term:`bluestore`. Before you run ``ceph-volume lvm prepare``, we recommend
+that you provision a logical volume. Then you can run ``prepare`` on that
+logical volume. 
 
-Logical volumes are not altered except for adding extra metadata.
+``prepare`` adds metadata to logical volumes but does not alter them in any
+other way. 
 
-.. note:: This is part of a two step process to deploy an OSD. If looking for
-          a single-call way, please see :ref:`ceph-volume-lvm-create`
+.. note:: This is part of a two-step process to deploy an OSD. If you prefer a
+   single-call method of deploying an OSD, see :ref:`ceph-volume-lvm-create`.
 
-To help identify volumes, the process of preparing a volume (or volumes) to
-work with Ceph, the tool will assign a few pieces of metadata information using
-:term:`LVM tags`.
+``prepare`` uses :term:`LVM tags` to assign several pieces of metadata to a
+logical volume. Volumes tagged in this way are easier to identify and easier to
+use with Ceph. :term:`LVM tags` identify logical volumes by the role that they
+play in the Ceph cluster (for example: journal, filestore, or bluestore).
 
-:term:`LVM tags` makes volumes easy to discover later, and help identify them as
-part of a Ceph system, and what role they have (journal, filestore, bluestore,
-etc...)
-
-Although :term:`bluestore` is the default, the back end can be specified with:
-
+:term:`Bluestore<bluestore>` is the default backend. Ceph permits changing
+the backend, which can be done by using the following flags and arguments:
 
 * :ref:`--filestore <ceph-volume-lvm-prepare_filestore>`
 * :ref:`--bluestore <ceph-volume-lvm-prepare_bluestore>`
