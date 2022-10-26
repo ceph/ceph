@@ -532,19 +532,16 @@ public:
   seastar::future<> snap_request_reservation(
     spg_t item,
     Context *on_reserved,
-    unsigned prio,
-    Context *on_preempt) {
+    unsigned prio) {
     return with_singleton(
       [item, prio](OSDSingletonState &singleton,
-		   Context *wrapped_on_reserved, Context *wrapped_on_preempt) {
+		   Context *wrapped_on_reserved) {
 	return singleton.snap_reserver.request_reservation(
 	  item,
 	  wrapped_on_reserved,
-	  prio,
-	  wrapped_on_preempt);
+	  prio);
       },
-      invoke_context_on_core(seastar::this_shard_id(), on_reserved),
-      invoke_context_on_core(seastar::this_shard_id(), on_preempt));
+      invoke_context_on_core(seastar::this_shard_id(), on_reserved));
   }
 
 #undef FORWARD_CONST
