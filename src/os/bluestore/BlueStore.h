@@ -1333,8 +1333,14 @@ public:
     bool is_one_tracker_allowed() {
       return onode.has_one_tracker();
     }
+    uint64_t get_one_tracker_id() {
+      return onode.allocation_tracker_sbid;
+    }
     bool has_one_tracker() {
       ceph_assert(is_one_tracker_allowed());
+      if (allocation_tracker != nullptr) {
+	ceph_assert(onode.allocation_tracker_sbid != 0);
+      }
       return allocation_tracker != nullptr; // I do not like implicit conversions ptr->bool
     }
     bluestore_shared_blob_t* get_one_tracker() {
@@ -1356,6 +1362,7 @@ public:
     void import_tracker(Onode* src) {
       ceph_assert(src->has_one_tracker());
       ceph_assert(!has_one_tracker());
+      ceph_assert(src->onode.allocation_tracker_sbid != 0);
       ceph_assert(onode.allocation_tracker_sbid == 0);
       onode.allocation_tracker_sbid = src->onode.allocation_tracker_sbid;
       allocation_tracker = src->allocation_tracker;
@@ -2851,6 +2858,10 @@ private:
     int64_t& errors,
     int64_t &warnings,
     BlueStoreRepairer* repairer);
+  void _fsck_scan_one_trackers(
+    mempool_dynamic_bitset &used_blocks,
+    uint64_t granularity,
+    BlueStoreRepairer* repairer);
   void _fsck_repair_shared_blobs(
     BlueStoreRepairer& repairer,
     shared_blob_2hash_tracker_t& sb_ref_counts,
@@ -3710,7 +3721,6 @@ private:
   std::atomic<uint64_t> alloc_stats_count = {0};
   std::atomic<uint64_t> alloc_stats_fragments = { 0 };
   std::atomic<uint64_t> alloc_stats_size = { 0 };
-  // 
   std::array<std::tuple<uint64_t, uint64_t, uint64_t>, 5> alloc_stats_history =
   { std::make_tuple(0ul, 0ul, 0ul) };
 
@@ -3720,6 +3730,43 @@ public:
   typedef btree::btree_set<
     uint64_t, std::less<uint64_t>,
     mempool::bluestore_fsck::pool_allocator<uint64_t>> uint64_t_btree_t;
+
+  struct FSCK_one_tracker_cache_t {
+    struct item_t {
+      bluestore_extent_ref_map_t original; ///< as decoded from DB
+      bluestore_extent_ref_map_t current; ///< updated during check
+      // original can always be decoded from DB
+      // when current is 0, we assume everything is OK, and original can we cleared
+      bluestore_extent_ref_map_t compressed;
+      bluestore_extent_ref_map_t noncompressed;
+      store_statfs_t* statfs = nullptr;
+    };
+    std::map<uint64_t, item_t> active;
+  };
+    // returns a tracker. If
+  FSCK_one_tracker_cache_t::item_t& FSCK_one_tracker_find(
+    //BlueStore::CollectionRef c,
+    FSCK_one_tracker_cache_t& one_cache,
+    uint64_t tr_id);
+  // Update tracker with allocations from Blob.
+  // Separates extents that do not belong to tracker into not_in_tracker.
+  bool FSCK_one_tracker_update(
+    FSCK_one_tracker_cache_t::item_t& item,
+    store_statfs_t* statfs,
+
+    const PExtentVector& from_blob,
+    //PExtentVector& in_tracker,
+    bool compressed,
+    PExtentVector& not_in_tracker);
+  //   divide(uint64_t tr_id, );
+  //put_refs(uint64_t tr_id, PExtentVector , PExtentVector);
+
+    // it is signalled when all refs from tracker reach zero
+  //   void is_tracker_zero();
+  //  void get_tra
+  //  std::map<uint64_t, bluestore_extent_ref_map_t*> ;
+  void _fsck_stats_one_trackers(
+    FSCK_one_tracker_cache_t& cache);
 
   struct FSCK_ObjectCtx {
     int64_t& errors;
@@ -3738,7 +3785,8 @@ public:
     sb_info_space_efficient_map_t& sb_info;
     // approximate amount of references per <shared blob, chunk>
     shared_blob_2hash_tracker_t& sb_ref_counts;
-
+    // tracker cache that spans different objects
+    FSCK_one_tracker_cache_t& tracker_cache;
     store_statfs_t& expected_store_statfs;
     per_pool_statfs& expected_pool_statfs;
     BlueStoreRepairer* repairer;
@@ -3757,6 +3805,7 @@ public:
                    ceph::mutex* _sb_info_lock,
                    sb_info_space_efficient_map_t& _sb_info,
 		   shared_blob_2hash_tracker_t& _sb_ref_counts,
+		   FSCK_one_tracker_cache_t& _tracker_cache,
                    store_statfs_t& _store_statfs,
                    per_pool_statfs& _pool_statfs,
                    BlueStoreRepairer* _repairer) :
@@ -3773,6 +3822,7 @@ public:
       sb_info_lock(_sb_info_lock),
       sb_info(_sb_info),
       sb_ref_counts(_sb_ref_counts),
+      tracker_cache(_tracker_cache),
       expected_store_statfs(_store_statfs),
       expected_pool_statfs(_pool_statfs),
       repairer(_repairer) {
