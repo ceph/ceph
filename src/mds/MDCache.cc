@@ -13223,7 +13223,9 @@ struct C_IO_DataUninlined : public MDSIOContext {
 	   << " (" << cpp_strerror(r) << ") for " << *in << dendl;
       in->mdcache->logger->inc(l_mdc_uninline_write_failed);
       ceph_assert(in->get_scrub_header());
-      in->get_scrub_header()->record_uninline_status(in->ino(), r);
+      std::string path;
+      in->make_path_string(path);
+      in->get_scrub_header()->record_uninline_status(in->ino(), r, path);
       in->uninline_finished();
       mds->server->respond_to_request(mdr, r);
       return;
