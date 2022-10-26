@@ -98,6 +98,7 @@ Current Members
  * Neha Ojha <nojha@redhat.com>
  * Patrick Donnelly <pdonnell@redhat.com>
  * Sam Just <sjust@redhat.com>
+ * Vikhyat Umrao <vikhyat@redhat.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
  * Yehuda Sadeh <yehuda@redhat.com>
  * Yingxin Cheng <yingxin.cheng@intel.com>
