@@ -1058,6 +1058,7 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
     bool any_repaired = false;
     std::set<std::string> scrubbing_tags;
     std::unordered_map<std::string, unordered_map<int, std::vector<_inodeno_t>>> uninline_failed_meta_info;
+    std::unordered_map<_inodeno_t, std::string> paths;
 
     for (auto it = scrubbing_map.begin(); it != scrubbing_map.end(); ) {
       auto& header = it->second;
@@ -1072,6 +1073,8 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
 	auto& ufi = header->get_uninline_failed_info();
 	uninline_failed_meta_info[it->first] = ufi;
 	ufi.clear();
+	paths.merge(header->get_paths());
+	ceph_assert(header->get_paths().size() == 0);
 	scrubbing_map.erase(it++);
       } else {
 	++it;
@@ -1083,6 +1086,7 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
     auto ack = make_message<MMDSScrubStats>(scrub_epoch,
 					    std::move(scrubbing_tags),
 					    std::move(uninline_failed_meta_info),
+					    std::move(paths),
 					    clear_stack);
     mdcache->mds->send_message_mds(ack, 0);
 
@@ -1100,6 +1104,7 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
       for (auto& [scrub_tag, errno_map] : m->get_uninline_failed_meta_info()) {
 	stat.uninline_failed_meta_info[scrub_tag] = errno_map;
       }
+      stat.paths.insert(m->get_paths().begin(), m->get_paths().end());;
     }
   }
 }
@@ -1110,19 +1115,17 @@ void ScrubStack::move_uninline_failures_to_damage_table()
 
   for (mds_rank_t rank = 0; rank < (mds_rank_t)mds_scrub_stats.size(); rank++) {
     auto& ufmi = mds_scrub_stats[rank].uninline_failed_meta_info;
+    auto& paths = mds_scrub_stats[rank].paths;
 
     for (const auto& [scrub_tag, errno_ino_vec_map] : ufmi) {
       for (const auto& [errno_, ino_vec] : errno_ino_vec_map) {
 	for (auto ino : ino_vec) {
-	  std::string path;
-	  auto in = mdcache->get_inode(ino);
-	  ceph_assert(in);
-	  in->make_path_string(path);
-	  mds->damage_table.notify_uninline_failed(ino, rank, errno_, scrub_tag, path);
+	  mds->damage_table.notify_uninline_failed(ino, rank, errno_, scrub_tag, paths[ino]);
 	}
       }
     }
     ufmi.clear();
+    paths.clear();
   }
 }
 
@@ -1191,6 +1194,7 @@ void ScrubStack::advance_scrub_status()
 	any_repaired = true;
       auto& ufmi = mds_scrub_stats[0].uninline_failed_meta_info;
       ufmi[it->first] = header->get_uninline_failed_info();
+      mds_scrub_stats[0].paths.merge(header->get_paths());
       move_uninline_failures_to_damage_table();
       scrubbing_map.erase(it++);
     } else {

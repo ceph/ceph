@@ -41,6 +41,9 @@ public:
   const std::unordered_map<std::string, std::unordered_map<int, std::vector<_inodeno_t>>>& get_uninline_failed_meta_info() const {
     return uninline_failed_meta_info;
   }
+  const std::unordered_map<_inodeno_t, std::string>& get_paths() const {
+    return paths;
+  }
 
   void encode_payload(uint64_t features) override {
     using ceph::encode;
@@ -75,6 +78,12 @@ public:
 	encode(ino_vec, payload);
       }
     }
+    count = (int)paths.size();
+    encode(count, payload);
+    for (auto& [ino, path] : paths) {
+      encode(ino, payload);
+      encode(path, payload);
+    }
   }
   void decode_uninline_failed_info(ceph::bufferlist::const_iterator& p) {
     using ceph::decode;
@@ -95,6 +104,15 @@ public:
       }
       uninline_failed_meta_info[tag] = std::move(uninline_failed_info);
     }
+    int count = 0;
+    decode(count, p);
+    while (count--) {
+      _inodeno_t ino;
+      std::string path;
+      decode(ino, p);
+      decode(path, p);
+      paths[ino] = path;
+    }
   }
 
 protected:
@@ -109,10 +127,10 @@ protected:
     epoch(e), scrubbing_tags(tags), update_scrubbing(true), aborting(abrt) {}
   MMDSScrubStats(unsigned e, const std::set<std::string>& tags,
     std::unordered_map<std::string, std::unordered_map<int, std::vector<_inodeno_t>>>&& ufmi,
-    bool abrt = false) :
+    std::unordered_map<_inodeno_t, std::string>&& paths_, bool abrt = false) :
     MMDSOp(MSG_MDS_SCRUB_STATS, HEAD_VERSION, COMPAT_VERSION),
     epoch(e), scrubbing_tags(tags), update_scrubbing(true), aborting(abrt),
-    uninline_failed_meta_info(std::move(ufmi)) {}
+    uninline_failed_meta_info(std::move(ufmi)), paths(std::move(paths_)) {}
   ~MMDSScrubStats() override {}
 
 private:
@@ -122,6 +140,7 @@ private:
   bool aborting = false;
   // <tag, <error_code, [ino1, ino2, ...]>>
   std::unordered_map<std::string, std::unordered_map<int, std::vector<_inodeno_t>>> uninline_failed_meta_info;
+  std::unordered_map<_inodeno_t, std::string> paths;
 
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
