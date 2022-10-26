@@ -189,6 +189,16 @@ struct bluestore_extent_ref_map_t {
   bool put(PExtentVector& old_extents, PExtentVector& extents_to_deallocate);
   // TODO explain me!
   void on_dup(const PExtentVector& dup_extents);
+
+  // TODO explain me
+  void divide(
+    const PExtentVector& extents,
+    PExtentVector& in_tracker,
+    PExtentVector& not_in_tracker);
+
+  // Checks if this and other ref_maps are equal.
+  bool equals(const struct bluestore_extent_ref_map_t* other) const;
+
   bool contains(uint64_t offset, uint32_t len) const;
   bool intersects(uint64_t offset, uint32_t len) const;
 

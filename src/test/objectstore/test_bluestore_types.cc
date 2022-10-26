@@ -503,6 +503,76 @@ TEST(bluestore_extent_ref_map_t, do_dup_exh)
   } while (mode[sec_count] == 0);
 }
 
+
+TEST(bluestore_extent_ref_map_t, divide_exh)
+{
+  auto append = [](PExtentVector& v, uint64_t off, uint32_t len) {
+    if (v.size() > 0) {
+      if (v.back().offset + v.back().length == off) {
+	v.back().length += len;
+	return;
+      }
+    }
+    v.emplace_back(off, len);
+  };
+  const int sec_count = 7;
+  char mode[sec_count + 1] = {0};
+
+  do {
+    bluestore_extent_ref_map_t ref_map;
+    std::string ref_map_str;
+    // prepare ref_map
+    for (int i = 0; i < sec_count; i++) {
+      ref_map_str.push_back('0' + mode[i]);
+      for (int j = 0 ; j < mode[i]; j++) {
+	ref_map.get(i * 16, 16);
+      }
+    }
+
+    // cout << ref_map << std::endl;
+    // exhaustive release pattern
+    for (uint64_t bitmap = 1; bitmap < (1LL << sec_count); bitmap++) {
+      PExtentVector extents;
+      PExtentVector in_exp;
+      PExtentVector not_in_exp;
+      // prepare expected output
+      for (int i = 0; i < sec_count; i++) {
+	if (bitmap & (1LL << i)) {
+	  append(extents, i * 16, 16);
+	  if (mode[i] == 0) {
+	    append(not_in_exp, i * 16, 16);
+	  } else {
+	    append(in_exp, i * 16, 16);
+	  }
+	}
+      }
+      PExtentVector in_res;
+      PExtentVector not_in_res;
+      ref_map.divide(extents, in_res, not_in_res);
+      if(0)cout << bitmap << " " << ref_map_str << " " << ref_map
+		<< " in:exp" << in_exp << "/res" << in_res
+		<< " not_in:exp" << not_in_exp << "/res" << not_in_res << std::endl;
+      std::stringstream in_exp_str, not_in_exp_str, in_res_str, not_in_res_str;
+      in_exp_str << in_exp;
+      not_in_exp_str << not_in_exp;
+      in_res_str << in_res;
+      not_in_res_str << not_in_res;
+      ASSERT_EQ(in_exp_str.str(), in_res_str.str());
+      ASSERT_EQ(not_in_exp_str.str(), not_in_res_str.str());
+    }
+
+    int carry = 1;
+    for (int i = 0; i < sec_count + 1; i++) {
+      mode[i] += carry;
+      carry = 0;
+      if (mode[i] == 3) {
+	mode[i] = 0;
+	carry = 1;
+      }
+    }
+  } while (mode[sec_count] == 0);
+}
+
 TEST(bluestore_blob_t, calc_csum)
 {
   bufferlist bl;
