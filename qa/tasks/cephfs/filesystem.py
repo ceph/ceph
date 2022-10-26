@@ -595,6 +595,9 @@ class Filesystem(MDSCluster):
     def set_allow_new_snaps(self, yes):
         self.set_var("allow_new_snaps", yes, '--yes-i-really-mean-it')
 
+    def set_bal_rank_mask(self, bal_rank_mask):
+        self.set_var("bal_rank_mask", bal_rank_mask)
+
     def compat(self, *args):
         a = map(lambda x: str(x).lower(), args)
         self.mon_manager.raw_cluster_cmd("fs", "compat", self.name, *a)
