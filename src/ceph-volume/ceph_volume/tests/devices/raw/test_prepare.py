@@ -41,7 +41,7 @@ class TestPrepare(object):
         assert 'Path to bluestore block.wal block device' in stdout
         assert 'Enable device encryption via dm-crypt' in stdout
 
-    @patch('ceph_volume.util.arg_validators.ValidRawDevice.__call__')
+    @patch('ceph_volume.util.device.ValidRawDevice')
     def test_prepare_dmcrypt_no_secret_passed(self, m_valid_device, capsys):
         m_valid_device.return_value = '/dev/foo'
         with pytest.raises(SystemExit):
@@ -87,7 +87,7 @@ class TestPrepare(object):
 
     @patch('ceph_volume.devices.raw.prepare.rollback_osd')
     @patch('ceph_volume.devices.raw.prepare.Prepare.prepare')
-    @patch('ceph_volume.util.arg_validators.ValidRawDevice.__call__')
+    @patch('ceph_volume.util.device.ValidRawDevice')
     def test_safe_prepare_exception_raised(self, m_valid_device, m_prepare, m_rollback_osd):
         m_valid_device.return_value = '/dev/foo'
         m_prepare.side_effect = Exception('foo')

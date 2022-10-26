@@ -14,6 +14,7 @@ class TestZap(object):
 
 class TestFindAssociatedDevices(object):
 
+    @patch('ceph_volume.devices.raw.list.List.generate', return_value={})
     def test_no_lvs_found_that_match_id(self, monkeypatch, device_info):
         tags = 'ceph.osd_id=9,ceph.journal_uuid=x,ceph.type=data'
         osd = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='vg',
@@ -23,8 +24,9 @@ class TestFindAssociatedDevices(object):
         monkeypatch.setattr(zap.api, 'get_lvs', lambda **kwargs: {})
 
         with pytest.raises(RuntimeError):
-            zap.find_associated_devices(osd_id=10)
+            zap.find_associated_devices(osd_id='10')
 
+    @patch('ceph_volume.devices.raw.list.List.generate', return_value={})
     def test_no_lvs_found_that_match_fsid(self, monkeypatch, device_info):
         tags = 'ceph.osd_id=9,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,'+\
                'ceph.type=data'
@@ -37,6 +39,7 @@ class TestFindAssociatedDevices(object):
         with pytest.raises(RuntimeError):
             zap.find_associated_devices(osd_fsid='aaaa-lkjh')
 
+    @patch('ceph_volume.devices.raw.list.List.generate', return_value={})
     def test_no_lvs_found_that_match_id_fsid(self, monkeypatch, device_info):
         tags = 'ceph.osd_id=9,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,'+\
                'ceph.type=data'
@@ -49,6 +52,7 @@ class TestFindAssociatedDevices(object):
         with pytest.raises(RuntimeError):
             zap.find_associated_devices(osd_id='9', osd_fsid='aaaa-lkjh')
 
+    @patch('ceph_volume.devices.raw.list.List.generate', return_value={})
     def test_no_ceph_lvs_found(self, monkeypatch):
         osd = api.Volume(lv_name='volume1', lv_uuid='y', lv_tags='',
                          lv_path='/dev/VolGroup/lv')
@@ -57,7 +61,7 @@ class TestFindAssociatedDevices(object):
         monkeypatch.setattr(zap.api, 'get_lvs', lambda **kwargs: {})
 
         with pytest.raises(RuntimeError):
-            zap.find_associated_devices(osd_id=100)
+            zap.find_associated_devices(osd_id='100')
 
     def test_lv_is_matched_id(self, monkeypatch):
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
@@ -133,7 +137,7 @@ class TestEnsureAssociatedLVs(object):
 
     def test_success_message_for_id(self, factory, is_root, capsys):
         cli_zap = zap.Zap([])
-        args = factory(devices=[], osd_id='1', osd_fsid=None)
+        args = factory(devices=[], osd_id='1', osd_fsid=None, no_systemd=True)
         cli_zap.args = args
         cli_zap.zap()
         out, err = capsys.readouterr()

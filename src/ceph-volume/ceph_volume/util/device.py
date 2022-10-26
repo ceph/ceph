@@ -11,7 +11,6 @@ from ceph_volume.util import disk, system
 from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
 from ceph_volume.util.disk import allow_loop_devices
-from ceph_volume.devices.raw.list import List
 
 logger = logging.getLogger(__name__)
 
@@ -827,6 +826,7 @@ class ValidZapDevice(ValidDevice):
                 if self.osd_id:
                     osd_ids = [self.osd_id]
                 else:
+                    from ceph_volume.devices.raw.list import List
                     dev = List([]).generate([self.dev_path])
                     osd_ids = [dev[d]['osd_id'] for d in dev]
             if self.device.lvs:

@@ -5,7 +5,6 @@ import re
 import stat
 import time
 from ceph_volume import process
-from ceph_volume.api import lvm
 from ceph_volume.util.system import get_file_contents
 
 

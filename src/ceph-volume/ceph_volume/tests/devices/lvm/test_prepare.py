@@ -1,7 +1,9 @@
 import pytest
+from ceph_volume import decorators
 from ceph_volume.devices import lvm
 from ceph_volume.api import lvm as api
-from mock.mock import patch, Mock
+from ceph_volume.util.device import Device
+from mock.mock import patch, Mock, MagicMock
 
 
 class TestLVM(object):

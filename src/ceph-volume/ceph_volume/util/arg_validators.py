@@ -1,8 +1,7 @@
 import argparse
 import os
 import math
-import json
-from ceph_volume import terminal, decorators, process, conf
+from ceph_volume import terminal, decorators
 from ceph_volume.util import disk
 
 
