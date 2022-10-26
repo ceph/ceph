@@ -897,6 +897,7 @@ public:
       needs_reshard_begin = needs_reshard_end = 0;
     }
     void request_reshard(uint32_t begin, uint32_t end) {
+      return;
       if (begin < needs_reshard_begin) {
 	needs_reshard_begin = begin;
       }
