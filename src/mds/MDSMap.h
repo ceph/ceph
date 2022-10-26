@@ -275,6 +275,21 @@ public:
   const std::string get_balancer() const { return balancer; }
   void set_balancer(std::string val) { balancer.assign(val); }
 
+  const std::bitset<MAX_MDS>& get_bal_rank_mask_bitset() const;
+  void set_bal_rank_mask(std::string val);
+  unsigned get_num_mdss_in_rank_mask_bitset() const { return num_mdss_in_rank_mask_bitset; }
+  void update_num_mdss_in_rank_mask_bitset();
+  int hex2bin(std::string hex_string, std::string &bin_string, unsigned int max_bits, std::ostream& ss) const;
+
+  typedef enum
+  {
+    BAL_RANK_MASK_TYPE_ANY = 0,
+    BAL_RANK_MASK_TYPE_ALL = 1,
+    BAL_RANK_MASK_TYPE_NONE = 2,
+  } bal_rank_mask_type_t;
+
+  const bool check_special_bal_rank_mask(std::string val, bal_rank_mask_type_t type) const;
+
   mds_rank_t get_tableserver() const { return tableserver; }
   mds_rank_t get_root() const { return root; }
 
@@ -625,6 +640,10 @@ protected:
   mds_rank_t old_max_mds = 0; /* Value to restore when MDS cluster is marked up */
   mds_rank_t standby_count_wanted = -1;
   std::string balancer;    /* The name/version of the mantle balancer (i.e. the rados obj name) */
+
+  std::string bal_rank_mask = "-1";
+  std::bitset<MAX_MDS> bal_rank_mask_bitset;
+  uint32_t num_mdss_in_rank_mask_bitset;
 
   std::set<mds_rank_t> in;              // currently defined cluster
 
