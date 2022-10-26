@@ -74,6 +74,33 @@ example spec file:
     spec:
       rgw_frontend_port: 8080
 
+Passing Frontend Extra Arguments
+--------------------------------
+
+The RGW service specification can be used to pass extra arguments to the rgw frontend by using
+the `rgw_frontend_extra_args` arguments list.
+
+example spec file:
+
+.. code-block:: yaml
+
+    service_type: rgw
+    service_id: foo
+    placement:
+      label: rgw
+      count_per_host: 2
+    spec:
+      rgw_realm: myrealm
+      rgw_zone: myzone
+      rgw_frontend_type: "beast"
+      rgw_frontend_port: 5000
+      rgw_frontend_extra_args:
+      - "tcp_nodelay=1"
+      - "max_header_size=65536"
+
+.. note:: cephadm combines the arguments from the `spec` section and the ones from
+	  the `rgw_frontend_extra_args` into a single space-separated arguments list
+	  which is used to set the value of `rgw_frontends` configuration parameter.
 
 Multisite zones
 ---------------
