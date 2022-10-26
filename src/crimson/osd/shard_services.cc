@@ -136,7 +136,11 @@ OSDSingletonState::OSDSingletonState(
       &cct,
       &finisher,
       crimson::common::local_conf()->osd_max_backfills,
-      crimson::common::local_conf()->osd_min_recovery_priority)
+      crimson::common::local_conf()->osd_min_recovery_priority),
+    snap_reserver(
+      &cct,
+      &finisher,
+      crimson::common::local_conf()->osd_max_trimming_pgs)
 {
   crimson::common::local_conf().add_observer(this);
   osdmaps[0] = boost::make_local_shared<OSDMap>();
@@ -318,6 +322,7 @@ const char** OSDSingletonState::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "osd_max_backfills",
     "osd_min_recovery_priority",
+    "osd_max_trimming_pgs",
     nullptr
   };
   return KEYS;
@@ -334,6 +339,9 @@ void OSDSingletonState::handle_conf_change(
   if (changed.count("osd_min_recovery_priority")) {
     local_reserver.set_min_priority(conf->osd_min_recovery_priority);
     remote_reserver.set_min_priority(conf->osd_min_recovery_priority);
+  }
+  if (changed.count("osd_max_trimming_pgs")) {
+    snap_reserver.set_max(conf->osd_max_trimming_pgs);
   }
 }
 

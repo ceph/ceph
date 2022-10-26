@@ -271,6 +271,7 @@ private:
   } finisher;
   AsyncReserver<spg_t, DirectFinisher> local_reserver;
   AsyncReserver<spg_t, DirectFinisher> remote_reserver;
+  AsyncReserver<spg_t, DirectFinisher> snap_reserver;
 
   epoch_t up_thru_wanted = 0;
   seastar::future<> send_alive(epoch_t want);
@@ -477,6 +478,12 @@ public:
   FORWARD_TO_OSD_SINGLETON_TARGET(
     remote_dump_reservations,
     remote_reserver.dump)
+  FORWARD_TO_OSD_SINGLETON_TARGET(
+    snap_cancel_reservation,
+    snap_reserver.cancel_reservation)
+  FORWARD_TO_OSD_SINGLETON_TARGET(
+    snap_dump_reservations,
+    snap_reserver.dump)
 
   Context *invoke_context_on_core(core_id_t core, Context *c) {
     if (!c) return nullptr;
@@ -514,6 +521,23 @@ public:
       [item, prio](OSDSingletonState &singleton,
 		   Context *wrapped_on_reserved, Context *wrapped_on_preempt) {
 	return singleton.remote_reserver.request_reservation(
+	  item,
+	  wrapped_on_reserved,
+	  prio,
+	  wrapped_on_preempt);
+      },
+      invoke_context_on_core(seastar::this_shard_id(), on_reserved),
+      invoke_context_on_core(seastar::this_shard_id(), on_preempt));
+  }
+  seastar::future<> snap_request_reservation(
+    spg_t item,
+    Context *on_reserved,
+    unsigned prio,
+    Context *on_preempt) {
+    return with_singleton(
+      [item, prio](OSDSingletonState &singleton,
+		   Context *wrapped_on_reserved, Context *wrapped_on_preempt) {
+	return singleton.snap_reserver.request_reservation(
 	  item,
 	  wrapped_on_reserved,
 	  prio,
