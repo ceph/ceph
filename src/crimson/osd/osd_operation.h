@@ -46,6 +46,7 @@ enum class OperationTypeCode {
   historic_client_request,
   logmissing_request,
   logmissing_request_reply,
+  snaptrim_event,
   last_op
 };
 
@@ -62,6 +63,7 @@ static constexpr const char* const OP_NAMES[] = {
   "historic_client_request",
   "logmissing_request",
   "logmissing_request_reply",
+  "snaptrim_event",
 };
 
 // prevent the addition of OperationTypeCode-s with no matching OP_NAMES entry:
