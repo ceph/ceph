@@ -106,78 +106,98 @@ a volume group and a logical volume using the following conventions:
 
 ``filestore``
 -------------
-This is the OSD backend that allows preparation of logical volumes for
-a :term:`filestore` objectstore OSD.
+``filestore`` is the OSD backend that prepares logical volumes for a
+:term:`filestore`-backed object-store OSD.
 
-It can use a logical volume for the OSD data and a physical device, a partition
-or logical volume for the journal. A physical device will have a logical volume
-created on it. A volume group will either be created or reused it its name begins
-with ``ceph``.  No special preparation is needed for these volumes other than
-following the minimum size requirements for data and journal.
+``filestore`` can use a logical volume for OSD data, and it can use a physical
+device, a partition, or a logical volume for the journal. If a physical device
+is used to create a filestore backend, a logical volume will be created on that
+physical device. A volume group will either be created or reused if its name
+begins with ``ceph``. No special preparation is needed for these volumes other
+than making sure to adhere to the minimum size requirements for data and for
+the journal.
 
-The CLI call looks like this of a basic standalone filestore OSD::
+Use this command to create a basic filestore OSD:
 
-    ceph-volume lvm prepare --filestore --data <data block device>
+.. prompt:: bash #
 
-To deploy file store with an external journal::
+   ceph-volume lvm prepare --filestore --data <data block device>
 
-    ceph-volume lvm prepare --filestore --data <data block device> --journal <journal block device>
+Use this command to deploy filestore with an external journal:
 
-For enabling :ref:`encryption <ceph-volume-lvm-encryption>`, the ``--dmcrypt`` flag is required::
+.. prompt:: bash #
 
-    ceph-volume lvm prepare --filestore --dmcrypt --data <data block device> --journal <journal block device>
+   ceph-volume lvm prepare --filestore --data <data block device> --journal <journal block device>
 
-Both the journal and data block device can take three forms:
+Use this command to enable :ref:`encryption <ceph-volume-lvm-encryption>`, and note that the ``--dmcrypt`` flag is required:
+
+.. prompt:: bash #
+
+   ceph-volume lvm prepare --filestore --dmcrypt --data <data block device> --journal <journal block device>
+
+Both the journal and the data block device can take three forms:
 
 * a physical block device
 * a partition on a physical block device
 * a logical volume
 
-When using logical volumes the value *must* be of the format
-``volume_group/logical_volume``. Since logical volume names
-are not enforced for uniqueness, this prevents accidentally 
-choosing the wrong volume.
+If you use a logical volume to deploy filestore, the value that you pass in the
+command *must* be of the format ``volume_group/logical_volume_name``. Since logical
+volume names are not enforced for uniqueness, using this format is meant to
+guard against accidentally choosing the wrong volume (and clobbering its data).
 
-When using a partition, it *must* contain a ``PARTUUID``, that can be 
-discovered by ``blkid``. THis ensure it can later be identified correctly
-regardless of the device name (or path).
+If you use a partition to deploy filestore, the partition *must* contain a
+``PARTUUID`` that can be discovered by ``blkid``. This ensures that the
+partition can be identified correctly regardless of the device's name (or path).
 
-For example: passing a logical volume for data and a partition ``/dev/sdc1`` for
-the journal::
+For example, to use a logical volume for OSD data and a partition
+(``/dev/sdc1``) for the journal, run a command of this form:
 
-    ceph-volume lvm prepare --filestore --data volume_group/lv_name --journal /dev/sdc1
+.. prompt:: bash #
 
-Passing a bare device for data and a logical volume ias the journal::
+   ceph-volume lvm prepare --filestore --data volume_group/logical_volume_name --journal /dev/sdc1
 
-    ceph-volume lvm prepare --filestore --data /dev/sdc --journal volume_group/journal_lv
+Or, to use a bare device for data and a logical volume for the journal:
 
-A generated uuid is used to ask the cluster for a new OSD. These two pieces are
-crucial for identifying an OSD and will later be used throughout the
-:ref:`ceph-volume-lvm-activate` process.
+.. prompt:: bash #
+
+   ceph-volume lvm prepare --filestore --data /dev/sdc --journal volume_group/journal_lv
+
+A generated UUID is used when asking the cluster for a new OSD. These two
+pieces of information (the OSD ID and the OSD UUID) are necessary for
+identifying a given OSD and will later be used throughout the
+:ref:`activation<ceph-volume-lvm-activate>` process.
 
 The OSD data directory is created using the following convention::
 
     /var/lib/ceph/osd/<cluster name>-<osd id>
 
-At this point the data volume is mounted at this location, and the journal
-volume is linked::
+To link the journal volume to the mounted data volume, run this command:
 
-      ln -s /path/to/journal /var/lib/ceph/osd/<cluster_name>-<osd-id>/journal
+.. prompt:: bash #
 
-The monmap is fetched using the bootstrap key from the OSD::
+   ln -s /path/to/journal /var/lib/ceph/osd/<cluster_name>-<osd-id>/journal
 
-      /usr/bin/ceph --cluster ceph --name client.bootstrap-osd
-      --keyring /var/lib/ceph/bootstrap-osd/ceph.keyring
-      mon getmap -o /var/lib/ceph/osd/<cluster name>-<osd id>/activate.monmap
+To fetch the monmap by using the bootstrap key from the OSD, run this command:
 
-``ceph-osd`` will be called to populate the OSD directory, that is already
-mounted, re-using all the pieces of information from the initial steps::
+.. prompt:: bash #
 
-      ceph-osd --cluster ceph --mkfs --mkkey -i <osd id> \
-      --monmap /var/lib/ceph/osd/<cluster name>-<osd id>/activate.monmap --osd-data \
-      /var/lib/ceph/osd/<cluster name>-<osd id> --osd-journal /var/lib/ceph/osd/<cluster name>-<osd id>/journal \
-      --osd-uuid <osd uuid> --keyring /var/lib/ceph/osd/<cluster name>-<osd id>/keyring \
-      --setuser ceph --setgroup ceph
+   /usr/bin/ceph --cluster ceph --name client.bootstrap-osd --keyring
+   /var/lib/ceph/bootstrap-osd/ceph.keyring mon getmap -o
+   /var/lib/ceph/osd/<cluster name>-<osd id>/activate.monmap
+
+To populate the OSD directory (which has already been mounted), use this ``ceph-osd`` command:  
+.. prompt:: bash #
+
+   ceph-osd --cluster ceph --mkfs --mkkey -i <osd id> \ --monmap
+   /var/lib/ceph/osd/<cluster name>-<osd id>/activate.monmap --osd-data \
+   /var/lib/ceph/osd/<cluster name>-<osd id> --osd-journal
+   /var/lib/ceph/osd/<cluster name>-<osd id>/journal \ --osd-uuid <osd uuid>
+   --keyring /var/lib/ceph/osd/<cluster name>-<osd id>/keyring \ --setuser ceph
+   --setgroup ceph
+
+All of the information from the previous steps is used in the above command.      
+
 
 
 .. _ceph-volume-lvm-partitions:
