@@ -29,50 +29,58 @@ Although :term:`bluestore` is the default, the back end can be specified with:
 
 ``bluestore``
 -------------
-The :term:`bluestore` objectstore is the default for new OSDs. It offers a bit
-more flexibility for devices compared to :term:`filestore`.
-Bluestore supports the following configurations:
+:term:`Bluestore<bluestore>` is the default object store for new OSDs. It
+offers more flexibility for devices than :term:`filestore` does.  Bluestore
+supports the following configurations:
 
-* A block device, a block.wal, and a block.db device
-* A block device and a block.wal device
-* A block device and a block.db device
-* A single block device
+* a block device, a block.wal device, and a block.db device
+* a block device and a block.wal device
+* a block device and a block.db device
+* a single block device
 
-The bluestore subcommand accepts physical block devices, partitions on
-physical block devices or logical volumes as arguments for the various device parameters
-If a physical device is provided, a logical volume will be created. A volume group will
-either be created or reused it its name begins with ``ceph``.
-This allows a simpler approach at using LVM but at the cost of flexibility:
-there are no options or configurations to change how the LV is created.
+The bluestore subcommand accepts physical block devices, partitions on physical
+block devices, or logical volumes as arguments for the various device
+parameters. If a physical block device is provided, a logical volume will be
+created. If the provided volume group's name begins with `ceph`, it will be
+created if it does not yet exist and it will be clobbered and reused if it
+already exists. This allows for a simpler approach to using LVM but at the
+cost of flexibility: no options or configurations can be used to change how the
+logical volume is created.
 
 The ``block`` is specified with the ``--data`` flag, and in its simplest use
-case it looks like::
+case it looks like:
+
+.. prompt:: bash #
 
     ceph-volume lvm prepare --bluestore --data vg/lv
 
-A raw device can be specified in the same way::
+A raw device can be specified in the same way:
+
+.. prompt:: bash #
 
     ceph-volume lvm prepare --bluestore --data /path/to/device
 
-For enabling :ref:`encryption <ceph-volume-lvm-encryption>`, the ``--dmcrypt`` flag is required::
+For enabling :ref:`encryption <ceph-volume-lvm-encryption>`, the ``--dmcrypt`` flag is required:
+
+.. prompt:: bash #
 
     ceph-volume lvm prepare --bluestore --dmcrypt --data vg/lv
 
-If a ``block.db`` or a ``block.wal`` is needed (they are optional for
-bluestore) they can be specified with ``--block.db`` and ``--block.wal``
-accordingly. These can be a physical device, a partition  or
-a logical volume.
+If a ``block.db`` device or a ``block.wal`` device is needed, it can be
+specified with ``--block.db`` or ``--block.wal``. These can be physical
+devices, partitions, or logical volumes. ``block.db`` and ``block.wal`` are
+optional for bluestore.
 
-For both ``block.db`` and ``block.wal`` partitions aren't made logical volumes
-because they can be used as-is.
+For both ``block.db`` and ``block.wal``, partitions can be used as-is, and 
+therefore are not made into logical volumes.
 
-While creating the OSD directory, the process will use a ``tmpfs`` mount to
-place all the files needed for the OSD. These files are initially created by
-``ceph-osd --mkfs`` and are fully ephemeral.
+While creating the OSD directory, the process uses a ``tmpfs`` mount to hold
+the files needed for the OSD. These files are created by ``ceph-osd --mkfs``
+and are ephemeral.
 
-A symlink is always created for the ``block`` device, and optionally for
-``block.db`` and ``block.wal``. For a cluster with a default name, and an OSD
-id of 0, the directory could look like::
+A symlink is created for the ``block`` device, and is optional for ``block.db``
+and ``block.wal``. For a cluster with a default name and an OSD id of 0, the
+directory looks like this::
 
     # ls -l /var/lib/ceph/osd/ceph-0
     lrwxrwxrwx. 1 ceph ceph 93 Oct 20 13:05 block -> /dev/ceph-be2b6fbd-bcf2-4c51-b35d-a35a162a02f0/osd-block-25cf0a05-2bc6-44ef-9137-79d65bd7ad62
@@ -85,11 +93,11 @@ id of 0, the directory could look like::
     -rw-------. 1 ceph ceph 10 Oct 20 13:05 type
     -rw-------. 1 ceph ceph  2 Oct 20 13:05 whoami
 
-In the above case, a device was used for ``block`` so ``ceph-volume`` create
-a volume group and a logical volume using the following convention:
+In the above case, a device was used for ``block``, so ``ceph-volume`` created
+a volume group and a logical volume using the following conventions:
 
-* volume group name: ``ceph-{cluster fsid}`` or if the vg exists already
-  ``ceph-{random uuid}``
+* volume group name: ``ceph-{cluster fsid}`` (or if the volume group already
+  exists: ``ceph-{random uuid}``)
 
 * logical volume name: ``osd-block-{osd_fsid}``
 
