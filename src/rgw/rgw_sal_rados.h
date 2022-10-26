@@ -1,4 +1,4 @@
-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
@@ -343,9 +343,20 @@ class RadosObject : public StoreObject {
       RadosReadOp(RadosObject *_source, RGWObjectCtx *_rctx);
 
       virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
-      virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y, const DoutPrefixProvider* dpp) override;
-      virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end, RGWGetDataCB* cb, optional_yield y) override;
-      virtual int get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y) override;
+
+      /*
+       * Both `read` and `iterate` read up through index `end`
+       * *inclusive*. The number of bytes that could be returned is
+       * `end - ofs + 1`.
+       */
+      virtual int read(int64_t ofs, int64_t end,
+		       bufferlist& bl, optional_yield y,
+		       const DoutPrefixProvider* dpp) override;
+      virtual int iterate(const DoutPrefixProvider* dpp,
+			  int64_t ofs, int64_t end,
+			  RGWGetDataCB* cb, optional_yield y) override;
+
+        virtual int get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y) override;
     };
 
     struct RadosDeleteOp : public DeleteOp {

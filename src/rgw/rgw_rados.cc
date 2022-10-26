@@ -6382,7 +6382,13 @@ int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp,
   return ret;
 }
 
-int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y, const DoutPrefixProvider *dpp)
+/*
+ * Read up through index `end` inclusive. Number of bytes read is up
+ * to `end - ofs + 1`.
+ */
+int RGWRados::Object::Read::read(int64_t ofs, int64_t end,
+				 bufferlist& bl, optional_yield y,
+				 const DoutPrefixProvider *dpp)
 {
   RGWRados *store = source->get_store();
 
