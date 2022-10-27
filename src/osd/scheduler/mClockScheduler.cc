@@ -31,11 +31,17 @@ using namespace std::placeholders;
 namespace ceph::osd::scheduler {
 
 mClockScheduler::mClockScheduler(CephContext *cct,
+  int whoami,
   uint32_t num_shards,
-  bool is_rotational)
+  int shard_id,
+  bool is_rotational,
+  MonClient *monc)
   : cct(cct),
+    whoami(whoami),
     num_shards(num_shards),
+    shard_id(shard_id),
     is_rotational(is_rotational),
+    monc(monc),
     scheduler(
       std::bind(&mClockScheduler::ClientRegistry::get_info,
                 &client_registry,
@@ -339,6 +345,11 @@ void mClockScheduler::enable_mclock_profile_settings()
 
 void mClockScheduler::set_profile_config()
 {
+  // Let only a single osd shard (id:0) set the profile configs
+  if (shard_id > 0) {
+    return;
+  }
+
   ClientAllocs client = client_allocs[
     static_cast<size_t>(op_scheduler_class::client)];
   ClientAllocs rec = client_allocs[
@@ -378,6 +389,9 @@ void mClockScheduler::set_profile_config()
   dout(10) << __func__ << " Best effort QoS params: " << "["
     << best_effort.res << "," << best_effort.wgt << "," << best_effort.lim
     << "]" << dendl;
+
+  // Apply the configuration changes
+  update_configuration();
 }
 
 int mClockScheduler::calc_scaled_cost(int item_cost)
@@ -544,17 +558,56 @@ void mClockScheduler::handle_conf_change(
       client_registry.update_from_config(conf);
     }
   }
-  if (changed.count("osd_mclock_scheduler_client_res") ||
-      changed.count("osd_mclock_scheduler_client_wgt") ||
-      changed.count("osd_mclock_scheduler_client_lim") ||
-      changed.count("osd_mclock_scheduler_background_recovery_res") ||
-      changed.count("osd_mclock_scheduler_background_recovery_wgt") ||
-      changed.count("osd_mclock_scheduler_background_recovery_lim") ||
-      changed.count("osd_mclock_scheduler_background_best_effort_res") ||
-      changed.count("osd_mclock_scheduler_background_best_effort_wgt") ||
-      changed.count("osd_mclock_scheduler_background_best_effort_lim")) {
+
+  auto get_changed_key = [&changed]() -> std::optional<std::string> {
+    static const std::vector<std::string> qos_params = {
+      "osd_mclock_scheduler_client_res",
+      "osd_mclock_scheduler_client_wgt",
+      "osd_mclock_scheduler_client_lim",
+      "osd_mclock_scheduler_background_recovery_res",
+      "osd_mclock_scheduler_background_recovery_wgt",
+      "osd_mclock_scheduler_background_recovery_lim",
+      "osd_mclock_scheduler_background_best_effort_res",
+      "osd_mclock_scheduler_background_best_effort_wgt",
+      "osd_mclock_scheduler_background_best_effort_lim"
+    };
+
+    for (auto &qp : qos_params) {
+      if (changed.count(qp)) {
+        return qp;
+      }
+    }
+    return std::nullopt;
+  };
+
+  if (auto key = get_changed_key(); key.has_value()) {
     if (mclock_profile == "custom") {
       client_registry.update_from_config(conf);
+    } else {
+      // Attempt to change QoS parameter for a built-in profile. Restore the
+      // profile defaults by making one of the OSD shards remove the key from
+      // config monitor store. Note: monc is included in the check since the
+      // mock unit test currently doesn't initialize it.
+      if (shard_id == 0 && monc) {
+        static const std::vector<std::string> osds = {
+          "osd",
+          "osd." + std::to_string(whoami)
+        };
+
+        for (auto osd : osds) {
+          std::string cmd =
+            "{"
+              "\"prefix\": \"config rm\", "
+              "\"who\": \"" + osd + "\", "
+              "\"name\": \"" + *key + "\""
+            "}";
+          std::vector<std::string> vcmd{cmd};
+
+          dout(10) << __func__ << " Removing Key: " << *key
+                   << " for " << osd << " from Mon db" << dendl;
+          monc->start_mon_command(vcmd, {}, nullptr, nullptr, nullptr);
+        }
+      }
     }
   }
 }
