@@ -206,6 +206,7 @@ using LBAManagerRef = std::unique_ptr<LBAManager>;
 
 class Cache;
 namespace lba_manager {
+template <bool leaf_has_children>
 LBAManagerRef create_lba_manager(Cache &cache);
 }
 

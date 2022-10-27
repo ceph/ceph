@@ -76,7 +76,8 @@ class BackrefLeafNode
       paddr_t, paddr_le_t,
       backref_map_val_t, backref_map_val_le_t,
       BACKREF_NODE_SIZE,
-      BackrefLeafNode> {
+      BackrefLeafNode,
+      false> {
 public:
   template <typename... T>
   BackrefLeafNode(T&&... t) :
