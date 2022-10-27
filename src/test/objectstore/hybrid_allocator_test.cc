@@ -11,9 +11,10 @@ public:
   TestHybridAllocator(CephContext* cct,
                       int64_t device_size,
                       int64_t _block_size,
+                      int64_t _large_unit,
                       uint64_t max_entries,
       const std::string& name) :
-    HybridAllocator(cct, device_size, _block_size,
+    HybridAllocator(cct, device_size, _block_size, _large_unit,
       max_entries,
       name) {
   }
@@ -34,7 +35,7 @@ TEST(HybridAllocator, basic)
   {
     uint64_t block_size = 0x1000;
     uint64_t capacity = 0x10000 * _1m; // = 64GB
-    TestHybridAllocator ha(g_ceph_context, capacity, block_size,
+    TestHybridAllocator ha(g_ceph_context, capacity, block_size, 0,
       4 * sizeof(range_seg_t), "test_hybrid_allocator");
 
     ASSERT_EQ(0, ha.get_free());
@@ -183,7 +184,7 @@ TEST(HybridAllocator, basic)
   {
     uint64_t block_size = 0x1000;
     uint64_t capacity = 0x10000 * _1m; // = 64GB
-    TestHybridAllocator ha(g_ceph_context, capacity, block_size,
+    TestHybridAllocator ha(g_ceph_context, capacity, block_size, 0,
       4 * sizeof(range_seg_t), "test_hybrid_allocator");
 
     ha.init_add_free(_1m, _1m);
@@ -212,7 +213,7 @@ TEST(HybridAllocator, fragmentation)
   {
     uint64_t block_size = 0x1000;
     uint64_t capacity = 0x1000 * 0x1000; // = 16M
-    TestHybridAllocator ha(g_ceph_context, capacity, block_size,
+    TestHybridAllocator ha(g_ceph_context, capacity, block_size, 0,
       4 * sizeof(range_seg_t), "test_hybrid_allocator");
 
     ha.init_add_free(0, 0x2000);

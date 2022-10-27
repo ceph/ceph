@@ -253,6 +253,7 @@ int replay_free_dump_and_apply_raw(
       std::string_view,
       int64_t,
       int64_t,
+      int64_t,
       std::string_view)> create,
     std::function<void (uint64_t, uint64_t)> add_ext)
 {
@@ -260,6 +261,7 @@ int replay_free_dump_and_apply_raw(
   string alloc_name;
   uint64_t capacity = 0;
   uint64_t alloc_unit = 0;
+  uint64_t aux_alloc_unit = 0;
 
   JSONParser p;
   std::cout << "parsing..." << std::endl;
@@ -286,6 +288,10 @@ int replay_free_dump_and_apply_raw(
   o = p.find_obj("alloc_unit");
   ceph_assert(o);
   decode_json_obj(alloc_unit, o);
+  o = p.find_obj("aux_alloc_unit");
+  if (o) {
+    decode_json_obj(aux_alloc_unit, o);
+  }
 
   int fd = -1;
   o = p.find_obj("extents_file");
@@ -305,7 +311,7 @@ int replay_free_dump_and_apply_raw(
   }
   std::cout << "parsing completed!" << std::endl;
 
-  create(alloc_type, capacity, alloc_unit, alloc_name);
+  create(alloc_type, capacity, alloc_unit, aux_alloc_unit, alloc_name);
   int r = 0;
   if (fd < 0) {
     auto it = o->find_first();
@@ -379,10 +385,11 @@ int replay_free_dump_and_apply(char* fname,
   auto create_fn = [&](std::string_view alloc_type,
                        int64_t capacity,
                        int64_t alloc_unit,
+                       int64_t aux_alloc_unit,
                        std::string_view alloc_name) {
     alloc.reset(
       Allocator::create(
-        g_ceph_context, alloc_type, capacity, alloc_unit, 0, 0, alloc_name));
+        g_ceph_context, alloc_type, capacity, alloc_unit, aux_alloc_unit, 0, alloc_name));
   };
   auto add_fn = [&](uint64_t offset,
                    uint64_t len) {
@@ -434,6 +441,7 @@ int export_as_binary(char* fname, char* target_fname)
    [&](std::string_view alloc_type,
        int64_t capacity,
        int64_t alloc_unit,
+       int64_t aux_alloc_unit,
        std::string_view alloc_name) {
   };
   auto add_fn = [&](uint64_t offset,
@@ -467,6 +475,7 @@ int check_duplicates(char* fname)
    [&](std::string_view alloc_type,
        int64_t capacity,
        int64_t alloc_unit,
+       int64_t aux_alloc_unit,
        std::string_view alloc_name) {
   };
   size_t errors = 0;
@@ -579,12 +588,19 @@ int main(int argc, char **argv)
         {
           PExtentVector extents;
           for(size_t i = 0; i < count; i++) {
-              extents.clear();
-              auto r = a->allocate(want, alloc_unit, 0, &extents);
-              if (r < 0) {
-                  std::cerr << "Error: allocation failure at step:" << i + 1
-                            << ", ret = " << r << std::endl;
-              return -1;
+            extents.clear();
+            auto t0 = ceph::mono_clock::now();
+            auto r = a->allocate(want, alloc_unit, 0, &extents);
+            std::cout << "Duration (ns): " << (ceph::mono_clock::now() - t0).count() << std::endl;
+            if (r < 0) {
+              std::cerr << "Error: allocation failure at step:" << i + 1
+                        << ", ret = " << r << std::endl;
+	      return -1;
+            } else if ((size_t)r < want) {
+              std::cerr << "Error: allocation failure at step:" << i + 1
+                        << ", allocated " << r << " of " << want
+                        << std::endl;
+	      return -1;
             }
 	  }
         }

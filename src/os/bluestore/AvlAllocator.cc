@@ -16,15 +16,6 @@
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(range_seg_t, range_seg_t, bluestore_alloc);
 
-namespace {
-  // a light-weight "range_seg_t", which only used as the key when searching in
-  // range_tree and range_size_tree
-  struct range_t {
-    uint64_t start;
-    uint64_t end;
-  };
-}
-
 /*
  * This is a helper function that can be used by the allocator to find
  * a suitable block to allocate. This will search the specified AVL
@@ -37,7 +28,7 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
   const auto compare = range_tree.key_comp();
   uint32_t search_count = 0;
   uint64_t search_bytes = 0;
-  auto rs_start = range_tree.lower_bound(range_t{*cursor, size}, compare);
+  auto rs_start = range_tree.lower_bound(range_t{*cursor, size, large_unit}, compare);
   for (auto rs = rs_start; rs != range_tree.end(); ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
     *cursor = offset + size;
@@ -80,7 +71,7 @@ uint64_t AvlAllocator::_pick_block_fits(uint64_t size,
   // instead of searching from cursor, just pick the smallest range which fits
   // the needs
   const auto compare = range_size_tree.key_comp();
-  auto rs_start = range_size_tree.lower_bound(range_t{0, size}, compare);
+  auto rs_start = range_size_tree.lower_bound(range_t{0, size, large_unit}, compare);
   for (auto rs = rs_start; rs != range_size_tree.end(); ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
     if (offset + size <= rs->end) {
@@ -96,7 +87,7 @@ void AvlAllocator::_add_to_tree(uint64_t start, uint64_t size)
 
   uint64_t end = start + size;
 
-  auto rs_after = range_tree.upper_bound(range_t{start, end},
+  auto rs_after = range_tree.upper_bound(range_t{start, end, large_unit},
 					 range_tree.key_comp());
 
   /* Make sure we don't overlap with either of our neighbors */
@@ -167,7 +158,7 @@ void AvlAllocator::_remove_from_tree(uint64_t start, uint64_t size)
   ceph_assert(size != 0);
   ceph_assert(size <= num_free);
 
-  auto rs = range_tree.find(range_t{start, end}, range_tree.key_comp());
+  auto rs = range_tree.find(range_t{start, end, large_unit}, range_tree.key_comp());
   /* Make sure we completely overlap with someone */
   ceph_assert(rs != range_tree.end());
   ceph_assert(rs->start <= start);
@@ -183,7 +174,7 @@ void AvlAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
 
   ceph_assert(size != 0);
 
-  auto rs = range_tree.find(range_t{ start, end },
+  auto rs = range_tree.find(range_t{ start, end, large_unit },
     range_tree.key_comp());
 
   if (rs == range_tree.end() || rs->start >= end) {
@@ -280,7 +271,7 @@ int AvlAllocator::_allocate(
   if (start == -1ULL) {
     do {
       start = _pick_block_fits(size, unit);
-      dout(20) << __func__ << " best fit=" << start << " size=" << size << dendl;
+      dout(20) << __func__ << " best fit=" << start << " size=" << size << " unit " << unit << dendl;
       if (start != uint64_t(-1ULL)) {
         break;
       }
@@ -333,6 +324,7 @@ void AvlAllocator::_shutdown()
 AvlAllocator::AvlAllocator(CephContext* cct,
                            int64_t device_size,
                            int64_t block_size,
+                           int64_t _large_unit,
                            uint64_t max_mem,
                            std::string_view name) :
   Allocator(name, device_size, block_size),
@@ -345,14 +337,16 @@ AvlAllocator::AvlAllocator(CephContext* cct,
   max_search_bytes(
     cct->_conf.get_val<Option::size_t>("bluestore_avl_alloc_ff_max_search_bytes")),
   range_count_cap(max_mem / sizeof(range_seg_t)),
+  large_unit(_large_unit),
   cct(cct)
 {}
 
 AvlAllocator::AvlAllocator(CephContext* cct,
 			   int64_t device_size,
 			   int64_t block_size,
+                           int64_t _large_unit,
 			   std::string_view name) :
-  AvlAllocator(cct, device_size, block_size, 0 /* max_mem */, name)
+  AvlAllocator(cct, device_size, block_size, _large_unit, 0 /* max_mem */, name)
 {}
 
 AvlAllocator::~AvlAllocator()

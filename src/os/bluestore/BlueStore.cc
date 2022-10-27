@@ -5808,9 +5808,12 @@ int BlueStore::_create_alloc()
 
   std::string allocator_type = cct->_conf->bluestore_allocator;
 
+  auto bluefs_alloc_size = g_conf()->bluefs_shared_alloc_size;
+  auto aux_size = bluefs_alloc_size;
 #ifdef HAVE_LIBZBD
   if (freelist_type == "zoned") {
     allocator_type = "zoned";
+    aux_size = zone_size;
   }
 #endif
 
@@ -5818,7 +5821,7 @@ int BlueStore::_create_alloc()
     cct, allocator_type,
     bdev->get_size(),
     alloc_size,
-    zone_size,
+    aux_size,
     first_sequential_zone,
     "block");
   if (!alloc) {
@@ -5833,7 +5836,7 @@ int BlueStore::_create_alloc()
       cct, cct->_conf->bluestore_allocator,
       bdev->get_conventional_region_size(),
       alloc_size,
-      0, 0,
+      bluefs_alloc_size, 0,
       "zoned_block");
     if (!a) {
       lderr(cct) << __func__ << " failed to create " << cct->_conf->bluestore_allocator
@@ -18659,7 +18662,7 @@ Allocator* BlueStore::create_bitmap_allocator(uint64_t bdev_size) {
   // create allocator
   uint64_t alloc_size = min_alloc_size;
   Allocator* alloc = Allocator::create(cct, "bitmap", bdev_size, alloc_size,
-				       zone_size, first_sequential_zone,
+				       0, 0,
 				       "recovery");
   if (alloc) {
     return alloc;

@@ -12,9 +12,10 @@ class HybridAllocator : public AvlAllocator {
   BitmapAllocator* bmap_alloc = nullptr;
 public:
   HybridAllocator(CephContext* cct, int64_t device_size, int64_t _block_size,
+                  int64_t _large_unit,
                   uint64_t max_mem,
 	          std::string_view name) :
-      AvlAllocator(cct, device_size, _block_size, max_mem, name) {
+      AvlAllocator(cct, device_size, _block_size, _large_unit, max_mem, name) {
   }
   const char* get_type() const override
   {

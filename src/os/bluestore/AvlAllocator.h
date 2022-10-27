@@ -30,8 +30,24 @@ struct range_seg_t {
 
   // Tree is sorted by size, larger sizes at the end of the tree.
   struct shorter_t {
-    template<typename KeyType>
-    bool operator()(const range_seg_t& lhs, const KeyType& rhs) const {
+    template<typename KeyType1, typename KeyType2>
+    bool compare(const KeyType1& lhs, const KeyType2& rhs,
+                 uint64_t unit) const {
+      if (unit) {
+        auto e = p2align(lhs.end, unit);
+        auto s = p2roundup(lhs.start, unit);
+        auto lhs_size = e > s ? e - s : 0;
+
+        e = p2align(rhs.end, unit);
+        s = p2roundup(rhs.start, unit);
+        auto rhs_size = e > s ? e - s : 0;
+        if (lhs_size < rhs_size) {
+	  return true;
+        } else if (lhs_size > rhs_size) {
+	  return false;
+        }
+      }
+
       auto lhs_size = lhs.end - lhs.start;
       auto rhs_size = rhs.end - rhs.start;
       if (lhs_size < rhs_size) {
@@ -42,11 +58,34 @@ struct range_seg_t {
 	return lhs.start < rhs.start;
       }
     }
+    template<typename KeyType>
+    bool operator()(const range_seg_t& lhs, const KeyType& rhs) const {
+      return compare(lhs, rhs, rhs.unit);
+    }
+    template<typename KeyType>
+    bool operator()(const KeyType& lhs, const range_seg_t& rhs) const {
+      return compare(lhs, rhs, lhs.unit);
+    }
   };
   inline uint64_t length() const {
     return end - start;
   }
   boost::intrusive::avl_set_member_hook<> size_hook;
+};
+
+
+// a light-weight "range_seg_t", which only used as the key when searching in
+// range_tree and range_size_tree
+struct range_t {
+  uint64_t start;
+  uint64_t end;
+  uint64_t unit;
+  range_t(const range_seg_t& r, uint64_t _unit)
+    : start(r.start), end(r.end), unit(_unit) {
+  }
+  range_t(uint64_t s, uint64_t e, uint64_t _unit)
+    : start(s), end(e), unit(_unit) {
+  }
 };
 
 class AvlAllocator : public Allocator {
@@ -64,12 +103,14 @@ protected:
   * (when entry count >= max_entries)
   */
   AvlAllocator(CephContext* cct, int64_t device_size, int64_t block_size,
+    int64_t _large_unit,
     uint64_t max_mem,
     std::string_view name);
 
 public:
   AvlAllocator(CephContext* cct, int64_t device_size, int64_t block_size,
-	       std::string_view name);
+    int64_t _large_unit,
+    std::string_view name);
   ~AvlAllocator();
   const char* get_type() const override
   {
@@ -176,15 +217,24 @@ private:
   */
   uint64_t range_count_cap = 0;
 
+  // large unit size which might also be requested from the allocator.
+  // sorting in range_size_tree is optimized using this value if it's non-zero
+  uint64_t large_unit = 0;
+
+  void _range_size_tree_add(range_seg_t& r) {
+    auto it = range_size_tree.upper_bound(range_t(r.start, r.end, large_unit),
+      range_size_tree.key_comp());
+    range_size_tree.insert_before(it, r);
+  }
   void _range_size_tree_rm(range_seg_t& r) {
     ceph_assert(num_free >= r.length());
     num_free -= r.length();
-    range_size_tree.erase(r);
-
+    range_size_tree.erase(range_t(r, large_unit),
+      range_size_tree.key_comp());
   }
   void _range_size_tree_try_insert(range_seg_t& r) {
     if (_try_insert_range(r.start, r.end)) {
-      range_size_tree.insert(r);
+      _range_size_tree_add(r);
       num_free += r.length();
     } else {
       range_tree.erase_and_dispose(r, dispose_rs{});
@@ -209,7 +259,7 @@ private:
       if (insert_pos) {
         auto new_rs = new range_seg_t{ start, end };
         range_tree.insert_before(*insert_pos, *new_rs);
-        range_size_tree.insert(*new_rs);
+        _range_size_tree_add(*new_rs);
         num_free += new_rs->length();
       }
       if (remove_lowest) {

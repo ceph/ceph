@@ -132,7 +132,7 @@ Allocator *Allocator::create(
   std::string_view type,
   int64_t size,
   int64_t block_size,
-  int64_t zone_size,
+  int64_t secondary_size,
   int64_t first_sequential_zone,
   std::string_view name)
 {
@@ -142,16 +142,16 @@ Allocator *Allocator::create(
   } else if (type == "bitmap") {
     alloc = new BitmapAllocator(cct, size, block_size, name);
   } else if (type == "avl") {
-    return new AvlAllocator(cct, size, block_size, name);
+    return new AvlAllocator(cct, size, block_size, secondary_size, name);
   } else if (type == "btree") {
     return new BtreeAllocator(cct, size, block_size, name);
   } else if (type == "hybrid") {
-    return new HybridAllocator(cct, size, block_size,
+    return new HybridAllocator(cct, size, block_size, secondary_size,
       cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
       name);
 #ifdef HAVE_LIBZBD
   } else if (type == "zoned") {
-    return new ZonedAllocator(cct, size, block_size, zone_size, first_sequential_zone,
+    return new ZonedAllocator(cct, size, block_size, secondary_size, first_sequential_zone,
 			      name);
 #endif
   }
