@@ -4307,6 +4307,7 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
     do {
       if (lease_cr && !lease_cr->is_locked()) {
         drain_all();
+        yield call(marker_tracker.flush());
         tn->log(1, "no lease or lease is lost, abort");
         return set_cr_error(-ECANCELED);
       }
@@ -4323,6 +4324,8 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
       if (retcode < 0 && retcode != -ENOENT) {
         set_status("failed bucket listing, going down");
         drain_all();
+        /* use spawn(wait=true) to preserve retcode */
+        yield spawn(marker_tracker.flush(), true);
         return set_cr_error(retcode);
       }
       if (list_result.entries.size() > 0) {
@@ -4332,6 +4335,7 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
       for (; entries_iter != list_result.entries.end(); ++entries_iter) {
         if (lease_cr && !lease_cr->is_locked()) {
           drain_all();
+          yield call(marker_tracker.flush());
           tn->log(1, "no lease or lease is lost, abort");
           return set_cr_error(-ECANCELED);
         }
@@ -4379,6 +4383,7 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
     tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
     if (lease_cr && !lease_cr->is_locked()) {
       tn->log(1, "no lease or lease is lost, abort");
+      yield call(marker_tracker.flush());
       return set_cr_error(-ECANCELED);
     }
     yield call(marker_tracker.flush());
@@ -4570,6 +4575,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
     do {
       if (lease_cr && !lease_cr->is_locked()) {
         drain_all();
+        yield call(marker_tracker.flush());
         tn->log(1, "no lease or lease is lost, abort");
         return set_cr_error(-ECANCELED);
       }
@@ -4579,6 +4585,8 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
       if (retcode < 0 && retcode != -ENOENT) {
         /* wait for all operations to complete */
         drain_all();
+        /* use spawn(wait=true) to preserve retcode */
+        yield spawn(marker_tracker.flush(), true);
         return set_cr_error(retcode);
       }
       list_result = std::move(extended_result.entries);
@@ -4626,6 +4634,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
       for (; entries_iter != entries_end; ++entries_iter) {
         if (lease_cr && !lease_cr->is_locked()) {
           drain_all();
+          yield call(marker_tracker.flush());
           tn->log(1, "no lease or lease is lost, abort");
           return set_cr_error(-ECANCELED);
         }
@@ -5466,6 +5475,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
     using ReadCR = RGWSimpleRadosReadCR<rgw_bucket_sync_status>;
     using WriteCR = RGWSimpleRadosWriteCR<rgw_bucket_sync_status>;
 
+    objv.clear();
     yield call(new ReadCR(dpp, env->async_rados, env->svc->sysobj,
                           status_obj, &bucket_status, false, &objv));
     if (retcode == -ENOENT) {
@@ -5477,6 +5487,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
       if (retcode == -EEXIST) {
         // raced with another create, read its status
         tn->log(20, "raced with another create, read its status");
+        objv.clear();
         yield call(new ReadCR(dpp, env->async_rados, env->svc->sysobj,
                               status_obj, &bucket_status, false, &objv));
       }
@@ -5526,6 +5537,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
           }
 
           // check if local state is "stopped"
+          objv.clear();
           yield call(new ReadCR(dpp, env->async_rados, env->svc->sysobj,
                 status_obj, &bucket_status, false, &objv));
           if (retcode < 0) {
@@ -5574,6 +5586,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
         }
 
         // reread the status after acquiring the lock
+        objv.clear();
         yield call(new ReadCR(dpp, env->async_rados, env->svc->sysobj,
                             status_obj, &bucket_status, false, &objv));
         if (retcode < 0) {
