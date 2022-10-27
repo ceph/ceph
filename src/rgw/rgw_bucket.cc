@@ -44,6 +44,7 @@
 #include "rgw_reshard.h"
 #include "rgw_lc.h"
 #include "rgw_bucket_layout.h"
+#include "common/errno.h"
 
 // stolen from src/cls/version/cls_version.cc
 #define VERSION_ATTR "ceph.objclass.version"
@@ -252,7 +253,7 @@ static void dump_mulipart_index_results(list<rgw_obj_index_key>& objs_to_unlink,
   }
 }
 
-void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User* user,
+void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User& user,
 				   bool fix,
 				   optional_yield y,
                                    const DoutPrefixProvider *dpp)
@@ -265,7 +266,7 @@ void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User* user,
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
 
   do {
-    int ret = user->list_buckets(dpp, marker, string(), max_entries, false, user_buckets, y);
+    int ret = user.list_buckets(dpp, marker, string(), max_entries, false, user_buckets, y);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "failed to read user buckets: "
 			     << cpp_strerror(-ret) << dendl;
@@ -281,7 +282,7 @@ void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User* user,
       auto& bucket = i->second;
 
       std::unique_ptr<rgw::sal::Bucket> actual_bucket;
-      int r = store->get_bucket(dpp, user, user->get_tenant(), bucket->get_name(), &actual_bucket, null_yield);
+      int r = store->get_bucket(dpp, &user, user.get_tenant(), bucket->get_name(), &actual_bucket, null_yield);
       if (r < 0) {
         ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << dendl;
         continue;
@@ -294,7 +295,7 @@ void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User* user,
         cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
         if (fix) {
           cout << "fixing" << std::endl;
-	  r = actual_bucket->chown(dpp, user, nullptr, null_yield);
+	  r = actual_bucket->chown(dpp, user, null_yield);
           if (r < 0) {
             cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
           }
@@ -419,12 +420,12 @@ bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw:
 int RGWBucket::chown(RGWBucketAdminOpState& op_state, const string& marker,
                      optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
 {
-  int ret = bucket->chown(dpp, user.get(), user.get(), y, &marker);
-  if (ret < 0) {
-    set_err_msg(err_msg, "Failed to change object ownership: " + cpp_strerror(-ret));
-  }
-  
-  return ret;
+  /* User passed in by rgw_admin is the new user; get the current user and set it in
+   * the bucket */
+  std::unique_ptr<rgw::sal::User> old_user = store->get_user(bucket->get_info().owner);
+  bucket->set_owner(old_user.get());
+
+  return rgw_chown_bucket_and_objects(store, bucket.get(), user.get(), marker, err_msg, dpp, y);
 }
 
 int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg)
@@ -2888,97 +2889,6 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   return svc.bucket->store_bucket_entrypoint_info(ctx, meta_key, ep, false, real_time(), &attrs, &ot, y, dpp);
 }
 
-// TODO: remove RGWRados dependency for bucket listing
-int RGWBucketCtl::chown(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
-                        const rgw_user& user_id, const std::string& display_name,
-                        const std::string& marker, optional_yield y, const DoutPrefixProvider *dpp)
-{
-  map<string, bool> common_prefixes;
-
-  rgw::sal::Bucket::ListParams params;
-  rgw::sal::Bucket::ListResults results;
-
-  params.list_versions = true;
-  params.allow_unordered = true;
-  params.marker = marker;
-
-  int count = 0;
-  int max_entries = 1000;
-
-  //Loop through objects and update object acls to point to bucket owner
-
-  do {
-    RGWObjectCtx obj_ctx(store);
-    results.objs.clear();
-    int ret = bucket->list(dpp, params, max_entries, results, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: list objects failed: " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-
-    params.marker = results.next_marker;
-    count += results.objs.size();
-
-    for (const auto& obj : results.objs) {
-      std::unique_ptr<rgw::sal::Object> r_obj = bucket->get_object(obj.key);
-
-      ret = r_obj->get_obj_attrs(&obj_ctx, y, dpp);
-      if (ret < 0){
-        ldpp_dout(dpp, 0) << "ERROR: failed to read object " << obj.key.name << cpp_strerror(-ret) << dendl;
-        continue;
-      }
-      const auto& aiter = r_obj->get_attrs().find(RGW_ATTR_ACL);
-      if (aiter == r_obj->get_attrs().end()) {
-        ldpp_dout(dpp, 0) << "ERROR: no acls found for object " << obj.key.name << " .Continuing with next object." << dendl;
-        continue;
-      } else {
-        bufferlist& bl = aiter->second;
-        RGWAccessControlPolicy policy(store->ctx());
-        ACLOwner owner;
-        try {
-          decode(policy, bl);
-          owner = policy.get_owner();
-        } catch (buffer::error& err) {
-          ldpp_dout(dpp, 0) << "ERROR: decode policy failed" << err.what()
-				 << dendl;
-          return -EIO;
-        }
-
-        //Get the ACL from the policy
-        RGWAccessControlList& acl = policy.get_acl();
-
-        //Remove grant that is set to old owner
-        acl.remove_canon_user_grant(owner.get_id());
-
-        //Create a grant and add grant
-        ACLGrant grant;
-        grant.set_canon(user_id, display_name, RGW_PERM_FULL_CONTROL);
-        acl.add_grant(&grant);
-
-        //Update the ACL owner to the new user
-        owner.set_id(user_id);
-        owner.set_name(display_name);
-        policy.set_owner(owner);
-
-        bl.clear();
-        encode(policy, bl);
-
-	r_obj->set_atomic(&obj_ctx);
-	map<string, bufferlist> attrs;
-	attrs[RGW_ATTR_ACL] = bl;
-	ret = r_obj->set_obj_attrs(dpp, &obj_ctx, &attrs, nullptr, y);
-        if (ret < 0) {
-          ldpp_dout(dpp, 0) << "ERROR: modify attr failed " << cpp_strerror(-ret) << dendl;
-          return ret;
-        }
-      }
-    }
-    cerr << count << " objects processed in " << bucket
-        << ". Next marker " << params.marker.name << std::endl;
-  } while(results.is_truncated);
-  return 0;
-}
-
 int RGWBucketCtl::read_bucket_stats(const rgw_bucket& bucket,
                                     RGWBucketEnt *result,
                                     optional_yield y,
@@ -3117,5 +3027,58 @@ void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
   if (has_bucket_info) {
     JSONDecoder::decode_json("old_bucket_info", old_bucket_info, obj);
   }
+}
+
+int rgw_chown_bucket_and_objects(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
+				 rgw::sal::User* new_user,
+				 const std::string& marker, std::string *err_msg,
+				 const DoutPrefixProvider *dpp, optional_yield y)
+{
+  /* Chown on the bucket */
+  int ret = bucket->chown(dpp, *new_user, y);
+  if (ret < 0) {
+    set_err_msg(err_msg, "Failed to change object ownership: " + cpp_strerror(-ret));
+  }
+
+  /* Now chown on all the objects in the bucket */
+  map<string, bool> common_prefixes;
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+
+  params.list_versions = true;
+  params.allow_unordered = true;
+  params.marker = marker;
+
+  int count = 0;
+  int max_entries = 1000;
+
+  //Loop through objects and update object acls to point to bucket owner
+
+  do {
+    results.objs.clear();
+    ret = bucket->list(dpp, params, max_entries, results, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: list objects failed: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    params.marker = results.next_marker;
+    count += results.objs.size();
+
+    for (const auto& obj : results.objs) {
+      std::unique_ptr<rgw::sal::Object> r_obj = bucket->get_object(obj.key);
+
+      ret = r_obj->chown(*new_user, dpp, y);
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "ERROR: chown failed on " << r_obj << " :" << cpp_strerror(-ret) << dendl;
+          return ret;
+        }
+      }
+    cerr << count << " objects processed in " << bucket
+        << ". Next marker " << params.marker.name << std::endl;
+  } while(results.is_truncated);
+
+  return ret;
 }
 
