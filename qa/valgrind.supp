@@ -290,6 +290,15 @@
 	...
 }
 {
+	dl-init.c possible lost init
+	Memcheck:Leak
+	...
+	fun:__trans_list_add
+	fun:call_init.part.0
+	fun:call_init
+	...
+}
+{
 	weird thing from libc
 	Memcheck:Leak
 	...
@@ -392,6 +401,13 @@
 	Memcheck:Leak
 	...
 	fun:*BGThreadWrapper*
+	...
+}
+{
+	rocksdb VersionStorageInfo
+	Memcheck:Leak
+	...
+	fun:*VersionStorageInfo
 	...
 }
 {
