@@ -123,6 +123,18 @@ class C_MDL_WriteError : public MDSIOContextBase {
 };
 
 
+uint64_t MDLog::get_segment_expected_end(uint64_t offset, uint64_t end) const
+{
+  uint64_t period = journaler->get_layout_period();
+  int periods_per_segment = g_conf()->mds_log_periods_per_segment;
+  if (periods_per_segment >= 1) {
+      // expected segment size is set by user
+      return (offset / period + periods_per_segment) * period;
+  }
+  // segment size is expected to be more than twice size of subtreemap
+  return ((end * 2 - offset) / period + 1) * period;
+}
+
 void MDLog::write_head(MDSContext *c) 
 {
   Context *fin = NULL;
@@ -305,8 +317,7 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
   }
 
   unflushed++;
-  
-  uint64_t period = journaler->get_layout_period();
+
   // start a new segment?
   if (le->get_type() == EVENT_SUBTREEMAP ||
       (le->get_type() == EVENT_IMPORTFINISH && mds->is_resolve())) {
@@ -314,10 +325,12 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
     // do not insert ESubtreeMap among EImportFinish events that finish
     // disambiguate imports. Because the ESubtreeMap reflects the subtree
     // state when all EImportFinish events are replayed.
-  } else if (ls->end/period != ls->offset/period ||
+  } else if (ls->end > ls->expected_end || // we can't use '>=' here because they are initialized to the same value
 	     ls->num_events >= g_conf()->mds_log_events_per_segment) {
     dout(10) << "submit_entry also starting new segment: last = "
-	     << ls->seq  << "/" << ls->offset << ", event seq = " << event_seq << dendl;
+             << ls->seq  << "/" << ls->offset << ", event seq = " << event_seq
+             << ", " << ls->num_events << " events, end = " << ls->end
+             << ", expected end = " << ls->expected_end << dendl;
     _start_new_segment();
   } else if (g_conf()->mds_debug_subtrees &&
 	     le->get_type() != EVENT_SUBTREEMAP_TEST) {
@@ -400,6 +413,12 @@ void MDLog::_submit_thread()
       // journal it.
       const uint64_t new_write_pos = journaler->append_entry(bl);  // bl is destroyed.
       ls->end = new_write_pos;
+
+      if (le->get_type() == EVENT_SUBTREEMAP) {
+        ls->expected_end = get_segment_expected_end(ls->offset, ls->end);
+        dout(5) << "_submit subtreemap event, from " << ls->offset << " to " << ls->end
+                << ", expected end = " << ls->expected_end << dendl;
+      }
 
       MDSLogContextBase *fin;
       if (data.fin) {
@@ -1419,7 +1438,11 @@ void MDLog::_replay_thread()
 	event_seq = sle->event_seq;
       else
 	event_seq = pos;
-      segments[event_seq] = new LogSegment(event_seq, pos);
+      LogSegment *ls = new LogSegment(event_seq, pos);
+      segments[event_seq] = ls;
+      ls->expected_end = get_segment_expected_end(pos, journaler->get_read_pos());
+      dout(10) << "_replay subtreemap event, from " << pos << " to " << journaler->get_read_pos()
+               << ", expected end = " << ls->expected_end << dendl;
       logger->set(l_mdl_seg, segments.size());
     } else {
       event_seq++;

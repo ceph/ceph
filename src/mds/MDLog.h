@@ -305,6 +305,8 @@ private:
   void _expired(LogSegment *ls);
   void _trim_expired_segments();
   void write_head(MDSContext *onfinish);
+  // get segment expected end by offset and end of subtreemap in journal
+  uint64_t get_segment_expected_end(uint64_t offset, uint64_t end) const;
 
   // -- events --
   LogEvent *cur_event = nullptr;

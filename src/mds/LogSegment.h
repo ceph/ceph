@@ -39,7 +39,7 @@ class LogSegment {
   using seq_t = uint64_t;
 
   LogSegment(uint64_t _seq, loff_t off=-1) :
-    seq(_seq), offset(off), end(off),
+    seq(_seq), offset(off), end(off), expected_end(off),
     dirty_dirfrags(member_offset(CDir, item_dirty)),
     new_dirfrags(member_offset(CDir, item_new)),
     dirty_inodes(member_offset(CInode, item_dirty)),
@@ -69,7 +69,7 @@ class LogSegment {
   }
 
   const seq_t seq;
-  uint64_t offset, end;
+  uint64_t offset, end, expected_end;
   int num_events = 0;
 
   // dirty items
