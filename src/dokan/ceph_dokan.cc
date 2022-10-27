@@ -953,6 +953,8 @@ int do_map() {
   dout(0) << "Mounted cephfs directory: " << g_cfg->root_path.c_str()
           <<". Mountpoint: " << to_string(g_cfg->mountpoint) << dendl;
 
+  DokanInit();
+
   DWORD status = DokanMain(dokan_options, dokan_operations);
   switch (static_cast<int>(status)) {
   case DOKAN_SUCCESS:
@@ -980,6 +982,8 @@ int do_map() {
     derr << "Unknown Dokan error: " << status << dendl;
     break;
   }
+
+  DokanShutdown();
 
   free(dokan_options);
   free(dokan_operations);

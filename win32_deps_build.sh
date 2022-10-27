@@ -39,7 +39,7 @@ wnbdSrcDir="${depsSrcDir}/wnbd"
 wnbdLibDir="${depsToolsetDir}/wnbd/lib"
 
 dokanUrl="https://github.com/dokan-dev/dokany"
-dokanTag="v1.3.1.1000"
+dokanTag="v2.0.5.1000"
 dokanSrcDir="${depsSrcDir}/dokany"
 dokanLibDir="${depsToolsetDir}/dokany/lib"
 
