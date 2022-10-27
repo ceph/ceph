@@ -324,7 +324,7 @@ TEST_F(lba_btree_test, basic)
 }
 
 struct btree_lba_manager_test : btree_test_base {
-  BtreeLBAManagerRef lba_manager;
+  BtreeLBAManagerRef<false> lba_manager;
 
   btree_lba_manager_test() = default;
 

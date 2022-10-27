@@ -1062,23 +1062,24 @@ enum class extent_types_t : uint8_t {
   ROOT = 0,
   LADDR_INTERNAL = 1,
   LADDR_LEAF = 2,
-  OMAP_INNER = 3,
-  OMAP_LEAF = 4,
-  ONODE_BLOCK_STAGED = 5,
-  COLL_BLOCK = 6,
-  OBJECT_DATA_BLOCK = 7,
-  RETIRED_PLACEHOLDER = 8,
+  DINK_LADDR_LEAF = 3,
+  OMAP_INNER = 4,
+  OMAP_LEAF = 5,
+  ONODE_BLOCK_STAGED = 6,
+  COLL_BLOCK = 7,
+  OBJECT_DATA_BLOCK = 8,
+  RETIRED_PLACEHOLDER = 9,
   // the following two types are not extent types,
   // they are just used to indicates paddr allocation deltas
-  ALLOC_INFO = 9,
-  JOURNAL_TAIL = 10,
+  ALLOC_INFO = 10,
+  JOURNAL_TAIL = 11,
   // Test Block Types
-  TEST_BLOCK = 11,
-  TEST_BLOCK_PHYSICAL = 12,
-  BACKREF_INTERNAL = 13,
-  BACKREF_LEAF = 14,
+  TEST_BLOCK = 12,
+  TEST_BLOCK_PHYSICAL = 13,
+  BACKREF_INTERNAL = 14,
+  BACKREF_LEAF = 15,
   // None and the number of valid extent_types_t
-  NONE = 15,
+  NONE = 16,
 };
 using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
@@ -1108,7 +1109,8 @@ constexpr bool is_retired_placeholder(extent_types_t type)
 constexpr bool is_lba_node(extent_types_t type)
 {
   return type == extent_types_t::LADDR_INTERNAL ||
-    type == extent_types_t::LADDR_LEAF;
+    type == extent_types_t::LADDR_LEAF ||
+    type == extent_types_t::DINK_LADDR_LEAF;
 }
 
 constexpr bool is_backref_node(extent_types_t type)

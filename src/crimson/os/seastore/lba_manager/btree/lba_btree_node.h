@@ -142,7 +142,8 @@ struct LBALeafNode
       laddr_t, laddr_le_t,
       lba_map_val_t, lba_map_val_le_t,
       LBA_BLOCK_SIZE,
-      LBALeafNode> {
+      LBALeafNode,
+      true> {
   using Ref = TCachedExtentRef<LBALeafNode>;
   using internal_iterator_t = const_iterator;
   template <typename... T>

@@ -21,17 +21,26 @@ SET_SUBSYS(seastore_lba);
 
 namespace crimson::os::seastore {
 
-template<>
-Transaction::tree_stats_t& get_tree_stats<
-  crimson::os::seastore::lba_manager::btree::LBABtree>(Transaction &t) {
+template <typename T>
+Transaction::tree_stats_t& get_tree_stats(Transaction &t)
+{
   return t.get_lba_tree_stats();
 }
 
-template<>
-phy_tree_root_t& get_phy_tree_root<
-  crimson::os::seastore::lba_manager::btree::LBABtree>(root_t &r) {
+template Transaction::tree_stats_t&
+get_tree_stats<
+  crimson::os::seastore::lba_manager::btree::LBABtree>(
+  Transaction &t);
+
+template <typename T>
+phy_tree_root_t& get_phy_tree_root(root_t &r)
+{
   return r.lba_root;
 }
+
+template phy_tree_root_t&
+get_phy_tree_root<
+  crimson::os::seastore::lba_manager::btree::LBABtree>(root_t &r);
 
 template <>
 const get_phy_tree_root_node_ret get_phy_tree_root_node<
@@ -89,7 +98,8 @@ void unlink_phy_tree_root_node<laddr_t>(RootBlockRef &root_block) {
 
 namespace crimson::os::seastore::lba_manager::btree {
 
-BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
+BtreeLBAManager::mkfs_ret
+BtreeLBAManager::mkfs(
   Transaction &t)
 {
   LOG_PREFIX(BtreeLBAManager::mkfs);
@@ -125,7 +135,7 @@ BtreeLBAManager::get_mappings(
 	  if (pos.is_end() || pos.get_key() >= (offset + length)) {
 	    TRACET("{}~{} done with {} results",
 	           c.trans, offset, length, ret.size());
-	    return LBABtree::iterate_repeat_ret_inner(
+	    return typename LBABtree::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
 	  }
@@ -133,13 +143,12 @@ BtreeLBAManager::get_mappings(
 	         c.trans, offset, length, pos.get_key(), pos.get_val());
 	  ceph_assert((pos.get_key() + pos.get_val().len) > offset);
 	  ret.push_back(pos.get_pin());
-	  return LBABtree::iterate_repeat_ret_inner(
+	  return typename LBABtree::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},
 	    seastar::stop_iteration::no);
 	});
     });
 }
-
 
 BtreeLBAManager::get_mappings_ret
 BtreeLBAManager::get_mappings(
@@ -155,7 +164,7 @@ BtreeLBAManager::get_mappings(
     l->begin(),
     l->end(),
     [this, &t, &ret](const auto &p) {
-      return get_mappings(t, p.first, p.second).si_then(
+      return this->get_mappings(t, p.first, p.second).si_then(
 	[&ret](auto res) {
 	  ret.splice(ret.end(), res, res.begin(), res.end());
 	  return get_mappings_iertr::now();
@@ -205,8 +214,8 @@ BtreeLBAManager::alloc_extent(
   struct state_t {
     laddr_t last_end;
 
-    std::optional<LBABtree::iterator> insert_iter;
-    std::optional<LBABtree::iterator> ret;
+    std::optional<typename LBABtree::iterator> insert_iter;
+    std::optional<typename LBABtree::iterator> ret;
 
     state_t(laddr_t hint) : last_end(hint) {}
   };
@@ -232,7 +241,7 @@ BtreeLBAManager::alloc_extent(
                    stats.num_alloc_extents_iter_nexts - lookup_attempts,
                    state.last_end);
 	    state.insert_iter = pos;
-	    return LBABtree::iterate_repeat_ret_inner(
+	    return typename LBABtree::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
 	  } else if (pos.get_key() >= (state.last_end + len)) {
@@ -243,7 +252,7 @@ BtreeLBAManager::alloc_extent(
                    state.last_end,
                    pos.get_val());
 	    state.insert_iter = pos;
-	    return LBABtree::iterate_repeat_ret_inner(
+	    return typename LBABtree::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
 	  } else {
@@ -252,7 +261,7 @@ BtreeLBAManager::alloc_extent(
                    t, addr, len, hint,
                    pos.get_key(), pos.get_val().len,
                    pos.get_val());
-	    return LBABtree::iterate_repeat_ret_inner(
+	    return typename LBABtree::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::no);
 	  }
@@ -280,7 +289,8 @@ static bool is_lba_node(const CachedExtent &e)
   return is_lba_node(e.get_type());
 }
 
-btree_range_pin_t<laddr_t> &BtreeLBAManager::get_pin(CachedExtent &e)
+btree_range_pin_t<laddr_t> &BtreeLBAManager::get_pin(
+  CachedExtent &e)
 {
   if (is_lba_node(e)) {
     return e.cast<LBANode>()->pin;
@@ -338,7 +348,8 @@ void BtreeLBAManager::complete_transaction(
   }
 }
 
-BtreeLBAManager::base_iertr::future<> _init_cached_extent(
+BtreeLBAManager::base_iertr::template future<>
+_init_cached_extent(
   op_context_t<laddr_t> c,
   const CachedExtentRef &e,
   LBABtree &btree,
@@ -377,7 +388,8 @@ BtreeLBAManager::base_iertr::future<> _init_cached_extent(
   }
 }
 
-BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
+BtreeLBAManager::init_cached_extent_ret
+BtreeLBAManager::init_cached_extent(
   Transaction &t,
   CachedExtentRef e)
 {
@@ -385,16 +397,19 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
   TRACET("{}", t, *e);
   return seastar::do_with(bool(), [this, e, &t](bool &ret) {
     auto c = get_context(t);
-    return with_btree<LBABtree>(cache, c, [c, e, &ret](auto &btree)
-      -> base_iertr::future<> {
-      LOG_PREFIX(BtreeLBAManager::init_cached_extent);
-      DEBUGT("extent {}", c.trans, *e);
-      return _init_cached_extent(c, e, btree, ret);
-    }).si_then([&ret] { return ret; });
+    return with_btree<LBABtree>(
+      cache, c,
+      [c, e, &ret](auto &btree) -> base_iertr::future<> {
+	LOG_PREFIX(BtreeLBAManager::init_cached_extent);
+	DEBUGT("extent {}", c.trans, *e);
+	return _init_cached_extent(c, e, btree, ret);
+      }
+    ).si_then([&ret] { return ret; });
   });
 }
 
-BtreeLBAManager::scan_mappings_ret BtreeLBAManager::scan_mappings(
+BtreeLBAManager::scan_mappings_ret
+BtreeLBAManager::scan_mappings(
   Transaction &t,
   laddr_t begin,
   laddr_t end,
@@ -413,20 +428,21 @@ BtreeLBAManager::scan_mappings_ret BtreeLBAManager::scan_mappings(
 	btree.upper_bound_right(c, begin),
 	[f=std::move(f), begin, end](auto &pos) {
 	  if (pos.is_end() || pos.get_key() >= end) {
-	    return LBABtree::iterate_repeat_ret_inner(
+	    return typename LBABtree::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
 	  }
 	  ceph_assert((pos.get_key() + pos.get_val().len) > begin);
 	  f(pos.get_key(), pos.get_val().paddr, pos.get_val().len);
-	  return LBABtree::iterate_repeat_ret_inner(
+	  return typename LBABtree::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},
 	    seastar::stop_iteration::no);
 	});
     });
 }
 
-BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
+BtreeLBAManager::rewrite_extent_ret
+BtreeLBAManager::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent)
 {
@@ -504,16 +520,11 @@ BtreeLBAManager::get_physical_extent_if_live(
       if (type == extent_types_t::LADDR_INTERNAL) {
 	return btree.get_internal_if_live(c, addr, laddr, len);
       } else {
-	assert(type == extent_types_t::LADDR_LEAF);
+	assert(type == extent_types_t::LADDR_LEAF ||
+	       type == extent_types_t::DINK_LADDR_LEAF);
 	return btree.get_leaf_if_live(c, addr, laddr, len);
       }
     });
-}
-
-BtreeLBAManager::BtreeLBAManager(Cache &cache)
-  : cache(cache)
-{
-  register_metrics();
 }
 
 void BtreeLBAManager::register_metrics()
@@ -539,7 +550,8 @@ void BtreeLBAManager::register_metrics()
   );
 }
 
-BtreeLBAManager::update_refcount_ret BtreeLBAManager::update_refcount(
+BtreeLBAManager::update_refcount_ret
+BtreeLBAManager::update_refcount(
   Transaction &t,
   laddr_t addr,
   int delta)
@@ -565,7 +577,8 @@ BtreeLBAManager::update_refcount_ret BtreeLBAManager::update_refcount(
   });
 }
 
-BtreeLBAManager::_update_mapping_ret BtreeLBAManager::_update_mapping(
+BtreeLBAManager::_update_mapping_ret
+BtreeLBAManager::_update_mapping(
   Transaction &t,
   laddr_t addr,
   update_func_t &&f)
@@ -604,15 +617,6 @@ BtreeLBAManager::_update_mapping_ret BtreeLBAManager::_update_mapping(
 	}
       });
     });
-}
-
-BtreeLBAManager::~BtreeLBAManager()
-{
-  pin_set.scan([](auto &i) {
-    LOG_PREFIX(BtreeLBAManager::~BtreeLBAManager);
-    ERROR("Found {}, has_ref={} -- {}",
-          i, i.has_ref(), i.get_extent());
-  });
 }
 
 }

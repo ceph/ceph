@@ -1119,6 +1119,8 @@ public:
     switch (type) {
     case extent_types_t::LADDR_INTERNAL:
       [[fallthrough]];
+    case extent_types_t::DINK_LADDR_LEAF:
+      [[fallthrough]];
     case extent_types_t::LADDR_LEAF:
       stats.lba_tree_extents_num += delta;
       ceph_assert(stats.lba_tree_extents_num >= 0);
