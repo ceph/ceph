@@ -282,9 +282,9 @@ void BlueFS::_init_logger()
 		    "mxwb",
 		    PerfCountersBuilder::PRIO_INTERESTING,
 		    unit_t(UNIT_BYTES));
-  b.add_u64_counter(l_bluefs_main_alloc_unit, "alloc_unit_main",
+  b.add_u64_counter(l_bluefs_slow_alloc_unit, "alloc_unit_slow",
 		    "Allocation unit size (in bytes) for primary/shared device",
-		    "aumb",
+		    "ausb",
 		    PerfCountersBuilder::PRIO_CRITICAL,
 		    unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_db_alloc_unit, "alloc_unit_db",
@@ -297,6 +297,30 @@ void BlueFS::_init_logger()
 		    "auwb",
 		    PerfCountersBuilder::PRIO_CRITICAL,
 		    unit_t(UNIT_BYTES));
+  b.add_time_avg   (l_bluefs_slow_alloc_lat, "alloc_slow_lat",
+                    "Average allocation latency for primary/shared device",
+                    "as_t",
+                    PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time_avg   (l_bluefs_db_alloc_lat, "alloc_db_lat",
+                    "Average allocation latency for db device",
+                    "ad_t",
+                    PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time_avg   (l_bluefs_wal_alloc_lat, "alloc_wal_lat",
+                    "Average allocation latency for wal device",
+                    "aw_t",
+                    PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time       (l_bluefs_slow_alloc_max_lat, "alloc_slow_max_lat",
+                    "Max allocation latency for primary/shared device",
+                    "asxt",
+                    PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time       (l_bluefs_db_alloc_max_lat, "alloc_db_max_lat",
+                    "Max allocation latency for db device",
+                    "adxt",
+                    PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time       (l_bluefs_wal_alloc_max_lat, "alloc_wal_max_lat",
+                    "Max allocation latency for wal device",
+                    "awxt",
+                    PerfCountersBuilder::PRIO_INTERESTING);
   b.add_u64_counter(l_bluefs_read_random_count, "read_random_count",
 		    "random read requests processed",
 		    NULL,
@@ -649,10 +673,10 @@ void BlueFS::_init_alloc()
     alloc_size[BDEV_DB] = cct->_conf->bluefs_alloc_size;
     alloc_size[BDEV_SLOW] = cct->_conf->bluefs_shared_alloc_size;
     logger->set(l_bluefs_db_alloc_unit, cct->_conf->bluefs_alloc_size);
-    logger->set(l_bluefs_main_alloc_unit, cct->_conf->bluefs_shared_alloc_size);
+    logger->set(l_bluefs_slow_alloc_unit, cct->_conf->bluefs_shared_alloc_size);
   } else {
     alloc_size[BDEV_DB] = cct->_conf->bluefs_shared_alloc_size;
-    logger->set(l_bluefs_main_alloc_unit, 0);
+    logger->set(l_bluefs_slow_alloc_unit, 0);
     logger->set(l_bluefs_db_alloc_unit, cct->_conf->bluefs_shared_alloc_size);
   }
   // new wal and db devices are never shared
@@ -3730,6 +3754,33 @@ const char* BlueFS::get_device_name(unsigned id)
   return names[id];
 }
 
+void BlueFS::_update_allocate_stats(uint8_t id, const ceph::timespan& d)
+{
+  switch(id) {
+    case BDEV_SLOW:
+      logger->tinc(l_bluefs_slow_alloc_lat, d);
+      if (d > max_alloc_lat[id]) {
+        logger->tset(l_bluefs_slow_alloc_max_lat, utime_t(d));
+        max_alloc_lat[id] = d;
+      }
+      break;
+    case BDEV_DB:
+      logger->tinc(l_bluefs_db_alloc_lat, d);
+      if (d > max_alloc_lat[id]) {
+        logger->tset(l_bluefs_db_alloc_max_lat, utime_t(d));
+        max_alloc_lat[id] = d;
+      }
+      break;
+    case BDEV_WAL:
+      logger->tinc(l_bluefs_wal_alloc_lat, d);
+      if (d > max_alloc_lat[id]) {
+        logger->tset(l_bluefs_wal_alloc_max_lat, utime_t(d));
+        max_alloc_lat[id] = d;
+      }
+      break;
+  }
+}
+
 int BlueFS::_allocate(uint8_t id, uint64_t len,
 		      uint64_t alloc_unit,
 		      bluefs_fnode_t* node,
@@ -3774,7 +3825,9 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     }   
     ++alloc_attempts;
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
+    auto t0 = mono_clock::now();
     alloc_len = alloc[id]->allocate(need, alloc_unit, hint, &extents);
+    _update_allocate_stats(id, mono_clock::now() - t0);
   }
   if (alloc_len < 0 || alloc_len < need) {
     if (alloc[id]) {

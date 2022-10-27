@@ -40,9 +40,15 @@ enum {
   l_bluefs_max_bytes_wal,
   l_bluefs_max_bytes_db,
   l_bluefs_max_bytes_slow,
-  l_bluefs_main_alloc_unit,
+  l_bluefs_slow_alloc_unit,
   l_bluefs_db_alloc_unit,
   l_bluefs_wal_alloc_unit,
+  l_bluefs_slow_alloc_lat,
+  l_bluefs_db_alloc_lat,
+  l_bluefs_wal_alloc_lat,
+  l_bluefs_slow_alloc_max_lat,
+  l_bluefs_db_alloc_max_lat,
+  l_bluefs_wal_alloc_max_lat,
   l_bluefs_read_random_count,
   l_bluefs_read_random_bytes,
   l_bluefs_read_random_disk_count,
@@ -341,6 +347,8 @@ private:
     l_bluefs_max_bytes_db,
   };
 
+  ceph::timespan max_alloc_lat[MAX_BDEV] = {ceph::make_timespan(0)};
+
   // cache
   struct {
     ceph::mutex lock = ceph::make_mutex("BlueFS::nodes.lock");
@@ -427,6 +435,7 @@ private:
     return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
   }
   const char* get_device_name(unsigned id);
+  void _update_allocate_stats(uint8_t id, const ceph::timespan& d);
   int _allocate(uint8_t bdev, uint64_t len,
                 uint64_t alloc_unit,
 		bluefs_fnode_t* node,
