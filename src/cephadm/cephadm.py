@@ -4535,6 +4535,7 @@ WantedBy=ceph-{fsid}.target
                 # case for a new daemon in ls or an old daemon no longer appearing.
                 # If that happens we need a full ls
                 logger.info('Change detected in state of daemons. Running full daemon ls')
+                self.cached_ls_values = {}
                 ls = list_daemons(self.ctx)
                 for d in ls:
                     self.cached_ls_values[d['name']] = d
@@ -4566,6 +4567,7 @@ WantedBy=ceph-{fsid}.target
             if need_full_ls:
                 logger.info('Change detected in state of daemons. Running full daemon ls')
                 ls = list_daemons(self.ctx)
+                self.cached_ls_values = {}
                 for d in ls:
                     self.cached_ls_values[d['name']] = d
                 return (ls, True)
