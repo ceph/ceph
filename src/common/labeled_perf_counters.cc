@@ -232,7 +232,6 @@ uint64_t LabeledPerfCounters::get(int idx) const
   const perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_U64))
     return 0;
-  data.accessed = true;
   return data.u64;
 }
 
@@ -311,7 +310,6 @@ utime_t LabeledPerfCounters::tget(int idx) const
   if (!(data.type & PERFCOUNTER_TIME))
     return utime_t();
   uint64_t v = data.u64;
-  data.accessed = true;
   return utime_t(v / 1000000000ull, v % 1000000000ull);
 }
 
@@ -348,7 +346,6 @@ pair<uint64_t, uint64_t> LabeledPerfCounters::get_tavg_ns(int idx) const
   if (!(data.type & PERFCOUNTER_LONGRUNAVG))
     return make_pair(0, 0);
   pair<uint64_t,uint64_t> a = data.read_avg();
-  data.accessed = true;
   return make_pair(a.second, a.first);
 }
 
