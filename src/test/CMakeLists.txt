@@ -31,6 +31,7 @@ if (WITH_CEPHFS)
   add_subdirectory(mds)
 endif()
 add_subdirectory(pybind)
+add_subdirectory(dokan)
 
 # Not available on Windows for the time being.
 if(NOT WIN32)
