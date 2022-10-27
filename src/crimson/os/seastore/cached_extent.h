@@ -30,7 +30,8 @@ template <
   typename internal_node_t,
   typename leaf_node_t,
   typename pin_t,
-  size_t node_size>
+  size_t node_size,
+  bool leaf_has_children>
 class FixedKVBtree;
 
 // #define DEBUG_CACHED_EXTENT_REF
@@ -189,7 +190,8 @@ class CachedExtent
     typename internal_node_t,
     typename leaf_node_t,
     typename pin_t,
-    size_t node_size>
+    size_t node_size,
+    bool leaf_has_children>
   friend class FixedKVBtree;
   uint32_t last_committed_crc = 0;
 

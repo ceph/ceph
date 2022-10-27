@@ -48,7 +48,8 @@ template <
   typename internal_node_t,
   typename leaf_node_t,
   typename pin_t,
-  size_t node_size>
+  size_t node_size,
+  bool leaf_has_children>
 class FixedKVBtree {
   static constexpr size_t MAX_DEPTH = 16;
   using self_type = FixedKVBtree<
@@ -57,7 +58,8 @@ class FixedKVBtree {
     internal_node_t,
     leaf_node_t,
     pin_t,
-    node_size>;
+    node_size,
+    leaf_has_children>;
 public:
   using InternalNodeRef = TCachedExtentRef<internal_node_t>;
   using LeafNodeRef = TCachedExtentRef<leaf_node_t>;
@@ -835,6 +837,7 @@ public:
     LOG_PREFIX(FixedKVBtree::rewrite_extent);
     assert(e->get_type() == extent_types_t::LADDR_INTERNAL ||
            e->get_type() == extent_types_t::LADDR_LEAF ||
+           e->get_type() == extent_types_t::DINK_LADDR_LEAF ||
            e->get_type() == extent_types_t::BACKREF_INTERNAL ||
            e->get_type() == extent_types_t::BACKREF_LEAF);
     
@@ -1991,7 +1994,8 @@ template <
   typename internal_node_t,
   typename leaf_node_t,
   typename pin_t,
-  size_t node_size>
+  size_t node_size,
+  bool leaf_has_children>
 struct is_fixed_kv_tree<
   FixedKVBtree<
     node_key_t,
@@ -1999,7 +2003,8 @@ struct is_fixed_kv_tree<
     internal_node_t,
     leaf_node_t,
     pin_t,
-    node_size>> : std::true_type {};
+    node_size,
+    leaf_has_children>> : std::true_type {};
 
 template <
   typename tree_type_t,

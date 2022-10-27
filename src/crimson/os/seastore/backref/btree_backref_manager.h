@@ -33,7 +33,7 @@ public:
 
 using BackrefBtree = FixedKVBtree<
   paddr_t, backref_map_val_t, BackrefInternalNode,
-  BackrefLeafNode, BtreeBackrefPin, BACKREF_BLOCK_SIZE>;
+  BackrefLeafNode, BtreeBackrefPin, BACKREF_BLOCK_SIZE, false>;
 
 class BtreeBackrefManager : public BackrefManager {
 public:

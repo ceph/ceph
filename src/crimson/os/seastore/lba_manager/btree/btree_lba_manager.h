@@ -40,9 +40,11 @@ public:
   {}
 };
 
+template <bool leaf_has_children>
 using LBABtree = FixedKVBtree<
   laddr_t, lba_map_val_t, LBAInternalNode,
-  LBALeafNode, BtreeLBAPin, LBA_BLOCK_SIZE>;
+  LBALeafNode<leaf_has_children>, BtreeLBAPin,
+  LBA_BLOCK_SIZE, leaf_has_children>;
 
 /**
  * BtreeLBAManager
@@ -61,9 +63,14 @@ using LBABtree = FixedKVBtree<
  * get_mappings, alloc_extent_*, etc populate a Transaction
  * which then gets submitted
  */
+template <bool leaf_has_children>
 class BtreeLBAManager : public LBAManager {
 public:
-  BtreeLBAManager(Cache &cache);
+  BtreeLBAManager(Cache &cache)
+    : cache(cache)
+  {
+    register_metrics();
+  }
 
   mkfs_ret mkfs(
     Transaction &t) final;
@@ -144,7 +151,13 @@ public:
     bpin->set_parent(nullptr);
   }
 
-  ~BtreeLBAManager();
+  ~BtreeLBAManager() {
+    pin_set.scan([](auto &i) {
+      LOG_PREFIX(BtreeLBAManager::~BtreeLBAManager);
+      SUBERROR(seastore_lba, "Found {}, has_ref={} -- {}",
+	    i, i.has_ref(), i.get_extent());
+    });
+  }
 private:
   Cache &cache;
 
@@ -190,6 +203,7 @@ private:
     laddr_t addr,
     update_func_t &&f);
 };
-using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
+template <bool leaf_has_children>
+using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager<leaf_has_children>>;
 
 }

@@ -21,21 +21,36 @@ SET_SUBSYS(seastore_lba);
 
 namespace crimson::os::seastore {
 
-template<>
-Transaction::tree_stats_t& get_tree_stats<
-  crimson::os::seastore::lba_manager::btree::LBABtree>(Transaction &t) {
+template <typename T>
+Transaction::tree_stats_t& get_tree_stats(Transaction &t)
+{
   return t.get_lba_tree_stats();
 }
 
-template<>
-phy_tree_root_t& get_phy_tree_root<
-  crimson::os::seastore::lba_manager::btree::LBABtree>(root_t &r) {
+template Transaction::tree_stats_t&
+get_tree_stats<
+  crimson::os::seastore::lba_manager::btree::LBABtree<true>>(
+  Transaction &t);
+template Transaction::tree_stats_t&
+get_tree_stats<
+  crimson::os::seastore::lba_manager::btree::LBABtree<false>>(
+  Transaction &t);
+
+template <typename T>
+phy_tree_root_t& get_phy_tree_root(root_t &r)
+{
   return r.lba_root;
 }
 
-template <>
-const CachedExtentRef get_phy_tree_root_node<
-  crimson::os::seastore::lba_manager::btree::LBABtree>(
+template phy_tree_root_t&
+get_phy_tree_root<
+  crimson::os::seastore::lba_manager::btree::LBABtree<true>>(root_t &r);
+template phy_tree_root_t&
+get_phy_tree_root<
+  crimson::os::seastore::lba_manager::btree::LBABtree<false>>(root_t &r);
+
+template <typename T>
+const CachedExtentRef get_phy_tree_root_node(
   const RootBlockRef &root_block, Transaction &t)
 {
   auto lba_root = root_block->lba_root_node;
@@ -45,6 +60,14 @@ const CachedExtentRef get_phy_tree_root_node<
     return nullptr;
   }
 }
+
+template const CachedExtentRef get_phy_tree_root_node<
+  crimson::os::seastore::lba_manager::btree::LBABtree<true>>(
+  const RootBlockRef &root_block, Transaction &t);
+template const CachedExtentRef get_phy_tree_root_node<
+  crimson::os::seastore::lba_manager::btree::LBABtree<false>>(
+  const RootBlockRef &root_block, Transaction &t);
+
 
 template <bool set_root_block, typename T, typename ROOT>
 void set_phy_tree_root_node(RootBlockRef &root_block, ROOT* lba_root) {
@@ -58,9 +81,15 @@ void set_phy_tree_root_node(RootBlockRef &root_block, ROOT* lba_root) {
 
 template void set_phy_tree_root_node<
   true,
-  crimson::os::seastore::lba_manager::btree::LBABtree,
+  crimson::os::seastore::lba_manager::btree::LBABtree<true>,
   lba_manager::btree::LBAInternalNode>(
   RootBlockRef &root_block, lba_manager::btree::LBAInternalNode* lba_root);
+template void set_phy_tree_root_node<
+  true,
+  crimson::os::seastore::lba_manager::btree::LBABtree<false>,
+  lba_manager::btree::LBAInternalNode>(
+  RootBlockRef &root_block, lba_manager::btree::LBAInternalNode* lba_root);
+
 template void set_phy_tree_root_node<
   true,
   laddr_t,
@@ -68,17 +97,28 @@ template void set_phy_tree_root_node<
   RootBlockRef &root_block, lba_manager::btree::LBAInternalNode* lba_root);
 template void set_phy_tree_root_node<
   true,
-  crimson::os::seastore::lba_manager::btree::LBABtree,
-  lba_manager::btree::LBALeafNode>(
-  RootBlockRef &root_block, lba_manager::btree::LBALeafNode* lba_root);
+  crimson::os::seastore::lba_manager::btree::LBABtree<true>>(
+  RootBlockRef &root_block, lba_manager::btree::LBALeafNode<true>* lba_root);
 template void set_phy_tree_root_node<
   true,
-  laddr_t,
-  lba_manager::btree::LBALeafNode>(
-  RootBlockRef &root_block, lba_manager::btree::LBALeafNode* lba_root);
+  crimson::os::seastore::lba_manager::btree::LBABtree<false>>(
+  RootBlockRef &root_block, lba_manager::btree::LBALeafNode<false>* lba_root);
 template void set_phy_tree_root_node<
   true,
-  crimson::os::seastore::lba_manager::btree::LBABtree,
+  laddr_t>(
+  RootBlockRef &root_block, lba_manager::btree::LBALeafNode<true>* lba_root);
+template void set_phy_tree_root_node<
+  true,
+  laddr_t>(
+  RootBlockRef &root_block, lba_manager::btree::LBALeafNode<false>* lba_root);
+template void set_phy_tree_root_node<
+  true,
+  crimson::os::seastore::lba_manager::btree::LBABtree<true>,
+  lba_manager::btree::LBANode>(
+  RootBlockRef &root_block, lba_manager::btree::LBANode* lba_root);
+template void set_phy_tree_root_node<
+  true,
+  crimson::os::seastore::lba_manager::btree::LBABtree<false>,
   lba_manager::btree::LBANode>(
   RootBlockRef &root_block, lba_manager::btree::LBANode* lba_root);
 template void set_phy_tree_root_node<
@@ -88,7 +128,12 @@ template void set_phy_tree_root_node<
   RootBlockRef &root_block, lba_manager::btree::LBANode* lba_root);
 template void set_phy_tree_root_node<
   false,
-  crimson::os::seastore::lba_manager::btree::LBABtree,
+  crimson::os::seastore::lba_manager::btree::LBABtree<true>,
+  lba_manager::btree::LBAInternalNode>(
+  RootBlockRef &root_block, lba_manager::btree::LBAInternalNode* lba_root);
+template void set_phy_tree_root_node<
+  false,
+  crimson::os::seastore::lba_manager::btree::LBABtree<false>,
   lba_manager::btree::LBAInternalNode>(
   RootBlockRef &root_block, lba_manager::btree::LBAInternalNode* lba_root);
 template void set_phy_tree_root_node<
@@ -98,17 +143,28 @@ template void set_phy_tree_root_node<
   RootBlockRef &root_block, lba_manager::btree::LBAInternalNode* lba_root);
 template void set_phy_tree_root_node<
   false,
-  crimson::os::seastore::lba_manager::btree::LBABtree,
-  lba_manager::btree::LBALeafNode>(
-  RootBlockRef &root_block, lba_manager::btree::LBALeafNode* lba_root);
+  crimson::os::seastore::lba_manager::btree::LBABtree<true>>(
+  RootBlockRef &root_block, lba_manager::btree::LBALeafNode<true>* lba_root);
 template void set_phy_tree_root_node<
   false,
-  laddr_t,
-  lba_manager::btree::LBALeafNode>(
-  RootBlockRef &root_block, lba_manager::btree::LBALeafNode* lba_root);
+  crimson::os::seastore::lba_manager::btree::LBABtree<false>>(
+  RootBlockRef &root_block, lba_manager::btree::LBALeafNode<false>* lba_root);
 template void set_phy_tree_root_node<
   false,
-  crimson::os::seastore::lba_manager::btree::LBABtree,
+  laddr_t>(
+  RootBlockRef &root_block, lba_manager::btree::LBALeafNode<true>* lba_root);
+template void set_phy_tree_root_node<
+  false,
+  laddr_t>(
+  RootBlockRef &root_block, lba_manager::btree::LBALeafNode<false>* lba_root);
+template void set_phy_tree_root_node<
+  false,
+  crimson::os::seastore::lba_manager::btree::LBABtree<true>,
+  lba_manager::btree::LBANode>(
+  RootBlockRef &root_block, lba_manager::btree::LBANode* lba_root);
+template void set_phy_tree_root_node<
+  false,
+  crimson::os::seastore::lba_manager::btree::LBABtree<false>,
   lba_manager::btree::LBANode>(
   RootBlockRef &root_block, lba_manager::btree::LBANode* lba_root);
 template void set_phy_tree_root_node<
@@ -122,14 +178,16 @@ template void set_phy_tree_root_node<
 
 namespace crimson::os::seastore::lba_manager::btree {
 
-BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
+template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::mkfs_ret
+BtreeLBAManager<leaf_has_children>::mkfs(
   Transaction &t)
 {
   LOG_PREFIX(BtreeLBAManager::mkfs);
   INFOT("start", t);
   return cache.get_root(t).si_then([this, &t](auto croot) {
     assert(croot->is_mutation_pending());
-    auto [root, root_node] = LBABtree::mkfs(get_context(t));
+    auto [root, root_node] = LBABtree<leaf_has_children>::mkfs(get_context(t));
     croot->get_root().lba_root = root;
     croot->lba_root_node = root_node.get();
     return mkfs_iertr::now();
@@ -141,26 +199,27 @@ BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
   );
 }
 
-BtreeLBAManager::get_mappings_ret
-BtreeLBAManager::get_mappings(
+template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::get_mappings_ret
+BtreeLBAManager<leaf_has_children>::get_mappings(
   Transaction &t,
   laddr_t offset, extent_len_t length)
 {
   LOG_PREFIX(BtreeLBAManager::get_mappings);
   TRACET("{}~{}", t, offset, length);
   auto c = get_context(t);
-  return with_btree_state<LBABtree, lba_pin_list_t>(
+  return with_btree_state<LBABtree<leaf_has_children>, lba_pin_list_t>(
     cache,
     c,
     [c, offset, length, FNAME](auto &btree, auto &ret) {
-      return LBABtree::iterate_repeat(
+      return LBABtree<leaf_has_children>::iterate_repeat(
 	c,
 	btree.upper_bound_right(c, offset),
 	[&ret, offset, length, c, FNAME](auto &pos) {
 	  if (pos.is_end() || pos.get_key() >= (offset + length)) {
 	    TRACET("{}~{} done with {} results",
 	           c.trans, offset, length, ret.size());
-	    return LBABtree::iterate_repeat_ret_inner(
+	    return typename LBABtree<leaf_has_children>::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
 	  }
@@ -168,16 +227,16 @@ BtreeLBAManager::get_mappings(
 	         c.trans, offset, length, pos.get_key(), pos.get_val());
 	  ceph_assert((pos.get_key() + pos.get_val().len) > offset);
 	  ret.push_back(pos.get_pin());
-	  return LBABtree::iterate_repeat_ret_inner(
+	  return typename LBABtree<leaf_has_children>::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},
 	    seastar::stop_iteration::no);
 	});
     });
 }
 
-
-BtreeLBAManager::get_mappings_ret
-BtreeLBAManager::get_mappings(
+template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::get_mappings_ret
+BtreeLBAManager<leaf_has_children>::get_mappings(
   Transaction &t,
   laddr_list_t &&list)
 {
@@ -190,7 +249,7 @@ BtreeLBAManager::get_mappings(
     l->begin(),
     l->end(),
     [this, &t, &ret](const auto &p) {
-      return get_mappings(t, p.first, p.second).si_then(
+      return this->get_mappings(t, p.first, p.second).si_then(
 	[&ret](auto res) {
 	  ret.splice(ret.end(), res, res.begin(), res.end());
 	  return get_mappings_iertr::now();
@@ -200,15 +259,16 @@ BtreeLBAManager::get_mappings(
     });
 }
 
-BtreeLBAManager::get_mapping_ret
-BtreeLBAManager::get_mapping(
+template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::get_mapping_ret
+BtreeLBAManager<leaf_has_children>::get_mapping(
   Transaction &t,
   laddr_t offset)
 {
   LOG_PREFIX(BtreeLBAManager::get_mapping);
   TRACET("{}", t, offset);
   auto c = get_context(t);
-  return with_btree_ret<LBABtree, LBAPinRef>(
+  return with_btree_ret<LBABtree<leaf_has_children>, LBAPinRef>(
     cache,
     c,
     [FNAME, c, offset](auto &btree) {
@@ -230,8 +290,9 @@ BtreeLBAManager::get_mapping(
     });
 }
 
-BtreeLBAManager::alloc_extent_ret
-BtreeLBAManager::alloc_extent(
+template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::alloc_extent_ret
+BtreeLBAManager<leaf_has_children>::alloc_extent(
   Transaction &t,
   laddr_t hint,
   extent_len_t len,
@@ -240,8 +301,8 @@ BtreeLBAManager::alloc_extent(
   struct state_t {
     laddr_t last_end;
 
-    std::optional<LBABtree::iterator> insert_iter;
-    std::optional<LBABtree::iterator> ret;
+    std::optional<typename LBABtree<leaf_has_children>::iterator> insert_iter;
+    std::optional<typename LBABtree<leaf_has_children>::iterator> ret;
 
     state_t(laddr_t hint) : last_end(hint) {}
   };
@@ -251,7 +312,7 @@ BtreeLBAManager::alloc_extent(
   auto c = get_context(t);
   ++stats.num_alloc_extents;
   auto lookup_attempts = stats.num_alloc_extents_iter_nexts;
-  return crimson::os::seastore::with_btree_state<LBABtree, state_t>(
+  return crimson::os::seastore::with_btree_state<LBABtree<leaf_has_children>, state_t>(
     cache,
     c,
     hint,
@@ -267,7 +328,7 @@ BtreeLBAManager::alloc_extent(
                    stats.num_alloc_extents_iter_nexts - lookup_attempts,
                    state.last_end);
 	    state.insert_iter = pos;
-	    return LBABtree::iterate_repeat_ret_inner(
+	    return typename LBABtree<leaf_has_children>::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
 	  } else if (pos.get_key() >= (state.last_end + len)) {
@@ -278,7 +339,7 @@ BtreeLBAManager::alloc_extent(
                    state.last_end,
                    pos.get_val());
 	    state.insert_iter = pos;
-	    return LBABtree::iterate_repeat_ret_inner(
+	    return typename LBABtree<leaf_has_children>::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
 	  } else {
@@ -287,7 +348,7 @@ BtreeLBAManager::alloc_extent(
                    t, addr, len, hint,
                    pos.get_key(), pos.get_val().len,
                    pos.get_val());
-	    return LBABtree::iterate_repeat_ret_inner(
+	    return typename LBABtree<leaf_has_children>::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::no);
 	  }
@@ -315,7 +376,9 @@ static bool is_lba_node(const CachedExtent &e)
   return is_lba_node(e.get_type());
 }
 
-btree_range_pin_t<laddr_t> &BtreeLBAManager::get_pin(CachedExtent &e)
+template <bool leaf_has_children>
+btree_range_pin_t<laddr_t> &BtreeLBAManager<leaf_has_children>::get_pin(
+  CachedExtent &e)
 {
   if (is_lba_node(e)) {
     return e.cast<LBANode>()->pin;
@@ -339,7 +402,8 @@ static depth_t get_depth(const CachedExtent &e)
   }
 }
 
-void BtreeLBAManager::complete_transaction(
+template <bool leaf_has_children>
+void BtreeLBAManager<leaf_has_children>::complete_transaction(
   Transaction &t,
   std::vector<CachedExtentRef> &to_clear,
   std::vector<CachedExtentRef> &to_link)
@@ -373,10 +437,12 @@ void BtreeLBAManager::complete_transaction(
   }
 }
 
-BtreeLBAManager::base_iertr::future<> _init_cached_extent(
+template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::base_iertr::template future<>
+_init_cached_extent(
   op_context_t<laddr_t> c,
   const CachedExtentRef &e,
-  LBABtree &btree,
+  LBABtree<leaf_has_children> &btree,
   bool &ret)
 {
   if (e->is_logical()) {
@@ -412,7 +478,9 @@ BtreeLBAManager::base_iertr::future<> _init_cached_extent(
   }
 }
 
-BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
+template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::init_cached_extent_ret
+BtreeLBAManager<leaf_has_children>::init_cached_extent(
   Transaction &t,
   CachedExtentRef e)
 {
@@ -420,16 +488,20 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
   TRACET("{}", t, *e);
   return seastar::do_with(bool(), [this, e, &t](bool &ret) {
     auto c = get_context(t);
-    return with_btree<LBABtree>(cache, c, [c, e, &ret](auto &btree)
-      -> base_iertr::future<> {
-      LOG_PREFIX(BtreeLBAManager::init_cached_extent);
-      DEBUGT("extent {}", c.trans, *e);
-      return _init_cached_extent(c, e, btree, ret);
-    }).si_then([&ret] { return ret; });
+    return with_btree<LBABtree<leaf_has_children>>(
+      cache, c,
+      [c, e, &ret](auto &btree) -> base_iertr::future<> {
+	LOG_PREFIX(BtreeLBAManager::init_cached_extent);
+	DEBUGT("extent {}", c.trans, *e);
+	return _init_cached_extent(c, e, btree, ret);
+      }
+    ).si_then([&ret] { return ret; });
   });
 }
 
-BtreeLBAManager::scan_mappings_ret BtreeLBAManager::scan_mappings(
+template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::scan_mappings_ret
+BtreeLBAManager<leaf_has_children>::scan_mappings(
   Transaction &t,
   laddr_t begin,
   laddr_t end,
@@ -439,29 +511,31 @@ BtreeLBAManager::scan_mappings_ret BtreeLBAManager::scan_mappings(
   DEBUGT("begin: {}, end: {}", t, begin, end);
 
   auto c = get_context(t);
-  return with_btree<LBABtree>(
+  return with_btree<LBABtree<leaf_has_children>>(
     cache,
     c,
     [c, f=std::move(f), begin, end](auto &btree) mutable {
-      return LBABtree::iterate_repeat(
+      return LBABtree<leaf_has_children>::iterate_repeat(
 	c,
 	btree.upper_bound_right(c, begin),
 	[f=std::move(f), begin, end](auto &pos) {
 	  if (pos.is_end() || pos.get_key() >= end) {
-	    return LBABtree::iterate_repeat_ret_inner(
+	    return typename LBABtree<leaf_has_children>::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
 	  }
 	  ceph_assert((pos.get_key() + pos.get_val().len) > begin);
 	  f(pos.get_key(), pos.get_val().paddr, pos.get_val().len);
-	  return LBABtree::iterate_repeat_ret_inner(
+	  return typename LBABtree<leaf_has_children>::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},
 	    seastar::stop_iteration::no);
 	});
     });
 }
 
-BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
+template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::rewrite_extent_ret
+BtreeLBAManager<leaf_has_children>::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent)
 {
@@ -475,7 +549,7 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
   if (is_lba_node(*extent)) {
     DEBUGT("rewriting lba extent -- {}", t, *extent);
     auto c = get_context(t);
-    return with_btree<LBABtree>(
+    return with_btree<LBABtree<leaf_has_children>>(
       cache,
       c,
       [c, extent](auto &btree) mutable {
@@ -487,8 +561,9 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
   }
 }
 
-BtreeLBAManager::update_mapping_ret
-BtreeLBAManager::update_mapping(
+template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::update_mapping_ret
+BtreeLBAManager<leaf_has_children>::update_mapping(
   Transaction& t,
   laddr_t laddr,
   paddr_t prev_addr,
@@ -519,8 +594,9 @@ BtreeLBAManager::update_mapping(
   );
 }
 
-BtreeLBAManager::get_physical_extent_if_live_ret
-BtreeLBAManager::get_physical_extent_if_live(
+template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::get_physical_extent_if_live_ret
+BtreeLBAManager<leaf_has_children>::get_physical_extent_if_live(
   Transaction &t,
   extent_types_t type,
   paddr_t addr,
@@ -532,26 +608,22 @@ BtreeLBAManager::get_physical_extent_if_live(
          t, type, laddr, addr, len);
   ceph_assert(is_lba_node(type));
   auto c = get_context(t);
-  return with_btree_ret<LBABtree, CachedExtentRef>(
+  return with_btree_ret<LBABtree<leaf_has_children>, CachedExtentRef>(
     cache,
     c,
     [c, type, addr, laddr, len](auto &btree) {
       if (type == extent_types_t::LADDR_INTERNAL) {
 	return btree.get_internal_if_live(c, addr, laddr, len);
       } else {
-	assert(type == extent_types_t::LADDR_LEAF);
+	assert(type == extent_types_t::LADDR_LEAF ||
+	       type == extent_types_t::DINK_LADDR_LEAF);
 	return btree.get_leaf_if_live(c, addr, laddr, len);
       }
     });
 }
 
-BtreeLBAManager::BtreeLBAManager(Cache &cache)
-  : cache(cache)
-{
-  register_metrics();
-}
-
-void BtreeLBAManager::register_metrics()
+template <bool leaf_has_children>
+void BtreeLBAManager<leaf_has_children>::register_metrics()
 {
   LOG_PREFIX(BtreeLBAManager::register_metrics);
   DEBUG("start");
@@ -574,7 +646,9 @@ void BtreeLBAManager::register_metrics()
   );
 }
 
-BtreeLBAManager::update_refcount_ret BtreeLBAManager::update_refcount(
+template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::update_refcount_ret
+BtreeLBAManager<leaf_has_children>::update_refcount(
   Transaction &t,
   laddr_t addr,
   int delta)
@@ -600,13 +674,15 @@ BtreeLBAManager::update_refcount_ret BtreeLBAManager::update_refcount(
   });
 }
 
-BtreeLBAManager::_update_mapping_ret BtreeLBAManager::_update_mapping(
+template <bool leaf_has_children>
+typename BtreeLBAManager<leaf_has_children>::_update_mapping_ret
+BtreeLBAManager<leaf_has_children>::_update_mapping(
   Transaction &t,
   laddr_t addr,
   update_func_t &&f)
 {
   auto c = get_context(t);
-  return with_btree_ret<LBABtree, lba_map_val_t>(
+  return with_btree_ret<LBABtree<leaf_has_children>, lba_map_val_t>(
     cache,
     c,
     [f=std::move(f), c, addr](auto &btree) mutable {
@@ -641,13 +717,168 @@ BtreeLBAManager::_update_mapping_ret BtreeLBAManager::_update_mapping(
     });
 }
 
-BtreeLBAManager::~BtreeLBAManager()
-{
-  pin_set.scan([](auto &i) {
-    LOG_PREFIX(BtreeLBAManager::~BtreeLBAManager);
-    ERROR("Found {}, has_ref={} -- {}",
-          i, i.has_ref(), i.get_extent());
-  });
-}
+template BtreeLBAManager<true>::mkfs_ret
+BtreeLBAManager<true>::mkfs(Transaction &t);
+template BtreeLBAManager<false>::mkfs_ret
+BtreeLBAManager<false>::mkfs(Transaction &t);
+
+template BtreeLBAManager<true>::get_mappings_ret
+BtreeLBAManager<true>::get_mappings(
+  Transaction &t,
+  laddr_t offset, extent_len_t length);
+template BtreeLBAManager<false>::get_mappings_ret
+BtreeLBAManager<false>::get_mappings(
+  Transaction &t,
+  laddr_t offset, extent_len_t length);
+
+template BtreeLBAManager<true>::get_mappings_ret
+BtreeLBAManager<true>::get_mappings(
+  Transaction &t,
+  laddr_list_t &&list);
+template BtreeLBAManager<false>::get_mappings_ret
+BtreeLBAManager<false>::get_mappings(
+  Transaction &t,
+  laddr_list_t &&list);
+
+template BtreeLBAManager<true>::get_mapping_ret
+BtreeLBAManager<true>::get_mapping(
+  Transaction &t,
+  laddr_t offset);
+template BtreeLBAManager<false>::get_mapping_ret
+BtreeLBAManager<false>::get_mapping(
+  Transaction &t,
+  laddr_t offset);
+
+template BtreeLBAManager<true>::alloc_extent_ret
+BtreeLBAManager<true>::alloc_extent(
+  Transaction &t,
+  laddr_t hint,
+  extent_len_t len,
+  paddr_t addr,
+  LogicalCachedExtent* nextent);
+template BtreeLBAManager<false>::alloc_extent_ret
+BtreeLBAManager<false>::alloc_extent(
+  Transaction &t,
+  laddr_t hint,
+  extent_len_t len,
+  paddr_t addr,
+  LogicalCachedExtent* nextent);
+
+template btree_range_pin_t<laddr_t>
+&BtreeLBAManager<true>::get_pin(
+  CachedExtent &e);
+template btree_range_pin_t<laddr_t>
+&BtreeLBAManager<false>::get_pin(
+  CachedExtent &e);
+
+template void BtreeLBAManager<true>::complete_transaction(
+  Transaction &t,
+  std::vector<CachedExtentRef> &to_clear,
+  std::vector<CachedExtentRef> &to_link);
+template void BtreeLBAManager<false>::complete_transaction(
+  Transaction &t,
+  std::vector<CachedExtentRef> &to_clear,
+  std::vector<CachedExtentRef> &to_link);
+
+template typename BtreeLBAManager<true>::base_iertr::future<>
+_init_cached_extent(
+  op_context_t<laddr_t> c,
+  const CachedExtentRef &e,
+  LBABtree<true> &btree,
+  bool &ret);
+template typename BtreeLBAManager<false>::base_iertr::future<>
+_init_cached_extent(
+  op_context_t<laddr_t> c,
+  const CachedExtentRef &e,
+  LBABtree<false> &btree,
+  bool &ret);
+
+template BtreeLBAManager<true>::init_cached_extent_ret
+BtreeLBAManager<true>::init_cached_extent(
+  Transaction &t,
+  CachedExtentRef e);
+template BtreeLBAManager<false>::init_cached_extent_ret
+BtreeLBAManager<false>::init_cached_extent(
+  Transaction &t,
+  CachedExtentRef e);
+
+template BtreeLBAManager<true>::scan_mappings_ret
+BtreeLBAManager<true>::scan_mappings(
+  Transaction &t,
+  laddr_t begin,
+  laddr_t end,
+  scan_mappings_func_t &&f);
+template BtreeLBAManager<false>::scan_mappings_ret
+BtreeLBAManager<false>::scan_mappings(
+  Transaction &t,
+  laddr_t begin,
+  laddr_t end,
+  scan_mappings_func_t &&f);
+
+template BtreeLBAManager<true>::rewrite_extent_ret
+BtreeLBAManager<true>::rewrite_extent(
+  Transaction &t,
+  CachedExtentRef extent);
+template BtreeLBAManager<false>::rewrite_extent_ret
+BtreeLBAManager<false>::rewrite_extent(
+  Transaction &t,
+  CachedExtentRef extent);
+
+template BtreeLBAManager<true>::update_mapping_ret
+BtreeLBAManager<true>::update_mapping(
+  Transaction& t,
+  laddr_t laddr,
+  paddr_t prev_addr,
+  paddr_t addr,
+  LogicalCachedExtent *nextent);
+template BtreeLBAManager<false>::update_mapping_ret
+BtreeLBAManager<false>::update_mapping(
+  Transaction& t,
+  laddr_t laddr,
+  paddr_t prev_addr,
+  paddr_t addr,
+  LogicalCachedExtent *nextent);
+
+template BtreeLBAManager<true>::get_physical_extent_if_live_ret
+BtreeLBAManager<true>::get_physical_extent_if_live(
+  Transaction &t,
+  extent_types_t type,
+  paddr_t addr,
+  laddr_t laddr,
+  extent_len_t len);
+template BtreeLBAManager<false>::get_physical_extent_if_live_ret
+BtreeLBAManager<false>::get_physical_extent_if_live(
+  Transaction &t,
+  extent_types_t type,
+  paddr_t addr,
+  laddr_t laddr,
+  extent_len_t len);
+
+template void BtreeLBAManager<true>::register_metrics();
+template void BtreeLBAManager<false>::register_metrics();
+
+template BtreeLBAManager<true>::update_refcount_ret
+BtreeLBAManager<true>::update_refcount(
+  Transaction &t,
+  laddr_t addr,
+  int delta);
+template BtreeLBAManager<false>::update_refcount_ret
+BtreeLBAManager<false>::update_refcount(
+  Transaction &t,
+  laddr_t addr,
+  int delta);
+
+template BtreeLBAManager<true>::_update_mapping_ret
+BtreeLBAManager<true>::_update_mapping(
+  Transaction &t,
+  laddr_t addr,
+  update_func_t &&f,
+  LogicalCachedExtent* nextent);
+template BtreeLBAManager<false>::_update_mapping_ret
+BtreeLBAManager<false>::_update_mapping(
+  Transaction &t,
+  laddr_t addr,
+  update_func_t &&f,
+  LogicalCachedExtent* nextent);
 
 }

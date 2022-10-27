@@ -1156,7 +1156,8 @@ template <
   typename VAL,
   typename VAL_LE,
   size_t node_size,
-  typename node_type_t>
+  typename node_type_t,
+  bool has_children>
 struct FixedKVLeafNode
   : FixedKVNode<NODE_KEY>,
     common::FixedKVNodeLayout<

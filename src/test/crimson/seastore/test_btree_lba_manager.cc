@@ -190,7 +190,7 @@ struct lba_btree_test : btree_test_base {
       auto mut_croot = cache->duplicate_for_write(
 	t, croot
       )->cast<RootBlock>();
-      auto [root, root_node] = LBABtree::mkfs(get_op_context(t));
+      auto [root, root_node] = LBABtree<false>::mkfs(get_op_context(t));
       mut_croot->root.lba_root = root;
       mut_croot->lba_root_node = root_node.get();
     });
@@ -208,7 +208,7 @@ struct lba_btree_test : btree_test_base {
 	  t
 	).si_then([f=std::move(f), &t](RootBlockRef croot) {
 	  return seastar::do_with(
-	    LBABtree(croot),
+	    LBABtree<false>(croot),
 	    [f=std::move(f), &t](auto &btree) mutable {
 	      return std::invoke(
 		std::move(f), btree, t
@@ -231,7 +231,7 @@ struct lba_btree_test : btree_test_base {
 	  t
 	).si_then([f=std::move(f), &t](RootBlockRef croot) mutable {
 	  return seastar::do_with(
-	    LBABtree(croot),
+	    LBABtree<false>(croot),
 	    [f=std::move(f), &t](auto &btree) mutable {
 	      return std::invoke(
 		std::move(f), btree, t
@@ -317,7 +317,7 @@ TEST_F(lba_btree_test, basic)
 }
 
 struct btree_lba_manager_test : btree_test_base {
-  BtreeLBAManagerRef lba_manager;
+  BtreeLBAManagerRef<false> lba_manager;
 
   btree_lba_manager_test() = default;
 
@@ -340,7 +340,7 @@ struct btree_lba_manager_test : btree_test_base {
   }
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
-    lba_manager.reset(new BtreeLBAManager(*cache));
+    lba_manager.reset(new BtreeLBAManager<false>(*cache));
     return lba_manager->mkfs(t);
   }
 
