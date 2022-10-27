@@ -22,16 +22,28 @@ namespace crimson::os::seastore {
 using context_t = ObjectDataHandler::context_t;
 using get_iertr = ObjectDataHandler::write_iertr;
 
-auto read_pin(
+get_iertr::future<ObjectDataBlockRef> read_pin(
   context_t ctx,
-  LBAPinRef pin) {
-  return ctx.tm.pin_to_extent<ObjectDataBlock>(
-    ctx.t,
-    std::move(pin)
-  ).handle_error_interruptible(
-    get_iertr::pass_further{},
-    crimson::ct_error::assert_all{ "read_pin: invalid error" }
-  );
+  LBAPinRef pin)
+{
+  LOG_PREFIX(read_pin);
+  auto child_pos = pin->get_logical_extent(ctx.t);
+  auto extent = child_pos.template get_child<ObjectDataBlock>();
+  if (extent) {
+    SUBTRACET(seastore_tm, "got extent {}", ctx.t, *extent);
+    if (!extent->is_pending_in_trans(ctx.t.get_trans_id())) {
+      ctx.t.add_to_read_set(extent);
+    }
+    return extent->wait_io().then([extent] {
+      return extent;
+    });
+  } else {
+    return ctx.tm.pin_to_extent<ObjectDataBlock>(ctx.t, std::move(pin), child_pos
+    ).handle_error_interruptible(
+      get_iertr::pass_further{},
+      crimson::ct_error::assert_all{ "read_pin: invalid error" }
+    );;
+  }
 }
 
 /**
@@ -946,8 +958,8 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 		      current = end;
 		      return seastar::now();
 		    } else {
-		      return ctx.tm.pin_to_extent<ObjectDataBlock>(
-			ctx.t,
+		      return read_pin(
+			ctx,
 			std::move(pin)
 		      ).si_then([&ret, &current, end](auto extent) {
 			ceph_assert(

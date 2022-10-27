@@ -623,6 +623,41 @@ TransactionManager::get_extents_if_live(
   });
 }
 
+TransactionManager::pin_to_extent_by_type_ret
+TransactionManager::pin_to_extent_by_type(
+    Transaction &t,
+    LBAPinRef pin,
+    extent_types_t type) {
+  LOG_PREFIX(TransactionManager::pin_to_extent_by_type);
+  SUBTRACET(seastore_tm, "getting extent {} type {}", t, *pin, type);
+  assert(is_logical_type(type));
+  auto &pref = *pin;
+  return cache->get_extent_by_type(
+    t,
+    type,
+    pref.get_val(),
+    pref.get_key(),
+    pref.get_length(),
+    [pin=std::move(pin)](CachedExtent &extent) mutable {
+      auto &lextent = static_cast<LogicalCachedExtent&>(extent);
+      assert(!lextent.has_laddr());
+      assert(!lextent.has_been_invalidated());
+      assert(!pin->has_been_invalidated());
+      assert(pin->get_parent());
+      auto &parent = (lba_manager::btree::LBALeafNode<true>&)*pin->get_parent();
+      assert(!parent.is_pending());
+      parent.link_child(&lextent, pin->get_pos());
+      lextent.set_pin(std::move(pin));
+      lba_manager->add_pin(lextent.get_pin());
+    }
+  ).si_then([FNAME, &t](auto ref) {
+    SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
+    return pin_to_extent_by_type_ret(
+      interruptible::ready_future_marker{},
+      std::move(ref->template cast<LogicalCachedExtent>()));
+  });
+}
+
 TransactionManager::~TransactionManager() {}
 
 TransactionManagerRef make_transaction_manager(

@@ -857,7 +857,37 @@ private:
   uint64_t bytes = 0;
 };
 
+class ChildableCachedExtent;
 class LogicalCachedExtent;
+
+class child_pos_t {
+public:
+  child_pos_t(CachedExtentRef child) : child(child) {}
+  child_pos_t(CachedExtentRef stable_parent, uint16_t pos)
+    : stable_parent(stable_parent), pos(pos) {}
+
+  template <typename parent_t>
+  TCachedExtentRef<parent_t> get_parent() {
+    ceph_assert(stable_parent);
+    return stable_parent->template cast<parent_t>();
+  }
+  uint16_t get_pos() {
+    return pos;
+  }
+  template <typename child_t>
+  TCachedExtentRef<child_t> get_child() {
+    if (child) {
+      return child->template cast<child_t>();
+    } else {
+      return nullptr;
+    }
+  }
+  void link_child(ChildableCachedExtent *c);
+private:
+  CachedExtentRef stable_parent;
+  uint16_t pos = std::numeric_limits<uint16_t>::max();
+  CachedExtentRef child;
+};
 
 template <typename key_t, typename>
 class PhysicalNodePin;
@@ -877,6 +907,8 @@ public:
   virtual PhysicalNodePinRef<key_t, val_t> duplicate() const = 0;
   virtual bool has_been_invalidated() const = 0;
   virtual CachedExtentRef get_parent() const = 0;
+  virtual child_pos_t get_logical_extent(Transaction&) = 0;
+  virtual uint16_t get_pos() const = 0;
 
   virtual ~PhysicalNodePin() {}
 };

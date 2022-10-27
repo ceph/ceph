@@ -128,7 +128,8 @@ public:
   template <typename T>
   pin_to_extent_ret<T> pin_to_extent(
     Transaction &t,
-    LBAPinRef pin) {
+    LBAPinRef pin,
+    child_pos_t &child_pos) {
     LOG_PREFIX(TransactionManager::pin_to_extent);
     SUBTRACET(seastore_tm, "getting extent {}", t, *pin);
     static_assert(is_logical_type(T::TYPE));
@@ -138,11 +139,13 @@ public:
       t,
       pref.get_val(),
       pref.get_length(),
-      [this, pin=std::move(pin)](T &extent) mutable {
+      [pin=std::move(pin), child_pos=std::move(child_pos)]
+      (T &extent) mutable {
 	assert(!extent.has_pin());
 	assert(!extent.has_been_invalidated());
 	assert(!pin->has_been_invalidated());
 	assert(pin->get_parent());
+	child_pos.link_child(&extent);
 	extent.set_pin(std::move(pin));
 	lba_manager->add_pin(extent.get_pin());
       }
@@ -164,32 +167,7 @@ public:
   pin_to_extent_by_type_ret pin_to_extent_by_type(
       Transaction &t,
       LBAPinRef pin,
-      extent_types_t type) {
-    LOG_PREFIX(TransactionManager::pin_to_extent_by_type);
-    SUBTRACET(seastore_tm, "getting extent {} type {}", t, *pin, type);
-    assert(is_logical_type(type));
-    auto &pref = *pin;
-    return cache->get_extent_by_type(
-      t,
-      type,
-      pref.get_val(),
-      pref.get_key(),
-      pref.get_length(),
-      [this, pin=std::move(pin)](CachedExtent &extent) mutable {
-        auto &lextent = static_cast<LogicalCachedExtent&>(extent);
-        assert(!lextent.has_pin());
-        assert(!lextent.has_been_invalidated());
-        assert(!pin->has_been_invalidated());
-        lextent.set_pin(std::move(pin));
-        lba_manager->add_pin(lextent.get_pin());
-      }
-    ).si_then([FNAME, &t](auto ref) {
-      SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
-      return pin_to_extent_by_type_ret(
-	interruptible::ready_future_marker{},
-	std::move(ref->template cast<LogicalCachedExtent>()));
-    });
-  }
+      extent_types_t type);
 
   /**
    * read_extent
@@ -209,14 +187,30 @@ public:
     SUBTRACET(seastore_tm, "{}~{}", t, offset, length);
     return get_pin(
       t, offset
-    ).si_then([this, FNAME, &t, offset, length] (auto pin) {
+    ).si_then([this, FNAME, &t, offset, length] (auto pin)
+      -> read_extent_ret<T> {
       if (length != pin->get_length() || !pin->get_val().is_real()) {
         SUBERRORT(seastore_tm,
             "offset {} len {} got wrong pin {}",
             t, offset, length, *pin);
         ceph_assert(0 == "Should be impossible");
       }
-      return this->pin_to_extent<T>(t, std::move(pin));
+      auto child_pos = pin->get_logical_extent(t);
+      auto extent = child_pos.template get_child<T>();
+      if (extent) {
+	SUBTRACET(seastore_tm, "got extent {}", t, *extent);
+	if (!extent->is_pending_in_trans(t.get_trans_id())) {
+	  t.add_to_read_set(extent);
+	  if (!extent->is_mutation_pending()) {
+	    cache->touch_extent(*extent);
+	  }
+	}
+	return extent->wait_io().then([extent] {
+	  return extent;
+	});
+      } else {
+	return this->pin_to_extent<T>(t, std::move(pin), child_pos);
+      }
     });
   }
 
@@ -233,14 +227,30 @@ public:
     SUBTRACET(seastore_tm, "{}", t, offset);
     return get_pin(
       t, offset
-    ).si_then([this, FNAME, &t, offset] (auto pin) {
+    ).si_then([this, FNAME, &t, offset] (auto pin)
+      -> read_extent_ret<T> {
       if (!pin->get_val().is_real()) {
         SUBERRORT(seastore_tm,
             "offset {} got wrong pin {}",
             t, offset, *pin);
         ceph_assert(0 == "Should be impossible");
       }
-      return this->pin_to_extent<T>(t, std::move(pin));
+      auto child_pos = pin->get_logical_extent(t);
+      auto extent = child_pos.template get_child<T>();
+      if (extent) {
+	SUBTRACET(seastore_tm, "got extent {}", t, *extent);
+	if (!extent->is_pending_in_trans(t.get_trans_id())) {
+	  t.add_to_read_set(extent);
+	  if (!extent->is_mutation_pending()) {
+	    cache->touch_extent(*extent);
+	  }
+	}
+	return extent->wait_io().then([extent] {
+	  return extent;
+	});
+      } else {
+	return this->pin_to_extent<T>(t, std::move(pin), child_pos);
+      }
     });
   }
 

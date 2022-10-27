@@ -473,6 +473,8 @@ public:
     return parent;
   }
 
+  child_pos_t get_logical_extent(Transaction &t) final;
+
   btree_range_pin_t<key_t>& get_range_pin() {
     return pin;
   }
@@ -485,7 +487,14 @@ public:
     parent = pin;
   }
 
-  void link_extent(LogicalCachedExtent *ref) final;
+  void link_extent(LogicalCachedExtent *ref) final {
+    pin.set_extent(ref);
+    pos = std::numeric_limits<uint16_t>::max();
+  }
+
+  uint16_t get_pos() const final {
+    return pos;
+  }
 
   extent_len_t get_length() const final {
     ceph_assert(pin.range.end > pin.range.begin);
@@ -512,6 +521,7 @@ public:
     ret->value = value;
     ret->parent = parent;
     ret->len = len;
+    ret->pos = pos;
     return ret;
   }
 
