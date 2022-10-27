@@ -5,7 +5,7 @@
 #include <sstream>
 
 #include "rgw_zone.h"
-#include "rgw_bucket.h"
+#include "driver/rados/rgw_bucket.h"
 #include "rgw_reshard.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"

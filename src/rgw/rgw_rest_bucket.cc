@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_op.h"
-#include "rgw_bucket.h"
+#include "driver/rados/rgw_bucket.h"
 #include "rgw_rest_bucket.h"
 #include "rgw_sal.h"
 

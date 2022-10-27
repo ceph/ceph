@@ -517,10 +517,8 @@ int DaosBucket::check_bucket_shards(const DoutPrefixProvider* dpp) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosBucket::chown(const DoutPrefixProvider* dpp, User* new_user,
-                      User* old_user, optional_yield y,
-                      const std::string* marker) {
-  /* XXX: Update policies of all the bucket->objects with new user */
+int DaosBucket::chown(const DoutPrefixProvider* dpp, User& new_user,
+                      optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
@@ -1042,6 +1040,10 @@ int DaosObject::omap_set_val_by_key(const DoutPrefixProvider* dpp,
                                     const std::string& key, bufferlist& val,
                                     bool must_exist, optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
+}
+
+int DaosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y) {
+  return 0;
 }
 
 std::unique_ptr<MPSerializer> DaosObject::get_serializer(

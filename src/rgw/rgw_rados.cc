@@ -28,7 +28,7 @@
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h" /* for dumping s3policy in debug log */
 #include "rgw_aio_throttle.h"
-#include "rgw_bucket.h"
+#include "driver/rados/rgw_bucket.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"

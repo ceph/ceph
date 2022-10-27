@@ -15,7 +15,7 @@
 #include <map>
 #include "rgw_sal_store.h"
 #include "rgw_common.h"
-#include "rgw_bucket.h"
+#include "driver/rados/rgw_bucket.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/ceph_context.h"
