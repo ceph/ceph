@@ -22,8 +22,12 @@ LBAManager::update_mappings(
   });
 }
 
+template <bool leaf_has_children>
 LBAManagerRef lba_manager::create_lba_manager(Cache &cache) {
-  return LBAManagerRef(new btree::BtreeLBAManager(cache));
+  return LBAManagerRef(new btree::BtreeLBAManager<leaf_has_children>(cache));
 }
+
+template  LBAManagerRef lba_manager::create_lba_manager<true>(Cache &cache);
+template  LBAManagerRef lba_manager::create_lba_manager<false>(Cache &cache);
 
 }

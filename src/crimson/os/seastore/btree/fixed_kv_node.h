@@ -915,7 +915,8 @@ template <
   typename VAL,
   typename VAL_LE,
   size_t node_size,
-  typename node_type_t>
+  typename node_type_t,
+  bool has_children>
 struct FixedKVLeafNode
   : FixedKVNode<NODE_KEY>,
     common::FixedKVNodeLayout<
@@ -941,6 +942,8 @@ struct FixedKVLeafNode
   FixedKVLeafNode(const FixedKVLeafNode &rhs)
     : FixedKVNode<NODE_KEY>(rhs),
       node_layout_t(this->get_bptr().c_str()) {}
+
+  static constexpr bool do_has_children = has_children;
 
   uint16_t get_node_split_pivot() final {
     return this->get_split_pivot().get_offset();

@@ -42,7 +42,7 @@ public:
 
 using LBABtree = FixedKVBtree<
   laddr_t, lba_map_val_t, LBAInternalNode,
-  LBALeafNode, BtreeLBAPin, LBA_BLOCK_SIZE>;
+  LBALeafNode, BtreeLBAPin, LBA_BLOCK_SIZE, true>;
 
 /**
  * BtreeLBAManager
@@ -63,7 +63,11 @@ using LBABtree = FixedKVBtree<
  */
 class BtreeLBAManager : public LBAManager {
 public:
-  BtreeLBAManager(Cache &cache);
+  BtreeLBAManager(Cache &cache)
+    : cache(cache)
+  {
+    register_metrics();
+  }
 
   mkfs_ret mkfs(
     Transaction &t) final;
@@ -144,7 +148,13 @@ public:
     bpin->set_parent(nullptr);
   }
 
-  ~BtreeLBAManager();
+  ~BtreeLBAManager() {
+    pin_set.scan([](auto &i) {
+      LOG_PREFIX(BtreeLBAManager::~BtreeLBAManager);
+      SUBERROR(seastore_lba, "Found {}, has_ref={} -- {}",
+	    i, i.has_ref(), i.get_extent());
+    });
+  }
 private:
   Cache &cache;
 
