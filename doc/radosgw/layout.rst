@@ -71,7 +71,7 @@ Objects data is kept in one or more RADOS objects for each rgw object.
 Object Lookup Path
 ------------------
 
-When accessing objects, ReST APIs come to RGW with three parameters:
+When accessing objects, REST APIs come to RGW with three parameters:
 account information (access key in S3 or account name in Swift),
 bucket or container name, and object name (or key). At present, RGW only
 uses account information to find out the user ID and for access control.
