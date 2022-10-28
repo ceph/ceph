@@ -126,3 +126,4 @@ void rgw_perf_stop(CephContext *cct)
   perf_counters_cache->clear_cache();
   delete perf_counters_cache;
 }
+

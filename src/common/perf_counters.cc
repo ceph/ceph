@@ -175,7 +175,6 @@ void PerfCounters::inc(int idx, uint64_t amt)
   } else {
     data.u64 += amt;
   }
-  data.accessed = true;
 }
 
 void PerfCounters::dec(int idx, uint64_t amt)

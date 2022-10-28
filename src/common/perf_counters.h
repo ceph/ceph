@@ -189,7 +189,6 @@ public:
     std::atomic<uint64_t> avgcount = { 0 };
     std::atomic<uint64_t> avgcount2 = { 0 };
     std::unique_ptr<PerfHistogram<>> histogram;
-    bool accessed = false;
 
     void reset()
     {
