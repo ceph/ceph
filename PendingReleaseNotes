@@ -88,6 +88,11 @@
 * RBD: Trailing newline in passphrase files (`<passphrase-file>` argument in
   `rbd encryption format` command and `--encryption-passphrase-file` option
   in other commands) is no longer stripped.
+* RBD: Support for layered client-side encryption is added.  Cloned images
+  can now be encrypted each with its own encryption format and passphrase,
+  potentially different from that of the parent image.  The efficient
+  copy-on-write semantics intrinsic to unformatted (regular) cloned images
+  are retained.
 
 >=17.2.1
 
