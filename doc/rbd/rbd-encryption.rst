@@ -65,11 +65,11 @@ image.
 In order to safely perform encrypted IO on the formatted image, an additional
 *encryption load* operation should be applied after opening the image. The
 encryption load operation requires supplying the encryption format and a secret
-for unlocking the encryption key. Following a successful encryption load
-operation, all IOs for the opened image will be encrypted / decrypted.
-For a cloned image, this includes IOs for ancestor images as well. The
-encryption key will be stored in-memory by the RBD client until the image is
-closed.
+for unlocking the encryption key for the image itself and each of its explicitly
+formatted ancestor images. Following a successful encryption load operation,
+all IOs for the opened image will be encrypted / decrypted. For a cloned
+image, this includes IOs for ancestor images as well. The encryption keys will
+be stored in-memory by the RBD client until the image is closed.
 
 .. note::
    Once encryption has been loaded, no other encryption load / format
@@ -77,7 +77,30 @@ closed.
 
 .. note::
    Once encryption has been loaded, API calls for retrieving the image size
-   using the opened image context will return the effective image size.
+   and the parent overlap using the opened image context will return the
+   effective image size and the effective parent overlap respectively.
+
+.. note::
+   Once encryption has been loaded, API calls for resizing the image will
+   interpret the specified target size as effective image size.
+
+.. note::
+   If a clone of an encrypted image is explicitly formatted, the operation of
+   flattening the cloned image ceases to be transparent since the parent data
+   must be re-encrypted according to the cloned image format as it is copied
+   from the parent snapshot. If encryption is not loaded before the flatten
+   operation is issued, any parent data that was previously accessible in the
+   cloned image may become unreadable.
+
+.. note::
+   If a clone of an encrypted image is explicitly formatted, the operation of
+   shrinking the cloned image ceases to be transparent since in some cases
+   (e.g. if the cloned image has snapshots or if the cloned image is being
+   shrunk to a size that is not aligned with the object size) it involves
+   copying some data from the parent snapshot, similar to flattening. If
+   encryption is not loaded before the shrink operation is issued, any parent
+   data that was previously accessible in the cloned image may become
+   unreadable.
 
 .. note::
    Encryption load can be automatically applied when mounting RBD images as
@@ -102,9 +125,11 @@ into the image) and loaded by RBD encryption.
    Currently, only AES-128 and AES-256 encryption algorithms are supported.
    Additionally, xts-plain64 is currently the only supported encryption mode.
 
-To use the LUKS format, start by formatting the image::
+To use the LUKS format, start by formatting the image:
 
-    $ rbd encryption format {pool-name}/{image-name} {luks1|luks2} {passphrase-file} [–cipher-alg {aes-128 | aes-256}]
+.. prompt:: bash $
+
+    rbd encryption format [--cipher-alg {aes-128|aes-256}] {image-spec} {luks1|luks2} {passphrase-file}
 
 The encryption format operation generates a LUKS header and writes it to the
 beginning of the image. The header is appended with a single keyslot holding a
@@ -124,8 +149,10 @@ tools such as cryptsetup.
 The LUKS header size can vary (up to 136MiB in LUKS2), but is usually up to
 16MiB, depending on the version of `libcryptsetup` installed. For optimal
 performance, the encryption format will set the data offset to be aligned with
-the image object size. For example expect a minimum overhead of 8MiB if using
-an imageconfigured with an 8MiB object size.
+the image stripe period size. For example, expect a minimum overhead of 8MiB if
+using an image configured with an 8MiB object size and a minimum overhead of
+12MiB if using an image configured with a 4MiB object size and `stripe count`_
+of 3.
 
 In LUKS1, sectors, which are the minimal encryption units, are fixed at 512
 bytes. LUKS2 supports larger sectors, and for better performance we set
@@ -148,6 +175,72 @@ encryption operations of actual image IO, assuming AES-NI is enabled,
 a relative small microseconds latency should be added, as well as a small
 increase in CPU utilization.
 
+Examples
+========
+
+Create a LUKS2-formatted image with the effective size of 50GiB:
+
+.. prompt:: bash $
+
+    rbd create --size 50G mypool/myimage
+    rbd encryption format mypool/myimage luks2 passphrase.bin
+    rbd resize --size 50G --encryption-passphrase-file passphrase.bin mypool/myimage
+
+``rbd resize`` command at the end grows the image to compensate for the
+overhead associated with the LUKS2 header.
+
+Given a LUKS2-formatted image, create a LUKS2-formatted clone with the
+same effective size:
+
+.. prompt:: bash $
+
+    rbd snap create mypool/myimage@snap
+    rbd snap protect mypool/myimage@snap
+    rbd clone mypool/myimage@snap mypool/myclone
+    rbd encryption format mypool/myclone luks2 clone-passphrase.bin
+
+Given a LUKS2-formatted image with the effective size of 50GiB, create
+a LUKS1-formatted clone with the same effective size:
+
+.. prompt:: bash $
+
+    rbd snap create mypool/myimage@snap
+    rbd snap protect mypool/myimage@snap
+    rbd clone mypool/myimage@snap mypool/myclone
+    rbd encryption format mypool/myclone luks1 clone-passphrase.bin
+    rbd resize --size 50G --allow-shrink --encryption-passphrase-file clone-passphrase.bin --encryption-passphrase-file passphrase.bin mypool/myclone
+
+Since LUKS1 header is usually smaller than LUKS2 header, ``rbd resize``
+command at the end shrinks the cloned image to get rid of unneeded
+space allowance.
+
+Given a LUKS1-formatted image with the effective size of 50GiB, create
+a LUKS2-formatted clone with the same effective size:
+
+.. prompt:: bash $
+
+    rbd resize --size 51G mypool/myimage
+    rbd snap create mypool/myimage@snap
+    rbd snap protect mypool/myimage@snap
+    rbd clone mypool/myimage@snap mypool/myclone
+    rbd encryption format mypool/myclone luks2 clone-passphrase.bin
+    rbd resize --size 50G --allow-shrink --encryption-passphrase-file passphrase.bin mypool/myimage
+    rbd resize --size 50G --allow-shrink --encryption-passphrase-file clone-passphrase.bin --encryption-passphrase-file passphrase.bin mypool/myclone
+
+Since LUKS2 header is usually bigger than LUKS1 header, ``rbd resize``
+command at the beginning temporarily grows the parent image to reserve
+some extra space in the parent snapshot and consequently the cloned
+image. This is necessary to make all parent data accessible in the
+cloned image. ``rbd resize`` commands at the end shrink the parent
+image back to its original size (this does not impact the parent
+snapshot) and also the cloned image to get rid of unused reserved
+space.
+
+The same applies to creating a formatted clone of an unformatted
+(plaintext) image since an unformatted image does not have a header at
+all.
+
 .. _journal feature: ../rbd-mirroring/#enable-image-journaling-feature
 .. _Supported Formats: #supported-formats
 .. _rbd-nbd: ../../man/8/rbd-nbd
+.. _stripe count: ../../man/8/rbd/#striping
