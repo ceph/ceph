@@ -28,7 +28,7 @@ the backend, which can be done by using the following flags and arguments:
 
 ``bluestore``
 -------------
-:term:`Bluestore<bluestore>` is the default object store for new OSDs. It
+:term:`Bluestore<bluestore>` is the default backend for new OSDs. It
 offers more flexibility for devices than :term:`filestore` does.  Bluestore
 supports the following configurations:
 
@@ -37,13 +37,13 @@ supports the following configurations:
 * a block device and a block.db device
 * a single block device
 
-The bluestore subcommand accepts physical block devices, partitions on physical
+The ``bluestore`` subcommand accepts physical block devices, partitions on physical
 block devices, or logical volumes as arguments for the various device
 parameters. If a physical block device is provided, a logical volume will be
 created. If the provided volume group's name begins with `ceph`, it will be
 created if it does not yet exist and it will be clobbered and reused if it
 already exists. This allows for a simpler approach to using LVM but at the
-cost of flexibility: no options or configurations can be used to change how the
+cost of flexibility: no option or configuration can be used to change how the
 logical volume is created.
 
 The ``block`` is specified with the ``--data`` flag, and in its simplest use
