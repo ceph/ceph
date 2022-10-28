@@ -20,9 +20,8 @@
 #include <boost/phoenix/operator.hpp>
 #include <boost/phoenix.hpp>
 
-#include "common/debug.h"
+#include "debug.h"
 #include "MDSAuthCaps.h"
-#include "mdstypes.h"
 #include "include/ipaddr.h"
 
 #define dout_subsys ceph_subsys_mds_auth

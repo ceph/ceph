@@ -22,14 +22,14 @@
 #include "include/common_fwd.h"
 #include "include/types.h"
 #include "include/encoding.h"
-#include "common/debug.h"
+#include "debug.h"
 
-#include "mdstypes.h"
+//#include "mdstypes.h"
 
 // unix-style capabilities
 enum {
   MAY_READ	= (1 << 0),
-  MAY_WRITE 	= (1 << 1),
+  MAY_WRITE	= (1 << 1),
   MAY_EXECUTE	= (1 << 2),
   MAY_CHOWN	= (1 << 4),
   MAY_CHGRP	= (1 << 5),

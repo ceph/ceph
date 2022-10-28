@@ -15,7 +15,7 @@
 #include <iostream>
 
 #include "include/stringify.h"
-#include "mds/MDSAuthCaps.h"
+#include "common/MDSAuthCaps.h"
 
 #include "gtest/gtest.h"
 

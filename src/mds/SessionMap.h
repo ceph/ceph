@@ -24,7 +24,7 @@
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "mdstypes.h"
-#include "mds/MDSAuthCaps.h"
+#include "common/MDSAuthCaps.h"
 #include "common/perf_counters.h"
 #include "common/DecayCounter.h"
 

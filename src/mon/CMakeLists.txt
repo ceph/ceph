@@ -2,6 +2,7 @@ set(lib_mon_srcs
   ${CMAKE_SOURCE_DIR}/src/auth/cephx/CephxKeyServer.cc
   ${CMAKE_SOURCE_DIR}/src/auth/cephx/CephxServiceHandler.cc
   ${CMAKE_SOURCE_DIR}/src/auth/AuthServiceHandler.cc
+  ${CMAKE_SOURCE_DIR}/src/common/MDSAuthCaps.cc
   Paxos.cc
   PaxosService.cc
   OSDMonitor.cc
@@ -21,7 +22,6 @@ set(lib_mon_srcs
   ConnectionTracker.cc
   HealthMonitor.cc
   KVMonitor.cc
-  ../mds/MDSAuthCaps.cc
   ../mgr/mgr_commands.cc
   ../osd/OSDCap.cc
   ../mgr/MgrCap.cc)

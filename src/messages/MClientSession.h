@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
-#include "mds/MDSAuthCaps.h"
+#include "common/MDSAuthCaps.h"
 
 class MClientSession final : public SafeMessage {
 private:

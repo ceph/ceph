@@ -34,7 +34,6 @@ set(mds_srcs
   snap.cc
   SessionMap.cc
   MDSContext.cc
-  MDSAuthCaps.cc
   MDLog.cc
   MDSCacheObject.cc
   Mantle.cc
@@ -43,6 +42,7 @@ set(mds_srcs
   MDSPinger.cc
   MetricAggregator.cc
   MetricsHandler.cc
+  ${CMAKE_SOURCE_DIR}/src/common/MDSAuthCaps.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc

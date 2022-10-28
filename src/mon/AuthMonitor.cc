@@ -33,7 +33,7 @@
 #include "include/stringify.h"
 #include "include/ceph_assert.h"
 
-#include "mds/MDSAuthCaps.h"
+#include "common/MDSAuthCaps.h"
 #include "mgr/MgrCap.h"
 #include "osd/OSDCap.h"
 
