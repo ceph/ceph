@@ -1196,6 +1196,7 @@ static bool issue_set_bucket_resharding(librados::IoCtx& io_ctx,
   call.entry = entry;
   encode(call, in);
   librados::ObjectWriteOperation op;
+  op.assert_exists(); // the shard must exist; if not fail rather than recreate
   op.exec(RGW_CLASS, RGW_SET_BUCKET_RESHARDING, in);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
