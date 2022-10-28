@@ -775,6 +775,7 @@ enum class cls_rgw_reshard_status : uint8_t {
   IN_PROGRESS     = 1,
   DONE            = 2
 };
+std::ostream& operator<<(std::ostream&, cls_rgw_reshard_status);
 
 inline std::string to_string(const cls_rgw_reshard_status status)
 {
@@ -833,8 +834,15 @@ struct cls_rgw_bucket_instance_entry {
   bool resharding() const {
     return reshard_status != RESHARD_STATUS::NOT_RESHARDING;
   }
+
   bool resharding_in_progress() const {
     return reshard_status == RESHARD_STATUS::IN_PROGRESS;
+  }
+
+  friend std::ostream& operator<<(std::ostream& out, const cls_rgw_bucket_instance_entry& v) {
+    out << "cls_rgw_bucket_instance_entry:{ " << v.reshard_status <<
+      ", \"" << v.new_bucket_instance_id << "\", " << v.num_shards << " }";
+    return out;
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_bucket_instance_entry)

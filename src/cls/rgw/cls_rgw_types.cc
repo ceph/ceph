@@ -763,3 +763,21 @@ void cls_rgw_lc_obj_head::dump(Formatter *f) const
 void cls_rgw_lc_obj_head::generate_test_instances(list<cls_rgw_lc_obj_head*>& ls)
 {
 }
+
+std::ostream& operator<<(std::ostream& out, cls_rgw_reshard_status status) {
+  switch (status) {
+  case cls_rgw_reshard_status::NOT_RESHARDING:
+    out << "NOT_RESHARDING";
+    break;
+  case cls_rgw_reshard_status::IN_PROGRESS:
+    out << "IN_PROGRESS";
+    break;
+  case cls_rgw_reshard_status::DONE:
+    out << "DONE";
+    break;
+  default:
+    out << "UNKNOWN_STATUS";
+  }
+
+  return out;
+}
