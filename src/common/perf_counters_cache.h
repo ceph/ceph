@@ -4,12 +4,6 @@
 #include "common/labeled_perf_counters.h"
 #include "common/ceph_context.h"
 
-enum {
-  lm_rgw_first = 16000,
-  lm_rgw_put_b,
-  lm_rgw_last,
-};
-
 class PerfCountersCache {
 
 private:
@@ -33,29 +27,20 @@ public:
   }
 
   ceph::common::LabeledPerfCounters* add(std::string key) {
-  //void add(std::string key) {
     auto labeled_counters = get(key);
     if (!labeled_counters) {
       // perf counters instance creation code
       if(curr_size < target_size) {
-        // new builder
-        //ceph::common::LabeledPerfCountersBuilder lpcb(cct, key, lower_bound, upper_bound);
-
-        //lpcb.add_u64_counter(lm_rgw_put, "put", "Puts");
-
         auto lpcb = new ceph::common::LabeledPerfCountersBuilder(cct, key, lower_bound, upper_bound);
         lpcb_init(lpcb);
 
         // add counters to builder
         labeled_counters = lpcb->create_perf_counters();
         delete lpcb;
-        labeled_counters->set_name(key);
 
         // add new labeled counters to collection, cache
         cct->get_labeledperfcounters_collection()->add(labeled_counters);
         cache[key] = labeled_counters;
-        /*
-        */
         curr_size++;
       }
     }

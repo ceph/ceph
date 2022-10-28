@@ -2323,6 +2323,7 @@ void RGWGetObj::execute(optional_yield y)
   }
 
   labels = ceph::perf_counters::cache_key("z_rgw", {{"Bucket", s->bucket_name}, {"User", s->user->get_display_name()}});
+  // TODO delete logging
   ldpp_dout(this, 20) << "labels for perf counters cache for l_rgw_metrics_get_b: " << labels << dendl;
   perf_counters_cache->add(labels);
   perf_counters_cache->inc(labels, l_rgw_get_b, s->obj_size);
@@ -4172,12 +4173,14 @@ void RGWPutObj::execute(optional_yield y)
   s->obj_size = ofs;
   s->object->set_obj_size(ofs);
 
+  std::string labels = ceph::perf_counters::cache_key("z_rgw", {{"Bucket", s->bucket_name}, {"User", s->user->get_display_name()}});
+  // TODO delete below logging
+  ldpp_dout(this, 20) << "labels for perf counters cache for l_rgw_metrics_put_b: " << labels << dendl;
   uint64_t rgw_labeled_perfcounters_size = s->cct->_conf.get_val<uint64_t>("rgw_labeled_perfcounters_size");
   ldpp_dout(this, 20) << "rgw_labeled_perfcounters_size is: " << rgw_labeled_perfcounters_size << dendl;
-  std::string labels = ceph::perf_counters::cache_key("z_rgw", {{"Bucket", s->bucket_name}, {"User", s->user->get_display_name()}});
-  ldpp_dout(this, 20) << "labels for perf counters cache for l_rgw_metrics_put_b: " << labels << dendl;
+
   perf_counters_cache->add(labels);
-  perf_counters_cache->inc(labels, lm_rgw_put_b, s->obj_size);
+  perf_counters_cache->inc(labels, l_rgw_put_b, s->obj_size);
 
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 
