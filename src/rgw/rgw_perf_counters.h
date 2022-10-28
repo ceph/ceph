@@ -11,6 +11,7 @@ extern PerfCountersCache *perf_counters_cache;
 
 extern int rgw_perf_start(CephContext *cct);
 extern void rgw_perf_stop(CephContext *cct);
+extern void add_rgw_counters(ceph::common::LabeledPerfCountersBuilder* lpcb);
 
 enum {
   l_rgw_first = 15000,
@@ -59,4 +60,3 @@ enum {
 
   l_rgw_last,
 };
-

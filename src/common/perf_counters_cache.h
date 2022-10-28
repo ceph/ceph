@@ -4,13 +4,22 @@
 #include "common/labeled_perf_counters.h"
 #include "common/ceph_context.h"
 
+enum {
+  lm_rgw_first = 16000,
+  lm_rgw_put_b,
+  lm_rgw_last,
+};
+
 class PerfCountersCache {
 
 private:
   CephContext *cct;
   size_t curr_size = 0; 
   size_t target_size = 0; 
-  ceph::common::LabeledPerfCountersBuilder *default_lplb;
+  int lower_bound = 0;
+  int upper_bound = 0;
+  std::function<void(ceph::common::LabeledPerfCountersBuilder*)> lpcb_init;
+
   std::unordered_map<std::string, ceph::common::LabeledPerfCounters*> cache;
 
 public:
@@ -23,20 +32,30 @@ public:
     return NULL;
   }
 
-  ceph::common::LabeledPerfCounters* add(std::string key, ceph::common::LabeledPerfCountersBuilder *lplb = NULL) {
+  ceph::common::LabeledPerfCounters* add(std::string key) {
   //void add(std::string key) {
     auto labeled_counters = get(key);
     if (!labeled_counters) {
+      // perf counters instance creation code
       if(curr_size < target_size) {
-        // perf counters instance creation code
-        if(lplb) {
-          labeled_counters = lplb->create_perf_counters();
-        } else {
-          labeled_counters = default_lplb->create_perf_counters();
-        }
+        // new builder
+        //ceph::common::LabeledPerfCountersBuilder lpcb(cct, key, lower_bound, upper_bound);
+
+        //lpcb.add_u64_counter(lm_rgw_put, "put", "Puts");
+
+        auto lpcb = new ceph::common::LabeledPerfCountersBuilder(cct, key, lower_bound, upper_bound);
+        lpcb_init(lpcb);
+
+        // add counters to builder
+        labeled_counters = lpcb->create_perf_counters();
+        delete lpcb;
         labeled_counters->set_name(key);
+
+        // add new labeled counters to collection, cache
         cct->get_labeledperfcounters_collection()->add(labeled_counters);
         cache[key] = labeled_counters;
+        /*
+        */
         curr_size++;
       }
     }
@@ -83,12 +102,12 @@ public:
     }
   }
 
-  PerfCountersCache(CephContext *_cct, size_t _target_size, ceph::common::LabeledPerfCountersBuilder *_lplb) : cct(_cct), target_size(_target_size), default_lplb(_lplb) {}
+  PerfCountersCache(CephContext *_cct, size_t _target_size, int _lower_bound, int _upper_bound, 
+      std::function<void(ceph::common::LabeledPerfCountersBuilder*)> _lpcb_init) : cct(_cct), 
+      target_size(_target_size), lower_bound(_lower_bound), upper_bound(_upper_bound), 
+      lpcb_init(_lpcb_init) {}
 
-  ~PerfCountersCache() {
-    delete default_lplb;
-    default_lplb = NULL;
-  }
+  ~PerfCountersCache() {}
 
 };
 
