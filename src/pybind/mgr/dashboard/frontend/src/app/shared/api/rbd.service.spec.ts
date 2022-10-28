@@ -56,7 +56,7 @@ describe('RbdService', () => {
   });
 
   it('should call list', () => {
-    /* tslint:disable:no-empty */
+    /* eslint-disable no-empty, @typescript-eslint/no-empty-function */
     const context = new CdTableFetchDataContext(() => {});
     service.list(context.toParams()).subscribe();
     const req = httpTesting.expectOne('api/block/image?offset=0&limit=10&search=&sort=+name');

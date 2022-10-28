@@ -5,7 +5,7 @@ import { Injectable } from '@angular/core';
   providedIn: 'root'
 })
 export class CdTableServerSideService {
-  /* tslint:disable:no-empty */
+  /* eslint-disable no-empty, @typescript-eslint/no-empty-function */
   constructor() {}
 
   static getCount(resp: HttpResponse<any>): number {
