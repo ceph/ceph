@@ -4392,10 +4392,11 @@ WantedBy=ceph-{fsid}.target
             # part of the networks info is returned as a set which is not JSON
             # serializable. The set must be converted to a list
             networks = list_networks(self.ctx)
-            networks_list = {}
+            networks_list: Dict[str, Dict[str, List[str]]] = {}
             for key in networks.keys():
+                networks_list[key] = {}
                 for k, v in networks[key].items():
-                    networks_list[key] = {k: list(v)}
+                    networks_list[key][k] = list(v)
 
             data = json.dumps({'host': self.host,
                                'ls': (self.ls_gatherer.data if self.ack == self.ls_gatherer.ack
