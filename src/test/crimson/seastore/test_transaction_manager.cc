@@ -399,11 +399,6 @@ struct transaction_manager_test_t :
   }
 
   bool check_usage() {
-    std::string j_type = GetParam();
-    if (j_type == "circularbounded") {
-      // TODO: add check_usage for RBM
-      return true;
-    }
     return epm->check_usage();
   }
 

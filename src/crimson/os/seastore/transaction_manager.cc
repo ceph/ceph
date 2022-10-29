@@ -647,7 +647,7 @@ TransactionManagerRef make_transaction_manager(
     sms->add_segment_manager(static_cast<SegmentManager*>(primary_device));
   } else {
     auto rbm = std::make_unique<BlockRBManager>(
-      static_cast<RBMDevice*>(primary_device), "");
+      static_cast<RBMDevice*>(primary_device), "", is_test);
     rbs->add_rb_manager(std::move(rbm));
   }
 
@@ -655,7 +655,8 @@ TransactionManagerRef make_transaction_manager(
     if (p_dev->get_backend_type() == backend_type_t::SEGMENTED) {
       sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
     } else {
-      auto rbm = std::make_unique<BlockRBManager>(static_cast<RBMDevice*>(p_dev), "");
+      auto rbm = std::make_unique<BlockRBManager>(
+	static_cast<RBMDevice*>(p_dev), "", is_test);
       rbs->add_rb_manager(std::move(rbm));
     }
   }

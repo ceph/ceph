@@ -60,9 +60,14 @@ public:
   paddr_t alloc_extent(size_t size) final; // allocator, return blocks
 
   abort_allocation_ertr::future<> abort_allocation(Transaction &t) final;
-  write_ertr::future<> complete_allocation(Transaction &t) final;
+  void complete_allocation(paddr_t addr, size_t size) final;
 
-  size_t get_size() const final { return device->get_available_size(); };
+  size_t get_start_rbm_addr() const {
+    return device->get_journal_start() + device->get_journal_size();
+  }
+  size_t get_size() const final {
+    return device->get_available_size() - get_start_rbm_addr(); 
+  };
   extent_len_t get_block_size() const final { return device->get_block_size(); }
 
   /*
@@ -70,9 +75,9 @@ public:
    * on a device, so start and end location of the device are needed to
    * support such case.
    */
-  BlockRBManager(RBMDevice * device, std::string path)
+  BlockRBManager(RBMDevice * device, std::string path, bool detailed)
     : device(device), path(path) {
-    allocator.reset(new AvlAllocator);
+    allocator.reset(new AvlAllocator(detailed));
   }
 
   write_ertr::future<> write(rbm_abs_addr addr, bufferlist &bl);
@@ -97,7 +102,7 @@ public:
   void mark_space_used(paddr_t paddr, size_t len) final {
     assert(allocator);
     rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
-    assert(addr >= device->get_journal_size() + device->get_journal_start() &&
+    assert(addr >= get_start_rbm_addr() &&
 	   addr + len <= device->get_available_size());
     allocator->mark_extent_used(addr, len);
   }
@@ -105,15 +110,23 @@ public:
   void mark_space_free(paddr_t paddr, size_t len) final {
     assert(allocator);
     rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
-    assert(addr >= device->get_journal_size() + device->get_journal_start() &&
+    assert(addr >= get_start_rbm_addr() &&
 	   addr + len <= device->get_available_size());
     allocator->free_extent(addr, len);
   }
 
   paddr_t get_start() final {
     return convert_abs_addr_to_paddr(
-      device->get_journal_start() + device->get_journal_size(),
+      get_start_rbm_addr(),
       device->get_device_id());
+  }
+
+  rbm_extent_state_t get_extent_state(paddr_t paddr, size_t size) final {
+    assert(allocator);
+    rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
+    assert(addr >= get_start_rbm_addr() &&
+	   addr + size <= device->get_available_size());
+    return allocator->get_extent_state(addr, size);
   }
 
 private:

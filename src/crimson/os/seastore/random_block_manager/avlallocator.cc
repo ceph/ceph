@@ -166,6 +166,10 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extent(
   assert(result.num_intervals() == 1);
   for (auto p : result) {
     INFO("result start: {}, end: {}", p.first, p.first + p.second);
+    if (detailed) {
+      assert(!reserved_extent_tracker.contains(p.first, p.second));
+      reserved_extent_tracker.insert(p.first, p.second);
+    }
   }
   return result;
 }
@@ -175,5 +179,23 @@ void AvlAllocator::free_extent(rbm_abs_addr addr, size_t size)
   assert(total_size);
   assert(total_size > available_size);
   _add_to_tree(addr, size);
+  if (detailed && reserved_extent_tracker.contains(addr, size)) {
+    reserved_extent_tracker.erase(addr, size);
+  }
+}
+
+bool AvlAllocator::is_free_extent(rbm_abs_addr start, size_t size)
+{
+  rbm_abs_addr end = start + size;
+  ceph_assert(size != 0);
+  if (start < base_addr || base_addr + total_size < end) {
+    return false;
+  }
+
+  auto rs = extent_tree.find(extent_range_t{start, end}, extent_tree.key_comp());
+  if (rs != extent_tree.end() && rs->start <= start && rs->end >= end) {
+    return true;
+  }
+  return false;
 }
 }
