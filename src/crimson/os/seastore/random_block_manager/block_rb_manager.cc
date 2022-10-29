@@ -72,10 +72,12 @@ BlockRBManager::abort_allocation_ertr::future<> BlockRBManager::abort_allocation
   return abort_allocation_ertr::now();
 }
 
-BlockRBManager::write_ertr::future<> BlockRBManager::complete_allocation(
-    Transaction &t)
+void BlockRBManager::complete_allocation(
+    paddr_t paddr, size_t size)
 {
-  return write_ertr::now();
+  assert(allocator);
+  rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
+  allocator->complete_allocation(addr, size);
 }
 
 BlockRBManager::open_ertr::future<> BlockRBManager::open()
@@ -84,7 +86,7 @@ BlockRBManager::open_ertr::future<> BlockRBManager::open()
   return device->read_rbm_header(RBM_START_ADDRESS
   ).safe_then([this](auto s)
     -> open_ertr::future<> {
-    auto ool_start = device->get_journal_start() + device->get_journal_size();
+    auto ool_start = get_start_rbm_addr();
     allocator->init(
       ool_start,
       device->get_available_size() -

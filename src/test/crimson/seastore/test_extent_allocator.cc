@@ -35,7 +35,7 @@ struct allocator_test_t :
   seastar::future<> set_up_fut() final {
     std::string a_type = GetParam();
     if (a_type == "avl") {
-      allocator.reset(new AvlAllocator);
+      allocator.reset(new AvlAllocator(false));
       return seastar::now();
     } 
     ceph_assert(0 == "no support");

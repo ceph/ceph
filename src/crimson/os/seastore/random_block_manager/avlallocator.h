@@ -60,8 +60,8 @@ struct extent_range_t {
  */
 class AvlAllocator : public ExtentAllocator {
 public:
-  AvlAllocator(uint64_t block_size = 0, uint64_t available_size = 0) :
-    block_size(block_size), available_size(available_size) {}
+  AvlAllocator(bool detailed) :
+    detailed(detailed) {}
   std::optional<interval_set<rbm_abs_addr>> alloc_extent(
     size_t size) final;
 
@@ -81,6 +81,9 @@ public:
   }
 
   void close() {
+    if (!detailed) {
+      assert(reserved_extent_tracker.size() == 0);
+    }
     extent_size_tree.clear();
     extent_tree.clear_and_dispose(dispose_rs{});
     total_size = 0;
@@ -95,6 +98,31 @@ public:
 
   uint64_t get_max_alloc_size() const final {
     return max_alloc_size;
+  }
+
+  bool is_free_extent(rbm_abs_addr start, size_t size);
+
+  void complete_allocation(rbm_abs_addr start, size_t size) final {
+    if (detailed) {
+      assert(reserved_extent_tracker.contains(start, size));
+      reserved_extent_tracker.erase(start, size);
+    }
+  }
+
+  bool is_reserved_extent(rbm_abs_addr start, size_t size) {
+    if (detailed) {
+      return reserved_extent_tracker.contains(start, size);
+    } 
+    return false;
+  }
+
+  rbm_extent_state_t get_extent_state(rbm_abs_addr addr, size_t size) final {
+    if (is_reserved_extent(addr, size)) {
+      return rbm_extent_state_t::RESERVED;
+    } else if (is_free_extent(addr, size)) {
+      return rbm_extent_state_t::FREE;
+    }
+    return rbm_extent_state_t::ALLOCATED;
   }
 
 private:
@@ -139,6 +167,8 @@ private:
   uint64_t total_size = 0;
   uint64_t base_addr = 0;
   uint64_t max_alloc_size = 4 << 20;
+  bool detailed;
+  interval_set<rbm_abs_addr> reserved_extent_tracker; 
 };
 
 }

@@ -57,6 +57,16 @@ public:
   virtual uint64_t get_available_size() const = 0;
   virtual uint64_t get_max_alloc_size() const = 0;
   virtual void close() = 0;
+  /**
+   * complete_allocation
+   *
+   * This changes this extent state from RESERVED to ALLOCATED
+   *
+   * @param start address
+   * @param size
+   */
+  virtual void complete_allocation(rbm_abs_addr start, size_t size) = 0;
+  virtual rbm_extent_state_t get_extent_state(rbm_abs_addr addr, size_t size) = 0;
   virtual ~ExtentAllocator() {}
 };
 using ExtentAllocatorRef = std::unique_ptr<ExtentAllocator>;

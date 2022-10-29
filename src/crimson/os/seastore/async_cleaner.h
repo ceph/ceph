@@ -820,6 +820,247 @@ public:
   bool equals(const SpaceTrackerI &other) const;
 };
 
+template <typename T>
+class block_map_t {
+public:
+  block_map_t() {
+    device_to_blocks.resize(DEVICE_ID_MAX_VALID);
+    device_block_size.resize(DEVICE_ID_MAX_VALID);
+  }
+  void add_device(device_id_t device, std::size_t blocks, const T& init,
+		  size_t block_size) {
+    ceph_assert(device <= DEVICE_ID_MAX_VALID);
+    ceph_assert(device_to_blocks[device].size() == 0);
+    ceph_assert(blocks > 0);
+    device_to_blocks[device].resize(blocks, init);
+    total_blocks += blocks;
+    device_block_size[device] = block_size;
+  }
+  void clear() {
+    device_to_blocks.clear();
+    device_to_blocks.resize(DEVICE_ID_MAX_VALID);
+    total_blocks = 0;
+  }
+
+  T& operator[](paddr_t block) {
+    ceph_assert(device_to_blocks[block.get_device_id()].size() != 0);
+    auto &blk = block.as_blk_paddr();
+    auto block_id = get_block_id(block.get_device_id(), blk.get_device_off());
+    return device_to_blocks[block.get_device_id()][block_id];
+  }
+  const T& operator[](paddr_t block) const {
+    ceph_assert(device_to_blocks[block.get_device_id()].size() != 0);
+    auto &blk = block.as_blk_paddr();
+    auto block_id = get_block_id(block.get_device_id(), blk.get_device_off());
+    return device_to_blocks[block.get_device_id()][block_id];
+  }
+
+  auto begin() {
+    return iterator<false>::lower_bound(*this, 0, 0);
+  }
+  auto begin() const {
+    return iterator<true>::lower_bound(*this, 0, 0);
+  }
+
+  auto end() {
+    return iterator<false>::end_iterator(*this);
+  }
+  auto end() const {
+    return iterator<true>::end_iterator(*this);
+  }
+
+  size_t size() const {
+    return total_blocks;
+  }
+
+  uint64_t get_block_size(device_id_t device_id) {
+    return device_block_size[device_id];
+  }
+
+  uint32_t get_block_id(device_id_t device_id, device_off_t blk_off) const {
+    auto block_size = device_block_size[device_id];
+    return blk_off == 0 ? 0 : blk_off/block_size;
+  }
+
+  template <bool is_const = false>
+  class iterator {
+    /// points at set being iterated over
+    std::conditional_t<
+      is_const,
+      const block_map_t &,
+      block_map_t &> parent;
+
+    /// points at current device, or DEVICE_ID_MAX_VALID if is_end()
+    device_id_t device_id;
+
+    /// segment at which we are pointing, 0 if is_end()
+    device_off_t blk_off;
+
+    /// holds referent for operator* and operator-> when !is_end()
+    std::optional<
+      std::pair<
+        const device_off_t,
+	std::conditional_t<is_const, const T&, T&>
+	>> current;
+
+    bool is_end() const {
+      return device_id == DEVICE_ID_MAX_VALID;
+    }
+
+    uint32_t get_block_id() {
+      return parent.get_block_id(device_id, blk_off);
+    }
+
+    void find_valid() {
+      assert(!is_end());
+      auto &device_vec = parent.device_to_blocks[device_id];
+      if (device_vec.size() == 0 ||
+	  get_block_id() == device_vec.size()) {
+	while (++device_id < DEVICE_ID_MAX_VALID&&
+	       parent.device_to_blocks[device_id].size() == 0);
+	blk_off = 0;
+      }
+      if (is_end()) {
+	current = std::nullopt;
+      } else {
+	current.emplace(
+	  blk_off,
+	  parent.device_to_blocks[device_id][get_block_id()]
+	);
+      }
+    }
+
+    iterator(
+      decltype(parent) &parent,
+      device_id_t device_id,
+      device_off_t device_block_off)
+      : parent(parent), device_id(device_id),
+	blk_off(device_block_off) {}
+
+  public:
+    static iterator lower_bound(
+      decltype(parent) &parent,
+      device_id_t device_id,
+      device_off_t block_off) {
+      if (device_id == DEVICE_ID_MAX_VALID) {
+	return end_iterator(parent);
+      } else {
+	auto ret = iterator{parent, device_id, block_off};
+	ret.find_valid();
+	return ret;
+      }
+    }
+
+    static iterator end_iterator(
+      decltype(parent) &parent) {
+      return iterator{parent, DEVICE_ID_MAX_VALID, 0};
+    }
+
+    iterator<is_const>& operator++() {
+      assert(!is_end());
+      auto block_size = parent.device_block_size[device_id];
+      blk_off += block_size;
+      find_valid();
+      return *this;
+    }
+
+    bool operator==(iterator<is_const> rit) {
+      return (device_id == rit.device_id &&
+	      blk_off == rit.blk_off);
+    }
+
+    bool operator!=(iterator<is_const> rit) {
+      return !(*this == rit);
+    }
+    template <bool c = is_const, std::enable_if_t<c, int> = 0>
+    const std::pair<const device_off_t, const T&> *operator->() {
+      assert(!is_end());
+      return &*current;
+    }
+    template <bool c = is_const, std::enable_if_t<!c, int> = 0>
+    std::pair<const device_off_t, T&> *operator->() {
+      assert(!is_end());
+      return &*current;
+    }
+    template <bool c = is_const, std::enable_if_t<c, int> = 0>
+    const std::pair<const device_off_t, const T&> &operator*() {
+      assert(!is_end());
+      return *current;
+    }
+    template <bool c = is_const, std::enable_if_t<!c, int> = 0>
+    std::pair<const device_off_t, T&> &operator*() {
+      assert(!is_end());
+      return *current;
+    }
+  };
+  std::vector<std::vector<T>> device_to_blocks;
+  std::vector<size_t> device_block_size;
+  size_t total_blocks = 0;
+};
+
+class RBMSpaceTracker {
+  struct random_block_t {
+    bool used = false;
+    void allocate() {
+      used = true;
+    }
+    void release() {
+      used = false;
+    }
+  };
+  block_map_t<random_block_t> block_usage;
+
+public:
+  RBMSpaceTracker(const RBMSpaceTracker &) = default;
+  RBMSpaceTracker(const std::vector<RandomBlockManager*> &rbms) {
+    for (auto rbm : rbms) {
+      block_usage.add_device(
+	rbm->get_device_id(),
+	rbm->get_device()->get_available_size() / rbm->get_block_size(),
+	{false},
+	rbm->get_block_size());
+    }
+  }
+
+  void allocate(
+    paddr_t addr,
+    extent_len_t len) {
+    paddr_t cursor = addr;
+    paddr_t end = addr.add_offset(len);
+    do {
+      block_usage[cursor].allocate();
+      cursor = cursor.add_offset(
+	block_usage.get_block_size(addr.get_device_id()));
+    } while (cursor < end);
+  }
+
+  void release(
+    paddr_t addr,
+    extent_len_t len) {
+    paddr_t cursor = addr;
+    paddr_t end = addr.add_offset(len);
+    do {
+      block_usage[cursor].release();
+      cursor = cursor.add_offset(
+	block_usage.get_block_size(addr.get_device_id()));
+    } while (cursor < end);
+  }
+
+  void reset() {
+    for (auto &i : block_usage) {
+      i.second = {false};
+    }
+  }
+
+  std::unique_ptr<RBMSpaceTracker> make_empty() const {
+    auto ret = std::make_unique<RBMSpaceTracker>(*this); 
+    ret->reset();
+    return ret;
+  }
+  friend class RBMCleaner;
+};
+using RBMSpaceTrackerRef = std::unique_ptr<RBMSpaceTracker>;
+
 /*
  * AsyncCleaner
  *
@@ -1373,10 +1614,7 @@ public:
 
   // Testing interfaces
 
-  bool check_usage() final {
-    // TODO
-    return true;
-  }
+  bool check_usage() final;
 
   bool check_usage_is_empty() const final {
     // TODO
@@ -1384,10 +1622,11 @@ public:
   }
 
 private:
+  bool equals(const RBMSpaceTracker &other) const;
+
   const bool detailed;
   RBMDeviceGroupRef rb_group;
   BackrefManager &backref_manager;
-
 
   struct {
     /**
