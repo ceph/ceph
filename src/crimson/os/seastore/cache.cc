@@ -867,6 +867,10 @@ void Cache::mark_transaction_conflicted(
     }
     efforts.mutate_delta_bytes += delta_stat.bytes;
 
+    for (auto &i: t.pre_alloc_list) {
+      epm.mark_space_free(i->get_paddr(), i->get_length());
+    }
+
     auto& ool_stats = t.get_ool_write_stats();
     efforts.fresh_ool_written.increment_stat(ool_stats.extents);
     efforts.num_ool_records += ool_stats.num_records;
@@ -1444,7 +1448,7 @@ void Cache::complete_commit(
     const auto t_src = t.get_src();
     i->invalidate_hints();
     add_extent(i, &t_src);
-    epm.mark_space_used(i->get_paddr(), i->get_length());
+    epm.commit_space_used(i->get_paddr(), i->get_length());
     if (is_backref_mapped_extent_node(i)) {
       DEBUGT("backref_list new {} len {}",
 	     t,
@@ -1559,6 +1563,12 @@ void Cache::complete_commit(
   }
   if (!backref_list.empty()) {
     backref_batch_update(std::move(backref_list), start_seq);
+  }
+
+  for (auto &i: t.pre_alloc_list) {
+    if (!i->is_valid()) {
+      epm.mark_space_free(i->get_paddr(), i->get_length());
+    }
   }
 }
 

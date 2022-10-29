@@ -1561,18 +1561,12 @@ void RBMCleaner::mark_space_used(
   paddr_t addr,
   extent_len_t len)
 {
-  // Need to mark the space as used at startup time.
-  // We do not use mark_space_used after complete_commit()
-  // because alloc_extent() already reserved the space.
   assert(addr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
-  if (background_callback->get_state() ==
-      BackgroundListener::state_t::SCAN_SPACE) {
-    auto rbms = rb_group->get_rb_managers();
-    for (auto rbm : rbms) {
-      if (addr.get_device_id() == rbm->get_device_id()) {
-	if (rbm->get_start() <= addr) {
-	  return rbm->mark_space_used(addr, len);
-	}
+  auto rbms = rb_group->get_rb_managers();
+  for (auto rbm : rbms) {
+    if (addr.get_device_id() == rbm->get_device_id()) {
+      if (rbm->get_start() <= addr) {
+	rbm->mark_space_used(addr, len);
       }
     }
   }
@@ -1589,6 +1583,19 @@ void RBMCleaner::mark_space_free(
       if (rbm->get_start() <= addr) {
 	return rbm->mark_space_free(addr, len);
       }
+    }
+  }
+}
+
+void RBMCleaner::commit_space_used(paddr_t addr, extent_len_t len) 
+{
+  auto rbms = rb_group->get_rb_managers();
+  for (auto rbm : rbms) {
+    if (addr.get_device_id() == rbm->get_device_id()) {
+      if (rbm->get_start() <= addr) {
+	rbm->complete_allocation(addr, len);
+      }
+      return;
     }
   }
 }

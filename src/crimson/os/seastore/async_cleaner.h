@@ -850,6 +850,8 @@ public:
 
   virtual void mark_space_free(paddr_t, extent_len_t) = 0;
 
+  virtual void commit_space_used(paddr_t, extent_len_t) = 0;
+
   virtual void reserve_projected_usage(std::size_t) = 0;
 
   virtual void release_projected_usage(std::size_t) = 0;
@@ -1006,6 +1008,10 @@ public:
   void mark_space_used(paddr_t, extent_len_t) final;
 
   void mark_space_free(paddr_t, extent_len_t) final;
+  
+  void commit_space_used(paddr_t addr, extent_len_t len) final {
+    mark_space_used(addr, len);
+  }
 
   void reserve_projected_usage(std::size_t) final;
 
@@ -1332,6 +1338,8 @@ public:
   void mark_space_used(paddr_t, extent_len_t) final;
 
   void mark_space_free(paddr_t, extent_len_t) final;
+
+  void commit_space_used(paddr_t, extent_len_t) final;
 
   void reserve_projected_usage(std::size_t) final;
 

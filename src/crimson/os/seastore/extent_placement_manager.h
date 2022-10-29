@@ -297,6 +297,10 @@ public:
     background_process.mark_space_free(addr, len);
   }
 
+  void commit_space_used(paddr_t addr, extent_len_t len) {
+    return background_process.commit_space_used(addr, len);
+  }
+
   seastar::future<> reserve_projected_usage(std::size_t projected_usage) {
     return background_process.reserve_projected_usage(projected_usage);
   }
@@ -407,6 +411,14 @@ private:
       }
       assert(cleaner);
       cleaner->mark_space_free(addr, len);
+    }
+
+    void commit_space_used(paddr_t addr, extent_len_t len) {
+      if (state < state_t::SCAN_SPACE) {
+        return;
+      }
+      assert(cleaner);
+      return cleaner->commit_space_used(addr, len);
     }
 
     seastar::future<> reserve_projected_usage(std::size_t projected_usage);
