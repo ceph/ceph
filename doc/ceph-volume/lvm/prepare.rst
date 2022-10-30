@@ -10,8 +10,8 @@ logical volume.
 ``prepare`` adds metadata to logical volumes but does not alter them in any
 other way. 
 
-.. note:: This is part of a two-step process to deploy an OSD. If you prefer a
-   single-call method of deploying an OSD, see :ref:`ceph-volume-lvm-create`.
+.. note:: This is part of a two-step process to deploy an OSD. If you prefer 
+   to deploy an OSD by using only one command, see :ref:`ceph-volume-lvm-create`.
 
 ``prepare`` uses :term:`LVM tags` to assign several pieces of metadata to a
 logical volume. Volumes tagged in this way are easier to identify and easier to
@@ -78,7 +78,7 @@ the files needed for the OSD. These files are created by ``ceph-osd --mkfs``
 and are ephemeral.
 
 A symlink is created for the ``block`` device, and is optional for ``block.db``
-and ``block.wal``. For a cluster with a default name and an OSD id of 0, the
+and ``block.wal``. For a cluster with a default name and an OSD ID of 0, the
 directory looks like this::
 
     # ls -l /var/lib/ceph/osd/ceph-0
@@ -105,18 +105,20 @@ a volume group and a logical volume using the following conventions:
 
 ``filestore``
 -------------
-``filestore`` is the OSD backend that prepares logical volumes for a
+``Filestore<filestore>`` is the OSD backend that prepares logical volumes for a
 :term:`filestore`-backed object-store OSD.
 
-``filestore`` can use a logical volume for OSD data, and it can use a physical
-device, a partition, or a logical volume for the journal. If a physical device
-is used to create a filestore backend, a logical volume will be created on that
-physical device. A volume group will either be created or reused if its name
-begins with ``ceph``. No special preparation is needed for these volumes other
-than making sure to adhere to the minimum size requirements for data and for
-the journal.
 
-Use this command to create a basic filestore OSD:
+``Filestore<filestore>`` uses a logical volume to store OSD data and it uses
+physical devices, partitions, or logical volumes to store the journal.  If a
+physical device is used to create a filestore backend, a logical volume will be
+created on that physical device. If the provided volume group's name begins
+with `ceph`, it will be created if it does not yet exist and it will be
+clobbered and reused if it already exists. No special preparation is needed for
+these volumes, but be sure to meet the minimum size requirements for OSD data and
+for the journal.
+
+Use the following command to create a basic filestore OSD:
 
 .. prompt:: bash #
 
@@ -134,7 +136,7 @@ Use this command to enable :ref:`encryption <ceph-volume-lvm-encryption>`, and n
 
    ceph-volume lvm prepare --filestore --dmcrypt --data <data block device> --journal <journal block device>
 
-Both the journal and the data block device can take three forms:
+The data block device and the journal can each take one of three forms: 
 
 * a physical block device
 * a partition on a physical block device
@@ -142,8 +144,8 @@ Both the journal and the data block device can take three forms:
 
 If you use a logical volume to deploy filestore, the value that you pass in the
 command *must* be of the format ``volume_group/logical_volume_name``. Since logical
-volume names are not enforced for uniqueness, using this format is meant to
-guard against accidentally choosing the wrong volume (and clobbering its data).
+volume names are not enforced for uniqueness, using this format is an important 
+safeguard against accidentally choosing the wrong volume (and clobbering its data).
 
 If you use a partition to deploy filestore, the partition *must* contain a
 ``PARTUUID`` that can be discovered by ``blkid``. This ensures that the
@@ -171,13 +173,13 @@ The OSD data directory is created using the following convention::
 
     /var/lib/ceph/osd/<cluster name>-<osd id>
 
-To link the journal volume to the mounted data volume, run this command:
+To link the journal volume to the mounted data volume, use this command:
 
 .. prompt:: bash #
 
    ln -s /path/to/journal /var/lib/ceph/osd/<cluster_name>-<osd-id>/journal
 
-To fetch the monmap by using the bootstrap key from the OSD, run this command:
+To fetch the monmap by using the bootstrap key from the OSD, use this command:
 
 .. prompt:: bash #
 
