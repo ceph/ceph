@@ -619,9 +619,12 @@ std::vector<uint64_t> AlienStore::_parse_cpu_cores()
     std::string cpu;
     std::getline(cpu_stream, cpu, '-');
     uint64_t start_cpu = std::stoull(cpu);
+    uint64_t end_cpu = start_cpu;
     std::getline(cpu_stream, cpu, '-');
-    uint64_t end_cpu = std::stoull(cpu);
-    for (uint64_t i = start_cpu; i < end_cpu; i++) {
+    if (!cpu.empty()) {
+      end_cpu = std::stoull(cpu);
+    }
+    for (uint64_t i = start_cpu; i <= end_cpu; i++) {
       cpu_cores.push_back(i);
     }
   }
