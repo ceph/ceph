@@ -111,20 +111,25 @@ template <typename T> auto ptr(const ::seastar::shared_ptr<T>& p) -> const void*
 namespace crimson::net {
 
 #ifdef UNIT_TESTS_BUILT
-void intercept(Breakpoint bp, bp_type_t type,
-               SocketConnection& conn, SocketRef& socket) {
-  if (conn.interceptor) {
-    auto action = conn.interceptor->intercept(conn, Breakpoint(bp));
-    socket->set_trap(type, action, &conn.interceptor->blocker);
+void intercept(Breakpoint bp,
+               bp_type_t type,
+               Connection& conn,
+               Interceptor *interceptor,
+               SocketRef& socket) {
+  if (interceptor) {
+    auto action = interceptor->intercept(conn, Breakpoint(bp));
+    socket->set_trap(type, action, &interceptor->blocker);
   }
 }
 
 #define INTERCEPT_CUSTOM(bp, type)       \
-intercept({bp}, type, conn, conn.socket)
+intercept({bp}, type, conn,              \
+          conn.interceptor, conn.socket)
 
 #define INTERCEPT_FRAME(tag, type)       \
 intercept({static_cast<Tag>(tag), type}, \
-          type, conn, conn.socket)
+          type, conn,                    \
+          conn.interceptor, conn.socket)
 
 #define INTERCEPT_N_RW(bp)                               \
 if (conn.interceptor) {                                  \
