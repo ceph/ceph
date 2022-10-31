@@ -723,6 +723,32 @@ void ScrubStack::scrub_status(Formatter *f) {
     f->close_section(); // scrub id
   }
   f->close_section(); // scrubs
+
+  f->open_object_section("scrub_stats");
+  for (auto& [tag, ctrs] : mds_scrub_stats[0].counters) {
+    uint64_t started = 0;
+    uint64_t passed = 0;
+    uint64_t failed = 0;
+    for (auto& stats : mds_scrub_stats) {
+      if (auto it = stats.counters.find(tag); it != stats.counters.end()) {
+	auto& [t, c] = *it;
+	started += c.uninline_started;
+	passed += c.uninline_passed;
+	failed += c.uninline_failed;
+      }
+    }
+    f->open_object_section(tag);
+    {
+      f->dump_stream("start_time") << ctrs.start_time;
+      f->dump_string("path", (ctrs.origin_path == "" ? "/"s : ctrs.origin_path));
+      f->dump_int("uninline_started", started);
+      f->dump_int("uninline_passed", passed);
+      f->dump_int("uninline_failed", failed);
+    }
+    f->close_section(); // tag
+  }
+  f->close_section(); // scrub_stats
+
   f->close_section(); // result
 }
 
