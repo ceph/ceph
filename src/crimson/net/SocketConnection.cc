@@ -134,19 +134,19 @@ seastar::shard_id SocketConnection::shard_id() const {
 }
 
 seastar::socket_address SocketConnection::get_local_address() const {
-  return protocol->socket->get_local_address();
+  return socket->get_local_address();
 }
 
 void SocketConnection::print(ostream& out) const {
     out << (void*)this << " ";
     messenger.print(out);
-    if (!protocol->socket) {
+    if (!socket) {
       out << " >> " << get_peer_name() << " " << peer_addr;
-    } else if (protocol->socket->get_side() == Socket::side_t::acceptor) {
+    } else if (socket->get_side() == Socket::side_t::acceptor) {
       out << " >> " << get_peer_name() << " " << peer_addr
-          << "@" << protocol->socket->get_ephemeral_port();
-    } else { // protocol->socket->get_side() == Socket::side_t::connector
-      out << "@" << protocol->socket->get_ephemeral_port()
+          << "@" << socket->get_ephemeral_port();
+    } else { // socket->get_side() == Socket::side_t::connector
+      out << "@" << socket->get_ephemeral_port()
           << " >> " << get_peer_name() << " " << peer_addr;
     }
 }

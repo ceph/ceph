@@ -37,6 +37,8 @@ class SocketConnection : public Connection {
   SocketMessenger& messenger;
   std::unique_ptr<Protocol> protocol;
 
+  SocketRef socket;
+
   entity_name_t peer_name = {0, entity_name_t::NEW};
 
   entity_addr_t peer_addr;
