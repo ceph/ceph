@@ -55,10 +55,10 @@ function main {
     done
 
     if [ -z "$1" ]; then
-        printf "specify the branch [default \"master:latest\"]: "
+        printf "specify the branch [default \"main:latest\"]: "
         read branch
         if [ -z "$branch" ]; then
-            branch=master:latest
+            branch=main:latest
         fi
     else
         branch="$1"
