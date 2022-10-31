@@ -12,6 +12,14 @@
 #  version 2.1 of the License, or (at your option) any later version.
 #
 set -e
+
+if ! [ "${_SOURCED_LIB_BUILD}" = 1 ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    CEPH_ROOT="${SCRIPT_DIR}"
+    . "${CEPH_ROOT}/src/script/lib-build.sh" || exit 2
+fi
+
+
 DIR=/tmp/install-deps.$$
 trap "rm -fr $DIR" EXIT
 mkdir -p $DIR
@@ -24,9 +32,6 @@ export LC_ALL=C.UTF-8
 
 ARCH=$(uname -m)
 
-function in_jenkins() {
-    test -n "$JENKINS_HOME"
-}
 
 function munge_ceph_spec_in {
     local with_seastar=$1
