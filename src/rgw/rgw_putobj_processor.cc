@@ -13,6 +13,7 @@
  *
  */
 
+#include "include/scope_guard.h"
 #include "rgw_aio.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_multi.h"
@@ -20,6 +21,7 @@
 #include "services/svc_sys_obj.h"
 #include "services/svc_zone.h"
 #include "rgw_sal_rados.h"
+#include "rgw_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -498,15 +500,42 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     head_obj->get_bucket()->get_object(rgw_obj_key(mp.get_meta(), std::string(), RGW_OBJ_NS_MULTIPART));
   meta_obj->set_in_extra_data(true);
 
-  r = meta_obj->omap_set_val_by_key(dpp, p, bl, true, null_yield);
+  /* take a cls lock on meta_obj to prevent racing retries */
+  int max_lock_secs_mp =
+    store->ctx()->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
+  utime_t dur(max_lock_secs_mp, 0);
+
+  auto serializer = meta_obj->get_serializer(dpp, "MultipartObjectProcessor");
+  r = serializer->try_lock(dpp, dur, y);
   if (r < 0) {
+    ldpp_dout(dpp, 1) << "failed to acquire lock" << dendl;
     return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
   }
+  auto g = make_scope_guard([&serializer] { serializer->unlock(); });
 
-  if (!obj_op.meta.canceled) {
-    // on success, clear the set of objects for deletion
-    writer.clear_written();
+  string oid, loc;
+  get_obj_bucket_and_oid_loc(meta_obj->get_obj(), oid, loc);
+  map<string, bufferlist> m;
+  r = meta_obj->omap_get_vals_by_keys(dpp, oid, {p}, &m);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: omap_get_vals_by_keys failed: " << r << dendl;
+    return r;
   }
+
+  if (!m.empty()) {
+    ldpp_dout(dpp, 5) << "racing retry" << dendl;
+  } else {
+    r = meta_obj->omap_set_val_by_key(dpp, p, bl, true, null_yield);
+    if (r < 0) {
+      return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
+    }
+
+    if (!obj_op.meta.canceled) {
+      // on success, clear the set of objects for deletion
+      writer.clear_written();
+    }
+  }
+
   if (pcanceled) {
     *pcanceled = obj_op.meta.canceled;
   }
