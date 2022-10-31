@@ -16,7 +16,6 @@
 
 #include "chained_dispatchers.h"
 #include "Errors.h"
-#include "Socket.h"
 #include "SocketConnection.h"
 #include "SocketMessenger.h"
 
@@ -121,11 +120,11 @@ void intercept(Breakpoint bp, bp_type_t type,
 }
 
 #define INTERCEPT_CUSTOM(bp, type)       \
-intercept({bp}, type, conn, socket)
+intercept({bp}, type, conn, conn.socket)
 
 #define INTERCEPT_FRAME(tag, type)       \
 intercept({static_cast<Tag>(tag), type}, \
-          type, conn, socket)
+          type, conn, conn.socket)
 
 #define INTERCEPT_N_RW(bp)                               \
 if (conn.interceptor) {                                  \
@@ -178,7 +177,7 @@ void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
                                const entity_name_t& _peer_name)
 {
   ceph_assert(state == state_t::NONE);
-  ceph_assert(!socket);
+  ceph_assert(!conn.socket);
   ceph_assert(!gate.is_closed());
   conn.peer_addr = _peer_addr;
   conn.target_addr = _peer_addr;
@@ -199,10 +198,10 @@ void ProtocolV2::start_accept(SocketRef&& sock,
                               const entity_addr_t& _peer_addr)
 {
   ceph_assert(state == state_t::NONE);
-  ceph_assert(!socket);
+  ceph_assert(!conn.socket);
   // until we know better
   conn.target_addr = _peer_addr;
-  socket = std::move(sock);
+  conn.socket = std::move(sock);
   logger().info("{} ProtocolV2::start_accept(): target_addr={}", conn, _peer_addr);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
@@ -221,26 +220,26 @@ void ProtocolV2::enable_recording()
 seastar::future<Socket::tmp_buf> ProtocolV2::read_exactly(size_t bytes)
 {
   if (unlikely(record_io)) {
-    return socket->read_exactly(bytes)
-    .then([this] (auto bl) {
+    return conn.socket->read_exactly(bytes
+    ).then([this] (auto bl) {
       rxbuf.append(buffer::create(bl.share()));
       return bl;
     });
   } else {
-    return socket->read_exactly(bytes);
+    return conn.socket->read_exactly(bytes);
   };
 }
 
 seastar::future<bufferlist> ProtocolV2::read(size_t bytes)
 {
   if (unlikely(record_io)) {
-    return socket->read(bytes)
-    .then([this] (auto buf) {
+    return conn.socket->read(bytes
+    ).then([this] (auto buf) {
       rxbuf.append(buf);
       return buf;
     });
   } else {
-    return socket->read(bytes);
+    return conn.socket->read(bytes);
   }
 }
 
@@ -249,7 +248,7 @@ seastar::future<> ProtocolV2::write(bufferlist&& buf)
   if (unlikely(record_io)) {
     txbuf.append(buf);
   }
-  return socket->write(std::move(buf));
+  return conn.socket->write(std::move(buf));
 }
 
 seastar::future<> ProtocolV2::write_flush(bufferlist&& buf)
@@ -257,7 +256,7 @@ seastar::future<> ProtocolV2::write_flush(bufferlist&& buf)
   if (unlikely(record_io)) {
     txbuf.append(buf);
   }
-  return socket->write_flush(std::move(buf));
+  return conn.socket->write_flush(std::move(buf));
 }
 
 size_t ProtocolV2::get_current_msg_size() const
@@ -811,8 +810,8 @@ ProtocolV2::client_reconnect()
 void ProtocolV2::execute_connecting()
 {
   trigger_state(state_t::CONNECTING, write_state_t::delay, false);
-  if (socket) {
-    socket->shutdown();
+  if (conn.socket) {
+    conn.socket->shutdown();
   }
   gated_execute("execute_connecting", [this] {
       global_seq = messenger.get_global_seq();
@@ -832,9 +831,9 @@ void ProtocolV2::execute_connecting()
                            conn, get_state_name(state));
             abort_protocol();
           }
-          if (socket) {
+          if (conn.socket) {
             gate.dispatch_in_background("close_sockect_connecting", *this,
-                           [sock = std::move(socket)] () mutable {
+                           [sock = std::move(conn.socket)] () mutable {
               return sock->close().then([sock = std::move(sock)] {});
             });
           }
@@ -849,7 +848,7 @@ void ProtocolV2::execute_connecting()
               abort_protocol();
             });
           }
-          socket = std::move(sock);
+          conn.socket = std::move(sock);
           return seastar::now();
         }).then([this] {
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
@@ -869,7 +868,7 @@ void ProtocolV2::execute_connecting()
                            conn, get_state_name(state));
             abort_protocol();
           }
-          socket->learn_ephemeral_port_as_connector(_my_addr_from_peer.get_port());
+          conn.socket->learn_ephemeral_port_as_connector(_my_addr_from_peer.get_port());
           if (unlikely(_my_addr_from_peer.is_legacy())) {
             logger().warn("{} peer sent a legacy address for me: {}",
                           conn, _my_addr_from_peer);
@@ -1071,7 +1070,7 @@ ProtocolV2::reuse_connection(
 {
   existing_proto->trigger_replacing(reconnect,
                                     do_reset,
-                                    std::move(socket),
+                                    std::move(conn.socket),
                                     std::move(auth_meta),
                                     std::move(session_stream_handlers),
                                     peer_global_seq,
@@ -1682,8 +1681,8 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                                    uint64_t new_msg_seq)
 {
   trigger_state(state_t::REPLACING, write_state_t::delay, false);
-  if (socket) {
-    socket->shutdown();
+  if (conn.socket) {
+    conn.socket->shutdown();
   }
   dispatchers.ms_handle_accept(
       seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
@@ -1719,13 +1718,13 @@ void ProtocolV2::trigger_replacing(bool reconnect,
         });
       }
 
-      if (socket) {
+      if (conn.socket) {
         gate.dispatch_in_background("close_socket_replacing", *this,
-                       [sock = std::move(socket)] () mutable {
+                       [sock = std::move(conn.socket)] () mutable {
           return sock->close().then([sock = std::move(sock)] {});
         });
       }
-      socket = std::move(new_socket);
+      conn.socket = std::move(new_socket);
       auth_meta = std::move(new_auth_meta);
       session_stream_handlers = std::move(new_rxtx);
       record_io = false;
@@ -2021,8 +2020,8 @@ void ProtocolV2::execute_ready(bool dispatch_connect)
 void ProtocolV2::execute_standby()
 {
   trigger_state(state_t::STANDBY, write_state_t::delay, false);
-  if (socket) {
-    socket->shutdown();
+  if (conn.socket) {
+    conn.socket->shutdown();
   }
 }
 
@@ -2040,8 +2039,8 @@ void ProtocolV2::notify_write()
 void ProtocolV2::execute_wait(bool max_backoff)
 {
   trigger_state(state_t::WAIT, write_state_t::delay, false);
-  if (socket) {
-    socket->shutdown();
+  if (conn.socket) {
+    conn.socket->shutdown();
   }
   gated_execute("execute_wait", [this, max_backoff] {
     double backoff = protocol_timer.last_dur();

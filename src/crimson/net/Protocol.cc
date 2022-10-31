@@ -8,7 +8,6 @@
 #include "crimson/common/log.h"
 #include "crimson/net/Errors.h"
 #include "crimson/net/chained_dispatchers.h"
-#include "crimson/net/Socket.h"
 #include "crimson/net/SocketConnection.h"
 #include "msg/Message.h"
 
@@ -51,8 +50,8 @@ void Protocol::close(bool dispatch_reset,
   if (f_accept_new) {
     (*f_accept_new)();
   }
-  if (socket) {
-    socket->shutdown();
+  if (conn.socket) {
+    conn.socket->shutdown();
   }
   set_write_state(write_state_t::drop);
   assert(!gate.is_closed());
@@ -67,8 +66,8 @@ void Protocol::close(bool dispatch_reset,
   // asynchronous operations
   assert(!close_ready.valid());
   close_ready = std::move(gate_closed).then([this] {
-    if (socket) {
-      return socket->close();
+    if (conn.socket) {
+      return conn.socket->close();
     } else {
       return seastar::now();
     }
@@ -208,7 +207,7 @@ void Protocol::ack_writes(seq_num_t seq)
 
 seastar::future<stop_t> Protocol::try_exit_sweep() {
   assert(!is_queued());
-  return socket->flush().then([this] {
+  return conn.socket->flush().then([this] {
     if (!is_queued()) {
       // still nothing pending to send after flush,
       // the dispatching can ONLY stop now
@@ -242,7 +241,7 @@ seastar::future<> Protocol::do_write_dispatch_sweep()
       auto acked = ack_left;
       assert(acked == 0 || conn.in_seq > 0);
       // sweep all pending writes with the concrete Protocol
-      return socket->write(sweep_messages_and_move_to_sent(
+      return conn.socket->write(sweep_messages_and_move_to_sent(
           num_msgs, need_keepalive, keepalive_ack, acked > 0)
       ).then([this, prv_keepalive_ack=keepalive_ack, acked] {
         need_keepalive = false;
@@ -292,7 +291,7 @@ seastar::future<> Protocol::do_write_dispatch_sweep()
                      conn, write_state, e);
       ceph_abort();
     }
-    socket->shutdown();
+    conn.socket->shutdown();
     if (write_state == write_state_t::open) {
       logger().info("{} write_event(): fault at {}, going to delay -- {}",
                     conn, write_state, e);

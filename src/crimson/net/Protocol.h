@@ -75,9 +75,6 @@ class Protocol {
       std::optional<utime_t> keepalive_ack,
       bool require_ack); 
 
- public:
-  SocketRef socket;
-
  protected:
   ChainedDispatchers& dispatchers;
   SocketConnection &conn;
