@@ -378,55 +378,55 @@ void LabeledPerfCounters::dump_formatted_generic(Formatter *f, bool schema,
       continue;
     }
 
-    if (schema) {
-      f->open_object_section(d->name);
-      // we probably should not have exposed this raw field (with bit
-      // values), but existing plugins rely on it so we're stuck with
-      // it.
-      f->dump_int("type", d->type);
+    if(d->accessed) {
+      if (schema) {
+        f->open_object_section(d->name);
+        // we probably should not have exposed this raw field (with bit
+        // values), but existing plugins rely on it so we're stuck with
+        // it.
+        f->dump_int("type", d->type);
 
-      if (d->type & PERFCOUNTER_COUNTER) {
-	f->dump_string("metric_type", "counter");
-      } else {
-	f->dump_string("metric_type", "gauge");
-      }
+        if (d->type & PERFCOUNTER_COUNTER) {
+          f->dump_string("metric_type", "counter");
+        } else {
+          f->dump_string("metric_type", "gauge");
+        }
 
-      if (d->type & PERFCOUNTER_LONGRUNAVG) {
-	if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_string("value_type", "real-integer-pair");
-	} else {
-	  f->dump_string("value_type", "integer-integer-pair");
-	}
-      } else if (d->type & PERFCOUNTER_HISTOGRAM) {
-	if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_string("value_type", "real-2d-histogram");
-	} else {
-	  f->dump_string("value_type", "integer-2d-histogram");
-	}
-      } else {
-	if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_string("value_type", "real");
-	} else {
-	  f->dump_string("value_type", "integer");
-	}
-      }
+        if (d->type & PERFCOUNTER_LONGRUNAVG) {
+          if (d->type & PERFCOUNTER_TIME) {
+            f->dump_string("value_type", "real-integer-pair");
+          } else {
+            f->dump_string("value_type", "integer-integer-pair");
+          }
+        } else if (d->type & PERFCOUNTER_HISTOGRAM) {
+          if (d->type & PERFCOUNTER_TIME) {
+            f->dump_string("value_type", "real-2d-histogram");
+          } else {
+            f->dump_string("value_type", "integer-2d-histogram");
+          }
+        } else {
+          if (d->type & PERFCOUNTER_TIME) {
+            f->dump_string("value_type", "real");
+          } else {
+            f->dump_string("value_type", "integer");
+          }
+        }
 
-      f->dump_string("description", d->description ? d->description : "");
-      if (d->nick != NULL) {
-        f->dump_string("nick", d->nick);
+        f->dump_string("description", d->description ? d->description : "");
+        if (d->nick != NULL) {
+          f->dump_string("nick", d->nick);
+        } else {
+          f->dump_string("nick", "");
+        }
+        f->dump_int("priority", get_adjusted_priority(d->prio));
+        
+        if (d->unit == UNIT_NONE) {
+          f->dump_string("units", "none"); 
+        } else if (d->unit == UNIT_BYTES) {
+          f->dump_string("units", "bytes");
+        }
+        f->close_section();
       } else {
-        f->dump_string("nick", "");
-      }
-      f->dump_int("priority", get_adjusted_priority(d->prio));
-      
-      if (d->unit == UNIT_NONE) {
-	f->dump_string("units", "none"); 
-      } else if (d->unit == UNIT_BYTES) {
-	f->dump_string("units", "bytes");
-      }
-      f->close_section();
-    } else {
-      if(d->accessed) {
         if (d->type & PERFCOUNTER_LONGRUNAVG) {
           f->open_object_section(d->name);
           pair<uint64_t,uint64_t> a = d->read_avg();
