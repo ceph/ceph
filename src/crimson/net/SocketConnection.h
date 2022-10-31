@@ -59,10 +59,6 @@ class SocketConnection : public Connection {
   seq_num_t out_seq = 0;
   /// the seq num of the last received message
   seq_num_t in_seq = 0;
-  /// update the seq num of last received message
-  /// @returns true if the @c seq is valid, and @c in_seq is updated,
-  ///          false otherwise.
-  bool update_rx_seq(seq_num_t seq);
 
   // messages to be resent after connection gets reset
   std::deque<MessageURef> out_q;
@@ -73,8 +69,7 @@ class SocketConnection : public Connection {
 
   std::unique_ptr<user_private_t> user_private;
 
-  seastar::shard_id shard_id() const;
-
+ // Connection interfaces, public to users
  public:
   SocketConnection(SocketMessenger& messenger,
                    ChainedDispatchers& dispatchers);
@@ -133,7 +128,34 @@ class SocketConnection : public Connection {
 
   void print(std::ostream& out) const override;
 
+ // public to SocketMessenger
  public:
+  /// start a handshake from the client's perspective,
+  /// only call when SocketConnection first construct
+  void start_connect(const entity_addr_t& peer_addr,
+                     const entity_name_t& peer_name);
+
+  /// start a handshake from the server's perspective,
+  /// only call when SocketConnection first construct
+  void start_accept(SocketRef&& socket,
+                    const entity_addr_t& peer_addr);
+
+  seastar::future<> close_clean(bool dispatch_reset);
+
+  seastar::socket_address get_local_address() const;
+
+  SocketMessenger &get_messenger() const {
+    return messenger;
+  }
+
+private:
+  seastar::shard_id shard_id() const;
+
+  /// update the seq num of last received message
+  /// @returns true if the @c seq is valid, and @c in_seq is updated,
+  ///          false otherwise.
+  bool update_rx_seq(seq_num_t seq);
+
   void set_peer_type(entity_type_t peer_type) {
     // it is not allowed to assign an unknown value when the current
     // value is known
@@ -171,31 +193,6 @@ class SocketConnection : public Connection {
 
   void set_features(uint64_t f) {
     features = f;
-  }
-
-  /// start a handshake from the client's perspective,
-  /// only call when SocketConnection first construct
-  void start_connect(const entity_addr_t& peer_addr,
-                     const entity_name_t& peer_name);
-  /// start a handshake from the server's perspective,
-  /// only call when SocketConnection first construct
-  void start_accept(SocketRef&& socket,
-                    const entity_addr_t& peer_addr);
-
-  seastar::future<> close_clean(bool dispatch_reset);
-
-  bool is_server_side() const {
-    return policy.server;
-  }
-
-  bool is_lossy() const {
-    return policy.lossy;
-  }
-
-  seastar::socket_address get_local_address() const;
-
-  SocketMessenger &get_messenger() const {
-    return messenger;
   }
 
 #ifdef UNIT_TESTS_BUILT
