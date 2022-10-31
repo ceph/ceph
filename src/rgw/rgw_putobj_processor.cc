@@ -448,29 +448,22 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  RGWRados::Object op_target(store->getRados(),
-		  head_obj->get_bucket(),
-		  obj_ctx, head_obj.get());
-  RGWRados::Object::Write obj_op(&op_target);
+  rgw::sal::Bucket * bucket = head_obj->get_bucket();
 
+  RGWRados::Object op_target(store->getRados(),
+		  bucket,
+		  obj_ctx, head_obj.get());
   op_target.set_versioning_disabled(true);
   op_target.set_meta_placement_rule(&tail_placement_rule);
-  obj_op.meta.set_mtime = set_mtime;
-  obj_op.meta.mtime = mtime;
-  obj_op.meta.owner = owner;
-  obj_op.meta.delete_at = delete_at;
-  obj_op.meta.zones_trace = zones_trace;
-  obj_op.meta.modify_tail = true;
 
-  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y);
-  if (r < 0)
-    return r;
+  // meta object containing manifest of each part
+  std::unique_ptr<rgw::sal::Object> meta_obj =
+    bucket->get_object(rgw_obj_key(mp.get_meta(), std::string(), RGW_OBJ_NS_MULTIPART));
+  meta_obj->set_in_extra_data(true);
 
-  bufferlist bl;
-  RGWUploadPartInfo info;
+  // compute omap key that contains part info in meta object
   string p = "part.";
   bool sorted_omap = is_v2_upload_id(upload_id);
-
   if (sorted_omap) {
     char buf[32];
     snprintf(buf, sizeof(buf), "%08d", part_num);
@@ -478,6 +471,84 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   } else {
     p.append(part_num_str);
   }
+
+  // check if a previous part with same part_num has already been uploaded
+  const std::set<std::string> keys = {p};
+  rgw::sal::Attrs prev_attrs;
+  r = meta_obj->omap_get_vals_by_keys(dpp, keys, &prev_attrs);
+  if (r < 0 && r != -ENOENT) {
+    ldpp_dout(dpp, 1) << "cannot get omap key " << p << " of " << meta_obj->get_name() << dendl;
+    return r;
+  }
+  list<rgw_obj_index_key> remove_objs;
+  auto bl_iter = prev_attrs.find(p);
+  if (bl_iter != prev_attrs.end()) {
+    RGWUploadPartInfo prev_info;
+    try {
+      using ceph::decode;
+      decode(prev_info, bl_iter->second);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to decode RGWUploadPartInfo" << dendl;
+      return -EIO;
+    }
+
+    // found a previous upload of this part, we must remove previous part object(s) from index and from rados
+    RGWObjManifest prev_manifest = prev_info.manifest;
+    RGWObjManifest::obj_iterator miter = prev_manifest.obj_begin(dpp);
+    if (miter != prev_manifest.obj_end(dpp)) {
+      // find the head of previous part upload
+      const rgw_raw_obj& prev_raw_head_obj = miter.get_location().get_raw_obj(static_cast<rgw::sal::RadosStore*>(store));
+      rgw_obj prev_head_obj;
+      RGWSI_Tier_RADOS::raw_obj_to_obj(bucket->get_key(), prev_raw_head_obj, &prev_head_obj);
+
+      // delete it
+      r = bucket->get_object(prev_head_obj.key)->delete_object(dpp, null_yield);
+      if (r < 0 && r != -ENOENT)
+          return r;
+
+      // send its tail to gc
+      cls_rgw_obj_chain chain;
+      store->getRados()->update_gc_chain(dpp, prev_head_obj, prev_manifest, &chain);
+
+      if (store->getRados()->get_gc() == nullptr) {
+        //Delete objects inline if gc hasn't been initialised (in case when bypass gc is specified)
+        store->getRados()->delete_objs_inline(dpp, chain, upload_id);
+      } else {
+        /* use upload id as tag and do it synchronously */
+        auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, upload_id);
+        if (ret < 0 && leftover_chain) {
+          ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
+          if (ret == -ENOENT) {
+            return -ERR_NO_SUCH_UPLOAD;
+          }
+          //Delete objects inline if send chain to gc fails
+          store->getRados()->delete_objs_inline(dpp, *leftover_chain, upload_id);
+        }
+      }
+
+      // remove previous index entry
+      rgw_obj_index_key remove_key;
+      prev_head_obj.key.get_index_key(&remove_key);
+      remove_objs.push_back(remove_key);
+    }
+  }
+
+  RGWRados::Object::Write obj_op(&op_target);
+  obj_op.meta.set_mtime = set_mtime;
+  obj_op.meta.mtime = mtime;
+  obj_op.meta.owner = owner;
+  obj_op.meta.delete_at = delete_at;
+  obj_op.meta.zones_trace = zones_trace;
+  obj_op.meta.modify_tail = true;
+  obj_op.meta.remove_objs = &remove_objs;
+
+  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y);
+  if (r < 0)
+    return r;
+
+  bufferlist bl;
+  RGWUploadPartInfo info;
+  
   info.num = part_num;
   info.etag = etag;
   info.size = actual_size;
@@ -493,10 +564,6 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   }
 
   encode(info, bl);
-
-  std::unique_ptr<rgw::sal::Object> meta_obj =
-    head_obj->get_bucket()->get_object(rgw_obj_key(mp.get_meta(), std::string(), RGW_OBJ_NS_MULTIPART));
-  meta_obj->set_in_extra_data(true);
 
   r = meta_obj->omap_set_val_by_key(dpp, p, bl, true, null_yield);
   if (r < 0) {
