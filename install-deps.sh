@@ -68,7 +68,7 @@ function munge_debian_control {
 }
 
 function ensure_decent_gcc_on_ubuntu {
-    in_jenkins && echo "CI_DEBUG: Start ensure_decent_gcc_on_ubuntu() in install-deps.sh"
+    ci_debug "Start ensure_decent_gcc_on_ubuntu() in install-deps.sh"
     # point gcc to the one offered by g++-7 if the used one is not
     # new enough
     local old=$(gcc -dumpfullversion -dumpversion)
@@ -105,7 +105,7 @@ ENDOFKEY
 }
 
 function ensure_python3_sphinx_on_ubuntu {
-    in_jenkins && echo "CI_DEBUG: Running ensure_python3_sphinx_on_ubuntu() in install-deps.sh"
+    ci_debug "Running ensure_python3_sphinx_on_ubuntu() in install-deps.sh"
     local sphinx_command=/usr/bin/sphinx-build
     # python-sphinx points $sphinx_command to
     # ../share/sphinx/scripts/python2/sphinx-build when it's installed
@@ -116,7 +116,7 @@ function ensure_python3_sphinx_on_ubuntu {
 }
 
 function install_pkg_on_ubuntu {
-    in_jenkins && echo "CI_DEBUG: Running install_pkg_on_ubuntu() in install-deps.sh"
+    ci_debug "Running install_pkg_on_ubuntu() in install-deps.sh"
     local project=$1
     shift
     local sha1=$1
@@ -133,7 +133,7 @@ function install_pkg_on_ubuntu {
         for pkg in $pkgs; do
             if ! apt -qq list $pkg 2>/dev/null | grep -q installed; then
                 missing_pkgs+=" $pkg"
-                in_jenkins && echo "CI_DEBUG: missing_pkgs=$missing_pkgs"
+                ci_debug "missing_pkgs=$missing_pkgs"
             fi
         done
     fi
@@ -181,7 +181,7 @@ function clean_boost_on_ubuntu {
 }
 
 function install_boost_on_ubuntu {
-    in_jenkins && echo "CI_DEBUG: Running install_boost_on_ubuntu() in install-deps.sh"
+    ci_debug "Running install_boost_on_ubuntu() in install-deps.sh"
     # Once we get to this point, clean_boost_on_ubuntu() should ensure
     # that there is no more than one installed version.
     local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
@@ -220,7 +220,7 @@ function install_boost_on_ubuntu {
 }
 
 function install_libzbd_on_ubuntu {
-    in_jenkins && echo "CI_DEBUG: Running install_libzbd_on_ubuntu() in install-deps.sh"
+    ci_debug "Running install_libzbd_on_ubuntu() in install-deps.sh"
     local codename=$1
     local project=libzbd
     local sha1=1fadde94b08fab574b17637c2bebd2b1e7f9127b
@@ -292,7 +292,7 @@ EOF
 }
 
 function populate_wheelhouse() {
-    in_jenkins && echo "CI_DEBUG: Running populate_wheelhouse() in install-deps.sh"
+    ci_debug "Running populate_wheelhouse() in install-deps.sh"
     local install=$1
     shift
 
@@ -307,7 +307,7 @@ function populate_wheelhouse() {
 }
 
 function activate_virtualenv() {
-    in_jenkins && echo "CI_DEBUG: Running activate_virtualenv() in install-deps.sh"
+    ci_debug "Running activate_virtualenv() in install-deps.sh"
     local top_srcdir=$1
     local env_dir=$top_srcdir/install-deps-python3
 
@@ -323,7 +323,7 @@ function activate_virtualenv() {
 }
 
 function preload_wheels_for_tox() {
-    in_jenkins && echo "CI_DEBUG: Running preload_wheels_for_tox() in install-deps.sh"
+    ci_debug "Running preload_wheels_for_tox() in install-deps.sh"
     local ini=$1
     shift
     pushd . > /dev/null
@@ -440,7 +440,7 @@ else
                 # state. Run the command again after `dpkg --configure -a` to
                 # bring package manager back into a clean state.
                 $SUDO dpkg --configure -a
-                in_jenkins && echo "CI_DEBUG: trying to install $INSTALL_EXTRA_PACKAGES again"
+                ci_debug "trying to install $INSTALL_EXTRA_PACKAGES again"
                 $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES
             fi
         fi
@@ -472,7 +472,7 @@ else
         fi
         touch $DIR/status
 
-        in_jenkins && echo "CI_DEBUG: Running munge_debian_control() in install-deps.sh"
+        ci_debug "Running munge_debian_control() in install-deps.sh"
         backports=""
         control=$(munge_debian_control "$VERSION" "debian/control")
         case "$VERSION" in
@@ -495,19 +495,17 @@ else
             build_profiles+=",pkg.ceph.pmdk"
         fi
 
-        in_jenkins && cat <<EOF
-CI_DEBUG: for_make_check=$for_make_check
-CI_DEBUG: with_seastar=$with_seastar
-CI_DEBUG: with_jaeger=$with_jaeger
-CI_DEBUG: build_profiles=$build_profiles
-CI_DEBUG: Now running 'mk-build-deps' and installing ceph-build-deps package
-EOF
+        ci_debug "for_make_check=$for_make_check"
+        ci_debug "with_seastar=$with_seastar"
+        ci_debug "with_jaeger=$with_jaeger"
+        ci_debug "build_profiles=$build_profiles"
+        ci_debug "Now running 'mk-build-deps' and installing ceph-build-deps package"
 
         $SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
               --build-profiles "${build_profiles#,}" \
               --install --remove \
               --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
-        in_jenkins && echo "CI_DEBUG: Removing ceph-build-deps"
+        ci_debug "Removing ceph-build-deps"
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
         if [ "$control" != "debian/control" ] ; then rm $control; fi
 
@@ -613,4 +611,4 @@ if $for_make_check; then
     type git > /dev/null || (echo "Dashboard uses git to pull dependencies." ; false)
 fi
 
-in_jenkins && echo "CI_DEBUG: End install-deps.sh" || true
+ci_debug "End install-deps.sh" || true
