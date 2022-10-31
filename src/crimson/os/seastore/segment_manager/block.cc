@@ -310,9 +310,13 @@ open_device_ret open_device(
     return seastar::open_file_dma(
       path,
       seastar::open_flags::rw | seastar::open_flags::dsync
-    ).then([=, &path](auto file) {
-      INFO("path={} successful, size={}", path, stat.size);
-      return std::make_pair(file, stat);
+    ).then([stat, &path, FNAME](auto file) mutable {
+      return file.size().then([stat, file, &path, FNAME](auto size) mutable {
+        stat.size = size;
+        INFO("path={} successful, size={}, block_size={}", 
+        path, stat.size, stat.block_size);
+        return std::make_pair(file, stat);
+      });
     });
   }).handle_exception([FNAME, &path](auto e) -> open_device_ret {
     ERROR("path={} got error -- {}", path, e);
