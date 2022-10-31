@@ -2251,6 +2251,11 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       break;
   }
 
+  if (cfg->snapid != CEPH_NOSNAP && !cfg->snapname.empty()) {
+    *err_msg << "rbd-nbd: use either snapname or snapid, not both";
+    return -EINVAL;
+  }
+
   if (args.begin() != args.end()) {
     *err_msg << "rbd-nbd: unknown args: " << *args.begin();
     return -EINVAL;

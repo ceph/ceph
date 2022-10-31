@@ -122,6 +122,11 @@ int execute_attach(const po::variables_map &vm,
     return -EINVAL;
   }
 
+  if (vm.count(at::SNAPSHOT_ID)) {
+    args.push_back("--snap-id");
+    args.push_back(std::to_string(vm[at::SNAPSHOT_ID].as<uint64_t>()));
+  }
+
   if (vm["quiesce"].as<bool>()) {
     args.push_back("--quiesce");
   }
@@ -159,23 +164,28 @@ int execute_detach(const po::variables_map &vm,
     device_name.clear();
   }
 
+  std::vector<std::string> args;
+
+  args.push_back("detach");
   std::string image_name;
   if (device_name.empty()) {
     int r = utils::get_image_or_snap_spec(vm, &image_name);
     if (r < 0) {
       return r;
     }
+
+    if (image_name.empty()) {
+      std::cerr << "rbd: detach requires either image name or device path"
+                << std::endl;
+      return -EINVAL;
+    }
+
+    if (vm.count(at::SNAPSHOT_ID)) {
+      args.push_back("--snap-id");
+      args.push_back(std::to_string(vm[at::SNAPSHOT_ID].as<uint64_t>()));
+    }
   }
 
-  if (device_name.empty() && image_name.empty()) {
-    std::cerr << "rbd: detach requires either image name or device path"
-              << std::endl;
-    return -EINVAL;
-  }
-
-  std::vector<std::string> args;
-
-  args.push_back("detach");
   args.push_back(device_name.empty() ? image_name : device_name);
 
   if (vm.count("options")) {
@@ -216,6 +226,11 @@ int execute_map(const po::variables_map &vm,
     args.push_back(vm["cookie"].as<std::string>());
   }
 
+  if (vm.count(at::SNAPSHOT_ID)) {
+    args.push_back("--snap-id");
+    args.push_back(std::to_string(vm[at::SNAPSHOT_ID].as<uint64_t>()));
+  }
+
   if (vm["read-only"].as<bool>()) {
     args.push_back("--read-only");
   }
@@ -249,23 +264,28 @@ int execute_unmap(const po::variables_map &vm,
     device_name.clear();
   }
 
+  std::vector<std::string> args;
+
+  args.push_back("unmap");
   std::string image_name;
   if (device_name.empty()) {
     int r = utils::get_image_or_snap_spec(vm, &image_name);
     if (r < 0) {
       return r;
     }
+
+    if (image_name.empty()) {
+      std::cerr << "rbd: unmap requires either image name or device path"
+                << std::endl;
+      return -EINVAL;
+    }
+
+    if (vm.count(at::SNAPSHOT_ID)) {
+      args.push_back("--snap-id");
+      args.push_back(std::to_string(vm[at::SNAPSHOT_ID].as<uint64_t>()));
+    }
   }
 
-  if (device_name.empty() && image_name.empty()) {
-    std::cerr << "rbd: unmap requires either image name or device path"
-              << std::endl;
-    return -EINVAL;
-  }
-
-  std::vector<std::string> args;
-
-  args.push_back("unmap");
   args.push_back(device_name.empty() ? image_name : device_name);
 
   if (vm.count("options")) {
