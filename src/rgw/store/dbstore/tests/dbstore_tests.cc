@@ -1143,7 +1143,7 @@ TEST_F(DBStoreTest, ObjectOmapGetValsByKeys) {
   keys.insert("part2");
   keys.insert("part4");
 
-  ret = op_target.obj_omap_get_vals_by_keys(dpp, "", keys, &vals);
+  ret = op_target.obj_omap_get_vals_by_keys(dpp, keys, &vals);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(vals.size(), 2);
 

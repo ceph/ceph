@@ -70,7 +70,7 @@ int seed::get_torrent_file(rgw::sal::Object* object,
 
   const set<string> obj_key{RGW_OBJ_TORRENT};
   map<string, bufferlist> m;
-  const int r = object->omap_get_vals_by_keys(s, oid, obj_key, &m);
+  const int r = object->omap_get_vals_by_keys(s, obj_key, &m);
   if (r < 0) {
     ldpp_dout(s, 0) << "ERROR: omap_get_vals_by_keys failed: " << r << dendl;
     return r;

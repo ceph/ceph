@@ -705,13 +705,13 @@ namespace rgw::sal {
     return op_target.obj_omap_get_all(dpp, m);
   }
 
-  int DBObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
+  int DBObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp,
       const std::set<std::string>& keys,
       Attrs* vals)
   {
     DB::Object op_target(store->getDB(),
         get_bucket()->get_info(), get_obj());
-    return op_target.obj_omap_get_vals_by_keys(dpp, oid, keys, vals);
+    return op_target.obj_omap_get_vals_by_keys(dpp, keys, vals);
   }
 
   int DBObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,

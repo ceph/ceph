@@ -1768,7 +1768,7 @@ int RadosObject::omap_get_all(const DoutPrefixProvider *dpp, std::map<std::strin
   return sysobj.omap().get_all(dpp, m, y);
 }
 
-int RadosObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
+int RadosObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp,
 					  const std::set<std::string>& keys,
 					  Attrs* vals)
 {
@@ -1783,7 +1783,7 @@ int RadosObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std:
     return ret;
   }
 
-  return cur_ioctx.omap_get_vals_by_keys(oid, keys, vals);
+  return cur_ioctx.omap_get_vals_by_keys(head_obj.oid, keys, vals);
 }
 
 int RadosObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,

@@ -1082,7 +1082,7 @@ class Object {
     virtual int omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>* m,
 			     optional_yield y) = 0;
     /** Get the OMAP values matching the given set of keys */
-    virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
+    virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp,
 			      const std::set<std::string>& keys,
 			      Attrs* vals) = 0;
     /** Get a single OMAP value matching the given key */

@@ -1051,11 +1051,10 @@ int FilterObject::omap_get_all(const DoutPrefixProvider *dpp,
 }
 
 int FilterObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp,
-					const std::string& oid,
 					const std::set<std::string>& keys,
 					Attrs* vals)
 {
-  return next->omap_get_vals_by_keys(dpp, oid, keys, vals);
+  return next->omap_get_vals_by_keys(dpp, keys, vals);
 }
 
 int FilterObject::omap_set_val_by_key(const DoutPrefixProvider *dpp,
