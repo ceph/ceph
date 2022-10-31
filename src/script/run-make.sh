@@ -2,14 +2,17 @@
 
 set -e
 
+if ! [ "${_SOURCED_LIB_BUILD}" = 1 ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    CEPH_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+    . "${CEPH_ROOT}/src/script/lib-build.sh" || exit 2
+fi
+
+
 trap clean_up_after_myself EXIT
 
 ORIGINAL_CCACHE_CONF="$HOME/.ccache/ccache.conf"
 SAVED_CCACHE_CONF="$HOME/.run-make-check-saved-ccache-conf"
-
-function in_jenkins() {
-    test -n "$JENKINS_HOME"
-}
 
 function save_ccache_conf() {
     test -f $ORIGINAL_CCACHE_CONF && cp $ORIGINAL_CCACHE_CONF $SAVED_CCACHE_CONF || true
