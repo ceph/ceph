@@ -25,3 +25,9 @@ _SOURCED_LIB_BUILD=1
 function in_jenkins() {
     [ -n "$JENKINS_HOME" ]
 }
+
+function ci_debug() {
+    if in_jenkins || [ "${FORCE_CI_DEBUG}" ]; then
+        echo "CI_DEBUG: $*"
+    fi
+}

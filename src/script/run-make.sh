@@ -68,7 +68,7 @@ function prepare() {
     fi
 
     if test -f ./install-deps.sh ; then
-        in_jenkins && echo "CI_DEBUG: Running install-deps.sh"
+        ci_debug "Running install-deps.sh"
         INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang"
         $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
@@ -134,9 +134,9 @@ EOM
 
     cmake_opts+=$(detect_ceph_dev_pkgs)
 
-    in_jenkins && echo "CI_DEBUG: Our cmake_opts are: $cmake_opts
-                        CI_DEBUG: Running ./configure"
-    in_jenkins && echo "CI_DEBUG: Running do_cmake.sh"
+    ci_debug "Our cmake_opts are: $cmake_opts"
+    ci_debug "Running ./configure"
+    ci_debug "Running do_cmake.sh"
 
     $DRY_RUN ./do_cmake.sh $cmake_opts $@ || return 1
 }
@@ -154,7 +154,7 @@ function build() {
     BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     test "$BUILD_MAKEOPTS" && echo "make will run with option(s) $BUILD_MAKEOPTS"
     # older cmake does not support --parallel or -j, so pass it to underlying generator
-    in_jenkins && echo "CI_DEBUG: Running cmake"
+    ci_debug "Running cmake"
     $DRY_RUN cmake --build . $targets -- $BUILD_MAKEOPTS || return 1
     $DRY_RUN ccache -s # print the ccache statistics to evaluate the efficiency
 }
