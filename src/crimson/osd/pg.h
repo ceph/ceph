@@ -506,9 +506,6 @@ public:
 
   static hobject_t get_oid(const hobject_t& hobj);
   static RWState::State get_lock_type(const OpInfo &op_info);
-  static std::optional<hobject_t> resolve_oid(
-    const SnapSet &snapset,
-    const hobject_t &oid);
 
   using load_obc_ertr = crimson::errorator<
     crimson::ct_error::enoent,
