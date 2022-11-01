@@ -31,3 +31,20 @@ function ci_debug() {
         echo "CI_DEBUG: $*"
     fi
 }
+
+# get_processors returns 1/2 the value of the value returned by
+# the nproc program OR the value of the environment variable NPROC
+# allowing the user to tune the number of cores visible to the
+# build scripts.
+function get_processors() {
+    # get_processors() depends on coreutils nproc.
+    if [ -n "$NPROC" ]; then
+        echo "$NPROC"
+    else
+        if [ "$(nproc)" -ge 2 ]; then
+            echo "$(($(nproc) / 2))"
+        else
+            echo 1
+        fi
+    fi
+}
