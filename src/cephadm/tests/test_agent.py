@@ -88,9 +88,13 @@ def test_agent_shutdown(_is_alive):
         _is_alive.return_value = True
         assert agent.stop == False
         assert agent.mgr_listener.stop == False
+        assert agent.ls_gatherer.stop == False
+        assert agent.volume_gatherer.stop == False
         agent.shutdown()
         assert agent.stop == True
         assert agent.mgr_listener.stop == True
+        assert agent.ls_gatherer.stop == True
+        assert agent.volume_gatherer.stop == True
 
 
 def test_agent_wakeup():
