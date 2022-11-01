@@ -27,19 +27,6 @@ function clean_up_after_myself() {
     restore_ccache_conf
 }
 
-function get_processors() {
-    # get_processors() depends on coreutils nproc.
-    if test -n "$NPROC" ; then
-        echo $NPROC
-    else
-        if test $(nproc) -ge 2 ; then
-            expr $(nproc) / 2
-        else
-            echo 1
-        fi
-    fi
-}
-
 function detect_ceph_dev_pkgs() {
     local cmake_opts="-DWITH_FMT_VERSION=9.0.0"
     local boost_root=/opt/ceph
