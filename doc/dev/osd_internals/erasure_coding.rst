@@ -16,20 +16,6 @@ Glossary
    rank of the first chunk is 0, the rank of the second chunk is 1,
    and so on.
 
-*stripe* 
-   if an object is so large that encoding it requires more than one call to the
-   encoding function, each of these calls will create a set of chunks called a
-   *stripe*.
-
-*shard* (also called *strip*)
-   an ordered sequence of chunks of the same rank from the same
-   object. For a given placement group, each OSD contains shards of
-   the same rank. When dealing with objects that are encoded with a
-   single operation, *chunk* is sometimes used instead of *shard*
-   because the shard is made of a single chunk. The *chunks* in a
-   *shard* are ordered according to the rank of the stripe they belong
-   to.
-
 *K*
    the number of "data *chunks*" into which an object is divided. For example, 
    if *K* = 2, then a 10KB object is divided into two objects of 5KB each.
@@ -50,6 +36,20 @@ Glossary
    mean that *N* = 12 (because *K* + *M* = 9 + 3). Therefore, the rate (*K* /
    *N*) is 9 / 12 = 0.75. In other words, 75% of the chunks contain useful
    information.
+
+*shard* (also called *strip*)
+   an ordered sequence of chunks of the same rank from the same
+   object. For a given placement group, each OSD contains shards of
+   the same rank. When dealing with objects that are encoded with a
+   single operation, *chunk* is sometimes used instead of *shard*
+   because the shard is made of a single chunk. The *chunks* in a
+   *shard* are ordered according to the rank of the stripe they belong
+   to.
+
+*stripe* 
+   if an object is so large that encoding it requires more than one call to the
+   encoding function, each of these calls will create a set of chunks called a
+   *stripe*.
 
 The definitions are illustrated as follows (PG stands for placement group):
 ::
