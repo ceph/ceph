@@ -33,11 +33,13 @@ function run() {
     # increase the aio-max-nr, which is by default 65536. we could reach this
     # limit while running seastar tests and bluestore tests.
     local m=16
-    if [ $(nproc) -gt $m ]; then
-        m=$(nproc)
+    local procs="$(($(get_processors) * 2))"
+    if [ "${procs}" -gt $m ]; then
+        m="${procs}"
     fi
-    if [ "$(/sbin/sysctl -n fs.aio-max-nr )" -lt "$((65536 * $(nproc)))" ]; then
-        $DRY_RUN sudo /sbin/sysctl -q -w fs.aio-max-nr=$((65536 * $(nproc)))
+    local aiomax="$((65536 * procs))"
+    if [ "$(/sbin/sysctl -n fs.aio-max-nr )" -lt "${aiomax}" ]; then
+        $DRY_RUN sudo /sbin/sysctl -q -w fs.aio-max-nr="${aiomax}"
     fi
 
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
