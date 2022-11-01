@@ -4168,6 +4168,7 @@ class MgrListener(Thread):
                     err_str = f'Failed to extract length of payload from message: {e}'
                     conn.send(err_str.encode())
                     logger.error(err_str)
+                    continue
                 while True:
                     payload = conn.recv(length).decode()
                     if not payload:
