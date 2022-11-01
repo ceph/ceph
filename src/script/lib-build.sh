@@ -71,6 +71,15 @@ function discover_compiler() {
             break
         fi
     done
+    # but if this is {centos,rhel} we need gcc-toolset
+    if [ -f "/opt/rh/gcc-toolset-11/enable" ]; then
+        ci_debug "Detected SCL gcc-toolset-11 environment file"
+        compiler_env="/opt/rh/gcc-toolset-11/enable"
+        # shellcheck disable=SC1090
+        cxx_compiler="$(. ${compiler_env} && command -v g++)"
+        # shellcheck disable=SC1090
+        c_compiler="$(. ${compiler_env} && command -v gcc)"
+    fi
 
     export discovered_c_compiler="${c_compiler}"
     export discovered_cxx_compiler="${cxx_compiler}"
