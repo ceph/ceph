@@ -50,7 +50,8 @@ class Protocol {
   virtual void start_accept(SocketRef&& socket,
                             const entity_addr_t& peer_addr) = 0;
 
-  virtual void print(std::ostream&) const = 0;
+  virtual void print_conn(std::ostream&) const = 0;
+
  protected:
   Protocol(ChainedDispatchers& dispatchers,
            SocketConnection& conn);
@@ -86,8 +87,38 @@ class Protocol {
 
 // the write state-machine
  public:
+  using clock_t = seastar::lowres_system_clock;
+
   seastar::future<> send(MessageURef msg);
+
   seastar::future<> keepalive();
+
+  clock_t::time_point get_last_keepalive() const {
+    return last_keepalive;
+  }
+
+  clock_t::time_point get_last_keepalive_ack() const {
+    return last_keepalive_ack;
+  }
+
+  void set_last_keepalive_ack(clock_t::time_point when) {
+    last_keepalive_ack = when;
+  }
+
+  struct io_stat_printer {
+    const Protocol &protocol;
+  };
+  void print_io_stat(std::ostream &out) const {
+    out << "io_stat("
+        << "in_seq=" << in_seq
+        << ", out_seq=" << out_seq
+        << ", out_q_size=" << out_q.size()
+        << ", sent_size=" << sent.size()
+        << ", need_ack=" << (ack_left > 0)
+        << ", need_keepalive=" << need_keepalive
+        << ", need_keepalive_ack=" << bool(keepalive_ack)
+        << ")";
+  }
 
 // TODO: encapsulate a SessionedSender class
  protected:
@@ -129,20 +160,55 @@ class Protocol {
 
   void reset_write();
 
+  void reset_read() {
+    in_seq = 0;
+  }
+
   bool is_queued() const {
-    return (!conn.out_q.empty() ||
+    return (!out_q.empty() ||
             ack_left > 0 ||
             need_keepalive ||
             keepalive_ack.has_value());
   }
 
+  bool is_queued_or_sent() const {
+    return is_queued() || !sent.empty();
+  }
+
   void ack_writes(seq_num_t seq);
+
+  void set_last_keepalive(clock_t::time_point when) {
+    last_keepalive = when;
+  }
+
+  seq_num_t get_in_seq() const {
+    return in_seq;
+  }
+
+  void set_in_seq(seq_num_t _in_seq) {
+    in_seq = _in_seq;
+  }
+
+  seq_num_t increment_out() {
+    return ++out_seq;
+  }
+
   crimson::common::Gated gate;
 
  private:
   write_state_t write_state = write_state_t::none;
+
   // wait until current state changed
   seastar::shared_promise<> state_changed;
+
+  /// the seq num of the last transmitted message
+  seq_num_t out_seq = 0;
+
+  // messages to be resent after connection gets reset
+  std::deque<MessageURef> out_q;
+
+  // messages sent, but not yet acked by peer
+  std::deque<MessageURef> sent;
 
   bool need_keepalive = false;
   std::optional<utime_t> keepalive_ack = std::nullopt;
@@ -153,16 +219,28 @@ class Protocol {
   // it needs to wait for exit_open until writing is stopped or failed.
   std::optional<seastar::shared_promise<>> exit_open;
 
+  /// the seq num of the last received message
+  seq_num_t in_seq = 0;
+
+  clock_t::time_point last_keepalive;
+
+  clock_t::time_point last_keepalive_ack;
+
   seastar::future<stop_t> try_exit_sweep();
   seastar::future<> do_write_dispatch_sweep();
   void write_event();
 };
 
 inline std::ostream& operator<<(std::ostream& out, const Protocol& proto) {
-  proto.print(out);
+  proto.print_conn(out);
   return out;
 }
 
+inline std::ostream& operator<<(
+    std::ostream& out, Protocol::io_stat_printer stat) {
+  stat.protocol.print_io_stat(out);
+  return out;
+}
 
 } // namespace crimson::net
 

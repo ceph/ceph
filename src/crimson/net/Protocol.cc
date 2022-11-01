@@ -92,24 +92,24 @@ ceph::bufferlist Protocol::sweep_messages_and_move_to_sent(
       std::optional<utime_t> keepalive_ack,
       bool require_ack)
 {
-  ceph::bufferlist bl = do_sweep_messages(conn.out_q, 
-                                          num_msgs, 
-                                          require_keepalive, 
-                                          keepalive_ack, 
+  ceph::bufferlist bl = do_sweep_messages(out_q,
+                                          num_msgs,
+                                          require_keepalive,
+                                          keepalive_ack,
                                           require_ack);
   if (!conn.policy.lossy) {
-    conn.sent.insert(conn.sent.end(),
-                     std::make_move_iterator(conn.out_q.begin()),
-                     std::make_move_iterator(conn.out_q.end()));
+    sent.insert(sent.end(),
+                std::make_move_iterator(out_q.begin()),
+                std::make_move_iterator(out_q.end()));
   }
-  conn.out_q.clear();
+  out_q.clear();
   return bl;
 }
 
 seastar::future<> Protocol::send(MessageURef msg)
 {
   if (write_state != write_state_t::drop) {
-    conn.out_q.push_back(std::move(msg));
+    out_q.push_back(std::move(msg));
     write_event();
   }
   return seastar::now();
@@ -142,41 +142,41 @@ void Protocol::notify_ack()
 void Protocol::requeue_sent()
 {
   assert(write_state != write_state_t::open);
-  if (conn.sent.empty()) {
+  if (sent.empty()) {
     return;
   }
 
-  conn.out_seq -= conn.sent.size();
+  out_seq -= sent.size();
   logger().debug("{} requeue {} items, revert out_seq to {}",
-                 conn, conn.sent.size(), conn.out_seq);
-  for (MessageURef& msg : conn.sent) {
+                 conn, sent.size(), out_seq);
+  for (MessageURef& msg : sent) {
     msg->clear_payload();
     msg->set_seq(0);
   }
-  conn.out_q.insert(conn.out_q.begin(),
-                    std::make_move_iterator(conn.sent.begin()),
-                    std::make_move_iterator(conn.sent.end()));
-  conn.sent.clear();
+  out_q.insert(out_q.begin(),
+               std::make_move_iterator(sent.begin()),
+               std::make_move_iterator(sent.end()));
+  sent.clear();
   write_event();
 }
 
 void Protocol::requeue_up_to(seq_num_t seq)
 {
   assert(write_state != write_state_t::open);
-  if (conn.sent.empty() && conn.out_q.empty()) {
+  if (sent.empty() && out_q.empty()) {
     logger().debug("{} nothing to requeue, reset out_seq from {} to seq {}",
-                   conn, conn.out_seq, seq);
-    conn.out_seq = seq;
+                   conn, out_seq, seq);
+    out_seq = seq;
     return;
   }
   logger().debug("{} discarding sent items by seq {} (sent_len={}, out_seq={})",
-                 conn, seq, conn.sent.size(), conn.out_seq);
-  while (!conn.sent.empty()) {
-    auto cur_seq = conn.sent.front()->get_seq();
+                 conn, seq, sent.size(), out_seq);
+  while (!sent.empty()) {
+    auto cur_seq = sent.front()->get_seq();
     if (cur_seq == 0 || cur_seq > seq) {
       break;
     } else {
-      conn.sent.pop_front();
+      sent.pop_front();
     }
   }
   requeue_sent();
@@ -185,9 +185,9 @@ void Protocol::requeue_up_to(seq_num_t seq)
 void Protocol::reset_write()
 {
   assert(write_state != write_state_t::open);
-  conn.out_seq = 0;
-  conn.out_q.clear();
-  conn.sent.clear();
+  out_seq = 0;
+  out_q.clear();
+  sent.clear();
   need_keepalive = false;
   keepalive_ack = std::nullopt;
   ack_left = 0;
@@ -198,10 +198,10 @@ void Protocol::ack_writes(seq_num_t seq)
   if (conn.policy.lossy) {  // lossy connections don't keep sent messages
     return;
   }
-  while (!conn.sent.empty() && conn.sent.front()->get_seq() <= seq) {
+  while (!sent.empty() && sent.front()->get_seq() <= seq) {
     logger().trace("{} got ack seq {} >= {}, pop {}",
-                   conn, seq, conn.sent.front()->get_seq(), *conn.sent.front());
-    conn.sent.pop_front();
+                   conn, seq, sent.front()->get_seq(), *sent.front());
+    sent.pop_front();
   }
 }
 
@@ -233,13 +233,13 @@ seastar::future<> Protocol::do_write_dispatch_sweep()
   return seastar::repeat([this] {
     switch (write_state) {
      case write_state_t::open: {
-      size_t num_msgs = conn.out_q.size();
+      size_t num_msgs = out_q.size();
       bool still_queued = is_queued();
       if (unlikely(!still_queued)) {
         return try_exit_sweep();
       }
       auto acked = ack_left;
-      assert(acked == 0 || conn.in_seq > 0);
+      assert(acked == 0 || in_seq > 0);
       // sweep all pending writes with the concrete Protocol
       return conn.socket->write(sweep_messages_and_move_to_sent(
           num_msgs, need_keepalive, keepalive_ack, acked > 0)

@@ -20,7 +20,8 @@ class ProtocolV2 final : public Protocol {
              SocketConnection& conn,
              SocketMessenger& messenger);
   ~ProtocolV2() override;
-  void print(std::ostream&) const final;
+  void print_conn(std::ostream&) const final;
+
  private:
   void on_closed() override;
   bool is_connected() const override;
@@ -144,7 +145,7 @@ class ProtocolV2 final : public Protocol {
 
  private:
   void fault(bool backoff, const char* func_name, std::exception_ptr eptr);
-  void reset_session(bool full);
+  void reset_session(bool is_full);
   seastar::future<std::tuple<entity_type_t, entity_addr_t>>
   banner_exchange(bool is_connect);
 

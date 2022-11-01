@@ -379,8 +379,7 @@ void ProtocolV2::fault(bool backoff, const char* func_name, std::exception_ptr e
                   conn, func_name, get_state_name(state), eptr);
     close(true);
   } else if (conn.policy.server ||
-             (conn.policy.standby &&
-              (!is_queued() && conn.sent.empty()))) {
+             (conn.policy.standby && !is_queued_or_sent())) {
     logger().info("{} {}: fault at {} with nothing to send, going to STANDBY -- {}",
                   conn, func_name, get_state_name(state), eptr);
     execute_standby();
@@ -399,7 +398,7 @@ void ProtocolV2::reset_session(bool full)
 {
   server_cookie = 0;
   connect_seq = 0;
-  conn.in_seq = 0;
+  reset_read();
   if (full) {
     client_cookie = generate_client_cookie();
     peer_global_seq = 0;
@@ -755,12 +754,12 @@ ProtocolV2::client_reconnect()
                                           server_cookie,
                                           global_seq,
                                           connect_seq,
-                                          conn.in_seq);
+                                          get_in_seq());
   logger().debug("{} WRITE ReconnectFrame: addrs={}, client_cookie={},"
-                 " server_cookie={}, gs={}, cs={}, msg_seq={}",
+                 " server_cookie={}, gs={}, cs={}, in_seq={}",
                  conn, messenger.get_myaddrs(),
                  client_cookie, server_cookie,
-                 global_seq, connect_seq, conn.in_seq);
+                 global_seq, connect_seq, get_in_seq());
   return write_frame(reconnect).then([this] {
     return read_main_preamble();
   }).then([this] (Tag tag) {
@@ -899,12 +898,11 @@ void ProtocolV2::execute_connecting()
           }
           switch (next) {
            case next_step_t::ready: {
-            logger().info("{} connected:"
-                          " gs={}, pgs={}, cs={}, client_cookie={},"
-                          " server_cookie={}, in_seq={}, out_seq={}, out_q={}",
+            logger().info("{} connected: gs={}, pgs={}, cs={}, "
+                          "client_cookie={}, server_cookie={}, {}",
                           conn, global_seq, peer_global_seq, connect_seq,
-                          client_cookie, server_cookie, conn.in_seq,
-                          conn.out_seq, conn.out_q.size());
+                          client_cookie, server_cookie,
+                          io_stat_printer{*this});
             execute_ready(true);
             break;
            }
@@ -927,8 +925,7 @@ void ProtocolV2::execute_connecting()
           }
 
           if (conn.policy.server ||
-              (conn.policy.standby &&
-               (!is_queued() && conn.sent.empty()))) {
+              (conn.policy.standby && !is_queued_or_sent())) {
             logger().info("{} execute_connecting(): fault at {} with nothing to send,"
                           " going to STANDBY -- {}",
                           conn, get_state_name(state), eptr);
@@ -1607,11 +1604,11 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
                        conn, get_state_name(state));
         abort_protocol();
       }
-      logger().info("{} established: gs={}, pgs={}, cs={}, client_cookie={},"
-                    " server_cookie={}, in_seq={}, out_seq={}, out_q={}",
+      logger().info("{} established: gs={}, pgs={}, cs={}, "
+                    "client_cookie={}, server_cookie={}, {}",
                     conn, global_seq, peer_global_seq, connect_seq,
-                    client_cookie, server_cookie, conn.in_seq,
-                    conn.out_seq, conn.out_q.size());
+                    client_cookie, server_cookie,
+                    io_stat_printer{*this});
       execute_ready(false);
     }).handle_exception([this] (std::exception_ptr eptr) {
       if (state != state_t::ESTABLISHING) {
@@ -1639,7 +1636,7 @@ ProtocolV2::send_server_ident()
 
   // this is required for the case when this connection is being replaced
   requeue_up_to(0);
-  conn.in_seq = 0;
+  reset_read();
 
   if (!conn.policy.lossy) {
     server_cookie = ceph::util::generate_random_number<uint64_t>(1, -1ll);
@@ -1739,8 +1736,8 @@ void ProtocolV2::trigger_replacing(bool reconnect,
         connect_seq = new_connect_seq;
         // send_reconnect_ok() logic
         requeue_up_to(new_msg_seq);
-        auto reconnect_ok = ReconnectOkFrame::Encode(conn.in_seq);
-        logger().debug("{} WRITE ReconnectOkFrame: msg_seq={}", conn, conn.in_seq);
+        auto reconnect_ok = ReconnectOkFrame::Encode(get_in_seq());
+        logger().debug("{} WRITE ReconnectOkFrame: msg_seq={}", conn, get_in_seq());
         return write_frame(reconnect_ok);
       } else {
         client_cookie = new_client_cookie;
@@ -1761,12 +1758,12 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                        conn, get_state_name(state));
         abort_protocol();
       }
-      logger().info("{} replaced ({}):"
-                    " gs={}, pgs={}, cs={}, client_cookie={}, server_cookie={},"
-                    " in_seq={}, out_seq={}, out_q={}",
+      logger().info("{} replaced ({}): gs={}, pgs={}, cs={}, "
+                    "client_cookie={}, server_cookie={}, {}",
                     conn, reconnect ? "reconnected" : "connected",
-                    global_seq, peer_global_seq, connect_seq, client_cookie,
-                    server_cookie, conn.in_seq, conn.out_seq, conn.out_q.size());
+                    global_seq, peer_global_seq, connect_seq,
+                    client_cookie, server_cookie,
+                    io_stat_printer{*this});
       execute_ready(false);
     }).handle_exception([this] (std::exception_ptr eptr) {
       if (state != state_t::REPLACING) {
@@ -1804,7 +1801,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
   }
 
   if (require_ack && num_msgs == 0u) {
-    auto ack_frame = AckFrame::Encode(conn.in_seq);
+    auto ack_frame = AckFrame::Encode(get_in_seq());
     bl.append(ack_frame.get_buffer(tx_frame_asm));
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::ACK, bp_type_t::WRITE);
   }
@@ -1817,7 +1814,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     msg->encode(conn.features, 0);
 
     ceph_assert(!msg->get_seq() && "message already has seq");
-    msg->set_seq(++conn.out_seq);
+    msg->set_seq(increment_out());
 
     ceph_msg_header &header = msg->get_header();
     ceph_msg_footer &footer = msg->get_footer();
@@ -1826,7 +1823,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
                              header.type,       header.priority,
                              header.version,
                              ceph_le32(0),      header.data_off,
-                             ceph_le64(conn.in_seq),
+                             ceph_le64(get_in_seq()),
                              footer.flags,      header.compat_version,
                              header.reserved};
 
@@ -1897,7 +1894,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
     // client side queueing because messages can't be renumbered, but the (kernel)
     // client will occasionally pull a message out of the sent queue to send
     // elsewhere.  in that case it doesn't matter if we "got" it or not.
-    uint64_t cur_seq = conn.in_seq;
+    uint64_t cur_seq = get_in_seq();
     if (message->get_seq() <= cur_seq) {
       logger().error("{} got old message {} <= {} {}, discarding",
                      conn, message->get_seq(), cur_seq, *message);
@@ -1915,7 +1912,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
     }
 
     // note last received message.
-    conn.in_seq = message->get_seq();
+    set_in_seq(message->get_seq());
     logger().debug("{} <== #{} === {} ({})",
 		   conn, message->get_seq(), *message, message->get_type());
     notify_ack();
@@ -1990,16 +1987,17 @@ void ProtocolV2::execute_ready(bool dispatch_connect)
               logger().debug("{} GOT KeepAliveFrame: timestamp={}",
                              conn, keepalive_frame.timestamp());
               notify_keepalive_ack(keepalive_frame.timestamp());
-              conn.set_last_keepalive(seastar::lowres_system_clock::now());
+              set_last_keepalive(seastar::lowres_system_clock::now());
             });
           case Tag::KEEPALIVE2_ACK:
             return read_frame_payload().then([this] {
               // handle_keepalive2_ack() logic
               auto keepalive_ack_frame = KeepAliveFrameAck::Decode(rx_segments_data.back());
-              conn.set_last_keepalive_ack(
-                seastar::lowres_system_clock::time_point{keepalive_ack_frame.timestamp()});
+              auto _last_keepalive_ack =
+                seastar::lowres_system_clock::time_point{keepalive_ack_frame.timestamp()};
+              set_last_keepalive_ack(_last_keepalive_ack);
               logger().debug("{} GOT KeepAliveFrameAck: timestamp={}",
-                             conn, conn.last_keepalive_ack);
+                             conn, _last_keepalive_ack);
             });
           default: {
             unexpected_tag(tag, conn, "execute_ready");
@@ -2122,7 +2120,7 @@ void ProtocolV2::on_closed()
 	conn.shared_from_this()));
 }
 
-void ProtocolV2::print(std::ostream& out) const
+void ProtocolV2::print_conn(std::ostream& out) const
 {
   out << conn;
 }
