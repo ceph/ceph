@@ -2546,17 +2546,20 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
       RGWUploadPartInfo& obj_part = part->info;
 
       /* update manifest for part */
-      string oid = mp_obj.get_part(part->info.num);
-      rgw_obj src_obj;
-      src_obj.init_ns(bucket->get_key(), oid, mp_ns);
-
       if (obj_part.manifest.empty()) {
-        ldpp_dout(dpp, 0) << "ERROR: empty manifest for object part: obj="
-			 << src_obj << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: empty manifest for object part: "
+			 << obj_part.num << " of " << target_obj->get_name() << dendl;
         ret = -ERR_INVALID_PART;
         return ret;
-      } else {
-        manifest.append(dpp, obj_part.manifest, store->svc()->zone->get_zonegroup(), store->svc()->zone->get_zone_params());
+      }
+      manifest.append(dpp, obj_part.manifest, store->svc()->zone->get_zonegroup(), store->svc()->zone->get_zone_params());
+
+      // extract part head from part manifest, it will be used later to remove corresponding index entry
+      rgw_obj src_obj;
+      RGWObjManifest::obj_iterator miter = obj_part.manifest.obj_begin(dpp);
+      if (miter != obj_part.manifest.obj_end(dpp)) {
+        const rgw_raw_obj& raw_head_obj = miter.get_location().get_raw_obj(static_cast<rgw::sal::RadosStore*>(store));
+        RGWSI_Tier_RADOS::raw_obj_to_obj(target_obj->get_bucket()->get_key(), raw_head_obj, &src_obj);
       }
 
       bool part_compressed = (obj_part.cs_info.compression_type != "none");

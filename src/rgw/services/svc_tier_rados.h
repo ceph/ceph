@@ -56,19 +56,6 @@ public:
     prefix.append(part_unique_str);
   }
   const std::string& get_meta() const { return meta; }
-  std::string get_part(int num) const {
-    char buf[16];
-    snprintf(buf, 16, ".%d", num);
-    std::string s = prefix;
-    s.append(buf);
-    return s;
-  }
-  std::string get_part(const std::string& part) const {
-    std::string s = prefix;
-    s.append(".");
-    s.append(part);
-    return s;
-  }
   const std::string& get_upload_id() const {
     return upload_id;
   }
