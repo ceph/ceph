@@ -784,3 +784,17 @@ def test_gatherer_run(_wait, _time, _agent_wakeup, cephadm_fs):
             assert agent.ls_gatherer.ack == agent.ack
             # should not have gotten to end of loop
             _clear.assert_not_called()
+
+
+@mock.patch("cephadm.CephadmAgent.run")
+def test_command_agent(_agent_run, cephadm_fs):
+    with with_cephadm_ctx([]) as ctx:
+        ctx.fsid = FSID
+        ctx.daemon_id = AGENT_ID
+
+        with pytest.raises(Exception, match=f"Agent daemon directory {AGENT_DIR} does not exist. Perhaps agent was never deployed?"):
+            _cephadm.command_agent(ctx)
+
+        cephadm_fs.create_dir(AGENT_DIR)
+        _cephadm.command_agent(ctx)
+        _agent_run.assert_called()
