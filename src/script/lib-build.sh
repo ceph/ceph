@@ -31,8 +31,16 @@ function ci_debug() {
         echo "CI_DEBUG: $*"
     fi
 }
-<<<<<<< HEAD
-=======
+
+function wrap_sudo() {
+    # set or unset the SUDO env var so that scripts already running
+    # as root do not call into sudo to escalate privs
+    if test $(id -u) != 0 ; then
+        SUDO=sudo
+    else
+        SUDO=""
+    fi
+}
 
 # get_processors returns 1/2 the value of the value returned by
 # the nproc program OR the value of the environment variable NPROC
@@ -49,6 +57,14 @@ function get_processors() {
             echo 1
         fi
     fi
+}
+
+# has_build_dir returns true if a build directory exists and can be used
+# for builds. has_build_dir is designed to interoperate with do_cmake.sh
+# and uses the same BUILD_DIR environment variable. It checks for the
+# directory relative to the current working directory.
+function has_build_dir() {
+    ( cd "${BUILD_DIR:=build}" && [[ -f build.ninja || -f Makefile ]] )
 }
 
 # discover_compiler takes one argument, purpose, which may be used
@@ -73,10 +89,18 @@ function discover_compiler() {
             break
         fi
     done
+    # but if this is {centos,rhel} we need gcc-toolset
+    if [ -f "/opt/rh/gcc-toolset-11/enable" ]; then
+        ci_debug "Detected SCL gcc-toolset-11 environment file"
+        compiler_env="/opt/rh/gcc-toolset-11/enable"
+        # shellcheck disable=SC1090
+        cxx_compiler="$(. ${compiler_env} && command -v g++)"
+        # shellcheck disable=SC1090
+        c_compiler="$(. ${compiler_env} && command -v gcc)"
+    fi
 
     export discovered_c_compiler="${c_compiler}"
     export discovered_cxx_compiler="${cxx_compiler}"
     export discovered_compiler_env="${compiler_env}"
     return 0
 }
->>>>>>> 8dae1c161c4 (script: add discover_compiler function to lib-build.sh)
