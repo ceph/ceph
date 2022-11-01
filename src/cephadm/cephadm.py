@@ -4326,6 +4326,10 @@ WantedBy=ceph-{fsid}.target
         self.stop = True
         if self.mgr_listener.is_alive():
             self.mgr_listener.shutdown()
+        if self.ls_gatherer.is_alive():
+            self.ls_gatherer.shutdown()
+        if self.volume_gatherer.is_alive():
+            self.volume_gatherer.shutdown()
 
     def wakeup(self) -> None:
         self.event.set()
