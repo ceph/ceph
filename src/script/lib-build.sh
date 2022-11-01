@@ -31,3 +31,52 @@ function ci_debug() {
         echo "CI_DEBUG: $*"
     fi
 }
+<<<<<<< HEAD
+=======
+
+# get_processors returns 1/2 the value of the value returned by
+# the nproc program OR the value of the environment variable NPROC
+# allowing the user to tune the number of cores visible to the
+# build scripts.
+function get_processors() {
+    # get_processors() depends on coreutils nproc.
+    if [ -n "$NPROC" ]; then
+        echo "$NPROC"
+    else
+        if [ "$(nproc)" -ge 2 ]; then
+            echo "$(($(nproc) / 2))"
+        else
+            echo 1
+        fi
+    fi
+}
+
+# discover_compiler takes one argument, purpose, which may be used
+# to adjust the results for a specific need. It sets three environment
+# variables `discovered_c_compiler`, `discovered_cxx_compiler` and
+# `discovered_compiler_env`. The `discovered_compiler_env` variable
+# may be blank. If not, it will contain a file that needs to be sourced
+# prior to using the compiler.
+function discover_compiler() {
+    # nb: currently purpose is not used for detection
+    local purpose="$1"
+    ci_debug "Finding compiler for ${purpose}"
+
+    local compiler_env=""
+    local cxx_compiler=g++
+    local c_compiler=gcc
+    # ubuntu/debian ci builds prefer clang
+    for i in {14..10}; do
+        if type -t "clang-$i" > /dev/null; then
+            cxx_compiler="clang++-$i"
+            c_compiler="clang-$i"
+            break
+        fi
+    done
+
+    export discovered_c_compiler="${c_compiler}"
+    export discovered_cxx_compiler="${cxx_compiler}"
+    export discovered_compiler_env="${compiler_env}"
+    return 0
+}
+>>>>>>> 8dae1c161c4 (script: add discover_compiler function to lib-build.sh)
