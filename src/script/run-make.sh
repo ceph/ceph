@@ -92,6 +92,10 @@ EOM
     if ! discover_compiler ci-build ; then
         ci_debug "Failed to discover a compiler"
     fi
+    if [ "${discovered_compiler_env}" ]; then
+        ci_debug "Enabling compiler environment file: ${discovered_compiler_env}"
+        . "${discovered_compiler_env}"
+    fi
     local cxx_compiler="${discovered_cxx_compiler}"
     local c_compiler="${discovered_c_compiler}"
     local cmake_opts
