@@ -138,6 +138,13 @@ int			logcount = 0;	/* total ops */
 #undef PAGE_MASK
 #define PAGE_MASK       (PAGE_SIZE - 1)
 
+// On Windows, we need to open the files using O_BINARY, otherwise certain
+// characters will get translated (e.g. LF to CRLF), which can corrupt our
+// payload.
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
+
 
 char	*original_buf;			/* a pointer to the original data */
 char	*good_buf;			/* a pointer to the correct data */
@@ -2085,7 +2092,7 @@ doread(unsigned offset, unsigned size)
 void
 check_eofpage(char *s, unsigned offset, char *p, int size)
 {
-	unsigned long last_page, should_be_zero;
+	uintptr_t last_page, should_be_zero;
 
 	if (offset + size <= (file_size & ~page_mask))
 		return;
@@ -2095,7 +2102,7 @@ check_eofpage(char *s, unsigned offset, char *p, int size)
 	 * beyond the true end of the file mapping
 	 * (as required by mmap def in 1996 posix 1003.1)
 	 */
-	last_page = ((unsigned long)p + (offset & page_mask) + size) & ~page_mask;
+	last_page = ((uintptr_t)p + (offset & page_mask) + size) & ~page_mask;
 
 	for (should_be_zero = last_page + (file_size & page_mask);
 	     should_be_zero < last_page + page_size;
@@ -2540,7 +2547,7 @@ do_clone()
 	}
 
 	clone_filename(filename, sizeof(filename), num_clones);
-	if ((fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, 0666)) < 0) {
+	if ((fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666)) < 0) {
 		simple_err("do_clone: open", -errno);
 		exit(162);
 	}
@@ -2609,7 +2616,7 @@ check_clone(int clonenum, bool replay_image)
 	}
 
 	clone_filename(filename, sizeof(filename), clonenum + 1);
-	if ((fd = open(filename, O_RDONLY)) < 0) {
+	if ((fd = open(filename, O_RDONLY | O_BINARY)) < 0) {
 		simple_err("check_clone: open", -errno);
 		exit(168);
 	}
@@ -2658,8 +2665,8 @@ check_clone(int clonenum, bool replay_image)
 	        unlink(filename);
         }
 
-	free(good_buf);
-	free(temp_buf);
+	aligned_free(good_buf);
+	aligned_free(temp_buf);
 }
 
 void
@@ -3322,7 +3329,7 @@ main(int argc, char **argv)
 		strcat(dirpath, ".");
 	strncat(goodfile, iname, 256);
 	strcat (goodfile, ".fsxgood");
-	fsxgoodfd = open(goodfile, O_RDWR|O_CREAT|O_TRUNC, 0666);
+	fsxgoodfd = open(goodfile, O_RDWR | O_CREAT | O_TRUNC | O_BINARY, 0666);
 	if (fsxgoodfd < 0) {
 		prterr(goodfile);
 		exit(92);
@@ -3440,8 +3447,8 @@ main(int argc, char **argv)
 	rados_shutdown(cluster);
 
 	free(original_buf);
-	free(good_buf);
-	free(temp_buf);
+	aligned_free(good_buf);
+	aligned_free(temp_buf);
 
 	exit(0);
 	return 0;
