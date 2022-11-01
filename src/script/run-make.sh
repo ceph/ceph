@@ -89,15 +89,11 @@ EOM
     fi
     $DRY_RUN ccache -sz # Reset the ccache statistics and show the current configuration
 
-    local cxx_compiler=g++
-    local c_compiler=gcc
-    for i in $(seq 14 -1 10); do
-        if type -t clang-$i > /dev/null; then
-            cxx_compiler="clang++-$i"
-            c_compiler="clang-$i"
-            break
-        fi
-    done
+    if ! discover_compiler ci-build ; then
+        ci_debug "Failed to discover a compiler"
+    fi
+    local cxx_compiler="${discovered_cxx_compiler}"
+    local c_compiler="${discovered_c_compiler}"
     local cmake_opts
     cmake_opts+=" -DCMAKE_CXX_COMPILER=$cxx_compiler -DCMAKE_C_COMPILER=$c_compiler"
     cmake_opts+=" -DCMAKE_CXX_FLAGS_DEBUG=-Werror"
