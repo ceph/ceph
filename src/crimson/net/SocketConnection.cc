@@ -84,29 +84,27 @@ seastar::future<> SocketConnection::keepalive()
     });
 }
 
+SocketConnection::clock_t::time_point
+SocketConnection::get_last_keepalive() const
+{
+  return protocol->get_last_keepalive();
+}
+
+SocketConnection::clock_t::time_point
+SocketConnection::get_last_keepalive_ack() const
+{
+  return protocol->get_last_keepalive_ack();
+}
+
+void SocketConnection::set_last_keepalive_ack(clock_t::time_point when)
+{
+  protocol->set_last_keepalive_ack(when);
+}
+
 void SocketConnection::mark_down()
 {
   assert(seastar::this_shard_id() == shard_id());
   protocol->close(false);
-}
-
-bool SocketConnection::update_rx_seq(seq_num_t seq)
-{
-  if (seq <= in_seq) {
-    if (HAVE_FEATURE(features, RECONNECT_SEQ) &&
-        local_conf()->ms_die_on_old_message) {
-      ceph_abort_msg("old msgs despite reconnect_seq feature");
-    }
-    return false;
-  } else if (seq > in_seq + 1) {
-    if (local_conf()->ms_die_on_skipped_message) {
-      ceph_abort_msg("skipped incoming seq");
-    }
-    return false;
-  } else {
-    in_seq = seq;
-    return true;
-  }
 }
 
 void

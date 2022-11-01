@@ -47,23 +47,9 @@ class SocketConnection : public Connection {
   // or should reconnect to (as peer)
   entity_addr_t target_addr;
 
-  clock_t::time_point last_keepalive;
-
-  clock_t::time_point last_keepalive_ack;
-
   uint64_t features = 0;
 
   ceph::net::Policy<crimson::common::Throttle> policy;
-
-  /// the seq num of the last transmitted message
-  seq_num_t out_seq = 0;
-  /// the seq num of the last received message
-  seq_num_t in_seq = 0;
-
-  // messages to be resent after connection gets reset
-  std::deque<MessageURef> out_q;
-  // messages sent, but not yet acked by peer
-  std::deque<MessageURef> sent;
 
   uint64_t peer_global_id = 0;
 
@@ -98,17 +84,11 @@ class SocketConnection : public Connection {
 
   seastar::future<> keepalive() override;
 
-  clock_t::time_point get_last_keepalive() const override {
-    return last_keepalive;
-  }
+  clock_t::time_point get_last_keepalive() const override;
 
-  clock_t::time_point get_last_keepalive_ack() const override {
-    return last_keepalive_ack;
-  }
+  clock_t::time_point get_last_keepalive_ack() const override;
 
-  void set_last_keepalive_ack(clock_t::time_point when) override {
-    last_keepalive_ack = when;
-  }
+  void set_last_keepalive_ack(clock_t::time_point when) override;
 
   void mark_down() override;
 
@@ -151,11 +131,6 @@ class SocketConnection : public Connection {
 private:
   seastar::shard_id shard_id() const;
 
-  /// update the seq num of last received message
-  /// @returns true if the @c seq is valid, and @c in_seq is updated,
-  ///          false otherwise.
-  bool update_rx_seq(seq_num_t seq);
-
   void set_peer_type(entity_type_t peer_type) {
     // it is not allowed to assign an unknown value when the current
     // value is known
@@ -185,10 +160,6 @@ private:
   void set_peer_name(entity_name_t name) {
     set_peer_type(name.type());
     set_peer_id(name.num());
-  }
-
-  void set_last_keepalive(clock_t::time_point when) {
-    last_keepalive = when;
   }
 
   void set_features(uint64_t f) {
