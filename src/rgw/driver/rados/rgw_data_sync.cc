@@ -5399,6 +5399,7 @@ public:
 int RGWSyncBucketShardCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
+    objv_tracker.clear();
     yield call(new RGWReadBucketPipeSyncStatusCoroutine(sc, sync_pair, &sync_status, &objv_tracker, generation));
     if (retcode < 0 && retcode != -ENOENT) {
       tn->log(0, SSTR("ERROR: failed to read sync status for bucket. error: " << retcode));
