@@ -21,6 +21,7 @@
 #include "rgw_compression.h"
 
 #include "rgw_auth.h"
+#include "rgw_auth_registry.h"
 #include "rgw_swift_auth.h"
 
 #include "rgw_request.h"

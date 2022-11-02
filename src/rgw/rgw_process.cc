@@ -7,6 +7,7 @@
 #include "include/scope_guard.h"
 
 #include <utility>
+#include "rgw_auth_registry.h"
 #include "rgw_dmclock_scheduler.h"
 #include "rgw_rest.h"
 #include "rgw_frontend.h"

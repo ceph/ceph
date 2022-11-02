@@ -6,11 +6,8 @@
 
 #include "rgw_common.h"
 #include "rgw_acl.h"
-#include "rgw_auth_registry.h"
 #include "rgw_user.h"
-#include "rgw_op.h"
 #include "rgw_rest.h"
-#include "rgw_ratelimit.h"
 #include "include/ceph_assert.h"
 
 #include "common/WorkQueue.h"
@@ -24,23 +21,8 @@
 namespace rgw::dmclock {
   class Scheduler;
 }
-namespace rgw::lua {
-  class Background;
-}
-namespace rgw::sal {
-  class LuaManager;
-}
 
-struct RGWProcessEnv {
-  rgw::sal::Driver* driver = nullptr;
-  RGWREST *rest = nullptr;
-  OpsLogSink *olog = nullptr;
-  rgw_auth_registry_ptr_t auth_registry;
-  ActiveRateLimiter* ratelimiting = nullptr;
-  rgw::lua::Background* lua_background = nullptr;
-  std::unique_ptr<rgw::sal::LuaManager> lua_manager;
-};
-
+struct RGWProcessEnv;
 class RGWFrontendConfig;
 class RGWRequest;
 
