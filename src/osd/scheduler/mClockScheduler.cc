@@ -102,9 +102,11 @@ void mClockScheduler::set_max_osd_capacity()
   if (is_rotational) {
     max_osd_capacity =
       cct->_conf.get_val<double>("osd_mclock_max_capacity_iops_hdd");
+    cct->_conf.set_val("osd_mclock_max_capacity_iops_ssd", "0");
   } else {
     max_osd_capacity =
       cct->_conf.get_val<double>("osd_mclock_max_capacity_iops_ssd");
+    cct->_conf.set_val("osd_mclock_max_capacity_iops_hdd", "0");
   }
   // Set per op-shard iops limit
   max_osd_capacity /= num_shards;
