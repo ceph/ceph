@@ -13294,6 +13294,11 @@ void MDCache::uninline_data_work(MDRequestRef mdr)
     mds->server->respond_to_request(mdr, 0);
     return;
   }
+  if (MDS_INO_IS_MDSDIR(in->get_scrub_header()->get_origin())) {
+    in->get_scrub_header()->record_uninline_skipped();
+    mds->server->respond_to_request(mdr, 0);
+    return;
+  }
 
   logger->inc(l_mdc_uninline_started);
   auto h = in->get_scrub_header();

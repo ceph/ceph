@@ -94,10 +94,12 @@ public:
       uint64_t started = v[0];
       uint64_t passed = v[1];
       uint64_t failed = v[2];
+      uint64_t skipped = v[3];
 
       encode(started, payload);
       encode(passed, payload);
       encode(failed, payload);
+      encode(skipped, payload);
     }
   }
   void decode_uninline_failed_info(ceph::bufferlist::const_iterator& p) {
@@ -136,11 +138,13 @@ public:
       uint64_t started = 0;
       uint64_t passed = 0;
       uint64_t failed = 0;
+      uint64_t skipped = 0;
 
       decode(started, p);
       decode(passed, p);
       decode(failed, p);
-      std::vector<uint64_t> c{started, passed, failed};
+      decode(skipped, p);
+      std::vector<uint64_t> c{started, passed, failed, skipped};
       counters[tag] = c;
     }
   }

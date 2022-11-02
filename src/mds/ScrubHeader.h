@@ -91,6 +91,9 @@ public:
   void record_uninline_failed() {
     uninline_failed++;
   }
+  void record_uninline_skipped() {
+    uninline_skipped++;
+  }
   uint64_t get_uninline_started() const {
     return uninline_started;
   }
@@ -99,6 +102,9 @@ public:
   }
   uint64_t get_uninline_failed() const {
     return uninline_failed;
+  }
+  uint64_t get_uninline_skipped() const {
+    return uninline_skipped;
   }
 
 protected:
@@ -121,6 +127,7 @@ protected:
   uint64_t uninline_started = 0;
   uint64_t uninline_passed = 0;
   uint64_t uninline_failed = 0;
+  uint64_t uninline_skipped = 0;
 };
 
 typedef std::shared_ptr<ScrubHeader> ScrubHeaderRef;

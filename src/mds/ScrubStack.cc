@@ -108,9 +108,51 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
   return 0;
 }
 
+void ScrubStack::purge_scrub_counters(std::string_view tag)
+{
+  for (auto& stat : mds_scrub_stats) {
+    if (tag == "all") {
+      stat.counters.clear();
+    } else {
+      auto it = stat.counters.find(std::string(tag));
+      if (it != stat.counters.end()) {
+	stat.counters.erase(it);
+      }
+    }
+  }
+}
+
+// called from tick
+void ScrubStack::purge_old_scrub_counters()
+{
+  // "mds_scrub_stats_review_period" must be in number of days
+  uint64_t mds_scrub_stats_review_period = g_conf().get_val<uint64_t>("mds_scrub_stats_review_period");
+  auto review_period = ceph::make_timespan(mds_scrub_stats_review_period * 24 * 60 * 60);
+  auto now = coarse_real_clock::now();
+
+  dout(20) << __func__ << " review_period:" << review_period << dendl;
+
+  for (mds_rank_t rank = 0; rank < (mds_rank_t)mds_scrub_stats.size(); rank++) {
+    auto& counters = mds_scrub_stats[rank].counters;
+    for (auto it = counters.begin(); it != counters.end(); ) {
+      auto curr = it;
+      auto c = (*it).second;
+      auto elapsed = now - c.start_time;
+      dout(20) << __func__
+	       << " rank(" << rank << ") :"
+               << " elapsed:" << elapsed
+	       << dendl;
+      ++it;
+      if (elapsed >= review_period) {
+	counters.erase(curr);
+      }
+    }
+  }
+}
+
 void ScrubStack::init_scrub_counters(std::string_view path, std::string_view tag)
 {
-  scrub_counters_t sc{real_clock::now(), std::string(path), 0, 0, 0};
+  scrub_counters_t sc{coarse_real_clock::now(), std::string(path), 0, 0, 0};
   for (auto& stat : mds_scrub_stats) {
     stat.counters[std::string(tag)] = sc;
   }
@@ -736,15 +778,23 @@ void ScrubStack::scrub_status(Formatter *f) {
 	  started += c.uninline_started;
 	  passed += c.uninline_passed;
 	  failed += c.uninline_failed;
+	  skipped += c.uninline_skipped;
 	}
       }
       f->open_object_section(tag);
       {
 	f->dump_stream("start_time") << ctrs.start_time;
-	f->dump_string("path", (ctrs.origin_path == "" ? "/"s : ctrs.origin_path));
+	std::string path = ctrs.origin_path;
+	if (path == "") {
+	  path = "/";
+	} else if (path.starts_with("~mds")) {
+	  path = "~mdsdir";
+	}
+	f->dump_string("path", path);
 	f->dump_int("uninline_started", started);
 	f->dump_int("uninline_passed", passed);
 	f->dump_int("uninline_failed", failed);
+	f->dump_int("uninline_skipped", skipped);
       }
       f->close_section(); // tag
     }
@@ -1119,7 +1169,8 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
 	ceph_assert(header->get_paths().size() == 0);
 	std::vector<uint64_t> c{header->get_uninline_started(),
 				header->get_uninline_passed(),
-				header->get_uninline_failed()
+				header->get_uninline_failed(),
+				header->get_uninline_skipped()
 	};
 	counters[header->get_tag()] = c;
 	scrubbing_map.erase(it++);
@@ -1157,6 +1208,7 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
 	stat.counters[tag].uninline_started = v[0];
 	stat.counters[tag].uninline_passed = v[1];
 	stat.counters[tag].uninline_failed = v[2];
+	stat.counters[tag].uninline_skipped = v[3];
       }
     }
   }
@@ -1258,6 +1310,7 @@ void ScrubStack::advance_scrub_status()
       sc.uninline_started = header->get_uninline_started();
       sc.uninline_passed = header->get_uninline_passed();
       sc.uninline_failed = header->get_uninline_failed();
+      sc.uninline_skipped = header->get_uninline_skipped();
 
       scrubbing_map.erase(it++);
     } else {

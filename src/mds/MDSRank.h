@@ -509,6 +509,7 @@ class MDSRank {
     // scrub control commands
     void command_scrub_resume(Formatter *f);
     void command_scrub_status(Formatter *f);
+    void command_scrub_purge_status(std::string_view tag);
 
     void command_get_subtrees(Formatter *f);
     void command_export_dir(Formatter *f,
