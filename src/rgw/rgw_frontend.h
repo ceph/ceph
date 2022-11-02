@@ -83,8 +83,7 @@ public:
   virtual void join() = 0;
 
   virtual void pause_for_new_config() = 0;
-  virtual void unpause_with_new_config(rgw::sal::Driver* driver,
-                                       rgw_auth_registry_ptr_t auth_registry) = 0;
+  virtual void unpause_with_new_config() = 0;
 };
 
 
@@ -122,11 +121,8 @@ public:
     pprocess->pause();
   }
 
-  void unpause_with_new_config(rgw::sal::Driver* const driver,
-                               rgw_auth_registry_ptr_t auth_registry) override {
-    env.driver = driver;
-    env.auth_registry = auth_registry;
-    pprocess->unpause_with_new_config(driver, std::move(auth_registry));
+  void unpause_with_new_config() override {
+    pprocess->unpause_with_new_config();
   }
 }; /* RGWProcessFrontend */
 
@@ -194,16 +190,11 @@ public:
 class RGWFrontendPauser : public RGWRealmReloader::Pauser {
   std::vector<RGWFrontend*> &frontends;
   RGWRealmReloader::Pauser* pauser;
-  rgw::auth::ImplicitTenants& implicit_tenants;
 
  public:
   RGWFrontendPauser(std::vector<RGWFrontend*> &frontends,
-                    rgw::auth::ImplicitTenants& implicit_tenants,
                     RGWRealmReloader::Pauser* pauser = nullptr)
-    : frontends(frontends),
-      pauser(pauser),
-      implicit_tenants(implicit_tenants) {
-  }
+    : frontends(frontends), pauser(pauser) {}
 
   void pause() override {
     for (auto frontend : frontends)
@@ -212,13 +203,8 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
       pauser->pause();
   }
   void resume(rgw::sal::Driver* driver) override {
-    /* Initialize the registry of auth strategies which will coordinate
-     * the dynamic reconfiguration. */
-    auto auth_registry = \
-      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, driver);
-
     for (auto frontend : frontends)
-      frontend->unpause_with_new_config(driver, auth_registry);
+      frontend->unpause_with_new_config();
     if (pauser)
       pauser->resume(driver);
   }

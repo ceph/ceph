@@ -450,7 +450,7 @@ class AsioFrontend {
   void stop();
   void join();
   void pause();
-  void unpause(rgw::sal::Driver* driver, rgw_auth_registry_ptr_t);
+  void unpause();
 };
 
 unsigned short parse_port(const char *input, boost::system::error_code& ec)
@@ -1118,12 +1118,9 @@ void AsioFrontend::pause()
   }
 }
 
-void AsioFrontend::unpause(rgw::sal::Driver* const driver,
-                           rgw_auth_registry_ptr_t auth_registry)
+void AsioFrontend::unpause()
 {
-  env.driver = driver;
-  env.auth_registry = std::move(auth_registry);
-  lua_manager = driver->get_lua_manager();
+  lua_manager = env.driver->get_lua_manager();
 
   // unpause to unblock connections
   pause_mutex.unlock();
@@ -1182,9 +1179,7 @@ void RGWAsioFrontend::pause_for_new_config()
   impl->pause();
 }
 
-void RGWAsioFrontend::unpause_with_new_config(
-  rgw::sal::Driver* const driver,
-  rgw_auth_registry_ptr_t auth_registry
-) {
-  impl->unpause(driver, std::move(auth_registry));
+void RGWAsioFrontend::unpause_with_new_config()
+{
+  impl->unpause();
 }

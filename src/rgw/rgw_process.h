@@ -115,11 +115,8 @@ public:
     m_tp.pause();
   }
 
-  void unpause_with_new_config(rgw::sal::Driver* const driver,
-                               rgw_auth_registry_ptr_t auth_registry) {
-    env.driver = driver;
-    env.auth_registry = std::move(auth_registry);
-    lua_manager = driver->get_lua_manager();
+  void unpause_with_new_config() {
+    lua_manager = env.driver->get_lua_manager();
     m_tp.unpause();
   }
 

@@ -27,9 +27,12 @@
 static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
 
 
-RGWRealmReloader::RGWRealmReloader(RGWProcessEnv& env, std::map<std::string, std::string>& service_map_meta,
+RGWRealmReloader::RGWRealmReloader(RGWProcessEnv& env,
+                                   const rgw::auth::ImplicitTenants& implicit_tenants,
+                                   std::map<std::string, std::string>& service_map_meta,
                                    Pauser* frontends)
   : env(env),
+    implicit_tenants(implicit_tenants),
     service_map_meta(service_map_meta),
     frontends(frontends),
     timer(env.driver->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
@@ -171,6 +174,11 @@ void RGWRealmReloader::reload()
   rgw_rest_init(cct, env.driver->get_zone()->get_zonegroup());
   ldpp_dout(&dp, 1) << " - usage subsystem init" << dendl;
   rgw_log_usage_init(cct, env.driver);
+
+  /* Initialize the registry of auth strategies which will coordinate
+   * the dynamic reconfiguration. */
+  env.auth_registry = rgw::auth::StrategyRegistry::create(
+      cct, implicit_tenants, env.driver);
 
   ldpp_dout(&dp, 1) << "Resuming frontends with new realm configuration." << dendl;
 
