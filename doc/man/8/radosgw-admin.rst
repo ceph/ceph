@@ -743,6 +743,10 @@ Options
 
    The placement target index type (normal, indexless, or #id).
 
+.. option:: --placement-inline-data=<true>
+
+   Whether the placement target is configured to store a data chunk inline in head objects.
+
 .. option:: --tier-type=<type>
 
    The zone tier type.
