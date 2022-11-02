@@ -38,7 +38,6 @@
 
 using namespace std;
 
-// cons/des
 MDLog::~MDLog()
 {
   if (journaler) { delete journaler; journaler = 0; }
