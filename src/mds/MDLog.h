@@ -157,10 +157,6 @@ public:
   void trim_expired_segments();
   void trim(int max=-1);
   int trim_all();
-  bool expiry_done() const
-  {
-    return expiring_segments.empty() && expired_segments.empty();
-  };
 
   void create(MDSContext *onfinish);  // fresh, empty log! 
   void open(MDSContext *onopen);      // append() or replay() to follow!
