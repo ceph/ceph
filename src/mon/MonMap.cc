@@ -368,7 +368,7 @@ void MonMap::print_summary(ostream& out) const
     out << p->first << "=" << p->second.public_addrs;
     has_printed = true;
   }
-  out << "}";
+  out << "}" << " removed_ranks: {" << removed_ranks << "}";
 }
  
 void MonMap::print(ostream& out) const
@@ -412,6 +412,7 @@ void MonMap::dump(Formatter *f) const
   f->dump_stream("disallowed_leaders: ") << disallowed_leaders;
   f->dump_bool("stretch_mode", stretch_mode_enabled);
   f->dump_string("tiebreaker_mon", tiebreaker_mon);
+  f->dump_stream("removed_ranks: ") << removed_ranks;
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
   optional_features.dump(f, "optional");
