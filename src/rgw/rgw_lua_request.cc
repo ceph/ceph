@@ -7,7 +7,8 @@
 #include "rgw_lua.h"
 #include "rgw_common.h"
 #include "rgw_log.h"
-#include "rgw_process.h"
+#include "rgw_op.h"
+#include "rgw_process_env.h"
 #include "rgw_zone.h"
 #include "rgw_acl.h"
 #include "rgw_sal_rados.h"
@@ -878,8 +879,8 @@ int execute(
   lua_pushcclosure(L, RequestLog, FOUR_UPVALS);
   lua_rawset(L, -3);
   
-  if (s->lua_background) {
-    s->lua_background->create_background_metatable(L);
+  if (s->penv.lua_background) {
+    s->penv.lua_background->create_background_metatable(L);
     lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
     ceph_assert(lua_istable(L, -1));
   }

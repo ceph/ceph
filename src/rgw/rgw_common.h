@@ -1218,9 +1218,6 @@ struct req_state : DoutPrefixProvider {
   //Principal tags that come in as part of AssumeRoleWithWebIdentity
   std::vector<std::pair<std::string, std::string>> principal_tags;
 
-  rgw::lua::Background* lua_background = nullptr;
-  rgw::sal::LuaManager* lua_manager = nullptr;
-
   req_state(CephContext* _cct, const RGWProcessEnv& penv, RGWEnv* e, uint64_t id);
   ~req_state();
 
