@@ -86,7 +86,8 @@ The zone placement configuration can be queried with:
                       }
                   },
                   "data_extra_pool": "default.rgw.buckets.non-ec",
-                  "index_type": 0
+                  "index_type": 0,
+                  "inline_data": true
               }
           }
       ],
@@ -132,7 +133,6 @@ Then provide the zone placement info for that target:
           the BlueStore DB is located on faster storage than bucket data since it eliminates the need to access
           slower devices synchronously while processing the client request. In that case, data associated with the deleted
           objects is removed asynchronously in the background by garbage collection.                                          
-
 .. _adding_a_storage_class:
 
 Adding a Storage Class
