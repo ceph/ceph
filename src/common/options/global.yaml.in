@@ -6318,6 +6318,14 @@ options:
   - rgw
   - osd
   with_legacy: true
+- name: jaeger_agent_port
+  type: int
+  level: advanced
+  desc: port number of the jaeger agent
+  default: 6799
+  services:
+  - rgw
+  - osd
 - name: mgr_ttl_cache_expire_seconds
   type: uint
   level: dev
