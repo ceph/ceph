@@ -24,6 +24,7 @@
 #include <map>
 #include <set>
 #include <utility>
+#include <sstream>
 
 #include "include/types.h"
 #include "include/encoding.h"
@@ -674,6 +675,8 @@ protected:
   bool grace_interval_threshold_exceeded(int last_failed);
   void set_default_laggy_params(int target_osd);
 
+  int parse_pgid(const cmdmap_t& cmdmap, std::stringstream &ss,
+		 pg_t &pgid, std::optional<std::string> pgidstr = std::nullopt);
 public:
   OSDMonitor(CephContext *cct, Monitor &mn, Paxos &p, const std::string& service_name);
 
