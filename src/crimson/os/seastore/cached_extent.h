@@ -898,8 +898,6 @@ using PhysicalNodePinRef = std::unique_ptr<PhysicalNodePin<key_t, val_t>>;
 template <typename key_t, typename val_t>
 class PhysicalNodePin {
 public:
-  virtual void link_extent(LogicalCachedExtent *ref) = 0;
-  virtual void take_pin(PhysicalNodePin<key_t, val_t> &pin) = 0;
   virtual extent_len_t get_length() const = 0;
   virtual extent_types_t get_type() const = 0;
   virtual val_t get_val() const = 0;
@@ -1036,20 +1034,8 @@ public:
     : ChildableCachedExtent(std::forward<T>(t)...)
   {}
 
-  void set_pin(LBAPinRef &&npin) {
-    assert(!pin);
-    pin = std::move(npin);
-    laddr = pin->get_key();
-    pin->link_extent(this);
-  }
-
-  bool has_pin() const {
-    return !!pin;
-  }
-
-  LBAPin &get_pin() {
-    assert(pin);
-    return *pin;
+  bool has_laddr() const {
+    return laddr != L_ADDR_NULL;
   }
 
   laddr_t get_laddr() const {
@@ -1088,15 +1074,11 @@ protected:
   void on_delta_write(paddr_t record_block_offset) final {
     assert(is_exist_mutation_pending() ||
 	   get_prior_instance());
-    if (get_prior_instance()) {
-      pin->take_pin(*(get_prior_instance()->cast<LogicalCachedExtent>()->pin));
-    }
     logical_on_delta_write();
   }
 
 private:
   laddr_t laddr = L_ADDR_NULL;
-  LBAPinRef pin;
 
   template <
     size_t CAPACITY,

@@ -367,25 +367,9 @@ TransactionManager::submit_transaction_direct(
       }
 
       // ...but add_pin from parent->leaf
+      // TODO: remove this part of the code
       std::vector<CachedExtentRef> lba_to_link;
       std::vector<CachedExtentRef> backref_to_link;
-      lba_to_link.reserve(tref.get_fresh_block_stats().num +
-			  tref.get_existing_block_stats().valid_num);
-      backref_to_link.reserve(tref.get_fresh_block_stats().num);
-      tref.for_each_fresh_block([&](auto &e) {
-	if (e->is_valid()) {
-	  if (is_lba_node(e->get_type()) || e->is_logical())
-	    lba_to_link.push_back(e);
-	  else if (is_backref_node(e->get_type()))
-	    backref_to_link.push_back(e);
-	}
-      });
-
-      for (auto &e: tref.get_existing_block_list()) {
-	if (e->is_valid()) {
-	  lba_to_link.push_back(e);
-	}
-      }
 
       lba_manager->complete_transaction(tref, lba_to_clear, lba_to_link);
       backref_manager->complete_transaction(tref, backref_to_clear, backref_to_link);
@@ -462,7 +446,6 @@ TransactionManager::rewrite_logical_extent(
     lextent->get_length(),
     nlextent->get_bptr().c_str());
   nlextent->set_laddr(lextent->get_laddr());
-  nlextent->set_pin(lextent->get_pin().duplicate());
   nlextent->set_modify_time(lextent->get_modify_time());
 
   DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
@@ -647,8 +630,7 @@ TransactionManager::pin_to_extent_by_type(
       auto &parent = (lba_manager::btree::LBALeafNode<true>&)*pin->get_parent();
       assert(!parent.is_pending());
       parent.link_child(&lextent, pin->get_pos());
-      lextent.set_pin(std::move(pin));
-      lba_manager->add_pin(lextent.get_pin());
+      lextent.set_laddr(pin->get_key());
     }
   ).si_then([FNAME, &t](auto ref) {
     SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);

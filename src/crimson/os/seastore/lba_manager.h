@@ -201,8 +201,6 @@ public:
     laddr_t laddr,
     extent_len_t len) = 0;
 
-  virtual void add_pin(LBAPin &pin) = 0;
-
   virtual ~LBAManager() {}
 };
 using LBAManagerRef = std::unique_ptr<LBAManager>;

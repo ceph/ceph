@@ -141,13 +141,12 @@ public:
       pref.get_length(),
       [pin=std::move(pin), child_pos=std::move(child_pos)]
       (T &extent) mutable {
-	assert(!extent.has_pin());
+	assert(!extent.has_laddr());
 	assert(!extent.has_been_invalidated());
 	assert(!pin->has_been_invalidated());
 	assert(pin->get_parent());
 	child_pos.link_child(&extent);
-	extent.set_pin(std::move(pin));
-	lba_manager->add_pin(extent.get_pin());
+	extent.set_laddr(pin->get_key());
       }
     ).si_then([FNAME, &t](auto ref) mutable -> ret {
       SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
@@ -260,13 +259,13 @@ public:
     auto ret = cache->duplicate_for_write(
       t,
       ref)->cast<LogicalCachedExtent>();
-    if (!ret->has_pin()) {
+    if (!ret->has_laddr()) {
       SUBDEBUGT(seastore_tm,
 	"duplicating extent for write -- {} -> {}",
 	t,
 	*ref,
 	*ret);
-      ret->set_pin(ref->get_pin().duplicate());
+      ret->set_laddr(ref->get_laddr());
     } else {
       SUBTRACET(seastore_tm,
 	"extent is already duplicated -- {}",
@@ -338,8 +337,8 @@ public:
       len,
       ext->get_paddr(),
       ext.get()
-    ).si_then([ext=std::move(ext), laddr_hint, &t, FNAME](auto &&ref) mutable {
-      ext->set_pin(std::move(ref));
+    ).si_then([ext=std::move(ext), laddr_hint, &t](auto &&) mutable {
+      LOG_PREFIX(TransactionManager::alloc_extent);
       SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
       return alloc_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
@@ -395,7 +394,6 @@ public:
       ext.get()
     ).si_then([ext=std::move(ext), laddr_hint, this](auto &&ref) {
       ceph_assert(laddr_hint == ref->get_key());
-      ext->set_pin(std::move(ref));
       return epm->read(
         ext->get_paddr(),
 	ext->get_length(),

@@ -361,10 +361,13 @@ BtreeLBAManager<leaf_has_children>::alloc_extent(
 	    state.last_end,
 	    lba_map_val_t{len, addr, 1, 0},
 	    nextent
-	  ).si_then([&state, FNAME, c, addr, len, hint](auto &&p) {
+	  ).si_then([&state, FNAME, c, addr, len, hint, nextent](auto &&p) {
 	    auto [iter, inserted] = std::move(p);
 	    TRACET("{}~{}, hint={}, inserted at {}",
 	           c.trans, addr, len, hint, state.last_end);
+	    if (nextent) {
+	      nextent->set_laddr(iter.get_key());
+	    }
 	    ceph_assert(inserted);
 	    state.ret = iter;
 	  });
@@ -380,32 +383,6 @@ static bool is_lba_node(const CachedExtent &e)
 }
 
 template <bool leaf_has_children>
-btree_range_pin_t<laddr_t> &BtreeLBAManager<leaf_has_children>::get_pin(
-  CachedExtent &e)
-{
-  if (is_lba_node(e)) {
-    return e.cast<LBANode>()->pin;
-  } else if (e.is_logical()) {
-    return static_cast<BtreeLBAPin &>(
-      e.cast<LogicalCachedExtent>()->get_pin()).get_range_pin();
-  } else {
-    ceph_abort_msg("impossible");
-  }
-}
-
-static depth_t get_depth(const CachedExtent &e)
-{
-  if (is_lba_node(e)) {
-    return e.cast<LBANode>()->get_node_meta().depth;
-  } else if (e.is_logical()) {
-    return 0;
-  } else {
-    ceph_assert(0 == "currently impossible");
-    return 0;
-  }
-}
-
-template <bool leaf_has_children>
 void BtreeLBAManager<leaf_has_children>::complete_transaction(
   Transaction &t,
   std::vector<CachedExtentRef> &to_clear,
@@ -413,31 +390,6 @@ void BtreeLBAManager<leaf_has_children>::complete_transaction(
 {
   LOG_PREFIX(BtreeLBAManager::complete_transaction);
   DEBUGT("start", t);
-  // need to call check_parent from leaf->parent
-  std::sort(
-    to_clear.begin(), to_clear.end(),
-    [](auto &l, auto &r) { return get_depth(*l) < get_depth(*r); });
-
-  for (auto &e: to_clear) {
-    auto &pin = get_pin(*e);
-    DEBUGT("retiring extent {} -- {}", t, pin, *e);
-    pin_set.retire(pin);
-  }
-
-  std::sort(
-    to_link.begin(), to_link.end(),
-    [](auto &l, auto &r) -> bool { return get_depth(*l) > get_depth(*r); });
-
-  for (auto &e : to_link) {
-    DEBUGT("linking extent -- {}", t, *e);
-    pin_set.add_pin(get_pin(*e));
-  }
-
-  for (auto &e: to_clear) {
-    auto &pin = get_pin(*e);
-    TRACET("checking extent {} -- {}", t, pin, *e);
-    pin_set.check_parent(pin);
-  }
 }
 
 template <bool leaf_has_children>
@@ -460,12 +412,8 @@ _init_cached_extent(
 	  iter.get_val().paddr == logn->get_paddr()) {
 	assert(!iter.get_leaf_node()->is_pending());
 	iter.get_leaf_node()->link_child(logn.get(), iter.get_leaf_pos());
-	logn->set_pin(iter.get_pin());
+	logn->set_laddr(iter.get_pin()->get_key());
 	ceph_assert(iter.get_val().len == e->get_length());
-	if (c.pins) {
-	  c.pins->add_pin(
-	    static_cast<BtreeLBAPin&>(logn->get_pin()).get_range_pin());
-	}
 	DEBUGT("logical extent {} live", c.trans, *logn);
 	ret = true;
       } else {
@@ -771,13 +719,6 @@ BtreeLBAManager<false>::alloc_extent(
   extent_len_t len,
   paddr_t addr,
   LogicalCachedExtent* nextent);
-
-template btree_range_pin_t<laddr_t>
-&BtreeLBAManager<true>::get_pin(
-  CachedExtent &e);
-template btree_range_pin_t<laddr_t>
-&BtreeLBAManager<false>::get_pin(
-  CachedExtent &e);
 
 template void BtreeLBAManager<true>::complete_transaction(
   Transaction &t,

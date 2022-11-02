@@ -148,9 +148,6 @@ public:
 						//   into backref manager's pin set
   ) = 0;
 
-  virtual void add_pin(BackrefPin &pin) = 0;
-  virtual void remove_pin(BackrefPin &pin) = 0;
-
   virtual ~BackrefManager() {}
 };
 

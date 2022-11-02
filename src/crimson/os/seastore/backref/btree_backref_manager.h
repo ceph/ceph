@@ -89,16 +89,6 @@ public:
     Transaction &t,
     CachedExtentRef extent) final;
 
-  void add_pin(BackrefPin &pin) final {
-    auto *bpin = reinterpret_cast<BtreeBackrefPin*>(&pin);
-    pin_set.add_pin(bpin->get_range_pin());
-    bpin->set_parent(nullptr);
-  }
-  void remove_pin(BackrefPin &pin) final {
-    auto *bpin = reinterpret_cast<BtreeBackrefPin*>(&pin);
-    pin_set.retire(bpin->get_range_pin());
-  }
-
   Cache::backref_entry_query_mset_t
   get_cached_backref_entries_in_range(
     paddr_t start,
@@ -118,10 +108,8 @@ public:
 private:
   Cache &cache;
 
-  btree_pin_set_t<paddr_t> pin_set;
-
   op_context_t<paddr_t> get_context(Transaction &t) {
-    return op_context_t<paddr_t>{cache, t, &pin_set};
+    return op_context_t<paddr_t>{cache, t};
   }
 };
 
