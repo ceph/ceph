@@ -13197,6 +13197,8 @@ class C_MDC_DataUninlinedSubmitted : public MDCacheLogContext {
     ceph_assert(r == 0);
 
     in->mdcache->logger->inc(l_mdc_uninline_succeeded);
+    auto h = in->get_scrub_header();
+    h->record_uninline_passed();
     in->uninline_finished();
     mdr->apply();
     mds->server->respond_to_request(mdr, r);
@@ -13223,9 +13225,11 @@ struct C_IO_DataUninlined : public MDSIOContext {
 	   << " (" << cpp_strerror(r) << ") for " << *in << dendl;
       in->mdcache->logger->inc(l_mdc_uninline_write_failed);
       ceph_assert(in->get_scrub_header());
+      auto h = in->get_scrub_header();
+      h->record_uninline_failed();
       std::string path;
       in->make_path_string(path);
-      in->get_scrub_header()->record_uninline_status(in->ino(), r, path);
+      h->record_uninline_status(in->ino(), r, path);
       in->uninline_finished();
       mds->server->respond_to_request(mdr, r);
       return;
@@ -13292,6 +13296,8 @@ void MDCache::uninline_data_work(MDRequestRef mdr)
   }
 
   logger->inc(l_mdc_uninline_started);
+  auto h = in->get_scrub_header();
+  h->record_uninline_started();
   in->uninline_initialize();
 
   auto ino = [&]() { return in->ino(); };

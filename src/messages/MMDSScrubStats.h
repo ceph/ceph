@@ -44,6 +44,9 @@ public:
   const std::unordered_map<_inodeno_t, std::string>& get_paths() const {
     return paths;
   }
+  const std::unordered_map<std::string, std::vector<uint64_t>>& get_counters() const {
+    return counters;
+  }
 
   void encode_payload(uint64_t features) override {
     using ceph::encode;
@@ -84,6 +87,18 @@ public:
       encode(ino, payload);
       encode(path, payload);
     }
+    count = (int)counters.size();
+    encode(count, payload);
+    for (auto& [tag, v] : counters) {
+      encode(tag, payload);
+      uint64_t started = v[0];
+      uint64_t passed = v[1];
+      uint64_t failed = v[2];
+
+      encode(started, payload);
+      encode(passed, payload);
+      encode(failed, payload);
+    }
   }
   void decode_uninline_failed_info(ceph::bufferlist::const_iterator& p) {
     using ceph::decode;
@@ -113,6 +128,21 @@ public:
       decode(path, p);
       paths[ino] = path;
     }
+    count = 0;
+    decode(count, p);
+    while (count--) {
+      std::string tag;
+      decode(tag, p);
+      uint64_t started = 0;
+      uint64_t passed = 0;
+      uint64_t failed = 0;
+
+      decode(started, p);
+      decode(passed, p);
+      decode(failed, p);
+      std::vector<uint64_t> c{started, passed, failed};
+      counters[tag] = c;
+    }
   }
 
 protected:
@@ -127,10 +157,13 @@ protected:
     epoch(e), scrubbing_tags(tags), update_scrubbing(true), aborting(abrt) {}
   MMDSScrubStats(unsigned e, const std::set<std::string>& tags,
     std::unordered_map<std::string, std::unordered_map<int, std::vector<_inodeno_t>>>&& ufmi,
-    std::unordered_map<_inodeno_t, std::string>&& paths_, bool abrt = false) :
+    std::unordered_map<_inodeno_t, std::string>&& paths_,
+    std::unordered_map<std::string, std::vector<uint64_t>>&& counters_,
+    bool abrt = false) :
     MMDSOp(MSG_MDS_SCRUB_STATS, HEAD_VERSION, COMPAT_VERSION),
     epoch(e), scrubbing_tags(tags), update_scrubbing(true), aborting(abrt),
-    uninline_failed_meta_info(std::move(ufmi)), paths(std::move(paths_)) {}
+    uninline_failed_meta_info(std::move(ufmi)), paths(std::move(paths_)),
+    counters(std::move(counters_)) {}
   ~MMDSScrubStats() override {}
 
 private:
@@ -141,6 +174,7 @@ private:
   // <tag, <error_code, [ino1, ino2, ...]>>
   std::unordered_map<std::string, std::unordered_map<int, std::vector<_inodeno_t>>> uninline_failed_meta_info;
   std::unordered_map<_inodeno_t, std::string> paths;
+  std::unordered_map<std::string, std::vector<uint64_t>> counters;
 
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
