@@ -32,7 +32,7 @@ struct RGWProcessEnv {
   rgw::sal::Driver* driver = nullptr;
   RGWREST *rest = nullptr;
   OpsLogSink *olog = nullptr;
-  std::shared_ptr<rgw::auth::StrategyRegistry> auth_registry;
+  rgw_auth_registry_ptr_t auth_registry;
   ActiveRateLimiter* ratelimiting = nullptr;
   rgw::lua::Background* lua_background = nullptr;
 };

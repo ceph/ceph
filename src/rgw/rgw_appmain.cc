@@ -390,8 +390,6 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
    * the dynamic reconfiguration. */
   implicit_tenant_context.reset(new rgw::auth::ImplicitTenants{g_conf()});
   g_conf().add_observer(implicit_tenant_context.get());
-  auto auth_registry =
-    rgw::auth::StrategyRegistry::create(dpp->get_cct(), *implicit_tenant_context, env.driver);
 
   /* allocate a mime table (you'd never guess that from the name) */
   rgw_tools_init(dpp, dpp->get_cct());
@@ -406,7 +404,8 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
   // initialize RGWProcessEnv
   env.rest = &rest;
   env.olog = olog;
-  env.auth_registry = auth_registry;
+  env.auth_registry = rgw::auth::StrategyRegistry::create(
+      dpp->get_cct(), *implicit_tenant_context, env.driver);
   env.ratelimiting = ratelimiter.get();
   env.lua_background = lua_background.get();
 
