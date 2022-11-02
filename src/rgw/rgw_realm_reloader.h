@@ -9,6 +9,7 @@
 #include "rgw_sal_fwd.h"
 
 struct RGWProcessEnv;
+namespace rgw::auth { class ImplicitTenants; }
 
 /**
  * RGWRealmReloader responds to new period notifications by recreating RGWRados
@@ -33,7 +34,9 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
     virtual void resume(rgw::sal::Driver* driver) = 0;
   };
 
-  RGWRealmReloader(RGWProcessEnv& env, std::map<std::string, std::string>& service_map_meta,
+  RGWRealmReloader(RGWProcessEnv& env,
+                   const rgw::auth::ImplicitTenants& implicit_tenants,
+                   std::map<std::string, std::string>& service_map_meta,
                    Pauser* frontends);
   ~RGWRealmReloader() override;
 
@@ -47,6 +50,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
   class C_Reload; //< Context that calls reload()
 
   RGWProcessEnv& env;
+  const rgw::auth::ImplicitTenants& implicit_tenants;
   std::map<std::string, std::string>& service_map_meta;
   Pauser *const frontends;
 

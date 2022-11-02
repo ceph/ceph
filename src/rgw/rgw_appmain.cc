@@ -469,13 +469,14 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
   if (env.driver->get_name() == "rados") {
     // add a watcher to respond to realm configuration changes
     pusher = std::make_unique<RGWPeriodPusher>(dpp, env.driver, null_yield);
-    fe_pauser = std::make_unique<RGWFrontendPauser>(fes, *(implicit_tenant_context.get()), pusher.get());
+    fe_pauser = std::make_unique<RGWFrontendPauser>(fes, pusher.get());
     rgw_pauser = std::make_unique<RGWPauser>();
     rgw_pauser->add_pauser(fe_pauser.get());
     if (lua_background) {
       rgw_pauser->add_pauser(lua_background.get());
     }
-    reloader = std::make_unique<RGWRealmReloader>(env, service_map_meta, rgw_pauser.get());
+    reloader = std::make_unique<RGWRealmReloader>(
+        env, *implicit_tenant_context, service_map_meta, rgw_pauser.get());
     realm_watcher = std::make_unique<RGWRealmWatcher>(dpp, g_ceph_context,
 				  static_cast<rgw::sal::RadosStore*>(env.driver)->svc()->zone->get_realm());
     realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
