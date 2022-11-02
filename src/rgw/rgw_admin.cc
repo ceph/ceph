@@ -357,6 +357,9 @@ void usage()
   cout << "   --data-extra-pool=<pool>  placement target data extra (non-ec) pool\n";
   cout << "   --placement-index-type=<type>\n";
   cout << "                             placement target index type (normal, indexless, or #id)\n";
+  cout << "   --placement-inline-data=<true>\n";
+  cout << "                             set whether the placement target is configured to store a data\n";
+  cout << "                             chunk inline in head objects\n";
   cout << "   --compression=<type>      placement target compression type (plugin name or empty/none)\n";
   cout << "   --tier-type=<type>        zone tier type\n";
   cout << "   --tier-config=<k>=<v>[,...]\n";
@@ -3138,6 +3141,8 @@ int main(int argc, const char **argv)
   list<string> tags;
   list<string> tags_add;
   list<string> tags_rm;
+  int placement_inline_data = true;
+  bool placement_inline_data_specified = false;
 
   int64_t max_objects = -1;
   int64_t max_size = -1;
@@ -3167,6 +3172,7 @@ int main(int argc, const char **argv)
   int num_shards = 0;
   bool num_shards_specified = false;
   std::optional<int> bucket_index_max_shards;
+
   int max_concurrent_ios = 32;
   uint64_t orphan_stale_secs = (24 * 3600);
   int detail = false;
@@ -3462,6 +3468,9 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &warnings_only, NULL, "--warnings-only", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &inconsistent_index, NULL, "--inconsistent-index", (char*)NULL)) {
+     // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &placement_inline_data, NULL, "--placement-inline-data", (char*)NULL)) {
+      placement_inline_data_specified = true;
      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
@@ -5393,6 +5402,9 @@ int main(int argc, const char **argv)
           }
           if (index_type_specified) {
 	    info.index_type = placement_index_type;
+          }
+          if (placement_inline_data_specified) {
+            info.inline_data = placement_inline_data;
           }
 
           ret = check_pool_support_omap(info.get_data_extra_pool());
