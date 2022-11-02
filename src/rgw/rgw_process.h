@@ -110,6 +110,8 @@ public:
   
   virtual ~RGWProcess() = default;
 
+  const RGWProcessEnv& get_env() const { return env; }
+
   virtual void run() = 0;
   virtual void handle_request(const DoutPrefixProvider *dpp, RGWRequest *req) = 0;
 

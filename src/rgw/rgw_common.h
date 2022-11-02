@@ -56,6 +56,8 @@ namespace rgw::lua {
   class Background;
 }
 
+struct RGWProcessEnv;
+
 using ceph::crypto::MD5;
 
 #define RGW_ATTR_PREFIX  "user.rgw."
@@ -1068,6 +1070,7 @@ class RGWObjectCtx;
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state : DoutPrefixProvider {
   CephContext *cct;
+  const RGWProcessEnv& penv;
   rgw::io::BasicClient *cio{nullptr};
   http_op op{OP_UNKNOWN};
   RGWOpType op_type{};
@@ -1218,7 +1221,7 @@ struct req_state : DoutPrefixProvider {
   rgw::lua::Background* lua_background = nullptr;
   rgw::sal::LuaManager* lua_manager = nullptr;
 
-  req_state(CephContext* _cct, RGWEnv* e, uint64_t id);
+  req_state(CephContext* _cct, const RGWProcessEnv& penv, RGWEnv* e, uint64_t id);
   ~req_state();
 
 

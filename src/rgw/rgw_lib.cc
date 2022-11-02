@@ -204,7 +204,7 @@ namespace rgw {
     rgw_env.set("HTTP_HOST", "");
 
     /* XXX and -then- bloat up req_state with string copies from it */
-    req_state rstate(req->cct, &rgw_env, req->id);
+    req_state rstate(req->cct, env, &rgw_env, req->id);
     req_state *s = &rstate;
 
     // XXX fix this
