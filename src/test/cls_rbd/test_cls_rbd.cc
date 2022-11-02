@@ -2612,8 +2612,6 @@ TEST_F(TestClsRbd, group_snap_set_empty_name) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
-  string image_id = "image_id_snap_add_emtpy_name";
-
   string group_id = "group_id_snap_add_empty_name";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2626,8 +2624,6 @@ TEST_F(TestClsRbd, group_snap_set_empty_id) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
-  string image_id = "image_id_snap_add_empty_id";
-
   string group_id = "group_id_snap_add_empty_id";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2639,8 +2635,6 @@ TEST_F(TestClsRbd, group_snap_set_empty_id) {
 TEST_F(TestClsRbd, group_snap_set_duplicate_id) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
-
-  string image_id = "image_id_snap_add_duplicate_id";
 
   string group_id = "group_id_snap_add_duplicate_id";
   ASSERT_EQ(0, ioctx.create(group_id, true));
@@ -2657,8 +2651,6 @@ TEST_F(TestClsRbd, group_snap_set_duplicate_name) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
-  string image_id = "image_id_snap_add_duplicate_name";
-
   string group_id = "group_id_snap_add_duplicate_name";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2674,8 +2666,6 @@ TEST_F(TestClsRbd, group_snap_set_duplicate_name) {
 TEST_F(TestClsRbd, group_snap_set) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
-
-  string image_id = "image_id_snap_add";
 
   string group_id = "group_id_snap_add";
   ASSERT_EQ(0, ioctx.create(group_id, true));
@@ -2697,8 +2687,6 @@ TEST_F(TestClsRbd, group_snap_set) {
 TEST_F(TestClsRbd, group_snap_list) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
-
-  string image_id = "image_id_snap_list";
 
   string group_id = "group_id_snap_list";
   ASSERT_EQ(0, ioctx.create(group_id, true));
@@ -2728,8 +2716,6 @@ static std::string hexify(int v) {
 TEST_F(TestClsRbd, group_snap_list_max_return) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
-
-  string image_id = "image_id_snap_list_max_return";
 
   string group_id = "group_id_snap_list_max_return";
   ASSERT_EQ(0, ioctx.create(group_id, true));
@@ -2766,8 +2752,6 @@ TEST_F(TestClsRbd, group_snap_remove) {
 
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
-  string image_id = "image_id_snap_remove";
-
   string group_id = "group_id_snap_remove";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2797,8 +2781,6 @@ TEST_F(TestClsRbd, group_snap_get_by_id) {
   librados::IoCtx ioctx;
 
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
-
-  string image_id = "image_id_snap_get_by_id";
 
   string group_id = "group_id_snap_get_by_id";
   ASSERT_EQ(0, ioctx.create(group_id, true));
