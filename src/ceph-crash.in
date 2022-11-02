@@ -50,7 +50,8 @@ def post_crash(path):
             stderr=subprocess.PIPE,
         )
         f = open(os.path.join(path, 'meta'), 'rb')
-        stderr = pr.communicate(input=f.read())
+        (_, stderr) = pr.communicate(input=f.read())
+        stderr = stderr.decode()
         rc = pr.wait()
         f.close()
         if rc != 0 or stderr != "":
