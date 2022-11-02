@@ -351,6 +351,11 @@ public:
     return 0;
   }
 
+  epoch_t max_oldest_stored_osdmap() final {
+    // TODO
+    return 0;
+  }
+
   void on_backfill_reserved() final {
     recovery_handler->on_backfill_reserved();
   }

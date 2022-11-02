@@ -1629,6 +1629,10 @@ epoch_t PG::oldest_stored_osdmap() {
   return osd->get_superblock().oldest_map;
 }
 
+epoch_t PG::max_oldest_stored_osdmap() {
+  return osd->get_superblock().max_oldest_map;
+}
+
 OstreamTemp PG::get_clog_info() {
   return osd->clog->info();
 }

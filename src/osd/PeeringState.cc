@@ -930,7 +930,9 @@ static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
 
 void PeeringState::check_past_interval_bounds() const
 {
-  auto oldest_epoch = pl->oldest_stored_osdmap();
+  // a specific OSD's oldest_map can lag for a while, therfore
+  // use the maximum MOSDMap.oldest_map received with peers.
+  auto oldest_epoch = pl->max_oldest_stored_osdmap();
   auto rpib = get_required_past_interval_bounds(
     info,
     oldest_epoch);
