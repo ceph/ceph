@@ -62,7 +62,7 @@ struct bluefs_fnode_t {
   uint64_t ino;
   uint64_t size;
   utime_t mtime;
-  uint8_t __unused__; // was prefer_bdev
+  uint8_t __unused__ = 0; // was prefer_bdev
   mempool::bluefs::vector<bluefs_extent_t> extents;
 
   // precalculated logical offsets for extents vector entries
@@ -72,7 +72,15 @@ struct bluefs_fnode_t {
   uint64_t allocated;
   uint64_t allocated_commited;
 
-  bluefs_fnode_t() : ino(0), size(0), __unused__(0), allocated(0), allocated_commited(0) {}
+  bluefs_fnode_t() : ino(0), size(0), allocated(0), allocated_commited(0) {}
+  bluefs_fnode_t(uint64_t _ino, uint64_t _size, utime_t _mtime) :
+    ino(_ino), size(_size), mtime(_mtime), allocated(0), allocated_commited(0) {}
+  bluefs_fnode_t(const bluefs_fnode_t& other) :
+    ino(other.ino), size(other.size), mtime(other.mtime),
+    allocated(other.allocated),
+    allocated_commited(other.allocated_commited) {
+    clone_extents(other);
+  }
 
   uint64_t get_allocated() const {
     return allocated;
@@ -111,7 +119,6 @@ struct bluefs_fnode_t {
     denc(v.extents, p);
     DENC_FINISH(p);
   }
-
   void reset_delta() {
     allocated_commited = allocated;
   }
