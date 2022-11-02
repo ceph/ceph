@@ -62,8 +62,8 @@ void ConnectionTracker::receive_peer_report(const ConnectionTracker& o)
   ldout(cct, 30) << __func__ << dendl;
   for (auto& i : o.peer_reports) {
     const ConnectionReport& report = i.second;
-    if (report.rank == rank) continue;
-    ConnectionReport& existing = *reports(report.rank);
+    if (i.first == rank) continue;
+    ConnectionReport& existing = *reports(i.first);
     if (report.epoch > existing.epoch ||
 	(report.epoch == existing.epoch &&
 	 report.epoch_version > existing.epoch_version)) {
@@ -188,28 +188,23 @@ void ConnectionTracker::notify_rank_changed(int new_rank)
   rank = new_rank;
   encoding.clear();
   ldout(cct, 20) << "peer_reports after: " << peer_reports << dendl;
+
+  increase_version();
 }
 
-void ConnectionTracker::notify_rank_removed(int rank_removed)
+void ConnectionTracker::notify_rank_removed(int rank_removed, int new_rank)
 {
-
-  ldout(cct, 20) << __func__ << " " << rank_removed << dendl;
-
-  // No point removing something that doesn't exist!
-  if (!peer_reports.count(rank_removed)) return;
-
+  ldout(cct, 20) << __func__ << " " << rank_removed
+    << " new_rank: " << new_rank << dendl;
   ldout(cct, 20) << "my_reports before: " << my_reports << dendl;
   ldout(cct, 20) << "peer_reports before: " << peer_reports << dendl;
   ldout(cct, 20) << "my rank before: " << rank << dendl;
 
   encoding.clear();
-  size_t starting_size = my_reports.current.size();
-  // erase the removed rank from everywhere
+  size_t starting_size_current = my_reports.current.size();
+  // Lets adjust everything in my report.
   my_reports.current.erase(rank_removed);
   my_reports.history.erase(rank_removed);
-  peer_reports.erase(rank_removed);
-  // Move ranks > rank_removed down by 1
-  // First in my_reports' history+current
   auto ci = my_reports.current.upper_bound(rank_removed);
   auto hi = my_reports.history.upper_bound(rank_removed);
   while (ci != my_reports.current.end()) {
@@ -219,22 +214,26 @@ void ConnectionTracker::notify_rank_removed(int rank_removed)
     my_reports.current.erase(ci++);
     my_reports.history.erase(hi++);
   }
-  ceph_assert((my_reports.current.size() == starting_size) ||
-	      (my_reports.current.size() + 1 == starting_size));
+  ceph_assert((my_reports.current.size() == starting_size_current) ||
+    (my_reports.current.size() + 1 == starting_size_current));
 
-  // now move ranks down one in peer_reports
-  starting_size = peer_reports.size();
+  size_t starting_size = peer_reports.size();
   auto pi = peer_reports.upper_bound(rank_removed);
+  // Remove the target rank and adjust everything that comes after.
+  // Note that we don't adjust current and history for our peer_reports
+  // because it is better to rely on our peers on that information.
+  peer_reports.erase(rank_removed);
   while (pi != peer_reports.end()) {
-    peer_reports[pi->first - 1] = pi->second;
-    peer_reports.erase(pi++);
+    peer_reports[pi->first - 1] = pi->second; // copy content of next rank to ourself.
+    peer_reports.erase(pi++); // destroy our next rank and move on.
   }
-  ceph_assert((peer_reports.size() == starting_size) ||
-	      (peer_reports.size() + 1 == starting_size));
 
-  if (rank_removed < rank) {
+  ceph_assert((peer_reports.size() == starting_size) ||
+	  (peer_reports.size() + 1 == starting_size));
+
+  if (rank_removed < rank) { // if the rank removed is lower than us, we need to adjust.
     --rank;
-    my_reports.rank = rank;
+    my_reports.rank = rank; // also adjust my_reports.rank.
   }
 
   ldout(cct, 20) << "my rank after: " << rank << dendl;
@@ -243,6 +242,8 @@ void ConnectionTracker::notify_rank_removed(int rank_removed)
 
   //check if the new_rank from monmap is equal to our adjusted rank.
   ceph_assert(rank == new_rank);
+
+  increase_version();
 }
 
 void ConnectionTracker::encode(bufferlist &bl) const
