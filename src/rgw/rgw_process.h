@@ -155,20 +155,14 @@ public:
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 };
 /* process stream request */
-extern int process_request(rgw::sal::Driver* driver,
-                           RGWREST* rest,
+extern int process_request(const RGWProcessEnv& penv,
                            RGWRequest* req,
                            const std::string& frontend_prefix,
-                           const rgw_auth_registry_t& auth_registry,
                            RGWRestfulIO* client_io,
-                           OpsLogSink* olog,
                            optional_yield y,
                            rgw::dmclock::Scheduler *scheduler,
                            std::string* user,
                            ceph::coarse_real_clock::duration* latency,
-                           std::shared_ptr<RateLimiter> ratelimit,
-                           rgw::lua::Background* lua_background,
-                           std::unique_ptr<rgw::sal::LuaManager>& lua_manager,
                            int* http_ret = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,
