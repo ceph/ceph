@@ -1232,6 +1232,9 @@ class TestFsAuthorize(CephFSTestCase):
         # write even thought access level is set to "rw".
         self.captester.conduct_pos_test_for_read_caps()
         self.captester.conduct_neg_test_for_write_caps(sudo_write=True)
+        self.captester.conduct_neg_test_for_chown_caps()
+        self.captester.conduct_neg_test_for_truncate_caps()
+        self.captester.conduct_pos_test_for_open_caps()
 
     def test_single_path_authorize_on_nonalphanumeric_fsname(self):
         """
