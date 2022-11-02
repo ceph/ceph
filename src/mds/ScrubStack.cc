@@ -108,6 +108,14 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
   return 0;
 }
 
+void ScrubStack::init_scrub_counters(std::string_view path, std::string_view tag)
+{
+  scrub_counters_t sc{real_clock::now(), std::string(path), 0, 0, 0};
+  for (auto& stat : mds_scrub_stats) {
+    stat.counters[std::string(tag)] = sc;
+  }
+}
+
 int ScrubStack::enqueue(CInode *in, ScrubHeaderRef& header, bool top)
 {
   // abort in progress
@@ -135,6 +143,10 @@ int ScrubStack::enqueue(CInode *in, ScrubHeaderRef& header, bool top)
     //to make sure mdsdir is always on the top
     top = false;
   }
+
+  std::string path;
+  in->make_path_string(path);
+  init_scrub_counters(path, header->get_tag());
   int r = _enqueue(in, header, top);
   if (r < 0)
     return r;
@@ -940,6 +952,7 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
 	  header->set_origin(m->get_origin());
 	  scrubbing_map.emplace(header->get_tag(), header);
 	}
+
 	for (auto dir : dfs) {
 	  queued.insert_raw(dir->get_frag());
 	  _enqueue(dir, header, true);
@@ -1059,6 +1072,7 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
     std::set<std::string> scrubbing_tags;
     std::unordered_map<std::string, unordered_map<int, std::vector<_inodeno_t>>> uninline_failed_meta_info;
     std::unordered_map<_inodeno_t, std::string> paths;
+    std::unordered_map<std::string, std::vector<uint64_t>> counters;
 
     for (auto it = scrubbing_map.begin(); it != scrubbing_map.end(); ) {
       auto& header = it->second;
@@ -1075,6 +1089,11 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
 	ufi.clear();
 	paths.merge(header->get_paths());
 	ceph_assert(header->get_paths().size() == 0);
+	std::vector<uint64_t> c{header->get_uninline_started(),
+				header->get_uninline_passed(),
+				header->get_uninline_failed()
+	};
+	counters[header->get_tag()] = c;
 	scrubbing_map.erase(it++);
       } else {
 	++it;
@@ -1087,6 +1106,7 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
 					    std::move(scrubbing_tags),
 					    std::move(uninline_failed_meta_info),
 					    std::move(paths),
+					    std::move(counters),
 					    clear_stack);
     mdcache->mds->send_message_mds(ack, 0);
 
@@ -1105,6 +1125,11 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
 	stat.uninline_failed_meta_info[scrub_tag] = errno_map;
       }
       stat.paths.insert(m->get_paths().begin(), m->get_paths().end());;
+      for (auto& [tag, v] : m->get_counters()) {
+	stat.counters[tag].uninline_started = v[0];
+	stat.counters[tag].uninline_passed = v[1];
+	stat.counters[tag].uninline_failed = v[2];
+      }
     }
   }
 }
@@ -1126,6 +1151,9 @@ void ScrubStack::move_uninline_failures_to_damage_table()
     }
     ufmi.clear();
     paths.clear();
+    // do not clear the counters map; we'll clear them later:
+    // - on user request or
+    // - after a grace period
   }
 }
 
@@ -1196,6 +1224,14 @@ void ScrubStack::advance_scrub_status()
       ufmi[it->first] = header->get_uninline_failed_info();
       mds_scrub_stats[0].paths.merge(header->get_paths());
       move_uninline_failures_to_damage_table();
+
+      auto& c = mds_scrub_stats[0].counters;
+      ceph_assert(c.find(header->get_tag()) != c.end());
+      auto& sc = c[header->get_tag()];
+      sc.uninline_started = header->get_uninline_started();
+      sc.uninline_passed = header->get_uninline_passed();
+      sc.uninline_failed = header->get_uninline_failed();
+
       scrubbing_map.erase(it++);
     } else {
       ++it;

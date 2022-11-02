@@ -23,6 +23,7 @@
 
 #include "common/LogClient.h"
 #include "common/Cond.h"
+#include "common/ceph_time.h"
 #include "include/elist.h"
 #include "messages/MMDSScrub.h"
 #include "messages/MMDSScrubStats.h"
@@ -106,6 +107,8 @@ public:
 
   void move_uninline_failures_to_damage_table();
 
+  void init_scrub_counters(std::string_view path, std::string_view tag);
+
   MDCache *mdcache;
 
 protected:
@@ -135,12 +138,20 @@ protected:
   // check if any mds is aborting scrub after mds.0 starts
   bool scrub_any_peer_aborting = true;
 
+  struct scrub_counters_t {
+    ceph::real_clock::time_point start_time;
+    std::string origin_path;
+    uint64_t uninline_started;
+    uint64_t uninline_passed;
+    uint64_t uninline_failed;
+  };
   struct scrub_stat_t {
     unsigned epoch_acked = 0;
     std::set<std::string> scrubbing_tags;
     bool aborting = false;
     std::unordered_map<std::string, std::unordered_map<int, std::vector<_inodeno_t>>> uninline_failed_meta_info;
     std::unordered_map<_inodeno_t, std::string> paths;
+    std::unordered_map<std::string, scrub_counters_t> counters; // map(scrub_tag -> counters)
   };
   std::vector<scrub_stat_t> mds_scrub_stats;
 
