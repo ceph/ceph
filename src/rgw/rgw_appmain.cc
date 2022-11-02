@@ -408,6 +408,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       dpp->get_cct(), *implicit_tenant_context, env.driver);
   env.ratelimiting = ratelimiter.get();
   env.lua_background = lua_background.get();
+  env.lua_manager = env.driver->get_lua_manager();
 
   int fe_count = 0;
   for (multimap<string, RGWFrontendConfig *>::iterator fiter = fe_map.begin();
