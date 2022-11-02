@@ -2,6 +2,7 @@
 #include "rgw_lua_utils.h"
 #include "rgw_lua_request.h"
 #include "rgw_lua_background.h"
+#include "rgw_process_env.h"
 #include <lua.hpp>
 
 namespace rgw::lua {
@@ -102,9 +103,9 @@ int RGWObjFilter::execute(bufferlist& bl, off_t offset, const char* op_name) con
   lua_pushinteger(L, offset);
   lua_setglobal(L, "Offset");
 
-  if (s->lua_background) {
+  if (s->penv.lua_background) {
     // create the "RGW" table
-    s->lua_background->create_background_metatable(L);
+    s->penv.lua_background->create_background_metatable(L);
     lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
     ceph_assert(lua_istable(L, -1));
   }

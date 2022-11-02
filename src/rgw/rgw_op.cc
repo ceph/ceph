@@ -47,6 +47,7 @@
 #include "rgw_putobj_processor.h"
 #include "rgw_crypt.h"
 #include "rgw_perf_counters.h"
+#include "rgw_process_env.h"
 #include "rgw_notify.h"
 #include "rgw_notify_event_type.h"
 #include "rgw_sal.h"
@@ -2087,7 +2088,7 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 
 int RGWGetObj::get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter, RGWGetObj_Filter* cb) {
   std::string script;
-  const auto rc = rgw::lua::read_script(s, s->lua_manager, s->bucket_tenant, s->yield, rgw::lua::context::getData, script);
+  const auto rc = rgw::lua::read_script(s, s->penv.lua_manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::getData, script);
   if (rc == -ENOENT) {
     // no script, nothing to do
     return 0;
@@ -3874,7 +3875,7 @@ static CompressorRef get_compressor_plugin(const req_state *s,
 
 int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, rgw::sal::DataProcessor* cb) {
   std::string script;
-  const auto rc = rgw::lua::read_script(s, s->lua_manager, s->bucket_tenant, s->yield, rgw::lua::context::putData, script);
+  const auto rc = rgw::lua::read_script(s, s->penv.lua_manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::putData, script);
   if (rc == -ENOENT) {
     // no script, nothing to do
     return 0;
