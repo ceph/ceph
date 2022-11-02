@@ -132,13 +132,8 @@ void RGWLoadGenProcess::handle_request(const DoutPrefixProvider *dpp, RGWRequest
 
   RGWLoadGenIO real_client_io(&renv);
   RGWRestfulIO client_io(cct, &real_client_io);
-  ActiveRateLimiter ratelimit(cct);
-  int ret = process_request(env.driver, env.rest, req, uri_prefix,
-                            *env.auth_registry, &client_io, env.olog,
-                            null_yield, nullptr, nullptr, nullptr,
-                            ratelimit.get_active(),
-                            nullptr,
-                            env.lua_manager);
+  int ret = process_request(env, req, uri_prefix, &client_io,
+                            null_yield, nullptr, nullptr, nullptr);
   if (ret < 0) {
     /* we don't really care about return code */
     dout(20) << "process_request() returned " << ret << dendl;

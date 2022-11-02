@@ -261,20 +261,14 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   return 0;
 }
 
-int process_request(rgw::sal::Driver* const driver,
-                    RGWREST* const rest,
+int process_request(const RGWProcessEnv& penv,
                     RGWRequest* const req,
                     const std::string& frontend_prefix,
-                    const rgw_auth_registry_t& auth_registry,
                     RGWRestfulIO* const client_io,
-                    OpsLogSink* const olog,
                     optional_yield yield,
 		    rgw::dmclock::Scheduler *scheduler,
                     string* user,
                     ceph::coarse_real_clock::duration* latency,
-                    std::shared_ptr<RateLimiter> ratelimit,
-                    rgw::lua::Background* lua_background,
-                    std::unique_ptr<rgw::sal::LuaManager>& lua_manager,
                     int* http_ret)
 {
   int ret = client_io->init(g_ceph_context);
@@ -287,7 +281,9 @@ int process_request(rgw::sal::Driver* const driver,
   req_state rstate(g_ceph_context, &rgw_env, req->id);
   req_state *s = &rstate;
 
-  s->ratelimit_data = ratelimit;
+  s->ratelimit_data = penv.ratelimiting->get_active();
+
+  rgw::sal::Driver* driver = penv.driver;
   std::unique_ptr<rgw::sal::User> u = driver->get_user(rgw_user());
   s->set_user(u);
 
@@ -307,9 +303,10 @@ int process_request(rgw::sal::Driver* const driver,
   RGWOp* op = nullptr;
   int init_error = 0;
   bool should_log = false;
+  RGWREST* rest = penv.rest;
   RGWRESTMgr *mgr;
   RGWHandler_REST *handler = rest->get_handler(driver, s,
-                                               auth_registry,
+                                               *penv.auth_registry,
                                                frontend_prefix,
                                                client_io, &mgr, &init_error);
   rgw::dmclock::SchedulerCompleter c;
@@ -328,8 +325,8 @@ int process_request(rgw::sal::Driver* const driver,
     abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler, yield);
     goto done;
   }
-  s->lua_background = lua_background;
-  s->lua_manager = lua_manager.get();
+  s->lua_background = penv.lua_background;
+  s->lua_manager = penv.lua_manager.get();
   {
     s->trace_enabled = tracing::rgw::tracer.is_enabled();
     std::string script;
@@ -339,7 +336,7 @@ int process_request(rgw::sal::Driver* const driver,
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read pre request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(driver, rest, olog, s, op, script);
+      rc = rgw::lua::request::execute(driver, rest, penv.olog, s, op, script);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute pre request script. error: " << rc << dendl;
       }
@@ -360,7 +357,7 @@ int process_request(rgw::sal::Driver* const driver,
 
   try {
     ldpp_dout(op, 2) << "verifying requester" << dendl;
-    ret = op->verify_requester(auth_registry, yield);
+    ret = op->verify_requester(*penv.auth_registry, yield);
     if (ret < 0) {
       dout(10) << "failed to authorize request" << dendl;
       abort_early(s, op, ret, handler, yield);
@@ -424,7 +421,7 @@ done:
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read post request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(driver, rest, olog, s, op, script);
+      rc = rgw::lua::request::execute(driver, rest, penv.olog, s, op, script);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
       }
@@ -438,7 +435,7 @@ done:
             << e.what() << dendl;
   }
   if (should_log) {
-    rgw_log_op(rest, s, op, olog);
+    rgw_log_op(rest, s, op, penv.olog);
   }
 
   if (http_ret != nullptr) {

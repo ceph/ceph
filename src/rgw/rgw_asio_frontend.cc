@@ -270,13 +270,8 @@ void handle_connection(boost::asio::io_context& context,
       string user = "-";
       const auto started = ceph::coarse_real_clock::now();
       ceph::coarse_real_clock::duration latency{};
-      process_request(env.driver, env.rest, &req, uri_prefix,
-                      *env.auth_registry, &client, env.olog, y,
-                      scheduler, &user, &latency,
-                      env.ratelimiting->get_active(),
-                      env.lua_background,
-                      env.lua_manager,
-                      &http_ret);
+      process_request(env, &req, uri_prefix, &client, y,
+                      scheduler, &user, &latency, &http_ret);
 
       if (cct->_conf->subsys.should_gather(ceph_subsys_rgw_access, 1)) {
         // access log line elements begin per Apache Combined Log Format with additions following
