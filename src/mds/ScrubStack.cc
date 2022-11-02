@@ -108,9 +108,51 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
   return 0;
 }
 
+void ScrubStack::purge_scrub_counters(std::string_view tag)
+{
+  for (auto& stat : mds_scrub_stats) {
+    if (tag == "all") {
+      stat.counters.clear();
+    } else {
+      auto it = stat.counters.find(std::string(tag));
+      if (it != stat.counters.end()) {
+	stat.counters.erase(it);
+      }
+    }
+  }
+}
+
+// called from tick
+void ScrubStack::purge_old_scrub_counters()
+{
+  // "mds_scrub_stats_review_period" must be in number of days
+  uint64_t mds_scrub_stats_review_period = g_conf().get_val<uint64_t>("mds_scrub_stats_review_period");
+  auto review_period = ceph::make_timespan(mds_scrub_stats_review_period * 24 * 60 * 60);
+  auto now = coarse_real_clock::now();
+
+  dout(20) << __func__ << " review_period:" << review_period << dendl;
+
+  for (mds_rank_t rank = 0; rank < (mds_rank_t)mds_scrub_stats.size(); rank++) {
+    auto& counters = mds_scrub_stats[rank].counters;
+    for (auto it = counters.begin(); it != counters.end(); ) {
+      auto curr = it;
+      auto c = (*it).second;
+      auto elapsed = now - c.start_time;
+      dout(20) << __func__
+	       << " rank(" << rank << ") :"
+               << " elapsed:" << elapsed
+	       << dendl;
+      ++it;
+      if (elapsed >= review_period) {
+	counters.erase(curr);
+      }
+    }
+  }
+}
+
 void ScrubStack::init_scrub_counters(std::string_view path, std::string_view tag)
 {
-  scrub_counters_t sc{real_clock::now(), std::string(path), 0, 0, 0};
+  scrub_counters_t sc{coarse_real_clock::now(), std::string(path), 0, 0, 0};
   for (auto& stat : mds_scrub_stats) {
     stat.counters[std::string(tag)] = sc;
   }

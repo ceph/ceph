@@ -108,6 +108,9 @@ public:
   void move_uninline_failures_to_damage_table();
 
   void init_scrub_counters(std::string_view path, std::string_view tag);
+  void purge_scrub_counters(std::string_view tag);
+  void purge_old_scrub_counters(); // on tick
+
 
   MDCache *mdcache;
 
@@ -139,11 +142,11 @@ protected:
   bool scrub_any_peer_aborting = true;
 
   struct scrub_counters_t {
-    ceph::real_clock::time_point start_time;
+    ceph::coarse_real_clock::time_point start_time = coarse_real_clock::now();
     std::string origin_path;
-    uint64_t uninline_started;
-    uint64_t uninline_passed;
-    uint64_t uninline_failed;
+    uint64_t uninline_started = 0;
+    uint64_t uninline_passed = 0;
+    uint64_t uninline_failed = 0;
   };
   struct scrub_stat_t {
     unsigned epoch_acked = 0;
