@@ -626,6 +626,7 @@ void Elector::dispatch(MonOpRequestRef op)
       }
 
       auto em = op->get_req<MMonElection>();
+      dout(20) << __func__ << " from: " << mon->monmap->get_rank(em->get_source_addr()) << dendl;
       // assume an old message encoding would have matched
       if (em->fsid != mon->monmap->fsid) {
 	dout(0) << " ignoring election msg fsid " 
@@ -730,10 +731,10 @@ void Elector::notify_rank_changed(int new_rank)
   dead_pinging.erase(new_rank);
 }
 
-void Elector::notify_rank_removed(int rank_removed)
+void Elector::notify_rank_removed(int rank_removed, int new_rank)
 {
   dout(10) << __func__ << ": " << rank_removed << dendl; 
-  peer_tracker.notify_rank_removed(rank_removed);
+  peer_tracker.notify_rank_removed(rank_removed, new_rank);
   /* we have to clean up the pinging state, which is annoying
      because it's not indexed anywhere (and adding indexing
      would also be annoying).
