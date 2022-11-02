@@ -3,11 +3,8 @@
 
 #include <boost/tokenizer.hpp>
 
-#include "rgw_rest.h"
+#include "rgw_auth_s3.h"
 #include "rgw_rest_iam.h"
-
-#include "rgw_request.h"
-#include "rgw_process.h"
 
 #include "rgw_rest_role.h"
 #include "rgw_rest_user_policy.h"

@@ -3,11 +3,12 @@
 
 #include "rgw_realm_reloader.h"
 
+#include "rgw_auth_registry.h"
 #include "rgw_bucket.h"
 #include "rgw_log.h"
 #include "rgw_rest.h"
 #include "rgw_user.h"
-#include "rgw_process.h"
+#include "rgw_process_env.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 

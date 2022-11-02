@@ -24,8 +24,10 @@
 #include "common/ceph_context.h"
 #include "global/global_init.h"
 #include "rgw_auth.h"
+#include "rgw_auth_registry.h"
 #include "rgw_iam_policy.h"
 #include "rgw_op.h"
+#include "rgw_process_env.h"
 #include "rgw_sal_rados.h"
 
 

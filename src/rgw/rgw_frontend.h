@@ -12,6 +12,7 @@
 
 #include "rgw_request.h"
 #include "rgw_process.h"
+#include "rgw_process_env.h"
 #include "rgw_realm_reloader.h"
 
 #include "rgw_auth_registry.h"
