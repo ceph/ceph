@@ -371,7 +371,7 @@ class Elector : public ElectionOwner, RankProvider {
    * This is safe to call even if we haven't joined or are currently
    * in a quorum.
    */
-  void notify_rank_removed(int rank_removed);
+  void notify_rank_removed(int rank_removed, int new_rank);
   void notify_strategy_maybe_changed(int strategy);
   /**
    * Set the disallowed leaders.
