@@ -27,6 +27,9 @@ namespace rgw::dmclock {
 namespace rgw::lua {
   class Background;
 }
+namespace rgw::sal {
+  class LuaManager;
+}
 
 struct RGWProcessEnv {
   rgw::sal::Driver* driver = nullptr;
@@ -35,6 +38,7 @@ struct RGWProcessEnv {
   rgw_auth_registry_ptr_t auth_registry;
   ActiveRateLimiter* ratelimiting = nullptr;
   rgw::lua::Background* lua_background = nullptr;
+  std::unique_ptr<rgw::sal::LuaManager> lua_manager;
 };
 
 class RGWFrontendConfig;
@@ -50,7 +54,6 @@ protected:
   RGWFrontendConfig* conf;
   int sock_fd;
   std::string uri_prefix;
-  std::unique_ptr<rgw::sal::LuaManager> lua_manager;
 
   struct RGWWQ : public DoutPrefixProvider, public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess* process;
@@ -99,7 +102,6 @@ public:
       conf(conf),
       sock_fd(-1),
       uri_prefix(std::move(uri_prefix)),
-      lua_manager(env.driver->get_lua_manager()),
       req_wq(this,
 	     ceph::make_timespan(g_conf()->rgw_op_thread_timeout),
 	     ceph::make_timespan(g_conf()->rgw_op_thread_suicide_timeout),
@@ -116,7 +118,6 @@ public:
   }
 
   void unpause_with_new_config() {
-    lua_manager = env.driver->get_lua_manager();
     m_tp.unpause();
   }
 
