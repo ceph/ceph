@@ -3,8 +3,10 @@
 # vim: ts=4 sw=4 smarttab expandtab
 
 import argparse
+import grp
 import logging
 import os
+import pwd
 import signal
 import socket
 import subprocess
@@ -88,8 +90,25 @@ def handler(signum, frame):
     sys.exit(0)
 
 
+def drop_privs():
+    if os.getuid() == 0:
+        try:
+            ceph_uid = pwd.getpwnam("ceph").pw_uid
+            ceph_gid = grp.getgrnam("ceph").gr_gid
+            os.setgroups([])
+            os.setgid(ceph_gid)
+            os.setuid(ceph_uid)
+        except Exception as e:
+            log.error(f"Unable to drop privileges: {e}")
+            sys.exit(1)
+
+
 def main():
     global auth_names
+
+    # run as unprivileged ceph user
+    drop_privs()
+
     # exit code 0 on SIGINT, SIGTERM
     signal.signal(signal.SIGINT, handler)
     signal.signal(signal.SIGTERM, handler)
@@ -108,7 +127,10 @@ def main():
 
     log.info("monitoring path %s, delay %ds" % (args.path, args.delay * 60.0))
     while True:
-        scrape_path(args.path)
+        try:
+            scrape_path(args.path)
+        except Exception as e:
+            log.error(f"Error scraping {args.path}: {e}")
         if args.delay == 0:
             sys.exit(0)
         time.sleep(args.delay * 60)
