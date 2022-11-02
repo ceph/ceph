@@ -712,6 +712,11 @@ prepare_conf() {
         $(format_conf "${extra_conf}")
         $AUTOSCALER_OPTS
 EOF
+    if [ "$with_jaeger" -eq 1 ] ; then
+        wconf <<EOF
+        jaeger_agent_port = 6831
+EOF
+    fi
     if [ "$lockdep" -eq 1 ] ; then
         wconf <<EOF
         lockdep = true
