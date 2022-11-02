@@ -869,7 +869,6 @@ int BlueFS::prepare_new_device(int id, const bluefs_layout_t& layout)
       new_log_dev_next,
       RENAME_DB2SLOW,
       layout);
-    //}
   } else if(id == BDEV_NEWWAL) {
     _rewrite_log_and_layout_sync_LNF_LD(false,
       BDEV_DB,
@@ -2169,6 +2168,33 @@ uint64_t BlueFS::_estimate_transaction_size(bluefs_transaction_t* t)
   return round_up_to(t->op_bl.length() + super.block_size * 2, max_alloc_size);
 }
 
+uint64_t BlueFS::_make_initial_transaction(uint64_t start_seq,
+                                           bluefs_fnode_t& fnode,
+                                           uint64_t expected_final_size,
+                                           bufferlist* out)
+{
+  bluefs_transaction_t t0;
+  t0.seq = start_seq;
+  t0.uuid = super.uuid;
+  t0.op_init();
+  t0.op_file_update_inc(fnode);
+  t0.op_jump(start_seq, expected_final_size); // this is a fixed size op,
+                                              // hence it's valid with fake
+                                              // params for overall txc size
+                                              // estimation
+  if (!out) {
+    return _estimate_transaction_size(&t0);
+  }
+
+  ceph_assert(expected_final_size > 0);
+  out->reserve(expected_final_size);
+  encode(t0, *out);
+  // make sure we're not wrong aboth the size
+  ceph_assert(out->length() <= expected_final_size);
+  _pad_bl(*out, expected_final_size);
+  return expected_final_size;
+}
+
 uint64_t BlueFS::_estimate_log_size_N()
 {
   std::lock_guard nl(nodes.lock);
@@ -2216,13 +2242,17 @@ bool BlueFS::_should_start_compact_log_L_N()
   return true;
 }
 
-void BlueFS::_compact_log_dump_metadata_NF(bluefs_transaction_t *t,
+void BlueFS::_compact_log_dump_metadata_NF(uint64_t start_seq,
+                                        bluefs_transaction_t *t,
 					int bdev_update_flags,
                                         uint64_t capture_before_seq)
 {
+  dout(20) << __func__ << dendl;
+  t->seq = start_seq;
+  t->uuid = super.uuid;
+
   std::lock_guard nl(nodes.lock);
 
-  dout(20) << __func__ << " op_init" << dendl;
   for (auto& [ino, file_ref] : nodes.file_map) {
     if (ino == 1)
       continue;
@@ -2289,6 +2319,21 @@ void BlueFS::_compact_log_sync_LNF_LD()
   logger->inc(l_bluefs_log_compactions);
 }
 
+/*
+ * SYNC LOG COMPACTION
+ *
+ * 0. Lock the log completely through the whole procedure
+ *
+ * 1. Build new log. It will include log's starter and compacted metadata
+ *    body. Jump op appended to the starter will link the pieces together.
+ *
+ * 2. Write out new log's content
+ *
+ * 3. Write out new superblock. This includes relevant device layout update.
+ *
+ * 4. Finalization. Old space release.
+ */
+
 void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
 					 int super_dev,
 					 int log_dev,
@@ -2296,10 +2341,26 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
 					 int flags,
 					 std::optional<bluefs_layout_t> layout)
 {
+  // we substitute log_dev with log_dev_new for new allocations below
+  // and permitting fallback allocations prevents such a substitution
+  ceph_assert((allocate_with_fallback && log_dev == log_dev_new) ||
+              !allocate_with_fallback);
+
+  dout(10) << __func__ << " super_dev:" << super_dev
+                       << " log_dev:" << log_dev
+                       << " log_dev_new:" << log_dev_new
+		       << " flags:" << flags
+		       << " seq:" << log.seq_live
+		       << dendl;
+  utime_t mtime = ceph_clock_now();
+  uint64_t starter_seq = 1;
+
+  // Part 0.
+  // Lock the log totally till the end of the procedure
   std::lock_guard ll(log.lock);
 
   File *log_file = log.writer->file.get();
-
+  bluefs_fnode_t fnode_tail;
   // log.t.seq is always set to current live seq
   ceph_assert(log.t.seq == log.seq_live);
   // Capturing entire state. Dump anything that has been stored there.
@@ -2308,44 +2369,147 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
   // From now on, no changes to log.t are permitted until we finish rewriting log.
   // Can allow dirty to remain dirty - log.seq_live will not change.
 
-  dout(20) << __func__ << " super_dev:" << super_dev
-                       << " log_dev:" << log_dev
-                       << " log_dev_new:" << log_dev_new
-		       << " flags:" << flags
-		       << dendl;
-  bluefs_transaction_t t;
-  t.seq = 2;
-  t.uuid = super.uuid;
-  _compact_log_dump_metadata_NF(&t, flags, 0);
-  dout(20) << __func__ << " op_jump_seq " << log.seq_live << dendl;
-  t.op_jump_seq(log.seq_live);
+  //
+  // Part 1.
+  // Build new log starter and compacted metadata body
+  // 1.1. Build full compacted meta transaction.
+  //      Encode a bluefs transaction that dumps all of the in-memory fnodes
+  //      and names.
+  //      This might be pretty large and its allocation map can exceed
+  //      superblock size. Hence instead we'll need log starter part which
+  //      goes to superblock and refers that new meta through op_update_inc.
+  // 1.2.  Allocate space for the above transaction
+  //       using its size estimation.
+  // 1.3.  Allocate the space required for the starter part of the new log.
+  //       It should be small enough to fit into superblock.
+  // 1.4   Building new log persistent fnode representation which will
+  //       finally land to disk.
+  //       Depending on input parameters we might need to perform device ids
+  //       rename - runtime and persistent replicas should be different when we
+  //       are in the device migration process.
+  // 1.5   Store starter fnode to run-time superblock, to be written out later.
+  //       It doesn't contain compacted meta to fit relevant alocation map into
+  //       superblock.
+  // 1.6   Proceed building new log persistent fnode representation.
+  //       Will add log tail with compacted meta extents from 1.1.
+  //       Device rename applied as well
+  //
+  // 1.7.  Encode new log fnode starter,
+  //       It will include op_init, new log's op_update_inc
+  //       and jump to the compacted meta transaction beginning.
+  //       Superblock will reference this starter part
+  //
+  // 1.8.  Encode compacted meta transaction,
+  //       extend the transaction with a jump to proper sequence no
+  //
 
-  bufferlist bl;
-  encode(t, bl);
-  _pad_bl(bl);
 
-  uint64_t need = bl.length() + cct->_conf->bluefs_max_log_runway;
-  dout(20) << __func__ << " need " << need << dendl;
+  // 1.1 Build full compacted meta transaction
+  bluefs_transaction_t compacted_meta_t;
+  _compact_log_dump_metadata_NF(starter_seq + 1, &compacted_meta_t, flags, 0);
 
-  bluefs_fnode_t old_fnode;
-  int r;
-  vselector->sub_usage(log_file->vselector_hint, log_file->fnode);
-  log_file->fnode.swap_extents(old_fnode);
-  r = allocate_with_fallback ?
-    _allocate(log_dev, need, &log_file->fnode) :
-    _allocate_without_fallback(log_dev, need, &log_file->fnode);
+  // 1.2 Allocate the space required for the compacted meta transaction
+  uint64_t compacted_meta_need =
+    _estimate_transaction_size(&compacted_meta_t) +
+      cct->_conf->bluefs_max_log_runway;
+
+  dout(20) << __func__ << " compacted_meta_need " << compacted_meta_need << dendl;
+
+  int r = allocate_with_fallback ?
+    _allocate(log_dev, compacted_meta_need, &fnode_tail) :
+    _allocate_without_fallback(log_dev, compacted_meta_need, &fnode_tail);
   ceph_assert(r == 0);
 
+
+  // 1.3 Allocate the space required for the starter part of the new log.
+  // estimate new log fnode size to be referenced from superblock
+  // hence use dummy fnode and jump parameters
+  uint64_t starter_need = _make_initial_transaction(starter_seq, fnode_tail, 0, nullptr);
+
+  bluefs_fnode_t fnode_starter(log_file->fnode.ino, 0, mtime);
+  r = allocate_with_fallback ?
+    _allocate(log_dev, starter_need, &fnode_starter) :
+    _allocate_without_fallback(log_dev, starter_need, &fnode_starter);
+  ceph_assert(r == 0);
+
+  // 1.4 Building starter fnode
+  bluefs_fnode_t fnode_persistent(fnode_starter.ino, 0, mtime);
+  for (auto p : fnode_starter.extents) {
+    // rename device if needed - this is possible when fallback allocations
+    // are prohibited only. Which means every extent is targeted to the same
+    // device and we can unconditionally update them.
+    if (log_dev != log_dev_new) {
+      dout(10) << __func__ << " renaming log extents to "
+               << log_dev_new << dendl;
+      p.bdev = log_dev_new;
+    }
+    fnode_persistent.append_extent(p);
+  }
+
+  // 1.5 Store starter fnode to run-time superblock, to be written out later
+  super.log_fnode = fnode_persistent;
+
+  // 1.6 Proceed building new log persistent fnode representation
+  // we'll build incremental update starting from this point
+  fnode_persistent.reset_delta();
+  for (auto p : fnode_tail.extents) {
+    // rename device if needed - this is possible when fallback allocations
+    // are prohibited only. Which means every extent is targeted to the same
+    // device and we can unconditionally update them.
+    if (log_dev != log_dev_new) {
+      dout(10) << __func__ << " renaming log extents to "
+               << log_dev_new << dendl;
+      p.bdev = log_dev_new;
+    }
+    fnode_persistent.append_extent(p);
+  }
+
+  // 1.7 Encode new log fnode
+  // This will flush incremental part of fnode_persistent only.
+  bufferlist starter_bl;
+  _make_initial_transaction(starter_seq, fnode_persistent, starter_need, &starter_bl);
+
+  // 1.8 Encode compacted meta transaction
+  dout(20) << __func__ << " op_jump_seq " << log.seq_live << dendl;
+  // hopefully "compact_meta_need" estimation provides enough extra space
+  // for this op, assert below if not
+  compacted_meta_t.op_jump_seq(log.seq_live);
+
+  bufferlist compacted_meta_bl;
+  encode(compacted_meta_t, compacted_meta_bl);
+  _pad_bl(compacted_meta_bl);
+  ceph_assert(compacted_meta_bl.length() <= compacted_meta_need);
+
+  //
+  // Part 2
+  // Write out new log's content
+  // 2.1. Build the full runtime new log's fnode
+  //
+  // 2.2. Write out new log's
+  //
+  // 2.3. Do flush and wait for completion through flush_bdev()
+  //
+  // 2.4. Finalize log update
+  //      Update all sequence numbers
+  //
+
+  // 2.1 Build the full runtime new log's fnode
+  bluefs_fnode_t old_log_fnode;
+  old_log_fnode.swap(fnode_starter);
+  old_log_fnode.clone_extents(fnode_tail);
+  old_log_fnode.reset_delta();
+  log_file->fnode.swap(old_log_fnode);
+
+  // 2.2 Write out new log's content
+  // Get rid off old writer
   _close_writer(log.writer);
-
-  // we will write it to super
-  log_file->fnode.reset_delta();
-  log_file->fnode.size = bl.length();
-
+  // Make new log writer and stage new log's content writing
   log.writer = _create_writer(log_file);
-  log.writer->append(bl);
+  log.writer->append(starter_bl);
+  log.writer->append(compacted_meta_bl);
+
+  // 2.3 Do flush and wait for completion through flush_bdev()
   _flush_special(log.writer);
-  vselector->add_usage(log_file->vselector_hint, log_file->fnode);
 #ifdef HAVE_LIBAIO
   if (!cct->_conf->bluefs_sync_write) {
     list<aio_t> completed_ios;
@@ -2355,110 +2519,123 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
   }
 #endif
   _flush_bdev();
+
+  // 2.4 Finalize log update
   ++log.seq_live;
   dirty.seq_live = log.seq_live;
   log.t.seq = log.seq_live;
+  vselector->sub_usage(log_file->vselector_hint, old_log_fnode);
+  vselector->add_usage(log_file->vselector_hint, log_file->fnode);
+
+  // Part 3.
+  // Write out new superblock to reflect all the changes.
+  //
 
   super.memorized_layout = layout;
-  super.log_fnode = log_file->fnode;
-  // rename device if needed
-  if (log_dev != log_dev_new) {
-    dout(10) << __func__ << " renaming log extents to " << log_dev_new << dendl;
-    for (auto& p : super.log_fnode.extents) {
-      p.bdev = log_dev_new;
-    }
-  }
-  dout(10) << __func__ << " writing super, log fnode: " << super.log_fnode << dendl;
-
   _write_super(super_dev);
   _flush_bdev();
 
-  dout(10) << __func__ << " release old log extents " << old_fnode.extents << dendl;
-  std::lock_guard dl(dirty.lock);
-  for (auto& r : old_fnode.extents) {
-    dirty.pending_release[r.bdev].insert(r.offset, r.length);
+  // we're mostly done
+  dout(10) << __func__ << " log extents " << log_file->fnode.extents << dendl;
+  logger->inc(l_bluefs_log_compactions);
+
+  // Part 4
+  // Finalization. Release old space.
+  //
+  {
+    dout(10) << __func__
+             << " release old log extents " << old_log_fnode.extents
+             << dendl;
+    std::lock_guard dl(dirty.lock);
+    for (auto& r : old_log_fnode.extents) {
+      dirty.pending_release[r.bdev].insert(r.offset, r.length);
+    }
   }
 }
 
 /*
+ * ASYNC LOG COMPACTION
+ *
+ * 0. Lock the log and forbid its extension. The former covers just
+ *    a part of the below procedure while the latter spans over it
+ *    completely.
  * 1. Allocate a new extent to continue the log, and then log an event
- * that jumps the log write position to the new extent.  At this point, the
- * old extent(s) won't be written to, and reflect everything to compact.
- * New events will be written to the new region that we'll keep.
+ *    that jumps the log write position to the new extent.  At this point, the
+ *    old extent(s) won't be written to, and reflect everything to compact.
+ *    New events will be written to the new region that we'll keep.
+ *    The latter will finally become new log tail on compaction completion.
  *
- * 2. While still holding the lock, encode a bufferlist that dumps all of the
- * in-memory fnodes and names.  This will become the new beginning of the
- * log.  The last event will jump to the log continuation extent from #1.
+ * 2. Build new log. It will include log's starter, compacted metadata
+ *    body and the above tail. Jump ops appended to the starter and meta body
+ *    will link the pieces togather. Log's lock is releases in the mid of the
+ *    process to permit parallel access to it.
  *
- * 3. Queue a write to a new extent for the new beginnging of the log.
+ * 3. Write out new log's content.
  *
- * 4. Drop lock and wait
+ * 4. Write out new superblock to reflect all the changes.
  *
- * 5. Retake the lock.
+ * 5. Apply new log fnode, log is locked for a while.
  *
- * 6. Update the log_fnode to splice in the new beginning.
- *
- * 7. Write the new superblock.
- *
- * 8. Release the old log space.  Clean up.
+ * 6. Finalization. Clean up, old space release and total unlocking.
  */
 
 void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
 {
   dout(10) << __func__ << dendl;
+  utime_t mtime = ceph_clock_now();
+  uint64_t starter_seq = 1;
+  uint64_t old_log_jump_to = 0;
+
+  // Part 0.
+  // Lock the log and forbid its expansion and other compactions
+
   // only one compaction allowed at one time
   bool old_is_comp = std::atomic_exchange(&log_is_compacting, true);
   if (old_is_comp) {
     dout(10) << __func__ << " ongoing" <<dendl;
     return;
   }
-
+  // lock log's run-time structures for a while
   log.lock.lock();
-  File *log_file = log.writer->file.get();
-  FileWriter *new_log_writer = nullptr;
-  FileRef new_log = nullptr;
-  uint64_t new_log_jump_to = 0;
-  uint64_t old_log_jump_to = 0;
-
-  new_log = ceph::make_ref<File>();
-  new_log->fnode.ino = 0;   // we use _flush_special to avoid log of the fnode
-
-  // Part 1.
-  // Prepare current log for jumping into it.
-  // 1. Allocate extent
-  // 2. Update op to log
-  // 3. Jump op to log
-  // During that, no one else can write to log, otherwise we risk jumping backwards.
-  // We need to sync log, because we are injecting discontinuity, and writer is not prepared for that.
-
   //signal _maybe_extend_log that expansion of log is temporary inacceptable
   bool old_forbidden = atomic_exchange(&log_forbidden_to_expand, true);
   ceph_assert(old_forbidden == false);
 
-  vselector->sub_usage(log_file->vselector_hint, log_file->fnode);
+  //
+  // Part 1.
+  // Prepare current log for jumping into it.
+  // 1.1. Allocate extent
+  // 1.2. Save log's fnode extents and add new extents
+  // 1.3. Update op to log
+  // 1.4. Jump op to log
+  // During that, no one else can write to log, otherwise we risk jumping backwards.
+  // We need to sync log, because we are injecting discontinuity, and writer is not prepared for that.
 
-  // 1.1 allocate new log space and jump to it.
+  // 1.1 allocate new log extents and store them at fnode_tail
+  File *log_file = log.writer->file.get();
   old_log_jump_to = log_file->fnode.get_allocated();
+  bluefs_fnode_t fnode_tail;
   uint64_t runway = log_file->fnode.get_allocated() - log.writer->get_effective_write_pos();
   dout(10) << __func__ << " old_log_jump_to 0x" << std::hex << old_log_jump_to
-           << " need 0x" << (old_log_jump_to + cct->_conf->bluefs_max_log_runway) << std::dec << dendl;
-  bluefs_fnode_t new_log_tail_fnode;
-  bluefs_fnode_t old_log_snapshot_fnode;
+           << " need 0x" << cct->_conf->bluefs_max_log_runway << std::dec << dendl;
   int r = _allocate(vselector->select_prefer_bdev(log_file->vselector_hint),
 		    cct->_conf->bluefs_max_log_runway,
-                    &new_log_tail_fnode);
+                    &fnode_tail);
   ceph_assert(r == 0);
-  old_log_snapshot_fnode.clone_extents(log_file->fnode);
-  log_file->fnode.clone_extents(new_log_tail_fnode);
 
+  // 1.2 save log's fnode extents and add new extents
+  bluefs_fnode_t old_log_fnode(log_file->fnode);
+  log_file->fnode.clone_extents(fnode_tail);
   //adjust usage as flush below will need it
+  vselector->sub_usage(log_file->vselector_hint, old_log_fnode);
   vselector->add_usage(log_file->vselector_hint, log_file->fnode);
   dout(10) << __func__ << " log extents " << log_file->fnode.extents << dendl;
 
-  // update the log file change and log a jump to the offset where we want to
+  // 1.3 update the log file change and log a jump to the offset where we want to
   // write the new entries
   log.t.op_file_update_inc(log_file->fnode);
-  // jump to new position should mean next seq
+
+  // 1.4 jump to new position should mean next seq
   log.t.op_jump(log.seq_live + 1, old_log_jump_to);
   uint64_t seq_now = log.seq_live;
   // we need to flush all bdev because we will be streaming all dirty files to log
@@ -2467,96 +2644,188 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   _flush_bdev();
   _flush_and_sync_log_jump_D(old_log_jump_to, runway);
 
-  // out of jump section
+  //
+  // Part 2.
+  // Build new log starter and compacted metadata body
+  // 2.1.  Build full compacted meta transaction.
+  //       While still holding the lock, encode a bluefs transaction
+  //       that dumps all of the in-memory fnodes and names.
+  //       This might be pretty large and its allocation map can exceed
+  //       superblock size. Hence instead we'll need log starter part which
+  //       goes to superblock and refers that new meta through op_update_inc.
+  // 2.2.  After releasing the lock allocate space for the above transaction
+  //       using its size estimation.
+  //       Then build tailing list of extents which consists of these
+  //       newly allocated extents followed by ones from Part 1.
+  // 2.3.  Allocate the space required for the starter part of the new log.
+  //       It should be small enough to fit into superblock.
+  //       Effectively we start building new log fnode here.
+  // 2.4.  Store starter fnode to run-time superblock, to be written out later
+  // 2.5.  Finalize new log's fnode building
+  //       This will include log's starter and tailing extents built at 2.2
+  // 2.6.  Encode new log fnode starter,
+  //       It will include op_init, new log's op_update_inc
+  //       and jump to the compacted meta transaction beginning.
+  //       Superblock will reference this starter part
+  // 2.7.  Encode compacted meta transaction,
+  //       extend the transaction with a jump to the log tail from 1.1 before
+  //       encoding.
+  //
 
-  // 2. prepare compacted log
-  bluefs_transaction_t t;
-  t.seq = 1;
-  t.uuid = super.uuid;
-  t.op_init();
-  _compact_log_dump_metadata_NF(&t, 0, seq_now);
+  // 2.1 Build full compacted meta transaction
+  bluefs_transaction_t compacted_meta_t;
+  _compact_log_dump_metadata_NF(starter_seq + 1, &compacted_meta_t, 0, seq_now);
 
-  // now state is captured to bufferlist
-  // log can be used to write to, ops in log will be continuation of captured state
+  // now state is captured to compacted_meta_t,
+  // current log can be used to write to,
+  //ops in log will be continuation of captured state
   log.lock.unlock();
 
-  new_log_jump_to = _estimate_transaction_size(&t);
-  //newly constructed log head will jump to what we had before
-  t.op_jump(seq_now, new_log_jump_to);
+  // 2.2 Allocate the space required for the compacted meta transaction
+  uint64_t compacted_meta_need = _estimate_transaction_size(&compacted_meta_t);
+  dout(20) << __func__ << " compacted_meta_need " << compacted_meta_need
+           << dendl;
+  {
+    bluefs_fnode_t fnode_pre_tail;
+    // do allocate
+    r = _allocate(vselector->select_prefer_bdev(log_file->vselector_hint),
+                  compacted_meta_need,
+                  &fnode_pre_tail);
+    ceph_assert(r == 0);
+    // build trailing list of extents in fnode_tail,
+    // this will include newly allocated extents for compacted meta
+    // and aux extents allocated at step 1.1
+    fnode_pre_tail.claim_extents(fnode_tail.extents);
+    fnode_tail.swap_extents(fnode_pre_tail);
+  }
 
-  // allocate
+  // 2.3 Allocate the space required for the starter part of the new log.
+  // Start building New log fnode
+  FileRef new_log = nullptr;
+  new_log = ceph::make_ref<File>();
+  new_log->fnode.ino = log_file->fnode.ino;
+  new_log->fnode.mtime = mtime;
+  // Estimate the required space
+  uint64_t starter_need =
+    _make_initial_transaction(starter_seq, fnode_tail, 0, nullptr);
+  // and now allocate and store at new_log_fnode
   r = _allocate(vselector->select_prefer_bdev(log_file->vselector_hint),
-                new_log_jump_to,
+                starter_need,
                 &new_log->fnode);
   ceph_assert(r == 0);
 
-  bufferlist bl;
-  encode(t, bl);
-  _pad_bl(bl);
-
-  dout(10) << __func__ << " new_log_jump_to 0x" << std::hex << new_log_jump_to
-	   << std::dec << dendl;
-
-  new_log_writer = _create_writer(new_log);
-
-  new_log_writer->append(bl);
-  // 3. flush
-  _flush_special(new_log_writer);
-
-  // 4. wait
-  _flush_bdev(new_log_writer);
-  // 5. update our log fnode
-  // we need to append to new_log the extents that were allocated in step 1.1
-  new_log->fnode.claim_extents(new_log_tail_fnode.extents);
-  // we will write it to super
-  new_log->fnode.reset_delta();
-
-  // 6. write the super block to reflect the changes
-  dout(10) << __func__ << " writing super" << dendl;
-  new_log->fnode.ino = log_file->fnode.ino;
-  new_log->fnode.size = 0;
-  new_log->fnode.mtime = ceph_clock_now();
+  // 2.4 Store starter fnode to run-time superblock, to be written out later
   super.log_fnode = new_log->fnode;
+
+  // 2.5 Finalize new log's fnode building
+  // start collecting new log fnode updates (to make op_update_inc later)
+  // since this point. This will include compacted meta from 2.2 and aux
+  // extents from 1.1.
+  new_log->fnode.reset_delta();
+  new_log->fnode.claim_extents(fnode_tail.extents);
+
+  // 2.6 Encode new log fnode
+  bufferlist starter_bl;
+  _make_initial_transaction(starter_seq, new_log->fnode, starter_need,
+    &starter_bl);
+
+  // 2.7 Encode compacted meta transaction,
+  dout(20) << __func__
+           << " new_log jump seq " << seq_now
+           << std::hex << " offset 0x" << starter_need + compacted_meta_need
+	   << std::dec << dendl;
+  // Extent compacted_meta transaction with a just to new log tail.
+  // Hopefully "compact_meta_need" estimation provides enough extra space
+  // for this new jump, assert below if not
+  compacted_meta_t.op_jump(seq_now, starter_need + compacted_meta_need);
+  // Now do encodeing and padding
+  bufferlist compacted_meta_bl;
+  compacted_meta_bl.reserve(compacted_meta_need);
+  encode(compacted_meta_t, compacted_meta_bl);
+  ceph_assert(compacted_meta_bl.length() <= compacted_meta_need);
+  _pad_bl(compacted_meta_bl, compacted_meta_need);
+
+  //
+  // Part 3.
+  // Write out new log's content
+  // 3.1 Stage new log's content writing
+  // 3.2 Do flush and wait for completion through flush_bdev()
+  //
+
+  // 3.1 Stage new log's content writing
+  // Make new log writer and append bufferlists to write out.
+  FileWriter *new_log_writer = _create_writer(new_log);
+  // And append all new log's bufferlists to write out.
+  new_log_writer->append(starter_bl);
+  new_log_writer->append(compacted_meta_bl);
+
+  // 3.2. flush and wait
+  _flush_special(new_log_writer);
+  _flush_bdev(new_log_writer, false); // do not check log.lock is locked
+
+  // Part 4.
+  // Write out new superblock to reflect all the changes.
+  //
+
   _write_super(BDEV_DB);
   _flush_bdev();
 
+  // Part 5.
+  // Apply new log fnode
+  //
+
+  // we need to acquire log's lock back at this point
   log.lock.lock();
-  // swapping log_file and new_log, new log file is the log file now.
+  // Reconstruct actual log object from the new one.
   vselector->sub_usage(log_file->vselector_hint, log_file->fnode);
-  new_log->fnode.swap_extents(log_file->fnode);
-
-  log.writer->pos = log.writer->file->fnode.size =
-    log.writer->pos - old_log_jump_to + new_log_jump_to;
-
+  log_file->fnode.size =
+    log.writer->pos - old_log_jump_to + starter_need + compacted_meta_need;
+  log_file->fnode.mtime = std::max(mtime, log_file->fnode.mtime);
+  log_file->fnode.swap_extents(new_log->fnode);
+  // update log's writer
+  log.writer->pos = log.writer->file->fnode.size;
   vselector->add_usage(log_file->vselector_hint, log_file->fnode);
-
+  // and unlock
   log.lock.unlock();
 
+  // we're mostly done
+  dout(10) << __func__ << " log extents " << log_file->fnode.extents << dendl;
+  logger->inc(l_bluefs_log_compactions);
+
+  //Part 6.
+  // Finalization
+  // 6.1 Permit log's extension, forbidden at step 0.
+  //
+  // 6.2 Release the new log writer
+  //
+  // 6.3 Release old space
+  //
+  // 6.4. Enable other compactions
+  //
+
+  // 6.1 Permit log's extension, forbidden at step 0.
   old_forbidden = atomic_exchange(&log_forbidden_to_expand, false);
   ceph_assert(old_forbidden == true);
   //to wake up if someone was in need of expanding log
   log_cond.notify_all();
 
-  // 7. release old space
-  dout(10) << __func__
-           << " release old log extents " << old_log_snapshot_fnode.extents
-           << dendl;
+  // 6.2 Release the new log writer
+  _close_writer(new_log_writer);
+  new_log_writer = nullptr;
+  new_log = nullptr;
+
+  // 6.3 Release old space
   {
+    dout(10) << __func__
+             << " release old log extents " << old_log_fnode.extents
+             << dendl;
     std::lock_guard dl(dirty.lock);
-    for (auto& r : old_log_snapshot_fnode.extents) {
+    for (auto& r : old_log_fnode.extents) {
       dirty.pending_release[r.bdev].insert(r.offset, r.length);
     }
   }
 
-  // delete the new log, remove from the dirty files list
-  _close_writer(new_log_writer);
-  new_log_writer = nullptr;
-  new_log = nullptr;
-  log_cond.notify_all();
-
-  dout(10) << __func__ << " log extents " << log_file->fnode.extents << dendl;
-  logger->inc(l_bluefs_log_compactions);
-
+  // 6.4. Enable other compactions
   old_is_comp = atomic_exchange(&log_is_compacting, false);
   ceph_assert(old_is_comp);
 }
@@ -3253,12 +3522,14 @@ int BlueFS::fsync(FileWriter *h)/*_WF_WD_WLD_WLNF_WNF*/
 }
 
 // be careful - either h->file->lock or log.lock must be taken
-void BlueFS::_flush_bdev(FileWriter *h)
+void BlueFS::_flush_bdev(FileWriter *h, bool check_mutext_locked)
 {
-  if (h->file->fnode.ino > 1) {
-    ceph_assert(ceph_mutex_is_locked(h->lock));
-  } else if (h->file->fnode.ino == 1) {
-    ceph_assert(ceph_mutex_is_locked(log.lock));
+  if (check_mutext_locked) {
+    if (h->file->fnode.ino > 1) {
+      ceph_assert(ceph_mutex_is_locked(h->lock));
+    } else if (h->file->fnode.ino == 1) {
+      ceph_assert(ceph_mutex_is_locked(log.lock));
+    }
   }
   std::array<bool, MAX_BDEV> flush_devs = h->dirty_devs;
   h->dirty_devs.fill(false);

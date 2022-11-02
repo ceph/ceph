@@ -429,6 +429,10 @@ private:
   int _flush_and_sync_log_LD(uint64_t want_seq = 0);
 
   uint64_t _estimate_transaction_size(bluefs_transaction_t* t);
+  uint64_t _make_initial_transaction(uint64_t start_seq,
+                                     bluefs_fnode_t& fnode,
+                                     uint64_t expected_final_size,
+                                     bufferlist* out);
   uint64_t _estimate_log_size_N();
   bool _should_start_compact_log_L_N();
 
@@ -438,9 +442,10 @@ private:
     RENAME_SLOW2DB = 4,
     RENAME_DB2SLOW = 8,
   };
-  void _compact_log_dump_metadata_NF(bluefs_transaction_t *t,
-				 int flags,
-				 uint64_t capture_before_seq);
+  void _compact_log_dump_metadata_NF(uint64_t start_seq,
+                                     bluefs_transaction_t *t,
+				     int flags,
+				     uint64_t capture_before_seq);
 
   void _compact_log_sync_LNF_LD();
   void _compact_log_async_LD_LNF_D();
@@ -454,7 +459,7 @@ private:
 
   //void _aio_finish(void *priv);
 
-  void _flush_bdev(FileWriter *h);
+  void _flush_bdev(FileWriter *h, bool check_mutex_locked = true);
   void _flush_bdev();  // this is safe to call without a lock
   void _flush_bdev(std::array<bool, MAX_BDEV>& dirty_bdevs);  // this is safe to call without a lock
 
