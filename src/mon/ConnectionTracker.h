@@ -181,7 +181,7 @@ class ConnectionTracker {
   }
   void notify_reset() { clear_peer_reports(); }
   void notify_rank_changed(int new_rank);
-  void notify_rank_removed(int rank_removed);
+  void notify_rank_removed(int rank_removed, int new_rank);
   friend std::ostream& operator<<(std::ostream& o, const ConnectionTracker& c);
   friend ConnectionReport *get_connection_reports(ConnectionTracker& ct);
   friend std::map<int,ConnectionReport> *get_peer_reports(ConnectionTracker& ct);
