@@ -29,6 +29,9 @@ class CapsHelper(CephFSTestCase):
 
     def run_mds_cap_tests(self, filepaths, filedata, mounts, perm):
         self.conduct_pos_test_for_read_caps(filepaths, filedata, mounts)
+        self.captester.conduct_pos_test_for_open_caps(filepaths, filedata, mounts)
+        self.captester.conduct_neg_test_for_chown_caps()
+        self.captester.conduct_neg_test_for_truncate_caps()
 
         if perm == 'rw':
             self.conduct_pos_test_for_write_caps(filepaths, mounts)
@@ -37,13 +40,13 @@ class CapsHelper(CephFSTestCase):
         else:
             raise RuntimeError(f'perm = {perm}\nIt should be "r" or "rw".')
 
-    def conduct_pos_test_for_read_caps(self, filepaths, filedata, mounts):
+    def conduct_pos_test_for_read_caps(self, filepaths, filedata, mounts, sudo_read=False):
         for mount in mounts:
             for path, data in zip(filepaths, filedata):
                 # XXX: conduct tests only if path belongs to current mount; in
                 # teuth tests client are located on same machines.
                 if path.find(mount.hostfs_mntpt) != -1:
-                    contents = mount.read_file(path)
+                    contents = mount.read_file(path, sudo_read)
                     self.assertEqual(data, contents)
 
     def conduct_pos_test_for_write_caps(self, filepaths, mounts):
@@ -77,3 +80,34 @@ class CapsHelper(CephFSTestCase):
 
         raise RuntimeError('get_save_mon_cap: mon cap not found in keyring. '
                            'keyring -\n' + keyring)
+
+    def _conduct_neg_test_for_root_squash_caps(self, _cmdargs, sudo_write=False):
+        possible_errmsgs = ('permission denied', 'operation not permitted')
+        cmdargs = ['sudo'] if sudo_write else ['']
+        cmdargs += _cmdargs
+
+        log.info(f'test absence of {_cmdargs[0]} perm: expect failure {self.path}.')
+
+        # open the file and hold it. The MDS will issue CEPH_CAP_EXCL_*
+        # to mount
+        proc = self.mount.open_background(self.path)
+
+        cmdargs.append(self.path)
+        self.mount.negtestcmd(args=cmdargs, retval=1, errmsgs=possible_errmsgs)
+        cmdargs.pop(-1)
+
+        self.mount._kill_background(proc)
+
+        log.info(f'absence of {_cmdargs[0]} perm was tested successfully')
+
+    def conduct_neg_test_for_chown_caps(self, sudo_write=True):
+        # flip ownership to nobody. assumption: nobody's id is 65534
+        cmdargs = ['chown', '-h', '65534:65534']
+        self._conduct_neg_test_for_root_squash_caps(cmdargs, sudo_write)
+
+    def conduct_neg_test_for_truncate_caps(self, sudo_write=True):
+        cmdargs = ['truncate', '-s', '10GB']
+        self._conduct_neg_test_for_root_squash_caps(cmdargs, sudo_write)
+
+    def conduct_pos_test_for_open_caps(self, filepaths, filedata, mounts, sudo_read=True):
+        self.conduct_pos_test_for_read_caps(filepaths, filedata, mounts, sudo_read)
