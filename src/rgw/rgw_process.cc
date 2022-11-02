@@ -278,7 +278,7 @@ int process_request(const RGWProcessEnv& penv,
 
   RGWEnv& rgw_env = client_io->get_env();
 
-  req_state rstate(g_ceph_context, &rgw_env, req->id);
+  req_state rstate(g_ceph_context, penv, &rgw_env, req->id);
   req_state *s = &rstate;
 
   s->ratelimit_data = penv.ratelimiting->get_active();
