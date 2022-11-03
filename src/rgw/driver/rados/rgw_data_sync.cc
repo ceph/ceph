@@ -2987,9 +2987,11 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(const DoutPrefixProvider *dp
   if (versioned_epoch.value_or(0) == 0) { /* force version if not set */
     versioned_epoch = 0;
     dest_key = key;
-    if (key.instance.empty()) {
-      sync_env->driver->getRados()->gen_rand_obj_instance_name(&(*dest_key));
-    }
+  }
+
+  if (key.instance.empty()) {
+    dest_key = key;
+    sync_env->driver->getRados()->gen_rand_obj_instance_name(&(*dest_key));
   }
 
   return new RGWObjFetchCR(sc, sync_pipe, key, dest_key, versioned_epoch, zones_trace);
