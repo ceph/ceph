@@ -41,7 +41,7 @@ class ProtocolV2 final : public Protocol {
       std::optional<utime_t> keepalive_ack,
       bool require_ack) override;
 
-  void notify_write() override;
+  void notify_out() override;
 
  private:
   SocketMessenger &messenger;
@@ -76,7 +76,7 @@ class ProtocolV2 final : public Protocol {
     return statenames[static_cast<int>(state)];
   }
 
-  void trigger_state(state_t state, write_state_t write_state, bool reentrant);
+  void trigger_state(state_t state, out_state_t out_state, bool reentrant);
 
   uint64_t peer_supported_features = 0;
 

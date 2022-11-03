@@ -75,12 +75,12 @@ seastar::future<> SocketConnection::send(MessageURef msg)
     });
 }
 
-seastar::future<> SocketConnection::keepalive()
+seastar::future<> SocketConnection::send_keepalive()
 {
   return seastar::smp::submit_to(
     shard_id(),
     [this] {
-      return protocol->keepalive();
+      return protocol->send_keepalive();
     });
 }
 

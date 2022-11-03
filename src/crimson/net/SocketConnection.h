@@ -82,7 +82,7 @@ class SocketConnection : public Connection {
 
   seastar::future<> send(MessageURef msg) override;
 
-  seastar::future<> keepalive() override;
+  seastar::future<> send_keepalive() override;
 
   clock_t::time_point get_last_keepalive() const override;
 

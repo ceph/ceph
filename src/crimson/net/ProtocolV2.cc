@@ -359,7 +359,7 @@ seastar::future<> ProtocolV2::write_frame(F &frame, bool flush)
   }
 }
 
-void ProtocolV2::trigger_state(state_t _state, write_state_t _write_state, bool reentrant)
+void ProtocolV2::trigger_state(state_t _state, out_state_t _out_state, bool reentrant)
 {
   if (!reentrant && _state == state) {
     logger().error("{} is not allowed to re-trigger state {}",
@@ -369,7 +369,7 @@ void ProtocolV2::trigger_state(state_t _state, write_state_t _write_state, bool 
   logger().debug("{} TRIGGER {}, was {}",
                  conn, get_state_name(_state), get_state_name(state));
   state = _state;
-  set_write_state(_write_state);
+  set_out_state(_out_state);
 }
 
 void ProtocolV2::fault(bool backoff, const char* func_name, std::exception_ptr eptr)
@@ -379,7 +379,7 @@ void ProtocolV2::fault(bool backoff, const char* func_name, std::exception_ptr e
                   conn, func_name, get_state_name(state), eptr);
     close(true);
   } else if (conn.policy.server ||
-             (conn.policy.standby && !is_queued_or_sent())) {
+             (conn.policy.standby && !is_out_queued_or_sent())) {
     logger().info("{} {}: fault at {} with nothing to send, going to STANDBY -- {}",
                   conn, func_name, get_state_name(state), eptr);
     execute_standby();
@@ -398,11 +398,11 @@ void ProtocolV2::reset_session(bool full)
 {
   server_cookie = 0;
   connect_seq = 0;
-  reset_read();
+  reset_in();
   if (full) {
     client_cookie = generate_client_cookie();
     peer_global_seq = 0;
-    reset_write();
+    reset_out();
     dispatchers.ms_handle_remote_reset(
 	seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }
@@ -678,7 +678,7 @@ ProtocolV2::client_connect()
       case Tag::SERVER_IDENT:
         return read_frame_payload().then([this] {
           // handle_server_ident() logic
-          requeue_sent();
+          requeue_out_sent();
           auto server_ident = ServerIdentFrame::Decode(rx_segments_data.back());
           logger().debug("{} GOT ServerIdentFrame:"
                          " addrs={}, gid={}, gs={},"
@@ -800,7 +800,7 @@ ProtocolV2::client_reconnect()
           auto reconnect_ok = ReconnectOkFrame::Decode(rx_segments_data.back());
           logger().debug("{} GOT ReconnectOkFrame: msg_seq={}",
                          conn, reconnect_ok.msg_seq());
-          requeue_up_to(reconnect_ok.msg_seq());
+          requeue_out_sent_up_to(reconnect_ok.msg_seq());
           return seastar::make_ready_future<next_step_t>(next_step_t::ready);
         });
       default: {
@@ -813,7 +813,7 @@ ProtocolV2::client_reconnect()
 
 void ProtocolV2::execute_connecting()
 {
-  trigger_state(state_t::CONNECTING, write_state_t::delay, false);
+  trigger_state(state_t::CONNECTING, out_state_t::delay, false);
   if (conn.socket) {
     conn.socket->shutdown();
   }
@@ -829,7 +829,7 @@ void ProtocolV2::execute_connecting()
         assert(server_cookie == 0);
         logger().debug("{} UPDATE: gs={} for connect", conn, global_seq);
       }
-      return wait_write_exit().then([this] {
+      return wait_out_exit_dispatching().then([this] {
           if (unlikely(state != state_t::CONNECTING)) {
             logger().debug("{} triggered {} before Socket::connect()",
                            conn, get_state_name(state));
@@ -925,7 +925,7 @@ void ProtocolV2::execute_connecting()
           }
 
           if (conn.policy.server ||
-              (conn.policy.standby && !is_queued_or_sent())) {
+              (conn.policy.standby && !is_out_queued_or_sent())) {
             logger().info("{} execute_connecting(): fault at {} with nothing to send,"
                           " going to STANDBY -- {}",
                           conn, get_state_name(state), eptr);
@@ -1178,7 +1178,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
         logger().warn("{} server_connect: connection race detected (cs={}, e_cs={}, ss=0)"
                       " and lose to existing {}, ask client to wait",
                       conn, client_cookie, existing_proto->client_cookie, *existing_conn);
-        return existing_conn->keepalive().then([this] {
+        return existing_conn->send_keepalive().then([this] {
           return send_wait();
         });
       }
@@ -1457,7 +1457,7 @@ ProtocolV2::server_reconnect()
 
 void ProtocolV2::execute_accepting()
 {
-  trigger_state(state_t::ACCEPTING, write_state_t::none, false);
+  trigger_state(state_t::ACCEPTING, out_state_t::none, false);
   gate.dispatch_in_background("execute_accepting", *this, [this] {
       return seastar::futurize_invoke([this] {
           INTERCEPT_N_RW(custom_bp_t::SOCKET_ACCEPTED);
@@ -1578,7 +1578,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
         conn.shared_from_this()));
   };
 
-  trigger_state(state_t::ESTABLISHING, write_state_t::delay, false);
+  trigger_state(state_t::ESTABLISHING, out_state_t::delay, false);
   if (existing_conn) {
     existing_conn->protocol->close(
         true /* dispatch_reset */, std::move(accept_me));
@@ -1635,8 +1635,8 @@ ProtocolV2::send_server_ident()
   logger().debug("{} UPDATE: gs={} for server ident", conn, global_seq);
 
   // this is required for the case when this connection is being replaced
-  requeue_up_to(0);
-  reset_read();
+  requeue_out_sent_up_to(0);
+  reset_in();
 
   if (!conn.policy.lossy) {
     server_cookie = ceph::util::generate_random_number<uint64_t>(1, -1ll);
@@ -1682,7 +1682,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                                    uint64_t new_connect_seq,
                                    uint64_t new_msg_seq)
 {
-  trigger_state(state_t::REPLACING, write_state_t::delay, false);
+  trigger_state(state_t::REPLACING, out_state_t::delay, false);
   if (conn.socket) {
     conn.socket->shutdown();
   }
@@ -1699,7 +1699,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                   new_conn_features, new_peer_supported_features,
                   new_peer_global_seq,
                   new_connect_seq, new_msg_seq] () mutable {
-    return wait_write_exit().then([this, do_reset] {
+    return wait_out_exit_dispatching().then([this, do_reset] {
       if (do_reset) {
         reset_session(true);
       }
@@ -1735,7 +1735,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
       if (reconnect) {
         connect_seq = new_connect_seq;
         // send_reconnect_ok() logic
-        requeue_up_to(new_msg_seq);
+        requeue_out_sent_up_to(new_msg_seq);
         auto reconnect_ok = ReconnectOkFrame::Encode(get_in_seq());
         logger().debug("{} WRITE ReconnectOkFrame: msg_seq={}", conn, get_in_seq());
         return write_frame(reconnect_ok);
@@ -1783,7 +1783,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     const std::deque<MessageURef>& msgs,
     size_t num_msgs,
     bool require_keepalive,
-    std::optional<utime_t> _keepalive_ack,
+    std::optional<utime_t> maybe_keepalive_ack,
     bool require_ack)
 {
   ceph::bufferlist bl;
@@ -1794,8 +1794,8 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::KEEPALIVE2, bp_type_t::WRITE);
   }
 
-  if (unlikely(_keepalive_ack.has_value())) {
-    auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*_keepalive_ack);
+  if (unlikely(maybe_keepalive_ack.has_value())) {
+    auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*maybe_keepalive_ack);
     bl.append(keepalive_ack_frame.get_buffer(tx_frame_asm));
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::KEEPALIVE2_ACK, bp_type_t::WRITE);
   }
@@ -1814,7 +1814,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     msg->encode(conn.features, 0);
 
     ceph_assert(!msg->get_seq() && "message already has seq");
-    msg->set_seq(increment_out());
+    msg->set_seq(increment_out_seq());
 
     ceph_msg_header &header = msg->get_header();
     ceph_msg_footer &footer = msg->get_footer();
@@ -1916,7 +1916,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
     logger().debug("{} <== #{} === {} ({})",
 		   conn, message->get_seq(), *message, message->get_type());
     notify_ack();
-    ack_writes(current_header.ack_seq);
+    ack_out_sent(current_header.ack_seq);
 
     // TODO: change MessageRef with seastar::shared_ptr
     auto msg_ref = MessageRef{message, false};
@@ -1928,7 +1928,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 void ProtocolV2::execute_ready(bool dispatch_connect)
 {
   assert(conn.policy.lossy || (client_cookie != 0 && server_cookie != 0));
-  trigger_state(state_t::READY, write_state_t::open, false);
+  trigger_state(state_t::READY, out_state_t::open, false);
   if (dispatch_connect) {
     dispatchers.ms_handle_connect(
 	seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
@@ -1978,7 +1978,7 @@ void ProtocolV2::execute_ready(bool dispatch_connect)
               // handle_message_ack() logic
               auto ack = AckFrame::Decode(rx_segments_data.back());
               logger().debug("{} GOT AckFrame: seq={}", conn, ack.seq());
-              ack_writes(ack.seq());
+              ack_out_sent(ack.seq());
             });
           case Tag::KEEPALIVE2:
             return read_frame_payload().then([this] {
@@ -2022,16 +2022,16 @@ void ProtocolV2::execute_ready(bool dispatch_connect)
 
 void ProtocolV2::execute_standby()
 {
-  trigger_state(state_t::STANDBY, write_state_t::delay, false);
+  trigger_state(state_t::STANDBY, out_state_t::delay, false);
   if (conn.socket) {
     conn.socket->shutdown();
   }
 }
 
-void ProtocolV2::notify_write()
+void ProtocolV2::notify_out()
 {
   if (unlikely(state == state_t::STANDBY && !conn.policy.server)) {
-    logger().info("{} notify_write(): at {}, going to CONNECTING",
+    logger().info("{} notify_out(): at {}, going to CONNECTING",
                   conn, get_state_name(state));
     execute_connecting();
   }
@@ -2041,7 +2041,7 @@ void ProtocolV2::notify_write()
 
 void ProtocolV2::execute_wait(bool max_backoff)
 {
-  trigger_state(state_t::WAIT, write_state_t::delay, false);
+  trigger_state(state_t::WAIT, out_state_t::delay, false);
   if (conn.socket) {
     conn.socket->shutdown();
   }
@@ -2075,7 +2075,7 @@ void ProtocolV2::execute_wait(bool max_backoff)
 
 void ProtocolV2::execute_server_wait()
 {
-  trigger_state(state_t::SERVER_WAIT, write_state_t::none, false);
+  trigger_state(state_t::SERVER_WAIT, out_state_t::none, false);
   gated_execute("execute_server_wait", [this] {
     return read_exactly(1).then([this] (auto bl) {
       logger().warn("{} SERVER_WAIT got read, abort", conn);
@@ -2110,7 +2110,7 @@ void ProtocolV2::trigger_close()
   }
 
   protocol_timer.cancel();
-  trigger_state(state_t::CLOSING, write_state_t::drop, false);
+  trigger_state(state_t::CLOSING, out_state_t::drop, false);
 }
 
 void ProtocolV2::on_closed()
