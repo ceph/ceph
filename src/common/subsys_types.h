@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 
 enum ceph_subsys_id_t {
   ceph_subsys_,   // default
