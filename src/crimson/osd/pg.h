@@ -346,10 +346,6 @@ public:
   void on_active_advmap(const OSDMapRef &osdmap) final {
     // Not needed yet
   }
-  epoch_t oldest_stored_osdmap() final {
-    // TODO
-    return 0;
-  }
 
   epoch_t max_oldest_stored_osdmap() final {
     // TODO

@@ -404,7 +404,6 @@ public:
     // ==================== Std::map notifications ===================
     virtual void on_active_actmap() = 0;
     virtual void on_active_advmap(const OSDMapRef &osdmap) = 0;
-    virtual epoch_t oldest_stored_osdmap() = 0;
     virtual epoch_t max_oldest_stored_osdmap() = 0;
 
     // ============ recovery reservation notifications ==========
