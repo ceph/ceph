@@ -5,9 +5,12 @@
 #include "alien_store.h"
 #include "alien_log.h"
 
+#include <algorithm>
+#include <iterator>
 #include <map>
 #include <string_view>
 #include <boost/algorithm/string/trim.hpp>
+#include <boost/iterator/counting_iterator.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
@@ -104,15 +107,14 @@ seastar::future<> AlienStore::start()
   // 	[0, N_CORES_FOR_SEASTAR) are reserved for seastar reactors
   // 	[N_CORES_FOR_SEASTAR, ..] are assigned to alien threads.
   if (!cpu_cores.has_value()) {
-    if (long nr_cpus = sysconf(_SC_NPROCESSORS_ONLN);
-	nr_cpus > N_CORES_FOR_SEASTAR ) {
-      seastar::resource::cpuset cpuset;
-      for (unsigned i = N_CORES_FOR_SEASTAR; i < nr_cpus; i++) {
-        cpuset.insert(i);
-      }
-      cpu_cores = cpuset;
-    } else {
+    seastar::resource::cpuset cpuset;
+    std::copy(boost::counting_iterator<unsigned>(N_CORES_FOR_SEASTAR),
+	      boost::counting_iterator<unsigned>(sysconf(_SC_NPROCESSORS_ONLN)),
+	      std::inserter(cpuset, cpuset.end()));
+    if (cpuset.empty()) {
       logger().error("{}: unable to get nproc: {}", __func__, errno);
+    } else {
+      cpu_cores = cpuset;
     }
   }
   const auto num_threads =
