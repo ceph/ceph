@@ -15,7 +15,7 @@ namespace crimson::os {
 
 ThreadPool::ThreadPool(size_t n_threads,
                        size_t queue_sz,
-                       std::vector<uint64_t> cpus)
+                       const std::optional<seastar::resource::cpuset>& cpus)
   : n_threads(n_threads),
     queue_size{round_up_to(queue_sz, seastar::smp::count)},
     pending_queues(n_threads)
@@ -23,8 +23,8 @@ ThreadPool::ThreadPool(size_t n_threads,
   auto queue_max_wait = std::chrono::seconds(local_conf()->threadpool_empty_queue_max_wait);
   for (size_t i = 0; i < n_threads; i++) {
     threads.emplace_back([this, cpus, queue_max_wait, i] {
-      if (!cpus.empty()) {
-        pin(cpus);
+      if (cpus.has_value()) {
+        pin(*cpus);
       }
       block_sighup();
       (void) pthread_setname_np(pthread_self(), "alien-store-tp");
@@ -40,7 +40,7 @@ ThreadPool::~ThreadPool()
   }
 }
 
-void ThreadPool::pin(const std::vector<uint64_t>& cpus)
+void ThreadPool::pin(const seastar::resource::cpuset& cpus)
 {
   cpu_set_t cs;
   CPU_ZERO(&cs);
