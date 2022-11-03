@@ -120,7 +120,7 @@ class SocketConnection : public Connection {
   void start_accept(SocketRef&& socket,
                     const entity_addr_t& peer_addr);
 
-  seastar::future<> close_clean(bool dispatch_reset);
+  seastar::future<> close_clean_yielded();
 
   seastar::socket_address get_local_address() const;
 

@@ -15,35 +15,23 @@
 namespace crimson::net {
 
 class Protocol {
+// public to SocketConnection
  public:
   Protocol(Protocol&&) = delete;
   virtual ~Protocol();
 
   virtual bool is_connected() const = 0;
 
+  virtual void close() = 0;
+
+  virtual seastar::future<> close_clean_yielded() = 0;
+
 #ifdef UNIT_TESTS_BUILT
-  bool is_closed_clean = false;
-  bool is_closed() const { return closed; }
+  virtual bool is_closed_clean() const = 0;
+
+  virtual bool is_closed() const = 0;
+
 #endif
-
-  // Reentrant closing
-  void close(bool dispatch_reset, std::optional<std::function<void()>> f_accept_new=std::nullopt);
-  seastar::future<> close_clean(bool dispatch_reset) {
-    // yield() so that close(dispatch_reset) can be called *after*
-    // close_clean() is applied to all connections in a container using
-    // seastar::parallel_for_each(). otherwise, we could erase a connection in
-    // the container when seastar::parallel_for_each() is still iterating in
-    // it. that'd lead to a segfault.
-    return seastar::yield(
-    ).then([this, dispatch_reset, conn_ref = conn.shared_from_this()] {
-      close(dispatch_reset);
-      // it can happen if close_clean() is called inside Dispatcher::ms_handle_reset()
-      // which will otherwise result in deadlock
-      assert(close_ready.valid());
-      return close_ready.get_future();
-    });
-  }
-
   virtual void start_connect(const entity_addr_t& peer_addr,
                              const entity_name_t& peer_name) = 0;
 
@@ -56,8 +44,6 @@ class Protocol {
   Protocol(ChainedDispatchers& dispatchers,
            SocketConnection& conn);
 
-  virtual void trigger_close() = 0;
-
   virtual ceph::bufferlist do_sweep_messages(
       const std::deque<MessageURef>& msgs,
       size_t num_msgs,
@@ -66,13 +52,6 @@ class Protocol {
       bool require_ack) = 0;
 
   virtual void notify_out() = 0;
-
-  virtual void on_closed() = 0;
-
- private:
-  bool closed = false;
-  // become valid only after closed == true
-  seastar::shared_future<> close_ready;
 
 // the write state-machine
  public:

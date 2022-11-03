@@ -57,7 +57,7 @@ bool SocketConnection::is_closed() const
 bool SocketConnection::is_closed_clean() const
 {
   assert(seastar::this_shard_id() == shard_id());
-  return protocol->is_closed_clean;
+  return protocol->is_closed_clean();
 }
 
 #endif
@@ -104,7 +104,7 @@ void SocketConnection::set_last_keepalive_ack(clock_t::time_point when)
 void SocketConnection::mark_down()
 {
   assert(seastar::this_shard_id() == shard_id());
-  protocol->close(false);
+  protocol->close();
 }
 
 void
@@ -122,9 +122,9 @@ SocketConnection::start_accept(SocketRef&& sock,
 }
 
 seastar::future<>
-SocketConnection::close_clean(bool dispatch_reset)
+SocketConnection::close_clean_yielded()
 {
-  return protocol->close_clean(dispatch_reset);
+  return protocol->close_clean_yielded();
 }
 
 seastar::shard_id SocketConnection::shard_id() const {
