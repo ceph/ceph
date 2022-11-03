@@ -261,7 +261,6 @@ OSDService::OSDService(OSD *osd, ceph::async::io_context_pool& poolctx) :
   osd_skip_data_digest(cct->_conf, "osd_skip_data_digest"),
   publish_lock{ceph::make_mutex("OSDService::publish_lock")},
   pre_publish_lock{ceph::make_mutex("OSDService::pre_publish_lock")},
-  max_oldest_map(0),
   m_scrub_queue{cct, *this},
   agent_valid_iterator(false),
   agent_ops(0),
@@ -1337,7 +1336,7 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
 {
   MOSDMap *m = new MOSDMap(monc->get_fsid(),
 			   osdmap->get_encoding_features());
-  m->oldest_map = max_oldest_map;
+  m->oldest_map = sblock.max_oldest_map;
   m->newest_map = sblock.newest_map;
 
   int max = cct->_conf->osd_map_message_max;
@@ -1347,8 +1346,9 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
     // we don't have the next map the target wants, so start with a
     // full map.
     bufferlist bl;
-    dout(10) << __func__ << " oldest map " << max_oldest_map << " > since "
-	     << since << ", starting with full map" << dendl;
+    dout(10) << __func__ << " oldest map " << sblock.max_oldest_map
+             << " > since " << since << ", starting with full map"
+             << dendl;
     since = m->oldest_map;
     if (!get_map_bl(since, bl)) {
       derr << __func__ << " missing full map " << since << dendl;
@@ -1419,7 +1419,7 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
       // just send latest full map
       MOSDMap *m = new MOSDMap(monc->get_fsid(),
 			       osdmap->get_encoding_features());
-      m->oldest_map = max_oldest_map;
+      m->oldest_map = sblock.max_oldest_map;
       m->newest_map = sblock.newest_map;
       get_map_bl(to, m->maps[to]);
       send_map(m, con);
@@ -3684,6 +3684,11 @@ int OSD::init()
     // We need to persist the new compat_set before we
     // do anything else
     dout(5) << "Upgrading superblock adding: " << diff << dendl;
+
+    if (!superblock.max_oldest_map) {
+      superblock.max_oldest_map = superblock.oldest_map;
+    }
+
     ObjectStore::Transaction t;
     write_superblock(t);
     r = store->queue_transaction(service.meta_ch, std::move(t));
@@ -3801,7 +3806,6 @@ int OSD::init()
   service.init();
   service.publish_map(osdmap);
   service.publish_superblock(superblock);
-  service.max_oldest_map = superblock.oldest_map;
 
   for (auto& shard : shards) {
     // put PGs in a temporary set because we may modify pg_slots
@@ -8071,9 +8075,12 @@ void OSD::handle_osd_map(MOSDMap *m)
   logger->inc(l_osd_mape, last - first + 1);
   if (first <= superblock.newest_map)
     logger->inc(l_osd_mape_dup, superblock.newest_map - first + 1);
-  if (service.max_oldest_map < m->oldest_map) {
-    service.max_oldest_map = m->oldest_map;
-    ceph_assert(service.max_oldest_map >= superblock.oldest_map);
+
+  if (superblock.max_oldest_map < m->oldest_map) {
+    superblock.max_oldest_map = m->oldest_map;
+    dout(10) << " superblock max_oldest_map new epoch is: "
+             << superblock.max_oldest_map << dendl;
+    ceph_assert(superblock.max_oldest_map >= superblock.oldest_map);
   }
 
   // make sure there is something new, here, before we bother flushing
