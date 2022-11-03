@@ -465,7 +465,7 @@ void Client::tick()
   gate.dispatch_in_background(__func__, *this, [this] {
     if (active_con) {
       return seastar::when_all_succeed(wait_for_send_log(),
-                                       active_con->get_conn()->keepalive(),
+                                       active_con->get_conn()->send_keepalive(),
                                        active_con->renew_tickets(),
                                        active_con->renew_rotating_keyring()).discard_result();
     } else {
