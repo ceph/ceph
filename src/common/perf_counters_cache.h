@@ -16,6 +16,9 @@ private:
 
   std::unordered_map<std::string, ceph::common::LabeledPerfCounters*> cache;
 
+  ceph::common::LabeledPerfCounters* base_counters;
+  std::string base_counters_name;
+
 public:
 
   ceph::common::LabeledPerfCounters* get(std::string key) {
@@ -51,20 +54,34 @@ public:
     auto labeled_counters = get(label);
     if(labeled_counters) {
       labeled_counters->inc(indx, v);
+      base_counters->inc(indx, v);
     }
   }
 
   void dec(std::string label, int indx, uint64_t v) {
     auto labeled_counters = get(label);
     if(labeled_counters) {
-      labeled_counters->inc(indx, v);
+      labeled_counters->dec(indx, v);
+      base_counters->dec(indx, v);
     }
   }
 
   void set_counter(std::string label, int indx, uint64_t val) {
     auto labeled_counters = get(label);
     if(labeled_counters) {
+      uint64_t old_val = labeled_counters->get(indx);
       labeled_counters->set(indx, val);
+
+      // apply new value to totals in base counters
+      // need to make sure value of delta is positive since it is unsigned
+      uint64_t delta = 0;
+      if((old_val > val) && base_counters) {
+        delta = old_val - val;
+        base_counters->dec(indx, delta);
+      } else if(base_counters) {
+        delta = val - old_val;
+        base_counters->inc(indx, delta);
+      }
     }
   }
 
@@ -88,9 +105,11 @@ public:
   }
 
   PerfCountersCache(CephContext *_cct, size_t _target_size, int _lower_bound, int _upper_bound, 
-      std::function<void(ceph::common::LabeledPerfCountersBuilder*)> _lpcb_init) : cct(_cct), 
+      std::function<void(ceph::common::LabeledPerfCountersBuilder*)> _lpcb_init, std::string _base_counters_name) : cct(_cct), 
       target_size(_target_size), lower_bound(_lower_bound), upper_bound(_upper_bound), 
-      lpcb_init(_lpcb_init) {}
+      lpcb_init(_lpcb_init), base_counters_name(_base_counters_name) {
+      base_counters = add(base_counters_name);
+  }
 
   ~PerfCountersCache() {}
 

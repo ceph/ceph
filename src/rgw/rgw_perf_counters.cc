@@ -70,7 +70,7 @@ int rgw_perf_start(CephContext *cct)
   std::function<void(ceph::common::LabeledPerfCountersBuilder*)> lpcb_init = add_rgw_counters;
 
   uint64_t target_size = cct->_conf.get_val<uint64_t>("rgw_labeled_perfcounters_size");
-  perf_counters_cache = new PerfCountersCache(cct, target_size, l_rgw_first, l_rgw_last, lpcb_init);
+  perf_counters_cache = new PerfCountersCache(cct, target_size, l_rgw_first, l_rgw_last, lpcb_init, "rgw");
   return 0;
 }
 
