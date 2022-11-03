@@ -18,8 +18,8 @@ operations not performed by cephadm itself. To learn more about these external
 configuration tools, visit their pages:
 
  * https://github.com/ceph/cephadm-ansible
- * https://github.com/ceph/ceph-salt
  * https://rook.io/docs/rook/v1.10/Getting-Started/intro/
+ * https://github.com/ceph/ceph-salt
 
 ``cephadm`` manages the full lifecycle of a Ceph cluster. This lifecycle starts
 with the bootstrapping process, when ``cephadm`` creates a tiny Ceph cluster on
