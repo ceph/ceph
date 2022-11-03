@@ -1572,10 +1572,6 @@ void PG::on_new_interval()
   cancel_recovery();
 }
 
-epoch_t PG::oldest_stored_osdmap() {
-  return osd->get_superblock().oldest_map;
-}
-
 epoch_t PG::max_oldest_stored_osdmap() {
   return osd->get_superblock().max_oldest_map;
 }
