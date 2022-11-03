@@ -432,9 +432,7 @@ int execute_status(const po::variables_map &vm,
       for (auto &snap : snaps) {
         librbd::snap_mirror_namespace_t info;
         r = image.snap_get_mirror_namespace(snap.id, &info, sizeof(info));
-        if (r < 0 ||
-            (info.state != RBD_SNAP_MIRROR_STATE_PRIMARY &&
-             info.state != RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED)) {
+        if (r < 0) {
           continue;
         }
         formatter->open_object_section("snapshot");
@@ -496,9 +494,7 @@ int execute_status(const po::variables_map &vm,
       for (auto &snap : snaps) {
         librbd::snap_mirror_namespace_t info;
         r = image.snap_get_mirror_namespace(snap.id, &info, sizeof(info));
-        if (r < 0 ||
-            (info.state != RBD_SNAP_MIRROR_STATE_PRIMARY &&
-             info.state != RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED)) {
+        if (r < 0) {
           continue;
         }
 
