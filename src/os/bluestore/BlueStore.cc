@@ -18836,7 +18836,7 @@ void BlueStore::read_allocation_from_single_onode(
       if (!blob.is_shared()) {
 	// skip repeating extents
 	auto lcl_itr = lcl_extnt_map.find(offset);
-	// extents using shared blobs might have differnt length
+	// extents using shared blobs might have different length
 	if (lcl_itr != lcl_extnt_map.end() ) {
 	  // repeated extents must have the same length!
 	  ceph_assert(lcl_extnt_map[offset] == length);
@@ -18847,7 +18847,7 @@ void BlueStore::read_allocation_from_single_onode(
 	  stats.extent_count++;
 	}
       } else {
-	// extents using shared blobs might have differnt length
+	// extents using shared blobs might have different length
 	set_allocation_in_simple_bmap(sbmap, offset, length);
 	stats.extent_count++;
       }
