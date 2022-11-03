@@ -66,6 +66,7 @@ private:
   bool bdata_encode;
   osd_reqid_t reqid; // reqid explicitly set by sender
   dmc::ReqParams qos_req_params;
+  client_qos_params_t qos_profile_params;
 
 public:
   friend MOSDOpReply;
@@ -86,6 +87,9 @@ public:
   }
   void set_qos_req_params(const dmc::ReqParams& p) {
     qos_req_params = p;
+  }
+  void set_qos_profile_params(const client_qos_params_t& p) {
+    qos_profile_params = p;
   }
 
   // Fields decoded in partial decoding
@@ -125,6 +129,11 @@ public:
   const dmc::ReqParams& get_qos_req_params() const {
     assert(!partial_decode_needed);
     return qos_req_params;
+  }
+
+  const client_qos_params_t& get_qos_profile_params() const {
+    assert(!partial_decode_needed);
+    return qos_profile_params;
   }
 
   // Fields decoded in final decoding
@@ -391,6 +400,7 @@ struct ceph_osd_request_head {
       encode(reqid, payload);
       if (header.version >= 9) {
         encode(qos_req_params, payload);
+        encode(qos_profile_params, payload);
       }
       encode_trace(payload, features);
 
@@ -431,6 +441,7 @@ struct ceph_osd_request_head {
       decode(reqid, p);
       if (header.version >= 9) {
         decode(qos_req_params, p); // dmClock [delta, rho] values
+        decode(qos_profile_params, p); // dmclock [r, w, l, id] values
       }
       decode_trace(p);
     } else if (header.version == 7) {

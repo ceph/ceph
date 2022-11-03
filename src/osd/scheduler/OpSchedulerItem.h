@@ -106,6 +106,9 @@ private:
   /// ReqParams - delta and rho parameters
   dmc::ReqParams qos_req_params;
 
+  /// client_qos_params_t - The client specific res, wgt and lim parameters
+  client_qos_params_t qos_profile_params;
+
   /// True iff queued via mclock proper, not the high/immediate queues
   bool was_queued_via_mclock() const {
     return qos_cost > 0;
@@ -131,6 +134,7 @@ public:
       if (req->get_type() == CEPH_MSG_OSD_OP) {
         const MOSDOp *m = static_cast<const MOSDOp*>(req);
         qos_req_params = m->get_qos_req_params();
+        qos_profile_params = m->get_qos_profile_params();
       }
     }
   }
@@ -162,6 +166,9 @@ public:
   uint64_t get_owner() const { return owner; }
   epoch_t get_map_epoch() const { return map_epoch; }
   dmc::ReqParams get_qos_req_params() const { return qos_req_params; }
+  const client_qos_params_t& get_qos_profile_params() const {
+    return qos_profile_params;
+  }
 
   bool is_peering() const {
     return qitem->is_peering();
