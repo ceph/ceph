@@ -487,7 +487,7 @@ private:
 
   placement_hint_t user_hint;
 
-  /// > 0 and not null means the extent is under reclaimming
+  /// > 0 and not null means the extent is under reclaiming
   reclaim_gen_t reclaim_generation;
 
 protected:
