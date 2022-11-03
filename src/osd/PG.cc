@@ -1745,10 +1745,6 @@ void PG::on_new_interval()
   m_scrubber->on_primary_change(__func__, m_planned_scrub);
 }
 
-epoch_t PG::oldest_stored_osdmap() {
-  return osd->get_superblock().oldest_map;
-}
-
 epoch_t PG::max_oldest_stored_osdmap() {
   return osd->get_superblock().max_oldest_map;
 }
