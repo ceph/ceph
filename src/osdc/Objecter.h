@@ -38,7 +38,7 @@
 
 #include <fmt/format.h>
 
-#include "dmclock/src/dmclock_client.h"
+#include "QosProfileMgr.h"
 
 #include "include/buffer.h"
 #include "include/ceph_assert.h"
@@ -104,6 +104,8 @@ struct ObjectOperation {
   boost::container::small_vector<boost::system::error_code*,
 				 osdc_opvec_len> out_ec;
 
+  osdc::shared_qos_profile qos_profile;
+
   ObjectOperation() = default;
   ObjectOperation(const ObjectOperation&) = delete;
   ObjectOperation& operator =(const ObjectOperation&) = delete;
@@ -113,6 +115,10 @@ struct ObjectOperation {
 
   size_t size() const {
     return ops.size();
+  }
+
+  void set_qos_profile(const osdc::shared_qos_profile& qp) {
+    qos_profile = qp;
   }
 
   void clear() {
@@ -1707,7 +1713,6 @@ public:
   boost::asio::strand<boost::asio::io_context::executor_type>
       finish_strand{service.get_executor()};
   ZTracer::Endpoint trace_endpoint{"0.0.0.0", 0, "Objecter"};
-  std::unique_ptr<dmc::ServiceTracker<int>> qos_svc_tracker;
 private:
   std::unique_ptr<OSDMap> osdmap{std::make_unique<OSDMap>()};
 public:
@@ -2064,6 +2069,8 @@ public:
 		  boost::asio::io_context::executor_type e) {
       complete(std::move(onfinish), ec, r, e);
     }
+
+    osdc::shared_qos_profile qos_profile;
 
     Op(const object_t& o, const object_locator_t& ol,  osdc_opvec&& _ops,
        int f, OpComp&& fin, version_t *ov, int *offset = nullptr,
@@ -3020,6 +3027,7 @@ public:
     const object_t& oid, const object_locator_t& oloc,
     ObjectOperation& op, const SnapContext& snapc,
     ceph::real_time mtime, int flags,
+    osdc::shared_qos_profile qos_profile,
     Context *oncommit, version_t *objver = NULL,
     osd_reqid_t reqid = osd_reqid_t(),
     ZTracer::Trace *parent_trace = nullptr,
@@ -3035,6 +3043,7 @@ public:
     o->out_handler.swap(op.out_handler);
     o->out_ec.swap(op.out_ec);
     o->reqid = reqid;
+    o->qos_profile = qos_profile;
     op.clear();
     return o;
   }
@@ -3045,6 +3054,7 @@ public:
     Context *oncommit, version_t *objver = NULL,
     osd_reqid_t reqid = osd_reqid_t()) {
     Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags,
+                              osdc::get_default_qos_profile(),
 			      oncommit, objver, reqid);
     ceph_tid_t tid;
     op_submit(o, &tid);
@@ -3068,6 +3078,7 @@ public:
     o->out_rval.swap(op.out_rval);
     o->out_ec.swap(op.out_ec);
     o->reqid = reqid;
+    o->qos_profile = osdc::get_default_qos_profile();
     op.clear();
     op_submit(o);
   }
@@ -3496,6 +3507,7 @@ public:
     const object_t& oid, const object_locator_t& oloc,
     uint64_t off, uint64_t len, const SnapContext& snapc,
     const ceph::buffer::list &bl, ceph::real_time mtime, int flags,
+    osdc::shared_qos_profile qos_profile,
     Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0,
     ZTracer::Trace *parent_trace = nullptr) {
@@ -3513,6 +3525,7 @@ public:
                    nullptr, parent_trace);
     o->mtime = mtime;
     o->snapc = snapc;
+    o->qos_profile = qos_profile;
     return o;
   }
   ceph_tid_t write(
@@ -3522,6 +3535,7 @@ public:
     Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     Op *o = prepare_write_op(oid, oloc, off, len, snapc, bl, mtime, flags,
+                             osdc::get_default_qos_profile(),
 			     oncommit, objver, extra_ops, op_flags);
     ceph_tid_t tid;
     op_submit(o, &tid);
