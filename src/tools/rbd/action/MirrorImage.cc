@@ -366,7 +366,7 @@ int execute_status(const po::variables_map &vm,
   }
 
   std::vector<librbd::snap_info_t> snaps;
-  if (status.info.primary && status.info.state == RBD_MIRROR_IMAGE_ENABLED) {
+  if (status.info.state == RBD_MIRROR_IMAGE_ENABLED) {
     librbd::mirror_image_mode_t mode = RBD_MIRROR_IMAGE_MODE_JOURNAL;
     r = image.mirror_image_get_mode(&mode);
     if (r < 0) {
