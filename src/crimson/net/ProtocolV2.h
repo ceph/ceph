@@ -20,20 +20,34 @@ class ProtocolV2 final : public Protocol {
              SocketConnection& conn,
              SocketMessenger& messenger);
   ~ProtocolV2() override;
-  void print_conn(std::ostream&) const final;
 
+// public to SocketConnection, but private to the others
  private:
-  void on_closed() override;
   bool is_connected() const override;
 
+  void close() override;
+
+  seastar::future<> close_clean_yielded() override;
+
+#ifdef UNIT_TESTS_BUILT
+  bool is_closed_clean() const override {
+    return closed_clean;
+  }
+
+  bool is_closed() const override {
+    return closed;
+  }
+
+#endif
   void start_connect(const entity_addr_t& peer_addr,
                      const entity_name_t& peer_name) override;
 
   void start_accept(SocketRef&& socket,
                     const entity_addr_t& peer_addr) override;
 
-  void trigger_close() override;
+  void print_conn(std::ostream&) const final;
 
+ private:
   ceph::bufferlist do_sweep_messages(
       const std::deque<MessageURef>& msgs,
       size_t num_msgs,
@@ -48,6 +62,15 @@ class ProtocolV2 final : public Protocol {
 
   AuthConnectionMetaRef auth_meta;
 
+  bool closed = false;
+
+  // become valid only after closed == true
+  seastar::shared_future<> closed_clean_fut;
+
+#ifdef UNIT_TESTS_BUILT
+  bool closed_clean = false;
+
+#endif
   enum class state_t {
     NONE = 0,
     ACCEPTING,
@@ -229,6 +252,11 @@ class ProtocolV2 final : public Protocol {
 
   // SERVER_WAIT
   void execute_server_wait();
+
+  // CLOSING
+  // reentrant
+  void do_close(bool dispatch_reset,
+                std::optional<std::function<void()>> f_accept_new=std::nullopt);
 };
 
 } // namespace crimson::net

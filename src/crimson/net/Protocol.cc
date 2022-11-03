@@ -31,61 +31,6 @@ Protocol::~Protocol()
   assert(!out_exit_dispatching);
 }
 
-void Protocol::close(bool dispatch_reset,
-                     std::optional<std::function<void()>> f_accept_new)
-{
-  if (closed) {
-    // already closing
-    return;
-  }
-
-  bool is_replace = f_accept_new ? true : false;
-  logger().info("{} closing: reset {}, replace {}", conn,
-                dispatch_reset ? "yes" : "no",
-                is_replace ? "yes" : "no");
-
-  // atomic operations
-  closed = true;
-  trigger_close();
-  if (f_accept_new) {
-    (*f_accept_new)();
-  }
-  if (conn.socket) {
-    conn.socket->shutdown();
-  }
-  set_out_state(out_state_t::drop);
-  assert(!gate.is_closed());
-  auto gate_closed = gate.close();
-
-  if (dispatch_reset) {
-    dispatchers.ms_handle_reset(
-        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
-        is_replace);
-  }
-
-  // asynchronous operations
-  assert(!close_ready.valid());
-  close_ready = std::move(gate_closed).then([this] {
-    if (conn.socket) {
-      return conn.socket->close();
-    } else {
-      return seastar::now();
-    }
-  }).then([this] {
-    logger().debug("{} closed!", conn);
-    on_closed();
-#ifdef UNIT_TESTS_BUILT
-    is_closed_clean = true;
-    if (conn.interceptor) {
-      conn.interceptor->register_conn_closed(conn);
-    }
-#endif
-  }).handle_exception([conn_ref = conn.shared_from_this(), this] (auto eptr) {
-    logger().error("{} closing: close_ready got unexpected exception {}", conn, eptr);
-    ceph_abort();
-  });
-}
-
 ceph::bufferlist Protocol::sweep_out_pending_msgs_to_sent(
       size_t num_msgs,
       bool require_keepalive,

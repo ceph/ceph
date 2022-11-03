@@ -68,9 +68,9 @@ seastar::logger& logger() {
   throw std::system_error(make_error_code(crimson::net::error::protocol_aborted));
 }
 
-[[noreturn]] void abort_in_close(crimson::net::ProtocolV2& proto, bool dispatch_reset) {
-  proto.close(dispatch_reset);
-  abort_protocol();
+#define ABORT_IN_CLOSE(dispatch_reset) { \
+  do_close(dispatch_reset);              \
+  abort_protocol();                      \
 }
 
 inline void expect_tag(const Tag& expected,
@@ -377,7 +377,7 @@ void ProtocolV2::fault(bool backoff, const char* func_name, std::exception_ptr e
   if (conn.policy.lossy) {
     logger().info("{} {}: fault at {} on lossy channel, going to CLOSING -- {}",
                   conn, func_name, get_state_name(state), eptr);
-    close(true);
+    do_close(true);
   } else if (conn.policy.server ||
              (conn.policy.standby && !is_out_queued_or_sent())) {
     logger().info("{} {}: fault at {} with nothing to send, going to STANDBY -- {}",
@@ -486,13 +486,13 @@ ProtocolV2::banner_exchange(bool is_connect)
         logger().error("{} peer does not support all required features"
                        " required={} peer_supported={}",
                        conn, required_features, _peer_supported_features);
-        abort_in_close(*this, is_connect);
+        ABORT_IN_CLOSE(is_connect);
       }
       if ((supported_features & _peer_required_features) != _peer_required_features) {
         logger().error("{} we do not support all peer required features"
                        " peer_required={} supported={}",
                        conn, _peer_required_features, supported_features);
-        abort_in_close(*this, is_connect);
+        ABORT_IN_CLOSE(is_connect);
       }
       peer_supported_features = _peer_supported_features;
       bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
@@ -617,7 +617,7 @@ seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods
     });
   } catch (const crimson::auth::error& e) {
     logger().error("{} get_initial_auth_request returned {}", conn, e.what());
-    abort_in_close(*this, true);
+    ABORT_IN_CLOSE(true);
     return seastar::now();
   }
 }
@@ -715,7 +715,7 @@ ProtocolV2::client_connect()
             logger().error("{} connection peer id ({}) does not match "
                            "what it should be ({}) during connecting, close",
                             conn, server_ident.gid(), conn.get_peer_id());
-            abort_in_close(*this, true);
+            ABORT_IN_CLOSE(true);
           }
           conn.set_peer_id(server_ident.gid());
           conn.set_features(server_ident.supported_features() &
@@ -865,7 +865,7 @@ void ProtocolV2::execute_connecting()
             logger().warn("{} connection peer type does not match what peer advertises {} != {}",
                           conn, ceph_entity_type_name(conn.get_peer_type()),
                           ceph_entity_type_name(_peer_type));
-            abort_in_close(*this, true);
+            ABORT_IN_CLOSE(true);
           }
           if (unlikely(state != state_t::CONNECTING)) {
             logger().debug("{} triggered {} during banner_exchange(), abort",
@@ -1090,7 +1090,7 @@ ProtocolV2::reuse_connection(
   // close this connection because all the necessary information is delivered
   // to the exisiting connection, and jump to error handling code to abort the
   // current state.
-  abort_in_close(*this, false);
+  ABORT_IN_CLOSE(false);
   return seastar::make_ready_future<next_step_t>(next_step_t::none);
 }
 
@@ -1520,7 +1520,7 @@ void ProtocolV2::execute_accepting()
         }).handle_exception([this] (std::exception_ptr eptr) {
           logger().info("{} execute_accepting(): fault at {}, going to CLOSING -- {}",
                         conn, get_state_name(state), eptr);
-          close(false);
+          do_close(false);
         });
     });
 }
@@ -1580,7 +1580,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
 
   trigger_state(state_t::ESTABLISHING, out_state_t::delay, false);
   if (existing_conn) {
-    existing_conn->protocol->close(
+    static_cast<ProtocolV2*>(existing_conn->protocol.get())->do_close(
         true /* dispatch_reset */, std::move(accept_me));
     if (unlikely(state != state_t::ESTABLISHING)) {
       logger().warn("{} triggered {} during execute_establishing(), "
@@ -2083,19 +2083,59 @@ void ProtocolV2::execute_server_wait()
     }).handle_exception([this] (std::exception_ptr eptr) {
       logger().info("{} execute_server_wait(): fault at {}, going to CLOSING -- {}",
                     conn, get_state_name(state), eptr);
-      close(false);
+      do_close(false);
     });
   });
 }
 
 // CLOSING state
 
-void ProtocolV2::trigger_close()
+void ProtocolV2::close()
 {
+  do_close(false);
+}
+
+seastar::future<> ProtocolV2::close_clean_yielded()
+{
+  // yield() so that do_close() can be called *after* close_clean_yielded() is
+  // applied to all connections in a container using
+  // seastar::parallel_for_each(). otherwise, we could erase a connection in
+  // the container when seastar::parallel_for_each() is still iterating in it.
+  // that'd lead to a segfault.
+  return seastar::yield(
+  ).then([this, conn_ref = conn.shared_from_this()] {
+    do_close(false);
+    // it can happen if close_clean() is called inside Dispatcher::ms_handle_reset()
+    // which will otherwise result in deadlock
+    assert(closed_clean_fut.valid());
+    return closed_clean_fut.get_future();
+  });
+}
+
+void ProtocolV2::do_close(
+    bool dispatch_reset,
+    std::optional<std::function<void()>> f_accept_new)
+{
+  if (closed) {
+    // already closing
+    return;
+  }
+
+  bool is_replace = f_accept_new ? true : false;
+  logger().info("{} closing: reset {}, replace {}", conn,
+                dispatch_reset ? "yes" : "no",
+                is_replace ? "yes" : "no");
+
+  /*
+   * atomic operations
+   */
+
+  closed = true;
+
+  // trigger close
   messenger.closing_conn(
       seastar::static_pointer_cast<SocketConnection>(
         conn.shared_from_this()));
-
   if (state == state_t::ACCEPTING || state == state_t::SERVER_WAIT) {
     messenger.unaccept_conn(
       seastar::static_pointer_cast<SocketConnection>(
@@ -2108,16 +2148,48 @@ void ProtocolV2::trigger_close()
     // cannot happen
     ceph_assert(false);
   }
-
   protocol_timer.cancel();
   trigger_state(state_t::CLOSING, out_state_t::drop, false);
-}
 
-void ProtocolV2::on_closed()
-{
-  messenger.closed_conn(
-      seastar::static_pointer_cast<SocketConnection>(
-	conn.shared_from_this()));
+  if (f_accept_new) {
+    (*f_accept_new)();
+  }
+  if (conn.socket) {
+    conn.socket->shutdown();
+  }
+  assert(!gate.is_closed());
+  auto gate_closed = gate.close();
+
+  if (dispatch_reset) {
+    dispatchers.ms_handle_reset(
+        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
+        is_replace);
+  }
+
+  // asynchronous operations
+  assert(!closed_clean_fut.valid());
+  closed_clean_fut = std::move(gate_closed).then([this] {
+    if (conn.socket) {
+      return conn.socket->close();
+    } else {
+      return seastar::now();
+    }
+  }).then([this] {
+    logger().debug("{} closed!", conn);
+    messenger.closed_conn(
+        seastar::static_pointer_cast<SocketConnection>(
+          conn.shared_from_this()));
+#ifdef UNIT_TESTS_BUILT
+    closed_clean = true;
+    if (conn.interceptor) {
+      conn.interceptor->register_conn_closed(conn);
+    }
+#endif
+  }).handle_exception([conn_ref = conn.shared_from_this(), this] (auto eptr) {
+    logger().error("{} closing: closed_clean_fut got unexpected exception {}",
+                   conn, eptr);
+    ceph_abort();
+  });
 }
 
 void ProtocolV2::print_conn(std::ostream& out) const
