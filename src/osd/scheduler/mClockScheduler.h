@@ -204,9 +204,20 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   priority_t immediate_class_priority = std::numeric_limits<priority_t>::max();
 
   static scheduler_id_t get_scheduler_id(const OpSchedulerItem &item) {
+    auto get_client_profile_id = [&]() {
+      const client_qos_params_t& qos_profile_params =
+        item.get_qos_profile_params();
+      client_profile_id_t client_id = client_profile_id_t();
+      if (qos_profile_params.qos_profile_id != 0) {
+        client_id = client_profile_id_t(
+          item.get_owner(), qos_profile_params.qos_profile_id);
+      }
+      return client_id;
+    };
+
     return scheduler_id_t{
       item.get_scheduler_class(),
-      client_profile_id_t()
+      get_client_profile_id()
     };
   }
 

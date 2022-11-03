@@ -6823,4 +6823,54 @@ std::string_view get_op_queue_type_name(const op_queue_type_t &q);
 std::optional<op_queue_type_t> get_op_queue_type_by_name(
   const std::string_view &s);
 
+/**
+ * Client QoS request parameters
+ *
+ */
+struct client_qos_params_t {
+  uint64_t reservation = 0;
+  uint64_t weight = 1;
+  uint64_t limit = 0;
+
+  // A unique profile id for a given client. So a <client_id, qos_profile_id>
+  // tuple is a unique identifier for a client.
+  uint64_t qos_profile_id = 0;
+
+  client_qos_params_t() = default;
+
+  client_qos_params_t(uint64_t res, uint64_t wgt, uint64_t lim, uint64_t qpid) :
+    reservation(res),
+    weight(wgt),
+    limit(lim),
+    qos_profile_id(qpid)
+  {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(reservation, bl);
+    encode(weight, bl);
+    encode(limit, bl);
+    encode(qos_profile_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_START(1, p);
+    decode(reservation, p);
+    decode(weight, p);
+    decode(limit, p);
+    decode(qos_profile_id, p);
+    DECODE_FINISH(p);
+  }
+
+  friend std::ostream& operator<<(std::ostream& out, const client_qos_params_t& q) {
+    return out << "client_qos_params(res " << q.reservation
+               << " weight " << q.weight
+               << " limit " << q.limit
+               << " id " << q.qos_profile_id
+               << ")";
+  }
+};
+WRITE_CLASS_ENCODER(client_qos_params_t)
+
 #endif

@@ -667,6 +667,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
     oid, oloc,
     *o, snapc, ut,
     flags | extra_op_flags,
+    get_qos_profile(o->qos_profile),
     oncommit, &ver, osd_reqid_t(), nullptr, otel_trace);
   objecter->op_submit(objecter_op);
 
@@ -784,7 +785,8 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   trace.event("init root span");
   Objecter::Op *op = objecter->prepare_mutate_op(
     oid, oloc, *o, snap_context, ut, flags | extra_op_flags,
-    oncomplete, &c->objver, osd_reqid_t(), &trace, otel_trace);
+    get_qos_profile(o->qos_profile), oncomplete,
+    &c->objver, osd_reqid_t(), &trace, otel_trace);
   objecter->op_submit(op, &c->tid);
   trace.event("rados operate op submitted");
 
@@ -971,7 +973,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 
   Objecter::Op *o = objecter->prepare_write_op(
     oid, oloc,
-    off, len, snapc, bl, ut, extra_op_flags,
+    off, len, snapc, bl, ut, extra_op_flags, get_qos_profile(),
     oncomplete, &c->objver, nullptr, 0, &trace);
   objecter->op_submit(o, &c->tid);
 

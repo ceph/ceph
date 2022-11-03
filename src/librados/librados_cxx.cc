@@ -35,6 +35,7 @@
 #include "librados/RadosXattrIter.h"
 #include "librados/ListObjectImpl.h"
 #include "librados/librados_util.h"
+#include "osdc/QosProfileMgr.h"
 #include "cls/lock/cls_lock_client.h"
 
 #include <string>
@@ -88,6 +89,8 @@ static TracepointProvider::Traits tracepoint_traits("librados_tp.so", "rados_tra
  * |          RadosClient                 |
  * +--------------------------------------+
  */
+
+static osdc::QosProfileMgr qos_profile_mgr;
 
 size_t librados::ObjectOperation::size()
 {
@@ -729,6 +732,13 @@ void librados::ObjectWriteOperation::cache_unpin()
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
   o->cache_unpin();
+}
+
+void librados::ObjectWriteOperation::set_qos_profile(rados_qos_profile_t qp)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->set_qos_profile(*osdc::qos_profile_ref(qp));
 }
 
 librados::WatchCtx::
@@ -2911,6 +2921,24 @@ librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
   return new AioCompletion(c);
 }
 
+rados_qos_profile_t librados::Rados::qos_profile_create(uint64_t reservation,
+                                                        uint64_t weight,
+                                                        uint64_t limit)
+{
+  return (rados_qos_profile_t) qos_profile_mgr.create(reservation, weight, limit);
+}
+
+int librados::Rados::qos_profile_release(rados_qos_profile_t qos_profile)
+{
+  return qos_profile_mgr.release((osdc::qos_profile_ref) qos_profile);
+}
+
+uint64_t librados::Rados::qos_profile_get_id(rados_qos_profile_t qos_profile)
+{
+  return osdc::QosProfileMgr::get_profile_id(
+    (osdc::qos_profile_ref) qos_profile);
+}
+
 librados::ObjectOperation::ObjectOperation() : impl(new ObjectOperationImpl) {}
 
 librados::ObjectOperation::ObjectOperation(ObjectOperation&& rhs)
@@ -3201,4 +3229,13 @@ int librados::IoCtx::application_metadata_list(const std::string& app_name,
                                                std::map<std::string, std::string> *values)
 {
   return io_ctx_impl->application_metadata_list(app_name, values);
+}
+
+void librados::IoCtx::set_qos_profile(rados_qos_profile_t qos_profile)
+{
+  if (nullptr == qos_profile) {
+    io_ctx_impl->set_qos_profile(osdc::get_default_qos_profile());
+  } else {
+    io_ctx_impl->set_qos_profile(*osdc::qos_profile_ref(qos_profile));
+  }
 }
