@@ -147,6 +147,7 @@ protected:
     uint64_t uninline_started = 0;
     uint64_t uninline_passed = 0;
     uint64_t uninline_failed = 0;
+    uint64_t uninline_skipped = 0;
   };
   struct scrub_stat_t {
     unsigned epoch_acked = 0;

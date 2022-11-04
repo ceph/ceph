@@ -771,21 +771,30 @@ void ScrubStack::scrub_status(Formatter *f) {
     uint64_t started = 0;
     uint64_t passed = 0;
     uint64_t failed = 0;
+    uint64_t skipped = 0;
     for (auto& stats : mds_scrub_stats) {
       if (auto it = stats.counters.find(tag); it != stats.counters.end()) {
 	auto& [t, c] = *it;
 	started += c.uninline_started;
 	passed += c.uninline_passed;
 	failed += c.uninline_failed;
+	skipped += c.uninline_skipped;
       }
     }
     f->open_object_section(tag);
     {
       f->dump_stream("start_time") << ctrs.start_time;
-      f->dump_string("path", (ctrs.origin_path == "" ? "/"s : ctrs.origin_path));
+      std::string path = ctrs.origin_path;
+      if (path == "") {
+	path = "/";
+      } else if (path.starts_with("~mds")) {
+	path = "~mdsdir";
+      }
+      f->dump_string("path", path);
       f->dump_int("uninline_started", started);
       f->dump_int("uninline_passed", passed);
       f->dump_int("uninline_failed", failed);
+      f->dump_int("uninline_skipped", skipped);
     }
     f->close_section(); // tag
   }
@@ -1159,7 +1168,8 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
 	ceph_assert(header->get_paths().size() == 0);
 	std::vector<uint64_t> c{header->get_uninline_started(),
 				header->get_uninline_passed(),
-				header->get_uninline_failed()
+				header->get_uninline_failed(),
+				header->get_uninline_skipped()
 	};
 	counters[header->get_tag()] = c;
 	scrubbing_map.erase(it++);
@@ -1197,6 +1207,7 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
 	stat.counters[tag].uninline_started = v[0];
 	stat.counters[tag].uninline_passed = v[1];
 	stat.counters[tag].uninline_failed = v[2];
+	stat.counters[tag].uninline_skipped = v[3];
       }
     }
   }
