@@ -1265,6 +1265,11 @@ OPTION(rgw_override_bucket_index_max_shards, OPT_U32)
 OPTION(rgw_bucket_index_max_aio, OPT_U32)
 
 /**
+ * Represents the maximum AIO pending requests for multi object delete requests.
+ */
+OPTION(rgw_multi_obj_del_max_aio, OPT_U32)
+
+/**
  * whether or not the quota/gc threads should be started
  */
 OPTION(rgw_enable_quota_threads, OPT_BOOL)
