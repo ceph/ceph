@@ -532,7 +532,6 @@ void MDCache::_create_system_file(CDir *dir, std::string_view name, CInode *in, 
 
   mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, "create system file");
-  mds->mdlog->start_entry(le);
 
   if (!in->is_mdsdir()) {
     predirty_journal_parents(mut, &le->metablob, in, dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
@@ -2106,8 +2105,6 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
   bool do_parent_mtime = flags & PREDIRTY_DIR;
   bool shallow = flags & PREDIRTY_SHALLOW;
 
-  ceph_assert(mds->mdlog->entry_is_open());
-
   // make sure stamp is set
   if (mut->get_mds_stamp() == utime_t())
     mut->set_mds_stamp(ceph_clock_now());
@@ -2391,8 +2388,7 @@ void MDCache::log_leader_commit(metareqid_t reqid)
 {
   dout(10) << "log_leader_commit " << reqid << dendl;
   uncommitted_leaders[reqid].committing = true;
-  mds->mdlog->start_submit_entry(new ECommitted(reqid), 
-				 new C_MDC_CommittedLeader(this, reqid));
+  mds->mdlog->submit_entry(new ECommitted(reqid), new C_MDC_CommittedLeader(this, reqid));
 }
 
 void MDCache::_logged_leader_commit(metareqid_t reqid)
@@ -2509,7 +2505,6 @@ ESubtreeMap *MDCache::create_subtree_map()
   show_subtrees();
 
   ESubtreeMap *le = new ESubtreeMap();
-  mds->mdlog->_start_entry(le);
   
   map<dirfrag_t, CDir*> dirs_to_add;
 
@@ -3385,7 +3380,7 @@ void MDCache::handle_resolve_ack(const cref_t<MMDSResolveAck> &ack)
       ceph_assert(su);
 
       // log commit
-      mds->mdlog->start_submit_entry(new EPeerUpdate(mds->mdlog, "unknown", p.first, from,
+      mds->mdlog->submit_entry(new EPeerUpdate(mds->mdlog, "unknown", p.first, from,
 						      EPeerUpdate::OP_COMMIT, su->origop),
 				     new C_MDC_PeerCommit(this, from, p.first));
       mds->mdlog->flush();
@@ -3598,7 +3593,7 @@ void MDCache::disambiguate_my_imports()
       dout(10) << "ambiguous import auth known, must not be me " << *dir << dendl;
       cancel_ambiguous_import(dir);
 
-      mds->mdlog->start_submit_entry(new EImportFinish(dir, false));
+      mds->mdlog->submit_entry(new EImportFinish(dir, false));
 
       // subtree may have been swallowed by another node claiming dir
       // as their own.
@@ -3610,7 +3605,7 @@ void MDCache::disambiguate_my_imports()
     } else {
       dout(10) << "ambiguous import auth unclaimed, must be me " << *dir << dendl;
       finish_ambiguous_import(q->first);
-      mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
+      mds->mdlog->submit_entry(new EImportFinish(dir, true));
     }
   }
   ceph_assert(my_ambiguous_imports.empty());
@@ -5438,7 +5433,7 @@ bool MDCache::process_imported_caps()
 							      finish->session_map);
       ESessions *le = new ESessions(pv, std::move(rejoin_client_map),
 				    std::move(rejoin_client_metadata_map));
-      mds->mdlog->start_submit_entry(le, finish);
+      mds->mdlog->submit_entry(le, finish);
       mds->mdlog->flush();
       rejoin_client_map.clear();
       rejoin_client_metadata_map.clear();
@@ -6288,7 +6283,6 @@ void MDCache::queue_file_recover(CInode *in)
     auto mut(std::make_shared<MutationImpl>());
     mut->ls = mds->mdlog->get_current_segment();
     EUpdate *le = new EUpdate(mds->mdlog, "queue_file_recover cow");
-    mds->mdlog->start_entry(le);
     predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
 
     s.erase(*s.begin());
@@ -6634,7 +6628,6 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   pi.inode->fscrypt_last_block = bufferlist();
 
   EUpdate *le = new EUpdate(mds->mdlog, "truncate finish");
-  mds->mdlog->start_entry(le);
 
   predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   journal_dirty_inode(mut.get(), &le->metablob, in);
@@ -6748,7 +6741,7 @@ void MDCache::purge_inodes(const interval_set<inodeno_t>& inos, LogSegment *ls)
       mds->inotable->project_release_ids(inos);
       version_t piv = mds->inotable->get_projected_version();
       ceph_assert(piv != 0);
-      mds->mdlog->start_submit_entry(new EPurged(inos, ls->seq, piv),
+      mds->mdlog->submit_entry(new EPurged(inos, ls->seq, piv),
 				     new C_MDS_purge_completed_finish(this, inos, ls, piv));
       mds->mdlog->flush();
     });
@@ -7959,7 +7952,8 @@ bool MDCache::shutdown_pass()
     if (ls->num_events > 1 || !ls->dirty_dirfrags.empty()) {
       // Current segment contains events other than subtreemap or
       // there are dirty dirfrags (see CDir::log_mark_dirty())
-      mds->mdlog->start_new_segment();
+      auto sle = create_subtree_map();
+      mds->mdlog->submit_entry(sle);
       mds->mdlog->flush();
     }
   }
@@ -12066,7 +12060,6 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
 
   mdr->ls = mds->mdlog->get_current_segment();
   EFragment *le = new EFragment(mds->mdlog, EFragment::OP_PREPARE, basedirfrag, info.bits);
-  mds->mdlog->start_entry(le);
 
   for (const auto& dir : info.dirs) {
     dirfrag_rollback rollback;
@@ -12210,7 +12203,7 @@ void MDCache::_fragment_stored(MDRequestRef& mdr)
 
   // journal commit
   EFragment *le = new EFragment(mds->mdlog, EFragment::OP_COMMIT, basedirfrag, info.bits);
-  mds->mdlog->start_submit_entry(le, new C_MDC_FragmentCommit(this, basedirfrag, mdr));
+  mds->mdlog->submit_entry(le, new C_MDC_FragmentCommit(this, basedirfrag, mdr));
 
 
   // unfreeze resulting frags
@@ -12280,7 +12273,7 @@ void MDCache::_fragment_old_purged(dirfrag_t basedirfrag, int bits, const MDRequ
     mdr->mark_event("old frags purged");
 
   EFragment *le = new EFragment(mds->mdlog, EFragment::OP_FINISH, basedirfrag, bits);
-  mds->mdlog->start_submit_entry(le);
+  mds->mdlog->submit_entry(le);
 
   finish_uncommitted_fragment(basedirfrag, EFragment::OP_FINISH);
 
@@ -12495,7 +12488,6 @@ void MDCache::rollback_uncommitted_fragments()
     MutationRef mut(new MutationImpl());
     mut->ls = mds->mdlog->get_current_segment();
     EFragment *le = new EFragment(mds->mdlog, EFragment::OP_ROLLBACK, p->first, uf.bits);
-    mds->mdlog->start_entry(le);
     bool diri_auth = (diri->authority() != CDIR_AUTH_UNDEF);
 
     frag_vec_t old_frags;
@@ -13181,7 +13173,6 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
 
   mdr->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, "repair_dirfrag");
-  mds->mdlog->start_entry(le);
 
   if (!good_fragstat) {
     if (pf->fragstat.mtime > frag_info.mtime)

@@ -218,7 +218,6 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 	dout(20) << "try_to_expire requeueing snap needflush inode " << *in << dendl;
 	if (!le) {
 	  le = new EOpen(mds->mdlog);
-	  mds->mdlog->start_entry(le);
 	}
 	le->add_clean_inode(in);
 	ls->open_files.push_back(&in->item_open_file);
@@ -391,15 +390,16 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
       }
 
       // was the inode journaled in this blob?
-      if (event_seq && diri->last_journaled == event_seq) {
+      if (touched.contains(diri)) {
 	dout(20) << "EMetaBlob::add_dir_context(" << dir << ") already have diri this blob " << *diri << dendl;
 	break;
       }
 
       // have we journaled this inode since the last subtree map?
-      if (!maybenot && last_subtree_map && diri->last_journaled >= last_subtree_map) {
+      auto last_segment_seq = mds->mdlog->get_last_segment_seq();
+      if (!maybenot && diri->last_journaled >= last_segment_seq) {
 	dout(20) << "EMetaBlob::add_dir_context(" << dir << ") already have diri in this segment (" 
-		 << diri->last_journaled << " >= " << last_subtree_map << "), setting maybenot flag "
+		 << diri->last_journaled << " >= " << last_segment_seq << "), setting maybenot flag "
 		 << *diri << dendl;
 	maybenot = true;
       }
