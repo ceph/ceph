@@ -63,6 +63,9 @@ SnapRealm::SnapRealm(MDCache *c, CInode *in) :
     mdcache(c), inode(in), inodes_with_caps(member_offset(CInode, item_caps))
 {
   global = (inode->ino() == CEPH_INO_GLOBAL_SNAPREALM);
+  if (inode->ino() == CEPH_INO_ROOT) {
+    srnode.last_modified = in->get_inode()->mtime;
+  }
 }
 
 /*
