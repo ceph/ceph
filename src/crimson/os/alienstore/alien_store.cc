@@ -5,15 +5,19 @@
 #include "alien_store.h"
 #include "alien_log.h"
 
+#include <algorithm>
+#include <iterator>
 #include <map>
 #include <string_view>
 #include <boost/algorithm/string/trim.hpp>
+#include <boost/iterator/counting_iterator.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
 #include <seastar/core/alien.hh>
 #include <seastar/core/future-util.hh>
 #include <seastar/core/reactor.hh>
+#include <seastar/core/resource.hh>
 
 #include "common/ceph_context.h"
 #include "global/global_context.h"
@@ -96,19 +100,21 @@ seastar::future<> AlienStore::start()
   if (!store) {
     ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
   }
-  std::vector<uint64_t> cpu_cores = _parse_cpu_cores();
+  auto cpu_cores = seastar::resource::parse_cpuset(
+    get_conf<std::string>("crimson_alien_thread_cpu_cores"));
   // cores except the first "N_CORES_FOR_SEASTAR" ones will
   // be used for alien threads scheduling:
   // 	[0, N_CORES_FOR_SEASTAR) are reserved for seastar reactors
   // 	[N_CORES_FOR_SEASTAR, ..] are assigned to alien threads.
-  if (cpu_cores.empty()) {
-    if (long nr_cpus = sysconf(_SC_NPROCESSORS_ONLN);
-	nr_cpus > N_CORES_FOR_SEASTAR ) {
-      for (int i = N_CORES_FOR_SEASTAR; i < nr_cpus; i++) {
-        cpu_cores.push_back(i);
-      }
-    } else {
+  if (!cpu_cores.has_value()) {
+    seastar::resource::cpuset cpuset;
+    std::copy(boost::counting_iterator<unsigned>(N_CORES_FOR_SEASTAR),
+	      boost::counting_iterator<unsigned>(sysconf(_SC_NPROCESSORS_ONLN)),
+	      std::inserter(cpuset, cpuset.end()));
+    if (cpuset.empty()) {
       logger().error("{}: unable to get nproc: {}", __func__, errno);
+    } else {
+      cpu_cores = cpuset;
     }
   }
   const auto num_threads =
@@ -604,28 +610,6 @@ AlienStore::read_errorator::future<std::map<uint64_t, uint64_t>> AlienStore::fie
       }
     });
   });
-}
-
-std::vector<uint64_t> AlienStore::_parse_cpu_cores()
-{
-  std::vector<uint64_t> cpu_cores;
-  auto cpu_string =
-    get_conf<std::string>("crimson_alien_thread_cpu_cores");
-
-  std::string token;
-  std::istringstream token_stream(cpu_string);
-  while (std::getline(token_stream, token, ',')) {
-    std::istringstream cpu_stream(token);
-    std::string cpu;
-    std::getline(cpu_stream, cpu, '-');
-    uint64_t start_cpu = std::stoull(cpu);
-    std::getline(cpu_stream, cpu, '-');
-    uint64_t end_cpu = std::stoull(cpu);
-    for (uint64_t i = start_cpu; i < end_cpu; i++) {
-      cpu_cores.push_back(i);
-    }
-  }
-  return cpu_cores;
 }
 
 }
