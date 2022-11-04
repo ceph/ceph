@@ -35,6 +35,7 @@
 
 #include "events/ETableClient.h"
 #include "events/ETableServer.h"
+#include "events/ESegment.h"
 
 #include "include/stringify.h"
 
@@ -396,10 +397,10 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
       }
 
       // have we journaled this inode since the last subtree map?
-      auto last_segment_seq = mds->mdlog->get_last_segment_seq();
-      if (!maybenot && diri->last_journaled >= last_segment_seq) {
+      auto last_major_segment_seq = mds->mdlog->get_last_major_segment_seq();
+      if (!maybenot && diri->last_journaled >= last_major_segment_seq) {
 	dout(20) << "EMetaBlob::add_dir_context(" << dir << ") already have diri in this segment (" 
-		 << diri->last_journaled << " >= " << last_segment_seq << "), setting maybenot flag "
+		 << diri->last_journaled << " >= " << last_major_segment_seq << "), setting maybenot flag "
 		 << *diri << dendl;
 	maybenot = true;
       }
@@ -2680,7 +2681,7 @@ void ESubtreeMap::encode(bufferlist& bl, uint64_t features) const
   encode(subtrees, bl);
   encode(ambiguous_subtrees, bl);
   encode(expire_pos, bl);
-  encode(event_seq, bl);
+  encode(seq, bl);
   ENCODE_FINISH(bl);
 }
  
@@ -2696,7 +2697,7 @@ void ESubtreeMap::decode(bufferlist::const_iterator &bl)
   if (struct_v >= 3)
     decode(expire_pos, bl);
   if (struct_v >= 6)
-    decode(event_seq, bl);
+    decode(seq, bl);
   DECODE_FINISH(bl);
 }
 
@@ -3264,6 +3265,35 @@ void EResetJournal::replay(MDSRank *mds)
   mds->mdcache->recalc_auth_bits(true);
 
   mds->mdcache->show_subtrees();
+}
+
+void ESegment::encode(bufferlist &bl, uint64_t features) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(seq, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ESegment::decode(bufferlist::const_iterator &bl)
+{
+  DECODE_START(1, bl);
+  decode(seq, bl);
+  DECODE_FINISH(bl);
+}
+
+void ESegment::replay(MDSRank *mds)
+{
+  dout(4) << "ESegment::replay, seq " << seq << dendl;
+}
+
+void ESegment::dump(Formatter *f) const
+{
+  f->dump_int("seq", seq);
+}
+
+void ESegment::generate_test_instances(std::list<ESegment*>& ls)
+{
+  ls.push_back(new ESegment);
 }
 
 
