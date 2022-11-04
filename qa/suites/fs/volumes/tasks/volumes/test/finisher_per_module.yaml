@@ -1,0 +1,13 @@
+tasks:
+  - check-counter:
+      counters:
+        mgr:
+            - name: "finisher-volumes.complete_latency.avgcount"
+              min: 4
+            - name: "finisher-volumes.queue_len"
+              expected_val: 0
+
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.test_volumes.TestPerModuleFinsherThread
