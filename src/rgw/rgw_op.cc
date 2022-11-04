@@ -6839,21 +6839,14 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
   entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
 }
 
-void RGWDeleteMultiObj::wait_flush(optional_yield y, size_t n)
+void RGWDeleteMultiObj::wait_flush(optional_yield y, std::function<bool()> predicate)
 {
   if (y) {
-    if (ops_log_entries.size() == n) {
-      rgw_flush_formatter(s, s->formatter);
-      return;
-    }
     auto yc = y.get_yield_context();
-    for (;;) {
+    while (!predicate()) {
       boost::system::error_code error;
       formatter_flush_cond->async_wait(yc[error]);
       rgw_flush_formatter(s, s->formatter);
-      if (ops_log_entries.size() == n) {
-        break;
-      }
     }
   }
 }
@@ -7002,6 +6995,8 @@ void RGWDeleteMultiObj::execute(optional_yield y)
   RGWMultiDelDelete *multi_delete;
   vector<rgw_obj_key>::iterator iter;
   RGWMultiDelXMLParser parser;
+  uint32_t aio_count = 0;
+  uint32_t max_aio = s->cct->_conf->rgw_multi_obj_del_max_aio;
   char* buf;
   if (y) {
     formatter_flush_cond = std::make_unique<boost::asio::deadline_timer>(y.get_io_context());  
@@ -7067,16 +7062,22 @@ void RGWDeleteMultiObj::execute(optional_yield y)
         iter != multi_delete->objects.end();
         ++iter) {
     rgw_obj_key* obj_key = &*iter;
-    if (y) {
-      spawn::spawn(y.get_yield_context(), [this, &y, obj_key] (yield_context yield) {
+    if (y && max_aio > 1) {
+      wait_flush(y, [&aio_count, max_aio] {
+        return aio_count < max_aio;
+      });
+      aio_count++;
+      spawn::spawn(y.get_yield_context(), [this, &y, &aio_count, obj_key] (yield_context yield) {
         handle_individual_object(obj_key, optional_yield { y.get_io_context(), yield }); 
+        aio_count--;
       }); 
     } else {
       handle_individual_object(obj_key, y);
     }
   }
-
-  wait_flush(y, multi_delete->objects.size());
+  wait_flush(y, [this, n=multi_delete->objects.size()] {
+    return n == ops_log_entries.size();
+  });
 
   /*  set the return code to zero, errors at this point will be
   dumped to the response */
