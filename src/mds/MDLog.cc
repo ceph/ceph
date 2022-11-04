@@ -267,37 +267,22 @@ void MDLog::append()
 
 // -------------------------------------------------
 
-void MDLog::_start_entry(LogEvent *e)
+void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase* c)
 {
-  ceph_assert(ceph_mutex_is_locked_by_me(submit_mutex));
-
-  ceph_assert(cur_event == NULL);
-  cur_event = e;
-
-  event_seq++;
-
-  EMetaBlob *metablob = e->get_metablob();
-  if (metablob) {
-    metablob->event_seq = event_seq;
-    metablob->last_subtree_map = get_last_segment_seq();
-  }
-}
-
-void MDLog::cancel_entry(LogEvent *le)
-{
-  ceph_assert(le == cur_event);
-  cur_event = NULL;
-  delete le;
-}
-
-void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
-{
+  dout(20) << __func__ << " " << *le << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
   ceph_assert(ceph_mutex_is_locked_by_me(submit_mutex));
   ceph_assert(!mds->is_any_replay());
   ceph_assert(!mds_is_shutting_down);
 
-  ceph_assert(le == cur_event);
-  cur_event = NULL;
+  event_seq++;
+
+  EMetaBlob *metablob = le->get_metablob();
+  if (metablob) {
+    for (auto& in : metablob->get_touched_inodes()) {
+      in->last_journaled = event_seq;
+    }
+  }
 
   // let the event register itself in the segment
   ceph_assert(!segments.empty());
@@ -318,8 +303,14 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
   }
 
   unflushed++;
-  
+}
+
+void MDLog::_segment_upkeep(LogEvent* le)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(submit_mutex));
   uint64_t period = journaler->get_layout_period();
+  auto ls = get_current_segment();
   // start a new segment?
   if (le->get_type() == EVENT_SUBTREEMAP ||
       (le->get_type() == EVENT_IMPORTFINISH && mds->is_resolve())) {
@@ -327,16 +318,15 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
     // do not insert ESubtreeMap among EImportFinish events that finish
     // disambiguate imports. Because the ESubtreeMap reflects the subtree
     // state when all EImportFinish events are replayed.
-  } else if (ls->end/period != ls->offset/period ||
-	     ls->num_events >= events_per_segment) {
+  } else if (ls->end/period != ls->offset/period || ls->num_events >= events_per_segment) {
     dout(10) << "submit_entry also starting new segment: last = "
-	     << ls->seq  << "/" << ls->offset << ", event seq = " << event_seq << dendl;
+            << ls->seq  << "/" << ls->offset << ", event seq = " << event_seq << dendl;
     _start_new_segment();
-  } else if (debug_subtrees &&
-	     le->get_type() != EVENT_SUBTREEMAP_TEST) {
+  } else if (debug_subtrees && le->get_type() != EVENT_SUBTREEMAP_TEST) {
     // debug: journal this every time to catch subtree replay bugs.
     // use a different event id so it doesn't get interpreted as a
     // LogSegment boundary on replay.
+    dout(10) << __func__ << ": creating test subtree map" << dendl;
     LogEvent *sle = mds->mdcache->create_subtree_map();
     sle->set_type(EVENT_SUBTREEMAP_TEST);
     _submit_entry(sle, NULL);

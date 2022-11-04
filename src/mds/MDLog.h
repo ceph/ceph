@@ -130,31 +130,23 @@ public:
   Journaler *get_journaler() { return journaler; }
   bool empty() const { return segments.empty(); }
 
+  uint64_t get_last_segment_seq() const {
+    ceph_assert(!segments.empty());
+    return segments.rbegin()->first;
+  }
+
   bool is_capped() const { return mds_is_shutting_down; }
   void cap();
 
   void kick_submitter();
   void shutdown();
 
-  void _start_entry(LogEvent *e);
-  void start_entry(LogEvent *e) {
-    std::lock_guard l(submit_mutex);
-    _start_entry(e);
-  }
-  void cancel_entry(LogEvent *e);
-  void _submit_entry(LogEvent *e, MDSLogContextBase *c);
-  void submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
+  void submit_entry(LogEvent *e, MDSLogContextBase* c = 0) {
     std::lock_guard l(submit_mutex);
     _submit_entry(e, c);
+    _segment_upkeep(e);
     submit_cond.notify_all();
   }
-  void start_submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
-    std::lock_guard l(submit_mutex);
-    _start_entry(e);
-    _submit_entry(e, c);
-    submit_cond.notify_all();
-  }
-  bool entry_is_open() const { return cur_event != NULL; }
 
   void wait_for_safe(Context* c);
   void flush();
@@ -250,10 +242,6 @@ protected:
 
   void _submit_thread();
 
-  uint64_t get_last_segment_seq() const {
-    ceph_assert(!segments.empty());
-    return segments.rbegin()->first;
-  }
   LogSegment *get_oldest_segment() {
     return segments.begin()->second;
   }
@@ -303,7 +291,9 @@ private:
   // -- segments --
   void _start_new_segment();
   void _prepare_new_segment();
+  void _segment_upkeep(LogEvent* le);
   void _journal_segment_subtree_map(MDSContext *onsync);
+  void _submit_entry(LogEvent *e, MDSLogContextBase *c);
 
   void try_to_commit_open_file_table(uint64_t last_seq);
 
@@ -312,9 +302,6 @@ private:
   void _expired(LogSegment *ls);
   void _trim_expired_segments();
   void write_head(MDSContext *onfinish);
-
-  // -- events --
-  LogEvent *cur_event = nullptr;
 
   bool debug_subtrees;
   uint64_t events_per_segment;
