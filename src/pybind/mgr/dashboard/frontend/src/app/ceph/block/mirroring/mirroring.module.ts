@@ -3,7 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
-import { NgbNavModule, NgbProgressbarModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbNavModule, NgbProgressbarModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { BootstrapCreateModalComponent } from './bootstrap-create-modal/bootstrap-create-modal.component';
@@ -24,7 +24,8 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     RouterModule,
     FormsModule,
     ReactiveFormsModule,
-    NgbProgressbarModule
+    NgbProgressbarModule,
+    NgbTooltipModule
   ],
   declarations: [
     BootstrapCreateModalComponent,
