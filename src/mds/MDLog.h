@@ -114,8 +114,8 @@ public:
 
   void flush_logger();
 
-  size_t get_num_events() const { return num_events; }
-  size_t get_num_segments() const { return segments.size(); }
+  uint64_t get_num_events() const { return num_events; }
+  uint64_t get_num_segments() const { return segments.size(); }
 
   auto get_debug_subtrees() const {
     return events_per_segment;
@@ -263,8 +263,8 @@ protected:
     segments.erase(p);
   }
 
-  int num_events = 0; // in events
-  int unflushed = 0;
+  uint64_t num_events = 0; // in events
+  uint64_t unflushed = 0;
   bool mds_is_shutting_down = false;
 
   // Log position which is persistent *and* for which
@@ -287,8 +287,8 @@ protected:
   std::set<LogSegment*> expired_segments;
   std::size_t pre_segments_size = 0;            // the num of segments when the mds finished replay-journal, to calc the num of segments growing
   uint64_t event_seq = 0;
-  int expiring_events = 0;
-  int expired_events = 0;
+  uint64_t expiring_events = 0;
+  uint64_t expired_events = 0;
 
   int64_t mdsmap_up_features = 0;
   std::map<uint64_t,std::list<PendingEvent> > pending_events; // log segment -> event list
