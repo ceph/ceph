@@ -719,8 +719,11 @@ void Elector::start_participating()
 
 void Elector::notify_clear_peer_state()
 {
-  dout(10) << __func__ << dendl; 
+  dout(10) << __func__ << dendl;
+  dout(20) << " peer_tracker before: " << peer_tracker << dendl;
   peer_tracker.notify_reset();
+  peer_tracker.set_rank(mon->rank);
+  dout(20) << " peer_tracker after: " << peer_tracker << dendl;
 }
 
 void Elector::notify_rank_changed(int new_rank)
