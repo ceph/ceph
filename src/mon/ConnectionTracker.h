@@ -152,6 +152,7 @@ class ConnectionTracker {
     encoding.clear();
     peer_reports.clear();
     my_reports = ConnectionReport();
+    my_reports.rank = rank;
   }
 
  public:
@@ -180,6 +181,10 @@ class ConnectionTracker {
     my_reports = o.my_reports;
   }
   void notify_reset() { clear_peer_reports(); }
+  void set_rank(int new_rank) {
+    rank = new_rank;
+    my_reports.rank = rank;
+  }
   void notify_rank_changed(int new_rank);
   void notify_rank_removed(int rank_removed, int new_rank);
   friend std::ostream& operator<<(std::ostream& o, const ConnectionTracker& c);
