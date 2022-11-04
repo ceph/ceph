@@ -156,7 +156,7 @@ public:
   }
   bool entry_is_open() const { return cur_event != NULL; }
 
-  void wait_for_safe( MDSContext *c );
+  void wait_for_safe(Context* c);
   void flush();
   bool is_flushed() const {
     return unflushed == 0;
@@ -184,9 +184,9 @@ public:
 
 protected:
   struct PendingEvent {
-    PendingEvent(LogEvent *e, MDSContext *c, bool f=false) : le(e), fin(c), flush(f) {}
+    PendingEvent(LogEvent *e, Context* c, bool f=false) : le(e), fin(c), flush(f) {}
     LogEvent *le;
-    MDSContext *fin;
+    Context* fin;
     bool flush;
   };
 
