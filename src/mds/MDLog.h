@@ -100,9 +100,12 @@ public:
   }
 
   LogSegment *get_segment(LogSegment::seq_t seq) {
-    if (segments.count(seq))
-      return segments[seq];
-    return NULL;
+    auto it = segments.find(seq);
+    if (it != segments.end()) {
+      return it->second;
+    } else {
+      return nullptr;
+    }
   }
 
   bool have_any_segments() const {
