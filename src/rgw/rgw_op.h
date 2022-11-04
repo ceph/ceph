@@ -2046,7 +2046,7 @@ class RGWDeleteMultiObj : public RGWOp {
    * and saved on the req_state vs. one that is passed on the stack.
    * This is a no-op in the case where we're not executing as a coroutine.
    */
-  void wait_flush(optional_yield y, size_t n);
+  void wait_flush(optional_yield y, std::function<bool()> predicate);
 
 protected:
   std::vector<delete_multi_obj_entry> ops_log_entries;
