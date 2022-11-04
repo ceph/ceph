@@ -36,7 +36,6 @@ struct ConnectionPipeline {
 enum class OperationTypeCode {
   client_request = 0,
   peering_event,
-  compound_peering_request,
   pg_advance_map,
   pg_creation,
   replicated_request,
@@ -53,7 +52,6 @@ enum class OperationTypeCode {
 static constexpr const char* const OP_NAMES[] = {
   "client_request",
   "peering_event",
-  "compound_peering_request",
   "pg_advance_map",
   "pg_creation",
   "replicated_request",
