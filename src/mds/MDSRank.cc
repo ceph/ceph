@@ -38,6 +38,8 @@
 #include "mon/MonClient.h"
 #include "common/HeartbeatMap.h"
 #include "ScrubStack.h"
+#include "events/ESubtreeMap.h"
+#include "events/ESegment.h"
 
 
 #include "MDSRank.h"
@@ -89,7 +91,8 @@ private:
 
     // I need to seal off the current segment, and then mark all
     // previous segments for expiry
-    mdlog->start_new_segment();
+    auto sle = mdcache->create_subtree_map();
+    mdlog->submit_entry(sle);
 
     Context *ctx = new LambdaContext([this](int r) {
         handle_flush_mdlog(r);
@@ -1742,7 +1745,8 @@ void MDSRank::starting_done()
   ceph_assert(is_starting());
   request_state(MDSMap::STATE_ACTIVE);
 
-  mdlog->start_new_segment();
+  auto sle = mdcache->create_subtree_map();
+  mdlog->submit_entry(sle);
 
   // sync snaptable cache
   snapclient->sync(new C_MDSInternalNoop);
@@ -2160,7 +2164,9 @@ void MDSRank::boot_create()
   mdlog->create(fin.new_sub());
 
   // open new journal segment, but do not journal subtree map (yet)
-  mdlog->prepare_new_segment();
+  // N.B. this singular event will be skipped during replay
+  auto le = new ESegment();
+  mdlog->submit_entry(le);
 
   if (whoami == mdsmap->get_root()) {
     dout(3) << "boot_create creating fresh hierarchy" << dendl;
@@ -2195,8 +2201,10 @@ void MDSRank::boot_create()
   ceph_assert(g_conf()->mds_kill_create_at != 1);
 
   // ok now journal it
-  mdlog->journal_segment_subtree_map(fin.new_sub());
+  auto sle = mdcache->create_subtree_map();
+  mdlog->submit_entry(sle);
   mdlog->flush();
+  mdlog->wait_for_safe(fin.new_sub());
 
   // Usually we do this during reconnect, but creation skips that.
   objecter->enable_blocklist_events();
@@ -3813,6 +3821,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_inject_migrator_session_race",
     "mds_inject_rename_corrupt_dentry_first",
     "mds_log_events_per_segment",
+    "mds_log_major_segment_event_ratio",
     "mds_log_max_events",
     "mds_log_max_segments",
     "mds_log_pause",

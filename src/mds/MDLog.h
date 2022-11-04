@@ -29,6 +29,7 @@ enum {
   l_mdl_segex,
   l_mdl_segtrm,
   l_mdl_seg,
+  l_mdl_segmjr,
   l_mdl_segexg,
   l_mdl_segexd,
   l_mdl_expos,
@@ -49,6 +50,7 @@ enum {
 
 #include "LogSegment.h"
 #include "MDSMap.h"
+#include "SegmentBoundary.h"
 
 #include <list>
 #include <map>
@@ -72,23 +74,6 @@ public:
 
   void create_logger();
   void set_write_iohint(unsigned iohint_flags);
-
-  void start_new_segment() {
-    std::lock_guard l(submit_mutex);
-    _start_new_segment();
-  }
-  void prepare_new_segment() {
-    std::lock_guard l(submit_mutex);
-    _prepare_new_segment();
-  }
-  void journal_segment_subtree_map(MDSContext *onsync=NULL) {
-    {
-      std::lock_guard l{submit_mutex};
-      _journal_segment_subtree_map(onsync);
-    }
-    if (onsync)
-      flush();
-  }
 
   LogSegment *peek_current_segment() {
     return segments.empty() ? NULL : segments.rbegin()->second;
@@ -130,6 +115,10 @@ public:
   Journaler *get_journaler() { return journaler; }
   bool empty() const { return segments.empty(); }
 
+  uint64_t get_last_major_segment_seq() const {
+    ceph_assert(!major_segments.empty());
+    return *major_segments.rbegin();
+  }
   uint64_t get_last_segment_seq() const {
     ceph_assert(!segments.empty());
     return segments.rbegin()->first;
@@ -144,7 +133,7 @@ public:
   void submit_entry(LogEvent *e, MDSLogContextBase* c = 0) {
     std::lock_guard l(submit_mutex);
     _submit_entry(e, c);
-    _segment_upkeep(e);
+    _segment_upkeep();
     submit_cond.notify_all();
   }
 
@@ -271,10 +260,8 @@ protected:
 
   // -- segments --
   std::map<uint64_t,LogSegment*> segments;
-  std::set<LogSegment*> expiring_segments;
-  std::set<LogSegment*> expired_segments;
   std::size_t pre_segments_size = 0;            // the num of segments when the mds finished replay-journal, to calc the num of segments growing
-  uint64_t event_seq = 0;
+  LogSegment::seq_t event_seq = 0;
   uint64_t expiring_events = 0;
   uint64_t expired_events = 0;
 
@@ -288,14 +275,10 @@ private:
   friend class C_MDL_Flushed;
   friend class C_OFT_Committed;
 
-  // -- segments --
-  void _start_new_segment();
-  void _prepare_new_segment();
-  void _segment_upkeep(LogEvent* le);
-  void _journal_segment_subtree_map(MDSContext *onsync);
-  void _submit_entry(LogEvent *e, MDSLogContextBase *c);
-
   void try_to_commit_open_file_table(uint64_t last_seq);
+  LogSegment* _start_new_segment(SegmentBoundary* sb);
+  void _segment_upkeep();
+  void _submit_entry(LogEvent* e, MDSLogContextBase* c);
 
   void try_expire(LogSegment *ls, int op_prio);
   void _maybe_expired(LogSegment *ls, int op_prio);
@@ -305,8 +288,14 @@ private:
 
   bool debug_subtrees;
   uint64_t events_per_segment;
+  uint64_t major_segment_event_ratio;
   int64_t max_events;
   uint64_t max_segments;
   bool pause;
+
+  std::set<uint64_t> major_segments;
+  std::set<LogSegment*> expired_segments;
+  std::set<LogSegment*> expiring_segments;
+  uint64_t events_since_last_major_segment = 0;
 };
 #endif

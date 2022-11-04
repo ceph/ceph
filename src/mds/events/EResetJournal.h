@@ -17,9 +17,10 @@
 #define CEPH_MDS_ERESETJOURNAL_H
 
 #include "../LogEvent.h"
+#include "../SegmentBoundary.h"
 
 // generic log event
-class EResetJournal : public LogEvent {
+class EResetJournal : public LogEvent, public SegmentBoundary {
  public:
   EResetJournal() : LogEvent(EVENT_RESETJOURNAL) { }
   ~EResetJournal() override {}
