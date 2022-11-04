@@ -78,9 +78,10 @@ To add each new host to the cluster, perform two steps:
 Removing Hosts
 ==============
 
-A host can safely be removed from a the cluster once all daemons are removed from it.
+A host can safely be removed from a the cluster after all daemons are removed
+from it.
 
-To drain all daemons from a host do the following:
+To drain all daemons from a host, run a command of the following form:
 
 .. prompt:: bash #
 
