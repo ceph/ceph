@@ -7805,3 +7805,29 @@ class TestMisc(TestVolumesHelper):
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+class TestPerModuleFinsherThread(TestVolumesHelper):
+    """
+    Per module finisher thread tests related to mgr/volume cmds.
+    This is used in conjuction with check_counter with min val being 4
+    as four subvolume cmds are run
+    """
+    def test_volumes_module_finisher_thread(self):
+        subvol1, subvol2, subvol3 = self._generate_random_subvolume_name(3)
+        group = self._generate_random_group_name()
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolumes in group
+        self._fs_cmd("subvolume", "create", self.volname, subvol1, "--group_name", group)
+        self._fs_cmd("subvolume", "create", self.volname, subvol2, "--group_name", group)
+        self._fs_cmd("subvolume", "create", self.volname, subvol3, "--group_name", group)
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvol1, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvol2, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvol3, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()

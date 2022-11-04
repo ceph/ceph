@@ -5,6 +5,8 @@ import json
 from teuthology.task import Task
 from teuthology import misc
 
+from tasks import ceph_manager
+
 log = logging.getLogger(__name__)
 
 
@@ -35,6 +37,11 @@ class CheckCounter(Task):
                     min: 3
     - workunit: ...
     """
+    @property
+    def admin_remote(self):
+        first_mon = misc.get_first_mon(self.ctx, None)
+        (result,) = self.ctx.cluster.only(first_mon).remotes.keys()
+        return result
 
     def start(self):
         log.info("START")
@@ -50,6 +57,10 @@ class CheckCounter(Task):
         if cluster_name is None:
             cluster_name = next(iter(self.ctx.managers.keys()))
 
+
+        mon_manager = ceph_manager.CephManager(self.admin_remote, ctx=self.ctx, logger=log.getChild('ceph_manager'))
+        active_mgr = json.loads(mon_manager.raw_cluster_cmd("mgr", "dump", "--format=json-pretty"))["active_name"]
+
         for daemon_type, counters in targets.items():
             # List of 'a', 'b', 'c'...
             daemon_ids = list(misc.all_roles_of_type(self.ctx.cluster, daemon_type))
@@ -64,6 +75,8 @@ class CheckCounter(Task):
                 if not daemon.running():
                     log.info("Ignoring daemon {0}, it isn't running".format(daemon_id))
                     continue
+                elif daemon_type == 'mgr' and daemon_id != active_mgr:
+                    continue
                 else:
                     log.debug("Getting stats from {0}".format(daemon_id))
 
@@ -76,10 +89,15 @@ class CheckCounter(Task):
                     log.warning("No admin socket response from {0}, skipping".format(daemon_id))
                     continue
 
+                minval = ''
+                expected_val = ''
                 for counter in counters:
                     if isinstance(counter, dict):
                         name = counter['name']
-                        minval = counter['min']
+                        if 'min' in counter:
+                            minval = counter['min']
+                        if 'expected_val' in counter:
+                            expected_val = counter['expected_val']
                     else:
                         name = counter
                         minval = 1
@@ -96,7 +114,9 @@ class CheckCounter(Task):
 
                     if val is not None:
                         log.info(f"Daemon {daemon_type}.{daemon_id} {name}={val}")
-                        if val >= minval:
+                        if isinstance(minval, int) and val >= minval:
+                            seen.add(name)
+                        elif isinstance(expected_val, int) and val == expected_val:
                             seen.add(name)
 
             if not dry_run:
