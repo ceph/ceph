@@ -14,8 +14,6 @@
 #define MULTIPART_UPLOAD_ID_PREFIX_LEGACY "2/"
 #define MULTIPART_UPLOAD_ID_PREFIX "2~" // must contain a unique char that may not come up in gen_rand_alpha()
 
-class RGWMPObj;
-
 struct RGWUploadPartInfo {
   uint32_t num;
   uint64_t size;
