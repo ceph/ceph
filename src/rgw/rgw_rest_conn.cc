@@ -409,7 +409,12 @@ int RGWRESTConn::send_resource(const DoutPrefixProvider *dpp, const std::string&
     return ret;
   }
 
-  return req.complete_request(y);
+  ret = req.complete_request(y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 5) << __func__ << ": complete_request() resource=" << resource << " returned ret=" << ret << dendl;
+  }
+
+  return ret;
 }
 
 RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
