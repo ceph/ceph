@@ -905,6 +905,139 @@ struct rgw_placement_rule {
 };
 WRITE_CLASS_ENCODER(rgw_placement_rule)
 
+struct rgw_obj {
+  rgw_bucket bucket;
+  rgw_obj_key key;
+
+  bool in_extra_data{false}; /* in-memory only member, does not serialize */
+
+  // Represents the hash index source for this object once it is set (non-empty)
+  std::string index_hash_source;
+
+  rgw_obj() {}
+  rgw_obj(const rgw_bucket& b, const std::string& name) : bucket(b), key(name) {}
+  rgw_obj(const rgw_bucket& b, const rgw_obj_key& k) : bucket(b), key(k) {}
+  rgw_obj(const rgw_bucket& b, const rgw_obj_index_key& k) : bucket(b), key(k) {}
+
+  void init(const rgw_bucket& b, const rgw_obj_key& k) {
+    bucket = b;
+    key = k;
+  }
+  void init(const rgw_bucket& b, const std::string& name) {
+    bucket = b;
+    key.set(name);
+  }
+  void init(const rgw_bucket& b, const std::string& name, const std::string& i, const std::string& n) {
+    bucket = b;
+    key.set(name, i, n);
+  }
+  void init_ns(const rgw_bucket& b, const std::string& name, const std::string& n) {
+    bucket = b;
+    key.name = name;
+    key.instance.clear();
+    key.ns = n;
+  }
+
+  bool empty() const {
+    return key.empty();
+  }
+
+  void set_key(const rgw_obj_key& k) {
+    key = k;
+  }
+
+  std::string get_oid() const {
+    return key.get_oid();
+  }
+
+  const std::string& get_hash_object() const {
+    return index_hash_source.empty() ? key.name : index_hash_source;
+  }
+
+  void set_in_extra_data(bool val) {
+    in_extra_data = val;
+  }
+
+  bool is_in_extra_data() const {
+    return in_extra_data;
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(6, 6, bl);
+    encode(bucket, bl);
+    encode(key.ns, bl);
+    encode(key.name, bl);
+    encode(key.instance, bl);
+//    encode(placement_id, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+    if (struct_v < 6) {
+      std::string s;
+      decode(bucket.name, bl); /* bucket.name */
+      decode(s, bl); /* loc */
+      decode(key.ns, bl);
+      decode(key.name, bl);
+      if (struct_v >= 2)
+        decode(bucket, bl);
+      if (struct_v >= 4)
+        decode(key.instance, bl);
+      if (key.ns.empty() && key.instance.empty()) {
+        if (key.name[0] == '_') {
+          key.name = key.name.substr(1);
+        }
+      } else {
+        if (struct_v >= 5) {
+          decode(key.name, bl);
+        } else {
+          ssize_t pos = key.name.find('_', 1);
+          if (pos < 0) {
+            throw buffer::malformed_input();
+          }
+          key.name = key.name.substr(pos + 1);
+        }
+      }
+    } else {
+      decode(bucket, bl);
+      decode(key.ns, bl);
+      decode(key.name, bl);
+      decode(key.instance, bl);
+//      decode(placement_id, bl);
+    }
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_obj*>& o);
+
+  bool operator==(const rgw_obj& o) const {
+    return (key == o.key) &&
+           (bucket == o.bucket);
+  }
+  bool operator<(const rgw_obj& o) const {
+    int r = key.name.compare(o.key.name);
+    if (r == 0) {
+      r = bucket.bucket_id.compare(o.bucket.bucket_id); /* not comparing bucket.name, if bucket_id is equal so will be bucket.name */
+      if (r == 0) {
+        r = key.ns.compare(o.key.ns);
+        if (r == 0) {
+          r = key.instance.compare(o.key.instance);
+        }
+      }
+    }
+
+    return (r < 0);
+  }
+
+  const rgw_pool& get_explicit_data_pool() {
+    if (!in_extra_data || bucket.explicit_placement.data_extra_pool.empty()) {
+      return bucket.explicit_placement.data_pool;
+    }
+    return bucket.explicit_placement.data_extra_pool;
+  }
+};
+WRITE_CLASS_ENCODER(rgw_obj)
+
 struct rgw_bucket_shard {
   rgw_bucket bucket;
   int shard_id;
