@@ -46,6 +46,12 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 
 	Ceph Cluster Map
 	Ceph Dashboard
+                :ref:`The Ceph Dashboard<mgr-dashboard>` is a built-in
+                web-based Ceph management and monitoring application through
+                which you can inspect and administer various resources within
+                the cluster. It is implemented as a :ref:`ceph-manager-daemon`
+                module.
+
 	Ceph File System
                 See :term:`CephFS`
 
