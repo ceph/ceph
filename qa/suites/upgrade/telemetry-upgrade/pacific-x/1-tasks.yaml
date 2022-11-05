@@ -22,6 +22,7 @@ tasks:
       - ceph config set mgr mgr/cephadm/use_repo_digest true --force
 - print: "**** done cephadm.shell ceph config set mgr..."
 
+
 - print: "**** done start telemetry pacific..."
 - workunit:
     clients:
@@ -29,15 +30,25 @@ tasks:
         - test_telemetry_pacific.sh
 - print: "**** done end telemetry pacific..."
 
-- print: "**** done start parallel"
-- parallel:
-    - workload
-    - upgrade-sequence
-- print: "**** done end parallel"
+- print: "**** done start upgrade sequence..."
+- sequential:
+    - print: "**** done start upgrade..."
+    - cephadm.shell:
+        env: [sha1]
+        mon.a:
+            - ceph config set global log_to_journald false --force
+            - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+            - while ceph orch upgrade status | jq '.in_progress' | grep true ; do ceph orch ps ; ceph versions ; sleep 30 ; done
+            - ceph orch ps
+            - ceph versions
+            - ceph versions | jq -e '.overall | length == 1'
+            - ceph versions | jq -e '.overall | keys' | grep $sha1
+    - print: "**** done end upgrade..."
 
-- print: "**** done start telemetry x..."
-- workunit:
-    clients:
-      client.0:
-        - test_telemetry_pacific_x.sh
-- print: "**** done end telemetry x..."
+    - print: "**** done start telemetry x..."
+    - workunit:
+        clients:
+          client.0:
+            - test_telemetry_pacific_x.sh
+    - print: "**** done end telemetry x..."
+- print: "**** done end upgrade sequence..."
