@@ -22,6 +22,13 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 
 	Ceph
 	Ceph Block Device
+                A software instrument that orchestrates the storage of
+                block-based data in Ceph. Ceph Block Device (also called "RBD",
+                or "RADOS block device") splits block-based application data
+                into "chunks". RADOS stores these chunks as objects. Ceph Block
+                Device orchestrates the storage of those objects across the
+                storage cluster. See also :term:`RBD`.
+
 	Ceph Block Storage
                 The block storage "product," service or capabilities when used
                 in conjunction with ``librbd``, a hypervisor such as QEMU or
