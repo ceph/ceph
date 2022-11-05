@@ -906,6 +906,88 @@ struct rgw_placement_rule {
 };
 WRITE_CLASS_ENCODER(rgw_placement_rule)
 
+struct rgw_raw_obj {
+  rgw_pool pool;
+  std::string oid;
+  std::string loc;
+
+  rgw_raw_obj() {}
+  rgw_raw_obj(const rgw_pool& _pool, const std::string& _oid) {
+    init(_pool, _oid);
+  }
+  rgw_raw_obj(const rgw_pool& _pool, const std::string& _oid, const std::string& _loc) : loc(_loc) {
+    init(_pool, _oid);
+  }
+
+  void init(const rgw_pool& _pool, const std::string& _oid) {
+    pool = _pool;
+    oid = _oid;
+  }
+
+  bool empty() const {
+    return oid.empty();
+  }
+
+  void encode(bufferlist& bl) const {
+     ENCODE_START(6, 6, bl);
+    encode(pool, bl);
+    encode(oid, bl);
+    encode(loc, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode_from_rgw_obj(bufferlist::const_iterator& bl);
+
+  void decode(bufferlist::const_iterator& bl) {
+    unsigned ofs = bl.get_off();
+    DECODE_START(6, bl);
+    if (struct_v < 6) {
+      /*
+       * this object was encoded as rgw_obj, prior to rgw_raw_obj been split out of it,
+       * let's decode it as rgw_obj and convert it
+       */
+      bl.seek(ofs);
+      decode_from_rgw_obj(bl);
+      return;
+    }
+    decode(pool, bl);
+    decode(oid, bl);
+    decode(loc, bl);
+    DECODE_FINISH(bl);
+  }
+
+  bool operator<(const rgw_raw_obj& o) const {
+    int r = pool.compare(o.pool);
+    if (r == 0) {
+      r = oid.compare(o.oid);
+      if (r == 0) {
+        r = loc.compare(o.loc);
+      }
+    }
+    return (r < 0);
+  }
+
+  bool operator==(const rgw_raw_obj& o) const {
+    return (pool == o.pool && oid == o.oid && loc == o.loc);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_raw_obj)
+
+inline std::ostream& operator<<(std::ostream& out, const rgw_raw_obj& o) {
+  out << o.pool << ":" << o.oid;
+  return out;
+}
+
+struct rgw_bucket_placement {
+  rgw_placement_rule placement_rule;
+  rgw_bucket bucket;
+
+  void dump(Formatter *f) const;
+};
+
 struct rgw_obj {
   rgw_bucket bucket;
   rgw_obj_key key;
@@ -924,14 +1006,17 @@ struct rgw_obj {
     bucket = b;
     key = k;
   }
+
   void init(const rgw_bucket& b, const std::string& name) {
     bucket = b;
     key.set(name);
   }
+
   void init(const rgw_bucket& b, const std::string& name, const std::string& i, const std::string& n) {
     bucket = b;
     key.set(name, i, n);
   }
+
   void init_ns(const rgw_bucket& b, const std::string& name, const std::string& n) {
     bucket = b;
     key.name = name;
@@ -972,6 +1057,7 @@ struct rgw_obj {
 //    encode(placement_id, bl);
     ENCODE_FINISH(bl);
   }
+
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
     if (struct_v < 6) {

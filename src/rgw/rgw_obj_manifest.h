@@ -15,8 +15,6 @@
 
 #pragma once
 
-#include "rgw_common.h"
-#include "rgw_compression_types.h"
 #include "rgw_sal.h"
 #include "rgw_zone.h"
 
