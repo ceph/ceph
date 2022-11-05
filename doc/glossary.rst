@@ -61,12 +61,12 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
                 more details.
 
 	Ceph Interim Release
-                Versions of Ceph that have not yet been put through quality
-                assurance testing, but may contain new features.
+                A version of Ceph that has not yet been put through quality
+                assurance testing. May contain new features.
 
 	Ceph Kernel Modules
-                The collection of kernel modules which can be used to interact
-                with the Ceph System (e.g., ``ceph.ko``, ``rbd.ko``).
+                The collection of kernel modules that can be used to interact
+                with the Ceph System (for example: ``ceph.ko``, ``rbd.ko``).
 
 	Ceph Manager
 	Ceph Manager Dashboard
@@ -132,7 +132,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Cloud Platforms
 	Cloud Stacks
                 Third party cloud provisioning platforms such as OpenStack,
-                CloudStack, OpenNebula, Proxmox VE, etc.
+                CloudStack, OpenNebula, and Proxmox VE.
 
 	Cluster Map
                 The set of maps comprising the monitor map, OSD map, PG map,
@@ -179,7 +179,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Node
 	Object Storage Device
 	OSD
-		A physical or logical storage unit (*e.g.*, LUN).
+		A physical or logical storage unit (for example: LUN).
 		Sometimes, Ceph users use the
 		term "OSD" to refer to :term:`Ceph OSD Daemon`, though the
 		proper term is "Ceph OSD".
