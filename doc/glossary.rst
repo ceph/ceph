@@ -168,11 +168,16 @@
 
 	Node
 	Object Storage Device
+                See :term:`OSD`.
+
 	OSD
-		A physical or logical storage unit (for example: LUN).
-		Sometimes, Ceph users use the
-		term "OSD" to refer to :term:`Ceph OSD Daemon`, though the
-		proper term is "Ceph OSD".
+                **O**\bject **S**\torage **D**\evice. A physical or logical
+                storage unit (for example: LUN). Ceph users sometimes use the
+                term "OSD" to refer to :term:`Ceph OSD Daemon`, but this is
+                incorrect. The proper expansion of "Ceph OSD" is "object
+                storage device". In contrast, :term:`Ceph OSD Daemon` refers to
+                :ref:`\``ceph-osd``<ceph_osd-daemon>`, not to "**O**\bject
+                **S**\torage **D**\evice".
 
 	OSD fsid
                 This is a unique identifier used to further improve the
