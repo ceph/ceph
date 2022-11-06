@@ -1,5 +1,7 @@
 :orphan:
 
+.. _ceph_osd-daemon:
+
 ========================================
  ceph-osd -- ceph object storage daemon
 ========================================
