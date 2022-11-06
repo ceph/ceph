@@ -39,7 +39,7 @@ using crimson::common::local_conf;
   {
     assert(!oid.is_head());
     return with_head_obc<RWState::RWREAD>(oid.get_head(),
-      [oid, func=std::move(func), this](auto head)
+      [oid, func=std::move(func), this](auto head) mutable
       -> load_obc_iertr::future<> {
       if (!head->obs.exists) {
         logger().error("with_clone_obc: {} head doesn't exist",
@@ -48,23 +48,36 @@ using crimson::common::local_conf;
           crimson::ct_error::enoent::make()
         };
       }
-      auto coid = resolve_oid(head->get_ro_ss(), oid);
-      if (!coid) {
-        logger().error("with_clone_obc: {} clone not found", coid);
-        return load_obc_iertr::future<>{
-          crimson::ct_error::enoent::make()
-        };
-      }
-      auto [clone, existed] = shard_services.get_cached_obc(*coid);
-      return clone->template with_lock<State, IOInterruptCondition>(
-        [existed=existed, head=std::move(head), clone=std::move(clone),
-         func=std::move(func), this]() -> load_obc_iertr::future<> {
-        auto loaded = get_or_load_obc<State>(clone, existed);
-        clone->head = head;
-        return loaded.safe_then_interruptible(
-          [func = std::move(func)](auto clone) {
-          return std::move(func)(std::move(clone));
-        });
+      return this->with_clone_obc_only<State>(head,
+                                              oid,
+                                              std::move(func));
+    });
+  }
+
+  template<RWState::State State>
+  ObjectContextLoader::load_obc_iertr::future<>
+  ObjectContextLoader::with_clone_obc_only(ObjectContextRef head,
+                                           hobject_t oid,
+                                           with_obc_func_t&& func)
+  {
+    auto coid = resolve_oid(head->get_ro_ss(), oid);
+    if (!coid) {
+      logger().error("with_clone_obc_only: {} clone not found",
+                     coid);
+      return load_obc_iertr::future<>{
+        crimson::ct_error::enoent::make()
+      };
+    }
+    auto [clone, existed] = shard_services.get_cached_obc(*coid);
+    return clone->template with_lock<State, IOInterruptCondition>(
+      [existed=existed, clone=std::move(clone),
+       func=std::move(func), head=std::move(head), this]()
+      -> load_obc_iertr::future<> {
+      auto loaded = get_or_load_obc<State>(clone, existed);
+      clone->head = std::move(head);
+      return loaded.safe_then_interruptible(
+        [func = std::move(func)](auto clone) {
+        return std::move(func)(std::move(clone));
       });
     });
   }
