@@ -2,16 +2,6 @@
  Ceph Glossary
 ===============
 
-Ceph is growing rapidly. As firms deploy Ceph, the technical terms such as
-"RADOS", "RBD," "RGW" and so forth require corresponding marketing terms
-that explain what each component does. The terms in this glossary are
-intended to complement the existing technical terminology.
-
-Sometimes more than one term applies to a definition. Generally, the first
-term reflects a term consistent with Ceph's marketing, and secondary terms
-reflect either technical terms or legacy ways of referring to Ceph systems.
-
-
 .. glossary::
 
 	bluestore
