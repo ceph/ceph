@@ -104,15 +104,15 @@ PGBackend::load_metadata(const hobject_t& oid)
           bool object_corrupted = true;
           if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
             object_corrupted = false;
-            logger().debug(
-              "load_metadata: object {} and snapset {} present",
-              oid, ssiter->second);
             bufferlist bl = std::move(ssiter->second);
             if (bl.length()) {
               ret->ssc = new crimson::osd::SnapSetContext(oid.get_snapdir());
               try {
                 ret->ssc->snapset = SnapSet(bl);
                 ret->ssc->exists = true;
+                logger().debug(
+                  "load_metadata: object {} and snapset {} present",
+                   oid, ret->ssc->snapset);
               } catch (const buffer::error&) {
                 logger().warn("unable to decode SnapSet");
                 throw crimson::osd::invalid_argument();
