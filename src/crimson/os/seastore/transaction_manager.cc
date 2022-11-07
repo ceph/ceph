@@ -451,8 +451,8 @@ TransactionManager::rewrite_logical_extent(
     lextent->get_type(),
     lextent->get_length(),
     lextent->get_user_hint(),
-    // get target reclaim generation
-    lextent->get_reclaim_generation())->cast<LogicalCachedExtent>();
+    // get target rewrite generation
+    lextent->get_rewrite_generation())->cast<LogicalCachedExtent>();
   lextent->get_bptr().copy_out(
     0,
     lextent->get_length(),
@@ -477,7 +477,7 @@ TransactionManager::rewrite_logical_extent(
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent,
-  reclaim_gen_t target_generation,
+  rewrite_gen_t target_generation,
   sea_time_point modify_time)
 {
   LOG_PREFIX(TransactionManager::rewrite_extent);
@@ -494,9 +494,9 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
 
   assert(extent->is_valid() && !extent->is_initial_pending());
   if (extent->is_dirty()) {
-    extent->set_target_reclaim_generation(INIT_GENERATION);
+    extent->set_target_rewrite_generation(INIT_GENERATION);
   } else {
-    extent->set_target_reclaim_generation(target_generation);
+    extent->set_target_rewrite_generation(target_generation);
     ceph_assert(modify_time != NULL_TIME);
     extent->set_modify_time(modify_time);
   }

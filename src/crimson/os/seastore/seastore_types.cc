@@ -246,7 +246,7 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
   }
 }
 
-std::ostream &operator<<(std::ostream &out, reclaim_gen_printer_t gen)
+std::ostream &operator<<(std::ostream &out, rewrite_gen_printer_t gen)
 {
   if (gen.gen == NULL_GENERATION) {
     return out << "GEN_NULL";
@@ -349,7 +349,7 @@ std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
              << " " << header.type
              << " " << segment_seq_printer_t{header.segment_seq}
              << " " << header.category
-             << " " << reclaim_gen_printer_t{header.generation}
+             << " " << rewrite_gen_printer_t{header.generation}
              << ", dirty_tail=" << header.dirty_tail
              << ", alloc_tail=" << header.alloc_tail
              << ", segment_nonce=" << header.segment_nonce

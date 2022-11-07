@@ -818,8 +818,8 @@ public:
         c.trans,
         fixed_kv_extent.get_length(),
         fixed_kv_extent.get_user_hint(),
-        // get target reclaim generation
-        fixed_kv_extent.get_reclaim_generation());
+        // get target rewrite generation
+        fixed_kv_extent.get_rewrite_generation());
       fixed_kv_extent.get_bptr().copy_out(
         0,
         fixed_kv_extent.get_length(),

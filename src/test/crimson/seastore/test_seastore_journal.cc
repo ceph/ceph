@@ -114,7 +114,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
     segment_seq_t seq,
     segment_type_t type,
     data_category_t,
-    reclaim_gen_t
+    rewrite_gen_t
   ) final {
     auto ret = next;
     next = segment_id_t{
