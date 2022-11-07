@@ -157,3 +157,8 @@ of the feature, refer this link on how to perform it:
 https://docs.ceph.com/en/quincy/cephadm/upgrade/#staggered-upgrade
 Relevant tracker: https://tracker.ceph.com/issues/55715
 
+* Introduced a new file system flag `refuse_client_session` that can be set using the
+`fs set` command. This flag allows blocking any incoming session
+request from client(s). This can be useful during some recovery situations
+where it's desirable to bring MDS up but have no client workload.
+Relevant tracker: https://tracker.ceph.com/issues/57090
