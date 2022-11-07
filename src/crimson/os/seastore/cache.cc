@@ -700,6 +700,8 @@ void Cache::add_extent(
     const Transaction::src_t* p_src=nullptr)
 {
   assert(ref->is_valid());
+  assert(ref->user_hint == PLACEMENT_HINT_NULL);
+  assert(ref->reclaim_generation == NULL_GENERATION);
   extents.insert(*ref);
   if (ref->is_dirty()) {
     add_to_dirty(ref);
@@ -1012,7 +1014,6 @@ CachedExtentRef Cache::duplicate_for_write(
 
   ret->version++;
   ret->state = CachedExtent::extent_state_t::MUTATION_PENDING;
-  ret->set_reclaim_generation(DIRTY_GENERATION);
   DEBUGT("{} -> {}", t, *i, *ret);
   return ret;
 }
@@ -1440,6 +1441,7 @@ void Cache::complete_commit(
     DEBUGT("add extent as fresh, inline={} -- {}",
 	   t, is_inline, *i);
     const auto t_src = t.get_src();
+    i->invalidate_hints();
     add_extent(i, &t_src);
     epm.mark_space_used(i->get_paddr(), i->get_length());
     if (is_backref_mapped_extent_node(i)) {

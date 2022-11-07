@@ -31,7 +31,7 @@ void segment_info_t::set_open(
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
   ceph_assert(_category != data_category_t::NUM);
-  ceph_assert(_generation < RECLAIM_GENERATIONS);
+  ceph_assert(is_reclaim_generation(_generation));
   state = Segment::segment_state_t::OPEN;
   seq = _seq;
   type = _type;
@@ -66,7 +66,7 @@ void segment_info_t::init_closed(
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
   ceph_assert(_category != data_category_t::NUM);
-  ceph_assert(_generation < RECLAIM_GENERATIONS);
+  ceph_assert(is_reclaim_generation(_generation));
   state = Segment::segment_state_t::CLOSED;
   seq = _seq;
   type = _type;
@@ -612,7 +612,7 @@ JournalTrimmerImpl::trim_dirty()
             dirty_list,
             [this, &t](auto &e) {
             return extent_callback->rewrite_extent(
-                t, e, DIRTY_GENERATION, NULL_TIME);
+                t, e, INIT_GENERATION, NULL_TIME);
           });
         });
       }).si_then([this, &t] {

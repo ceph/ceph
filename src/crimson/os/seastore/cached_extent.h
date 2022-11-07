@@ -118,6 +118,7 @@ public:
             paddr_t paddr,
             placement_hint_t hint,
             reclaim_gen_t gen) {
+    assert(gen == NULL_GENERATION || is_reclaim_generation(gen));
     state = _state;
     set_paddr(paddr);
     user_hint = hint;
@@ -402,8 +403,10 @@ public:
     reclaim_generation = NULL_GENERATION;
   }
 
-  void set_reclaim_generation(reclaim_gen_t gen) {
-    assert(gen < RECLAIM_GENERATIONS);
+  /// assign the target reclaim generation for the followup rewrite
+  void set_target_reclaim_generation(reclaim_gen_t gen) {
+    assert(is_target_reclaim_generation(gen));
+
     user_hint = placement_hint_t::REWRITE;
     reclaim_generation = gen;
   }
@@ -485,10 +488,11 @@ private:
 
   read_set_item_t<Transaction>::list transactions;
 
-  placement_hint_t user_hint;
+  placement_hint_t user_hint = PLACEMENT_HINT_NULL;
 
-  /// > 0 and not null means the extent is under reclaimming
-  reclaim_gen_t reclaim_generation;
+  // the target reclaim generation for the followup rewrite
+  // or the reclaim generation for the fresh write
+  reclaim_gen_t reclaim_generation = NULL_GENERATION;
 
 protected:
   CachedExtent(CachedExtent &&other) = delete;
