@@ -28,7 +28,7 @@
 #include "rgw_cors.h"
 #include "rgw_basic_types.h"
 #include "rgw_iam_policy.h"
-#include "rgw_quota.h"
+#include "rgw_quota_types.h"
 #include "rgw_string.h"
 #include "common/async/yield_context.h"
 #include "rgw_website.h"
@@ -307,31 +307,6 @@ static inline const char* to_mime_type(const RGWFormat f)
 
 typedef void *RGWAccessHandle;
 
-enum RGWIntentEvent {
-  DEL_OBJ = 0,
-  DEL_DIR = 1,
-};
-
-enum HostStyle {
-  PathStyle = 0,
-  VirtualStyle = 1,
-};
-
-/** Store error returns for output at a different point in the program */
-struct rgw_err {
-  rgw_err();
-  void clear();
-  bool is_clear() const;
-  bool is_err() const;
-  friend std::ostream& operator<<(std::ostream& oss, const rgw_err &err);
-
-  int http_ret;
-  int ret;
-  std::string err_code;
-  std::string message;
-};
-
-
 /* Helper class used for RGWHTTPArgs parsing */
 class NameVal
 {
@@ -498,97 +473,6 @@ enum http_op {
 
 class RGWAccessControlPolicy;
 class JSONObj;
-
-struct RGWAccessKey {
-  std::string id; // AccessKey
-  std::string key; // SecretKey
-  std::string subuser;
-
-  RGWAccessKey() {}
-  RGWAccessKey(std::string _id, std::string _key)
-    : id(std::move(_id)), key(std::move(_key)) {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
-    encode(id, bl);
-    encode(key, bl);
-    encode(subuser, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
-     decode(id, bl);
-     decode(key, bl);
-     decode(subuser, bl);
-     DECODE_FINISH(bl);
-  }
-  void dump(Formatter *f) const;
-  void dump_plain(Formatter *f) const;
-  void dump(Formatter *f, const std::string& user, bool swift) const;
-  static void generate_test_instances(std::list<RGWAccessKey*>& o);
-
-  void decode_json(JSONObj *obj);
-  void decode_json(JSONObj *obj, bool swift);
-};
-WRITE_CLASS_ENCODER(RGWAccessKey)
-
-struct RGWSubUser {
-  std::string name;
-  uint32_t perm_mask;
-
-  RGWSubUser() : perm_mask(0) {}
-  void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
-    encode(name, bl);
-    encode(perm_mask, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
-     decode(name, bl);
-     decode(perm_mask, bl);
-     DECODE_FINISH(bl);
-  }
-  void dump(Formatter *f) const;
-  void dump(Formatter *f, const std::string& user) const;
-  static void generate_test_instances(std::list<RGWSubUser*>& o);
-
-  void decode_json(JSONObj *obj);
-};
-WRITE_CLASS_ENCODER(RGWSubUser)
-
-class RGWUserCaps
-{
-  std::map<std::string, uint32_t> caps;
-
-  int get_cap(const std::string& cap, std::string& type, uint32_t *perm);
-  int add_cap(const std::string& cap);
-  int remove_cap(const std::string& cap);
-public:
-  static int parse_cap_perm(const std::string& str, uint32_t *perm);
-  int add_from_string(const std::string& str);
-  int remove_from_string(const std::string& str);
-
-  void encode(bufferlist& bl) const {
-     ENCODE_START(1, 1, bl);
-     encode(caps, bl);
-     ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator& bl) {
-     DECODE_START(1, bl);
-     decode(caps, bl);
-     DECODE_FINISH(bl);
-  }
-  int check_cap(const std::string& cap, uint32_t perm) const;
-  bool is_valid_cap_type(const std::string& tp);
-  void dump(Formatter *f) const;
-  void dump(Formatter *f, const char *name) const;
-
-  void decode_json(JSONObj *obj);
-};
-WRITE_CLASS_ENCODER(RGWUserCaps)
 
 void encode_json(const char *name, const obj_version& v, Formatter *f);
 void encode_json(const char *name, const RGWUserCaps& val, Formatter *f);

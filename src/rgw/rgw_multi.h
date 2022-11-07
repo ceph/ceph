@@ -6,6 +6,7 @@
 
 #include <map>
 #include "rgw_xml.h"
+#include "rgw_obj_types.h"
 #include "rgw_obj_manifest.h"
 #include "rgw_compression_types.h"
 #include "common/dout.h"
