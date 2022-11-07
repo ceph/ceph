@@ -3,6 +3,10 @@
 
 #pragma once
 
+#include <list>
+#include <vector>
+#include <map>
+
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw/rgw_basic_types.h"
 
@@ -1287,6 +1291,27 @@ cls_rgw_lc_list_entries_ret(uint8_t compat_v = 3)
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_ret)
+
+struct cls_rgw_mp_upload_part_op {
+  RGWUploadPartInfo info;
+
+  cls_rgw_mp_upload_part_op() {}
+
+  void encode(buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(info, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(info, bl);
+    DECODE_FINISH(bl);
+  }
+  static void generate_test_instances(std::list<cls_rgw_mp_upload_part_op*>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_mp_upload_part_op)
 
 struct cls_rgw_reshard_add_op {
  cls_rgw_reshard_entry entry;
