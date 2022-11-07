@@ -47,7 +47,7 @@ using ExtentOolWriterRef = std::unique_ptr<ExtentOolWriter>;
 class SegmentedOolWriter : public ExtentOolWriter {
 public:
   SegmentedOolWriter(data_category_t category,
-                     reclaim_gen_t gen,
+                     rewrite_gen_t gen,
                      SegmentProvider &sp,
                      SegmentSeqAllocator &ssa);
 
@@ -136,17 +136,17 @@ public:
   struct alloc_result_t {
     paddr_t paddr;
     bufferptr bp;
-    reclaim_gen_t gen;
+    rewrite_gen_t gen;
   };
   alloc_result_t alloc_new_extent(
     Transaction& t,
     extent_types_t type,
     extent_len_t length,
     placement_hint_t hint,
-    reclaim_gen_t gen
+    rewrite_gen_t gen
   ) {
     assert(hint < placement_hint_t::NUM_HINTS);
-    assert(is_target_reclaim_generation(gen));
+    assert(is_target_rewrite_generation(gen));
     assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
 
     // XXX: bp might be extended to point to differnt memory (e.g. PMem)
@@ -265,9 +265,9 @@ private:
 
   ExtentOolWriter* get_writer(placement_hint_t hint,
                               data_category_t category,
-                              reclaim_gen_t gen) {
+                              rewrite_gen_t gen) {
     assert(hint < placement_hint_t::NUM_HINTS);
-    assert(is_reclaim_generation(gen));
+    assert(is_rewrite_generation(gen));
     assert(gen != INLINE_GENERATION);
     if (category == data_category_t::DATA) {
       return data_writers_by_gen[generation_to_writer(gen)];

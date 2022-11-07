@@ -12,7 +12,7 @@ namespace crimson::os::seastore {
 
 SegmentedOolWriter::SegmentedOolWriter(
   data_category_t category,
-  reclaim_gen_t gen,
+  rewrite_gen_t gen,
   SegmentProvider& sp,
   SegmentSeqAllocator &ssa)
   : segment_allocator(nullptr, category, gen, sp, ssa),
@@ -182,7 +182,7 @@ void ExtentPlacementManager::init(
   ceph_assert(segment_cleaner != nullptr);
   auto num_writers = generation_to_writer(REWRITE_GENERATIONS);
   data_writers_by_gen.resize(num_writers, {});
-  for (reclaim_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+  for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
     writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
           data_category_t::DATA, gen, *segment_cleaner,
           segment_cleaner->get_ool_segment_seq_allocator()));
@@ -190,7 +190,7 @@ void ExtentPlacementManager::init(
   }
 
   md_writers_by_gen.resize(num_writers, {});
-  for (reclaim_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+  for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
     writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
           data_category_t::METADATA, gen, *segment_cleaner,
           segment_cleaner->get_ool_segment_seq_allocator()));
@@ -252,7 +252,7 @@ ExtentPlacementManager::delayed_alloc_or_ool_write(
       auto writer_ptr = get_writer(
           extent->get_user_hint(),
           get_extent_category(extent->get_type()),
-          extent->get_reclaim_generation());
+          extent->get_rewrite_generation());
       alloc_map[writer_ptr].emplace_back(extent);
     }
     return trans_intr::do_for_each(alloc_map, [&t](auto& p) {

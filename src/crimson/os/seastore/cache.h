@@ -629,11 +629,11 @@ public:
     Transaction &t,         ///< [in, out] current transaction
     extent_len_t length,    ///< [in] length
     placement_hint_t hint,  ///< [in] user hint
-    reclaim_gen_t gen       ///< [in] reclaim generation
+    rewrite_gen_t gen       ///< [in] rewrite generation
   ) {
     LOG_PREFIX(Cache::alloc_new_extent);
     SUBTRACET(seastore_cache, "allocate {} {}B, hint={}, gen={}",
-              t, T::TYPE, length, hint, reclaim_gen_printer_t{gen});
+              t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
     auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen);
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
     ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
@@ -644,7 +644,7 @@ public:
     SUBDEBUGT(seastore_cache,
               "allocated {} {}B extent at {}, hint={}, gen={} -- {}",
               t, T::TYPE, length, result.paddr,
-              hint, reclaim_gen_printer_t{result.gen}, *ret);
+              hint, rewrite_gen_printer_t{result.gen}, *ret);
     return ret;
   }
 
@@ -658,7 +658,7 @@ public:
     extent_types_t type,   ///< [in] type tag
     extent_len_t length,   ///< [in] length
     placement_hint_t hint, ///< [in] user hint
-    reclaim_gen_t gen      ///< [in] reclaim generation
+    rewrite_gen_t gen      ///< [in] rewrite generation
     );
 
   /**

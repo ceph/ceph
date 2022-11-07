@@ -701,7 +701,7 @@ void Cache::add_extent(
 {
   assert(ref->is_valid());
   assert(ref->user_hint == PLACEMENT_HINT_NULL);
-  assert(ref->reclaim_generation == NULL_GENERATION);
+  assert(ref->rewrite_generation == NULL_GENERATION);
   extents.insert(*ref);
   if (ref->is_dirty()) {
     add_to_dirty(ref);
@@ -946,12 +946,12 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
   extent_types_t type,   ///< [in] type tag
   extent_len_t length,   ///< [in] length
   placement_hint_t hint, ///< [in] user hint
-  reclaim_gen_t gen      ///< [in] reclaim generation
+  rewrite_gen_t gen      ///< [in] rewrite generation
 )
 {
   LOG_PREFIX(Cache::alloc_new_extent_by_type);
   SUBDEBUGT(seastore_cache, "allocate {} {}B, hint={}, gen={}",
-            t, type, length, hint, reclaim_gen_printer_t{gen});
+            t, type, length, hint, rewrite_gen_printer_t{gen});
   switch (type) {
   case extent_types_t::ROOT:
     ceph_assert(0 == "ROOT is never directly alloc'd");

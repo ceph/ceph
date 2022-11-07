@@ -1118,7 +1118,7 @@ constexpr bool is_backref_node(extent_types_t type)
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
 /**
- * reclaim_gen_t
+ * rewrite_gen_t
  *
  * The goal is to group the similar aged extents in the same segment for better
  * bimodel utilization distribution, and also to the same device tier. For EPM,
@@ -1137,16 +1137,16 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t);
  * to not increase the generation if want to keep the hot tier as filled as
  * possible.
  */
-using reclaim_gen_t = uint8_t;
+using rewrite_gen_t = uint8_t;
 
 // INIT_GENERATION requires EPM decision to INLINE/OOL_GENERATION
-constexpr reclaim_gen_t INIT_GENERATION = 0;
-constexpr reclaim_gen_t INLINE_GENERATION = 1; // to the journal
-constexpr reclaim_gen_t OOL_GENERATION = 2;
+constexpr rewrite_gen_t INIT_GENERATION = 0;
+constexpr rewrite_gen_t INLINE_GENERATION = 1; // to the journal
+constexpr rewrite_gen_t OOL_GENERATION = 2;
 
 // All the rewritten extents start with MIN_REWRITE_GENERATION
-constexpr reclaim_gen_t MIN_REWRITE_GENERATION = 3;
-constexpr reclaim_gen_t MAX_REWRITE_GENERATION = 4;
+constexpr rewrite_gen_t MIN_REWRITE_GENERATION = 3;
+constexpr rewrite_gen_t MAX_REWRITE_GENERATION = 4;
 
 /**
  * TODO:
@@ -1154,30 +1154,30 @@ constexpr reclaim_gen_t MAX_REWRITE_GENERATION = 4;
  * hot tier.
  */
 
-constexpr reclaim_gen_t REWRITE_GENERATIONS = MAX_REWRITE_GENERATION + 1;
-constexpr reclaim_gen_t NULL_GENERATION =
-  std::numeric_limits<reclaim_gen_t>::max();
+constexpr rewrite_gen_t REWRITE_GENERATIONS = MAX_REWRITE_GENERATION + 1;
+constexpr rewrite_gen_t NULL_GENERATION =
+  std::numeric_limits<rewrite_gen_t>::max();
 
-struct reclaim_gen_printer_t {
-  reclaim_gen_t gen;
+struct rewrite_gen_printer_t {
+  rewrite_gen_t gen;
 };
 
-std::ostream &operator<<(std::ostream &out, reclaim_gen_printer_t gen);
+std::ostream &operator<<(std::ostream &out, rewrite_gen_printer_t gen);
 
-constexpr std::size_t generation_to_writer(reclaim_gen_t gen) {
+constexpr std::size_t generation_to_writer(rewrite_gen_t gen) {
   // caller to assert the gen is in the reasonable range
   return gen - OOL_GENERATION;
 }
 
 // before EPM decision
-constexpr bool is_target_reclaim_generation(reclaim_gen_t gen) {
+constexpr bool is_target_rewrite_generation(rewrite_gen_t gen) {
   return gen == INIT_GENERATION ||
          (gen >= MIN_REWRITE_GENERATION &&
           gen <= REWRITE_GENERATIONS);
 }
 
 // after EPM decision
-constexpr bool is_reclaim_generation(reclaim_gen_t gen) {
+constexpr bool is_rewrite_generation(rewrite_gen_t gen) {
   return gen >= INLINE_GENERATION &&
          gen < REWRITE_GENERATIONS;
 }
@@ -1694,7 +1694,7 @@ struct segment_header_t {
   segment_type_t type;
 
   data_category_t category;
-  reclaim_gen_t generation;
+  rewrite_gen_t generation;
 
   segment_type_t get_type() const {
     return type;
