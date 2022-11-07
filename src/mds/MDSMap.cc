@@ -234,6 +234,7 @@ void MDSMap::dump_flags_state(Formatter *f) const
     f->dump_bool(flag_display.at(CEPH_MDSMAP_ALLOW_SNAPS), allows_snaps());
     f->dump_bool(flag_display.at(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS), allows_multimds_snaps());
     f->dump_bool(flag_display.at(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY), allows_standby_replay());
+    f->dump_bool(flag_display.at(CEPH_MDSMAP_REFUSE_CLIENT_SESSION), test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION));
     f->close_section();
 }
 
@@ -373,6 +374,8 @@ void MDSMap::print_flags(std::ostream& out) const {
     out << " " << flag_display.at(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS);
   if (allows_standby_replay())
     out << " " << flag_display.at(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY);
+  if (test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION))
+    out << " " << flag_display.at(CEPH_MDSMAP_REFUSE_CLIENT_SESSION);
 }
 
 void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
