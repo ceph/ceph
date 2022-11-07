@@ -1293,6 +1293,7 @@ cls_rgw_lc_list_entries_ret(uint8_t compat_v = 3)
 WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_ret)
 
 struct cls_rgw_mp_upload_part_op {
+  std::string part_key;
   RGWUploadPartInfo info;
 
   cls_rgw_mp_upload_part_op() {}

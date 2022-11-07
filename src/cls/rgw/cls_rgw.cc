@@ -4331,6 +4331,66 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
   return 0;
 }
 
+static int rgw_cls_mp_upload_part_meta(cls_method_context_t hctx,
+				       buffer::list *in,
+				       bufferlist *out)
+{
+  cls_rgw_mp_upload_part_op op;
+  auto in_iter = in->cbegin();
+  try {
+    decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_cls_mp_upload_part_meta(): failed to decode op\n");
+    return -EINVAL;
+  }
+
+  RGWUploadPartInfo stored_info;
+
+  int ret = read_omap_entry(hctx, op.part_key, &stored_info);
+  if (ret < 0) {
+    if (ret != -ENOENT) {
+	return ret;
+    }
+
+    /* merge all the prior manifest prefix and any failed
+     * prefixes carried forward from prior upload attempts */
+    boost::container::flat_set<std::string> nfps;
+
+    nfps.reserve(stored_info.saved_prefixes.size() +
+		 op.info.saved_prefixes.size() + 1);
+
+    // the incoming manifest prefix supercedes prior ones
+    nfps.insert(stored_info.manifest.get_prefix());
+
+    std::for_each(stored_info.saved_prefixes.begin(),
+		  stored_info.saved_prefixes.end(),
+		  [&](const std::string& fprefix) {
+		    nfps.insert(fprefix);
+		  });
+
+    std::for_each(op.info.saved_prefixes.begin(),
+		  op.info.saved_prefixes.end(),
+		  [&](const std::string& fprefix) {
+		    nfps.insert(fprefix);
+		  });
+
+    // consolidate info incoming part info record */
+    op.info.saved_prefixes.clear();
+    std::for_each(nfps.begin(), nfps.end(),
+		  [&](const std::string& fprefix) {
+		    op.info.saved_prefixes.push_back(fprefix);
+		  });
+  }
+
+  buffer::list bl;
+
+  encode(op.info, bl);
+
+  ret = cls_cxx_map_set_val(hctx, op.part_key, &bl);
+
+  return ret;
+}
+
 static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
