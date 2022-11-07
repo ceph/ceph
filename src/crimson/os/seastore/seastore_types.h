@@ -1117,11 +1117,44 @@ constexpr bool is_backref_node(extent_types_t type)
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
+/**
+ * reclaim_gen_t
+ *
+ * The goal is to group the similar aged extents in the same segment for better
+ * bimodel utilization distribution, and also to the same device tier. For EPM,
+ * it has the flexibility to make placement decisions by re-assigning the
+ * generation. And each non-inline generation will be statically mapped to a
+ * writer in EPM.
+ *
+ * All the fresh and dirty extents start with INIT_GENERATION upon allocation,
+ * and they will be assigned to INLINE/OOL generation by EPM before the initial
+ * writes. After that, the generation can only be increased upon rewrite.
+ *
+ * Note, although EPM can re-assign the generations according to the tiering
+ * status, it cannot decrease the generation for the correctness of space
+ * reservation. It may choose to assign a larger generation if the extent is
+ * hinted cold, or if want to evict extents to the cold tier. And it may choose
+ * to not increase the generation if want to keep the hot tier as filled as
+ * possible.
+ */
 using reclaim_gen_t = uint8_t;
 
-constexpr reclaim_gen_t DIRTY_GENERATION = 1;
-constexpr reclaim_gen_t COLD_GENERATION = 1;
-constexpr reclaim_gen_t RECLAIM_GENERATIONS = 3;
+// INIT_GENERATION requires EPM decision to INLINE/OOL_GENERATION
+constexpr reclaim_gen_t INIT_GENERATION = 0;
+constexpr reclaim_gen_t INLINE_GENERATION = 1; // to the journal
+constexpr reclaim_gen_t OOL_GENERATION = 2;
+
+// All the rewritten extents start with MIN_REWRITE_GENERATION
+constexpr reclaim_gen_t MIN_REWRITE_GENERATION = 3;
+constexpr reclaim_gen_t MAX_REWRITE_GENERATION = 4;
+
+/**
+ * TODO:
+ * For tiering, might introduce 5 and 6 for the cold tier, and 1 ~ 4 for the
+ * hot tier.
+ */
+
+constexpr reclaim_gen_t REWRITE_GENERATIONS = MAX_REWRITE_GENERATION + 1;
 constexpr reclaim_gen_t NULL_GENERATION =
   std::numeric_limits<reclaim_gen_t>::max();
 
@@ -1130,6 +1163,24 @@ struct reclaim_gen_printer_t {
 };
 
 std::ostream &operator<<(std::ostream &out, reclaim_gen_printer_t gen);
+
+constexpr std::size_t generation_to_writer(reclaim_gen_t gen) {
+  // caller to assert the gen is in the reasonable range
+  return gen - OOL_GENERATION;
+}
+
+// before EPM decision
+constexpr bool is_target_reclaim_generation(reclaim_gen_t gen) {
+  return gen == INIT_GENERATION ||
+         (gen >= MIN_REWRITE_GENERATION &&
+          gen <= REWRITE_GENERATIONS);
+}
+
+// after EPM decision
+constexpr bool is_reclaim_generation(reclaim_gen_t gen) {
+  return gen >= INLINE_GENERATION &&
+         gen < REWRITE_GENERATIONS;
+}
 
 enum class data_category_t : uint8_t {
   METADATA = 0,

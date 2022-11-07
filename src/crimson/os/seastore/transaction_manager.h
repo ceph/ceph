@@ -320,7 +320,7 @@ public:
       t,
       len,
       placement_hint,
-      0);
+      INIT_GENERATION);
     return lba_manager->alloc_extent(
       t,
       laddr_hint,

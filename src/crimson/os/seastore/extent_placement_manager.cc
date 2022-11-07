@@ -57,7 +57,6 @@ SegmentedOolWriter::write_record(
       TRACET("{} ool extent written at {} -- {}",
              t, segment_allocator.get_name(),
              extent_addr, *extent);
-      extent->invalidate_hints();
       t.mark_delayed_extent_ool(extent, extent_addr);
       extent_addr = extent_addr.as_seg_paddr().add_offset(
           extent->get_length());
@@ -179,23 +178,23 @@ void ExtentPlacementManager::init(
 {
   writer_refs.clear();
 
-  ceph_assert(RECLAIM_GENERATIONS > 0);
   auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
   ceph_assert(segment_cleaner != nullptr);
-  data_writers_by_gen.resize(RECLAIM_GENERATIONS, {});
-  for (reclaim_gen_t gen = 0; gen < RECLAIM_GENERATIONS; ++gen) {
+  auto num_writers = generation_to_writer(REWRITE_GENERATIONS);
+  data_writers_by_gen.resize(num_writers, {});
+  for (reclaim_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
     writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
           data_category_t::DATA, gen, *segment_cleaner,
           segment_cleaner->get_ool_segment_seq_allocator()));
-    data_writers_by_gen[gen] = writer_refs.back().get();
+    data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
   }
 
-  md_writers_by_gen.resize(RECLAIM_GENERATIONS - 1, {});
-  for (reclaim_gen_t gen = 1; gen < RECLAIM_GENERATIONS; ++gen) {
+  md_writers_by_gen.resize(num_writers, {});
+  for (reclaim_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
     writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
           data_category_t::METADATA, gen, *segment_cleaner,
           segment_cleaner->get_ool_segment_seq_allocator()));
-    md_writers_by_gen[gen - 1] = writer_refs.back().get();
+    md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
   }
 
   for (auto *device : segment_cleaner->get_segment_manager_group()

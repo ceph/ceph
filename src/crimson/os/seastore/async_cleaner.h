@@ -1085,10 +1085,20 @@ private:
         segment_id_t segment_id,
         reclaim_gen_t generation,
         segment_off_t segment_size) {
-      ceph_assert(generation < RECLAIM_GENERATIONS);
+      ceph_assert(is_reclaim_generation(generation));
+
+      reclaim_gen_t target_gen;
+      if (generation < MIN_REWRITE_GENERATION) {
+        target_gen = MIN_REWRITE_GENERATION;
+      } else {
+        // tolerate the target_gen to exceed MAX_REWRETE_GENERATION to make EPM
+        // aware of its original generation for the decisions.
+        target_gen = generation + 1;
+      }
+
+      assert(is_target_reclaim_generation(target_gen));
       return {generation,
-              (reclaim_gen_t)(generation == RECLAIM_GENERATIONS - 1 ?
-                              generation : generation + 1),
+              target_gen,
               segment_size,
               P_ADDR_NULL,
               paddr_t::make_seg_paddr(segment_id, 0)};

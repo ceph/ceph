@@ -146,8 +146,8 @@ public:
     reclaim_gen_t gen
   ) {
     assert(hint < placement_hint_t::NUM_HINTS);
-    assert(gen < RECLAIM_GENERATIONS);
-    assert(gen == 0 || hint == placement_hint_t::REWRITE);
+    assert(is_target_reclaim_generation(gen));
+    assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
 
     // XXX: bp might be extended to point to differnt memory (e.g. PMem)
     // according to the allocator.
@@ -159,31 +159,37 @@ public:
       // TODO: implement out-of-line strategy for physical extent.
       return {make_record_relative_paddr(0),
               std::move(bp),
-              0};
+              INLINE_GENERATION};
     }
 
     if (hint == placement_hint_t::COLD) {
-      assert(gen == 0);
+      assert(gen == INIT_GENERATION);
       return {make_delayed_temp_paddr(0),
               std::move(bp),
-              COLD_GENERATION};
+              MIN_REWRITE_GENERATION};
     }
 
     if (get_extent_category(type) == data_category_t::METADATA &&
-        gen == 0) {
-      // gen 0 METADATA writer is the journal writer
+        gen == INIT_GENERATION) {
       if (prefer_ool) {
         return {make_delayed_temp_paddr(0),
                 std::move(bp),
-                1};
+                OOL_GENERATION};
       } else {
+        // default not to ool metadata extents to reduce padding overhead.
+        // TODO: improve padding so we can default to the prefer_ool path.
         return {make_record_relative_paddr(0),
                 std::move(bp),
-                0};
+                INLINE_GENERATION};
       }
     } else {
       assert(get_extent_category(type) == data_category_t::DATA ||
-             gen > 0);
+             gen >= MIN_REWRITE_GENERATION);
+      if (gen > MAX_REWRITE_GENERATION) {
+        gen = MAX_REWRITE_GENERATION;
+      } else if (gen == INIT_GENERATION) {
+        gen = OOL_GENERATION;
+      }
       return {make_delayed_temp_paddr(0),
               std::move(bp),
               gen};
@@ -261,14 +267,13 @@ private:
                               data_category_t category,
                               reclaim_gen_t gen) {
     assert(hint < placement_hint_t::NUM_HINTS);
-    assert(gen < RECLAIM_GENERATIONS);
+    assert(is_reclaim_generation(gen));
+    assert(gen != INLINE_GENERATION);
     if (category == data_category_t::DATA) {
-      return data_writers_by_gen[gen];
+      return data_writers_by_gen[generation_to_writer(gen)];
     } else {
       assert(category == data_category_t::METADATA);
-      // gen 0 METADATA writer is the journal writer
-      assert(gen > 0);
-      return md_writers_by_gen[gen - 1];
+      return md_writers_by_gen[generation_to_writer(gen)];
     }
   }
 

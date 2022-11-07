@@ -249,9 +249,15 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
 std::ostream &operator<<(std::ostream &out, reclaim_gen_printer_t gen)
 {
   if (gen.gen == NULL_GENERATION) {
-    return out << "NULL_GEN";
-  } else if (gen.gen >= RECLAIM_GENERATIONS) {
-    return out << "INVALID_GEN(" << (unsigned)gen.gen << ")";
+    return out << "GEN_NULL";
+  } else if (gen.gen == INIT_GENERATION) {
+    return out << "GEN_INIT";
+  } else if (gen.gen == INLINE_GENERATION) {
+    return out << "GEN_INL";
+  } else if (gen.gen == OOL_GENERATION) {
+    return out << "GEN_OOL";
+  } else if (gen.gen > REWRITE_GENERATIONS) {
+    return out << "GEN_INVALID(" << (unsigned)gen.gen << ")!";
   } else {
     return out << "GEN(" << (unsigned)gen.gen << ")";
   }
