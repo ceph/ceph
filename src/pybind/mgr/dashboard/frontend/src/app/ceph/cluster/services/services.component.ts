@@ -54,6 +54,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   permissions: Permissions;
   tableActions: CdTableAction[];
   showDocPanel = false;
+  count = 0;
   bsModalRef: NgbModalRef;
 
   orchStatus: OrchestratorStatus;
@@ -213,9 +214,11 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       return;
     }
     this.isLoadingServices = true;
-    this.cephServiceService.list().subscribe(
+    const pagination_obs = this.cephServiceService.list(context.toParams());
+    pagination_obs.observable.subscribe(
       (services: CephServiceSpec[]) => {
         this.services = services;
+        this.count = pagination_obs.count;
         this.services = this.services.filter((col: any) => {
           return !this.hiddenServices.includes(col.service_name);
         });
