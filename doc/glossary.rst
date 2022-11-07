@@ -59,6 +59,12 @@
                 with the Ceph System (for example: ``ceph.ko``, ``rbd.ko``).
 
 	Ceph Manager
+                The Ceph manager daemon (ceph-mgr) is a daemon that runs
+                alongside monitor daemons to provide monitoring and interfacing
+                to external monitoring and management systems. Since the
+                Luminous release (12.x), the ceph-mgr daemon is required in
+                order for the Ceph cluster to function properly.
+
 	Ceph Manager Dashboard
 	Ceph Metadata Server
 	Ceph Monitor
