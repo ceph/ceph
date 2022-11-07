@@ -1185,6 +1185,8 @@ record_t Cache::prepare_record(
                  i->get_type()).increment(i->get_length());
     } else {
       TRACET("fresh inline extent -- {}", t, *i);
+      i->prepare_write();
+      i->prepare_initial_commit();
     }
     fresh_stat.increment(i->get_length());
     get_by_ext(efforts.fresh_inline_by_ext,
@@ -1192,7 +1194,6 @@ record_t Cache::prepare_record(
     assert(i->is_inline());
 
     bufferlist bl;
-    i->prepare_write();
     bl.append(i->get_bptr());
     if (i->get_type() == extent_types_t::ROOT) {
       ceph_assert(0 == "ROOT never gets written as a fresh block");
@@ -1233,6 +1234,7 @@ record_t Cache::prepare_record(
     assert(!i->is_inline());
     get_by_ext(efforts.fresh_ool_by_ext,
                i->get_type()).increment(i->get_length());
+    i->prepare_initial_commit();
     if (is_backref_mapped_extent_node(i)) {
       alloc_delta.alloc_blk_ranges.emplace_back(
 	i->get_paddr(),

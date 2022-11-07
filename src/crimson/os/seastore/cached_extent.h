@@ -306,6 +306,15 @@ public:
    * invalidated.
    */
   virtual void on_invalidated(Transaction &t) {}
+
+  /**
+   * prepare_initial_write
+   *
+   * Called right before committing initial_pending extents by Cache::prepare_record
+   *
+   */
+  virtual void prepare_initial_commit() {}
+
   /**
    * get_type
    *

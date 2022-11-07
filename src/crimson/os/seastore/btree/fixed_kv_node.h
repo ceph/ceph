@@ -719,7 +719,7 @@ struct FixedKVNode : ChildableCachedExtent {
     return is_initial_pending() && get_prior_instance();
   }
 
-  virtual void on_fixed_kv_node_initial_write() = 0;
+  virtual void on_fixed_kv_node_initial_write() {}
   void on_initial_write() final {
     // All in-memory relative addrs are necessarily block-relative
     resolve_relative_addrs(get_paddr());
@@ -1254,7 +1254,7 @@ struct FixedKVLeafNode
     }
   }
 
-  void on_fixed_kv_node_initial_write() final {
+  void prepare_initial_commit() final {
     if constexpr (has_children) {
       this->copy_from_srcs_and_apply_mutates();
       if (this->is_rewrite_from_mutation_pending()) {
