@@ -243,4 +243,52 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_user &u) {
 
 #include "rgw_obj_manifest.h"
 
+struct RGWUploadPartInfo {
+  uint32_t num;
+  uint64_t size;
+  uint64_t accounted_size{0};
+  std::string etag;
+  ceph::real_time modified;
+  RGWObjManifest manifest;
+  RGWCompressionInfo cs_info;
+  std::vector<std::string> saved_prefixes; // Yixin's preferred member name
+
+  RGWUploadPartInfo() : num(0), size(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(5, 2, bl);
+    encode(num, bl);
+    encode(size, bl);
+    encode(etag, bl);
+    encode(modified, bl);
+    encode(manifest, bl);
+    encode(cs_info, bl);
+    encode(accounted_size, bl);
+    encode(saved_prefixes, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+    decode(num, bl);
+    decode(size, bl);
+    decode(etag, bl);
+    decode(modified, bl);
+    if (struct_v >= 3)
+      decode(manifest, bl);
+    if (struct_v >= 4) {
+      decode(cs_info, bl);
+      decode(accounted_size, bl);
+    } else {
+      accounted_size = size;
+    }
+    if (struct_v >= 5) {
+      decode(saved_prefixes, bl);
+    }
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<RGWUploadPartInfo*>& o);
+};
+WRITE_CLASS_ENCODER(RGWUploadPartInfo)
+
 #endif /* CEPH_RGW_BASIC_TYPES_H */
