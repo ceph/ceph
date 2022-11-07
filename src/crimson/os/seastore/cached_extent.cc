@@ -100,7 +100,11 @@ void child_pos_t::link_child(ChildableCachedExtent *c) {
 
 std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
 {
-  out << ", laddr=" << laddr;
+  out << ", laddr=" << laddr
+      << ", parent_tracker=" << (void*)parent_tracker.get();
+  if (parent_tracker) {
+    out << ", parent=" << (void*)parent_tracker->get_parent().get();
+  }
   return print_detail_l(out);
 }
 

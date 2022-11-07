@@ -273,6 +273,8 @@ struct FixedKVNode : ChildableCachedExtent {
   uint16_t capacity = 0;
   parent_tracker_t* my_tracker = nullptr;
   RootBlockRef root_block;
+  FixedKVNodeRef rewritten;
+
 
   bool is_linked() {
     assert(!(bool)parent_tracker || !(bool)root_block);
@@ -711,6 +713,14 @@ struct FixedKVNode : ChildableCachedExtent {
       child_trans_view_hook.unlink();
     }
     parent_tracker.reset();
+    copy_sources.clear();
+    mutate_state.clear();
+    if (get_prior_instance()) {
+      auto &prior = (FixedKVNode&)*get_prior_instance();
+      if (prior.rewritten == this) {
+	prior.rewritten.reset();
+      }
+    }
   }
 
   virtual void adjust_ptracker_for_stable_children() = 0;

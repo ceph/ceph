@@ -173,6 +173,13 @@ public:
     paddr_t paddr,
     LogicalCachedExtent *nextent) = 0;
 
+  virtual update_mapping_ret replace_logical_extent(
+    Transaction &t,
+    laddr_t laddr,
+    paddr_t paddr,
+    LogicalCachedExtent *old_ext,
+    LogicalCachedExtent *new_ext) = 0;
+
   /**
    * update_mappings
    *

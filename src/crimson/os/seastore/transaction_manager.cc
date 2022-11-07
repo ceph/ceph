@@ -454,11 +454,11 @@ TransactionManager::rewrite_logical_extent(
    * extents since we're going to do it again once we either do the ool write
    * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
    * avoid this complication. */
-  return lba_manager->update_mapping(
+  return lba_manager->replace_logical_extent(
     t,
     lextent->get_laddr(),
-    lextent->get_paddr(),
     nlextent->get_paddr(),
+    lextent.get(),
     nlextent.get());
 }
 

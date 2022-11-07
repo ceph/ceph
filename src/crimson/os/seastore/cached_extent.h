@@ -15,6 +15,11 @@
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/seastore_types.h"
 
+namespace crimson::os::seastore::lba_manager::btree {
+template <bool leaf_has_children>
+class BtreeLBAManager;
+}
+
 namespace crimson::os::seastore {
 
 class Transaction;
@@ -1117,6 +1122,7 @@ private:
     size_t node_size,
     bool leaf_has_children>
   friend class FixedKVBtree;
+  friend class lba_manager::btree::BtreeLBAManager<true>;
 };
 
 using LogicalCachedExtentRef = TCachedExtentRef<LogicalCachedExtent>;

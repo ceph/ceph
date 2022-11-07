@@ -144,6 +144,13 @@ public:
     paddr_t paddr,
     LogicalCachedExtent*) final;
 
+  update_mapping_ret replace_logical_extent(
+    Transaction &t,
+    laddr_t laddr,
+    paddr_t paddr,
+    LogicalCachedExtent *old_ext,
+    LogicalCachedExtent *new_ext) final;
+
   get_physical_extent_if_live_ret get_physical_extent_if_live(
     Transaction &t,
     extent_types_t type,

@@ -1018,13 +1018,18 @@ public:
         if (!fixed_kv_extent.is_pending()) {
           n_fixed_kv_extent->copy_sources.emplace(&fixed_kv_extent);
           n_fixed_kv_extent->prior_instance = &fixed_kv_extent;
+          fixed_kv_extent.rewritten = n_fixed_kv_extent;
         } else {
           ceph_assert(fixed_kv_extent.is_mutation_pending());
           n_fixed_kv_extent->copy_sources.emplace(
             (typename internal_node_t::base_t*
              )fixed_kv_extent.get_prior_instance().get());
           n_fixed_kv_extent->mutate_state = std::move(fixed_kv_extent.mutate_state);
-          n_fixed_kv_extent->prior_instance = fixed_kv_extent.get_prior_instance();
+          auto prior_instance = fixed_kv_extent.get_prior_instance();
+          n_fixed_kv_extent->prior_instance = prior_instance;
+          auto &prior = (std::remove_reference_t<
+            decltype(fixed_kv_extent)>&)*prior_instance;
+          prior.rewritten = n_fixed_kv_extent;
           n_fixed_kv_extent->adjust_ptracker_for_pending_children();
         }
       }

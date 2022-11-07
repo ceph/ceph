@@ -524,6 +524,70 @@ BtreeLBAManager<leaf_has_children>::rewrite_extent(
   }
 }
 
+template <>
+typename BtreeLBAManager<true>::update_mapping_ret
+BtreeLBAManager<true>::replace_logical_extent(
+  Transaction &t,
+  laddr_t laddr,
+  paddr_t paddr,
+  LogicalCachedExtent *old_ext,
+  LogicalCachedExtent *new_ext)
+{
+  LOG_PREFIX(BtreeLBAManager::replace_logical_extent);
+  TRACET("{} => {}", t, *old_ext, *new_ext);
+  assert(new_ext->is_initial_pending());
+  LBALeafNodeRef<true> parent;
+  if (old_ext->is_mutation_pending()) {
+    auto &prior = (LogicalCachedExtent&)*old_ext->get_prior_instance();
+    assert(prior.get_parent_tracker());
+    assert(prior.get_parent_tracker()->get_parent());
+    parent = prior.get_parent_tracker()->get_parent<LBALeafNode<true>>();
+  } else {
+    assert(!old_ext->is_pending());
+    assert(old_ext->get_parent_tracker());
+    assert(old_ext->get_parent_tracker()->get_parent());
+    parent = old_ext->get_parent_tracker()->get_parent<LBALeafNode<true>>();
+  }
+  assert(parent->is_valid());
+  assert(!parent->is_pending_in_trans(t.get_trans_id()));
+  t.add_to_read_set(parent);
+
+  return parent->wait_io().then(
+    [parent, this, old_ext, new_ext, laddr, &t]() mutable {
+    assert(!parent->is_pending());
+    if (parent->rewritten) {
+      parent = parent->rewritten->cast<LBALeafNode<true>>();
+    } else {
+      parent = parent->get_transactional_view(t)->cast<LBALeafNode<true>>();
+    }
+
+    if (!parent->is_pending()) {
+      parent = cache.duplicate_for_write(t, parent)->cast<LBALeafNode<true>>();
+    }
+    assert(parent->pending_for_transaction == t.get_trans_id());
+    auto it = parent->lower_bound(laddr);
+    assert(it->get_key() == laddr);
+    auto val = it->get_val();
+    assert(val.paddr == old_ext->get_paddr());
+    val.paddr = new_ext->get_paddr();
+    parent->update(it, val, new_ext);
+    return update_mapping_iertr::now();
+  });
+}
+
+template <>
+typename BtreeLBAManager<false>::update_mapping_ret
+BtreeLBAManager<false>::replace_logical_extent(
+  Transaction &t,
+  laddr_t laddr,
+  paddr_t paddr,
+  LogicalCachedExtent *old_ext,
+  LogicalCachedExtent *new_ext)
+{
+  ceph_abort("impossible");
+  return update_mapping_iertr::now();
+}
+
 template <bool leaf_has_children>
 typename BtreeLBAManager<leaf_has_children>::update_mapping_ret
 BtreeLBAManager<leaf_has_children>::update_mapping(
@@ -535,28 +599,44 @@ BtreeLBAManager<leaf_has_children>::update_mapping(
 {
   LOG_PREFIX(BtreeLBAManager::update_mapping);
   TRACET("laddr={}, paddr {} => {}", t, laddr, prev_addr, addr);
-  return _update_mapping(
-    t,
-    laddr,
-    [prev_addr, addr](
-      const lba_map_val_t &in) {
-      assert(!addr.is_null());
-      lba_map_val_t ret = in;
-      ceph_assert(in.paddr == prev_addr);
-      ret.paddr = addr;
-      return ret;
-    },
-    nextent
-  ).si_then([&t, laddr, prev_addr, addr, FNAME](auto result) {
-      DEBUGT("laddr={}, paddr {} => {} done -- {}",
-             t, laddr, prev_addr, addr, result);
-    },
-    update_mapping_iertr::pass_further{},
-    /* ENOENT in particular should be impossible */
-    crimson::ct_error::assert_all{
-      "Invalid error in BtreeLBAManager::update_mapping"
-    }
-  );
+  if (nextent && nextent->get_parent_tracker()) {
+    assert(nextent->is_initial_pending());
+    assert(nextent->get_parent_tracker()->get_parent());
+    auto leaf = nextent->get_parent_tracker()->get_parent<
+      LBALeafNode<leaf_has_children>>();
+    assert(leaf->is_pending());
+    assert(leaf->is_pending_in_trans(t.get_trans_id()));
+    auto it = leaf->lower_bound(laddr);
+    assert(it->get_key() == laddr);
+    auto val = it->get_val();
+    assert(val.paddr == prev_addr);
+    val.paddr = addr;
+    leaf->update(it, val, nullptr);
+    return update_mapping_iertr::now();
+  } else {
+    return _update_mapping(
+      t,
+      laddr,
+      [prev_addr, addr](
+	const lba_map_val_t &in) {
+	assert(!addr.is_null());
+	lba_map_val_t ret = in;
+	ceph_assert(in.paddr == prev_addr);
+	ret.paddr = addr;
+	return ret;
+      },
+      nextent
+    ).si_then([&t, laddr, prev_addr, addr, FNAME](auto result) {
+	DEBUGT("laddr={}, paddr {} => {} done -- {}",
+	       t, laddr, prev_addr, addr, result);
+      },
+      update_mapping_iertr::pass_further{},
+      /* ENOENT in particular should be impossible */
+      crimson::ct_error::assert_all{
+	"Invalid error in BtreeLBAManager::update_mapping"
+      }
+    );
+  }
 }
 
 template <bool leaf_has_children>

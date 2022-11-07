@@ -26,13 +26,23 @@ LBAManager::update_mappings(
         return update_mappings_iertr::make_ready_future<
           seastar::stop_iteration>(seastar::stop_iteration::yes);
       }
+      assert((*iter_extents)->get_parent_tracker());
+      assert((*iter_extents)->get_parent_tracker()->get_parent());
+#ifndef NDEBUG
+      auto leaf = (*iter_extents)->get_parent_tracker()->template get_parent<
+	  lba_manager::btree::LBALeafNode<true>>();
+      auto it = leaf->mutate_state.pending_children.find(
+	  (*iter_extents)->get_laddr(),
+	  typename lba_manager::btree::LBALeafNode<true>::pending_child_tracker_t::cmp_t());
+      assert(it != leaf->mutate_state.pending_children.end()
+	&& it->op != lba_manager::btree::LBALeafNode<true>::op_t::REMOVE);
+#endif
       return update_mapping(
           t,
           (*iter_extents)->get_laddr(),
           *iter_original_paddrs,
           (*iter_extents)->get_paddr(),
-	  nullptr	// all the extents should have already been
-			// added to the fixed_kv_btree
+	  iter_extents->get()
       ).si_then([&iter_extents, &iter_original_paddrs] {
         ++iter_extents;
         ++iter_original_paddrs;
