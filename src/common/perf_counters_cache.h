@@ -66,6 +66,30 @@ public:
     }
   }
 
+  void dec(std::string label, int indx, int64_t x, int64_t y) {
+    auto labeled_counters = get(label);
+    if(labeled_counters) {
+      labeled_counters->hinc(indx, x, y);
+      base_counters->hinc(indx, x, y);
+    }
+  }
+
+  void tinc(std::string label, int indx, utime_t amt) {
+    auto labeled_counters = get(label);
+    if(labeled_counters) {
+      labeled_counters->tinc(indx, amt);
+      base_counters->tinc(indx, amt);
+    }
+  }
+
+  void tinc(std::string label, int indx, ceph::timespan amt) {
+    auto labeled_counters = get(label);
+    if(labeled_counters) {
+      labeled_counters->tinc(indx, amt);
+      base_counters->tinc(indx, amt);
+    }
+  }
+
   void set_counter(std::string label, int indx, uint64_t val) {
     auto labeled_counters = get(label);
     if(labeled_counters) {
@@ -92,6 +116,28 @@ public:
       val = labeled_counters->get(indx);
     }
     return val;
+  }
+
+  utime_t tget(std::string label, int indx) {
+    auto labeled_counters = get(label);
+    utime_t val;
+    if(labeled_counters) {
+      val = labeled_counters->tget(indx);
+      return val;
+    } else {
+      return utime_t();
+    }
+  }
+
+  void tset(std::string label, int indx, utime_t amt) {
+    auto labeled_counters = get(label);
+    if(labeled_counters) {
+      utime_t old_amt = labeled_counters->tget(indx);
+      labeled_counters->tset(indx, amt);
+      // TODO write a unit test for possible values of delta
+      utime_t delta = old_amt - amt;
+      base_counters->tinc(indx, delta);
+    }
   }
 
   // for use right before destructor would get called

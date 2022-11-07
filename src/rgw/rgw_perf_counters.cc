@@ -75,6 +75,7 @@ int rgw_perf_start(CephContext *cct)
 }
 
 void add_rgw_counters(ceph::common::LabeledPerfCountersBuilder *lpcb) {
+  lpcb->set_prio_default(ceph::common::LabeledPerfCountersBuilder::PRIO_USEFUL);
   lpcb->add_u64_counter(l_rgw_req, "req", "Requests");
   lpcb->add_u64_counter(l_rgw_failed_req, "failed_req", "Aborted requests");
 
