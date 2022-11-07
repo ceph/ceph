@@ -470,6 +470,37 @@ tests:
            summary: One or more NICs reports packet errors
            description: "Node node-exporter experiences packet errors > 0.01% or > 10 packets/s on interface eth0."
 
+ # Bond is missing a peer
+ - interval: 1m
+   input_series:
+    - series: 'node_bonding_active{master="bond0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '3'
+    - series: 'node_bonding_slaves{master="bond0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '4'
+   promql_expr_test:
+     - expr: |
+         node_bonding_slaves - node_bonding_active != 0
+       eval_time: 5m
+       exp_samples:
+         - labels: '{master="bond0", instance="node-exporter",
+           job="node-exporter"}'
+           value: 1
+   alert_rule_test:
+     - eval_time: 5m
+       alertname: CephNodeNetworkBondDegraded
+       exp_alerts:
+       - exp_labels:
+           master: bond0
+           instance: node-exporter
+           job: node-exporter
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           summary: Degraded Bond on Node node-exporter
+           description: "Bond bond0 is degraded on Node node-exporter."
+
 # Node Storage disk space filling up
  - interval: 1m
    # 20GB = 21474836480, 256MB = 268435456
