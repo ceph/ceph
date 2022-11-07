@@ -1185,10 +1185,13 @@ std::string pg_state_string(uint64_t state)
   if (state & PG_STATE_WAIT)
     *css << "wait+";
   auto ret = css->str();
-  if (ret.length() > 0)
+  if (ret.length() > 0) {
+    // kill the last "+"
     ret.resize(ret.length() - 1);
-  else
-    ret = "unknown";
+  } else {
+    *css << "unknown(" << std::hex << state << std::dec << ")";
+    ret = css->str();
+  }
   return ret;
 }
 
