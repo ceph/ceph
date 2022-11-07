@@ -1,3 +1,4 @@
+import { HttpParams } from '@angular/common/http';
 import { Component, Input, OnInit, ViewChild } from '@angular/core';
 import { AbstractControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -350,12 +351,14 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       });
     }
 
-    this.cephServiceService.list().subscribe((services: CephServiceSpec[]) => {
-      this.serviceList = services;
-      this.services = services.filter((service: any) =>
-        this.INGRESS_SUPPORTED_SERVICE_TYPES.includes(service.service_type)
-      );
-    });
+    this.cephServiceService
+      .list(new HttpParams({ fromObject: { limit: -1, offset: 0 } }))
+      .observable.subscribe((services: CephServiceSpec[]) => {
+        this.serviceList = services;
+        this.services = services.filter((service: any) =>
+          this.INGRESS_SUPPORTED_SERVICE_TYPES.includes(service.service_type)
+        );
+      });
 
     this.cephServiceService.getKnownTypes().subscribe((resp: Array<string>) => {
       // Remove service types:
@@ -385,96 +388,100 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     if (this.editing) {
       this.action = this.actionLabels.EDIT;
       this.disableForEditing(this.serviceType);
-      this.cephServiceService.list(this.serviceName).subscribe((response: CephServiceSpec[]) => {
-        const formKeys = ['service_type', 'service_id', 'unmanaged'];
-        formKeys.forEach((keys) => {
-          this.serviceForm.get(keys).setValue(response[0][keys]);
-        });
-        if (!response[0]['unmanaged']) {
-          const placementKey = Object.keys(response[0]['placement'])[0];
-          let placementValue: string;
-          ['hosts', 'label'].indexOf(placementKey) >= 0
-            ? (placementValue = placementKey)
-            : (placementValue = 'hosts');
-          this.serviceForm.get('placement').setValue(placementValue);
-          this.serviceForm.get('count').setValue(response[0]['placement']['count']);
-          if (response[0]?.placement[placementValue]) {
-            this.serviceForm.get(placementValue).setValue(response[0]?.placement[placementValue]);
+      this.cephServiceService
+        .list(new HttpParams({ fromObject: { limit: -1, offset: 0 } }), this.serviceName)
+        .observable.subscribe((response: CephServiceSpec[]) => {
+          const formKeys = ['service_type', 'service_id', 'unmanaged'];
+          formKeys.forEach((keys) => {
+            this.serviceForm.get(keys).setValue(response[0][keys]);
+          });
+          if (!response[0]['unmanaged']) {
+            const placementKey = Object.keys(response[0]['placement'])[0];
+            let placementValue: string;
+            ['hosts', 'label'].indexOf(placementKey) >= 0
+              ? (placementValue = placementKey)
+              : (placementValue = 'hosts');
+            this.serviceForm.get('placement').setValue(placementValue);
+            this.serviceForm.get('count').setValue(response[0]['placement']['count']);
+            if (response[0]?.placement[placementValue]) {
+              this.serviceForm.get(placementValue).setValue(response[0]?.placement[placementValue]);
+            }
           }
-        }
-        switch (this.serviceType) {
-          case 'iscsi':
-            const specKeys = ['pool', 'api_password', 'api_user', 'trusted_ip_list', 'api_port'];
-            specKeys.forEach((key) => {
-              this.serviceForm.get(key).setValue(response[0].spec[key]);
-            });
-            this.serviceForm.get('ssl').setValue(response[0].spec?.api_secure);
-            if (response[0].spec?.api_secure) {
-              this.serviceForm.get('ssl_cert').setValue(response[0].spec?.ssl_cert);
-              this.serviceForm.get('ssl_key').setValue(response[0].spec?.ssl_key);
-            }
-            break;
-          case 'rgw':
-            this.serviceForm.get('rgw_frontend_port').setValue(response[0].spec?.rgw_frontend_port);
-            this.serviceForm.get('ssl').setValue(response[0].spec?.ssl);
-            if (response[0].spec?.ssl) {
-              this.serviceForm
-                .get('ssl_cert')
-                .setValue(response[0].spec?.rgw_frontend_ssl_certificate);
-            }
-            break;
-          case 'ingress':
-            const ingressSpecKeys = [
-              'backend_service',
-              'virtual_ip',
-              'frontend_port',
-              'monitor_port',
-              'virtual_interface_networks',
-              'ssl'
-            ];
-            ingressSpecKeys.forEach((key) => {
-              this.serviceForm.get(key).setValue(response[0].spec[key]);
-            });
-            if (response[0].spec?.ssl) {
-              this.serviceForm.get('ssl_cert').setValue(response[0].spec?.ssl_cert);
-              this.serviceForm.get('ssl_key').setValue(response[0].spec?.ssl_key);
-            }
-            break;
-          case 'snmp-gateway':
-            const snmpCommonSpecKeys = ['snmp_version', 'snmp_destination'];
-            snmpCommonSpecKeys.forEach((key) => {
-              this.serviceForm.get(key).setValue(response[0].spec[key]);
-            });
-            if (this.serviceForm.getValue('snmp_version') === 'V3') {
-              const snmpV3SpecKeys = [
-                'engine_id',
-                'auth_protocol',
-                'privacy_protocol',
-                'snmp_v3_auth_username',
-                'snmp_v3_auth_password',
-                'snmp_v3_priv_password'
-              ];
-              snmpV3SpecKeys.forEach((key) => {
-                if (key !== null) {
-                  if (
-                    key === 'snmp_v3_auth_username' ||
-                    key === 'snmp_v3_auth_password' ||
-                    key === 'snmp_v3_priv_password'
-                  ) {
-                    this.serviceForm.get(key).setValue(response[0].spec['credentials'][key]);
-                  } else {
-                    this.serviceForm.get(key).setValue(response[0].spec[key]);
-                  }
-                }
+          switch (this.serviceType) {
+            case 'iscsi':
+              const specKeys = ['pool', 'api_password', 'api_user', 'trusted_ip_list', 'api_port'];
+              specKeys.forEach((key) => {
+                this.serviceForm.get(key).setValue(response[0].spec[key]);
               });
-            } else {
+              this.serviceForm.get('ssl').setValue(response[0].spec?.api_secure);
+              if (response[0].spec?.api_secure) {
+                this.serviceForm.get('ssl_cert').setValue(response[0].spec?.ssl_cert);
+                this.serviceForm.get('ssl_key').setValue(response[0].spec?.ssl_key);
+              }
+              break;
+            case 'rgw':
               this.serviceForm
-                .get('snmp_community')
-                .setValue(response[0].spec['credentials']['snmp_community']);
-            }
-            break;
-        }
-      });
+                .get('rgw_frontend_port')
+                .setValue(response[0].spec?.rgw_frontend_port);
+              this.serviceForm.get('ssl').setValue(response[0].spec?.ssl);
+              if (response[0].spec?.ssl) {
+                this.serviceForm
+                  .get('ssl_cert')
+                  .setValue(response[0].spec?.rgw_frontend_ssl_certificate);
+              }
+              break;
+            case 'ingress':
+              const ingressSpecKeys = [
+                'backend_service',
+                'virtual_ip',
+                'frontend_port',
+                'monitor_port',
+                'virtual_interface_networks',
+                'ssl'
+              ];
+              ingressSpecKeys.forEach((key) => {
+                this.serviceForm.get(key).setValue(response[0].spec[key]);
+              });
+              if (response[0].spec?.ssl) {
+                this.serviceForm.get('ssl_cert').setValue(response[0].spec?.ssl_cert);
+                this.serviceForm.get('ssl_key').setValue(response[0].spec?.ssl_key);
+              }
+              break;
+            case 'snmp-gateway':
+              const snmpCommonSpecKeys = ['snmp_version', 'snmp_destination'];
+              snmpCommonSpecKeys.forEach((key) => {
+                this.serviceForm.get(key).setValue(response[0].spec[key]);
+              });
+              if (this.serviceForm.getValue('snmp_version') === 'V3') {
+                const snmpV3SpecKeys = [
+                  'engine_id',
+                  'auth_protocol',
+                  'privacy_protocol',
+                  'snmp_v3_auth_username',
+                  'snmp_v3_auth_password',
+                  'snmp_v3_priv_password'
+                ];
+                snmpV3SpecKeys.forEach((key) => {
+                  if (key !== null) {
+                    if (
+                      key === 'snmp_v3_auth_username' ||
+                      key === 'snmp_v3_auth_password' ||
+                      key === 'snmp_v3_priv_password'
+                    ) {
+                      this.serviceForm.get(key).setValue(response[0].spec['credentials'][key]);
+                    } else {
+                      this.serviceForm.get(key).setValue(response[0].spec[key]);
+                    }
+                  }
+                });
+              } else {
+                this.serviceForm
+                  .get('snmp_community')
+                  .setValue(response[0].spec['credentials']['snmp_community']);
+              }
+              break;
+          }
+        });
     }
   }
 

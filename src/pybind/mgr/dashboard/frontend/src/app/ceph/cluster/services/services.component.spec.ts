@@ -1,3 +1,4 @@
+import { HttpHeaders } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
@@ -10,6 +11,7 @@ import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { PaginateObservable } from '~/app/shared/api/paginate.model';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -20,6 +22,7 @@ import { ServicesComponent } from './services.component';
 describe('ServicesComponent', () => {
   let component: ServicesComponent;
   let fixture: ComponentFixture<ServicesComponent>;
+  let headers: HttpHeaders;
 
   const fakeAuthStorageService = {
     getPermissions: () => {
@@ -67,8 +70,10 @@ describe('ServicesComponent', () => {
     const orchService = TestBed.inject(OrchestratorService);
     const cephServiceService = TestBed.inject(CephServiceService);
     spyOn(orchService, 'status').and.returnValue(of({ available: true }));
-    spyOn(cephServiceService, 'list').and.returnValue(of(services));
-    fixture.detectChanges();
+    headers = new HttpHeaders().set('X-Total-Count', '2');
+    const paginate_obs = new PaginateObservable<any>(of({ body: services, headers: headers }));
+
+    spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
   });
 
   it('should create', () => {
@@ -87,7 +92,10 @@ describe('ServicesComponent', () => {
   });
 
   it('should return all services', () => {
-    component.getServices(new CdTableFetchDataContext(() => undefined));
+    const context = new CdTableFetchDataContext(() => undefined);
+    context.pageInfo.offset = 0;
+    context.pageInfo.limit = -1;
+    component.getServices(context);
     expect(component.services.length).toBe(2);
   });
 

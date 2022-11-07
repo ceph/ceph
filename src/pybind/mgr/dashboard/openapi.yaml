@@ -8952,10 +8952,30 @@ paths:
         name: service_name
         schema:
           type: string
+      - default: 0
+        in: query
+        name: offset
+        schema:
+          type: integer
+      - default: 5
+        in: query
+        name: limit
+        schema:
+          type: integer
+      - default: ''
+        in: query
+        name: search
+        schema:
+          type: string
+      - default: +service_name
+        in: query
+        name: sort
+        schema:
+          type: string
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               type: object
           description: OK
         '400':
