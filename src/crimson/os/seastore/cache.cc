@@ -1187,6 +1187,7 @@ record_t Cache::prepare_record(
       TRACET("fresh inline extent -- {}", t, *i);
       i->prepare_write();
       i->prepare_initial_commit();
+      i->set_io_wait();
     }
     fresh_stat.increment(i->get_length());
     get_by_ext(efforts.fresh_inline_by_ext,
@@ -1235,6 +1236,7 @@ record_t Cache::prepare_record(
     get_by_ext(efforts.fresh_ool_by_ext,
                i->get_type()).increment(i->get_length());
     i->prepare_initial_commit();
+    i->set_io_wait();
     if (is_backref_mapped_extent_node(i)) {
       alloc_delta.alloc_blk_ranges.emplace_back(
 	i->get_paddr(),
@@ -1450,6 +1452,7 @@ void Cache::complete_commit(
     i->last_committed_crc = i->get_crc32c();
     i->pending_for_transaction = 0;
     i->on_initial_write();
+    i->complete_io();
 
     i->state = CachedExtent::extent_state_t::CLEAN;
     DEBUGT("add extent as fresh, inline={} -- {}",
