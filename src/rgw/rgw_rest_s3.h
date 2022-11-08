@@ -517,7 +517,8 @@ public:
   void send_status() override;
   void begin_response() override;
   void send_partial_response(const rgw_obj_key& key, bool delete_marker,
-                             const std::string& marker_version_id, int ret) override;
+                             const std::string& marker_version_id, int ret,
+                             boost::asio::deadline_timer *formatter_flush_cond) override;
   void end_response() override;
 };
 
