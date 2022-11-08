@@ -336,6 +336,7 @@ class CephadmServe:
             sd.rank_generation = int(d['rank_generation']) if d.get(
                 'rank_generation') is not None else None
             sd.extra_container_args = d.get('extra_container_args')
+            sd.extra_entrypoint_args = d.get('extra_entrypoint_args')
             if 'state' in d:
                 sd.status_desc = d['state']
                 sd.status = {
@@ -903,6 +904,12 @@ class CephadmServe:
                 self.log.info(f'Redeploying {dd.name()}, (container cli args changed) . . .')
                 dd.extra_container_args = spec.extra_container_args
                 action = 'redeploy'
+            elif spec is not None and hasattr(spec, 'extra_entrypoint_args') and dd.extra_entrypoint_args != spec.extra_entrypoint_args:
+                self.log.info(f'Redeploying {dd.name()}, (entrypoint args changed) . . .')
+                self.log.debug(
+                    f'{dd.name()} daemon entrypoint args {dd.extra_entrypoint_args} -> {spec.extra_entrypoint_args}')
+                dd.extra_entrypoint_args = spec.extra_entrypoint_args
+                action = 'redeploy'
             elif self.mgr.last_monmap and \
                     self.mgr.last_monmap > last_config and \
                     dd.daemon_type in CEPH_TYPES:
@@ -1133,13 +1140,7 @@ class CephadmServe:
                 if self.mgr.allow_ptrace:
                     daemon_spec.extra_args.append('--allow-ptrace')
 
-                try:
-                    eca = daemon_spec.extra_container_args
-                    if eca:
-                        for a in eca:
-                            daemon_spec.extra_args.append(f'--extra-container-args={a}')
-                except AttributeError:
-                    eca = None
+                daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec)
 
                 if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
                     self._registry_login(daemon_spec.host,
@@ -1160,7 +1161,8 @@ class CephadmServe:
                             'deployed_by': self.mgr.get_active_mgr_digests(),
                             'rank': daemon_spec.rank,
                             'rank_generation': daemon_spec.rank_generation,
-                            'extra_container_args': eca
+                            'extra_container_args': extra_container_args,
+                            'extra_entrypoint_args': extra_entrypoint_args
                         }),
                         '--config-json', '-',
                     ] + daemon_spec.extra_args,
@@ -1200,6 +1202,29 @@ class CephadmServe:
                     dd = daemon_spec.to_daemon_description(DaemonDescriptionStatus.error, 'failed')
                     self.mgr.cephadm_services[servict_type].post_remove(dd, is_failed_deploy=True)
                 raise
+
+    def _setup_extra_deployment_args(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[CephadmDaemonDeploySpec, Optional[List[str]], Optional[List[str]]]:
+        # this function is for handling any potential user specified
+        # (in the service spec) extra runtime or entrypoint args for a daemon
+        # we are going to deploy. Effectively just adds a set of extra args to
+        # pass to the cephadm binary to indicate the daemon being deployed
+        # needs extra runtime/entrypoint args. Returns the modified daemon spec
+        # as well as what args were added (as those are included in unit.meta file)
+        try:
+            eca = daemon_spec.extra_container_args
+            if eca:
+                for a in eca:
+                    daemon_spec.extra_args.append(f'--extra-container-args={a}')
+        except AttributeError:
+            eca = None
+        try:
+            eea = daemon_spec.extra_entrypoint_args
+            if eea:
+                for a in eea:
+                    daemon_spec.extra_args.append(f'--extra-entrypoint-args={a}')
+        except AttributeError:
+            eea = None
+        return daemon_spec, eca, eea
 
     def _remove_daemon(self, name: str, host: str, no_post_remove: bool = False) -> str:
         """

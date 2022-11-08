@@ -861,6 +861,7 @@ class DaemonDescription(object):
                  rank: Optional[int] = None,
                  rank_generation: Optional[int] = None,
                  extra_container_args: Optional[List[str]] = None,
+                 extra_entrypoint_args: Optional[List[str]] = None,
                  ) -> None:
 
         #: Host is at the same granularity as InventoryHost
@@ -926,6 +927,7 @@ class DaemonDescription(object):
         self.is_active = is_active
 
         self.extra_container_args = extra_container_args
+        self.extra_entrypoint_args = extra_entrypoint_args
 
     @property
     def status(self) -> Optional[DaemonDescriptionStatus]:
