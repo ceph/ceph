@@ -39,6 +39,8 @@
                 components of the Ceph System.
 
 	Ceph Cluster Map
+                See :term:`Cluster Map`
+
 	Ceph Dashboard
                 :ref:`The Ceph Dashboard<mgr-dashboard>` is a built-in
                 web-based Ceph management and monitoring application through
@@ -142,7 +144,8 @@
 
 	Cluster Map
                 The set of maps comprising the monitor map, OSD map, PG map,
-                MDS map and CRUSH map. See `Cluster Map`_ for details.
+                MDS map and CRUSH map, which together report the state of the
+                Ceph cluster. See `Cluster Map`_ for details.
 
 	CRUSH
                 Controlled Replication Under Scalable Hashing. It is the
