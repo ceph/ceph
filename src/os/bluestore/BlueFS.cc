@@ -2428,17 +2428,22 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   uint64_t runway = log_file->fnode.get_allocated() - log.writer->get_effective_write_pos();
   dout(10) << __func__ << " old_log_jump_to 0x" << std::hex << old_log_jump_to
            << " need 0x" << (old_log_jump_to + cct->_conf->bluefs_max_log_runway) << std::dec << dendl;
+  bluefs_fnode_t new_log_tail_fnode;
+  bluefs_fnode_t old_log_snapshot_fnode;
   int r = _allocate(vselector->select_prefer_bdev(log_file->vselector_hint),
 		    cct->_conf->bluefs_max_log_runway,
-                    &log_file->fnode);
+                    &new_log_tail_fnode);
   ceph_assert(r == 0);
+  old_log_snapshot_fnode.clone_extents(log_file->fnode);
+  log_file->fnode.clone_extents(new_log_tail_fnode);
+
   //adjust usage as flush below will need it
   vselector->add_usage(log_file->vselector_hint, log_file->fnode);
   dout(10) << __func__ << " log extents " << log_file->fnode.extents << dendl;
 
   // update the log file change and log a jump to the offset where we want to
   // write the new entries
-  log.t.op_file_update(log_file->fnode);
+  log.t.op_file_update_inc(log_file->fnode);
   // jump to new position should mean next seq
   log.t.op_jump(log.seq_live + 1, old_log_jump_to);
   uint64_t seq_now = log.seq_live;
@@ -2472,9 +2477,9 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   t.op_jump(seq_now, new_log_jump_to);
 
   // allocate
-  //FIXME: check if we want DB here?
-  r = _allocate(BlueFS::BDEV_DB, new_log_jump_to,
-                    &new_log->fnode);
+  r = _allocate(vselector->select_prefer_bdev(log_file->vselector_hint),
+                new_log_jump_to,
+                &new_log->fnode);
   ceph_assert(r == 0);
 
   bufferlist bl;
@@ -2494,42 +2499,7 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   _flush_bdev(new_log_writer);
   // 5. update our log fnode
   // we need to append to new_log the extents that were allocated in step 1.1
-  // we do it by inverse logic - we drop 'old_log_jump_to' bytes and keep rest
-  // todo - maybe improve _allocate so we will give clear set of new allocations
-  uint64_t processed = 0;
-  mempool::bluefs::vector<bluefs_extent_t> old_extents;
-dout(0) << __func__ << " " << std::hex
-        << log.writer->pos << " "
-        << log.writer->file->fnode.size << " "
-        << old_log_jump_to
-        << std::dec << dendl;
-  for (auto& e : log_file->fnode.extents) {
-    if (processed + e.length <= old_log_jump_to) {
-      // drop whole extent
-      dout(10) << __func__ << " remove old log extent " << e << dendl;
-      old_extents.push_back(e);
-    } else {
-      // keep, but how much?
-      if (processed < old_log_jump_to) {
-	ceph_assert(processed + e.length > old_log_jump_to);
-	ceph_assert(old_log_jump_to - processed <= std::numeric_limits<uint32_t>::max());
-	uint32_t cut_at = uint32_t(old_log_jump_to - processed);
-	// need to cut, first half gets dropped
-	bluefs_extent_t retire(e.bdev, e.offset, cut_at);
-	old_extents.push_back(retire);
-	// second half goes to new log
-	bluefs_extent_t keep(e.bdev, e.offset + cut_at, e.length - cut_at);
-	new_log->fnode.append_extent(keep);
-	dout(10) << __func__ << " kept " << keep << " removed " << retire << dendl;
-      } else {
-	// take entire extent
-	ceph_assert(processed >= old_log_jump_to);
-	new_log->fnode.append_extent(e);
-	dout(10) << __func__ << " kept " << e << dendl;
-      }
-    }
-    processed += e.length;
-  }
+  new_log->fnode.claim_extents(new_log_tail_fnode.extents);
   // we will write it to super
   new_log->fnode.reset_delta();
 
@@ -2544,12 +2514,8 @@ dout(0) << __func__ << " " << std::hex
   _flush_bdev();
 
   log.lock.lock();
-  // swapping log_file and new_log
+  // swapping log_file and new_log, new log file is the log file now.
   vselector->sub_usage(log_file->vselector_hint, log_file->fnode);
-
-  // clear the extents from old log file, they are added to new log
-  log_file->fnode.clear_extents();
-  // swap the log files. New log file is the log file now.
   new_log->fnode.swap_extents(log_file->fnode);
 
   log.writer->pos = log.writer->file->fnode.size =
@@ -2565,10 +2531,12 @@ dout(0) << __func__ << " " << std::hex
   log_cond.notify_all();
 
   // 7. release old space
-  dout(10) << __func__ << " release old log extents " << old_extents << dendl;
+  dout(10) << __func__
+           << " release old log extents " << old_log_snapshot_fnode.extents
+           << dendl;
   {
     std::lock_guard dl(dirty.lock);
-    for (auto& r : old_extents) {
+    for (auto& r : old_log_snapshot_fnode.extents) {
       dirty.pending_release[r.bdev].insert(r.offset, r.length);
     }
   }
