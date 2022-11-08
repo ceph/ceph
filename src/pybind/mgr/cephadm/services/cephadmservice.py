@@ -62,6 +62,7 @@ class CephadmDaemonDeploySpec:
                  rank: Optional[int] = None,
                  rank_generation: Optional[int] = None,
                  extra_container_args: Optional[List[str]] = None,
+                 extra_entrypoint_args: Optional[List[str]] = None,
                  ):
         """
         A data struction to encapsulate `cephadm deploy ...
@@ -98,6 +99,7 @@ class CephadmDaemonDeploySpec:
         self.rank_generation: Optional[int] = rank_generation
 
         self.extra_container_args = extra_container_args
+        self.extra_entrypoint_args = extra_entrypoint_args
 
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -127,6 +129,7 @@ class CephadmDaemonDeploySpec:
             rank=dd.rank,
             rank_generation=dd.rank_generation,
             extra_container_args=dd.extra_container_args,
+            extra_entrypoint_args=dd.extra_entrypoint_args,
         )
 
     def to_daemon_description(self, status: DaemonDescriptionStatus, status_desc: str) -> DaemonDescription:
@@ -142,6 +145,7 @@ class CephadmDaemonDeploySpec:
             rank=self.rank,
             rank_generation=self.rank_generation,
             extra_container_args=self.extra_container_args,
+            extra_entrypoint_args=self.extra_entrypoint_args,
         )
 
 
@@ -215,6 +219,8 @@ class CephadmService(metaclass=ABCMeta):
             rank_generation=rank_generation,
             extra_container_args=spec.extra_container_args if hasattr(
                 spec, 'extra_container_args') else None,
+            extra_entrypoint_args=spec.extra_entrypoint_args if hasattr(
+                spec, 'extra_entrypoint_args') else None,
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
