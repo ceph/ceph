@@ -4,6 +4,8 @@
 
 There are several Ceph daemons in a storage cluster:
 
+.. _rados_configuration_storage-devices_ceph_osd:
+
 * **Ceph OSDs** (Object Storage Daemons) store most of the data
   in Ceph. Usually each OSD is backed by a single storage device.
   This can be a traditional hard disk (HDD) or a solid state disk
