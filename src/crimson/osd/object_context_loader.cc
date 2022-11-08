@@ -155,6 +155,13 @@ using crimson::common::local_conf;
     });
   }
 
+  void ObjectContextLoader::notify_on_change(bool is_primary)
+  {
+    for (auto& obc : obc_set_accessing) {
+      obc.interrupt(::crimson::common::actingset_changed(is_primary));
+    }
+  }
+
   // explicitly instantiate the used instantiations
   template ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::with_head_obc<RWState::RWNONE>(hobject_t,

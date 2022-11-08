@@ -54,6 +54,8 @@ public:
 
   load_obc_iertr::future<> reload_obc(ObjectContext& obc) const;
 
+  void notify_on_change(bool is_primary);
+
 private:
   ShardServices &shard_services;
   PGBackend* backend;
