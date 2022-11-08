@@ -20,23 +20,28 @@ There are two Ceph daemons that store data on devices:
   gigabytes.
 
 
-OSD Backends
-============
+OSD Back Ends
+=============
 
-There are two ways that OSDs can manage the data they store.  Starting
-with the Luminous 12.2.z release, the new default (and recommended) backend is
-*BlueStore*.  Prior to Luminous, the default (and only option) was
-*Filestore*.
+There are two ways that OSDs manage the data they store.  As of the Luminous
+12.2.z release, the default (and recommended) back end is *BlueStore*.  Prior
+to the Luminous release, the default (and only) back end was *Filestore*.
 
 .. _rados_config_storage_devices_bluestore:
 
 BlueStore
 ---------
 
+<<<<<<< HEAD
 BlueStore is a special-purpose storage backend designed specifically
 for managing data on disk for Ceph OSD workloads.  It is motivated by
 experience supporting and managing OSDs using FileStore over the
 last ten years.  Key BlueStore features include:
+=======
+BlueStore is a special-purpose storage back end designed specifically for
+managing data on disk for Ceph OSD workloads.  BlueStore's design is based on
+a decade of experience of supporting and managing Filestore OSDs. 
+>>>>>>> 28abc6a9a59 (doc/rados: s/backend/back end/)
 
 * Direct management of storage devices.  BlueStore consumes raw block
   devices or partitions.  This avoids any intervening layers of
