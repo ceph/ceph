@@ -115,6 +115,11 @@ struct bluefs_fnode_t {
   void reset_delta() {
     allocated_commited = allocated;
   }
+  void clone_extents(const bluefs_fnode_t& fnode) {
+    for (const auto& p : fnode.extents) {
+      append_extent(p);
+    }
+  }
   void claim_extents(mempool::bluefs::vector<bluefs_extent_t>& extents) {
     for (const auto& p : extents) {
       append_extent(p);
