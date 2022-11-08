@@ -2847,7 +2847,7 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
     return -EINVAL;
   }
 
-  s->object = store->get_object(rgw_obj_key(object_str));
+  s->object = s->bucket->get_object(rgw_obj_key(object_str));
 
   rebuild_key(s->object.get());
 
