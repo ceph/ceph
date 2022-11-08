@@ -4,11 +4,15 @@
 
 .. glossary::
 
-	bluestore
-                OSD BlueStore is a new back end for OSD daemons (kraken and
-                newer versions). Unlike :term:`filestore` it stores objects
-                directly on the Ceph block devices without any file system
-                interface.
+	:ref:`BlueStore<rados_config_storage_devices_bluestore>`
+                OSD BlueStore is a storage back end used by OSD daemons, and
+                was designed specifically for use with Ceph. BlueStore was
+                introduced in the Ceph Kraken release. In the Ceph Luminous
+                release, BlueStore became Ceph's default storage back end,
+                supplanting FileStore. Unlike :term:`filestore`, BlueStore
+                stores objects directly on Ceph block devices without any file
+                system interface. Since Luminous (12.2), BlueStore has been
+                Ceph's default and recommended storage back end.
 
 	Ceph
 	Ceph Block Device
@@ -85,6 +89,7 @@
 
 	Ceph Object Store
 	:ref:`Ceph OSD<rados_configuration_storage-devices_ceph_osd>`
+	Ceph OSD
                 Ceph **O**\bject **S**\torage **D**\aemon. The Ceph OSD
                 software, which interacts with logical disks (:term:`OSD`).
                 Around 2013, there was an attempt by "research and industry"
