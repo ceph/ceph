@@ -384,7 +384,8 @@ private:
   void _init_alloc();
   void _stop_alloc();
 
-  void _pad_bl(ceph::buffer::list& bl);  ///< pad ceph::buffer::list to block size w/ zeros
+  ///< pad ceph::buffer::list to max(block size, pad_size) w/ zeros
+  void _pad_bl(ceph::buffer::list& bl, uint64_t pad_size = 0);
 
   uint64_t _get_used(unsigned id) const;
   uint64_t _get_total(unsigned id) const;
@@ -427,6 +428,7 @@ private:
 			       int64_t available_runway);
   int _flush_and_sync_log_LD(uint64_t want_seq = 0);
 
+  uint64_t _estimate_transaction_size(bluefs_transaction_t* t);
   uint64_t _estimate_log_size_N();
   bool _should_start_compact_log_L_N();
 

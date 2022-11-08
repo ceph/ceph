@@ -2157,6 +2157,17 @@ void BlueFS::invalidate_cache(FileRef f, uint64_t offset, uint64_t length)
   }
 }
 
+
+uint64_t BlueFS::_estimate_transaction_size(bluefs_transaction_t* t)
+{
+  uint64_t max_alloc_size = std::max(alloc_size[BDEV_WAL],
+				     std::max(alloc_size[BDEV_DB],
+					      alloc_size[BDEV_SLOW]));
+
+  // conservative estimate for final encoded size
+  return round_up_to(t->op_bl.length() + super.block_size * 2, max_alloc_size);
+}
+
 uint64_t BlueFS::_estimate_log_size_N()
 {
   std::lock_guard nl(nodes.lock);
@@ -2466,13 +2477,7 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   // log can be used to write to, ops in log will be continuation of captured state
   log.lock.unlock();
 
-  uint64_t max_alloc_size = std::max(alloc_size[BDEV_WAL],
-				     std::max(alloc_size[BDEV_DB],
-					      alloc_size[BDEV_SLOW]));
-
-  // conservative estimate for final encoded size
-  new_log_jump_to = round_up_to(t.op_bl.length() + super.block_size * 2,
-                                max_alloc_size);
+  new_log_jump_to = _estimate_transaction_size(&t);
   //newly constructed log head will jump to what we had before
   t.op_jump(seq_now, new_log_jump_to);
 
@@ -2554,13 +2559,14 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   ceph_assert(old_is_comp);
 }
 
-void BlueFS::_pad_bl(bufferlist& bl)
+void BlueFS::_pad_bl(bufferlist& bl, uint64_t pad_size)
 {
-  uint64_t partial = bl.length() % super.block_size;
+  pad_size = std::max(pad_size, uint64_t(super.block_size));
+  uint64_t partial = bl.length() % pad_size;
   if (partial) {
     dout(10) << __func__ << " padding with 0x" << std::hex
-	     << super.block_size - partial << " zeros" << std::dec << dendl;
-    bl.append_zero(super.block_size - partial);
+	     << pad_size - partial << " zeros" << std::dec << dendl;
+    bl.append_zero(pad_size - partial);
   }
 }
 
