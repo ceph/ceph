@@ -84,11 +84,17 @@
                 Gateway.
 
 	Ceph Object Store
-	Ceph OSD
-		The Ceph OSD software, which interacts with a logical
-		disk (:term:`OSD`). Sometimes, Ceph users use the
-		term "OSD" to refer to "Ceph OSD Daemon", though the
-		proper term is "Ceph OSD".
+	:ref:`Ceph OSD<rados_configuration_storage-devices_ceph_osd>`
+                Ceph **O**\bject **S**\torage **D**\aemon. The Ceph OSD
+                software, which interacts with logical disks (:term:`OSD`).
+                Around 2013, there was an attempt by "research and industry"
+                (Sage's own words) to insist on using the term "OSD" to mean
+                only "Object Storage Device", but the Ceph community has always
+                persisted in using the term to mean "Object Storage Daemon" and
+                no less an authority than Sage Weil himself confirms in
+                November of 2022 that "Daemon is more accurate for how Ceph is
+                built" (private correspondence between Zac Dover and Sage Weil,
+                07 Nov 2022). 
 
 	Ceph OSD Daemon
 	Ceph OSD Daemons
