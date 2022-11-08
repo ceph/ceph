@@ -84,7 +84,7 @@
                 Gateway.
 
 	Ceph Object Store
-	Ceph OSD
+	:ref:`Ceph OSD<rados_configuration_storage-devices_ceph_osd>`
                 Ceph **O**\bject **S**\torage **D**\aemon. The Ceph OSD
                 software, which interacts with logical disks (:term:`OSD`).
                 Around 2013, there was an attempt by "research and industry"
