@@ -4,14 +4,13 @@
 #pragma once
 #include "include/common_fwd.h"
 #include "common/perf_counters_cache.h"
-#include "common/labeled_perf_counters.h"
 
 extern PerfCounters *perfcounter;
 extern PerfCountersCache *perf_counters_cache;
 
 extern int rgw_perf_start(CephContext *cct);
 extern void rgw_perf_stop(CephContext *cct);
-extern void add_rgw_counters(ceph::common::LabeledPerfCountersBuilder* lpcb);
+extern void add_rgw_counters(PerfCountersBuilder* lpcb);
 
 enum {
   l_rgw_first = 15000,

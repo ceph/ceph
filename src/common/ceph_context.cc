@@ -544,7 +544,7 @@ int CephContext::_do_command(
     std::string counter;
     cmd_getval(cmdmap, "logger", logger);
     cmd_getval(cmdmap, "counter", counter);
-    _perf_counters_collection->dump_formatted(f, false, logger, counter);
+    _perf_counters_collection->dump_formatted(f, false, false, logger, counter);
   }
   else if (command == "perfcounters_schema" || command == "2" ||
     command == "perf schema") {
@@ -552,7 +552,7 @@ int CephContext::_do_command(
   }
   else if (command == "labeledperfcounters_schema" || command == "3" ||
       command == "labeledperf schema") {
-    _labeled_perf_counters_collection->dump_formatted(f, true);
+    _perf_counters_collection->dump_formatted(f, true, true);
   }
   else if (command == "labeledperfcounters_dump" || command == "4" ||
       command == "labeledperf dump") {
@@ -560,7 +560,7 @@ int CephContext::_do_command(
     std::string counter;
     cmd_getval(cmdmap, "logger", logger);
     cmd_getval(cmdmap, "counter", counter);
-    _labeled_perf_counters_collection->dump_formatted(f, false, logger, counter);
+    _perf_counters_collection->dump_formatted(f, false, true, logger, counter);
   }
   else if (command == "perf histogram dump") {
     std::string logger;

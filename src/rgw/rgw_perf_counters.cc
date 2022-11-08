@@ -67,15 +67,15 @@ int rgw_perf_start(CephContext *cct)
   
   perfcounter = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perfcounter);
-  std::function<void(ceph::common::LabeledPerfCountersBuilder*)> lpcb_init = add_rgw_counters;
+  std::function<void(PerfCountersBuilder*)> lpcb_init = add_rgw_counters;
 
   uint64_t target_size = cct->_conf.get_val<uint64_t>("rgw_labeled_perfcounters_size");
-  perf_counters_cache = new PerfCountersCache(cct, target_size, l_rgw_first, l_rgw_last, lpcb_init, "rgw");
+  perf_counters_cache = new PerfCountersCache(cct, target_size, l_rgw_first, l_rgw_last, lpcb_init, "rgw_base");
   return 0;
 }
 
-void add_rgw_counters(ceph::common::LabeledPerfCountersBuilder *lpcb) {
-  lpcb->set_prio_default(ceph::common::LabeledPerfCountersBuilder::PRIO_USEFUL);
+void add_rgw_counters(PerfCountersBuilder *lpcb) {
+  lpcb->set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
   lpcb->add_u64_counter(l_rgw_req, "req", "Requests");
   lpcb->add_u64_counter(l_rgw_failed_req, "failed_req", "Aborted requests");
 
