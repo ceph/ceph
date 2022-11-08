@@ -34,6 +34,8 @@ As of the Luminous 12.2.z release, the default (and recommended) backend is
 *BlueStore*.  Prior to the Luminous release, the default (and only option) was
 *Filestore*.
 
+.. _rados_config_storage_devices_bluestore:
+
 BlueStore
 ---------
 
