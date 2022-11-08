@@ -376,7 +376,7 @@ uint32_t PurgeQueue::_calculate_ops(const PurgeItem &item) const
     const uint64_t num = (item.size > 0) ?
       Striper::get_num_objects(item.layout, item.size) : 1;
 
-    ops_required = std::min(num, g_conf()->filer_max_purge_ops);
+    ops_required = num;
 
     // Account for deletions for old pools
     if (item.action != PurgeItem::TRUNCATE_FILE) {
@@ -850,4 +850,3 @@ std::string_view PurgeItem::get_type_str() const
     return "UNKNOWN";
   }
 }
-
