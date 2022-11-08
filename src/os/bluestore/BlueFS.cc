@@ -2205,76 +2205,46 @@ bool BlueFS::_should_start_compact_log_L_N()
 }
 
 void BlueFS::_compact_log_dump_metadata_NF(bluefs_transaction_t *t,
-					int flags)
+					int bdev_update_flags,
+                                        uint64_t capture_before_seq)
 {
   std::lock_guard nl(nodes.lock);
 
-  t->seq = 1;
-  t->uuid = super.uuid;
   dout(20) << __func__ << " op_init" << dendl;
-
-  t->op_init();
   for (auto& [ino, file_ref] : nodes.file_map) {
     if (ino == 1)
       continue;
     ceph_assert(ino > 1);
     std::lock_guard fl(file_ref->lock);
-    for(auto& e : file_ref->fnode.extents) {
-      auto bdev = e.bdev;
-      auto bdev_new = bdev;
-      ceph_assert(!((flags & REMOVE_WAL) && bdev == BDEV_WAL));
-      if ((flags & RENAME_SLOW2DB) && bdev == BDEV_SLOW) {
-	bdev_new = BDEV_DB;
+    if (bdev_update_flags) {
+      for(auto& e : file_ref->fnode.extents) {
+        auto bdev = e.bdev;
+        auto bdev_new = bdev;
+        ceph_assert(!((bdev_update_flags & REMOVE_WAL) && bdev == BDEV_WAL));
+        if ((bdev_update_flags & RENAME_SLOW2DB) && bdev == BDEV_SLOW) {
+	  bdev_new = BDEV_DB;
+        }
+        if ((bdev_update_flags & RENAME_DB2SLOW) && bdev == BDEV_DB) {
+	  bdev_new = BDEV_SLOW;
+        }
+        if (bdev == BDEV_NEWDB) {
+	  // REMOVE_DB xor RENAME_DB
+	  ceph_assert(!(bdev_update_flags & REMOVE_DB) != !(bdev_update_flags & RENAME_DB2SLOW));
+	  ceph_assert(!(bdev_update_flags & RENAME_SLOW2DB));
+	  bdev_new = BDEV_DB;
+        }
+        if (bdev == BDEV_NEWWAL) {
+	  ceph_assert(bdev_update_flags & REMOVE_WAL);
+	  bdev_new = BDEV_WAL;
+        }
+        e.bdev = bdev_new;
       }
-      if ((flags & RENAME_DB2SLOW) && bdev == BDEV_DB) {
-	bdev_new = BDEV_SLOW;
-      }
-      if (bdev == BDEV_NEWDB) {
-	// REMOVE_DB xor RENAME_DB
-	ceph_assert(!(flags & REMOVE_DB) != !(flags & RENAME_DB2SLOW));
-	ceph_assert(!(flags & RENAME_SLOW2DB));
-	bdev_new = BDEV_DB;
-      }
-      if (bdev == BDEV_NEWWAL) {
-	ceph_assert(flags & REMOVE_WAL);
-	bdev_new = BDEV_WAL;
-      }
-      e.bdev = bdev_new;
     }
-    dout(20) << __func__ << " op_file_update " << file_ref->fnode << dendl;
-    t->op_file_update(file_ref->fnode);
-  }
-  for (auto& [path, dir_ref] : nodes.dir_map) {
-    dout(20) << __func__ << " op_dir_create " << path << dendl;
-    t->op_dir_create(path);
-    for (auto& [fname, file_ref] : dir_ref->file_map) {
-      dout(20) << __func__ << " op_dir_link " << path << "/" << fname
-	       << " to " << file_ref->fnode.ino << dendl;
-      t->op_dir_link(path, fname, file_ref->fnode.ino);
-    }
-  }
-}
-/* Streams to t files modified before *capture_before_seq* and all dirs */
-void BlueFS::_compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
-						 uint64_t capture_before_seq)
-{
-  std::lock_guard nl(nodes.lock);
-
-  t->seq = 1;
-  t->uuid = super.uuid;
-  dout(20) << __func__ << " op_init" << dendl;
-
-  t->op_init();
-  for (auto& [ino, file_ref] : nodes.file_map) {
-    if (ino == 1)
-      continue;
-    ceph_assert(ino > 1);
-    std::lock_guard fl(file_ref->lock);
-    if (file_ref->dirty_seq < capture_before_seq) {
+    if (capture_before_seq == 0 || file_ref->dirty_seq < capture_before_seq) {
       dout(20) << __func__ << " op_file_update " << file_ref->fnode << dendl;
     } else {
       dout(20) << __func__ << " op_file_update just modified, dirty_seq="
-	       << file_ref->dirty_seq << " " << file_ref->fnode << dendl;
+               << file_ref->dirty_seq << " " << file_ref->fnode << dendl;
     }
     t->op_file_update(file_ref->fnode);
   }
@@ -2332,8 +2302,9 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
 		       << " flags:" << flags
 		       << dendl;
   bluefs_transaction_t t;
-  _compact_log_dump_metadata_NF(&t, flags);
-
+  t.seq = 2;
+  t.uuid = super.uuid;
+  _compact_log_dump_metadata_NF(&t, flags, 0);
   dout(20) << __func__ << " op_jump_seq " << log.seq_live << dendl;
   t.op_jump_seq(log.seq_live);
 
@@ -2481,7 +2452,10 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
 
   // 2. prepare compacted log
   bluefs_transaction_t t;
-  _compact_log_async_dump_metadata_NF(&t, seq_now);
+  t.seq = 1;
+  t.uuid = super.uuid;
+  t.op_init();
+  _compact_log_dump_metadata_NF(&t, 0, seq_now);
 
   // now state is captured to bufferlist
   // log can be used to write to, ops in log will be continuation of captured state
