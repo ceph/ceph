@@ -4141,7 +4141,8 @@ void RGWDeleteMultiObj_ObjStore_S3::begin_response()
 void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(const rgw_obj_key& key,
 							  bool delete_marker,
 							  const string& marker_version_id,
-                                                          int ret)
+                                                          int ret,
+                                                          boost::asio::deadline_timer *formatter_flush_cond)
 {
   if (!key.empty()) {
     delete_multi_obj_entry ops_log_entry;
