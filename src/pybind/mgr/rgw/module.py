@@ -5,6 +5,7 @@ import errno
 import base64
 import functools
 import sys
+from datetime import datetime, timedelta
 
 from mgr_module import MgrModule, CLICommand, HandleCommandResult, Option
 import orchestrator
@@ -101,7 +102,17 @@ def check_orchestrator(func: FuncT) -> FuncT:
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
-    MODULE_OPTIONS: List[Option] = []
+    MODULE_OPTIONS: List[Option] = [
+        Option(name='usage_trim_realms',
+               default='',
+               desc='Comma separated list with realms to usage trim'),
+        Option(name='usage_trim_older_than_days',
+               default=0,
+               desc='Trim usage log entries older than this amount of days, must be set to a positive value'),
+        Option(name='usage_trim_interval',
+               default=43200,
+               desc='Interval between trimming usage log entries, defaults to 12 hours'),
+    ]
 
     # These are "native" Ceph options that this module cares about.
     NATIVE_OPTIONS: List[Option] = []
@@ -357,6 +368,27 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
+
+    def serve(self) -> None:
+        self.run = True
+
+        self.log.info('Starting usage trim loop')
+        while self.run:
+            if self.usage_trim_older_than_days <= 0:
+                self.log.info('Skipping usage trim because usage_trim_older_than_days is not > 0')
+                self.event.sleep(self.usage_trim_interval)
+                continue
+            startDate = '1970-01-01'
+            endDate = (datetime.today() - timedelta(days=self.usage_trim_older_than_days)).strftime('%Y-%m-%d')
+            realms = cast(str, self.usage_trim_realms, default='').split(',')
+            for realm in realms:
+                self.log.info('Running usage trim for realm {} with startDate={} and endDate={}'.format(
+                              realm, startDate, endDate))
+                try:
+                    RGWAM(self.env).usage_op().trim(realm=realm, startDate=startDate, endDate=endDate)
+                except Exception:
+                    self.log.exception("Failed to usage trim:")
+            self.event.sleep(self.usage_trim_interval)
 
     def shutdown(self) -> None:
         """

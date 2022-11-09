@@ -139,3 +139,32 @@ Join an existing realm by creating a new secondary zone (using the realm token)
   ceph rgw admin [*]
 
 RGW admin command
+
+Automatic usage log trimming
+----------------------------
+
+Enable automatic usage log trimming for one or more RGW realms by
+setting the config option ``usage_trim_realms`` to a comma separated
+list of realms.
+
+Set the ``usage_trim_older_than_days`` config option to the amount of
+days usage logs older than this should be trimmed. Optionally you can
+set the interval that trim will be performed with ``usage_trim_interval``,
+it defaults to every twelve hours.
+
+The below example will trim logs from start date 1970-01-01 to the current
+date minus 30 days.
+
+::
+
+    ceph config set mgr mgr/rgw/usage_trim_realms default
+    ceph config set mgr mgr/rgw/usage_trim_older_than_days 30
+
+The above is equivalent to running the following command assuming that todays
+date is 2022-11-13.
+::
+
+    radosgw-admin --rgw-realm=default usage trim --start-date=1970-01-01 --end-date=2022-10-14
+
+End date is thus calculated as (today - usage_trim_older_than_days) which is
+equal to (2022-11-13 - 30 days) = 2022-10-14.
