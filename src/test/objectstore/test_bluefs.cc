@@ -232,7 +232,7 @@ TEST(BlueFS, very_large_write) {
     delete h;
     ASSERT_EQ(0, fs.open_for_read("dir", "bigfile", &h));
     ASSERT_EQ(h->file->fnode.size, total_written);
-    unique_ptr<char> huge_buf(new char[h->file->fnode.size]);
+    auto huge_buf = std::make_unique<char[]>(h->file->fnode.size);
     auto l = h->file->fnode.size;
     int64_t r = fs.read(h, 0, l, NULL, huge_buf.get());
     ASSERT_EQ(r, l);
