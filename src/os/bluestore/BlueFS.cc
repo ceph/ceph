@@ -295,6 +295,14 @@ void BlueFS::_init_logger()
   b.add_u64_counter(l_bluefs_read_prefetch_bytes, "read_prefetch_bytes",
 		    "Bytes requested in prefetch read mode", NULL,
 		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+ b.add_time_avg     (l_bluefs_compaction_lat, "compact_lat",
+                    "Average bluefs log compaction latency",
+                    "c__t",
+                    PerfCountersBuilder::PRIO_INTERESTING);
+ b.add_time_avg     (l_bluefs_compaction_lock_lat, "compact_lock_lat",
+                    "Average lock duration while compacting bluefs log",
+                    "c_lt",
+                    PerfCountersBuilder::PRIO_INTERESTING);
   b.add_u64(l_bluefs_read_zeros_candidate, "read_zeros_candidate",
 	    "How many times bluefs read found page with all 0s");
   b.add_u64(l_bluefs_read_zeros_errors, "read_zeros_errors",
@@ -2358,6 +2366,7 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
   // Part 0.
   // Lock the log totally till the end of the procedure
   std::lock_guard ll(log.lock);
+  auto t0 = mono_clock::now();
 
   File *log_file = log.writer->file.get();
   bluefs_fnode_t fnode_tail;
@@ -2551,6 +2560,7 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
       dirty.pending_release[r.bdev].insert(r.offset, r.length);
     }
   }
+  logger->tinc(l_bluefs_compaction_lock_lat, mono_clock::now() - t0);
 }
 
 /*
@@ -2597,6 +2607,16 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   }
   // lock log's run-time structures for a while
   log.lock.lock();
+  auto t0 = mono_clock::now();
+
+  // Part 1.
+  // Prepare current log for jumping into it.
+  // 1. Allocate extent
+  // 2. Update op to log
+  // 3. Jump op to log
+  // During that, no one else can write to log, otherwise we risk jumping backwards.
+  // We need to sync log, because we are injecting discontinuity, and writer is not prepared for that.
+
   //signal _maybe_extend_log that expansion of log is temporary inacceptable
   bool old_forbidden = atomic_exchange(&log_forbidden_to_expand, true);
   ceph_assert(old_forbidden == false);
@@ -2679,6 +2699,7 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   // now state is captured to compacted_meta_t,
   // current log can be used to write to,
   //ops in log will be continuation of captured state
+  logger->tinc(l_bluefs_compaction_lock_lat, mono_clock::now() - t0);
   log.lock.unlock();
 
   // 2.2 Allocate the space required for the compacted meta transaction
@@ -3734,11 +3755,13 @@ void BlueFS::_maybe_compact_log_LNF_NF_LD_D()
 {
   if (!cct->_conf->bluefs_replay_recovery_disable_compact &&
       _should_start_compact_log_L_N()) {
+    auto t0 = mono_clock::now();
     if (cct->_conf->bluefs_compact_log_sync) {
       _compact_log_sync_LNF_LD();
     } else {
       _compact_log_async_LD_LNF_D();
     }
+    logger->tinc(l_bluefs_compaction_lat, mono_clock::now() - t0);
   }
 }
 
