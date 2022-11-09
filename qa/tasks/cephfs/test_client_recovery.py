@@ -724,3 +724,34 @@ class TestClientRecovery(CephFSTestCase):
 
         rproc.wait()
         self.assertEqual(rproc.exitstatus, 0)
+
+    def test_refuse_client_session(self):
+        """
+        Test that client cannot start session when file system flag
+        refuse_client_session is set
+        """
+
+        self.mount_a.umount_wait()
+        self.fs.set_refuse_client_session(True)
+        with self.assertRaises(CommandFailedError):
+            self.mount_a.mount_wait()
+
+    def test_refuse_client_session_on_reconnect(self):
+        """
+        Test that client cannot reconnect when filesystem comes online and
+        file system flag refuse_client_session is set
+        """
+
+        self.mount_a.create_files()
+        self.mount_a.check_files()
+
+        self.fs.fail()
+        self.fs.set_refuse_client_session(True)
+        self.fs.set_joinable()
+        with self.assert_cluster_log('client could not reconnect as'
+                                     ' file system flag'
+                                     ' refuse_client_session is set'):
+            time.sleep(self.fs.get_var("session_timeout") * 1.5)
+            self.assertEqual(len(self.fs.mds_tell(["session", "ls"])), 0)
+        self.mount_a.umount_wait(force=True)
+
