@@ -39,6 +39,7 @@ Map options:
   --current-session-only      expose the mount only to the current user session
   --removable                 use a removable drive
   --win-vol-name arg          The Windows volume name. Default: Ceph - <fs_name>.
+  --win-vol-serial arg        The Windows volume serial number. Default: <fs_id>.
 
 Unmap options:
   -l [ --mountpoint ] arg     mountpoint (path or drive letter) (e.g -l x).
@@ -83,6 +84,7 @@ int parse_args(
   std::ostringstream err;
   std::string mountpoint;
   std::string win_vol_name;
+  std::string win_vol_serial;
 
   int thread_count;
 
@@ -110,6 +112,9 @@ int parse_args(
     } else if (ceph_argparse_witharg(args, i, &win_vol_name,
                                      "--win-vol-name", (char *)NULL)) {
       cfg->win_vol_name = to_wstring(win_vol_name);
+    } else if (ceph_argparse_witharg(args, i, &win_vol_serial,
+                                     "--win-vol-serial", (char *)NULL)) {
+      cfg->win_vol_serial = std::stoul(win_vol_serial);
     } else if (ceph_argparse_flag(args, i, "--current-session-only", (char *)NULL)) {
       cfg->current_session_only = true;
     } else if (ceph_argparse_witharg(args, i, &thread_count,
