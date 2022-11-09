@@ -135,6 +135,8 @@ Placement of Replicated Data`_.
 
 .. index:: architecture; cluster map
 
+.. _architecture_cluster_map:
+
 Cluster Map
 ~~~~~~~~~~~
 
