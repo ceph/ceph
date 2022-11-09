@@ -149,6 +149,12 @@ struct bluefs_fnode_t {
     extents.erase(it);
   }
   
+  void swap(bluefs_fnode_t& other) {
+    std::swap(ino, other.ino);
+    std::swap(size, other.size);
+    std::swap(mtime, other.mtime);
+    swap_extents(other);
+  }
   void swap_extents(bluefs_fnode_t& other) {
     other.extents.swap(extents);
     other.extents_index.swap(extents_index);
@@ -290,9 +296,10 @@ struct bluefs_transaction_t {
   void op_file_update_inc(bluefs_fnode_t& file) {
     using ceph::encode;
     bluefs_fnode_delta_t delta;
-    file.make_delta(&delta); //also resets delta to zero
+    file.make_delta(&delta);
     encode((__u8)OP_FILE_UPDATE_INC, op_bl);
     encode(delta, op_bl);
+    file.reset_delta();
   }
   void op_file_remove(uint64_t ino) {
     using ceph::encode;
