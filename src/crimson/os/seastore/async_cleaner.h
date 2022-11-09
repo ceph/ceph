@@ -38,7 +38,7 @@ struct segment_info_t {
 
   data_category_t category = data_category_t::NUM;
 
-  reclaim_gen_t generation = NULL_GENERATION;
+  rewrite_gen_t generation = NULL_GENERATION;
 
   sea_time_point modify_time = NULL_TIME;
 
@@ -64,11 +64,11 @@ struct segment_info_t {
   }
 
   void init_closed(segment_seq_t, segment_type_t,
-                   data_category_t, reclaim_gen_t,
+                   data_category_t, rewrite_gen_t,
                    segment_off_t);
 
   void set_open(segment_seq_t, segment_type_t,
-                data_category_t, reclaim_gen_t);
+                data_category_t, rewrite_gen_t);
 
   void set_empty();
 
@@ -214,10 +214,10 @@ public:
 
   // initiate non-empty segments, the others are by default empty
   void init_closed(segment_id_t, segment_seq_t, segment_type_t,
-                   data_category_t, reclaim_gen_t);
+                   data_category_t, rewrite_gen_t);
 
   void mark_open(segment_id_t, segment_seq_t, segment_type_t,
-                 data_category_t, reclaim_gen_t);
+                 data_category_t, rewrite_gen_t);
 
   void mark_empty(segment_id_t);
 
@@ -328,7 +328,7 @@ public:
   virtual rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent,
-    reclaim_gen_t target_generation,
+    rewrite_gen_t target_generation,
     sea_time_point modify_time) = 0;
 
   /**
@@ -596,7 +596,7 @@ public:
   virtual const segment_info_t& get_seg_info(segment_id_t id) const = 0;
 
   virtual segment_id_t allocate_segment(
-      segment_seq_t, segment_type_t, data_category_t, reclaim_gen_t) = 0;
+      segment_seq_t, segment_type_t, data_category_t, rewrite_gen_t) = 0;
 
   virtual void close_segment(segment_id_t) = 0;
 
@@ -949,7 +949,7 @@ public:
   }
 
   segment_id_t allocate_segment(
-      segment_seq_t, segment_type_t, data_category_t, reclaim_gen_t) final;
+      segment_seq_t, segment_type_t, data_category_t, rewrite_gen_t) final;
 
   void close_segment(segment_id_t segment) final;
 
@@ -1075,20 +1075,30 @@ private:
   segment_id_t get_next_reclaim_segment() const;
 
   struct reclaim_state_t {
-    reclaim_gen_t generation;
-    reclaim_gen_t target_generation;
+    rewrite_gen_t generation;
+    rewrite_gen_t target_generation;
     segment_off_t segment_size;
     paddr_t start_pos;
     paddr_t end_pos;
 
     static reclaim_state_t create(
         segment_id_t segment_id,
-        reclaim_gen_t generation,
+        rewrite_gen_t generation,
         segment_off_t segment_size) {
-      ceph_assert(generation < RECLAIM_GENERATIONS);
+      ceph_assert(is_rewrite_generation(generation));
+
+      rewrite_gen_t target_gen;
+      if (generation < MIN_REWRITE_GENERATION) {
+        target_gen = MIN_REWRITE_GENERATION;
+      } else {
+        // tolerate the target_gen to exceed MAX_REWRETE_GENERATION to make EPM
+        // aware of its original generation for the decisions.
+        target_gen = generation + 1;
+      }
+
+      assert(is_target_rewrite_generation(target_gen));
       return {generation,
-              (reclaim_gen_t)(generation == RECLAIM_GENERATIONS - 1 ?
-                              generation : generation + 1),
+              target_gen,
               segment_size,
               P_ADDR_NULL,
               paddr_t::make_seg_paddr(segment_id, 0)};
@@ -1209,7 +1219,7 @@ private:
       segment_seq_t seq,
       segment_type_t s_type,
       data_category_t category,
-      reclaim_gen_t generation) {
+      rewrite_gen_t generation) {
     assert(background_callback->get_state() == state_t::MOUNT);
     ceph_assert(s_type == segment_type_t::OOL ||
                 trimmer != nullptr); // segment_type_t::JOURNAL
