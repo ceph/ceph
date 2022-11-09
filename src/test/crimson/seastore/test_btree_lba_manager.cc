@@ -75,7 +75,7 @@ struct btree_test_base :
     segment_seq_t seq,
     segment_type_t type,
     data_category_t,
-    reclaim_gen_t
+    rewrite_gen_t
   ) final {
     auto ret = next;
     next = segment_id_t{

@@ -700,6 +700,8 @@ void Cache::add_extent(
     const Transaction::src_t* p_src=nullptr)
 {
   assert(ref->is_valid());
+  assert(ref->user_hint == PLACEMENT_HINT_NULL);
+  assert(ref->rewrite_generation == NULL_GENERATION);
   extents.insert(*ref);
   if (ref->is_dirty()) {
     add_to_dirty(ref);
@@ -944,12 +946,12 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
   extent_types_t type,   ///< [in] type tag
   extent_len_t length,   ///< [in] length
   placement_hint_t hint, ///< [in] user hint
-  reclaim_gen_t gen      ///< [in] reclaim generation
+  rewrite_gen_t gen      ///< [in] rewrite generation
 )
 {
   LOG_PREFIX(Cache::alloc_new_extent_by_type);
   SUBDEBUGT(seastore_cache, "allocate {} {}B, hint={}, gen={}",
-            t, type, length, hint, reclaim_gen_printer_t{gen});
+            t, type, length, hint, rewrite_gen_printer_t{gen});
   switch (type) {
   case extent_types_t::ROOT:
     ceph_assert(0 == "ROOT is never directly alloc'd");
@@ -1012,7 +1014,6 @@ CachedExtentRef Cache::duplicate_for_write(
 
   ret->version++;
   ret->state = CachedExtent::extent_state_t::MUTATION_PENDING;
-  ret->set_reclaim_generation(DIRTY_GENERATION);
   DEBUGT("{} -> {}", t, *i, *ret);
   return ret;
 }
@@ -1440,6 +1441,7 @@ void Cache::complete_commit(
     DEBUGT("add extent as fresh, inline={} -- {}",
 	   t, is_inline, *i);
     const auto t_src = t.get_src();
+    i->invalidate_hints();
     add_extent(i, &t_src);
     epm.mark_space_used(i->get_paddr(), i->get_length());
     if (is_backref_mapped_extent_node(i)) {

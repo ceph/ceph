@@ -117,11 +117,12 @@ public:
   void init(extent_state_t _state,
             paddr_t paddr,
             placement_hint_t hint,
-            reclaim_gen_t gen) {
+            rewrite_gen_t gen) {
+    assert(gen == NULL_GENERATION || is_rewrite_generation(gen));
     state = _state;
     set_paddr(paddr);
     user_hint = hint;
-    reclaim_generation = gen;
+    rewrite_generation = gen;
   }
 
   void set_modify_time(sea_time_point t) {
@@ -212,7 +213,7 @@ public:
 	<< ", last_committed_crc=" << last_committed_crc
 	<< ", refcount=" << use_count()
 	<< ", user_hint=" << user_hint
-	<< ", reclaim_gen=" << reclaim_gen_printer_t{reclaim_generation};
+	<< ", rewrite_gen=" << rewrite_gen_printer_t{rewrite_generation};
     if (state != extent_state_t::INVALID &&
         state != extent_state_t::CLEAN_PENDING) {
       print_detail(out);
@@ -393,19 +394,21 @@ public:
     return user_hint;
   }
 
-  reclaim_gen_t get_reclaim_generation() const {
-    return reclaim_generation;
+  rewrite_gen_t get_rewrite_generation() const {
+    return rewrite_generation;
   }
 
   void invalidate_hints() {
     user_hint = PLACEMENT_HINT_NULL;
-    reclaim_generation = NULL_GENERATION;
+    rewrite_generation = NULL_GENERATION;
   }
 
-  void set_reclaim_generation(reclaim_gen_t gen) {
-    assert(gen < RECLAIM_GENERATIONS);
+  /// assign the target rewrite generation for the followup rewrite
+  void set_target_rewrite_generation(rewrite_gen_t gen) {
+    assert(is_target_rewrite_generation(gen));
+
     user_hint = placement_hint_t::REWRITE;
-    reclaim_generation = gen;
+    rewrite_generation = gen;
   }
 
   bool is_inline() const {
@@ -485,10 +488,11 @@ private:
 
   read_set_item_t<Transaction>::list transactions;
 
-  placement_hint_t user_hint;
+  placement_hint_t user_hint = PLACEMENT_HINT_NULL;
 
-  /// > 0 and not null means the extent is under reclaimming
-  reclaim_gen_t reclaim_generation;
+  // the target rewrite generation for the followup rewrite
+  // or the rewrite generation for the fresh write
+  rewrite_gen_t rewrite_generation = NULL_GENERATION;
 
 protected:
   CachedExtent(CachedExtent &&other) = delete;
