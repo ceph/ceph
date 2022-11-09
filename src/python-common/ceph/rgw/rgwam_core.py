@@ -420,6 +420,24 @@ class UserOp:
         return RGWAdminCmd(ze).run(params)
 
 
+class UsageOp:
+    def __init__(self, env):
+        self.env = env
+
+    def trim(self, realm: EntityKey = None, startDate: str = '', endDate: str = ''):
+        ze = ZoneEnv(self.env, realm=realm)
+
+        params = ['trim']
+
+        if startDate != '':
+            params += ['--start-date=%s' % startDate]
+
+        if endDate != '':
+            params += ['--end-date=%s' % endDate]
+
+        return RGWAdminCmd(ze).run(params)
+
+
 class RGWAM:
     def __init__(self, env):
         self.env = env
@@ -438,6 +456,9 @@ class RGWAM:
 
     def user_op(self):
         return UserOp(self.env)
+
+    def usage_op(self):
+        return UsageOp(self.env)
 
     def get_realm(self, realm_name):
         try:
