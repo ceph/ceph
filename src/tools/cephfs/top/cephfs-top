@@ -40,7 +40,7 @@ FS_TOP_ALL_FS_APP = 'ALL_FS_APP'
 FS_TOP_FS_SELECTED_APP = 'SELECTED_FS_APP'
 
 # version match b/w fstop and stats emitted by mgr/stats
-FS_TOP_SUPPORTED_VER = 2.0
+FS_TOP_SUPPORTED_VER = 2
 
 ITEMS_PAD_LEN = 3
 ITEMS_PAD = " " * ITEMS_PAD_LEN
@@ -85,7 +85,7 @@ MAIN_WINDOW_TOP_LINE_METRICS = OrderedDict([
 ])
 MGR_STATS_COUNTERS = list(MAIN_WINDOW_TOP_LINE_METRICS.keys())
 
-FS_TOP_VERSION_HEADER_FMT = '{prog_name} v{version} - {now}'
+FS_TOP_VERSION_HEADER_FMT = '{prog_name} - {now}'
 FS_TOP_CLIENT_HEADER_FMT = 'Total Client(s): {num_clients} - '\
     '{num_mounts} FUSE, {num_kclients} kclient, {num_libs} libcephfs'
 FS_TOP_NAME_TOPL_FMT = 'Filesystem: {fs_name} - {client_count} client(s)'
@@ -805,7 +805,6 @@ class FSTop(object):
                 num_libs = num_clients - (num_mounts + num_kclients)
         now = datetime.now().ctime()
         self.header.addstr(0, 0, FS_TOP_VERSION_HEADER_FMT.format(prog_name=FS_TOP_PROG_STR,
-                                                                  version=FS_TOP_SUPPORTED_VER,
                                                                   now=now), curses.A_BOLD)
         self.header.addstr(2, 0, screen_title, curses.color_pair(color_id) | curses.A_BOLD)
         self.header.addstr(3, 0, FS_TOP_CLIENT_HEADER_FMT.format(num_clients=num_clients,
