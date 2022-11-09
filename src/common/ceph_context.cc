@@ -104,12 +104,6 @@ PerfCountersCollectionImpl* CephContext::get_perfcounters_collection()
   return _perf_counters_collection.get_perf_collection();
 }
 
-LabeledPerfCountersCollectionImpl* CephContext::get_labeledperfcounters_collection()
-{
-  return _labeled_perf_counters_collection.get_perf_collection();
-}
-
-
 }
 #else  // WITH_SEASTAR
 namespace {
@@ -725,7 +719,6 @@ CephContext::CephContext(uint32_t module_type_,
     _log_obs(NULL),
     _admin_socket(NULL),
     _perf_counters_collection(NULL),
-    _labeled_perf_counters_collection(NULL),
     _perf_counters_conf_obs(NULL),
     _heartbeat_map(NULL),
     _crypto_none(NULL),
@@ -752,7 +745,6 @@ CephContext::CephContext(uint32_t module_type_,
   _conf.add_observer(_lockdep_obs);
 #endif
   _perf_counters_collection = new PerfCountersCollection(this);
-  _labeled_perf_counters_collection = new LabeledPerfCountersCollection(this);
  
   _admin_socket = new AdminSocket(this);
   _heartbeat_map = new HeartbeatMap(this);
@@ -820,9 +812,6 @@ CephContext::~CephContext()
 
   delete _perf_counters_collection;
   _perf_counters_collection = NULL;
-
-  delete _labeled_perf_counters_collection;
-  _labeled_perf_counters_collection = NULL;
 
   delete _perf_counters_conf_obs;
   _perf_counters_conf_obs = NULL;
@@ -951,11 +940,6 @@ int CephContext::get_init_flags() const
 PerfCountersCollection *CephContext::get_perfcounters_collection()
 {
   return _perf_counters_collection;
-}
-
-LabeledPerfCountersCollection *CephContext::get_labeledperfcounters_collection()
-{
-  return _labeled_perf_counters_collection;
 }
 
 void CephContext::_enable_perf_counter()
