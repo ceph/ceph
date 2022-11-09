@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from datetime import datetime
-from threading import Event, Thread
+from threading import Event, Thread, Lock
 from itertools import chain
 import queue
 import json
@@ -9,6 +9,8 @@ import time
 from typing import cast, Any, Dict, Iterator, List, Optional, Tuple, Union
 
 from mgr_module import CLICommand, CLIReadCommand, CLIWriteCommand, MgrModule, Option, OptionValue
+from mgr_util import profile_method
+from rbd import RBD
 
 try:
     from influxdb import InfluxDBClient
@@ -60,6 +62,14 @@ class Module(MgrModule):
                type='int',
                default=5000,
                desc='How big batches of data points should be when sending to InfluxDB.'),
+        Option(name='rbd_stats_pools',
+               default=''),
+        Option(name='rbd_stats_pools_scrape_interval',
+               type='int',
+               default=15),
+        Option(name='rbd_stats_pools_refresh_interval',
+               type='int',
+               default=300),
     ]
 
     @property
@@ -94,6 +104,23 @@ class Module(MgrModule):
         self.workers: List[Thread] = list()
         self.queue: 'queue.Queue[Optional[List[Dict[str, str]]]]' = queue.Queue(maxsize=100)
         self.health_checks: Dict[str, Dict[str, Any]] = dict()
+
+        self.rbd_stats_event = Event()
+        self.rbd_stats_worker = None
+        self.rbd_stats_collect_lock = Lock()
+        self.rbd_stats_collect_cache: Optional[str] = None
+        self.rbd_stats = {
+            'pools': {},
+            'pools_refresh_time': 0,
+            'counters_info': {
+                'write_ops': {'type': self.PERFCOUNTER_COUNTER},
+                'read_ops': {'type': self.PERFCOUNTER_COUNTER},
+                'write_bytes': {'type': self.PERFCOUNTER_COUNTER},
+                'read_bytes': {'type': self.PERFCOUNTER_COUNTER},
+                'write_latency': {'type': self.PERFCOUNTER_LONGRUNAVG},
+                'read_latency': {'type': self.PERFCOUNTER_LONGRUNAVG},
+            },
+        }  # type: Dict[str, Any]
 
     def get_fsid(self) -> str:
         return self.get('mon_map')['fsid']
@@ -162,6 +189,300 @@ class Module(MgrModule):
             finally:
                 self.queue.task_done()
 
+    def refresh_rbd_stats_pools(self, pools: Dict[str, Set[str]]) -> None:
+        self.log.debug('refreshing rbd pools %s' % (pools))
+
+        rbd = RBD()
+        counters_info = self.rbd_stats['counters_info']
+        for pool_name, cfg_ns_names in pools.items():
+            try:
+                pool_id = self.rados.pool_lookup(pool_name)
+                with self.rados.open_ioctx(pool_name) as ioctx:
+                    if pool_id not in self.rbd_stats['pools']:
+                        self.rbd_stats['pools'][pool_id] = {'images': {}}
+                    pool = self.rbd_stats['pools'][pool_id]
+                    pool['name'] = pool_name
+                    pool['ns_names'] = cfg_ns_names
+                    if cfg_ns_names:
+                        nspace_names = list(cfg_ns_names)
+                    else:
+                        nspace_names = [''] + rbd.namespace_list(ioctx)
+                    for nspace_name in pool['images']:
+                        if nspace_name not in nspace_names:
+                            del pool['images'][nspace_name]
+                    for nspace_name in nspace_names:
+                        if nspace_name and\
+                           not rbd.namespace_exists(ioctx, nspace_name):
+                            self.log.debug('unknown namespace %s for pool %s' %
+                                           (nspace_name, pool_name))
+                            continue
+                        ioctx.set_namespace(nspace_name)
+                        if nspace_name not in pool['images']:
+                            pool['images'][nspace_name] = {}
+                        namespace = pool['images'][nspace_name]
+                        images = {}
+                        for image_meta in RBD().list2(ioctx):
+                            image = {'n': image_meta['name']}
+                            image_id = image_meta['id']
+                            if image_id in namespace:
+                                image['c'] = namespace[image_id]['c']
+                            else:
+                                image['c'] = [[0, 0] for x in counters_info]
+                            images[image_id] = image
+                        pool['images'][nspace_name] = images
+            except Exception as e:
+                self.log.error('failed listing pool %s: %s' % (pool_name, e))
+        self.rbd_stats['pools_refresh_time'] = time.time()
+
+    @profile_method()
+    def collect_rbd_stats(self) -> Iterator[Dict[str, Any]]:
+        # Per RBD image stats is collected by registering a dynamic osd perf
+        # stats query that tells OSDs to group stats for requests associated
+        # with RBD objects by pool, namespace, and image id, which are
+        # extracted from the request object names or other attributes.
+        # The RBD object names have the following prefixes:
+        #   - rbd_data.{image_id}. (data stored in the same pool as metadata)
+        #   - rbd_data.{pool_id}.{image_id}. (data stored in a dedicated data pool)
+        #   - journal_data.{pool_id}.{image_id}. (journal if journaling is enabled)
+        # The pool_id in the object name is the id of the pool with the image
+        # metdata, and should be used in the image spec. If there is no pool_id
+        # in the object name, the image pool is the pool where the object is
+        # located.
+
+        # Parse rbd_stats_pools option, which is a comma or space separated
+        # list of pool[/namespace] entries. If no namespace is specifed the
+        # stats are collected for every namespace in the pool. The wildcard
+        # '*' can be used to indicate all pools or namespaces
+        pools_string = cast(str, self.get_localized_module_option('rbd_stats_pools'))
+        pool_keys = set()
+        osd_map = self.get('osd_map')
+        rbd_pools = [pool['pool_name'] for pool in osd_map['pools']
+                     if 'rbd' in pool.get('application_metadata', {})]
+        for x in re.split(r'[\s,]+', pools_string):
+            if not x:
+                continue
+
+            s = x.split('/', 2)
+            pool_name = s[0]
+            namespace_name = None
+            if len(s) == 2:
+                namespace_name = s[1]
+
+            if pool_name == "*":
+                # collect for all pools
+                for pool in rbd_pools:
+                    pool_keys.add((pool, namespace_name))
+            else:
+                if pool_name in rbd_pools:
+                    pool_keys.add((pool_name, namespace_name))  # avoids adding deleted pool
+
+        pools = {}  # type: Dict[str, Set[str]]
+        for pool_key in pool_keys:
+            pool_name = pool_key[0]
+            namespace_name = pool_key[1]
+            if not namespace_name or namespace_name == "*":
+                # empty set means collect for all namespaces
+                pools[pool_name] = set()
+                continue
+
+            if pool_name not in pools:
+                pools[pool_name] = set()
+            elif not pools[pool_name]:
+                continue
+            pools[pool_name].add(namespace_name)
+
+        rbd_stats_pools = {}
+        for pool_id in self.rbd_stats['pools'].keys():
+            name = self.rbd_stats['pools'][pool_id]['name']
+            if name not in pools:
+                del self.rbd_stats['pools'][pool_id]
+            else:
+                rbd_stats_pools[name] = \
+                    self.rbd_stats['pools'][pool_id]['ns_names']
+
+        pools_refreshed = False
+        if pools:
+            next_refresh = self.rbd_stats['pools_refresh_time'] + \
+                self.get_localized_module_option(
+                'rbd_stats_pools_refresh_interval', 300)
+            if rbd_stats_pools != pools or time.time() >= next_refresh:
+                self.refresh_rbd_stats_pools(pools)
+                pools_refreshed = True
+
+        pool_ids = list(self.rbd_stats['pools'])
+        pool_ids.sort()
+        pool_id_regex = '^(' + '|'.join([str(x) for x in pool_ids]) + ')$'
+
+        nspace_names = []
+        for pool_id, pool in self.rbd_stats['pools'].items():
+            if pool['ns_names']:
+                nspace_names.extend(pool['ns_names'])
+            else:
+                nspace_names = []
+                break
+        if nspace_names:
+            namespace_regex = '^(' + \
+                              "|".join([re.escape(x)
+                                        for x in set(nspace_names)]) + ')$'
+        else:
+            namespace_regex = '^(.*)$'
+
+        if ('query' in self.rbd_stats
+            and (pool_id_regex != self.rbd_stats['query']['key_descriptor'][0]['regex']
+                 or namespace_regex != self.rbd_stats['query']['key_descriptor'][1]['regex'])):
+            self.remove_osd_perf_query(self.rbd_stats['query_id'])
+            del self.rbd_stats['query_id']
+            del self.rbd_stats['query']
+
+        if not self.rbd_stats['pools']:
+            return
+
+        counters_info = self.rbd_stats['counters_info']
+
+        if 'query_id' not in self.rbd_stats:
+            query = {
+                'key_descriptor': [
+                    {'type': 'pool_id', 'regex': pool_id_regex},
+                    {'type': 'namespace', 'regex': namespace_regex},
+                    {'type': 'object_name',
+                     'regex': r'^(?:rbd|journal)_data\.(?:([0-9]+)\.)?([^.]+)\.'},
+                ],
+                'performance_counter_descriptors': list(counters_info),
+            }
+            query_id = self.add_osd_perf_query(query)
+            if query_id is None:
+                self.log.error('failed to add query %s' % query)
+                return
+            self.rbd_stats['query'] = query
+            self.rbd_stats['query_id'] = query_id
+
+        res = self.get_osd_perf_counters(self.rbd_stats['query_id'])
+        assert res
+        now = self.get_timestamp()
+        for c in res['counters']:
+            # if the pool id is not found in the object name use id of the
+            # pool where the object is located
+            if c['k'][2][0]:
+                pool_id = int(c['k'][2][0])
+            else:
+                pool_id = int(c['k'][0][0])
+            if pool_id not in self.rbd_stats['pools'] and not pools_refreshed:
+                self.refresh_rbd_stats_pools(pools)
+                pools_refreshed = True
+            if pool_id not in self.rbd_stats['pools']:
+                continue
+            pool = self.rbd_stats['pools'][pool_id]
+            nspace_name = c['k'][1][0]
+            if nspace_name not in pool['images']:
+                continue
+            image_id = c['k'][2][1]
+            if image_id not in pool['images'][nspace_name] and \
+               not pools_refreshed:
+                self.refresh_rbd_stats_pools(pools)
+                pool = self.rbd_stats['pools'][pool_id]
+                pools_refreshed = True
+            if image_id not in pool['images'][nspace_name]:
+                continue
+            counters = pool['images'][nspace_name][image_id]['c']
+            for i in range(len(c['c'])):
+                counters[i][0] += c['c'][i][0]
+                counters[i][1] += c['c'][i][1]
+
+        label_names = ("pool", "namespace", "image")
+        for pool_id, pool in self.rbd_stats['pools'].items():
+            pool_name = pool['name']
+            for nspace_name, images in pool['images'].items():
+                for image_id in images:
+                    image_name = images[image_id]['n']
+                    counters = images[image_id]['c']
+                    i = 0
+                    for key in counters_info:
+                        counter_info = counters_info[key]
+                        if counter_info['type'] == self.PERFCOUNTER_COUNTER:
+                            yield {
+                                "measurement": "ceph_rbd_stats",
+                                "tags": {
+                                    "type_instance": 'rbd.' + key,
+                                    "pool": pool_name,
+                                    "namespace": nspace_name,
+                                    "image": image_name,
+                                    "fsid": self.get_fsid()
+                                },
+                                "time": now,
+                                "fields": {
+                                    "value": counters[i][0],
+                                }
+                            }
+                        elif counter_info['type'] == self.PERFCOUNTER_LONGRUNAVG:
+                            yield {
+                                "measurement": "ceph_rbd_stats",
+                                "tags": {
+                                    "type_instance": 'rbd.' + key + '_sum',
+                                    "pool": pool_name,
+                                    "namespace": nspace_name,
+                                    "image": image_name,
+                                    "fsid": self.get_fsid()
+                                },
+                                "time": now,
+                                "fields": {
+                                    "value": counters[i][0],
+                                }
+                            }
+                            yield {
+                                "measurement": "ceph_rbd_stats",
+                                "tags": {
+                                    "type_instance": 'rbd.' + key + '_count',
+                                    "pool": pool_name,
+                                    "namespace": nspace_name,
+                                    "image": image_name,
+                                    "fsid": self.get_fsid()
+                                },
+                                "time": now,
+                                "fields": {
+                                    "value": counters[i][1],
+                                }
+                            }
+                        i += 1
+
+    def rbd_stats_worker_thread(self) -> None:
+        self.log.info('starting rbd stats thread')
+        while not self.rbd_stats_event.is_set():
+            self.log.debug('collecting rbd stats in thread')
+            if self.have_mon_connection():
+                start_time = time.time()
+
+                try:
+                    data = self.collect_rbd_stats()
+                except Exception:
+                    # Log any issues encountered during the data collection and continue
+                    self.log.exception("failed to collect metrics:")
+                    self.rbd_stats_event.wait(self.config['rbd_stats_pools_scrape_interval'])
+                    continue
+
+                duration = time.time() - start_time
+                self.log.debug('collecting rbd stats in thread done')
+
+                sleep_time = self.config['rbd_stats_pools_scrape_interval'] - duration
+                if sleep_time < 0:
+                    self.log.warning(
+                        'Collecting data took more time than configured scrape interval. '
+                        'This possibly results in stale data. '
+                        'Collecting data took {:.2f} seconds but scrape interval is configured '
+                        'to be {:.0f} seconds.'.format(
+                            duration,
+                            self.config['rbd_stats_pools_scrape_interval'],
+                        )
+                    )
+                    sleep_time = 0
+
+                with self.rbd_stats_collect_lock:
+                    self.rbd_stats_collect_cache = data
+
+                self.rbd_stats_event.wait(sleep_time)
+            else:
+                self.log.error('No MON connection')
+                self.rbd_stats_event.wait(self.config['rbd_stats_pools_scrape_interval'])
+
     def get_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
         if data:
@@ -188,7 +509,7 @@ class Module(MgrModule):
             'quota_objects',
             'quota_bytes'
         ]
-        
+
         for df_type in df_types:
             for pool in df['pools']:
                 point = {
@@ -306,13 +627,22 @@ class Module(MgrModule):
         verify_ssl = \
             cast(str, self.get_module_option("verify_ssl", default=self.config_keys['verify_ssl']))
         self.config['verify_ssl'] = verify_ssl.lower() == 'true'
+        self.config['rbd_stats_pools'] = \
+            cast(str, self.get_module_option("rbd_stats_pools", default=''))
+        self.config['rbd_stats_pools_scrape_interval'] = \
+            cast(int, self.get_module_option("rbd_stats_pools_scrape_interval", default=15))
+        self.config['rbd_stats_pools_refresh_interval'] = \
+            cast(int, self.get_module_option("rbd_stats_pools_refresh_interval", default=300))
 
     def gather_statistics(self) -> Iterator[Dict[str, str]]:
         now = self.get_timestamp()
         df_stats, pools = self.get_df_stats(now)
-        return chain(df_stats, self.get_daemon_stats(now),
-                     self.get_pg_summary_osd(pools, now),
-                     self.get_pg_summary_pool(pools, now))
+        result = chain(df_stats, self.get_daemon_stats(now),
+                       self.get_pg_summary_osd(pools, now),
+                       self.get_pg_summary_pool(pools, now))
+        if self.rbd_stats_collect_cache is not None:
+            return chain(result, self.rbd_stats_collect_cache)
+        return result
 
     @contextmanager
     def get_influx_client(self) -> Iterator['InfluxDBClient']:
@@ -401,6 +731,12 @@ class Module(MgrModule):
     def shutdown(self) -> None:
         self.log.info('Stopping influx module')
         self.run = False
+
+        if self.rbd_stats_worker:
+            self.rbd_stats_event.set()
+            self.log.info('Stopping rbd stats worker')
+            self.rbd_stats_worker.join()
+
         self.event.set()
         self.log.debug('Shutting down queue workers')
 
@@ -470,6 +806,11 @@ class Module(MgrModule):
             worker.setDaemon(True)
             worker.start()
             self.workers.append(worker)
+
+        if len(self.config['rbd_stats_pools']) > 0:
+            self.rbd_stats_worker = Thread(target=self.rbd_stats_worker_thread, args=())
+            self.rbd_stats_worker.setDaemon(True)
+            self.rbd_stats_worker.start()
 
         while self.run:
             start = time.time()
