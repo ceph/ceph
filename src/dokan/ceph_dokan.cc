@@ -789,7 +789,8 @@ static NTSTATUS WinCephGetVolumeInformation(
   g_cfg->win_vol_name.copy(VolumeNameBuffer, VolumeNameSize);
   *VolumeSerialNumber = g_cfg->win_vol_serial;
 
-  *MaximumComponentLength = 256;
+  *MaximumComponentLength = g_cfg->max_path_len;
+
   *FileSystemFlags = FILE_CASE_SENSITIVE_SEARCH |
             FILE_CASE_PRESERVED_NAMES |
             FILE_SUPPORTS_REMOTE_STORAGE |
@@ -947,6 +948,15 @@ int do_map() {
     if (get_volume_serial(&g_cfg->win_vol_serial)) {
       return -EINVAL;
     }
+  }
+
+  if (g_cfg->max_path_len > 260) {
+    dout(0) << "maximum path length set to " << g_cfg->max_path_len 
+            << ". Some Windows utilities may not be able to handle "
+            << "paths that exceed MAX_PATH (260) characters. "
+            << "CreateDirectoryW, used by Powershell, has also been "
+            << "observed to fail when paths exceed 16384 characters."
+            << dendl;
   }
 
   atexit(unmount_atexit);
