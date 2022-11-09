@@ -139,11 +139,9 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
        l != m_loggers.end(); ++l) {
     // Optionally filter on logger name, pass through counter filter
     if (logger.empty() || (*l)->get_name() == logger) {
-      if(dump_labeled) {
-        if((*l)->is_instance_labeled()) {
-          (*l)->dump_formatted_generic(f, schema, histograms, dump_labeled, counter);
-        }
-      } else {
+      if(dump_labeled && (*l)->is_instance_labeled()) {
+        (*l)->dump_formatted_generic(f, schema, histograms, dump_labeled, counter);
+      } else if(!dump_labeled && !((*l)->is_instance_labeled())) {
         (*l)->dump_formatted_generic(f, schema, histograms, dump_labeled, counter);
       }
     }
