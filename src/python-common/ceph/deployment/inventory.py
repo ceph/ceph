@@ -15,7 +15,8 @@ class Devices(object):
 
     def __init__(self, devices):
         # type: (List[Device]) -> None
-        self.devices = devices  # type: List[Device]
+        # sort devices by path name so ordering is consistent
+        self.devices: List[Device] = sorted(devices, key=lambda d: d.path if d.path else '')
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Devices):
