@@ -38,7 +38,7 @@ using crimson::common::local_conf;
                                       with_obc_func_t&& func)
   {
     assert(!oid.is_head());
-    return with_head_obc<RWState::RWREAD>(oid.get_head(),
+    return with_obc<RWState::RWREAD>(oid.get_head(),
       [oid, func=std::move(func), this](auto head) mutable
       -> load_obc_iertr::future<> {
       if (!head->obs.exists) {
@@ -84,14 +84,18 @@ using crimson::common::local_conf;
 
   template<RWState::State State>
   ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_head_obc(hobject_t oid,
-                                     with_obc_func_t&& func)
+  ObjectContextLoader::with_obc(hobject_t oid,
+                                with_obc_func_t&& func)
   {
-    auto [obc, existed] =
-      shard_services.get_cached_obc(std::move(oid));
-    return with_head_obc<State>(std::move(obc),
-                                existed,
-                                std::move(func));
+    if (oid.is_head()) {
+      auto [obc, existed] =
+        shard_services.get_cached_obc(std::move(oid));
+      return with_head_obc<State>(std::move(obc),
+                                  existed,
+                                  std::move(func));
+    } else {
+      return with_clone_obc<State>(oid, std::move(func));
+    }
   }
 
   ObjectContextLoader::load_obc_iertr::future<ObjectContextRef>
@@ -177,34 +181,18 @@ using crimson::common::local_conf;
 
   // explicitly instantiate the used instantiations
   template ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_head_obc<RWState::RWNONE>(hobject_t,
-                                                      with_obc_func_t&&);
+  ObjectContextLoader::with_obc<RWState::RWNONE>(hobject_t,
+                                                 with_obc_func_t&&);
 
   template ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_head_obc<RWState::RWREAD>(hobject_t,
-                                                      with_obc_func_t&&);
+  ObjectContextLoader::with_obc<RWState::RWREAD>(hobject_t,
+                                                 with_obc_func_t&&);
 
   template ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_head_obc<RWState::RWWRITE>(hobject_t,
-                                                       with_obc_func_t&&);
+  ObjectContextLoader::with_obc<RWState::RWWRITE>(hobject_t,
+                                                  with_obc_func_t&&);
 
   template ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_head_obc<RWState::RWEXCL>(hobject_t,
-                                                      with_obc_func_t&&);
-
-  template ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_clone_obc<RWState::RWNONE>(hobject_t,
-                                                       with_obc_func_t&&);
-
-  template ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_clone_obc<RWState::RWREAD>(hobject_t,
-                                                       with_obc_func_t&&);
-
-  template ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_clone_obc<RWState::RWWRITE>(hobject_t,
-                                                        with_obc_func_t&&);
-
-  template ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_clone_obc<RWState::RWEXCL>(hobject_t,
-                                                       with_obc_func_t&&);
+  ObjectContextLoader::with_obc<RWState::RWEXCL>(hobject_t,
+                                                 with_obc_func_t&&);
 }

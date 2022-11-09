@@ -1006,23 +1006,11 @@ PG::with_locked_obc(const hobject_t &hobj,
   const hobject_t oid = get_oid(hobj);
   switch (get_lock_type(op_info)) {
   case RWState::RWREAD:
-    if (oid.is_head()) {
-      return obc_loader.with_head_obc<RWState::RWREAD>(oid, std::move(f));
-    } else {
-      return obc_loader.with_clone_obc<RWState::RWREAD>(oid, std::move(f));
-    }
+      return obc_loader.with_obc<RWState::RWREAD>(oid, std::move(f));
   case RWState::RWWRITE:
-    if (oid.is_head()) {
-      return obc_loader.with_head_obc<RWState::RWWRITE>(oid, std::move(f));
-    } else {
-      return obc_loader.with_clone_obc<RWState::RWWRITE>(oid, std::move(f));
-    }
+      return obc_loader.with_obc<RWState::RWWRITE>(oid, std::move(f));
   case RWState::RWEXCL:
-    if (oid.is_head()) {
-      return obc_loader.with_head_obc<RWState::RWEXCL>(oid, std::move(f));
-    } else {
-      return obc_loader.with_clone_obc<RWState::RWEXCL>(oid, std::move(f));
-    }
+      return obc_loader.with_obc<RWState::RWEXCL>(oid, std::move(f));
   default:
     ceph_abort();
   };

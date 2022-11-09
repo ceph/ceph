@@ -32,8 +32,8 @@ public:
     std::function<load_obc_iertr::future<> (ObjectContextRef)>;
 
   template<RWState::State State>
-  load_obc_iertr::future<> with_head_obc(hobject_t oid,
-                                         with_obc_func_t&& func);
+  load_obc_iertr::future<> with_obc(hobject_t oid,
+                                    with_obc_func_t&& func);
 
   template<RWState::State State>
   load_obc_iertr::future<> with_clone_obc(hobject_t oid,
