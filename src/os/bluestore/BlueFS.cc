@@ -1191,7 +1191,9 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     }
 
     auto p = t.op_bl.cbegin();
+    auto pos0 = pos;
     while (!p.end()) {
+      pos = pos0 + p.get_off();
       __u8 op;
       decode(op, p);
       switch (op) {
@@ -2013,7 +2015,9 @@ int64_t BlueFS::_read_random(
       buf->pos += r;
     }
   }
-  dout(20) << __func__ << " got " << ret << dendl;
+  dout(20) << __func__ << std::hex
+           << " got 0x" << ret
+           << std::dec  << dendl;
   --h->file->num_reading;
   return ret;
 }
@@ -2137,7 +2141,9 @@ int64_t BlueFS::_read(
     buf->pos += r;
   }
 
-  dout(20) << __func__ << " got " << ret << dendl;
+  dout(20) << __func__ << std::hex
+           << " got 0x" << ret
+           << std::dec  << dendl;
   ceph_assert(!outbl || (int)outbl->length() == ret);
   --h->file->num_reading;
   return ret;
