@@ -33,6 +33,7 @@ struct Config {
 
   std::wstring win_vol_name = L"";
   unsigned long win_vol_serial = 0;
+  unsigned long max_path_len = 256;
 };
 
 extern Config *g_cfg;
