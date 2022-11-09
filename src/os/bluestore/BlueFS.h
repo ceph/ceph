@@ -61,6 +61,8 @@ enum {
   l_bluefs_read_disk_bytes_slow,
   l_bluefs_read_prefetch_count,
   l_bluefs_read_prefetch_bytes,
+  l_bluefs_compaction_lat,
+  l_bluefs_compaction_lock_lat,
   l_bluefs_read_zeros_candidate,
   l_bluefs_read_zeros_errors,
 
