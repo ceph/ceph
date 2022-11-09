@@ -4693,6 +4693,10 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         results->backtrace.error_str << "failed to read off disk; see retval";
         // we probably have a new unwritten file!
         // so skip the backtrace scrub for this entry and say that all's well
+        if (in->is_mdsdir()){
+          dout(20) << "forcing backtrace as passed since mdsdir actually doesn't have backtrace" << dendl;
+          results->backtrace.passed = true;
+        }
         if (in->is_dirty_parent()) {
           dout(20) << "forcing backtrace as passed since inode is dirty parent" << dendl;
           results->backtrace.passed = true;
