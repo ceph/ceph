@@ -490,7 +490,7 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
   _init_alloc();
   _init_logger();
 
-  super.version = 1;
+  super.version = 0;
   super.block_size = bdev[BDEV_DB]->get_block_size();
   super.osd_uuid = osd_uuid;
   super.uuid.generate_random();
@@ -909,6 +909,7 @@ int BlueFS::fsck()
 
 int BlueFS::_write_super(int dev)
 {
+  ++super.version;
   // build superblock
   bufferlist bl;
   encode(super, bl);
@@ -2366,7 +2367,6 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
   }
   dout(10) << __func__ << " writing super, log fnode: " << super.log_fnode << dendl;
 
-  ++super.version;
   _write_super(super_dev);
   _flush_bdev();
 
@@ -2514,7 +2514,6 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   new_log->fnode.size = 0;
   new_log->fnode.mtime = ceph_clock_now();
   super.log_fnode = new_log->fnode;
-  ++super.version;
   _write_super(BDEV_DB);
   _flush_bdev();
 
