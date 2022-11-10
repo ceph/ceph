@@ -3192,7 +3192,6 @@ int RadosLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y,
   return 0;
 }
 
-#ifdef WITH_RADOSGW_LUA_PACKAGES
 const std::string PACKAGE_LIST_OBJECT_NAME = "lua_package_allowlist";
 
 int RadosLuaManager::add_package(const DoutPrefixProvider *dpp, optional_yield y, const std::string& package_name)
@@ -3267,7 +3266,6 @@ int RadosLuaManager::list_packages(const DoutPrefixProvider *dpp, optional_yield
 
   return 0;
 }
-#endif
 
 int RadosOIDCProvider::store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y)
 {
