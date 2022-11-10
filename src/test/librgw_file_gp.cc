@@ -213,7 +213,7 @@ TEST(LibRGW, LOOKUP_BUCKET) {
 }
 
 extern "C" {
-  static bool r2_cb(const char* name, void *arg, uint64_t offset,
+  static int r2_cb(const char* name, void *arg, uint64_t offset,
 		    struct stat *st, uint32_t st_mask,
 		    uint32_t flags) {
     // don't need arg--it would point to fids
