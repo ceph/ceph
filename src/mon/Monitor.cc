@@ -3454,9 +3454,9 @@ void Monitor::handle_command(MonOpRequestRef op)
   // Catch bad_cmd_get exception if _generate_command_map() throws it
   try {
     _generate_command_map(cmdmap, param_str_map);
-  }
-  catch(bad_cmd_get& e) {
+  } catch (const bad_cmd_get& e) {
     reply_command(op, -EINVAL, e.what(), 0);
+    return;
   }
 
   if (!_allowed_command(session, service, prefix, cmdmap,
