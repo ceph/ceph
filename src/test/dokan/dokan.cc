@@ -15,6 +15,7 @@
 #include <fstream>
 #include <filesystem>
 #include <sys/socket.h>
+#include <direct.h>
 
 #include "gtest/gtest.h"
 
@@ -139,6 +140,28 @@ void map_dokan_read_only(
               << std::endl;
 }
 
+void map_dokan_with_maxpath(
+    SubProcess** mount,
+    const char* mountpoint,
+    uint64_t max_path_len)
+{
+    SubProcess* new_mount = new SubProcess("ceph-dokan");
+    new_mount->add_cmd_args("map", "--debug", "--dokan-stderr",
+                            "--win-vol-name", "TestCeph",
+                            "--win-vol-serial", TEST_VOL_SERIAL,
+                            "--max-path-len",
+                            (std::to_string(max_path_len)).c_str(),
+                            "-l", mountpoint, NULL);
+
+    *mount = new_mount;
+    ASSERT_EQ(new_mount->spawn(), 0);
+    if (256 <= max_path_len && max_path_len <= 4096) {
+        ASSERT_EQ(wait_for_mount(mountpoint), 0);
+    } else {
+        ASSERT_NE(wait_for_mount(mountpoint), 0);
+    }
+}
+
 void unmap_dokan(SubProcess* mount, const char* mountpoint) {
     std::string ret = run_cmd("ceph-dokan", "unmap", "-l",
                               mountpoint, (char*)NULL);
@@ -147,6 +170,28 @@ void unmap_dokan(SubProcess* mount, const char* mountpoint) {
     std::cerr<< "Unmounted: " << mountpoint << std::endl;
 
     ASSERT_EQ(mount->join(), 0);
+}
+
+int get_volume_max_path(std::string mountpoint){
+    char volume_name[MAX_PATH + 1] = { 0 };
+    char file_system_name[MAX_PATH + 1] = { 0 };
+    DWORD serial_number = 0;
+    DWORD max_component_len = 0;
+    DWORD file_system_flags = 0;
+    if (GetVolumeInformation(
+            mountpoint.c_str(),
+            volume_name,
+            sizeof(volume_name),
+            &serial_number,
+            &max_component_len,
+            &file_system_flags,
+            file_system_name,
+            sizeof(file_system_name)) != TRUE) {
+        std::cerr << "GetVolumeInformation() failed, error: "
+                  << GetLastError() << std::endl;
+    }
+
+    return max_component_len;
 }
 
 static SubProcess* shared_mount = nullptr;
@@ -351,6 +396,79 @@ TEST_F(DokanTests, test_move_file) {
     // clean-up
     ASSERT_NE(fs::remove_all(dir1_path),0);
     ASSERT_NE(fs::remove_all(dir2_path),0);
+}
+
+TEST_F(DokanTests, test_max_path) {
+    std::string mountpoint = "P:\\";
+    std::string extended_mountpoint = "\\\\?\\" + mountpoint;
+    SubProcess* mount = nullptr;
+    char dir[200] = { 0 };
+    char file[200] = { 0 };
+    std::string data = "abcd1234";
+
+    memset(dir, 'd', sizeof(dir) - 1);
+    memset(file, 'f', sizeof(file) - 1);
+
+    uint64_t max_path_len = 4096;
+    
+    map_dokan_with_maxpath(&mount,
+                           mountpoint.c_str(),
+                           max_path_len);
+    EXPECT_EQ(get_volume_max_path(extended_mountpoint),
+              max_path_len);
+
+    std::string long_dir_path = extended_mountpoint;
+
+    std::string dir_names[15];
+
+    for (int i = 0; i < 15; i++) {
+        std::string crt_dir = std::string(dir) + "_"
+                              + get_uuid() + "\\";
+        long_dir_path.append(crt_dir);
+        int stat = _mkdir(long_dir_path.c_str());
+        ASSERT_EQ(stat, 0) << "Error creating directory " << i
+                           << ": " << GetLastError() << std::endl;
+        dir_names[i] = crt_dir;
+    }
+    std::string file_path = long_dir_path + "\\" + std::string(file)
+                            + "_" + get_uuid();
+
+    check_write_file(file_path, data);
+
+    // clean-up
+    // fs::remove is unable to handle long Windows paths
+    EXPECT_NE(DeleteFileA(file_path.c_str()), 0);
+
+    for (int i = 14; i >= 0; i--) {
+        std::string remove_dir = extended_mountpoint;
+        for (int j = 0; j <= i; j++) {
+            remove_dir.append(dir_names[j]);
+        }
+        
+        EXPECT_NE(RemoveDirectoryA(remove_dir.c_str()), 0);
+    }
+
+    unmap_dokan(mount, mountpoint.c_str());
+
+    // value exceeds 32767, so a failure is expected
+    max_path_len = 32770;
+    map_dokan_with_maxpath(&mount,
+                           mountpoint.c_str(),
+                           max_path_len);
+    ASSERT_FALSE(fs::exists(mountpoint));
+
+    // value is below 256, so a failure is expected
+    max_path_len = 150;
+    map_dokan_with_maxpath(&mount,
+                           mountpoint.c_str(),
+                           max_path_len);
+    ASSERT_FALSE(fs::exists(mountpoint));
+
+    // default value
+    map_dokan(&mount, mountpoint.c_str());
+    EXPECT_EQ(get_volume_max_path(mountpoint.c_str()), 256);
+
+    unmap_dokan(mount, mountpoint.c_str());
 }
 
 TEST_F(DokanTests, test_set_eof) {
