@@ -75,6 +75,8 @@
                 order for the Ceph cluster to function properly.
 
 	Ceph Manager Dashboard
+                See :term:`Ceph Dashboard`.
+
 	Ceph Metadata Server
 	Ceph Monitor
                 A daemon that maintains a map of the state of the cluster. This
