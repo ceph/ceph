@@ -108,7 +108,11 @@
                 07 Nov 2022). 
 
 	Ceph OSD Daemon
+                See :term:`Ceph OSD`.
+
 	Ceph OSD Daemons
+                See :term:`Ceph OSD`.
+
 	Ceph Platform
                 All Ceph software, which includes any piece of code hosted at
                 `https://github.com/ceph`_.
