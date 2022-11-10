@@ -3,38 +3,29 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
-std::vector< std::pair<std::string, std::string> > RGWD4NCache::buildObject(rgw::sal::Attrs* baseBinary, rgw::sal::Attrs* newBinary) {
+/* Base metadata and data fields should remain consistent */
+std::vector<std::string> baseFields{
+  "mtime",
+  "object_size",
+  "accounted_size",
+  "epoch",
+  "version_id",
+  "source_zone_short_id",
+  "bucket_count",
+  "bucket_size",
+  "user_quota.max_size",
+  "user_quota.max_objects",
+  "max_buckets",
+  "data"};
+
+std::vector< std::pair<std::string, std::string> > RGWD4NCache::buildObject(rgw::sal::Attrs* binary) {
   std::vector< std::pair<std::string, std::string> > values;
   rgw::sal::Attrs::iterator attrs;
  
   /* Convert to vector */
-  if (baseBinary != NULL) {
-    for (attrs = baseBinary->begin(); attrs != baseBinary->end(); ++attrs) {
+  if (binary != NULL) {
+    for (attrs = binary->begin(); attrs != binary->end(); ++attrs) {
       values.push_back(std::make_pair(attrs->first, attrs->second.to_str()));
-    }
-  } 
-
-  if (newBinary != NULL) {
-    /* Update attributes */
-    if (!newBinary->empty()) {
-      for (attrs = newBinary->begin(); attrs != newBinary->end(); ++attrs) {
-        long unsigned int index = 0;
-
-        for (const auto& pair : values) {
-          if (pair.first == attrs->first) {
-            break;
-          }
-      
-          index++;
-        }
-    
-        if (index != values.size()) {
-          values[index] = std::make_pair(attrs->first, attrs->second.to_str());
-        } else {
-	  /* If not, append it to existing attributes */
-          values.push_back(std::make_pair(attrs->first, attrs->second.to_str()));
-	}
-      }
     }
   } 
 
@@ -57,7 +48,7 @@ void RGWD4NCache::findClient(cpp_redis::client *client) {
 }
 
 int RGWD4NCache::existKey(std::string key) { 
-  int result = 0;
+  int result = -1;
   std::vector<std::string> keys;
   keys.push_back(key);
 
@@ -74,12 +65,12 @@ int RGWD4NCache::existKey(std::string key) {
 
     client.sync_commit(std::chrono::milliseconds(1000));
   } catch(std::exception &e) {}
-
+  
   return result;
 }
 
-int RGWD4NCache::setObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal::Attrs* newAttrs) {
-  /* Creating the index based on obj_name */
+int RGWD4NCache::setObject(std::string oid, rgw::sal::Attrs* attrs) {
+  /* Creating the index based on oid */
   std::string key = "rgw-object:" + oid + ":cache";
   std::string result;
 
@@ -89,7 +80,7 @@ int RGWD4NCache::setObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal
 
   /* Every set will be treated as new */
   try {
-    std::vector< std::pair<std::string, std::string> > redisObject = buildObject(baseAttrs, newAttrs);
+    std::vector< std::pair<std::string, std::string> > redisObject = buildObject(attrs);
       
     if (redisObject.empty()) {
       return -1;
@@ -113,8 +104,12 @@ int RGWD4NCache::setObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal
   return 0;
 }
 
-int RGWD4NCache::getObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal::Attrs* newAttrs) {
+int RGWD4NCache::getObject(std::string oid, 
+    rgw::sal::Attrs* newAttrs, 
+    std::vector< std::pair<std::string, std::string> >* newMetadata) 
+{
   int key_exist = -2;
+  std::string result;
   std::string key = "rgw-object:" + oid + ":cache";
 
   if (!client.is_connected()) {
@@ -123,25 +118,55 @@ int RGWD4NCache::getObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal
 
   if (existKey(key)) {
     rgw::sal::Attrs::iterator it;
-    std::vector<std::string> fields;
+    std::vector< std::pair<std::string, std::string> > redisObject;
+    std::vector<std::string> getFields;
 
-    for (it = baseAttrs->begin(); it != baseAttrs->end(); ++it) {
-      fields.push_back(it->first);
+    /* Retrieve existing fields from cache */
+    try {
+      client.hgetall(key, [&getFields](cpp_redis::reply &reply) {
+	if (reply.is_array()) {
+	  auto arr = reply.as_array();
+
+	  if (!arr[0].is_null()) {
+	    for (long unsigned int i = 0; i < arr.size() - 1; i += 2) {
+	      getFields.push_back(arr[i].as_string());
+	    }
+	  }
+	}
+      });
+
+      client.sync_commit(std::chrono::milliseconds(1000));
+    } catch(std::exception &e) {
+      return -1;
     }
 
+    /* Ensure all metadata, attributes, and data has been set */
+    for (const auto& field : baseFields) { 
+      auto it = std::find_if(getFields.begin(), getFields.end(),
+        [&](const auto& comp) { return comp == field; });
+
+      if (it != getFields.end()) {
+	int index = std::distance(getFields.begin(), it);
+	getFields.erase(getFields.begin() + index);
+      } else {
+        return -1;
+      }
+    }
+
+    /* Get attributes from cache */
     try {
-      client.hmget(key, fields, [&key_exist, &newAttrs, &fields](cpp_redis::reply &reply) {
+      client.hmget(key, getFields, [&key_exist, &newAttrs, &getFields](cpp_redis::reply &reply) {
         if (reply.is_array()) {
 	  auto arr = reply.as_array();
 
 	  if (!arr[0].is_null()) {
 	    key_exist = 0;
 
-            for (long unsigned int i = 0; i < fields.size(); ++i) {
+            for (long unsigned int i = 0; i < getFields.size(); ++i) {
 	      std::string tmp = arr[i].as_string();
               buffer::list bl;
-	      bl.append(tmp.data(), std::strlen(tmp.data()));
-	      newAttrs->insert({fields[i], bl});
+	      bl.append(tmp);
+	      newAttrs->insert({getFields[i], bl});
             }
 	  }
 	}
@@ -151,6 +176,34 @@ int RGWD4NCache::getObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal
     } catch(std::exception &e) {
       return -1;
     }
+    
+    if (key_exist == 0) {
+      key_exist = -2;
+      getFields.clear();
+      getFields.insert(getFields.begin(), baseFields.begin(), baseFields.end());
+      getFields.pop_back(); /* Do not query for data field */
+
+      /* Get metadata from cache */
+      try {
+	client.hmget(key, getFields, [&key_exist, &newMetadata, &getFields](cpp_redis::reply &reply) {
+	  if (reply.is_array()) {
+	    auto arr = reply.as_array();
+
+	    if (!arr[0].is_null()) {
+	      key_exist = 0;
+
+	      for (long unsigned int i = 0; i < getFields.size(); ++i) {
+		newMetadata->push_back({getFields[i], arr[i].as_string()});
+	      }
+	    }
+	  }
+	});
+
+	client.sync_commit(std::chrono::milliseconds(1000));
+      } catch(std::exception &e) {
+	return -1;
+      }
+    }
   }
 
   if (key_exist < 0) {
@@ -158,6 +211,77 @@ int RGWD4NCache::getObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal
   }
 
   return key_exist;
+}
+
+int RGWD4NCache::copyObject(std::string original_oid, std::string copy_oid, rgw::sal::Attrs* attrs) {
+  std::string result;
+  std::vector< std::pair<std::string, std::string> > redisObject;
+  std::string key = "rgw-object:" + original_oid + ":cache";
+
+  if (!client.is_connected()) {
+    findClient(&client);
+  }
+
+  /* Read values from cache */
+  if (existKey(key)) {
+    try {
+      client.hgetall(key, [&redisObject](cpp_redis::reply &reply) {
+        if (reply.is_array()) {
+	  auto arr = reply.as_array();
+
+	  if (!arr[0].is_null()) {
+            for (long unsigned int i = 0; i < arr.size() - 1; i += 2) {
+	      redisObject.push_back({arr[i].as_string(), arr[i + 1].as_string()});
+	    }
+	  }
+	}
+      });
+
+      client.sync_commit(std::chrono::milliseconds(1000));
+    } catch(std::exception &e) {
+      return -1;
+    }
+  } else {
+    return -2; 
+  }
+
+  /* Build copy with updated values */
+  if (!redisObject.empty()) {
+    rgw::sal::Attrs::iterator attr;
+    
+    for (attr = attrs->begin(); attr != attrs->end(); ++attr) {
+      auto it = std::find_if(redisObject.begin(), redisObject.end(),
+        [&](const auto& pair) { return pair.first == attr->first; });
+
+      if (it != redisObject.end()) {
+	int index = std::distance(redisObject.begin(), it);
+	redisObject[index] = {attr->first, attr->second.to_str()};
+      } else {
+	redisObject.push_back(std::make_pair(attr->first, attr->second.to_str()));
+      }
+    }
+  }
+
+  /* Set copy with new values */
+  key = "rgw-object:" + copy_oid + ":cache";
+
+  try {
+    client.hmset(key, redisObject, [&result](cpp_redis::reply &reply) {
+      if (!reply.is_null()) {
+        result = reply.as_string();
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+
+    if (result != "OK") {
+      return -1;
+    }
+  } catch(std::exception &e) {
+    return -2;
+  }
+   
+  return 0;
 }
 
 int RGWD4NCache::delObject(std::string oid) {
@@ -188,6 +312,41 @@ int RGWD4NCache::delObject(std::string oid) {
 
   dout(20) << "RGW D4N Cache: Object is not in cache." << dendl;
   return -2;
+}
+
+int RGWD4NCache::updateAttr(std::string oid, rgw::sal::Attrs* attr) {
+  std::string result;
+  std::string key = "rgw-object:" + oid + ":cache";
+
+  if (!client.is_connected()) {
+    findClient(&client);
+  }
+  
+  if (existKey(key)) { 
+    try {
+      std::vector< std::pair<std::string, std::string> > redisObject;
+      auto it = attr->begin();
+      redisObject.push_back({it->first, it->second.to_str()});
+
+      client.hmset(key, redisObject, [&result](cpp_redis::reply &reply) {
+	if (!reply.is_null()) {
+	  result = reply.as_string();
+	}
+      });
+
+      client.sync_commit(std::chrono::milliseconds(1000));
+
+      if (result != "OK") {
+	return -1;
+      }
+    } catch(std::exception &e) {
+      return -2;
+    }
+  } else {
+    return -2;
+  }
+
+  return 0;
 }
 
 int RGWD4NCache::delAttrs(std::string oid, std::vector<std::string>& baseFields, std::vector<std::string>& deleteFields) {
@@ -226,7 +385,7 @@ int RGWD4NCache::delAttrs(std::string oid, std::vector<std::string>& baseFields,
 }
 
 int RGWD4NCache::appendData(std::string oid, buffer::list& data) {
-  int result = 0;
+  std::string result;
   std::string value = "";
   std::string key = "rgw-object:" + oid + ":cache";
 
@@ -250,18 +409,26 @@ int RGWD4NCache::appendData(std::string oid, buffer::list& data) {
 
   try {
     /* Append to existing value or set as new value */
-    client.hset(key, "data", value + data.to_str(), [&result](cpp_redis::reply &reply) {
-      if (reply.is_integer()) {
-	result = reply.as_integer();
+    std::string temp = value + data.to_str();
+    std::vector< std::pair<std::string, std::string> > field;
+    field.push_back({"data", temp});
+
+    client.hmset(key, field, [&result](cpp_redis::reply &reply) {
+      if (!reply.is_null()) {
+        result = reply.as_string();
       }
     });
 
     client.sync_commit(std::chrono::milliseconds(1000));
+
+    if (result != "OK") {
+      return -1;
+    }
   } catch(std::exception &e) {
     return -2;
   }
 
-  return result - 1;
+  return 0;
 }
 
 int RGWD4NCache::deleteData(std::string oid) {
@@ -301,6 +468,8 @@ int RGWD4NCache::deleteData(std::string oid) {
 	return -2;
       }
     }
+  } else {
+    return 0; /* No delete was necessary */
   }
 
   return result - 1;

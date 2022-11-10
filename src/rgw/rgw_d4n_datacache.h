@@ -21,9 +21,11 @@ class RGWD4NCache {
 
     void findClient(cpp_redis::client *client);
     int existKey(std::string key);
-    int setObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal::Attrs* newAttrs);
-    int getObject(std::string oid, rgw::sal::Attrs* baseAttrs, rgw::sal::Attrs* newAttrs);
+    int setObject(std::string oid, rgw::sal::Attrs* attrs);
+    int getObject(std::string oid, rgw::sal::Attrs* newAttrs, std::vector< std::pair<std::string, std::string> >* newMetadata);
+    int copyObject(std::string original_oid, std::string copy_oid, rgw::sal::Attrs* attrs);
     int delObject(std::string oid);
+    int updateAttr(std::string oid, rgw::sal::Attrs* attr);
     int delAttrs(std::string oid, std::vector<std::string>& baseFields, std::vector<std::string>& deleteFields);
     int appendData(std::string oid, buffer::list& data);
     int deleteData(std::string oid);
@@ -32,7 +34,7 @@ class RGWD4NCache {
     cpp_redis::client client;
     std::string host = "";
     int port = 0;
-    std::vector< std::pair<std::string, std::string> > buildObject(rgw::sal::Attrs* baseBinary, rgw::sal::Attrs* newBinary);
+    std::vector< std::pair<std::string, std::string> > buildObject(rgw::sal::Attrs* binary);
 };
 
 #endif
