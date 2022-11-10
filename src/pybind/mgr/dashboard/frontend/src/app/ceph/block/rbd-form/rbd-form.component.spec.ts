@@ -457,6 +457,24 @@ describe('RbdFormComponent', () => {
         expect(exclusiveLocks.checked).toBe(true);
         expect(exclusiveLocks.disabled).toBe(true);
       });
+
+      it('should have journaling feature for journaling mirror mode on createRequest', () => {
+        component.mirroring = true;
+        fixture.detectChanges();
+        const journal = fixture.debugElement.query(By.css('#journal')).nativeElement;
+        expect(journal.checked).toBe(true);
+        const request = component.createRequest();
+        expect(request.features).toContain('journaling');
+      });
+
+      it('should have journaling feature for journaling mirror mode on editRequest', () => {
+        component.mirroring = true;
+        fixture.detectChanges();
+        const journal = fixture.debugElement.query(By.css('#journal')).nativeElement;
+        expect(journal.checked).toBe(true);
+        const request = component.editRequest();
+        expect(request.features).toContain('journaling');
+      });
     });
   });
 });
