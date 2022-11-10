@@ -34,7 +34,7 @@ static inline Object* nextObject(Object* t)
     return nullptr;
   
   return dynamic_cast<FilterObject*>(t)->get_next();
-}  
+}
 
 int D4NFilterStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
@@ -88,6 +88,87 @@ int D4NFilterUser::create_bucket(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int D4NFilterObject::copy_object(User* user,
+                              req_info* info,
+                              const rgw_zone_id& source_zone,
+                              rgw::sal::Object* dest_object,
+                              rgw::sal::Bucket* dest_bucket,
+                              rgw::sal::Bucket* src_bucket,
+                              const rgw_placement_rule& dest_placement,
+                              ceph::real_time* src_mtime,
+                              ceph::real_time* mtime,
+                              const ceph::real_time* mod_ptr,
+                              const ceph::real_time* unmod_ptr,
+                              bool high_precision_time,
+                              const char* if_match,
+                              const char* if_nomatch,
+                              AttrsMod attrs_mod,
+                              bool copy_if_newer,
+                              Attrs& attrs,
+                              RGWObjCategory category,
+                              uint64_t olh_epoch,
+                              boost::optional<ceph::real_time> delete_at,
+                              std::string* version_id,
+                              std::string* tag,
+                              std::string* etag,
+                              void (*progress_cb)(off_t, void *),
+                              void* progress_data,
+                              const DoutPrefixProvider* dpp,
+                              optional_yield y)
+{
+  /* Append additional metadata to attributes */
+  rgw::sal::Attrs baseAttrs = this->get_attrs();
+  buffer::list bl;
+
+  bl.append(to_iso_8601(*mtime));
+  baseAttrs.insert({"mtime", bl});
+  bl.clear();
+  
+  if (version_id != NULL) { 
+    bl.append(*version_id);
+    baseAttrs.insert({"version_id", bl});
+    bl.clear();
+  }
+ 
+  if (!etag->empty()) {
+    bl.append(*etag);
+    baseAttrs.insert({"etag", bl});
+    bl.clear();
+  }
+
+  if (attrs_mod == rgw::sal::ATTRSMOD_REPLACE) { /* Replace */
+    rgw::sal::Attrs::iterator iter;
+
+    for (const auto& pair : attrs) {
+      iter = baseAttrs.find(pair.first);
+    
+      if (iter != baseAttrs.end()) {
+        iter->second = pair.second;
+      }
+    }
+  } else if (attrs_mod == rgw::sal::ATTRSMOD_MERGE) { /* Merge */
+    baseAttrs.insert(attrs.begin(), attrs.end()); 
+  }
+
+  int copyObjReturn = filter->get_d4n_cache()->copyObject(this->get_key().get_oid(), dest_object->get_key().get_oid(), &baseAttrs);
+
+  if (copyObjReturn < 0) {
+    ldpp_dout(dpp, 20) << "D4N Filter: Cache copy object operation failed." << dendl;
+  } else {
+    ldpp_dout(dpp, 20) << "D4N Filter: Cache copy object operation succeeded." << dendl;
+  }
+
+  return next->copy_object(user, info, source_zone,
+                           nextObject(dest_object),
+                           nextBucket(dest_bucket),
+                           nextBucket(src_bucket),
+                           dest_placement, src_mtime, mtime,
+                           mod_ptr, unmod_ptr, high_precision_time, if_match,
+                           if_nomatch, attrs_mod, copy_if_newer, attrs,
+                           category, olh_epoch, delete_at, version_id, tag,
+                           etag, progress_cb, progress_data, dpp, y);
+}
+
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y) 
 {
@@ -102,7 +183,7 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
       }
     }
 
-    int updateAttrsReturn = filter->get_d4n_cache()->setObject(this->get_name(), &(this->get_attrs()), setattrs);
+    int updateAttrsReturn = filter->get_d4n_cache()->setObject(this->get_key().get_oid(), setattrs);
 
     if (updateAttrsReturn < 0) {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache set object attributes operation failed." << dendl;
@@ -128,7 +209,7 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
       currentFields.push_back(attrs->first);
     }
     
-    int delAttrsReturn = filter->get_d4n_cache()->delAttrs(this->get_name(), currentFields, delFields);
+    int delAttrsReturn = filter->get_d4n_cache()->delAttrs(this->get_key().get_oid(), currentFields, delFields);
 
     if (delAttrsReturn < 0) {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attributes operation failed." << dendl;
@@ -144,7 +225,10 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
                                 rgw_obj* target_obj)
 {
   rgw::sal::Attrs newAttrs;
-  int getAttrsReturn = filter->get_d4n_cache()->getObject(this->get_name(), &(this->get_attrs()), &newAttrs);
+  std::vector< std::pair<std::string, std::string> > newMetadata;
+  int getAttrsReturn = filter->get_d4n_cache()->getObject(this->get_key().get_oid(), 
+						  &newAttrs, 
+						  &newMetadata);
 
   if (getAttrsReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache get object attributes operation failed." << dendl;
@@ -170,7 +254,7 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
 {
   Attrs update;
   update[(std::string)attr_name] = attr_val;
-  int updateAttrsReturn = filter->get_d4n_cache()->setObject(this->get_name(), &(this->get_attrs()), &update);
+  int updateAttrsReturn = filter->get_d4n_cache()->updateAttr(this->get_key().get_oid(), &update);
 
   if (updateAttrsReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache modify object attribute operation failed." << dendl;
@@ -196,7 +280,7 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
     currentFields.push_back(attrs->first);
   }
   
-  int delAttrReturn = filter->get_d4n_cache()->delAttrs(this->get_name(), currentFields, delFields);
+  int delAttrReturn = filter->get_d4n_cache()->delAttrs(this->get_key().get_oid(), currentFields, delFields);
 
   if (delAttrReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attribute operation failed." << dendl;
@@ -254,16 +338,63 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
   }
 
   rgw::sal::Attrs newAttrs;
-  source->filter->get_d4n_cache()->getObject(source->get_name(), &(source->get_attrs()), &newAttrs);
-  int getObjReturn = source->set_attrs(newAttrs);
+  std::vector< std::pair<std::string, std::string> > newMetadata;
+  int getObjReturn = source->filter->get_d4n_cache()->getObject(source->get_key().get_oid(), 
+							&newAttrs, 
+							&newMetadata);
 
   if (getObjReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache get operation failed." << dendl;
+    ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
+
+    return next->prepare(y, dpp);
   } else {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache get operation succeeded." << dendl;
+    /* Set metadata locally */
+    RGWQuotaInfo quota_info;
+    RGWObjState* astate;
+    source->get_obj_state(dpp, &astate, y);
+
+    for (auto it = newMetadata.begin(); it != newMetadata.end(); ++it) {
+      if (!std::strcmp(it->first.data(), "mtime")) {
+        parse_time(it->second.data(), &astate->mtime); 
+      } else if (!std::strcmp(it->first.data(), "object_size")) {
+	source->set_obj_size(std::stoull(it->second));
+      } else if (!std::strcmp(it->first.data(), "accounted_size")) {
+	astate->accounted_size = std::stoull(it->second);
+      } else if (!std::strcmp(it->first.data(), "epoch")) {
+	astate->epoch = std::stoull(it->second);
+      } else if (!std::strcmp(it->first.data(), "version_id")) {
+	source->set_instance(it->second);
+      } else if (!std::strcmp(it->first.data(), "source_zone_short_id")) {
+	astate->zone_short_id = static_cast<uint32_t>(std::stoul(it->second));
+      } else if (!std::strcmp(it->first.data(), "bucket_count")) {
+	source->get_bucket()->set_count(std::stoull(it->second));
+      } else if (!std::strcmp(it->first.data(), "bucket_size")) {
+	source->get_bucket()->set_size(std::stoull(it->second));
+      } else if (!std::strcmp(it->first.data(), "user_quota.max_size")) {
+        quota_info.max_size = std::stoull(it->second);
+      } else if (!std::strcmp(it->first.data(), "user_quota.max_objects")) {
+        quota_info.max_objects = std::stoull(it->second);
+      } else if (!std::strcmp(it->first.data(), "max_buckets")) {
+        source->get_bucket()->get_owner()->set_max_buckets(std::stoull(it->second));
+      }
+    }
+
+    source->get_bucket()->get_owner()->set_info(quota_info);
+    source->set_obj_state(*astate);
+   
+    /* Set attributes locally */
+    int setAttrsReturn = source->set_attrs(newAttrs);
+
+    if (setAttrsReturn < 0) {
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
+    
+      return next->prepare(y, dpp);
+    } else {
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation succeeded." << dendl;
+     
+      return 0;
+    }
   }
-  
-  return next->prepare(y, dpp);
 }
 
 int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
@@ -277,7 +408,7 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     ldpp_dout(dpp, 20) << "D4N Filter: Directory delete operation succeeded." << dendl;
   }
 
-  int delObjReturn = source->filter->get_d4n_cache()->delObject(source->get_name());
+  int delObjReturn = source->filter->get_d4n_cache()->delObject(source->get_key().get_oid());
 
   if (delObjReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache delete operation failed." << dendl;
@@ -290,7 +421,7 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
 
 int D4NFilterWriter::prepare(optional_yield y) 
 {
-  int delDataReturn = filter->get_d4n_cache()->deleteData(head_obj->get_name()); 
+  int delDataReturn = filter->get_d4n_cache()->deleteData(head_obj->get_key().get_oid()); 
 
   if (delDataReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache delete data operation failed." << dendl;
@@ -304,7 +435,7 @@ int D4NFilterWriter::prepare(optional_yield y)
 int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
 {
   bufferlist objectData = data;
-  int appendDataReturn = filter->get_d4n_cache()->appendData(head_obj->get_name(), data);
+  int appendDataReturn = filter->get_d4n_cache()->appendData(head_obj->get_key().get_oid(), data);
 
   if (appendDataReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache append data operation failed." << dendl;
@@ -330,7 +461,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   temp_cache_block->hosts_list.push_back(temp_block_dir->get_host() + ":" + std::to_string(temp_block_dir->get_port())); 
   temp_cache_block->size_in_bytes = accounted_size;
   temp_cache_block->c_obj.bucket_name = head_obj->get_bucket()->get_name();
-  temp_cache_block->c_obj.obj_name = head_obj->get_name();
+  temp_cache_block->c_obj.obj_name = head_obj->get_key().get_oid();
 
   int setDirReturn = temp_block_dir->setValue(temp_cache_block);
 
@@ -346,69 +477,74 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 			canceled, y);
   head_obj->get_obj_attrs(y, save_dpp, NULL);
 
-  /* Append additional metadata to attributes */
-  rgw::sal::Attrs newAttrs = head_obj->get_attrs();
-  rgw::sal::Attrs attrs_temp = head_obj->get_attrs();
+  /* Append additional metadata to attributes */ 
+  rgw::sal::Attrs baseAttrs = head_obj->get_attrs();
+  rgw::sal::Attrs attrs_temp = baseAttrs;
   buffer::list bl;
   RGWObjState* astate;
   head_obj->get_obj_state(save_dpp, &astate, y);
 
   bl.append(to_iso_8601(head_obj->get_mtime()));
-  newAttrs.insert({"mtime", bl});
+  baseAttrs.insert({"mtime", bl});
   bl.clear();
 
   bl.append(std::to_string(head_obj->get_obj_size()));
-  newAttrs.insert({"object_size", bl});
+  baseAttrs.insert({"object_size", bl});
   bl.clear();
 
   bl.append(std::to_string(accounted_size));
-  newAttrs.insert({"accounted_size", bl});
-  bl.clear();
- 
-  bl.append(std::to_string(astate->accounted_size));
-  newAttrs.insert({"cur_accounted_size", bl});
+  baseAttrs.insert({"accounted_size", bl});
   bl.clear();
  
   bl.append(std::to_string(astate->epoch));
-  newAttrs.insert({"epoch", bl});
+  baseAttrs.insert({"epoch", bl});
   bl.clear();
 
   if (head_obj->have_instance()) {
     bl.append(head_obj->get_instance());
-    newAttrs.insert({"version_id", bl});
+    baseAttrs.insert({"version_id", bl});
+    bl.clear();
+  } else {
+    bl.append(""); /* Empty value */
+    baseAttrs.insert({"version_id", bl});
     bl.clear();
   }
 
   auto iter = attrs_temp.find(RGW_ATTR_SOURCE_ZONE);
   if (iter != attrs_temp.end()) {
     bl.append(std::to_string(astate->zone_short_id));
-    newAttrs.insert({"source_zone_short_id", bl});
+    baseAttrs.insert({"source_zone_short_id", bl});
+    bl.clear();
+  } else {
+    bl.append("0"); /* Initialized to zero */
+    baseAttrs.insert({"source_zone_short_id", bl});
     bl.clear();
   }
 
   bl.append(std::to_string(head_obj->get_bucket()->get_count()));
-  newAttrs.insert({"bucket_count", bl});
+  baseAttrs.insert({"bucket_count", bl});
   bl.clear();
 
   bl.append(std::to_string(head_obj->get_bucket()->get_size()));
-  newAttrs.insert({"bucket_size", bl});
+  baseAttrs.insert({"bucket_size", bl});
   bl.clear();
 
-  RGWQuota quota;
-  filter->get_quota(quota);
-  bl.append(std::to_string(quota.user_quota.max_size));
-  newAttrs.insert({"user_quota.max_size", bl});
+  RGWUserInfo info = head_obj->get_bucket()->get_owner()->get_info();
+  bl.append(std::to_string(info.quota.user_quota.max_size));
+  baseAttrs.insert({"user_quota.max_size", bl});
   bl.clear();
 
-  bl.append(std::to_string(quota.user_quota.max_objects));
-  newAttrs.insert({"user_quota.max_objects", bl});
+  bl.append(std::to_string(info.quota.user_quota.max_objects));
+  baseAttrs.insert({"user_quota.max_objects", bl});
   bl.clear();
 
   bl.append(std::to_string(head_obj->get_bucket()->get_owner()->get_max_buckets()));
-  newAttrs.insert({"max_buckets", bl});
+  baseAttrs.insert({"max_buckets", bl});
   bl.clear();
 
-  int setObjReturn = filter->get_d4n_cache()->setObject(head_obj->get_name(), &newAttrs, &attrs);
+  baseAttrs.insert(attrs.begin(), attrs.end());
+
+  int setObjReturn = filter->get_d4n_cache()->setObject(head_obj->get_key().get_oid(), &baseAttrs);
 
   if (setObjReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set operation failed." << dendl;
