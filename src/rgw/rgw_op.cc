@@ -12,7 +12,6 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
-#include <boost/asio.hpp>
 
 #include "include/scope_guard.h"
 #include "common/Clock.h"
@@ -6853,19 +6852,19 @@ void RGWDeleteMultiObj::wait_flush(optional_yield y,
   }
 }
 
-void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key *o, optional_yield y,
+void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_yield y,
                                                  boost::asio::deadline_timer *formatter_flush_cond)
 {
   std::string version_id;
-  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(*o);
+  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(o);
   if (s->iam_policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
     auto identity_policy_res = eval_identity_or_session_policies(this, s->iam_user_policies, s->env,
-                                                                 o->instance.empty() ?
+                                                                 o.instance.empty() ?
                                                                  rgw::IAM::s3DeleteObject :
                                                                  rgw::IAM::s3DeleteObjectVersion,
                                                                  ARN(obj->get_obj()));
     if (identity_policy_res == Effect::Deny) {
-      send_partial_response(*o, false, "", -EACCES, formatter_flush_cond);
+      send_partial_response(o, false, "", -EACCES, formatter_flush_cond);
       return;
     }
 
@@ -6875,52 +6874,52 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key *o, optional_
       ARN obj_arn(obj->get_obj());
       e = s->iam_policy->eval(s->env,
                               *s->auth.identity,
-                              o->instance.empty() ?
+                              o.instance.empty() ?
                               rgw::IAM::s3DeleteObject :
                               rgw::IAM::s3DeleteObjectVersion,
                               obj_arn,
                               princ_type);
     }
     if (e == Effect::Deny) {
-      send_partial_response(*o, false, "", -EACCES, formatter_flush_cond);
+      send_partial_response(o, false, "", -EACCES, formatter_flush_cond);
       return;
     }
 
     if (!s->session_policies.empty()) {
       auto session_policy_res = eval_identity_or_session_policies(this, s->session_policies, s->env,
-                                                                  o->instance.empty() ?
+                                                                  o.instance.empty() ?
                                                                   rgw::IAM::s3DeleteObject :
                                                                   rgw::IAM::s3DeleteObjectVersion,
                                                                   ARN(obj->get_obj()));
       if (session_policy_res == Effect::Deny) {
-        send_partial_response(*o, false, "", -EACCES, formatter_flush_cond);
+        send_partial_response(o, false, "", -EACCES, formatter_flush_cond);
         return;
       }
       if (princ_type == rgw::IAM::PolicyPrincipal::Role) {
         //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
         if ((session_policy_res != Effect::Allow || identity_policy_res != Effect::Allow) &&
             (session_policy_res != Effect::Allow || e != Effect::Allow)) {
-          send_partial_response(*o, false, "", -EACCES, formatter_flush_cond);
+          send_partial_response(o, false, "", -EACCES, formatter_flush_cond);
           return;
         }
       } else if (princ_type == rgw::IAM::PolicyPrincipal::Session) {
         //Intersection of session policy and identity policy plus bucket policy
         if ((session_policy_res != Effect::Allow || identity_policy_res != Effect::Allow) && e != Effect::Allow) {
-          send_partial_response(*o, false, "", -EACCES, formatter_flush_cond);
+          send_partial_response(o, false, "", -EACCES, formatter_flush_cond);
           return;
         }
       } else if (princ_type == rgw::IAM::PolicyPrincipal::Other) {// there was no match in the bucket policy
         if (session_policy_res != Effect::Allow || identity_policy_res != Effect::Allow) {
-          send_partial_response(*o, false, "", -EACCES, formatter_flush_cond);
+          send_partial_response(o, false, "", -EACCES, formatter_flush_cond);
           return;
         }
       }
-      send_partial_response(*o, false, "", -EACCES, formatter_flush_cond);
+      send_partial_response(o, false, "", -EACCES, formatter_flush_cond);
       return;
     }
 
     if ((identity_policy_res == Effect::Pass && e == Effect::Pass && !acl_allowed)) {
-      send_partial_response(*o, false, "", -EACCES, formatter_flush_cond);
+      send_partial_response(o, false, "", -EACCES, formatter_flush_cond);
       return;
     }
   }
@@ -6939,7 +6938,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key *o, optional_
         check_obj_lock = false;
       } else {
         // Something went wrong.
-        send_partial_response(*o, false, "", ret, formatter_flush_cond);
+        send_partial_response(o, false, "", ret, formatter_flush_cond);
         return;
       }
     } else {
@@ -6951,7 +6950,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key *o, optional_
       ceph_assert(astate);
       int object_lock_response = verify_object_lock(this, astate->attrset, bypass_perm, bypass_governance_mode);
       if (object_lock_response != 0) {
-        send_partial_response(*o, false, "", object_lock_response, formatter_flush_cond);
+        send_partial_response(o, false, "", object_lock_response, formatter_flush_cond);
         return;
       }
     }
@@ -6966,7 +6965,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key *o, optional_
           = store->get_notification(obj.get(), s->src_object.get(), s, event_type);
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
-    send_partial_response(*o, false, "", op_ret, formatter_flush_cond);
+    send_partial_response(o, false, "", op_ret, formatter_flush_cond);
     return;
   }
 
@@ -6983,7 +6982,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key *o, optional_
     op_ret = 0;
   }
 
-  send_partial_response(*o, obj->get_delete_marker(), del_op->result.version_id, op_ret, formatter_flush_cond);
+  send_partial_response(o, obj->get_delete_marker(), del_op->result.version_id, op_ret, formatter_flush_cond);
 
   // send request to notification manager
   int ret = res->publish_commit(this, obj_size, ceph::real_clock::now(), etag, version_id);
@@ -7001,9 +7000,9 @@ void RGWDeleteMultiObj::execute(optional_yield y)
   uint32_t aio_count = 0;
   const uint32_t max_aio = s->cct->_conf->rgw_multi_obj_del_max_aio;
   char* buf;
-  std::unique_ptr<boost::asio::deadline_timer> formatter_flush_cond;
+  std::optional<boost::asio::deadline_timer> formatter_flush_cond;
   if (y) {
-    formatter_flush_cond = std::make_unique<boost::asio::deadline_timer>(y.get_io_context());  
+    formatter_flush_cond = std::make_optional<boost::asio::deadline_timer>(y.get_io_context());  
   }
 
   buf = data.c_str();
@@ -7065,21 +7064,21 @@ void RGWDeleteMultiObj::execute(optional_yield y)
   for (iter = multi_delete->objects.begin();
         iter != multi_delete->objects.end();
         ++iter) {
-    rgw_obj_key* obj_key = &*iter;
+    rgw_obj_key obj_key = *iter;
     if (y && max_aio > 1) {
-      wait_flush(y, formatter_flush_cond.get(), [&aio_count, max_aio] {
+      wait_flush(y, &*formatter_flush_cond, [&aio_count, max_aio] {
         return aio_count < max_aio;
       });
       aio_count++;
       spawn::spawn(y.get_yield_context(), [this, &y, &aio_count, obj_key, &formatter_flush_cond] (yield_context yield) {
-        handle_individual_object(obj_key, optional_yield { y.get_io_context(), yield }, formatter_flush_cond.get()); 
+        handle_individual_object(obj_key, optional_yield { y.get_io_context(), yield }, &*formatter_flush_cond); 
         aio_count--;
       }); 
     } else {
-      handle_individual_object(obj_key, y, formatter_flush_cond.get());
+      handle_individual_object(obj_key, y, &*formatter_flush_cond);
     }
   }
-  wait_flush(y, formatter_flush_cond.get(), [this, n=multi_delete->objects.size()] {
+  wait_flush(y, &*formatter_flush_cond, [this, n=multi_delete->objects.size()] {
     return n == ops_log_entries.size();
   });
 
