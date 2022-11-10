@@ -5391,9 +5391,11 @@ int BlueStore::_create_alloc()
     alloc_size = _zoned_piggyback_device_parameters_onto(alloc_size);
   }
 
-  shared_alloc.set(Allocator::create(cct, cct->_conf->bluestore_allocator,
-    bdev->get_size(),
-    alloc_size, "block"));
+  shared_alloc.set(
+    Allocator::create(cct, cct->_conf->bluestore_allocator,
+      bdev->get_size(),
+      alloc_size, "block"),
+    alloc_size);
 
   if (!shared_alloc.a) {
     lderr(cct) << __func__ << "Failed to create allocator:: "
@@ -5401,6 +5403,7 @@ int BlueStore::_create_alloc()
       << dendl;
     return -EINVAL;
   }
+
   return 0;
 }
 

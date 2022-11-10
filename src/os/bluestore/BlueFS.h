@@ -52,9 +52,10 @@ enum {
   l_bluefs_read_prefetch_bytes,
   l_bluefs_compaction_lat,
   l_bluefs_compaction_lock_lat,
+  l_bluefs_alloc_shared_dev_fallbacks,
+  l_bluefs_alloc_shared_size_fallbacks,
   l_bluefs_read_zeros_candidate,
   l_bluefs_read_zeros_errors,
-
   l_bluefs_last,
 };
 
@@ -79,16 +80,19 @@ public:
 struct bluefs_shared_alloc_context_t {
   bool need_init = false;
   Allocator* a = nullptr;
+  uint64_t alloc_unit = 0;
 
   std::atomic<uint64_t> bluefs_used = 0;
 
-  void set(Allocator* _a) {
+  void set(Allocator* _a, uint64_t _au) {
     a = _a;
+    alloc_unit = _au;
     need_init = true;
     bluefs_used = 0;
   }
   void reset() {
     a = nullptr;
+    alloc_unit = 0;
   }
 };
 
@@ -401,8 +405,10 @@ private:
   }
   const char* get_device_name(unsigned id);
   int _allocate(uint8_t bdev, uint64_t len,
+                uint64_t alloc_unit,
 		bluefs_fnode_t* node);
   int _allocate_without_fallback(uint8_t id, uint64_t len,
+				 uint64_t alloc_unit,
 				 bluefs_fnode_t* node);
 
   /* signal replay log to include h->file in nearest log flush */
@@ -488,6 +494,7 @@ private:
     const char* op_name);
   int _verify_alloc_granularity(
     __u8 id, uint64_t offset, uint64_t length,
+    uint64_t alloc_unit,
     const char *op);
   int _replay(bool noop, bool to_stdout = false); ///< replay journal
 
