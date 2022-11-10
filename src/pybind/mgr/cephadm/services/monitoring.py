@@ -415,8 +415,9 @@ class PrometheusService(CephadmService):
         deps.append(self.mgr.get_active_mgr().name())
         # add dependency on ceph-exporter daemons
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('ceph-exporter')]
-        deps += [s for s in ['node-exporter', 'alertmanager', 'ingress']
-                 if self.mgr.cache.get_daemons_by_service(s)]
+        deps += [s for s in ['node-exporter', 'alertmanager'] if self.mgr.cache.get_daemons_by_service(s)]
+        if len(self.mgr.cache.get_daemons_by_type('ingress')) > 0:
+            deps.append('ingress')
         return deps
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
