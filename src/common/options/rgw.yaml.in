@@ -179,7 +179,7 @@ options:
   type: uint
   level: advanced
   desc: Max number of concurrent RADOS requests per multi-object delete request.
-  default: 128
+  default: 16
   services:
   - rgw
   with_legacy: true
