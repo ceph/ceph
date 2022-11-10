@@ -15,6 +15,9 @@
                 Ceph's default and recommended storage back end.
 
 	Ceph
+                Ceph is a distributed network storage and file system with
+                distributed metadata management and POSIX semantics.
+
 	Ceph Block Device
                 A software instrument that orchestrates the storage of
                 block-based data in Ceph. Ceph Block Device (also called "RBD",
