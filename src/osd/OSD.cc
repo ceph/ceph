@@ -2130,6 +2130,17 @@ int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, 
       return r;
   }
 
+  r = store->write_meta("ceph_version_when_created", pretty_version_to_str());
+  if (r < 0)
+    return r;
+
+  ostringstream created_at;
+  utime_t now = ceph_clock_now();
+  now.gmtime(created_at);
+  r = store->write_meta("created_at", created_at.str());
+  if (r < 0)
+    return r;
+
   r = store->write_meta("ready", "ready");
   if (r < 0)
     return r;
@@ -6734,6 +6745,18 @@ void OSD::_collect_metadata(map<string,string> *pm)
     osdspec_affinity = "";
   }
   (*pm)["osdspec_affinity"] = osdspec_affinity;
+  string ceph_version_when_created;
+  r = store->read_meta("ceph_version_when_created", &ceph_version_when_created);
+  if (r <0 || ceph_version_when_created.empty()) {
+    ceph_version_when_created = "";
+  }
+  (*pm)["ceph_version_when_created"] = ceph_version_when_created;
+  string created_at;
+  r = store->read_meta("created_at", &created_at);
+  if (r < 0 || created_at.empty()) {
+    created_at = "";
+  }
+  (*pm)["created_at"] = created_at;
   store->collect_metadata(pm);
 
   collect_sys_info(pm, cct);
