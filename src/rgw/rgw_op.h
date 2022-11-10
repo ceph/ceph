@@ -26,6 +26,7 @@
 #include <boost/utility/in_place_factory.hpp>
 #include <boost/function.hpp>
 #include <boost/container/flat_map.hpp>
+#include <boost/asio/deadline_timer.hpp>
 
 #include "common/armor.h"
 #include "common/mime.h"
@@ -2033,7 +2034,7 @@ class RGWDeleteMultiObj : public RGWOp {
    * Handles the deletion of an individual object and uses
    * set_partial_response to record the outcome. 
    */
-  void handle_individual_object(const rgw_obj_key *o,
+  void handle_individual_object(const rgw_obj_key& o,
 				optional_yield y,
                                 boost::asio::deadline_timer *formatter_flush_cond);
   
