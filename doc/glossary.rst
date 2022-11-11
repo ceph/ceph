@@ -141,7 +141,6 @@
 
 	Ceph Storage Cluster
 	Ceph System
-	Ceph Test Framework
 	cephx
                 The Ceph authentication protocol. Cephx operates like Kerberos,
                 but it has no single point of failure.
