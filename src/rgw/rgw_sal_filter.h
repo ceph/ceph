@@ -355,6 +355,8 @@ public:
   virtual const rgw_user& get_id() const override { return next->get_id(); }
   virtual uint32_t get_type() const override { return next->get_type(); }
   virtual int32_t get_max_buckets() const override { return next->get_max_buckets(); }
+  virtual void set_max_buckets(int32_t _max_buckets) override { return next->set_max_buckets(_max_buckets); }
+  virtual void set_info(RGWQuotaInfo& _quota) override { return next->set_info(_quota); }
   virtual const RGWUserCaps& get_caps() const override { return next->get_caps(); }
   virtual RGWObjVersionTracker& get_version_tracker() override {
     return next->get_version_tracker();
@@ -469,6 +471,8 @@ public:
   virtual int rebuild_index(const DoutPrefixProvider *dpp) override;
   virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) override;
   virtual int purge_instance(const DoutPrefixProvider* dpp) override;
+  virtual void set_count(uint64_t _count) override { return next->set_count(_count); }
+  virtual void set_size(uint64_t _size) override { return next->set_size(_size); }
   virtual bool empty() const override { return next->empty(); }
   virtual const std::string& get_name() const override { return next->get_name(); }
   virtual const std::string& get_tenant() const override { return next->get_tenant(); }
@@ -605,6 +609,7 @@ public:
 
   virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state,
 			    optional_yield y, bool follow_olh = true) override;
+  virtual void set_obj_state(RGWObjState& _state) override { return next->set_obj_state(_state); }
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 			    Attrs* delattrs, optional_yield y) override;
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,

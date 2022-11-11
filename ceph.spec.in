@@ -1349,7 +1349,6 @@ cmake .. \
     -DWITH_MANPAGE:BOOL=ON \
     -DWITH_PYTHON3:STRING=%{python3_version} \
     -DWITH_MGR_DASHBOARD_FRONTEND:BOOL=OFF \
-    -DWITH_CPP_REDIS=TRUE \
 %if 0%{?suse_version}
     -DWITH_RADOSGW_SELECT_PARQUET:BOOL=OFF \
 %endif

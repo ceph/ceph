@@ -509,6 +509,10 @@ class User {
     virtual uint32_t get_type() const = 0;
     /** Get the maximum number of buckets allowed for this User */
     virtual int32_t get_max_buckets() const = 0;
+    /** Set the maximum number of buckets allowed for this User */
+    virtual void set_max_buckets(int32_t _max_buckets) = 0;
+    /** Set quota info */
+    virtual void set_info(RGWQuotaInfo& _quota) = 0;
     /** Get the capabilities for this User */
     virtual const RGWUserCaps& get_caps() const = 0;
     /** Get the version tracker for this User */
@@ -713,6 +717,10 @@ class Bucket {
     virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) = 0;
     /** Remove this specific bucket instance from the backing store.  May be removed from API */
     virtual int purge_instance(const DoutPrefixProvider* dpp) = 0;
+    /** Set the cached object count of this bucket */
+    virtual void set_count(uint64_t _count) = 0;
+    /** Set the cached size of this bucket */
+    virtual void set_size(uint64_t _size) = 0;
 
     /** Check if this instantiation is empty */
     virtual bool empty() const = 0;
@@ -990,6 +998,8 @@ class Object {
 
     /** Get the object state for this object.  Will be removed in the future */
     virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state, optional_yield y, bool follow_olh = true) = 0;
+    /** Set the object state for this object */
+    virtual void set_obj_state(RGWObjState& _state) = 0;
     /** Set attributes for this object from the backing store.  Attrs can be set or
      * deleted.  @note the attribute APIs may be revisited in the future. */
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y) = 0;
