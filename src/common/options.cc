@@ -4278,6 +4278,18 @@ std::vector<Option> get_global_options() {
     .set_default(64_K)
     .set_description("Allocation unit size for primary/shared device"),
 
+    Option("bluefs_failed_shared_alloc_cooldown", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(600)
+    .set_description(
+        "Duration(in seconds) until the next attempt to use "
+        "'bluefs_shared_alloc_size' after facing ENOSPC failure.")
+    .set_long_description(
+        "Cooldown period(in seconds) when BlueFS uses shared/slow device "
+        "allocation size instead of 'bluefs_shared_alloc_size' one after facing "
+        "recoverable (via fallback to smaller chunk size) ENOSPC failure. Intended "
+        "primarily to avoid repetitive unsuccessful allocations which might be "
+        " expensive."),
+
     Option("bluefs_max_prefetch", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
     .set_description(""),

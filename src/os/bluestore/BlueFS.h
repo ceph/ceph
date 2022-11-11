@@ -379,6 +379,7 @@ private:
   inline bool is_shared_alloc(unsigned id) const {
     return id == shared_alloc_id;
   }
+  std::atomic<int64_t> cooldown_deadline = 0;
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;

@@ -1,6 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-
+#include <chrono>
 #include "boost/algorithm/string.hpp" 
 #include "bluestore_common.h"
 #include "BlueFS.h"
@@ -28,6 +28,8 @@ using std::set;
 using std::string;
 using std::to_string;
 using std::vector;
+using std::chrono::duration;
+using std::chrono::seconds;
 
 using ceph::bufferlist;
 using ceph::decode;
@@ -3613,16 +3615,36 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
                       bool permit_dev_fallback)
 {
   dout(10) << __func__ << " len 0x" << std::hex << len
-           << " alloc unit hint 0x" << alloc_unit
-           << std::dec << " from " << (int)id << dendl;
+           << " au 0x" << alloc_unit
+           << std::dec << " from " << (int)id
+           << " cooldown " << cooldown_deadline
+           << dendl;
   ceph_assert(id < alloc.size());
   int64_t alloc_len = 0;
   PExtentVector extents;
   uint64_t hint = 0;
   int64_t need = len;
+  bool shared = is_shared_alloc(id);
+  auto shared_unit = shared_alloc ? shared_alloc->alloc_unit : 0;
+  bool was_cooldown = false;
   if (alloc[id]) {
     if (!alloc_unit) {
       alloc_unit = alloc_size[id];
+    }
+    // do not attempt shared_allocator with bluefs alloc unit
+    // when cooling down, fallback to slow dev alloc unit.
+    if (shared && alloc_unit != shared_unit) {
+       if (std::chrono::duration_cast<seconds>(real_clock::now().time_since_epoch()).count() <
+           cooldown_deadline) {
+         logger->inc(l_bluefs_alloc_shared_size_fallbacks);
+         alloc_unit = shared_unit;
+         was_cooldown = true;
+       } else if (cooldown_deadline.fetch_and(0)) {
+         // we might get false cooldown_deadline reset at this point
+         // but that's mostly harmless.
+         dout(1) << __func__ << " shared allocation cooldown period elapsed"
+                 << dendl;
+       }
     }
     need = round_up_to(len, alloc_unit);
     if (!node->extents.empty() && node->extents.back().bdev == id) {
@@ -3636,6 +3658,14 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     if (alloc[id]) {
       if (alloc_len > 0) {
         alloc[id]->release(extents);
+      }
+      if (!was_cooldown && shared) {
+        auto delay_s = cct->_conf->bluefs_failed_shared_alloc_cooldown;
+        cooldown_deadline = delay_s +
+          std::chrono::duration_cast<seconds>(real_clock::now().time_since_epoch()).count();
+        dout(1) << __func__ << " shared allocation cooldown set for "
+                << delay_s << "s"
+                << dendl;
       }
       dout(1) << __func__ << " unable to allocate 0x" << std::hex << need
 	      << " on bdev " << (int)id
@@ -3653,8 +3683,8 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
                << " unable to allocate 0x" << std::hex << need
 	       << " on bdev " << (int)id << std::dec << dendl;
     }
-    if (alloc[id] && is_shared_alloc(id) && alloc_unit != shared_alloc->alloc_unit) {
-      alloc_unit = shared_alloc->alloc_unit;
+    if (alloc[id] && shared && alloc_unit != shared_unit) {
+      alloc_unit = shared_unit;
       dout(20) << __func__ << " fallback to bdev "
 	       << (int)id
                << " with alloc unit 0x" << std::hex << alloc_unit
@@ -3690,7 +3720,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
       logger->set(max_bytes_pcounters[id], used);
       max_bytes[id] = used;
     }
-    if (is_shared_alloc(id)) {
+    if (shared) {
       shared_alloc->bluefs_used += alloc_len;
     }
   }
