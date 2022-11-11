@@ -39,11 +39,8 @@ static inline Object* nextObject(Object* t)
 int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   FilterDriver::initialize(cct, dpp);
-  objDir->init(cct);
-  blockDir->init(cct);
-
-  policyDriver->init();
-  policyDriver->cachePolicy->init(cct);
+  blk_dir->init(cct);
+  d4n_cache->init(cct);
   
   return 0;
 }
@@ -59,7 +56,7 @@ std::unique_ptr<Object> D4NFilterBucket::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> o = next->get_object(k);
 
-  return std::make_unique<D4NFilterObject>(std::move(o), this, driver);
+  return std::make_unique<D4NFilterObject>(std::move(o), this, filter);
 }
 
 int D4NFilterUser::create_bucket(const DoutPrefixProvider* dpp,
@@ -86,7 +83,7 @@ int D4NFilterUser::create_bucket(const DoutPrefixProvider* dpp,
   if (ret < 0)
     return ret;
 
-  Bucket* fb = new D4NFilterBucket(std::move(nb), this, driver);
+  Bucket* fb = new D4NFilterBucket(std::move(nb), this, filter);
   bucket_out->reset(fb);
   return 0;
 }
@@ -119,25 +116,6 @@ int D4NFilterObject::copy_object(User* user,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
-  /* Build cache block copy */
-  rgw::d4n::CacheBlock* copyCacheBlock = new rgw::d4n::CacheBlock(); // How will this copy work in lfuda? -Sam
-
-  copyCacheBlock->hostsList.push_back(driver->get_cache_block()->hostsList[0]); 
-  copyCacheBlock->size = driver->get_cache_block()->size;
-  copyCacheBlock->size = driver->get_cache_block()->globalWeight; // Do we want to reset the global weight? -Sam
-  copyCacheBlock->cacheObj.bucketName = dest_bucket->get_name();
-  copyCacheBlock->cacheObj.objName = dest_object->get_key().get_oid();
-  
-  int copy_valueReturn = driver->get_block_dir()->set_value(copyCacheBlock);
-
-  if (copy_valueReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Block directory copy operation failed." << dendl;
-  } else {
-    ldpp_dout(dpp, 20) << "D4N Filter: Block directory copy operation succeeded." << dendl;
-  }
-
-  delete copyCacheBlock;
-
   /* Append additional metadata to attributes */
   rgw::sal::Attrs baseAttrs = this->get_attrs();
   buffer::list bl;
@@ -174,20 +152,13 @@ int D4NFilterObject::copy_object(User* user,
     baseAttrs.insert(attrs.begin(), attrs.end()); 
   }
 
-  /*
-  int copy_attrsReturn = driver->get_policy_driver()->cacheDriver->copy_attrs(this->get_key().get_oid(), dest_object->get_key().get_oid(), &baseAttrs);
+  int copyObjReturn = filter->get_d4n_cache()->copyObject(this->get_key().get_oid(), dest_object->get_key().get_oid(), &baseAttrs);
 
-  if (copy_attrsReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache copy attributes operation failed." << dendl;
+  if (copyObjReturn < 0) {
+    ldpp_dout(dpp, 20) << "D4N Filter: Cache copy object operation failed." << dendl;
   } else {
-    int copy_dataReturn = driver->get_policy_driver()->cacheDriver->copy_data(this->get_key().get_oid(), dest_object->get_key().get_oid());
-
-    if (copy_dataReturn < 0) {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache copy data operation failed." << dendl;
-    } else {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache copy object operation succeeded." << dendl;
-    }
-  }*/
+    ldpp_dout(dpp, 20) << "D4N Filter: Cache copy object operation succeeded." << dendl;
+  }
 
   return next->copy_object(user, info, source_zone,
                            nextObject(dest_object),
@@ -213,14 +184,13 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
       }
     }
 
-    /*
-    int update_attrsReturn = driver->get_policy_driver()->cacheDriver->set_attrs(this->get_key().get_oid(), setattrs);
+    int updateAttrsReturn = filter->get_d4n_cache()->setObject(this->get_key().get_oid(), setattrs);
 
-    if (update_attrsReturn < 0) {
+    if (updateAttrsReturn < 0) {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache set object attributes operation failed." << dendl;
     } else {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache set object attributes operation succeeded." << dendl;
-    }*/
+    }
   }
 
   if (delattrs != NULL) {
@@ -240,14 +210,13 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
       currentFields.push_back(attrs->first);
     }
     
-    /*
-    int del_attrsReturn = driver->get_policy_driver()->cacheDriver->del_attrs(this->get_key().get_oid(), currentFields, delFields);
+    int delAttrsReturn = filter->get_d4n_cache()->delAttrs(this->get_key().get_oid(), currentFields, delFields);
 
-    if (del_attrsReturn < 0) {
+    if (delAttrsReturn < 0) {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attributes operation failed." << dendl;
     } else {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attributes operation succeeded." << dendl;
-    }*/
+    }
   }
 
   return next->set_obj_attrs(dpp, setattrs, delattrs, y);  
@@ -258,18 +227,18 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 {
   rgw::sal::Attrs newAttrs;
   std::vector< std::pair<std::string, std::string> > newMetadata;
-/*  int get_attrsReturn = driver->get_policy_driver()->cacheDriver->get_attrs(this->get_key().get_oid(), 
-			  			 		      &newAttrs, 
-						  		      &newMetadata);
+  int getAttrsReturn = filter->get_d4n_cache()->getObject(this->get_key().get_oid(), 
+						  &newAttrs, 
+						  &newMetadata);
 
-  if (get_attrsReturn < 0) {
+  if (getAttrsReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache get object attributes operation failed." << dendl;
 
     return next->get_obj_attrs(y, dpp, target_obj);
-  } else {*/
-    int set_attrsReturn = this->set_attrs(newAttrs);
+  } else {
+    int setAttrsReturn = this->set_attrs(newAttrs);
     
-    if (set_attrsReturn < 0) {
+    if (setAttrsReturn < 0) {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache get object attributes operation failed." << dendl;
 
       return next->get_obj_attrs(y, dpp, target_obj);
@@ -278,7 +247,7 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
   
       return 0;
     }
-  //}
+  }
 }
 
 int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
@@ -286,13 +255,13 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
 {
   Attrs update;
   update[(std::string)attr_name] = attr_val;
- /* int update_attrsReturn = driver->get_policy_driver()->cacheDriver->update_attr(this->get_key().get_oid(), &update);
+  int updateAttrsReturn = filter->get_d4n_cache()->updateAttr(this->get_key().get_oid(), &update);
 
-  if (update_attrsReturn < 0) {
+  if (updateAttrsReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache modify object attribute operation failed." << dendl;
   } else {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache modify object attribute operation succeeded." << dendl;
-  }*/
+  }
 
   return next->modify_obj_attrs(attr_name, attr_val, y, dpp);  
 }
@@ -312,14 +281,13 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
     currentFields.push_back(attrs->first);
   }
   
-  /*
-  int delAttrReturn = driver->get_policy_driver()->cacheDriver->del_attrs(this->get_key().get_oid(), currentFields, delFields);
+  int delAttrReturn = filter->get_d4n_cache()->delAttrs(this->get_key().get_oid(), currentFields, delFields);
 
   if (delAttrReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attribute operation failed." << dendl;
   } else {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attribute operation succeeded." << dendl;
-  }*/
+  }
   
   return next->delete_obj_attrs(dpp, attr_name, y);  
 }
@@ -360,65 +328,26 @@ std::unique_ptr<Object::DeleteOp> D4NFilterObject::get_delete_op()
 
 int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  /* Execute cache replacement policy */
-  int policyRet = source->driver->get_policy_driver()->cachePolicy->get_block(source->driver->get_cache_block(), 
-		    source->driver->get_policy_driver()->cacheDriver); // should it be called before or after cache check? -Sam
-  
-  if (policyRet < 0)
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache replacement operation failed." << dendl;
+  int getDirReturn = source->filter->get_block_dir()->getValue(source->filter->get_cache_block());
 
-  /* Local cache check */
-  std::string oid(source->get_name());
-  
-  if (source->driver->get_policy_driver()->cacheDriver->key_exists(dpp, oid)) { // Entire object for now -Sam
-    read = "local";
+  if (getDirReturn < 0) {
+    ldpp_dout(dpp, 20) << "D4N Filter: Directory get operation failed." << dendl;
   } else {
-    /* Block directory check */
-    int getDirReturn = source->driver->get_block_dir()->get_value(source->driver->get_cache_block()); 
-
-    if (getDirReturn >= -1) {
-      if (getDirReturn == -1) {
-        ldpp_dout(dpp, 20) << "D4N Filter: Block directory get operation failed." << dendl;
-      } else {
-        ldpp_dout(dpp, 20) << "D4N Filter: Block directory get operation succeeded." << dendl;
-      }
-
-      read = "remote";
-    } else {
-      /* Write tier retrieval */
-      ldpp_dout(dpp, 20) << "D4N Filter: Block directory get operation failed." << dendl;
-
-      getDirReturn = source->driver->get_obj_dir()->get_value(&(source->driver->get_cache_block()->cacheObj));
-
-      if (getDirReturn >= -1) {
-	if (getDirReturn == -1) {
-	  ldpp_dout(dpp, 20) << "D4N Filter: Object directory get operation failed." << dendl;
-	} else {
-	  ldpp_dout(dpp, 20) << "D4N Filter: Object directory get operation succeeded." << dendl;
-	}
-	
-	read = "writeback";
-      } else {
-	/* Backend store retrieval */
-	ldpp_dout(dpp, 20) << "D4N Filter: Object directory get operation failed." << dendl;
-	read = "backend";
-      }
-    }
+    ldpp_dout(dpp, 20) << "D4N Filter: Directory get operation succeeded." << dendl;
   }
 
-  /* D4N Cache */
   rgw::sal::Attrs newAttrs;
   std::vector< std::pair<std::string, std::string> > newMetadata;
-  //int getObjReturn = source->driver->get_policy_driver()->cacheDriver->get_attrs(source->get_key().get_oid(), 
-//					   				   &newAttrs, 
-//									   &newMetadata);
+  int getObjReturn = source->filter->get_d4n_cache()->getObject(source->get_key().get_oid(), 
+							&newAttrs, 
+							&newMetadata);
 
   int ret = next->prepare(y, dpp);
   
-/*  if (getObjReturn < 0) {
+  if (getObjReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
   } else {
-  */  /* Set metadata locally */
+    /* Set metadata locally */
     RGWQuotaInfo quota_info;
     RGWObjState* astate;
     source->get_obj_state(dpp, &astate, y);
@@ -453,83 +382,14 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     source->set_obj_state(*astate);
    
     /* Set attributes locally */
-    int set_attrsReturn = source->set_attrs(newAttrs);
+    int setAttrsReturn = source->set_attrs(newAttrs);
 
-    if (set_attrsReturn < 0) {
+    if (setAttrsReturn < 0) {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
     } else {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation succeeded." << dendl;
     }   
- // }
-
-  return ret;
-}
-
-int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
-                        RGWGetDataCB* cb, optional_yield y) 
-{
-  int ret = -1;
-  bufferlist bl;
-  uint64_t len = end - ofs + 1;
-
-  if (read == "local") {
-    //ret = source->driver->policyDriver->cacheNode->get(dpp, source->get_obj_name(), ofs, len, bl, source->get_attrs());
-    cb->handle_data(bl, ofs, len);
-  } else if (read == "remote") {
-    // remote cache get
-
-    /* Cache block locally */
-    //ret = source->driver->policyDriver->cacheNode->put(dpp, source->get_obj_name(), bl, len, source->get_attrs()); // May be put_async -Sam
-
-    int updateValueReturn = source->driver->get_block_dir()->update_field(source->driver->get_cache_block(), "hostsList", ""/*local cache ip from config*/);
-
-    if (updateValueReturn < 0) {
-      ldpp_dout(dpp, 20) << "D4N Filter: Block directory update value operation failed." << dendl;
-    } else {
-      ldpp_dout(dpp, 20) << "D4N Filter: Block directory update value operation succeeded." << dendl;
-    }
-    
-    cb->handle_data(bl, ofs, len);
-  } else if (read == "writeback") {
-    // retrieve from write back cache, which will be stored as a cache driver instance in the filter
-
-    /* Cache block locally */
-    //ret = source->driver->policyDriver->cacheNode->put(dpp, source->get_obj_name(), bl, len, source->get_attrs()); // May be put_async -Sam
-
-    int updateValueReturn = source->driver->get_block_dir()->update_field(source->driver->get_cache_block(), "hostsList", ""/*local cache ip from config*/);
-
-    if (updateValueReturn < 0) {
-      ldpp_dout(dpp, 20) << "D4N Filter: Block directory update value operation failed." << dendl;
-    } else {
-      ldpp_dout(dpp, 20) << "D4N Filter: Block directory update value operation succeeded." << dendl;
-    }
-    
-    cb->handle_data(bl, ofs, len);
-  } else if (read == "backend") {
-    ret = next->iterate(dpp, ofs, end, cb, y);
-
-    if (!ret) {
-      /* Cache block locally */
-      //ret = source->driver->policyDriver->cacheNode->put(dpp, source->get_obj_name(), bl, len, source->get_attrs()); // May be put_async -Sam
-
-      /* Store block in directory */
-      rgw::d4n::BlockDirectory* tempBlockDir = source->driver->get_block_dir(); // remove later -Sam
-
-      source->driver->get_cache_block()->hostsList.push_back(tempBlockDir->get_addr().host + ":" + std::to_string(tempBlockDir->get_addr().port)); // local cache address -Sam 
-      source->driver->get_cache_block()->size = source->get_obj_size();
-      source->driver->get_cache_block()->cacheObj.bucketName = source->get_bucket()->get_name();
-      source->driver->get_cache_block()->cacheObj.objName = source->get_key().get_oid();
-
-      int setDirReturn = tempBlockDir->set_value(source->driver->get_cache_block());
-
-      if (setDirReturn < 0) {
-	ldpp_dout(dpp, 20) << "D4N Filter: Block directory set operation failed." << dendl;
-      } else {
-	ldpp_dout(dpp, 20) << "D4N Filter: Block directory set operation succeeded." << dendl;
-      }
-    }
-  } else
-    return -1;
+  }
 
   return ret;
 }
@@ -537,45 +397,34 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y)
 {
-  int delDirReturn = source->driver->get_block_dir()->del_value(source->driver->get_cache_block());
+  int delDirReturn = source->filter->get_block_dir()->delValue(source->filter->get_cache_block());
 
   if (delDirReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Block directory delete operation failed." << dendl;
+    ldpp_dout(dpp, 20) << "D4N Filter: Directory delete operation failed." << dendl;
   } else {
-    ldpp_dout(dpp, 20) << "D4N Filter: Block directory delete operation succeeded." << dendl;
+    ldpp_dout(dpp, 20) << "D4N Filter: Directory delete operation succeeded." << dendl;
   }
 
-  Attrs::iterator attrs;
-  Attrs currentattrs = source->get_attrs();
-  std::vector<std::string> currentFields;
-  
-  /* Extract fields from current attrs */
-  for (attrs = currentattrs.begin(); attrs != currentattrs.end(); ++attrs) {
-    currentFields.push_back(attrs->first);
-  }
-
-  /*
-  int delObjReturn = source->driver->get_policy_driver()->cacheDriver->del_object(source->get_key().get_oid());
+  int delObjReturn = source->filter->get_d4n_cache()->delObject(source->get_key().get_oid());
 
   if (delObjReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object operation failed." << dendl;
+    ldpp_dout(dpp, 20) << "D4N Filter: Cache delete operation failed." << dendl;
   } else {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache delete operation succeeded." << dendl;
-  }*/
+  }
 
   return next->delete_obj(dpp, y);
 }
 
 int D4NFilterWriter::prepare(optional_yield y) 
 {
-  /*
-  int del_dataReturn = driver->driver->get_policy_driver()->cacheDriver->del_data(obj->get_key().get_oid());
+  int delDataReturn = filter->get_d4n_cache()->deleteData(obj->get_key().get_oid()); 
 
-  if (del_dataReturn < 0) {
+  if (delDataReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache delete data operation failed." << dendl;
   } else {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache delete data operation succeeded." << dendl;
-  }*/
+  }
 
   return next->prepare(y);
 }
@@ -583,14 +432,13 @@ int D4NFilterWriter::prepare(optional_yield y)
 int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
 {
   bufferlist objectData = data;
-  /*
-  int append_dataReturn = driver->get_policy_driver()->cacheDriver->append_data(obj->get_key().get_oid(), data);
+  int appendDataReturn = filter->get_d4n_cache()->appendData(obj->get_key().get_oid(), data);
 
-  if (append_dataReturn < 0) {
+  if (appendDataReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache append data operation failed." << dendl;
   } else {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache append data operation succeeded." << dendl;
-  }*/
+  }
 
   return next->process(std::move(data), offset);
 }
@@ -604,26 +452,26 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y)
 {
-  rgw::d4n::BlockDirectory* tempBlockDir = driver->get_block_dir();
+  cache_block* temp_cache_block = filter->get_cache_block();
+  RGWBlockDirectory* temp_block_dir = filter->get_block_dir();
 
-  driver->get_cache_block()->hostsList.push_back(tempBlockDir->get_addr().host + ":" + std::to_string(tempBlockDir->get_addr().port)); 
-  driver->get_cache_block()->size = accounted_size;
-  driver->get_cache_block()->cacheObj.bucketName = obj->get_bucket()->get_name();
-  driver->get_cache_block()->cacheObj.objName = obj->get_key().get_oid();
+  temp_cache_block->hosts_list.push_back(temp_block_dir->get_host() + ":" + std::to_string(temp_block_dir->get_port())); 
+  temp_cache_block->size_in_bytes = accounted_size;
+  temp_cache_block->c_obj.bucket_name = obj->get_bucket()->get_name();
+  temp_cache_block->c_obj.obj_name = obj->get_key().get_oid();
 
-  int setDirReturn = tempBlockDir->set_value(driver->get_cache_block());
+  int setDirReturn = temp_block_dir->setValue(temp_cache_block);
 
   if (setDirReturn < 0) {
-    ldpp_dout(save_dpp, 20) << "D4N Filter: Block directory set operation failed." << dendl;
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Directory set operation failed." << dendl;
   } else {
-    ldpp_dout(save_dpp, 20) << "D4N Filter: Block directory set operation succeeded." << dendl;
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Directory set operation succeeded." << dendl;
   }
    
   /* Retrieve complete set of attrs */
   int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
 			canceled, y);
-
   obj->get_obj_attrs(y, save_dpp, NULL);
 
   /* Append additional metadata to attributes */ 
@@ -693,14 +541,13 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 
   baseAttrs.insert(attrs.begin(), attrs.end());
 
-  /*
-  int set_attrsReturn = driver->get_policy_driver()->cacheDriver->set_attrs(obj->get_key().get_oid(), &baseAttrs);
+  int setObjReturn = filter->get_d4n_cache()->setObject(obj->get_key().get_oid(), &baseAttrs);
 
-  if (set_attrsReturn < 0) {
-    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation failed." << dendl;
+  if (setObjReturn < 0) {
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set operation failed." << dendl;
   } else {
-    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation succeeded." << dendl;
-  }*/
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set operation succeeded." << dendl;
+  }
   
   return ret;
 }
