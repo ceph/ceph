@@ -1,41 +1,9 @@
 /* You can add global styles to this file, and also import other style files */
 @use './src/styles/defaults' as *;
+@use '~bootstrap/scss/mixins';
 
-// Angular2-Tree Component
-@import '~@circlon/angular-tree-component/css/angular-tree-component.css';
-
-// Fork-Awesome
-$fa-font-path: '~fork-awesome/fonts';
-$font-family-icon: 'ForkAwesome';
-
-$badge-font-size: 1rem;
-$form-feedback-font-size: 100%;
-$popover-max-width: 350px;
-$popover-font-size: 1rem;
-
-// https://getbootstrap.com/docs/4.5/layout/grid/#variables
-$grid-breakpoints: (
-  xs: 0,
-  sm: 576px,
-  md: 768px,
-  lg: 992px,
-  xl: 1200px,
-  2xl: 1450px
-);
-
-@import '~bootstrap/scss/bootstrap';
-@import '~fork-awesome/scss/fork-awesome';
 @import 'app/ceph/dashboard/info-card/info-card-popover.scss';
-@import './src/styles/bootstrap-extends';
 
-@import './src/styles/ceph-custom/basics';
-@import './src/styles/ceph-custom/buttons';
-@import './src/styles/ceph-custom/dropdown';
-@import './src/styles/ceph-custom/forms';
-@import './src/styles/ceph-custom/grid';
-@import './src/styles/ceph-custom/icons';
-@import './src/styles/ceph-custom/navs';
-@import './src/styles/ceph-custom/toast';
 
 /* If javascript is disabled. */
 .noscript {

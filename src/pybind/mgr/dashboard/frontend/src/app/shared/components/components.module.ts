@@ -49,6 +49,7 @@ import { SubmitButtonComponent } from './submit-button/submit-button.component';
 import { TelemetryNotificationComponent } from './telemetry-notification/telemetry-notification.component';
 import { UsageBarComponent } from './usage-bar/usage-bar.component';
 import { WizardComponent } from './wizard/wizard.component';
+import { ThemeSwitcherComponent } from './theme-switcher/theme-switcher.component';
 
 @NgModule({
   imports: [
@@ -101,7 +102,8 @@ import { WizardComponent } from './wizard/wizard.component';
     WizardComponent,
     CustomLoginBannerComponent,
     CdLabelComponent,
-    ColorClassFromTextPipe
+    ColorClassFromTextPipe,
+    ThemeSwitcherComponent
   ],
   providers: [],
   exports: [
@@ -131,7 +133,8 @@ import { WizardComponent } from './wizard/wizard.component';
     MotdComponent,
     WizardComponent,
     CustomLoginBannerComponent,
-    CdLabelComponent
+    CdLabelComponent,
+    ThemeSwitcherComponent
   ]
 })
 export class ComponentsModule {}

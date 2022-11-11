@@ -3,3 +3,7 @@
 @function strip-unit($value) {
   @return math.div($value, $value * 0 + 1);
 }
+
+@function custom-property-name($name) {
+  @return '--' + $name;
+}

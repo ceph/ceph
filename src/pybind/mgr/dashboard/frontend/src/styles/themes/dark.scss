@@ -1,0 +1,93 @@
+/*
+ * Dark theme
+ * Theme class will be attached to the top level body tag
+ * Color overrides are defined in the theme class
+*/
+
+// import the default color variables and external vendor files
+@use '../vendor/variables' as *;
+@use '../vendor/variables' as vv;
+@use '../defaults' as *;
+@use 'sass:map';
+@use 'sass:meta';
+
+// extract all default variables
+$default-variables-map: meta.module-variables('vv');
+@debug $default-variables-map;
+
+// extract theme colors
+$theme-colors: map.get($default-variables-map, 'theme-colors');
+@debug $theme-colors;
+
+// extract theme colors
+$grid-breakpoints: map.get($default-variables-map, 'grid-breakpoints');
+@debug $grid-breakpoints;
+
+// remove theme color map to avoid map.merge errors later after color overrides
+$default-variables-map: map.remove($default-variables-map, 'theme-colors');
+@debug $default-variables-map;
+
+// color overrides map()
+$colors: (
+  'body-bg': vv.$gray-700,
+  'body-color': vv.$white,
+  'body-bg-alt': vv.$gray-900,
+  'gray-100': vv.$gray-900,
+  'gray-200': vv.$gray-800,
+  'gray-300': vv.$gray-700,
+  'gray-400': vv.$gray-600,
+  'gray-500': vv.$gray-500,
+  'gray-600': vv.$gray-400,
+  'gray-700': vv.$gray-300,
+  'gray-800': vv.$gray-200,
+  'gray-900': vv.$gray-100
+);
+
+$body-bg: $gray-700;
+$body-bg-alt: #232627;
+$body-color: #fff;
+$light: #181a1b;
+$dark: #fff;
+
+$grays: (
+  "100": $gray-900,
+  "200": $gray-800,
+  "300": $gray-700,
+  "400": $gray-600,
+  "500": $gray-500,
+  "600": $gray-400,
+  "700": $gray-300,
+  "800": $gray-200,
+  "900": $gray-100
+);
+
+// merge defaults with new overrides
+$dark-theme: map.merge($default-variables-map, $colors);
+
+// Generate theme, Make vendor variables accessible to JS/TS code via CSS custom property definition.
+:root {
+  @each $key_name, $value in $dark-theme {
+    @if type-of($value) != 'map' {
+      @include define-custom-property($key_name, $value);
+    }
+  }
+}
+
+// import bootstrap
+@import '~bootstrap/scss/bootstrap';
+
+// import ceph-custom styles
+@import '../ceph-custom/basics';
+@import '../ceph-custom/buttons';
+@import '../ceph-custom/dropdown';
+@import '../ceph-custom/forms';
+@import '../ceph-custom/grid';
+@import '../ceph-custom/icons';
+@import '../ceph-custom/navs';
+@import '../ceph-custom/toast';
+
+// import external vendor files
+@import '../vendor/style-overrides';
+
+// apply extensions
+@import '../bootstrap-extends.scss';

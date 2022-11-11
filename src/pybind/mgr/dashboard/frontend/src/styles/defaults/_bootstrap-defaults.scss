@@ -1,3 +1,5 @@
+// https://getbootstrap.com/docs/4.6/getting-started/theming/
+
 // Color system
 
 $white: #fff !default;
@@ -128,3 +130,21 @@ $screen-md-max: calc(#{$screen-lg-min} - 1px) !default;
 $screen-lg-max: calc(#{$screen-xl-min} - 1px) !default;
 
 $navbar-height: 43px !default;
+
+// Overrides
+
+$badge-font-size: 1rem;
+$form-feedback-font-size: 100%;
+$popover-max-width: 350px;
+$popover-font-size: 1rem;
+
+// https://getbootstrap.com/docs/4.6/layout/grid/#variables
+$grid-breakpoints: (
+  xs: 0,
+  sm: 576px,
+  md: 768px,
+  lg: 992px,
+  xl: 1200px,
+  2xl: 1450px
+);
+

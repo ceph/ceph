@@ -1,0 +1,25 @@
+<div ngbDropdown display="dynamic" placement="bottom-right">
+  <a
+    ngbDropdownToggle
+    i18n-title
+    id="theme-switcher"
+    title="Select a theme"
+    role="button"
+    class="cd-theme-switcher btn text-light d-flex align-items-center"
+  >
+    <i class="fa {{ theme.icon }}" aria-hidden="true"></i>
+    <span class="ml-1">{{ theme.label | titlecase }}</span>
+  </a>
+  <div ngbDropdownMenu role="listbox" aria-labelledby="theme-switcher">
+    <ng-container *ngFor="let theme of themes">
+      <button
+        ngbDropdownItem
+        class="btn d-flex align-items-center"
+        (click)="changeTheme(theme)"
+      >
+        <i class="fa {{ theme.icon }}" aria-hidden="true"></i>
+        <span class="ml-1">{{ theme.label | titlecase }}</span>
+      </button>
+    </ng-container>
+  </div>
+</div>

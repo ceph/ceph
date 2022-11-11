@@ -1,5 +1,6 @@
 @use '../vendor/variables' as vv;
 @use 'functions';
+@use 'sass:meta';
 
 @mixin table-cell {
   border: 0;
@@ -31,4 +32,8 @@
       font-size: $max-font-size;
     }
   }
+}
+
+@mixin define-custom-property($name, $value) {
+  #{functions.custom-property-name($name)}: meta.inspect($value);
 }

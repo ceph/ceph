@@ -2,3 +2,12 @@
 
 Custom styles, third-party libraries, frameworks, design systems, ...
 */
+
+// Angular2-Tree Component
+@import '~@circlon/angular-tree-component/css/angular-tree-component.css';
+
+// Fork-Awesome
+$fa-font-path: '~fork-awesome/fonts';
+$font-family-icon: 'ForkAwesome';
+
+@import '~fork-awesome/scss/fork-awesome';

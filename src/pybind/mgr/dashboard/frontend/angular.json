@@ -97,15 +97,22 @@
             "styles": [
               "node_modules/swagger-ui/dist/swagger-ui.css",
               "node_modules/ngx-toastr/toastr.css",
-              "src/styles.scss"
+              {
+                "input": "src/styles/themes/light.scss",
+                "bundleName": "light",
+                "inject": true
+              },
+              {
+                "input": "src/styles/themes/dark.scss",
+                "bundleName": "dark",
+                "inject": false
+              }
             ],
             "scripts": [
               "node_modules/chart.js/dist/Chart.bundle.js"
             ],
             "stylePreprocessorOptions": {
-              "includePaths": [
-                "src"
-              ]
+              "includePaths": ["src"]
             },
             "vendorChunk": true,
             "extractLicenses": false,
