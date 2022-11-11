@@ -63,7 +63,7 @@ struct objv {
 	    ver != rhs.ver);
   }
   bool same_or_later(const objv& rhs) const {
-    return (instance == rhs.instance ||
+    return (instance == rhs.instance &&
 	    ver >= rhs.ver);
   }
 
