@@ -358,6 +358,11 @@ class Elector : public ElectionOwner, RankProvider {
    */
   void start_participating();
   /**
+  * Check if our peer_tracker is self-consistent, not suffering from
+  * https://tracker.ceph.com/issues/58049
+  */
+  bool peer_tracker_is_clean();
+  /**
    * Forget everything about our peers. :(
    */
   void notify_clear_peer_state();

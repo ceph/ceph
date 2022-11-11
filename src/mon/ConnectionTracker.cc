@@ -106,6 +106,10 @@ void ConnectionTracker::report_live_connection(int peer_rank, double units_alive
 {
   ldout(cct, 30) << __func__ << " peer_rank: " << peer_rank << " units_alive: " << units_alive << dendl;
   ldout(cct, 30) << "my_reports before: " << my_reports << dendl;
+  if (peer_rank == rank) {
+    lderr(cct) << "Got a report from my own rank, hopefully this is startup weirdness, dropping" << dendl;
+    return;
+  }
   // we need to "auto-initialize" to 1, do shenanigans
   auto i = my_reports.history.find(peer_rank);
   if (i == my_reports.history.end()) {
@@ -130,6 +134,10 @@ void ConnectionTracker::report_dead_connection(int peer_rank, double units_dead)
 {
   ldout(cct, 30) << __func__ << " peer_rank: " << peer_rank << " units_dead: " << units_dead << dendl;
   ldout(cct, 30) << "my_reports before: " << my_reports << dendl;
+  if (peer_rank == rank) {
+    lderr(cct) << "Got a report from my own rank, hopefully this is startup weirdness, dropping" << dendl;
+    return;
+  }
   // we need to "auto-initialize" to 1, do shenanigans
   auto i = my_reports.history.find(peer_rank);
   if (i == my_reports.history.end()) {
@@ -244,6 +252,22 @@ void ConnectionTracker::notify_rank_removed(int rank_removed, int new_rank)
   ceph_assert(rank == new_rank);
 
   increase_version();
+}
+
+bool ConnectionTracker::is_clean(int mon_rank, int monmap_size)
+{
+  ldout(cct, 30) << __func__ << dendl;
+  // check consistency between our rank according
+  // to monmap and our rank according to our report.
+  if (rank != mon_rank ||
+    my_reports.rank != mon_rank) {
+    return false;
+  } else if (!peer_reports.empty()){
+    // if peer_report max rank is greater than monmap max rank
+    // then there is a problem.
+    if (peer_reports.rbegin()->first > monmap_size - 1) return false;
+  }
+  return true;
 }
 
 void ConnectionTracker::encode(bufferlist &bl) const

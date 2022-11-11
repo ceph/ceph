@@ -121,6 +121,13 @@ class ConnectionTracker {
   void get_total_connection_score(int peer_rank, double *rating,
 				  int *live_count) const;
   /**
+  * Check if our ranks are clean and make
+  * sure there are no extra peer_report lingering.
+  * In the future we also want to check the reports
+  * current and history of each peer_report.
+  */
+  bool is_clean(int mon_rank, int monmap_size);
+  /**
    * Encode this ConnectionTracker. Useful both for storing on disk
    * and for sending off to peers for decoding and import
    * with receive_peer_report() above.
@@ -185,6 +192,7 @@ class ConnectionTracker {
     rank = new_rank;
     my_reports.rank = rank;
   }
+
   void notify_rank_changed(int new_rank);
   void notify_rank_removed(int rank_removed, int new_rank);
   friend std::ostream& operator<<(std::ostream& o, const ConnectionTracker& c);
