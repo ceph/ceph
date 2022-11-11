@@ -2622,8 +2622,6 @@ void DaemonServer::send_report()
 		 << std::dec << dendl;
             continue;
           }
-	  dout(20) << " + " << state->key << " "
-		   << metric << dendl;
           tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
               std::move(collector));
         }

@@ -572,6 +572,16 @@ groups:
         labels:
           severity: "warning"
           type: "ceph_default"
+      - alert: "CephDaemonSlowOps"
+        for: "30s"
+        expr: "ceph_daemon_health_metrics{type=\"SLOW_OPS\"} > 0"
+        labels: 
+          severity: 'warning'
+          type: 'ceph_default'
+        annotations:
+          summary: "{{ $labels.ceph_daemon }} operations are slow to complete"
+          description: "{{ $labels.ceph_daemon }} operations are taking too long to process (complaint time exceeded)"
+          documentation: "https://docs.ceph.com/en/latest/rados/operations/health-checks#slow-ops"
   - name: "cephadm"
     rules:
       - alert: "CephadmUpgradeFailed"

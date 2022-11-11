@@ -640,6 +640,17 @@
             description: '{{ $value }} OSD requests are taking too long to process (osd_op_complaint_time exceeded)',
           },
         },
+        {
+          alert: 'CephDaemonSlowOps',
+          'for': '30s',
+          expr: 'ceph_daemon_health_metrics{type="SLOW_OPS"} > 0',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            documentation: 'https://docs.ceph.com/en/latest/rados/operations/health-checks#slow-ops',
+            summary: '{{ $labels.ceph_daemon }} operations are slow to complete',
+            description: '{{ $labels.ceph_daemon }} operations are taking too long to process (complaint time exceeded)',
+          },
+        },
       ],
     },
     {
