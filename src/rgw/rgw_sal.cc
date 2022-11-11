@@ -20,6 +20,7 @@
 #include <sstream>
 
 #include "common/errno.h"
+#include "common/dout.h"
 
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
@@ -31,6 +32,9 @@
 #include "rgw_sal_dbstore.h"
 #include "store/dbstore/config/store.h"
 #endif
+#ifdef WITH_RADOSGW_D4N_FILTER
+#include "rgw_sal_d4n.h" 
+#endif
 
 #ifdef WITH_RADOSGW_MOTR
 #include "rgw_sal_motr.h"
@@ -41,6 +45,7 @@
 #endif
 
 #define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
 
 extern "C" {
 extern rgw::sal::Store* newStore(void);
@@ -53,8 +58,10 @@ extern rgw::sal::Store* newMotrStore(CephContext *cct);
 #ifdef WITH_RADOSGW_DAOS
 extern rgw::sal::Store* newDaosStore(CephContext *cct);
 #endif
+#ifdef WITH_RADOSGW_D4N_FILTER
+extern rgw::sal::Store* newD4NFilter(rgw::sal::Store* next);
+#endif
 extern rgw::sal::Store* newBaseFilter(rgw::sal::Store* next);
-
 }
 
 RGWObjState::RGWObjState() {
@@ -246,7 +253,19 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
       delete next;
       return nullptr;
     }
+  } 
+#ifdef WITH_RADOSGW_D4N_FILTER 
+  else if (cfg.filter_name.compare("d4n") == 0) {
+    rgw::sal::Store* next = store;
+    store = newD4NFilter(next);
+
+    if (store->initialize(cct, dpp) < 0) {
+      delete store;
+      delete next;
+      return nullptr;
+    }
   }
+#endif
 
   return store;
 }
@@ -373,6 +392,11 @@ StoreManager::Config StoreManager::get_config(bool admin, CephContext* cct)
   if (config_filter == "base") {
     cfg.filter_name = "base";
   }
+#ifdef WITH_RADOSGW_D4N_FILTER
+  else if (config_filter == "d4n") {
+    cfg.filter_name= "d4n";
+  }
+#endif
 
   return cfg;
 }

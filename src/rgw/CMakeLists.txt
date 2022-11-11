@@ -62,7 +62,9 @@ set(librgw_common_srcs
   rgw_bucket_layout.cc
   rgw_bucket_sync.cc
   rgw_cache.cc
+  rgw_directory.cc
   rgw_d3n_datacache.cc
+  rgw_d4n_datacache.cc
   rgw_common.cc
   rgw_compression.cc
   rgw_etag_verifier.cc
@@ -138,6 +140,7 @@ set(librgw_common_srcs
   rgw_role.cc
   rgw_sal.cc
   rgw_sal_filter.cc
+  rgw_sal_d4n.cc
   rgw_sal_rados.cc
   rgw_string.cc
   rgw_tag.cc
