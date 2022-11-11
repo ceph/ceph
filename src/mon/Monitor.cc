@@ -941,7 +941,15 @@ int Monitor::init()
   osdmon()->get_filestore_osd_list();
 
   state = STATE_PROBING;
+
   bootstrap();
+
+  if (!elector.peer_tracker_is_clean()){
+    dout(10) << "peer_tracker looks inconsistent"
+      << " previous bad logic, clearing ..." << dendl;
+    elector.notify_clear_peer_state();
+  }
+
   // add features of myself into feature_map
   session_map.feature_map.add_mon(con_self->get_features());
   return 0;
