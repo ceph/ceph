@@ -332,7 +332,8 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
     uint64_t entry_start_offset = start_offset - bl.length();
     CLS_LOG(20, "INFO: queue_list_entries(): Entry start offset accounting for leftover data is %lu", entry_start_offset);
     bl.claim_append(bl_chunk);
-    bl_chunk = std::move(bl);
+    bl_chunk = bl;
+    bl.clear();
 
     CLS_LOG(20, "INFO: queue_list_entries(): size of chunk %u", bl_chunk.length());
 
