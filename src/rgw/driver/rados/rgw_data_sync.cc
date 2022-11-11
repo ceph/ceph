@@ -5652,30 +5652,33 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
             ". lease is: " << (bucket_lease_cr ? "taken" : "not taken") << ". stop indications is: " << bucket_stopped));
 
       if (bucket_status.state != BucketSyncState::Incremental ||
-          bucket_stopped) { 
+          bucket_stopped) {
+
+        if (!bucket_lease_cr) {
+          bucket_lease_cr.reset(new RGWContinuousLeaseCR(env->async_rados, env->driver, status_obj,
+                lock_name, lock_duration, this, &sc->lcc));
+          yield spawn(bucket_lease_cr.get(), false);
+          while (!bucket_lease_cr->is_locked()) {
+            if (bucket_lease_cr->is_done()) {
+              tn->log(5, "failed to take lease");
+              set_status("lease lock failed, early abort");
+              drain_all();
+              return set_cr_error(bucket_lease_cr->get_ret_status());
+            }
+            tn->log(5, "waiting on bucket lease");
+            yield set_sleeping(true);
+          }
+        }
+
         // if state is Init or Stopped, we query the remote RGW for ther state
         yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pair.source_bs.bucket, &info));
         if (retcode < 0) {
+          RELEASE_LOCK(bucket_lease_cr);
           return set_cr_error(retcode);
         }
         if (info.syncstopped) {
           // remote indicates stopped state
           tn->log(20, "remote bilog indicates that sync was stopped");
-          if (!bucket_lease_cr) {
-            bucket_lease_cr.reset(new RGWContinuousLeaseCR(env->async_rados, env->driver, status_obj,
-							   lock_name, lock_duration, this, &sc->lcc));
-            yield spawn(bucket_lease_cr.get(), false);
-            while (!bucket_lease_cr->is_locked()) {
-              if (bucket_lease_cr->is_done()) {
-                tn->log(5, "failed to take lease");
-                set_status("lease lock failed, early abort");
-                drain_all();
-                return set_cr_error(bucket_lease_cr->get_ret_status());
-              }
-              tn->log(5, "waiting on bucket lease");
-              yield set_sleeping(true);
-            }
-          }
 
           // if state was incremental, remove all per-shard status objects
           if (bucket_status.state == BucketSyncState::Incremental) {
