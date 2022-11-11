@@ -717,6 +717,11 @@ void Elector::start_participating()
   logic.participating = true;
 }
 
+bool Elector::peer_tracker_is_clean()
+{
+  return peer_tracker.is_clean(mon->rank, paxos_size());
+}
+
 void Elector::notify_clear_peer_state()
 {
   dout(10) << __func__ << dendl;
