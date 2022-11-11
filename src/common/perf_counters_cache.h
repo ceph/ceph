@@ -154,7 +154,7 @@ public:
       std::function<void(PerfCountersBuilder*)> _lpcb_init, std::string _base_counters_name) : cct(_cct), 
       target_size(_target_size), lower_bound(_lower_bound), upper_bound(_upper_bound), 
       lpcb_init(_lpcb_init), base_counters_name(_base_counters_name) {
-      base_counters = add(base_counters_name, false);
+      base_counters = add(base_counters_name, true);
   }
 
   ~PerfCountersCache() {}
