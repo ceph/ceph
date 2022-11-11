@@ -1195,7 +1195,7 @@
             "multi": false,
             "name": "ceph_hosts",
             "options": [ ],
-            "query": "label_values({}, instance)",
+            "query": "label_values(instance)",
             "refresh": 1,
             "regex": "([^.:]*).*",
             "sort": 3,
