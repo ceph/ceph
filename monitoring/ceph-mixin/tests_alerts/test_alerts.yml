@@ -710,6 +710,33 @@ tests:
            summary: OSD operations are slow to complete
            description: "1 OSD requests are taking too long to process (osd_op_complaint_time exceeded)"
 
+ # slow daemon ops
+ - interval : 1m
+   input_series:
+    - series: 'ceph_daemon_health_metrics{ceph_daemon="osd.1", instance="ceph:9283",job="ceph", type="SLOW_OPS"}'
+      values: '1+0x120'
+   promql_expr_test:
+     - expr: 'ceph_daemon_health_metrics{type="SLOW_OPS"} > 0'
+       eval_time: 1m
+       exp_samples:
+         - labels: '{__name__="ceph_daemon_health_metrics", ceph_daemon="osd.1",instance="ceph:9283",
+           job="ceph", type="SLOW_OPS"}'
+           value: 1
+   alert_rule_test:
+     - eval_time: 20m
+       alertname: CephDaemonSlowOps
+       exp_alerts:
+       - exp_labels:
+           instance: ceph:9283
+           ceph_daemon: "osd.1"
+           job: ceph
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#slow-ops
+           summary: osd.1 operations are slow to complete
+           description: "osd.1 operations are taking too long to process (complaint time exceeded)"
+
 # CEPHADM orchestrator alert triggers
  - interval: 30s
    input_series:

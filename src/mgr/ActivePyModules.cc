@@ -1515,3 +1515,26 @@ void ActivePyModules::unregister_client(std::string_view name, std::string addrs
   dout(7) << "unregistering msgr client handle " << addrv << dendl;
   py_module_registry.unregister_client(name, addrv);
 }
+
+PyObject* ActivePyModules::get_daemon_health_metrics()
+{
+  without_gil_t no_gil;
+  return daemon_state.with_daemons_by_server([&no_gil]
+      (const std::map<std::string, DaemonStateCollection> &all) {
+      no_gil.acquire_gil();
+      PyFormatter f;
+      for (const auto &[hostname, daemon_state] : all) {
+        for (const auto &[key, state] : daemon_state) {
+          f.open_array_section(ceph::to_string(key));
+          for (const auto &metric : state->daemon_health_metrics) {
+            f.open_object_section(metric.get_type_name());
+            f.dump_int("value", metric.get_n1());
+            f.dump_string("type", metric.get_type_name());
+            f.close_section();
+          }
+          f.close_section();
+        }
+      }
+      return f.get();
+  });
+}
