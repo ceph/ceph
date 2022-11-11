@@ -317,6 +317,8 @@ private:
     l_bluefs_max_bytes_wal,
     l_bluefs_max_bytes_db,
     l_bluefs_max_bytes_slow,
+    l_bluefs_max_bytes_wal,
+    l_bluefs_max_bytes_db,
   };
 
   // cache
@@ -406,10 +408,9 @@ private:
   const char* get_device_name(unsigned id);
   int _allocate(uint8_t bdev, uint64_t len,
                 uint64_t alloc_unit,
-		bluefs_fnode_t* node);
-  int _allocate_without_fallback(uint8_t id, uint64_t len,
-				 uint64_t alloc_unit,
-				 bluefs_fnode_t* node);
+		bluefs_fnode_t* node,
+                size_t alloc_attempts = 0,
+                bool permit_dev_fallback = true);
 
   /* signal replay log to include h->file in nearest log flush */
   int _signal_dirty_to_log_D(FileWriter *h);
@@ -458,7 +459,7 @@ private:
   void _compact_log_sync_LNF_LD();
   void _compact_log_async_LD_LNF_D();
 
-  void _rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
+  void _rewrite_log_and_layout_sync_LNF_LD(bool permit_dev_fallback,
 				    int super_dev,
 				    int log_dev,
 				    int new_log_dev,

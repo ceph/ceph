@@ -1650,8 +1650,8 @@ int BlueFS::device_migrate_to_existing(
       }
 
       // write entire file
-      auto l = _allocate_without_fallback(dev_target, bl.length(), 0,
-        &file_ref->fnode);
+      auto l = _allocate(dev_target, bl.length(), 0,
+        &file_ref->fnode, 0, false);
       if (l < 0) {
 	derr << __func__ << " unable to allocate len 0x" << std::hex
 	     << bl.length() << std::dec << " from " << (int)dev_target
@@ -1790,8 +1790,8 @@ int BlueFS::device_migrate_to_new(
       }
 
       // write entire file
-      auto l = _allocate_without_fallback(dev_target, bl.length(), 0,
-        &file_ref->fnode);
+      auto l = _allocate(dev_target, bl.length(), 0,
+        &file_ref->fnode, 0, false);
       if (l < 0) {
 	derr << __func__ << " unable to allocate len 0x" << std::hex
 	     << bl.length() << std::dec << " from " << (int)dev_target
@@ -2350,7 +2350,7 @@ void BlueFS::_compact_log_sync_LNF_LD()
  * 4. Finalization. Old space release.
  */
 
-void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
+void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool permit_dev_fallback,
 					 int super_dev,
 					 int log_dev,
 					 int log_dev_new,
@@ -2359,8 +2359,8 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
 {
   // we substitute log_dev with log_dev_new for new allocations below
   // and permitting fallback allocations prevents such a substitution
-  ceph_assert((allocate_with_fallback && log_dev == log_dev_new) ||
-              !allocate_with_fallback);
+  ceph_assert((permit_dev_fallback && log_dev == log_dev_new) ||
+              !permit_dev_fallback);
 
   dout(10) << __func__ << " super_dev:" << super_dev
                        << " log_dev:" << log_dev
@@ -2432,9 +2432,8 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
 
   dout(20) << __func__ << " compacted_meta_need " << compacted_meta_need << dendl;
 
-  int r = allocate_with_fallback ?
-    _allocate(log_dev, compacted_meta_need, 0, &fnode_tail) :
-    _allocate_without_fallback(log_dev, compacted_meta_need, 0, &fnode_tail);
+  int r = _allocate(log_dev, compacted_meta_need, 0, &fnode_tail, 0,
+    permit_dev_fallback);
   ceph_assert(r == 0);
 
 
@@ -2444,9 +2443,8 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
   uint64_t starter_need = _make_initial_transaction(starter_seq, fnode_tail, 0, nullptr);
 
   bluefs_fnode_t fnode_starter(log_file->fnode.ino, 0, mtime);
-  r = allocate_with_fallback ?
-    _allocate(log_dev, starter_need, 0, &fnode_starter) :
-    _allocate_without_fallback(log_dev, starter_need, 0, &fnode_starter);
+  r = _allocate(log_dev, starter_need, 0, &fnode_starter, 0,
+    permit_dev_fallback);
   ceph_assert(r == 0);
 
   // 1.4 Building starter fnode
@@ -3608,65 +3606,11 @@ const char* BlueFS::get_device_name(unsigned id)
   return names[id];
 }
 
-int BlueFS::_allocate_without_fallback(uint8_t id, uint64_t len,
-                      uint64_t alloc_unit,
-		      bluefs_fnode_t* node)
-{
-  dout(10) << __func__ << " len 0x" << std::hex << len
-           << " alloc_unit hint 0x " << alloc_unit
-           << std::dec
-           << " from " << (int)id << dendl;
-  assert(id < alloc.size());
-  if (!alloc[id]) {
-    return -ENOENT;
-  }
-  if (!alloc_unit) {
-   alloc_unit = alloc_size[id];
-  }
-  PExtentVector extents;
-  extents.reserve(4);  // 4 should be (more than) enough for most allocations
-  int64_t need = round_up_to(len, alloc_unit);
-  int64_t alloc_len = alloc[id]->allocate(need, alloc_unit, 0, &extents);
-  if (alloc_len < 0 || alloc_len < need) {
-    if (alloc_len > 0) {
-      alloc[id]->release(extents);
-    }
-    derr << __func__ << " unable to allocate 0x" << std::hex << need
-	 << " on bdev " << (int)id
-         << ", allocator name " << alloc[id]->get_name()
-         << ", allocator type " << alloc[id]->get_type()
-         << ", capacity 0x" << alloc[id]->get_capacity()
-         << ", block size 0x" << alloc[id]->get_block_size()
-         << ", alloc size 0x" << alloc_size[id]
-         << ", free 0x" << alloc[id]->get_free()
-         << ", fragmentation " << alloc[id]->get_fragmentation()
-         << ", allocated 0x" << (alloc_len > 0 ? alloc_len : 0)
-	 << std::dec << dendl;
-    if (is_shared_alloc(id) && alloc_unit != shared_alloc->alloc_unit) {
-      // fallback to shared alloc unit is permitted though
-      alloc_unit = shared_alloc->alloc_unit;
-      dout(20) << __func__ << " fallback to bdev "
-	       << (int)id
-               << " with alloc unit 0x" << std::hex << alloc_unit
-               << std::dec << dendl;
-      return _allocate_without_fallback(id, len, alloc_unit, node);
-    }
-    alloc[id]->dump();
-    return -ENOSPC;
-  }
-  if (is_shared_alloc(id)) {
-    shared_alloc->bluefs_used += alloc_len;
-  }
-  for (auto& p : extents) {
-    node->append_extent(bluefs_extent_t(id, p.offset, p.length));
-  }
-
-  return 0;
-}
-
 int BlueFS::_allocate(uint8_t id, uint64_t len,
 		      uint64_t alloc_unit,
-		      bluefs_fnode_t* node)
+		      bluefs_fnode_t* node,
+                      size_t alloc_attempts,
+                      bool permit_dev_fallback)
 {
   dout(10) << __func__ << " len 0x" << std::hex << len
            << " alloc unit hint 0x" << alloc_unit
@@ -3684,6 +3628,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     if (!node->extents.empty() && node->extents.back().bdev == id) {
       hint = node->extents.back().end();
     }   
+    ++alloc_attempts;
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
     alloc_len = alloc[id]->allocate(need, alloc_unit, hint, &extents);
   }
@@ -3715,15 +3660,25 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
                << " with alloc unit 0x" << std::hex << alloc_unit
                << std::dec << dendl;
       logger->inc(l_bluefs_alloc_shared_size_fallbacks);
-      return _allocate(id, len, alloc_unit, node);
-    } else if (id != BDEV_SLOW && alloc[id + 1]) {
+      return _allocate(id,
+                       len,
+                       alloc_unit,
+                       node,
+                       alloc_attempts,
+                       permit_dev_fallback);
+    } else if (permit_dev_fallback && id != BDEV_SLOW && alloc[id + 1]) {
       dout(20) << __func__ << " fallback to bdev "
                << (int)id + 1
 	       << dendl;
-      if (alloc[id] && is_shared_alloc(id + 1)) {
+      if (alloc_attempts > 0 && is_shared_alloc(id + 1)) {
         logger->inc(l_bluefs_alloc_shared_dev_fallbacks);
       }
-      return _allocate(id + 1, len, 0, node); // back to default alloc unit
+      return _allocate(id + 1,
+                       len,
+                       0, // back to default alloc unit
+                       node,
+                       alloc_attempts,
+                       permit_dev_fallback);
     } else {
       derr << __func__ << " allocation failed, needed 0x" << std::hex << need
            << dendl;
