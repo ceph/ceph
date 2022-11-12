@@ -46,15 +46,17 @@ configure how this migration takes place by setting the ``cache-mode``. There ar
 two main scenarios:
 
 - **writeback** mode: When admins configure tiers with ``writeback`` mode, Ceph
-  clients write data to the cache tier and receive an ACK from the cache tier.
-  In time, the data written to the cache tier migrates to the storage tier
-  and gets flushed from the cache tier. Conceptually, the cache tier is 
-  overlaid "in front" of the backing storage tier. When a Ceph client needs 
-  data that resides in the storage tier, the cache tiering agent migrates the
-  data to the cache tier on read, then it is sent to the Ceph client. 
-  Thereafter, the Ceph client can perform I/O using the cache tier, until the 
-  data becomes inactive. This is ideal for mutable data (e.g., photo/video 
-  editing, transactional data, etc.).
+  clients write data to the base tier and receive an ACK from it. Then the cache
+  tiering agent compares ``osd_tier_default_cache_min_write_recency_for_promote``,
+  that means if the data is written over given times at a interval, it will
+  be promoted to the cache tier. When Ceph clients need data that resides in
+  the base tier, the cache tier will proxy read the data from the base tier
+  and return to the client. Meanwhile, as same as write does, the cache tiering
+  agent will decide whether migrating the data to the cache tier based on
+  ``osd_tier_default_cache_min_read_recency_for_promote``. After the data
+  is promoted to from the base tier, the Ceph client can perform I/O using
+  the cache tier, until the data becomes inactive. This is ideal for mutable
+  data (e.g., photo/video editing, transactional data, etc.).
 
 - **readproxy** mode: This mode will use any objects that already
   exist in the cache tier, but if an object is not present in the
