@@ -1,3 +1,5 @@
+.. _rados_pools:
+
 =======
  Pools
 =======
