@@ -224,9 +224,11 @@
                 Just like the OSD fsid, this is the OSD unique identifier and
                 is used interchangeably with ``fsid``
 
-	Pool
+	:ref:`Pool<rados_pools>`
+		A pool is a logical partition used to store objects.
+
 	Pools
-		Pools are logical partitions for storing objects.
+                See :term:`pool`.
 
 	RADOS
 	RADOS Cluster
