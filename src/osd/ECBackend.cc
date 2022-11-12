@@ -948,7 +948,6 @@ void ECBackend::handle_sub_write(
   ECSubWrite &op,
   const ZTracer::Trace &trace)
 {
-  jspan span;
   if (msg) {
     msg->mark_event("sub_op_started");
   }
@@ -1549,7 +1548,6 @@ void ECBackend::submit_transaction(
   op->tid = tid;
   op->reqid = reqid;
   op->client_op = client_op;
-  jspan span;
   if (client_op) {
     op->trace = client_op->pg_trace;
   }
