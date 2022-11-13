@@ -453,7 +453,7 @@ bool PurgeQueue::_consume()
       return could_consume;
     }
 
-    if (!journaler.is_readable()) {
+    if (!journaler.is_readable() && journaler.get_read_pos() < journaler.get_write_pos()) {
       dout(10) << " not readable right now" << dendl;
       // Because we are the writer and the reader of the journal
       // via the same Journaler instance, we never need to reread_head

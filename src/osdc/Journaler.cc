@@ -991,7 +991,7 @@ void Journaler::_assimilate_prefetch()
 
     // Update readability (this will also hit any decode errors resulting
     // from bad data)
-    readable = _is_readable();
+    readable = _have_next_entry();
   }
 
   if ((got_any && !was_readable && readable) || read_pos == write_pos) {
@@ -1115,9 +1115,9 @@ void Journaler::_prefetch()
 
 
 /*
- * _is_readable() - return true if next entry is ready.
+ * _have_next_entry() - return true if next entry is ready.
  */
-bool Journaler::_is_readable()
+bool Journaler::_have_next_entry()
 {
   // anything to read?
   if (read_pos == write_pos)
@@ -1129,13 +1129,13 @@ bool Journaler::_is_readable()
     return true;
   }
 
-  ldout (cct, 10) << "_is_readable read_buf.length() == " << read_buf.length()
+  ldout (cct, 10) << "_have_next_entry read_buf.length() == " << read_buf.length()
 		  << ", but need " << need << " for next entry; fetch_len is "
 		  << fetch_len << dendl;
 
   // partial fragment at the end?
   if (received_pos == write_pos) {
-    ldout(cct, 10) << "is_readable() detected partial entry at tail, "
+    ldout(cct, 10) << "_have_next_entry() detected partial entry at tail, "
       "adjusting write_pos to " << read_pos << dendl;
 
     // adjust write_pos
@@ -1154,11 +1154,11 @@ bool Journaler::_is_readable()
 
   if (need > fetch_len) {
     temp_fetch_len = need;
-    ldout(cct, 10) << "_is_readable noting temp_fetch_len " << temp_fetch_len
+    ldout(cct, 10) << "_have_next_entry noting temp_fetch_len " << temp_fetch_len
 		   << dendl;
   }
 
-  ldout(cct, 10) << "_is_readable: not readable, returning false" << dendl;
+  ldout(cct, 10) << "_have_next_entry: not readable, returning false" << dendl;
   return false;
 }
 
@@ -1264,9 +1264,9 @@ bool Journaler::try_read_entry(bufferlist& bl)
   read_pos += consumed;
   try {
     // We were readable, we might not be any more
-    readable = _is_readable();
+    readable = _have_next_entry();
   } catch (const buffer::error &e) {
-    lderr(cct) << __func__ << ": decode error from _is_readable" << dendl;
+    lderr(cct) << __func__ << ": decode error from _have_next_entry" << dendl;
     error = -EINVAL;
     return false;
   }
@@ -1292,7 +1292,7 @@ void Journaler::wait_for_readable(Context *onreadable)
   }
 
   ceph_assert(on_readable == 0);
-  if (!readable) {
+  if (!readable && read_pos < write_pos) {
     ldout(cct, 10) << "wait_for_readable at " << read_pos << " onreadable "
 		   << onreadable << dendl;
     on_readable = wrap_finisher(onreadable);
