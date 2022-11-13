@@ -2101,7 +2101,7 @@ namespace librbd {
     return librbd::api::Image<>::encryption_load(ictx, &spec, 1, false);
   }
 
-  int Image::encryption_load2(encryption_spec_t *specs, size_t spec_count)
+  int Image::encryption_load2(const encryption_spec_t *specs, size_t spec_count)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     return librbd::api::Image<>::encryption_load(
@@ -4394,7 +4394,7 @@ extern "C" int rbd_encryption_load(rbd_image_t image,
 }
 
 extern "C" int rbd_encryption_load2(rbd_image_t image,
-                                    rbd_encryption_spec_t *specs,
+                                    const rbd_encryption_spec_t *specs,
                                     size_t spec_count)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
