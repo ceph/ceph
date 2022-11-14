@@ -25,6 +25,14 @@ struct SnapSetContext {
   explicit SnapSetContext(const hobject_t& o) :
     oid(o), ref(0), registered(false), exists(true) { }
 };
+
+inline std::ostream& operator<<(std::ostream& out, const SnapSetContext& ssc)
+{
+  return out << "ssc(" << ssc.oid << " snapset: " << ssc.snapset
+             << " ref: " << ssc.ref << " registered: "
+             << ssc.registered << " exists: " << ssc.exists << ")";
+}
+
 struct ObjectContext;
 typedef std::shared_ptr<ObjectContext> ObjectContextRef;
 
