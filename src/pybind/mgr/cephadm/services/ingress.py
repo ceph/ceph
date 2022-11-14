@@ -164,6 +164,7 @@ class IngressService(CephService):
                 } for d in daemons if d.ports
             ]
 
+        host_ip = daemon_spec.ip or self.mgr.inventory.get_addr(daemon_spec.host)
         haproxy_conf = self.mgr.template.render(
             'services/ingress/haproxy.cfg.j2',
             {
@@ -176,6 +177,7 @@ class IngressService(CephService):
                 'ip': "*" if spec.virtual_ips_list else str(spec.virtual_ip).split('/')[0] or daemon_spec.ip or '*',
                 'frontend_port': daemon_spec.ports[0] if daemon_spec.ports else spec.frontend_port,
                 'monitor_port': daemon_spec.ports[1] if daemon_spec.ports else spec.monitor_port,
+                'local_host_ip': host_ip
             }
         )
         config_files = {
@@ -277,7 +279,8 @@ class IngressService(CephService):
                 if d.daemon_type == 'haproxy':
                     assert d.ports
                     port = d.ports[1]   # monitoring port
-                    script = f'/usr/bin/curl {build_url(scheme="http", host=d.ip or "localhost", port=port)}/health'
+                    host_ip = d.ip or self.mgr.inventory.get_addr(d.hostname)
+                    script = f'/usr/bin/curl {build_url(scheme="http", host=host_ip, port=port)}/health'
         assert script
 
         states = []
