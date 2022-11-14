@@ -135,7 +135,7 @@ void PGBackend::handle_recovery_delete(OpRequestRef op)
 {
   auto m = op->get_req<MOSDPGRecoveryDelete>();
   ceph_assert(m->get_type() == MSG_OSD_PG_RECOVERY_DELETE);
-  dout(20) << __func__ << " " << op << dendl;
+  dout(20) << __func__ << " " << *op->get_req() << dendl;
 
   op->mark_started();
 
@@ -166,7 +166,7 @@ void PGBackend::handle_recovery_delete_reply(OpRequestRef op)
 {
   auto m = op->get_req<MOSDPGRecoveryDeleteReply>();
   ceph_assert(m->get_type() == MSG_OSD_PG_RECOVERY_DELETE_REPLY);
-  dout(20) << __func__ << " " << op << dendl;
+  dout(20) << __func__ << " " << *op->get_req() << dendl;
 
   for (const auto &p : m->objects) {
     ObjectRecoveryInfo recovery_info;
