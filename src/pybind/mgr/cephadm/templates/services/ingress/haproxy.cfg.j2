@@ -67,6 +67,10 @@ frontend frontend
 backend backend
 {% if mode == 'http' %}
     option forwardfor
+{% if backend_spec.ssl %}
+    default-server ssl
+    default-server verify none
+{% endif %}
     balance static-rr
     option httpchk HEAD / HTTP/1.0
     {% for server in servers %}
