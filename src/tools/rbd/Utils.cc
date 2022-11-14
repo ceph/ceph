@@ -753,7 +753,7 @@ int get_encryption_options(const boost::program_options::variables_map &vm,
   auto& specs = opts->specs;
   specs.resize(spec_count);
   for (size_t i = 0; i < spec_count; ++i) {
-    std::ifstream file(passphrase_files[i].c_str());
+    std::ifstream file(passphrase_files[i], std::ios::in | std::ios::binary);
     auto sg = make_scope_guard([&] { file.close(); });
 
     specs[i].format = formats[i];
@@ -781,11 +781,6 @@ int get_encryption_options(const boost::program_options::variables_map &vm,
                 << passphrase_files[i] << "': " << cpp_strerror(errno)
                 << std::endl;
       return -errno;
-    }
-
-    if (!passphrase->empty() &&
-        (*passphrase)[passphrase->length() - 1] == '\n') {
-      passphrase->erase(passphrase->length() - 1);
     }
   }
 

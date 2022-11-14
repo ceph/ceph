@@ -1693,7 +1693,8 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
     });
 
     for (size_t i = 0; i < encryption_format_count; ++i) {
-      std::ifstream file(cfg->encryption_passphrase_file[i].c_str());
+      std::ifstream file(cfg->encryption_passphrase_file[i],
+                         std::ios::in | std::ios::binary);
       auto sg2 = make_scope_guard([&] { file.close(); });
 
       specs[i].format = cfg->encryption_format[i];
@@ -1722,11 +1723,6 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
                   << cfg->encryption_passphrase_file[i] << "': "
                   << cpp_strerror(errno) << std::endl;
         goto close_fd;
-      }
-
-      if (!passphrase->empty() &&
-          (*passphrase)[passphrase->length() - 1] == '\n') {
-        passphrase->erase(passphrase->length() - 1);
       }
     }
 
