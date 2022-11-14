@@ -20,7 +20,7 @@ esac
 
 VENV="$BUILDDIR/virtualenv"
 CRAM_BIN="$VENV/bin/cram"
-if [ ! -e "$CRAM_BIN" ]; then
+if [ ! -e "$CRAM_BIN" ] || ! "${CRAM_BIN}" --version &> /dev/null ; then
     # With "make distcheck", the source directory must be read-only. I
     # patched cram to support that. See upstream ticket at
     # https://bitbucket.org/brodie/cram/issue/9/allow-read-only-directories-for-t
