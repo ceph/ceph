@@ -120,17 +120,7 @@ describe('ServiceFormComponent', () => {
 
     it('should test various services', () => {
       _.forEach(
-        [
-          'alertmanager',
-          'crash',
-          'grafana',
-          'mds',
-          'mgr',
-          'mon',
-          'node-exporter',
-          'prometheus',
-          'rbd-mirror'
-        ],
+        ['alertmanager', 'crash', 'mds', 'mgr', 'mon', 'node-exporter', 'prometheus', 'rbd-mirror'],
         (serviceType) => {
           formHelper.setValue('service_type', serviceType);
           component.onSubmit();
@@ -141,6 +131,36 @@ describe('ServiceFormComponent', () => {
           });
         }
       );
+    });
+
+    describe('should test service grafana', () => {
+      beforeEach(() => {
+        formHelper.setValue('service_type', 'grafana');
+      });
+
+      it('should sumbit grafana', () => {
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'grafana',
+          placement: {},
+          unmanaged: false,
+          initial_admin_password: null,
+          port: null
+        });
+      });
+
+      it('should sumbit grafana with custom port and initial password', () => {
+        formHelper.setValue('grafana_port', 1234);
+        formHelper.setValue('grafana_admin_password', 'foo');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'grafana',
+          placement: {},
+          unmanaged: false,
+          initial_admin_password: 'foo',
+          port: 1234
+        });
+      });
     });
 
     describe('should test service nfs', () => {
