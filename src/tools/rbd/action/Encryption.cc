@@ -58,18 +58,6 @@ int execute(const po::variables_map &vm,
     return -EINVAL;
   }
 
-  std::ifstream file(passphrase_file, std::ios::in | std::ios::binary);
-  if (file.fail()) {
-    std::cerr << "rbd: unable to open passphrase file " << passphrase_file
-              << ": " << cpp_strerror(errno) << std::endl;
-    return -errno;
-  }
-  std::string passphrase((std::istreambuf_iterator<char>(file)),
-                         (std::istreambuf_iterator<char>()));
-  auto sg = make_scope_guard([&] {
-      ceph_memzero_s(&passphrase[0], passphrase.size(), passphrase.size()); });
-  file.close();
-
   auto alg = RBD_ENCRYPTION_ALGORITHM_AES256;
   if (vm.count("cipher-alg")) {
     alg = vm["cipher-alg"].as<librbd::encryption_algorithm_t>();
@@ -84,18 +72,30 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
+  std::ifstream file(passphrase_file, std::ios::in | std::ios::binary);
+  if (file.fail()) {
+    std::cerr << "rbd: unable to open passphrase file '" << passphrase_file
+              << "': " << cpp_strerror(errno) << std::endl;
+    return -errno;
+  }
+  std::string passphrase((std::istreambuf_iterator<char>(file)),
+                         std::istreambuf_iterator<char>());
+  file.close();
+
   if (format_str == "luks1") {
-    librbd::encryption_luks1_format_options_t opts = {};
-    opts.alg = alg;
-    opts.passphrase = passphrase;
+    librbd::encryption_luks1_format_options_t opts = {
+        alg, std::move(passphrase)};
     r = image.encryption_format(
             RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts));
+    ceph_memzero_s(opts.passphrase.data(), opts.passphrase.size(),
+                   opts.passphrase.size());
   } else if (format_str == "luks2") {
-    librbd::encryption_luks2_format_options_t opts = {};
-    opts.alg = alg;
-    opts.passphrase = passphrase;
+    librbd::encryption_luks2_format_options_t opts = {
+        alg, std::move(passphrase)};
     r = image.encryption_format(
             RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts));
+    ceph_memzero_s(opts.passphrase.data(), opts.passphrase.size(),
+                   opts.passphrase.size());
   } else {
     std::cerr << "rbd: unsupported encryption format" << std::endl;
     return -ENOTSUP;
