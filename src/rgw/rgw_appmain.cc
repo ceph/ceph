@@ -509,18 +509,17 @@ void rgw::AppMain::init_lua()
 {
   rgw::sal::Driver* driver = env.driver;
   int r{0};
-  const auto &luarocks_path =
-      g_conf().get_val<std::string>("rgw_luarocks_location");
-  if (luarocks_path.empty()) {
-    driver->set_luarocks_path("");
-  } else {
-    driver->set_luarocks_path(luarocks_path + "/" + g_conf()->name.to_str());
+  std::string path = g_conf().get_val<std::string>("rgw_luarocks_location");
+  if (!path.empty()) {
+    path += "/" + g_conf()->name.to_str();
   }
+  env.lua.luarocks_path = path;
+
 #ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
   std::string output;
-  r = rgw::lua::install_packages(dpp, driver, null_yield, failed_packages,
-                                 output);
+  r = rgw::lua::install_packages(dpp, driver, null_yield, path,
+                                 failed_packages, output);
   if (r < 0) {
     dout(1) << "WARNING: failed to install lua packages from allowlist"
             << dendl;
@@ -538,7 +537,7 @@ void rgw::AppMain::init_lua()
 
   if (driver->get_name() == "rados") { /* Supported for only RadosStore */
     lua_background = std::make_unique<
-      rgw::lua::Background>(driver, dpp->get_cct(), driver->get_luarocks_path());
+      rgw::lua::Background>(driver, dpp->get_cct(), path);
     lua_background->start();
     env.lua.background = lua_background.get();
   }
