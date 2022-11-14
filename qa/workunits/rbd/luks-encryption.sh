@@ -184,8 +184,8 @@ dd if=/dev/urandom of=/tmp/testdata1 bs=4M count=4
 dd if=/dev/urandom of=/tmp/testdata2 bs=4M count=4
 
 # create passphrase files
-echo -n "password" > /tmp/passphrase
-echo -n "password2" > /tmp/passphrase2
+printf "pass\0word\n" > /tmp/passphrase
+printf "\t password2   " > /tmp/passphrase2
 
 # create an image
 rbd create testimg --size=32M

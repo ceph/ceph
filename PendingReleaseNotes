@@ -85,7 +85,9 @@
   notifications needs to pull them (instead of the notifications be pushed 
   to it), an external message bus (e.g. rabbitmq, Kafka) should be used for 
   that purpose.
-
+* RBD: Trailing newline in passphrase files (`<passphrase-file>` argument in
+  `rbd encryption format` command and `--encryption-passphrase-file` option
+  in other commands) is no longer stripped.
 
 >=17.2.1
 

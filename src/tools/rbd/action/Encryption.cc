@@ -58,7 +58,7 @@ int execute(const po::variables_map &vm,
     return -EINVAL;
   }
 
-  std::ifstream file(passphrase_file.c_str());
+  std::ifstream file(passphrase_file, std::ios::in | std::ios::binary);
   if (file.fail()) {
     std::cerr << "rbd: unable to open passphrase file " << passphrase_file
               << ": " << cpp_strerror(errno) << std::endl;
@@ -69,9 +69,6 @@ int execute(const po::variables_map &vm,
   auto sg = make_scope_guard([&] {
       ceph_memzero_s(&passphrase[0], passphrase.size(), passphrase.size()); });
   file.close();
-  if (!passphrase.empty() && passphrase[passphrase.length() - 1] == '\n') {
-    passphrase.erase(passphrase.length() - 1);
-  }
 
   auto alg = RBD_ENCRYPTION_ALGORITHM_AES256;
   if (vm.count("cipher-alg")) {

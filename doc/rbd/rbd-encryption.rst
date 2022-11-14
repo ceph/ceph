@@ -112,8 +112,8 @@ randomly-generated encryption key, and is protected by the passphrase read from
 `passphrase-file`.
 
 .. note::
-   If the content of `passphrase-file` ends with a newline character, it will
-   be stripped off.
+   In older versions, if the content of `passphrase-file` ended with a newline
+   character, it was stripped off.
 
 By default, AES-256 in xts-plain64 mode (which is the current recommended mode,
 and the usual default for other tools) will be used. The format operation
