@@ -8,13 +8,13 @@ Pools are logical partitions that are used to store objects.
 Pools provide:
 
 - **Resilience**: It is possible to set the number of OSDs that are allowed to
-  fail without any data in the cluster being lost. If your cluster uses
-  replicated pools, the number of OSDs that can fail without data loss is the
-  number of replicas of an object. For example: a typical configuration stores
-  an object and two additional copies (that is: ``size = 3``), but you can
-  configure the number of replicas on a per-pool basis. For `erasure coded
-  pools <../erasure-code>`_, resilience is defined as the number of coding
-  chunks (for example, ``m = 2`` in the **erasure code profile**).
+  fail without any data being lost. If your cluster uses replicated pools, the
+  number of OSDs that can fail without data loss is the number of replicas.
+  For example: a typical configuration stores an object and two additional
+  copies (that is: ``size = 3``), but you can configure the number of replicas
+  on a per-pool basis. For `erasure coded pools <../erasure-code>`_, resilience
+  is defined as the number of coding chunks (for example, ``m = 2`` in the
+  **erasure code profile**).
 
 - **Placement Groups**: You can set the number of placement groups for the
   pool. A typical configuration targets approximately 100 placement groups per
@@ -23,7 +23,8 @@ Pools provide:
   placement groups for each pool and for the cluster as a whole. Note that each
   PG belongs to a specific pool: when multiple pools use the same OSDs, make
   sure that the **sum** of PG replicas per OSD is in the desired PG per OSD
-  target range.
+  target range. Use the `pgcalc`_ tool to calculate the number of placement
+  groups to set for your pool.
 
 - **CRUSH Rules**: When data is stored in a pool, the placement of the object
   and its replicas (or chunks, in the case of erasure-coded pools) in your
@@ -891,7 +892,7 @@ By default, ceph creates two replicas of an object (a total of three copies, or
 a size of 3).
 
 
-
+.. _pgcalc: https://old.ceph.com/pgcalc/
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
 .. _Bloom Filter: https://en.wikipedia.org/wiki/Bloom_filter
 .. _setting the number of placement groups: ../placement-groups#set-the-number-of-placement-groups
