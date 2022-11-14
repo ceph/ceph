@@ -23,9 +23,6 @@ fi
 DIR=/tmp/install-deps.$$
 trap "rm -fr $DIR" EXIT
 mkdir -p $DIR
-if test $(id -u) != 0 ; then
-    SUDO=sudo
-fi
 # enable UTF-8 encoding for programs like pip that expect to
 # print more than just ascii chars
 export LC_ALL=C.UTF-8
@@ -74,12 +71,12 @@ function ensure_decent_gcc_on_ubuntu {
     fi
 
     if [ ! -f /usr/bin/g++-${new} ]; then
-        $SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
+        csudo tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
 deb [lang=none] http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
 deb [arch=amd64 lang=none] http://mirror.nullivex.com/ppa/ubuntu-toolchain-r-test $codename main
 EOF
         # import PPA's signing key into APT's keyring
-        cat << ENDOFKEY | $SUDO apt-key add -
+        csudo apt-key add - << ENDOFKEY
 -----BEGIN PGP PUBLIC KEY BLOCK-----
 Version: SKS 1.1.6
 Comment: Hostname: keyserver.ubuntu.com
@@ -94,8 +91,8 @@ msyaQpNl/m/lNtOLhR64v5ZybofB2EWkMxUzX8D/FQ==
 =LcUQ
 -----END PGP PUBLIC KEY BLOCK-----
 ENDOFKEY
-        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
-        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
+        csudo env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
+        csudo env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
     fi
 }
 
@@ -106,7 +103,7 @@ function ensure_python3_sphinx_on_ubuntu {
     # ../share/sphinx/scripts/python2/sphinx-build when it's installed
     # let's "correct" this
     if test -e $sphinx_command  && head -n1 $sphinx_command | grep -q python$; then
-        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove python-sphinx
+        csudo env DEBIAN_FRONTEND=noninteractive apt-get -y remove python-sphinx
     fi
 }
 
@@ -135,9 +132,9 @@ function install_pkg_on_ubuntu {
     if test -n "$missing_pkgs"; then
         local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
         in_jenkins && echo -n "CI_DEBUG: Downloading $shaman_url ... "
-        $SUDO curl --silent --fail --write-out "%{http_code}" --location $shaman_url --output /etc/apt/sources.list.d/$project.list
-        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
-        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y $missing_pkgs
+        csudo curl --silent --fail --write-out "%{http_code}" --location $shaman_url --output /etc/apt/sources.list.d/$project.list
+        csudo env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
+        csudo env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y $missing_pkgs
     fi
 }
 
@@ -162,23 +159,23 @@ function clean_boost_on_ubuntu {
     fi
 
     # Historical packages
-    $SUDO rm -f /etc/apt/sources.list.d/ceph-libboost*.list
+    csudo rm -f /etc/apt/sources.list.d/ceph-libboost*.list
     # Currently used
-    $SUDO rm -f /etc/apt/sources.list.d/libboost.list
+    csudo rm -f /etc/apt/sources.list.d/libboost.list
     # Refresh package list so things aren't in the available list.
-    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
+    csudo env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
     # Remove all ceph-libboost packages. We have an early return if
     # the desired version is already (and the only) version installed,
     # so no need to spare it.
     if test -n "$installed_ver"; then
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y --fix-missing remove "ceph-libboost*"
+	csudo env DEBIAN_FRONTEND=noninteractive apt-get -y --fix-missing remove "ceph-libboost*"
 	# When an error occurs during `apt-get remove ceph-libboost*`, ceph-libboost* packages
 	# may be not removed, so use `dpkg` to force remove ceph-libboost*.
 	local ceph_libboost_pkgs=$(dpkg -l | grep ceph-libboost* | awk '{print $2}' |
 		                        awk -F: '{print $1}')
 	if test -n "$ceph_libboost_pkgs"; then
 	    ci_debug "Force remove ceph-libboost* packages $ceph_libboost_pkgs"
-	    $SUDO dpkg --purge --force-all $ceph_libboost_pkgs
+	    csudo dpkg --purge --force-all $ceph_libboost_pkgs
 	fi
     fi
 }
@@ -324,7 +321,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         echo "Installing extra packages not supported on FreeBSD" >&2
         exit 1
     fi
-    $SUDO pkg install -yq \
+    csudo pkg install -yq \
         devel/babeltrace \
         devel/binutils \
         devel/git \
@@ -390,19 +387,19 @@ else
 	# up in a broken case.
         clean_boost_on_ubuntu
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
-            if ! $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES ; then
+            if ! csudo apt-get install -y $INSTALL_EXTRA_PACKAGES ; then
                 # try again. ported over from run-make.sh (orignally e278295)
                 # In the case that apt-get is interrupted, like when a jenkins
                 # job is cancelled, the package manager will be in an inconsistent
                 # state. Run the command again after `dpkg --configure -a` to
                 # bring package manager back into a clean state.
-                $SUDO dpkg --configure -a
+                csudo dpkg --configure -a
                 ci_debug "trying to install $INSTALL_EXTRA_PACKAGES again"
-                $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES
+                csudo apt-get install -y $INSTALL_EXTRA_PACKAGES
             fi
         fi
-        $SUDO apt-get install -y devscripts equivs
-        $SUDO apt-get install -y dpkg-dev
+        csudo apt-get install -y devscripts equivs
+        csudo apt-get install -y dpkg-dev
         ensure_python3_sphinx_on_ubuntu
         case "$VERSION" in
             *Bionic*)
@@ -415,10 +412,10 @@ else
                 ;;
             *Jammy*)
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
-                $SUDO apt-get install -y gcc
+                csudo apt-get install -y gcc
                 ;;
             *)
-                $SUDO apt-get install -y gcc
+                csudo apt-get install -y gcc
                 ;;
         esac
         if ! test -r debian/control ; then
@@ -456,62 +453,62 @@ else
         ci_debug "build_profiles=$build_profiles"
         ci_debug "Now running 'mk-build-deps' and installing ceph-build-deps package"
 
-        $SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
+        csudo env DEBIAN_FRONTEND=noninteractive mk-build-deps \
               --build-profiles "${build_profiles#,}" \
               --install --remove \
               --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
         ci_debug "Removing ceph-build-deps"
-        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
+        csudo env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
         if [ "$control" != "debian/control" ] ; then rm $control; fi
         ;;
     almalinux|rocky|centos|fedora|rhel|ol|virtuozzo)
-        builddepcmd="dnf -y builddep --allowerasing"
+        builddepcmd=(dnf -y builddep --allowerasing)
         echo "Using dnf to install dependencies: ID=$ID"
         case "$ID" in
             fedora)
-                $SUDO dnf install -y dnf-utils
+                csudo dnf install -y dnf-utils
                 ;;
             almalinux|rocky|centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
-                $SUDO dnf install -y dnf-utils selinux-policy-targeted
+                csudo dnf install -y dnf-utils selinux-policy-targeted
                 rpm --quiet --query epel-release || \
-                    $SUDO dnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
-                $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
-                $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
+                    csudo dnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
+                csudo rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
+                csudo rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $ID = centos -a $MAJOR_VERSION = 8 ; then
                     # for grpc-devel
                     # See https://copr.fedorainfracloud.org/coprs/ceph/grpc/
                     # epel is enabled for all major versions couple of lines above
-                    $SUDO dnf copr enable -y ceph/grpc
+                    csudo dnf copr enable -y ceph/grpc
 
                     # Enable 'powertools' or 'PowerTools' repo
-                    $SUDO dnf config-manager --set-enabled $(dnf repolist --all 2>/dev/null|gawk 'tolower($0) ~ /^powertools\s/{print $1}')
+                    csudo dnf config-manager --set-enabled $(dnf repolist --all 2>/dev/null|gawk 'tolower($0) ~ /^powertools\s/{print $1}')
                     dts_ver=11
                     # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
-                    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
-                    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
-                    $SUDO dnf -y module enable javapackages-tools
+                    csudo dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
+                    csudo dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
+                    csudo dnf -y module enable javapackages-tools
                 elif test $ID = centos -a $MAJOR_VERSION = 9 ; then
-                    $SUDO dnf config-manager --set-enabled crb
+                    csudo dnf config-manager --set-enabled crb
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     dts_ver=11
-                    $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
-                    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
-                    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
-                    $SUDO dnf -y module enable javapackages-tools
+                    csudo dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
+                    csudo dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
+                    csudo dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
+                    csudo dnf -y module enable javapackages-tools
 
                     # Enable ceph/grpc from copr for el8, this is needed for nvmeof management.
-                    $SUDO dnf copr enable -y ceph/grpc
+                    csudo dnf copr enable -y ceph/grpc
                 fi
                 ;;
         esac
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
-            $SUDO dnf install -y $INSTALL_EXTRA_PACKAGES
+            csudo dnf install -y $INSTALL_EXTRA_PACKAGES
         fi
         munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
-        $SUDO dnf install -y python3-devel
-        $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+        csudo dnf install -y python3-devel
+        csudo "${builddepcmd[@]}" $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
         if [ -n "$dts_ver" ]; then
             ensure_decent_gcc_on_rh $dts_ver
@@ -522,12 +519,11 @@ else
     opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
-        $SUDO $zypp_install systemd-rpm-macros rpm-build || exit 1
+        csudo $zypp_install systemd-rpm-macros rpm-build || exit 1
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
-            $SUDO $zypp_install $INSTALL_EXTRA_PACKAGES
+            csudo $zypp_install $INSTALL_EXTRA_PACKAGES
         fi
-        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
-        $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
+        csudo $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     *)
         echo "$ID is unknown, dependencies will have to be installed manually."
