@@ -59,7 +59,9 @@ int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optio
 
 // install all packages from the allowlist
 // return the list of packages that failed to install and the output of the install command
-int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y, packages_t& failed_packages, std::string& output);
+int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
+                     optional_yield y, const std::string& luarocks_path,
+                     packages_t& failed_packages, std::string& output);
 #endif
 }
 

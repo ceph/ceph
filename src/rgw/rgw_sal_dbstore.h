@@ -762,7 +762,6 @@ public:
        * multiple db handles (for eg., one for each tenant),
        * use dbsm->getDB(tenant) */
       DB *db;
-      std::string luarocks_path;
       DBZone zone;
       RGWSyncModuleInstanceRef sync_module;
       RGWLC* lc;
@@ -903,13 +902,6 @@ public:
         return db->ctx();
       }
 
-      virtual const std::string& get_luarocks_path() const override {
-        return luarocks_path;
-      }
-
-      virtual void set_luarocks_path(const std::string& path) override {
-        luarocks_path = path;
-      }
       virtual void register_admin_apis(RGWRESTMgr* mgr) override { };
 
       /* Unique to DBStore */

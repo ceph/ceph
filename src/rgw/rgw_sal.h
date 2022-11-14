@@ -448,10 +448,6 @@ class Driver {
     /** Get the Ceph context associated with this driver.  May be removed. */
     virtual CephContext* ctx(void) = 0;
 
-    /** Get the location of where lua packages are installed */
-    virtual const std::string& get_luarocks_path() const = 0;
-    /** Set the location of where lua packages are installed */
-    virtual void set_luarocks_path(const std::string& path) = 0;
     /** Register admin APIs unique to this driver */
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
 };

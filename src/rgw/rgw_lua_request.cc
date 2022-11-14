@@ -859,9 +859,7 @@ int execute(
   lua_state_guard lguard(L);
 
   open_standard_libs(L);
-  set_package_path(L, driver ?
-      driver->get_luarocks_path() :
-      "");
+  set_package_path(L, s->penv.lua.luarocks_path);
 
   create_debug_action(L, s->cct);  
   
