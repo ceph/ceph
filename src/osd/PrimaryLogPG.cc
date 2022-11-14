@@ -762,7 +762,7 @@ bool PrimaryLogPG::maybe_await_blocked_head(
 
 void PrimaryLogPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef op)
 {
-  dout(10) << __func__ << " " << soid << " " << op << dendl;
+  dout(10) << __func__ << " " << soid << " " << *op->get_req() << dendl;
   waiting_for_blocked_object[soid].push_back(op);
   op->mark_delayed("waiting for blocked object");
 }
@@ -1878,7 +1878,7 @@ void PrimaryLogPG::do_request(
   }
 
   if (recovery_state.needs_flush()) {
-    dout(20) << "waiting for flush on " << op << dendl;
+    dout(20) << "waiting for flush on " << *op->get_req() << dendl;
     waiting_for_flush.push_back(op);
     op->mark_delayed("waiting for flush");
     return;
@@ -1892,7 +1892,8 @@ void PrimaryLogPG::do_request(
   case CEPH_MSG_OSD_OP:
   case CEPH_MSG_OSD_BACKOFF:
     if (!is_active()) {
-      dout(20) << " peered, not active, waiting for active on " << op << dendl;
+      dout(20) << " peered, not active, waiting for active on "
+               << *op->get_req() << dendl;
       waiting_for_active.push_back(op);
       op->mark_delayed("waiting for active");
       return;
@@ -2914,7 +2915,7 @@ void PrimaryLogPG::do_cache_redirect(OpRequestRef op)
   request_redirect_t redir(m->get_object_locator(), pool.info.tier_of);
   reply->set_redirect(redir);
   dout(10) << "sending redirect to pool " << pool.info.tier_of << " for op "
-	   << op << dendl;
+	   << *op->get_req() << dendl;
   m->get_connection()->send_message(reply);
   return;
 }
