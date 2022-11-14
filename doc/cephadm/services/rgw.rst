@@ -164,8 +164,10 @@ for RGW with a minimum set of configuration options.  The orchestrator will
 deploy and manage a combination of haproxy and keepalived to provide load
 balancing on a floating virtual IP.
 
-If SSL is used, then SSL must be configured and terminated by the ingress service
-and not RGW itself.
+If the RGW service is configured with SSL enabled, then the ingress service
+will use the `ssl` and `verify none` options in the backend configuration.
+Trust verification is disabled because the backends are accessed by IP 
+address instead of FQDN.
 
 .. image:: ../../images/HAProxy_for_RGW.svg
 
@@ -186,8 +188,7 @@ between all the RGW daemons available.
 Prerequisites
 -------------
 
-* An existing RGW service, without SSL.  (If you want SSL service, the certificate
-  should be configured on the ingress service, not the RGW service.)
+* An existing RGW service.
 
 Deploying
 ---------
