@@ -35,6 +35,8 @@ export interface CephServiceAdditionalSpec {
   ssl: boolean;
   ssl_cert: string;
   ssl_key: string;
+  port: number;
+  initial_admin_password: string;
 }
 
 export interface CephServicePlacement {
