@@ -334,7 +334,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             privacy_protocol: { op: '!empty' }
           })
         ]
-      ]
+      ],
+      grafana_port: [null, [CdValidators.number(false)]],
+      grafana_admin_password: [null]
     });
   }
 
@@ -479,6 +481,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                   .get('snmp_community')
                   .setValue(response[0].spec['credentials']['snmp_community']);
               }
+              break;
+            case 'grafana':
+              this.serviceForm.get('grafana_port').setValue(response[0].spec.port);
+              this.serviceForm
+                .get('grafana_admin_password')
+                .setValue(response[0].spec.initial_admin_password);
               break;
           }
         });
@@ -654,6 +662,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           }
           serviceSpec['virtual_interface_networks'] = values['virtual_interface_networks'];
           break;
+        case 'grafana':
+          serviceSpec['port'] = values['grafana_port'];
+          serviceSpec['initial_admin_password'] = values['grafana_admin_password'];
       }
     }
 
