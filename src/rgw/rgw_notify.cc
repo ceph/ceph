@@ -624,7 +624,10 @@ rgw::sal::Object* get_object_with_atttributes(
     if (!src_obj->get_bucket()) {
       src_obj->set_bucket(res.bucket);
     }
-    if (src_obj->get_obj_attrs(res.obj_ctx, res.yield, res.dpp) < 0) {
+    const auto ret = src_obj->get_obj_attrs(res.obj_ctx, res.yield, res.dpp);
+    if (ret < 0) {
+      ldpp_dout(res.dpp, 20) << "failed to get attributes from object: " << 
+        src_obj->get_key() << ". ret = " << ret << dendl;
       return nullptr;
     }
   }
@@ -638,6 +641,7 @@ static inline void metadata_from_attributes(
   if (!src_obj) {
     return;
   }
+  res.metadata_fetched_from_attributes = true;
   for (auto& attr : src_obj->get_attrs()) {
     if (boost::algorithm::starts_with(attr.first, RGW_ATTR_META_PREFIX)) {
       std::string_view key(attr.first);
@@ -700,13 +704,11 @@ static inline void populate_event(reservation_t& res,
   set_event_id(event.id, etag, ts);
   event.bucket_id = res.bucket->get_bucket_id();
   // pass meta data
-  if (res.x_meta_map.empty()) {
-    // no metadata cached:
+  if (!res.metadata_fetched_from_attributes) {
     // either no metadata exist or no metadata filter was used
     metadata_from_attributes(res, obj);
-  } else {
-      event.x_meta_map = res.x_meta_map;
   }
+  event.x_meta_map = res.x_meta_map;
   // pass tags
   if (!res.tagset ||
       (*res.tagset).get_tags().empty()) {
@@ -971,6 +973,7 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
   object_name(_object_name),
   tagset(_s->tagset),
   x_meta_map(_s->info.x_meta_map),
+  metadata_fetched_from_attributes(false),
   user_id(_s->user->get_id().id),
   user_tenant(_s->user->get_id().tenant),
   req_id(_s->req_id),
