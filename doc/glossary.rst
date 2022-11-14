@@ -78,6 +78,8 @@
                 See :term:`Ceph Dashboard`.
 
 	Ceph Metadata Server
+                See :term:`MDS`.
+
 	Ceph Monitor
                 A daemon that maintains a map of the state of the cluster. This
                 "cluster state" includes the monitor map, the manager map, the
@@ -184,8 +186,10 @@
                 store Ceph-specific information about devices and its
                 relationship with OSDs.
 
-	MDS
-		The Ceph metadata software.
+	:ref:`MDS<cephfs_add_remote_mds>`
+                The Ceph metadata server daemon. Also referred to as
+                "ceph-mds". The Ceph metadata server daemon is required to run
+                the CephFS file system. The MDS stores all filesystem metadata. 
 
 	MGR
                 The Ceph manager software, which collects all the state from
@@ -252,4 +256,4 @@
 		The collection of software that performs scripted tests on Ceph.
 
 .. _https://github.com/ceph: https://github.com/ceph
-.. _Cluster Map: ../architecture#cluster-map
+.. _Cluster Map: ../architecture#cluster-map   
