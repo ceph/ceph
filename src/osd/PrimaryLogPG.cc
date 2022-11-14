@@ -11862,8 +11862,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
 	obc = create_object_context(oi, ssc);
 	dout(10) << __func__ << ": " << *obc
 		 << " oi: " << obc->obs.oi
-		 << " ssc: " << obc->ssc
-		 << " snapset: " << obc->ssc->snapset << dendl;
+		 << " " << *obc->ssc << dendl;
 	return obc;
       }
     }
@@ -11915,8 +11914,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
   dout(10) << __func__ << ": " << *obc
 	   << " oi: " << obc->obs.oi
 	   << " exists: " << (int)obc->obs.exists
-	   << " ssc: " << obc->ssc
-	   << " snapset: " << obc->ssc->snapset << dendl;
+	   << " " << *obc->ssc << dendl;
   return obc;
 }
 
