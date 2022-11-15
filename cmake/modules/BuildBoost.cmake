@@ -63,8 +63,12 @@ function(do_build_boost root_dir version)
   else()
     list(APPEND boost_features "address-model=32")
   endif()
-  set(BOOST_CXXFLAGS "-fPIC -w") # check on arm, etc <---XXX
+  string(APPEND BOOST_CXXFLAGS " -fPIC -w") # check on arm, etc <---XXX
   list(APPEND boost_features "cxxflags=${BOOST_CXXFLAGS}")
+
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 16)
+    string(APPEND BOOST_CXXFLAGS " -Wno-enum-constexpr-conversion")
+  endif ()
 
   set(boost_with_libs)
   foreach(c ${Boost_BUILD_COMPONENTS})
@@ -142,7 +146,7 @@ function(do_build_boost root_dir version)
     #"--buildid=ceph" # changes lib names--can omit for static
     ${boost_features})
   set(install_command
-    ${b2} install)
+    ${b2} ${boost_features} install)
   if(EXISTS "${PROJECT_SOURCE_DIR}/src/boost/bootstrap.sh")
     check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
     set(source_dir
