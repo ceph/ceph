@@ -805,9 +805,9 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
     const imageFeatures = image.features;
     const requiredFeatures = this.required_rbd_features[backstore];
     const unsupportedFeatures = this.unsupported_rbd_features[backstore];
-    // tslint:disable-next-line:no-bitwise
+    // eslint-disable-next-line no-bitwise
     const validRequiredFeatures = (imageFeatures & requiredFeatures) === requiredFeatures;
-    // tslint:disable-next-line:no-bitwise
+    // eslint-disable-next-line no-bitwise
     const validSupportedFeatures = (imageFeatures & unsupportedFeatures) === 0;
     return validRequiredFeatures && validSupportedFeatures;
   }

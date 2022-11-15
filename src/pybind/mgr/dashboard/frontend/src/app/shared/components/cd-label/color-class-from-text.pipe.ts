@@ -19,7 +19,7 @@ export class ColorClassFromTextPipe implements PipeTransform {
     if (text) {
       for (let i = 0; i < text.length; i++) {
         charCode = text.charCodeAt(i);
-        // tslint:disable-next-line:no-bitwise
+        // eslint-disable-next-line no-bitwise
         hash = Math.abs((hash << 5) - hash + charCode);
       }
     }

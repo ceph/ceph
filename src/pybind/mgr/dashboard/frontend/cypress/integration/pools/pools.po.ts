@@ -63,7 +63,7 @@ export class PoolPageHelper extends PageHelper {
     if (!apps || apps.length === 0) {
       return;
     }
-    cy.get('.float-left.mr-2.select-menu-edit').click();
+    cy.get('.float-start.me-2.select-menu-edit').click();
     cy.get('.popover-body').should('be.visible');
     apps.forEach((app) => cy.get('.select-menu-item-content').contains(app).click());
   }

@@ -27,7 +27,7 @@
     <ng-template #blockClearDevices>
       <div class="pb-2 my-2 border-bottom">
         <span *ngFor="let filter of appliedFilters">
-          <span class="badge badge-dark mr-2">{{ filter.name }}: {{ filter.value.formatted }}</span>
+          <span class="badge badge-dark me-2">{{ filter.name }}: {{ filter.value.formatted }}</span>
         </span>
         <a class="tc_clearSelections"
            href=""
@@ -43,7 +43,7 @@
         </cd-inventory-devices>
       </div>
       <div *ngIf="type === 'data'"
-           class="float-right">
+           class="float-end">
         <span i18n>Raw capacity: {{ capacity | dimlessBinary }}</span>
       </div>
     </ng-template>

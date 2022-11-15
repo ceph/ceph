@@ -53,12 +53,10 @@
                      name="password"
                      autocomplete="new-password"
                      formControlName="password">
-              <span class="input-group-append">
-                <button type="button"
-                        class="btn btn-light"
-                        cdPasswordButton="password">
-                </button>
-              </span>
+              <button type="button"
+                      class="btn btn-light"
+                      cdPasswordButton="password">
+              </button>
             </div>
             <div class="password-strength-level">
               <div class="{{ passwordStrengthLevelClass }}"
@@ -91,12 +89,10 @@
                      name="confirmpassword"
                      autocomplete="new-password"
                      formControlName="confirmpassword">
-              <span class="input-group-append">
-                <button type="button"
-                        class="btn btn-light"
-                        cdPasswordButton="confirmpassword">
-                </button>
-              </span>
+              <button type="button"
+                      class="btn btn-light"
+                      cdPasswordButton="confirmpassword">
+              </button>
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
                     i18n>Password confirmation doesn't match the password.</span>
@@ -142,13 +138,11 @@
                      #p="ngbPopover"
                      (click)="p.open()"
                      (keypress)="p.close()">
-              <span class="input-group-append">
-                <button type="button"
-                        class="btn btn-light"
-                        (click)="clearExpirationDate()">
-                  <i class="icon-prepend {{ icons.destroy }}"></i>
-                </button>
-              </span>
+              <button type="button"
+                      class="btn btn-light"
+                      (click)="clearExpirationDate()">
+                <i class="icon-prepend {{ icons.destroy }}"></i>
+              </button>
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('pwdExpirationDate', formDir, 'required')"
                     i18n>This field is required.</span>

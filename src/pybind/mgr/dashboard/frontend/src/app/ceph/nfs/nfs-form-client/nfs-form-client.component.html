@@ -17,7 +17,7 @@
              [formGroup]="item">
           <div class="card-header">
             {{ (index + 1) | ordinal }}
-            <span class="float-right clickable"
+            <span class="float-end clickable"
                   name="remove_client"
                   (click)="removeClient(index)"
                   ngbTooltip="Remove">&times;</span>
@@ -55,7 +55,7 @@
                      class="cd-col-form-label"
                      for="access_type">Access Type</label>
               <div class="cd-col-form-input">
-                <select class="form-control"
+                <select class="form-select"
                         name="access_type"
                         id="access_type"
                         formControlName="access_type">
@@ -78,7 +78,7 @@
                 <ng-container *ngTemplateOutlet="squashHelperTpl"></ng-container>
               </label>
               <div class="cd-col-form-input">
-                <select class="form-control"
+                <select class="form-select"
                         name="squash"
                         id="squash"
                         formControlName="squash">
@@ -93,9 +93,9 @@
       </div>
     </ng-container>
 
-    <div class="row">
+    <div class="row my-2">
       <div class="col-12">
-        <div class="float-right">
+        <div class="float-end">
           <button class="btn btn-light "
                   (click)="addClient()"
                   name="add_client">

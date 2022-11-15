@@ -19,7 +19,7 @@ export class AuthStorageDirective {
     private authStorageService: AuthStorageService
   ) {}
 
-  @Input('cdScope') set cdScope(condition: Condition) {
+  @Input() set cdScope(condition: Condition) {
     this.permissions = this.authStorageService.getPermissions();
     if (this.isAuthorized(condition)) {
       this.viewContainer.createEmbeddedView(this.templateRef);

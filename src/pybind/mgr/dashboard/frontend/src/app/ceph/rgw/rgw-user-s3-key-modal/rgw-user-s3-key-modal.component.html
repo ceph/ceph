@@ -68,14 +68,12 @@
                      type="password"
                      [readonly]="viewing"
                      formControlName="access_key">
-              <span class="input-group-append">
-                <button type="button"
-                        class="btn btn-light"
-                        cdPasswordButton="access_key">
-                </button>
-                <cd-copy-2-clipboard-button source="access_key">
-                </cd-copy-2-clipboard-button>
-              </span>
+              <button type="button"
+                      class="btn btn-light"
+                      cdPasswordButton="access_key">
+              </button>
+              <cd-copy-2-clipboard-button source="access_key">
+              </cd-copy-2-clipboard-button>
             </div>
             <span class="invalid-feedback"
                   *ngIf="formGroup.showError('access_key', frm, 'required')"
@@ -97,14 +95,12 @@
                      type="password"
                      [readonly]="viewing"
                      formControlName="secret_key">
-              <span class="input-group-append">
-                <button type="button"
-                        class="btn btn-light"
-                        cdPasswordButton="secret_key">
-                </button>
-                <cd-copy-2-clipboard-button source="secret_key">
-                </cd-copy-2-clipboard-button>
-              </span>
+              <button type="button"
+                      class="btn btn-light"
+                      cdPasswordButton="secret_key">
+              </button>
+              <cd-copy-2-clipboard-button source="secret_key">
+              </cd-copy-2-clipboard-button>
             </div>
             <span class="invalid-feedback"
                   *ngIf="formGroup.showError('secret_key', frm, 'required')"

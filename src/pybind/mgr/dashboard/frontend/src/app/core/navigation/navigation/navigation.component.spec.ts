@@ -1,8 +1,10 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { RouterTestingModule } from '@angular/router/testing';
 
-import { MockModule } from 'ng-mocks';
+import { ToastrModule } from 'ngx-toastr';
+import { SimplebarAngularModule } from 'simplebar-angular';
 import { of } from 'rxjs';
 
 import { Permission, Permissions } from '~/app/shared/models/permissions';
@@ -14,9 +16,14 @@ import {
 } from '~/app/shared/services/feature-toggles.service';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
+import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { NavigationModule } from '../navigation.module';
 import { NavigationComponent } from './navigation.component';
+import { NotificationsComponent } from '../notifications/notifications.component';
+import { AdministrationComponent } from '../administration/administration.component';
+import { IdentityComponent } from '../identity/identity.component';
+import { NgbModule } from '@ng-bootstrap/ng-bootstrap';
+import { DashboardHelpComponent } from '../dashboard-help/dashboard-help.component';
 
 function everythingPermittedExcept(disabledPermissions: string[] = []): any {
   const permissions: Permissions = new Permissions({});
@@ -51,26 +58,43 @@ describe('NavigationComponent', () => {
   let fixture: ComponentFixture<NavigationComponent>;
 
   configureTestBed({
-    declarations: [NavigationComponent],
-    imports: [HttpClientTestingModule, MockModule(NavigationModule)],
-    providers: [
-      {
-        provide: AuthStorageService,
-        useValue: {
-          getPermissions: jest.fn(),
-          isPwdDisplayed$: { subscribe: jest.fn() },
-          telemetryNotification$: { subscribe: jest.fn() }
-        }
-      },
-      { provide: SummaryService, useValue: { subscribe: jest.fn() } },
-      { provide: FeatureTogglesService, useValue: { get: jest.fn() } },
-      { provide: PrometheusAlertService, useValue: { alerts: [] } }
-    ]
+    declarations: [
+      NavigationComponent,
+      NotificationsComponent,
+      AdministrationComponent,
+      DashboardHelpComponent,
+      IdentityComponent
+    ],
+    imports: [
+      HttpClientTestingModule,
+      SharedModule,
+      ToastrModule.forRoot(),
+      RouterTestingModule,
+      SimplebarAngularModule,
+      NgbModule
+    ],
+    providers: [AuthStorageService, SummaryService, FeatureTogglesService, PrometheusAlertService]
   });
 
   beforeEach(() => {
+    spyOn(TestBed.inject(AuthStorageService), 'getPermissions').and.callFake(() =>
+      everythingPermittedExcept()
+    );
+
+    spyOn(TestBed.inject(FeatureTogglesService), 'get').and.callFake(() =>
+      of(everythingEnabledExcept())
+    );
+    spyOn(TestBed.inject(SummaryService), 'subscribe').and.callFake(() =>
+      of({ health: { status: 'HEALTH_OK' } })
+    );
+    spyOn(TestBed.inject(PrometheusAlertService), 'getAlerts').and.callFake(() => of([]));
     fixture = TestBed.createComponent(NavigationComponent);
     component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    fixture.destroy();
   });
 
   describe('Test Permissions', () => {

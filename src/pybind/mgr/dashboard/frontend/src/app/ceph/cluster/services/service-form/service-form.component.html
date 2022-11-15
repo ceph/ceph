@@ -16,7 +16,7 @@
           <div class="cd-col-form-input">
             <select id="service_type"
                     name="service_type"
-                    class="form-control"
+                    class="form-select"
                     formControlName="service_type"
                     (change)="getServiceIds($event.target.value)">
               <option i18n
@@ -42,7 +42,7 @@
             <div class="cd-col-form-input">
               <select id="backend_service"
                       name="backend_service"
-                      class="form-control"
+                      class="form-select"
                       formControlName="backend_service"
                       (change)="prePopulateId()">
                 <option *ngIf="services === null"
@@ -115,7 +115,7 @@
                  i18n>Placement</label>
           <div class="cd-col-form-input">
             <select id="placement"
-                    class="form-control"
+                    class="form-select"
                     formControlName="placement">
               <option i18n
                       value="hosts">Hosts</option>
@@ -220,7 +220,7 @@
           <div class="cd-col-form-input">
             <select id="pool"
                     name="pool"
-                    class="form-control"
+                    class="form-select"
                     formControlName="pool">
               <option *ngIf="pools === null"
                       [ngValue]="null"
@@ -315,14 +315,12 @@
                        type="password"
                        autocomplete="new-password"
                        formControlName="api_password">
-                <span class="input-group-append">
-                  <button type="button"
-                          class="btn btn-light"
-                          cdPasswordButton="api_password">
-                  </button>
-                  <cd-copy-2-clipboard-button source="api_password">
-                  </cd-copy-2-clipboard-button>
-                </span>
+                <button type="button"
+                        class="btn btn-light"
+                        cdPasswordButton="api_password">
+                </button>
+                <cd-copy-2-clipboard-button source="api_password">
+                </cd-copy-2-clipboard-button>
                 <span class="invalid-feedback"
                       *ngIf="serviceForm.showError('api_password', frm, 'required')"
                       i18n>This field is required.</span>
@@ -446,7 +444,7 @@
             <div class="cd-col-form-input">
               <select id="snmp_version"
                       name="snmp_version"
-                      class="form-control"
+                      class="form-select"
                       formControlName="snmp_version"
                       (change)="clearValidations()">
                 <option i18n
@@ -513,7 +511,7 @@
             <div class="cd-col-form-input">
               <select id="auth_protocol"
                       name="auth_protocol"
-                      class="form-control"
+                      class="form-select"
                       formControlName="auth_protocol">
                 <option i18n
                         [ngValue]="null">-- Select auth protocol --</option>
@@ -536,7 +534,7 @@
             <div class="cd-col-form-input">
               <select id="privacy_protocol"
                       name="privacy_protocol"
-                      class="form-control"
+                      class="form-select"
                       formControlName="privacy_protocol">
                 <option i18n
                         [ngValue]="null">-- Select privacy protocol --</option>

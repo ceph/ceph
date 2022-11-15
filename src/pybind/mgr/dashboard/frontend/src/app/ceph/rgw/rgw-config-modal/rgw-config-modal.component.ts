@@ -64,7 +64,7 @@ export class RgwConfigModalComponent implements OnInit {
         ]
       ],
       kms_provider: ['vault', Validators.required],
-      encryptionType: [null, Validators.required],
+      encryptionType: ['aws:kms', Validators.required],
       auth_method: [null, Validators.required],
       secret_engine: [null, Validators.required],
       secret_path: ['/'],

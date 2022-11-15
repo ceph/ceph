@@ -31,7 +31,7 @@
                     [innerHTML]="line.message | searchHighlight: search"></span>
             </p>
 
-            <ng-container *ngIf="clog.length != 0 else noEntriesTpl"></ng-container>
+            <ng-container *ngIf="clog.length !== 0 else noEntriesTpl"></ng-container>
           </div>
         </div>
       </ng-template>
@@ -62,7 +62,7 @@
                     [innerHTML]="line.message | searchHighlight: search"></span>
             </p>
 
-            <ng-container *ngIf="audit_log.length != 0 else noEntriesTpl"></ng-container>
+            <ng-container *ngIf="audit_log.length !== 0 else noEntriesTpl"></ng-container>
           </div>
         </div>
       </ng-template>
@@ -90,12 +90,14 @@
 </div>
 
 <ng-template #logFiltersTpl>
-  <div class="form-inline">
-    <div class="form-group">
+  <div class="row mb-3">
+  <div class="col-lg-10 d-flex">
+    <div class="col-sm-1 me-3">
       <label for="logs-priority"
+             class="fw-bold"
              i18n>Priority:</label>
       <select id="logs-priority"
-              class="form-control"
+              class="form-select"
               [(ngModel)]="priority"
               (ngModelChange)="filterLogs()">
         <option *ngFor="let prio of priorities"
@@ -103,15 +105,14 @@
       </select>
     </div>
 
-    <div class="form-group">
+    <div class="col-md-3 me-3">
       <label for="logs-keyword"
+             class="fw-bold"
              i18n>Keyword:</label>
       <div class="input-group">
-        <div class="input-group-prepend">
-          <span class="input-group-text">
-            <i [ngClass]="[icons.search]"></i>
-          </span>
-        </div>
+        <span class="input-group-text">
+          <i [ngClass]="[icons.search]"></i>
+        </span>
 
         <input class="form-control"
                id="logs-keyword"
@@ -119,19 +120,18 @@
                [(ngModel)]="search"
                (keyup)="filterLogs()">
 
-        <div class="input-group-append">
-          <button type="button"
-                  class="btn btn-light"
-                  (click)="clearSearchKey()"
-                  title="Clear">
-            <i class="icon-prepend {{ icons.destroy }}"></i>
-          </button>
-        </div>
+        <button type="button"
+                class="btn btn-light"
+                (click)="clearSearchKey()"
+                title="Clear">
+          <i class="icon-prepend {{ icons.destroy }}"></i>
+        </button>
       </div>
     </div>
 
-    <div class="form-group">
+    <div class="col-md-3 me-3">
       <label for="logs-date"
+             class="fw-bold"
              i18n>Date:</label>
       <div class="input-group">
         <input class="form-control"
@@ -143,30 +143,30 @@
                (click)="d.open()"
                [(ngModel)]="selectedDate"
                (ngModelChange)="filterLogs()">
-        <span class="input-group-append">
-          <button type="button"
-                  class="btn btn-light"
-                  (click)="clearDate()"
-                  title="Clear">
-            <i class="icon-prepend {{ icons.destroy }}"></i>
-          </button>
-        </span>
+        <button type="button"
+                class="btn btn-light"
+                (click)="clearDate()"
+                title="Clear">
+          <i class="icon-prepend {{ icons.destroy }}"></i>
+        </button>
       </div>
     </div>
 
-    <div class="form-group">
-      <label i18n>Time range:</label>
+    <div class="col-md-5">
+      <label i18n
+             class="fw-bold">Time range:</label>
+      <div class="d-flex">
       <ngb-timepicker [spinners]="false"
                       [(ngModel)]="startTime"
                       (ngModelChange)="filterLogs()"></ngb-timepicker>
 
-      <span>&nbsp;&mdash;&nbsp;</span>
+      <span class="mt-2">&nbsp;&mdash;&nbsp;</span>
 
       <ngb-timepicker [spinners]="false"
                       [(ngModel)]="endTime"
                       (ngModelChange)="filterLogs()"></ngb-timepicker>
-    </div>
-  </div>
+    </div></div>
+  </div></div>
 </ng-template>
 
 <ng-template #noEntriesTpl>
