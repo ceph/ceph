@@ -329,7 +329,7 @@ int process_request(const RGWProcessEnv& penv,
   {
     s->trace_enabled = tracing::rgw::tracer.is_enabled();
     std::string script;
-    auto rc = rgw::lua::read_script(s, penv.lua_manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
+    auto rc = rgw::lua::read_script(s, penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {
@@ -414,7 +414,7 @@ done:
       }
     }
     std::string script;
-    auto rc = rgw::lua::read_script(s, penv.lua_manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
+    auto rc = rgw::lua::read_script(s, penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {

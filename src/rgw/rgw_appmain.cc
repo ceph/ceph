@@ -407,8 +407,6 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
   env.auth_registry = rgw::auth::StrategyRegistry::create(
       dpp->get_cct(), *implicit_tenant_context, env.driver);
   env.ratelimiting = ratelimiter.get();
-  env.lua_background = lua_background.get();
-  env.lua_manager = env.driver->get_lua_manager();
 
   int fe_count = 0;
   for (multimap<string, RGWFrontendConfig *>::iterator fiter = fe_map.begin();
@@ -472,8 +470,8 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     fe_pauser = std::make_unique<RGWFrontendPauser>(fes, pusher.get());
     rgw_pauser = std::make_unique<RGWPauser>();
     rgw_pauser->add_pauser(fe_pauser.get());
-    if (lua_background) {
-      rgw_pauser->add_pauser(lua_background.get());
+    if (env.lua.background) {
+      rgw_pauser->add_pauser(env.lua.background);
     }
     reloader = std::make_unique<RGWRealmReloader>(
         env, *implicit_tenant_context, service_map_meta, rgw_pauser.get());
@@ -536,10 +534,13 @@ void rgw::AppMain::init_lua()
   }
 #endif
 
+  env.lua.manager = env.driver->get_lua_manager();
+
   if (driver->get_name() == "rados") { /* Supported for only RadosStore */
     lua_background = std::make_unique<
       rgw::lua::Background>(driver, dpp->get_cct(), driver->get_luarocks_path());
     lua_background->start();
+    env.lua.background = lua_background.get();
   }
 } /* init_lua */
 

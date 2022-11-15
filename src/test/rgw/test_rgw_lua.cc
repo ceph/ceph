@@ -774,7 +774,7 @@ TEST(TestRGWLuaBackground, RequestScript)
   )";
 
   DEFINE_REQ_STATE;
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
 
   // to make sure test is consistent we have to puase the background
   lua_background.pause();
@@ -925,7 +925,7 @@ TEST(TestRGWLuaBackground, TableValues)
   )";
 
   DEFINE_REQ_STATE;
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
@@ -946,7 +946,7 @@ TEST(TestRGWLuaBackground, TablePersist)
   )";
 
   DEFINE_REQ_STATE;
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
 
   auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
@@ -980,7 +980,7 @@ TEST(TestRGWLuaBackground, TableValuesFromRequest)
   )";
 
   DEFINE_REQ_STATE;
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
 
   s.tagset.add_tag("key1", "val1");
   s.tagset.add_tag("key2", "val1");
@@ -1010,7 +1010,7 @@ TEST(TestRGWLuaBackground, TableInvalidValue)
   )";
 
   DEFINE_REQ_STATE;
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
   s.tagset.add_tag("key1", "val1");
   s.tagset.add_tag("key2", "val2");
 
@@ -1036,7 +1036,7 @@ TEST(TestRGWLuaBackground, TableErase)
   )";
 
   DEFINE_REQ_STATE;
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
 
   auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
@@ -1078,7 +1078,7 @@ TEST(TestRGWLuaBackground, TableIterate)
   )";
 
   DEFINE_REQ_STATE;
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
@@ -1104,7 +1104,7 @@ TEST(TestRGWLuaBackground, TableIncrement)
   )";
 
   DEFINE_REQ_STATE;
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
@@ -1127,7 +1127,7 @@ TEST(TestRGWLuaBackground, TableIncrementBy)
   )";
 
   DEFINE_REQ_STATE;
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
@@ -1148,7 +1148,7 @@ TEST(TestRGWLuaBackground, TableDecrement)
   )";
 
   DEFINE_REQ_STATE;
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
@@ -1171,7 +1171,7 @@ TEST(TestRGWLuaBackground, TableDecrementBy)
   )";
 
   DEFINE_REQ_STATE;
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
@@ -1189,7 +1189,7 @@ TEST(TestRGWLuaBackground, TableIncrementValueError)
   )";
 
   DEFINE_REQ_STATE;
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
 
   auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_NE(rc, 0);
@@ -1225,7 +1225,7 @@ TEST(TestRGWLuaBackground, TableIncrementError)
   )";
 
   DEFINE_REQ_STATE;
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
 
   auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_NE(rc, 0);
@@ -1309,7 +1309,7 @@ TEST(TestRGWLua, Data)
   TestBackground lua_background(store.get(), "");
   DEFINE_REQ_STATE;
   s.host_id = "foo";
-  pe.lua_background = &lua_background;
+  pe.lua.background = &lua_background;
   lua::RGWObjFilter filter(&s, script);
   bufferlist bl;
   bl.append("The quick brown fox jumps over the lazy dog");

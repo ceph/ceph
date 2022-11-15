@@ -103,9 +103,9 @@ int RGWObjFilter::execute(bufferlist& bl, off_t offset, const char* op_name) con
   lua_pushinteger(L, offset);
   lua_setglobal(L, "Offset");
 
-  if (s->penv.lua_background) {
+  if (s->penv.lua.background) {
     // create the "RGW" table
-    s->penv.lua_background->create_background_metatable(L);
+    s->penv.lua.background->create_background_metatable(L);
     lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
     ceph_assert(lua_istable(L, -1));
   }
