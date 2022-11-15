@@ -4,7 +4,7 @@
   </div>
   <ng-content></ng-content>
 </ng-template>
-<i [ngClass]="[icons.questionCircle]"
+<i [ngClass]="iconClass ? iconClass : [icons.questionCircle]"
    aria-hidden="true"
    [ngbPopover]="popoverTpl"
    (click)="$event.preventDefault();">

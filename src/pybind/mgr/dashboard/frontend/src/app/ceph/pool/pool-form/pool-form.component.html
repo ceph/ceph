@@ -45,7 +45,7 @@
                  for="poolType"
                  i18n>Pool type</label>
           <div class="cd-col-form-input">
-            <select class="form-control"
+            <select class="form-select"
                     id="poolType"
                     formControlName="poolType"
                     name="poolType">
@@ -69,7 +69,7 @@
                    class="cd-col-form-label"
                    for="pgAutoscaleMode">PG Autoscale</label>
             <div class="cd-col-form-input">
-              <select class="form-control"
+              <select class="form-select"
                       id="pgAutoscaleMode"
                       name="pgAutoscaleMode"
                       formControlName="pgAutoscaleMode">
@@ -203,8 +203,8 @@
                    class="cd-col-form-label"
                    for="erasureProfile">Erasure code profile</label>
             <div class="cd-col-form-input">
-              <div class="input-group">
-                <select class="form-control"
+              <div class="input-group mb-1">
+                <select class="form-select"
                         id="erasureProfile"
                         name="erasureProfile"
                         formControlName="erasureProfile">
@@ -222,34 +222,32 @@
                     {{ ecp.name }}
                   </option>
                 </select>
-                <span class="input-group-append">
-                  <button class="btn btn-light"
-                          [ngClass]="{'active': data.erasureInfo}"
-                          id="ecp-info-button"
-                          type="button"
-                          (click)="data.erasureInfo = !data.erasureInfo">
-                    <i [ngClass]="[icons.questionCircle]"
-                       aria-hidden="true"></i>
-                  </button>
-                  <button class="btn btn-light"
-                          type="button"
-                          *ngIf="!editing"
-                          (click)="addErasureCodeProfile()">
-                    <i [ngClass]="[icons.add]"
-                       aria-hidden="true"></i>
-                  </button>
-                  <button class="btn btn-light"
-                          type="button"
-                          *ngIf="!editing"
-                          ngbTooltip="This profile can't be deleted as it is in use."
-                          i18n-ngbTooltip
-                          triggers="manual"
-                          #ecpDeletionBtn="ngbTooltip"
-                          (click)="deleteErasureCodeProfile()">
-                    <i [ngClass]="[icons.trash]"
-                       aria-hidden="true"></i>
-                  </button>
-                </span>
+                <button class="btn btn-light"
+                        [ngClass]="{'active': data.erasureInfo}"
+                        id="ecp-info-button"
+                        type="button"
+                        (click)="data.erasureInfo = !data.erasureInfo">
+                  <i [ngClass]="[icons.questionCircle]"
+                     aria-hidden="true"></i>
+                </button>
+                <button class="btn btn-light"
+                        type="button"
+                        *ngIf="!editing"
+                        (click)="addErasureCodeProfile()">
+                  <i [ngClass]="[icons.add]"
+                     aria-hidden="true"></i>
+                </button>
+                <button class="btn btn-light"
+                        type="button"
+                        *ngIf="!editing"
+                        ngbTooltip="This profile can't be deleted as it is in use."
+                        i18n-ngbTooltip
+                        triggers="manual"
+                        #ecpDeletionBtn="ngbTooltip"
+                        (click)="deleteErasureCodeProfile()">
+                  <i [ngClass]="[icons.trash]"
+                     aria-hidden="true"></i>
+                </button>
               </div>
               <span class="form-text text-muted"
                     id="ecp-info-block"
@@ -313,7 +311,7 @@
               </ng-template>
               <div *ngIf="current.rules.length > 0; else noRules">
                 <div class="input-group">
-                  <select class="form-control"
+                  <select class="form-select"
                           id="crushRule"
                           formControlName="crushRule"
                           name="crushSet">
@@ -324,38 +322,36 @@
                       {{ rule.rule_name }}
                     </option>
                   </select>
-                  <span class="input-group-append">
-                    <button class="btn btn-light"
-                            [ngClass]="{'active': data.crushInfo}"
-                            id="crush-info-button"
-                            type="button"
-                            ngbTooltip="Placement and
-                            replication strategies or distribution policies that allow to
-                            specify how CRUSH places data replicas."
-                            i18n-ngbTooltip
-                            (click)="data.crushInfo = !data.crushInfo">
-                      <i [ngClass]="[icons.questionCircle]"
-                         aria-hidden="true"></i>
-                    </button>
-                    <button class="btn btn-light"
-                            type="button"
-                            *ngIf="isReplicated && !editing"
-                            (click)="addCrushRule()">
-                      <i [ngClass]="[icons.add]"
-                         aria-hidden="true"></i>
-                    </button>
-                    <button class="btn btn-light"
-                            *ngIf="isReplicated && !editing"
-                            type="button"
-                            ngbTooltip="This rule can't be deleted as it is in use."
-                            i18n-ngbTooltip
-                            triggers="manual"
-                            #crushDeletionBtn="ngbTooltip"
-                            (click)="deleteCrushRule()">
-                      <i [ngClass]="[icons.trash]"
-                         aria-hidden="true"></i>
-                    </button>
-                  </span>
+                  <button class="btn btn-light"
+                          [ngClass]="{'active': data.crushInfo}"
+                          id="crush-info-button"
+                          type="button"
+                          ngbTooltip="Placement and
+                          replication strategies or distribution policies that allow to
+                          specify how CRUSH places data replicas."
+                          i18n-ngbTooltip
+                          (click)="data.crushInfo = !data.crushInfo">
+                    <i [ngClass]="[icons.questionCircle]"
+                       aria-hidden="true"></i>
+                  </button>
+                  <button class="btn btn-light"
+                          type="button"
+                          *ngIf="isReplicated && !editing"
+                          (click)="addCrushRule()">
+                    <i [ngClass]="[icons.add]"
+                       aria-hidden="true"></i>
+                  </button>
+                  <button class="btn btn-light"
+                          *ngIf="isReplicated && !editing"
+                          type="button"
+                          ngbTooltip="This rule can't be deleted as it is in use."
+                          i18n-ngbTooltip
+                          triggers="manual"
+                          #crushDeletionBtn="ngbTooltip"
+                          (click)="deleteCrushRule()">
+                    <i [ngClass]="[icons.trash]"
+                       aria-hidden="true"></i>
+                  </button>
                 </div>
 
                 <div class="form-text text-muted"
@@ -429,7 +425,7 @@
                    class="cd-col-form-label"
                    for="mode">Mode</label>
             <div class="cd-col-form-input">
-              <select class="form-control"
+              <select class="form-select"
                       id="mode"
                       name="mode"
                       formControlName="mode">
@@ -447,7 +443,7 @@
                      class="cd-col-form-label"
                      for="algorithm">Algorithm</label>
               <div class="cd-col-form-input">
-                <select class="form-control"
+                <select class="form-select"
                         id="algorithm"
                         name="algorithm"
                         formControlName="algorithm">

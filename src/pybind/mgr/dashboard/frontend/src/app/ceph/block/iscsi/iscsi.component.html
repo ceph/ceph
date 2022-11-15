@@ -1,15 +1,19 @@
 <cd-iscsi-tabs></cd-iscsi-tabs>
 
 <legend i18n>Gateways</legend>
-<cd-table [data]="gateways"
-          (fetchData)="refresh()"
-          [columns]="gatewaysColumns">
-</cd-table>
+<div>
+  <cd-table [data]="gateways"
+            (fetchData)="refresh()"
+            [columns]="gatewaysColumns">
+  </cd-table>
+</div>
 
 <legend i18n>Images</legend>
-<cd-table [data]="images"
-          [columns]="imagesColumns">
-</cd-table>
+<div>
+  <cd-table [data]="images"
+            [columns]="imagesColumns">
+  </cd-table>
+</div>
 
 <ng-template #iscsiSparklineTpl
              let-row="row"

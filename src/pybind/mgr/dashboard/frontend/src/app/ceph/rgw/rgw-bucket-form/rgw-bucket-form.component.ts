@@ -332,7 +332,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   }
 
   openConfigModal() {
-    const modalRef = this.modalService.show(RgwConfigModalComponent);
+    const modalRef = this.modalService.show(RgwConfigModalComponent, null, { size: 'lg' });
     modalRef.componentInstance.configForm
       .get('encryptionType')
       .setValue(this.bucketForm.getValue('encryption_type'));

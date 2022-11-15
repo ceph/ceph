@@ -7,9 +7,9 @@
        [routerLinkActiveOptions]="{exact: true}"
        i18n>Active Alerts
     <small *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
-        class="badge badge-danger ml-1">{{ prometheusAlertService.activeCriticalAlerts }}</small>
+        class="badge badge-danger ms-1">{{ prometheusAlertService.activeCriticalAlerts }}</small>
     <small *ngIf="prometheusAlertService.activeWarningAlerts > 0"
-        class="badge badge-warning ml-1">{{ prometheusAlertService.activeWarningAlerts }}</small></a>
+        class="badge badge-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</small></a>
   </li>
   <li class="nav-item">
     <a class="nav-link"
