@@ -291,13 +291,6 @@ int RGWBucketReshard::clear_resharding(const DoutPrefixProvider *dpp,
 				       const RGWBucketInfo& bucket_info)
 {
   int ret;
-  ret = clear_index_shard_reshard_status(dpp, store, bucket_info);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "RGWBucketReshard::" << __func__ <<
-      " ERROR: error clearing reshard status from index shard " <<
-      cpp_strerror(-ret) << dendl;
-    return ret;
-  }
 
   // default constructed = NOT_RESHARDING
   cls_rgw_bucket_instance_entry instance_entry;
