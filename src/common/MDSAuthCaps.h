@@ -289,6 +289,15 @@ public:
     return false;
   }
 
+  bool rootsquash_in_caps() const {
+    for (const MDSCapGrant &g : grants) {
+      if (g.match.root_squash) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
