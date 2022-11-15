@@ -41,8 +41,8 @@ void DataScan::usage()
 {
   std::cout << "Usage: \n"
     << "  cephfs-data-scan init [--force-init]\n"
-    << "  cephfs-data-scan scan_extents [--force-pool] [--worker_n N --worker_m M] <data pool name>\n"
-    << "  cephfs-data-scan scan_inodes [--force-pool] [--force-corrupt] [--worker_n N --worker_m M] <data pool name>\n"
+    << "  cephfs-data-scan scan_extents [--force-pool] [--worker_n N --worker_m M] [<data pool name> [<extra data pool name> ...]]\n"
+    << "  cephfs-data-scan scan_inodes [--force-pool] [--force-corrupt] [--worker_n N --worker_m M] [<data pool name>]\n"
     << "  cephfs-data-scan pg_files <path> <pg id> [<pg id>...]\n"
     << "  cephfs-data-scan scan_links\n"
     << "\n"
@@ -53,7 +53,7 @@ void DataScan::usage()
     << "    --worker_n: Worker number, range 0-(worker_m-1)\n"
     << "\n"
     << "  cephfs-data-scan scan_frags [--force-corrupt]\n"
-    << "  cephfs-data-scan cleanup <data pool name>\n"
+    << "  cephfs-data-scan cleanup [<data pool name>]\n"
     << std::endl;
 
   generic_client_usage();
@@ -259,32 +259,43 @@ int DataScan::main(const std::vector<const char*> &args)
     return pge.scan_path(pg_files_path);
   }
 
+  bool autodetect_data_pools = false;
+
   // Initialize data_io for those commands that need it
   if (command == "scan_inodes" ||
       command == "scan_extents" ||
       command == "cleanup") {
+    data_pool_id = fs->mds_map.get_first_data_pool();
+
+    std::string pool_name;
+    r = rados.pool_reverse_lookup(data_pool_id, &pool_name);
+    if (r < 0) {
+      std::cerr << "Failed to resolve data pool: " << cpp_strerror(r)
+		<< std::endl;
+      return r;
+    }
+
     if (data_pool_name.empty()) {
-      std::cerr << "Data pool not specified" << std::endl;
-      return -EINVAL;
-    }
-
-    data_pool_id = rados.pool_lookup(data_pool_name.c_str());
-    if (data_pool_id < 0) {
-      std::cerr << "Data pool '" << data_pool_name << "' not found!" << std::endl;
-      return -ENOENT;
-    } else {
-      dout(4) << "data pool '" << data_pool_name
-        << "' has ID " << data_pool_id << dendl;
-    }
-
-    if (data_pool_id != fs->mds_map.get_first_data_pool()) {
+      autodetect_data_pools = true;
+      data_pool_name = pool_name;
+    } else if (data_pool_name != pool_name) {
       std::cerr << "Warning: pool '" << data_pool_name << "' is not the "
         "main CephFS data pool!" << std::endl;
       if (!force_pool) {
         std::cerr << "Use --force-pool to continue" << std::endl;
         return -EINVAL;
       }
+
+      data_pool_id = rados.pool_lookup(data_pool_name.c_str());
+      if (data_pool_id < 0) {
+	std::cerr << "Data pool '" << data_pool_name << "' not found!"
+		  << std::endl;
+	return -ENOENT;
+      }
     }
+
+    dout(4) << "data pool '" << data_pool_name << "' has ID " << data_pool_id
+	    << dendl;
 
     dout(4) << "opening data pool '" << data_pool_name << "'" << dendl;
     r = rados.ioctx_create(data_pool_name.c_str(), data_io);
@@ -295,6 +306,25 @@ int DataScan::main(const std::vector<const char*> &args)
 
   // Initialize extra data_ios for those commands that need it
   if (command == "scan_extents") {
+    if (autodetect_data_pools) {
+      ceph_assert(extra_data_pool_names.empty());
+
+      for (auto &pool_id : fs->mds_map.get_data_pools()) {
+	if (pool_id == data_pool_id) {
+	  continue;
+	}
+
+	std::string pool_name;
+	r = rados.pool_reverse_lookup(pool_id, &pool_name);
+	if (r < 0) {
+	  std::cerr << "Failed to resolve data pool: " << cpp_strerror(r)
+		    << std::endl;
+	  return r;
+	}
+	extra_data_pool_names.insert(pool_name);
+      }
+    }
+
     for (auto &data_pool_name: extra_data_pool_names) {
       int64_t pool_id = rados.pool_lookup(data_pool_name.c_str());
       if (data_pool_id < 0) {
