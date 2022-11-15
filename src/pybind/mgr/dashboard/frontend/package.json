@@ -56,7 +56,7 @@
     "@circlon/angular-tree-component": "10.0.0",
     "@ng-bootstrap/ng-bootstrap": "12.1.2",
     "@popperjs/core": "2.10.2",
-    "@swimlane/ngx-datatable": "18.0.0",
+    "@swimlane/ngx-datatable": "20.1.0",
     "@types/file-saver": "2.0.1",
     "async-mutex": "0.2.4",
     "bootstrap": "5.0.0",
