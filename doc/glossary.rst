@@ -120,7 +120,8 @@
                 `https://github.com/ceph`_.
 
 	Ceph Point Release
-		Any ad-hoc release that includes only bug or security fixes.
+                Any ad hoc release that includes only bug fixes and security
+                fixes.
 
 	Ceph Project
                 The aggregate term for the people, software, mission and
