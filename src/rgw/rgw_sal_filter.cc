@@ -598,6 +598,7 @@ int FilterUser::create_bucket(const DoutPrefixProvider* dpp,
 
   Bucket* fb = new FilterBucket(std::move(nb), this);
   bucket_out->reset(fb);
+  ldpp_dout(dpp, 20) << "AMIN: sal_filter create bucket " << __func__<< dendl;
   return 0;
 }
 

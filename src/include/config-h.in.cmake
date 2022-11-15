@@ -157,6 +157,9 @@
 /* define if radosgw has openssl support */
 #cmakedefine WITH_CURL_OPENSSL
 
+/*define if S3 filter enabled */
+#cmakedefine WITH_RADOSGW_S3_FILTER
+
 /* define if HAVE_THREAD_SAFE_RES_QUERY */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
 

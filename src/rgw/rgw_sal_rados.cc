@@ -293,6 +293,7 @@ int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
 
   bucket_out->swap(bucket);
 
+  ldpp_dout(dpp, 20) << "AMIN: rados_filter create bucket " << __func__ << dendl;
   return ret;
 }
 

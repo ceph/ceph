@@ -2296,6 +2296,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
   rgw_placement_rule selected_placement_rule;
   RGWZonePlacementInfo rule_info;
 
+  ldpp_dout(dpp, 20) << "AMIN: RGW Rados create bucket" << dendl;
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
     ret = svc.zone->select_bucket_placement(dpp, owner, zonegroup_id, placement_rule,

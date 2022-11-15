@@ -32,6 +32,10 @@
 #include "store/dbstore/config/store.h"
 #endif
 
+#ifdef WITH_RADOSGW_s3_FILTER
+#include "rgw_sal_S3.h"
+#endif
+
 #ifdef WITH_RADOSGW_MOTR
 #include "rgw_sal_motr.h"
 #endif
@@ -52,6 +56,9 @@ extern rgw::sal::Store* newMotrStore(CephContext *cct);
 #endif
 #ifdef WITH_RADOSGW_DAOS
 extern rgw::sal::Store* newDaosStore(CephContext *cct);
+#endif
+#ifdef WITH_RADOSGW_S3_FILTER
+extern rgw::sal::Store* newS3Filter(rgw::sal::Store* next);
 #endif
 extern rgw::sal::Store* newBaseFilter(rgw::sal::Store* next);
 
@@ -248,6 +255,20 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
     }
   }
 
+#ifdef WITH_RADOSGW_S3_FILTER
+  else if (cfg.filter_name.compare("s3") == 0) {
+    rgw::sal::Store* next = store;
+    store = newS3Filter(next);
+
+    if (store->initialize(cct, dpp) < 0) {
+      delete store;
+      delete next;
+      return nullptr;
+    }
+  }
+#endif
+
+
   return store;
 }
 
@@ -367,12 +388,22 @@ StoreManager::Config StoreManager::get_config(bool admin, CephContext* cct)
   }
 #endif
 
+  //FIXME : AMIN : uncomment below lines
+  cfg.filter_name = "s3";
   // Get the filter
+  /*
   cfg.filter_name = "none";
   const auto& config_filter = g_conf().get_val<std::string>("rgw_filter");
   if (config_filter == "base") {
     cfg.filter_name = "base";
   }
+#ifdef WITH_RADOSGW_S3_FILTER
+  
+  else if (config_filter == "s3") {
+    cfg.filter_name= "s3";
+  }
+#endif
+*/
 
   return cfg;
 }
