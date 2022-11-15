@@ -366,8 +366,8 @@ class TestDataScan(CephFSTestCase):
 
         self.fs.journal_tool(["journal", "reset", "--force"], 0)
         self.fs.data_scan(["init"])
-        self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()], worker_count=workers)
-        self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()], worker_count=workers)
+        self.fs.data_scan(["scan_extents"], worker_count=workers)
+        self.fs.data_scan(["scan_inodes"], worker_count=workers)
         self.fs.data_scan(["scan_links"])
 
         # Mark the MDS repaired
@@ -481,8 +481,8 @@ class TestDataScan(CephFSTestCase):
 
         # Run data-scan, observe that it inserts our dentry back into the correct fragment
         # by checking the omap now has the dentry's key again
-        self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()])
-        self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()])
+        self.fs.data_scan(["scan_extents"])
+        self.fs.data_scan(["scan_inodes"])
         self.fs.data_scan(["scan_links"])
         self.assertIn(victim_key, self._dirfrag_keys(frag_obj_id))
 
