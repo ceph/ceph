@@ -180,6 +180,7 @@ void RGWRealmReloader::reload()
    * the dynamic reconfiguration. */
   env.auth_registry = rgw::auth::StrategyRegistry::create(
       cct, implicit_tenants, env.driver);
+  env.lua.manager = env.driver->get_lua_manager();
 
   ldpp_dout(&dp, 1) << "Resuming frontends with new realm configuration." << dendl;
 

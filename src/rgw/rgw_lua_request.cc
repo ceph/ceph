@@ -879,8 +879,8 @@ int execute(
   lua_pushcclosure(L, RequestLog, FOUR_UPVALS);
   lua_rawset(L, -3);
   
-  if (s->penv.lua_background) {
-    s->penv.lua_background->create_background_metatable(L);
+  if (s->penv.lua.background) {
+    s->penv.lua.background->create_background_metatable(L);
     lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
     ceph_assert(lua_istable(L, -1));
   }

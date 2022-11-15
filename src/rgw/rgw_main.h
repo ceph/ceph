@@ -25,7 +25,6 @@
 #include "rgw_realm_reloader.h"
 #include "rgw_ldap.h"
 #include "rgw_lua.h"
-#include "rgw_lua_background.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_ratelimit.h"
 
@@ -50,6 +49,8 @@ public:
 };
 
 namespace rgw {
+
+namespace lua { class Background; }
 
 class RGWLib;
 class AppMain {
