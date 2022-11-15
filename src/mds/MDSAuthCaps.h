@@ -285,6 +285,15 @@ public:
     }
   }
 
+  bool root_squash_in_caps() const {
+    for (const MDSCapGrant &g : grants) {
+      if (g.match.root_squash) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 private:
   std::vector<MDSCapGrant> grants;
