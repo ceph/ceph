@@ -404,7 +404,7 @@ public:
 
   bool should_split() const {
     return g_conf()->mds_bal_split_size > 0 &&
-           (int)get_frag_size() > g_conf()->mds_bal_split_size;
+      ((int)get_frag_size() + (int)get_num_snap_items()) > g_conf()->mds_bal_split_size;
   }
   bool should_split_fast() const;
   bool should_merge() const;
