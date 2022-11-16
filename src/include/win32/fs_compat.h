@@ -13,6 +13,8 @@
 // Those definitions allow handling information coming from Ceph and should
 // not be passed to Windows functions.
 
+#pragma once
+
 #define S_IFLNK   0120000
 
 #define S_ISTYPE(m, TYPE) ((m & S_IFMT) == TYPE)
