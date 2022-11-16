@@ -3669,7 +3669,7 @@ bool CDir::should_merge() const
       return false;
   }
 
-  return (int)get_frag_size() < g_conf()->mds_bal_merge_size;
+  return ((int)get_frag_size() + (int)get_num_snap_items()) < g_conf()->mds_bal_merge_size;
 }
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(CDir, co_dir, mds_co);
