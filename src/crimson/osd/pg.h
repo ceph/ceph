@@ -716,6 +716,7 @@ private:
   friend struct PGFacade;
   friend class InternalClientRequest;
   friend class WatchTimeoutRequest;
+  friend class SnapTrimRequest;
 private:
   seastar::future<bool> find_unfound() {
     return seastar::make_ready_future<bool>(true);
