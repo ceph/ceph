@@ -717,6 +717,7 @@ private:
   friend class InternalClientRequest;
   friend class WatchTimeoutRequest;
   friend class SnapTrimRequest;
+  friend class SnapTrimObjSubRequest;
 private:
   seastar::future<bool> find_unfound() {
     return seastar::make_ready_future<bool>(true);

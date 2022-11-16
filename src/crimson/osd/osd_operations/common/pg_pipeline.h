@@ -12,6 +12,7 @@ class CommonPGPipeline {
 protected:
   friend class InternalClientRequest;
   friend class SnapTrimRequest;
+  friend class SnapTrimObjSubRequest;
 
   struct WaitForActive : OrderedExclusivePhaseT<WaitForActive> {
     static constexpr auto type_name = "CommonPGPipeline:::wait_for_active";

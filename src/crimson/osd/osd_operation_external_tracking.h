@@ -297,4 +297,11 @@ struct EventBackendRegistry<osd::PGAdvanceMap> {
   }
 };
 
+template <>
+struct EventBackendRegistry<osd::SnapTrimObjSubRequest> {
+  static std::tuple<> get_backends() {
+    return {};
+  }
+};
+
 } // namespace crimson
