@@ -141,6 +141,7 @@ public:
   static const char *PURGED_SNAP_EPOCH_PREFIX;
   static const char *PURGED_SNAP_PREFIX;
 
+#ifndef WITH_SEASTAR
   struct Scrubber {
     CephContext *cct;
     ObjectStore *store;
@@ -187,6 +188,7 @@ public:
     ObjectStore::CollectionHandle& ch,
     ghobject_t hoid,
     unsigned max);
+#endif
 
   static void record_purged_snaps(
     CephContext *cct,

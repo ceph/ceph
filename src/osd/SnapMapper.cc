@@ -657,6 +657,7 @@ void SnapMapper::record_purged_snaps(
 }
 
 
+#ifndef WITH_SEASTAR
 bool SnapMapper::Scrubber::_parse_p()
 {
   if (!psit->valid()) {
@@ -760,6 +761,7 @@ void SnapMapper::Scrubber::run()
   psit = ObjectMap::ObjectMapIterator();
   mapit = ObjectMap::ObjectMapIterator();
 }
+#endif // !WITH_SEASTAR
 
 
 // -------------------------------------
@@ -816,6 +818,7 @@ std::string SnapMapper::convert_legacy_key(
     + "_" + object_suffix;
 }
 
+#ifndef WITH_SEASTAR
 int SnapMapper::convert_legacy(
   CephContext *cct,
   ObjectStore *store,
@@ -874,3 +877,4 @@ int SnapMapper::convert_legacy(
   }
   return 0;
 }
+#endif // !WITH_SEASTAR
