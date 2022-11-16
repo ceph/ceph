@@ -22,8 +22,8 @@
 #include "common/debug.h"
 #include "include/ceph_assert.h"
 #include "gtest/gtest.h"
-#include "rgw/rgw_token.h"
-#include "rgw/rgw_b64.h"
+#include "rgw_token.h"
+#include "rgw_b64.h"
 
 #define dout_subsys ceph_subsys_rgw
 

@@ -5,9 +5,9 @@
 #include "svc_meta_be_params.h"
 #include "svc_mdlog.h"
 
-#include "rgw/rgw_tools.h"
-#include "rgw/rgw_metadata.h"
-#include "rgw/rgw_mdlog.h"
+#include "rgw_tools.h"
+#include "rgw_metadata.h"
+#include "rgw_mdlog.h"
 
 #define dout_subsys ceph_subsys_rgw
 

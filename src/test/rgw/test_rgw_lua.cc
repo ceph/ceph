@@ -1,12 +1,12 @@
 #include <gtest/gtest.h>
 #include "common/ceph_context.h"
-#include "rgw/rgw_common.h"
-#include "rgw/rgw_auth.h"
-#include "rgw/rgw_process.h"
-#include "rgw/rgw_sal_rados.h"
-#include "rgw/rgw_lua_request.h"
-#include "rgw/rgw_lua_background.h"
-#include "rgw/rgw_lua_data_filter.h"
+#include "rgw_common.h"
+#include "rgw_auth.h"
+#include "rgw_process.h"
+#include "rgw_sal_rados.h"
+#include "rgw_lua_request.h"
+#include "rgw_lua_background.h"
+#include "rgw_lua_data_filter.h"
 
 using namespace std;
 using namespace rgw;
