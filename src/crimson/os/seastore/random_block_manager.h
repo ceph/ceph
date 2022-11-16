@@ -95,12 +95,6 @@ public:
   virtual void mark_space_used(paddr_t paddr, size_t len) = 0;
   virtual void mark_space_free(paddr_t paddr, size_t len) = 0;
 
-  using abort_allocation_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg
-    >;
-  virtual abort_allocation_ertr::future<> abort_allocation(Transaction &t) = 0;
-
   virtual void complete_allocation(paddr_t addr, size_t size) = 0;
 
   virtual size_t get_size() const = 0;

@@ -59,7 +59,6 @@ public:
    */
   paddr_t alloc_extent(size_t size) final; // allocator, return blocks
 
-  abort_allocation_ertr::future<> abort_allocation(Transaction &t) final;
   void complete_allocation(paddr_t addr, size_t size) final;
 
   size_t get_start_rbm_addr() const {
@@ -70,11 +69,6 @@ public:
   };
   extent_len_t get_block_size() const final { return device->get_block_size(); }
 
-  /*
-   * We will have mulitple partitions (circularjournals and randbomblockmanagers)
-   * on a device, so start and end location of the device are needed to
-   * support such case.
-   */
   BlockRBManager(RBMDevice * device, std::string path, bool detailed)
     : device(device), path(path) {
     allocator.reset(new AvlAllocator(detailed));

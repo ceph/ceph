@@ -62,16 +62,6 @@ paddr_t BlockRBManager::alloc_extent(size_t size)
   return paddr;
 }
 
-
-BlockRBManager::abort_allocation_ertr::future<> BlockRBManager::abort_allocation(
-    Transaction &t)
-{
-  /*
-   * TODO: clear all allocation infos associated with transaction in in-memory allocator
-   */
-  return abort_allocation_ertr::now();
-}
-
 void BlockRBManager::complete_allocation(
     paddr_t paddr, size_t size)
 {
