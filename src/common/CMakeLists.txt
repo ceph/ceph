@@ -173,6 +173,7 @@ elseif(AIX)
   list(APPEND common_srcs aix_errno.cc)
 elseif(WIN32)
   list(APPEND common_srcs win32/errno.cc)
+  list(APPEND common_srcs win32/wstring.cc)
 endif()
 
 if(WITH_EVENTTRACE)
