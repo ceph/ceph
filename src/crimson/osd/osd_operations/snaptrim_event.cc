@@ -10,6 +10,15 @@ namespace {
   }
 }
 
+namespace crimson {
+  template <>
+  struct EventBackendRegistry<osd::SnapTrimEvent> {
+    static std::tuple<> get_backends() {
+      return {};
+    }
+  };
+}
+
 namespace crimson::osd {
 
 void SnapTrimEvent::print(std::ostream &lhs) const
@@ -29,8 +38,56 @@ void SnapTrimEvent::dump_detail(Formatter *f) const
 
 seastar::future<> SnapTrimEvent::start()
 {
-  logger().debug("{}", __func__);
-  return seastar::now();
+  logger().debug("{}: {}", *this, __func__);
+  return with_pg(
+    pg->get_shard_services(), pg
+  ).finally([ref=IRef{this}, this] {
+    logger().debug("{}: complete", *ref);
+    return handle.complete();
+  });
+}
+
+CommonPGPipeline& SnapTrimEvent::pp()
+{
+  return pg->request_pg_pipeline;
+}
+
+seastar::future<> SnapTrimEvent::with_pg(
+  ShardServices &shard_services, Ref<PG> _pg)
+{
+  return interruptor::with_interruption([&shard_services, this] {
+    return enter_stage<interruptor>(
+      pp().wait_for_active
+    ).then_interruptible([this] {
+      return with_blocking_event<PGActivationBlocker::BlockingEvent,
+                                 interruptor>([this] (auto&& trigger) {
+        return pg->wait_for_active_blocker.wait(std::move(trigger));
+      });
+    }).then_interruptible([this] {
+      return enter_stage<interruptor>(
+        pp().recover_missing);
+    }).then_interruptible([] {
+      //return do_recover_missing(pg, get_target_oid());
+      return seastar::now();
+    }).then_interruptible([this] {
+      return enter_stage<interruptor>(
+        pp().get_obc);
+    }).then_interruptible([this] {
+      return enter_stage<interruptor>(
+        pp().process);
+    }).then_interruptible([&shard_services, this] {
+      std::vector<hobject_t> to_trim;
+      assert(!to_trim.empty());
+      for (const auto& object : to_trim) {
+        logger().debug("{}: trimming {}", object);
+        // TODO: start subop and add to subop blcoker
+      }
+      return seastar::now();
+    });
+  }, [this](std::exception_ptr eptr) {
+    // TODO: better debug output
+    logger().debug("{}: interrupted {}", *this, eptr);
+  }, pg);
 }
 
 } // namespace crimson::osd
