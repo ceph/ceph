@@ -14,9 +14,9 @@
 #include <iostream>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
-#include "rgw/rgw_common.h"
-#include "rgw/rgw_rados.h"
-#include "rgw/rgw_crypt.h"
+#include "rgw_common.h"
+#include "rgw_rados.h"
+#include "rgw_crypt.h"
 #include <gtest/gtest.h>
 #include "include/ceph_assert.h"
 #define dout_subsys ceph_subsys_rgw

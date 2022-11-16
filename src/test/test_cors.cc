@@ -17,8 +17,8 @@ extern "C"{
 #include "common/ceph_argparse.h"
 #include "common/Finisher.h"
 #include "global/global_init.h"
-#include "rgw/rgw_cors.h"
-#include "rgw/rgw_cors_s3.h"
+#include "rgw_cors.h"
+#include "rgw_cors_s3.h"
 
 using namespace std;
 

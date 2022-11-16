@@ -31,8 +31,8 @@ extern "C"{
 #include "common/ceph_argparse.h"
 #include "common/Finisher.h"
 #include "global/global_init.h"
-#include "rgw/rgw_common.h"
-#include "rgw/rgw_rados.h"
+#include "rgw_common.h"
+#include "rgw_rados.h"
 #include <gtest/gtest.h>
 
 using namespace std;

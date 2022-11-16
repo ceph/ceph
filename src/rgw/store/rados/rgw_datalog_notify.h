@@ -6,7 +6,7 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 
-#include "rgw/rgw_datalog.h"
+#include "rgw_datalog.h"
 
 namespace bc = boost::container;
 

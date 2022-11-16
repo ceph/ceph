@@ -6,7 +6,7 @@
 #include "svc_rados.h"
 #include "svc_zone.h"
 
-#include "rgw/rgw_zone.h"
+#include "rgw_zone.h"
 
 #include "cls/otp/cls_otp_client.h"
 #include "cls/log/cls_log_client.h"

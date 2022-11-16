@@ -48,7 +48,6 @@ set(librgw_common_srcs
   services/svc_user_rados.cc
   services/svc_zone.cc
   services/svc_zone_utils.cc
-  rgw_service.cc
   rgw_acl.cc
   rgw_acl_s3.cc
   rgw_acl_swift.cc
@@ -60,59 +59,38 @@ set(librgw_common_srcs
   rgw_basic_types.cc
   rgw_bucket.cc
   rgw_bucket_layout.cc
-  rgw_bucket_sync.cc
   rgw_cache.cc
-  rgw_d3n_datacache.cc
   rgw_common.cc
   rgw_compression.cc
-  rgw_etag_verifier.cc
   rgw_cors.cc
   rgw_cors_s3.cc
   rgw_env.cc
   rgw_es_query.cc
   rgw_formats.cc
-  rgw_gc.cc
-  rgw_gc_log.cc
   rgw_http_client.cc
   rgw_keystone.cc
   rgw_ldap.cc
   rgw_lc.cc
   rgw_lc_s3.cc
-  rgw_lc_tier.cc
   rgw_metadata.cc
   rgw_multi.cc
   rgw_multi_del.cc
+  rgw_multipart_meta_filter.cc
   rgw_obj_manifest.cc
+  rgw_period.cc
   rgw_pubsub.cc
+  rgw_realm.cc
   rgw_sync.cc
-  rgw_data_sync.cc
-  rgw_sync_counters.cc
-  rgw_sync_error_repo.cc
-  rgw_sync_module.cc
-  rgw_sync_module_aws.cc
-  rgw_sync_module_es.cc
-  rgw_sync_module_es_rest.cc
-  rgw_sync_module_log.cc
-  rgw_sync_module_pubsub.cc
   rgw_sync_policy.cc
   rgw_pubsub_push.cc
-  rgw_notify.cc
   rgw_notify_event_type.cc
   rgw_sync_module_pubsub_rest.cc
-  rgw_sync_trace.cc
-  rgw_trim_bilog.cc
-  rgw_trim_datalog.cc
-  rgw_trim_mdlog.cc
   rgw_period_history.cc
   rgw_period_puller.cc
   rgw_reshard.cc
   rgw_coroutine.cc
-  rgw_cr_rados.cc
   rgw_cr_rest.cc
-  rgw_cr_tools.cc
-  rgw_object_expirer_core.cc
   rgw_op.cc
-  rgw_otp.cc
   rgw_policy_s3.cc
   rgw_public_access.cc
   rgw_putobj.cc
@@ -127,23 +105,17 @@ set(librgw_common_srcs
   rgw_rest_conn.cc
   rgw_rest_log.cc
   rgw_rest_metadata.cc
-  rgw_rest_pubsub.cc
-  rgw_rest_pubsub_common.cc
   rgw_rest_ratelimit.cc
-  rgw_rest_realm.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
-  rgw_rest_user.cc
   rgw_s3select.cc
   rgw_role.cc
   rgw_sal.cc
   rgw_sal_filter.cc
-  rgw_sal_rados.cc
   rgw_string.cc
   rgw_tag.cc
   rgw_tag_s3.cc
   rgw_tools.cc
-  rgw_log_backing.cc
   rgw_user.cc
   rgw_website.cc
   rgw_xml.cc
@@ -163,9 +135,6 @@ set(librgw_common_srcs
   rgw_kmip_client.cc
   rgw_url.cc
   rgw_oidc_provider.cc
-  rgw_datalog.cc
-  rgw_datalog_notify.cc
-  cls_fifo_legacy.cc
   rgw_log.cc
   rgw_lua_request.cc
   rgw_lua_utils.cc
@@ -173,7 +142,49 @@ set(librgw_common_srcs
   rgw_lua_data_filter.cc
   rgw_bucket_encryption.cc
   rgw_tracer.cc
-  rgw_lua_background.cc)
+  rgw_lua_background.cc
+  store/rados/cls_fifo_legacy.cc
+  store/rados/rgw_bucket.cc
+  store/rados/rgw_bucket_sync.cc
+  store/rados/rgw_cr_rados.cc
+  store/rados/rgw_cr_tools.cc
+  store/rados/rgw_d3n_datacache.cc
+  store/rados/rgw_datalog.cc
+  store/rados/rgw_datalog_notify.cc
+  store/rados/rgw_data_sync.cc
+  store/rados/rgw_etag_verifier.cc
+  store/rados/rgw_gc.cc
+  store/rados/rgw_gc_log.cc
+  store/rados/rgw_lc_tier.cc
+  store/rados/rgw_log_backing.cc
+  store/rados/rgw_metadata.cc
+  store/rados/rgw_notify.cc
+  store/rados/rgw_obj_manifest.cc
+  store/rados/rgw_object_expirer_core.cc
+  store/rados/rgw_otp.cc
+  store/rados/rgw_period.cc
+  store/rados/rgw_rest_pubsub.cc
+  store/rados/rgw_rest_pubsub_common.cc
+  store/rados/rgw_rest_realm.cc
+  store/rados/rgw_rest_user.cc
+  store/rados/rgw_sal_rados.cc
+  store/rados/rgw_service.cc
+  store/rados/rgw_sync.cc
+  store/rados/rgw_sync_counters.cc
+  store/rados/rgw_sync_error_repo.cc
+  store/rados/rgw_sync_module.cc
+  store/rados/rgw_sync_module_aws.cc
+  store/rados/rgw_sync_module_es.cc
+  store/rados/rgw_sync_module_es_rest.cc
+  store/rados/rgw_sync_module_log.cc
+  store/rados/rgw_sync_module_pubsub.cc
+  store/rados/rgw_sync_trace.cc
+  store/rados/rgw_tools.cc
+  store/rados/rgw_trim_bilog.cc
+  store/rados/rgw_trim_datalog.cc
+  store/rados/rgw_trim_mdlog.cc
+  store/rados/rgw_user.cc
+  store/rados/rgw_zone.cc)
 
 list(APPEND librgw_common_srcs
   store/immutable_config/store.cc
@@ -244,7 +255,8 @@ target_link_libraries(rgw_common
     ${LUA_LIBRARIES}
     spawn)
 target_include_directories(rgw_common
-  PUBLIC "services"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/store/rados"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
   PUBLIC "${LUA_INCLUDE_DIR}")
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
@@ -325,7 +337,7 @@ set(rgw_a_srcs
   rgw_rest_log.cc
   rgw_rest_metadata.cc
   rgw_rest_ratelimit.cc
-  rgw_rest_realm.cc
+  store/rados/rgw_rest_realm.cc
   rgw_rest_sts.cc
   rgw_rest_swift.cc
   rgw_rest_usage.cc
@@ -345,10 +357,13 @@ add_library(rgw_a STATIC
     ${rgw_a_srcs})
 
 target_compile_definitions(rgw_a PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
-target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
-target_include_directories(rgw_a PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip")
-target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
-target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
+
+target_include_directories(rgw_a
+  SYSTEM PUBLIC "../rapidjson/include"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/store/rados"
+  PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip")
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   find_package(RabbitMQ REQUIRED)

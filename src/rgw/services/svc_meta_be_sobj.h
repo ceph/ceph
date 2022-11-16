@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "rgw/rgw_service.h"
+#include "rgw_service.h"
 
 #include "svc_meta_be.h"
 #include "svc_sys_obj.h"

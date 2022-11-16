@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "rgw/rgw_gc_log.h"
+#include "rgw_gc_log.h"
 
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"

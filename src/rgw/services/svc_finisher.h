@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "rgw/rgw_service.h"
+#include "rgw_service.h"
 
 class Context;
 class Finisher;

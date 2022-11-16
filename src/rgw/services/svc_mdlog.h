@@ -16,9 +16,9 @@
 
 #pragma once
 
-#include "rgw/rgw_service.h"
-#include "rgw/rgw_period_history.h"
-#include "rgw/rgw_period_puller.h"
+#include "rgw_service.h"
+#include "rgw_period_history.h"
+#include "rgw_period_puller.h"
 
 #include "svc_meta_be.h"
 

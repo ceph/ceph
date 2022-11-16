@@ -12,7 +12,7 @@
  *
  */
 
-#include "rgw/rgw_reshard.h"
+#include "rgw_reshard.h"
 #include <spawn/spawn.hpp>
 
 #include <gtest/gtest.h>

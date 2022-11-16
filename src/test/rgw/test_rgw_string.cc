@@ -12,7 +12,7 @@
  *
  */
 
-#include "rgw/rgw_string.h"
+#include "rgw_string.h"
 #include <gtest/gtest.h>
 
 const std::string abc{"abc"};
