@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <ranges>
+
 #include "crimson/osd/osd_operations/snaptrim_request.h"
 #include "crimson/osd/pg.h"
 
@@ -27,6 +29,34 @@ namespace crimson {
 }
 
 namespace crimson::osd {
+
+
+void SnapTrimRequest::SubOpBlocker::dump_detail(Formatter *f) const
+{
+  f->open_array_section("dependent_operations");
+  {
+    for (auto &i : subops | std::views::keys) {
+      f->dump_unsigned("op_id", i);
+    }
+  }
+  f->close_section();
+}
+
+template <class... Args>
+void SnapTrimRequest::SubOpBlocker::emplace_back(Args&&... args)
+{
+  subops.emplace_back(std::forward<Args>(args)...);
+};
+
+seastar::future<> SnapTrimRequest::SubOpBlocker::wait_completion()
+{
+  auto rng = subops | std::views::values;
+  return seastar::when_all_succeed(
+    std::begin(rng), std::end(rng)
+  ).then([] (auto&&...) {
+    return seastar::now();
+  });
+}
 
 void SnapTrimRequest::print(std::ostream &lhs) const
 {
@@ -96,9 +126,12 @@ seastar::future<> SnapTrimRequest::with_pg(
       assert(!to_trim.empty());
       for (const auto& object : to_trim) {
         logger().debug("{}: trimming {}", object);
-        // TODO: start subop and add to subop blcoker
+        auto [op, fut] = shard_services.start_operation<SnapTrimObjSubRequest>(
+          object,
+          snapid);
+        subop_blocker.emplace_back(op->get_id(), std::move(fut));
       }
-      return seastar::now();
+      return subop_blocker.wait_completion();
     });
   }, [this](std::exception_ptr eptr) {
     // TODO: better debug output
