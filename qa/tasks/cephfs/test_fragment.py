@@ -317,3 +317,43 @@ class TestFragmentation(CephFSTestCase):
             lambda: _count_fragmented() > 0,
             timeout=30
         )
+
+    def test_dir_merge_with_snap_items(self):
+        """
+        That directory remain fragmented when snapshot items are taken into account.
+        """
+        split_size = 1000
+        merge_size = 100
+        self._configure(
+            mds_bal_split_size=split_size,
+            mds_bal_merge_size=merge_size,
+            mds_bal_split_bits=1
+        )
+
+        # split the dir
+        create_files = split_size + 50
+        self.mount_a.create_n_files("splitdir/file_", create_files)
+
+        self.wait_until_true(
+            lambda: self.get_splits() == 1,
+            timeout=30
+        )
+
+        frags = self.get_dir_ino("/splitdir")['dirfrags']
+        self.assertEqual(len(frags), 2)
+        self.assertEqual(frags[0]['dirfrag'], "0x10000000000.0*")
+        self.assertEqual(frags[1]['dirfrag'], "0x10000000000.1*")
+        self.assertEqual(
+            sum([len(f['dentries']) for f in frags]), create_files
+        )
+
+        self.assertEqual(self.get_merges(), 0)
+
+        self.mount_a.run_shell(["mkdir", "splitdir/.snap/snap_a"])
+        self.mount_a.run_shell(["mkdir", "splitdir/.snap/snap_b"])
+        self.mount_a.run_shell(["rm", "-f", run.Raw("splitdir/file*")])
+
+        time.sleep(30)
+
+        self.assertEqual(self.get_merges(), 0)
+        self.assertEqual(len(self.get_dir_ino("/splitdir")["dirfrags"]), 2)
