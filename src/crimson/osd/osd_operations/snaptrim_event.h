@@ -42,6 +42,21 @@ public:
 private:
   CommonPGPipeline& pp();
 
+  // bases on 998cb8c141bb89aafae298a9d5e130fbd78fe5f2
+  struct SubOpBlocker : crimson::BlockerT<SubOpBlocker> {
+    static constexpr const char* type_name = "CompoundOpBlocker";
+
+    using id_done_t = std::pair<crimson::Operation::id_t, seastar::future<>>;
+
+    void dump_detail(Formatter *f) const final;
+
+    template <class... Args>
+    void emplace_back(Args&&... args);
+
+    seastar::future<> wait_completion();
+  private:
+    std::vector<id_done_t> subops;
+  } subop_blocker;
   PipelineHandle handle;
   Ref<PG> pg;
   const snapid_t snapid;
