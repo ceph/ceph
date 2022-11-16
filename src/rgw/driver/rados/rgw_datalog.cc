@@ -61,6 +61,15 @@ void rgw_data_change::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("gen", gen, obj);
 }
 
+void rgw_data_change::generate_test_instances(std::list<rgw_data_change *>& l) {
+  l.push_back(new rgw_data_change{});
+  l.push_back(new rgw_data_change);
+  l.back()->entity_type = ENTITY_TYPE_BUCKET;
+  l.back()->key = "bucket_name";
+  l.back()->timestamp = ceph::real_clock::zero();
+  l.back()->gen = 0;
+}
+
 void rgw_data_change_log_entry::dump(Formatter *f) const
 {
   encode_json("log_id", log_id, f);

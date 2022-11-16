@@ -30,6 +30,9 @@ TYPE(RGWCacheNotifyInfo)
 #include "rgw_lc.h"
 TYPE(RGWLifecycleConfiguration)
 
+#include "cls/log/cls_log_types.h"
+TYPE(cls_log_entry)
+
 #include "cls/rgw/cls_rgw_types.h"
 TYPE(rgw_bucket_pending_info)
 TYPE(rgw_bucket_dir_entry_meta)
@@ -121,6 +124,12 @@ TYPE(rgw_obj)
 
 #include "rgw_log.h"
 TYPE(rgw_log_entry)
+
+#include "rgw_datalog.h"
+TYPE(rgw_data_change)
+
+#include "rgw_mdlog.h"
+TYPE(RGWMetadataLogData)
 
 #include "rgw_meta_sync_status.h"
 TYPE(rgw_meta_sync_info)
