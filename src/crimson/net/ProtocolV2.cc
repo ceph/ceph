@@ -2159,6 +2159,7 @@ void ProtocolV2::do_close(
   }
   assert(!gate.is_closed());
   auto gate_closed = gate.close();
+  auto out_closed = close_out();
 
   if (dispatch_reset) {
     dispatchers.ms_handle_reset(
@@ -2168,7 +2169,9 @@ void ProtocolV2::do_close(
 
   // asynchronous operations
   assert(!closed_clean_fut.valid());
-  closed_clean_fut = std::move(gate_closed).then([this] {
+  closed_clean_fut = seastar::when_all(
+      std::move(gate_closed), std::move(out_closed)
+  ).discard_result().then([this] {
     if (conn.socket) {
       return conn.socket->close();
     } else {
