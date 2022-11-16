@@ -45,16 +45,22 @@ and the backing storage tier automatically. However, admins have the ability to
 configure how this migration takes place by setting the ``cache-mode``. There are
 two main scenarios:
 
-- **writeback** mode: When admins configure tiers with ``writeback`` mode, Ceph
-  clients write data to the cache tier and receive an ACK from the cache tier.
-  In time, the data written to the cache tier migrates to the storage tier
-  and gets flushed from the cache tier. Conceptually, the cache tier is 
-  overlaid "in front" of the backing storage tier. When a Ceph client needs 
-  data that resides in the storage tier, the cache tiering agent migrates the
-  data to the cache tier on read, then it is sent to the Ceph client. 
-  Thereafter, the Ceph client can perform I/O using the cache tier, until the 
-  data becomes inactive. This is ideal for mutable data (e.g., photo/video 
-  editing, transactional data, etc.).
+- **writeback** mode: If the base tier and the cache tier are configured in
+  ``writeback`` mode, Ceph clients receive an ACK from the base tier every time
+  they write data to it. Then the cache tiering agent determines whether
+  ``osd_tier_default_cache_min_write_recency_for_promote`` has been set. If it
+  has been set and the data has been written more than a specified number of
+  times per interval, the data is promoted to the cache tier.
+
+  When Ceph clients need access to data stored in the base tier, the cache
+  tiering agent reads the data from the base tier and returns it to the client.
+  While data is being read from the base tier, the cache tiering agent consults
+  the value of ``osd_tier_default_cache_min_read_recency_for_promote`` and
+  decides whether to promote that data from the base tier to the cache tier.
+  When data has been promoted from the base tier to the cache tier, the Ceph
+  client is able to perform I/O operations on it using the cache tier. This is
+  well-suited for mutable data (for example, photo/video editing, transactional
+  data).
 
 - **readproxy** mode: This mode will use any objects that already
   exist in the cache tier, but if an object is not present in the

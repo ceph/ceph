@@ -78,6 +78,8 @@
                 See :term:`Ceph Dashboard`.
 
 	Ceph Metadata Server
+                See :term:`MDS`.
+
 	Ceph Monitor
                 A daemon that maintains a map of the state of the cluster. This
                 "cluster state" includes the monitor map, the manager map, the
@@ -88,7 +90,11 @@
                 Reference <monitor-config-reference>`.
 
 	Ceph Node
-	Ceph Object Gateway
+	:ref:`Ceph Object Gateway<object-gateway>`
+                An object storage interface built on top of librados. Ceph
+                Object Gateway provides a RESTful gateway between applications
+                and Ceph storage clusters.
+
 	Ceph Object Storage
                 The object storage "product", service or capabilities, which
                 consists essentially of a Ceph Storage Cluster and a Ceph Object
@@ -118,7 +124,8 @@
                 `https://github.com/ceph`_.
 
 	Ceph Point Release
-		Any ad-hoc release that includes only bug or security fixes.
+                Any ad hoc release that includes only bug fixes and security
+                fixes.
 
 	Ceph Project
                 The aggregate term for the people, software, mission and
@@ -184,8 +191,10 @@
                 store Ceph-specific information about devices and its
                 relationship with OSDs.
 
-	MDS
-		The Ceph metadata software.
+	:ref:`MDS<cephfs_add_remote_mds>`
+                The Ceph metadata server daemon. Also referred to as
+                "ceph-mds". The Ceph metadata server daemon is required to run
+                the CephFS file system. The MDS stores all filesystem metadata. 
 
 	MGR
                 The Ceph manager software, which collects all the state from
@@ -224,9 +233,11 @@
                 Just like the OSD fsid, this is the OSD unique identifier and
                 is used interchangeably with ``fsid``
 
-	Pool
+	:ref:`Pool<rados_pools>`
+		A pool is a logical partition used to store objects.
+
 	Pools
-		Pools are logical partitions for storing objects.
+                See :term:`pool`.
 
 	RADOS
 	RADOS Cluster
@@ -250,4 +261,4 @@
 		The collection of software that performs scripted tests on Ceph.
 
 .. _https://github.com/ceph: https://github.com/ceph
-.. _Cluster Map: ../architecture#cluster-map
+.. _Cluster Map: ../architecture#cluster-map   

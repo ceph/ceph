@@ -1,45 +1,44 @@
+.. _rados_pools:
+
 =======
  Pools
 =======
-Pools are logical partitions for storing objects.
+Pools are logical partitions that are used to store objects.
 
-When you first deploy a cluster without creating a pool, Ceph uses the default
-pools for storing data. A pool provides you with:
+Pools provide:
 
-- **Resilience**: You can set how many OSD are allowed to fail without losing data.
-  For replicated pools, it is the desired number of copies/replicas of an object.
-  A typical configuration stores an object and two additional copies
-  (i.e., ``size = 3``), but you can configure the number of copies/replicas at
-  pool granularity.
-  For `erasure coded pools <../erasure-code>`_, it is the number of coding chunks
-  (i.e. ``m=2`` in the **erasure code profile**)
+- **Resilience**: It is possible to set the number of OSDs that are allowed to
+  fail without any data being lost. If your cluster uses replicated pools, the
+  number of OSDs that can fail without data loss is the number of replicas.
+  For example: a typical configuration stores an object and two additional
+  copies (that is: ``size = 3``), but you can configure the number of replicas
+  on a per-pool basis. For `erasure coded pools <../erasure-code>`_, resilience
+  is defined as the number of coding chunks (for example, ``m = 2`` in the
+  **erasure code profile**).
 
-- **Placement Groups**: You can set the number of placement groups for the pool.
-  A typical configuration targets approximately 100 placement groups per OSD to
-  provide optimal balancing without using up too many computing resources. When
-  setting up multiple pools, be careful to set a reasonable number of
-  placement groups for each pool and for the cluster as a whole.  Note that each PG
-  belongs to a specific pool, so when multiple pools use the same OSDs, you must
-  take care that the **sum** of PG replicas per OSD is in the desired PG per OSD
-  target range.
+- **Placement Groups**: You can set the number of placement groups for the
+  pool. A typical configuration targets approximately 100 placement groups per
+  OSD, providing optimal balancing without consuming many computing resources.
+  When setting up multiple pools, be careful to set a reasonable number of
+  placement groups for each pool and for the cluster as a whole. Note that each
+  PG belongs to a specific pool: when multiple pools use the same OSDs, make
+  sure that the **sum** of PG replicas per OSD is in the desired PG per OSD
+  target range. Use the `pgcalc`_ tool to calculate the number of placement
+  groups to set for your pool.
 
-- **CRUSH Rules**: When you store data in a pool, placement of the object
-  and its replicas (or chunks for erasure coded pools) in your cluster is governed
-  by CRUSH rules. You can create a custom CRUSH rule for your pool if the default
-  rule is not appropriate for your use case.
+- **CRUSH Rules**: When data is stored in a pool, the placement of the object
+  and its replicas (or chunks, in the case of erasure-coded pools) in your
+  cluster is governed by CRUSH rules. Custom CRUSH rules can be created for a
+  pool if the default rule does not fit your use case.
 
-- **Snapshots**: When you create snapshots with ``ceph osd pool mksnap``,
-  you effectively take a snapshot of a particular pool.
-
-To organize data into pools, you can list, create, and remove pools.
-You can also view the utilization statistics for each pool.
+- **Snapshots**: The command ``ceph osd pool mksnap`` creates a snapshot of a
+  pool. 
 
 Pool Names
 ==========
 
 Pool names beginning with ``.`` are reserved for use by Ceph's internal
 operations. Please do not create or manipulate pools with these names.
-
 
 
 List Pools
@@ -907,7 +906,7 @@ By default, ceph creates two replicas of an object (a total of three copies, or
 a size of 3).
 
 
-
+.. _pgcalc: https://old.ceph.com/pgcalc/
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
 .. _Bloom Filter: https://en.wikipedia.org/wiki/Bloom_filter
 .. _setting the number of placement groups: ../placement-groups#set-the-number-of-placement-groups

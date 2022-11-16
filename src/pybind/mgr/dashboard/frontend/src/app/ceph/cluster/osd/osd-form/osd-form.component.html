@@ -5,31 +5,30 @@
   <div i18n="form title|Example: Create Pool@@formTitle"
        class="card-header"
        *ngIf="!hideTitle">{{ action | titlecase }} {{ resource | upperFirst }}</div>
-  <div class="card-body ml-2">
+  <div class="card-body ms-2">
     <form name="form"
           #formDir="ngForm"
           [formGroup]="form"
           novalidate>
       <div class="accordion">
-        <div class="card">
-          <div class="card-header">
-            <h2 class="mb-0">
-              <button class="btn btn-link btn-block text-left dropdown-toggle"
-                      data-toggle="collapse"
-                      aria-label="toggle deployment options"
-                      [attr.aria-expanded]="simpleDeployment"
-                      (click)="emitDeploymentMode()"
-                      i18n>Deployment Options</button>
-            </h2>
-          </div>
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button"
+                    type="button"
+                    data-toggle="collapse"
+                    aria-label="toggle deployment options"
+                    [ngClass]="{collapsed: !simpleDeployment}"
+                    (click)="emitDeploymentMode()"
+                    i18n>Deployment Options</button>
+          </h2>
         </div>
-        <div class="collapse"
+        <div class="accordion-collapse collapse"
              [ngClass]="{show: simpleDeployment}">
-          <div class="card-body d-flex flex-column">
+          <div class="accordion-body">
             <div class="pt-3 pb-3"
                  *ngFor="let optionName of optionNames">
-              <div class="custom-control custom-radio custom-control-inline">
-                <input class="custom-control-input"
+              <div class="custom-control form-check custom-control-inline">
+                <input class="form-check-input"
                        type="radio"
                        name="deploymentOption"
                        [id]="optionName"
@@ -37,7 +36,7 @@
                        formControlName="deploymentOption"
                        (change)="emitDeploymentSelection()"
                        [attr.disabled]="!deploymentOptions?.options[optionName].available ? true : null">
-                <label class="custom-control-label"
+                <label class="form-check-label"
                        [id]="'label_' + optionName"
                        [for]="optionName"
                        i18n>{{ deploymentOptions?.options[optionName].title }}
@@ -62,21 +61,19 @@
             </div> -->
           </div>
         </div>
-        <div class="card">
-          <div class="card-header">
-            <h2 class="mb-0">
-              <button class="btn btn-link btn-block text-left dropdown-toggle"
-                      data-toggle="collapse"
-                      aria-label="toggle advanced mode"
-                      [attr.aria-expanded]="!simpleDeployment"
-                      (click)="emitDeploymentMode()"
-                      i18n>Advanced Mode</button>
-            </h2>
-          </div>
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button"
+                    type="button"
+                    aria-label="toggle advanced mode"
+                    [ngClass]="{collapsed: simpleDeployment}"
+                    (click)="emitDeploymentMode()"
+                    i18n>Advanced Mode</button>
+          </h2>
         </div>
-        <div class="collapse"
+        <div class="accordion-collapse collapse"
              [ngClass]="{show: !simpleDeployment}">
-          <div class="card-body">
+          <div class="accordion-body">
             <div class="card-body">
               <fieldset>
                 <cd-osd-devices-selection-groups #dataDeviceSelectionGroups
@@ -170,19 +167,18 @@
         </div>
 
         <!-- Features -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="mb-0">
-              <button class="btn btn-link btn-block text-left dropdown-toggle"
-                      data-toggle="collapse"
-                      aria-label="features"
-                      aria-expanded="true"
-                      i18n>Features</button>
-            </h2>
-          </div>
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button"
+                    type="button"
+                    data-toggle="collapse"
+                    aria-label="features"
+                    aria-expanded="true"
+                    i18n>Features</button>
+          </h2>
         </div>
-        <div class="collapse show">
-          <div class="card-body d-flex flex-column">
+        <div class="accordion-collapse collapse show">
+          <div class="accordion-body">
             <div class="pt-3 pb-3"
                  formGroupName="features">
               <div class="custom-control custom-checkbox"

@@ -290,7 +290,7 @@ HTML files:
 - `html-linter <https://github.com/chinchiheather/html-linter>`_
 - `htmllint-cli <https://github.com/htmllint/htmllint-cli>`_
 - `Prettier <https://prettier.io/>`_
-- `TSLint <https://palantir.github.io/tslint/>`_
+- `ESLint <https://eslint.org/>`_
 - `stylelint <https://stylelint.io/>`_
 
 We added 2 npm scripts to help run these tools:
