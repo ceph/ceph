@@ -54,10 +54,10 @@
 	Ceph File System
                 See :term:`CephFS`
 
-	CephFS
-                The POSIX filesystem components of Ceph. Refer :ref:`CephFS
-                Architecture <arch-cephfs>` and :ref:`ceph-file-system` for
-                more details.
+	:ref:`CephFS<ceph-file-system>`
+                The Ceph File System, or CephFS, is a POSIX-compliant file
+                system built on top of Ceph’s distributed object store, RADOS.
+                See :ref:`CephFS Architecture <arch-cephfs>` for more details.
 
 	Ceph Interim Release
                 A version of Ceph that has not yet been put through quality
