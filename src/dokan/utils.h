@@ -10,6 +10,8 @@
  *
 */
 
+#pragma once
+
 #include "include/compat.h"
 
 void to_filetime(time_t t, LPFILETIME pft);
