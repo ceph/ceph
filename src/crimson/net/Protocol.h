@@ -90,6 +90,11 @@ class Protocol {
 
 // TODO: encapsulate a SessionedSender class
  protected:
+  seastar::future<> close_out() {
+    assert(!gate.is_closed());
+    return gate.close();
+  }
+
   /**
    * out_state_t
    *
@@ -165,8 +170,6 @@ class Protocol {
     return ++out_seq;
   }
 
-  crimson::common::Gated gate;
-
   ChainedDispatchers& dispatchers;
 
   SocketConnection &conn;
@@ -183,6 +186,8 @@ class Protocol {
       bool require_ack);
 
   void notify_out_dispatch();
+
+  crimson::common::Gated gate;
 
   /*
    * out states for writing

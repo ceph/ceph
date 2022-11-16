@@ -62,6 +62,8 @@ class ProtocolV2 final : public Protocol {
 
   AuthConnectionMetaRef auth_meta;
 
+  crimson::common::Gated gate;
+
   bool closed = false;
 
   // become valid only after closed == true
