@@ -159,6 +159,7 @@ struct RGWMetadataLogData {
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<RGWMetadataLogData *>& l);
 };
 WRITE_CLASS_ENCODER(RGWMetadataLogData)
 
