@@ -90,7 +90,11 @@
                 Reference <monitor-config-reference>`.
 
 	Ceph Node
-	Ceph Object Gateway
+	:ref:`Ceph Object Gateway<object-gateway>`
+                An object storage interface built on top of librados. Ceph
+                Object Gateway provides a RESTful gateway between applications
+                and Ceph storage clusters.
+
 	Ceph Object Storage
                 The object storage "product", service or capabilities, which
                 consists essentially of a Ceph Storage Cluster and a Ceph Object
