@@ -87,7 +87,7 @@ int OSDriver::get_keys(
 
 int OSDriver::get_next(
   const std::string &key,
-  pair<std::string, ceph::buffer::list> *next)
+  std::pair<std::string, ceph::buffer::list> *next)
 {
   ObjectMap::ObjectMapIterator iter =
     os->get_omap_iterator(ch, hoid);
@@ -99,6 +99,26 @@ int OSDriver::get_next(
   if (iter->valid()) {
     if (next)
       *next = make_pair(iter->key(), iter->value());
+    return 0;
+  } else {
+    return -ENOENT;
+  }
+}
+
+int OSDriver::get_next_or_current(
+  const std::string &key,
+  std::pair<std::string, ceph::buffer::list> *next_or_current)
+{
+  ObjectMap::ObjectMapIterator iter =
+    os->get_omap_iterator(ch, hoid);
+  if (!iter) {
+    ceph_abort();
+    return -EINVAL;
+  }
+  iter->lower_bound(key);
+  if (iter->valid()) {
+    if (next_or_current)
+      *next_or_current = make_pair(iter->key(), iter->value());
     return 0;
   } else {
     return -ENOENT;
@@ -571,21 +591,21 @@ int SnapMapper::_lookup_purged_snap(
   int64_t pool, snapid_t snap,
   snapid_t *begin, snapid_t *end)
 {
+  OSDriver backend(store, ch, hoid);
   string k = make_purged_snap_key(pool, snap);
-  auto it = store->get_omap_iterator(ch, hoid);
-  it->lower_bound(k);
-  if (!it->valid()) {
+  std::pair<std::string, ceph::buffer::list> kv;
+  if (auto ret = backend.get_next_or_current(k, &kv); ret == -ENOENT) {
     dout(20) << __func__ << " pool " << pool << " snap " << snap
 	     << " key '" << k << "' lower_bound not found" << dendl;
     return -ENOENT;
   }
-  if (it->key().find(PURGED_SNAP_PREFIX) != 0) {
+  if (kv.first.find(PURGED_SNAP_PREFIX) != 0) {
     dout(20) << __func__ << " pool " << pool << " snap " << snap
 	     << " key '" << k << "' lower_bound got mismatched prefix '"
-	     << it->key() << "'" << dendl;
+	     << kv.first << "'" << dendl;
     return -ENOENT;
   }
-  ceph::buffer::list v = it->value();
+  ceph::buffer::list v = kv.second;
   auto p = v.cbegin();
   int64_t gotpool;
   decode(gotpool, p);
