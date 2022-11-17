@@ -35,7 +35,7 @@ void ClientRequest::Orderer::clear_and_cancel()
 {
   for (auto i = list.begin(); i != list.end(); ) {
     logger().debug(
-      "{}: ClientRequest::Orderer::clear_and_cancel {}",
+      "ClientRequest::Orderer::clear_and_cancel: {}",
       *i);
     i->complete_request();
     remove_request(*(i++));
