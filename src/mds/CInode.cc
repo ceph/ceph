@@ -4788,6 +4788,7 @@ next:
                            false);
         // Flag that we repaired this BT so that it won't go into damagetable
         results->backtrace.repaired = true;
+        in->mdcache->mds->damage_table.remove_backtrace_damage_entry(in->ino());
         if (in->mdcache->mds->logger)
           in->mdcache->mds->logger->inc(l_mds_scrub_backtrace_repaired);
       }
@@ -4926,6 +4927,9 @@ next:
 	    << "freshly-calculated rstats don't match existing ones (will be fixed)";
 	  in->mdcache->repair_inode_stats(in);
           results->raw_stats.repaired = true;
+          for (const auto &p : in->dirfrags){
+            in->mdcache->mds->damage_table.remove_dirfrag_damage_entry(p.second);
+          }
 	} else {
 	  results->raw_stats.error_str
 	    << "freshly-calculated rstats don't match existing ones";
