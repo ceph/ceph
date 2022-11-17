@@ -23,7 +23,6 @@ security fixes.
 
    Quincy (v17.2.*) <quincy>
    Pacific (v16.2.*) <pacific>
-   Octopus (v15.2.*) <octopus>
 
 .. ceph_releases:: releases.yml current
 
@@ -40,6 +39,7 @@ receive bug fixes or backports).
    :maxdepth: 1
    :hidden:
 
+   Octopus (v15.2.*) <octopus>
    Nautilus (v14.2.*) <nautilus>
    Mimic (v13.2.*) <mimic>
    Luminous (v12.2.*) <luminous>
@@ -58,8 +58,8 @@ receive bug fixes or backports).
 Release timeline
 ----------------
 
-.. ceph_timeline_gantt:: releases.yml quincy pacific octopus
-.. ceph_timeline:: releases.yml quincy pacific octopus
+.. ceph_timeline_gantt:: releases.yml quincy pacific
+.. ceph_timeline:: releases.yml quincy pacific
 
 .. _Quincy: quincy
 .. _17.2.0: quincy#v17-2-0-quincy
