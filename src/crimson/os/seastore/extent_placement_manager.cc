@@ -341,7 +341,7 @@ void ExtentPlacementManager::BackgroundProcess::log_state(const char *caller) co
   DEBUG("caller {}, {}, {}",
         caller,
         JournalTrimmerImpl::stat_printer_t{*trimmer, true},
-        AsyncCleaner::stat_printer_t{*cleaner, true});
+        AsyncCleaner::stat_printer_t{*major_cleaner, true});
 }
 
 void ExtentPlacementManager::BackgroundProcess::start_background()
@@ -349,7 +349,7 @@ void ExtentPlacementManager::BackgroundProcess::start_background()
   LOG_PREFIX(BackgroundProcess::start_background);
   INFO("{}, {}",
        JournalTrimmerImpl::stat_printer_t{*trimmer, true},
-       AsyncCleaner::stat_printer_t{*cleaner, true});
+       AsyncCleaner::stat_printer_t{*major_cleaner, true});
   ceph_assert(trimmer->check_is_ready());
   ceph_assert(state == state_t::SCAN_SPACE);
   assert(!is_running());
@@ -379,7 +379,7 @@ ExtentPlacementManager::BackgroundProcess::stop_background()
     LOG_PREFIX(BackgroundProcess::stop_background);
     INFO("done, {}, {}",
          JournalTrimmerImpl::stat_printer_t{*trimmer, true},
-         AsyncCleaner::stat_printer_t{*cleaner, true});
+         AsyncCleaner::stat_printer_t{*major_cleaner, true});
     // run_until_halt() can be called at HALT
   });
 }
@@ -416,7 +416,7 @@ ExtentPlacementManager::BackgroundProcess::try_reserve(
 {
   reserve_result_t res {
     trimmer->try_reserve_inline_usage(usage.inline_usage),
-    cleaner->try_reserve_projected_usage(usage.inline_usage + usage.ool_usage)
+    major_cleaner->try_reserve_projected_usage(usage.inline_usage + usage.ool_usage)
   };
 
   if (!res.is_successful()) {
@@ -424,7 +424,7 @@ ExtentPlacementManager::BackgroundProcess::try_reserve(
       trimmer->release_inline_usage(usage.inline_usage);
     }
     if (res.reserve_ool_success) {
-      cleaner->release_projected_usage(usage.inline_usage + usage.ool_usage);
+      major_cleaner->release_projected_usage(usage.inline_usage + usage.ool_usage);
     }
   }
   return res;
@@ -509,22 +509,22 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
   bool trimmer_reserve_success = true;
   if (trimmer->should_trim()) {
     trimmer_reserve_success =
-      cleaner->try_reserve_projected_usage(
+      major_cleaner->try_reserve_projected_usage(
         trimmer->get_trim_size_per_cycle());
   }
 
   if (trimmer->should_trim() && trimmer_reserve_success) {
     return trimmer->trim(
     ).finally([this] {
-      cleaner->release_projected_usage(
+      major_cleaner->release_projected_usage(
           trimmer->get_trim_size_per_cycle());
     });
-  } else if (cleaner->should_clean_space() ||
+  } else if (major_cleaner->should_clean_space() ||
              // make sure cleaner will start
              // when the trimmer should run but
              // failed to reserve space.
              !trimmer_reserve_success) {
-    return cleaner->clean_space(
+    return major_cleaner->clean_space(
     ).handle_error(
       crimson::ct_error::assert_all{
 	"do_background_cycle encountered invalid error in clean_space"
