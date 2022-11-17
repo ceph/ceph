@@ -408,6 +408,14 @@ private:
       if (_cold_cleaner) {
         cold_cleaner = std::move(_cold_cleaner);
         cold_cleaner->set_background_callback(this);
+
+        cleaner_by_device_id.resize(DEVICE_ID_MAX, nullptr);
+        for (auto id : major_cleaner->get_device_ids()) {
+          cleaner_by_device_id[id] = major_cleaner.get();
+        }
+        for (auto id : cold_cleaner->get_device_ids()) {
+          cleaner_by_device_id[id] = cold_cleaner.get();
+        }
       }
     }
 
@@ -463,16 +471,30 @@ private:
       if (state < state_t::SCAN_SPACE) {
         return;
       }
-      assert(major_cleaner);
-      major_cleaner->mark_space_used(addr, len);
+      if (!cold_cleaner) {
+        assert(major_cleaner);
+        major_cleaner->mark_space_used(addr, len);
+      } else {
+        assert(!cleaner_by_device_id.empty());
+        auto cleaner = cleaner_by_device_id[addr.get_device_id()];
+        assert(cleaner);
+        cleaner->mark_space_used(addr, len);
+      }
     }
 
     void mark_space_free(paddr_t addr, extent_len_t len) {
       if (state < state_t::SCAN_SPACE) {
         return;
       }
-      assert(major_cleaner);
-      major_cleaner->mark_space_free(addr, len);
+      if (!cold_cleaner) {
+        assert(major_cleaner);
+        major_cleaner->mark_space_free(addr, len);
+      } else {
+        assert(!cleaner_by_device_id.empty());
+        auto cleaner = cleaner_by_device_id[addr.get_device_id()];
+        assert(cleaner);
+        cleaner->mark_space_free(addr, len);
+      }
     }
 
     void commit_space_used(paddr_t addr, extent_len_t len) {
@@ -590,6 +612,7 @@ private:
     JournalTrimmerImplRef trimmer;
     AsyncCleanerRef major_cleaner;
     AsyncCleanerRef cold_cleaner;
+    std::vector<AsyncCleaner*> cleaner_by_device_id;
 
     std::optional<seastar::future<>> process_join;
     std::optional<seastar::promise<>> blocking_background;
