@@ -48,7 +48,7 @@ static bool get_qz_params(const std::string &alg, QzSessionParams_T &params) {
   if (rc != QZ_OK)
     return false;
   params.direction = QZ_DIR_BOTH;
-  params.is_busy_polling = true;
+  params.is_busy_polling = false;
   if (alg == "zlib") {
     params.comp_algorithm = QZ_DEFLATE;
     params.data_fmt = QZ_DEFLATE_RAW;
