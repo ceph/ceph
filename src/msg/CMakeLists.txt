@@ -29,6 +29,11 @@ elseif(FREEBSD OR APPLE)
     async/EventKqueue.cc)
 endif(LINUX)
 
+if(WIN32)
+  list(APPEND msg_srcs
+    async/EventPoll.cc)
+endif(WIN32)
+
 if(HAVE_RDMA)
   list(APPEND msg_srcs
     async/rdma/Infiniband.cc

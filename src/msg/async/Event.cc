@@ -28,7 +28,11 @@
 #ifdef HAVE_KQUEUE
 #include "EventKqueue.h"
 #else
+#ifdef HAVE_POLL
+#include "EventPoll.h"
+#else
 #include "EventSelect.h"
+#endif
 #endif
 #endif
 
@@ -123,7 +127,11 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type)
 #ifdef HAVE_KQUEUE
   driver = new KqueueDriver(cct);
 #else
+#ifdef HAVE_POLL
+  driver = new PollDriver(cct);
+#else
   driver = new SelectDriver(cct);
+#endif
 #endif
 #endif
   }
