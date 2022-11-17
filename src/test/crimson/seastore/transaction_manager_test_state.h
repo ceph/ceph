@@ -343,6 +343,10 @@ public:
     device_id_t device_id = 0)
     : sm(sm), device_id(device_id) {}
 
+  device_type_t get_device_type() const final {
+    return device_type_t::SSD;
+  }
+
   device_id_t get_device_id() const {
     return device_id;
   }
