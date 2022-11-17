@@ -149,7 +149,7 @@ public:
     assert(is_target_rewrite_generation(gen));
     assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
 
-    // XXX: bp might be extended to point to differnt memory (e.g. PMem)
+    // XXX: bp might be extended to point to different memory (e.g. PMem)
     // according to the allocator.
     auto bp = ceph::bufferptr(
       buffer::create_page_aligned(length));
