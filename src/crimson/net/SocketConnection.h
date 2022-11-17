@@ -180,6 +180,7 @@ private:
 
   friend class Protocol;
   friend class ProtocolV2;
+  friend class FrameAssemblerV2;
 };
 
 } // namespace crimson::net

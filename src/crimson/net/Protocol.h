@@ -11,6 +11,7 @@
 #include "crimson/common/log.h"
 #include "Fwd.h"
 #include "SocketConnection.h"
+#include "FrameAssemblerV2.h"
 
 namespace crimson::net {
 
@@ -141,13 +142,6 @@ class Protocol {
     in_seq = 0;
   }
 
-  bool is_out_queued() const {
-    return (!out_pending_msgs.empty() ||
-            ack_left > 0 ||
-            need_keepalive ||
-            next_keepalive_ack.has_value());
-  }
-
   bool is_out_queued_or_sent() const {
     return is_out_queued() || !out_sent_msgs.empty();
   }
@@ -174,7 +168,16 @@ class Protocol {
 
   SocketConnection &conn;
 
+  FrameAssemblerV2 frame_assembler;
+
  private:
+  bool is_out_queued() const {
+    return (!out_pending_msgs.empty() ||
+            ack_left > 0 ||
+            need_keepalive ||
+            next_keepalive_ack.has_value());
+  }
+
   seastar::future<stop_t> try_exit_out_dispatch();
 
   seastar::future<> do_out_dispatch();

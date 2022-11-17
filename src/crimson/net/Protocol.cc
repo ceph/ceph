@@ -22,7 +22,8 @@ namespace crimson::net {
 Protocol::Protocol(ChainedDispatchers& dispatchers,
                    SocketConnection& conn)
   : dispatchers(dispatchers),
-    conn(conn)
+    conn(conn),
+    frame_assembler(conn)
 {}
 
 Protocol::~Protocol()
@@ -156,7 +157,7 @@ void Protocol::ack_out_sent(seq_num_t seq)
 
 seastar::future<stop_t> Protocol::try_exit_out_dispatch() {
   assert(!is_out_queued());
-  return conn.socket->flush().then([this] {
+  return frame_assembler.flush().then([this] {
     if (!is_out_queued()) {
       // still nothing pending to send after flush,
       // the dispatching can ONLY stop now
@@ -190,7 +191,7 @@ seastar::future<> Protocol::do_out_dispatch()
       auto to_ack = ack_left;
       assert(to_ack == 0 || in_seq > 0);
       // sweep all pending out with the concrete Protocol
-      return conn.socket->write(
+      return frame_assembler.write(
         sweep_out_pending_msgs_to_sent(
           num_msgs, need_keepalive, next_keepalive_ack, to_ack > 0)
       ).then([this, prv_keepalive_ack=next_keepalive_ack, to_ack] {
@@ -241,7 +242,8 @@ seastar::future<> Protocol::do_out_dispatch()
                      conn, out_state, e);
       ceph_abort();
     }
-    conn.socket->shutdown();
+    ceph_assert_always(frame_assembler.has_socket());
+    frame_assembler.shutdown_socket();
     if (out_state == out_state_t::open) {
       logger().info("{} do_out_dispatch(): fault at {}, going to delay -- {}",
                     conn, out_state, e);
