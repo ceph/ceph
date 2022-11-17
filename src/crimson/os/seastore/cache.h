@@ -689,6 +689,10 @@ public:
     assert(segment_provider == nullptr);
     segment_provider = &sp;
   }
+  void set_cold_segment_provider(SegmentProvider &sp) {
+    assert(cold_segment_provider == nullptr);
+    cold_segment_provider = &sp;
+  }
 
   /**
    * prepare_record
@@ -981,6 +985,7 @@ private:
 
   // FIXME: This is specific to the segmented implementation
   SegmentProvider *segment_provider = nullptr;
+  SegmentProvider *cold_segment_provider = nullptr;
 
   /**
    * dirty
