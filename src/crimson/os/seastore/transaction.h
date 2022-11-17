@@ -63,11 +63,13 @@ struct version_stat_t {
 struct projected_usage_t {
   std::size_t inline_usage = 0;
   std::size_t ool_usage = 0;
+  std::size_t cold_ool_usage = 0;
 };
 inline std::ostream &operator<<(std::ostream &out, const projected_usage_t &usage) {
   return out << "projected_usage_t("
 	     << "inline_usage=" << usage.inline_usage
 	     << ", ool_usage=" << usage.ool_usage
+	     << ", cold_ool_usage=" << usage.cold_ool_usage
 	     << ")";
 }
 
@@ -480,7 +482,11 @@ public:
     projected_usage_t usage;
     for (auto &extent : written_ool_block_list) {
       if (extent->is_valid()) {
-        usage.ool_usage += extent->get_length();
+        if (extent->get_rewrite_generation() < MIN_COLD_GENERATION) {
+          usage.ool_usage += extent->get_length();
+        } else {
+          usage.cold_ool_usage += extent->get_length();
+        }
       }
     }
     for (auto &extent : inline_block_list) {

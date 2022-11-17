@@ -174,16 +174,24 @@ SegmentedOolWriter::alloc_write_ool_extents(
 }
 
 void ExtentPlacementManager::init(
-    JournalTrimmerImplRef &&trimmer, AsyncCleanerRef &&cleaner)
+    JournalTrimmerImplRef &&trimmer,
+    AsyncCleanerRef &&cleaner,
+    AsyncCleanerRef &&cold_cleaner)
 {
   writer_refs.clear();
+  auto cold_segment_cleaner = dynamic_cast<SegmentCleaner*>(cold_cleaner.get());
 
   if (trimmer->get_journal_type() == journal_type_t::SEGMENTED) {
     auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
     ceph_assert(segment_cleaner != nullptr);
-    auto num_writers = generation_to_writer(REWRITE_GENERATIONS);
+    dynamic_max_rewrite_generation = MIN_COLD_GENERATION - 1;
+    if (cold_segment_cleaner) {
+      dynamic_max_rewrite_generation = MAX_REWRITE_GENERATION;
+    }
+    auto num_writers = generation_to_writer(dynamic_max_rewrite_generation + 1);
+
     data_writers_by_gen.resize(num_writers, {});
-    for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+    for (rewrite_gen_t gen = OOL_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
 	    data_category_t::DATA, gen, *segment_cleaner,
             *ool_segment_seq_allocator));
@@ -191,7 +199,7 @@ void ExtentPlacementManager::init(
     }
 
     md_writers_by_gen.resize(num_writers, {});
-    for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+    for (rewrite_gen_t gen = OOL_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
 	    data_category_t::METADATA, gen, *segment_cleaner,
             *ool_segment_seq_allocator));
@@ -219,7 +227,28 @@ void ExtentPlacementManager::init(
     }
   }
 
-  background_process.init(std::move(trimmer), std::move(cleaner));
+  if (cold_segment_cleaner) {
+    for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+            data_category_t::DATA, gen, *cold_segment_cleaner,
+            *ool_segment_seq_allocator));
+      data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
+    }
+    for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+            data_category_t::METADATA, gen, *cold_segment_cleaner,
+            *ool_segment_seq_allocator));
+      md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
+    }
+    for (auto *device : cold_segment_cleaner->get_segment_manager_group()
+                                            ->get_segment_managers()) {
+      add_device(device);
+    }
+  }
+
+  background_process.init(std::move(trimmer),
+                          std::move(cleaner),
+                          std::move(cold_cleaner));
 }
 
 void ExtentPlacementManager::set_primary_device(Device *device)
@@ -342,6 +371,11 @@ void ExtentPlacementManager::BackgroundProcess::log_state(const char *caller) co
         caller,
         JournalTrimmerImpl::stat_printer_t{*trimmer, true},
         AsyncCleaner::stat_printer_t{*major_cleaner, true});
+  if (cold_cleaner) {
+    DEBUG("caller {}, cold_cleaner: {}",
+          caller,
+          AsyncCleaner::stat_printer_t{*cold_cleaner, true});
+  }
 }
 
 void ExtentPlacementManager::BackgroundProcess::start_background()

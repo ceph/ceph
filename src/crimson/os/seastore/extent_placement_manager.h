@@ -136,7 +136,7 @@ public:
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
   }
 
-  void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&);
+  void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&, AsyncCleanerRef &&);
 
   SegmentSeqAllocator* get_ool_segment_seq_allocator() const {
     return ool_segment_seq_allocator.get();
@@ -250,8 +250,8 @@ public:
     } else {
       assert(get_extent_category(type) == data_category_t::DATA ||
              gen >= MIN_REWRITE_GENERATION);
-      if (gen > MAX_REWRITE_GENERATION) {
-        gen = MAX_REWRITE_GENERATION;
+      if (gen > dynamic_max_rewrite_generation) {
+        gen = dynamic_max_rewrite_generation;
       } else if (gen == INIT_GENERATION) {
         gen = OOL_GENERATION;
       }
@@ -377,8 +377,8 @@ private:
                               data_category_t category,
                               rewrite_gen_t gen) {
     assert(hint < placement_hint_t::NUM_HINTS);
-    assert(is_rewrite_generation(gen));
-    assert(gen != INLINE_GENERATION);
+    assert(gen > INLINE_GENERATION);
+    assert(gen <= dynamic_max_rewrite_generation);
     if (category == data_category_t::DATA) {
       return data_writers_by_gen[generation_to_writer(gen)];
     } else {
@@ -399,11 +399,16 @@ private:
     BackgroundProcess() = default;
 
     void init(JournalTrimmerImplRef &&_trimmer,
-              AsyncCleanerRef &&_cleaner) {
+              AsyncCleanerRef &&_cleaner,
+              AsyncCleanerRef &&_cold_cleaner) {
       trimmer = std::move(_trimmer);
       trimmer->set_background_callback(this);
       major_cleaner = std::move(_cleaner);
       major_cleaner->set_background_callback(this);
+      if (_cold_cleaner) {
+        cold_cleaner = std::move(_cold_cleaner);
+        cold_cleaner->set_background_callback(this);
+      }
     }
 
     journal_type_t get_journal_type() const {
@@ -413,10 +418,21 @@ private:
     void set_extent_callback(ExtentCallbackInterface *cb) {
       trimmer->set_extent_callback(cb);
       major_cleaner->set_extent_callback(cb);
+      if (cold_cleaner){
+        cold_cleaner->set_extent_callback(cb);
+      }
     }
 
     store_statfs_t get_stat() const {
-      return major_cleaner->get_stat();
+      auto stat = major_cleaner->get_stat();
+      if (cold_cleaner) {
+        auto s = cold_cleaner->get_stat();
+        stat.total += s.total;
+        stat.available += s.available;
+        stat.allocated += s.allocated;
+        stat.data_stored += s.data_stored;
+      }
+      return stat;
     }
 
     using mount_ret = ExtentPlacementManager::mount_ret;
@@ -426,13 +442,19 @@ private:
       trimmer->reset();
       stats = {};
       register_metrics();
-      return major_cleaner->mount();
+      return major_cleaner->mount(
+      ).safe_then([this] {
+        return cold_cleaner ?
+          cold_cleaner->mount() : mount_ertr::now();
+      });
     }
 
     void start_scan_space() {
       ceph_assert(state == state_t::MOUNT);
       state = state_t::SCAN_SPACE;
       ceph_assert(major_cleaner->check_usage_is_empty());
+      ceph_assert(!cold_cleaner ||
+                  cold_cleaner->check_usage_is_empty());
     }
 
     void start_background();
@@ -475,7 +497,8 @@ private:
     // Testing interfaces
 
     bool check_usage() {
-      return major_cleaner->check_usage();
+      return major_cleaner->check_usage() &&
+        (!cold_cleaner || cold_cleaner->check_usage());
     }
 
     seastar::future<> run_until_halt();
@@ -566,6 +589,7 @@ private:
 
     JournalTrimmerImplRef trimmer;
     AsyncCleanerRef major_cleaner;
+    AsyncCleanerRef cold_cleaner;
 
     std::optional<seastar::future<>> process_join;
     std::optional<seastar::promise<>> blocking_background;
@@ -584,6 +608,7 @@ private:
   Device* primary_device = nullptr;
   std::size_t num_devices = 0;
 
+  rewrite_gen_t dynamic_max_rewrite_generation = MAX_REWRITE_GENERATION;
   BackgroundProcess background_process;
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
