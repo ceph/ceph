@@ -1,5 +1,6 @@
 
-This document describes the requirements and HLD of the primary balancer for Ceph.
+This document describes the requirements and high-level design of the primary
+balancer for Ceph.
 
 Introduction
 ============
