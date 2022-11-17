@@ -66,16 +66,21 @@ public:
   }
 
   OSDriver(ObjectStore *os, const coll_t& cid, const ghobject_t &hoid) :
+    OSDriver(os, os->open_collection(cid), hoid) {}
+  OSDriver(ObjectStore *os, ObjectStore::CollectionHandle ch, const ghobject_t &hoid) :
     os(os),
-    hoid(hoid) {
-    ch = os->open_collection(cid);
-  }
+    ch(ch),
+    hoid(hoid) {}
+
   int get_keys(
     const std::set<std::string> &keys,
     std::map<std::string, ceph::buffer::list> *out) override;
   int get_next(
     const std::string &key,
     std::pair<std::string, ceph::buffer::list> *next) override;
+  int get_next_or_current(
+    const std::string &key,
+    std::pair<std::string, ceph::buffer::list> *next_or_current) override;
 };
 
 /**
