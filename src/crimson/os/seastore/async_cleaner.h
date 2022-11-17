@@ -103,6 +103,10 @@ public:
     reset();
   }
 
+  bool contains(segment_id_t id) const {
+    return segments.contains(id);
+  }
+
   const segment_info_t& operator[](segment_id_t id) const {
     return segments[id];
   }
@@ -635,6 +639,8 @@ std::ostream &operator<<(
  */
 class SegmentProvider {
 public:
+  virtual bool contains(segment_id_t id) const = 0;
+
   virtual const segment_info_t& get_seg_info(segment_id_t id) const = 0;
 
   virtual segment_id_t allocate_segment(
@@ -1237,6 +1243,10 @@ public:
   /*
    * SegmentProvider interfaces
    */
+
+  bool contains(segment_id_t id) const final {
+    return segments.contains(id);
+  }
 
   const segment_info_t& get_seg_info(segment_id_t id) const final {
     return segments[id];

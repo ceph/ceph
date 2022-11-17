@@ -72,6 +72,10 @@ struct btree_test_base :
   /*
    * SegmentProvider interfaces
    */
+  bool contains(segment_id_t id) const final {
+    return segment_seqs.contains(id);
+  }
+
   const segment_info_t& get_seg_info(segment_id_t id) const final {
     tmp_info = {};
     tmp_info.seq = segment_seqs.at(id);

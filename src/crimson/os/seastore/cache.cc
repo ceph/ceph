@@ -1116,7 +1116,12 @@ record_t Cache::prepare_record(
       if (segment_provider != nullptr &&
           i->get_paddr().get_addr_type() == paddr_types_t::SEGMENT) {
         auto sid = i->get_paddr().as_seg_paddr().get_segment_id();
-        auto &sinfo = segment_provider->get_seg_info(sid);
+	auto provider = segment_provider;
+	if (cold_segment_provider &&
+	    !segment_provider->contains(sid)) {
+	  provider = cold_segment_provider;
+	}
+        auto &sinfo = provider->get_seg_info(sid);
         sseq = sinfo.seq;
         stype = sinfo.type;
       }
@@ -1660,7 +1665,12 @@ Cache::replay_delta(
       delta.paddr != P_ADDR_NULL &&
       delta.paddr.get_addr_type() == paddr_types_t::SEGMENT) {
     auto& seg_addr = delta.paddr.as_seg_paddr();
-    auto& seg_info = segment_provider->get_seg_info(seg_addr.get_segment_id());
+    auto provider = segment_provider;
+    if (cold_segment_provider &&
+	!segment_provider->contains(seg_addr.get_segment_id())) {
+      provider = cold_segment_provider;
+    }
+    auto& seg_info = provider->get_seg_info(seg_addr.get_segment_id());
     auto delta_paddr_segment_seq = seg_info.seq;
     auto delta_paddr_segment_type = seg_info.type;
     if (delta_paddr_segment_seq != delta.ext_seq ||

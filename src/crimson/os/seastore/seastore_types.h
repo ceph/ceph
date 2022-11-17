@@ -261,7 +261,7 @@ public:
     return device_to_segments[id.device_id()][id.device_segment_id()];
   }
 
-  bool contains(segment_id_t id) {
+  bool contains(segment_id_t id) const {
     bool b = id.device_id() < device_to_segments.size();
     if (!b) {
       return b;
