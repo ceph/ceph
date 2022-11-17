@@ -6,9 +6,6 @@
 #include <seastar/core/sleep.hh>
 
 #include "Protocol.h"
-#include "msg/async/frames_v2.h"
-#include "msg/async/crypto_onwire.h"
-#include "msg/async/compression_onwire.h"
 
 namespace crimson::net {
 
@@ -139,37 +136,17 @@ class ProtocolV2 final : public Protocol {
   };
   Timer protocol_timer;
 
- // TODO: Frame related implementations, probably to a separate class.
  private:
-  bool record_io = false;
-  ceph::bufferlist rxbuf;
-  ceph::bufferlist txbuf;
+  seastar::future<FrameAssemblerV2::read_main_t> read_main_preamble();
 
-  void enable_recording();
-  seastar::future<Socket::tmp_buf> read_exactly(size_t bytes);
-  seastar::future<bufferlist> read(size_t bytes);
-  seastar::future<> write(bufferlist&& buf);
-  seastar::future<> write_flush(bufferlist&& buf);
-
-  ceph::crypto::onwire::rxtx_t session_stream_handlers;
-  ceph::compression::onwire::rxtx_t session_comp_handlers;
-  ceph::msgr::v2::FrameAssembler tx_frame_asm{
-    &session_stream_handlers, false, common::local_conf()->ms_crc_data,
-    &session_comp_handlers};
-  ceph::msgr::v2::FrameAssembler rx_frame_asm{
-    &session_stream_handlers, false, common::local_conf()->ms_crc_data,
-    &session_comp_handlers};
-  ceph::bufferlist rx_preamble;
-  ceph::msgr::v2::segment_bls_t rx_segments_data;
-
-  size_t get_current_msg_size() const;
-  seastar::future<ceph::msgr::v2::Tag> read_main_preamble();
-  seastar::future<> read_frame_payload();
   template <class F>
-  seastar::future<> write_frame(F &frame, bool flush=true);
+  ceph::bufferlist get_buffer(F &tx_frame);
 
- private:
+  template <class F>
+  seastar::future<> write_flush_frame(F &tx_frame);
+
   void fault(bool backoff, const char* func_name, std::exception_ptr eptr);
+
   void reset_session(bool is_full);
   seastar::future<std::tuple<entity_type_t, entity_addr_t>>
   banner_exchange(bool is_connect);
@@ -229,9 +206,8 @@ class ProtocolV2 final : public Protocol {
   // REPLACING (server)
   void trigger_replacing(bool reconnect,
                          bool do_reset,
-                         SocketRef&& new_socket,
+                         FrameAssemblerV2::mover_t &&mover,
                          AuthConnectionMetaRef&& new_auth_meta,
-                         ceph::crypto::onwire::rxtx_t new_rxtx,
                          uint64_t new_peer_global_seq,
                          // !reconnect
                          uint64_t new_client_cookie,
@@ -243,7 +219,7 @@ class ProtocolV2 final : public Protocol {
                          uint64_t new_msg_seq);
 
   // READY
-  seastar::future<> read_message(utime_t throttle_stamp);
+  seastar::future<> read_message(utime_t throttle_stamp, std::size_t msg_size);
   void execute_ready(bool dispatch_connect);
 
   // STANDBY
