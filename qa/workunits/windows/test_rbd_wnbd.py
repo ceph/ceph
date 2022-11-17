@@ -286,6 +286,13 @@ class RbdImage(object):
         return f"\\\\.\\PhysicalDrive{self.disk_number}"
 
     @Tracer.trace
+    def set_writable(self):
+        execute(
+            "powershell.exe", "-command",
+            "Set-Disk", "-Number", str(self.disk_number),
+            "-IsReadOnly", "$false")
+
+    @Tracer.trace
     def map(self, timeout: int = 60):
         LOG.info("Mapping image: %s", self.name)
         tstart = time.time()
@@ -296,7 +303,9 @@ class RbdImage(object):
         self.disk_number = self.get_disk_number(timeout=timeout)
 
         elapsed = time.time() - tstart
-        self._wait_for_disk(timeout=timeout - elapsed, )
+        self._wait_for_disk(timeout=timeout - elapsed)
+
+        self.set_writable()
 
     @Tracer.trace
     def unmap(self):
