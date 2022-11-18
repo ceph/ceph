@@ -668,8 +668,9 @@ void SnapMapper::record_purged_snaps(
       }
     }
   }
-  t->omap_rmkeys(ch->cid, hoid, rm);
-  t->omap_setkeys(ch->cid, hoid, m);
+  auto txn = backend.get_transaction(t);
+  txn.remove_keys(rm);
+  txn.set_keys(m);
   dout(10) << __func__ << " rm " << rm.size() << " keys, set " << m.size()
 	   << " keys" << dendl;
 }
