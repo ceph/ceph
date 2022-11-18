@@ -585,13 +585,10 @@ void SnapMapper::make_purged_snap_key_value(
 
 int SnapMapper::_lookup_purged_snap(
   CephContext *cct,
-  ObjectStore *store,
-  ObjectStore::CollectionHandle& ch,
-  const ghobject_t& hoid,
+  OSDriver& backend,
   int64_t pool, snapid_t snap,
   snapid_t *begin, snapid_t *end)
 {
-  OSDriver backend(store, ch, hoid);
   string k = make_purged_snap_key(pool, snap);
   std::pair<std::string, ceph::buffer::list> kv;
   if (auto ret = backend.get_next_or_current(k, &kv); ret == -ENOENT) {
@@ -628,6 +625,7 @@ void SnapMapper::record_purged_snaps(
   map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps)
 {
   dout(10) << __func__ << " purged_snaps " << purged_snaps << dendl;
+  OSDriver backend(store, ch, hoid);
   map<string,ceph::buffer::list> m;
   set<string> rm;
   for (auto& [epoch, bypool] : purged_snaps) {
@@ -640,9 +638,9 @@ void SnapMapper::record_purged_snaps(
 	snapid_t end = i.get_end();
 	snapid_t before_begin, before_end;
 	snapid_t after_begin, after_end;
-	int b = _lookup_purged_snap(cct, store, ch, hoid,
+	int b = _lookup_purged_snap(cct, backend,
 				    pool, begin - 1, &before_begin, &before_end);
-	int a = _lookup_purged_snap(cct, store, ch, hoid,
+	int a = _lookup_purged_snap(cct, backend,
 				    pool, end, &after_begin, &after_end);
 	if (!b && !a) {
 	  dout(10) << __func__
