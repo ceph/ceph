@@ -139,6 +139,10 @@ initializes a partition::
         New-Partition -AssignDriveLetter -UseMaximumSize | `
         Format-Volume -Force -Confirm:$false
 
+    # Show the partition letter (for example, "D:" or "F:"):
+    (Get-Partition -DiskNumber $diskNumber).DriveLetter
+
+
 Limitations
 -----------
 
