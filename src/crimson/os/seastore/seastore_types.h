@@ -391,13 +391,11 @@ private:
       assert(!is_end());
       return &*current;
     }
-    template <bool c = is_const, std::enable_if_t<c, int> = 0>
-    const std::pair<const segment_id_t, const T&> &operator*() {
-      assert(!is_end());
-      return *current;
-    }
-    template <bool c = is_const, std::enable_if_t<!c, int> = 0>
-    std::pair<const segment_id_t, T&> &operator*() {
+
+    using reference = std::conditional_t<
+      is_const, const std::pair<const segment_id_t, const T&>&,
+      std::pair<const segment_id_t, T&>&>;
+    reference operator*() {
       assert(!is_end());
       return *current;
     }
