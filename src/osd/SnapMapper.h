@@ -212,9 +212,7 @@ public:
 private:
   static int _lookup_purged_snap(
     CephContext *cct,
-    ObjectStore *store,
-    ObjectStore::CollectionHandle& ch,
-    const ghobject_t& hoid,
+    OSDriver& backend,
     int64_t pool, snapid_t snap,
     snapid_t *begin, snapid_t *end);
   static void make_purged_snap_key_value(
