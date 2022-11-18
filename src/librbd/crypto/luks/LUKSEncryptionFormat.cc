@@ -19,42 +19,60 @@ namespace crypto {
 namespace luks {
 
 template <typename I>
-LUKSEncryptionFormat<I>::LUKSEncryptionFormat(
-        encryption_algorithm_t alg,
-        std::string_view passphrase) : m_passphrase(passphrase), m_alg(alg) {
-}
-
-template <typename I>
-LUKSEncryptionFormat<I>::LUKSEncryptionFormat(
-        std::string_view passphrase) : m_passphrase(passphrase) {
+void EncryptionFormat<I>::flatten(I* image_ctx, Context* on_finish) {
+  auto req = luks::FlattenRequest<I>::create(image_ctx, on_finish);
+  req->send();
 }
 
 template <typename I>
 void LUKSEncryptionFormat<I>::format(I* image_ctx, Context* on_finish) {
-  if (get_format() == RBD_ENCRYPTION_FORMAT_LUKS) {
-    lderr(image_ctx->cct) << "explicit LUKS version required for format"
-                          << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
+  lderr(image_ctx->cct) << "explicit LUKS version required for format" << dendl;
+  on_finish->complete(-EINVAL);
+}
 
+template <typename I>
+void LUKSEncryptionFormat<I>::load(I* image_ctx,
+                                   std::string* detected_format_name,
+                                   Context* on_finish) {
+  auto req = luks::LoadRequest<I>::create(image_ctx, RBD_ENCRYPTION_FORMAT_LUKS,
+                                          m_passphrase, &this->m_crypto,
+                                          detected_format_name, on_finish);
+  req->send();
+}
+
+template <typename I>
+void LUKS1EncryptionFormat<I>::format(I* image_ctx, Context* on_finish) {
   auto req = luks::FormatRequest<I>::create(
-          image_ctx, get_format(), m_alg, m_passphrase, &m_crypto, on_finish,
-          false);
+      image_ctx, RBD_ENCRYPTION_FORMAT_LUKS1, m_alg, m_passphrase,
+      &this->m_crypto, on_finish, false);
   req->send();
 }
 
 template <typename I>
-void LUKSEncryptionFormat<I>::load(
-        I* image_ctx, std::string* detected_format_name, Context* on_finish) {
+void LUKS1EncryptionFormat<I>::load(I* image_ctx,
+                                    std::string* detected_format_name,
+                                    Context* on_finish) {
   auto req = luks::LoadRequest<I>::create(
-          image_ctx, m_passphrase, &m_crypto, detected_format_name, on_finish);
+      image_ctx, RBD_ENCRYPTION_FORMAT_LUKS1, m_passphrase, &this->m_crypto,
+      detected_format_name, on_finish);
   req->send();
 }
 
 template <typename I>
-void LUKSEncryptionFormat<I>::flatten(I* image_ctx, Context* on_finish) {
-  auto req = luks::FlattenRequest<I>::create(image_ctx, on_finish);
+void LUKS2EncryptionFormat<I>::format(I* image_ctx, Context* on_finish) {
+  auto req = luks::FormatRequest<I>::create(
+      image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2, m_alg, m_passphrase,
+      &this->m_crypto, on_finish, false);
+  req->send();
+}
+
+template <typename I>
+void LUKS2EncryptionFormat<I>::load(I* image_ctx,
+                                    std::string* detected_format_name,
+                                    Context* on_finish) {
+  auto req = luks::LoadRequest<I>::create(
+      image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2, m_passphrase, &this->m_crypto,
+      detected_format_name, on_finish);
   req->send();
 }
 
