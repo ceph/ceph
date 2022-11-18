@@ -5,7 +5,6 @@
 #define CEPH_LIBRBD_CRYPTO_ENCRYPTION_FORMAT_H
 
 #include <memory>
-#include "common/ref.h"
 
 struct Context;
 
