@@ -44,7 +44,7 @@ function cleanup () {
 
 function get_sources () {
     for s in $SOURCES ; do
-        curl --progress-bar --output $s ${DL_PREFIX}$s
+        curl --progress-bar --output $s -L ${DL_PREFIX}$s
     done
 }
 
