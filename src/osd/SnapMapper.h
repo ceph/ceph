@@ -197,10 +197,8 @@ public:
 
   static void record_purged_snaps(
     CephContext *cct,
-    ObjectStore *store,
-    ObjectStore::CollectionHandle& ch,
-    ghobject_t hoid,
-    ObjectStore::Transaction *t,
+    OSDriver& backend,
+    OSDriver::OSTransaction&& txn,
     std::map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps);
   static void scrub_purged_snaps(
     CephContext *cct,
