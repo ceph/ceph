@@ -22,6 +22,10 @@
 
 #include "common/hobject.h"
 #include "common/map_cacher.hpp"
+#ifdef WITH_SEASTAR
+#  include "crimson/os/futurized_store.h"
+#  include "crimson/os/futurized_collection.h"
+#endif
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/object.h"
@@ -30,8 +34,16 @@
 #include "osd/SnapMapReaderI.h"
 
 class OSDriver : public MapCacher::StoreDriver<std::string, ceph::buffer::list> {
-  ObjectStore *os;
-  ObjectStore::CollectionHandle ch;
+#ifdef WITH_SEASTAR
+  using ObjectStoreT = crimson::os::FuturizedStore;
+  using CollectionHandleT = ObjectStoreT::CollectionRef;
+#else
+  using ObjectStoreT = ObjectStore;
+  using CollectionHandleT = ObjectStoreT::CollectionHandle;
+#endif
+
+  ObjectStoreT *os;
+  CollectionHandleT ch;
   ghobject_t hoid;
 
 public:
@@ -39,11 +51,11 @@ public:
     friend class OSDriver;
     coll_t cid;
     ghobject_t hoid;
-    ObjectStore::Transaction *t;
+    ceph::os::Transaction *t;
     OSTransaction(
       const coll_t &cid,
       const ghobject_t &hoid,
-      ObjectStore::Transaction *t)
+      ceph::os::Transaction *t)
       : cid(cid), hoid(hoid), t(t) {}
   public:
     void set_keys(
@@ -61,13 +73,15 @@ public:
   };
 
   OSTransaction get_transaction(
-    ObjectStore::Transaction *t) const {
-    return OSTransaction(ch->cid, hoid, t);
+    ceph::os::Transaction *t) const {
+    return OSTransaction(ch->get_cid(), hoid, t);
   }
 
-  OSDriver(ObjectStore *os, const coll_t& cid, const ghobject_t &hoid) :
+#ifndef WITH_SEASTAR
+  OSDriver(ObjectStoreT *os, const coll_t& cid, const ghobject_t &hoid) :
     OSDriver(os, os->open_collection(cid), hoid) {}
-  OSDriver(ObjectStore *os, ObjectStore::CollectionHandle ch, const ghobject_t &hoid) :
+#endif
+  OSDriver(ObjectStoreT *os, CollectionHandleT ch, const ghobject_t &hoid) :
     os(os),
     ch(ch),
     hoid(hoid) {}

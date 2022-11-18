@@ -17,6 +17,7 @@
 #include <fmt/printf.h>
 #include <fmt/ranges.h>
 
+#include "global/global_context.h"
 #include "osd/osd_types_fmt.h"
 #include "SnapMapReaderI.h"
 
@@ -78,6 +79,28 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
 
   */
 
+#ifdef WITH_SEASTAR
+int OSDriver::get_keys(
+  const std::set<std::string> &keys,
+  std::map<std::string, ceph::buffer::list> *out)
+{
+  return -ENOENT;
+}
+
+int OSDriver::get_next(
+  const std::string &key,
+  std::pair<std::string, ceph::buffer::list> *next)
+{
+  return -ENOENT;
+}
+
+int OSDriver::get_next_or_current(
+  const std::string &key,
+  std::pair<std::string, ceph::buffer::list> *next_or_current)
+{
+  return -ENOENT;
+}
+#else
 int OSDriver::get_keys(
   const std::set<std::string> &keys,
   std::map<std::string, ceph::buffer::list> *out)
@@ -124,6 +147,7 @@ int OSDriver::get_next_or_current(
     return -ENOENT;
   }
 }
+#endif // WITH_SEASTAR
 
 string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
 {
@@ -801,6 +825,7 @@ bool SnapMapper::is_legacy_mapping(const string &to_test)
     LEGACY_MAPPING_PREFIX;
 }
 
+#ifndef WITH_SEASTAR
 /* Octopus modified the SnapMapper key format from
  *
  *  <LEGACY_MAPPING_PREFIX><snapid>_<shardid>_<hobject_t::to_str()>
@@ -833,7 +858,6 @@ std::string SnapMapper::convert_legacy_key(
     + "_" + object_suffix;
 }
 
-#ifndef WITH_SEASTAR
 int SnapMapper::convert_legacy(
   CephContext *cct,
   ObjectStore *store,
