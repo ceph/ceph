@@ -22,6 +22,9 @@ the real work. To mount a Ceph file system use::
 
   mount.ceph name@07fe3187-00d9-42a3-814b-72a4d5e7d5be.fs_name=/ /mnt/mycephfs -o mon_addr=1.2.3.4
 
+where "name" is the RADOS client name (referred to hereafter as "RADOS user",
+and meaning any individual or system actor such as an application). 
+
 Mount helper can fill in the cluster FSID by reading the ceph configuration file.
 Its recommended to call the mount helper via mount(8) as per::
 
