@@ -200,12 +200,6 @@ public:
     OSDriver& backend,
     OSDriver::OSTransaction&& txn,
     std::map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps);
-  static void scrub_purged_snaps(
-    CephContext *cct,
-    ObjectStore *store,
-    ObjectStore::CollectionHandle& ch,
-    ghobject_t mapper_hoid,
-    ghobject_t purged_snaps_hoid);
 
 private:
   static int _lookup_purged_snap(
