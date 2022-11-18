@@ -1904,7 +1904,7 @@ cdef class LibCephFS(object):
     def lstat(self, path):
         """
         Get a file's extended statistics and attributes. When file's a
-        symbolic link, return the informaion of the link itself rather
+        symbolic link, return the information of the link itself rather
         than that of the file it points too.
 
         :param path: the file or directory to get the statistics of.
