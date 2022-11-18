@@ -296,7 +296,6 @@ if(WITH_CEPHFS_JAVA)
 endif()
 
 if(WITH_RADOSGW_D4N)
->>>>>>> f409ee2d871 (RGW: Update D4N files and cpp_redis submodule)
   add_subdirectory(cpp_redis)
 endif()
 
