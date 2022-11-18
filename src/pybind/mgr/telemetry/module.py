@@ -1523,6 +1523,8 @@ class Module(MgrModule):
         # Formatting the perf histograms so they are human-readable. This will change the
         # ranges and values, which are currently in list form, into strings so that
         # they are displayed horizontally instead of vertically.
+        if 'report' in report:
+            report = report['report']
         try:
             # Formatting ranges and values in osd_perf_histograms
             mode = 'osd_perf_histograms'
@@ -1920,10 +1922,13 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
 
         if not self.channel_device:
             # device channel is off, no need to display its report
-            return 0, json.dumps(self.get_report_locked('default'), indent=4, sort_keys=True), ''
+            report = self.get_report_locked('default')
+        else:
+            # telemetry is on and device channel is enabled, show both
+            report = self.get_report_locked('all')
 
-        # telemetry is on and device channel is enabled, show both
-        return 0, json.dumps(self.get_report_locked('all'), indent=4, sort_keys=True), ''
+        self.format_perf_histogram(report)
+        return 0, json.dumps(report, indent=4, sort_keys=True), ''
 
     @CLIReadCommand('telemetry preview-all')
     def preview_all(self) -> Tuple[int, str, str]:
