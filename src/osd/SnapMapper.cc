@@ -618,14 +618,11 @@ int SnapMapper::_lookup_purged_snap(
 
 void SnapMapper::record_purged_snaps(
   CephContext *cct,
-  ObjectStore *store,
-  ObjectStore::CollectionHandle& ch,
-  ghobject_t hoid,
-  ObjectStore::Transaction *t,
+  OSDriver& backend,
+  OSDriver::OSTransaction&& txn,
   map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps)
 {
   dout(10) << __func__ << " purged_snaps " << purged_snaps << dendl;
-  OSDriver backend(store, ch, hoid);
   map<string,ceph::buffer::list> m;
   set<string> rm;
   for (auto& [epoch, bypool] : purged_snaps) {
@@ -668,7 +665,6 @@ void SnapMapper::record_purged_snaps(
       }
     }
   }
-  auto txn = backend.get_transaction(t);
   txn.remove_keys(rm);
   txn.set_keys(m);
   dout(10) << __func__ << " rm " << rm.size() << " keys, set " << m.size()
