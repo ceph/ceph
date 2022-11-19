@@ -3,7 +3,7 @@
     <cd-card title="Details"
              i18n-title
              class="col-sm-3 px-3">
-      <dl class="ml-4 mr-4">
+      <dl class="ms-4 me-4">
         <dt>FSID</dt>
         <dd>{{ detailsCardData.fsid }}</dd>
         <dt>Orchestror</dt>
@@ -16,22 +16,22 @@
     <cd-card title="Status"
              i18n-title
              class="col-sm-6 px-3">
-      <div class="d-flex ml-4 mr-4 mb-5"
+      <div class="d-flex ms-4 me-4 mb-5"
            *ngIf="healthData$ | async as healthData">
         <i *ngIf="healthData.health?.status"
            [ngClass]="[healthData.health.status | healthIcon, icons.large]"
            [ngStyle]="healthData.health.status | healthColor"
            [title]="healthData.health.status"></i>
-        <span class="ml-2 mt-n1"
+        <span class="ms-2 mt-n1"
               i18n>Cluster</span>
       </div>
       <section class="border-top mt-5"
                *ngIf="isAlertmanagerConfigured && (crticialActiveAlerts || warningActiveAlerts)">
-        <div class="d-flex flex-wrap ml-4 mr-4">
+        <div class="d-flex flex-wrap ms-4 me-4">
           <span class="pt-2"
                 i18n>Alerts</span>
           <!-- Potentially make widget component -->
-          <button class="btn btn-outline-danger rounded-pill ml-2"
+          <button class="btn btn-outline-danger rounded-pill ms-2"
                   [ngClass]="{'active': showAlerts && alertType === 'critical'}"
                   title="Danger"
                   (click)="toggleAlertsWindow('danger')"
@@ -42,7 +42,7 @@
             <span>{{ crticialActiveAlerts }}</span>
           </button>
 
-          <button class="btn btn-outline-warning rounded-pill ml-2"
+          <button class="btn btn-outline-warning rounded-pill ms-2"
                   [ngClass]="{'active': showAlerts && alertType === 'warning'}"
                   title="Warning"
                   (click)="toggleAlertsWindow('warning')"
@@ -66,7 +66,7 @@
              *ngIf="showAlerts">
           <hr class="mt-4">
           <ngx-simplebar [options]="simplebar">
-            <div class="card-body pl-0 pr-1 pt-1">
+            <div class="card-body ps-0 pe-1 pt-1">
               <ng-container *ngTemplateOutlet="alertsCard"></ng-container>
             </div>
           </ngx-simplebar>
@@ -77,7 +77,7 @@
     <cd-card title="Capacity"
              i18n-title
              class="col-sm-3 px-3">
-      <ng-container class="ml-4 mr-4"
+      <ng-container class="ms-4 me-4"
                     *ngIf="{osdSettings: osdSettings$ | async, capacity: capacity$ | async} as values">
         <ng-container *ngIf="values.osdSettings && values.capacity">
           <cd-dashboard-pie [data]="{max: values.capacity.total_bytes, current: values.capacity.total_used_raw_bytes}"
@@ -93,7 +93,7 @@
     <cd-card title="Inventory"
              i18n-title
              class="col-sm-3 px-3">
-      <div class="ml-4 mr-4">
+      <div class="ms-4 me-4">
         Text
       </div>
     </cd-card>
@@ -101,7 +101,7 @@
     <cd-card title="Capacity utilization"
              i18n-title
              class="col-sm-6 px-3">
-      <div class="ml-4 mr-4">
+      <div class="ms-4 me-4">
         Text
       </div>
     </cd-card>
@@ -109,7 +109,7 @@
     <cd-card title="Events"
              i18n-title
              class="col-sm-3 px-3">
-      <div class="ml-4 mr-4">
+      <div class="ms-4 me-4">
         Text
       </div>
     </cd-card>
@@ -129,11 +129,11 @@
             </span>
           </div>
           <div class="col-md-11">
-            <div class="card-body pl-0 pr-1 pt-1">
+            <div class="card-body ps-0 pe-1 pt-1">
               <h6 class="card-title bold">{{ alert.labels.alertname }}</h6>
-              <p class="card-text mr-3"
+              <p class="card-text me-3"
                  [innerHtml]="alert.annotations.summary"></p>
-              <p class="card-text text-muted mr-3">
+              <p class="card-text text-muted me-3">
                 <small class="date"
                        [title]="alert.startsAt | cdDate"
                        i18n>Active since: {{ alert.startsAt  | relativeDate }}</small>
