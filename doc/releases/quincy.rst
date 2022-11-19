@@ -807,20 +807,26 @@ Upgrading non-cephadm clusters
    :ref:`cephadm-adoption`.
 
 #. Set the ``noout`` flag for the duration of the upgrade. (Optional,
-   but recommended.)::
+   but recommended.):
 
-     # ceph osd set noout
+   .. prompt:: bash #
+
+      ceph osd set noout
 
 #. Upgrade monitors by installing the new packages and restarting the
-   monitor daemons.  For example, on each monitor host,::
+   monitor daemons.  For example, on each monitor host,:
+   
+   .. prompt:: bash #
 
-     # systemctl restart ceph-mon.target
+      systemctl restart ceph-mon.target
 
    Once all monitors are up, verify that the monitor upgrade is
    complete by looking for the ``quincy`` string in the mon
-   map.  The command::
+   map.  The command:
+   
+   .. prompt:: bash #
 
-     # ceph mon dump | grep min_mon_release
+      ceph mon dump | grep min_mon_release
 
    should report::
 
@@ -830,14 +836,20 @@ Upgrading non-cephadm clusters
    upgraded and restarted and/or the quorum does not include all monitors.
 
 #. Upgrade ``ceph-mgr`` daemons by installing the new packages and
-   restarting all manager daemons.  For example, on each manager host,::
+   restarting all manager daemons.  For example, on each manager host,:
+   
+   .. prompt:: bash #
 
-     # systemctl restart ceph-mgr.target
+      systemctl restart ceph-mgr.target
 
    Verify the ``ceph-mgr`` daemons are running by checking ``ceph
-   -s``::
+   -s``:
+   
+   .. prompt:: bash #
 
-     # ceph -s
+      ceph -s
+
+   ::
 
      ...
        services:
@@ -846,61 +858,85 @@ Upgrading non-cephadm clusters
      ...
 
 #. Upgrade all OSDs by installing the new packages and restarting the
-   ceph-osd daemons on all OSD hosts::
+   ceph-osd daemons on all OSD hosts:
+   
+   .. prompt:: bash #
 
-     # systemctl restart ceph-osd.target
+      systemctl restart ceph-osd.target
 
 #. Upgrade all CephFS MDS daemons. For each CephFS file system,
 
-   #. Disable standby_replay::
+   #. Disable standby_replay:
+         
+      .. prompt:: bash #
 
-	# ceph fs set <fs_name> allow_standby_replay false
+	 ceph fs set <fs_name> allow_standby_replay false
 
    #. Reduce the number of ranks to 1.  (Make note of the original
-      number of MDS daemons first if you plan to restore it later.)::
+      number of MDS daemons first if you plan to restore it later.):
+      
+      .. prompt:: bash #
 
-	# ceph status
-	# ceph fs set <fs_name> max_mds 1
+	 ceph status
+	 ceph fs set <fs_name> max_mds 1
 
    #. Wait for the cluster to deactivate any non-zero ranks by
-      periodically checking the status::
+      periodically checking the status:
+      
+      .. prompt:: bash #
 
-	# ceph status
+	 ceph status
 
-   #. Take all standby MDS daemons offline on the appropriate hosts with::
+   #. Take all standby MDS daemons offline on the appropriate hosts with:
 
-	# systemctl stop ceph-mds@<daemon_name>
+      .. prompt:: bash #
 
-   #. Confirm that only one MDS is online and is rank 0 for your FS::
+	 systemctl stop ceph-mds@<daemon_name>
 
-	# ceph status
+   #. Confirm that only one MDS is online and is rank 0 for your FS:
+
+      .. prompt:: bash #
+
+	 ceph status
 
    #. Upgrade the last remaining MDS daemon by installing the new
-      packages and restarting the daemon::
+      packages and restarting the daemon:
 
-        # systemctl restart ceph-mds.target
+      .. prompt:: bash #
 
-   #. Restart all standby MDS daemons that were taken offline::
+         systemctl restart ceph-mds.target
 
-	# systemctl start ceph-mds.target
+   #. Restart all standby MDS daemons that were taken offline:
 
-   #. Restore the original value of ``max_mds`` for the volume::
+      .. prompt:: bash #
 
-	# ceph fs set <fs_name> max_mds <original_max_mds>
+	 systemctl start ceph-mds.target
+
+   #. Restore the original value of ``max_mds`` for the volume:
+
+      .. prompt:: bash #
+
+	 ceph fs set <fs_name> max_mds <original_max_mds>
 
 #. Upgrade all radosgw daemons by upgrading packages and restarting
-   daemons on all hosts::
+   daemons on all hosts:
 
-     # systemctl restart ceph-radosgw.target
+   .. prompt:: bash #
+
+      systemctl restart ceph-radosgw.target
 
 #. Complete the upgrade by disallowing pre-Quincy OSDs and enabling
-   all new Quincy-only functionality::
+   all new Quincy-only functionality:
 
-     # ceph osd require-osd-release quincy
+   .. prompt:: bash #
 
-#. If you set ``noout`` at the beginning, be sure to clear it with::
+      ceph osd require-osd-release quincy
 
-     # ceph osd unset noout
+#. If you set ``noout`` at the beginning, be sure to clear it with:
+
+   .. prompt:: bash #
+
+      ceph osd unset noout
 
 #. Consider transitioning your cluster to use the cephadm deployment
    and orchestration framework to simplify cluster management and
@@ -912,21 +948,27 @@ Post-upgrade
 
 #. Verify the cluster is healthy with ``ceph health``. If your cluster is
    running Filestore, a deprecation warning is expected. This warning can
-   be temporarily muted using the following command::
+   be temporarily muted using the following command:
 
-     ceph health mute OSD_FILESTORE
+   .. prompt:: bash #
+
+      ceph health mute OSD_FILESTORE
 
 #. If you are upgrading from Mimic, or did not already do so when you
    upgraded to Nautilus, we recommend you enable the new :ref:`v2
-   network protocol <msgr2>`, issue the following command::
+   network protocol <msgr2>`, issue the following command:
 
-     ceph mon enable-msgr2
+   .. prompt:: bash #
+
+      ceph mon enable-msgr2
 
    This will instruct all monitors that bind to the old default port
    6789 for the legacy v1 protocol to also bind to the new 3300 v2
-   protocol port.  To see if all monitors have been updated,::
+   protocol port.  To see if all monitors have been updated, run this:
 
-     ceph mon dump
+   .. prompt:: bash #
+
+      ceph mon dump
 
    and verify that each monitor has both a ``v2:`` and ``v1:`` address
    listed.
@@ -934,14 +976,18 @@ Post-upgrade
 #. Consider enabling the :ref:`telemetry module <telemetry>` to send
    anonymized usage statistics and crash information to the Ceph
    upstream developers.  To see what would be reported (without actually
-   sending any information to anyone),::
+   sending any information to anyone),:
 
-     ceph telemetry preview-all
+   .. prompt:: bash #
+
+      ceph telemetry preview-all
 
    If you are comfortable with the data that is reported, you can opt-in to
-   automatically report the high-level cluster metadata with::
+   automatically report the high-level cluster metadata with:
 
-     ceph telemetry on
+   .. prompt:: bash #
+
+      ceph telemetry on
 
    The public dashboard that aggregates Ceph telemetry can be found at
    `https://telemetry-public.ceph.com/ <https://telemetry-public.ceph.com/>`_.
