@@ -240,6 +240,17 @@
                 See :term:`pool`.
 
 	RADOS
+                **R**\eliable **A**\utonomic **D**\istributed **O**\bject
+                **S**\tore. RADOS is the object store that provides a scalable
+                service for variably-sized objects. The RADOS object store is
+                the core component of a Ceph cluster.  `This blog post from
+                2009
+                <https://ceph.io/en/news/blog/2009/the-rados-distributed-object-store/>`_
+                provides a beginner's introduction to RADOS. Readers interested
+                in a deeper understanding of RADOS are directed to `RADOS: A
+                Scalable, Reliable Storage Service for Petabyte-scale Storage
+                Clusters <https://ceph.io/assets/pdfs/weil-rados-pdsw07.pdf>`_.
+
 	RADOS Cluster
 	RADOS Gateway
 	RBD
@@ -247,7 +258,7 @@
 
 	Reliable Autonomic Distributed Object Store
                 The core set of storage software which stores the user's data
-                (MON+OSD).
+                (MON+OSD). See also :term:`RADOS`.
 
 	RGW
 		The S3/Swift gateway component of Ceph.
