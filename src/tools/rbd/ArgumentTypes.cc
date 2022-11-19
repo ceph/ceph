@@ -331,9 +331,9 @@ void add_snap_create_options(po::options_description *opt) {
 
 void add_encryption_options(boost::program_options::options_description *opt) {
   opt->add_options()
-  (ENCRYPTION_FORMAT.c_str(),
-   po::value<std::vector<EncryptionFormat>>(),
-   "encryption formats [possible values: luks]");
+    (ENCRYPTION_FORMAT.c_str(),
+     po::value<std::vector<EncryptionFormat>>(),
+     "encryption format (luks, luks1, luks2)");
 
   opt->add_options()
     (ENCRYPTION_PASSPHRASE_FILE.c_str(),
@@ -538,14 +538,15 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               EncryptionFormat *target_type, int) {
   po::validators::check_first_occurrence(v);
   const std::string &s = po::validators::get_single_string(values);
-  EncryptionFormat format;
   if (s == "luks") {
-    format.format = RBD_ENCRYPTION_FORMAT_LUKS;
+    v = boost::any(EncryptionFormat{RBD_ENCRYPTION_FORMAT_LUKS});
+  } else if (s == "luks1") {
+    v = boost::any(EncryptionFormat{RBD_ENCRYPTION_FORMAT_LUKS1});
+  } else if (s == "luks2") {
+    v = boost::any(EncryptionFormat{RBD_ENCRYPTION_FORMAT_LUKS2});
   } else {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
-
-  v = boost::any(format);
 }
 
 void validate(boost::any& v, const std::vector<std::string>& values,

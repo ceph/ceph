@@ -119,8 +119,8 @@ struct Config {
   std::string format;
   bool pretty_format = false;
 
-  std::vector<librbd::encryption_format_t> encryption_format;
-  std::vector<std::string> encryption_passphrase_file;
+  std::vector<librbd::encryption_format_t> encryption_formats;
+  std::vector<std::string> encryption_passphrase_files;
 
   Command command = None;
   int pid = 0;
@@ -152,8 +152,8 @@ static void usage()
             << "               [options] list-mapped                 List mapped nbd devices\n"
             << "Map and attach options:\n"
             << "  --device <device path>        Specify nbd device path (/dev/nbd{num})\n"
-            << "  --encryption-format           Image encryption format\n"
-            << "                                (possible values: luks)\n"
+            << "  --encryption-format luks|luks1|luks2\n"
+            << "                                Image encryption format\n"
             << "  --encryption-passphrase-file  Path of file containing passphrase for unlocking image encryption\n"
             << "  --exclusive                   Forbid writes by other clients\n"
             << "  --notrim                      Turn off trim/discard\n"
@@ -943,6 +943,43 @@ private:
   }
 };
 
+struct EncryptionOptions {
+  std::vector<librbd::encryption_spec_t> specs;
+
+  ~EncryptionOptions() {
+    for (auto& spec : specs) {
+      switch (spec.format) {
+      case RBD_ENCRYPTION_FORMAT_LUKS: {
+        auto opts =
+            static_cast<librbd::encryption_luks_format_options_t*>(spec.opts);
+        ceph_memzero_s(opts->passphrase.data(), opts->passphrase.size(),
+                       opts->passphrase.size());
+        delete opts;
+        break;
+      }
+      case RBD_ENCRYPTION_FORMAT_LUKS1: {
+        auto opts =
+            static_cast<librbd::encryption_luks1_format_options_t*>(spec.opts);
+        ceph_memzero_s(opts->passphrase.data(), opts->passphrase.size(),
+                       opts->passphrase.size());
+        delete opts;
+        break;
+      }
+      case RBD_ENCRYPTION_FORMAT_LUKS2: {
+        auto opts =
+            static_cast<librbd::encryption_luks2_format_options_t*>(spec.opts);
+        ceph_memzero_s(opts->passphrase.data(), opts->passphrase.size(),
+                       opts->passphrase.size());
+        delete opts;
+        break;
+      }
+      default:
+        ceph_abort();
+      }
+    }
+  }
+};
+
 static std::string get_cookie(const std::string &devpath)
 {
   std::string cookie;
@@ -1588,7 +1625,6 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
   unsigned long size;
   unsigned long blksize = RBD_NBD_BLKSIZE;
   bool use_netlink;
-  auto encryption_format_count = cfg->encryption_format.size();
 
   int fd[2];
 
@@ -1679,55 +1715,53 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
     }
   }
 
-  if (encryption_format_count > 0) {
-    std::vector<librbd::encryption_spec_t> specs(encryption_format_count);
-    std::vector<librbd::encryption_luks_format_options_t> luks_opts;
+  if (!cfg->encryption_formats.empty()) {
+    EncryptionOptions encryption_options;
+    encryption_options.specs.reserve(cfg->encryption_formats.size());
 
-    luks_opts.reserve(encryption_format_count);
-
-    auto sg = make_scope_guard([&] {
-      for (auto& opts : luks_opts) {
-        auto& passphrase = opts.passphrase;
-        ceph_memzero_s(&passphrase[0], passphrase.size(), passphrase.size());
-      }
-    });
-
-    for (size_t i = 0; i < encryption_format_count; ++i) {
-      std::ifstream file(cfg->encryption_passphrase_file[i],
+    for (size_t i = 0; i < cfg->encryption_formats.size(); ++i) {
+      std::ifstream file(cfg->encryption_passphrase_files[i],
                          std::ios::in | std::ios::binary);
-      auto sg2 = make_scope_guard([&] { file.close(); });
-
-      specs[i].format = cfg->encryption_format[i];
-      std::string* passphrase;
-      switch (specs[i].format) {
-        case RBD_ENCRYPTION_FORMAT_LUKS: {
-          luks_opts.emplace_back();
-          specs[i].opts = &luks_opts.back();
-          specs[i].opts_size = sizeof(luks_opts.back());
-          passphrase = &luks_opts.back().passphrase;
-          break;
-        }
-        default:
-          r = -ENOTSUP;
-          cerr << "rbd-nbd: unsupported encryption format: " << specs[i].format
-               << std::endl;
-          goto close_fd;
-      }
-
-      passphrase->assign((std::istreambuf_iterator<char>(file)),
-                         (std::istreambuf_iterator<char>()));
-
       if (file.fail()) {
         r = -errno;
         std::cerr << "rbd-nbd: unable to open passphrase file '"
-                  << cfg->encryption_passphrase_file[i] << "': "
-                  << cpp_strerror(errno) << std::endl;
+                  << cfg->encryption_passphrase_files[i] << "': "
+                  << cpp_strerror(r) << std::endl;
         goto close_fd;
+      }
+      std::string passphrase((std::istreambuf_iterator<char>(file)),
+                             std::istreambuf_iterator<char>());
+      file.close();
+
+      switch (cfg->encryption_formats[i]) {
+      case RBD_ENCRYPTION_FORMAT_LUKS: {
+        auto opts = new librbd::encryption_luks_format_options_t{
+            std::move(passphrase)};
+        encryption_options.specs.push_back(
+            {RBD_ENCRYPTION_FORMAT_LUKS, opts, sizeof(*opts)});
+        break;
+      }
+      case RBD_ENCRYPTION_FORMAT_LUKS1: {
+        auto opts = new librbd::encryption_luks1_format_options_t{
+            .passphrase = std::move(passphrase)};
+        encryption_options.specs.push_back(
+            {RBD_ENCRYPTION_FORMAT_LUKS1, opts, sizeof(*opts)});
+        break;
+      }
+      case RBD_ENCRYPTION_FORMAT_LUKS2: {
+        auto opts = new librbd::encryption_luks2_format_options_t{
+            .passphrase = std::move(passphrase)};
+        encryption_options.specs.push_back(
+            {RBD_ENCRYPTION_FORMAT_LUKS2, opts, sizeof(*opts)});
+        break;
+      }
+      default:
+        ceph_abort();
       }
     }
 
-    r = image.encryption_load2(&specs[0], encryption_format_count);
-
+    r = image.encryption_load2(encryption_options.specs.data(),
+                               encryption_options.specs.size());
     if (r != 0) {
       cerr << "rbd-nbd: failed to load encryption: " << cpp_strerror(r)
            << std::endl;
@@ -2142,15 +2176,11 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     } else if (ceph_argparse_witharg(args, i, &arg_value,
                                      "--encryption-format", (char *)NULL)) {
       if (arg_value == "luks1") {
-        cfg->encryption_format.push_back(RBD_ENCRYPTION_FORMAT_LUKS);
-        *err_msg << "rbd-nbd: specifying luks1 when loading encryption "
-                    "is deprecated, use luks";
+        cfg->encryption_formats.push_back(RBD_ENCRYPTION_FORMAT_LUKS1);
       } else if (arg_value == "luks2") {
-        cfg->encryption_format.push_back(RBD_ENCRYPTION_FORMAT_LUKS);
-        *err_msg << "rbd-nbd: specifying luks2 when loading encryption "
-                    "is deprecated, use luks";
+        cfg->encryption_formats.push_back(RBD_ENCRYPTION_FORMAT_LUKS2);
       } else if (arg_value == "luks") {
-        cfg->encryption_format.push_back(RBD_ENCRYPTION_FORMAT_LUKS);
+        cfg->encryption_formats.push_back(RBD_ENCRYPTION_FORMAT_LUKS);
       } else {
         *err_msg << "rbd-nbd: Invalid encryption format";
         return -EINVAL;
@@ -2158,13 +2188,13 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     } else if (ceph_argparse_witharg(args, i, &arg_value,
                                      "--encryption-passphrase-file",
                                      (char *)NULL)) {
-      cfg->encryption_passphrase_file.push_back(arg_value);
+      cfg->encryption_passphrase_files.push_back(arg_value);
     } else {
       ++i;
     }
   }
 
-  if (cfg->encryption_format.size() != cfg->encryption_passphrase_file.size()) {
+  if (cfg->encryption_formats.size() != cfg->encryption_passphrase_files.size()) {
     *err_msg << "rbd-nbd: Encryption formats count does not match "
              << "passphrase files count";
     return -EINVAL;
