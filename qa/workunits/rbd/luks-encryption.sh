@@ -94,7 +94,8 @@ function test_clone_encryption() {
   sudo rbd device unmap -t nbd $LIBRBD_DEV
 
   # flatten
-  rbd flatten testimg2 --encryption-format luks --encryption-format luks --encryption-passphrase-file /tmp/passphrase2 --encryption-passphrase-file /tmp/passphrase
+  expect_false rbd flatten testimg2 --encryption-format luks1 --encryption-format luks2 --encryption-passphrase-file /tmp/passphrase2 --encryption-passphrase-file /tmp/passphrase
+  rbd flatten testimg2 --encryption-format luks2 --encryption-format luks1 --encryption-passphrase-file /tmp/passphrase2 --encryption-passphrase-file /tmp/passphrase
 
   # verify with cryptsetup
   RAW_FLAT_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd)

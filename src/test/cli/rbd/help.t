@@ -878,7 +878,7 @@
     --namespace arg                  namespace name
     --image arg                      image name
     --no-progress                    disable progress output
-    --encryption-format arg          encryption formats [possible values: luks]
+    --encryption-format arg          encryption format (luks, luks1, luks2)
     --encryption-passphrase-file arg path to file containing passphrase for
                                      unlocking the image
   
@@ -2253,7 +2253,7 @@
     -s [ --size ] arg                image size (in M/G/T) [default: M]
     --allow-shrink                   permit shrinking
     --no-progress                    disable progress output
-    --encryption-format arg          encryption formats [possible values: luks]
+    --encryption-format arg          encryption format (luks, luks1, luks2)
     --encryption-passphrase-file arg path to file containing passphrase for
                                      unlocking the image
   
