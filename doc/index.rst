@@ -112,6 +112,8 @@ about Ceph, see our `Architecture`_ section.
    governance
    foundation
    ceph-volume/index
+   Ceph Releases (general) <https://docs.ceph.com/en/latest/releases/general/>
+   Ceph Releases (index) <https://docs.ceph.com/en/latest/releases/>
    security/index
    Glossary <glossary>
    Tracing <jaegertracing/index>
