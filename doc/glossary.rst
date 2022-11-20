@@ -27,9 +27,14 @@
                 storage cluster. See also :term:`RBD`.
 
 	Ceph Block Storage
-                The block storage "product," service or capabilities when used
-                in conjunction with ``librbd``, a hypervisor such as QEMU or
-                Xen, and a hypervisor abstraction layer such as ``libvirt``.
+                One of the three kinds of storage supported by Ceph (the other
+                two are object storage and file storage). Ceph Block Storage is
+                the block storage "product", which refers to block-storage
+                related services and capabilities when used in conjunction with
+                the collection of (1) ``librbd`` (a python module that provides
+                file-like access to :term:`RBD` images), (2) a hypervisor such
+                as QEMU or Xen, and (3) a hypervisor abstraction layer such as
+                ``libvirt``.
 
 	Ceph Client
                 The collection of Ceph components which can access a Ceph
