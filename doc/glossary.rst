@@ -253,6 +253,8 @@
 
 	RADOS Cluster
 	RADOS Gateway
+                See :term:`RGW`.
+
 	RBD
 		The block storage component of Ceph.
 
@@ -260,8 +262,12 @@
                 The core set of storage software which stores the user's data
                 (MON+OSD). See also :term:`RADOS`.
 
-	RGW
-		The S3/Swift gateway component of Ceph.
+	:ref:`RGW<object-gateway>`
+                **R**\ADOS **G**\ate **W**\ay.
+
+                The component of Ceph that provides a gateway to both the
+                Amazon S3 RESTful API and the OpenStack Swift API. Also called
+                "RADOS Gateway" and "Ceph Object Gateway".
 
 	systemd oneshot
                 A systemd ``type`` where a command is defined in ``ExecStart``
