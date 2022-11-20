@@ -64,6 +64,8 @@
 
 #include "common/ceph_time.h"
 
+#include "common/tracer.h"
+
 namespace neorados {
 class Object;
 class IOContext;
@@ -1409,29 +1411,29 @@ public:
   auto execute(Object o, IOContext ioc, ReadOp op,
 	       ceph::buffer::list* bl,
 	       CompletionToken&& token, uint64_t* objver = nullptr,
-	       const blkin_trace_info* trace_info = nullptr,
+	       const jspan_context& trace = {false, false},
 	       std::uint64_t subsystem = 0) {
     auto consigned = consign(std::forward<CompletionToken>(token));
     return boost::asio::async_initiate<decltype(consigned), Op::Signature>(
-      [bl, objver, trace_info,
+      [bl, objver, trace,
        subsystem, this](auto&& handler, Object o, IOContext ioc,
 			ReadOp op) {
 	execute_(std::move(o), std::move(ioc), std::move(op), bl,
-		 std::move(handler), objver, trace_info, subsystem);
+		 std::move(handler), objver, trace, subsystem);
       }, consigned, std::move(o), std::move(ioc), std::move(op));
   }
 
   template<boost::asio::completion_token_for<Op::Signature> CompletionToken>
   auto execute(Object o, IOContext ioc, WriteOp op,
 	       CompletionToken&& token, uint64_t* objver = nullptr,
-	       const blkin_trace_info* trace_info = nullptr,
+	       const jspan_context& trace = {false, false},
 	       std::uint64_t subsystem = 0) {
     auto consigned = consign(std::forward<CompletionToken>(token));
     return boost::asio::async_initiate<decltype(consigned), Op::Signature>(
-      [objver, trace_info,
+      [objver, trace,
        subsystem, this](auto&& handler, Object o, IOContext ioc, WriteOp op) {
 	execute_(std::move(o), std::move(ioc), std::move(op),
-		 std::move(handler), objver, trace_info, subsystem);
+		 std::move(handler), objver, trace, subsystem);
       }, consigned, std::move(o), std::move(ioc), std::move(op));
   }
 
@@ -1823,12 +1825,12 @@ private:
 
   void execute_(Object o, IOContext ioc, ReadOp op,
 		ceph::buffer::list* bl, Op::Completion c,
-		uint64_t* objver, const blkin_trace_info* trace_info,
+		uint64_t* objver, const jspan_context& trace,
 		uint64_t subsystem);
 
   void execute_(Object o, IOContext ioc, WriteOp op,
 		Op::Completion c, uint64_t* objver,
-		const blkin_trace_info* trace_info,
+		const jspan_context& trace,
 		uint64_t subsystem);
 
   void lookup_pool_(std::string name, LookupPoolComp c);

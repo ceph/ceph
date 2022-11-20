@@ -12,8 +12,6 @@
 #include "librbd/io/Types.h"
 #include "librbd/io/ReadResult.h"
 
-namespace ZTracer { struct Trace; }
-
 namespace librbd {
 
 namespace io {
@@ -34,7 +32,7 @@ struct Api {
 
   virtual void read_parent(
       ImageCtxT *image_ctx, uint64_t object_no, io::ReadExtents* extents,
-      librados::snap_t snap_id, const ZTracer::Trace &trace,
+      librados::snap_t snap_id, const jspan_context &trace,
       Context* on_finish);
 
   virtual void execute_image_metadata_set(

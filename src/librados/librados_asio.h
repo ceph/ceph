@@ -215,7 +215,7 @@ auto async_write(IoExecutor ex, IoCtx& io, const std::string& oid,
 template <boost::asio::execution::executor IoExecutor, typename CompletionToken>
 auto async_operate(IoExecutor ex, IoCtx& io, const std::string& oid,
                    ObjectReadOperation read_op, int flags,
-                   const jspan_context* trace_ctx, CompletionToken&& token)
+                   const jspan_context& trace_ctx, CompletionToken&& token)
 {
   using Op = detail::AsyncOp<bufferlist>;
   using Signature = typename Op::Signature;
@@ -246,14 +246,14 @@ auto async_operate(IoExecutor ex, IoCtx& io, const std::string& oid,
 template <boost::asio::execution::executor IoExecutor, typename CompletionToken>
 auto async_operate(IoExecutor ex, IoCtx& io, const std::string& oid,
                    ObjectWriteOperation write_op, int flags,
-                   const jspan_context* trace_ctx, CompletionToken &&token)
+                   const jspan_context& trace_ctx, CompletionToken &&token)
 {
   using Op = detail::AsyncOp<void>;
   using Signature = typename Op::Signature;
   return boost::asio::async_initiate<CompletionToken, Signature>(
       [] (auto handler, IoExecutor ex, const IoCtx& i, const std::string& oid,
           ObjectWriteOperation write_op, int flags,
-          const jspan_context* trace_ctx) {
+          const jspan_context& trace_ctx) {
         constexpr bool is_read = false;
         auto p = Op::create(ex, is_read, std::move(handler));
         auto& op = p->user_data;

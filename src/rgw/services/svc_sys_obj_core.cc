@@ -177,7 +177,7 @@ int RGWSI_SysObj_Core::read(const DoutPrefixProvider *dpp,
   }
 
   version_t op_ver = 0;
-  r = rgw_rados_operate(dpp, ref.ioctx, obj.oid, std::move(op), nullptr, y, 0, nullptr, &op_ver);
+  r = rgw_rados_operate(dpp, ref.ioctx, obj.oid, std::move(op), nullptr, y, 0, {false, false}, &op_ver);
   if (r < 0) {
     ldpp_dout(dpp, 20) << "rados_obj.operate() r=" << r << " bl.length=" << bl->length() << dendl;
     return r;

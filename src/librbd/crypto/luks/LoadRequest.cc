@@ -57,11 +57,10 @@ void LoadRequest<I>::read(uint64_t end_offset, Context* on_finish) {
   auto aio_comp = io::AioCompletion::create_and_start(
           on_finish, librbd::util::get_image_ctx(m_image_ctx),
           io::AIO_TYPE_READ);
-  ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_read(
           *m_image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
           {{m_offset, length}}, io::ImageArea::DATA, io::ReadResult{&m_bl},
-          m_image_ctx->get_data_io_context(), 0, 0, trace);
+          m_image_ctx->get_data_io_context(), 0, 0, {false, false});
   req->send();
 }
 

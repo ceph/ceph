@@ -836,7 +836,7 @@ TEST_F(TestMockMigrationQCOWFormat, Read) {
   bufferlist bl;
   io::ReadResult read_result{&bl};
   mock_qcow_format.read(aio_comp, CEPH_NOSNAP, {{65659, 123}},
-                        std::move(read_result), 0, 0, {});
+                        std::move(read_result), 0, 0, {false, false});
   ASSERT_EQ(123, ctx2.wait());
   ASSERT_EQ(expect_bl, bl);
 
@@ -871,7 +871,7 @@ TEST_F(TestMockMigrationQCOWFormat, ReadL1DNE) {
   bufferlist bl;
   io::ReadResult read_result{&bl};
   mock_qcow_format.read(aio_comp, CEPH_NOSNAP, {{234, 123}},
-                        std::move(read_result), 0, 0, {});
+                        std::move(read_result), 0, 0, {false, false});
   ASSERT_EQ(123, ctx2.wait());
   bufferlist expect_bl;
   expect_bl.append_zero(123);
@@ -911,7 +911,7 @@ TEST_F(TestMockMigrationQCOWFormat, ReadL2DNE) {
   bufferlist bl;
   io::ReadResult read_result{&bl};
   mock_qcow_format.read(aio_comp, CEPH_NOSNAP, {{234, 123}},
-                        std::move(read_result), 0, 0, {});
+                        std::move(read_result), 0, 0, {false, false});
   ASSERT_EQ(123, ctx2.wait());
   bufferlist expect_bl;
   expect_bl.append_zero(123);
@@ -951,7 +951,7 @@ TEST_F(TestMockMigrationQCOWFormat, ReadZero) {
   bufferlist bl;
   io::ReadResult read_result{&bl};
   mock_qcow_format.read(aio_comp, CEPH_NOSNAP, {{65659, 123}},
-                        std::move(read_result), 0, 0, {});
+                        std::move(read_result), 0, 0, {false, false});
   ASSERT_EQ(123, ctx2.wait());
   bufferlist expect_bl;
   expect_bl.append_zero(123);
@@ -1005,7 +1005,7 @@ TEST_F(TestMockMigrationQCOWFormat, ReadSnap) {
   bufferlist bl;
   io::ReadResult read_result{&bl};
   mock_qcow_format.read(aio_comp, 1, {{65659, 123}},
-                        std::move(read_result), 0, 0, {});
+                        std::move(read_result), 0, 0, {false, false});
   ASSERT_EQ(123, ctx2.wait());
   ASSERT_EQ(expect_bl, bl);
 
@@ -1040,7 +1040,7 @@ TEST_F(TestMockMigrationQCOWFormat, ReadSnapDNE) {
   bufferlist bl;
   io::ReadResult read_result{&bl};
   mock_qcow_format.read(aio_comp, 1, {{65659, 123}},
-                        std::move(read_result), 0, 0, {});
+                        std::move(read_result), 0, 0, {false, false});
   ASSERT_EQ(-ENOENT, ctx2.wait());
 
   C_SaferCond ctx3;
@@ -1091,7 +1091,7 @@ TEST_F(TestMockMigrationQCOWFormat, ReadClusterCacheHit) {
   bufferlist bl1;
   io::ReadResult read_result1{&bl1};
   mock_qcow_format.read(aio_comp1, CEPH_NOSNAP, {{65659, 123}},
-                        std::move(read_result1), 0, 0, {});
+                        std::move(read_result1), 0, 0, {false, false});
   ASSERT_EQ(123, ctx2.wait());
   ASSERT_EQ(expect_bl1, bl1);
 
@@ -1101,7 +1101,7 @@ TEST_F(TestMockMigrationQCOWFormat, ReadClusterCacheHit) {
   bufferlist bl2;
   io::ReadResult read_result2{&bl2};
   mock_qcow_format.read(aio_comp2, CEPH_NOSNAP, {{66016, 234}},
-                        std::move(read_result2), 0, 0, {});
+                        std::move(read_result2), 0, 0, {false, false});
   ASSERT_EQ(234, ctx3.wait());
   ASSERT_EQ(expect_bl2, bl2);
 
@@ -1143,7 +1143,7 @@ TEST_F(TestMockMigrationQCOWFormat, ReadClusterError) {
   bufferlist bl;
   io::ReadResult read_result{&bl};
   mock_qcow_format.read(aio_comp, CEPH_NOSNAP, {{65659, 123}},
-                        std::move(read_result), 0, 0, {});
+                        std::move(read_result), 0, 0, {false, false});
   ASSERT_EQ(-EIO, ctx2.wait());
 
   C_SaferCond ctx3;
@@ -1180,7 +1180,7 @@ TEST_F(TestMockMigrationQCOWFormat, ReadL2TableError) {
   bufferlist bl;
   io::ReadResult read_result{&bl};
   mock_qcow_format.read(aio_comp, CEPH_NOSNAP, {{65659, 123}},
-                        std::move(read_result), 0, 0, {});
+                        std::move(read_result), 0, 0, {false, false});
   ASSERT_EQ(-EIO, ctx2.wait());
 
   C_SaferCond ctx3;
@@ -1241,7 +1241,7 @@ TEST_F(TestMockMigrationQCOWFormat, ListSnaps) {
   C_SaferCond ctx2;
   io::SnapshotDelta snapshot_delta;
   mock_qcow_format.list_snaps({{0, 196608}}, {1, CEPH_NOSNAP}, 0,
-                              &snapshot_delta, {}, &ctx2);
+                              &snapshot_delta, {false, false}, &ctx2);
   ASSERT_EQ(0, ctx2.wait());
 
   io::SnapshotDelta expected_snapshot_delta;

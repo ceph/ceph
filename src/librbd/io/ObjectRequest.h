@@ -40,26 +40,26 @@ public:
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
       ceph::bufferlist&& data, IOContext io_context, int op_flags,
       int write_flags, std::optional<uint64_t> assert_version,
-      const ZTracer::Trace &parent_trace, Context *completion);
+      const jspan_context &parent_trace, Context *completion);
   static ObjectRequest* create_discard(
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
       uint64_t object_len, IOContext io_context, int discard_flags,
-      const ZTracer::Trace &parent_trace, Context *completion);
+      const jspan_context &parent_trace, Context *completion);
   static ObjectRequest* create_write_same(
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
       uint64_t object_len, ceph::bufferlist&& data, IOContext io_context,
-      int op_flags, const ZTracer::Trace &parent_trace, Context *completion);
+      int op_flags, const jspan_context &parent_trace, Context *completion);
   static ObjectRequest* create_compare_and_write(
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
       ceph::bufferlist&& cmp_data, ceph::bufferlist&& write_data,
       IOContext io_context, uint64_t *mismatch_offset, int op_flags,
-      const ZTracer::Trace &parent_trace, Context *completion);
+      const jspan_context &parent_trace, Context *completion);
 
   ObjectRequest(ImageCtxT *ictx, uint64_t objectno, IOContext io_context,
-                const char *trace_name, const ZTracer::Trace &parent_trace,
+                const char *trace_name, const jspan_context &parent_trace,
                 Context *completion);
   virtual ~ObjectRequest() {
-    m_trace.event("finish");
+    m_trace->AddEvent("finish");
   }
 
   static void add_write_hint(ImageCtxT& image_ctx,
@@ -81,7 +81,7 @@ protected:
   uint64_t m_object_no;
   IOContext m_io_context;
   Context *m_completion;
-  ZTracer::Trace m_trace;
+  jspan_ptr m_trace;
 
   void async_finish(int r);
   void finish(int r);
@@ -96,7 +96,7 @@ public:
   static ObjectReadRequest* create(
       ImageCtxT *ictx, uint64_t objectno, ReadExtents* extents,
       IOContext io_context, int op_flags, int read_flags,
-      const ZTracer::Trace &parent_trace, uint64_t* version,
+      const jspan_context &parent_trace, uint64_t* version,
       Context *completion) {
     return new ObjectReadRequest(ictx, objectno, extents, io_context, op_flags,
                                  read_flags, parent_trace, version, completion);
@@ -105,7 +105,7 @@ public:
   ObjectReadRequest(
       ImageCtxT *ictx, uint64_t objectno, ReadExtents* extents,
       IOContext io_context, int op_flags, int read_flags,
-      const ZTracer::Trace &parent_trace, uint64_t* version,
+      const jspan_context &parent_trace, uint64_t* version,
       Context *completion);
 
   void send() override;
@@ -156,7 +156,7 @@ public:
   AbstractObjectWriteRequest(
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off, uint64_t len,
       IOContext io_context, const char *trace_name,
-      const ZTracer::Trace &parent_trace, Context *completion);
+      const jspan_context &parent_trace, Context *completion);
 
   virtual bool is_empty_write_op() const {
     return false;
@@ -264,7 +264,7 @@ public:
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
       ceph::bufferlist&& data, IOContext io_context, int op_flags,
       int write_flags, std::optional<uint64_t> assert_version,
-      const ZTracer::Trace &parent_trace, Context *completion)
+      const jspan_context &parent_trace, Context *completion)
     : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
                                             data.length(), io_context, "write",
                                             parent_trace, completion),
@@ -297,7 +297,7 @@ public:
   ObjectDiscardRequest(
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
       uint64_t object_len, IOContext io_context, int discard_flags,
-      const ZTracer::Trace &parent_trace, Context *completion)
+      const jspan_context &parent_trace, Context *completion)
     : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
                                             object_len, io_context, "discard",
                                             parent_trace, completion),
@@ -380,7 +380,7 @@ public:
   ObjectWriteSameRequest(
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
       uint64_t object_len, ceph::bufferlist&& data, IOContext io_context,
-      int op_flags, const ZTracer::Trace &parent_trace, Context *completion)
+      int op_flags, const jspan_context &parent_trace, Context *completion)
     : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
                                             object_len, io_context, "writesame",
                                             parent_trace, completion),
@@ -406,7 +406,7 @@ public:
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
       ceph::bufferlist&& cmp_bl, ceph::bufferlist&& write_bl,
       IOContext io_context, uint64_t *mismatch_offset, int op_flags,
-      const ZTracer::Trace &parent_trace, Context *completion)
+      const jspan_context &parent_trace, Context *completion)
    : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
                                            cmp_bl.length(), io_context,
                                            "compare_and_write", parent_trace,
@@ -450,7 +450,7 @@ public:
   static ObjectListSnapsRequest* create(
       ImageCtxT *ictx, uint64_t objectno, Extents&& object_extents,
       SnapIds&& snap_ids, int list_snaps_flags,
-      const ZTracer::Trace &parent_trace, SnapshotDelta* snapshot_delta,
+      const jspan_context &parent_trace, SnapshotDelta* snapshot_delta,
       Context *completion) {
     return new ObjectListSnapsRequest(ictx, objectno,
                                       std::move(object_extents),
@@ -461,7 +461,7 @@ public:
   ObjectListSnapsRequest(
       ImageCtxT *ictx, uint64_t objectno, Extents&& object_extents,
       SnapIds&& snap_ids, int list_snaps_flags,
-      const ZTracer::Trace &parent_trace, SnapshotDelta* snapshot_delta,
+      const jspan_context &parent_trace, SnapshotDelta* snapshot_delta,
       Context *completion);
 
   void send() override;

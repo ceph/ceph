@@ -1,6 +1,7 @@
 #include "ECReader.h"
 
 #include <boost/program_options.hpp>
+#include "common/tracer.h"
 
 
 using ECReader = ceph::consistency::ECReader;
@@ -97,7 +98,7 @@ void ECReader::do_read(Read read)
   };
 
   librados::async_operate(asio.get_executor(), io, read.get_oid(),
-                          std::move(op), 0, nullptr, read_cb);
+                          std::move(op), 0, jspan_context(false, false), read_cb);
 }
 
 /**

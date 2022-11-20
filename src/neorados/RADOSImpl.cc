@@ -20,13 +20,33 @@
 namespace neorados {
 namespace detail {
 
+// Constructor 1: Create tracer with name
 RADOS::RADOS(boost::asio::io_context& ioctx,
-	     boost::intrusive_ptr<CephContext> cct)
+	     boost::intrusive_ptr<CephContext> cct,
+	     std::string_view tracer_name)
   : Dispatcher(cct.get()),
     ioctx(ioctx),
     cct(cct),
+    tracer(cct.get(), {tracer_name.data(), tracer_name.size()}),
     monclient(cct.get(), ioctx),
     mgrclient(cct.get(), nullptr, &monclient.monmap) {
+  initialize_common();
+}
+
+// Constructor 2: Accept external tracer
+RADOS::RADOS(boost::asio::io_context& ioctx,
+	     boost::intrusive_ptr<CephContext> cct,
+	     tracing::Tracer&& external_tracer)
+  : Dispatcher(cct.get()),
+    ioctx(ioctx),
+    cct(cct),
+    tracer(std::move(external_tracer)),
+    monclient(cct.get(), ioctx),
+    mgrclient(cct.get(), nullptr, &monclient.monmap) {
+  initialize_common();
+}
+
+void RADOS::initialize_common() {
   auto err = monclient.build_initial_monmap();
   if (err < 0)
     throw std::system_error(ceph::to_error_code(err));

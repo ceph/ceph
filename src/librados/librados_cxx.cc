@@ -15,17 +15,12 @@
 
 #include <limits.h>
 
-#include "common/config.h"
-#include "common/errno.h"
-#include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
-#include "common/common_init.h"
 #include "common/TracepointProvider.h"
 #include "common/hobject.h"
 #include "common/async/waiter.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
-#include "include/types.h"
 #include <include/stringify.h>
 
 #include "librados/AioCompletionImpl.h"
@@ -33,7 +28,6 @@
 #include "librados/ObjectOperationImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
-#include "librados/RadosXattrIter.h"
 #include "librados/ListObjectImpl.h"
 #include "librados/librados_util.h"
 #include "cls/lock/cls_lock_client.h"
@@ -43,7 +37,6 @@
 #include <set>
 #include <vector>
 #include <list>
-#include <stdexcept>
 #include <system_error>
 
 #ifdef WITH_LTTNG
@@ -1533,7 +1526,7 @@ int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperat
   return io_ctx_impl->operate(obj, &o->impl->o, (ceph::real_time *)o->impl->prt, translate_flags(flags));
 }
 
-int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o, int flags, const jspan_context* otel_trace)
+int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o, int flags, const jspan_context& otel_trace)
 {
   object_t obj(oid);
   if (unlikely(!o->impl))
@@ -1575,18 +1568,19 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     return -EINVAL;
   return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
 				  io_ctx_impl->snapc, o->impl->prt,
-				  translate_flags(flags), nullptr);
+				  translate_flags(flags));
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
-				 ObjectWriteOperation *o, int flags, const jspan_context* otel_trace)
+				 ObjectWriteOperation *o, int flags,
+				 const jspan_context& otel_trace)
 {
   object_t obj(oid);
   if (unlikely(!o->impl))
     return -EINVAL;
   return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
 				  io_ctx_impl->snapc, o->impl->prt,
-				  translate_flags(flags), nullptr, otel_trace);
+				  translate_flags(flags), otel_trace);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -1608,7 +1602,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
          librados::ObjectWriteOperation *o,
          snap_t snap_seq, std::vector<snap_t>& snaps,
-         const blkin_trace_info *trace_info)
+         const jspan_context& otel_trace)
 {
   if (unlikely(!o->impl))
     return -EINVAL;
@@ -1619,13 +1613,13 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     snv[i] = snaps[i];
   SnapContext snapc(snap_seq, snv);
   return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
-          snapc, o->impl->prt, 0, trace_info);
+          snapc, o->impl->prt, 0, otel_trace);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
          librados::ObjectWriteOperation *o,
          snap_t snap_seq, std::vector<snap_t>& snaps, int flags,
-         const blkin_trace_info *trace_info)
+         const jspan_context& otel_trace)
 {
   if (unlikely(!o->impl))
     return -EINVAL;
@@ -1636,7 +1630,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     snv[i] = snaps[i];
   SnapContext snapc(snap_seq, snv);
   return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc, snapc, o->impl->prt,
-                                  translate_flags(flags), trace_info);
+                                  translate_flags(flags), otel_trace);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -1684,13 +1678,13 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
          librados::ObjectReadOperation *o,
-         int flags, bufferlist *pbl, const blkin_trace_info *trace_info)
+         int flags, bufferlist *pbl, const jspan_context& otel_trace)
 {
   if (unlikely(!o->impl))
     return -EINVAL;
   object_t obj(oid);
   return io_ctx_impl->aio_operate_read(obj, &o->impl->o, c->pc,
-               translate_flags(flags), pbl, trace_info);
+               translate_flags(flags), pbl, otel_trace);
 }
 
 void librados::IoCtx::snap_set_read(snap_t seq)

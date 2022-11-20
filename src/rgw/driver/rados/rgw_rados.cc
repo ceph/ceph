@@ -3470,7 +3470,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   auto& ioctx = ref.ioctx;
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
-  r = rgw_rados_operate(rctx.dpp, ref.ioctx, ref.obj.oid, std::move(op), rctx.y, 0, &trace, &epoch);
+  r = rgw_rados_operate(rctx.dpp, ref.ioctx, ref.obj.oid, std::move(op), rctx.y, 0, trace, &epoch);
   tracepoint(rgw_rados, operate_exit, req_id.c_str());
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
                 or -ENOENT if was removed, or -EEXIST if it did not exist
@@ -6770,7 +6770,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
   auto& ioctx = ref.ioctx;
   ioctx.set_pool_full_try(); // allow deletion at pool quota limit
   version_t epoch = 0;
-  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, std::move(op), y, 0, nullptr, &epoch);
+  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, std::move(op), y, 0, {false, false}, &epoch);
 
   /* raced with another operation, object state is indeterminate */
   const bool need_invalidate = (r == -ECANCELED);
@@ -7575,7 +7575,7 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
   op.mtime2(&mtime_ts);
   auto& ioctx = ref.ioctx;
   version_t epoch = 0;
-  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, std::move(op), y, 0, nullptr, &epoch);
+  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, std::move(op), y, 0, {false, false}, &epoch);
   if (state) {
     if (r >= 0) {
       ACLOwner owner;
@@ -9920,7 +9920,7 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
   }
 
   bufferlist outbl;
-  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), &outbl, y, 0, nullptr, epoch);
+  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), &outbl, y, 0, {false, false}, epoch);
   if (r < 0)
     return r;
 
@@ -11119,7 +11119,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
     cls_rgw_bucket_list_op(op, marker, prefix, empty_delimiter,
 			   num_entries,
                            list_versions, &result);
-    r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y, 0, nullptr, &index_ver.epoch);
+    r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y, 0, {false, false}, &index_ver.epoch);
     if (r == RGWBIAdvanceAndRetryError) {
       // CLS could not return any visible entries in this round,
       // but it advanced the marker; retry with the new marker.
