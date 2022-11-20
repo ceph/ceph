@@ -13,6 +13,7 @@
  */
 
 #include <bit>
+#include <sstream>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -13937,15 +13938,13 @@ BlueStore::TransContext *BlueStore::_txc_create(
   TransContext *txc = new TransContext(cct, c, osr, on_commits);
   txc->t = db->get_transaction();
 
-#ifdef WITH_BLKIN
-  if (osd_op && osd_op->pg_trace) {
-    txc->trace.init("TransContext", &trace_endpoint,
-                    &osd_op->pg_trace);
-    txc->trace.event("txc create");
-    //txc->trace.keyval("txc seq", txc->seq);
-    txc->trace.keyval("txc", txc);
+  txc->trace = tracer.add_span("TransContext", osd_op->pg_trace);
+  std::string txcstr = "Dummy TXC";
+  if (txc->trace->IsRecording()) {
+    std::ostringstream ss;
+    ss << txc;
   }
-#endif
+  txc->trace->AddEvent("txc create", {{"txc", txc}});
 
   osr->queue_new(txc);
   dout(20) << __func__ << " osr " << osr << " = " << txc
@@ -14015,11 +14014,6 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       throttle.log_state_latency(*txc, logger, l_bluestore_state_prepare_lat);
       if (txc->ioc.has_pending_aios()) {
 	txc->set_state(TransContext::STATE_AIO_WAIT);
-#ifdef WITH_BLKIN
-        if (txc->trace) {
-          txc->trace.keyval("pending aios", txc->ioc.num_pending.load());
-        }
-#endif
 	txc->had_ios = true;
 	_txc_aio_submit(txc);
 	return;
@@ -14272,12 +14266,6 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
   {
 #if defined(WITH_LTTNG)
     auto start = mono_clock::now();
-#endif
-
-#ifdef WITH_BLKIN
-    if (txc->trace) {
-      txc->trace.event("db async submit");
-    }
 #endif
 
     int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
@@ -14814,14 +14802,6 @@ void BlueStore::_kv_sync_thread()
 	0 : db->submit_transaction_sync(synct);
       ceph_assert(r == 0);
 
-#ifdef WITH_BLKIN
-      for (auto txc : kv_committing) {
-        if (txc->trace) {
-          txc->trace.event("db sync submit");
-          txc->trace.keyval("kv_committing size", kv_committing.size());
-        }
-      }
-#endif
 
       int committing_size = kv_committing.size();
       int deferred_size = deferred_stable.size();
@@ -15372,11 +15352,6 @@ int BlueStore::queue_transactions(
 
   _txc_finalize_kv(txc, txc->t);
 
-#ifdef WITH_BLKIN
-  if (txc->trace) {
-    txc->trace.event("txc encode finished");
-  }
-#endif
 
   if (handle)
     handle->suspend_tp_timeout();
@@ -15425,11 +15400,6 @@ int BlueStore::queue_transactions(
     }
   }
 
-#ifdef WITH_BLKIN
-  if (txc->trace) {
-    txc->trace.event("txc applied");
-  }
-#endif
 
   log_latency("submit_transact",
     l_bluestore_submit_lat,
