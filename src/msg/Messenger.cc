@@ -45,8 +45,7 @@ Messenger *Messenger::create(CephContext *cct, const std::string &type,
 static int get_default_crc_flags(const ConfigProxy&);
 
 Messenger::Messenger(CephContext *cct_, entity_name_t w)
-  : trace_endpoint("0.0.0.0", 0, "Messenger"),
-    my_name(w),
+  : my_name(w),
     default_send_priority(CEPH_MSG_PRIO_DEFAULT),
     started(false),
     magic(0),
@@ -60,26 +59,6 @@ Messenger::Messenger(CephContext *cct_, entity_name_t w)
   comp_registry.refresh_config();
 }
 
-void Messenger::set_endpoint_addr(const entity_addr_t& a,
-                                  const entity_name_t &name)
-{
-  size_t hostlen;
-  if (a.get_family() == AF_INET)
-    hostlen = sizeof(struct sockaddr_in);
-  else if (a.get_family() == AF_INET6)
-    hostlen = sizeof(struct sockaddr_in6);
-  else
-    hostlen = 0;
-
-  if (hostlen) {
-    char buf[NI_MAXHOST] = { 0 };
-    getnameinfo(a.get_sockaddr(), hostlen, buf, sizeof(buf),
-                NULL, 0, NI_NUMERICHOST);
-
-    trace_endpoint.copy_ip(buf);
-  }
-  trace_endpoint.set_port(a.get_port());
-}
 
 /**
  * Get the default crc flags for this messenger.

@@ -378,7 +378,6 @@ struct ceph_osd_request_head {
       encode(osdmap_epoch, payload);
       encode(flags, payload);
       encode(reqid, payload);
-      encode_trace(payload, features);
 
       // -- above decoded up front; below decoded post-dispatch thread --
 
@@ -407,7 +406,6 @@ struct ceph_osd_request_head {
       encode(osdmap_epoch, payload);
       encode(flags, payload);
       encode(reqid, payload);
-      encode_trace(payload, features);
       encode_otel_trace(payload, features);
 
       // -- above decoded up front; below decoded post-dispatch thread --
@@ -445,7 +443,6 @@ struct ceph_osd_request_head {
       decode(osdmap_epoch, p);
       decode(flags, p);
       decode(reqid, p);
-      decode_trace(p);
       decode_otel_trace(p);
     } else if (header.version == 8) {
       decode(pgid, p);      // actual pgid

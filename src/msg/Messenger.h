@@ -107,7 +107,6 @@ private:
   std::vector<PriorityDispatcher> dispatchers;
   std::vector<PriorityDispatcher> fast_dispatchers;
 
-  ZTracer::Endpoint trace_endpoint;
 
   static void insert_head(std::vector<PriorityDispatcher>& v,
                           PriorityDispatcher d)
@@ -121,8 +120,6 @@ private:
   }
 
 protected:
-  void set_endpoint_addr(const entity_addr_t& a,
-                         const entity_name_t &name);
 
 protected:
   /// the "name" of the local daemon. eg client.99
@@ -264,15 +261,8 @@ protected:
    */
   virtual void set_myaddrs(const entity_addrvec_t& a) {
     my_addrs = a;
-    set_endpoint_addr(a.front(), my_name);
   }
 public:
-  /**
-   * @return the zipkin trace endpoint
-   */
-  const ZTracer::Endpoint* get_trace_endpoint() const {
-    return &trace_endpoint;
-  }
 
   /**
    * set the name of the local entity. The name is reported to others and
@@ -504,7 +494,10 @@ public:
    *
    * @return 0 on success; -errno on failure.
    */
-  virtual int start() { started = true; return 0; }
+  virtual int start() {
+    started = true;
+    return 0;
+  }
 
   // shutdown
   /**

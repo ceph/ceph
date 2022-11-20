@@ -910,8 +910,6 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       op.temp_cleared,
       !should_send);
 
-    ZTracer::Trace trace;
-
     op.otel_trace->AddEvent("ec sub write", {{"shard", pg_shard.shard.id}});
 
     if (pg_shard == get_parent()->whoami_shard()) {
@@ -928,7 +926,8 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, pg_shard.shard);
       r->map_epoch = get_osdmap_epoch();
       r->min_epoch = get_parent()->get_interval_start_epoch();
-      r->trace = trace;
+      r->trace = ::tracing::osd::tracer.add_span("MOSDECSubIoWrite",
+						op.otel_trace);
       messages.push_back(std::make_pair(pg_shard.osd, r));
     }
   }

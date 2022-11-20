@@ -981,8 +981,6 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
       op->temp_cleared,
       !should_send);
 
-    ZTracer::Trace trace;
-    
     op->otel_trace->AddEvent("ec sub read", {{"shard", i->shard.id}});
 
     if (*i == get_parent()->whoami_shard()) {
@@ -998,7 +996,8 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
       r->map_epoch = get_osdmap_epoch();
       r->min_epoch = get_parent()->get_interval_start_epoch();
-      r->trace = trace;
+      r->trace = ::tracing::osd::tracer.add_span("MOSDECSubIoRead",
+						op->otel_trace);
       messages.push_back(std::make_pair(i->osd, r));
     }
   }

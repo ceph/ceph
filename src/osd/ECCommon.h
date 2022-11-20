@@ -292,8 +292,7 @@ struct ECCommon {
         do_redundant_reads(do_redundant_reads),
         for_recovery(for_recovery),
         on_complete(std::move(_on_complete)),
-        to_read(std::move(_to_read)),
-        otel_trace(tracing::osd::tracer.add_span("EC ReadOp", op->osd_trace)) {}
+        to_read(std::move(_to_read)) {}
 
     ReadOp() = delete;
     ReadOp(const ReadOp &) = delete; // due to on_complete being unique_ptr
