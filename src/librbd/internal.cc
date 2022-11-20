@@ -1251,7 +1251,10 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	  api::Io<>::aio_write(*m_dest, comp, m_offset + write_offset,
                                write_length, std::move(*write_bl),
                                LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
-                               std::move(read_trace));
+// I think this worked by accident previously due to ZTracer::Trace being
+// convertible to bool. -- Adam E
+//                               std::move(read_trace));
+			       false);
 	  write_offset = offset;
 	  write_length = 0;
 	}
@@ -1261,7 +1264,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       gather_ctx->activate();
     }
 
-    ZTracer::Trace read_trace;
+    jspan_context read_trace{false, false};
 
   private:
     SimpleThrottle *m_throttle;
@@ -1295,7 +1298,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	  io::AIO_TYPE_FLUSH);
       auto req = io::ImageDispatchSpec::create_flush(
 	  *src, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
-	  aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+	  aio_comp, io::FLUSH_SOURCE_INTERNAL, {false, false});
       req->send();
     }
     int r = flush_ctx.wait();
@@ -1314,10 +1317,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
     }
 
-    ZTracer::Trace trace;
-    if (src->blkin_trace_all) {
-      trace.init("copy", &src->trace_endpoint);
-    }
+    auto trace = src->tracer.start_trace("copy");
 
     SimpleThrottle throttle(src->config.get_val<uint64_t>("rbd_concurrent_management_ops"), false);
     uint64_t period = src->get_stripe_period();
@@ -1356,9 +1356,9 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       auto req = io::ImageDispatchSpec::create_read(
         *src, io::IMAGE_DISPATCH_LAYER_NONE, comp,
         {{offset, len}}, io::ImageArea::DATA, io::ReadResult{bl},
-        src->get_data_io_context(), fadvise_flags, 0, trace);
+        src->get_data_io_context(), fadvise_flags, 0, trace->GetContext());
 
-      ctx->read_trace = trace;
+      ctx->read_trace = trace->GetContext();
       req->send();
 
       prog_ctx.update_progress(offset, src_size);
@@ -1550,10 +1550,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     uint64_t period = ictx->get_stripe_period();
     uint64_t left = mylen;
 
-    ZTracer::Trace trace;
-    if (ictx->blkin_trace_all) {
-      trace.init("read_iterate", &ictx->trace_endpoint);
-    }
+    auto trace = ictx->tracer.start_trace("read_iterate", ictx->otel_trace_all);
 
     std::shared_lock owner_locker{ictx->owner_lock};
     start_time = coarse_mono_clock::now();
@@ -1569,7 +1566,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       auto req = io::ImageDispatchSpec::create_read(
         *ictx, io::IMAGE_DISPATCH_LAYER_NONE, c,
         {{off, read_len}}, io::ImageArea::DATA, io::ReadResult{&bl},
-        ictx->get_data_io_context(), 0, 0, trace);
+        ictx->get_data_io_context(), 0, 0, trace->GetContext());
       req->send();
 
       int ret = ctx.wait();

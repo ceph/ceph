@@ -27,9 +27,6 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/hobject.h"
-#include "common/EventTrace.h"
-
-#include "global/global_init.h"
 
 #include "osd/osd_types.h"
 #include "osdc/error_code.h"
@@ -867,7 +864,7 @@ void RADOS::make_with_cct_(CephContext* cct,
 			   asio::io_context& ioctx,
 			   BuildComp c) {
   try {
-    auto r = new detail::NeoClient{std::make_unique<detail::RADOS>(ioctx, cct)};
+    auto r = new detail::NeoClient{std::make_unique<detail::RADOS>(ioctx, cct, "io.ceph.neorados")};
     r->objecter->wait_for_osd_map(
       [c = std::move(c), r = std::unique_ptr<detail::Client>(r)]() mutable {
 	asio::dispatch(asio::append(std::move(c), bs::error_code{},
@@ -904,8 +901,10 @@ asio::io_context& RADOS::get_io_context() {
 void RADOS::execute_(Object o, IOContext _ioc, ReadOp _op,
 		     cb::list* bl,
 		     ReadOp::Completion c, version_t* objver,
-		     const blkin_trace_info *trace_info) {
+		     const jspan_context& otel_ctx) {
+  auto trace = impl->tracer.add_span("RADOS::execute", otel_ctx);
   if (_op.size() == 0) {
+    trace->AddEvent("Empty operation, bailing out.");
     asio::dispatch(asio::append(std::move(c), bs::error_code{}));
     return;
   }
@@ -914,23 +913,20 @@ void RADOS::execute_(Object o, IOContext _ioc, ReadOp _op,
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
   auto flags = op->op.flags | ioc->extra_op_flags;
 
-  ZTracer::Trace trace;
-  if (trace_info) {
-    ZTracer::Trace parent_trace("", nullptr, trace_info);
-    trace.init("rados execute", &impl->objecter->trace_endpoint, &parent_trace);
-  }
-
-  trace.event("init");
+  trace->AddEvent("Submitting Read operation to objecter",
+		  {{"numops", _op.size()}});
   impl->objecter->read(
     *oid, ioc->oloc, std::move(op->op), ioc->snap_seq, bl, flags,
-    std::move(c), objver, nullptr /* data_offset */, 0 /* features */, &trace);
+    std::move(c), objver, nullptr /* data_offset */, 0 /* features */,
+    trace->GetContext());
 
-  trace.event("submitted");
+  trace->AddEvent("submitted");
 }
 
 void RADOS::execute_(Object o, IOContext _ioc, WriteOp _op,
 		     WriteOp::Completion c, version_t* objver,
-		     const blkin_trace_info *trace_info) {
+		     const jspan_context& otel_ctx) {
+  auto trace = impl->tracer.add_span("RADOS::execute", otel_ctx);
   if (_op.size() == 0) {
     asio::dispatch(asio::append(std::move(c), bs::error_code{}));
     return;
@@ -945,18 +941,12 @@ void RADOS::execute_(Object o, IOContext _ioc, WriteOp _op,
   else
     mtime = ceph::real_clock::now();
 
-  ZTracer::Trace trace;
-  if (trace_info) {
-    ZTracer::Trace parent_trace("", nullptr, trace_info);
-    trace.init("rados execute", &impl->objecter->trace_endpoint, &parent_trace);
-  }
-
-  trace.event("init");
+  trace->AddEvent("Submitting Write operation to objecter",
+		  {{"numops", _op.size()}});
   impl->objecter->mutate(
     *oid, ioc->oloc, std::move(op->op), ioc->snapc,
-    mtime, flags,
-    std::move(c), objver, osd_reqid_t{}, &trace);
-  trace.event("submitted");
+    mtime, flags, std::move(c), objver, osd_reqid_t{}, trace->GetContext());
+  trace->AddEvent("submitted");
 }
 
 boost::uuids::uuid RADOS::get_fsid() const noexcept {

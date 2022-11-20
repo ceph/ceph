@@ -4,6 +4,7 @@
 #include "auth/AuthRegistry.h"
 
 #include "common/errno.h"
+#include "common/zipkin_trace.h"
 #include "librados/librados_asio.h"
 
 #include "include/stringify.h"
@@ -198,7 +199,7 @@ int rgw_delete_system_obj(const DoutPrefixProvider *dpp,
 
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
-                      optional_yield y, int flags, const jspan_context* trace_info)
+                      optional_yield y, int flags, const jspan_context& trace_info)
 {
   // given a yield_context, call async_operate() to yield the coroutine instead
   // of blocking
@@ -218,7 +219,7 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
 
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation *op, optional_yield y,
-		      int flags, const jspan_context* trace_info)
+		      int flags, const jspan_context& trace_info)
 {
   if (y) {
     auto& yield = y.get_yield_context();

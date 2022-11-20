@@ -105,7 +105,7 @@ void CloseRequest<I>::send_flush() {
                                                       io::AIO_TYPE_FLUSH);
   auto req = io::ImageDispatchSpec::create_flush(
     *m_image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-    io::FLUSH_SOURCE_SHUTDOWN, {});
+    io::FLUSH_SOURCE_SHUTDOWN, {false, false});
   req->send();
 }
 

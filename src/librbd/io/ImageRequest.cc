@@ -171,7 +171,7 @@ void readahead(I *ictx, const Extents& image_extents, IOContext io_context) {
                                              object_extent.length);
       auto req = io::ObjectDispatchSpec::create_read(
         ictx, io::OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
-        &req_comp->extents, io_context, 0, 0, {}, nullptr, req_comp);
+        &req_comp->extents, io_context, 0, 0, {false, false}, nullptr, req_comp);
       req->send();
     }
 
@@ -231,7 +231,7 @@ void ImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                Extents &&image_extents, ImageArea area,
                                ReadResult &&read_result, IOContext io_context,
                                int op_flags, int read_flags,
-			       const ZTracer::Trace &parent_trace) {
+			       const jspan_context &parent_trace) {
   ImageReadRequest<I> req(*ictx, c, std::move(image_extents), area,
                           std::move(read_result), io_context, op_flags,
                           read_flags, parent_trace);
@@ -242,7 +242,7 @@ template <typename I>
 void ImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
                                 Extents &&image_extents, ImageArea area,
                                 bufferlist &&bl, int op_flags,
-				const ZTracer::Trace &parent_trace) {
+				const jspan_context &parent_trace) {
   ImageWriteRequest<I> req(*ictx, c, std::move(image_extents), area,
                            std::move(bl), op_flags, parent_trace);
   req.send();
@@ -252,7 +252,7 @@ template <typename I>
 void ImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
                                   Extents &&image_extents, ImageArea area,
                                   uint32_t discard_granularity_bytes,
-                                  const ZTracer::Trace &parent_trace) {
+                                  const jspan_context &parent_trace) {
   ImageDiscardRequest<I> req(*ictx, c, std::move(image_extents), area,
                              discard_granularity_bytes, parent_trace);
   req.send();
@@ -261,7 +261,7 @@ void ImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
 template <typename I>
 void ImageRequest<I>::aio_flush(I *ictx, AioCompletion *c,
                                 FlushSource flush_source,
-                                const ZTracer::Trace &parent_trace) {
+                                const jspan_context &parent_trace) {
   ImageFlushRequest<I> req(*ictx, c, flush_source, parent_trace);
   req.send();
 }
@@ -270,7 +270,7 @@ template <typename I>
 void ImageRequest<I>::aio_writesame(I *ictx, AioCompletion *c,
                                     Extents &&image_extents, ImageArea area,
                                     bufferlist &&bl, int op_flags,
-				    const ZTracer::Trace &parent_trace) {
+				    const jspan_context &parent_trace) {
   ImageWriteSameRequest<I> req(*ictx, c, std::move(image_extents), area,
                                std::move(bl), op_flags, parent_trace);
   req.send();
@@ -284,7 +284,7 @@ void ImageRequest<I>::aio_compare_and_write(I *ictx, AioCompletion *c,
                                             bufferlist &&bl,
                                             uint64_t *mismatch_offset,
                                             int op_flags,
-                                            const ZTracer::Trace &parent_trace) {
+                                            const jspan_context &parent_trace) {
   ImageCompareAndWriteRequest<I> req(*ictx, c, std::move(image_extents), area,
                                      std::move(cmp_bl), std::move(bl),
                                      mismatch_offset, op_flags, parent_trace);
@@ -364,7 +364,7 @@ ImageReadRequest<I>::ImageReadRequest(I &image_ctx, AioCompletion *aio_comp,
                                       ReadResult &&read_result,
                                       IOContext io_context, int op_flags,
 				      int read_flags,
-                                      const ZTracer::Trace &parent_trace)
+                                      const jspan_context &parent_trace)
   : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents), area,
                     "read", parent_trace),
     m_io_context(io_context), m_op_flags(op_flags), m_read_flags(read_flags) {
@@ -412,7 +412,7 @@ void ImageReadRequest<I>::send_request() {
     auto req = ObjectDispatchSpec::create_read(
       &image_ctx, OBJECT_DISPATCH_LAYER_NONE, oe.object_no,
       &req_comp->extents, m_io_context, m_op_flags, m_read_flags,
-      this->m_trace, nullptr, req_comp);
+      this->m_trace->GetContext(), nullptr, req_comp);
     req->send();
   }
 
@@ -544,7 +544,7 @@ ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
   auto req = ObjectDispatchSpec::create_write(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
     object_extent.offset, std::move(bl), io_context, m_op_flags, 0,
-    std::nullopt, journal_tid, this->m_trace, on_finish);
+    std::nullopt, journal_tid, this->m_trace->GetContext(), on_finish);
   return req;
 }
 
@@ -572,7 +572,7 @@ ObjectDispatchSpec *ImageDiscardRequest<I>::create_object_request(
   auto req = ObjectDispatchSpec::create_discard(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
     object_extent.offset, object_extent.length, io_context,
-    OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE, journal_tid, this->m_trace,
+    OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE, journal_tid, this->m_trace->GetContext(),
     on_finish);
   return req;
 }
@@ -678,7 +678,7 @@ void ImageFlushRequest<I>::send_request() {
 
   auto object_dispatch_spec = ObjectDispatchSpec::create_flush(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, m_flush_source, journal_tid,
-    this->m_trace, ctx);
+    this->m_trace->GetContext(), ctx);
   ctx = new LambdaContext([object_dispatch_spec](int r) {
       object_dispatch_spec->send();
     });
@@ -721,13 +721,13 @@ ObjectDispatchSpec *ImageWriteSameRequest<I>::create_object_request(
       &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
       object_extent.offset, object_extent.length, std::move(buffer_extents),
       std::move(bl), io_context, m_op_flags, journal_tid,
-      this->m_trace, on_finish);
+      this->m_trace->GetContext(), on_finish);
     return req;
   }
   req = ObjectDispatchSpec::create_write(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
     object_extent.offset, std::move(bl), io_context, m_op_flags, 0,
-    std::nullopt, journal_tid, this->m_trace, on_finish);
+    std::nullopt, journal_tid, this->m_trace->GetContext(), on_finish);
   return req;
 }
 
@@ -782,7 +782,7 @@ ObjectDispatchSpec *ImageCompareAndWriteRequest<I>::create_object_request(
   auto req = ObjectDispatchSpec::create_compare_and_write(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
     object_extent.offset, std::move(cmp_bl), std::move(bl), io_context,
-    m_mismatch_offset, m_op_flags, journal_tid, this->m_trace, on_finish);
+    m_mismatch_offset, m_op_flags, journal_tid, this->m_trace->GetContext(), on_finish);
   return req;
 }
 
@@ -812,7 +812,7 @@ template <typename I>
 ImageListSnapsRequest<I>::ImageListSnapsRequest(
     I& image_ctx, AioCompletion* aio_comp, Extents&& image_extents,
     ImageArea area, SnapIds&& snap_ids, int list_snaps_flags,
-    SnapshotDelta* snapshot_delta, const ZTracer::Trace& parent_trace)
+    SnapshotDelta* snapshot_delta, const jspan_context& parent_trace)
   : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents), area,
                     "list-snaps", parent_trace),
     m_snap_ids(std::move(snap_ids)), m_list_snaps_flags(list_snaps_flags),
@@ -859,7 +859,7 @@ void ImageListSnapsRequest<I>::send_request() {
     auto ctx = new C_AioRequest(sub_aio_comp);
     auto req = ObjectDispatchSpec::create_list_snaps(
       &image_ctx, OBJECT_DISPATCH_LAYER_NONE, oe.first, std::move(oe.second),
-      SnapIds{m_snap_ids}, m_list_snaps_flags, this->m_trace,
+      SnapIds{m_snap_ids}, m_list_snaps_flags, this->m_trace->GetContext(),
       assemble_ctx->get_snapshot_delta(oe.first), ctx);
     req->send();
   }

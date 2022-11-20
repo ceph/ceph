@@ -48,7 +48,7 @@ public:
     auto object_dispatch_spec = io::ObjectDispatchSpec::create_discard(
       &image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, m_object_no, 0,
       image_ctx.layout.object_size, m_io_context,
-      io::OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE, 0, {}, this);
+      io::OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE, 0, {false, false}, this);
     object_dispatch_spec->send();
     return 0;
   }
@@ -207,7 +207,7 @@ void TrimRequest<I>::send_pre_trim() {
 
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start_min, m_num_objects, OBJECT_PENDING,
-            OBJECT_EXISTS, {}, false, this)) {
+            OBJECT_EXISTS, {false, false}, false, this)) {
         return;
       }
     }
@@ -311,7 +311,7 @@ void TrimRequest<I>::send_post_trim() {
 
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start_min, m_num_objects, OBJECT_NONEXISTENT,
-            OBJECT_PENDING, {}, false, this)) {
+            OBJECT_PENDING, {false, false}, false, this)) {
         return;
       }
     }
@@ -364,7 +364,7 @@ void TrimRequest<I>::send_clean_boundary() {
 
     auto object_dispatch_spec = io::ObjectDispatchSpec::create_discard(
       &image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, extent.objectno, extent.offset,
-      extent.length, io_context, 0, 0, {}, req_comp);
+      extent.length, io_context, 0, 0, {false, false}, req_comp);
     object_dispatch_spec->send();
   }
   completion->finish_adding_requests();

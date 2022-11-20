@@ -29,7 +29,7 @@ public:
                     DispatchResult*, Context*));
   bool read(
       uint64_t object_no, ReadExtents* extents, IOContext io_context,
-      int op_flags, int read_flags, const ZTracer::Trace& parent_trace,
+      int op_flags, int read_flags, const jspan_context& parent_trace,
       uint64_t* version, int* dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) {
@@ -43,7 +43,7 @@ public:
   bool discard(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       IOContext io_context, int discard_flags,
-      const ZTracer::Trace &parent_trace, int* dispatch_flags,
+      const jspan_context &parent_trace, int* dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) {
     return execute_discard(object_no, object_off, object_len, io_context,
@@ -59,7 +59,7 @@ public:
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
       IOContext io_context, int op_flags, int write_flags,
       std::optional<uint64_t> assert_version,
-      const ZTracer::Trace &parent_trace, int* dispatch_flags,
+      const jspan_context &parent_trace, int* dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override {
     return execute_write(object_no, object_off, data, io_context, write_flags,
@@ -76,7 +76,7 @@ public:
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
       IOContext io_context, int op_flags,
-      const ZTracer::Trace &parent_trace, int* dispatch_flags,
+      const jspan_context &parent_trace, int* dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context* *on_finish, Context* on_dispatched) override {
     return execute_write_same(object_no, object_off, object_len, buffer_extents,
@@ -91,7 +91,7 @@ public:
   bool compare_and_write(
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
       ceph::bufferlist&& write_data, IOContext io_context, int op_flags,
-      const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
+      const jspan_context &parent_trace, uint64_t* mismatch_offset,
       int* dispatch_flags, uint64_t* journal_tid,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override {
@@ -103,7 +103,7 @@ public:
 
   MOCK_METHOD4(execute_flush, bool(FlushSource, uint64_t*, DispatchResult*,
                                    Context*));
-  bool flush(FlushSource flush_source, const ZTracer::Trace &parent_trace,
+  bool flush(FlushSource flush_source, const jspan_context &parent_trace,
              uint64_t* journal_tid, DispatchResult* dispatch_result,
              Context** on_finish, Context* on_dispatched) {
     return execute_flush(flush_source, journal_tid, dispatch_result,
@@ -115,7 +115,7 @@ public:
                                         DispatchResult*, Context*));
   bool list_snaps(
       uint64_t object_no, io::Extents&& extents, SnapIds&& snap_ids,
-      int list_snaps_flags, const ZTracer::Trace &parent_trace,
+      int list_snaps_flags, const jspan_context &parent_trace,
       SnapshotDelta* snapshot_delta, int* object_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override {

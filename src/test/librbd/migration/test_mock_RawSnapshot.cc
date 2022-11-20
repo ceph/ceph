@@ -211,7 +211,7 @@ TEST_F(TestMockMigrationRawSnapshot, Read) {
   bufferlist bl;
   io::ReadResult read_result{&bl};
   mock_raw_snapshot.read(aio_comp, {{123, 123}}, std::move(read_result), 0, 0,
-                         {});
+                         {false, false});
   ASSERT_EQ(123, ctx2.wait());
   ASSERT_EQ(expect_bl, bl);
 
@@ -243,7 +243,7 @@ TEST_F(TestMockMigrationRawSnapshot, ListSnap) {
 
   C_SaferCond ctx2;
   io::SparseExtents sparse_extents;
-  mock_raw_snapshot.list_snap({{0, 123}}, 0, &sparse_extents, {}, &ctx2);
+  mock_raw_snapshot.list_snap({{0, 123}}, 0, &sparse_extents, {false, false}, &ctx2);
   ASSERT_EQ(0, ctx2.wait());
 
   C_SaferCond ctx3;

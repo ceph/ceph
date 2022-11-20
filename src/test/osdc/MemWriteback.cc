@@ -91,7 +91,7 @@ void MemWriteback::read(const object_t& oid, uint64_t object_no,
 			 uint64_t off, uint64_t len, snapid_t snapid,
 			 bufferlist *pbl, uint64_t trunc_size,
 			 __u32 trunc_seq, int op_flags,
-                         const ZTracer::Trace &parent_trace,
+                         const jspan_context &otel_trace,
                          Context *onfinish)
 {
   ceph_assert(snapid == CEPH_NOSNAP);
@@ -107,7 +107,7 @@ ceph_tid_t MemWriteback::write(const object_t& oid,
 				const bufferlist &bl, ceph::real_time mtime,
 				uint64_t trunc_size, __u32 trunc_seq,
 				ceph_tid_t journal_tid,
-                                const ZTracer::Trace &parent_trace,
+                                const jspan_context &otel_trace,
                                 Context *oncommit)
 {
   ceph_assert(snapc.seq == 0);

@@ -51,7 +51,7 @@ void cb(librados::completion_t, void* arg) {
 }
 
 template <typename Op>
-Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op, const jspan_context* trace_ctx = nullptr) {
+Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op, const jspan_context& trace_ctx = {false, false}) {
   return [ctx = std::move(ctx), op = std::move(op), trace_ctx] (Aio* aio, AioResult& r) mutable {
       constexpr bool read = std::is_same_v<std::decay_t<Op>, librados::ObjectReadOperation>;
       // use placement new to construct the rados state inside of user_data
@@ -91,7 +91,7 @@ struct Handler {
 template <typename Op>
 Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op,
                          boost::asio::yield_context yield,
-                         const jspan_context* trace_ctx) {
+                         const jspan_context& trace_ctx) {
   return [ctx = std::move(ctx), op = std::move(op), yield, trace_ctx] (Aio* aio, AioResult& r) mutable {
       // arrange for the completion Handler to run on the yield_context's strand
       // executor so it can safely call back into Aio without locking
@@ -115,7 +115,7 @@ Aio::OpFunc d3n_cache_aio_abstract(const DoutPrefixProvider *dpp, optional_yield
 
 
 template <typename Op>
-Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op, optional_yield y, const jspan_context *trace_ctx = nullptr) {
+Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op, optional_yield y, const jspan_context& trace_ctx = {false, false}) {
   static_assert(std::is_base_of_v<librados::ObjectOperation, std::decay_t<Op>>);
   static_assert(!std::is_lvalue_reference_v<Op>);
   static_assert(!std::is_const_v<Op>);
@@ -135,7 +135,7 @@ Aio::OpFunc Aio::librados_op(librados::IoCtx ctx,
 }
 Aio::OpFunc Aio::librados_op(librados::IoCtx ctx,
                              librados::ObjectWriteOperation&& op,
-                             optional_yield y, const jspan_context *trace_ctx) {
+                             optional_yield y, const jspan_context& trace_ctx) {
   return aio_abstract(std::move(ctx), std::move(op), y, trace_ctx);
 }
 

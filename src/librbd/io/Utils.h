@@ -33,7 +33,7 @@ bool assemble_write_same_extent(const LightweightObjectExtent &object_extent,
 template <typename ImageCtxT = librbd::ImageCtx>
 void read_parent(ImageCtxT *image_ctx, uint64_t object_no,
                  ReadExtents* read_extents, librados::snap_t snap_id,
-                 const ZTracer::Trace &trace, Context* on_finish);
+                 const jspan_context &trace, Context* on_finish);
 
 template <typename ImageCtxT = librbd::ImageCtx>
 int clip_request(ImageCtxT* image_ctx, Extents* image_extents, ImageArea area);

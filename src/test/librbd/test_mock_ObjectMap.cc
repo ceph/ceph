@@ -71,7 +71,7 @@ struct UpdateRequest<MockTestImageCtx> {
                                uint64_t start_object_no, uint64_t end_object_no,
                                uint8_t new_state,
                                const boost::optional<uint8_t> &current_state,
-                               const ZTracer::Trace &parent_trace,
+                               const jspan_context &parent_trace,
                                bool ignore_enoent, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
@@ -186,8 +186,8 @@ TEST_F(TestMockObjectMap, NonDetainedUpdate) {
   C_SaferCond update_ctx2;
   {
     std::shared_lock image_locker{mock_image_ctx.image_lock};
-    mock_object_map->aio_update(CEPH_NOSNAP, 0, 1, {}, {}, false, &update_ctx1);
-    mock_object_map->aio_update(CEPH_NOSNAP, 1, 1, {}, {}, false, &update_ctx2);
+    mock_object_map->aio_update(CEPH_NOSNAP, 0, 1, {}, {false, false}, false, &update_ctx1);
+    mock_object_map->aio_update(CEPH_NOSNAP, 1, 1, {}, {false, false}, false, &update_ctx2);
   }
 
   finish_update_2->complete(0);
@@ -247,13 +247,13 @@ TEST_F(TestMockObjectMap, DetainedUpdate) {
   C_SaferCond update_ctx4;
   {
     std::shared_lock image_locker{mock_image_ctx.image_lock};
-    mock_object_map->aio_update(CEPH_NOSNAP, 1, 4, 1, {}, {}, false,
+    mock_object_map->aio_update(CEPH_NOSNAP, 1, 4, 1, {}, {false, false}, false,
                                &update_ctx1);
-    mock_object_map->aio_update(CEPH_NOSNAP, 1, 3, 1, {}, {}, false,
+    mock_object_map->aio_update(CEPH_NOSNAP, 1, 3, 1, {}, {false, false}, false,
                                &update_ctx2);
-    mock_object_map->aio_update(CEPH_NOSNAP, 2, 3, 1, {}, {}, false,
+    mock_object_map->aio_update(CEPH_NOSNAP, 2, 3, 1, {}, {false, false}, false,
                                &update_ctx3);
-    mock_object_map->aio_update(CEPH_NOSNAP, 0, 2, 1, {}, {}, false,
+    mock_object_map->aio_update(CEPH_NOSNAP, 0, 2, 1, {}, {false, false}, false,
                                &update_ctx4);
   }
 

@@ -2747,28 +2747,6 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_write)(
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_aio_write);
 
-#ifdef WITH_BLKIN
-extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_write_traced)(
-  rados_ioctx_t io, const char *o,
-  rados_completion_t completion,
-  const char *buf, size_t len, uint64_t off,
-  struct blkin_trace_info *info)
-{
-  tracepoint(librados, rados_aio_write_enter, io, o, completion, buf, len, off);
-  if (len > UINT_MAX/2)
-    return -E2BIG;
-  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  object_t oid(o);
-  bufferlist bl;
-  bl.append(buf, len);
-  int retval = ctx->aio_write(oid, (librados::AioCompletionImpl*)completion,
-                              bl, len, off, info);
-  tracepoint(librados, rados_aio_write_exit, retval);
-  return retval;
-}
-LIBRADOS_C_API_BASE_DEFAULT(rados_aio_write_traced);
-#endif
-
 extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_append)(
   rados_ioctx_t io, const char *o,
   rados_completion_t completion,

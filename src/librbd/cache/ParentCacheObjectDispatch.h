@@ -45,7 +45,7 @@ public:
 
   bool read(
       uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
-      int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
+      int op_flags, int read_flags, const jspan_context &parent_trace,
       uint64_t* version, int* object_dispatch_flags,
       io::DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
@@ -53,7 +53,7 @@ public:
   bool discard(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       IOContext io_context, int discard_flags,
-      const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
+      const jspan_context &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, io::DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) {
     return false;
@@ -63,7 +63,7 @@ public:
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
       IOContext io_context, int op_flags, int write_flags,
       std::optional<uint64_t> assert_version,
-      const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
+      const jspan_context &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, io::DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) {
     return false;
@@ -73,7 +73,7 @@ public:
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       io::LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
       IOContext io_context, int op_flags,
-      const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
+      const jspan_context &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, io::DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) {
     return false;
@@ -82,7 +82,7 @@ public:
   bool compare_and_write(
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
       ceph::bufferlist&& write_data, IOContext io_context, int op_flags,
-      const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
+      const jspan_context &parent_trace, uint64_t* mismatch_offset,
       int* object_dispatch_flags, uint64_t* journal_tid,
       io::DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) {
@@ -90,7 +90,7 @@ public:
   }
 
   bool flush(
-      io::FlushSource flush_source, const ZTracer::Trace &parent_trace,
+      io::FlushSource flush_source, const jspan_context &parent_trace,
       uint64_t* journal_id, io::DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) {
     return false;
@@ -98,7 +98,7 @@ public:
 
   bool list_snaps(
       uint64_t object_no, io::Extents&& extents, io::SnapIds&& snap_ids,
-      int list_snap_flags, const ZTracer::Trace &parent_trace,
+      int list_snap_flags, const jspan_context &parent_trace,
       io::SnapshotDelta* snapshot_delta, int* object_dispatch_flags,
       io::DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override {
@@ -139,7 +139,7 @@ private:
   void handle_read_cache(ceph::immutable_obj_cache::ObjectCacheRequest* ack,
                          uint64_t object_no, io::ReadExtents* extents,
                          IOContext io_context, int read_flags,
-                         const ZTracer::Trace &parent_trace,
+                         const jspan_context &parent_trace,
                          io::DispatchResult* dispatch_result,
                          Context* on_dispatched);
   int handle_register_client(bool reg);

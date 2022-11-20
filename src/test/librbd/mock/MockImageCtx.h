@@ -153,6 +153,7 @@ struct MockImageCtx {
 
   ImageCtx *image_ctx;
   CephContext *cct;
+  tracing::Tracer tracer;
   PerfCounters *perfcounter;
 
   cls::rbd::SnapshotNamespace snap_namespace;
@@ -235,15 +236,13 @@ struct MockImageCtx {
   MockExclusiveLock *exclusive_lock;
   MockJournal *journal;
 
-  ZTracer::Endpoint trace_endpoint;
-
   std::unique_ptr<crypto::MockEncryptionFormat> encryption_format;
 
   uint64_t sparse_read_threshold_bytes;
   uint32_t discard_granularity_bytes;
   int mirroring_replay_delay;
   bool non_blocking_aio;
-  bool blkin_trace_all;
+  bool otel_trace_all;
   bool enable_alloc_hint;
   uint32_t alloc_hint_flags;
   uint32_t read_flags;

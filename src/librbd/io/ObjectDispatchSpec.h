@@ -12,6 +12,7 @@
 #include "librbd/Types.h"
 #include "librbd/io/Types.h"
 #include <boost/variant/variant.hpp>
+#include "common/tracer.h"
 
 namespace librbd {
 namespace io {
@@ -162,13 +163,13 @@ public:
   Request request;
   IOContext io_context;
   int op_flags;
-  ZTracer::Trace parent_trace;
+  jspan_context parent_trace;
 
   template <typename ImageCtxT>
   static ObjectDispatchSpec* create_read(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
       uint64_t object_no, ReadExtents* extents, IOContext io_context,
-      int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
+      int op_flags, int read_flags, const jspan_context &parent_trace,
       uint64_t* version, Context* on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
@@ -183,7 +184,7 @@ public:
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       IOContext io_context, int discard_flags, uint64_t journal_tid,
-      const ZTracer::Trace &parent_trace, Context *on_finish) {
+      const jspan_context &parent_trace, Context *on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
                                   DiscardRequest{object_no, object_off,
@@ -198,7 +199,7 @@ public:
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
       IOContext io_context, int op_flags, int write_flags,
       std::optional<uint64_t> assert_version, uint64_t journal_tid,
-      const ZTracer::Trace &parent_trace, Context *on_finish) {
+      const jspan_context &parent_trace, Context *on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
                                   WriteRequest{object_no, object_off,
@@ -214,7 +215,7 @@ public:
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
       IOContext io_context, int op_flags, uint64_t journal_tid,
-      const ZTracer::Trace &parent_trace, Context *on_finish) {
+      const jspan_context &parent_trace, Context *on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
                                   WriteSameRequest{object_no, object_off,
@@ -232,7 +233,7 @@ public:
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
       ceph::bufferlist&& write_data, IOContext io_context,
       uint64_t *mismatch_offset, int op_flags, uint64_t journal_tid,
-      const ZTracer::Trace &parent_trace, Context *on_finish) {
+      const jspan_context &parent_trace, Context *on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
                                   CompareAndWriteRequest{object_no,
@@ -249,7 +250,7 @@ public:
   static ObjectDispatchSpec* create_flush(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
       FlushSource flush_source, uint64_t journal_tid,
-      const ZTracer::Trace &parent_trace, Context *on_finish) {
+      const jspan_context &parent_trace, Context *on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
                                   FlushRequest{flush_source, journal_tid},
@@ -260,7 +261,7 @@ public:
   static ObjectDispatchSpec* create_list_snaps(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
       uint64_t object_no, Extents&& extents, SnapIds&& snap_ids,
-      int list_snaps_flags, const ZTracer::Trace &parent_trace,
+      int list_snaps_flags, const jspan_context &parent_trace,
       SnapshotDelta* snapshot_delta, Context* on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
@@ -281,7 +282,7 @@ private:
   ObjectDispatchSpec(ObjectDispatcherInterface* object_dispatcher,
                      ObjectDispatchLayer object_dispatch_layer,
                      Request&& request, IOContext io_context, int op_flags,
-                     const ZTracer::Trace& parent_trace, Context* on_finish)
+                     const jspan_context& parent_trace, Context* on_finish)
     : dispatcher_ctx(this, on_finish), object_dispatcher(object_dispatcher),
       dispatch_layer(object_dispatch_layer), request(std::move(request)),
       io_context(io_context), op_flags(op_flags), parent_trace(parent_trace) {

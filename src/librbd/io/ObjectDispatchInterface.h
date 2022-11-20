@@ -35,7 +35,7 @@ struct ObjectDispatchInterface {
 
   virtual bool read(
       uint64_t object_no, ReadExtents* extents, IOContext io_context,
-      int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
+      int op_flags, int read_flags, const jspan_context &parent_trace,
       uint64_t* version, int* object_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) = 0;
@@ -43,7 +43,7 @@ struct ObjectDispatchInterface {
   virtual bool discard(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       IOContext io_context, int discard_flags,
-      const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
+      const jspan_context &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context**on_finish, Context* on_dispatched) = 0;
 
@@ -51,14 +51,14 @@ struct ObjectDispatchInterface {
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
       IOContext io_context, int op_flags, int write_flags,
       std::optional<uint64_t> assert_version,
-      const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
+      const jspan_context &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context**on_finish, Context* on_dispatched) = 0;
 
   virtual bool write_same(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
-      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+      IOContext io_context, int op_flags, const jspan_context &parent_trace,
       int* object_dispatch_flags, uint64_t* journal_tid,
       DispatchResult* dispatch_result, Context**on_finish,
       Context* on_dispatched) = 0;
@@ -66,19 +66,19 @@ struct ObjectDispatchInterface {
   virtual bool compare_and_write(
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
       ceph::bufferlist&& write_data, IOContext io_context, int op_flags,
-      const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
+      const jspan_context &parent_trace, uint64_t* mismatch_offset,
       int* object_dispatch_flags, uint64_t* journal_tid,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) = 0;
 
   virtual bool flush(
-      FlushSource flush_source, const ZTracer::Trace &parent_trace,
+      FlushSource flush_source, const jspan_context &parent_trace,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) = 0;
 
   virtual bool list_snaps(
       uint64_t object_no, Extents&& extents, SnapIds&& snap_ids,
-      int list_snap_flags, const ZTracer::Trace &parent_trace,
+      int list_snap_flags, const jspan_context &parent_trace,
       SnapshotDelta* snapshot_delta, int* object_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) = 0;

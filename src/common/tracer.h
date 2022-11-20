@@ -27,12 +27,13 @@ const inline jspan_context noop_span_ctx{false, false};
 class Tracer {
  private:
   const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> noop_tracer;
-  CephContext* cct = nullptr;;
+  CephContext* cct = nullptr;
   opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer;
 
  public:
 
   Tracer() = default;
+  Tracer(CephContext* cct, opentelemetry::nostd::string_view service_name);
 
   void init(CephContext* _cct, opentelemetry::nostd::string_view service_name);
 

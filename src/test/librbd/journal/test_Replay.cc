@@ -872,7 +872,7 @@ TEST_F(TestJournalReplay, ObjectPosition) {
     &flush_ctx, ictx, librbd::io::AIO_TYPE_FLUSH);
   auto req = librbd::io::ImageDispatchSpec::create_flush(
     *ictx, librbd::io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
-    librbd::io::FLUSH_SOURCE_INTERNAL, {});
+    librbd::io::FLUSH_SOURCE_INTERNAL, {false, false});
   req->send();
   ASSERT_EQ(0, flush_ctx.wait());
 

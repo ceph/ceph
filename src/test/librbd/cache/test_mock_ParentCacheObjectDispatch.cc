@@ -44,7 +44,7 @@ template <>
 struct Api<MockParentImageCacheImageCtx> {
   MOCK_METHOD6(read_parent, void(MockParentImageCacheImageCtx*, uint64_t,
                                  librbd::io::ReadExtents*, librados::snap_t,
-                                 const ZTracer::Trace &, Context*));
+                                 const jspan_context &, Context*));
 };
 
 } // namespace plugin
@@ -293,24 +293,23 @@ TEST_F(TestMockParentCacheObjectDispatch, test_disable_interface) {
   uint64_t* temp_journal_tid = nullptr;
   Context** temp_on_finish = nullptr;
   Context* temp_on_dispatched = nullptr;
-  ZTracer::Trace* temp_trace = nullptr;
   io::LightweightBufferExtents buffer_extents;
 
   ASSERT_EQ(mock_parent_image_cache->discard(0, 0, 0, io_context, 0,
-            *temp_trace, temp_op_flags, temp_journal_tid, temp_dispatch_result,
+	   {false, false}, temp_op_flags, temp_journal_tid, temp_dispatch_result,
             temp_on_finish, temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->write(0, 0, std::move(temp_bl),
-            io_context, 0, 0, std::nullopt, *temp_trace, temp_op_flags,
+	    io_context, 0, 0, std::nullopt, {false, false}, temp_op_flags,
             temp_journal_tid, temp_dispatch_result, temp_on_finish,
             temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->write_same(0, 0, 0, std::move(buffer_extents),
-            std::move(temp_bl), io_context, 0, *temp_trace, temp_op_flags,
+            std::move(temp_bl), io_context, 0, {false, false}, temp_op_flags,
             temp_journal_tid, temp_dispatch_result, temp_on_finish, temp_on_dispatched), false );
   ASSERT_EQ(mock_parent_image_cache->compare_and_write(0, 0, std::move(temp_bl), std::move(temp_bl),
-            io_context, 0, *temp_trace, temp_journal_tid, temp_op_flags,
+            io_context, 0, {false, false}, temp_journal_tid, temp_op_flags,
             temp_journal_tid, temp_dispatch_result, temp_on_finish,
             temp_on_dispatched), false);
-  ASSERT_EQ(mock_parent_image_cache->flush(io::FLUSH_SOURCE_USER, *temp_trace, temp_journal_tid,
+  ASSERT_EQ(mock_parent_image_cache->flush(io::FLUSH_SOURCE_USER, {false, false}, temp_journal_tid,
             temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->invalidate_cache(nullptr), false);
   ASSERT_EQ(mock_parent_image_cache->reset_existence_cache(nullptr), false);
@@ -361,7 +360,7 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read) {
   io::DispatchResult dispatch_result;
   io::ReadExtents extents = {{0, 4096}, {8192, 4096}};
   mock_parent_image_cache->read(
-    0, &extents, mock_image_ctx.get_data_io_context(), 0, 0, {}, nullptr, 
+    0, &extents, mock_image_ctx.get_data_io_context(), 0, 0, {false, false}, nullptr, 
     nullptr, &dispatch_result, nullptr, &on_dispatched);
   ASSERT_EQ(0, on_dispatched.wait());
 
@@ -415,7 +414,7 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read_dne) {
   C_SaferCond on_dispatched;
   io::DispatchResult dispatch_result;
   mock_parent_image_cache->read(
-    0, &extents, mock_image_ctx.get_data_io_context(), 0, 0, {}, nullptr,
+    0, &extents, mock_image_ctx.get_data_io_context(), 0, 0, {false, false}, nullptr,
     nullptr, &dispatch_result, nullptr, &on_dispatched);
   ASSERT_EQ(0, on_dispatched.wait());
 

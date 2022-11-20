@@ -184,7 +184,7 @@ void ObjectCacherObjectDispatch<I>::shut_down(Context* on_finish) {
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::read(
     uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
-    int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, int read_flags, const jspan_context &parent_trace,
     uint64_t* version, int* object_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -237,11 +237,10 @@ bool ObjectCacherObjectDispatch<I>::read(
     off += read_extent.length;
   }
 
-  ZTracer::Trace trace(parent_trace);
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
 
   m_cache_lock.lock();
-  int r = m_object_cacher->readx(rd, m_object_set, on_dispatched, &trace);
+  int r = m_object_cacher->readx(rd, m_object_set, on_dispatched, parent_trace);
   m_cache_lock.unlock();
   if (r != 0) {
     on_dispatched->complete(r);
@@ -253,7 +252,7 @@ template <typename I>
 bool ObjectCacherObjectDispatch<I>::discard(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
     IOContext io_context, int discard_flags,
-    const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
+    const jspan_context &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -295,7 +294,7 @@ bool ObjectCacherObjectDispatch<I>::write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
     IOContext io_context, int op_flags, int write_flags,
     std::optional<uint64_t> assert_version,
-    const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
+    const jspan_context& parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -342,11 +341,10 @@ bool ObjectCacherObjectDispatch<I>::write(
   extent.buffer_extents.push_back({0, data.length()});
   wr->extents.push_back(extent);
 
-  ZTracer::Trace trace(parent_trace);
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
 
   std::lock_guard locker{m_cache_lock};
-  m_object_cacher->writex(wr, m_object_set, on_dispatched, &trace);
+  m_object_cacher->writex(wr, m_object_set, on_dispatched, parent_trace);
   return true;
 }
 
@@ -355,7 +353,7 @@ bool ObjectCacherObjectDispatch<I>::write_same(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
     io::LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
     IOContext io_context, int op_flags,
-    const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
+    const jspan_context &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -378,7 +376,7 @@ template <typename I>
 bool ObjectCacherObjectDispatch<I>::compare_and_write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
     ceph::bufferlist&& write_data, IOContext io_context, int op_flags,
-    const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
+    const jspan_context &parent_trace, uint64_t* mismatch_offset,
     int* object_dispatch_flags, uint64_t* journal_tid,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -417,18 +415,17 @@ bool ObjectCacherObjectDispatch<I>::compare_and_write(
                                                       on_dispatched);
 
   // flush any pending writes from the cache before compare
-  ZTracer::Trace trace(parent_trace);
   *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
 
   std::lock_guard cache_locker{m_cache_lock};
-  m_object_cacher->flush_set(m_object_set, object_extents, &trace,
+  m_object_cacher->flush_set(m_object_set, object_extents, parent_trace,
                              on_dispatched);
   return true;
 }
 
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::flush(
-    io::FlushSource flush_source, const ZTracer::Trace &parent_trace,
+    io::FlushSource flush_source, const jspan_context &parent_trace,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
