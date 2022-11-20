@@ -935,8 +935,6 @@ void FileJournal::queue_completions_thru(uint64_t seq)
       finisher->queue(next.finish);
     if (next.tracked_op) {
       next.tracked_op->mark_event("journaled_completion_queued");
-      next.tracked_op->journal_trace.event("queued completion");
-      next.tracked_op->journal_trace.keyval("completed through", seq);
     }
     items.erase(it++);
   }
@@ -984,7 +982,6 @@ int FileJournal::prepare_single_write(write_item &next_write, bufferlist& bl, of
   bl.claim_append(ebl);
   if (next_write.tracked_op) {
     next_write.tracked_op->mark_event("write_thread_in_journal_buffer");
-    next_write.tracked_op->journal_trace.event("prepare_single_write");
   }
 
   journalq.push_back(pair<uint64_t,off64_t>(seq, queue_pos));
@@ -1629,11 +1626,6 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
 
   if (osd_op) {
     osd_op->mark_event("commit_queued_for_journal_write");
-    if (osd_op->store_trace) {
-      osd_op->journal_trace.init("journal", &trace_endpoint, &osd_op->store_trace);
-      osd_op->journal_trace.event("submit_entry");
-      osd_op->journal_trace.keyval("seq", seq);
-    }
   }
   {
     std::lock_guard l1{writeq_lock};
@@ -1654,8 +1646,6 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
     if (writeq.empty())
       writeq_cond.notify_all();
     writeq.push_back(write_item(seq, e, orig_len, osd_op));
-    if (osd_op)
-      osd_op->journal_trace.keyval("queue depth", writeq.size());
   }
 }
 

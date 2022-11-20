@@ -36,7 +36,6 @@
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "common/perf_counters.h"
-#include "common/zipkin_trace.h"
 
 #include "common/ceph_mutex.h"
 #include "HashIndex.h"
@@ -221,7 +220,7 @@ private:
     Context *onreadable, *onreadable_sync;
     uint64_t ops, bytes;
     TrackedOpRef osd_op;
-    ZTracer::Trace trace;
+    jspan_context otel_trace{false, false};
     bool registered_apply = false;
   };
   class OpSequencer : public CollectionImpl {
@@ -304,7 +303,6 @@ private:
       std::lock_guard l{qlock};
       q.push_back(o);
       _register_apply(o);
-      o->trace.keyval("queue depth", q.size());
     }
     void _register_apply(Op *o);
     void _unregister_apply(Op *o);
@@ -442,8 +440,6 @@ private:
   void new_journal();
 
   PerfCounters *logger;
-
-  ZTracer::Endpoint trace_endpoint;
 
 public:
   int lfn_find(const ghobject_t& oid, const Index& index,

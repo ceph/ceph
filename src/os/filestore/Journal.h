@@ -24,7 +24,6 @@
 #include "common/Finisher.h"
 #include "common/TrackedOp.h"
 #include "os/ObjectStore.h"
-#include "common/zipkin_trace.h"
 
 
 class Journal {

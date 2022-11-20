@@ -28,7 +28,6 @@ using std::deque;
 #include "common/Thread.h"
 #include "common/Throttle.h"
 #include "JournalThrottle.h"
-#include "common/zipkin_trace.h"
 
 #ifdef HAVE_LIBAIO
 # include <libaio.h>
@@ -61,7 +60,7 @@ public:
     ceph::buffer::list bl;
     uint32_t orig_len;
     TrackedOpRef tracked_op;
-    ZTracer::Trace trace;
+    jspan_context otel_trace{false, false};
     write_item(uint64_t s, ceph::buffer::list& b, int ol, TrackedOpRef opref) :
       seq(s), orig_len(ol), tracked_op(opref) {
       bl = std::move(b);
@@ -397,7 +396,6 @@ private:
     return round_up_to(sizeof(header), block_size);
   }
 
-  ZTracer::Endpoint trace_endpoint;
 
  public:
   FileJournal(CephContext* cct, uuid_d fsid, Finisher *fin, ceph::condition_variable *sync_cond,
@@ -421,8 +419,7 @@ private:
     write_stop(true),
     aio_stop(true),
     write_thread(this),
-    write_finish_thread(this),
-    trace_endpoint("0.0.0.0", 0, "FileJournal") {
+    write_finish_thread(this) {
 
       if (aio && !directio) {
 	lderr(cct) << "FileJournal::_open_any: aio not supported without directio; disabling aio" << dendl;
