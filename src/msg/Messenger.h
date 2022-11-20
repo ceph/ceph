@@ -93,11 +93,8 @@ class Messenger {
 private:
   std::deque<Dispatcher*> dispatchers;
   std::deque<Dispatcher*> fast_dispatchers;
-  ZTracer::Endpoint trace_endpoint;
 
 protected:
-  void set_endpoint_addr(const entity_addr_t& a,
-                         const entity_name_t &name);
 
 protected:
   /// the "name" of the local daemon. eg client.99
@@ -240,15 +237,8 @@ protected:
    */
   virtual void set_myaddrs(const entity_addrvec_t& a) {
     my_addrs = a;
-    set_endpoint_addr(a.front(), my_name);
   }
 public:
-  /**
-   * @return the zipkin trace endpoint
-   */
-  const ZTracer::Endpoint* get_trace_endpoint() const {
-    return &trace_endpoint;
-  }
 
   /**
    * set the name of the local entity. The name is reported to others and

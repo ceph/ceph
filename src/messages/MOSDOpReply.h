@@ -31,8 +31,8 @@
 
 class MOSDOpReply final : public Message {
 private:
-  static constexpr int HEAD_VERSION = 8;
-  static constexpr int COMPAT_VERSION = 2;
+  static constexpr int HEAD_VERSION = 9;
+  static constexpr int COMPAT_VERSION = 3;
 
   object_t oid;
   pg_t pgid;
@@ -222,7 +222,7 @@ public:
           encode(redirect, payload);
         }
       }
-      encode_trace(payload, features);
+      encode_otel_trace(payload, features);
     }
   }
   void decode_payload() override {

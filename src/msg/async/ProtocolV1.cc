@@ -237,7 +237,6 @@ void ProtocolV1::send_message(Message *m) {
     m->put();
   } else {
     m->queue_start = ceph::mono_clock::now();
-    m->trace.event("async enqueueing message");
     out_q[m->get_priority()].emplace_back(std::move(bl), m);
     ldout(cct, 15) << __func__ << " inline write is denied, reschedule m=" << m
                    << dendl;
@@ -1167,7 +1166,6 @@ ssize_t ProtocolV1::write_message(Message *m, ceph::buffer::list &bl, bool more)
     connection->outgoing_bl.append((char *)&old_footer, sizeof(old_footer));
   }
 
-  m->trace.event("async writing message");
   ldout(cct, 20) << __func__ << " sending " << m->get_seq() << " " << m
                  << dendl;
   ssize_t total_send_size = connection->outgoing_bl.length();

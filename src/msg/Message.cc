@@ -217,9 +217,6 @@
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 
-#ifdef WITH_BLKIN
-#include "Messenger.h"
-#endif
 
 #define DEBUGLVL  10    // debug level of output
 
@@ -986,41 +983,10 @@ Message *decode_message(CephContext *cct,
   return m.detach();
 }
 
-void Message::encode_trace(ceph::bufferlist &bl, uint64_t features) const
-{
-  using ceph::encode;
-  auto p = trace.get_info();
-  static const blkin_trace_info empty = { 0, 0, 0 };
-  if (!p) {
-    p = &empty;
-  }
-  encode(*p, bl);
-}
-
 void Message::decode_trace(ceph::bufferlist::const_iterator &p, bool create)
 {
-  blkin_trace_info info = {};
+  static blkin_trace_info info = {};
   decode(info, p);
-
-#ifdef WITH_BLKIN
-  if (!connection)
-    return;
-
-  const auto msgr = connection->get_messenger();
-  const auto endpoint = msgr->get_trace_endpoint();
-  if (info.trace_id) {
-    trace.init(get_type_name().data(), endpoint, &info, true);
-    trace.event("decoded trace");
-  } else if (create || (msgr->get_myname().is_osd() &&
-                        msgr->cct->_conf->osd_blkin_trace_all)) {
-    // create a trace even if we didn't get one on the wire
-    trace.init(get_type_name().data(), endpoint);
-    trace.event("created trace");
-  }
-  trace.keyval("tid", get_tid());
-  trace.keyval("entity type", get_source().type_str());
-  trace.keyval("entity num", get_source().num());
-#endif
 }
 
 void Message::encode_otel_trace(ceph::bufferlist &bl, uint64_t features) const

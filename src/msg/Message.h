@@ -280,9 +280,7 @@ protected:
   boost::intrusive::list_member_hook<> dispatch_q;
 
 public:
-  // zipkin tracing
-  ZTracer::Trace trace;
-  void encode_trace(ceph::buffer::list &bl, uint64_t features) const;
+  // zipkin tracing - for backward compatibility
   void decode_trace(ceph::buffer::list::const_iterator &p, bool create = false);
 
   // otel tracing
@@ -347,7 +345,6 @@ protected:
     if (byte_throttler)
       byte_throttler->put(payload.length() + middle.length() + data.length());
     release_message_throttle();
-    trace.event("message destructed");
     /* call completion hooks (if any) */
     if (completion_hook)
       completion_hook->complete(0);
