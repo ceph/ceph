@@ -15,6 +15,8 @@ using jspan_attribute = opentelemetry::common::AttributeValue;
 
 namespace tracing {
 
+const static jspan_context noop_span_ctx{false, false};
+
 class Tracer {
  private:
   const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> noop_tracer;
@@ -125,6 +127,7 @@ class jspan {
 };
 
 namespace tracing {
+const static jspan_context noop_span_ctx{};
 
 struct Tracer {
   bool is_enabled() const { return false; }
