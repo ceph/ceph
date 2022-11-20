@@ -61,29 +61,29 @@ public:
     ceph_tid_t tid,
     eversion_t version,
     eversion_t last_complete,
-    const ZTracer::Trace &trace);
+    const jspan_context &otel_trace);
   void handle_sub_write(
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
-    const ZTracer::Trace &trace
+    const jspan_context &otel_trace
     );
   void handle_sub_read(
     pg_shard_t from,
     const ECSubRead &op,
     ECSubReadReply *reply,
-    const ZTracer::Trace &trace
+    const jspan_context &otel_trace
     );
   void handle_sub_write_reply(
     pg_shard_t from,
     const ECSubWriteReply &op,
-    const ZTracer::Trace &trace
+    const jspan_context &otel_trace
     );
   void handle_sub_read_reply(
     pg_shard_t from,
     ECSubReadReply &op,
     RecoveryMessages *m,
-    const ZTracer::Trace &trace
+    const jspan_context &otel_trace
     );
 
   /// @see ReadOp below
@@ -373,7 +373,7 @@ public:
     // of the available shards.
     bool for_recovery;
 
-    ZTracer::Trace trace;
+    jspan_context otel_trace{false, false};
 
     std::map<hobject_t, std::set<int>> want_to_read;
     std::map<hobject_t, read_request_t> to_read;
@@ -456,7 +456,7 @@ public:
     std::vector<pg_log_entry_t> log_entries;
     ceph_tid_t tid;
     osd_reqid_t reqid;
-    ZTracer::Trace trace;
+    jspan_context otel_trace{false, false};
 
     eversion_t roll_forward_to; /// Soon to be generated internally
 

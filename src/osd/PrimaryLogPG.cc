@@ -1798,9 +1798,8 @@ void PrimaryLogPG::do_request(
   OpRequestRef& op,
   ThreadPool::TPHandle &handle)
 {
-  if (op->osd_trace) {
-    op->pg_trace.init("pg op", &trace_endpoint, &op->osd_trace);
-    op->pg_trace.event("do request");
+  if (op->osd_trace.IsValid()) {
+    tracing::osd::tracer.add_span("pg op", op->osd_trace);
   }
 
 

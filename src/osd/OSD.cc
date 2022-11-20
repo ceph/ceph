@@ -2216,7 +2216,6 @@ OSD::OSD(CephContext *cct_,
   whoami(id),
   dev_path(dev), journal_path(jdev),
   store_is_rotational(store->is_rotational()),
-  trace_endpoint("0.0.0.0", 0, "osd"),
   asok_hook(NULL),
   m_osd_pg_epoch_max_lag_factor(cct->_conf.get_val<double>(
 				  "osd_pg_epoch_max_lag_factor")),
@@ -2272,11 +2271,6 @@ OSD::OSD(CephContext *cct_,
   op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->osd_op_history_slow_op_size,
                                                     cct->_conf->osd_op_history_slow_op_threshold);
   ObjectCleanRegions::set_max_num_intervals(cct->_conf->osd_object_clean_region_max_num_intervals);
-#ifdef WITH_BLKIN
-  std::stringstream ss;
-  ss << "osd." << whoami;
-  trace_endpoint.copy_name(ss.str());
-#endif
 
   // initialize shards
   num_shards = get_num_op_shards();
@@ -7278,9 +7272,8 @@ void OSD::ms_fast_dispatch(Message *m)
   } else {
     op->osd_parent_span = tracing::osd::tracer.start_trace("op-request-created");
   }
+  op->osd_trace = op->osd_parent_span->GetContext();
 
-  if (m->trace)
-    op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
 
   // note sender epoch, min req's epoch
   op->sent_epoch = static_cast<MOSDFastDispatchOp*>(m)->get_map_epoch();
@@ -9438,11 +9431,8 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch)
 	   << " latency " << latency
 	   << " epoch " << epoch
 	   << " " << *(op->get_req()) << dendl;
-  op->osd_trace.event("enqueue op");
-  op->osd_trace.keyval("priority", priority);
-  op->osd_trace.keyval("cost", cost);
 
-  auto enqueue_span = tracing::osd::tracer.add_span(__func__, op->osd_parent_span);
+  auto enqueue_span = tracing::osd::tracer.add_span(__func__, op->osd_trace);
   enqueue_span->AddEvent(__func__, {
     {"priority", priority},
     {"cost", cost},
@@ -9512,7 +9502,6 @@ void OSD::dequeue_op(
     return;
 
   op->mark_reached_pg();
-  op->osd_trace.event("dequeue_op");
 
   pg->do_request(op, handle);
 
