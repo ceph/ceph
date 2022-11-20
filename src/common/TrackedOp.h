@@ -282,10 +282,10 @@ protected:
   virtual bool filter_out(const std::set<std::string>& filters) { return true; }
 
 public:
-  ZTracer::Trace osd_trace;
-  ZTracer::Trace pg_trace;
-  ZTracer::Trace store_trace;
-  ZTracer::Trace journal_trace;
+  jspan_context osd_trace{false, false};
+  jspan_context pg_trace{false, false};
+  jspan_context store_trace{false, false};
+  jspan_context journal_trace{false, false};
 
   virtual ~TrackedOp() {}
 

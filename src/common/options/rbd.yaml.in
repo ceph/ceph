@@ -385,13 +385,6 @@ options:
   default: false
   services:
   - rbd
-- name: rbd_blkin_trace_all
-  type: bool
-  level: advanced
-  desc: create a blkin trace for all RBD requests
-  default: false
-  services:
-  - rbd
 - name: rbd_validate_pool
   type: bool
   level: advanced

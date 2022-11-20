@@ -307,9 +307,6 @@
 /* Defined if pthread_rwlockattr_setkind_np() is available */
 #cmakedefine HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
 
-/* Defined if blkin enabled */
-#cmakedefine WITH_BLKIN
-
 /* Defined if pthread_set_name_np() is available */
 #cmakedefine HAVE_PTHREAD_SET_NAME_NP
 
