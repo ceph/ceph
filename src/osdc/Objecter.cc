@@ -3233,6 +3233,7 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   if (op->trace->GetContext().IsValid()) {
     m->otel_trace = op->trace->GetContext();
+    m->trace = op->session->con->get_messenger()->tracer.add_span("io.ceph.MOSDOp", m->otel_trace);
   }
 
   logger->inc(l_osdc_op_send);

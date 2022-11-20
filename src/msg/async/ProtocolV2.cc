@@ -456,7 +456,6 @@ void ProtocolV2::send_message(Message *m) {
     ldout(cct, 5) << __func__ << " enqueueing message m=" << m
                   << " type=" << m->get_type() << " " << *m << dendl;
     m->queue_start = ceph::mono_clock::now();
-    m->trace.event("async enqueueing message");
     out_queue[m->get_priority()].emplace_back(
       out_queue_entry_t{is_prepared, m});
     ldout(cct, 15) << __func__ << " inline write is denied, reschedule m=" << m
@@ -554,7 +553,6 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
   ldout(cct, 2) << __func__ << " sending message m=" << m
                 << " seq=" << m->get_seq() << " " << *m << dendl;
 
-  m->trace.event("async writing message");
   ldout(cct, 20) << __func__ << " sending m=" << m << " seq=" << m->get_seq()
                  << " src=" << entity_name_t(messenger->get_myname())
                  << " off=" << header2.data_off

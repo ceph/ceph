@@ -31,7 +31,6 @@
 #include "common/config.h"
 #include "common/ref.h"
 #include "common/debug.h"
-#include "common/zipkin_trace.h"
 #include "common/tracer.h"
 #include "include/ceph_assert.h" // Because intrusive_ptr clobbers our assert...
 #include "include/buffer.h"
@@ -286,9 +285,11 @@ protected:
   boost::intrusive::list_member_hook<> dispatch_q;
 
 public:
-  // zipkin tracing
-  ZTracer::Trace trace;
-  void encode_trace(ceph::buffer::list &bl, uint64_t features) const;
+
+  jspan_ptr trace = ::tracing::Tracer::noop_span;
+
+  // zipkin tracing - for backward compatibility
+  static void encode_trace(ceph::bufferlist &bl, uint64_t features);
   void decode_trace(ceph::buffer::list::const_iterator &p, bool create = false);
 
   // otel tracing
@@ -353,7 +354,7 @@ protected:
     if (byte_throttler)
       byte_throttler->put(payload.length() + middle.length() + data.length());
     release_message_throttle();
-    trace.event("message destructed");
+    trace->AddEvent("message destructed");
     /* call completion hooks (if any) */
     if (completion_hook)
       completion_hook->complete(0);
