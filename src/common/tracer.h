@@ -16,15 +16,17 @@ using jspan_attribute = opentelemetry::common::AttributeValue;
 
 namespace tracing {
 
+
 static constexpr int TraceIdkSize = 16;
 static constexpr int SpanIdkSize = 8;
 static_assert(TraceIdkSize == opentelemetry::trace::TraceId::kSize);
 static_assert(SpanIdkSize == opentelemetry::trace::SpanId::kSize);
 
+const inline jspan_context noop_span_ctx{false, false};
+
 class Tracer {
  private:
   const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> noop_tracer;
-  const static jspan_ptr noop_span;
   CephContext* cct = nullptr;;
   opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer;
 
@@ -50,6 +52,8 @@ class Tracer {
   // parent_ctx contains the required information of the trace.
   jspan_ptr add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx);
 
+  // A No-op span that can be safely passed to anything expecting a span
+  const static jspan_ptr noop_span;
 };
 
 inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {
@@ -143,6 +147,7 @@ public:
 };
 
 namespace tracing {
+const static jspan_context noop_span_ctx{};
 
 struct Tracer {
   void init(CephContext* _cct, std::string_view service_name) {}
@@ -150,6 +155,8 @@ struct Tracer {
   jspan_ptr start_trace(std::string_view, bool enabled = true) { return {}; }
   jspan_ptr add_span(std::string_view, const jspan_ptr&) { return {}; }
   jspan_ptr add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
+
+  static const jspan_ptr noop_span;
 };
 
 inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {

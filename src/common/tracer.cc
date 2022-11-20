@@ -86,5 +86,8 @@ bool Tracer::is_enabled() const {
 
 } // namespace tracing
 
-#endif // HAVE_JAEGER
-
+#else // !HAVE_JAEGER
+namespace tracing {
+const jspan_ptr Tracer::noop_span{};
+}
+#endif // !HAVE_JAEGER
