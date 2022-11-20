@@ -1571,7 +1571,7 @@ private:
     std::string _stringify() const;
 
   public:
-    OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
+    OmapIteratorImpl(CollectionRef c, OnodeRef& o, KeyValueDB::Iterator it);
     int seek_to_first() override;
     int upper_bound(const std::string &after) override;
     int lower_bound(const std::string &to) override;
@@ -1821,7 +1821,7 @@ private:
       delete deferred_txn;
     }
 
-    void write_onode(OnodeRef &o) {
+    void write_onode(OnodeRef& o) {
       onodes.insert(o);
     }
     void write_shared_blob(SharedBlobRef &sb) {
@@ -1832,7 +1832,7 @@ private:
     }
 
     /// note we logically modified object (when onode itself is unmodified)
-    void note_modified_object(OnodeRef &o) {
+    void note_modified_object(OnodeRef& o) {
       // onode itself isn't written, though
       modified_objects.insert(o);
     }
@@ -2691,7 +2691,7 @@ private:
   void _reap_collections();
   void _update_cache_logger();
 
-  void _assign_nid(TransContext *txc, OnodeRef o);
+  void _assign_nid(TransContext *txc, OnodeRef& o);
   uint64_t _assign_blobid(TransContext *txc);
 
   template <int LogLevelV>
@@ -3049,7 +3049,7 @@ private:
   typedef std::map<BlueStore::BlobRef, regions2read_t> blobs2read_t;
 
   void _read_cache(
-    OnodeRef o,
+    OnodeRef& o,
     uint64_t offset,
     size_t length,
     int read_cache_policy,
@@ -3063,7 +3063,7 @@ private:
     IOContext* ioc);
 
   int _generate_read_result_bl(
-    OnodeRef o,
+    OnodeRef& o,
     uint64_t offset,
     size_t length,
     ready_regions_t& ready_regions,
@@ -3075,7 +3075,7 @@ private:
 
   int _do_read(
     Collection *c,
-    OnodeRef o,
+    OnodeRef& o,
     uint64_t offset,
     size_t len,
     ceph::buffer::list& bl,
@@ -3084,7 +3084,7 @@ private:
 
   int _do_readv(
     Collection *c,
-    OnodeRef o,
+    OnodeRef& o,
     const interval_set<uint64_t>& m,
     ceph::buffer::list& bl,
     uint32_t op_flags = 0,
@@ -3151,7 +3151,7 @@ public:
     std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
     );
   int _onode_omap_get(
-    const OnodeRef &o,           ///< [in] Object containing omap
+    const OnodeRef& o,           ///< [in] Object containing omap
     ceph::buffer::list *header,          ///< [out] omap header
     std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
   );
@@ -3471,33 +3471,33 @@ private:
   void _do_write_small(
     TransContext *txc,
     CollectionRef &c,
-    OnodeRef o,
+    OnodeRef& o,
     uint64_t offset, uint64_t length,
     ceph::buffer::list::iterator& blp,
     WriteContext *wctx);
   void _do_write_big_apply_deferred(
     TransContext* txc,
     CollectionRef& c,
-    OnodeRef o,
+    OnodeRef& o,
     BigDeferredWriteContext& dctx,
     bufferlist::iterator& blp,
     WriteContext* wctx);
   void _do_write_big(
     TransContext *txc,
     CollectionRef &c,
-    OnodeRef o,
+    OnodeRef& o,
     uint64_t offset, uint64_t length,
     ceph::buffer::list::iterator& blp,
     WriteContext *wctx);
   int _do_alloc_write(
     TransContext *txc,
     CollectionRef c,
-    OnodeRef o,
+    OnodeRef& o,
     WriteContext *wctx);
   void _wctx_finish(
     TransContext *txc,
     CollectionRef& c,
-    OnodeRef o,
+    OnodeRef& o,
     WriteContext *wctx,
     std::set<SharedBlob*> *maybe_unshared_blobs=0);
 
@@ -3511,26 +3511,26 @@ private:
 		  uint64_t chunk_size);
 
   void _choose_write_options(CollectionRef& c,
-                             OnodeRef o,
+                             OnodeRef& o,
                              uint32_t fadvise_flags,
                              WriteContext *wctx);
 
   int _do_gc(TransContext *txc,
              CollectionRef& c,
-             OnodeRef o,
+             OnodeRef& o,
              const WriteContext& wctx,
              uint64_t *dirty_start,
              uint64_t *dirty_end);
 
   int _do_write(TransContext *txc,
 		CollectionRef &c,
-		OnodeRef o,
+		OnodeRef& o,
 		uint64_t offset, uint64_t length,
 		ceph::buffer::list& bl,
 		uint32_t fadvise_flags);
   void _do_write_data(TransContext *txc,
                       CollectionRef& c,
-                      OnodeRef o,
+                      OnodeRef& o,
                       uint64_t offset,
                       uint64_t length,
                       ceph::buffer::list& bl,
@@ -3549,7 +3549,7 @@ private:
 	    uint64_t offset, size_t len);
   void _do_truncate(TransContext *txc,
 		   CollectionRef& c,
-		   OnodeRef o,
+		   OnodeRef& o,
 		   uint64_t offset,
 		   std::set<SharedBlob*> *maybe_unshared_blobs=0);
   int _truncate(TransContext *txc,
@@ -3561,7 +3561,7 @@ private:
 	      OnodeRef& o);
   int _do_remove(TransContext *txc,
 		 CollectionRef& c,
-		 OnodeRef o);
+		 OnodeRef& o);
   int _setattr(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o,
@@ -3578,7 +3578,7 @@ private:
   int _rmattrs(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o);
-  void _do_omap_clear(TransContext *txc, OnodeRef &o);
+  void _do_omap_clear(TransContext *txc, OnodeRef& o);
   int _omap_clear(TransContext *txc,
 		  CollectionRef& c,
 		  OnodeRef& o);
