@@ -8,7 +8,6 @@
 #include "rgw_rest_pubsub.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
-#include "rgw_sync_module_pubsub.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -546,16 +545,6 @@ void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y) {
   std::string data_bucket_prefix = "";
   std::string data_oid_prefix = "";
   bool push_only = true;
-  if (store->get_sync_module()) {
-    const auto psmodule = dynamic_cast<RGWPSSyncModuleInstance*>(store->get_sync_module().get());
-    if (psmodule) {
-      const auto& conf = psmodule->get_effective_conf();
-      data_bucket_prefix = conf["data_bucket_prefix"];
-      data_oid_prefix = conf["data_oid_prefix"];
-      // TODO: allow "push-only" on PS zone as well
-      push_only = false;
-    }
-  }
 
   if(configurations.list.empty()) {
     // get all topics on a bucket
