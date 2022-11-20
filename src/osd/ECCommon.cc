@@ -450,9 +450,9 @@ void ECCommon::ReadPipeline::start_read_op(
   dout(10) << __func__ << ": starting " << op << dendl;
   if (op.op) {
 #ifndef WITH_CRIMSON
-    op.trace = op.op->pg_trace;
+    op.otel_trace = tracing::osd::tracer.add_span("EC ReadOp", op.op->pg_trace);
 #endif
-    op.trace.event("start ec read");
+    op.otel_trace->AddEvent("start ec read");
   }
   do_read_op(op);
 }
@@ -518,11 +518,8 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
     msg->op = read;
     msg->op.from = get_parent()->whoami_shard();
     msg->op.tid = tid;
-    if (rop.trace) {
-      // initialize a child span for this shard
-      msg->trace.init("ec sub read", nullptr, &rop.trace);
-      msg->trace.keyval("shard", pg_shard.shard.id);
-    }
+    msg->otel_trace = rop.otel_trace->GetContext();
+    rop.otel_trace->AddEvent("ec sub read", {{"shard", pg_shard.shard.id}});
     m.push_back(std::make_pair(pg_shard.osd, msg));
     dout(10) << __func__ << ": will send msg " << *msg
              << " to osd." << pg_shard << dendl;
@@ -831,7 +828,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     trans[shard];
   }
 
-  op.trace.event("start ec write");
+  op.otel_trace->AddEvent("start ec write");
 
   map<hobject_t, ECUtil::shard_extent_map_t> written;
   op.generate_transactions(
@@ -914,11 +911,8 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       !should_send);
 
     ZTracer::Trace trace;
-    if (op.trace) {
-      // initialize a child span for this shard
-      trace.init("ec sub write", nullptr, &op.trace);
-      trace.keyval("shard", pg_shard.shard.id);
-    }
+
+    op.otel_trace->AddEvent("ec sub write", {{"shard", pg_shard.shard.id}});
 
     if (pg_shard == get_parent()->whoami_shard()) {
       should_write_local = true;
@@ -950,7 +944,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       get_parent()->whoami_shard(),
       op.client_op,
       local_write_op,
-      op.trace);
+      op.otel_trace);
   }
 
 
@@ -1007,7 +1001,7 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
     dout(10) << __func__ << " Calling on_all_commit on " << *op << dendl;
     op->on_all_commit->complete(0);
     op->on_all_commit = nullptr;
-    op->trace.event("ec write all committed");
+    op->otel_trace->AddEvent("ec write all committed");
   }
 
   if (op->pg_committed_to > completed_to)

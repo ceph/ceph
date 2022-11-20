@@ -68,25 +68,25 @@ class ECBackend : public ECCommon {
       ceph_tid_t tid,
       eversion_t version,
       eversion_t last_complete,
-      const ZTracer::Trace &trace
+      const jspan_ptr &otel_trace
     );
   void handle_sub_write(
       pg_shard_t from,
       OpRequestRef msg,
       ECSubWrite &op,
-      const ZTracer::Trace &trace,
+      const jspan_ptr &otel_trace,
       ECListener &eclistener
     ) override;
   void handle_sub_read(
       pg_shard_t from,
       const ECSubRead &op,
       ECSubReadReply *reply,
-      const ZTracer::Trace &trace
+      const jspan_ptr &otel_trace
     );
   void handle_sub_read_n_reply(
     pg_shard_t from,
     ECSubRead &op,
-    const ZTracer::Trace &trace
+    const jspan_ptr &otel_trace
 #ifdef WITH_CRIMSON
     ) override;
 #else
@@ -95,12 +95,12 @@ class ECBackend : public ECCommon {
   void handle_sub_write_reply(
       pg_shard_t from,
       const ECSubWriteReply &op,
-      const ZTracer::Trace &trace
+      const jspan_ptr &otel_trace
     );
   void handle_sub_read_reply(
       pg_shard_t from,
       ECSubReadReply &op,
-      const ZTracer::Trace &trace
+      const jspan_ptr &otel_trace
     );
 
   /// @see ReadOp below
@@ -363,7 +363,7 @@ public:
     size_t
   > get_attrs_n_size_from_disk(const hobject_t &hoid);
 
- public:
+public:
   int object_stat(const hobject_t &hoid, struct stat *st);
   ECBackend(
       PGBackend::Listener *pg,

@@ -80,14 +80,14 @@ struct ECCommon {
       pg_shard_t from,
       OpRequestRef msg,
       ECSubWrite &op,
-      const ZTracer::Trace &trace,
+      const jspan_ptr &otel_trace,
       ECListener &eclistener) = 0;
 
 #ifdef WITH_CRIMSON
   virtual void handle_sub_read_n_reply(
     pg_shard_t from,
     ECSubRead &op,
-    const ZTracer::Trace &trace
+    const jspan_ptr &otel_trace
     ) = 0;
 #endif
 
@@ -263,10 +263,11 @@ struct ECCommon {
     bool for_recovery;
     std::unique_ptr<ReadCompleter> on_complete;
 
-    ZTracer::Trace trace;
 
     std::map<hobject_t, read_request_t> to_read;
     std::map<hobject_t, read_result_t> complete;
+
+    jspan_ptr otel_trace;
 
     std::map<hobject_t, std::set<pg_shard_t>> obj_to_source;
     std::map<pg_shard_t, std::set<hobject_t>> source_to_obj;
@@ -289,7 +290,8 @@ struct ECCommon {
         do_redundant_reads(do_redundant_reads),
         for_recovery(for_recovery),
         on_complete(std::move(_on_complete)),
-        to_read(std::move(_to_read)) {}
+        to_read(std::move(_to_read)),
+        otel_trace(tracing::osd::tracer.add_span("EC ReadOp", op->osd_trace)) {}
 
     ReadOp() = delete;
     ReadOp(const ReadOp &) = delete; // due to on_complete being unique_ptr
@@ -457,8 +459,8 @@ struct ECCommon {
     void handle_sub_read_n_reply(
       pg_shard_t from,
       ECSubRead &op,
-      const ZTracer::Trace &trace) {
-      ec_backend.handle_sub_read_n_reply(from, op, trace);
+      const jspan_ptr &otel_trace) {
+      ec_backend.handle_sub_read_n_reply(from, op, otel_trace);
     }
 #endif
   };
@@ -488,7 +490,6 @@ struct ECCommon {
       std::vector<pg_log_entry_t> log_entries;
       ceph_tid_t tid;
       osd_reqid_t reqid;
-      ZTracer::Trace trace;
 
       /**
        * pg_commited_to
@@ -528,6 +529,7 @@ struct ECCommon {
 
       /// optional, may be null, for tracking purposes
       OpRequestRef client_op;
+      jspan_ptr otel_trace = tracing::Tracer::noop_span;
 
       /// pin for cache
       std::list<ECExtentCache::OpRef> cache_ops;
@@ -644,8 +646,8 @@ struct ECCommon {
         pg_shard_t from,
         OpRequestRef msg,
         ECSubWrite &op,
-        const ZTracer::Trace &trace) const {
-      ec_backend.handle_sub_write(from, std::move(msg), op, trace,
+        const jspan_ptr &otel_trace) const {
+      ec_backend.handle_sub_write(from, std::move(msg), op, otel_trace,
                                   *get_parent());
     }
 
