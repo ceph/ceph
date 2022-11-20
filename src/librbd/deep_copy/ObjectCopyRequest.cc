@@ -105,7 +105,7 @@ void ObjectCopyRequest<I>::send_list_snaps() {
   auto req = io::ImageDispatchSpec::create_list_snaps(
     *m_src_image_ctx, io::IMAGE_DISPATCH_LAYER_NONE, aio_comp,
     io::Extents{m_image_extents}, std::move(snap_ids), list_snaps_flags,
-    &m_snapshot_delta, {});
+    &m_snapshot_delta, tracing::noop_span_ctx);
   req->send();
 }
 
@@ -173,7 +173,7 @@ void ObjectCopyRequest<I>::send_read() {
   auto req = io::ImageDispatchSpec::create_read(
     *m_src_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
     std::move(image_extents), std::move(read_result), io_context, op_flags,
-    read_flags, {});
+    read_flags, tracing::noop_span_ctx);
   req->send();
 }
 
@@ -248,7 +248,7 @@ void ObjectCopyRequest<I>::send_update_object_map() {
   auto dst_image_ctx = m_dst_image_ctx;
   bool sent = dst_image_ctx->object_map->template aio_update<
     Context, &Context::complete>(dst_snap_id, m_dst_object_number, object_state,
-                                 {}, {}, false, ctx);
+                                 {}, tracing::noop_span_ctx, false, ctx);
 
   // NOTE: state machine might complete before we reach here
   dst_image_ctx->image_lock.unlock_shared();

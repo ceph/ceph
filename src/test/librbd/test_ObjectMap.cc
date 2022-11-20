@@ -209,7 +209,7 @@ TEST_F(TestObjectMap, DISABLED_StressTest) {
 
     if (!ictx->object_map->aio_update<
           Context, &Context::complete>(CEPH_NOSNAP, object_no,
-                                       OBJECT_EXISTS, {}, {}, true,
+                                       OBJECT_EXISTS, {}, tracing::noop_span_ctx, true,
                                        ctx)) {
       ctx->complete(0);
     } else {

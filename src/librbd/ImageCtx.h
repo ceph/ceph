@@ -19,7 +19,7 @@
 #include "common/event_socket.h"
 #include "common/Readahead.h"
 #include "common/snap_types.h"
-#include "common/zipkin_trace.h"
+#include "common/tracer.h"
 
 #include "include/common_fwd.h"
 #include "include/buffer_fwd.h"
@@ -227,8 +227,6 @@ namespace librbd {
 
     exclusive_lock::Policy *exclusive_lock_policy = nullptr;
     journal::Policy *journal_policy = nullptr;
-
-    ZTracer::Endpoint trace_endpoint;
 
     crypto::CryptoInterface* crypto = nullptr;
 

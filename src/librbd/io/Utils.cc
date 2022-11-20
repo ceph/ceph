@@ -85,7 +85,7 @@ bool assemble_write_same_extent(
 
 template <typename I>
 void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
-                 librados::snap_t snap_id, const ZTracer::Trace &trace,
+                 librados::snap_t snap_id, const jspan_context &trace,
                  Context* on_finish) {
 
   auto cct = image_ctx->cct;
@@ -171,7 +171,7 @@ bool trigger_copyup(I* image_ctx, uint64_t object_no, IOContext io_context,
   bufferlist bl;
   auto req = new ObjectWriteRequest<I>(
           image_ctx, object_no, 0, std::move(bl), io_context, 0, 0,
-          std::nullopt, {}, on_finish);
+          std::nullopt, tracing::noop_span_ctx, on_finish);
   if (!req->has_parent()) {
     delete req;
     return false;
@@ -220,7 +220,7 @@ uint64_t get_file_offset(I* image_ctx, uint64_t object_no, uint64_t offset) {
 
 template void librbd::io::util::read_parent(
     librbd::ImageCtx *image_ctx, uint64_t object_no, ReadExtents* extents,
-    librados::snap_t snap_id, const ZTracer::Trace &trace, Context* on_finish);
+    librados::snap_t snap_id, const jspan_context &trace, Context* on_finish);
 template int librbd::io::util::clip_request(
     librbd::ImageCtx *image_ctx, Extents *image_extents);
 template bool librbd::io::util::trigger_copyup(

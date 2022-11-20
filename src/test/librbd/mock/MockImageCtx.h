@@ -17,7 +17,6 @@
 #include "test/librbd/mock/io/MockImageDispatcher.h"
 #include "test/librbd/mock/io/MockObjectDispatcher.h"
 #include "common/WorkQueue.h"
-#include "common/zipkin_trace.h"
 #include "librbd/ImageCtx.h"
 #include "gmock/gmock.h"
 #include <string>
@@ -93,12 +92,10 @@ struct MockImageCtx {
       state(new MockImageState()),
       image_watcher(NULL), object_map(NULL),
       exclusive_lock(NULL), journal(NULL),
-      trace_endpoint(image_ctx.trace_endpoint),
       sparse_read_threshold_bytes(image_ctx.sparse_read_threshold_bytes),
       discard_granularity_bytes(image_ctx.discard_granularity_bytes),
       mirroring_replay_delay(image_ctx.mirroring_replay_delay),
       non_blocking_aio(image_ctx.non_blocking_aio),
-      blkin_trace_all(image_ctx.blkin_trace_all),
       enable_alloc_hint(image_ctx.enable_alloc_hint),
       alloc_hint_flags(image_ctx.alloc_hint_flags),
       read_flags(image_ctx.read_flags),
@@ -315,15 +312,12 @@ struct MockImageCtx {
   MockExclusiveLock *exclusive_lock;
   MockJournal *journal;
 
-  ZTracer::Endpoint trace_endpoint;
-
   crypto::CryptoInterface* crypto = nullptr;
 
   uint64_t sparse_read_threshold_bytes;
   uint32_t discard_granularity_bytes;
   int mirroring_replay_delay;
   bool non_blocking_aio;
-  bool blkin_trace_all;
   bool enable_alloc_hint;
   uint32_t alloc_hint_flags;
   uint32_t read_flags;

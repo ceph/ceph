@@ -8,15 +8,13 @@
 #include "include/buffer.h"
 #include "include/interval_set.h"
 #include "common/ceph_mutex.h"
-#include "common/zipkin_trace.h"
+#include "common/tracer.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/Types.h"
 
 #include <map>
 #include <string>
 #include <vector>
-
-namespace ZTracer { struct Trace; }
 
 namespace librbd {
 
@@ -31,13 +29,13 @@ class CopyupRequest {
 public:
   static CopyupRequest* create(ImageCtxT *ictx, uint64_t objectno,
                                Extents &&image_extents,
-                               const ZTracer::Trace &parent_trace) {
+                               const jspan_context &parent_trace) {
     return new CopyupRequest(ictx, objectno, std::move(image_extents),
                              parent_trace);
   }
 
   CopyupRequest(ImageCtxT *ictx, uint64_t objectno, Extents &&image_extents,
-                const ZTracer::Trace &parent_trace);
+                const jspan_context &parent_trace);
   ~CopyupRequest();
 
   void append_request(AbstractObjectWriteRequest<ImageCtxT> *req,
@@ -83,7 +81,7 @@ private:
   ImageCtxT *m_image_ctx;
   uint64_t m_object_no;
   Extents m_image_extents;
-  ZTracer::Trace m_trace;
+  jspan_context m_trace;
 
   bool m_flatten = false;
   bool m_copyup_required = true;

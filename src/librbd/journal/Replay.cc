@@ -275,7 +275,7 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
   if (flush_comp != nullptr) {
     std::shared_lock owner_locker{m_image_ctx.owner_lock};
     io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp,
-                                   io::FLUSH_SOURCE_INTERNAL, {});
+                                   io::FLUSH_SOURCE_INTERNAL, tracing::noop_span_ctx);
   }
   if (on_finish != nullptr) {
     on_finish->complete(0);
@@ -296,7 +296,7 @@ void Replay<I>::flush(Context *on_finish) {
 
   std::shared_lock owner_locker{m_image_ctx.owner_lock};
   io::ImageRequest<I>::aio_flush(&m_image_ctx, aio_comp,
-                                 io::FLUSH_SOURCE_INTERNAL, {});
+                                 io::FLUSH_SOURCE_INTERNAL, tracing::noop_span_ctx);
 }
 
 template <typename I>
@@ -357,7 +357,7 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
     io::ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp,
                                      {{event.offset, event.length}},
                                      event.discard_granularity_bytes,
-                                     m_image_ctx.get_data_io_context(), {});
+                                     m_image_ctx.get_data_io_context(), tracing::noop_span_ctx);
   }
 
   if (flush_required) {
@@ -367,7 +367,7 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
 
     if (flush_comp != nullptr) {
       io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp,
-                                     io::FLUSH_SOURCE_INTERNAL, {});
+                                     io::FLUSH_SOURCE_INTERNAL, tracing::noop_span_ctx);
     }
   }
 }
@@ -392,7 +392,7 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
     io::ImageRequest<I>::aio_write(&m_image_ctx, aio_comp,
                                    {{event.offset, event.length}},
                                    std::move(data),
-                                   m_image_ctx.get_data_io_context(), 0, {});
+                                   m_image_ctx.get_data_io_context(), 0, tracing::noop_span_ctx);
   }
 
   if (flush_required) {
@@ -402,7 +402,7 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
 
     if (flush_comp != nullptr) {
       io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp,
-                                     io::FLUSH_SOURCE_INTERNAL, {});
+                                     io::FLUSH_SOURCE_INTERNAL, tracing::noop_span_ctx);
     }
   }
 }
@@ -421,7 +421,7 @@ void Replay<I>::handle_event(const journal::AioFlushEvent &event,
 
   if (aio_comp != nullptr) {
     io::ImageRequest<I>::aio_flush(&m_image_ctx, aio_comp,
-                                   io::FLUSH_SOURCE_INTERNAL, {});
+                                   io::FLUSH_SOURCE_INTERNAL, tracing::noop_span_ctx);
   }
   on_ready->complete(0);
 }
@@ -447,7 +447,7 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
                                        {{event.offset, event.length}},
                                        std::move(data),
                                        m_image_ctx.get_data_io_context(), 0,
-                                       {});
+                                       tracing::noop_span_ctx);
   }
 
   if (flush_required) {
@@ -457,7 +457,7 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
 
     if (flush_comp != nullptr) {
       io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp,
-                                     io::FLUSH_SOURCE_INTERNAL, {});
+                                     io::FLUSH_SOURCE_INTERNAL, tracing::noop_span_ctx);
     }
   }
 }
@@ -483,7 +483,7 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
                                                std::move(write_data),
                                                nullptr,
                                                m_image_ctx.get_data_io_context(),
-                                               0, {});
+                                               0, tracing::noop_span_ctx);
   }
 
   if (flush_required) {
@@ -492,7 +492,7 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
     m_lock.unlock();
 
     io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp,
-                                   io::FLUSH_SOURCE_INTERNAL, {});
+                                   io::FLUSH_SOURCE_INTERNAL, tracing::noop_span_ctx);
   }
 }
 

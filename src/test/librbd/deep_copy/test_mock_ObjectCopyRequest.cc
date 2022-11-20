@@ -323,7 +323,7 @@ public:
         expect.WillOnce(DoAll(WithArg<7>(Invoke([&mock_image_ctx, snap_id, state](Context *ctx) {
                                   ceph_assert(ceph_mutex_is_locked(mock_image_ctx.image_ctx->image_lock));
                                   mock_image_ctx.image_ctx->object_map->aio_update<Context>(
-                                    snap_id, 0, 1, state, boost::none, {}, false, ctx);
+                                    snap_id, 0, 1, state, boost::none, tracing::noop_span_ctx, false, ctx);
                                 })),
                               Return(true)));
       }

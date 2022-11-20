@@ -7,7 +7,7 @@
 #include "librbd/io/ImageDispatchInterface.h"
 #include "include/int_types.h"
 #include "include/buffer.h"
-#include "common/zipkin_trace.h"
+#include "common/tracer.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"
 
@@ -36,39 +36,39 @@ public:
   bool read(
       AioCompletion* aio_comp, Extents &&image_extents,
       ReadResult &&read_result, IOContext io_context, int op_flags,
-      int read_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
+      int read_flags, const jspan_context &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
   bool write(
       AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+      IOContext io_context, int op_flags, const jspan_context &parent_trace,
       uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
   bool discard(
       AioCompletion* aio_comp, Extents &&image_extents,
       uint32_t discard_granularity_bytes, IOContext io_context,
-      const ZTracer::Trace &parent_trace, uint64_t tid,
+      const jspan_context &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
   bool write_same(
       AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+      IOContext io_context, int op_flags, const jspan_context &parent_trace,
       uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
   bool compare_and_write(
       AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&cmp_bl,
       bufferlist &&bl, uint64_t *mismatch_offset, IOContext io_context,
-      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
+      int op_flags, const jspan_context &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
   bool flush(
       AioCompletion* aio_comp, FlushSource flush_source,
-      const ZTracer::Trace &parent_trace, uint64_t tid,
+      const jspan_context &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
@@ -76,7 +76,7 @@ public:
   bool list_snaps(
       AioCompletion* aio_comp, Extents&& image_extents, SnapIds&& snap_ids,
       int list_snaps_flags, SnapshotDelta* snapshot_delta,
-      const ZTracer::Trace &parent_trace, uint64_t tid,
+      const jspan_context &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;

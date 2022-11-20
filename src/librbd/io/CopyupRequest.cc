@@ -45,7 +45,7 @@ public:
   C_UpdateObjectMap(AsyncObjectThrottle<I> &throttle, I *image_ctx,
                     uint64_t object_no, uint8_t head_object_map_state,
                     const std::vector<uint64_t> *snap_ids,
-                    bool first_snap_is_clean, const ZTracer::Trace &trace,
+                    bool first_snap_is_clean, const jspan_context &trace,
                     size_t snap_id_idx)
     : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_object_no(object_no),
       m_head_object_map_state(head_object_map_state), m_snap_ids(*snap_ids),
@@ -108,7 +108,7 @@ private:
   uint8_t m_head_object_map_state;
   const std::vector<uint64_t> &m_snap_ids;
   bool m_first_snap_is_clean;
-  const ZTracer::Trace &m_trace;
+  const jspan_context &m_trace;
   size_t m_snap_id_idx;
 };
 
@@ -117,9 +117,9 @@ private:
 template <typename I>
 CopyupRequest<I>::CopyupRequest(I *ictx, uint64_t objectno,
                                 Extents &&image_extents,
-                                const ZTracer::Trace &parent_trace)
+                                const jspan_context &parent_trace)
   : m_image_ctx(ictx), m_object_no(objectno), m_image_extents(image_extents),
-    m_trace(librbd::util::create_trace(*m_image_ctx, "copy-up", parent_trace))
+    m_trace(tracing::noop_span_ctx)
 {
   ceph_assert(m_image_ctx->data_ctx.is_valid());
   m_async_op.start_op(*librbd::util::get_image_ctx(m_image_ctx));
@@ -475,7 +475,7 @@ void CopyupRequest<I>::copyup() {
       object, copyup_io_context, std::move(copyup_op),
       librbd::asio::util::get_callback_adapter(
         [this](int r) { handle_copyup(r); }), nullptr,
-        (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
+        nullptr);
   }
 
   if (write_op.size() > 0) {
@@ -490,7 +490,7 @@ void CopyupRequest<I>::copyup() {
       object, *io_context, std::move(write_op),
       librbd::asio::util::get_callback_adapter(
         [this](int r) { handle_copyup(r); }), nullptr,
-        (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
+        nullptr);
   }
 }
 

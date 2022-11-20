@@ -170,7 +170,7 @@ void readahead(I *ictx, const Extents& image_extents, IOContext io_context) {
                                              object_extent.length);
       auto req = io::ObjectDispatchSpec::create_read(
         ictx, io::OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
-        &req_comp->extents, io_context, 0, 0, {}, nullptr, req_comp);
+        &req_comp->extents, io_context, 0, 0, tracing::noop_span_ctx, nullptr, req_comp);
       req->send();
     }
 
@@ -230,7 +230,7 @@ void ImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                Extents &&image_extents,
                                ReadResult &&read_result, IOContext io_context,
                                int op_flags, int read_flags,
-			       const ZTracer::Trace &parent_trace) {
+			       const jspan_context &parent_trace) {
   ImageReadRequest<I> req(*ictx, c, std::move(image_extents),
                           std::move(read_result), io_context, op_flags,
                           read_flags, parent_trace);
@@ -241,7 +241,7 @@ template <typename I>
 void ImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
                                 Extents &&image_extents, bufferlist &&bl,
                                 IOContext io_context, int op_flags,
-				const ZTracer::Trace &parent_trace) {
+				const jspan_context &parent_trace) {
   ImageWriteRequest<I> req(*ictx, c, std::move(image_extents), std::move(bl),
                            io_context, op_flags, parent_trace);
   req.send();
@@ -252,7 +252,7 @@ void ImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
                                   Extents &&image_extents,
                                   uint32_t discard_granularity_bytes,
 				  IOContext io_context,
-                                  const ZTracer::Trace &parent_trace) {
+                                  const jspan_context &parent_trace) {
   ImageDiscardRequest<I> req(*ictx, c, std::move(image_extents),
                              discard_granularity_bytes, io_context,
                              parent_trace);
@@ -262,7 +262,7 @@ void ImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
 template <typename I>
 void ImageRequest<I>::aio_flush(I *ictx, AioCompletion *c,
                                 FlushSource flush_source,
-                                const ZTracer::Trace &parent_trace) {
+                                const jspan_context &parent_trace) {
   ImageFlushRequest<I> req(*ictx, c, flush_source, parent_trace);
   req.send();
 }
@@ -272,7 +272,7 @@ void ImageRequest<I>::aio_writesame(I *ictx, AioCompletion *c,
                                     Extents &&image_extents,
                                     bufferlist &&bl, IOContext io_context,
                                     int op_flags,
-				    const ZTracer::Trace &parent_trace) {
+				    const jspan_context &parent_trace) {
   ImageWriteSameRequest<I> req(*ictx, c, std::move(image_extents),
                                std::move(bl), io_context, op_flags,
                                parent_trace);
@@ -286,7 +286,7 @@ void ImageRequest<I>::aio_compare_and_write(I *ictx, AioCompletion *c,
                                             bufferlist &&bl,
                                             uint64_t *mismatch_offset,
                                             IOContext io_context, int op_flags,
-                                            const ZTracer::Trace &parent_trace) {
+                                            const jspan_context &parent_trace) {
   ImageCompareAndWriteRequest<I> req(*ictx, c, std::move(image_extents),
                                      std::move(cmp_bl), std::move(bl),
                                      mismatch_offset, io_context, op_flags,
@@ -367,7 +367,7 @@ ImageReadRequest<I>::ImageReadRequest(I &image_ctx, AioCompletion *aio_comp,
                                       ReadResult &&read_result,
                                       IOContext io_context, int op_flags,
 				      int read_flags,
-                                      const ZTracer::Trace &parent_trace)
+                                      const jspan_context &parent_trace)
   : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents),
                     io_context, "read", parent_trace),
     m_op_flags(op_flags), m_read_flags(read_flags) {
@@ -815,7 +815,7 @@ template <typename I>
 ImageListSnapsRequest<I>::ImageListSnapsRequest(
     I& image_ctx, AioCompletion* aio_comp, Extents&& image_extents,
     SnapIds&& snap_ids, int list_snaps_flags, SnapshotDelta* snapshot_delta,
-    const ZTracer::Trace& parent_trace)
+    const jspan_context& parent_trace)
   : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents),
                     image_ctx.get_data_io_context(), "list-snaps",
                     parent_trace),

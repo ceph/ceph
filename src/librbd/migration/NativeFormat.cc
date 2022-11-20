@@ -289,7 +289,7 @@ template <typename I>
 void NativeFormat<I>::list_snaps(io::Extents&& image_extents,
                                  io::SnapIds&& snap_ids, int list_snaps_flags,
                                  io::SnapshotDelta* snapshot_delta,
-                                 const ZTracer::Trace &parent_trace,
+                                 const jspan_context &parent_trace,
                                  Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
@@ -299,7 +299,7 @@ void NativeFormat<I>::list_snaps(io::Extents&& image_extents,
   auto req = io::ImageDispatchSpec::create_list_snaps(
     *m_image_ctx, io::IMAGE_DISPATCH_LAYER_MIGRATION, aio_comp,
     std::move(image_extents), std::move(snap_ids), list_snaps_flags,
-    snapshot_delta, {});
+    snapshot_delta, tracing::noop_span_ctx);
   req->send();
 }
 

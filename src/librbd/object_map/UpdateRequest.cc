@@ -63,7 +63,7 @@ void UpdateRequest<I>::update_object_map() {
   std::vector<librados::snap_t> snaps;
   int r = m_image_ctx.md_ctx.aio_operate(
     oid, rados_completion, &op, 0, snaps,
-    (m_trace.valid() ? m_trace.get_info() : nullptr));
+    nullptr);
   ceph_assert(r == 0);
   rados_completion->release();
 }

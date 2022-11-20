@@ -201,7 +201,7 @@ TEST_F(TestMockIoImageRequest, AioWriteModifyTimestamp) {
   bl.append("1");
   MockImageWriteRequest mock_aio_image_write_1(
     mock_image_ctx, aio_comp_1, {{0, 1}}, std::move(bl),
-    mock_image_ctx.get_data_io_context(), 0, {});
+    mock_image_ctx.get_data_io_context(), 0, tracing::noop_span_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_write_1.send();
@@ -214,7 +214,7 @@ TEST_F(TestMockIoImageRequest, AioWriteModifyTimestamp) {
   bl.append("1");
   MockImageWriteRequest mock_aio_image_write_2(
     mock_image_ctx, aio_comp_2, {{0, 1}}, std::move(bl),
-    mock_image_ctx.get_data_io_context(), 0, {});
+    mock_image_ctx.get_data_io_context(), 0, tracing::noop_span_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_write_2.send();
@@ -257,7 +257,7 @@ TEST_F(TestMockIoImageRequest, AioReadAccessTimestamp) {
   ReadResult rr;
   MockImageReadRequest mock_aio_image_read_1(
     mock_image_ctx, aio_comp_1, {{0, 1}}, std::move(rr),
-    mock_image_ctx.get_data_io_context(), 0, 0, {});
+    mock_image_ctx.get_data_io_context(), 0, 0, tracing::noop_span_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_read_1.send();
@@ -270,7 +270,7 @@ TEST_F(TestMockIoImageRequest, AioReadAccessTimestamp) {
 
   MockImageReadRequest mock_aio_image_read_2(
     mock_image_ctx, aio_comp_2, {{0, 1}}, std::move(rr),
-    mock_image_ctx.get_data_io_context(), 0, 0, {});
+    mock_image_ctx.get_data_io_context(), 0, 0, tracing::noop_span_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_read_2.send();
@@ -296,7 +296,7 @@ TEST_F(TestMockIoImageRequest, PartialDiscard) {
     &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
   MockImageDiscardRequest mock_aio_image_discard(
     mock_image_ctx, aio_comp, {{16, 63}, {84, 100}},
-    ictx->discard_granularity_bytes, mock_image_ctx.get_data_io_context(), {});
+    ictx->discard_granularity_bytes, mock_image_ctx.get_data_io_context(), tracing::noop_span_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_discard.send();
@@ -324,7 +324,7 @@ TEST_F(TestMockIoImageRequest, TailDiscard) {
   MockImageDiscardRequest mock_aio_image_discard(
     mock_image_ctx, aio_comp,
     {{ictx->layout.object_size - 1024, 1024}},
-    ictx->discard_granularity_bytes, mock_image_ctx.get_data_io_context(), {});
+    ictx->discard_granularity_bytes, mock_image_ctx.get_data_io_context(), tracing::noop_span_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_discard.send();
@@ -354,7 +354,7 @@ TEST_F(TestMockIoImageRequest, DiscardGranularity) {
   MockImageDiscardRequest mock_aio_image_discard(
     mock_image_ctx, aio_comp,
     {{16, 63}, {96, 31}, {84, 100}, {ictx->layout.object_size - 33, 33}},
-    ictx->discard_granularity_bytes, mock_image_ctx.get_data_io_context(), {});
+    ictx->discard_granularity_bytes, mock_image_ctx.get_data_io_context(), tracing::noop_span_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_discard.send();
@@ -385,7 +385,7 @@ TEST_F(TestMockIoImageRequest, AioWriteJournalAppendDisabled) {
   bl.append("1");
   MockImageWriteRequest mock_aio_image_write(
     mock_image_ctx, aio_comp, {{0, 1}}, std::move(bl),
-    mock_image_ctx.get_data_io_context(), 0, {});
+    mock_image_ctx.get_data_io_context(), 0, tracing::noop_span_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_write.send();
@@ -414,7 +414,7 @@ TEST_F(TestMockIoImageRequest, AioDiscardJournalAppendDisabled) {
     &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
   MockImageDiscardRequest mock_aio_image_discard(
     mock_image_ctx, aio_comp, {{0, 1}}, ictx->discard_granularity_bytes,
-    mock_image_ctx.get_data_io_context(), {});
+    mock_image_ctx.get_data_io_context(), tracing::noop_span_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_discard.send();
@@ -442,7 +442,7 @@ TEST_F(TestMockIoImageRequest, AioFlushJournalAppendDisabled) {
   AioCompletion *aio_comp = AioCompletion::create_and_start(
     &aio_comp_ctx, ictx, AIO_TYPE_FLUSH);
   MockImageFlushRequest mock_aio_image_flush(mock_image_ctx, aio_comp,
-                                             FLUSH_SOURCE_USER, {});
+                                             FLUSH_SOURCE_USER, tracing::noop_span_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_flush.send();
@@ -473,7 +473,7 @@ TEST_F(TestMockIoImageRequest, AioWriteSameJournalAppendDisabled) {
   bl.append("1");
   MockImageWriteSameRequest mock_aio_image_writesame(
     mock_image_ctx, aio_comp, {{0, 1}}, std::move(bl),
-    mock_image_ctx.get_data_io_context(), 0, {});
+    mock_image_ctx.get_data_io_context(), 0, tracing::noop_span_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_writesame.send();
@@ -507,7 +507,7 @@ TEST_F(TestMockIoImageRequest, AioCompareAndWriteJournalAppendDisabled) {
   uint64_t mismatch_offset;
   MockImageCompareAndWriteRequest mock_aio_image_write(
     mock_image_ctx, aio_comp, {{0, 1}}, std::move(cmp_bl), std::move(write_bl),
-    &mismatch_offset, mock_image_ctx.get_data_io_context(), 0, {});
+    &mismatch_offset, mock_image_ctx.get_data_io_context(), 0, tracing::noop_span_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_write.send();
@@ -545,7 +545,7 @@ TEST_F(TestMockIoImageRequest, ListSnaps) {
     &aio_comp_ctx, ictx, AIO_TYPE_GENERIC);
   MockImageListSnapsRequest mock_image_list_snaps_request(
     mock_image_ctx, aio_comp, {{0, 16384}, {16384, 16384}}, {0, CEPH_NOSNAP},
-    0, &snapshot_delta, {});
+    0, &snapshot_delta, tracing::noop_span_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_image_list_snaps_request.send();

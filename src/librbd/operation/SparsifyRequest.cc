@@ -237,7 +237,7 @@ public:
 
     bool sent = image_ctx.object_map->template aio_update<
       Context, &Context::complete>(CEPH_NOSNAP, m_object_no, OBJECT_PENDING,
-                                   OBJECT_EXISTS, {}, false, ctx);
+                                   OBJECT_EXISTS, tracing::noop_span_ctx, false, ctx);
 
     // NOTE: state machine might complete before we reach here
     image_ctx.image_lock.unlock_shared();
@@ -310,7 +310,7 @@ public:
       sent = image_ctx.object_map->template aio_update<
         Context, &Context::complete>(CEPH_NOSNAP, m_object_no,
                                      exists ? OBJECT_EXISTS : OBJECT_NONEXISTENT,
-                                     OBJECT_PENDING, {}, false, ctx);
+                                     OBJECT_PENDING, tracing::noop_span_ctx, false, ctx);
     }
     if (!sent) {
       ctx->complete(0);

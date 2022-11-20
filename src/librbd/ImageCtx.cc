@@ -119,9 +119,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
       op_work_queue(asio_engine->get_work_queue()),
       plugin_registry(new PluginRegistry<ImageCtx>(this)),
       event_socket_completions(32),
-      asok_hook(nullptr),
-      trace_endpoint("librbd")
-  {
+      asok_hook(nullptr)  {
     ldout(cct, 10) << this << " " << __func__ << ": "
                    << "image_name=" << image_name << ", "
                    << "image_id=" << image_id << dendl;
@@ -195,7 +193,6 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
       pname += snap_name;
     }
 
-    trace_endpoint.copy_name(pname);
     perf_start(pname);
 
     ceph_assert(image_watcher == NULL);
