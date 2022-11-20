@@ -26,7 +26,6 @@
 #include "common/AsyncReserver.h"
 #include "common/ceph_context.h"
 #include "common/config_cacher.h"
-#include "common/zipkin_trace.h"
 #include "common/ceph_timer.h"
 
 #include "mgr/MgrClient.h"
@@ -1112,7 +1111,6 @@ protected:
   bool store_is_rotational = true;
   bool journal_is_rotational = true;
 
-  ZTracer::Endpoint trace_endpoint;
   PerfCounters* create_logger();
   PerfCounters* create_recoverystate_perf();
   void tick();

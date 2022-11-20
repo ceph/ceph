@@ -842,8 +842,6 @@ protected:
 
 protected:
 
-  ZTracer::Endpoint trace_endpoint;
-
 
 protected:
   __u8 info_struct_v = 0;

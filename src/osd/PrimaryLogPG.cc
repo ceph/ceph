@@ -1817,11 +1817,9 @@ void PrimaryLogPG::do_request(
   OpRequestRef& op,
   ThreadPool::TPHandle &handle)
 {
-  if (op->osd_trace) {
-    op->pg_trace.init("pg op", &trace_endpoint, &op->osd_trace);
-    op->pg_trace.event("do request");
-  }
-
+  auto pg_span = tracing::osd::tracer.add_span("pg op", op->osd_trace);
+  pg_span->AddEvent("do request");
+  op->pg_trace = pg_span->GetContext();
 
 // make sure we have a new enough map
   auto p = waiting_for_map.find(op->get_source());

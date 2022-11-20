@@ -63,29 +63,29 @@ public:
     ceph_tid_t tid,
     eversion_t version,
     eversion_t last_complete,
-    const ZTracer::Trace &trace);
+    const jspan_ptr &otel_trace);
   void handle_sub_write(
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
-    const ZTracer::Trace &trace,
+    const jspan_ptr &otel_trace,
     ECListener& eclistener
     ) override;
   void handle_sub_read(
     pg_shard_t from,
     const ECSubRead &op,
     ECSubReadReply *reply,
-    const ZTracer::Trace &trace
+    const jspan_ptr &otel_trace
     );
   void handle_sub_write_reply(
     pg_shard_t from,
     const ECSubWriteReply &op,
-    const ZTracer::Trace &trace
+    const jspan_ptr &otel_trace
     );
   void handle_sub_read_reply(
     pg_shard_t from,
     ECSubReadReply &op,
-    const ZTracer::Trace &trace
+    const jspan_ptr &otel_trace
     );
 
   /// @see ReadOp below
@@ -410,7 +410,7 @@ public:
   > get_attrs_n_size_from_disk(const hobject_t& hoid);
 
 public:
-  int object_stat(const hobject_t &hoid, struct stat* st);
+  int object_stat(const hobject_t &hoid, struct stat* st) override;
   ECBackend(
     PGBackend::Listener *pg,
     const coll_t &coll,

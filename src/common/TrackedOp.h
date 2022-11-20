@@ -15,13 +15,16 @@
 #define TRACKEDREQUEST_H_
 
 #include <atomic>
+#include <coroutine>
 #include "common/StackStringStream.h"
 #include "common/ceph_mutex.h"
 #include "common/histogram.h"
 #include "common/Thread.h"
 #include "common/Clock.h"
+#include "common/tracer.h"
 #include "include/spinlock.h"
 #include "msg/Message.h"
+#include "osd/osd_tracer.h"
 
 #define OPTRACKER_PREALLOC_EVENTS 20
 
@@ -323,10 +326,11 @@ protected:
   virtual bool filter_out(const std::set<std::string>& filters) { return true; }
 
 public:
-  ZTracer::Trace osd_trace;
-  ZTracer::Trace pg_trace;
-  ZTracer::Trace store_trace;
-  ZTracer::Trace journal_trace;
+
+  jspan_context osd_trace{false, false};
+  jspan_context pg_trace{false, false};
+  jspan_context store_trace{false, false};
+  jspan_context journal_trace{false, false};
 
   virtual ~TrackedOp() {}
 
