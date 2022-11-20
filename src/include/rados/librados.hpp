@@ -1195,11 +1195,11 @@ inline namespace v14_2_0 {
     int aio_operate(const std::string& oid, AioCompletion *c,
         ObjectWriteOperation *op, snap_t seq,
         std::vector<snap_t>& snaps,
-        const blkin_trace_info *trace_info);
+        const jspan_context *trace_info);
     int aio_operate(const std::string& oid, AioCompletion *c,
         ObjectWriteOperation *op, snap_t seq,
         std::vector<snap_t>& snaps, int flags,
-        const blkin_trace_info *trace_info);
+        const jspan_context *trace_info);
     int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, bufferlist *pbl);
 
@@ -1213,7 +1213,7 @@ inline namespace v14_2_0 {
 		    bufferlist *pbl);
     int aio_operate(const std::string& oid, AioCompletion *c,
         ObjectReadOperation *op, int flags,
-        bufferlist *pbl, const blkin_trace_info *trace_info);
+        bufferlist *pbl, const jspan_context *trace_info);
 
     // watch/notify
     int watch2(const std::string& o, uint64_t *handle,

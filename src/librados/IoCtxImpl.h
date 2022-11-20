@@ -20,7 +20,6 @@
 #include "common/Cond.h"
 #include "common/ceph_mutex.h"
 #include "common/snap_types.h"
-#include "common/zipkin_trace.h"
 #include "include/types.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
@@ -158,9 +157,9 @@ struct librados::IoCtxImpl {
   int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl, int flags=0);
   int aio_operate(const object_t& oid, ::ObjectOperation *o,
 		  AioCompletionImpl *c, const SnapContext& snap_context,
-		  int flags, const blkin_trace_info *trace_info = nullptr, const jspan_context *otel_trace = nullptr);
+		  int flags, const jspan_context *otel_trace = nullptr);
   int aio_operate_read(const object_t& oid, ::ObjectOperation *o,
-		       AioCompletionImpl *c, int flags, bufferlist *pbl, const blkin_trace_info *trace_info = nullptr);
+		       AioCompletionImpl *c, int flags, bufferlist *pbl, const jspan_context *otel_trace = nullptr);
 
   struct C_aio_stat_Ack : public Context {
     librados::AioCompletionImpl *c;
@@ -189,10 +188,10 @@ struct librados::IoCtxImpl {
 
   int aio_read(const object_t oid, AioCompletionImpl *c,
 	       bufferlist *pbl, size_t len, uint64_t off, uint64_t snapid,
-	       const blkin_trace_info *info = nullptr);
+	       const jspan_context *otel_trace = nullptr);
   int aio_read(object_t oid, AioCompletionImpl *c,
 	       char *buf, size_t len, uint64_t off, uint64_t snapid,
-	       const blkin_trace_info *info = nullptr);
+	       const jspan_context *otel_trace = nullptr);
   int aio_sparse_read(const object_t oid, AioCompletionImpl *c,
 		      std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
 		      size_t len, uint64_t off, uint64_t snapid);
@@ -202,7 +201,7 @@ struct librados::IoCtxImpl {
 		      const char *cmp_buf, size_t cmp_len, uint64_t off);
   int aio_write(const object_t &oid, AioCompletionImpl *c,
 		const bufferlist& bl, size_t len, uint64_t off,
-		const blkin_trace_info *info = nullptr);
+		const jspan_context *otel_trace = nullptr);
   int aio_append(const object_t &oid, AioCompletionImpl *c,
 		 const bufferlist& bl, size_t len);
   int aio_write_full(const object_t &oid, AioCompletionImpl *c,

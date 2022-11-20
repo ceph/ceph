@@ -59,6 +59,8 @@
 
 #include "common/ceph_time.h"
 
+using jspan_context = opentelemetry::trace::SpanContext;
+
 namespace neorados {
 class Object;
 class IOContext;
@@ -553,24 +555,24 @@ public:
   auto execute(const Object& o, const IOContext& ioc, ReadOp&& op,
 	       ceph::buffer::list* bl,
 	       CompletionToken&& token, uint64_t* objver = nullptr,
-	       const blkin_trace_info* trace_info = nullptr) {
+	       const jspan_context* otel_trace = nullptr) {
     boost::asio::async_completion<CompletionToken, Op::Signature> init(token);
     execute(o, ioc, std::move(op), bl,
 	    ReadOp::Completion::create(get_executor(),
 				       std::move(init.completion_handler)),
-	    objver, trace_info);
+	    objver, otel_trace);
     return init.result.get();
   }
 
   template<typename CompletionToken>
   auto execute(const Object& o, const IOContext& ioc, WriteOp&& op,
 	       CompletionToken&& token, uint64_t* objver = nullptr,
-	       const blkin_trace_info* trace_info = nullptr) {
+	       const jspan_context* otel_trace = nullptr) {
     boost::asio::async_completion<CompletionToken, Op::Signature> init(token);
     execute(o, ioc, std::move(op),
 	    Op::Completion::create(get_executor(),
 				   std::move(init.completion_handler)),
-	    objver, trace_info);
+	    objver, otel_trace);
     return init.result.get();
   }
 
@@ -977,11 +979,11 @@ private:
 
   void execute(const Object& o, const IOContext& ioc, ReadOp&& op,
 	       ceph::buffer::list* bl, std::unique_ptr<Op::Completion> c,
-	       uint64_t* objver, const blkin_trace_info* trace_info);
+	       uint64_t* objver, const jspan_context* otel_trace);
 
   void execute(const Object& o, const IOContext& ioc, WriteOp&& op,
 	       std::unique_ptr<Op::Completion> c, uint64_t* objver,
-	       const blkin_trace_info* trace_info);
+	       const jspan_context* otel_trace);
 
   void execute(const Object& o, std::int64_t pool, ReadOp&& op,
 	       ceph::buffer::list* bl, std::unique_ptr<Op::Completion> c,

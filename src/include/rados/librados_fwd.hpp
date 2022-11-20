@@ -1,8 +1,6 @@
 #ifndef __LIBRADOS_FWD_HPP
 #define __LIBRADOS_FWD_HPP
 
-struct blkin_trace_info;
-
 namespace opentelemetry {
 inline namespace v1 {
 namespace trace {

@@ -802,29 +802,21 @@ boost::asio::io_context& RADOS::get_io_context() {
 void RADOS::execute(const Object& o, const IOContext& _ioc, ReadOp&& _op,
 		    cb::list* bl,
 		    std::unique_ptr<ReadOp::Completion> c, version_t* objver,
-		    const blkin_trace_info *trace_info) {
+		    const jspan_context *otel_trace) {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
   auto flags = op->op.flags | ioc->extra_op_flags;
 
-  ZTracer::Trace trace;
-  if (trace_info) {
-    ZTracer::Trace parent_trace("", nullptr, trace_info);
-    trace.init("rados execute", &impl->objecter->trace_endpoint, &parent_trace);
-  }
-
-  trace.event("init");
   impl->objecter->read(
     *oid, ioc->oloc, std::move(op->op), ioc->snap_seq, bl, flags,
-    std::move(c), objver, nullptr /* data_offset */, 0 /* features */, &trace);
+    std::move(c), objver, nullptr /* data_offset */, 0 /* features */, otel_trace);
 
-  trace.event("submitted");
 }
 
 void RADOS::execute(const Object& o, const IOContext& _ioc, WriteOp&& _op,
 		    std::unique_ptr<WriteOp::Completion> c, version_t* objver,
-		    const blkin_trace_info *trace_info) {
+		    const jspan_context *otel_trace) {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
@@ -835,18 +827,10 @@ void RADOS::execute(const Object& o, const IOContext& _ioc, WriteOp&& _op,
   else
     mtime = ceph::real_clock::now();
 
-  ZTracer::Trace trace;
-  if (trace_info) {
-    ZTracer::Trace parent_trace("", nullptr, trace_info);
-    trace.init("rados execute", &impl->objecter->trace_endpoint, &parent_trace);
-  }
-
-  trace.event("init");
   impl->objecter->mutate(
     *oid, ioc->oloc, std::move(op->op), ioc->snapc,
     mtime, flags,
-    std::move(c), objver, osd_reqid_t{}, &trace);
-  trace.event("submitted");
+    std::move(c), objver, osd_reqid_t{}, otel_trace);
 }
 
 void RADOS::execute(const Object& o, std::int64_t pool, ReadOp&& _op,

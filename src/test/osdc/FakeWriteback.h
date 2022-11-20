@@ -21,7 +21,7 @@ public:
 		    const object_locator_t& oloc, uint64_t off, uint64_t len,
 		    snapid_t snapid, bufferlist *pbl, uint64_t trunc_size,
 		    __u32 trunc_seq, int op_flags,
-		    const ZTracer::Trace &parent_trace,
+		    const jspan_context &otel_trace,
                     Context *onfinish) override;
 
   ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
@@ -29,7 +29,7 @@ public:
 			   const SnapContext& snapc, const bufferlist &bl,
 			   ceph::real_time mtime, uint64_t trunc_size,
 			   __u32 trunc_seq, ceph_tid_t journal_tid,
-                           const ZTracer::Trace &parent_trace,
+                           const jspan_context &otel_trace,
 			   Context *oncommit) override;
 
   using WritebackHandler::write;

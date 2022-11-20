@@ -5,7 +5,6 @@
 
 #include "include/Context.h"
 #include "include/types.h"
-#include "common/zipkin_trace.h"
 #include "osd/osd_types.h"
 
 class WritebackHandler {
@@ -17,7 +16,7 @@ class WritebackHandler {
 		    const object_locator_t& oloc, uint64_t off, uint64_t len,
 		    snapid_t snapid, ceph::buffer::list *pbl, uint64_t trunc_size,
 		    __u32 trunc_seq, int op_flags,
-                    const ZTracer::Trace &parent_trace, Context *onfinish) = 0;
+                    const jspan_context &otel_trace, Context *onfinish) = 0;
   /**
    * check if a given extent read result may change due to a write
    *
@@ -37,7 +36,7 @@ class WritebackHandler {
 			   const ceph::buffer::list &bl, ceph::real_time mtime,
 			   uint64_t trunc_size, __u32 trunc_seq,
                            ceph_tid_t journal_tid,
-                           const ZTracer::Trace &parent_trace,
+                           const jspan_context &otel_trace,
                            Context *oncommit) = 0;
 
   virtual void overwrite_extent(const object_t& oid, uint64_t off, uint64_t len,
