@@ -1383,11 +1383,19 @@ class CephadmServe:
             self._registry_login(host,
                                  json.loads(str(self.mgr.get_store('registry_credentials'))))
 
-        pullargs: List[str] = []
-        if self.mgr.registry_insecure:
-            pullargs.append("--insecure")
+        j = None
+        try:
+            j = self._run_cephadm_json(host, '', 'inspect-image', [],
+                                             image=image_name, no_fsid=True,
+                                             error_ok=True)
+        except OrchestratorError:
+            pass
 
-        j = self._run_cephadm_json(host, '', 'pull', pullargs, image=image_name, no_fsid=True)
+        if not j:
+            pullargs: List[str] = []
+            if self.mgr.registry_insecure:
+                pullargs.append("--insecure")
+            j = self._run_cephadm_json(host, '', 'pull', pullargs, image=image_name, no_fsid=True)
 
         r = ContainerInspectInfo(
             j['image_id'],
