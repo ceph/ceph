@@ -14,13 +14,14 @@ Storage Clusters. :term:`Ceph Object Storage` supports two interfaces:
 #. **Swift-compatible:** Provides object storage functionality with an interface
    that is compatible with a large subset of the OpenStack Swift API.
 
-Ceph Object Storage uses the Ceph Object Gateway daemon (``radosgw``), which is
-an HTTP server for interacting with a Ceph Storage Cluster. Since it
-provides interfaces compatible with OpenStack Swift and Amazon S3, the Ceph
-Object Gateway has its own user management. Ceph Object Gateway can store data
-in the same Ceph Storage Cluster used to store data from Ceph File System clients
-or Ceph Block Device clients. The S3 and Swift APIs share a common namespace, so
-you may write data with one API and retrieve it with the other.
+Ceph Object Storage uses the Ceph Object Gateway daemon (``radosgw``), an HTTP
+server designed for interacting with a Ceph Storage Cluster. The Ceph Object
+Gateway provides interfaces that are compatible with both Amazon S3 and
+OpenStack Swift, and it has its own user management. Ceph Object Gateway can
+store data in the same Ceph Storage Cluster in which data from Ceph File System
+clients and Ceph Block Device clients is stored. The S3 API and the Swift API
+share a common namespace, which makes it possible to write data to a Ceph
+Storage Cluster with one API and then retrieve that data with the other API.
 
 .. ditaa::
 
