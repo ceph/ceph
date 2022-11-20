@@ -1528,12 +1528,21 @@ class CephadmServe:
         if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
             await self._registry_login(host, json.loads(str(self.mgr.get_store('registry_credentials'))))
 
-        pullargs: List[str] = []
-        if self.mgr.registry_insecure:
-            pullargs.append("--insecure")
+        j = None
+        try:
+            j = await self._run_cephadm_json(host, '', 'inspect-image', [],
+                                             image=image_name, no_fsid=True,
+                                             error_ok=True)
+        except OrchestratorError:
+            pass
 
-        j = await self._run_cephadm_json(host, '', 'pull', pullargs, image=image_name, no_fsid=True)
+        if not j:
+            pullargs: List[str] = []
+            if self.mgr.registry_insecure:
+                pullargs.append("--insecure")
 
+            j = await self._run_cephadm_json(host, '', 'pull', pullargs,
+                                             image=image_name, no_fsid=True)
         r = ContainerInspectInfo(
             j['image_id'],
             j.get('ceph_version'),
