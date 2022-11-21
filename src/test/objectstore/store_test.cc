@@ -9274,40 +9274,6 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
 
   ASSERT_EQ(bstore->fsck(true), 0);
 
-  // reproducing issues #21040 & 20983
-  SetVal(g_conf(), "bluestore_debug_inject_bug21040", "true");
-  g_ceph_context->_conf.apply_changes(nullptr);
-  bstore->mount();
-
-  cerr << "repro bug #21040" << std::endl;
-  {
-    auto ch = store->open_collection(cid);
-    {
-      ObjectStore::Transaction t;
-      bl.append("0123456789012345");
-      t.write(cid, hoid3, offs_base, bl.length(), bl);
-      bl.clear();
-      bl.append('!');
-      t.write(cid, hoid3, 0, bl.length(), bl);
-
-      r = queue_transaction(store, ch, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
-    {
-      ObjectStore::Transaction t;
-      t.clone(cid, hoid3, hoid3_cloned);
-      r = queue_transaction(store, ch, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
-
-    bstore->umount();
-    // depending on statfs tracking we might meet or miss relevant error
-    // hence error count >= 3
-    ASSERT_GE(bstore->fsck(false), 3);
-    ASSERT_LE(bstore->repair(false), 0);
-    ASSERT_EQ(bstore->fsck(false), 0);
-  }
-
   cerr << "Zombie spanning blob" << std::endl;
   {
     bstore->mount();
