@@ -274,6 +274,9 @@
                 Amazon S3 RESTful API and the OpenStack Swift API. Also called
                 "RADOS Gateway" and "Ceph Object Gateway".
 
+        SDS
+                Software-defined storage.
+
 	systemd oneshot
                 A systemd ``type`` where a command is defined in ``ExecStart``
                 which will exit upon completion (it is not intended to
