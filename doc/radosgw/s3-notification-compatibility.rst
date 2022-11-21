@@ -2,7 +2,7 @@
 S3 Bucket Notifications Compatibility
 =====================================
 
-Ceph's `Bucket Notifications`_ API follow `AWS S3 Bucket Notifications API`_. However, some differences exist, as listed below.
+Ceph's `Bucket Notifications`_ API follows `AWS S3 Bucket Notifications API`_. However, some differences exist, as listed below.
 
 
 .. note:: 
@@ -59,7 +59,7 @@ Ceph's bucket notification API has the following extensions:
 Unsupported Fields in the Event Record
 --------------------------------------
 
-The records sent for bucket notification follow format described in: `Event Message Structure`_.
+The records sent for bucket notification follows the format described in: `Event Message Structure`_.
 However, the ``requestParameters.sourceIPAddress`` field will be sent empty.
 
 

@@ -163,7 +163,6 @@ set(librgw_common_srcs
   store/rados/rgw_otp.cc
   store/rados/rgw_period.cc
   store/rados/rgw_rest_pubsub.cc
-  store/rados/rgw_rest_pubsub_common.cc
   store/rados/rgw_rest_realm.cc
   store/rados/rgw_rest_user.cc
   store/rados/rgw_sal_rados.cc
