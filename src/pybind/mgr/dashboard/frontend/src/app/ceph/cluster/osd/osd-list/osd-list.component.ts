@@ -1,11 +1,11 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { FormControl } from '@angular/forms';
-import { Router } from '@angular/router';
+import { NavigationEnd, Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
-import { take } from 'rxjs/operators';
+import { filter, take } from 'rxjs/operators';
 
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -40,6 +40,8 @@ import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-mo
 import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.component';
 
 const BASE_URL = 'osd';
+
+declare var gtag: (arg0: string, arg1: string, arg2: { page_path: string; }) => void;
 
 @Component({
   selector: 'cd-osd-list',
@@ -243,6 +245,14 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         icon: Icons.destroy
       }
     ];
+
+    const nacEndEvents = router.events.pipe(filter(event=> event instanceof NavigationEnd),);
+    nacEndEvents.subscribe((event: NavigationEnd) => {
+      gtag('config', 'G-NT2BFQLY37', {
+        'page_path': event.urlAfterRedirects
+      });
+
+    })
   }
 
   ngOnInit() {

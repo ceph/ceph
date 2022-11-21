@@ -1,10 +1,10 @@
 import { Component, Input, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { Router } from '@angular/router';
+import { NavigationEnd, Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
-import { map, mergeMap } from 'rxjs/operators';
+import { filter, map, mergeMap } from 'rxjs/operators';
 
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
@@ -37,6 +37,8 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { HostFormComponent } from './host-form/host-form.component';
 
 const BASE_URL = 'hosts';
+
+declare var gtag: (arg0: string, arg1: string, arg2: { page_path: string; }) => void;
 
 @Component({
   selector: 'cd-hosts',
@@ -117,6 +119,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
     private notificationService: NotificationService,
     private orchService: OrchestratorService
   ) {
+    
     super();
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
@@ -187,6 +190,14 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         visible: () => !this.showGeneralActionsOnly && this.enableMaintenanceBtn
       }
     ];
+
+    const nacEndEvents = router.events.pipe(filter(event=> event instanceof NavigationEnd),);
+    nacEndEvents.subscribe((event: NavigationEnd) => {
+      gtag('config', 'G-NT2BFQLY37', {
+        'page_path': event.urlAfterRedirects
+      });
+
+    })
   }
 
   ngOnInit() {
@@ -199,7 +210,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: $localize`Service Instances`,
         prop: 'service_instances',
-        flexGrow: 1.5,
+        flexGrow: 1,
         cellTemplate: this.servicesTpl
       },
       {
@@ -214,7 +225,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: $localize`Status`,
         prop: 'status',
-        flexGrow: 0.8,
+        flexGrow: 1,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
