@@ -663,7 +663,7 @@ extern "C" struct dirent * ceph_readdir(struct ceph_mount_info *cmount, struct c
 {
   if (!cmount->is_mounted()) {
     /* Client::readdir also sets errno to signal errors. */
-    errno = ENOTCONN;
+    errno = CEPHFS_ENOTCONN;
     return nullptr;
   }
   return cmount->get_client()->readdir(reinterpret_cast<dir_result_t*>(dirp));
