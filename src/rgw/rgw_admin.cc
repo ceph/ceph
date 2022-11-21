@@ -308,13 +308,9 @@ void usage()
   cout << "  mfa remove                 delete MFA TOTP token\n";
   cout << "  mfa check                  check MFA TOTP token\n";
   cout << "  mfa resync                 re-sync MFA TOTP token\n";
-  cout << "  topic list                 list bucket notifications/pubsub topics\n";
-  cout << "  topic get                  get a bucket notifications/pubsub topic\n";
-  cout << "  topic rm                   remove a bucket notifications/pubsub topic\n";
-  cout << "  subscription get           get a pubsub subscription definition\n";
-  cout << "  subscription rm            remove a pubsub subscription\n";
-  cout << "  subscription pull          show events in a pubsub subscription\n";
-  cout << "  subscription ack           ack (remove) an events in a pubsub subscription\n";
+  cout << "  topic list                 list bucket notifications topics\n";
+  cout << "  topic get                  get a bucket notifications topic\n";
+  cout << "  topic rm                   remove a bucket notifications topic\n";
   cout << "  script put                 upload a lua script to a context\n";
   cout << "  script get                 get the lua script of a context\n";
   cout << "  script rm                  remove the lua scripts of a context\n";
@@ -480,10 +476,8 @@ void usage()
   cout << "   --totp-seconds            the time resolution that is being used for TOTP generation\n";
   cout << "   --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token\n";
   cout << "   --totp-pin                the valid value of a TOTP token at a certain time\n";
-  cout << "\nBucket notifications/pubsub options:\n";
-  cout << "   --topic                   bucket notifications/pubsub topic name\n";
-  cout << "   --subscription            pubsub subscription name\n";
-  cout << "   --event-id                event id in a pubsub subscription\n";
+  cout << "\nBucket notifications options:\n";
+  cout << "   --topic                   bucket notifications topic name\n";
   cout << "\nScript options:\n";
   cout << "   --context                 context in which the script runs. one of: "+LUA_CONTEXT_LIST+"\n";
   cout << "   --package                 name of the lua package that should be added/removed to/from the allowlist\n";
@@ -831,13 +825,8 @@ enum class OPT {
   RESHARD_STALE_INSTANCES_LIST,
   RESHARD_STALE_INSTANCES_DELETE,
   PUBSUB_TOPICS_LIST,
-  // TODO add "subscription list" command
   PUBSUB_TOPIC_GET,
   PUBSUB_TOPIC_RM,
-  PUBSUB_SUB_GET,
-  PUBSUB_SUB_RM,
-  PUBSUB_SUB_PULL,
-  PUBSUB_EVENT_RM,
   SCRIPT_PUT,
   SCRIPT_GET,
   SCRIPT_RM,
@@ -1068,10 +1057,6 @@ static SimpleCmd::Commands all_cmds = {
   { "topic list", OPT::PUBSUB_TOPICS_LIST },
   { "topic get", OPT::PUBSUB_TOPIC_GET },
   { "topic rm", OPT::PUBSUB_TOPIC_RM },
-  { "subscription get", OPT::PUBSUB_SUB_GET },
-  { "subscription rm", OPT::PUBSUB_SUB_RM },
-  { "subscription pull", OPT::PUBSUB_SUB_PULL },
-  { "subscription ack", OPT::PUBSUB_EVENT_RM },
   { "script put", OPT::SCRIPT_PUT },
   { "script get", OPT::SCRIPT_GET },
   { "script rm", OPT::SCRIPT_RM },
@@ -4335,8 +4320,6 @@ int main(int argc, const char **argv)
 			 OPT::RESHARD_STATUS,
 			 OPT::PUBSUB_TOPICS_LIST,
 			 OPT::PUBSUB_TOPIC_GET,
-			 OPT::PUBSUB_SUB_GET,
-			 OPT::PUBSUB_SUB_PULL,
 			 OPT::SCRIPT_GET,
     };
 
@@ -10493,99 +10476,6 @@ next:
     ret = ps.remove_topic(dpp(), topic_name, null_yield);
     if (ret < 0) {
       cerr << "ERROR: could not remove topic: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-  }
-
-  if (opt_cmd == OPT::PUBSUB_SUB_GET) {
-    if (store->get_zone()->get_tier_type() != "pubsub") {
-      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
-      return EINVAL;
-    }
-    if (sub_name.empty()) {
-      cerr << "ERROR: subscription name was not provided (via --subscription)" << std::endl;
-      return EINVAL;
-    }
-
-    RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(store), tenant);
-
-    rgw_pubsub_sub_config sub_conf;
-
-    auto sub = ps.get_sub(sub_name);
-    ret = sub->get_conf(&sub_conf);
-    if (ret < 0) {
-      cerr << "ERROR: could not get subscription info: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    encode_json("sub", sub_conf, formatter.get());
-    formatter->flush(cout);
-  }
-
- if (opt_cmd == OPT::PUBSUB_SUB_RM) {
-    if (store->get_zone()->get_tier_type() != "pubsub") {
-      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
-      return EINVAL;
-    }
-    if (sub_name.empty()) {
-      cerr << "ERROR: subscription name was not provided (via --subscription)" << std::endl;
-      return EINVAL;
-    }
-
-    RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(store), tenant);
-
-    auto sub = ps.get_sub(sub_name);
-    ret = sub->unsubscribe(dpp(), topic_name, null_yield);
-    if (ret < 0) {
-      cerr << "ERROR: could not get subscription info: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-  }
-
- if (opt_cmd == OPT::PUBSUB_SUB_PULL) {
-    if (store->get_zone()->get_tier_type() != "pubsub") {
-      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
-      return EINVAL;
-    }
-    if (sub_name.empty()) {
-      cerr << "ERROR: subscription name was not provided (via --subscription)" << std::endl;
-      return EINVAL;
-    }
-
-    RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(store), tenant);
-
-    if (!max_entries_specified) {
-      max_entries = RGWPubSub::Sub::DEFAULT_MAX_EVENTS;
-    }
-    auto sub = ps.get_sub_with_events(sub_name);
-    ret = sub->list_events(dpp(), marker, max_entries);
-    if (ret < 0) {
-      cerr << "ERROR: could not list events: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    encode_json("result", *sub, formatter.get());
-    formatter->flush(cout);
- }
-
- if (opt_cmd == OPT::PUBSUB_EVENT_RM) {
-    if (store->get_zone()->get_tier_type() != "pubsub") {
-      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
-      return EINVAL;
-    }
-    if (sub_name.empty()) {
-      cerr << "ERROR: subscription name was not provided (via --subscription)" << std::endl;
-      return EINVAL;
-    }
-    if (event_id.empty()) {
-      cerr << "ERROR: event id was not provided (via --event-id)" << std::endl;
-      return EINVAL;
-    }
-
-    RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(store), tenant);
-
-    auto sub = ps.get_sub_with_events(sub_name);
-    ret = sub->remove_event(dpp(), event_id);
-    if (ret < 0) {
-      cerr << "ERROR: could not remove event: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
   }
