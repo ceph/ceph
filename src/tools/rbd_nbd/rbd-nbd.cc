@@ -153,7 +153,7 @@ static void usage()
             << "Map and attach options:\n"
             << "  --device <device path>        Specify nbd device path (/dev/nbd{num})\n"
             << "  --encryption-format luks|luks1|luks2\n"
-            << "                                Image encryption format\n"
+            << "                                Image encryption format (default: luks)\n"
             << "  --encryption-passphrase-file  Path of file containing passphrase for unlocking image encryption\n"
             << "  --exclusive                   Forbid writes by other clients\n"
             << "  --notrim                      Turn off trim/discard\n"
@@ -2192,6 +2192,12 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     } else {
       ++i;
     }
+  }
+
+  if (cfg->encryption_formats.empty() &&
+      !cfg->encryption_passphrase_files.empty()) {
+    cfg->encryption_formats.resize(cfg->encryption_passphrase_files.size(),
+                                   RBD_ENCRYPTION_FORMAT_LUKS);
   }
 
   if (cfg->encryption_formats.size() != cfg->encryption_passphrase_files.size()) {

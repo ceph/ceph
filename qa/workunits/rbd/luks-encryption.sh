@@ -43,7 +43,7 @@ function test_encryption_format() {
   sudo chmod 666 /dev/mapper/cryptsetupdev
 
   # open encryption with librbd
-  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg -t nbd -o encryption-format=luks,encryption-passphrase-file=/tmp/passphrase)
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg -t nbd -o encryption-passphrase-file=/tmp/passphrase)
   sudo chmod 666 $LIBRBD_DEV
 
   # write via librbd && compare
@@ -117,9 +117,10 @@ function test_clone_and_load_with_a_single_passphrase {
 
   if [ "$expectedfail" = "true" ]
   then
-    expect_false rbd flatten testimg1 --encryption-format luks --encryption-passphrase-file /tmp/passphrase2
+    expect_false rbd flatten testimg1 --encryption-passphrase-file /tmp/passphrase2
+    rbd flatten testimg1 --encryption-passphrase-file /tmp/passphrase2 --encryption-passphrase-file /tmp/passphrase
   else
-    rbd flatten testimg1 --encryption-format luks --encryption-passphrase-file /tmp/passphrase2
+    rbd flatten testimg1 --encryption-passphrase-file /tmp/passphrase2
   fi
 
   rbd remove testimg1

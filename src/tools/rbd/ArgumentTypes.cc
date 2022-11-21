@@ -333,7 +333,7 @@ void add_encryption_options(boost::program_options::options_description *opt) {
   opt->add_options()
     (ENCRYPTION_FORMAT.c_str(),
      po::value<std::vector<EncryptionFormat>>(),
-     "encryption format (luks, luks1, luks2)");
+     "encryption format (luks, luks1, luks2) [default: luks]");
 
   opt->add_options()
     (ENCRYPTION_PASSPHRASE_FILE.c_str(),
