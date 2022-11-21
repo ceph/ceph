@@ -493,8 +493,7 @@ struct rgw_pubsub_topic_filter {
     encode(topic, bl);
     // events are stored as a vector of std::strings
     std::vector<std::string> tmp_events;
-    const auto converter = s3_id.empty() ? rgw::notify::to_ceph_string : rgw::notify::to_string;
-    std::transform(events.begin(), events.end(), std::back_inserter(tmp_events), converter);
+    std::transform(events.begin(), events.end(), std::back_inserter(tmp_events), rgw::notify::to_string);
     encode(tmp_events, bl);
     encode(s3_id, bl);
     encode(s3_filter, bl);
