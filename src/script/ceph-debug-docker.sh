@@ -117,6 +117,7 @@ RUN apt-get update --yes --quiet && \
 COPY cephdev.asc cephdev.asc
 RUN apt-key add cephdev.asc && \
     curl -L $repo_url | tee /etc/apt/sources.list.d/ceph_dev.list && \
+    cat /etc/apt/sources.list.d/ceph_dev.list|sed -e 's/^deb/deb-src/' >>/etc/apt/sources.list.d/ceph_dev.list && \
     apt-get update --yes && \
     DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt-get --assume-yes -q --no-install-recommends install -o Dpkg::Options::=--force-confnew --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-common-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg python3-cephfs python3-rados
 EOF
