@@ -91,10 +91,20 @@
                 OSD map, and the CRUSH map. A minimum of three monitors is
                 required in order for the Ceph cluster to be both redundant and
                 highly-available. Ceph monitors and the nodes on which they run
-                are often referred to as "mon"s. **SEE** :ref:`Monitor Config
+                are often referred to as "mon"s. See :ref:`Monitor Config
                 Reference <monitor-config-reference>`.
 
 	Ceph Node
+               A Ceph node is a unit of the Ceph Cluster that communicates with
+               other nodes in the Ceph Cluster in order to replicate and
+               redistribute data. All of the nodes together are called the
+               :term:`Ceph Storage Cluster`. Ceph nodes include :term:`OSD`\s,
+               :term:`Ceph Monitor`\s, :term:`Ceph Manager`\s, and
+               :term:`MDS`\es. The term "node" is usually equivalent to "host"
+               in the Ceph documentation. If you have a running Ceph Cluster,
+               you can list all of the nodes in it by running the command
+               ``ceph node ls all``.
+                
 	:ref:`Ceph Object Gateway<object-gateway>`
                 An object storage interface built on top of librados. Ceph
                 Object Gateway provides a RESTful gateway between applications
@@ -189,7 +199,8 @@
                 are written to the filesystem.
 
 	Host
-		Any single machine or server in a Ceph System.
+                Any single machine or server in a Ceph System. See :term:`Ceph
+                Node`.
 
 	LVM tags
                 Extensible metadata for LVM volumes and groups. It is used to
@@ -209,6 +220,8 @@
 		The Ceph monitor software.
 
 	Node
+                See :term:`Ceph Node`.
+
 	Object Storage Device
                 See :term:`OSD`.
 
