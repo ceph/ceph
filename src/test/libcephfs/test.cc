@@ -268,7 +268,7 @@ TEST(LibCephFS, OpenLayout) {
   ASSERT_LT(0, ceph_get_file_pool_name(cmount, fd, poolname, sizeof(poolname)));
   ASSERT_LT(0, ceph_get_file_pool_name(cmount, fd, poolname, 0));
 
-  /* on already-written file (ENOTEMPTY) */
+  /* on already-written file (CEPHFS_ENOTEMPTY) */
   ceph_write(cmount, fd, "hello world", 11, 0);
   ceph_close(cmount, fd);
 
@@ -1358,7 +1358,7 @@ TEST(LibCephFS, UseUnmounted) {
   EXPECT_EQ(-CEPHFS_ENOTCONN, ceph_closedir(cmount, dirp));
 
   ceph_readdir(cmount, dirp);
-  EXPECT_EQ(ENOTCONN, errno);
+  EXPECT_EQ(CEPHFS_ENOTCONN, errno);
 
   struct dirent rdent;
   EXPECT_EQ(-CEPHFS_ENOTCONN, ceph_readdir_r(cmount, dirp, &rdent));
