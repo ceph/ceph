@@ -95,6 +95,54 @@ int S3FilterUser::create_bucket(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+{
+  std::unique_ptr<Bucket> nb;
+  int ret;
+  User* nu = nextUser(u);
+
+  ret = next->get_bucket(dpp, nu, b, &nb, y);
+  if (ret != 0)
+    return ret;
+
+  Bucket* fb = new S3FilterBucket(std::move(nb), u);
+  bucket->reset(fb);
+  return 0;
+}
+
+int S3FilterStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
+{
+  std::unique_ptr<Bucket> nb;
+  int ret;
+  User* nu = nextUser(u);
+
+  ret = next->get_bucket(nu, i, &nb);
+  if (ret != 0)
+    return ret;
+
+  Bucket* fb = new S3FilterBucket(std::move(nb), u);
+  bucket->reset(fb);
+  return 0;
+}
+
+int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
+{
+  std::unique_ptr<Bucket> nb;
+  int ret;
+  User* nu = nextUser(u);
+
+  ret = next->get_bucket(dpp, nu, tenant, name, &nb, y);
+  if (ret != 0)
+    return ret;
+
+  Bucket* fb = new S3FilterBucket(std::move(nb), u);
+  bucket->reset(fb);
+  return 0;
+}
+
+
+
+
 /*
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y) 
