@@ -2526,9 +2526,6 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
   CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
   uint64_t& length, uint64_t& dstoff) {
 
-  auto cct = onode->c->store->cct;
-  bool inject_21040 =
-    cct->_conf->bluestore_debug_inject_bug21040;  
   vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
   for (auto& e : oldo->extent_map.extent_map) {
     e.blob->last_encoded_id = -1;
@@ -2558,12 +2555,9 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
       // make sure it is shared
       if (!blob.is_shared()) {
         c->make_blob_shared(b->_assign_blobid(txc), e.blob);
-	if (!inject_21040 && !src_dirty) {
+	if (!src_dirty) {
           src_dirty = true;
           dirty_range_begin = e.logical_offset;
-	} else if (inject_21040 &&
-	           dirty_range_begin == 0 && dirty_range_end == 0) {
-	  dirty_range_begin = e.logical_offset;
 	}        
         ceph_assert(e.logical_end() > 0);
         // -1 to exclude next potential shard
@@ -2624,8 +2618,7 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
     dout(20) << __func__ << "  dst " << *ne << dendl;
     ++n;
   }
-  if ((!inject_21040 && src_dirty) ||
-       (inject_21040 && dirty_range_end > dirty_range_begin)) {
+  if (src_dirty) {
     oldo->extent_map.dirty_range(dirty_range_begin,
       dirty_range_end - dirty_range_begin);
     txc->write_onode(oldo);
