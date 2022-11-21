@@ -731,6 +731,9 @@ int get_encryption_options(const boost::program_options::variables_map &vm,
   std::vector<at::EncryptionFormat> formats;
   if (vm.count(at::ENCRYPTION_FORMAT)) {
     formats = vm[at::ENCRYPTION_FORMAT].as<decltype(formats)>();
+  } else if (vm.count(at::ENCRYPTION_PASSPHRASE_FILE)) {
+    formats.resize(passphrase_files.size(),
+                   at::EncryptionFormat{RBD_ENCRYPTION_FORMAT_LUKS});
   }
 
   if (formats.size() != passphrase_files.size()) {

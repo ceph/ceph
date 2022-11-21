@@ -136,9 +136,11 @@ A batch of such unaligned writes can lead to IO races which will further
 deteriorate performance. Thus it is advisable to avoid using RBD encryption
 in cases where incoming writes cannot be guaranteed to be sector-aligned.
 
-To mount a LUKS-encrypted image run::
+To map a LUKS-formatted image run:
 
-    $ rbd -p {pool-name} device map -t nbd -o encryption-format=luks,encryption-passphrase-file={passphrase-file}
+.. prompt:: bash #
+
+    rbd device map -t nbd -o encryption-passphrase-file={passphrase-file} {image-spec}
 
 Note that for security reasons, both the encryption format and encryption load
 operations are CPU-intensive, and may take a few seconds to complete. For the
