@@ -197,7 +197,7 @@ quorum.
       ssh {mon-host}
       systemctl stop ceph-mon.target
 
-    Repeat for all monitor hosts.
+   Repeat for all monitor hosts.
 
 #. Identify a surviving monitor and log in to that host:
 
@@ -355,14 +355,20 @@ networks  are unable to communicate.  Use the following procedure:
 
 #. Retrieve the monitor map, where ``{tmp}`` is the path to 
    the retrieved monitor map, and ``{filename}`` is the name of the file 
-   containing the retrieved monitor map. :: 
+   containing the retrieved monitor map:
 
-	ceph mon getmap -o {tmp}/{filename}
+   .. prompt:: bash $
 
-#. The following example demonstrates the contents of the monmap. ::
+      ceph mon getmap -o {tmp}/{filename}
 
-	$ monmaptool --print {tmp}/{filename}
-	
+#. The following example demonstrates the contents of the monmap:
+
+   .. prompt:: bash $
+
+      monmaptool --print {tmp}/{filename}
+
+   ::	
+
 	monmaptool: monmap file {tmp}/{filename}
 	epoch 1
 	fsid 224e376d-c5fe-4504-96bb-ea6332a19e61
@@ -372,27 +378,41 @@ networks  are unable to communicate.  Use the following procedure:
 	1: 10.0.0.2:6789/0 mon.b
 	2: 10.0.0.3:6789/0 mon.c
 
-#. Remove the existing monitors. ::
+#. Remove the existing monitors:
 
-	$ monmaptool --rm a --rm b --rm c {tmp}/{filename}
+   .. prompt:: bash $
+
+      monmaptool --rm a --rm b --rm c {tmp}/{filename}
 	
+
+   ::
+
 	monmaptool: monmap file {tmp}/{filename}
 	monmaptool: removing a
 	monmaptool: removing b
 	monmaptool: removing c
 	monmaptool: writing epoch 1 to {tmp}/{filename} (0 monitors)
 
-#. Add the new monitor locations. ::
+#. Add the new monitor locations:
 
-	$ monmaptool --add a 10.1.0.1:6789 --add b 10.1.0.2:6789 --add c 10.1.0.3:6789 {tmp}/{filename}
+   .. prompt:: bash $
+
+      monmaptool --add a 10.1.0.1:6789 --add b 10.1.0.2:6789 --add c 10.1.0.3:6789 {tmp}/{filename}
+
+
+   ::
 	
-	monmaptool: monmap file {tmp}/{filename}
-	monmaptool: writing epoch 1 to {tmp}/{filename} (3 monitors)
+      monmaptool: monmap file {tmp}/{filename}
+      monmaptool: writing epoch 1 to {tmp}/{filename} (3 monitors)
 
-#. Check new contents. ::
+#. Check new contents:
 
-	$ monmaptool --print {tmp}/{filename}
+   .. prompt:: bash $
+
+       monmaptool --print {tmp}/{filename}
 	
+   ::
+
 	monmaptool: monmap file {tmp}/{filename}
 	epoch 1
 	fsid 224e376d-c5fe-4504-96bb-ea6332a19e61
@@ -409,9 +429,11 @@ monitors, and inject the modified monmap into each new monitor.
 #. First, make sure to stop all your monitors.  Injection must be done while 
    the daemon is not running.
 
-#. Inject the monmap. ::
+#. Inject the monmap: 
 
-	ceph-mon -i {mon-id} --inject-monmap {tmp}/{filename}
+   .. prompt:: bash $
+
+      ceph-mon -i {mon-id} --inject-monmap {tmp}/{filename}
 
 #. Restart the monitors.
 
