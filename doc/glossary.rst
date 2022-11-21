@@ -174,7 +174,7 @@
 
 	Cluster Map
                 The set of maps comprising the monitor map, OSD map, PG map,
-                MDS map and CRUSH map, which together report the state of the
+                MDS map, and CRUSH map, which together report the state of the
                 Ceph cluster. See :ref:`the "Cluster Map" section of the
                 Architecture document<architecture_cluster_map>` for details.
 
