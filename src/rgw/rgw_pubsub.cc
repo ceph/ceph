@@ -338,7 +338,7 @@ void encode_json(const char *name, const rgw::notify::EventTypeList& l, Formatte
 {
   f->open_array_section(name);
   for (auto iter = l.cbegin(); iter != l.cend(); ++iter) {
-    f->dump_string("obj", rgw::notify::to_ceph_string(*iter));
+    f->dump_string("obj", rgw::notify::to_string(*iter));
   }
   f->close_section();
 }
