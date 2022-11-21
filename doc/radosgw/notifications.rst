@@ -128,7 +128,7 @@ Create a Topic
 
 This creates a new topic. Provide the topic with push endpoint parameters,
 which will be used later when a notification is created. A response is
-generated. A successful response includes the the topic's `ARN
+generated. A successful response includes the topic's `ARN
 <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_
 (the "Amazon Resource Name", a unique identifier used to reference the topic).
 To update a topic, use the same command that you used to create it (but when
@@ -209,7 +209,7 @@ Request parameters:
  - ``use-ssl``: If this is set to "true", a secure connection is used to
    connect to the broker. (This is "false" by default.)
  - ``ca-location``: If this is provided and a secure connection is used, the
-   specified CA will be used insted of the default CA to authenticate the
+   specified CA will be used instead of the default CA to authenticate the
    broker. 
  - user/password: This must be provided only over HTTPS. Topic creation
    requests will otherwise be rejected.
