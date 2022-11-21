@@ -1301,4 +1301,9 @@ struct continuation_base_from_future<Container<::crimson::errorated_future_marke
   using type = continuation_base<Value>;
 };
 
+template <template <class> class Container,
+          class Value>
+struct is_future<
+  Container<::crimson::errorated_future_marker<Value>>>
+  : std::true_type {};
 } // namespace seastar
