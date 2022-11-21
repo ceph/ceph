@@ -15,6 +15,7 @@
 // naming the mutex for the purposes of the lockdep debug variant.
 
 #if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include <seastar/core/condition-variable.hh>
 
 namespace ceph {
   // an empty class satisfying the mutex concept
@@ -33,11 +34,26 @@ namespace ceph {
     void unlock_shared() {}
   };
 
+  // this implementation assumes running within a seastar::thread
+  struct green_condition_variable : private seastar::condition_variable {
+    template <class LockT>
+    void wait(LockT&&) {
+      seastar::condition_variable::wait().get();
+    }
+
+    void notify_one() noexcept {
+      signal();
+    }
+
+    void notify_all() noexcept {
+      broadcast();
+    }
+  };
+
   using mutex = dummy_mutex;
   using recursive_mutex = dummy_mutex;
   using shared_mutex = dummy_shared_mutex;
-  // in seastar, we should use a difference interface for enforcing the
-  // semantics of condition_variable
+  using condition_variable = green_condition_variable;
 
   template <typename ...Args>
   dummy_mutex make_mutex(Args&& ...args) {
