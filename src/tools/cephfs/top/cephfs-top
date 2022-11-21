@@ -351,6 +351,7 @@ class FSTop(object):
                     current_states["last_field"] = (field_menu[curr_row1].split('='))[0]
                 else:
                     current_states["last_field"] = 'chit'
+                self.header.erase()  # erase the previous text
                 if isinstance(last_fs, list):
                     self.run_all_display()
                 else:
@@ -452,6 +453,7 @@ class FSTop(object):
                     elif int(key) != 0:
                         current_states["limit"] = key[:-1]
                 self.stdscr.erase()
+                self.header.erase()  # erase the previous text
                 if isinstance(current_states['last_fs'], list):
                     self.run_all_display()
                 else:
@@ -811,7 +813,9 @@ class FSTop(object):
                                                                  num_mounts=num_mounts,
                                                                  num_kclients=num_kclients,
                                                                  num_libs=num_libs), curses.A_DIM)
-        self.header.addstr(4, 0, help, curses.A_DIM)
+        self.header.addstr(4, 0, f"Filters: Sort - {current_states['last_field']}, "
+                           f"Limit - {current_states['limit']}", curses.A_DIM)
+        self.header.addstr(5, 0, help, curses.A_DIM)
         return True
 
     def run_display(self):
