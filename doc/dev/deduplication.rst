@@ -199,7 +199,7 @@ The above is an example output when executing ``estimate``. ``target_chunk_size`
 examined bytes. For instance, 1 - ``dedup_bytes_ratio`` means the percentage of saved storage space.
 ``dedup_object_ratio`` is the generated chunk objects / ``examined_objects``. ``chunk_size_average`` 
 means that the divided chunk size on average when performing CDC---this may differnet from ``target_chunk_size``
-because CDC genarates differnt chunk-boundary depending on the content. ``chunk_size_stddev``
+because CDC genarates different chunk-boundary depending on the content. ``chunk_size_stddev``
 represents the standard deviation of the chunk size. 
 
 
