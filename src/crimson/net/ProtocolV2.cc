@@ -5,8 +5,10 @@
 
 #include <seastar/core/lowres_clock.hh>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include "include/msgr.h"
 #include "include/random.h"
+#include "msg/msg_fmt.h"
 
 #include "crimson/auth/AuthClient.h"
 #include "crimson/auth/AuthServer.h"

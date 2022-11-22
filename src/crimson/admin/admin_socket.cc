@@ -5,6 +5,7 @@
 
 #include <boost/algorithm/string/join.hpp>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <seastar/net/api.hh>
 #include <seastar/net/inet_address.hh>
 #include <seastar/core/future-util.hh>

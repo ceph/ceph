@@ -4,7 +4,7 @@
 #include "MonClient.h"
 
 #include <random>
-
+#include <fmt/ranges.h>
 #include <seastar/core/future-util.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/shared_future.hh>

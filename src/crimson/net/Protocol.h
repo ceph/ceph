@@ -192,3 +192,7 @@ struct fmt::formatter<crimson::net::Protocol::write_state_t>
     return formatter<string_view>::format(name, ctx);
   }
 };
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::net::Protocol> : fmt::ostream_formatter {};
+#endif

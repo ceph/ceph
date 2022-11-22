@@ -14,12 +14,15 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
+#include "common/hobject_fmt.h"
+
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
 
 #include "osd/OSDMap.h"
+#include "osd/osd_types_fmt.h"
 
 #include "os/Transaction.h"
 

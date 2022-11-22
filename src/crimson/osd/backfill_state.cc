@@ -3,8 +3,10 @@
 
 #include <algorithm>
 #include <boost/type_index.hpp>
-
+#include <fmt/ranges.h>
+#include "common/hobject_fmt.h"
 #include "crimson/osd/backfill_state.h"
+#include "osd/osd_types_fmt.h"
 
 namespace {
   seastar::logger& logger() {

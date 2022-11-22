@@ -153,3 +153,7 @@ public:
 };
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::segment_manager::ephemeral_config_t> : fmt::ostream_formatter {};
+#endif

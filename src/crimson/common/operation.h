@@ -757,3 +757,7 @@ public:
 };
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::Operation> : fmt::ostream_formatter {};
+#endif

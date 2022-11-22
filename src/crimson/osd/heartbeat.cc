@@ -4,6 +4,8 @@
 #include "heartbeat.h"
 
 #include <boost/range/join.hpp>
+#include <fmt/chrono.h>
+#include <fmt/os.h>
 
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"

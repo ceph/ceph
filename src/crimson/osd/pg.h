@@ -833,3 +833,7 @@ struct PG::do_osd_ops_params_t {
 std::ostream& operator<<(std::ostream&, const PG& pg);
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::PG> : fmt::ostream_formatter {};
+#endif

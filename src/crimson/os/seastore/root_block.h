@@ -88,3 +88,7 @@ struct RootBlock : CachedExtent {
 using RootBlockRef = RootBlock::Ref;
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::RootBlock> : fmt::ostream_formatter {};
+#endif
