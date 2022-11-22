@@ -15,6 +15,7 @@
 #ifndef CEPH_MESSAGE_H
 #define CEPH_MESSAGE_H
 
+#include <concepts>
 #include <cstdlib>
 #include <ostream>
 #include <string_view>
@@ -570,4 +571,9 @@ MURef<T> make_message(Args&&... args) {
   return {new T(std::forward<Args>(args)...), TOPNSPC::common::UniquePtrDeleter{}};
 }
 }
+
+#if FMT_VERSION >= 90000
+template <std::derived_from<Message> M> struct fmt::formatter<M> : fmt::ostream_formatter {};
+#endif
+
 #endif
