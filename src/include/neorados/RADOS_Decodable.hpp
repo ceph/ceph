@@ -110,7 +110,7 @@ struct hash<::neorados::Entry> {
 }
 
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<neorados::Entry> : ostream_formatter {};
+template <> struct fmt::formatter<neorados::Entry> : fmt::ostream_formatter {};
 #endif
 
 #endif // RADOS_DECODABLE_HPP
