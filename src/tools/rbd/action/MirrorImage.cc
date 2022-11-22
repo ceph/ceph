@@ -234,6 +234,63 @@ int execute_demote(const po::variables_map &vm,
   return 0;
 }
 
+int execute_checksum(const po::variables_map &vm,
+                     const std::vector<std::string> &ceph_global_init_args) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string namespace_name;
+  std::string image_name;
+  std::string snap_name;
+  int r = utils::get_pool_image_snapshot_names(vm, at::ARGUMENT_MODIFIER_NONE,
+                                               &arg_index, &pool_name,
+                                               &namespace_name, &image_name,
+                                               &snap_name, true,
+                                               utils::SNAPSHOT_PRESENCE_NONE,
+                                               utils::SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  librbd::Image image;
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::mirror_image_info_t mirror_image;
+  r = image.mirror_image_get_info(&mirror_image, sizeof(mirror_image));
+  if (r < 0) {
+    std::cerr << "rbd: failed to retrieve mirror info: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  if (mirror_image.state != RBD_MIRROR_IMAGE_ENABLED) {
+    std::cerr << "rbd: mirroring not enabled on the image" << std::endl;
+    return -EINVAL;
+  }
+
+  if (mirror_image.primary) {
+    std::cerr << "rbd: mirroring image is primary, perform checksum "
+                 "operation on secondary cluster" << std::endl;
+    return -EINVAL;
+  }
+
+  r = image.mirror_image_checksum();
+  if (r < 0) {
+    std::cerr << "rbd: error verifying the image: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  std::cout << "verified image checksum successfully." << std::endl;
+
+  return 0;
+}
+
 int execute_resync(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
@@ -591,6 +648,10 @@ Shell::Action action_resync(
   {"mirror", "image", "resync"}, {},
   "Force resync to primary image for RBD mirroring.", "",
   &get_arguments, &execute_resync);
+Shell::Action action_checksum(
+  {"mirror", "image", "checksum"}, {},
+  "Perform checksum validation on image for RBD mirroring.", "",
+  &get_arguments, &execute_checksum);
 Shell::Action action_status(
   {"mirror", "image", "status"}, {},
   "Show RBD mirroring status for an image.", "",
