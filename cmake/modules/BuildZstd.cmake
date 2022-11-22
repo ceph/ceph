@@ -14,7 +14,9 @@ function(build_Zstd)
     BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target libzstd_static
     BUILD_BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/libzstd/lib/libzstd.a"
     INSTALL_COMMAND "")
-  add_library(Zstd::Zstd STATIC IMPORTED)
+  if(NOT TARGET Zstd::Zstd)
+    add_library(Zstd::Zstd STATIC IMPORTED)
+  endif()
   set_target_properties(Zstd::Zstd PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/src/zstd/lib"
     IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/libzstd/lib/libzstd.a")

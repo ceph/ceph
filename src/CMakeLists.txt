@@ -340,6 +340,12 @@ set_target_properties(Boost::MPL PROPERTIES
   INTERFACE_COMPILE_DEFINITIONS
     "BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS;BOOST_MPL_LIMIT_LIST_SIZE=30")
 
+option(WITH_SYSTEM_ZSTD "use prebuilt libzstd in system" OFF)
+option(WITH_ROCKSDB_WAL_COMPRESSION "rocksdb wal compression" OFF)
+if(WITH_SYSTEM_ZSTD OR WITH_ROCKSDB_WAL_COMPRESSION)
+  find_package(Zstd 1.4.4 REQUIRED)
+endif()
+
 if(WITH_SEASTAR)
   find_package(c-ares 1.13.0 QUIET)
   if(NOT c-ares_FOUND)
