@@ -309,3 +309,7 @@ void Notify::do_notify_timeout()
 }
 
 } // namespace crimson::osd
+
+#if FMT_VERSION >= 90000
+template <typename Params> struct fmt::formatter<crimson::osd::WatchTimeoutRequest> : fmt::ostream_formatter {};
+#endif

@@ -115,3 +115,7 @@ omap_load_extent_iertr::future<OMapNodeRef>
 omap_load_extent(omap_context_t oc, laddr_t laddr, depth_t depth);
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::omap_manager::OMapNode> : fmt::ostream_formatter {};
+#endif
