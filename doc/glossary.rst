@@ -161,7 +161,13 @@
 	Ceph Stack
 		A collection of two or more components of Ceph.
 
-	Ceph Storage Cluster
+	:ref:`Ceph Storage Cluster<arch-ceph-storage-cluster>`
+                The collection of :term:`Ceph Monitor`\s, :term:`Ceph
+                Manager`\s, :term:`Ceph Metadata Server`\s, and :term:`OSD`\s
+                that work together to store and replicate data for use by
+                applications, Ceph Users, and :term:`Ceph Client`\s. Ceph
+                Storage Clusters receive data from :term:`Ceph Client`\s.
+
 	Ceph System
 	cephx
                 The Ceph authentication protocol. Cephx operates like Kerberos,
