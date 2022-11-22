@@ -235,3 +235,7 @@ inline std::ostream& operator<<(std::ostream& out, const OSD& osd) {
 }
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::OSD> : fmt::ostream_formatter {};
+#endif

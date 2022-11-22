@@ -217,3 +217,8 @@ struct LBALeafNode
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::LBAInternalNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::LBALeafNode> : fmt::ostream_formatter {};
+#endif

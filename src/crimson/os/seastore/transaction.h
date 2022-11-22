@@ -590,3 +590,7 @@ template <typename T>
 using with_trans_ertr = typename T::base_ertr::template extend<crimson::ct_error::eagain>;
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::io_stat_t> : fmt::ostream_formatter {};
+#endif

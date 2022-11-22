@@ -513,3 +513,7 @@ public:
 };
 
 }
+
+#if FMT_VERSION >= 90000
+template <typename node_bound_t> struct fmt::formatter<crimson::os::seastore::btree_range_pin_t<node_bound_t>> : fmt::ostream_formatter {};
+#endif
