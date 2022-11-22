@@ -84,21 +84,56 @@ int OSDriver::get_keys(
   const std::set<std::string> &keys,
   std::map<std::string, ceph::buffer::list> *out)
 {
-  return -ENOENT;
+  using crimson::os::FuturizedStore;
+  return os->omap_get_values(
+    ch, hoid, keys
+  ).safe_then([out] (FuturizedStore::omap_values_t&& vals) {
+    // just the difference in comparator (`std::less<>` in omap_values_t`)
+    reinterpret_cast<FuturizedStore::omap_values_t&>(*out) = std::move(vals);
+    return 0;
+  }, FuturizedStore::read_errorator::all_same_way([] (auto& e) {
+    assert(e.value() > 0);
+    return -e.value();
+  })).get(); // this requires seastar::thread
 }
 
 int OSDriver::get_next(
   const std::string &key,
   std::pair<std::string, ceph::buffer::list> *next)
 {
-  return -ENOENT;
+  using crimson::os::FuturizedStore;
+  return os->omap_get_values(
+    ch, hoid, key
+  ).safe_then_unpack([&key, next] (bool, FuturizedStore::omap_values_t&& vals) {
+    if (auto nit = std::begin(vals); nit == std::end(vals)) {
+      return -ENOENT;
+    } else {
+      assert(nit->first > key);
+      *next = *nit;
+      return 0;
+    }
+  }, FuturizedStore::read_errorator::all_same_way([] {
+    return -EINVAL;
+  })).get(); // this requires seastar::thread
 }
 
 int OSDriver::get_next_or_current(
   const std::string &key,
   std::pair<std::string, ceph::buffer::list> *next_or_current)
 {
-  return -ENOENT;
+  using crimson::os::FuturizedStore;
+  // let's try to get current first
+  return os->omap_get_values(
+    ch, hoid, FuturizedStore::omap_keys_t{key}
+  ).safe_then([&key, next_or_current] (FuturizedStore::omap_values_t&& vals) {
+    assert(vals.size() == 1);
+    *next_or_current = std::make_pair(key, std::move(vals[0]));
+    return 0;
+  }, FuturizedStore::read_errorator::all_same_way(
+    [next_or_current, &key, this] {
+    // no current, try next
+    return get_next(key, next_or_current);
+  })).get(); // this requires seastar::thread
 }
 #else
 int OSDriver::get_keys(
