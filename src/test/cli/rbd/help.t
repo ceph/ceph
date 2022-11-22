@@ -83,6 +83,8 @@
       migration commit                  Commit image migration.
       migration execute                 Execute image migration.
       migration prepare                 Prepare image migration.
+      mirror image checksum             Perform checksum validation on image for
+                                        RBD mirroring.
       mirror image demote               Demote an image to non-primary for RBD
                                         mirroring.
       mirror image disable              Disable RBD mirroring for an image.
@@ -1620,6 +1622,22 @@
     (*) supports enabling/disabling on existing images
     (-) supports disabling-only on existing images
     (+) enabled by default for new images if features not specified
+  
+  rbd help mirror image checksum
+  usage: rbd mirror image checksum [--pool <pool>] [--namespace <namespace>] 
+                                   [--image <image>] 
+                                   <image-spec> 
+  
+  Perform checksum validation on image for RBD mirroring.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
   
   rbd help mirror image demote
   usage: rbd mirror image demote [--pool <pool>] [--namespace <namespace>] 

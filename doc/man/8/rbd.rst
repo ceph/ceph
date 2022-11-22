@@ -493,6 +493,9 @@ Commands
   path to a JSON-encoded source-spec file using the *--source-spec-path*
   optionals.
 
+:command:`mirror image checksum` *image-spec*
+  Perform checksum validation on image for RBD mirroring.
+
 :command:`mirror image demote` *image-spec*
   Demote a primary image to non-primary for RBD mirroring.
 
