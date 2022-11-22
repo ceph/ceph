@@ -533,4 +533,9 @@ template<typename Rep, typename Period>
 ostream& operator<<(ostream& m, const chrono::duration<Rep, Period>& t);
 }
 
+#if FMT_VERSION >= 90000
+template<typename Clock>
+struct fmt::formatter<std::chrono::time_point<Clock>> : fmt::ostream_formatter {};
+#endif
+
 #endif // COMMON_CEPH_TIME_H
