@@ -123,3 +123,7 @@ inline std::ostream& operator<<(std::ostream& out, const Messenger& msgr) {
 }
 
 } // namespace crimson::net
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::net::Messenger> : fmt::ostream_formatter {};
+#endif
