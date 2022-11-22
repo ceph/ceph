@@ -13,6 +13,7 @@ replicate and redistribute data dynamically.
 
 .. image:: images/stack.png
 
+.. _arch-ceph-storage-cluster:
 
 The Ceph Storage Cluster
 ========================
