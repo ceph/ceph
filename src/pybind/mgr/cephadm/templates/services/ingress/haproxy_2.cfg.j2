@@ -1,0 +1,27 @@
+# {{ cephadm_managed }}
+defaults
+  log global
+  option log-health-checks
+  timeout connect 5s
+  timeout client 50s
+  timeout server 450s
+
+
+{% for service in services %}
+
+frontend frontend_{{ loop.index }}
+  mode tcp
+  bind {{ ip }}:{{ service + 1 }}
+  option tcplog
+  default_backend backend_{{ loop.index }}
+
+backend backend_{{ loop.index }}
+  mode tcp
+  option httpchk HEAD /
+  http-check expect status 200
+  {% for backend in backends %}
+  server {{ backend.name }} {{ backend.ip }}:{{ service }} check check-ssl verify none
+  {% endfor %}
+
+
+{% endfor %}

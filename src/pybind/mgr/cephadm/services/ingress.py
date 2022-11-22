@@ -113,6 +113,16 @@ class IngressService(CephService):
                         'ip': '0.0.0.0',
                         'port': 0,
                     })
+        if backend_spec.service_type == 'mgr':
+            mode = 'tcp'
+            services = self.mgr.get_active_mgr().ports
+            servers = [
+                {
+                    'name': d.name(),
+                    'ip': d.ip or resolve_ip(self.mgr.inventory.get_addr(str(d.hostname))),
+                    'ports': d.ports,
+                } for d in daemons if d.ports
+            ]
         else:
             mode = 'http'
             servers = [
@@ -123,19 +133,33 @@ class IngressService(CephService):
                 } for d in daemons if d.ports
             ]
 
-        haproxy_conf = self.mgr.template.render(
-            'services/ingress/haproxy.cfg.j2',
-            {
-                'spec': spec,
-                'mode': mode,
-                'servers': servers,
-                'user': spec.monitor_user or 'admin',
-                'password': password,
-                'ip': "*" if spec.virtual_ips_list else str(spec.virtual_ip).split('/')[0] or daemon_spec.ip or '*',
-                'frontend_port': daemon_spec.ports[0] if daemon_spec.ports else spec.frontend_port,
-                'monitor_port': daemon_spec.ports[1] if daemon_spec.ports else spec.monitor_port,
-            }
-        )
+        if backend_spec.service_type == 'mgr':
+            haproxy_conf = self.mgr.template.render(
+                'services/ingress/haproxy_2.cfg.j2',
+                {
+                    'mode': mode,
+                    'services': services,
+                    'backends': servers,
+                    'user': spec.monitor_user or 'admin',
+                    'password': password,
+                    'ip': "*" if spec.virtual_ips_list else str(spec.virtual_ip).split('/')[0] or daemon_spec.ip or '*',
+                }
+            )
+        else:
+            haproxy_conf = self.mgr.template.render(
+                'services/ingress/haproxy.cfg.j2',
+                {
+                    'spec': spec,
+                    'mode': mode,
+                    'servers': servers,
+                    'user': spec.monitor_user or 'admin',
+                    'password': password,
+                    'ip': "*" if spec.virtual_ips_list else str(spec.virtual_ip).split('/')[0] or daemon_spec.ip or '*',
+                    'frontend_port': daemon_spec.ports[0] if daemon_spec.ports else spec.frontend_port,
+                    'monitor_port': daemon_spec.ports[1] if daemon_spec.ports else spec.monitor_port,
+                }
+            )
+
         config_files = {
             'files': {
                 "haproxy.cfg": haproxy_conf,

@@ -685,6 +685,7 @@ class MgrService(CephService):
         if ports:
             daemon_spec.ports = ports
 
+        daemon_spec.ports.append(8765)
         daemon_spec.keyring = keyring
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)

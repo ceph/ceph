@@ -5183,7 +5183,7 @@ def create_mgr(
     # Note:the default port used by the Prometheus node exporter is opened in fw
     ctx.meta_json = json.dumps({'service_name': 'mgr'})
     deploy_daemon(ctx, fsid, 'mgr', mgr_id, mgr_c, uid, gid,
-                  config=config, keyring=mgr_keyring, ports=[9283, 8765])
+                  config=config, keyring=mgr_keyring, ports=[9283, 8765, 8443])
 
     # wait for the service to become available
     logger.info('Waiting for mgr to start...')
