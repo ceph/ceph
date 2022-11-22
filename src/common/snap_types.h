@@ -74,4 +74,8 @@ inline std::ostream& operator<<(std::ostream& out, const SnapContext& snapc) {
   return out << snapc.seq << "=" << snapc.snaps;
 }
 
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<SnapContext> : fmt::ostream_formatter {};
+#endif
+
 #endif
