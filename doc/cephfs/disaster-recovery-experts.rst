@@ -224,16 +224,21 @@ mark the file system failed:
 
     ceph fs fail <fs_name>
 
+.. note::
+
+   <fs_name> here and below indicates the original, damaged file system.
+
 Next, create a recovery file system in which we will populate a new metadata pool
 backed by the original data pool.
 
 ::
 
     ceph osd pool create cephfs_recovery_meta
-    ceph fs new cephfs_recovery recovery <data_pool> --recover --allow-dangerous-metadata-overlay
+    ceph fs new cephfs_recovery cephfs_recovery_meta <data_pool> --recover --allow-dangerous-metadata-overlay
 
 .. note::
 
+   You may rename the recovery metadata pool and file system at a future time.
    The ``--recover`` flag prevents any MDS from joining the new file system.
 
 Next, we will create the intial metadata for the fs:
@@ -291,7 +296,7 @@ Ensure you have an MDS running and issue:
 
 ::
 
-    ceph tell mds.recovery_fs:0 scrub start / recursive,repair,force
+    ceph tell mds.cephfs_recovery:0 scrub start / recursive,repair,force
 
 .. note::
 
