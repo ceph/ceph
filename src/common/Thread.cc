@@ -160,7 +160,7 @@ void Thread::create(const char *name, size_t stacksize)
   if (ret != 0) {
     char buf[256];
     snprintf(buf, sizeof(buf), "Thread::try_create(): pthread_create "
-	     "failed with error %d", ret);
+	     "failed with error %d\n", ret);
     dout_emergency(buf);
     ceph_assert(ret == 0);
   }
