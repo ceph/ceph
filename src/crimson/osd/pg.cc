@@ -1081,7 +1081,7 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
     }
     auto coid = resolve_oid(head->get_ro_ss(), oid);
     if (!coid) {
-      logger().error("with_clone_obc: {} clone not found", coid);
+      logger().error("with_clone_obc: {} clone not found", oid);
       return load_obc_iertr::future<>{crimson::ct_error::enoent::make()};
     }
     auto [clone, existed] = shard_services.get_cached_obc(*coid);
