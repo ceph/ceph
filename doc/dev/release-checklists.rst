@@ -53,6 +53,13 @@ Misc
 - [x] update src/tools/monmaptool.cc (`min_mon_release` and corresponding output in `src/test/cli/monmaptool`)
 - [x] update src/cephadm/cephadm (`DEFAULT_IMAGE_RELEASE` to X)
 
+Docs
+~~~~
+
+- [x] Remove ``doc/releases/*.rst``. This should leave behind ``doc/releases/releases.yml`` which is used for doc building purposes.
+- [x] Cherry-pick 8cf9ad62949516666ad0f2c0bb7726ef68e4d666 ("doc: add releases links to toc"). There will be trivial conflicts.
+- [x] Add redirect for new major release at `RTD <https://readthedocs.org/dashboard/ceph/redirects/>`_.
+
 Feature bits
 ------------
 
