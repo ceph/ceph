@@ -64,3 +64,7 @@ inline std::ostream& operator<<(std::ostream& out, const Client& client) {
 }
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::mgr::Client> : fmt::ostream_formatter {};
+#endif

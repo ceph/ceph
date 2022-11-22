@@ -146,3 +146,8 @@ struct test_block_mutator_t {
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::test_block_delta_t)
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::TestBlock> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::TestBlockPhysical> : fmt::ostream_formatter {};
+#endif

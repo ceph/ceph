@@ -164,3 +164,7 @@ class SocketMessenger final : public Messenger {
 };
 
 } // namespace crimson::net
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::net::SocketMessenger> : fmt::ostream_formatter {};
+#endif

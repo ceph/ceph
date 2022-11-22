@@ -246,6 +246,10 @@ class Heartbeat::Connection {
  }
 };
 
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<Heartbeat::Connection> : fmt::ostream_formatter {};
+#endif
+
 /*
  * Track the ping history and ping reply (the pong) from the same session, clean up
  * history once hb_front or hb_back loses connection and restart the session once
@@ -454,3 +458,7 @@ class Heartbeat::Peer final : private Heartbeat::ConnectionListener {
   Connection con_front;
   Connection con_back;
 };
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<Heartbeat> : fmt::ostream_formatter {};
+#endif

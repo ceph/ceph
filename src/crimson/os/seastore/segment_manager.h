@@ -191,3 +191,7 @@ public:
 WRITE_CLASS_DENC(
   crimson::os::seastore::block_sm_superblock_t
 )
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::block_sm_superblock_t> : fmt::ostream_formatter {};
+#endif

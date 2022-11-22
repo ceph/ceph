@@ -31,8 +31,12 @@ class Gated {
 	    "{}, {} skipped, system shutdown", who, what);
 	return;
       }
-      gated_logger().error(
-          "{} dispatch() {} caught exception: {}", who, what, eptr);
+      try {
+	std::rethrow_exception(eptr);
+      } catch (std::exception& e) {
+	gated_logger().error(
+          "{} dispatch() {} caught exception: {}", who, what, e.what());
+      }
       assert(*eptr.__cxa_exception_type()
 	== typeid(seastar::gate_closed_exception));
     });
