@@ -604,7 +604,7 @@ seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods
       return handle_auth_reply();
     });
   } catch (const crimson::auth::error& e) {
-    logger().error("{} get_initial_auth_request returned {}", conn, e);
+    logger().error("{} get_initial_auth_request returned {}", conn, e.what());
     abort_in_close(*this, true);
     return seastar::now();
   }
