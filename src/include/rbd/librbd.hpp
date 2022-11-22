@@ -811,6 +811,7 @@ public:
   int mirror_image_disable(bool force);
   int mirror_image_promote(bool force);
   int mirror_image_demote();
+  int mirror_image_checksum();
   int mirror_image_resync();
   int mirror_image_create_snapshot(uint64_t *snap_id);
   int mirror_image_create_snapshot2(uint32_t flags, uint64_t *snap_id);

@@ -87,6 +87,7 @@ struct Mirror {
   static void image_promote(ImageCtxT *ictx, bool force, Context *on_finish);
   static int image_demote(ImageCtxT *ictx);
   static void image_demote(ImageCtxT *ictx, Context *on_finish);
+  static int image_checksum(ImageCtxT *ictx);
   static int image_resync(ImageCtxT *ictx);
   static int image_get_info(ImageCtxT *ictx,
                             mirror_image_info_t *mirror_image_info);

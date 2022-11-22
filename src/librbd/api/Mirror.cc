@@ -33,6 +33,7 @@
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/scope_exit.hpp>
+#include "osdc/Striper.h"
 #include "json_spirit/json_spirit.h"
 
 #include <algorithm>
@@ -754,6 +755,188 @@ void Mirror<I>::image_demote(I *ictx, Context *on_finish) {
   ictx->image_lock.unlock();
 
   ictx->state->refresh(on_refresh);
+}
+
+template <typename I>
+int Mirror<I>::image_checksum(I *ictx) {
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "ictx=" << ictx << dendl;
+  librados::IoCtx io_ctx = ictx->md_ctx;
+
+  std::vector<mirror_peer_site_t> peers;
+  int r = Mirror<>::peer_site_list(io_ctx, &peers);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to list mirror peers: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  if (peers.empty()) {
+    lderr(cct) << "no peers found" << dendl;
+    return -EINVAL;
+  }
+  ceph_assert(peers.size() == 1);
+
+  auto peer = *peers.begin();
+  std::map<std::string, std::string> attributes;
+  r = Mirror<>::peer_site_get_attributes(io_ctx, peer.uuid, &attributes);
+  if (r < 0) {
+    lderr(cct) << "rbd: error reading mirroring peer config: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+  ldout(cct, 20) << "peer deatils: "
+                 << "UUID: " << peer.uuid
+                 << ", site name: " << peer.site_name
+                 << ", mirror UUID: " << peer.mirror_uuid
+                 << ", client: " << peer.client_name
+                 << ", mon host: " << attributes["mon_host"]
+                 << dendl;
+
+  std::string remote_client_id = peer.client_name;
+  auto pos = peer.client_name.find('.');
+  if (pos != std::string::npos)
+    remote_client_id = remote_client_id.substr(pos + 1);
+
+  librados::Rados remote_rados;
+  remote_rados.init(remote_client_id.c_str());
+
+  std::string mon_host = attributes["mon_host"];
+  pos = mon_host.find(':');
+  if (pos != std::string::npos)
+    mon_host= mon_host.substr(pos + 1);
+  pos = mon_host.find('/');
+  if (pos != std::string::npos)
+    mon_host= mon_host.substr(0, pos);
+
+  auto remote_cct = reinterpret_cast<CephContext*>(remote_rados.cct());
+  remote_cct->_conf.set_val("mon_host", mon_host);
+  remote_cct->_conf.set_val("key", attributes["key"]);
+
+  r = remote_rados.connect();
+  if (r < 0) {
+    lderr(cct) << "failed to connect to peer cluster: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  librados::IoCtx remote_io_ctx;
+  r = remote_rados.ioctx_create(io_ctx.get_pool_name().c_str(), remote_io_ctx);
+  if (r == -ENOENT) {
+    lderr(cct) << "remote pool does not exist" << cpp_strerror(r) << dendl;
+    return r;
+  } else if (r < 0) {
+    lderr(cct) << "failed to open remote pool '" << io_ctx.get_pool_name()
+               << "': " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  std::vector<mirror_peer_site_t> remote_peers;
+  r = Mirror<>::peer_site_list(remote_io_ctx, &remote_peers);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to list mirror remote peers: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+  if (remote_peers.empty()) {
+    lderr(cct) << "no peers found on remote" << dendl;
+    return -EINVAL;
+  }
+  ceph_assert(remote_peers.size() == 1);
+
+  auto remote_peer = *remote_peers.begin();
+  ldout(cct, 20) << "remote's peer deatils: "
+                 << ", UUID: " << remote_peer.uuid
+                 << ", site name: " << remote_peer.site_name
+                 << ", mirror UUID: " << remote_peer.mirror_uuid
+                 << ", client: " << remote_peer.client_name
+                 << dendl;
+
+  uint64_t size;
+  {
+    std::shared_lock image_locker{ictx->image_lock};
+    size =  ictx->get_image_size(CEPH_NOSNAP);
+  }
+  ldout(cct, 20) << "local image size: " << size << dendl;
+  uint64_t object_count = Striper::get_num_objects(ictx->layout, size);
+  ldout(cct, 20) << "local image object count: " << object_count << dendl;
+
+  librbd::ImageCtx *remote_ictx = new librbd::ImageCtx(ictx->name.c_str(), "",
+                                                       nullptr,
+                                                       remote_io_ctx, false);
+  remote_ictx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+  r = remote_ictx->state->open(0);
+  if (r < 0) {
+    lderr(cct) << "error opening image: " << ictx->name.c_str() << ": "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+  uint64_t remote_size;
+  {
+    std::shared_lock image_locker{remote_ictx->image_lock};
+    remote_size =  remote_ictx->get_image_size(CEPH_NOSNAP);
+  }
+  ldout(cct, 20) << "remote image size: " << remote_size  << dendl;
+  uint64_t remote_object_count = Striper::get_num_objects(remote_ictx->layout,
+                                                          remote_size);
+  ldout(cct, 20) << "remote image object count: "
+                 << remote_object_count << dendl;
+
+  bufferlist init_value_bl;
+  bufferlist csum_bl;
+  bufferlist rcsum_bl;
+  bool local_obj_absent;
+  bool remote_obj_absent;
+
+  ceph::encode(static_cast<uint32_t>(-1), init_value_bl);
+  for (uint64_t i = 0; i < object_count; ++i) {
+    csum_bl.clear();
+    local_obj_absent = false;
+    remote_obj_absent = false;
+
+    ldout(cct, 20) << "obj name: " << ictx->get_object_name(i) << dendl;
+    r = io_ctx.checksum(ictx->get_object_name(i), LIBRADOS_CHECKSUM_TYPE_CRC32C,
+                        init_value_bl, ictx->get_object_size(), 0, 0, &csum_bl);
+    if (r == -ENOENT) {
+      local_obj_absent = true;
+    } else if (r < 0) {
+      lderr(cct) << "failed to checksum object: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    rcsum_bl.clear();
+    ldout(cct, 20) << "remote obj name: "
+                   << remote_ictx->get_object_name(i) << dendl;
+    r = remote_io_ctx.checksum(remote_ictx->get_object_name(i),
+                              LIBRADOS_CHECKSUM_TYPE_CRC32C,
+                              init_value_bl,
+                              remote_ictx->get_object_size(),
+                              0, 0, &rcsum_bl);
+    if (r == -ENOENT) {
+      remote_obj_absent = true;
+    } else if (r < 0) {
+      lderr(cct) << "failed to checksum remote object: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if (local_obj_absent && remote_obj_absent) {
+      continue;
+    } else if (local_obj_absent && !remote_obj_absent) {
+      lderr(cct) << "local image doesn't have object: "
+                 << ictx->get_object_name(i) << dendl;
+      return -ENOENT;
+    } else if (!local_obj_absent && remote_obj_absent) {
+      lderr(cct) << "remote image doesn't have object: "
+                 << ictx->get_object_name(i) << dendl;
+      return -ENOENT;
+    }
+
+    if (!csum_bl.contents_equal(rcsum_bl)) {
+      lderr(cct) << "checksum mismatch for object: "
+                 << ictx->get_object_name(i) << dendl;
+      return -EIO;
+    }
+  }
+
+  return 0;
 }
 
 template <typename I>

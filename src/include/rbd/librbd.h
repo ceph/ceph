@@ -1311,6 +1311,8 @@ CEPH_RBD_API int rbd_metadata_remove(rbd_image_t image, const char *key);
 CEPH_RBD_API int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
     char *keys, size_t *key_len, char *values, size_t *vals_len);
 
+CEPH_RBD_API int rbd_mirror_image_checksum(rbd_image_t image);
+
 // RBD image mirroring support functions
 CEPH_RBD_API int rbd_mirror_image_enable(rbd_image_t image) CEPH_RBD_DEPRECATED;
 CEPH_RBD_API int rbd_mirror_image_enable2(rbd_image_t image,

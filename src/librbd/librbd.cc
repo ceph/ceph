@@ -2939,6 +2939,12 @@ namespace librbd {
     return librbd::api::Mirror<>::image_demote(ictx);
   }
 
+  int Image::mirror_image_checksum()
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Mirror<>::image_checksum(ictx);
+  }
+
   int Image::mirror_image_resync()
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -6548,6 +6554,12 @@ extern "C" int rbd_mirror_image_resync(rbd_image_t image)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::api::Mirror<>::image_resync(ictx);
+}
+
+extern "C" int rbd_mirror_image_checksum(rbd_image_t image)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::api::Mirror<>::image_checksum(ictx);
 }
 
 extern "C" int rbd_mirror_image_create_snapshot(rbd_image_t image,
