@@ -762,26 +762,34 @@ class FSTop(object):
         global metrics_dict, current_states
         counters = [m.upper() for m in stats_json[GLOBAL_COUNTERS_KEY]]
         self.tablehead_y += 2
-        res = stats_json[CLIENT_METADATA_KEY].get(fs_name, {})
+        res = stats_json[GLOBAL_METRICS_KEY].get(fs_name, {})
         client_cnt = len(res)
         self.fsstats.addstr(self.tablehead_y, 0, FS_TOP_NAME_TOPL_FMT.format(
             fs_name=fs_name, client_count=client_cnt), curses.A_BOLD)
         self.tablehead_y += 2
+        metrics_dict_client = metrics_dict.get(fs_name, {})
+        if len(metrics_dict) > len(fs_list):
+            stale_fs = set(metrics_dict) - set(fs_list)
+            for key in stale_fs:
+                del metrics_dict[key]
+        if len(metrics_dict_client) > client_cnt:
+            stale_clients = set(metrics_dict_client) - set(res)
+            for key in stale_clients:
+                del metrics_dict_client[key]
         if client_cnt:
-            if len(metrics_dict.get(fs_name, {})) != client_cnt:
-                sort_list = sorted(list(stats_json[GLOBAL_METRICS_KEY].get(fs_name, {}).keys()))
+            if len(metrics_dict_client) != client_cnt:
+                sort_list = sorted(list(res.keys()))
             else:
                 sort_arg = current_states['last_field']
-                sort_list = sorted(list(stats_json[GLOBAL_METRICS_KEY].get(fs_name, {}).keys()),
+                sort_list = sorted(list(res.keys()),
                                    key=lambda x: metrics_dict[fs_name].get(x, {}).get(sort_arg, 0),
                                    reverse=True)
             if current_states['limit'] is not None and int(current_states['limit']) < client_cnt:
                 sort_list = sort_list[0:int(current_states['limit'])]
             for client_id in sort_list:
                 self.create_client(
-                    fs_name, client_id,
-                    stats_json[GLOBAL_METRICS_KEY].get(fs_name, {}).get(client_id, {}),
-                    counters, res.get(client_id, {}),
+                    fs_name, client_id, res.get(client_id, {}), counters,
+                    stats_json[CLIENT_METADATA_KEY].get(fs_name, {}).get(client_id, {}),
                     x_coord_map, self.tablehead_y)
                 self.tablehead_y += 1
 
@@ -863,7 +871,7 @@ class FSTop(object):
                 help = "COMMANDS: " + help_commands
                 self.fsstats.erase()  # erase previous text
 
-                client_metadata = stats_json[CLIENT_METADATA_KEY].get(fs, {})
+                client_metadata = stats_json[GLOBAL_METRICS_KEY].get(fs, {})
                 if current_states['limit'] is not None and \
                    int(current_states['limit']) < len(client_metadata):
                     num_client = int(current_states['limit'])
@@ -992,7 +1000,7 @@ class FSTop(object):
                 self.fsstats.erase()  # erase previous text
                 for index, fs in enumerate(fs_list):
                     #  Get the vscrollEnd in advance
-                    client_metadata = stats_json[CLIENT_METADATA_KEY].get(fs, {})
+                    client_metadata = stats_json[GLOBAL_METRICS_KEY].get(fs, {})
                     if current_states['limit'] is not None and \
                        int(current_states['limit']) < len(client_metadata):
                         num_client = int(current_states['limit'])
