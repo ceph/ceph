@@ -130,8 +130,8 @@ std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
  * Tenants are separated from buckets in URLs by a colon in S3.
  * This function is not to be used on Swift URLs, not even for COPY arguments.
  */
-void rgw_parse_url_bucket(const string &bucket, const string& auth_tenant,
-                          string &tenant_name, string &bucket_name) {
+int rgw_parse_url_bucket(const string &bucket, const string& auth_tenant,
+                         string &tenant_name, string &bucket_name) {
 
   int pos = bucket.find(':');
   if (pos >= 0) {
@@ -142,10 +142,14 @@ void rgw_parse_url_bucket(const string &bucket, const string& auth_tenant,
      */
     tenant_name = bucket.substr(0, pos);
     bucket_name = bucket.substr(pos + 1);
+    if (bucket_name.empty()) {
+      return -ERR_INVALID_BUCKET_NAME;
+    }
   } else {
     tenant_name = auth_tenant;
     bucket_name = bucket;
   }
+  return 0;
 }
 
 /**
