@@ -3,6 +3,7 @@ Daemon restart
 """
 import logging
 import pipes
+import os
 
 from teuthology import misc as teuthology
 from teuthology.orchestra import run as tor
@@ -48,16 +49,15 @@ def get_tests(ctx, config, role, remote, testdir):
             'mkdir', '--', srcdir,
             run.Raw('&&'),
             'git',
-            'archive',
-            '--remote=git://git.ceph.com/ceph.git',
-            '%s:qa/workunits' % refspec,
-            run.Raw('|'),
-            'tar',
-            '-C', srcdir,
-            '-x',
-            '-f-',
+            'clone',
+            'https://git.ceph.com/ceph.git',
+            srcdir,
             run.Raw('&&'),
             'cd', '--', srcdir,
+            run.Raw('&&'),
+            'git', 'checkout', '-b', 'restart_test', str(refspec),
+            run.Raw('&&'),
+            'cd', '--', 'qa/workunits',
             run.Raw('&&'),
             'if', 'test', '-e', 'Makefile', run.Raw(';'), 'then', 'make', run.Raw(';'), 'fi',
             run.Raw('&&'),
@@ -66,7 +66,7 @@ def get_tests(ctx, config, role, remote, testdir):
             ],
         )
     restarts = sorted(remote.read_file(f'{testdir}/restarts.list').decode().split('\0'))
-    return (srcdir, restarts)
+    return (os.path.join(srcdir, 'qa/workunits'), restarts)
 
 def task(ctx, config):
     """
