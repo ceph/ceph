@@ -134,7 +134,7 @@ class PerShardState {
     auto op = registry.create_operation<T>(std::forward<Args>(args)...);
     crimson::get_logger(ceph_subsys_osd).info(
       "PerShardState::{}, {}", __func__, *op);
-    auto fut = op->start().then([op /* by copy */] {
+    auto fut = op->start().finally([op /* by copy */] {
       // ensure the op's lifetime is appropriate. It is not enough to
       // guarantee it's alive at the scheduling stages (i.e. `then()`
       // calling) but also during the actual execution (i.e. when passed
