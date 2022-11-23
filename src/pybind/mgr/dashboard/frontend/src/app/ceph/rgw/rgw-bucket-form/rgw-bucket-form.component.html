@@ -290,6 +290,7 @@
                        name="encryption_enabled"
                        formControlName="encryption_enabled"
                        type="checkbox"
+                       (change)="yourfunc($event)"
                        [attr.disabled]="!kmsVaultConfig && !s3VaultConfig ? true : null">
                 <label class="form-check-label"
                        for="encryption_enabled"

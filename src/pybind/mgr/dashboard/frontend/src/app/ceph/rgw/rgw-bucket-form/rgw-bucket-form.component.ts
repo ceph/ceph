@@ -22,6 +22,8 @@ import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
 import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
 import { RgwConfigModalComponent } from '../rgw-config-modal/rgw-config-modal.component';
 
+declare var gtag: (arg0: string, arg1: string, arg2: { event_category: string; event_label: string; value: string; }) => void;
+
 @Component({
   selector: 'cd-rgw-bucket-form',
   templateUrl: './rgw-bucket-form.component.html',
@@ -337,4 +339,14 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       .get('encryptionType')
       .setValue(this.bucketForm.getValue('encryption_type'));
   }
+
+
+  yourfunc(e: { target: { checked: any; }; }) {
+    if(e.target.checked){  
+      gtag('event', 'BUCKET_ENCRYPTION_ENABLED', {
+        'event_category': 'BUTTON_CLICK',
+        'event_label': 'BUCKET_ENCRYPTION_ENABLED',
+        'value': 'BUCKET_ENCRYPTION_ENABLED'   })      
+    }
+ }
 }
