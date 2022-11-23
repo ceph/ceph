@@ -903,3 +903,8 @@ void ns_oid_view_t::test_append(const Key& key, char*& p_append) {
 }
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::onode::key_hobj_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::onode::key_view_t> : fmt::ostream_formatter {};
+#endif

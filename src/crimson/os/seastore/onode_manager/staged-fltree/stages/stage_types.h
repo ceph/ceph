@@ -434,3 +434,9 @@ struct node_stats_t {
 };
 
 }
+
+#if FMT_VERSION >= 90000
+template <crimson::os::seastore::onode::match_stage_t S>
+struct fmt::formatter<crimson::os::seastore::onode::staged_position_t<S>> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::onode::MatchHistory> : fmt::ostream_formatter {};
+#endif
