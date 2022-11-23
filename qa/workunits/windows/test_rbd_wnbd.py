@@ -34,12 +34,19 @@ parser.add_argument('--fio-depth',
                     help='The number of concurrent asynchronous operations '
                          'executed per disk',
                     default=64, type=int)
+parser.add_argument('--fio-verify',
+                    help='The mechanism used to validate the written '
+                         'data. Examples: crc32c, md5, sha1, null, etc. '
+                         'If set to null, the written data will not be '
+                         'verified.',
+                    default='crc32c')
 parser.add_argument('--bs',
                     help='Benchmark block size.',
                     default="2M")
 parser.add_argument('--op',
-                    help='Benchmark operation.',
-                    default="read")
+                    help='Benchmark operation. '
+                         'Examples: read, randwrite, rw, etc.',
+                    default="rw")
 parser.add_argument('--image-prefix',
                     help='The image name prefix.',
                     default="cephTest-")
@@ -49,6 +56,10 @@ parser.add_argument('--image-size-mb',
 parser.add_argument('--map-timeout',
                     help='Image map timeout.',
                     default=60, type=int)
+parser.add_argument('--skip-enabling-disk', action='store_true',
+                    help='If set, the disk will not be turned online and the '
+                         'read-only flag will not be removed. Useful when '
+                         'the SAN policy is set to "onlineAll".')
 parser.add_argument('--verbose', action='store_true',
                     help='Print info messages.')
 parser.add_argument('--debug', action='store_true',
@@ -293,6 +304,13 @@ class RbdImage(object):
             "-IsReadOnly", "$false")
 
     @Tracer.trace
+    def set_online(self):
+        execute(
+            "powershell.exe", "-command",
+            "Set-Disk", "-Number", str(self.disk_number),
+            "-IsOffline", "$false")
+
+    @Tracer.trace
     def map(self, timeout: int = 60):
         LOG.info("Mapping image: %s", self.name)
         tstart = time.time()
@@ -304,8 +322,6 @@ class RbdImage(object):
 
         elapsed = time.time() - tstart
         self._wait_for_disk(timeout=timeout - elapsed)
-
-        self.set_writable()
 
     @Tracer.trace
     def unmap(self):
@@ -331,6 +347,10 @@ class RbdImage(object):
 class RbdTest(object):
     image: RbdImage
 
+    # Windows disks must be turned online before accessing partitions.
+    requires_disk_online = False
+    requires_disk_write = False
+
     def __init__(self,
                  image_prefix: str = "cephTest-",
                  image_size_mb: int = 1024,
@@ -339,6 +359,7 @@ class RbdTest(object):
         self.image_size_mb = image_size_mb
         self.image_name = image_prefix + str(uuid.uuid4())
         self.map_timeout = map_timeout
+        self.skip_enabling_disk = kwargs.get("skip_enabling_disk")
 
     @Tracer.trace
     def initialize(self):
@@ -346,6 +367,13 @@ class RbdTest(object):
             self.image_name,
             self.image_size_mb)
         self.image.map(timeout=self.map_timeout)
+
+        if not self.skip_enabling_disk:
+            if self.requires_disk_write:
+                self.image.set_writable()
+
+            if self.requires_disk_online:
+                self.image.set_online()
 
     def run(self):
         pass
@@ -362,7 +390,8 @@ class RbdTest(object):
 
 
 class RbdFioTest(RbdTest):
-    data: typing.List[typing.Dict[str, str]] = []
+    data: typing.DefaultDict[str, typing.List[typing.Dict[str, str]]] = (
+        collections.defaultdict(list))
     lock = threading.Lock()
 
     def __init__(self,
@@ -372,7 +401,8 @@ class RbdFioTest(RbdTest):
                  workers: int = 1,
                  bs: str = "2M",
                  iodepth: int = 64,
-                 op: str = "read",
+                 op: str = "rw",
+                 verify: str = "crc32c",
                  **kwargs):
 
         super(RbdFioTest, self).__init__(*args, **kwargs)
@@ -383,20 +413,26 @@ class RbdFioTest(RbdTest):
         self.bs = bs
         self.iodepth = iodepth
         self.op = op
+        if op not in ("read", "randread"):
+            self.requires_disk_write = True
+        self.verify = verify
 
     def process_result(self, raw_fio_output: str):
         result = json.loads(raw_fio_output)
         with self.lock:
             for job in result["jobs"]:
-                self.data.append({
-                    'error': job['error'],
-                    'io_bytes': job[self.op]['io_bytes'],
-                    'bw_bytes': job[self.op]['bw_bytes'],
-                    'runtime': job[self.op]['runtime'] / 1000,  # seconds
-                    'total_ios': job[self.op]['short_ios'],
-                    'short_ios': job[self.op]['short_ios'],
-                    'dropped_ios': job[self.op]['short_ios'],
-                })
+                # Fio doesn't support trim on Windows
+                for op in ['read', 'write']:
+                    if op in job:
+                        self.data[op].append({
+                            'error': job['error'],
+                            'io_bytes': job[op]['io_bytes'],
+                            'bw_bytes': job[op]['bw_bytes'],
+                            'runtime': job[op]['runtime'] / 1000,  # seconds
+                            'total_ios': job[op]['short_ios'],
+                            'short_ios': job[op]['short_ios'],
+                            'dropped_ios': job[op]['short_ios'],
+                        })
 
     @Tracer.trace
     def run(self):
@@ -411,6 +447,8 @@ class RbdFioTest(RbdTest):
             "--numjobs=%s" % self.workers,
             "--filename=%s" % self.image.path,
         ]
+        if self.verify:
+            cmd += ["--verify=%s" % self.verify]
         result = execute(*cmd)
         LOG.info("Completed FIO test.")
         self.process_result(result.stdout)
@@ -421,45 +459,53 @@ class RbdFioTest(RbdTest):
                       description: str = None):
         if description:
             title = "%s (%s)" % (title, description)
-        table = prettytable.PrettyTable(title=title)
-        table.field_names = ["stat", "min", "max", "mean",
-                             "median", "std_dev",
-                             "max 90%", "min 90%", "total"]
-        table.float_format = ".4"
 
-        s = array_stats([float(i["bw_bytes"]) / 1000_000 for i in cls.data])
-        table.add_row(["bandwidth (MB/s)",
-                       s['min'], s['max'], s['mean'],
-                       s['median'], s['std_dev'],
-                       s['max_90'], s['min_90'], 'N/A'])
+        for op in cls.data.keys():
+            op_title = "%s op=%s" % (title, op)
 
-        s = array_stats([float(i["runtime"]) / 1000 for i in cls.data])
-        table.add_row(["duration (s)",
-                      s['min'], s['max'], s['mean'],
-                      s['median'], s['std_dev'],
-                      s['max_90'], s['min_90'], s['sum']])
+            table = prettytable.PrettyTable(title=op_title)
+            table.field_names = ["stat", "min", "max", "mean",
+                                 "median", "std_dev",
+                                 "max 90%", "min 90%", "total"]
+            table.float_format = ".4"
 
-        s = array_stats([i["error"] for i in cls.data])
-        table.add_row(["errors",
-                       s['min'], s['max'], s['mean'],
-                       s['median'], s['std_dev'],
-                       s['max_90'], s['min_90'], s['sum']])
+            op_data = cls.data[op]
 
-        s = array_stats([i["short_ios"] for i in cls.data])
-        table.add_row(["incomplete IOs",
-                       s['min'], s['max'], s['mean'],
-                       s['median'], s['std_dev'],
-                       s['max_90'], s['min_90'], s['sum']])
+            s = array_stats([float(i["bw_bytes"]) / 1000_000 for i in op_data])
+            table.add_row(["bandwidth (MB/s)",
+                           s['min'], s['max'], s['mean'],
+                           s['median'], s['std_dev'],
+                           s['max_90'], s['min_90'], 'N/A'])
 
-        s = array_stats([i["dropped_ios"] for i in cls.data])
-        table.add_row(["dropped IOs",
-                       s['min'], s['max'], s['mean'],
-                       s['median'], s['std_dev'],
-                       s['max_90'], s['min_90'], s['sum']])
-        print(table)
+            s = array_stats([float(i["runtime"]) / 1000 for i in op_data])
+            table.add_row(["duration (s)",
+                          s['min'], s['max'], s['mean'],
+                          s['median'], s['std_dev'],
+                          s['max_90'], s['min_90'], s['sum']])
+
+            s = array_stats([i["error"] for i in op_data])
+            table.add_row(["errors",
+                           s['min'], s['max'], s['mean'],
+                           s['median'], s['std_dev'],
+                           s['max_90'], s['min_90'], s['sum']])
+
+            s = array_stats([i["short_ios"] for i in op_data])
+            table.add_row(["incomplete IOs",
+                           s['min'], s['max'], s['mean'],
+                           s['median'], s['std_dev'],
+                           s['max_90'], s['min_90'], s['sum']])
+
+            s = array_stats([i["dropped_ios"] for i in op_data])
+            table.add_row(["dropped IOs",
+                           s['min'], s['max'], s['mean'],
+                           s['median'], s['std_dev'],
+                           s['max_90'], s['min_90'], s['sum']])
+            print(table)
 
 
 class RbdStampTest(RbdTest):
+    requires_disk_write = True
+
     @staticmethod
     def _rand_float(min_val: float, max_val: float):
         return min_val + (random.random() * max_val - min_val)
@@ -586,8 +632,10 @@ if __name__ == '__main__':
         image_prefix=args.image_prefix,
         bs=args.bs,
         op=args.op,
+        verify=args.fio_verify,
         iodepth=args.fio_depth,
-        map_timeout=args.map_timeout
+        map_timeout=args.map_timeout,
+        skip_enabling_disk=args.skip_enabling_disk,
     )
 
     try:
