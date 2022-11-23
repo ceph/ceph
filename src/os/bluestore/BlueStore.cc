@@ -12969,10 +12969,10 @@ void BlueStore::_txc_finish(TransContext *txc)
   dout(20) << __func__ << " " << txc << " onodes " << txc->onodes << dendl;
   ceph_assert(txc->get_state() == TransContext::STATE_FINISHING);
 
-  for (auto& sb : txc->shared_blobs_written) {
-    sb->finish_write(txc->seq);
+  for (auto& sb : txc->blobs_written) {
+    sb->shared_blob->finish_write(txc->seq);
   }
-  txc->shared_blobs_written.clear();
+  txc->blobs_written.clear();
 
   while (!txc->removed_collections.empty()) {
     _queue_reap_collection(txc->removed_collections.front());
