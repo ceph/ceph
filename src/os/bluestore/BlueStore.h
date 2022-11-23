@@ -525,8 +525,6 @@ public:
     void put_ref(uint64_t offset, uint32_t length,
 		 PExtentVector *r, bool *unshare);
 
-    void finish_write(uint64_t seq);
-
     friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
       return l.get_sbid() == r.get_sbid();
     }
@@ -677,7 +675,8 @@ public:
     /// put logical references, and get back any released extents
     bool put_ref(Collection *coll, uint32_t offset, uint32_t length,
 		 PExtentVector *r);
-
+    // update caches to reflect content up to seq
+    void finish_write(uint64_t seq);
     /// split the blob
     void split(Collection *coll, uint32_t blob_offset, Blob *o);
 
