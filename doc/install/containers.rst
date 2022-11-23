@@ -19,7 +19,7 @@ Ceph Container Images
 Official Releases
 -----------------
 
-Ceph Container images are available from both Quay and Docker Hub::
+Ceph Container images are available from Quay:
 
   https://quay.io/repository/ceph/ceph
   https://hub.docker.com/r/ceph
