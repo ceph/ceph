@@ -773,7 +773,8 @@ class FSTop(object):
             else:
                 sort_arg = current_states['last_field']
                 sort_list = sorted(list(stats_json[GLOBAL_METRICS_KEY].get(fs_name, {}).keys()),
-                                   key=lambda x: metrics_dict[fs_name][x][sort_arg], reverse=True)
+                                   key=lambda x: metrics_dict[fs_name].get(x, {}).get(sort_arg, 0),
+                                   reverse=True)
             if current_states['limit'] is not None and int(current_states['limit']) < client_cnt:
                 sort_list = sort_list[0:int(current_states['limit'])]
             for client_id in sort_list:
