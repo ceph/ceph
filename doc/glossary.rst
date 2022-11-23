@@ -116,6 +116,9 @@
                 Gateway.
 
 	Ceph Object Store
+                A Ceph Object Store consists of a :term:`Ceph Storage Cluster`
+                and a :term:`Ceph Object Gateway` (RGW).
+
 	:ref:`Ceph OSD<rados_configuration_storage-devices_ceph_osd>`
                 Ceph **O**\bject **S**\torage **D**\aemon. The Ceph OSD
                 software, which interacts with logical disks (:term:`OSD`).
