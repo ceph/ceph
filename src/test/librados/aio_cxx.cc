@@ -14,6 +14,7 @@
 #include "include/stringify.h"
 #include "include/scope_guard.h"
 #include "common/ceph_mutex.h"
+#include <fmt/format.h>
 
 #include "test_cxx.h"
 #include "crimson_utils.h"
@@ -2295,9 +2296,14 @@ TEST(LibRadosAio, SimplePoolEIOFlag) {
     ASSERT_TRUE(my_completion);
 
     bufferlist empty;
-	  ASSERT_EQ(0, test_data.m_cluster.mon_command(
-	    "{\"prefix\": \"osd pool set\", \"pool\": \"" + test_data.m_pool_name +
-	    "\", \"var\": \"eio\", \"val\": \"true\"}", empty, nullptr, nullptr));
+    ASSERT_EQ(0, test_data.m_cluster.mon_command(
+      fmt::format(R"({{
+                  "prefix": "osd pool set",
+                  "pool": "{}",
+                  "var": "eio",
+                  "val": "true"
+                  }})", test_data.m_pool_name),
+      empty, nullptr, nullptr));
 
     bufferlist bl;
     bl.append("some data");
@@ -2338,8 +2344,13 @@ TEST(LibRadosAio, PoolEIOFlag) {
 	[&] {
 	  bufferlist empty;
 	  ASSERT_EQ(0, test_data.m_cluster.mon_command(
-	    "{\"prefix\": \"osd pool set\", \"pool\": \"" + test_data.m_pool_name +
-	    "\", \"var\": \"eio\", \"val\": \"true\"}", empty, nullptr, nullptr));
+	    fmt::format(R"({{
+	                "prefix": "osd pool set",
+	                "pool": "{}",
+	                "var": "eio",
+	                "val": "true"
+	                }})", test_data.m_pool_name),
+	    empty, nullptr, nullptr));
 	});
     }
 
