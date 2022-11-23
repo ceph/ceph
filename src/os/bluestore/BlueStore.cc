@@ -2148,23 +2148,6 @@ void BlueStore::SharedBlob::put_ref(uint64_t offset, uint32_t length,
     unshare && !*unshare ? unshare : nullptr);
 }
 
-void BlueStore::SharedBlob::finish_write(uint64_t seq)
-{
-  while (true) {
-    BufferCacheShard *cache = coll->cache;
-    std::lock_guard l(cache->lock);
-    if (coll->cache != cache) {
-      dout(20) << __func__
-	       << " raced with sb cache update, was " << cache
-	       << ", now " << coll->cache << ", retrying"
-	       << dendl;
-      continue;
-    }
-    bc._finish_write(cache, seq);
-    break;
-  }
-}
-
 // SharedBlobSet
 
 #undef dout_prefix
@@ -2374,6 +2357,24 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
     }
   }
   return true;
+}
+
+void BlueStore::Blob::finish_write(uint64_t seq)
+{
+  while (true) {
+    auto coll = shared_blob->coll;
+    BufferCacheShard *cache = coll->cache;
+    std::lock_guard l(cache->lock);
+    if (coll->cache != cache) {
+      dout(20) << __func__
+	       << " raced with sb cache update, was " << cache
+	       << ", now " << coll->cache << ", retrying"
+	       << dendl;
+      continue;
+    }
+    shared_blob->bc._finish_write(cache, seq);
+    break;
+  }
 }
 
 void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
@@ -12970,7 +12971,7 @@ void BlueStore::_txc_finish(TransContext *txc)
   ceph_assert(txc->get_state() == TransContext::STATE_FINISHING);
 
   for (auto& sb : txc->blobs_written) {
-    sb->shared_blob->finish_write(txc->seq);
+    sb->finish_write(txc->seq);
   }
   txc->blobs_written.clear();
 
