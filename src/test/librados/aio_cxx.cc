@@ -2287,6 +2287,30 @@ void pool_io_callback(completion_t cb, void *arg /* Actually AioCompletion* */)
   }
 }
 
+TEST(LibRadosAio, SimplePoolEIOFlag) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+
+    auto my_completion = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+    ASSERT_TRUE(my_completion);
+
+    bufferlist empty;
+	  ASSERT_EQ(0, test_data.m_cluster.mon_command(
+	    "{\"prefix\": \"osd pool set\", \"pool\": \"" + test_data.m_pool_name +
+	    "\", \"var\": \"eio\", \"val\": \"true\"}", empty, nullptr, nullptr));
+
+    bufferlist bl;
+    bl.append("some data");
+
+    ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion.get(),
+                                             bl, bl.length(), 0));
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, my_completion->wait_for_complete());
+    }
+    ASSERT_EQ(-EIO, my_completion->get_return_value());
+}
+
 TEST(LibRadosAio, PoolEIOFlag) {
   AioTestDataPP test_data;
   ASSERT_EQ("", test_data.init());
