@@ -1220,21 +1220,18 @@ compare_images()
 {
     local pool=$1
     local image=$2
-    local ret=0
+    local out
+    local cluster
 
-    local rmt_export=${TEMPDIR}/$(mkfname ${CLUSTER2}-${pool}-${image}.export)
-    local loc_export=${TEMPDIR}/$(mkfname ${CLUSTER1}-${pool}-${image}.export)
-
-    rm -f ${rmt_export} ${loc_export}
-    rbd --cluster ${CLUSTER2} export ${pool}/${image} ${rmt_export}
-    rbd --cluster ${CLUSTER1} export ${pool}/${image} ${loc_export}
-    if ! cmp ${rmt_export} ${loc_export}
-    then
-        show_diff ${rmt_export} ${loc_export}
-        ret=1
+    cluster=${CLUSTER1}
+    out=$(rbd --cluster ${CLUSTER1} mirror image status ${pool}/${image})
+    if [ $(echo ${out} | grep -q 'local image is primary') ]; then
+        cluster=${CLUSTER2}
     fi
-    rm -f ${rmt_export} ${loc_export}
-    return ${ret}
+
+    rbd --cluster ${cluster} mirror image checksum ${pool}/${image}
+
+    return $?
 }
 
 compare_image_snapshots()
