@@ -34,7 +34,8 @@ class Protocol {
     // seastar::parallel_for_each(). otherwise, we could erase a connection in
     // the container when seastar::parallel_for_each() is still iterating in
     // it. that'd lead to a segfault.
-    return seastar::yield().then([this, dispatch_reset] {
+    return seastar::yield(
+    ).then([this, dispatch_reset, conn_ref = conn.shared_from_this()] {
       close(dispatch_reset);
       // it can happen if close_clean() is called inside Dispatcher::ms_handle_reset()
       // which will otherwise result in deadlock
