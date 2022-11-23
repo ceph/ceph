@@ -72,18 +72,12 @@ class XFSTestsDev(CephFSTestCase):
         # read var name as "test dir's mount path"
         self.test_dirs_mount_path = self.mount_a.client_remote.mkdtemp(
             suffix=self.test_dirname)
-        self.mount_a.run_shell(['sudo','ln','-s',join(self.mount_a.mountpoint,
-                                                      self.test_dirname),
-                                self.test_dirs_mount_path])
 
         self.scratch_dirname = 'scratch'
         self.mount_a.run_shell(['mkdir', self.scratch_dirname])
         # read var name as "scratch dir's mount path"
         self.scratch_dirs_mount_path = self.mount_a.client_remote.mkdtemp(
             suffix=self.scratch_dirname)
-        self.mount_a.run_shell(['sudo','ln','-s',join(self.mount_a.mountpoint,
-                                                      self.scratch_dirname),
-                                self.scratch_dirs_mount_path])
 
     def install_deps(self):
         from teuthology.misc import get_system_type
