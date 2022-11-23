@@ -649,7 +649,7 @@ private:
     _future finally(FuncT &&func) {
       return this->then_wrapped(
         [func = std::forward<FuncT>(func)](auto &&result) mutable noexcept {
-        if constexpr (seastar::is_future<std::invoke_result_t<FuncT>>::value) {
+        if constexpr (seastar::InvokeReturnsAnyFuture<FuncT>) {
           return ::seastar::futurize_invoke(std::forward<FuncT>(func)).then_wrapped(
             [result = std::move(result)](auto&& f_res) mutable {
             // TODO: f_res.failed()
