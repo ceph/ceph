@@ -41,8 +41,6 @@ import boto.s3.tagging
 # configure logging for the tests module
 log = logging.getLogger(__name__)
 
-skip_amqp_ssl = True
-
 TOPIC_SUFFIX = "_topic"
 NOTIFICATION_SUFFIX = "_notif"
 
@@ -196,10 +194,15 @@ class AMQPReceiver(object):
             ssl_options = None
 
         if external_endpoint_address:
-            params = pika.URLParameters(external_endpoint_address, ssl_options=ssl_options)
+            if ssl_options:
+                # this is currently not working due to: https://github.com/pika/pika/issues/1192
+                params = pika.URLParameters(external_endpoint_address, ssl_options=ssl_options)
+            else:
+                params = pika.URLParameters(external_endpoint_address)
         else:
             hostname = get_ip()
             params = pika.ConnectionParameters(host=hostname, port=rabbitmq_port, ssl_options=ssl_options)
+
         remaining_retries = 10
         while remaining_retries > 0:
             try:
@@ -1768,7 +1771,7 @@ def test_ps_s3_lifecycle_on_master():
 def ps_s3_creation_triggers_on_master(external_endpoint_address=None, ca_location=None, verify_ssl='true'):
     """ test object creation s3 notifications in using put/copy/post on master"""
     
-    if not external_endpoint_address and not skip_amqp_ssl:
+    if not external_endpoint_address:
         hostname = 'localhost'
         proc = init_rabbitmq()
         if proc is  None:
@@ -1858,13 +1861,11 @@ def ps_s3_creation_triggers_on_master(external_endpoint_address=None, ca_locatio
 
 @attr('amqp_test')
 def test_ps_s3_creation_triggers_on_master():
-    ps_s3_creation_triggers_on_master()
+    ps_s3_creation_triggers_on_master(external_endpoint_address="amqp://localhost:5672")
 
 
 @attr('amqp_ssl_test')
 def test_ps_s3_creation_triggers_on_master_external():
-    if skip_amqp_ssl:
-        return SkipTest('This is an AMQP SSL test.')
 
     from distutils.util import strtobool
 
@@ -1884,13 +1885,9 @@ def test_ps_s3_creation_triggers_on_master_external():
         return SkipTest("Set AMQP_EXTERNAL_ENDPOINT to a valid external AMQP endpoint url for this test to run")
 
 
-@attr('amqp_ssl_test')
-def test_ps_s3_creation_triggers_on_master_ssl():
-    if skip_amqp_ssl:
-        return SkipTest('This is an AMQP SSL test.')
+def generate_private_key(tempdir):
 
     import datetime
-    import textwrap
     import stat
     from cryptography import x509
     from cryptography.x509.oid import NameOID
@@ -1898,84 +1895,96 @@ def test_ps_s3_creation_triggers_on_master_ssl():
     from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
+
+    # modify permissions to ensure that the broker user can access them
+    os.chmod(tempdir, mode=stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+    CACERTFILE = os.path.join(tempdir, 'ca_certificate.pem')
+    CERTFILE = os.path.join(tempdir, 'server_certificate.pem')
+    KEYFILE = os.path.join(tempdir, 'server_key.pem')
+
+    root_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+        backend=default_backend()
+    )
+    subject = issuer = x509.Name([
+        x509.NameAttribute(NameOID.COUNTRY_NAME, u"UK"),
+        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"Oxfordshire"),
+        x509.NameAttribute(NameOID.LOCALITY_NAME, u"Harwell"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Rosalind Franklin Institute"),
+        x509.NameAttribute(NameOID.COMMON_NAME, u"RFI CA"),
+    ])
+    root_cert = x509.CertificateBuilder().subject_name(
+        subject
+    ).issuer_name(
+        issuer
+    ).public_key(
+        root_key.public_key()
+    ).serial_number(
+        x509.random_serial_number()
+    ).not_valid_before(
+        datetime.datetime.utcnow()
+    ).not_valid_after(
+        datetime.datetime.utcnow() + datetime.timedelta(days=3650)
+    ).add_extension(
+        x509.BasicConstraints(ca=True, path_length=None), critical=True
+    ).sign(root_key, hashes.SHA256(), default_backend())
+    with open(CACERTFILE, "wb") as f:
+        f.write(root_cert.public_bytes(serialization.Encoding.PEM))
+
+    # Now we want to generate a cert from that root
+    cert_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+        backend=default_backend(),
+    )
+    with open(KEYFILE, "wb") as f:
+        f.write(cert_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        ))
+    new_subject = x509.Name([
+        x509.NameAttribute(NameOID.COUNTRY_NAME, u"UK"),
+        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"Oxfordshire"),
+        x509.NameAttribute(NameOID.LOCALITY_NAME, u"Harwell"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Rosalind Franklin Institute"),
+    ])
+    cert = x509.CertificateBuilder().subject_name(
+        new_subject
+    ).issuer_name(
+        root_cert.issuer
+    ).public_key(
+        cert_key.public_key()
+    ).serial_number(
+        x509.random_serial_number()
+    ).not_valid_before(
+        datetime.datetime.utcnow()
+    ).not_valid_after(
+    datetime.datetime.utcnow() + datetime.timedelta(days=30)
+    ).add_extension(
+        x509.SubjectAlternativeName([x509.DNSName(u"localhost")]),
+        critical=False,
+    ).sign(root_key, hashes.SHA256(), default_backend())
+    # Write our certificate out to disk.
+    with open(CERTFILE, "wb") as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
+
+    print("\n\n********private key generated********")
+    print(CACERTFILE, CERTFILE, KEYFILE)
+    print("\n\n")
+    return CACERTFILE, CERTFILE, KEYFILE
+
+
+@attr('amqp_ssl_test')
+def test_ps_s3_creation_triggers_on_master_ssl():
+
+    import textwrap
     from tempfile import TemporaryDirectory
 
     with TemporaryDirectory() as tempdir:
-        # modify permissions to ensure that the rabbitmq user can access them
-        os.chmod(tempdir, mode=stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
-        CACERTFILE = os.path.join(tempdir, 'ca_certificate.pem')
-        CERTFILE = os.path.join(tempdir, 'server_certificate.pem')
-        KEYFILE = os.path.join(tempdir, 'server_key.pem')
+        CACERTFILE, CERTFILE, KEYFILE = generate_private_key(tempdir)
         RABBITMQ_CONF_FILE = os.path.join(tempdir, 'rabbitmq.config')
-
-        root_key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048,
-            backend=default_backend()
-        )
-        subject = issuer = x509.Name([
-            x509.NameAttribute(NameOID.COUNTRY_NAME, u"UK"),
-            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"Oxfordshire"),
-            x509.NameAttribute(NameOID.LOCALITY_NAME, u"Harwell"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Rosalind Franklin Institute"),
-            x509.NameAttribute(NameOID.COMMON_NAME, u"RFI CA"),
-        ])
-        root_cert = x509.CertificateBuilder().subject_name(
-            subject
-        ).issuer_name(
-            issuer
-        ).public_key(
-            root_key.public_key()
-        ).serial_number(
-            x509.random_serial_number()
-        ).not_valid_before(
-            datetime.datetime.utcnow()
-        ).not_valid_after(
-            datetime.datetime.utcnow() + datetime.timedelta(days=3650)
-        ).add_extension(
-            x509.BasicConstraints(ca=True, path_length=None), critical=True
-        ).sign(root_key, hashes.SHA256(), default_backend())
-        with open(CACERTFILE, "wb") as f:
-            f.write(root_cert.public_bytes(serialization.Encoding.PEM))
-
-        # Now we want to generate a cert from that root
-        cert_key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048,
-            backend=default_backend()
-        )
-        with open(KEYFILE, "wb") as f:
-            f.write(cert_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.TraditionalOpenSSL,
-                encryption_algorithm=serialization.NoEncryption(),
-            ))
-        new_subject = x509.Name([
-            x509.NameAttribute(NameOID.COUNTRY_NAME, u"UK"),
-            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"Oxfordshire"),
-            x509.NameAttribute(NameOID.LOCALITY_NAME, u"Harwell"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Rosalind Franklin Institute"),
-        ])
-        cert = x509.CertificateBuilder().subject_name(
-            new_subject
-        ).issuer_name(
-            root_cert.issuer
-        ).public_key(
-            cert_key.public_key()
-        ).serial_number(
-            x509.random_serial_number()
-        ).not_valid_before(
-            datetime.datetime.utcnow()
-        ).not_valid_after(
-        datetime.datetime.utcnow() + datetime.timedelta(days=30)
-        ).add_extension(
-            x509.SubjectAlternativeName([x509.DNSName(u"localhost")]),
-            critical=False,
-        ).sign(root_key, hashes.SHA256(), default_backend())
-        # Write our certificate out to disk.
-        with open(CERTFILE, "wb") as f:
-            f.write(cert.public_bytes(serialization.Encoding.PEM))
-
         with open(RABBITMQ_CONF_FILE, "w") as f:
             # use the old style config format to ensure it also runs on older RabbitMQ versions.
             f.write(textwrap.dedent(f'''
@@ -2729,12 +2738,11 @@ def test_ps_s3_persistent_notification_pushback():
     http_server.close()
 
 
-@attr('manual_test')
+@attr('kafka_test')
 def test_ps_s3_notification_kafka_idle_behaviour():
     """ test pushing kafka s3 notification idle behaviour check """
     # TODO convert this test to actual running test by changing
     # os.system call to verify the process idleness
-    return SkipTest("only used in manual testing")
     conn = connection()
     zonegroup = 'default'
 
@@ -2803,10 +2811,19 @@ def test_ps_s3_notification_kafka_idle_behaviour():
     time.sleep(5)
     receiver.verify_s3_events(keys, exact_match=True, deletions=True, etags=etags)
 
-    print('waiting for 40sec for checking idleness')
-    time.sleep(40)
+    is_idle = False
 
-    os.system("netstat -nnp | grep 9092");
+    while not is_idle:
+        print('waiting for 10sec for checking idleness')
+        time.sleep(10)
+        cmd = "netstat -nnp | grep 9092 | grep radosgw"
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+        out = proc.communicate()[0]
+        if len(out) == 0:
+            is_idle = True
+        else:
+            print("radosgw<->kafka connection is not idle")
+            print(out.decode('utf-8'))
 
     # do the process of uploading an object and checking for notification again
     number_of_objects = 10
@@ -3168,6 +3185,14 @@ def persistent_notification(endpoint_type):
         endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange='+exchange+'&amqp-ack-level=broker'+'&persistent=true'
         # amqp broker guarantee ordering
         exact_match = True
+    elif endpoint_type == 'kafka':
+        # start amqp receiver
+        task, receiver = create_kafka_receiver_thread(topic_name)
+        task.start()
+        endpoint_address = 'kafka://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker'+'&persistent=true'
+        # amqp broker guarantee ordering
+        exact_match = True
     else:
         return SkipTest('Unknown endpoint type: ' + endpoint_type)
 
@@ -3245,15 +3270,14 @@ def test_ps_s3_persistent_notification_http():
 @attr('amqp_test')
 def test_ps_s3_persistent_notification_amqp():
     """ test pushing persistent notification amqp """
-
     persistent_notification('amqp')
 
-'''
+
 @attr('kafka_test')
 def test_ps_s3_persistent_notification_kafka():
-    """ test pushing persistent notification http """
+    """ test pushing persistent notification kafka """
     persistent_notification('kafka')
-'''
+
 
 def random_string(length):
     import string
@@ -3648,36 +3672,32 @@ def test_ps_s3_multiple_topics_notification():
     http_server.close()
 
 
-@attr('modification_required')
 def kafka_security(security_type):
-    """ test pushing kafka s3 notification on master """
-    return SkipTest('This test is yet to be modified.')
-
+    """ test pushing kafka s3 notification securly to master """
     conn = connection()
-    if security_type == 'SSL_SASL' and master_zone.secure_conn is None:
-        return SkipTest("secure connection is needed to test SASL_SSL security")
     zonegroup = 'default'
     # create bucket
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(bucket_name)
     # name is constant for manual testing
     topic_name = bucket_name+'_topic'
-    # create consumer on the topic
-    task, receiver = create_kafka_receiver_thread(topic_name)
-    task.start()
     # create s3 topic
     if security_type == 'SSL_SASL':
         endpoint_address = 'kafka://alice:alice-secret@' + kafka_server + ':9094'
-    else:
-        # ssl only
+    elif security_type == 'SSL':
         endpoint_address = 'kafka://' + kafka_server + ':9093'
-    KAFKA_DIR = os.environ['KAFKA_DIR']
-    # without acks from broker, with root CA
-    endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=none&use-ssl=true&ca-location='+KAFKA_DIR+'rootCA.crt'
-    if security_type == 'SSL_SASL':
-        topic_conf = PSTopicS3(master_zone.secure_conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     else:
-        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        assert False, 'unknown security method '+security_type
+
+    KAFKA_DIR = os.environ['KAFKA_DIR']
+    endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&ca-location='+KAFKA_DIR+"/y-ca.crt"
+
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    
+    # create consumer on the topic
+    task, receiver = create_kafka_receiver_thread(topic_name)
+    task.start()
+    
     topic_arn = topic_conf.set_config()
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
@@ -3730,14 +3750,12 @@ def kafka_security(security_type):
         stop_kafka_receiver(receiver, task)
 
 
-@attr('modification_required')
+@attr('kafka_ssl_test')
 def test_ps_s3_notification_push_kafka_security_ssl():
-    return SkipTest('This test is yet to be modified.')
     kafka_security('SSL')
 
 
-@attr('modification_required')
+@attr('kafka_ssl_test')
 def test_ps_s3_notification_push_kafka_security_ssl_sasl():
-    return SkipTest('This test is yet to be modified.')
     kafka_security('SSL_SASL')
 
