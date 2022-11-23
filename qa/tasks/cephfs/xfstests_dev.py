@@ -143,8 +143,8 @@ class XFSTestsDev(CephFSTestCase):
             export FSTYP=ceph
             export TEST_DEV={}
             export TEST_DIR={}
-            #export SCRATCH_DEV={}
-            #export SCRATCH_MNT={}
+            export SCRATCH_DEV={}
+            export SCRATCH_MNT={}
             export TEST_FS_MOUNT_OPTS="-o name=admin,secret={}"
             ''').format(self.test_dev, self.test_dirs_mount_path, self.scratch_dev,
                         self.scratch_dirs_mount_path, self.get_admin_key())
