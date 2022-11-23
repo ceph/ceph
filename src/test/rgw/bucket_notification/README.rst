@@ -1,44 +1,50 @@
-============================
- Bucket Notification tests
-============================
+==========================
+ Bucket Notification Tests
+==========================
 
 You will need to use the sample configuration file named ``bntests.conf.SAMPLE``
 that has been provided at ``/path/to/ceph/src/test/rgw/bucket_notification/``. You can also copy this file to the directory where you are
 running the tests and modify it if needed. This file can be used to run the bucket notification tests on a Ceph cluster started
 with vstart.
+For the tests covering Kafka and RabbitMQ security, the RGW will need to accept use/password without TLS connection between the client and the RGW.
+So, the cluster will have to be started with the following ``rgw_allow_notification_secrets_in_cleartext`` parameter set to ``true``.
+For example::
 
-============
-Kafka tests
-============
+  MON=1 OSD=1 MDS=0 MGR=1 RGW=1 ../src/vstart.sh -n -d -o "rgw_allow_notification_secrets_in_cleartext=true"
 
-You also need to install Kafka which can be done by downloading and unzipping from the following::
+===========
+Kafka Tests
+===========
 
-        https://archive.apache.org/dist/kafka/2.6.0/kafka-2.6.0-src.tgz
+You also need to install Kafka which can be downloaded from: https://kafka.apache.org/downloads
 
-Then inside the kafka config directory (``/path/to/kafka-2.6.0-src/config/``) you need to create a file named ``kafka_server_jaas.conf``
-with the following content::
+To test Kafka security, you should first run the ``kafka-security.sh`` script inside the Kafka directory.
 
-        KafkaClient {
-          org.apache.kafka.common.security.plain.PlainLoginModule required
-          username="alice"
-          password="alice-secret";
-        };
+Then edit the Kafka server properties file (``/path/to/kafka/config/server.properties``)
+to have the following lines::
 
-After creating this above file run the following command in kafka directory (``/path/to/kafka-2.6.0-src/``)::
+  listeners=PLAINTEXT://localhost:9092,SSL://localhost:9093,SASL_SSL://localhost:9094
+  ssl.keystore.location=/home/ylifshit/kafka-3.3.1-src/server.keystore.jks 
+  ssl.keystore.password=mypassword 
+  ssl.key.password=mypassword 
+  ssl.truststore.location=/home/ylifshit/kafka-3.3.1-src/server.truststore.jks 
+  ssl.truststore.password=mypassword 
+  sasl.enabled.mechanisms=PLAIN
+  listener.name.sasl_ssl.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \
+     username="alice" \
+     password="alice-secret" \
+     user_alice="alice-secret";
 
-        ./gradlew jar -PscalaVersion=2.13.2
-
-After following the above steps next is you need to start the Zookeeper and Kafka services.
-Here's the commands which can be used to start these services. For starting 
-Zookeeper service run::
+After following the above steps, start the Zookeeper and Kafka services.
+For starting Zookeeper service run::
 
         bin/zookeeper-server-start.sh config/zookeeper.properties
 
-and then run to start the Kafka service::
+and then start the Kafka service::
 
         bin/kafka-server-start.sh config/server.properties
 
-If you want to run Zookeeper and Kafka services in background add ``-daemon`` at the end of the command like::
+If you want to run Zookeeper and Kafka services in the background add ``-daemon`` at the end of the command like::
 
         bin/zookeeper-server-start.sh -daemon config/zookeeper.properties
 
@@ -46,15 +52,17 @@ and::
 
         bin/kafka-server-start.sh -daemon config/server.properties
 
-After starting vstart, zookeeper and kafka services you're ready to run the Kafka tests::
+After running vstart, Zookeeper, and Kafka services you're ready to run the Kafka tests::
 
         BNTESTS_CONF=bntests.conf python -m nose -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -a 'kafka_test'
 
-After running the tests you need to stop the vstart cluster (``/path/to/ceph/src/stop.sh``), zookeeper and kafka services which could be stopped by ``Ctrl+C``.
+To run the Kafka security test, you also need to provide the test with the location of the Kafka directory::
 
-===============
-RabbitMQ tests
-===============
+        KAFKA_DIR=/path/to/kafkaBNTESTS_CONF=bntests.conf python -m nose -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -a 'kafka_ssl_test'
+
+==============
+RabbitMQ Tests
+==============
 
 You need to install RabbitMQ in the following way::
 
@@ -64,7 +72,7 @@ Then you need to run the following command::
 
         sudo chkconfig rabbitmq-server on
 
-Finally to start the RabbitMQ server you need to run the following command::
+Finally, to start the RabbitMQ server you need to run the following command::
 
         sudo /sbin/service rabbitmq-server start
 
@@ -72,10 +80,17 @@ To confirm that the RabbitMQ server is running you can run the following command
 
         sudo /sbin/service rabbitmq-server status
 
-After starting vstart and RabbitMQ server you're ready to run the AMQP tests::
+After running vstart and RabbitMQ server you're ready to run the AMQP tests::
 
         BNTESTS_CONF=bntests.conf python -m nose -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -a 'amqp_test'
 
 After running the tests you need to stop the vstart cluster (``/path/to/ceph/src/stop.sh``) and the RabbitMQ server by running the following command::
 
         sudo /sbin/service rabbitmq-server stop
+
+To run the RabbitMQ SSL security tests use the following::
+
+        BNTESTS_CONF=bntests.conf python -m nose -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -a 'amqp_ssl_test'
+
+During these tests, the test script will restart the RabbitMQ server with the correct security configuration (``sudo`` privileges will be needed).
+
