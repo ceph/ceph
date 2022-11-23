@@ -37,10 +37,11 @@
                 ``libvirt``.
 
 	Ceph Client
-                The collection of Ceph components which can access a Ceph
-                Storage Cluster. These include the Ceph Object Gateway, the
-                Ceph Block Device, the Ceph File System, and their
-                corresponding libraries, kernel modules, and FUSEs.
+                Any of the Ceph components that can access a Ceph Storage
+                Cluster. This includes the Ceph Object Gateway, the Ceph Block
+                Device, the Ceph File System, and their corresponding
+                libraries. It also includes kernel modules, and FUSEs
+                (Filesystems in USERspace).
 
 	Ceph Client Libraries
                 The collection of libraries that can be used to interact with
