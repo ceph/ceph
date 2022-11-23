@@ -493,7 +493,6 @@ public:
       uint64_t sbid_unloaded;              ///< sbid if persistent isn't loaded
       bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
     };
-    BufferSpace bc;             ///< buffer cache
 
     SharedBlob(Collection *_coll) : coll(_coll), sbid_unloaded(0) {
       if (get_cache()) {
@@ -600,7 +599,7 @@ public:
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
     SharedBlobRef shared_blob;      ///< shared blob state (if any)
-
+    BufferSpace bc;
   private:
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
 #ifdef CACHE_BLOB_BL
@@ -634,7 +633,7 @@ public:
     bool can_split() const {
       std::lock_guard l(shared_blob->get_cache()->lock);
       // splitting a BufferSpace writing list is too hard; don't try.
-      return shared_blob->bc.writing.empty() &&
+      return bc.writing.empty() &&
              used_in_blob.can_split() &&
              get_blob().can_split();
     }
@@ -687,7 +686,7 @@ public:
       if (--nref == 0)
 	delete this;
     }
-
+    ~Blob();
 
 #ifdef CACHE_BLOB_BL
     void _encode() const {
@@ -2813,7 +2812,7 @@ private:
     uint64_t offset,
     ceph::buffer::list& bl,
     unsigned flags) {
-    b->shared_blob->bc.write(b->shared_blob->get_cache(), txc->seq, offset, bl,
+    b->bc.write(b->shared_blob->get_cache(), txc->seq, offset, bl,
 			     flags);
     txc->blobs_written.insert(b);
   }
