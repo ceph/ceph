@@ -4,18 +4,24 @@
 
 .. index:: Ceph Block Device; introduction
 
-A block is a sequence of bytes (often 512).
-Block-based storage interfaces are a mature and common way to store data on
-media including HDDs, SSDs, CDs, floppy disks, and even tape.
-The ubiquity of block device interfaces is a perfect fit for interacting
-with mass data storage including Ceph.
+**rbd** is a utility that can manipulate rados block device (RBD) images. It is
+used by the Linux rbd driver and the rbd storage driver for QEMU/KVM. RBD
+images are simple block devices that are striped over objects and stored in a
+RADOS object store. 
 
-Ceph block devices are thin-provisioned, resizable, and store data striped over
-multiple OSDs.  Ceph block devices leverage
+RBD is a service that provides thin-provisioned, resizable block devices whose
+features include snapshotting and cloning. 
+
+Block-based storage interfaces are a mature and common way to store data on
+media including HDDs, SSDs, CDs, floppy disks, and even tape. The ubiquity of
+block device interfaces is a perfect fit for interacting with mass data storage
+including Ceph.
+
+RBD stores data striped over multiple OSDs. Ceph block devices leverage
 :abbr:`RADOS (Reliable Autonomic Distributed Object Store)` capabilities
-including snapshotting, replication and strong consistency. Ceph block
-storage clients communicate with Ceph clusters through kernel modules or
-the ``librbd`` library.
+including snapshotting and replication, and they provide strong consistency.
+Ceph block storage clients communicate with Ceph clusters by means of a Linux
+kernel module or the ``librbd`` library.
 
 .. ditaa::
 
@@ -70,3 +76,4 @@ to operate the :ref:`Ceph RADOS Gateway <object-gateway>`, the
 .. _QEMU: ./qemu-rbd/
 .. _OpenStack: ./rbd-openstack
 .. _CloudStack: ./rbd-cloudstack
+
