@@ -142,6 +142,17 @@ PG::PG(
       obc_registry,
       *backend.get(),
       *this},
+    osdriver(
+      &shard_services.get_store(),
+      coll_ref,
+      pgid.make_pgmeta_oid()),
+    snap_mapper(
+      this->shard_services.get_cct(),
+      &osdriver,
+      pgid.ps(),
+      pgid.get_split_bits(pool.get_pg_num()),
+      pgid.pool(),
+      pgid.shard),
     wait_for_active_blocker(this)
 {
   peering_state.set_backend_predicates(
