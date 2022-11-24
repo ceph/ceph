@@ -167,7 +167,7 @@ class CephadmConfigChecks:
                                    "os_subscription",
                                    self._check_subscription),
             CephadmCheckDefinition(mgr, "CEPHADM_CHECK_PUBLIC_MEMBERSHIP",
-                                   "check that all hosts have a NIC on the Ceph public_netork",
+                                   "check that all hosts have a NIC on the Ceph public_network",
                                    "public_network",
                                    self._check_public_network),
             CephadmCheckDefinition(mgr, "CEPHADM_CHECK_MTU",
