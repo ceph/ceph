@@ -953,6 +953,10 @@ class TestFsAuthorize(CapsHelper):
         self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
 
     def test_single_path_rootsquash(self):
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("only FUSE client has CEPHFS_FEATURE_MDS_AUTH_CAPS "
+                          "needed to enforce root_squash MDS caps")
+
         filedata, filename = 'some data on fs 1', 'file_on_fs1'
         filepath = os_path_join(self.mount_a.hostfs_mntpt, filename)
         self.mount_a.write_file(filepath, filedata)
@@ -976,6 +980,10 @@ class TestFsAuthorize(CapsHelper):
         to a file. And after client remount, the non-root user can read the data that
         was previously written by it. https://tracker.ceph.com/issues/56067
         """
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("only FUSE client has CEPHFS_FEATURE_MDS_AUTH_CAPS "
+                          "needed to enforce root_squash MDS caps")
+
         keyring = self.fs.authorize(self.client_id, ('/', 'rw', 'root_squash'))
         keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
         self.mount_a.remount(client_id=self.client_id,
