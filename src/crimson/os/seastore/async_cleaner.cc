@@ -1052,13 +1052,14 @@ double SegmentCleaner::calc_gc_benefit_cost(
 
 SegmentCleaner::do_reclaim_space_ret
 SegmentCleaner::do_reclaim_space(
+    std::optional<reclaim_state_t>& state,
     const std::vector<CachedExtentRef> &backref_extents,
     const backref_pin_list_t &pin_list,
     std::size_t &reclaimed,
     std::size_t &runs)
 {
   return repeat_eagain([this, &backref_extents,
-                        &pin_list, &reclaimed, &runs] {
+                        &pin_list, &reclaimed, &runs, &state] {
     reclaimed = 0;
     runs++;
     auto src = Transaction::src_t::CLEANER;
@@ -1072,17 +1073,17 @@ SegmentCleaner::do_reclaim_space(
     return extent_callback->with_transaction_intr(
       src,
       "clean_reclaim_space",
-      [this, &backref_extents, &pin_list, &reclaimed](auto &t)
+      [this, &backref_extents, &pin_list, &reclaimed, &state](auto &t)
     {
       return seastar::do_with(
         std::vector<CachedExtentRef>(backref_extents),
-        [this, &t, &reclaimed, &pin_list](auto &extents)
+        [this, &t, &reclaimed, &pin_list, &state](auto &extents)
       {
         LOG_PREFIX(SegmentCleaner::do_reclaim_space);
         // calculate live extents
         auto cached_backref_entries =
           backref_manager.get_cached_backref_entries_in_range(
-            reclaim_state->start_pos, reclaim_state->end_pos);
+            state->start_pos, state->end_pos);
         backref_entry_query_set_t backref_entries;
         for (auto &pin : pin_list) {
           backref_entries.emplace(
@@ -1129,17 +1130,17 @@ SegmentCleaner::do_reclaim_space(
 	      }
 	    });
 	  });
-	}).si_then([FNAME, &extents, this, &reclaimed, &t] {
+	}).si_then([FNAME, &extents, this, &reclaimed, &t, &state] {
           DEBUGT("reclaim {} extents", t, extents.size());
           // rewrite live extents
-          auto modify_time = segments[reclaim_state->get_segment_id()].modify_time;
+          auto modify_time = segments[state->get_segment_id()].modify_time;
           return trans_intr::do_for_each(
             extents,
-            [this, modify_time, &t, &reclaimed](auto ext)
+            [this, modify_time, &t, &reclaimed, &state](auto ext)
           {
             reclaimed += ext->get_length();
             return extent_callback->rewrite_extent(
-                t, ext, reclaim_state->target_generation, modify_time);
+                t, ext, state->target_generation, modify_time);
           });
         });
       }).si_then([this, &t] {
@@ -1149,27 +1150,14 @@ SegmentCleaner::do_reclaim_space(
   });
 }
 
-SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
+SegmentCleaner::clean_space_ret
+SegmentCleaner::clean_space_impl(std::optional<reclaim_state_t>& state)
 {
-  LOG_PREFIX(SegmentCleaner::clean_space);
-  assert(background_callback->is_ready());
-  if (!reclaim_state) {
-    segment_id_t seg_id = get_next_reclaim_segment();
-    auto &segment_info = segments[seg_id];
-    INFO("reclaim {} {} start, usage={}, time_bound={}",
-         seg_id, segment_info,
-         space_tracker->calc_utilization(seg_id),
-         sea_time_point_printer_t{segments.get_time_bound()});
-    ceph_assert(segment_info.is_closed());
-    reclaim_state = reclaim_state_t::create(
-        seg_id, segment_info.generation, segments.get_segment_size());
-  }
-  reclaim_state->advance(config.reclaim_bytes_per_cycle);
-
+  LOG_PREFIX(SegmentCleaner::clean_space_impl);
   DEBUG("reclaiming {} {}~{}",
-        rewrite_gen_printer_t{reclaim_state->generation},
-        reclaim_state->start_pos,
-        reclaim_state->end_pos);
+        rewrite_gen_printer_t{state->generation},
+        state->start_pos,
+        state->end_pos);
   double pavail_ratio = get_projected_available_ratio();
   sea_time_point start = seastar::lowres_system_clock::now();
 
@@ -1178,58 +1166,59 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
   // not allowed right now.
   return extent_callback->with_transaction_weak(
       "retrieve_from_backref_tree",
-      [this](auto &t) {
+      [this, &state](auto &t) {
     return backref_manager.get_mappings(
       t,
-      reclaim_state->start_pos,
-      reclaim_state->end_pos
-    ).si_then([this, &t](auto pin_list) {
+      state->start_pos,
+      state->end_pos
+    ).si_then([this, &state, &t](auto pin_list) {
       if (!pin_list.empty()) {
 	auto it = pin_list.begin();
 	auto &first_pin = *it;
-	if (first_pin->get_key() < reclaim_state->start_pos) {
+	if (first_pin->get_key() < state->start_pos) {
 	  // BackrefManager::get_mappings may include a entry before
-	  // reclaim_state->start_pos, which is semantically inconsistent
+	  // state->start_pos, which is semantically inconsistent
 	  // with the requirements of the cleaner
 	  pin_list.erase(it);
 	}
       }
       return backref_manager.retrieve_backref_extents_in_range(
         t,
-        reclaim_state->start_pos,
-        reclaim_state->end_pos
+        state->start_pos,
+        state->end_pos
       ).si_then([pin_list=std::move(pin_list)](auto extents) mutable {
         return std::make_pair(std::move(extents), std::move(pin_list));
       });
     });
-  }).safe_then([this, FNAME, pavail_ratio, start](auto weak_read_ret) {
+  }).safe_then([this, FNAME, pavail_ratio, start, &state](auto weak_read_ret) {
     return seastar::do_with(
       std::move(weak_read_ret.first),
       std::move(weak_read_ret.second),
       (size_t)0,
       (size_t)0,
-      [this, FNAME, pavail_ratio, start](
+      [this, FNAME, pavail_ratio, start, &state](
         auto &backref_extents, auto &pin_list, auto &reclaimed, auto &runs)
     {
       return do_reclaim_space(
+          state,
           backref_extents,
           pin_list,
           reclaimed,
           runs
-      ).safe_then([this, FNAME, pavail_ratio, start, &reclaimed, &runs] {
+      ).safe_then([this, FNAME, pavail_ratio, start, &state, &reclaimed, &runs]() mutable {
         stats.reclaiming_bytes += reclaimed;
         auto d = seastar::lowres_system_clock::now() - start;
         DEBUG("duration: {}, pavail_ratio before: {}, repeats: {}",
               d, pavail_ratio, runs);
-        if (reclaim_state->is_complete()) {
-          auto segment_to_release = reclaim_state->get_segment_id();
+        if (state->is_complete()) {
+          auto segment_to_release = state->get_segment_id();
           INFO("reclaim {} finish, reclaimed alive/total={}",
                segment_to_release,
                stats.reclaiming_bytes/(double)segments.get_segment_size());
           stats.reclaimed_bytes += stats.reclaiming_bytes;
           stats.reclaimed_segment_bytes += segments.get_segment_size();
           stats.reclaiming_bytes = 0;
-          reclaim_state.reset();
+          state.reset();
           return sm_group->release_segment(segment_to_release
           ).handle_error(
             clean_space_ertr::pass_further{},
@@ -1256,6 +1245,48 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
         }
       });
     });
+  });
+
+}
+
+SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
+{
+  LOG_PREFIX(SegmentCleaner::clean_space);
+  assert(background_callback->is_ready());
+  if (!reclaim_state) {
+    segment_id_t seg_id = get_next_reclaim_segment();
+    auto &segment_info = segments[seg_id];
+    INFO("reclaim {} {} start, usage={}, time_bound={}",
+         seg_id, segment_info,
+         space_tracker->calc_utilization(seg_id),
+         sea_time_point_printer_t{segments.get_time_bound()});
+    ceph_assert(segment_info.is_closed());
+    reclaim_state = reclaim_state_t::create(
+        seg_id, segment_info.generation, segments.get_segment_size());
+  }
+  reclaim_state->advance(config.reclaim_bytes_per_cycle);
+  return clean_space_impl(reclaim_state);
+}
+
+SegmentCleaner::evict_cold_data_ret SegmentCleaner::evict_cold_data()
+{
+  LOG_PREFIX(SegmentCleaner::evict_cold_data);
+  assert(background_callback->is_ready());
+  if (!evict_state) {
+    segment_id_t seg_id = get_next_evict_segment();
+    auto &segment_info = segments[seg_id];
+    INFO("evict {} {} start, usage={}, time_bound={}",
+         seg_id, segment_info,
+         space_tracker->calc_utilization(seg_id),
+         sea_time_point_printer_t{segments.get_time_bound()});
+    ceph_assert(segment_info.is_closed());
+    evict_state = reclaim_state_t::create(
+        seg_id, segment_info.generation, segments.get_segment_size());
+  }
+  evict_state->advance(config.reclaim_bytes_per_cycle);
+  return clean_space_impl(evict_state
+  ).safe_then([this] {
+    return clean_space_ertr::make_ready_future<bool>(evict_state.has_value());
   });
 }
 
@@ -1529,6 +1560,8 @@ segment_id_t SegmentCleaner::get_next_reclaim_segment() const
   }
   for (auto& [_id, segment_info] : segments) {
     if (segment_info.is_closed() &&
+	(!evict_state ||
+	 _id != evict_state->get_segment_id()) &&
         (trimmer == nullptr ||
          !segment_info.is_in_journal(trimmer->get_journal_tail()))) {
       double benefit_cost = calc_gc_benefit_cost(_id, now_time, bound_time);
@@ -1548,6 +1581,39 @@ segment_id_t SegmentCleaner::get_next_reclaim_segment() const
     ceph_abort("impossible!");
     return NULL_SEG_ID;
   }
+}
+
+segment_id_t SegmentCleaner::get_next_evict_segment() const
+{
+  auto old_mtime = std::numeric_limits<mod_time_point_t>::max();
+  std::vector<std::pair<segment_id_t, mod_time_point_t>> id_age_by_gen;
+  for (rewrite_gen_t gen = 0;
+       gen < MIN_COLD_GENERATION;
+       gen++) {
+    id_age_by_gen.push_back(std::make_pair(NULL_SEG_ID, old_mtime));
+  }
+
+  for (auto& [_id, segment_info] : segments) {
+    if (segment_info.is_closed() &&
+        (!reclaim_state ||
+         _id != reclaim_state->get_segment_id()) &&
+        (trimmer == nullptr ||
+         !segment_info.is_in_journal(trimmer->get_journal_tail()))) {
+      auto mod = timepoint_to_mod(segment_info.modify_time);
+      auto &gen = id_age_by_gen[segment_info.generation];
+      if (gen.second > mod) {
+	gen.first = _id;
+	gen.second = mod;
+      }
+    }
+  }
+
+  for (int i = id_age_by_gen.size() - 1; i >= 0; i--) {
+    if (id_age_by_gen[i].first != NULL_SEG_ID) {
+      return id_age_by_gen[i].first;
+    }
+  }
+  ceph_abort("impossible");
 }
 
 bool SegmentCleaner::try_reserve_projected_usage(std::size_t projected_usage)

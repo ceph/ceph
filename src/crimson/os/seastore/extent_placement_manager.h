@@ -659,6 +659,7 @@ private:
     std::optional<seastar::promise<>> blocking_io;
     bool is_running_until_halt = false;
     bool start_evict = false;
+    bool evict_on_flight = false;
     state_t state = state_t::STOP;
   };
 

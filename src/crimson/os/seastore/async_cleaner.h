@@ -1156,6 +1156,9 @@ public:
   using clean_space_ret = clean_space_ertr::future<>;
   virtual clean_space_ret clean_space() = 0;
 
+  using evict_cold_data_ret = clean_space_ertr::future<bool>;
+  virtual evict_cold_data_ret evict_cold_data() = 0;
+
   virtual const std::set<device_id_t>& get_device_ids() const = 0;
 
   virtual std::size_t get_reclaim_size_per_cycle() const = 0;
@@ -1346,6 +1349,7 @@ public:
   }
 
   clean_space_ret clean_space() final;
+  evict_cold_data_ret evict_cold_data() final;
 
   const std::set<device_id_t>& get_device_ids() const final {
     return sm_group->get_device_ids();
@@ -1393,6 +1397,7 @@ private:
       const sea_time_point &bound_time) const;
 
   segment_id_t get_next_reclaim_segment() const;
+  segment_id_t get_next_evict_segment() const;
 
   struct reclaim_state_t {
     rewrite_gen_t generation;
@@ -1445,10 +1450,14 @@ private:
     }
   };
   std::optional<reclaim_state_t> reclaim_state;
+  std::optional<reclaim_state_t> evict_state;
+
+  clean_space_ret clean_space_impl(std::optional<reclaim_state_t>& state);
 
   using do_reclaim_space_ertr = base_ertr;
   using do_reclaim_space_ret = do_reclaim_space_ertr::future<>;
   do_reclaim_space_ret do_reclaim_space(
+    std::optional<reclaim_state_t>& state,
     const std::vector<CachedExtentRef> &backref_extents,
     const backref_pin_list_t &pin_list,
     std::size_t &reclaimed,
@@ -1667,6 +1676,10 @@ public:
   }
 
   clean_space_ret clean_space() final;
+  evict_cold_data_ret evict_cold_data() final {
+    // TODO
+    return clean_space_ertr::make_ready_future<bool>(true);
+  }
 
   const std::set<device_id_t>& get_device_ids() const final {
     return rb_group->get_device_ids();

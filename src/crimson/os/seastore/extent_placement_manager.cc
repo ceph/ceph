@@ -583,6 +583,7 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
   } else {
     bool clean_hot = false;
     bool clean_cold = false;
+    bool evict_cold = false;
     bool major_cleaner_should_run =
       major_cleaner->should_clean_space() ||
       should_evict() ||
@@ -602,13 +603,18 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
       }
     }
 
+    if (start_evict || evict_on_flight) {
+      evict_cold = cold_cleaner->try_reserve_projected_usage(
+          major_cleaner->get_reclaim_size_per_cycle());
+    }
+
     if (cold_cleaner &&
         (cold_cleaner->should_clean_space() ||
          (major_cleaner_should_run && !clean_hot))) {
       clean_cold = true;
     }
 
-    ceph_assert(clean_hot || clean_cold);
+    ceph_assert(clean_hot || clean_cold || evict_cold);
     return seastar::when_all(
       [this, clean_hot] {
         if (!clean_hot) {
@@ -636,6 +642,24 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
             "do_background_cycle encountered invalid error in cold clean_space"
           }
         );
+      },
+      [this, evict_cold] {
+        if (!evict_cold) {
+          return seastar::now();
+        }
+        return major_cleaner->evict_cold_data(
+        ).safe_then([this] (bool complete) {
+          evict_on_flight = !complete;
+        }).handle_error(
+          crimson::ct_error::assert_all{
+            "do_background_cycle encountered invalid error in hot evict_cold_data"
+          }
+        ).finally([this] {
+          if (cold_cleaner) {
+            cold_cleaner->release_projected_usage(
+                 major_cleaner->get_reclaim_size_per_cycle());
+          }
+        });
       }
     ).discard_result();
   }
