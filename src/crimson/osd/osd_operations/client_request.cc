@@ -287,6 +287,17 @@ ClientRequest::do_process(
   if (m->has_flag(CEPH_OSD_FLAG_PARALLELEXEC)) {
     return reply_op_error(pg, -EINVAL);
   }
+  const pg_pool_t pool = pg->get_pgpool().info;
+  if (pool.has_flag(pg_pool_t::FLAG_EIO)) {
+    // drop op on the floor; the client will handle returning EIO
+    if (m->has_flag(CEPH_OSD_FLAG_SUPPORTSPOOLEIO)) {
+      logger().debug("discarding op due to pool EIO flag");
+      return seastar::make_ready_future<seq_mode_t>(seq_mode_t::IN_ORDER);
+    } else {
+      logger().debug("replying EIO due to pool EIO flag");
+      return reply_op_error(pg, -EIO);
+    }
+  }
   if (m->get_oid().name.size()
     > crimson::common::local_conf()->osd_max_object_name_len) {
     return reply_op_error(pg, -ENAMETOOLONG);
