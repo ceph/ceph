@@ -34,8 +34,8 @@ bool verify_transport_security(CephContext *cct, const RGWEnv& env) {
 
 // make sure that endpoint is a valid URL
 // make sure that if user/password are passed inside URL, it is over secure connection
-// update rgw_pubsub_sub_dest to indicate that a password is stored in the URL
-bool validate_and_update_endpoint_secret(rgw_pubsub_sub_dest& dest, CephContext *cct, const RGWEnv& env) {
+// update rgw_pubsub_dest to indicate that a password is stored in the URL
+bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct, const RGWEnv& env) {
   if (dest.push_endpoint.empty()) {
       return true;
   }
@@ -57,8 +57,8 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_sub_dest& dest, CephContext 
   return true;
 }
 
-bool topic_has_endpoint_secret(const rgw_pubsub_topic_subs& topic) {
-    return topic.topic.dest.stored_secret;
+bool topic_has_endpoint_secret(const rgw_pubsub_topic& topic) {
+    return topic.dest.stored_secret;
 }
 
 bool topics_has_endpoint_secret(const rgw_pubsub_topics& topics) {
@@ -75,7 +75,7 @@ class RGWPSCreateTopicOp : public RGWOp {
   private:
   std::optional<RGWPubSub> ps;
   std::string topic_name;
-  rgw_pubsub_sub_dest dest;
+  rgw_pubsub_dest dest;
   std::string topic_arn;
   std::string opaque_data;
   
@@ -245,7 +245,7 @@ class RGWPSGetTopicOp : public RGWOp {
   private:
   std::string topic_name;
   std::optional<RGWPubSub> ps;
-  rgw_pubsub_topic_subs result;
+  rgw_pubsub_topic result;
   
   int get_params() {
     const auto topic_arn = rgw::ARN::parse((s->info.args.get("TopicArn")));
@@ -286,7 +286,7 @@ class RGWPSGetTopicOp : public RGWOp {
     const auto f = s->formatter;
     f->open_object_section("GetTopicResponse");
     f->open_object_section("GetTopicResult");
-    encode_xml("Topic", result.topic, f); 
+    encode_xml("Topic", result, f); 
     f->close_section();
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f); 
@@ -322,7 +322,7 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
   private:
   std::string topic_name;
   std::optional<RGWPubSub> ps;
-  rgw_pubsub_topic_subs result;
+  rgw_pubsub_topic result;
   
   int get_params() {
     const auto topic_arn = rgw::ARN::parse((s->info.args.get("TopicArn")));
@@ -363,7 +363,7 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
     const auto f = s->formatter;
     f->open_object_section_in_ns("GetTopicAttributesResponse", AWS_SNS_NS);
     f->open_object_section("GetTopicAttributesResult");
-    result.topic.dump_xml_as_attributes(f);
+    result.dump_xml_as_attributes(f);
     f->close_section(); // GetTopicAttributesResult
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f); 
