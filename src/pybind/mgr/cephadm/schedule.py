@@ -141,13 +141,13 @@ class DaemonPlacement(NamedTuple):
 class HostAssignment(object):
 
     def __init__(self,
-                 spec,  # type: ServiceSpec
+                 spec: ServiceSpec,
                  hosts: List[orchestrator.HostSpec],
                  unreachable_hosts: List[orchestrator.HostSpec],
                  draining_hosts: List[orchestrator.HostSpec],
                  daemons: List[orchestrator.DaemonDescription],
                  networks: Dict[str, Dict[str, Dict[str, List[str]]]] = {},
-                 filter_new_host=None,  # type: Optional[Callable[[str],bool]]
+                 filter_new_host: Optional[Callable[[str], bool]] = None,
                  allow_colo: bool = False,
                  primary_daemon_type: Optional[str] = None,
                  per_host_daemon_type: Optional[str] = None,

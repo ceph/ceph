@@ -134,8 +134,7 @@ def with_cephadm_module(module_options=None, store=None):
         yield m
 
 
-def wait(m, c):
-    # type: (CephadmOrchestrator, OrchResult) -> Any
+def wait(m: CephadmOrchestrator, c: OrchResult) -> Any:
     return raise_if_exception(c)
 
 
