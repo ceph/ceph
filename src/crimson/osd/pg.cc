@@ -38,6 +38,7 @@
 #include "crimson/osd/osd_operations/osdop_params.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
+#include "crimson/osd/osd_operations/snaptrim_event.h"
 #include "crimson/osd/pg_recovery.h"
 #include "crimson/osd/replicated_recovery_backend.h"
 #include "crimson/osd/watch.h"
@@ -310,8 +311,10 @@ void PG::on_removal(ceph::os::Transaction &t) {
   }));
 }
 
-void PG::on_activate(interval_set<snapid_t>)
+void PG::on_activate(interval_set<snapid_t> snaps)
 {
+  logger().debug("{}: {} snaps={}", *this, __func__, snaps);
+  snap_trimq = std::move(snaps);
   projected_last_update = peering_state.get_info().last_update;
 }
 
@@ -448,12 +451,48 @@ Context *PG::on_clean()
 
 void PG::on_active_actmap()
 {
-  // Not needed yet
+  logger().debug("{}: {} snap_trimq={}", *this, __func__, snap_trimq);
+  std::ignore = seastar::do_until(
+    [this] { return snap_trimq.empty(); },
+    [this] {
+      const auto to_trim = snap_trimq.range_start();
+      snap_trimq.erase(to_trim);
+      return seastar::repeat([to_trim, this] {
+        logger().debug("{}: going to start SnapTrimEvent, to_trim={}",
+                       *this, to_trim);
+        return shard_services.start_operation<SnapTrimEvent>(
+          this,
+          snap_mapper,
+          to_trim).second;
+      }).then([this, trimmed=to_trim] {
+        logger().debug("{}: trimmed snap={}", *this, trimmed);
+      });
+    });
 }
 
 void PG::on_active_advmap(const OSDMapRef &osdmap)
 {
-  // Not needed yet
+  const auto new_removed_snaps = osdmap->get_new_removed_snaps();
+  if (auto it = new_removed_snaps.find(get_pgid().pool());
+      it != new_removed_snaps.end()) {
+    bool bad = false;
+    for (auto j : it->second) {
+      if (snap_trimq.intersects(j.first, j.second)) {
+	decltype(snap_trimq) added, overlap;
+	added.insert(j.first, j.second);
+	overlap.intersection_of(snap_trimq, added);
+        logger().error("{}: {} removed_snaps already contains {}",
+                       *this, __func__, overlap);
+	bad = true;
+	snap_trimq.union_of(added);
+      } else {
+	snap_trimq.insert(j.first, j.second);
+      }
+    }
+    logger().info("{}: {} new removed snaps {}, snap_trimq now{}",
+                  *this, __func__, it->second, snap_trimq);
+    assert(!bad || local_conf().get_val<bool>("osd_debug_verify_cached_snaps"));
+  }
 }
 
 void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
@@ -770,7 +809,10 @@ PG::do_osd_ops_execute(
             crimson::ct_error::eagain::make()));
       }
     }
-    return std::move(*ox).flush_changes_n_do_ops_effects(ops,
+    return std::move(*ox).flush_changes_n_do_ops_effects(
+      ops,
+      snap_mapper,
+      osdriver,
       [this] (auto&& txn,
               auto&& obc,
               auto&& osd_op_p,

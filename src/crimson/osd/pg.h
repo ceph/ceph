@@ -10,6 +10,7 @@
 #include <seastar/core/shared_future.hh>
 
 #include "common/dout.h"
+#include "include/interval_set.h"
 #include "crimson/net/Fwd.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDOpReply.h"
@@ -172,7 +173,7 @@ public:
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) final;
 
   uint64_t get_snap_trimq_size() const final {
-    return 0;
+    return std::size(snap_trimq);
   }
 
   void send_cluster_message(
@@ -755,7 +756,10 @@ private:
     std::set<pg_shard_t> waiting_on;
     seastar::shared_promise<> all_committed;
   };
+
   std::map<ceph_tid_t, log_update_t> log_entry_update_waiting_on;
+  // snap trimming
+  interval_set<snapid_t> snap_trimq;
 };
 
 struct PG::do_osd_ops_params_t {
