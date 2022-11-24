@@ -450,7 +450,8 @@ ExtentPlacementManager::BackgroundProcess::try_reserve(
 {
   reserve_result_t res {
     trimmer->try_reserve_inline_usage(usage.inline_usage),
-    major_cleaner->try_reserve_projected_usage(usage.inline_usage + usage.ool_usage)
+    major_cleaner->try_reserve_projected_usage(usage.inline_usage + usage.ool_usage),
+    !cold_cleaner || cold_cleaner->try_reserve_projected_usage(usage.cold_ool_usage)
   };
 
   if (!res.is_successful()) {
@@ -459,6 +460,9 @@ ExtentPlacementManager::BackgroundProcess::try_reserve(
     }
     if (res.reserve_ool_success) {
       major_cleaner->release_projected_usage(usage.inline_usage + usage.ool_usage);
+    }
+    if (cold_cleaner && res.reserve_cold_ool_success) {
+      cold_cleaner->release_projected_usage(usage.cold_ool_usage);
     }
   }
   return res;
@@ -541,10 +545,27 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
 {
   assert(is_ready());
   bool trimmer_reserve_success = true;
+  auto trimmer_reserve_size = trimmer->get_trim_size_per_cycle();
+
   if (trimmer->should_trim()) {
-    trimmer_reserve_success =
-      major_cleaner->try_reserve_projected_usage(
-        trimmer->get_trim_size_per_cycle());
+    bool hot_success = true;
+    bool cold_success = true;
+
+    hot_success = major_cleaner->try_reserve_projected_usage(trimmer_reserve_size);
+    if (cold_cleaner) {
+      cold_success = cold_cleaner->try_reserve_projected_usage(trimmer_reserve_size);
+    }
+
+    trimmer_reserve_success = hot_success && cold_success;
+
+    if (!trimmer_reserve_success) {
+      if (hot_success) {
+        major_cleaner->release_projected_usage(trimmer_reserve_size);
+      }
+      if (cold_cleaner && cold_success) {
+        cold_cleaner->release_projected_usage(trimmer_reserve_size);
+      }
+    }
   }
 
   if (trimmer->should_trim() && trimmer_reserve_success) {
@@ -552,20 +573,68 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
     ).finally([this] {
       major_cleaner->release_projected_usage(
           trimmer->get_trim_size_per_cycle());
-    });
-  } else if (major_cleaner->should_clean_space() ||
-             // make sure cleaner will start
-             // when the trimmer should run but
-             // failed to reserve space.
-             !trimmer_reserve_success) {
-    return major_cleaner->clean_space(
-    ).handle_error(
-      crimson::ct_error::assert_all{
-	"do_background_cycle encountered invalid error in clean_space"
+      if (cold_cleaner) {
+        cold_cleaner->release_projected_usage(
+          trimmer->get_trim_size_per_cycle());
       }
-    );
+    });
   } else {
-    return seastar::now();
+    bool clean_hot = false;
+    bool clean_cold = false;
+    bool major_cleaner_should_run =
+      major_cleaner->should_clean_space() ||
+      // make sure cleaner will start
+      // when the trimmer should run but
+      // failed to reserve space.
+      !trimmer_reserve_success;
+
+    if (major_cleaner_should_run) {
+      // single tier
+      if (!cold_cleaner) {
+        clean_hot = true;
+      } else {
+        // multiple tiers
+        clean_hot = cold_cleaner->try_reserve_projected_usage(
+            major_cleaner->get_reclaim_size_per_cycle());
+      }
+    }
+
+    if (cold_cleaner &&
+        (cold_cleaner->should_clean_space() ||
+         (major_cleaner_should_run && !clean_hot))) {
+      clean_cold = true;
+    }
+
+    ceph_assert(clean_hot || clean_cold);
+    return seastar::when_all(
+      [this, clean_hot] {
+        if (!clean_hot) {
+          return seastar::now();
+        }
+        return major_cleaner->clean_space(
+        ).handle_error(
+          crimson::ct_error::assert_all{
+            "do_background_cycle encountered invalid error in hot clean_space"
+          }
+        ).finally([this] {
+          if (cold_cleaner) {
+            cold_cleaner->release_projected_usage(
+                 major_cleaner->get_reclaim_size_per_cycle());
+          }
+        });
+      },
+      [this, clean_cold] {
+        if (!clean_cold) {
+          return seastar::now();
+        }
+        return cold_cleaner->clean_space(
+        ).handle_error(
+          crimson::ct_error::assert_all{
+            "do_background_cycle encountered invalid error in cold clean_space"
+          }
+        );
+      }
+    ).discard_result();
   }
 }
 

@@ -511,6 +511,9 @@ private:
       if (is_ready()) {
         trimmer->release_inline_usage(usage.inline_usage);
         major_cleaner->release_projected_usage(usage.inline_usage + usage.ool_usage);
+        if (cold_cleaner) {
+          cold_cleaner->release_projected_usage(usage.cold_ool_usage);
+        }
       }
     }
 
@@ -574,6 +577,7 @@ private:
     bool background_should_run() const {
       assert(is_ready());
       return major_cleaner->should_clean_space()
+        || (cold_cleaner && cold_cleaner->should_clean_space())
         || trimmer->should_trim_dirty()
         || trimmer->should_trim_alloc();
     }
@@ -587,9 +591,12 @@ private:
     struct reserve_result_t {
       bool reserve_inline_success = true;
       bool reserve_ool_success = true;
+      bool reserve_cold_ool_success = true;
 
       bool is_successful() const {
-        return reserve_inline_success && reserve_ool_success;
+        return reserve_inline_success &&
+               reserve_ool_success &&
+               reserve_cold_ool_success;
       }
     };
 
