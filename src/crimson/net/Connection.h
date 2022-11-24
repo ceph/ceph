@@ -125,3 +125,7 @@ inline std::ostream& operator<<(std::ostream& out, const Connection& conn) {
 }
 
 } // namespace crimson::net
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::net::Connection> : fmt::ostream_formatter {};
+#endif

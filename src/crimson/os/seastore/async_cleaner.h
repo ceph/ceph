@@ -1285,3 +1285,10 @@ private:
 };
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::segment_info_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::segments_info_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::AsyncCleaner::stat_printer_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::JournalTrimmerImpl::stat_printer_t> : fmt::ostream_formatter {};
+#endif

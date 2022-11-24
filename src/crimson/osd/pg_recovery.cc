@@ -3,6 +3,7 @@
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include <fmt/ranges.h>
 
 #include "crimson/common/type_helpers.h"
 #include "crimson/osd/backfill_facades.h"

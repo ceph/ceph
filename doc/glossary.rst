@@ -27,15 +27,21 @@
                 storage cluster. See also :term:`RBD`.
 
 	Ceph Block Storage
-                The block storage "product," service or capabilities when used
-                in conjunction with ``librbd``, a hypervisor such as QEMU or
-                Xen, and a hypervisor abstraction layer such as ``libvirt``.
+                One of the three kinds of storage supported by Ceph (the other
+                two are object storage and file storage). Ceph Block Storage is
+                the block storage "product", which refers to block-storage
+                related services and capabilities when used in conjunction with
+                the collection of (1) ``librbd`` (a python module that provides
+                file-like access to :term:`RBD` images), (2) a hypervisor such
+                as QEMU or Xen, and (3) a hypervisor abstraction layer such as
+                ``libvirt``.
 
 	Ceph Client
-                The collection of Ceph components which can access a Ceph
-                Storage Cluster. These include the Ceph Object Gateway, the
-                Ceph Block Device, the Ceph File System, and their
-                corresponding libraries, kernel modules, and FUSEs.
+                Any of the Ceph components that can access a Ceph Storage
+                Cluster. This includes the Ceph Object Gateway, the Ceph Block
+                Device, the Ceph File System, and their corresponding
+                libraries. It also includes kernel modules, and FUSEs
+                (Filesystems in USERspace).
 
 	Ceph Client Libraries
                 The collection of libraries that can be used to interact with
@@ -86,10 +92,20 @@
                 OSD map, and the CRUSH map. A minimum of three monitors is
                 required in order for the Ceph cluster to be both redundant and
                 highly-available. Ceph monitors and the nodes on which they run
-                are often referred to as "mon"s. **SEE** :ref:`Monitor Config
+                are often referred to as "mon"s. See :ref:`Monitor Config
                 Reference <monitor-config-reference>`.
 
 	Ceph Node
+               A Ceph node is a unit of the Ceph Cluster that communicates with
+               other nodes in the Ceph Cluster in order to replicate and
+               redistribute data. All of the nodes together are called the
+               :term:`Ceph Storage Cluster`. Ceph nodes include :term:`OSD`\s,
+               :term:`Ceph Monitor`\s, :term:`Ceph Manager`\s, and
+               :term:`MDS`\es. The term "node" is usually equivalent to "host"
+               in the Ceph documentation. If you have a running Ceph Cluster,
+               you can list all of the nodes in it by running the command
+               ``ceph node ls all``.
+                
 	:ref:`Ceph Object Gateway<object-gateway>`
                 An object storage interface built on top of librados. Ceph
                 Object Gateway provides a RESTful gateway between applications
@@ -101,6 +117,9 @@
                 Gateway.
 
 	Ceph Object Store
+                A Ceph Object Store consists of a :term:`Ceph Storage Cluster`
+                and a :term:`Ceph Object Gateway` (RGW).
+
 	:ref:`Ceph OSD<rados_configuration_storage-devices_ceph_osd>`
                 Ceph **O**\bject **S**\torage **D**\aemon. The Ceph OSD
                 software, which interacts with logical disks (:term:`OSD`).
@@ -146,7 +165,13 @@
 	Ceph Stack
 		A collection of two or more components of Ceph.
 
-	Ceph Storage Cluster
+	:ref:`Ceph Storage Cluster<arch-ceph-storage-cluster>`
+                The collection of :term:`Ceph Monitor`\s, :term:`Ceph
+                Manager`\s, :term:`Ceph Metadata Server`\s, and :term:`OSD`\s
+                that work together to store and replicate data for use by
+                applications, Ceph Users, and :term:`Ceph Client`\s. Ceph
+                Storage Clusters receive data from :term:`Ceph Client`\s.
+
 	Ceph System
 	cephx
                 The Ceph authentication protocol. Cephx operates like Kerberos,
@@ -158,8 +183,8 @@
                 CloudStack, OpenNebula, and Proxmox VE.
 
 	Cluster Map
-                The set of maps comprising the monitor map, OSD map, PG map,
-                MDS map and CRUSH map, which together report the state of the
+                The set of maps consisting of the monitor map, OSD map, PG map,
+                MDS map, and CRUSH map, which together report the state of the
                 Ceph cluster. See :ref:`the "Cluster Map" section of the
                 Architecture document<architecture_cluster_map>` for details.
 
@@ -184,7 +209,8 @@
                 are written to the filesystem.
 
 	Host
-		Any single machine or server in a Ceph System.
+                Any single machine or server in a Ceph System. See :term:`Ceph
+                Node`.
 
 	LVM tags
                 Extensible metadata for LVM volumes and groups. It is used to
@@ -204,6 +230,8 @@
 		The Ceph monitor software.
 
 	Node
+                See :term:`Ceph Node`.
+
 	Object Storage Device
                 See :term:`OSD`.
 
@@ -240,17 +268,37 @@
                 See :term:`pool`.
 
 	RADOS
+                **R**\eliable **A**\utonomic **D**\istributed **O**\bject
+                **S**\tore. RADOS is the object store that provides a scalable
+                service for variably-sized objects. The RADOS object store is
+                the core component of a Ceph cluster.  `This blog post from
+                2009
+                <https://ceph.io/en/news/blog/2009/the-rados-distributed-object-store/>`_
+                provides a beginner's introduction to RADOS. Readers interested
+                in a deeper understanding of RADOS are directed to `RADOS: A
+                Scalable, Reliable Storage Service for Petabyte-scale Storage
+                Clusters <https://ceph.io/assets/pdfs/weil-rados-pdsw07.pdf>`_.
+
 	RADOS Cluster
 	RADOS Gateway
+                See :term:`RGW`.
+
 	RBD
 		The block storage component of Ceph.
 
 	Reliable Autonomic Distributed Object Store
                 The core set of storage software which stores the user's data
-                (MON+OSD).
+                (MON+OSD). See also :term:`RADOS`.
 
-	RGW
-		The S3/Swift gateway component of Ceph.
+	:ref:`RGW<object-gateway>`
+                **R**\ADOS **G**\ate **W**\ay.
+
+                The component of Ceph that provides a gateway to both the
+                Amazon S3 RESTful API and the OpenStack Swift API. Also called
+                "RADOS Gateway" and "Ceph Object Gateway".
+
+        SDS
+                Software-defined storage.
 
 	systemd oneshot
                 A systemd ``type`` where a command is defined in ``ExecStart``

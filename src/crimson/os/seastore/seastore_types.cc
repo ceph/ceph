@@ -591,7 +591,7 @@ try_decode_records_header(
     journal_logger().debug(
         "try_decode_records_header: failed, "
         "cannot decode record_group_header_t, got {}.",
-        e);
+        e.what());
     return std::nullopt;
   }
   if (header.segment_nonce != expected_nonce) {
@@ -654,7 +654,7 @@ try_decode_record_headers(
       journal_logger().debug(
           "try_decode_record_headers: failed, "
           "cannot decode record_header_t, got {}.",
-          e);
+          e.what());
       return std::nullopt;
     }
   }
@@ -690,7 +690,7 @@ try_decode_extent_infos(
         journal_logger().debug(
             "try_decode_extent_infos: failed, "
             "cannot decode extent_info_t, got {}.",
-            e);
+            e.what());
         return std::nullopt;
       }
     }
@@ -734,7 +734,7 @@ try_decode_deltas(
         journal_logger().debug(
             "try_decode_deltas: failed, "
             "cannot decode delta_info_t, got {}.",
-            e);
+            e.what());
         return std::nullopt;
       }
     }

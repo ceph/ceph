@@ -5,8 +5,10 @@
 
 #include <seastar/core/lowres_clock.hh>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include "include/msgr.h"
 #include "include/random.h"
+#include "msg/msg_fmt.h"
 
 #include "crimson/auth/AuthClient.h"
 #include "crimson/auth/AuthServer.h"
@@ -100,6 +102,13 @@ inline uint64_t generate_client_cookie() {
 
 } // namespace anonymous
 
+namespace fmt {
+
+template <typename T> auto ptr(const ::seastar::shared_ptr<T>& p) -> const void* {
+  return p.get();
+}
+
+}
 namespace crimson::net {
 
 #ifdef UNIT_TESTS_BUILT
@@ -604,7 +613,7 @@ seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods
       return handle_auth_reply();
     });
   } catch (const crimson::auth::error& e) {
-    logger().error("{} get_initial_auth_request returned {}", conn, e);
+    logger().error("{} get_initial_auth_request returned {}", conn, e.what());
     abort_in_close(*this, true);
     return seastar::now();
   }
@@ -1095,7 +1104,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
                  " found existing {}(state={}, gs={}, pgs={}, cs={}, cc={}, sc={})",
                  conn, global_seq, peer_global_seq, connect_seq,
                  client_cookie, server_cookie,
-                 existing_conn, get_state_name(existing_proto->state),
+                 fmt::ptr(existing_conn), get_state_name(existing_proto->state),
                  existing_proto->global_seq,
                  existing_proto->peer_global_seq,
                  existing_proto->connect_seq,
@@ -1104,7 +1113,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
 
   if (!validate_peer_name(existing_conn->get_peer_name())) {
     logger().error("{} server_connect: my peer_name doesn't match"
-                   " the existing connection {}, abort", conn, existing_conn);
+                   " the existing connection {}, abort", conn, fmt::ptr(existing_conn));
     abort_in_fault();
   }
 
@@ -1360,7 +1369,7 @@ ProtocolV2::server_reconnect()
                    " found existing {}(state={}, gs={}, pgs={}, cs={}, cc={}, sc={})",
                    conn, global_seq, peer_global_seq, reconnect.connect_seq(),
                    reconnect.client_cookie(), reconnect.server_cookie(),
-                   existing_conn,
+                   fmt::ptr(existing_conn),
                    get_state_name(existing_proto->state),
                    existing_proto->global_seq,
                    existing_proto->peer_global_seq,
@@ -1370,7 +1379,7 @@ ProtocolV2::server_reconnect()
 
     if (!validate_peer_name(existing_conn->get_peer_name())) {
       logger().error("{} server_reconnect: my peer_name doesn't match"
-                     " the existing connection {}, abort", conn, existing_conn);
+                     " the existing connection {}, abort", conn, fmt::ptr(existing_conn));
       abort_in_fault();
     }
 

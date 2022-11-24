@@ -200,7 +200,7 @@ OMapInnerNode::list(
 {
   LOG_PREFIX(OMapInnerNode::list);
   if (start) {
-    DEBUGT("start={}, this: {}", oc.t, start, *this);
+    DEBUGT("start={}, this: {}", oc.t, *start, *this);
   } else {
     DEBUGT("this: {}", oc.t, *this);
   }

@@ -785,6 +785,10 @@ inline std::ostream& operator<<(std::ostream& out, const coll_t& c) {
   return out;
 }
 
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<coll_t> : fmt::ostream_formatter {};
+#endif
+
 namespace std {
   template<> struct hash<coll_t> {
     size_t operator()(const coll_t &c) const { 
@@ -4711,6 +4715,9 @@ struct pg_missing_item {
 };
 WRITE_CLASS_ENCODER_FEATURES(pg_missing_item)
 std::ostream& operator<<(std::ostream& out, const pg_missing_item &item);
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<pg_missing_item> : fmt::ostream_formatter {};
+#endif
 
 class pg_missing_const_i {
 public:

@@ -231,3 +231,7 @@ class ProtocolV2 final : public Protocol {
 };
 
 } // namespace crimson::net
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::net::ProtocolV2> : fmt::ostream_formatter {};
+#endif

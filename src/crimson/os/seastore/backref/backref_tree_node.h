@@ -133,3 +133,9 @@ public:
 using BackrefLeafNodeRef = BackrefLeafNode::Ref;
 
 } // namespace crimson::os::seastore::backref
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::backref::backref_map_val_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefInternalNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefLeafNode> : fmt::ostream_formatter {};
+#endif

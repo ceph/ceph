@@ -241,3 +241,8 @@ using OMapLeafNodeRef = OMapLeafNode::OMapLeafNodeRef;
 std::ostream &operator<<(std::ostream &out, const omap_inner_key_t &rhs);
 std::ostream &operator<<(std::ostream &out, const omap_leaf_key_t &rhs);
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::omap_manager::OMapInnerNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::omap_manager::OMapLeafNode> : fmt::ostream_formatter {};
+#endif

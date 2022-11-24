@@ -14,12 +14,15 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
+#include "common/hobject_fmt.h"
+
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
 
 #include "osd/OSDMap.h"
+#include "osd/osd_types_fmt.h"
 
 #include "os/Transaction.h"
 
@@ -57,6 +60,17 @@ std::ostream& operator<<(std::ostream& out, const signedspan& d)
   return out;
 }
 }
+
+template <typename T>
+struct fmt::formatter<std::optional<T>> : fmt::formatter<T> {
+  template <typename FormatContext>
+  auto format(const std::optional<T>& v, FormatContext& ctx) const {
+    if (v.has_value()) {
+      return fmt::formatter<T>::format(*v, ctx);
+    }
+    return fmt::format_to(ctx.out(), "<null>");
+  }
+};
 
 namespace crimson::osd {
 
@@ -1067,7 +1081,7 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
     }
     auto coid = resolve_oid(head->get_ro_ss(), oid);
     if (!coid) {
-      logger().error("with_clone_obc: {} clone not found", coid);
+      logger().error("with_clone_obc: {} clone not found", oid);
       return load_obc_iertr::future<>{crimson::ct_error::enoent::make()};
     }
     auto [clone, existed] = shard_services.get_cached_obc(*coid);
