@@ -17,6 +17,7 @@
 #include "osd/osd_types.h"
 #include "crimson/osd/object_context.h"
 #include "osd/PeeringState.h"
+#include "osd/SnapMapper.h"
 
 #include "crimson/common/interruptible_future.h"
 #include "crimson/common/type_helpers.h"
@@ -614,6 +615,11 @@ public:
   ObjectContextRegistry obc_registry;
   ObjectContextLoader obc_loader;
 
+private:
+  OSDriver osdriver;
+  SnapMapper snap_mapper;
+
+public:
   // PeeringListener
   void publish_stats_to_osd() final;
   void clear_publish_stats() final;
