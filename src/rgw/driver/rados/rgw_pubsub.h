@@ -613,12 +613,6 @@ public:
     int remove_notifications(const DoutPrefixProvider *dpp, optional_yield y);
   };
 
-  using BucketRef = std::shared_ptr<Bucket>;
-
-  BucketRef get_bucket(const rgw_bucket& bucket) {
-    return std::make_shared<Bucket>(this, bucket);
-  }
-
   void get_meta_obj(rgw_raw_obj *obj) const;
   void get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const;
 
