@@ -334,9 +334,7 @@ WRITE_CLASS_ENCODER(rgw_pubsub_s3_event)
 // setting a unique ID for an event based on object hash and timestamp
 void set_event_id(std::string& id, const std::string& hash, const utime_t& ts);
 
-struct rgw_pubsub_sub_dest {
-  std::string bucket_name;
-  std::string oid_prefix;
+struct rgw_pubsub_dest {
   std::string push_endpoint;
   std::string push_endpoint_args;
   std::string arn_topic;
@@ -345,8 +343,8 @@ struct rgw_pubsub_sub_dest {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(5, 1, bl);
-    encode(bucket_name, bl);
-    encode(oid_prefix, bl);
+    encode("", bl);
+    encode("", bl);
     encode(push_endpoint, bl);
     encode(push_endpoint_args, bl);
     encode(arn_topic, bl);
@@ -357,8 +355,9 @@ struct rgw_pubsub_sub_dest {
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(5, bl);
-    decode(bucket_name, bl);
-    decode(oid_prefix, bl);
+    std::string dummy;
+    decode(dummy, bl);
+    decode(dummy, bl);
     decode(push_endpoint, bl);
     if (struct_v >= 2) {
         decode(push_endpoint_args, bl);
@@ -379,45 +378,12 @@ struct rgw_pubsub_sub_dest {
   void dump_xml(Formatter *f) const;
   std::string to_json_str() const;
 };
-WRITE_CLASS_ENCODER(rgw_pubsub_sub_dest)
-
-struct rgw_pubsub_sub_config {
-  rgw_user user;
-  std::string name;
-  std::string topic;
-  rgw_pubsub_sub_dest dest;
-  std::string s3_id;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
-    encode(user, bl);
-    encode(name, bl);
-    encode(topic, bl);
-    encode(dest, bl);
-    encode(s3_id, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
-    decode(user, bl);
-    decode(name, bl);
-    decode(topic, bl);
-    decode(dest, bl);
-    if (struct_v >= 2) {
-      decode(s3_id, bl);
-    }
-    DECODE_FINISH(bl);
-  }
-
-  void dump(Formatter *f) const;
-};
-WRITE_CLASS_ENCODER(rgw_pubsub_sub_config)
+WRITE_CLASS_ENCODER(rgw_pubsub_dest)
 
 struct rgw_pubsub_topic {
   rgw_user user;
   std::string name;
-  rgw_pubsub_sub_dest dest;
+  rgw_pubsub_dest dest;
   std::string arn;
   std::string opaque_data;
 
@@ -459,6 +425,7 @@ struct rgw_pubsub_topic {
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_topic)
 
+// this struct deprecated and remain only for backward compatibility
 struct rgw_pubsub_topic_subs {
   rgw_pubsub_topic topic;
   std::set<std::string> subs;
@@ -540,17 +507,26 @@ struct rgw_pubsub_bucket_topics {
 WRITE_CLASS_ENCODER(rgw_pubsub_bucket_topics)
 
 struct rgw_pubsub_topics {
-  std::map<std::string, rgw_pubsub_topic_subs> topics;
+  std::map<std::string, rgw_pubsub_topic> topics;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 2, bl);
     encode(topics, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(topics, bl);
+    DECODE_START(2, bl);
+    if (struct_v >= 2) {
+      decode(topics, bl);
+    } else {
+      std::map<std::string, rgw_pubsub_topic_subs> v1topics;
+      decode(v1topics, bl);
+      std::transform(v1topics.begin(), v1topics.end(), std::inserter(topics, topics.end()),
+          [](const auto& entry) {
+            return std::pair<std::string, rgw_pubsub_topic>(entry.first, entry.second.topic); 
+          });
+    }
     DECODE_FINISH(bl);
   }
 
@@ -577,10 +553,6 @@ class RGWPubSub
 
   std::string bucket_meta_oid(const rgw_bucket& bucket) const {
     return pubsub_oid_prefix + tenant + ".bucket." + bucket.name + "/" + bucket.marker;
-  }
-
-  std::string sub_meta_oid(const std::string& name) const {
-    return pubsub_oid_prefix + tenant + ".sub." + name;
   }
 
   template <class T>
@@ -650,15 +622,9 @@ public:
   void get_meta_obj(rgw_raw_obj *obj) const;
   void get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const;
 
-  void get_sub_meta_obj(const std::string& name, rgw_raw_obj *obj) const;
-
   // get all topics (per tenant, if used)) and populate them into "result"
   // return 0 on success or if no topics exist, error code otherwise
   int get_topics(rgw_pubsub_topics *result);
-  // get a topic with its subscriptions by its name and populate it into "result"
-  // return -ENOENT if the topic does not exists 
-  // return 0 on success, error code otherwise
-  int get_topic(const std::string& name, rgw_pubsub_topic_subs *result);
   // get a topic with by its name and populate it into "result"
   // return -ENOENT if the topic does not exists 
   // return 0 on success, error code otherwise
@@ -670,7 +636,7 @@ public:
   // create a topic with push destination information and ARN
   // if the topic already exists the destination and ARN values may be updated (considered succsess)
   // return 0 on success, error code otherwise
-  int create_topic(const DoutPrefixProvider *dpp, const std::string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn, const std::string& opaque_data, optional_yield y);
+  int create_topic(const DoutPrefixProvider *dpp, const std::string& name, const rgw_pubsub_dest& dest, const std::string& arn, const std::string& opaque_data, optional_yield y);
   // remove a topic according to its name
   // if the topic does not exists it is a no-op (considered success)
   // return 0 on success, error code otherwise

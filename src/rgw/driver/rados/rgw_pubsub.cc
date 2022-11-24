@@ -349,12 +349,6 @@ void rgw_pubsub_topic_filter::dump(Formatter *f) const
   encode_json("events", events, f);
 }
 
-void rgw_pubsub_topic_subs::dump(Formatter *f) const
-{
-  encode_json("topic", topic, f);
-  encode_json("subs", subs, f);
-}
-
 void rgw_pubsub_bucket_topics::dump(Formatter *f) const
 {
   Formatter::ArraySection s(*f, "topics");
@@ -374,14 +368,12 @@ void rgw_pubsub_topics::dump(Formatter *f) const
 void rgw_pubsub_topics::dump_xml(Formatter *f) const
 {
   for (auto& t : topics) {
-    encode_xml("member", t.second.topic, f);
+    encode_xml("member", t.second, f);
   }
 }
 
-void rgw_pubsub_sub_dest::dump(Formatter *f) const
+void rgw_pubsub_dest::dump(Formatter *f) const
 {
-  encode_json("bucket_name", bucket_name, f);
-  encode_json("oid_prefix", oid_prefix, f);
   encode_json("push_endpoint", push_endpoint, f);
   encode_json("push_endpoint_args", push_endpoint_args, f);
   encode_json("push_endpoint_topic", arn_topic, f);
@@ -389,10 +381,8 @@ void rgw_pubsub_sub_dest::dump(Formatter *f) const
   encode_json("persistent", persistent, f);
 }
 
-void rgw_pubsub_sub_dest::dump_xml(Formatter *f) const
+void rgw_pubsub_dest::dump_xml(Formatter *f) const
 {
-  // first 2 members are omitted here since they
-  // dont apply to AWS compliant topics
   encode_xml("EndpointAddress", push_endpoint, f);
   encode_xml("EndpointArgs", push_endpoint_args, f);
   encode_xml("EndpointTopic", arn_topic, f);
@@ -400,10 +390,8 @@ void rgw_pubsub_sub_dest::dump_xml(Formatter *f) const
   encode_xml("Persistent", persistent, f);
 }
 
-std::string rgw_pubsub_sub_dest::to_json_str() const
+std::string rgw_pubsub_dest::to_json_str() const
 {
-  // first 2 members are omitted here since they
-  // dont apply to AWS compliant topics
   JSONFormatter f;
   f.open_object_section("");
   encode_json("EndpointAddress", push_endpoint, &f);
@@ -415,15 +403,6 @@ std::string rgw_pubsub_sub_dest::to_json_str() const
   std::stringstream ss;
   f.flush(ss);
   return ss.str();
-}
-
-void rgw_pubsub_sub_config::dump(Formatter *f) const
-{
-  encode_json("user", user, f);
-  encode_json("name", name, f);
-  encode_json("topic", topic, f);
-  encode_json("dest", dest, f);
-  encode_json("s3_id", s3_id, f);
 }
 
 RGWPubSub::RGWPubSub(rgw::sal::RadosStore* _store, const std::string& _tenant)
@@ -499,7 +478,7 @@ int RGWPubSub::Bucket::get_topics(rgw_pubsub_bucket_topics *result)
   return read_topics(result, nullptr);
 }
 
-int RGWPubSub::get_topic(const string& name, rgw_pubsub_topic_subs *result)
+int RGWPubSub::get_topic(const string& name, rgw_pubsub_topic *result)
 {
   rgw_pubsub_topics topics;
   int ret = get_topics(&topics);
@@ -518,31 +497,12 @@ int RGWPubSub::get_topic(const string& name, rgw_pubsub_topic_subs *result)
   return 0;
 }
 
-int RGWPubSub::get_topic(const string& name, rgw_pubsub_topic *result)
-{
-  rgw_pubsub_topics topics;
-  int ret = get_topics(&topics);
-  if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
-    return ret;
-  }
-
-  auto iter = topics.topics.find(name);
-  if (iter == topics.topics.end()) {
-    ldout(store->ctx(), 1) << "ERROR: topic not found" << dendl;
-    return -ENOENT;
-  }
-
-  *result = iter->second.topic;
-  return 0;
-}
-
 int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const string& topic_name, const rgw::notify::EventTypeList& events, optional_yield y) {
   return create_notification(dpp, topic_name, events, std::nullopt, "", y);
 }
 
 int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const string& topic_name,const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name, optional_yield y) {
-  rgw_pubsub_topic_subs topic_info;
+  rgw_pubsub_topic topic_info;
 
   int ret = ps->get_topic(topic_name, &topic_info);
   if (ret < 0) {
@@ -564,7 +524,7 @@ int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const 
     bucket.name << "'" << dendl;
 
   auto& topic_filter = bucket_topics.topics[topic_name];
-  topic_filter.topic = topic_info.topic;
+  topic_filter.topic = topic_info;
   topic_filter.events = events;
   topic_filter.s3_id = notif_name;
   if (s3_filter) {
@@ -584,7 +544,7 @@ int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const 
 
 int RGWPubSub::Bucket::remove_notification(const DoutPrefixProvider *dpp, const string& topic_name, optional_yield y)
 {
-  rgw_pubsub_topic_subs topic_info;
+  rgw_pubsub_topic topic_info;
 
   int ret = ps->get_topic(topic_name, &topic_info);
   if (ret < 0) {
@@ -653,10 +613,10 @@ int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optio
 }
 
 int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const string& name, optional_yield y) {
-  return create_topic(dpp, name, rgw_pubsub_sub_dest(), "", "", y);
+  return create_topic(dpp, name, rgw_pubsub_dest{}, "", "", y);
 }
 
-int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn, const std::string& opaque_data, optional_yield y) {
+int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const string& name, const rgw_pubsub_dest& dest, const std::string& arn, const std::string& opaque_data, optional_yield y) {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;
 
@@ -667,12 +627,12 @@ int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const string& name, c
     return ret;
   }
  
-  rgw_pubsub_topic_subs& new_topic = topics.topics[name];
-  new_topic.topic.user = rgw_user("", tenant);
-  new_topic.topic.name = name;
-  new_topic.topic.dest = dest;
-  new_topic.topic.arn = arn;
-  new_topic.topic.opaque_data = opaque_data;
+  rgw_pubsub_topic& new_topic = topics.topics[name];
+  new_topic.user = rgw_user("", tenant);
+  new_topic.name = name;
+  new_topic.dest = dest;
+  new_topic.arn = arn;
+  new_topic.opaque_data = opaque_data;
 
   ret = write_topics(dpp, topics, &objv_tracker, y);
   if (ret < 0) {
@@ -715,9 +675,5 @@ void RGWPubSub::get_meta_obj(rgw_raw_obj *obj) const {
 
 void RGWPubSub::get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const {
   *obj = rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, bucket_meta_oid(bucket));
-}
-
-void RGWPubSub::get_sub_meta_obj(const string& name, rgw_raw_obj *obj) const {
-  *obj = rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sub_meta_oid(name));
 }
 
