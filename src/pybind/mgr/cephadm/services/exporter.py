@@ -17,8 +17,8 @@ class CephadmExporterConfig:
     required_keys = ['crt', 'key', 'token', 'port']
     DEFAULT_PORT = '9443'
 
-    def __init__(self, mgr, crt="", key="", token="", port=""):
-        # type: (CephadmOrchestrator, str, str, str, str) -> None
+    def __init__(self, mgr: "CephadmOrchestrator", crt: str = "", key: str = "",
+                 token: str = "", port: str = "") -> None:
         self.mgr = mgr
         self.crt = crt
         self.key = key
