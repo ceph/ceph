@@ -73,12 +73,9 @@ void SnapTrimRequest::dump_detail(Formatter *f) const
   f->close_section();
 }
 
-seastar::future<> SnapTrimRequest::start()
+seastar::future<seastar::stop_iteration> SnapTrimRequest::start()
 {
-  logger().debug("{}", __func__);
-  return seastar::now();
-
-  logger().debug("{}: start", *this);
+  logger().debug("{}: start", *this, __func__);
 
   IRef ref = this;
   auto maybe_delay = seastar::now();
@@ -98,7 +95,7 @@ CommonPGPipeline& SnapTrimRequest::pp()
   return pg->client_request_pg_pipeline;
 }
 
-seastar::future<> SnapTrimRequest::with_pg(
+seastar::future<seastar::stop_iteration> SnapTrimRequest::with_pg(
   ShardServices &shard_services, Ref<PG> _pg)
 {
   return interruptor::with_interruption([&shard_services, this] {
@@ -122,20 +119,50 @@ seastar::future<> SnapTrimRequest::with_pg(
       return enter_stage<interruptor>(
         pp().process);
     }).then_interruptible([&shard_services, this] {
-      std::vector<hobject_t> to_trim;
-      assert(!to_trim.empty());
-      for (const auto& object : to_trim) {
-        logger().debug("{}: trimming {}", object);
-        auto [op, fut] = shard_services.start_operation<SnapTrimObjSubRequest>(
-          object,
-          snapid);
-        subop_blocker.emplace_back(op->get_id(), std::move(fut));
-      }
-      return subop_blocker.wait_completion();
+      return seastar::async([this] {
+        std::vector<hobject_t> to_trim;
+        using crimson::common::local_conf;
+        const auto max =
+          local_conf().get_val<uint64_t>("osd_pg_max_concurrent_snap_trims");
+        // we need to look for at least 1 snaptrim, otherwise we'll misinterpret
+        // the ENOENT below and erase snapid.
+        int r = snap_mapper.get_next_objects_to_trim(
+          snapid,
+          max,
+          &to_trim);
+        if (r == -ENOENT) {
+          return std::optional<decltype(to_trim)>{};
+        } else if (r != 0) {
+          logger().error("{}: get_next_objects_to_trim returned {}",
+                         *this, cpp_strerror(r));
+          ceph_abort_msg("get_next_objects_to_trim returned an invalid code");
+        }
+        return std::make_optional(std::move(to_trim));
+      }).then([&shard_services, this] (const auto& to_trim) {
+        if (!to_trim) {
+          return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes);
+        }
+        assert(!to_trim->empty());
+        for (const auto& object : *to_trim) {
+          logger().debug("{}: trimming {}", object);
+          auto [op, fut] = shard_services.start_operation<SnapTrimObjSubRequest>(
+            pg,
+            object,
+            snapid);
+          subop_blocker.emplace_back(op->get_id(), std::move(fut));
+        }
+        return subop_blocker.wait_completion().then([] {
+          return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::no);
+        });
+      });
     });
   }, [this](std::exception_ptr eptr) {
     // TODO: better debug output
     logger().debug("{}: interrupted {}", *this, eptr);
+    return seastar::make_ready_future<seastar::stop_iteration>(
+      seastar::stop_iteration::no);
   }, pg);
 }
 
