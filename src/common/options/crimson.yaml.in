@@ -80,3 +80,13 @@ options:
   level: advanced
   desc: split extent if ratio of total extent size to write size exceeds this value
   default: 1.25
+- name: seastore_multiple_tiers_start_evict_threshold
+  type: float
+  level: advanced
+  desc: start to evict cold data in hot tier to cold when used ratio reach this threshold
+  default: 0.65
+- name: seastore_multiple_tiers_stop_evict_threshold
+  type: float
+  level: advanced
+  desc: stop evicting cold data when used ratio is less than this value
+  default: 0.6

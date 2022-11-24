@@ -525,7 +525,7 @@ ExtentPlacementManager::BackgroundProcess::run()
           seastar::stop_iteration::yes);
     }
     return seastar::futurize_invoke([this] {
-      if (background_should_run()) {
+      if (background_should_run() || blocking_io) {
         log_state("run(background)");
         return do_background_cycle();
       } else {
@@ -544,6 +544,8 @@ seastar::future<>
 ExtentPlacementManager::BackgroundProcess::do_background_cycle()
 {
   assert(is_ready());
+  update_generation_mappings();
+
   bool trimmer_reserve_success = true;
   auto trimmer_reserve_size = trimmer->get_trim_size_per_cycle();
 
@@ -583,6 +585,7 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
     bool clean_cold = false;
     bool major_cleaner_should_run =
       major_cleaner->should_clean_space() ||
+      should_evict() ||
       // make sure cleaner will start
       // when the trimmer should run but
       // failed to reserve space.
@@ -635,6 +638,32 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
         );
       }
     ).discard_result();
+  }
+}
+
+// adjust generations located in [MIN_REWRITE_GENERATION, MIN_COLD_GENERATION)
+void ExtentPlacementManager::BackgroundProcess::update_generation_mappings()
+{
+  if (!cold_cleaner) {
+    return;
+  }
+
+  auto stat = major_cleaner->get_stat();
+  double used_ratio = stat.data_stored / stat.total;
+  if (used_ratio > start_evict_ratio && !start_evict) {
+    start_evict = true;
+    for (rewrite_gen_t gen = MIN_REWRITE_GENERATION;
+         gen < MIN_COLD_GENERATION;
+         ++gen) {
+      generation_mappings[gen] = MIN_COLD_GENERATION;
+    }
+  } else if (used_ratio < stop_evict_ratio && start_evict) {
+    start_evict = false;
+    for (rewrite_gen_t gen = MIN_REWRITE_GENERATION;
+         gen < MIN_COLD_GENERATION;
+         ++gen) {
+      generation_mappings[gen] = gen;
+    }
   }
 }
 
