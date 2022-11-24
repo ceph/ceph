@@ -151,7 +151,11 @@ TEST_F(seastar_test_suite_t, loops)
 	  });
 	}).then_interruptible([] {
 	  std::cout << "test errorated future do_for_each" << std::endl;
-	  std::vector<int> vec = {1, 2};
+	  std::vector<int> vec;
+	  // set a big enough iteration times to test if there is stack overflow in do_for_each
+	  for (int i = 0; i < 1000000; i++) {
+	    vec.push_back(i);
+	  }
 	  return seastar::do_with(std::move(vec), [](auto& vec) {
 	    using namespace std::chrono_literals;
 	    return interruptor::make_interruptible(seastar::now()).then_interruptible([&vec] {
