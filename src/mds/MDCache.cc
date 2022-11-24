@@ -322,7 +322,9 @@ void MDCache::remove_inode(CInode *o)
   }
 
   // delete it
-  ceph_assert(o->get_num_ref() == 0);
+  if(!o->is_stray() && !o->is_mdsdir()) {
+    ceph_assert(o->get_num_ref() == 0);
+  }
   delete o; 
 }
 

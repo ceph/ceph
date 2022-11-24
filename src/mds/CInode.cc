@@ -4705,7 +4705,11 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 
       MDCache *mdcache = in->mdcache;  // For the benefit of dout
       auto ino = [this]() { return in->ino(); }; // For the benefit of dout
-
+      if (in->is_mdsdir() || in->is_stray()){
+          dout(20) << "forcing backtrace as passed since mdsdir/stray dir " 
+                      "actually doesn't have backtrace" << dendl;
+          results->backtrace.passed = true;
+      }
       // Ignore rval because it's the result of a FAILOK operation
       // from fetch_backtrace_and_tag: the real result is in
       // backtrace.ondisk_read_retval
