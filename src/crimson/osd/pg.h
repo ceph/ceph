@@ -17,6 +17,7 @@
 #include "osd/osd_types.h"
 #include "crimson/osd/object_context.h"
 #include "osd/PeeringState.h"
+#include "osd/SnapMapper.h"
 
 #include "crimson/common/interruptible_future.h"
 #include "crimson/common/type_helpers.h"
@@ -606,6 +607,9 @@ private:
 
   PeeringState peering_state;
   eversion_t projected_last_update;
+
+  OSDriver osdriver;
+  SnapMapper snap_mapper;
 
 public:
   ObjectContextLoader obc_loader;
