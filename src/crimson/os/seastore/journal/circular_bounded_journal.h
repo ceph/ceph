@@ -313,3 +313,7 @@ std::ostream &operator<<(std::ostream &out, const CircularBoundedJournal::cbj_he
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal::CircularBoundedJournal::cbj_header_t)
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::journal::CircularBoundedJournal::cbj_header_t> : fmt::ostream_formatter {};
+#endif

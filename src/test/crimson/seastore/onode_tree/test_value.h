@@ -54,6 +54,14 @@ inline std::ostream& operator<<(std::ostream& os, const delta_op_t op) {
   }
 }
 
+} // namespace crimson::os::seastore::onode
+
+#if FMT_VERSION >= 90000
+template<> struct fmt::formatter<crimson::os::seastore::onode::delta_op_t> : fmt::ostream_formatter {};
+#endif
+
+namespace crimson::os::seastore::onode {
+
 template <value_magic_t MAGIC,
           string_size_t MAX_NS_SIZE,
           string_size_t MAX_OID_SIZE,

@@ -122,3 +122,7 @@ std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)
 WRITE_CLASS_DENC_BOUNDED(
   crimson::os::seastore::rbm_metadata_header_t
 )
+
+#if FMT_VERSION >= 90000
+template<> struct fmt::formatter<crimson::os::seastore::rbm_metadata_header_t> : fmt::ostream_formatter {};
+#endif
