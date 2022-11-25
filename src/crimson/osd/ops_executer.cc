@@ -19,6 +19,7 @@
 #include "crimson/osd/pg.h"
 #include "crimson/osd/watch.h"
 #include "osd/ClassHandler.h"
+#include "osd/SnapMapper.h"
 
 namespace {
   seastar::logger& logger() {
@@ -825,6 +826,102 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
   }
   log_entries.back().clean_regions = std::move(osd_op_params->clean_regions);
   return log_entries;
+}
+
+void OpsExecuter::snap_map_remove(
+  const hobject_t& soid,
+  SnapMapper& snap_mapper,
+  SnapMapperTransaction& txn)
+{
+  logger().debug("{}: soid {}", __func__, soid);
+  const auto r = snap_mapper.remove_oid(soid, &txn);
+  if (r) {
+    logger().error("{}: remove_oid {} failed with {}",
+                   __func__, soid, r);
+  }
+  // On removal tolerate missing key corruption
+  assert(r == 0 || r == -ENOENT);
+}
+
+void OpsExecuter::snap_map_modify(
+  const hobject_t& soid,
+  const std::set<snapid_t>& snaps,
+  SnapMapper& snap_mapper,
+  SnapMapperTransaction& txn)
+{
+  logger().debug("{}: soid {}, snaps {}", __func__, soid, snaps);
+  assert(std::size(snaps) > 0);
+  [[maybe_unused]] const auto r = snap_mapper.update_snaps(
+    soid, snaps, 0, &txn);
+  assert(r == 0);
+}
+
+void OpsExecuter::snap_map_clone(
+  const hobject_t& soid,
+  const std::set<snapid_t>& snaps,
+  SnapMapper& snap_mapper,
+  SnapMapperTransaction& txn)
+{
+  logger().debug("{}: soid {}, snaps {}", __func__, soid, snaps);
+  assert(std::size(snaps) > 0);
+  snap_mapper.add_oid(soid, snaps, &txn);
+}
+
+OpsExecuter::interruptible_future<> OpsExecuter::flush_snap_map(
+  const std::vector<pg_log_entry_t>& log_entries,
+  SnapMapper& snap_mapper,
+  OSDriver& osdriver,
+  ceph::os::Transaction& txn)
+{
+  logger().debug("{} log_entries.size()={}",
+                 __func__, std::size(log_entries));
+  for (const auto& le : log_entries) {
+    if (le.soid.snap >= CEPH_MAXSNAP) {
+      logger().debug("{} {} >= CEPH_MAXSNAP",
+                   __func__, le.soid);
+      continue;
+    }
+    return interruptor::async([_t=osdriver.get_transaction(&txn),
+                               &le, &snap_mapper]() mutable {
+      if (le.is_delete()) {
+        logger().debug("flush_snap_map: is_delete()");
+      snap_mapper.remove_oid(
+  	  le.soid,
+  	  &_t);
+      } else if (le.is_update()) {
+        assert(le.snaps.length() > 0);
+        std::vector<snapid_t> snaps;
+        ceph::bufferlist snapbl = le.snaps;
+        auto p = snapbl.cbegin();
+        try {
+          decode(snaps, p);
+        } catch (...) {
+          logger().error("flush_snap_map: decode snaps failure on {}", le);
+          snaps.clear();
+        }
+        std::set<snapid_t> _snaps(snaps.begin(), snaps.end());
+        if (le.is_clone() || le.is_promote()) {
+          logger().debug("flush_snap_map: le.is_clone() || le.is_promote()");
+          snap_mapper.add_oid(
+            le.soid,
+            _snaps,
+            &_t);
+        } else if (le.is_modify()) {
+          logger().debug("flush_snap_map: is_modify()");
+          int r = snap_mapper.update_snaps(
+            le.soid,
+            _snaps,
+            0,
+            &_t);
+          assert(r == 0);
+        } else {
+          assert(le.is_clean());
+          logger().debug("flush_snap_map: is_clean()");
+        }
+      }
+    });
+  }
+  return seastar::now();
 }
 
 // Defined here because there is a circular dependency between OpsExecuter and PG
