@@ -50,7 +50,7 @@ void FrameAssemblerV2::reset_handlers()
 FrameAssemblerV2::mover_t
 FrameAssemblerV2::to_replace()
 {
-  assert(has_socket());
+  assert(is_socket_valid());
   socket = nullptr;
   return mover_t{
       std::move(conn.socket),
@@ -58,14 +58,14 @@ FrameAssemblerV2::to_replace()
       std::move(session_comp_handlers)};
 }
 
-void FrameAssemblerV2::replace_by(FrameAssemblerV2::mover_t &&mover)
+seastar::future<> FrameAssemblerV2::replace_by(FrameAssemblerV2::mover_t &&mover)
 {
-  set_socket(std::move(mover.socket));
   record_io = false;
   rxbuf.clear();
   txbuf.clear();
   session_stream_handlers = std::move(mover.session_stream_handlers);
   session_comp_handlers = std::move(mover.session_comp_handlers);
+  return replace_shutdown_socket(std::move(mover.socket));
 }
 
 void FrameAssemblerV2::start_recording()
@@ -89,13 +89,17 @@ bool FrameAssemblerV2::has_socket() const
   return socket != nullptr;
 }
 
-void FrameAssemblerV2::set_socket(SocketRef &&_socket)
+bool FrameAssemblerV2::is_socket_valid() const
+{
+  return has_socket() && !socket->is_shutdown();
+}
+
+void FrameAssemblerV2::set_socket(SocketRef &&new_socket)
 {
   assert(!has_socket());
-  ceph_assert_always(!conn.socket);
-  socket = _socket.get();
-  conn.socket = std::move(_socket);
-  assert(has_socket());
+  socket = new_socket.get();
+  conn.socket = std::move(new_socket);
+  assert(is_socket_valid());
 }
 
 void FrameAssemblerV2::learn_socket_ephemeral_port_as_connector(uint16_t port)
@@ -106,23 +110,26 @@ void FrameAssemblerV2::learn_socket_ephemeral_port_as_connector(uint16_t port)
 
 void FrameAssemblerV2::shutdown_socket()
 {
-  if (has_socket()) {
-    socket->shutdown();
-  }
+  assert(is_socket_valid());
+  socket->shutdown();
 }
 
-seastar::future<> FrameAssemblerV2::reset_and_close_socket(bool do_reset)
+seastar::future<> FrameAssemblerV2::replace_shutdown_socket(SocketRef &&new_socket)
 {
-  if (!has_socket()) {
-    return seastar::now();
-  }
-  if (do_reset) {
-    socket = nullptr;
-    return conn.socket->close(
-    ).then([sock = std::move(conn.socket)] {});
-  } else {
-    return socket->close();
-  }
+  assert(has_socket());
+  assert(socket->is_shutdown());
+  socket = nullptr;
+  auto old_socket = std::move(conn.socket);
+  set_socket(std::move(new_socket));
+  return old_socket->close(
+  ).then([sock = std::move(old_socket)] {});
+}
+
+seastar::future<> FrameAssemblerV2::close_shutdown_socket()
+{
+  assert(has_socket());
+  assert(socket->is_shutdown());
+  return socket->close();
 }
 
 seastar::future<Socket::tmp_buf>

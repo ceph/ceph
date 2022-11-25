@@ -54,6 +54,8 @@ class Protocol {
 
   virtual void notify_out() = 0;
 
+  virtual void notify_out_fault(std::exception_ptr) = 0;
+
 // the write state-machine
  public:
   using clock_t = seastar::lowres_system_clock;

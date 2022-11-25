@@ -54,8 +54,15 @@ class ProtocolV2 final : public Protocol {
 
   void notify_out() override;
 
+  void notify_out_fault(std::exception_ptr) override;
+
  private:
   SocketMessenger &messenger;
+
+  bool has_socket = false;
+
+  // the socket exists and it is not shutdown
+  bool is_socket_valid = false;
 
   AuthConnectionMetaRef auth_meta;
 
@@ -108,6 +115,14 @@ class ProtocolV2 final : public Protocol {
   uint64_t peer_global_seq = 0;
   uint64_t connect_seq = 0;
 
+  std::optional<seastar::shared_promise<>> in_exit_dispatching;
+  seastar::future<> wait_in_exit_dispatching() {
+    if (in_exit_dispatching.has_value()) {
+      return in_exit_dispatching->get_shared_future();
+    }
+    return seastar::now();
+  }
+
   seastar::future<> execution_done = seastar::now();
 
   template <typename Func>
@@ -159,7 +174,9 @@ class ProtocolV2 final : public Protocol {
   template <class F>
   seastar::future<> write_flush_frame(F &tx_frame);
 
-  void fault(bool backoff, const char* func_name, std::exception_ptr eptr);
+  void fault(state_t expected_state,
+             const char *where,
+             std::exception_ptr eptr);
 
   void reset_session(bool is_full);
   seastar::future<std::tuple<entity_type_t, entity_addr_t>>
