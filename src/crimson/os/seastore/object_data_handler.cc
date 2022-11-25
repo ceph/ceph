@@ -359,7 +359,7 @@ struct overwrite_plan_t {
     }
   }
 };
-} // namespace namespace crimson::os::seastore {
+} // namespace crimson::os::seastore {
 
 #if FMT_VERSION >= 90000
 template<> struct fmt::formatter<crimson::os::seastore::overwrite_plan_t> : fmt::ostream_formatter {};
