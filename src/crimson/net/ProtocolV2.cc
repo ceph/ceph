@@ -1589,20 +1589,23 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                   new_conn_features, new_peer_supported_features,
                   new_peer_global_seq,
                   new_connect_seq, new_msg_seq] () mutable {
-    return wait_out_exit_dispatching().then([this, do_reset] {
-      if (do_reset) {
-        reset_session(true);
-      }
+    return wait_out_exit_dispatching(
+    ).then([this] {
       protocol_timer.cancel();
       return execution_done.get_future();
     }).then([this,
              reconnect,
+             do_reset,
              mover = std::move(mover),
              new_auth_meta = std::move(new_auth_meta),
              new_client_cookie, new_peer_name,
              new_conn_features, new_peer_supported_features,
              new_peer_global_seq,
              new_connect_seq, new_msg_seq] () mutable {
+      if (state == state_t::REPLACING && do_reset) {
+        reset_session(true);
+      }
+
       if (unlikely(state != state_t::REPLACING)) {
         return mover.socket->close(
         ).then([sock = std::move(mover.socket)] {
