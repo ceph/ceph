@@ -10465,7 +10465,7 @@ next:
         return -ret;
       }
 
-      RGWPubSub::Bucket b(&ps, bucket->get_key());
+      const RGWPubSub::Bucket b(ps, bucket->get_key());
       ret = b.get_topics(&result);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
