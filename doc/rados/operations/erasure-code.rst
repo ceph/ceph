@@ -50,10 +50,10 @@ requires at least three hosts:
 Erasure code profiles
 ---------------------
 
-The default erasure code profile sustains the loss of a two OSDs. It
-is equivalent to a replicated pool of size three but requires 2TB
-instead of 3TB to store 1TB of data. The default profile can be
-displayed with:
+The default erasure code profile can sustain the loss of two OSDs. This erasure
+code profile is equivalent to a replicated pool of size three, but requires
+2TB to store 1TB of data instead of 3TB to store 1TB of data. The default
+profile can be displayed with this command:
 
 .. prompt:: bash $
 
@@ -67,13 +67,16 @@ displayed with:
    crush-failure-domain=host
    technique=reed_sol_van
 
-Choosing the right profile is important because it cannot be modified
-after the pool is created: a new pool with a different profile needs
-to be created and all objects from the previous pool moved to the new.
+Choosing the right profile is important because the profile cannot be modified
+after the pool is created. If you find that you need an erasure-coded pool with
+a profile different than the one you have created, you must create a new pool
+with a different (and presumably more carefully-considered) profile. When the
+new pool is created, all objects from the wrongly-configured pool must be moved
+to the newly-created pool. There is no way to alter the profile of a pool after its creation.
 
 The most important parameters of the profile are *K*, *M* and
 *crush-failure-domain* because they define the storage overhead and
-the data durability. For instance, if the desired architecture must
+the data durability. For example, if the desired architecture must
 sustain the loss of two racks with a storage overhead of 67% overhead,
 the following profile can be defined:
 
