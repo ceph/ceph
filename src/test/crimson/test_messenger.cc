@@ -36,7 +36,7 @@ using crimson::common::local_conf;
 namespace {
 
 seastar::logger& logger() {
-  return crimson::get_logger(ceph_subsys_ms);
+  return crimson::get_logger(ceph_subsys_test);
 }
 
 static std::random_device rd;
