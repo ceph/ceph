@@ -816,7 +816,7 @@ void ProtocolV2::execute_connecting()
             break;
            }
            case next_step_t::wait: {
-            logger().info("{} execute_connecting(): going to WAIT", conn);
+            logger().info("{} execute_connecting(): going to WAIT(max-backoff)", conn);
             execute_wait(true);
             break;
            }
@@ -1068,18 +1068,25 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
       // by replacing the socket
       logger().warn("{} server_connect:"
                     " found new session (cs={})"
-                    " when existing {} is with stale session (cs={}, ss={}),"
+                    " when existing {} {} is with stale session (cs={}, ss={}),"
                     " peer must have reset",
-                    conn, client_cookie,
-                    *existing_conn, existing_proto->client_cookie,
+                    conn,
+                    client_cookie,
+                    get_state_name(existing_proto->state),
+                    *existing_conn,
+                    existing_proto->client_cookie,
                     existing_proto->server_cookie);
       return reuse_connection(existing_proto, conn.policy.resetcheck);
     } else {
       // session establishment interrupted between client_ident and server_ident,
       // continuing...
-      logger().warn("{} server_connect: found client session with existing {}"
+      logger().warn("{} server_connect: found client session with existing {} {}"
                     " matched (cs={}, ss={}), continuing session establishment",
-                    conn, *existing_conn, client_cookie, existing_proto->server_cookie);
+                    conn,
+                    get_state_name(existing_proto->state),
+                    *existing_conn,
+                    client_cookie,
+                    existing_proto->server_cookie);
       return reuse_connection(existing_proto);
     }
   } else {
@@ -1088,8 +1095,12 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
     if (existing_proto->client_cookie != client_cookie) {
       if (existing_conn->peer_wins()) {
         logger().warn("{} server_connect: connection race detected (cs={}, e_cs={}, ss=0)"
-                      " and win, reusing existing {}",
-                      conn, client_cookie, existing_proto->client_cookie, *existing_conn);
+                      " and win, reusing existing {} {}",
+                      conn,
+                      client_cookie,
+                      existing_proto->client_cookie,
+                      get_state_name(existing_proto->state),
+                      *existing_conn);
         return reuse_connection(existing_proto);
       } else {
         logger().warn("{} server_connect: connection race detected (cs={}, e_cs={}, ss=0)"
@@ -1100,9 +1111,13 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
         });
       }
     } else {
-      logger().warn("{} server_connect: found client session with existing {}"
+      logger().warn("{} server_connect: found client session with existing {} {}"
                     " matched (cs={}, ss={}), continuing session establishment",
-                    conn, *existing_conn, client_cookie, existing_proto->server_cookie);
+                    conn,
+                    get_state_name(existing_proto->state),
+                    *existing_conn,
+                    client_cookie,
+                    existing_proto->server_cookie);
       return reuse_connection(existing_proto);
     }
   }
@@ -1356,8 +1371,11 @@ ProtocolV2::server_reconnect()
       // reconnect race: both peers are sending reconnect messages
       if (existing_conn->peer_wins()) {
         logger().warn("{} server_reconnect: reconnect race detected (cs={})"
-                      " and win, reusing existing {}",
-                      conn, reconnect.connect_seq(), *existing_conn);
+                      " and win, reusing existing {} {}",
+                      conn,
+                      reconnect.connect_seq(),
+                      get_state_name(existing_proto->state),
+                      *existing_conn);
         return reuse_connection(
             existing_proto, false,
             true, reconnect.connect_seq(), reconnect.msg_seq());
@@ -1369,9 +1387,12 @@ ProtocolV2::server_reconnect()
       }
     } else { // existing_proto->connect_seq < reconnect.connect_seq()
       logger().warn("{} server_reconnect: stale exsiting connect_seq exist_cs({}) < peer_cs({}),"
-                    " reusing existing {}",
-                    conn, existing_proto->connect_seq,
-                    reconnect.connect_seq(), *existing_conn);
+                    " reusing existing {} {}",
+                    conn,
+                    existing_proto->connect_seq,
+                    reconnect.connect_seq(),
+                    get_state_name(existing_proto->state),
+                    *existing_conn);
       return reuse_connection(
           existing_proto, false,
           true, reconnect.connect_seq(), reconnect.msg_seq());
@@ -1829,8 +1850,20 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp, std::size_t m
 
     // note last received message.
     set_in_seq(message->get_seq());
-    logger().debug("{} <== #{} === {} ({})",
-		   conn, message->get_seq(), *message, message->get_type());
+    if (conn.policy.lossy) {
+      logger().debug("{} <== #{} === {} ({})",
+                     conn,
+                     message->get_seq(),
+                     *message,
+                     message->get_type());
+    } else {
+      logger().debug("{} <== #{},{} === {} ({})",
+                     conn,
+                     message->get_seq(),
+                     current_header.ack_seq,
+                     *message,
+                     message->get_type());
+    }
     notify_ack();
     ack_out_sent(current_header.ack_seq);
 
