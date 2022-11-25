@@ -1640,7 +1640,9 @@ void ProtocolV2::trigger_replacing(bool reconnect,
     return wait_out_exit_dispatching(
     ).then([this] {
       protocol_timer.cancel();
-      return execution_done.get_future();
+      auto done = std::move(execution_done);
+      execution_done = seastar::now();
+      return done;
     }).then([this,
              reconnect,
              do_reset,
