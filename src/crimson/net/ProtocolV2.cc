@@ -1602,8 +1602,6 @@ void ProtocolV2::trigger_replacing(bool reconnect,
 {
   trigger_state(state_t::REPLACING, out_state_t::delay, false);
   frame_assembler.shutdown_socket();
-  dispatchers.ms_handle_accept(
-      seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   gate.dispatch_in_background("trigger_replacing", *this,
                  [this,
                   reconnect,
@@ -1614,6 +1612,10 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                   new_conn_features, new_peer_supported_features,
                   new_peer_global_seq,
                   new_connect_seq, new_msg_seq] () mutable {
+    ceph_assert_always(state == state_t::REPLACING);
+    dispatchers.ms_handle_accept(
+        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+    // state may become CLOSING, close mover.socket and abort later
     return wait_out_exit_dispatching(
     ).then([this] {
       protocol_timer.cancel();
