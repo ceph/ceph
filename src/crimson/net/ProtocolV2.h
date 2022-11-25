@@ -108,13 +108,27 @@ class ProtocolV2 final : public Protocol {
   uint64_t peer_global_seq = 0;
   uint64_t connect_seq = 0;
 
-  seastar::shared_future<> execution_done = seastar::now();
+  seastar::future<> execution_done = seastar::now();
 
   template <typename Func>
   void gated_execute(const char* what, Func&& func) {
     gate.dispatch_in_background(what, *this, [this, &func] {
-      execution_done = seastar::futurize_invoke(std::forward<Func>(func));
-      return execution_done.get_future();
+      if (!execution_done.available()) {
+        // discard the unready future
+        gate.dispatch_in_background(
+          "gated_execute_abandon",
+          *this,
+          [fut=std::move(execution_done)]() mutable {
+            return std::move(fut);
+          }
+        );
+      }
+      seastar::promise<> pr;
+      execution_done = pr.get_future();
+      return seastar::futurize_invoke(std::forward<Func>(func)
+      ).finally([pr=std::move(pr)]() mutable {
+        pr.set_value();
+      });
     });
   }
 
