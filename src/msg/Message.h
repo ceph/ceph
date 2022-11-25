@@ -21,6 +21,9 @@
 #include <string_view>
 
 #include <boost/intrusive/list.hpp>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 
 #include "include/Context.h"
 #include "common/RefCountedObj.h"

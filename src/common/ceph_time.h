@@ -19,6 +19,9 @@
 #include <iostream>
 #include <string>
 #include <optional>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 #include <sys/time.h>
 
 #if defined(__APPLE__)
