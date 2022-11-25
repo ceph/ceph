@@ -1,8 +1,6 @@
-import errno
 import json
 import rados
 import rbd
-import re
 import traceback
 
 from datetime import datetime
@@ -10,7 +8,7 @@ from threading import Condition, Lock, Thread
 from typing import Any, Dict, List, Optional, Tuple
 
 from .common import get_rbd_pools
-from .schedule import LevelSpec, Interval, StartTime, Schedule, Schedules
+from .schedule import LevelSpec, Schedules
 
 
 class TrashPurgeScheduleHandler:
@@ -262,10 +260,10 @@ class TrashPurgeScheduleHandler:
                         continue
                     pool_name = self.pools[pool_id][namespace]
                     scheduled.append({
-                        'schedule_time' : schedule_time,
-                        'pool_id' : pool_id,
-                        'pool_name' : pool_name,
-                        'namespace' : namespace
+                        'schedule_time': schedule_time,
+                        'pool_id': pool_id,
+                        'pool_name': pool_name,
+                        'namespace': namespace
                     })
-        return 0, json.dumps({'scheduled' : scheduled}, indent=4,
+        return 0, json.dumps({'scheduled': scheduled}, indent=4,
                              sort_keys=True), ""

@@ -1,9 +1,10 @@
 import re
 
-from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING, Union
+from typing import Dict, Optional, Tuple, TYPE_CHECKING, Union
 
 
 GLOBAL_POOL_KEY = (None, None)
+
 
 class NotAuthorizedError(Exception):
     pass
@@ -45,4 +46,3 @@ def get_rbd_pools(module: 'Module') -> Dict[int, str]:
     osd_map = module.get('osd_map')
     return {pool['pool']: pool['pool_name'] for pool in osd_map['pools']
             if 'rbd' in pool.get('application_metadata', {})}
-

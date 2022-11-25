@@ -149,6 +149,7 @@ ImageSpecT = Tuple[str, str, str]
 PoolSpecT = Tuple[str, str]
 MigrationStatusT = Dict[str, str]
 
+
 class TaskHandler:
     lock = Lock()
     condition = Condition(lock)
