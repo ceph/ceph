@@ -165,7 +165,7 @@ class TestValue final : public Value {
         }
       } catch (buffer::error& e) {
         logger().error("OTree::TestValue::Replay: got decode error {} when replay {:#x}+{:#x}",
-                       e, value_addr, payload_mut.get_length());
+                       e.what(), value_addr, payload_mut.get_length());
         ceph_abort();
       }
     }
