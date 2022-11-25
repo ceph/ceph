@@ -2,21 +2,22 @@ import errno
 import json
 import rados
 import rbd
-import re
 import traceback
 
 from datetime import datetime
 from threading import Condition, Lock, Thread
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Union
 
 from .common import get_rbd_pools
-from .schedule import LevelSpec, Interval, StartTime, Schedule, Schedules
+from .schedule import LevelSpec, Schedules
+
 
 def namespace_validator(ioctx: rados.Ioctx) -> None:
     mode = rbd.RBD().mirror_mode_get(ioctx)
     if mode != rbd.RBD_MIRROR_MODE_IMAGE:
         raise ValueError("namespace {} is not in mirror image mode".format(
             ioctx.get_namespace()))
+
 
 def image_validator(image: rbd.Image) -> None:
     mode = image.mirror_image_get_mode()
@@ -223,7 +224,6 @@ class CreateSnapshotRequests:
                 "exception when creating snapshot for {}/{}/{}: {}".format(
                     pool_id, namespace, image_id, e))
             self.close_image(image_spec, image)
-
 
     def handle_create_snapshot(self,
                                image_spec: ImageSpec,
@@ -601,8 +601,8 @@ class MirrorSnapshotScheduleHandler:
                         continue
                     image_name = self.images[pool_id][namespace][image_id]
                     scheduled_images.append({
-                        'schedule_time' : schedule_time,
-                        'image' : image_name
+                        'schedule_time': schedule_time,
+                        'image': image_name
                     })
-        return 0, json.dumps({'scheduled_images' : scheduled_images},
+        return 0, json.dumps({'scheduled_images': scheduled_images},
                              indent=4, sort_keys=True), ""
