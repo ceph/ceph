@@ -15,6 +15,7 @@
 #include <seastar/core/shared_ptr.hh>
 
 #include "common/dout.h"
+#include "common/map_cacher.hpp"
 #include "common/static_ptr.h"
 #include "messages/MOSDOp.h"
 #include "os/Transaction.h"
@@ -31,6 +32,10 @@
 
 struct ObjectState;
 struct OSDOp;
+class OSDriver;
+class SnapMapper;
+using SnapMapperTransaction =
+  MapCacher::Transaction<std::string, ceph::buffer::list>;
 
 namespace crimson::osd {
 class PG;
@@ -245,6 +250,27 @@ private:
   void flush_clone_metadata(
     std::vector<pg_log_entry_t>& log_entries);
 
+  interruptible_future<> flush_snap_map(
+    const std::vector<pg_log_entry_t>& log_entries,
+    SnapMapper& snap_mapper,
+    OSDriver& osdriver,
+    ceph::os::Transaction& txn);
+
+  static void snap_map_remove(
+    const hobject_t& soid,
+    SnapMapper& snap_mapper,
+    SnapMapperTransaction& txn);
+  static void snap_map_modify(
+    const hobject_t& soid,
+    const std::set<snapid_t>& snaps,
+    SnapMapper& snap_mapper,
+    SnapMapperTransaction& txn);
+  static void snap_map_clone(
+    const hobject_t& soid,
+    const std::set<snapid_t>& snaps,
+    SnapMapper& snap_mapper,
+    SnapMapperTransaction& txn);
+
   // this gizmo could be wrapped in std::optional for the sake of lazy
   // initialization. we don't need it for ops that doesn't have effect
   // TODO: verify the init overhead of chunked_fifo
@@ -371,7 +397,10 @@ public:
   using rep_op_fut_t =
     interruptible_future<rep_op_fut_tuple>;
   template <typename MutFunc>
-  rep_op_fut_t flush_changes_n_do_ops_effects(const std::vector<OSDOp>& ops,
+  rep_op_fut_t flush_changes_n_do_ops_effects(
+    const std::vector<OSDOp>& ops,
+    SnapMapper& snap_mapper,
+    OSDriver& osdriver,
     MutFunc&& mut_func) &&;
   std::vector<pg_log_entry_t> prepare_transaction(
     const std::vector<OSDOp>& ops);
@@ -455,6 +484,8 @@ template <typename MutFunc>
 OpsExecuter::rep_op_fut_t
 OpsExecuter::flush_changes_n_do_ops_effects(
   const std::vector<OSDOp>& ops,
+  SnapMapper& snap_mapper,
+  OSDriver& osdriver,
   MutFunc&& mut_func) &&
 {
   const bool want_mutate = !txn.empty();
@@ -474,14 +505,23 @@ OpsExecuter::flush_changes_n_do_ops_effects(
     }
     auto log_entries = prepare_transaction(ops);
     flush_clone_metadata(log_entries);
+    auto maybe_snap_mapped = flush_snap_map(std::as_const(log_entries),
+                                            snap_mapper,
+                                            osdriver,
+                                            txn);
     apply_stats();
-    auto [submitted, all_completed] = std::forward<MutFunc>(mut_func)(std::move(txn),
-                                                    std::move(obc),
-                                                    std::move(*osd_op_params),
-                                                    std::move(log_entries));
-    maybe_mutated = interruptor::make_ready_future<rep_op_fut_tuple>(
+    maybe_mutated = maybe_snap_mapped.then_interruptible([mut_func=std::move(mut_func),
+                                            log_entries=std::move(log_entries),
+                                            this]() mutable {
+      auto [submitted, all_completed] =
+        std::forward<MutFunc>(mut_func)(std::move(txn),
+                                        std::move(obc),
+                                        std::move(*osd_op_params),
+                                        std::move(log_entries));
+      return interruptor::make_ready_future<rep_op_fut_tuple>(
 	std::move(submitted),
 	osd_op_ierrorator::future<>(std::move(all_completed)));
+    });
   }
   if (__builtin_expect(op_effects.empty(), true)) {
     return maybe_mutated;
