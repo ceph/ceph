@@ -1164,89 +1164,91 @@ SegmentCleaner::clean_space_impl(std::optional<reclaim_state_t>& state)
   // Backref-tree doesn't support tree-read during tree-updates with parallel
   // transactions.  So, concurrent transactions between trim and reclaim are
   // not allowed right now.
-  return extent_callback->with_transaction_weak(
-      "retrieve_from_backref_tree",
-      [this, &state](auto &t) {
-    return backref_manager.get_mappings(
-      t,
-      state->start_pos,
-      state->end_pos
-    ).si_then([this, &state, &t](auto pin_list) {
-      if (!pin_list.empty()) {
-	auto it = pin_list.begin();
-	auto &first_pin = *it;
-	if (first_pin->get_key() < state->start_pos) {
-	  // BackrefManager::get_mappings may include a entry before
-	  // state->start_pos, which is semantically inconsistent
-	  // with the requirements of the cleaner
-	  pin_list.erase(it);
-	}
-      }
-      return backref_manager.retrieve_backref_extents_in_range(
+  return repeat_eagain([this, FNAME, pavail_ratio, start, &state] {
+    return extent_callback->with_transaction_intr(
+        Transaction::src_t::READ,
+        "retrieve_from_backref_tree",
+        [this, &state](auto &t) {
+      return backref_manager.get_mappings(
         t,
         state->start_pos,
         state->end_pos
-      ).si_then([pin_list=std::move(pin_list)](auto extents) mutable {
-        return std::make_pair(std::move(extents), std::move(pin_list));
-      });
-    });
-  }).safe_then([this, FNAME, pavail_ratio, start, &state](auto weak_read_ret) {
-    return seastar::do_with(
-      std::move(weak_read_ret.first),
-      std::move(weak_read_ret.second),
-      (size_t)0,
-      (size_t)0,
-      [this, FNAME, pavail_ratio, start, &state](
-        auto &backref_extents, auto &pin_list, auto &reclaimed, auto &runs)
-    {
-      return do_reclaim_space(
-          state,
-          backref_extents,
-          pin_list,
-          reclaimed,
-          runs
-      ).safe_then([this, FNAME, pavail_ratio, start, &state, &reclaimed, &runs]() mutable {
-        stats.reclaiming_bytes += reclaimed;
-        auto d = seastar::lowres_system_clock::now() - start;
-        DEBUG("duration: {}, pavail_ratio before: {}, repeats: {}",
-              d, pavail_ratio, runs);
-        if (state->is_complete()) {
-          auto segment_to_release = state->get_segment_id();
-          INFO("reclaim {} finish, reclaimed alive/total={}",
-               segment_to_release,
-               stats.reclaiming_bytes/(double)segments.get_segment_size());
-          stats.reclaimed_bytes += stats.reclaiming_bytes;
-          stats.reclaimed_segment_bytes += segments.get_segment_size();
-          stats.reclaiming_bytes = 0;
-          state.reset();
-          return sm_group->release_segment(segment_to_release
-          ).handle_error(
-            clean_space_ertr::pass_further{},
-            crimson::ct_error::assert_all{
-              "SegmentCleaner::clean_space encountered invalid error in release_segment"
-            }
-          ).safe_then([this, FNAME, segment_to_release] {
-            auto old_usage = calc_utilization(segment_to_release);
-            if(unlikely(old_usage != 0)) {
-              space_tracker->dump_usage(segment_to_release);
-              ERROR("segment {} old_usage {} != 0",
-                     segment_to_release, old_usage);
-              ceph_abort();
-            }
-            segments.mark_empty(segment_to_release);
-            auto new_usage = calc_utilization(segment_to_release);
-            adjust_segment_util(old_usage, new_usage);
-            INFO("released {}, {}",
-                 segment_to_release, stat_printer_t{*this, false});
-            background_callback->maybe_wake_blocked_io();
-          });
-        } else {
-          return clean_space_ertr::now();
+      ).si_then([this, &state, &t](auto pin_list) {
+        if (!pin_list.empty()) {
+          auto it = pin_list.begin();
+          auto &first_pin = *it;
+          if (first_pin->get_key() < state->start_pos) {
+            // BackrefManager::get_mappings may include a entry before
+            // state->start_pos, which is semantically inconsistent
+            // with the requirements of the cleaner
+            pin_list.erase(it);
+          }
         }
+        return backref_manager.retrieve_backref_extents_in_range(
+          t,
+          state->start_pos,
+          state->end_pos
+        ).si_then([pin_list=std::move(pin_list)](auto extents) mutable {
+          return std::make_pair(std::move(extents), std::move(pin_list));
+        });
+      });
+    }).safe_then([this, FNAME, pavail_ratio, start, &state](auto weak_read_ret) {
+      return seastar::do_with(
+        std::move(weak_read_ret.first),
+        std::move(weak_read_ret.second),
+        (size_t)0,
+        (size_t)0,
+        [this, FNAME, pavail_ratio, start, &state](
+          auto &backref_extents, auto &pin_list, auto &reclaimed, auto &runs)
+      {
+        return do_reclaim_space(
+            state,
+            backref_extents,
+            pin_list,
+            reclaimed,
+            runs
+        ).safe_then([this, FNAME, pavail_ratio, start, &state, &reclaimed, &runs]() mutable {
+          stats.reclaiming_bytes += reclaimed;
+          auto d = seastar::lowres_system_clock::now() - start;
+          DEBUG("duration: {}, pavail_ratio before: {}, repeats: {}",
+                d, pavail_ratio, runs);
+          if (state->is_complete()) {
+            auto segment_to_release = state->get_segment_id();
+            INFO("reclaim {} finish, reclaimed alive/total={}",
+                 segment_to_release,
+                 stats.reclaiming_bytes/(double)segments.get_segment_size());
+            stats.reclaimed_bytes += stats.reclaiming_bytes;
+            stats.reclaimed_segment_bytes += segments.get_segment_size();
+            stats.reclaiming_bytes = 0;
+            state.reset();
+            return sm_group->release_segment(segment_to_release
+            ).handle_error(
+              clean_space_ertr::pass_further{},
+              crimson::ct_error::assert_all{
+                "SegmentCleaner::clean_space encountered invalid error in release_segment"
+              }
+            ).safe_then([this, FNAME, segment_to_release] {
+              auto old_usage = calc_utilization(segment_to_release);
+              if(unlikely(old_usage != 0)) {
+                space_tracker->dump_usage(segment_to_release);
+                ERROR("segment {} old_usage {} != 0",
+                       segment_to_release, old_usage);
+                ceph_abort();
+              }
+              segments.mark_empty(segment_to_release);
+              auto new_usage = calc_utilization(segment_to_release);
+              adjust_segment_util(old_usage, new_usage);
+              INFO("released {}, {}",
+                   segment_to_release, stat_printer_t{*this, false});
+              background_callback->maybe_wake_blocked_io();
+            });
+          } else {
+            return clean_space_ertr::now();
+          }
+        });
       });
     });
   });
-
 }
 
 SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
@@ -1297,14 +1299,14 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
   INFO("{} segment managers", sms.size());
 
   assert(background_callback->get_state() == state_t::MOUNT);
-  
+
   space_tracker.reset(
     detailed ?
     (SpaceTrackerI*)new SpaceTrackerDetailed(
       sms) :
     (SpaceTrackerI*)new SpaceTrackerSimple(
       sms));
-  
+
   segments.reset();
   for (auto sm : sms) {
     segments.add_segment_manager(*sm);
