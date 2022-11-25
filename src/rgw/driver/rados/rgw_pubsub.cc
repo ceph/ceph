@@ -15,7 +15,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 void set_event_id(std::string& id, const std::string& hash, const utime_t& ts) {
   char buf[64];
   const auto len = snprintf(buf, sizeof(buf), "%010ld.%06ld.%s", (long)ts.sec(), (long)ts.usec(), hash.c_str());
@@ -178,7 +177,7 @@ bool match(const rgw_s3_key_value_filter& filter, const KeyMultiValueMap& kv) {
   // object metadata/tags may include items not in the filter
   for (auto& filter : filter.kv) {
     auto result = kv.equal_range(filter.first);
-    if (std::any_of(result.first, result.second, [&filter](const pair<string,string>& p) { return p.second == filter.second;}))
+    if (std::any_of(result.first, result.second, [&filter](const std::pair<std::string, std::string>& p) { return p.second == filter.second;}))
       continue;
     else
       return false;
@@ -194,7 +193,7 @@ bool match(const rgw::notify::EventTypeList& events, rgw::notify::EventType even
   return true;
 }
 
-void do_decode_xml_obj(rgw::notify::EventTypeList& l, const string& name, XMLObj *obj) {
+void do_decode_xml_obj(rgw::notify::EventTypeList& l, const std::string& name, XMLObj *obj) {
   l.clear();
 
   XMLObjIter iter = obj->find(name);
@@ -414,7 +413,7 @@ RGWPubSub::RGWPubSub(rgw::sal::RadosStore* _store, const std::string& _tenant)
 int RGWPubSub::remove(const DoutPrefixProvider *dpp, 
                           const rgw_raw_obj& obj,
 			  RGWObjVersionTracker *objv_tracker,
-			  optional_yield y)
+			  optional_yield y) const
 {
   int ret = rgw_delete_system_obj(dpp, store->svc()->sysobj, obj.pool, obj.oid, objv_tracker, y);
   if (ret < 0) {
@@ -424,7 +423,7 @@ int RGWPubSub::remove(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWPubSub::read_topics(rgw_pubsub_topics *result, RGWObjVersionTracker *objv_tracker)
+int RGWPubSub::read_topics(rgw_pubsub_topics *result, RGWObjVersionTracker *objv_tracker) const
 {
   int ret = read(meta_obj, result, objv_tracker);
   if (ret < 0) {
@@ -435,7 +434,7 @@ int RGWPubSub::read_topics(rgw_pubsub_topics *result, RGWObjVersionTracker *objv
 }
 
 int RGWPubSub::write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_topics& topics,
-				     RGWObjVersionTracker *objv_tracker, optional_yield y)
+				     RGWObjVersionTracker *objv_tracker, optional_yield y) const
 {
   int ret = write(dpp, meta_obj, topics, objv_tracker, y);
   if (ret < 0 && ret != -ENOENT) {
@@ -445,16 +444,16 @@ int RGWPubSub::write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_topi
   return 0;
 }
 
-int RGWPubSub::get_topics(rgw_pubsub_topics *result)
+int RGWPubSub::get_topics(rgw_pubsub_topics *result) const
 {
   return read_topics(result, nullptr);
 }
 
-int RGWPubSub::Bucket::read_topics(rgw_pubsub_bucket_topics *result, RGWObjVersionTracker *objv_tracker)
+int RGWPubSub::Bucket::read_topics(rgw_pubsub_bucket_topics *result, RGWObjVersionTracker *objv_tracker) const
 {
-  int ret = ps->read(bucket_meta_obj, result, objv_tracker);
+  int ret = ps.read(bucket_meta_obj, result, objv_tracker);
   if (ret < 0 && ret != -ENOENT) {
-    ldout(ps->store->ctx(), 1) << "ERROR: failed to read bucket topics info: ret=" << ret << dendl;
+    ldout(ps.store->ctx(), 1) << "ERROR: failed to read bucket topics info: ret=" << ret << dendl;
     return ret;
   }
   return 0;
@@ -462,23 +461,23 @@ int RGWPubSub::Bucket::read_topics(rgw_pubsub_bucket_topics *result, RGWObjVersi
 
 int RGWPubSub::Bucket::write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_bucket_topics& topics,
 					RGWObjVersionTracker *objv_tracker,
-					optional_yield y)
+					optional_yield y) const
 {
-  int ret = ps->write(dpp, bucket_meta_obj, topics, objv_tracker, y);
+  int ret = ps.write(dpp, bucket_meta_obj, topics, objv_tracker, y);
   if (ret < 0) {
-    ldout(ps->store->ctx(), 1) << "ERROR: failed to write bucket topics info: ret=" << ret << dendl;
+    ldout(ps.store->ctx(), 1) << "ERROR: failed to write bucket topics info: ret=" << ret << dendl;
     return ret;
   }
 
   return 0;
 }
 
-int RGWPubSub::Bucket::get_topics(rgw_pubsub_bucket_topics *result)
+int RGWPubSub::Bucket::get_topics(rgw_pubsub_bucket_topics *result) const
 {
   return read_topics(result, nullptr);
 }
 
-int RGWPubSub::get_topic(const string& name, rgw_pubsub_topic *result)
+int RGWPubSub::get_topic(const std::string& name, rgw_pubsub_topic *result) const
 {
   rgw_pubsub_topics topics;
   int ret = get_topics(&topics);
@@ -497,14 +496,16 @@ int RGWPubSub::get_topic(const string& name, rgw_pubsub_topic *result)
   return 0;
 }
 
-int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const string& topic_name, const rgw::notify::EventTypeList& events, optional_yield y) {
+int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const std::string& topic_name, 
+    const rgw::notify::EventTypeList& events, optional_yield y) const {
   return create_notification(dpp, topic_name, events, std::nullopt, "", y);
 }
 
-int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const string& topic_name,const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name, optional_yield y) {
+int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const std::string& topic_name, 
+    const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name, optional_yield y) const {
   rgw_pubsub_topic topic_info;
 
-  int ret = ps->get_topic(topic_name, &topic_info);
+  int ret = ps.get_topic(topic_name, &topic_info);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to read topic '" << topic_name << "' info: ret=" << ret << dendl;
     return ret;
@@ -542,11 +543,11 @@ int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const 
   return 0;
 }
 
-int RGWPubSub::Bucket::remove_notification(const DoutPrefixProvider *dpp, const string& topic_name, optional_yield y)
+int RGWPubSub::Bucket::remove_notification(const DoutPrefixProvider *dpp, const std::string& topic_name, optional_yield y) const
 {
   rgw_pubsub_topic topic_info;
 
-  int ret = ps->get_topic(topic_name, &topic_info);
+  int ret = ps.get_topic(topic_name, &topic_info);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to read topic info: ret=" << ret << dendl;
     return ret;
@@ -565,7 +566,7 @@ int RGWPubSub::Bucket::remove_notification(const DoutPrefixProvider *dpp, const 
 
   if (bucket_topics.topics.empty()) {
     // no more topics - delete the notification object of the bucket
-    ret = ps->remove(dpp, bucket_meta_obj, &objv_tracker, y);
+    ret = ps.remove(dpp, bucket_meta_obj, &objv_tracker, y);
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(dpp, 1) << "ERROR: failed to remove bucket topics: ret=" << ret << dendl;
       return ret;
@@ -583,7 +584,7 @@ int RGWPubSub::Bucket::remove_notification(const DoutPrefixProvider *dpp, const 
   return 0;
 }
 
-int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optional_yield y)
+int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optional_yield y) const
 {
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
@@ -596,14 +597,14 @@ int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optio
   // remove all auto-genrated topics
   for (const auto& topic : bucket_topics.topics) {
     const auto& topic_name = topic.first;
-    ret = ps->remove_topic(dpp, topic_name, y);
+    ret = ps.remove_topic(dpp, topic_name, y);
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(dpp, 5) << "WARNING: failed to remove auto-generated topic '" << topic_name << "', ret=" << ret << dendl;
     }
   }
 
   // delete the notification object of the bucket
-  ret = ps->remove(dpp, bucket_meta_obj, nullptr, y);
+  ret = ps.remove(dpp, bucket_meta_obj, nullptr, y);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 1) << "ERROR: failed to remove bucket topics: ret=" << ret << dendl;
     return ret;
@@ -612,11 +613,12 @@ int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optio
   return 0;
 }
 
-int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const string& name, optional_yield y) {
+int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y) const {
   return create_topic(dpp, name, rgw_pubsub_dest{}, "", "", y);
 }
 
-int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const string& name, const rgw_pubsub_dest& dest, const std::string& arn, const std::string& opaque_data, optional_yield y) {
+int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const std::string& name, const rgw_pubsub_dest& dest, 
+    const std::string& arn, const std::string& opaque_data, optional_yield y) const {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;
 
@@ -643,7 +645,7 @@ int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const string& name, c
   return 0;
 }
 
-int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const string& name, optional_yield y)
+int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y) const
 {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;

@@ -627,7 +627,7 @@ auto find_unique_topic(const rgw_pubsub_bucket_topics& bucket_topics, const std:
 }
 }
 
-int remove_notification_by_topic(const DoutPrefixProvider *dpp, const std::string& topic_name, RGWPubSub::Bucket& b, optional_yield y, RGWPubSub& ps) {
+int remove_notification_by_topic(const DoutPrefixProvider *dpp, const std::string& topic_name, const RGWPubSub::Bucket& b, optional_yield y, const RGWPubSub& ps) {
   int op_ret = b.remove_notification(dpp, topic_name, y);
   if (op_ret < 0) {
     ldpp_dout(dpp, 1) << "failed to remove notification of topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -639,7 +639,7 @@ int remove_notification_by_topic(const DoutPrefixProvider *dpp, const std::strin
   return op_ret;
 }
 
-int delete_all_notifications(const DoutPrefixProvider *dpp, const rgw_pubsub_bucket_topics& bucket_topics, RGWPubSub::Bucket& b, optional_yield y, RGWPubSub& ps) {
+int delete_all_notifications(const DoutPrefixProvider *dpp, const rgw_pubsub_bucket_topics& bucket_topics, const RGWPubSub::Bucket& b, optional_yield y, const RGWPubSub& ps) {
   // delete all notifications of on a bucket
   for (const auto& topic : bucket_topics.topics) {
     const auto op_ret = remove_notification_by_topic(dpp, topic.first, b, y, ps);
@@ -734,8 +734,8 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     return;
   }
 
-  RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
-  RGWPubSub::Bucket b(&ps, bucket_info.bucket);
+  const RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
+  const RGWPubSub::Bucket b(ps, bucket_info.bucket);
 
   if(configurations.list.empty()) {
     // get all topics on a bucket
@@ -880,8 +880,8 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
     return;
   }
 
-  RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
-  RGWPubSub::Bucket b(&ps, bucket_info.bucket);
+  const RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
+  const RGWPubSub::Bucket b(ps, bucket_info.bucket);
 
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
@@ -979,8 +979,8 @@ private:
 };
 
 void RGWPSListNotifsOp::execute(optional_yield y) {
-  RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
-  RGWPubSub::Bucket b(&ps, bucket_info.bucket);
+  const RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
+  const RGWPubSub::Bucket b(ps, bucket_info.bucket);
   
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
