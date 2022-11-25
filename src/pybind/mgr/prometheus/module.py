@@ -69,6 +69,8 @@ def health_status_to_number(status: str) -> int:
 
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
 
+OSD_BLOCKLIST = ['osd_blocklist_count']
+
 DF_POOL = ['max_avail', 'avail_raw', 'stored', 'stored_raw', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes',
            'compress_bytes_used', 'compress_under_bytes', 'bytes_used', 'percent_used']
@@ -809,6 +811,13 @@ class Module(MgrModule):
                 'DF pool {}'.format(state),
                 ('pool_id',)
             )
+        for state in OSD_BLOCKLIST:
+            path = 'cluster_{}'.format(state)
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'OSD Blocklist Count {}'.format(state),
+            )
         for state in NUM_OBJECTS:
             path = 'num_objects_{}'.format(state)
             metrics[path] = Metric(
@@ -938,6 +947,17 @@ class Module(MgrModule):
                     pool['stats'][stat],
                     (pool['id'],)
                 )
+
+    @profile_method()
+    def get_osd_blocklisted_entries(self) -> None:
+        r = self.mon_command({
+            'prefix': 'osd blocklist ls',
+            'format': 'json'
+        })
+        blocklist_entries = r[2].split(' ')
+        blocklist_count = blocklist_entries[1]
+        for stat in OSD_BLOCKLIST:
+            self.metrics['cluster_{}'.format(stat)].set(int(blocklist_count))
 
     @profile_method()
     def get_fs(self) -> None:
@@ -1585,6 +1605,7 @@ class Module(MgrModule):
 
         self.get_health()
         self.get_df()
+        self.get_osd_blocklisted_entries()
         self.get_pool_stats()
         self.get_fs()
         self.get_osd_stats()
