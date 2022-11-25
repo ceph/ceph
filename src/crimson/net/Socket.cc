@@ -119,6 +119,7 @@ Socket::read_exactly(size_t bytes) {
 }
 
 void Socket::shutdown() {
+  socket_is_shutdown = true;
   socket.shutdown_input();
   socket.shutdown_output();
 }
@@ -210,7 +211,7 @@ seastar::future<> Socket::try_trap_post(bp_action_t& trap) {
     break;
    case bp_action_t::STALL:
     logger().info("[Test] got STALL and block");
-    shutdown();
+    force_shutdown();
     return blocker->block();
    default:
     ceph_abort("unexpected action from trap");

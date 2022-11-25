@@ -43,7 +43,7 @@ public:
 
   mover_t to_replace();
 
-  void replace_by(mover_t &&);
+  seastar::future<> replace_by(mover_t &&);
 
   /*
    * auth signature interfaces
@@ -61,15 +61,15 @@ public:
    * socket maintainence interfaces
    */
 
-  bool has_socket() const;
-
   void set_socket(SocketRef &&);
 
   void learn_socket_ephemeral_port_as_connector(uint16_t port);
 
   void shutdown_socket();
 
-  seastar::future<> reset_and_close_socket(bool do_reset=true);
+  seastar::future<> replace_shutdown_socket(SocketRef &&);
+
+  seastar::future<> close_shutdown_socket();
 
   /*
    * socket read and write interfaces
@@ -115,6 +115,10 @@ public:
   }
 
 private:
+  bool has_socket() const;
+
+  bool is_socket_valid() const;
+
   void log_main_preamble(const ceph::bufferlist &bl);
 
   SocketConnection &conn;

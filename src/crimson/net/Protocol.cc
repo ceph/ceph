@@ -242,8 +242,15 @@ seastar::future<> Protocol::do_out_dispatch()
                      conn, out_state, e);
       ceph_abort();
     }
-    ceph_assert_always(frame_assembler.has_socket());
-    frame_assembler.shutdown_socket();
+
+    std::exception_ptr eptr;
+    try {
+      throw e;
+    } catch(...) {
+      eptr = std::current_exception();
+    }
+    notify_out_fault(eptr);
+
     if (out_state == out_state_t::open) {
       logger().info("{} do_out_dispatch(): fault at {}, going to delay -- {}",
                     conn, out_state, e);

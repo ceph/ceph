@@ -42,6 +42,7 @@ class Socket
       // the default buffer size 8192 is too small that may impact our write
       // performance. see seastar::net::connected_socket::output()
       out(socket.output(65536)),
+      socket_is_shutdown(false),
       side(_side),
       ephemeral_port(e_port) {}
 
@@ -109,6 +110,10 @@ class Socket
 #endif
   }
 
+  bool is_shutdown() const {
+    return socket_is_shutdown;
+  }
+
   // preemptively disable further reads or writes, can only be shutdown once.
   void shutdown();
 
@@ -118,6 +123,12 @@ class Socket
   static seastar::future<> inject_delay();
 
   static void inject_failure();
+
+  // shutdown for tests
+  void force_shutdown() {
+    socket.shutdown_input();
+    socket.shutdown_output();
+  }
 
   // shutdown input_stream only, for tests
   void force_shutdown_in() {
@@ -155,6 +166,7 @@ class Socket
   seastar::connected_socket socket;
   seastar::input_stream<char> in;
   seastar::output_stream<char> out;
+  bool socket_is_shutdown;
   side_t side;
   uint16_t ephemeral_port;
 
