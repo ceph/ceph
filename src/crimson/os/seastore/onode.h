@@ -82,3 +82,7 @@ public:
 std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 using OnodeRef = boost::intrusive_ptr<Onode>;
 }
+
+#if FMT_VERSION >= 90000
+template<> struct fmt::formatter<crimson::os::seastore::Onode> : fmt::ostream_formatter {};
+#endif

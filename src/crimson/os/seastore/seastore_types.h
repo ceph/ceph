@@ -2187,19 +2187,24 @@ template <> struct fmt::formatter<crimson::os::seastore::extent_types_t> : fmt::
 template <> struct fmt::formatter<crimson::os::seastore::journal_seq_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::journal_tail_delta_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_list_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::placement_hint_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::record_group_size_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_header_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_locator_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::record_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::rewrite_gen_printer_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::scan_valid_records_cursor> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::sea_time_point_printer_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::segment_header_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::segment_id_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::segment_seq_printer_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::segment_tail_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::segment_type_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::transaction_type_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::write_result_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ceph::buffer::list> : fmt::ostream_formatter {};
 #endif
