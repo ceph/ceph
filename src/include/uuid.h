@@ -16,6 +16,10 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
+
 namespace ceph {
   class Formatter;
 }
