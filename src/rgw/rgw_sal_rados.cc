@@ -1850,24 +1850,14 @@ int RadosObject::transition_to_cloud(Bucket* bucket,
   tier_ctx.multipart_sync_threshold = rtier->get_rt().t.s3.multipart_sync_threshold;
   tier_ctx.storage_class = tier->get_storage_class();
 
-  // check if target_path is already created
-  std::pair<std::set<std::string>::iterator, bool> it;
-
-  it = cloud_targets.insert(bucket_name);
-  tier_ctx.target_bucket_created = !(it.second);
-
   ldpp_dout(dpp, 0) << "Transitioning object(" << o.key << ") to the cloud endpoint(" << endpoint << ")" << dendl;
 
   /* Transition object to cloud end point */
-  int ret = rgw_cloud_tier_transfer_object(tier_ctx);
+  int ret = rgw_cloud_tier_transfer_object(tier_ctx, cloud_targets);
 
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to transfer object(" << o.key << ") to the cloud endpoint(" << endpoint << ") ret=" << ret << dendl;
     return ret;
-
-    if (!tier_ctx.target_bucket_created) {
-      cloud_targets.erase(it.first);
-    }
   }
 
   if (update_object) {
