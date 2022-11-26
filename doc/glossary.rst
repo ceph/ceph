@@ -73,7 +73,7 @@
                 The collection of kernel modules that can be used to interact
                 with the Ceph System (for example: ``ceph.ko``, ``rbd.ko``).
 
-	Ceph Manager
+	:ref:`Ceph Manager<ceph-manager-daemon>`
                 The Ceph manager daemon (ceph-mgr) is a daemon that runs
                 alongside monitor daemons to provide monitoring and interfacing
                 to external monitoring and management systems. Since the
