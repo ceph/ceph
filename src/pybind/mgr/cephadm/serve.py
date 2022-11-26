@@ -1235,11 +1235,12 @@ class CephadmServe:
                           command: str,
                           args: List[str],
                           no_fsid: Optional[bool] = False,
+                          error_ok: Optional[bool] = False,
                           image: Optional[str] = "",
                           ) -> Any:
         try:
             out, err, code = self._run_cephadm(
-                host, entity, command, args, no_fsid=no_fsid, image=image)
+                host, entity, command, args, no_fsid=no_fsid, error_ok=error_ok, image=image)
             if code:
                 raise OrchestratorError(f'host {host} `cephadm {command}` returned {code}: {err}')
         except Exception as e:
