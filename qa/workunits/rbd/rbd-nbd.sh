@@ -422,6 +422,7 @@ if [ -n "${COOKIE}" ]; then
     test "${ANOTHER_COOKIE}" = "abc de"
     unmap_device ${DEV} ${PID}
 fi
+DEV=
 
 # test detach/attach with --snap-id
 SNAPID=`rbd snap ls ${POOL}/${IMAGE} | awk '$2 == "snap" {print $1}'`
@@ -439,5 +440,6 @@ fi
 get_pid ${POOL}
 _sudo rbd device detach ${DEV} --device-type nbd
 expect_false get_pid ${POOL}
+DEV=
 
 echo OK
