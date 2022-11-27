@@ -464,6 +464,7 @@ public:
       discard(cache, offset, (uint32_t)-1 - offset);
     }
 
+    bool _dup_writing(BufferCacheShard* cache, BufferSpace* bc);
     void split(BufferCacheShard* cache, size_t pos, BufferSpace &r);
 
     void dump(BufferCacheShard* cache, ceph::Formatter *f) const {
