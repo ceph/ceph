@@ -45,7 +45,7 @@
 
 	Ceph Client Libraries
                 The collection of libraries that can be used to interact with
-                components of the Ceph System.
+                components of the Ceph Cluster.
 
 	Ceph Cluster Map
                 See :term:`Cluster Map`
@@ -71,7 +71,7 @@
 
 	Ceph Kernel Modules
                 The collection of kernel modules that can be used to interact
-                with the Ceph System (for example: ``ceph.ko``, ``rbd.ko``).
+                with the Ceph Cluster (for example: ``ceph.ko``, ``rbd.ko``).
 
 	:ref:`Ceph Manager<ceph-manager-daemon>`
                 The Ceph manager daemon (ceph-mgr) is a daemon that runs
@@ -208,7 +208,7 @@
                 are written to the filesystem.
 
 	Host
-                Any single machine or server in a Ceph System. See :term:`Ceph
+                Any single machine or server in a Ceph Cluster. See :term:`Ceph
                 Node`.
 
 	LVM tags
