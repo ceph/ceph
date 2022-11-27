@@ -1879,6 +1879,29 @@ void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache, uint64_t seq
   cache->_audit("finish_write end");
 }
 
+/*
+  copy Buffers that are in writing queue
+  returns:
+  true  if something copied
+  false if nothing copied
+*/
+bool BlueStore::BufferSpace::_dup_writing(BufferCacheShard* cache, BufferSpace* to)
+{
+  std::lock_guard lk(cache->lock);
+  bool copied = false;
+  if (!writing.empty()) {
+    copied = true;
+    for (auto it = writing.begin(); it != writing.end(); ++it) {
+      copied = true;
+      Buffer& b = *it;
+      Buffer* to_b = new Buffer(to, b.state, b.seq, b.offset, b.data, b.flags);
+      ceph_assert(to_b->is_writing());
+      to->_add_buffer(cache, to_b, 0, nullptr);
+    }
+  }
+  return copied;
+}
+
 void BlueStore::BufferSpace::split(BufferCacheShard* cache, size_t pos, BlueStore::BufferSpace &r)
 {
   std::lock_guard lk(cache->lock);
@@ -2552,6 +2575,16 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
       e.blob->last_encoded_id = n;
       id_to_blob[n] = cb;
       e.blob->dup(*cb);
+      // By default do not copy buffers to clones, and let them read data by themselves.
+      // The exception are 'writing' buffers, which are not yet stable on device.
+      bool some_copied = e.blob->bc._dup_writing(cb->shared_blob->get_cache(), &cb->bc);
+      if (some_copied) {
+	// Pretend we just wrote those buffers;
+	// we need to get _finish_write called, so we can clear then from writing list.
+	// Otherwise it will be stuck until someone does write-op on clone.
+	txc->blobs_written.insert(cb);
+      }
+
       // bump the extent refs on the copied blob's extents
       for (auto p : blob.get_extents()) {
         if (p.is_valid()) {
