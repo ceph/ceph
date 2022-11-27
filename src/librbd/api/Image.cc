@@ -737,8 +737,7 @@ int Image<I>::snap_set(I *ictx,
   std::string name(snap_name == nullptr ? "" : snap_name);
   if (!name.empty()) {
     std::shared_lock image_locker{ictx->image_lock};
-    snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace{},
-                                snap_name);
+    snap_id = ictx->get_snap_id(snap_namespace, snap_name);
     if (snap_id == CEPH_NOSNAP) {
       return -ENOENT;
     }

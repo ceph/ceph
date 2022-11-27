@@ -181,6 +181,7 @@ void get_map_arguments(po::options_description *positional,
     ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions")
     ("quiesce", po::bool_switch(), "use quiesce hooks")
     ("quiesce-hook", po::value<std::string>(), "quiesce hook path");
+  at::add_snap_id_option(options);
   add_device_specific_options(options);
 }
 
@@ -200,6 +201,7 @@ void get_unmap_arguments(po::options_description *positional,
   at::add_namespace_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_snap_id_option(options);
   add_device_specific_options(options);
 }
 
@@ -222,6 +224,7 @@ void get_attach_arguments(po::options_description *positional,
     ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions")
     ("quiesce", po::bool_switch(), "use quiesce hooks")
     ("quiesce-hook", po::value<std::string>(), "quiesce hook path");
+  at::add_snap_id_option(options);
   add_device_specific_options(options);
 }
 
@@ -236,10 +239,12 @@ void get_detach_arguments(po::options_description *positional,
   positional->add_options()
     ("image-or-snap-or-device-spec",
      "image, snapshot, or device specification\n"
-     "[<pool-name>/]<image-name>[@<snap-name>] or <device-path>");
+     "[<pool-name>/[<namespace>/]]<image-name>[@<snap-name>] or <device-path>");
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_snap_id_option(options);
   add_device_specific_options(options);
 }
 
