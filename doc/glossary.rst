@@ -172,7 +172,6 @@
                 applications, Ceph Users, and :term:`Ceph Client`\s. Ceph
                 Storage Clusters receive data from :term:`Ceph Client`\s.
 
-	Ceph System
 	cephx
                 The Ceph authentication protocol. Cephx operates like Kerberos,
                 but it has no single point of failure.
