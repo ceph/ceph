@@ -4189,6 +4189,15 @@ void BlueStore::Collection::split_cache(
 	bvec.push_back(b.second.get());
       }
       for (auto b : bvec) {
+	if (dest->cache != cache) {
+	  for (auto& i : b->bc.buffer_map) {
+	    if (!i.second->is_writing()) {
+	      ldout(store->cct, 20) << __func__ << "   moving " << *i.second
+				    << dendl;
+	      dest->cache->_move(cache, i.second.get());
+	    }
+	  }
+	}
 	SharedBlob* sb = b->shared_blob.get();
 	if (sb->coll == dest) {
 	  ldout(store->cct, 20) << __func__ << "  already moved " << *sb
@@ -4203,15 +4212,6 @@ void BlueStore::Collection::split_cache(
 	  dest->shared_blob_set.add(dest, sb);
 	}
 	sb->coll = dest;
-	if (dest->cache != cache) {
-	  for (auto& i : b->bc.buffer_map) {
-	    if (!i.second->is_writing()) {
-	      ldout(store->cct, 20) << __func__ << "   moving " << *i.second
-				    << dendl;
-	      dest->cache->_move(cache, i.second.get());
-	    }
-	  }
-	}
       }
     }
   }
