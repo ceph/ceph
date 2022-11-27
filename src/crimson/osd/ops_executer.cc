@@ -557,6 +557,10 @@ OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::execute_op(OSDOp& osd_op)
 {
   head_os = obc->obs;
+  if (pg->get_pgpool().info.has_flag(
+      pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED)) {
+    osd_op.op.flags = osd_op.op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+  }
   return do_execute_op(osd_op).handle_error_interruptible(
     osd_op_errorator::all_same_way([&osd_op](auto e, auto&& e_raw)
       -> OpsExecuter::osd_op_errorator::future<> {
