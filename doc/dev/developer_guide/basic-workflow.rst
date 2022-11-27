@@ -172,7 +172,7 @@ Fixing the Bug
 Synchronizing Local Main with Upstream Main
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In your local git environment, there is a copy of the ``main`` branch in
+In your local working copy, there is a copy of the ``main`` branch in
 ``remotes/origin/main``. This is called "local main". This copy of the
 main branch (https://github.com/your_github_id/ceph.git) is "frozen in time"
 at the moment that you cloned it, but the upstream repo
@@ -184,9 +184,8 @@ Because upstream main is continually receiving updates from other
 contributors, your fork will drift farther and farther from the state of the
 upstream repo when you cloned it.
 
-You must keep your fork's main branch synchronized with upstream main in
-order to reduce drift between your fork's main branch and the upstream main
-branch.
+Keep your fork's ``main`` branch synchronized with upstream main to reduce drift
+between your fork's main branch and the upstream main branch.
 
 Here are the commands for keeping your fork synchronized with the
 upstream repository:
@@ -198,8 +197,8 @@ upstream repository:
    git reset --hard ceph/main
    git push -u origin main
 
-This procedure should be followed often, in order to keep your local ``main``
-in sync with upstream ``main``.
+Follow this procedure often to keep your local ``main`` in sync with upstream
+``main``.
 
 If the command ``git status`` returns a line that reads "Untracked files", see
 :ref:`the procedure on updating submodules <update-submodules>`.
@@ -233,15 +232,15 @@ your local working repository to your fork of the upstream repository.
 Fixing the bug in the local working copy
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-#. Updating the tracker 
+#. **Updating the tracker**
 
    In the `Ceph issue tracker <https://tracker.ceph.com>`_, change the status
    of the tracker issue to "In progress".  This communicates to other Ceph
    contributors that you have begun working on a fix, which helps to avoid
    duplication of effort. If you don't have permission to change that field,
-   your comment that you are working on the issue is sufficient.
+   just comment that you are working on the issue. 
 
-#. Fixing the bug itself
+#. **Fixing the bug itself**
 
    This guide cannot tell you how to fix the bug that you have chosen to fix.
    This guide assumes that you know what required improvement, and that you
