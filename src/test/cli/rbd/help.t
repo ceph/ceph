@@ -581,7 +581,8 @@
                            [--snap <snap>] --device <device> [--show-cookie] 
                            [--cookie <cookie>] [--read-only] [--force] 
                            [--exclusive] [--quiesce] 
-                           [--quiesce-hook <quiesce-hook>] [--options <options>] 
+                           [--quiesce-hook <quiesce-hook>] [--snap-id <snap-id>] 
+                           [--options <options>] 
                            <image-or-snap-spec> 
   
   Attach image to device.
@@ -606,11 +607,13 @@
     --exclusive              disable automatic exclusive lock transitions
     --quiesce                use quiesce hooks
     --quiesce-hook arg       quiesce hook path
+    --snap-id arg            snapshot id
     -o [ --options ] arg     device specific options
   
   rbd help device detach
   usage: rbd device detach [--device-type <device-type>] [--pool <pool>] 
-                           [--image <image>] [--snap <snap>] 
+                           [--namespace <namespace>] [--image <image>] 
+                           [--snap <snap>] [--snap-id <snap-id>] 
                            [--options <options>] 
                            <image-or-snap-or-device-spec> 
   
@@ -618,14 +621,16 @@
   
   Positional arguments
     <image-or-snap-or-device-spec>  image, snapshot, or device specification
-                                    [<pool-name>/]<image-name>[@<snap-name>] or
-                                    <device-path>
+                                    [<pool-name>/[<namespace>/]]<image-name>[@<sna
+                                    p-name>] or <device-path>
   
   Optional arguments
     -t [ --device-type ] arg        device type [ggate, krbd (default), nbd]
     -p [ --pool ] arg               pool name
+    --namespace arg                 namespace name
     --image arg                     image name
     --snap arg                      snapshot name
+    --snap-id arg                   snapshot id
     -o [ --options ] arg            device specific options
   
   rbd help device list
@@ -644,7 +649,8 @@
                         [--namespace <namespace>] [--image <image>] 
                         [--snap <snap>] [--show-cookie] [--cookie <cookie>] 
                         [--read-only] [--exclusive] [--quiesce] 
-                        [--quiesce-hook <quiesce-hook>] [--options <options>] 
+                        [--quiesce-hook <quiesce-hook>] [--snap-id <snap-id>] 
+                        [--options <options>] 
                         <image-or-snap-spec> 
   
   Map an image to a block device.
@@ -667,12 +673,14 @@
     --exclusive              disable automatic exclusive lock transitions
     --quiesce                use quiesce hooks
     --quiesce-hook arg       quiesce hook path
+    --snap-id arg            snapshot id
     -o [ --options ] arg     device specific options
   
   rbd help device unmap
   usage: rbd device unmap [--device-type <device-type>] [--pool <pool>] 
                           [--namespace <namespace>] [--image <image>] 
-                          [--snap <snap>] [--options <options>] 
+                          [--snap <snap>] [--snap-id <snap-id>] 
+                          [--options <options>] 
                           <image-or-snap-or-device-spec> 
   
   Unmap a rbd device.
@@ -688,6 +696,7 @@
     --namespace arg                 namespace name
     --image arg                     image name
     --snap arg                      snapshot name
+    --snap-id arg                   snapshot id
     -o [ --options ] arg            device specific options
   
   rbd help diff

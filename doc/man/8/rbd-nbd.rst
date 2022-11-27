@@ -9,7 +9,7 @@
 Synopsis
 ========
 
-| **rbd-nbd** [-c conf] [--read-only] [--device *nbd device*] [--nbds_max *limit*] [--max_part *limit*] [--exclusive] [--notrim] [--encryption-format *format*] [--encryption-passphrase-file *passphrase-file*] [--io-timeout *seconds*] [--reattach-timeout *seconds*] map *image-spec* | *snap-spec*
+| **rbd-nbd** [-c conf] [--read-only] [--device *nbd device*] [--snap-id *snap-id*] [--nbds_max *limit*] [--max_part *limit*] [--exclusive] [--notrim] [--encryption-format *format*] [--encryption-passphrase-file *passphrase-file*] [--io-timeout *seconds*] [--reattach-timeout *seconds*] map *image-spec* | *snap-spec*
 | **rbd-nbd** unmap *nbd device* | *image-spec* | *snap-spec*
 | **rbd-nbd** list-mapped
 | **rbd-nbd** attach --device *nbd device* *image-spec* | *snap-spec*
@@ -70,6 +70,10 @@ Options
    Specify timeout for the kernel to wait for a new rbd-nbd process is
    attached after the old process is detached. The default is 30
    second.
+
+.. option:: --snap-id *snapid*
+
+   Specify a snapshot to map/unmap/attach/detach by ID instead of by name.
 
 Image and snap specs
 ====================
