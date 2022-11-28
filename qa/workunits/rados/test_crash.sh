@@ -26,7 +26,7 @@ done
 
 # let daemon find crashdumps on startup
 sudo systemctl restart ceph-crash
-sleep 30
+sleep 60
 
 # must be 3 crashdumps registered and moved to crash/posted
 [ $(ceph crash ls | wc -l) = 4 ]  || exit 1   # 4 here bc of the table header
