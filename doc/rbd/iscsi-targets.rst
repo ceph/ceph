@@ -12,7 +12,7 @@ wider platform usage, and potentially opening new use cases.
 
 -  A working Ceph Storage cluster, deployed with ``ceph-ansible`` or using the command-line interface
 
--  iSCSI gateways nodes, which can either be colocated with OSD nodes or on dedicated nodes
+-  iSCSI gateways nodes, which can either be collocated with OSD nodes or on dedicated nodes
 
 -  Separate network subnets for iSCSI front-end traffic and Ceph back-end traffic
 
