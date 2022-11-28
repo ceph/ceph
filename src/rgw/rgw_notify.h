@@ -64,6 +64,7 @@ struct reservation_t {
   const std::string* const object_name;
   boost::optional<const RGWObjTags&> tagset;
   meta_map_t x_meta_map; // metadata cached by value
+  bool metadata_fetched_from_attributes;
   const std::string user_id;
   const std::string user_tenant;
   const std::string req_id;
