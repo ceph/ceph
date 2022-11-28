@@ -5,7 +5,7 @@ Configuring the iSCSI Target using the Command Line Interface
 The Ceph iSCSI gateway is both an iSCSI target  and a Ceph client;
 think of it as a "translator" between Ceph's RBD interface
 and the iSCSI standard. The Ceph iSCSI gateway can run on a
-standalone node or be colocated with other daemons eg. on
+standalone node or be collocated with other daemons eg. on
 a Ceph Object Store Disk (OSD) node.  When co-locating, ensure
 that sufficient CPU and memory are available to share.
 The following steps install and configure the Ceph iSCSI gateway for basic operation.
