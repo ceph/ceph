@@ -4,6 +4,7 @@
 #include "segment_allocator.h"
 
 #include <fmt/format.h>
+#include <fmt/os.h>
 
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/async_cleaner.h"
