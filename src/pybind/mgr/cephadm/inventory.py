@@ -212,6 +212,7 @@ class SpecStore():
         self.spec_created = {}  # type: Dict[str, datetime.datetime]
         self.spec_deleted = {}  # type: Dict[str, datetime.datetime]
         self.spec_preview = {}  # type: Dict[str, ServiceSpec]
+        self._needs_configuration: Dict[str, bool] = {}
 
     @property
     def all_specs(self) -> Mapping[str, ServiceSpec]:
@@ -263,6 +264,9 @@ class SpecStore():
                     deleted = str_to_datetime(cast(str, j['deleted']))
                     self.spec_deleted[service_name] = deleted
 
+                if 'needs_configuration' in j:
+                    self._needs_configuration[service_name] = cast(bool, j['needs_configuration'])
+
                 if 'rank_map' in j and isinstance(j['rank_map'], dict):
                     self._rank_maps[service_name] = {}
                     for rank_str, m in j['rank_map'].items():
@@ -299,6 +303,7 @@ class SpecStore():
             self.spec_preview[name] = spec
             return None
         self._specs[name] = spec
+        self._needs_configuration[name] = True
 
         if update_create:
             self.spec_created[name] = datetime_now()
@@ -313,12 +318,15 @@ class SpecStore():
     def _save(self, name: str) -> None:
         data: Dict[str, Any] = {
             'spec': self._specs[name].to_json(),
-            'created': datetime_to_str(self.spec_created[name]),
         }
+        if name in self.spec_created:
+            data['created'] = datetime_to_str(self.spec_created[name])
         if name in self._rank_maps:
             data['rank_map'] = self._rank_maps[name]
         if name in self.spec_deleted:
             data['deleted'] = datetime_to_str(self.spec_deleted[name])
+        if name in self._needs_configuration:
+            data['needs_configuration'] = self._needs_configuration[name]
 
         self.mgr.set_store(
             SPEC_STORE_PREFIX + name,
@@ -350,6 +358,8 @@ class SpecStore():
             del self.spec_created[service_name]
             if service_name in self.spec_deleted:
                 del self.spec_deleted[service_name]
+            if service_name in self._needs_configuration:
+                del self._needs_configuration[service_name]
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
         return found
 
@@ -364,6 +374,23 @@ class SpecStore():
         self._specs[service_name].unmanaged = value
         self.save(self._specs[service_name])
         return f'Set unmanaged to {str(value)} for service {service_name}'
+
+    def needs_configuration(self, name: str) -> bool:
+        return self._needs_configuration.get(name, False)
+
+    def mark_needs_configuration(self, name: str) -> None:
+        if name in self._specs:
+            self._needs_configuration[name] = True
+            self._save(name)
+        else:
+            self.mgr.log.warning(f'Attempted to mark unknown service "{name}" as needing configuration')
+
+    def mark_configured(self, name: str) -> None:
+        if name in self._specs:
+            self._needs_configuration[name] = False
+            self._save(name)
+        else:
+            self.mgr.log.warning(f'Attempted to mark unknown service "{name}" as having been configured')
 
 
 class ClientKeyringSpec(object):
