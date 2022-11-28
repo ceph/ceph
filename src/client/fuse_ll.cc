@@ -1605,9 +1605,10 @@ int CephFuse::Handle::loop()
   if (fuse_multithreaded) {
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 1)
     {
-      struct fuse_loop_config conf = { 0 };
-
-      conf.clone_fd = opts.clone_fd;
+      struct fuse_loop_config conf = {
+        clone_fd: opts.clone_fd,
+        max_idle_threads: opts.max_idle_threads
+      };
       return fuse_session_loop_mt(se, &conf);
     }
 #elif FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
