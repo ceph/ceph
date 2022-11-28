@@ -54,6 +54,7 @@
 #include "osd/osd_perf_counters.h"
 #include "common/Finisher.h"
 #include "scrubber/osd_scrub_sched.h"
+#include "scrubber/scrub_queue.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -279,21 +280,9 @@ public:
  public:
   ScrubQueue& get_scrub_services() { return m_scrub_queue; }
 
-  /**
-   * A callback used by the ScrubQueue object to initiate a scrub on a specific PG.
-   *
-   * The request might fail for multiple reasons, as ScrubQueue cannot by its own
-   * check some of the PG-specific preconditions and those are checked here. See
-   * attempt_t definition.
-   *
-   * @param pgid to scrub
-   * @param allow_requested_repair_only
-   * @return a Scrub::attempt_t detailing either a success, or the failure reason.
-   */
-  Scrub::schedule_result_t initiate_a_scrub(
-    spg_t pgid,
-    bool allow_requested_repair_only) final;
+  std::optional<PGLockWrapper> get_locked_pg(spg_t pgid) final;
 
+  void send_sched_recalc_to_pg(spg_t pgid) final;
 
  private:
   // -- agent shared state --
@@ -549,6 +538,10 @@ public:
 
   /// queue the message (-> event) that some replicas denied our scrub resources request
   void queue_for_scrub_denied(PG* pg, Scrub::scrub_prio_t with_priority);
+
+  /// queue the message (-> event) that notifies us that configuration items
+  /// affecting scrub scheduling have changed
+  void queue_scrub_recalc_schedule(PG* pg, Scrub::scrub_prio_t with_priority);
 
   /// Signals either (a) the end of a sleep period, or (b) a recheck of the availability
   /// of the primary map being created by the backend.
@@ -1895,11 +1888,6 @@ protected:
   void do_recovery(PG *pg, epoch_t epoch_queued, uint64_t pushes_reserved,
 		   ThreadPool::TPHandle &handle);
 
-
-  // -- scrubbing --
-  void sched_scrub();
-  void resched_all_scrubs();
-  bool scrub_random_backoff();
 
   // -- status reporting --
   MPGStats *collect_pg_stats();

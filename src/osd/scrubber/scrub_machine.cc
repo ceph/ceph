@@ -134,7 +134,7 @@ sc::result ReservingReplicas::react(const ReservationFailure&)
   dout(10) << "ReservingReplicas::react(const ReservationFailure&)" << dendl;
 
   // the Scrubber must release all resources and abort the scrubbing
-  scrbr->clear_pgscrub_state();
+  scrbr->on_repl_reservation_failure();
   return transit<NotActive>();
 }
 

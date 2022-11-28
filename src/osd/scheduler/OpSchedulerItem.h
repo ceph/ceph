@@ -427,6 +427,17 @@ class PGScrubDenied : public PGScrubItem {
 };
 
 /**
+ *  should recompute scrub schedule following a configuration change
+ */
+class PGScrubRecalcSchedule : public PGScrubItem {
+ public:
+  PGScrubRecalcSchedule(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubRecalcSchedule"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+};
+
+/**
  *  called when a repair process completes, to initiate scrubbing. No local/remote
  *  resources are allocated.
  */

@@ -2944,22 +2944,29 @@ std::string pg_stat_t::dump_scrub_schedule() const
 	scrub_sched_status.m_duration_seconds);
     }
   }
+  // not scrubbing at this time:
   switch (scrub_sched_status.m_sched_status) {
     case pg_scrub_sched_status_t::unknown:
       // no reported scrub schedule yet
       return "--"s;
     case pg_scrub_sched_status_t::not_queued:
       return "no scrub is scheduled"s;
-    case pg_scrub_sched_status_t::scheduled:
-      return fmt::format(
-        "{} {}scrub scheduled @ {}",
-        (scrub_sched_status.m_is_periodic ? "periodic" : "user requested"),
-        ((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""),
-        scrub_sched_status.m_scheduled_at);
     case pg_scrub_sched_status_t::queued:
       return fmt::format(
         "queued for {}scrub",
         ((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""));
+    case pg_scrub_sched_status_t::scheduled:
+      return fmt::format(
+        "{} {}scrub scheduled to {:s}",
+        (scrub_sched_status.m_is_periodic ? "periodic" : "priority"),
+        ((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""),
+        scrub_sched_status.m_scheduled_at);
+    case pg_scrub_sched_status_t::delayed:
+      return fmt::format(
+        "{} {}scrub will be retried not before {:s}",
+        (scrub_sched_status.m_is_periodic ? "periodic" : "priority"),
+        ((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""),
+        scrub_sched_status.m_scheduled_at);
     default:
       // a bug!
       return "SCRUB STATE MISMATCH!"s;

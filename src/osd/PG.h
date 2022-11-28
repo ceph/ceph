@@ -26,6 +26,7 @@
 #include "include/types.h"
 #include "include/stringify.h"
 #include "osd_types.h"
+#include "osd_types_fmt.h"
 #include "include/xlist.h"
 #include "SnapMapper.h"
 #include "Session.h"
@@ -63,6 +64,8 @@ typedef OpRequest::Ref OpRequestRef;
 class DynamicPerfStats;
 class PgScrubber;
 class ScrubBackend;
+
+class ScrubQueue;
 
 namespace Scrub {
   class Store;
@@ -170,6 +173,7 @@ class PG : public DoutPrefixProvider,
   friend class PeeringState;
   friend class PgScrubber;
   friend class ScrubBackend;
+  friend class ScrubQueue;
 
 public:
   const pg_shard_t pg_whoami;
@@ -178,13 +182,6 @@ public:
   /// the 'scrubber'. Will be allocated in the derivative (PrimaryLogPG) ctor,
   /// and be removed only in the PrimaryLogPG destructor.
   std::unique_ptr<ScrubPgIF> m_scrubber;
-
-  /// flags detailing scheduling/operation characteristics of the next scrub 
-  requested_scrub_t m_planned_scrub;
-
-  const requested_scrub_t& get_planned_scrub() const {
-    return m_planned_scrub;
-  }
 
   /// scrubbing state for both Primary & replicas
   bool is_scrub_active() const { return m_scrubber->is_scrub_active(); }
@@ -458,6 +455,12 @@ public:
 			"ReservationFailure");
   }
 
+  void scrub_send_recalc_schedule(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::recalc_schedule, queued,
+			"RecalcSchedule");
+  }
+
   void scrub_send_scrub_resched(epoch_t queued, ThreadPool::TPHandle& handle)
   {
     forward_scrub_event(&ScrubPgIF::send_scrub_resched, queued, "InternalSchedScrub");
@@ -541,8 +544,6 @@ public:
   void on_info_history_change() override;
 
   void on_primary_status_change(bool was_primary, bool now_primary) override;
-
-  void reschedule_scrub() override;
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;
 
@@ -706,48 +707,32 @@ public:
   void shutdown();
   virtual void on_shutdown() = 0;
 
-  bool get_must_scrub() const;
-  Scrub::schedule_result_t sched_scrub();
+  /**
+   * Start a scrub operation.
+   *
+   * @param [in] scrub_clock_now time now (unless under unit-test)
+   * @param [in] level Level of scrub (deep or shallow)
+   * @param [in] preconds a set of flags determined based on environment
+   *       conditions (time & load) that might restrict some scrubs
+   * @returns either 'scrub_initiated' or 'failure'
+   */
+  Scrub::schedule_result_t start_scrubbing(
+      utime_t scrub_clock_now,
+      scrub_level_t level,
+      const Scrub::ScrubPreconds preconds);
 
-  unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsigned int suggested_priority) const;
+  unsigned int scrub_requeue_priority(
+    Scrub::scrub_prio_t with_priority,
+    unsigned int suggested_priority) const;
   /// the version that refers to flags_.priority
   unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority) const;
-private:
-  // auxiliaries used by sched_scrub():
-  double next_deepscrub_interval() const;
 
-  /// should we perform deep scrub?
-  bool is_time_for_deep(bool allow_deep_scrub,
-                        bool allow_shallow_scrub,
-                        bool has_deep_errors,
-                        const requested_scrub_t& planned) const;
-
-  /**
-   * Validate the various 'next scrub' flags in m_planned_scrub against configuration
-   * and scrub-related timestamps.
-   *
-   * @returns an updated copy of the m_planned_flags (or nothing if no scrubbing)
-   */
-  std::optional<requested_scrub_t> validate_scrub_mode() const;
-
-  std::optional<requested_scrub_t> validate_periodic_mode(
-    bool allow_deep_scrub,
-    bool try_to_auto_repair,
-    bool allow_shallow_scrub,
-    bool time_for_deep,
-    bool has_deep_errors,
-    const requested_scrub_t& planned) const;
-
-  std::optional<requested_scrub_t> validate_initiated_scrub(
-    bool allow_deep_scrub,
-    bool try_to_auto_repair,
-    bool time_for_deep,
-    bool has_deep_errors,
-    const requested_scrub_t& planned) const;
-
+ private:
+  /// forwarding scrub events to the scrubber
   using ScrubAPI = void (ScrubPgIF::*)(epoch_t epoch_queued);
   void forward_scrub_event(ScrubAPI fn, epoch_t epoch_queued, std::string_view desc);
-  // and for events that carry a meaningful 'activation token'
+
+  /// forwarding scrub events that carry a meaningful 'activation token'
   using ScrubSafeAPI = void (ScrubPgIF::*)(epoch_t epoch_queued,
 					   Scrub::act_token_t act_token);
   void forward_scrub_event(ScrubSafeAPI fn,
@@ -765,7 +750,7 @@ public:
 
   virtual void snap_trimmer(epoch_t epoch_queued) = 0;
   virtual void do_command(
-    const std::string_view& prefix,
+    std::string_view prefix,
     const cmdmap_t& cmdmap,
     const ceph::buffer::list& idata,
     std::function<void(int,const std::string&,ceph::buffer::list&)> on_finish) = 0;
@@ -1234,8 +1219,6 @@ public:
 
   // -- scrub --
 protected:
-  bool scrub_after_recovery;
-
   int active_pushes;
 
   [[nodiscard]] bool ops_blocked_by_scrub() const;
@@ -1369,7 +1352,7 @@ protected:
   virtual void snap_trimmer_scrub_complete() = 0;
 
   void queue_recovery();
-  void queue_scrub_after_repair();
+  void notify_scrub_on_recovery_finish();
   unsigned int get_scrub_priority();
 
   bool try_flush_or_schedule_async() override;
@@ -1420,10 +1403,6 @@ public:
 
  OSDService* get_pg_osd(ScrubberPasskey) const { return osd; }
 
- requested_scrub_t& get_planned_scrub(ScrubberPasskey)
- {
-   return m_planned_scrub;
- }
 
  void force_object_missing(ScrubberPasskey,
                            const std::set<pg_shard_t>& peer,
@@ -1437,6 +1416,15 @@ public:
  {
    return get_pgbackend()->be_get_ondisk_size(logical_size);
  }
+};
+
+class PGLockWrapper {
+ public:
+  PGLockWrapper(PGRef locked_pg) : m_pg{locked_pg} {}
+  PGRef pg() const { return m_pg; }
+  ~PGLockWrapper();
+ private:
+  PGRef m_pg;
 };
 
 #endif
