@@ -68,6 +68,11 @@ TEMPLATE = '''
 {%- if opt.see_also %}
    :see also: {{ opt.see_also | map('ref_confval') | join(', ') }}
 {%- endif %}
+{%- if opt.flags %}
+   :flags:{% for flag in opt.flags -%}
+{{" -" | indent(18, not loop.first) }} {{ flag | literal }}
+{% endfor %}
+{% endif %}
 {% if opt.note %}
    .. note::
       {{ opt.note }}
