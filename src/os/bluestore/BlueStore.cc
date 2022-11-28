@@ -2538,7 +2538,7 @@ void BlueStore::ExtentMap::scan_shared_blobs_segmented(
       break;
     }
     const bluestore_blob_t& blob = e.blob->get_blob();
-    if (blob.is_shared()) {
+    if (blob.is_shared() && !blob.is_compressed()) {
       // make sure blob is loaded, todo why?
       c->load_shared_blob(e.blob->shared_blob);
 
@@ -2603,7 +2603,8 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
       if (!blob.is_shared()) {
 	// first try to find a shared blob nearby
 	// that can accomodate extra extents
-	SharedBlob* sb = find_best_companion(e.logical_offset, segment_map);
+	SharedBlob* sb = blob.is_compressed() ? nullptr :
+	  find_best_companion(e.logical_offset, segment_map);
 	if (sb) {
 	  // overwrite previous (empty) shared blob
 	  // vv almost like make_blob_shared
