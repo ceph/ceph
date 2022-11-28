@@ -359,6 +359,13 @@ struct overwrite_plan_t {
     }
   }
 };
+} // namespace crimson::os::seastore {
+
+#if FMT_VERSION >= 90000
+template<> struct fmt::formatter<crimson::os::seastore::overwrite_plan_t> : fmt::ostream_formatter {};
+#endif
+
+namespace crimson::os::seastore {
 
 overwrite_plan_t generate_overwrite_plan(
   laddr_t offset,
