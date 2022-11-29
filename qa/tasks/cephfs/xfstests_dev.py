@@ -43,12 +43,11 @@ class XFSTestsDev(CephFSTestCase):
 
         # TODO: make sure that repo is not cloned for every test. it should
         # happen only once.
-        remoteurl = 'git://git.ceph.com/xfstests-dev.git'
+        remoteurl = 'https://git.ceph.com/xfstests-dev.git'
         self.repo_path = self.mount_a.client_remote.mkdtemp(suffix=
                                                             'xfstests-dev')
-        self.mount_a.run_shell(['git', 'archive', '--remote=' + remoteurl,
-                                'HEAD', run.Raw('|'),
-                                'tar', '-C', self.repo_path, '-x', '-f', '-'])
+        self.mount_a.run_shell(['git', 'clone', remoteurl, '--depth', '1',
+                                self.repo_path])
 
     def get_admin_key(self):
         import configparser
