@@ -30,18 +30,24 @@ This mode lets you mark monitors as disallowd, in which case they will
 participate in the quorum and serve clients, but cannot be elected leader. You
 may wish to use this if you have some monitors which are known to be far away
 from clients.
-You can disallow a leader by running ::
+You can disallow a leader by running:
 
-  $ ceph mon add disallowed_leader {name}
+.. prompt:: bash $
+
+   ceph mon add disallowed_leader {name}
 
 You can remove a monitor from the disallowed list, and allow it to become
-a leader again, by running ::
+a leader again, by running:
 
-  $ ceph mon rm disallowed_leader {name}
+.. prompt:: bash $
 
-The list of disallowed_leaders is included when you run ::
+   ceph mon rm disallowed_leader {name}
 
-  $ ceph mon dump
+The list of disallowed_leaders is included when you run:
+
+.. prompt:: bash $
+
+   ceph mon dump
 
 The connectivity Mode
 =====================
@@ -58,9 +64,11 @@ Examining connectivity scores
 =============================
 The monitors maintain connection scores even if they aren't in
 the connectivity election mode. You can examine the scores a monitor
-has by running ::
+has by running:
 
-  ceph daemon mon.{name} connection scores dump
+.. prompt:: bash $
+
+   ceph daemon mon.{name} connection scores dump
 
 Scores for individual connections range from 0-1 inclusive, and also
 include whether the connection is considered alive or dead (determined by
@@ -68,9 +76,11 @@ whether it returned its latest ping within the timeout).
 
 While this would be an unexpected occurrence, if for some reason you experience
 problems and troubleshooting makes you think your scores have become invalid,
-you can forget history and reset them by running ::
+you can forget history and reset them by running:
 
-  ceph daemon mon.{name} connection scores reset
+.. prompt:: bash $
+
+   ceph daemon mon.{name} connection scores reset
 
 While resetting scores has low risk (monitors will still quickly determine
 if a connection is alive or dead, and trend back to the previous scores if they
