@@ -274,9 +274,9 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
   void clone(
-    object_info_t& snap_oi,
-    ObjectState& os,
-    ObjectState& d_os,
+    /* const */object_info_t& snap_oi,
+    const ObjectState& os,
+    const ObjectState& d_os,
     ceph::os::Transaction& trans);
   interruptible_future<struct stat> stat(
     CollectionRef c,

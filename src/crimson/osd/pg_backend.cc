@@ -105,15 +105,15 @@ PGBackend::load_metadata(const hobject_t& oid)
           bool object_corrupted = true;
           if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
             object_corrupted = false;
-            logger().debug(
-              "load_metadata: object {} and snapset {} present",
-              oid, ssiter->second);
             bufferlist bl = std::move(ssiter->second);
             if (bl.length()) {
               ret->ssc = new crimson::osd::SnapSetContext(oid.get_snapdir());
               try {
                 ret->ssc->snapset = SnapSet(bl);
                 ret->ssc->exists = true;
+                logger().debug(
+                  "load_metadata: object {} and snapset {} present",
+                   oid, ret->ssc->snapset);
               } catch (const buffer::error&) {
                 logger().warn("unable to decode SnapSet");
                 throw crimson::osd::invalid_argument();
@@ -1247,22 +1247,18 @@ PGBackend::rm_xattr(
 }
 
 void PGBackend::clone(
-  object_info_t& snap_oi,
-  ObjectState& os,
-  ObjectState& d_os,
+  /* const */object_info_t& snap_oi,
+  const ObjectState& os,
+  const ObjectState& d_os,
   ceph::os::Transaction& txn)
 {
-  // Prepend the cloning operation to txn
-  ceph::os::Transaction c_txn;
-  c_txn.clone(coll->get_cid(), ghobject_t{os.oi.soid}, ghobject_t{d_os.oi.soid});
-  // Operations will be removed from txn while appending
-  c_txn.append(txn);
-  txn = std::move(c_txn);
-
-  ceph::bufferlist bv;
-  snap_oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
-
-  txn.setattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, OI_ATTR, bv);
+  // See OpsExecutor::execute_clone documentation
+  txn.clone(coll->get_cid(), ghobject_t{os.oi.soid}, ghobject_t{d_os.oi.soid});
+  {
+    ceph::bufferlist bv;
+    snap_oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
+    txn.setattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, OI_ATTR, bv);
+  }
   txn.rmattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, SS_ATTR);
 }
 
