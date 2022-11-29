@@ -102,7 +102,7 @@ struct rgw_log_entry {
   headers_map x_headers;
   std::string trans_id;
   std::vector<std::string> token_claims;
-  uint32_t identity_type;
+  uint32_t identity_type = TYPE_NONE;
   std::string access_key_id;
   std::string subuser;
   bool temp_url {false};
