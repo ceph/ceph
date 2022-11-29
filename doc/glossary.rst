@@ -279,6 +279,10 @@
                 Clusters <https://ceph.io/assets/pdfs/weil-rados-pdsw07.pdf>`_.
 
 	RADOS Cluster
+                A proper subset of the Ceph Cluster consisting of
+                :term:`OSD`\s, :term:`Ceph Monitor`\s, and :term:`Ceph
+                Manager`\s.
+                
 	RADOS Gateway
                 See :term:`RGW`.
 
