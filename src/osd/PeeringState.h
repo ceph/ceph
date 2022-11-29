@@ -2337,14 +2337,7 @@ public:
   bool needs_recovery() const;
   bool needs_backfill() const;
 
-  /**
-   * Returns whether a particular object can be safely read on this replica
-   */
-  bool can_serve_replica_read(const hobject_t &hoid) {
-    ceph_assert(!is_primary());
-    return !pg_log.get_log().has_write_since(
-      hoid, get_min_last_complete_ondisk());
-  }
+  bool can_serve_replica_read(const hobject_t &hoid);
 
   /**
    * Returns whether the current acting set is able to go active

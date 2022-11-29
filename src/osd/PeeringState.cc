@@ -1404,6 +1404,25 @@ bool PeeringState::needs_backfill() const
   return false;
 }
 
+/**
+* Returns whether a particular object can be safely read on this replica
+*/
+bool PeeringState::can_serve_replica_read(const hobject_t &hoid)
+{
+  ceph_assert(!is_primary());
+  eversion_t min_last_complete_ondisk = get_min_last_complete_ondisk();
+  if (!pg_log.get_log().has_write_since(
+      hoid, min_last_complete_ondisk)) {
+    psdout(20) << __func__
+               << " can be safely read on this replica" << dendl;
+    return true;
+  } else {
+    psdout(20) << __func__
+               << " can't read object on this replica" << dendl;
+    return false;
+  }
+}
+
 /*
  * Returns true unless there is a non-lost OSD in might_have_unfound.
  */
