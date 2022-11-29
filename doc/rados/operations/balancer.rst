@@ -1,4 +1,3 @@
-
 .. _balancer:
 
 Balancer
@@ -11,9 +10,11 @@ supervised fashion.
 Status
 ------
 
-The current status of the balancer can be checked at any time with::
+The current status of the balancer can be checked at any time with:
 
-  ceph balancer status
+   .. prompt:: bash $
+
+      ceph balancer status
 
 
 Automatic balancing
@@ -21,9 +22,11 @@ Automatic balancing
 
 The automatic balancing feature is enabled by default in ``upmap``
 mode. Please refer to :ref:`upmap` for more details. The balancer can be
-turned off with::
+turned off with:
 
-  ceph balancer off
+   .. prompt:: bash $
+
+      ceph balancer off
 
 The balancer mode can be changed to ``crush-compat`` mode, which is
 backward compatible with older clients, and will make small changes to
@@ -40,37 +43,51 @@ healed itself).
 When the cluster is healthy, the balancer will throttle its changes
 such that the percentage of PGs that are misplaced (i.e., that need to
 be moved) is below a threshold of (by default) 5%.  The
-``target_max_misplaced_ratio`` threshold can be adjusted with::
+``target_max_misplaced_ratio`` threshold can be adjusted with:
 
-  ceph config set mgr target_max_misplaced_ratio .07   # 7%
+   .. prompt:: bash $
 
-Set the number of seconds to sleep in between runs of the automatic balancer::
+      ceph config set mgr target_max_misplaced_ratio .07   # 7%
 
-  ceph config set mgr mgr/balancer/sleep_interval 60
+Set the number of seconds to sleep in between runs of the automatic balancer:
 
-Set the time of day to begin automatic balancing in HHMM format::
+   .. prompt:: bash $
 
-  ceph config set mgr mgr/balancer/begin_time 0000
+      ceph config set mgr mgr/balancer/sleep_interval 60
 
-Set the time of day to finish automatic balancing in HHMM format::
+Set the time of day to begin automatic balancing in HHMM format:
 
-  ceph config set mgr mgr/balancer/end_time 2359
+   .. prompt:: bash $
+
+      ceph config set mgr mgr/balancer/begin_time 0000
+
+Set the time of day to finish automatic balancing in HHMM format:
+
+   .. prompt:: bash $
+
+      ceph config set mgr mgr/balancer/end_time 2359
 
 Restrict automatic balancing to this day of the week or later. 
-Uses the same conventions as crontab, 0 is Sunday, 1 is Monday, and so on::
+Uses the same conventions as crontab, 0 is Sunday, 1 is Monday, and so on:
 
-  ceph config set mgr mgr/balancer/begin_weekday 0
+   .. prompt:: bash $
+
+      ceph config set mgr mgr/balancer/begin_weekday 0
 
 Restrict automatic balancing to this day of the week or earlier. 
-Uses the same conventions as crontab, 0 is Sunday, 1 is Monday, and so on::
+Uses the same conventions as crontab, 0 is Sunday, 1 is Monday, and so on:
 
-  ceph config set mgr mgr/balancer/end_weekday 6
+   .. prompt:: bash $
+
+      ceph config set mgr mgr/balancer/end_weekday 6
 
 Pool IDs to which the automatic balancing will be limited. 
 The default for this is an empty string, meaning all pools will be balanced. 
-The numeric pool IDs can be gotten with the :command:`ceph osd pool ls detail` command::
+The numeric pool IDs can be gotten with the :command:`ceph osd pool ls detail` command:
 
-  ceph config set mgr mgr/balancer/pool_ids 1,2,3
+   .. prompt:: bash $
+
+      ceph config set mgr mgr/balancer/pool_ids 1,2,3
 
 
 Modes
@@ -112,9 +129,11 @@ There are currently two supported balancer modes:
 
    Note that using upmap requires that all clients be Luminous or newer.
 
-The default mode is ``upmap``.  The mode can be adjusted with::
+The default mode is ``upmap``.  The mode can be adjusted with:
 
-  ceph balancer mode crush-compat
+   .. prompt:: bash $
+
+      ceph balancer mode crush-compat
 
 Supervised optimization
 -----------------------
@@ -125,43 +144,63 @@ The balancer operation is broken into a few distinct phases:
 #. evaluating the quality of the data distribution, either for the current PG distribution, or the PG distribution that would result after executing a *plan*
 #. executing the *plan*
 
-To evaluate and score the current distribution::
+To evaluate and score the current distribution:
 
-  ceph balancer eval
+   .. prompt:: bash $
 
-You can also evaluate the distribution for a single pool with::
+      ceph balancer eval
 
-  ceph balancer eval <pool-name>
+You can also evaluate the distribution for a single pool with:
 
-Greater detail for the evaluation can be seen with::
+   .. prompt:: bash $
 
-  ceph balancer eval-verbose ...
+      ceph balancer eval <pool-name>
+
+Greater detail for the evaluation can be seen with:
+
+   .. prompt:: bash $
+
+      ceph balancer eval-verbose ...
   
-The balancer can generate a plan, using the currently configured mode, with::
+The balancer can generate a plan, using the currently configured mode, with:
 
-  ceph balancer optimize <plan-name>
+   .. prompt:: bash $
 
-The name is provided by the user and can be any useful identifying string.  The contents of a plan can be seen with::
+      ceph balancer optimize <plan-name>
 
-  ceph balancer show <plan-name>
+The name is provided by the user and can be any useful identifying string.  The contents of a plan can be seen with:
 
-All plans can be shown with::
+   .. prompt:: bash $
 
-  ceph balancer ls
+      ceph balancer show <plan-name>
 
-Old plans can be discarded with::
+All plans can be shown with:
 
-  ceph balancer rm <plan-name>
+   .. prompt:: bash $
 
-Currently recorded plans are shown as part of the status command::
+      ceph balancer ls
 
-  ceph balancer status
+Old plans can be discarded with:
 
-The quality of the distribution that would result after executing a plan can be calculated with::
+   .. prompt:: bash $
 
-  ceph balancer eval <plan-name>
+      ceph balancer rm <plan-name>
 
-Assuming the plan is expected to improve the distribution (i.e., it has a lower score than the current cluster state), the user can execute that plan with::
+Currently recorded plans are shown as part of the status command:
 
-  ceph balancer execute <plan-name>
+   .. prompt:: bash $
+
+      ceph balancer status
+
+The quality of the distribution that would result after executing a plan can be calculated with:
+
+   .. prompt:: bash $
+
+      ceph balancer eval <plan-name>
+
+Assuming the plan is expected to improve the distribution (i.e., it has a lower score than the current cluster state), the user can execute that plan with:
+
+   .. prompt:: bash $
+
+      ceph balancer execute <plan-name>
 
