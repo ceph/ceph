@@ -1551,6 +1551,12 @@ int RGWUser::update(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state
     return -EINVAL;
   }
 
+  // if op_state.op_access_keys is not empty most recent keys have been fetched from master zone
+  if(!op_state.op_access_keys.empty()) {
+    auto user_access_keys = op_state.get_access_keys();
+    *(user_access_keys) = op_state.op_access_keys;
+  }
+
   RGWUserInfo *pold_info = (is_populated() ? &old_info : nullptr);
 
   ret = user->store_user(dpp, y, false, pold_info);

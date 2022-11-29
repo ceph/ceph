@@ -128,6 +128,8 @@ struct RGWUserAdminOpState {
   // key_attributes
   std::string id; // access key
   std::string key; // secret key
+  // access keys fetched for a user in the middle of an op
+  std::map<std::string, RGWAccessKey> op_access_keys;
   int32_t key_type{-1};
   bool access_key_exist = false;
 
