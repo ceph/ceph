@@ -4867,6 +4867,11 @@ int RGWHandler_REST_S3::postauth_init(optional_yield y)
 {
   struct req_init_state *t = &s->init_state;
 
+  //if no bucket name is assigned
+  if (t->url_bucket.back() == ':') {
+    return -ERR_INVALID_REQUEST;
+  } 
+
   rgw_parse_url_bucket(t->url_bucket, s->user->get_tenant(),
 		      s->bucket_tenant, s->bucket_name);
 
