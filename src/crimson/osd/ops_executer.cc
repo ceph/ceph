@@ -466,6 +466,7 @@ auto OpsExecuter::do_write_op(Func&& f, OpsExecuter::modified_by m) {
   ++num_write;
   if (!osd_op_params) {
     osd_op_params.emplace();
+    fill_op_params_bump_pg_version();
   }
   user_modify = (m == modified_by::user);
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn);
@@ -556,7 +557,6 @@ OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::execute_op(OSDOp& osd_op)
 {
-  head_os = obc->obs;
   return do_execute_op(osd_op).handle_error_interruptible(
     osd_op_errorator::all_same_way([&osd_op](auto e, auto&& e_raw)
       -> OpsExecuter::osd_op_errorator::future<> {
@@ -800,20 +800,21 @@ void OpsExecuter::fill_op_params_bump_pg_version()
   osd_op_params->pg_trim_to = pg->get_pg_trim_to();
   osd_op_params->min_last_complete_ondisk = pg->get_min_last_complete_ondisk();
   osd_op_params->last_complete = pg->get_info().last_complete;
-  if (user_modify) {
-    osd_op_params->user_at_version = osd_op_params->at_version.version;
-  }
 }
 
 std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
   const std::vector<OSDOp>& ops)
 {
   std::vector<pg_log_entry_t> log_entries;
-  log_entries.emplace_back(obc->obs.exists ?
+  log_entries.emplace_back(
+    obc->obs.exists ?
       pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
-    obc->obs.oi.soid, osd_op_params->at_version, obc->obs.oi.version,
+    obc->obs.oi.soid,
+    osd_op_params->at_version,
+    obc->obs.oi.version,
     osd_op_params->user_modify ? osd_op_params->at_version.version : 0,
-    osd_op_params->req_id, osd_op_params->mtime,
+    osd_op_params->req_id,
+    osd_op_params->mtime,
     op_info.allows_returnvec() && !ops.empty() ? ops.back().rval.code : 0);
   if (op_info.allows_returnvec()) {
     // also the per-op values are recorded in the pg log
@@ -836,96 +837,121 @@ version_t OpsExecuter::get_last_user_version() const
   return pg->get_last_user_version();
 }
 
-void OpsExecuter::make_writeable(std::vector<pg_log_entry_t>& log_entries)
+std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
+  const SnapContext& snapc,
+  const ObjectState& initial_obs,
+  const SnapSet& initial_snapset,
+  PGBackend& backend,
+  ceph::os::Transaction& txn)
 {
-  const hobject_t& soid = obc->obs.oi.soid;
+  const hobject_t& soid = initial_obs.oi.soid;
   logger().debug("{} {} snapset={} snapc={}",
                  __func__, soid,
-                 obc->ssc->snapset, snapc);
+                 initial_snapset, snapc);
 
-  // clone?
-  if (head_os.exists &&                          // old obs.exists
-      snapc.snaps.size() &&                      // there are snaps
-      snapc.snaps[0] > obc->ssc->snapset.seq) {  // existing obj is old
+  auto cloning_ctx = std::make_unique<CloningContext>();
+  cloning_ctx->new_snapset = initial_snapset;
 
-    // clone object, the snap field is set to the seq of the SnapContext
-    // at its creation.
-    hobject_t coid = soid;
-    coid.snap = snapc.seq;
+  // clone object, the snap field is set to the seq of the SnapContext
+  // at its creation.
+  hobject_t coid = soid;
+  coid.snap = snapc.seq;
 
-    // existing snaps are stored in descending order in snapc,
-    // cloned_snaps vector will hold all the snaps stored until snapset.seq
-    const std::vector<snapid_t> cloned_snaps = [&] {
-      auto last = std::find_if(
-        std::begin(snapc.snaps), std::end(snapc.snaps),
-        [&](snapid_t snap_id) { return snap_id <= obc->ssc->snapset.seq; });
-      return std::vector<snapid_t>{std::begin(snapc.snaps), last};
-    }();
+  // existing snaps are stored in descending order in snapc,
+  // cloned_snaps vector will hold all the snaps stored until snapset.seq
+  const std::vector<snapid_t> cloned_snaps = [&] {
+    auto last = std::find_if(
+      std::begin(snapc.snaps), std::end(snapc.snaps),
+      [&](snapid_t snap_id) { return snap_id <= initial_snapset.seq; });
+    return std::vector<snapid_t>{std::begin(snapc.snaps), last};
+  }();
 
-    // version
-    osd_op_params->at_version = pg->next_version();
+  auto [snap_oi, clone_obc] = prepare_clone(coid);
+  // make clone
+  backend.clone(snap_oi, initial_obs, clone_obc->obs, txn);
 
-    auto snap_oi = prepare_clone(coid);
-
-    // make clone
-    do_write_op([this, &snap_oi](auto& backend, auto& os, auto& txn) {
-      return backend.clone(snap_oi, os, clone_obc->obs, txn);
-    });
-
-    delta_stats.num_objects++;
-    if (snap_oi.is_omap()) {
-      delta_stats.num_objects_omap++;
-    }
-    delta_stats.num_object_clones++;
-    // newsnapset is obc's ssc
-    obc->ssc->snapset.clones.push_back(coid.snap);
-    obc->ssc->snapset.clone_size[coid.snap] = obc->obs.oi.size;
-    obc->ssc->snapset.clone_snaps[coid.snap] = cloned_snaps;
-
-    // clone_overlap should contain an entry for each clone
-    // (an empty interval_set if there is no overlap)
-    auto &overlap = obc->ssc->snapset.clone_overlap[coid.snap];
-    if (obc->obs.oi.size) {
-      overlap.insert(0, obc->obs.oi.size);
-    }
-
-    // log clone
-    logger().debug("cloning v {} to {} v {} snaps= {} snapset={}",
-                   obc->obs.oi.version, coid,
-                   osd_op_params->at_version, cloned_snaps, obc->ssc->snapset);
-
-    log_entries.emplace_back(pg_log_entry_t::CLONE,
-                             coid, osd_op_params->at_version,
-                             obc->obs.oi.version, obc->obs.oi.user_version,
-                             osd_reqid_t(),
-			     obc->obs.oi.mtime, 0);
-    encode(cloned_snaps, log_entries.back().snaps);
-    osd_op_params->at_version.version++;
-
-    // TODO: update most recent clone_overlap and usage stats
-
-    if (snapc.seq > obc->ssc->snapset.seq) {
-       // update snapset with latest snap context
-       obc->ssc->snapset.seq = snapc.seq;
-       obc->ssc->snapset.snaps.clear();
-    }
-    logger().debug("{} {} done, snapset={}",
-      __func__, soid, obc->ssc->snapset);
+  delta_stats.num_objects++;
+  if (snap_oi.is_omap()) {
+    delta_stats.num_objects_omap++;
   }
+  delta_stats.num_object_clones++;
+  // newsnapset is obc's ssc
+  cloning_ctx->new_snapset.clones.push_back(coid.snap);
+  cloning_ctx->new_snapset.clone_size[coid.snap] = initial_obs.oi.size;
+  cloning_ctx->new_snapset.clone_snaps[coid.snap] = cloned_snaps;
+
+  // clone_overlap should contain an entry for each clone
+  // (an empty interval_set if there is no overlap)
+  auto &overlap = cloning_ctx->new_snapset.clone_overlap[coid.snap];
+  if (initial_obs.oi.size) {
+    overlap.insert(0, initial_obs.oi.size);
+  }
+
+  // log clone
+  logger().debug("cloning v {} to {} v {} snaps={} snapset={}",
+                 initial_obs.oi.version, coid,
+                 osd_op_params->at_version, cloned_snaps, cloning_ctx->new_snapset);
+
+  cloning_ctx->log_entry = {
+    pg_log_entry_t::CLONE,
+    coid,
+    osd_op_params->at_version,
+    initial_obs.oi.version,
+    initial_obs.oi.user_version,
+    osd_reqid_t(),
+    initial_obs.oi.mtime, // will be replaced in `apply_to()`
+    0
+  };
+  encode(cloned_snaps, cloning_ctx->log_entry.snaps);
+
+  // TODO: update most recent clone_overlap and usage stats
+  return cloning_ctx;
 }
 
-const object_info_t OpsExecuter::prepare_clone(
+void OpsExecuter::CloningContext::apply_to(
+  const eversion_t& at_version,
+  std::vector<pg_log_entry_t>& log_entries,
+  ObjectContext& processed_obc) &&
+{
+  log_entry.mtime = processed_obc.obs.oi.mtime;
+  log_entry.version = at_version;
+  log_entries.emplace_back(std::move(log_entry));
+  processed_obc.ssc->snapset = std::move(new_snapset);
+}
+
+void OpsExecuter::flush_clone_metadata(
+  std::vector<pg_log_entry_t>& log_entries)
+{
+  assert(!txn.empty());
+  if (cloning_ctx) {
+    osd_op_params->at_version = pg->next_version();
+    std::move(*cloning_ctx).apply_to(osd_op_params->at_version,
+                                     log_entries,
+                                     *obc);
+  }
+  if (snapc.seq > obc->ssc->snapset.seq) {
+     // update snapset with latest snap context
+     obc->ssc->snapset.seq = snapc.seq;
+     obc->ssc->snapset.snaps.clear();
+  }
+  logger().debug("{} done, initial snapset={}, new snapset={}",
+    __func__, obc->obs.oi.soid, obc->ssc->snapset);
+}
+
+// TODO: make this static
+std::pair<object_info_t, ObjectContextRef> OpsExecuter::prepare_clone(
   const hobject_t& coid)
 {
   object_info_t static_snap_oi(coid);
   static_snap_oi.version = osd_op_params->at_version;
-  static_snap_oi.prior_version = head_os.oi.version;
-  static_snap_oi.copy_user_bits(head_os.oi);
+  static_snap_oi.prior_version = obc->obs.oi.version;
+  static_snap_oi.copy_user_bits(obc->obs.oi);
   if (static_snap_oi.is_whiteout()) {
     // clone shouldn't be marked as whiteout
     static_snap_oi.clear_flag(object_info_t::FLAG_WHITEOUT);
   }
 
+  ObjectContextRef clone_obc;
   if (pg->is_primary()) {
     // lookup_or_create
     auto [c_obc, existed] =
@@ -939,13 +965,35 @@ const object_info_t OpsExecuter::prepare_clone(
     logger().debug("clone_obc: {}", c_obc->obs.oi);
     clone_obc = std::move(c_obc);
   }
-  return static_snap_oi;
+  return std::make_pair(std::move(static_snap_oi), std::move(clone_obc));
 }
 
 void OpsExecuter::apply_stats()
 {
   pg->get_peering_state().apply_op_stats(get_target(), delta_stats);
   pg->publish_stats_to_osd();
+}
+
+OpsExecuter::OpsExecuter(Ref<PG> pg,
+                         ObjectContextRef _obc,
+                         const OpInfo& op_info,
+                         abstracted_msg_t&& msg,
+                         const SnapContext& _snapc)
+  : pg(std::move(pg)),
+    obc(std::move(_obc)),
+    op_info(op_info),
+    msg(std::move(msg)),
+    snapc(_snapc)
+{
+  if (op_info.may_write() && should_clone(*obc, snapc)) {
+    do_write_op([this](auto& backend, auto& os, auto& txn) {
+      cloning_ctx = execute_clone(std::as_const(snapc),
+                                  std::as_const(obc->obs),
+                                  std::as_const(obc->ssc->snapset),
+                                  backend,
+                                  txn);
+    });
+  }
 }
 
 static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
