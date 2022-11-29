@@ -342,7 +342,7 @@ bool ClientRequest::is_misdirected(const PG& pg) const
       return true;
     }
     // balanced reads; any replica will do
-    return pg.is_nonprimary();
+    return false;
   }
   // neither balanced nor localize reads
   return true;
