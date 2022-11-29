@@ -261,11 +261,16 @@ ClientRequest::do_process(
   if (!pg->is_primary()) {
     // primary can handle both normal ops and balanced reads
     if (is_misdirected(*pg)) {
-      logger().trace("do_process: dropping misdirected op");
+      logger().debug("{}: dropping misdirected op", __func__);
       return seastar::now();
     } else if (const hobject_t& hoid = m->get_hobj();
                !pg->get_peering_state().can_serve_replica_read(hoid)) {
+      logger().debug("{}: unstable write on replica, bouncing to primary",
+                     __func__);
       return reply_op_error(pg, -EAGAIN);
+    } else {
+      logger().debug("{}: : serving replica read on oid {}",
+                     __func__, m->get_hobj());
     }
   }
   if (m->has_flag(CEPH_OSD_FLAG_PARALLELEXEC)) {
