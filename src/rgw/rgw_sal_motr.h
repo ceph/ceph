@@ -897,7 +897,7 @@ public:
   int delete_parts(const DoutPrefixProvider *dpp);
 };
 
-class MotrStore : public StoreStore {
+class MotrStore : public StoreDriver {
   private:
     std::string luarocks_path;
     MotrZone zone;

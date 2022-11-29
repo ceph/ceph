@@ -705,13 +705,13 @@ int update_period(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
-                  sal::ConfigStore* cfgstore, sal::Store* store,
+                  sal::ConfigStore* cfgstore, sal::Driver* driver,
                   RGWRealm& realm, sal::RealmWriter& realm_writer,
                   const RGWPeriod& current_period,
                   RGWPeriod& info, std::ostream& error_stream,
                   bool force_if_stale)
 {
-  auto zone_svc = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone; // XXX
+  auto zone_svc = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone; // XXX
 
   ldpp_dout(dpp, 20) << __func__ << " realm " << realm.id
       << " period " << current_period.id << dendl;
@@ -742,7 +742,7 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
   // did the master zone change?
   if (info.master_zone != current_period.master_zone) {
     // store the current metadata sync status in the period
-    int r = info.update_sync_status(dpp, store, current_period,
+    int r = info.update_sync_status(dpp, driver, current_period,
                                     error_stream, force_if_stale);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "failed to update metadata sync status: "

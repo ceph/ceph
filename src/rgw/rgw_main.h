@@ -43,8 +43,8 @@ public:
   void pause() override {
     std::for_each(pausers.begin(), pausers.end(), [](Pauser* p){p->pause();});
   }
-  void resume(rgw::sal::Store* store) override {
-    std::for_each(pausers.begin(), pausers.end(), [store](Pauser* p){p->resume(store);});
+  void resume(rgw::sal::Driver* driver) override {
+    std::for_each(pausers.begin(), pausers.end(), [driver](Pauser* p){p->resume(driver);});
   }
 
 };
@@ -75,7 +75,7 @@ class AppMain {
   std::unique_ptr<RGWFrontendPauser> fe_pauser;
   std::unique_ptr<RGWRealmWatcher> realm_watcher;
   std::unique_ptr<RGWPauser> rgw_pauser;
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   DoutPrefixProvider* dpp;
 
 public:
@@ -86,8 +86,8 @@ public:
   void shutdown(std::function<void(void)> finalize_async_signals
 	       = []() { /* nada */});
 
-  rgw::sal::Store* get_store() {
-    return store;
+  rgw::sal::Driver* get_driver() {
+    return driver;
   }
 
   rgw::LDAPHelper* get_ldh() {
@@ -121,9 +121,9 @@ static inline RGWRESTMgr *set_logging(RGWRESTMgr* mgr)
   return mgr;
 }
 
-static inline RGWRESTMgr *rest_filter(rgw::sal::Store* store, int dialect, RGWRESTMgr* orig)
+static inline RGWRESTMgr *rest_filter(rgw::sal::Driver* driver, int dialect, RGWRESTMgr* orig)
 {
-  RGWSyncModuleInstanceRef sync_module = store->get_sync_module();
+  RGWSyncModuleInstanceRef sync_module = driver->get_sync_module();
   if (sync_module) {
     return sync_module->get_rest_filter(dialect, orig);
   } else {

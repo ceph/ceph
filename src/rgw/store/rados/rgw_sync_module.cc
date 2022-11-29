@@ -21,9 +21,9 @@ RGWMetadataHandler *RGWSyncModuleInstance::alloc_bucket_meta_handler()
   return RGWBucketMetaHandlerAllocator::alloc();
 }
 
-RGWBucketInstanceMetadataHandlerBase* RGWSyncModuleInstance::alloc_bucket_instance_meta_handler(rgw::sal::Store* store)
+RGWBucketInstanceMetadataHandlerBase* RGWSyncModuleInstance::alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver)
 {
-  return RGWBucketInstanceMetaHandlerAllocator::alloc(store);
+  return RGWBucketInstanceMetaHandlerAllocator::alloc(driver);
 }
 
 RGWStatRemoteObjCBCR::RGWStatRemoteObjCBCR(RGWDataSyncCtx *_sc,
@@ -41,7 +41,7 @@ RGWCallStatRemoteObjCR::RGWCallStatRemoteObjCR(RGWDataSyncCtx *_sc,
 int RGWCallStatRemoteObjCR::operate(const DoutPrefixProvider *dpp) {
   reenter(this) {
     yield {
-      call(new RGWStatRemoteObjCR(sync_env->async_rados, sync_env->store,
+      call(new RGWStatRemoteObjCR(sync_env->async_rados, sync_env->driver,
                                   sc->source_zone,
                                   src_bucket, key, &mtime, &size, &etag, &attrs, &headers));
     }

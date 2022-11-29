@@ -20,7 +20,7 @@ struct RGWLCCloudTierCtx {
 
   /* Source */
   rgw_bucket_dir_entry& o;
-  rgw::sal::Store *store;
+  rgw::sal::Driver *driver;
   RGWBucketInfo& bucket_info;
   std::string storage_class;
 
@@ -39,11 +39,11 @@ struct RGWLCCloudTierCtx {
   bool target_bucket_created{true};
 
   RGWLCCloudTierCtx(CephContext* _cct, const DoutPrefixProvider *_dpp,
-      rgw_bucket_dir_entry& _o, rgw::sal::Store *_store,
+      rgw_bucket_dir_entry& _o, rgw::sal::Driver *_driver,
       RGWBucketInfo &_binfo, rgw::sal::Object *_obj,
       RGWRESTConn& _conn, std::string& _bucket,
       std::string& _storage_class) :
-    cct(_cct), dpp(_dpp), o(_o), store(_store), bucket_info(_binfo),
+    cct(_cct), dpp(_dpp), o(_o), driver(_driver), bucket_info(_binfo),
     obj(_obj), conn(_conn), target_bucket_name(_bucket),
     target_storage_class(_storage_class) {}
 };

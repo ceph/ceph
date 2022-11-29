@@ -119,7 +119,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
 
   bufferlist bl = bufferlist::static_from_string(policy);
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_name));
 
   op_ret = user->load_user(s, s->yield);
   if (op_ret < 0) {
@@ -134,7 +134,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
   }
 
   ceph::bufferlist in_data;
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -199,7 +199,7 @@ void RGWGetUserPolicy::execute(optional_yield y)
     return;
   }
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_name));
   op_ret = user->read_attrs(s, s->yield);
   if (op_ret == -ENOENT) {
     ldpp_dout(this, 0) << "ERROR: attrs not found for user" << user_name << dendl;
@@ -268,7 +268,7 @@ void RGWListUserPolicies::execute(optional_yield y)
     return;
   }
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_name));
   op_ret = user->read_attrs(s, s->yield);
   if (op_ret == -ENOENT) {
     ldpp_dout(this, 0) << "ERROR: attrs not found for user" << user_name << dendl;
@@ -335,7 +335,7 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
     return;
   }
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_name));
   op_ret = user->load_user(s, s->yield);
   if (op_ret < 0) {
     op_ret = -ERR_NO_SUCH_ENTITY;
@@ -349,7 +349,7 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
   }
 
   ceph::bufferlist in_data;
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     // a policy might've been uploaded to this site when there was no sync
     // req. in earlier releases, proceed deletion

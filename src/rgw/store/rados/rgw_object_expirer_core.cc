@@ -108,7 +108,7 @@ int RGWObjExpStore::objexp_hint_add(const DoutPrefixProvider *dpp,
   cls_timeindex_add(op, utime_t(delete_at), keyext, hebl);
 
   string shard_name = objexp_hint_get_shardname(objexp_key_shard(obj_key, cct->_conf->rgw_objexp_hints_num_shards));
-  auto obj = rados_svc->obj(rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, shard_name));
+  auto obj = rados_svc->obj(rgw_raw_obj(driver->svc()->zone->get_zone_params().log_pool, shard_name));
   int r = obj.open(dpp);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
@@ -131,7 +131,7 @@ int RGWObjExpStore::objexp_hint_list(const DoutPrefixProvider *dpp,
   cls_timeindex_list(op, utime_t(start_time), utime_t(end_time), marker, max_entries, entries,
         out_marker, truncated);
 
-  auto obj = rados_svc->obj(rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, oid));
+  auto obj = rados_svc->obj(rgw_raw_obj(driver->svc()->zone->get_zone_params().log_pool, oid));
   int r = obj.open(dpp);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
@@ -180,7 +180,7 @@ int RGWObjExpStore::objexp_hint_trim(const DoutPrefixProvider *dpp,
                                const string& from_marker,
                                const string& to_marker)
 {
-  auto obj = rados_svc->obj(rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, oid));
+  auto obj = rados_svc->obj(rgw_raw_obj(driver->svc()->zone->get_zone_params().log_pool, oid));
   int r = obj.open(dpp);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
@@ -201,7 +201,7 @@ int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objex
   RGWBucketInfo bucket_info;
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
-  int ret = store->get_bucket(dpp, nullptr, rgw_bucket(hint.tenant, hint.bucket_name, hint.bucket_id), &bucket, null_yield);
+  int ret = driver->get_bucket(dpp, nullptr, rgw_bucket(hint.tenant, hint.bucket_name, hint.bucket_id), &bucket, null_yield);
   if (-ENOENT == ret) {
     ldpp_dout(dpp, 15) << "NOTICE: cannot find bucket = " \
         << hint.bucket_name << ". The object must be already removed" << dendl;
@@ -238,7 +238,7 @@ void RGWObjectExpirer::garbage_chunk(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 15) << "got removal hint for: " << iter->key_ts.sec() \
         << " - " << iter->key_ext << dendl;
 
-    int ret = objexp_hint_parse(dpp, store->ctx(), *iter, &hint);
+    int ret = objexp_hint_parse(dpp, driver->ctx(), *iter, &hint);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << "cannot parse removal hint for " << hint.obj_key << dendl;
       continue;
@@ -291,7 +291,7 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
   bool truncated = false;
   bool done = true;
 
-  CephContext *cct = store->ctx();
+  CephContext *cct = driver->ctx();
   int num_entries = cct->_conf->rgw_objexp_chunk_size;
 
   int max_secs = cct->_conf->rgw_objexp_gc_interval;
@@ -303,7 +303,7 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
   utime_t time(max_secs, 0);
   l.set_duration(time);
 
-  int ret = l.lock_exclusive(&static_cast<rgw::sal::RadosStore*>(store)->getRados()->objexp_pool_ctx, shard);
+  int ret = l.lock_exclusive(&static_cast<rgw::sal::RadosStore*>(driver)->getRados()->objexp_pool_ctx, shard);
   if (ret == -EBUSY) { /* already locked by another processor */
     ldpp_dout(dpp, 5) << __func__ << "(): failed to acquire lock on " << shard << dendl;
     return false;
@@ -339,7 +339,7 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
     marker = out_marker;
   } while (truncated);
 
-  l.unlock(&static_cast<rgw::sal::RadosStore*>(store)->getRados()->objexp_pool_ctx, shard);
+  l.unlock(&static_cast<rgw::sal::RadosStore*>(driver)->getRados()->objexp_pool_ctx, shard);
   return done;
 }
 
@@ -348,7 +348,7 @@ bool RGWObjectExpirer::inspect_all_shards(const DoutPrefixProvider *dpp,
                                           const utime_t& last_run,
                                           const utime_t& round_start)
 {
-  CephContext * const cct = store->ctx();
+  CephContext * const cct = driver->ctx();
   int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
   bool all_done = true;
 
@@ -373,7 +373,7 @@ bool RGWObjectExpirer::going_down()
 
 void RGWObjectExpirer::start_processor()
 {
-  worker = new OEWorker(store->ctx(), this);
+  worker = new OEWorker(driver->ctx(), this);
   worker->create("rgw_obj_expirer");
 }
 

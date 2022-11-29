@@ -120,7 +120,7 @@ class RadosZone : public StoreZone {
     virtual RGWBucketSyncPolicyHandlerRef get_sync_policy_handler() override;
 };
 
-class RadosStore : public StoreStore {
+class RadosStore : public StoreDriver {
   private:
     RGWRados* rados;
     RGWUserCtl* user_ctl;
@@ -375,14 +375,14 @@ class RadosObject : public StoreObject {
       : StoreObject(_k),
 	store(_st),
         acls(),
-	rados_ctx(new RGWObjectCtx(dynamic_cast<Store*>(store))),
+	rados_ctx(new RGWObjectCtx(dynamic_cast<Driver*>(store))),
 	rados_ctx_owned(true) {
     }
     RadosObject(RadosStore *_st, const rgw_obj_key& _k, Bucket* _b)
       : StoreObject(_k, _b),
 	store(_st),
         acls(),
-	rados_ctx(new RGWObjectCtx(dynamic_cast<Store*>(store))) ,
+	rados_ctx(new RGWObjectCtx(dynamic_cast<Driver*>(store))) ,
 	rados_ctx_owned(true) {
     }
     RadosObject(RadosObject& _o) : StoreObject(_o) {

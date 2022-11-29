@@ -190,7 +190,7 @@ struct RGWCtlDef {
   RGWCtlDef();
   ~RGWCtlDef();
 
-  int init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixProvider *dpp);
+  int init(RGWServices& svc, rgw::sal::Driver* driver, const DoutPrefixProvider *dpp);
 };
 
 struct RGWCtl {
@@ -213,7 +213,7 @@ struct RGWCtl {
   RGWBucketCtl *bucket{nullptr};
   RGWOTPCtl *otp{nullptr};
 
-  int init(RGWServices *_svc, rgw::sal::Store* store, const DoutPrefixProvider *dpp);
+  int init(RGWServices *_svc, rgw::sal::Driver* driver, const DoutPrefixProvider *dpp);
 };
 
 #endif

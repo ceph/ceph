@@ -107,7 +107,7 @@ void RGWLoadGenProcess::gen_request(const string& method,
 				    int content_length, std::atomic<bool>* fail_flag)
 {
   RGWLoadGenRequest* req =
-    new RGWLoadGenRequest(store->get_new_req_id(), method, resource,
+    new RGWLoadGenRequest(driver->get_new_req_id(), method, resource,
 			  content_length, fail_flag);
   dout(10) << "allocated request req=" << hex << req << dec << dendl;
   req_throttle.get(1);
@@ -133,7 +133,7 @@ void RGWLoadGenProcess::handle_request(const DoutPrefixProvider *dpp, RGWRequest
   RGWLoadGenIO real_client_io(&env);
   RGWRestfulIO client_io(cct, &real_client_io);
   ActiveRateLimiter ratelimit(cct);
-  int ret = process_request(store, rest, req, uri_prefix,
+  int ret = process_request(driver, rest, req, uri_prefix,
                             *auth_registry, &client_io, olog,
                             null_yield, nullptr, nullptr, nullptr,
                             ratelimit.get_active(),

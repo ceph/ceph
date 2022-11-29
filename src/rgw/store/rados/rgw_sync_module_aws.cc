@@ -1388,7 +1388,7 @@ public:
         ldpp_dout(dpp, 0) << "ERROR: failed to abort multipart upload dest obj=" << dest_obj << " upload_id=" << upload_id << " retcode=" << retcode << dendl;
         /* ignore error, best effort */
       }
-      yield call(new RGWRadosRemoveCR(sc->env->store, status_obj));
+      yield call(new RGWRadosRemoveCR(sc->env->driver, status_obj));
       if (retcode < 0) {
         ldpp_dout(dpp, 0) << "ERROR: failed to remove sync status obj obj=" << status_obj << " retcode=" << retcode << dendl;
         /* ignore error, best effort */
@@ -1532,7 +1532,7 @@ public:
       }
 
       /* remove status obj */
-      yield call(new RGWRadosRemoveCR(sync_env->store, status_obj));
+      yield call(new RGWRadosRemoveCR(sync_env->driver, status_obj));
       if (retcode < 0) {
         ldpp_dout(dpp, 0) << "ERROR: failed to abort multipart upload obj=" << src_obj << " upload_id=" << status.upload_id << " part number " << status.cur_part << " (" << cpp_strerror(-retcode) << ")" << dendl;
         /* ignore error, best effort */
@@ -1679,14 +1679,14 @@ public:
       }
 
       yield {
-        bucket.reset(new rgw::sal::RadosBucket(sync_env->store, src_bucket));
-        src_obj.reset(new rgw::sal::RadosObject(sync_env->store, key, bucket.get()));
+        bucket.reset(new rgw::sal::RadosBucket(sync_env->driver, src_bucket));
+        src_obj.reset(new rgw::sal::RadosObject(sync_env->driver, key, bucket.get()));
 
         /* init output */
         target_bucket.name = target_bucket_name; /* this is only possible because we only use bucket name for
                                                     uri resolution */
-        dest_bucket.reset(new rgw::sal::RadosBucket(sync_env->store, target_bucket));
-        dest_obj.reset(new rgw::sal::RadosObject(sync_env->store, rgw_obj_key(target_obj_name), dest_bucket.get()));
+        dest_bucket.reset(new rgw::sal::RadosBucket(sync_env->driver, target_bucket));
+        dest_obj.reset(new rgw::sal::RadosObject(sync_env->driver, rgw_obj_key(target_obj_name), dest_bucket.get()));
 
         rgw_sync_aws_src_obj_properties src_properties;
         src_properties.mtime = mtime;

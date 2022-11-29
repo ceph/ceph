@@ -150,9 +150,9 @@ void RGWPeriod::fork()
   realm_epoch++;
 }
 
-static int read_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw_meta_sync_status *sync_status)
+static int read_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw_meta_sync_status *sync_status)
 {
-  rgw::sal::RadosStore* rados_store = static_cast<rgw::sal::RadosStore*>(store);
+  rgw::sal::RadosStore* rados_store = static_cast<rgw::sal::RadosStore*>(driver);
   // initialize a sync status manager to read the status
   RGWMetaSyncStatusManager mgr(rados_store, rados_store->svc()->rados->get_async_processor());
   int r = mgr.init(dpp);
@@ -165,13 +165,13 @@ static int read_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Store* stor
 }
 
 int RGWPeriod::update_sync_status(const DoutPrefixProvider *dpp,
-                                  rgw::sal::Store* store, /* for now */
+                                  rgw::sal::Driver* driver, /* for now */
 				  const RGWPeriod &current_period,
                                   std::ostream& error_stream,
                                   bool force_if_stale)
 {
   rgw_meta_sync_status status;
-  int r = read_sync_status(dpp, store, &status);
+  int r = read_sync_status(dpp, driver, &status);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "period failed to read sync status: "
         << cpp_strerror(-r) << dendl;
@@ -216,7 +216,7 @@ int RGWPeriod::update_sync_status(const DoutPrefixProvider *dpp,
 }
 
 int RGWPeriod::commit(const DoutPrefixProvider *dpp,
-		      rgw::sal::Store* store,
+		      rgw::sal::Driver* driver,
 		      RGWRealm& realm, const RGWPeriod& current_period,
                       std::ostream& error_stream, optional_yield y,
 		      bool force_if_stale)
@@ -250,7 +250,7 @@ int RGWPeriod::commit(const DoutPrefixProvider *dpp,
   // did the master zone change?
   if (master_zone != current_period.get_master_zone()) {
     // store the current metadata sync status in the period
-    int r = update_sync_status(dpp, store, current_period, error_stream, force_if_stale);
+    int r = update_sync_status(dpp, driver, current_period, error_stream, force_if_stale);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "failed to update metadata sync status: "
           << cpp_strerror(-r) << dendl;

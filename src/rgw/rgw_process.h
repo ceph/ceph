@@ -29,13 +29,13 @@ namespace rgw::lua {
 }
 
 struct RGWProcessEnv {
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   RGWREST *rest;
   OpsLogSink *olog;
   int port;
   std::string uri_prefix;
   std::shared_ptr<rgw::auth::StrategyRegistry> auth_registry;
-  //maybe there is a better place to store the rate limit data structure
+  //maybe there is a better place to driver the rate limit data structure
   ActiveRateLimiter* ratelimiting;
   rgw::lua::Background* lua_background;
 };
@@ -47,7 +47,7 @@ class RGWProcess {
   std::deque<RGWRequest*> m_req_queue;
 protected:
   CephContext *cct;
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   rgw_auth_registry_ptr_t auth_registry;
   OpsLogSink* olog;
   ThreadPool m_tp;
@@ -100,7 +100,7 @@ public:
              const int num_threads,
              RGWFrontendConfig* const conf)
     : cct(cct),
-      store(pe->store),
+      driver(pe->driver),
       auth_registry(pe->auth_registry),
       olog(pe->olog),
       m_tp(cct, "RGWProcess::m_tp", "tp_rgw_process", num_threads),
@@ -110,7 +110,7 @@ public:
       sock_fd(-1),
       uri_prefix(pe->uri_prefix),
       lua_background(pe->lua_background),
-      lua_manager(store->get_lua_manager()),
+      lua_manager(driver->get_lua_manager()),
       req_wq(this,
 	     ceph::make_timespan(g_conf()->rgw_op_thread_timeout),
 	     ceph::make_timespan(g_conf()->rgw_op_thread_suicide_timeout),
@@ -126,11 +126,11 @@ public:
     m_tp.pause();
   }
 
-  void unpause_with_new_config(rgw::sal::Store* const store,
+  void unpause_with_new_config(rgw::sal::Driver* const driver,
                                rgw_auth_registry_ptr_t auth_registry) {
-    this->store = store;
+    this->driver = driver;
     this->auth_registry = std::move(auth_registry);
-    lua_manager = store->get_lua_manager();
+    lua_manager = driver->get_lua_manager();
     m_tp.unpause();
   }
 
@@ -168,7 +168,7 @@ public:
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 };
 /* process stream request */
-extern int process_request(rgw::sal::Store* store,
+extern int process_request(rgw::sal::Driver* driver,
                            RGWREST* rest,
                            RGWRequest* req,
                            const std::string& frontend_prefix,
@@ -189,7 +189,7 @@ extern int rgw_process_authenticated(RGWHandler_REST* handler,
                                      RGWRequest* req,
                                      req_state* s,
 				                             optional_yield y,
-                                     rgw::sal::Store* store,
+                                     rgw::sal::Driver* driver,
                                      bool skip_retarget = false);
 
 #undef dout_context

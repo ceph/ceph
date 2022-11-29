@@ -99,11 +99,11 @@ static inline string obj_to_aws_path(const rgw_obj& obj)
   return path;
 }
 
-static int read_upload_status(const DoutPrefixProvider *dpp, rgw::sal::Store *store,
+static int read_upload_status(const DoutPrefixProvider *dpp, rgw::sal::Driver *driver,
     const rgw_raw_obj *status_obj, rgw_lc_multipart_upload_info *status)
 {
   int ret = 0;
-  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
+  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(driver);
 
   if (!rados) {
     ldpp_dout(dpp, 0) << "ERROR: Not a RadosStore. Cannot be transitioned to cloud." << dendl;
@@ -138,11 +138,11 @@ static int read_upload_status(const DoutPrefixProvider *dpp, rgw::sal::Store *st
   return 0;
 }
 
-static int put_upload_status(const DoutPrefixProvider *dpp, rgw::sal::Store *store,
+static int put_upload_status(const DoutPrefixProvider *dpp, rgw::sal::Driver *driver,
     const rgw_raw_obj *status_obj, rgw_lc_multipart_upload_info *status)
 {
   int ret = 0;
-  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
+  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(driver);
 
   if (!rados) {
     ldpp_dout(dpp, 0) << "ERROR: Not a RadosStore. Cannot be transitioned to cloud." << dendl;
@@ -161,11 +161,11 @@ static int put_upload_status(const DoutPrefixProvider *dpp, rgw::sal::Store *sto
   return ret;
 }
 
-static int delete_upload_status(const DoutPrefixProvider *dpp, rgw::sal::Store *store,
+static int delete_upload_status(const DoutPrefixProvider *dpp, rgw::sal::Driver *driver,
     const rgw_raw_obj *status_obj)
 {
   int ret = 0;
-  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
+  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(driver);
 
   if (!rados) {
     ldpp_dout(dpp, 0) << "ERROR: Not a RadosStore. Cannot be transitioned to cloud." << dendl;
@@ -255,7 +255,7 @@ static int cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
     target_obj_name += get_key_instance(tier_ctx.obj->get_key());
   }
 
-  ret = tier_ctx.store->get_bucket(nullptr, b, &dest_bucket);
+  ret = tier_ctx.driver->get_bucket(nullptr, b, &dest_bucket);
   if (ret < 0) {
     ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to initialize dest_bucket - " << tier_ctx.target_bucket_name << " , reterr = " << ret << dendl;
     return ret;
@@ -772,7 +772,7 @@ static int cloud_tier_plain_transfer(RGWLCCloudTierCtx& tier_ctx) {
     target_obj_name += get_key_instance(tier_ctx.obj->get_key());
   }
 
-  ret = tier_ctx.store->get_bucket(nullptr, b, &dest_bucket);
+  ret = tier_ctx.driver->get_bucket(nullptr, b, &dest_bucket);
   if (ret < 0) {
     ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to initialize dest_bucket - " << tier_ctx.target_bucket_name << " , ret = " << ret << dendl;
     return ret;
@@ -827,7 +827,7 @@ static int cloud_tier_send_multipart_part(RGWLCCloudTierCtx& tier_ctx,
     target_obj_name += get_key_instance(tier_ctx.obj->get_key());
   }
 
-  ret = tier_ctx.store->get_bucket(nullptr, b, &dest_bucket);
+  ret = tier_ctx.driver->get_bucket(nullptr, b, &dest_bucket);
   if (ret < 0) {
     ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to initialize dest_bucket - " << tier_ctx.target_bucket_name << " , ret = " << ret << dendl;
     return ret;
@@ -1054,7 +1054,7 @@ static int cloud_tier_abort_multipart_upload(RGWLCCloudTierCtx& tier_ctx,
     /* ignore error, best effort */
   }
   /* remove status obj */
-  ret = delete_upload_status(tier_ctx.dpp, tier_ctx.store, &status_obj);
+  ret = delete_upload_status(tier_ctx.dpp, tier_ctx.driver, &status_obj);
   if (ret < 0) {
     ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to remove sync status obj obj=" << status_obj << " ret=" << ret << dendl;
     // ignore error, best effort 
@@ -1104,10 +1104,10 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
   }
   dest_obj.init(target_bucket, target_obj_name);
 
-  rgw_pool pool = static_cast<rgw::sal::RadosStore*>(tier_ctx.store)->svc()->zone->get_zone_params().log_pool;
+  rgw_pool pool = static_cast<rgw::sal::RadosStore*>(tier_ctx.driver)->svc()->zone->get_zone_params().log_pool;
   status_obj = rgw_raw_obj(pool, "lc_multipart_" + tier_ctx.obj->get_oid());
 
-  ret = read_upload_status(tier_ctx.dpp, tier_ctx.store, &status_obj, &status);
+  ret = read_upload_status(tier_ctx.dpp, tier_ctx.driver, &status_obj, &status);
 
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to read sync status of object " << src_obj << " ret=" << ret << dendl;
@@ -1141,10 +1141,10 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
     status.mtime = obj_properties.mtime;
     status.etag = obj_properties.etag;
 
-    ret = put_upload_status(tier_ctx.dpp, tier_ctx.store, &status_obj, &status);
+    ret = put_upload_status(tier_ctx.dpp, tier_ctx.driver, &status_obj, &status);
 
     if (ret < 0) {
-      ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to store multipart upload state, ret=" << ret << dendl;
+      ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to driver multipart upload state, ret=" << ret << dendl;
       // continue with upload anyway 
     }
 
@@ -1193,7 +1193,7 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
   }
 
   /* remove status obj */
-  ret = delete_upload_status(tier_ctx.dpp, tier_ctx.store, &status_obj);
+  ret = delete_upload_status(tier_ctx.dpp, tier_ctx.driver, &status_obj);
   if (ret < 0) {
     ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to abort multipart upload obj=" << tier_ctx.obj << " upload_id=" << status.upload_id << " part number " << cur_part << " (" << cpp_strerror(-ret) << ")" << dendl;
     // ignore error, best effort 

@@ -35,7 +35,7 @@ public:
 
 void RGWOp_User_List::execute(optional_yield y)
 {
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   uint32_t max_entries;
   std::string marker;
@@ -44,7 +44,7 @@ void RGWOp_User_List::execute(optional_yield y)
 
   op_state.max_entries = max_entries;
   op_state.marker = marker;
-  op_ret = RGWUserAdminOp_User::list(this, store, op_state, flusher);
+  op_ret = RGWUserAdminOp_User::list(this, driver, op_state, flusher);
 }
 
 class RGWOp_User_Info : public RGWRESTOp {
@@ -63,7 +63,7 @@ public:
 
 void RGWOp_User_Info::execute(optional_yield y)
 {
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   std::string uid_str, access_key_str;
   bool fetch_stats;
@@ -91,7 +91,7 @@ void RGWOp_User_Info::execute(optional_yield y)
   op_state.set_fetch_stats(fetch_stats);
   op_state.set_sync_stats(sync_stats);
 
-  op_ret = RGWUserAdminOp_User::info(s, store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_User::info(s, driver, op_state, flusher, y);
 }
 
 class RGWOp_User_Create : public RGWRESTOp {
@@ -131,7 +131,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   const int32_t default_max_buckets =
     s->cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
 
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   rgw_user uid(uid_str);
@@ -212,7 +212,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   if (!default_placement_str.empty()) {
     rgw_placement_rule target_rule;
     target_rule.from_str(default_placement_str);
-    if (!store->valid_placement(target_rule)) {
+    if (!driver->valid_placement(target_rule)) {
       ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << target_rule.to_str() << dendl;
       op_ret = -EINVAL;
       return;
@@ -227,12 +227,12 @@ void RGWOp_User_Create::execute(optional_yield y)
   }
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_User::create(s, store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_User::create(s, driver, op_state, flusher, y);
 }
 
 class RGWOp_User_Modify : public RGWRESTOp {
@@ -268,7 +268,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   bool quota_set;
   int32_t max_buckets;
 
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   rgw_user uid(uid_str);
@@ -351,7 +351,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   if (!default_placement_str.empty()) {
     rgw_placement_rule target_rule;
     target_rule.from_str(default_placement_str);
-    if (!store->valid_placement(target_rule)) {
+    if (!driver->valid_placement(target_rule)) {
       ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << target_rule.to_str() << dendl;
       op_ret = -EINVAL;
       return;
@@ -366,12 +366,12 @@ void RGWOp_User_Modify::execute(optional_yield y)
   }
   
   bufferlist data;
-  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_User::modify(s, store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_User::modify(s, driver, op_state, flusher, y);
 }
 
 class RGWOp_User_Remove : public RGWRESTOp {
@@ -393,7 +393,7 @@ void RGWOp_User_Remove::execute(optional_yield y)
   std::string uid_str;
   bool purge_data;
 
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   rgw_user uid(uid_str);
@@ -407,12 +407,12 @@ void RGWOp_User_Remove::execute(optional_yield y)
   op_state.set_purge_data(purge_data);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_User::remove(s, store, op_state, flusher, s->yield);
+  op_ret = RGWUserAdminOp_User::remove(s, driver, op_state, flusher, s->yield);
 }
 
 class RGWOp_Subuser_Create : public RGWRESTOp {
@@ -445,7 +445,7 @@ void RGWOp_Subuser_Create::execute(optional_yield y)
   uint32_t perm_mask = 0;
   int32_t key_type = KEY_TYPE_SWIFT;
 
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   rgw_user uid(uid_str);
@@ -482,12 +482,12 @@ void RGWOp_Subuser_Create::execute(optional_yield y)
   op_state.set_key_type(key_type);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_Subuser::create(s, store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Subuser::create(s, driver, op_state, flusher, y);
 }
 
 class RGWOp_Subuser_Modify : public RGWRESTOp {
@@ -512,7 +512,7 @@ void RGWOp_Subuser_Modify::execute(optional_yield y)
   std::string key_type_str;
   std::string perm_str;
 
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   uint32_t perm_mask;
   int32_t key_type = KEY_TYPE_SWIFT;
@@ -549,12 +549,12 @@ void RGWOp_Subuser_Modify::execute(optional_yield y)
   op_state.set_key_type(key_type);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_Subuser::modify(s, store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Subuser::modify(s, driver, op_state, flusher, y);
 }
 
 class RGWOp_Subuser_Remove : public RGWRESTOp {
@@ -577,7 +577,7 @@ void RGWOp_Subuser_Remove::execute(optional_yield y)
   std::string subuser;
   bool purge_keys;
 
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   rgw_user uid(uid_str);
@@ -592,12 +592,12 @@ void RGWOp_Subuser_Remove::execute(optional_yield y)
     op_state.set_purge_keys();
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_Subuser::remove(s, store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Subuser::remove(s, driver, op_state, flusher, y);
 }
 
 class RGWOp_Key_Create : public RGWRESTOp {
@@ -624,7 +624,7 @@ void RGWOp_Key_Create::execute(optional_yield y)
 
   bool gen_key;
 
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   rgw_user uid(uid_str);
@@ -653,7 +653,7 @@ void RGWOp_Key_Create::execute(optional_yield y)
     op_state.set_key_type(key_type);
   }
 
-  op_ret = RGWUserAdminOp_Key::create(s, store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Key::create(s, driver, op_state, flusher, y);
 }
 
 class RGWOp_Key_Remove : public RGWRESTOp {
@@ -677,7 +677,7 @@ void RGWOp_Key_Remove::execute(optional_yield y)
   std::string access_key;
   std::string key_type_str;
 
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   rgw_user uid(uid_str);
@@ -700,7 +700,7 @@ void RGWOp_Key_Remove::execute(optional_yield y)
     op_state.set_key_type(key_type);
   }
 
-  op_ret = RGWUserAdminOp_Key::remove(s, store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Key::remove(s, driver, op_state, flusher, y);
 }
 
 class RGWOp_Caps_Add : public RGWRESTOp {
@@ -722,7 +722,7 @@ void RGWOp_Caps_Add::execute(optional_yield y)
   std::string uid_str;
   std::string caps;
 
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   rgw_user uid(uid_str);
@@ -733,12 +733,12 @@ void RGWOp_Caps_Add::execute(optional_yield y)
   op_state.set_caps(caps);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_Caps::add(s, store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Caps::add(s, driver, op_state, flusher, y);
 }
 
 class RGWOp_Caps_Remove : public RGWRESTOp {
@@ -760,7 +760,7 @@ void RGWOp_Caps_Remove::execute(optional_yield y)
   std::string uid_str;
   std::string caps;
 
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   rgw_user uid(uid_str);
@@ -771,12 +771,12 @@ void RGWOp_Caps_Remove::execute(optional_yield y)
   op_state.set_caps(caps);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_Caps::remove(s, store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Caps::remove(s, driver, op_state, flusher, y);
 }
 
 struct UserQuotas {
@@ -816,7 +816,7 @@ public:
 
 void RGWOp_Quota_Info::execute(optional_yield y)
 {
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   std::string uid_str;
   std::string quota_type;
@@ -843,7 +843,7 @@ void RGWOp_Quota_Info::execute(optional_yield y)
   op_state.set_user_id(uid);
 
   RGWUser user;
-  op_ret = user.init(s, store, op_state, y);
+  op_ret = user.init(s, driver, op_state, y);
   if (op_ret < 0)
     return;
 
@@ -935,7 +935,7 @@ public:
 
 void RGWOp_Quota_Set::execute(optional_yield y)
 {
-  RGWUserAdminOpState op_state(store);
+  RGWUserAdminOpState op_state(driver);
 
   std::string uid_str;
   std::string quota_type;
@@ -978,7 +978,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
   op_state.set_user_id(uid);
 
   RGWUser user;
-  op_ret = user.init(s, store, op_state, y);
+  op_ret = user.init(s, driver, op_state, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "failed initializing user info: " << op_ret << dendl;
     return;
@@ -993,7 +993,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
   if (set_all) {
     UserQuotas quotas;
 
-    if ((op_ret = get_json_input(store->ctx(), s, quotas, QUOTA_INPUT_MAX_LEN, NULL)) < 0) {
+    if ((op_ret = get_json_input(driver->ctx(), s, quotas, QUOTA_INPUT_MAX_LEN, NULL)) < 0) {
       ldpp_dout(this, 20) << "failed to retrieve input" << dendl;
       return;
     }
@@ -1005,7 +1005,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
 
     if (!use_http_params) {
       bool empty;
-      op_ret = get_json_input(store->ctx(), s, quota, QUOTA_INPUT_MAX_LEN, &empty);
+      op_ret = get_json_input(driver->ctx(), s, quota, QUOTA_INPUT_MAX_LEN, &empty);
       if (op_ret < 0) {
         ldpp_dout(this, 20) << "failed to retrieve input" << dendl;
         if (!empty)

@@ -237,7 +237,7 @@ void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const strin
   }
 }
 
-RGWDataAccess::RGWDataAccess(rgw::sal::Store* _store) : store(_store)
+RGWDataAccess::RGWDataAccess(rgw::sal::Driver* _driver) : driver(_driver)
 {
 }
 
@@ -262,7 +262,7 @@ int RGWDataAccess::Bucket::finish_init()
 int RGWDataAccess::Bucket::init(const DoutPrefixProvider *dpp, optional_yield y)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = sd->store->get_bucket(dpp, nullptr, tenant, name, &bucket, y);
+  int ret = sd->driver->get_bucket(dpp, nullptr, tenant, name, &bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -294,26 +294,26 @@ int RGWDataAccess::Object::put(bufferlist& data,
                                const DoutPrefixProvider *dpp,
                                optional_yield y)
 {
-  rgw::sal::Store* store = sd->store;
-  CephContext *cct = store->ctx();
+  rgw::sal::Driver* driver = sd->driver;
+  CephContext *cct = driver->ctx();
 
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
   RGWBucketInfo& bucket_info = bucket->bucket_info;
 
-  rgw::BlockingAioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
+  rgw::BlockingAioThrottle aio(driver->ctx()->_conf->rgw_put_obj_min_window_size);
 
   std::unique_ptr<rgw::sal::Bucket> b;
-  store->get_bucket(NULL, bucket_info, &b);
+  driver->get_bucket(NULL, bucket_info, &b);
   std::unique_ptr<rgw::sal::Object> obj = b->get_object(key);
 
   auto& owner = bucket->policy.get_owner();
 
-  string req_id = store->zone_unique_id(store->get_new_req_id());
+  string req_id = driver->zone_unique_id(driver->get_new_req_id());
 
   std::unique_ptr<rgw::sal::Writer> processor;
-  processor = store->get_atomic_writer(dpp, y, std::move(obj),
+  processor = driver->get_atomic_writer(dpp, y, std::move(obj),
 				       owner.get_id(),
 				       nullptr, olh_epoch, req_id);
 
@@ -326,14 +326,14 @@ int RGWDataAccess::Object::put(bufferlist& data,
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
-  const auto& compression_type = store->get_compression_type(bucket_info.placement_rule);
+  const auto& compression_type = driver->get_compression_type(bucket_info.placement_rule);
   if (compression_type != "none") {
-    plugin = Compressor::create(store->ctx(), compression_type);
+    plugin = Compressor::create(driver->ctx(), compression_type);
     if (!plugin) {
       ldpp_dout(dpp, 1) << "Cannot load plugin for compression type "
         << compression_type << dendl;
     } else {
-      compressor.emplace(store->ctx(), plugin, filter);
+      compressor.emplace(driver->ctx(), plugin, filter);
       filter = &*compressor;
     }
   }

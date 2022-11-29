@@ -304,7 +304,7 @@ class RGWServices;
 struct RGWDataSyncEnv {
   const DoutPrefixProvider *dpp{nullptr};
   CephContext *cct{nullptr};
-  rgw::sal::RadosStore* store{nullptr};
+  rgw::sal::RadosStore* driver{nullptr};
   RGWServices *svc{nullptr};
   RGWAsyncRadosProcessor *async_rados{nullptr};
   RGWHTTPManager *http_manager{nullptr};
@@ -315,14 +315,14 @@ struct RGWDataSyncEnv {
 
   RGWDataSyncEnv() {}
 
-  void init(const DoutPrefixProvider *_dpp, CephContext *_cct, rgw::sal::RadosStore* _store, RGWServices *_svc,
+  void init(const DoutPrefixProvider *_dpp, CephContext *_cct, rgw::sal::RadosStore* _driver, RGWServices *_svc,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
             RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer,
             RGWSyncModuleInstanceRef& _sync_module,
             PerfCounters* _counters) {
      dpp = _dpp;
     cct = _cct;
-    store = _store;
+    driver = _driver;
     svc = _svc;
     async_rados = _async_rados;
     http_manager = _http_manager;
@@ -375,7 +375,7 @@ class RGWRados;
 
 class RGWRemoteDataLog : public RGWCoroutinesManager {
   const DoutPrefixProvider *dpp;
-  rgw::sal::RadosStore* store;
+  rgw::sal::RadosStore* driver;
   CephContext *cct;
   RGWCoroutinesManagerRegistry *cr_registry;
   RGWAsyncRadosProcessor *async_rados;
@@ -413,7 +413,7 @@ public:
 };
 
 class RGWDataSyncStatusManager : public DoutPrefixProvider {
-  rgw::sal::RadosStore* store;
+  rgw::sal::RadosStore* driver;
 
   rgw_zone_id source_zone;
   RGWRESTConn *conn;
@@ -431,17 +431,17 @@ class RGWDataSyncStatusManager : public DoutPrefixProvider {
   int num_shards;
 
 public:
-  RGWDataSyncStatusManager(rgw::sal::RadosStore* _store, RGWAsyncRadosProcessor *async_rados,
+  RGWDataSyncStatusManager(rgw::sal::RadosStore* _driver, RGWAsyncRadosProcessor *async_rados,
                            const rgw_zone_id& _source_zone, PerfCounters* counters)
-    : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
+    : driver(_driver), source_zone(_source_zone), conn(NULL), error_logger(NULL),
       sync_module(nullptr), counters(counters),
-      source_log(this, store, async_rados), num_shards(0) {}
-  RGWDataSyncStatusManager(rgw::sal::RadosStore* _store, RGWAsyncRadosProcessor *async_rados,
+      source_log(this, driver, async_rados), num_shards(0) {}
+  RGWDataSyncStatusManager(rgw::sal::RadosStore* _driver, RGWAsyncRadosProcessor *async_rados,
                            const rgw_zone_id& _source_zone, PerfCounters* counters,
                            const RGWSyncModuleInstanceRef& _sync_module)
-    : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
+    : driver(_driver), source_zone(_source_zone), conn(NULL), error_logger(NULL),
       sync_module(_sync_module), counters(counters),
-      source_log(this, store, async_rados), num_shards(0) {}
+      source_log(this, driver, async_rados), num_shards(0) {}
   ~RGWDataSyncStatusManager() {
     finalize();
   }
@@ -713,20 +713,20 @@ int rgw_read_remote_bilog_info(const DoutPrefixProvider *dpp,
                                optional_yield y);
 
 class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
-  rgw::sal::RadosStore* store;
+  rgw::sal::RadosStore* driver;
 
   RGWDataSyncEnv sync_env;
 
-  RGWCoroutinesManager cr_mgr{store->ctx(),
-                              store->getRados()->get_cr_registry()};
+  RGWCoroutinesManager cr_mgr{driver->ctx(),
+                              driver->getRados()->get_cr_registry()};
 
-  RGWHTTPManager http_manager{store->ctx(), cr_mgr.get_completion_mgr()};
+  RGWHTTPManager http_manager{driver->ctx(), cr_mgr.get_completion_mgr()};
 
   std::optional<rgw_zone_id> source_zone;
   std::optional<rgw_bucket> source_bucket;
 
   std::unique_ptr<RGWSyncErrorLogger> error_logger =
-    std::make_unique<RGWSyncErrorLogger>(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX,
+    std::make_unique<RGWSyncErrorLogger>(driver, RGW_SYNC_ERROR_LOG_SHARD_PREFIX,
 					 ERROR_LOGGER_SHARDS);
   RGWSyncModuleInstanceRef sync_module;
 
@@ -749,11 +749,11 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
   std::vector<source> sources;
 
   int do_init(const DoutPrefixProvider *dpp, std::ostream* ostr);
-  RGWBucketPipeSyncStatusManager(rgw::sal::RadosStore* store,
+  RGWBucketPipeSyncStatusManager(rgw::sal::RadosStore* driver,
 				 std::optional<rgw_zone_id> source_zone,
 				 std::optional<rgw_bucket> source_bucket,
 				 const rgw_bucket& dest_bucket)
-    : store(store), source_zone(source_zone), source_bucket(source_bucket),
+    : driver(driver), source_zone(source_zone), source_bucket(source_bucket),
       dest_bucket(dest_bucket) {}
 
   int remote_info(const DoutPrefixProvider *dpp, source& s,
@@ -761,7 +761,7 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
 		  uint64_t* num_shards);
 public:
   static tl::expected<std::unique_ptr<RGWBucketPipeSyncStatusManager>, int>
-  construct(const DoutPrefixProvider* dpp, rgw::sal::RadosStore* store,
+  construct(const DoutPrefixProvider* dpp, rgw::sal::RadosStore* driver,
 	    std::optional<rgw_zone_id> source_zone,
 	    std::optional<rgw_bucket> source_bucket,
 	    const rgw_bucket& dest_bucket, std::ostream *ostream);
@@ -792,14 +792,14 @@ public:
 
 /// read the full sync status with respect to a source bucket
 int rgw_read_bucket_full_sync_status(const DoutPrefixProvider *dpp,
-                                     rgw::sal::RadosStore *store,
+                                     rgw::sal::RadosStore *driver,
                                      const rgw_sync_bucket_pipe& pipe,
                                      rgw_bucket_sync_status *status,
                                      optional_yield y);
 
 /// read the incremental sync status of all bucket shards from the given source zone
 int rgw_read_bucket_inc_sync_status(const DoutPrefixProvider *dpp,
-                                    rgw::sal::RadosStore *store,
+                                    rgw::sal::RadosStore *driver,
                                     const rgw_sync_bucket_pipe& pipe,
                                     uint64_t gen,
                                     std::vector<rgw_bucket_shard_sync_info> *status);

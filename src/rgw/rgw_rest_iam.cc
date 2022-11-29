@@ -93,7 +93,7 @@ RGWOp *RGWHandler_REST_IAM::op_post()
   return nullptr;
 }
 
-int RGWHandler_REST_IAM::init(rgw::sal::Store* store,
+int RGWHandler_REST_IAM::init(rgw::sal::Driver* driver,
                               req_state *s,
                               rgw::io::BasicClient *cio)
 {
@@ -104,12 +104,12 @@ int RGWHandler_REST_IAM::init(rgw::sal::Store* store,
     return ret;
   }
 
-  return RGWHandler_REST::init(store, s, cio);
+  return RGWHandler_REST::init(driver, s, cio);
 }
 
 int RGWHandler_REST_IAM::authorize(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
+  return RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
 }
 
 int RGWHandler_REST_IAM::init_from_header(req_state* s,
@@ -155,7 +155,7 @@ int RGWHandler_REST_IAM::init_from_header(req_state* s,
 }
 
 RGWHandler_REST*
-RGWRESTMgr_IAM::get_handler(rgw::sal::Store* store,
+RGWRESTMgr_IAM::get_handler(rgw::sal::Driver* driver,
 			    req_state* const s,
 			    const rgw::auth::StrategyRegistry& auth_registry,
 			    const std::string& frontend_prefix)

@@ -117,7 +117,7 @@ class RGWPSCreateTopicOp : public RGWOp {
     dest.arn_topic = topic_name;
     // the topic ARN will be sent in the reply
     const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, 
-        store->get_zone()->get_zonegroup().get_name(),
+        driver->get_zone()->get_zonegroup().get_name(),
         s->user->get_tenant(), topic_name);
     topic_arn = arn.to_string();
     return 0;
@@ -167,7 +167,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
     return;
   }
 
-  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
   op_ret = ps->create_topic(this, topic_name, dest, topic_arn, opaque_data, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -222,7 +222,7 @@ public:
 };
 
 void RGWPSListTopicsOp::execute(optional_yield y) {
-  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
   op_ret = ps->get_topics(&result);
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
@@ -301,7 +301,7 @@ void RGWPSGetTopicOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
   op_ret = ps->get_topic(topic_name, &result);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -378,7 +378,7 @@ void RGWPSGetTopicAttributesOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
   op_ret = ps->get_topic(topic_name, &result);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -464,7 +464,7 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
   op_ret = ps->remove_topic(this, topic_name, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
@@ -606,7 +606,7 @@ RGWOp* RGWHandler_REST_PSTopic_AWS::op_post() {
 }
 
 int RGWHandler_REST_PSTopic_AWS::authorize(const DoutPrefixProvider* dpp, optional_yield y) {
-  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
+  return RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
 }
 
 namespace {
@@ -740,7 +740,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     return;
   }
 
-  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
   ceph_assert(b);
 
@@ -829,9 +829,9 @@ int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
     return ret;
   }
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(s->owner.get_id());
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(s->owner.get_id());
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  ret = store->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
+  ret = driver->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
   if (ret < 0) {
     ldpp_dout(this, 1) << "failed to get bucket info, cannot verify ownership" << dendl;
     return ret;
@@ -888,7 +888,7 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
     return;
   }
 
-  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
   ceph_assert(b);
 
@@ -922,9 +922,9 @@ int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
     return ret;
   }
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(s->owner.get_id());
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(s->owner.get_id());
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  ret = store->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
+  ret = driver->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -989,7 +989,7 @@ private:
 };
 
 void RGWPSListNotifsOp::execute(optional_yield y) {
-  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(driver), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
   ceph_assert(b);
   
@@ -1027,9 +1027,9 @@ int RGWPSListNotifsOp::verify_permission(optional_yield y) {
     return ret;
   }
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(s->owner.get_id());
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(s->owner.get_id());
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  ret = store->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
+  ret = driver->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
   if (ret < 0) {
     return ret;
   }

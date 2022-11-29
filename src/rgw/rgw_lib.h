@@ -29,7 +29,7 @@ namespace rgw {
       {}
     ~RGWLib() {}
 
-    rgw::sal::Store* get_store() { return main.get_store(); }
+    rgw::sal::Driver* get_driver() { return main.get_driver(); }
 
     RGWLibFrontend* get_fe() { return fe; }
 
@@ -70,7 +70,7 @@ namespace rgw {
       return user_info;
     }
 
-    int set_uid(rgw::sal::Store* store, const rgw_user& uid);
+    int set_uid(rgw::sal::Driver* driver, const rgw_user& uid);
 
     int write_data(const char *buf, int len);
     int read_data(char *buf, int len);
@@ -115,7 +115,7 @@ namespace rgw {
 
     RGWHandler_Lib() {}
     ~RGWHandler_Lib() override {}
-    static int init_from_header(rgw::sal::Store* store,
+    static int init_from_header(rgw::sal::Driver* driver,
 				req_state *s);
   }; /* RGWHandler_Lib */
 
@@ -130,7 +130,7 @@ namespace rgw {
     inline req_state* get_state() { return this->RGWRequest::s; }
 
     RGWLibRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user)
-      :  RGWRequest(g_rgwlib->get_store()->get_new_req_id()),
+      :  RGWRequest(g_rgwlib->get_driver()->get_new_req_id()),
 	 tuser(std::move(_user)), cct(_cct)
       {}
 
@@ -148,14 +148,14 @@ namespace rgw {
 
     using RGWHandler::init;
 
-    int init(const RGWEnv& rgw_env, rgw::sal::Store* _store,
+    int init(const RGWEnv& rgw_env, rgw::sal::Driver* _driver,
 	     RGWLibIO* io, req_state* _s) {
 
       RGWRequest::init_state(_s);
-      RGWHandler::init(_store, _s, io);
+      RGWHandler::init(_driver, _s, io);
 
-      get_state()->req_id = store->zone_unique_id(id);
-      get_state()->trans_id = store->zone_unique_trans_id(id);
+      get_state()->req_id = driver->zone_unique_id(id);
+      get_state()->trans_id = driver->zone_unique_trans_id(id);
       get_state()->bucket_tenant = tuser->get_tenant();
       get_state()->set_user(tuser);
 
@@ -164,7 +164,7 @@ namespace rgw {
 
       int ret = header_init();
       if (ret == 0) {
-	ret = init_from_header(store, _s);
+	ret = init_from_header(driver, _s);
       }
       return ret;
     }
@@ -188,16 +188,16 @@ namespace rgw {
 	io_ctx.init(_cct);
 
 	RGWRequest::init_state(&rstate);
-	RGWHandler::init(g_rgwlib->get_store(), &rstate, &io_ctx);
+	RGWHandler::init(g_rgwlib->get_driver(), &rstate, &io_ctx);
 
-	get_state()->req_id = store->zone_unique_id(id);
-	get_state()->trans_id = store->zone_unique_trans_id(id);
+	get_state()->req_id = driver->zone_unique_id(id);
+	get_state()->trans_id = driver->zone_unique_trans_id(id);
 
 	ldpp_dout(get_state(), 2) << "initializing for trans_id = "
 	    << get_state()->trans_id.c_str() << dendl;
       }
 
-    inline rgw::sal::Store* get_store() { return store; }
+    inline rgw::sal::Driver* get_driver() { return driver; }
     inline RGWLibIO& get_io() { return io_ctx; }
 
     virtual int execute() final { ceph_abort(); }
