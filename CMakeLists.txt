@@ -680,6 +680,8 @@ endif()
 set(DASHBOARD_FRONTEND_LANGS "" CACHE STRING
   "List of comma separated ceph-dashboard frontend languages to build. \
   Use value `ALL` to build all languages")
+set(DASHBOARD_BUILD_ASSETS_FROM "" CACHE STRING
+  "Provide the name of the folder where the frontend should be loaded from.")
 CMAKE_DEPENDENT_OPTION(WITH_MGR_ROOK_CLIENT "Enable the mgr's Rook support" ON
   "WITH_MGR" OFF)
 

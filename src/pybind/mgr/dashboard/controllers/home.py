@@ -21,11 +21,12 @@ logger = logging.getLogger("controllers.home")
 
 class LanguageMixin(object):
     def __init__(self):
+        product_name = os.environ.get('DASHBOARD_BUILD_ASSETS_FROM', '')
         try:
             self.LANGUAGES = {
                 f
                 for f in os.listdir(mgr.get_frontend_path())
-                if os.path.isdir(os.path.join(mgr.get_frontend_path(), f))
+                if os.path.isdir(os.path.join(mgr.get_frontend_path(), product_name, f))
             }
         except FileNotFoundError:
             logger.exception("Build directory missing")
@@ -34,7 +35,7 @@ class LanguageMixin(object):
         self.LANGUAGES_PATH_MAP = {
             f.lower(): {
                 'lang': f,
-                'path': os.path.join(mgr.get_frontend_path(), f)
+                'path': os.path.join(mgr.get_frontend_path(), product_name, f)
             }
             for f in self.LANGUAGES
         }
@@ -50,6 +51,7 @@ class LanguageMixin(object):
             config = json.load(f)
         self.DEFAULT_LANGUAGE = config['config']['locale']
         self.DEFAULT_LANGUAGE_PATH = os.path.join(mgr.get_frontend_path(),
+                                                  product_name,
                                                   self.DEFAULT_LANGUAGE)
         super().__init__()
 
