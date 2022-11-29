@@ -195,13 +195,15 @@
                 The CRUSH data placement rule that applies to a particular
                 pool(s).
 
-	Dashboard
+	:ref:`Dashboard<mgr-dashboard>`
                 A built-in web-based Ceph management and monitoring application
                 to administer various aspects and objects of the cluster. The
                 dashboard is implemented as a Ceph Manager module. See
                 :ref:`mgr-dashboard` for more details.
 
 	Dashboard Module
+                Another name for :term:`Dashboard`.
+
 	Dashboard Plugin
 	filestore
                 A back end for OSD daemons, where a Journal is needed and files
