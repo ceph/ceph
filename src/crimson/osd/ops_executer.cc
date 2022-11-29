@@ -501,7 +501,7 @@ OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
       if (p == ss.clone_snaps.end()) {
 	logger().error(
 	  "OpsExecutor::do_list_snaps: {} has inconsistent "
-	  "clone_overlap, missing clone {}",
+	  "clone_snaps, missing clone {}",
 	  os.oi.soid,
 	  clone);
 	return crimson::ct_error::invarg::make();
