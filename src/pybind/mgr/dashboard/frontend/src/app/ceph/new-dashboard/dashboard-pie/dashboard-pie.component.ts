@@ -55,7 +55,7 @@ export class DashboardPieComponent implements OnChanges, OnInit {
           generateLabels: (chart: any) => {
             const labels = { 0: {}, 1: {}, 2: {} };
             labels[0] = {
-              text: $localize`Capacity: ${chart.data.datasets[1].data[0]}%`,
+              text: $localize`Capacity: ${chart.data.datasets[1].data[2]}`,
               fillStyle: chart.data.datasets[1].backgroundColor[0],
               strokeStyle: chart.data.datasets[1].backgroundColor[0]
             };
@@ -170,7 +170,11 @@ export class DashboardPieComponent implements OnChanges, OnInit {
       Math.round(100 - fullRatioPercent)
     ];
 
-    chart.dataset[1].data = [percentUsed, percentAvailable];
+    chart.dataset[1].data = [
+      percentUsed,
+      percentAvailable,
+      this.dimlessBinary.transform(data.current)
+    ];
     chart.dataset[1].backgroundColor[0] = this.cssHelper.propertyValue(this.color);
 
     chart.dataset[0].label = [`${percentUsed}%\nof ${this.dimlessBinary.transform(data.max)}`];
