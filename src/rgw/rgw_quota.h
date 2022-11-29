@@ -110,7 +110,7 @@ public:
 
   virtual void update_stats(const rgw_user& bucket_owner, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) = 0;
 
-  static RGWQuotaHandler *generate_handler(const DoutPrefixProvider *dpp, rgw::sal::Store* store, bool quota_threads);
+  static RGWQuotaHandler *generate_handler(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, bool quota_threads);
   static void free_handler(RGWQuotaHandler *handler);
 };
 

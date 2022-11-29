@@ -13,12 +13,12 @@
 
 using namespace std;
 
-int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 			    rgw::sal::User* user, optional_yield y)
 {
   rgw::sal::BucketList user_buckets;
 
-  CephContext *cct = store->ctx();
+  CephContext *cct = driver->ctx();
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
   string marker;
   int ret;
@@ -62,12 +62,12 @@ int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Store* stor
 }
 
 int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
-				   rgw::sal::Store* store,
+				   rgw::sal::Driver* driver,
 				   rgw::sal::User* user,
 				   map<string, bucket_meta_entry>& buckets_usage_map,
 				   optional_yield y)
 {
-  CephContext *cct = store->ctx();
+  CephContext *cct = driver->ctx();
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
   bool done;
   string marker;

@@ -163,11 +163,11 @@ class RGWPeriodPusher::CRThread : public DoutPrefixProvider {
 };
 
 
-RGWPeriodPusher::RGWPeriodPusher(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+RGWPeriodPusher::RGWPeriodPusher(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 				 optional_yield y)
-  : cct(store->ctx()), store(store)
+  : cct(driver->ctx()), driver(driver)
 {
-  rgw::sal::Zone* zone = store->get_zone();
+  rgw::sal::Zone* zone = driver->get_zone();
   auto& realm_id = zone->get_realm_id();
   if (realm_id.empty()) // no realm configuration
     return;
@@ -175,7 +175,7 @@ RGWPeriodPusher::RGWPeriodPusher(const DoutPrefixProvider *dpp, rgw::sal::Store*
   // always send out the current period on startup
   RGWPeriod period;
   // XXX dang
-  int r = period.init(dpp, cct, static_cast<rgw::sal::RadosStore* >(store)->svc()->sysobj, realm_id, y, zone->get_realm_name());
+  int r = period.init(dpp, cct, static_cast<rgw::sal::RadosStore* >(driver)->svc()->sysobj, realm_id, y, zone->get_realm_name());
   if (r < 0) {
     ldpp_dout(dpp, -1) << "failed to load period for realm " << realm_id << dendl;
     return;
@@ -204,7 +204,7 @@ void RGWPeriodPusher::handle_notify(RGWRealmNotify type,
 
   // we can't process this notification without access to our current realm
   // configuration. queue it until resume()
-  if (store == nullptr) {
+  if (driver == nullptr) {
     pending_periods.emplace_back(std::move(info));
     return;
   }
@@ -230,7 +230,7 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
 
   // find our zonegroup in the new period
   auto& zonegroups = period.get_map().zonegroups;
-  auto i = zonegroups.find(store->get_zone()->get_zonegroup().get_id());
+  auto i = zonegroups.find(driver->get_zone()->get_zonegroup().get_id());
   if (i == zonegroups.end()) {
     lderr(cct) << "The new period does not contain my zonegroup!" << dendl;
     return;
@@ -238,7 +238,7 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
   auto& my_zonegroup = i->second;
 
   // if we're not a master zone, we're not responsible for pushing any updates
-  if (my_zonegroup.master_zone != store->get_zone()->get_id())
+  if (my_zonegroup.master_zone != driver->get_zone()->get_id())
     return;
 
   // construct a map of the zones that need this period. the map uses the same
@@ -247,11 +247,11 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
   auto hint = conns.end();
 
   // are we the master zonegroup in this period?
-  if (period.get_map().master_zonegroup == store->get_zone()->get_zonegroup().get_id()) {
+  if (period.get_map().master_zonegroup == driver->get_zone()->get_zonegroup().get_id()) {
     // update other zonegroup endpoints
     for (auto& zg : zonegroups) {
       auto& zonegroup = zg.second;
-      if (zonegroup.get_id() == store->get_zone()->get_zonegroup().get_id())
+      if (zonegroup.get_id() == driver->get_zone()->get_zonegroup().get_id())
         continue;
       if (zonegroup.endpoints.empty())
         continue;
@@ -259,14 +259,14 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
       hint = conns.emplace_hint(
           hint, std::piecewise_construct,
           std::forward_as_tuple(zonegroup.get_id()),
-          std::forward_as_tuple(cct, store, zonegroup.get_id(), zonegroup.endpoints, zonegroup.api_name));
+          std::forward_as_tuple(cct, driver, zonegroup.get_id(), zonegroup.endpoints, zonegroup.api_name));
     }
   }
 
   // update other zone endpoints
   for (auto& z : my_zonegroup.zones) {
     auto& zone = z.second;
-    if (zone.id == store->get_zone()->get_id())
+    if (zone.id == driver->get_zone()->get_id())
       continue;
     if (zone.endpoints.empty())
       continue;
@@ -274,7 +274,7 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
     hint = conns.emplace_hint(
         hint, std::piecewise_construct,
         std::forward_as_tuple(zone.id),
-        std::forward_as_tuple(cct, store, zone.id, zone.endpoints, my_zonegroup.api_name));
+        std::forward_as_tuple(cct, driver, zone.id, zone.endpoints, my_zonegroup.api_name));
   }
 
   if (conns.empty()) {
@@ -297,13 +297,13 @@ void RGWPeriodPusher::pause()
 {
   ldout(cct, 4) << "paused for realm update" << dendl;
   std::lock_guard<std::mutex> lock(mutex);
-  store = nullptr;
+  driver = nullptr;
 }
 
-void RGWPeriodPusher::resume(rgw::sal::Store* store)
+void RGWPeriodPusher::resume(rgw::sal::Driver* driver)
 {
   std::lock_guard<std::mutex> lock(mutex);
-  this->store = store;
+  this->driver = driver;
 
   ldout(cct, 4) << "resume with " << pending_periods.size()
       << " periods pending" << dendl;

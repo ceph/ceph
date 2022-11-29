@@ -63,9 +63,9 @@ struct bucket_meta_entry {
   uint64_t count;
 };
 
-extern int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw::sal::User* user, optional_yield y);
+extern int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::User* user, optional_yield y);
 extern int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
-  rgw::sal::Store* store, rgw::sal::User* user,
+  rgw::sal::Driver* driver, rgw::sal::User* user,
   std::map<std::string, bucket_meta_entry>& buckets_usage_map, optional_yield y);
 
 /**
@@ -430,7 +430,7 @@ struct RGWUserAdminOpState {
 
   std::string generate_subuser();
 
-  RGWUserAdminOpState(rgw::sal::Store* store);
+  RGWUserAdminOpState(rgw::sal::Driver* driver);
 };
 
 class RGWUser;
@@ -441,7 +441,7 @@ class RGWAccessKeyPool
 
   std::map<std::string, int, ltstr_nocase> key_type_map;
   rgw_user user_id;
-  rgw::sal::Store* store{nullptr};
+  rgw::sal::Driver* driver{nullptr};
 
   std::map<std::string, RGWAccessKey> *swift_keys{nullptr};
   std::map<std::string, RGWAccessKey> *access_keys{nullptr};
@@ -494,7 +494,7 @@ class RGWSubUserPool
   RGWUser *user{nullptr};
 
   rgw_user user_id;
-  rgw::sal::Store* store{nullptr};
+  rgw::sal::Driver* driver{nullptr};
   bool subusers_allowed{false};
 
   std::map<std::string, RGWSubUser> *subuser_map{nullptr};
@@ -556,7 +556,7 @@ class RGWUser
 
 private:
   RGWUserInfo old_info;
-  rgw::sal::Store* store{nullptr};
+  rgw::sal::Driver* driver{nullptr};
 
   rgw_user user_id;
   bool info_stored{false};
@@ -582,14 +582,14 @@ private:
 public:
   RGWUser();
 
-  int init(const DoutPrefixProvider *dpp, rgw::sal::Store* storage, RGWUserAdminOpState& op_state,
+  int init(const DoutPrefixProvider *dpp, rgw::sal::Driver* storage, RGWUserAdminOpState& op_state,
 	   optional_yield y);
 
-  int init_storage(rgw::sal::Store* storage);
+  int init_storage(rgw::sal::Driver* storage);
   int init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y);
   int init_members(RGWUserAdminOpState& op_state);
 
-  rgw::sal::Store* get_store() { return store; }
+  rgw::sal::Driver* get_driver() { return driver; }
 
   /* API Contracted Members */
   RGWUserCapPool caps;
@@ -628,24 +628,24 @@ public:
 class RGWUserAdminOp_User
 {
 public:
-  static int list(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+  static int list(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
   static int info(const DoutPrefixProvider *dpp,
-		  rgw::sal::Store* store,
+		  rgw::sal::Driver* driver,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		  optional_yield y);
 
   static int create(const DoutPrefixProvider *dpp,
-		    rgw::sal::Store* store,
+		    rgw::sal::Driver* driver,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 
   static int modify(const DoutPrefixProvider *dpp,
-		    rgw::sal::Store* store,
+		    rgw::sal::Driver* driver,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
 
-  static int remove(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+  static int remove(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
 };
 
@@ -653,17 +653,17 @@ class RGWUserAdminOp_Subuser
 {
 public:
   static int create(const DoutPrefixProvider *dpp,
-		    rgw::sal::Store* store,
+		    rgw::sal::Driver* driver,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 
   static int modify(const DoutPrefixProvider *dpp,
-		    rgw::sal::Store* store,
+		    rgw::sal::Driver* driver,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 
   static int remove(const DoutPrefixProvider *dpp,
-		    rgw::sal::Store* store,
+		    rgw::sal::Driver* driver,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 };
@@ -671,12 +671,12 @@ public:
 class RGWUserAdminOp_Key
 {
 public:
-  static int create(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+  static int create(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 
   static int remove(const DoutPrefixProvider *dpp,
-		    rgw::sal::Store* store,
+		    rgw::sal::Driver* driver,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 };
@@ -685,12 +685,12 @@ class RGWUserAdminOp_Caps
 {
 public:
   static int add(const DoutPrefixProvider *dpp,
-		 rgw::sal::Store* store,
+		 rgw::sal::Driver* driver,
 		 RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		 optional_yield y);
 
   static int remove(const DoutPrefixProvider *dpp,
-		    rgw::sal::Store* store,
+		    rgw::sal::Driver* driver,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 };

@@ -383,7 +383,7 @@ class RGWHandler_REST_MDSearch_S3 : public RGWHandler_REST_S3 {
 protected:
   RGWOp *op_get() override {
     if (s->info.args.exists("query")) {
-      return new RGWMetadataSearch_ObjStore_S3(store->get_sync_module());
+      return new RGWMetadataSearch_ObjStore_S3(driver->get_sync_module());
     }
     if (!s->init_state.url_bucket.empty() &&
         s->info.args.exists("mdsearch")) {
@@ -403,13 +403,13 @@ public:
 };
 
 
-RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::Store* store,
+RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::Driver* driver,
 						     req_state* const s,
                                                      const rgw::auth::StrategyRegistry& auth_registry,
                                                      const std::string& frontend_prefix)
 {
   int ret =
-    RGWHandler_REST_S3::init_from_header(store, s,
+    RGWHandler_REST_S3::init_from_header(driver, s,
 					RGWFormat::XML, true);
   if (ret < 0) {
     return nullptr;

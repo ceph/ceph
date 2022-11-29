@@ -107,7 +107,7 @@ private:
   bufferlist bl;  // bufflist ready to send
 
   req_state *s{nullptr};
-  rgw::sal::Store* store{nullptr};
+  rgw::sal::Driver* driver{nullptr};
   SHA1 h;
 
   TorrentBencode dencode;
@@ -116,7 +116,7 @@ public:
   ~seed();
 
   int get_params();
-  void init(req_state *p_req, rgw::sal::Store* p_store);
+  void init(req_state *p_req, rgw::sal::Driver* _driver);
   int get_torrent_file(rgw::sal::Object* object,
                        uint64_t &total_len,
                        ceph::bufferlist &bl_data,

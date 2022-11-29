@@ -1000,8 +1000,8 @@ namespace rgw {
       (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
     }
 
-    int authorize(const DoutPrefixProvider *dpp, rgw::sal::Store* store) {
-      int ret = store->get_user_by_access_key(dpp, key.id, null_yield, &user);
+    int authorize(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver) {
+      int ret = driver->get_user_by_access_key(dpp, key.id, null_yield, &user);
       if (ret == 0) {
 	RGWAccessKey* k = user->get_info().get_key(key.id);
 	if (!k || (k->key != key.key))
@@ -1019,12 +1019,12 @@ namespace rgw {
 	  token = std::string("");
 	}
 	if (token.valid() && (ldh->auth(token.id, token.key) == 0)) {
-	  /* try to store user if it doesn't already exist */
+	  /* try to driver user if it doesn't already exist */
 	  if (user->load_user(dpp, null_yield) < 0) {
 	    int ret = user->store_user(dpp, null_yield, true);
 	    if (ret < 0) {
 	      lsubdout(get_context(), rgw, 10)
-		<< "NOTICE: failed to store new user's info: ret=" << ret
+		<< "NOTICE: failed to driver new user's info: ret=" << ret
 		<< dendl;
 	    }
 	  }
@@ -1314,7 +1314,7 @@ namespace rgw {
     RGWUserInfo* get_user() { return &user->get_info(); }
 
     void update_user(const DoutPrefixProvider *dpp) {
-      (void) g_rgwlib->get_store()->get_user_by_access_key(dpp, key.id, null_yield, &user);
+      (void) g_rgwlib->get_driver()->get_user_by_access_key(dpp, key.id, null_yield, &user);
     }
 
     void close();
@@ -1375,9 +1375,9 @@ public:
   bool only_bucket() override { return false; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -1510,9 +1510,9 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -1811,9 +1811,9 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -1890,9 +1890,9 @@ public:
   }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -1947,9 +1947,9 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -1998,9 +1998,9 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
 
     int rc = valid_s3_object_name(obj_name);
@@ -2094,9 +2094,9 @@ public:
   bool only_bucket() override { return false; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -2175,9 +2175,9 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -2250,9 +2250,9 @@ public:
   bool only_bucket() override { return false; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -2324,9 +2324,9 @@ public:
   bool only_bucket() override { return false; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -2387,9 +2387,9 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -2489,11 +2489,11 @@ public:
   size_t bytes_written;
   bool eio;
 
-  RGWWriteRequest(rgw::sal::Store* store,
+  RGWWriteRequest(rgw::sal::Driver* driver,
 		  std::unique_ptr<rgw::sal::User> _user,
 		  RGWFileHandle* _fh, const std::string& _bname,
 		  const std::string& _oname)
-    : RGWLibContinuedReq(store->ctx(), std::move(_user)),
+    : RGWLibContinuedReq(driver->ctx(), std::move(_user)),
       bucket_name(_bname), obj_name(_oname),
       rgw_fh(_fh), filter(nullptr), timer_id(0), real_ofs(0),
       bytes_written(0), eio(false) {
@@ -2509,9 +2509,9 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -2597,9 +2597,9 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
 
     return 0;
@@ -2679,9 +2679,9 @@ public:
   virtual bool only_bucket() { return false; }
 
   virtual int op_init() {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -2730,9 +2730,9 @@ public:
   bool only_bucket() override { return false; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -2784,9 +2784,9 @@ public:
   virtual bool only_bucket() { return false; }
 
   virtual int op_init() {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
@@ -2829,9 +2829,9 @@ public:
   }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }

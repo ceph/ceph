@@ -1241,7 +1241,7 @@ public:
 
   // gather the metadata sync status for each shard; only for use on master zone
   int update_sync_status(const DoutPrefixProvider *dpp, 
-                         rgw::sal::Store* store,
+                         rgw::sal::Driver* driver,
                          const RGWPeriod &current_period,
                          std::ostream& error_stream, bool force_if_stale);
 
@@ -1343,7 +1343,7 @@ public:
 
   // commit a staging period; only for use on master zone
   int commit(const DoutPrefixProvider *dpp,
-	     rgw::sal::Store* store,
+	     rgw::sal::Driver* driver,
              RGWRealm& realm, const RGWPeriod &current_period,
              std::ostream& error_stream, optional_yield y,
 	     bool force_if_stale = false);
@@ -1438,7 +1438,7 @@ int update_period(const DoutPrefixProvider* dpp, optional_yield y,
 /// Validates the given 'staging' period and tries to commit it as the
 /// realm's new current period.
 int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
-                  sal::ConfigStore* cfgstore, sal::Store* store,
+                  sal::ConfigStore* cfgstore, sal::Driver* driver,
                   RGWRealm& realm, sal::RealmWriter& realm_writer,
                   const RGWPeriod& current_period,
                   RGWPeriod& info, std::ostream& error_stream,

@@ -374,7 +374,7 @@ RGWCtlDef::_meta::_meta() {}
 RGWCtlDef::_meta::~_meta() {}
 
 
-int RGWCtlDef::init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixProvider *dpp)
+int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver, const DoutPrefixProvider *dpp)
 {
   meta.mgr.reset(new RGWMetadataManager(svc.meta));
 
@@ -383,14 +383,14 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixPr
   auto sync_module = svc.sync_modules->get_sync_module();
   if (sync_module) {
     meta.bucket.reset(sync_module->alloc_bucket_meta_handler());
-    meta.bucket_instance.reset(sync_module->alloc_bucket_instance_meta_handler(store));
+    meta.bucket_instance.reset(sync_module->alloc_bucket_instance_meta_handler(driver));
   } else {
     meta.bucket.reset(RGWBucketMetaHandlerAllocator::alloc());
-    meta.bucket_instance.reset(RGWBucketInstanceMetaHandlerAllocator::alloc(store));
+    meta.bucket_instance.reset(RGWBucketInstanceMetaHandlerAllocator::alloc(driver));
   }
 
   meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc());
-  meta.role = std::make_unique<rgw::sal::RGWRoleMetadataHandler>(store, svc.role);
+  meta.role = std::make_unique<rgw::sal::RGWRoleMetadataHandler>(driver, svc.role);
 
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
   bucket.reset(new RGWBucketCtl(svc.zone,
@@ -420,12 +420,12 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixPr
   return 0;
 }
 
-int RGWCtl::init(RGWServices *_svc, rgw::sal::Store* store, const DoutPrefixProvider *dpp)
+int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver, const DoutPrefixProvider *dpp)
 {
   svc = _svc;
   cct = svc->cct;
 
-  int r = _ctl.init(*svc, store, dpp);
+  int r = _ctl.init(*svc, driver, dpp);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to start init ctls (" << cpp_strerror(-r) << dendl;
     return r;

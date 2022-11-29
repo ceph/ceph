@@ -1486,7 +1486,7 @@ WRITE_CLASS_ENCODER(DBOLHInfo)
 class DB {
   private:
     const std::string db_name;
-    rgw::sal::Store* store;
+    rgw::sal::Driver* driver;
     const std::string user_table;
     const std::string bucket_table;
     const std::string quota_table;
@@ -1549,8 +1549,8 @@ class DB {
 
     struct DBOps dbops; // DB operations, make it private?
 
-    void set_store(rgw::sal::Store* _store) {
-      store = _store;
+    void set_driver(rgw::sal::Driver* _driver) {
+      driver = _driver;
     }
 
     void set_context(CephContext *_cct) {

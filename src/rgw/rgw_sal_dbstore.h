@@ -752,7 +752,7 @@ public:
                        optional_yield y) override;
   };
 
-  class DBStore : public StoreStore {
+  class DBStore : public StoreDriver {
     private:
       /* DBStoreManager is used in case multiple
        * connections are needed one for each tenant.

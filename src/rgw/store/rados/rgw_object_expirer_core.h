@@ -39,11 +39,11 @@ class cls_timeindex_entry;
 class RGWObjExpStore {
   CephContext *cct;
   RGWSI_RADOS *rados_svc;
-  rgw::sal::RadosStore* store;
+  rgw::sal::RadosStore* driver;
 public:
-  RGWObjExpStore(CephContext *_cct, RGWSI_RADOS *_rados_svc, rgw::sal::RadosStore* _store) : cct(_cct),
+  RGWObjExpStore(CephContext *_cct, RGWSI_RADOS *_rados_svc, rgw::sal::RadosStore* _driver) : cct(_cct),
                                                                                       rados_svc(_rados_svc),
-                                                                                      store(_store) {}
+                                                                                      driver(_driver) {}
 
   int objexp_hint_add(const DoutPrefixProvider *dpp, 
                       const ceph::real_time& delete_at,
@@ -72,7 +72,7 @@ public:
 
 class RGWObjectExpirer {
 protected:
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   RGWObjExpStore exp_store;
 
   class OEWorker : public Thread, public DoutPrefixProvider {
@@ -100,9 +100,9 @@ protected:
   std::atomic<bool> down_flag = { false };
 
 public:
-  explicit RGWObjectExpirer(rgw::sal::Store* _store)
-    : store(_store),
-      exp_store(_store->ctx(), static_cast<rgw::sal::RadosStore*>(store)->svc()->rados, static_cast<rgw::sal::RadosStore*>(store)),
+  explicit RGWObjectExpirer(rgw::sal::Driver* _driver)
+    : driver(_driver),
+      exp_store(_driver->ctx(), static_cast<rgw::sal::RadosStore*>(driver)->svc()->rados, static_cast<rgw::sal::RadosStore*>(driver)),
       worker(NULL) {
   }
   ~RGWObjectExpirer() {

@@ -879,7 +879,7 @@ class DaosMultipartUpload : public StoreMultipartUpload {
   const std::string& get_bucket_name() { return bucket->get_name(); }
 };
 
-class DaosStore : public StoreStore {
+class DaosStore : public StoreDriver {
  private:
   std::string luarocks_path;
   DaosZone zone;

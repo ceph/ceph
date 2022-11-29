@@ -83,7 +83,7 @@ public:
   virtual void join() = 0;
 
   virtual void pause_for_new_config() = 0;
-  virtual void unpause_with_new_config(rgw::sal::Store* store,
+  virtual void unpause_with_new_config(rgw::sal::Driver* driver,
                                        rgw_auth_registry_ptr_t auth_registry) = 0;
 };
 
@@ -122,11 +122,11 @@ public:
     pprocess->pause();
   }
 
-  void unpause_with_new_config(rgw::sal::Store* const store,
+  void unpause_with_new_config(rgw::sal::Driver* const driver,
                                rgw_auth_registry_ptr_t auth_registry) override {
-    env.store = store;
+    env.driver = driver;
     env.auth_registry = auth_registry;
-    pprocess->unpause_with_new_config(store, std::move(auth_registry));
+    pprocess->unpause_with_new_config(driver, std::move(auth_registry));
   }
 }; /* RGWProcessFrontend */
 
@@ -136,7 +136,7 @@ public:
     : RGWProcessFrontend(pe, _conf) {}
 
   CephContext *get_cct() const { 
-    return env.store->ctx(); 
+    return env.driver->ctx();
   }
 
   unsigned get_subsys() const
@@ -166,7 +166,7 @@ public:
     }
 
     rgw_user uid(uid_str);
-    std::unique_ptr<rgw::sal::User> user = env.store->get_user(uid);
+    std::unique_ptr<rgw::sal::User> user = env.driver->get_user(uid);
 
     int ret = user->load_user(this, null_yield);
     if (ret < 0) {
@@ -208,16 +208,16 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
     if (pauser)
       pauser->pause();
   }
-  void resume(rgw::sal::Store* store) override {
+  void resume(rgw::sal::Driver* driver) override {
     /* Initialize the registry of auth strategies which will coordinate
      * the dynamic reconfiguration. */
     auto auth_registry = \
-      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store);
+      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, driver);
 
     for (auto frontend : frontends)
-      frontend->unpause_with_new_config(store, auth_registry);
+      frontend->unpause_with_new_config(driver, auth_registry);
     if (pauser)
-      pauser->resume(store);
+      pauser->resume(driver);
   }
 };
 

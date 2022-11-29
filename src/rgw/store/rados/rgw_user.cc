@@ -225,7 +225,7 @@ RGWAccessKeyPool::RGWAccessKeyPool(RGWUser* usr)
 
   user = usr;
 
-  store = user->get_store();
+  driver = user->get_driver();
 }
 
 int RGWAccessKeyPool::init(RGWUserAdminOpState& op_state)
@@ -249,9 +249,9 @@ int RGWAccessKeyPool::init(RGWUserAdminOpState& op_state)
   return 0;
 }
 
-RGWUserAdminOpState::RGWUserAdminOpState(rgw::sal::Store* store)
+RGWUserAdminOpState::RGWUserAdminOpState(rgw::sal::Driver* driver)
 {
-  user = store->get_user(rgw_user(RGW_USER_ANON_ID));
+  user = driver->get_user(rgw_user(RGW_USER_ANON_ID));
 }
 
 void RGWUserAdminOpState::set_user_id(const rgw_user& id)
@@ -504,13 +504,13 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
   if (!id.empty()) {
     switch (key_type) {
     case KEY_TYPE_SWIFT:
-      if (store->get_user_by_swift(dpp, id, y, &duplicate_check) >= 0) {
+      if (driver->get_user_by_swift(dpp, id, y, &duplicate_check) >= 0) {
         set_err_msg(err_msg, "existing swift key in RGW system:" + id);
         return -ERR_KEY_EXIST;
       }
       break;
     case KEY_TYPE_S3:
-      if (store->get_user_by_access_key(dpp, id, y, &duplicate_check) >= 0) {
+      if (driver->get_user_by_access_key(dpp, id, y, &duplicate_check) >= 0) {
         set_err_msg(err_msg, "existing S3 key in RGW system:" + id);
         return -ERR_KEY_EXIST;
       }
@@ -550,7 +550,7 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
       if (!validate_access_key(id))
         continue;
 
-    } while (!store->get_user_by_access_key(dpp, id, y, &duplicate_check));
+    } while (!driver->get_user_by_access_key(dpp, id, y, &duplicate_check));
   }
 
   if (key_type == KEY_TYPE_SWIFT) {
@@ -561,7 +561,7 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
     }
 
     // check that the access key doesn't exist
-    if (store->get_user_by_swift(dpp, id, y, &duplicate_check) >= 0) {
+    if (driver->get_user_by_swift(dpp, id, y, &duplicate_check) >= 0) {
       set_err_msg(err_msg, "cannot create existing swift key");
       return -ERR_KEY_EXIST;
     }
@@ -869,7 +869,7 @@ RGWSubUserPool::RGWSubUserPool(RGWUser *usr)
   user = usr;
 
   subusers_allowed = true;
-  store = user->get_store();
+  driver = user->get_driver();
 }
 
 int RGWSubUserPool::init(RGWUserAdminOpState& op_state)
@@ -1294,11 +1294,11 @@ RGWUser::RGWUser() : caps(this), keys(this), subusers(this)
   init_default();
 }
 
-int RGWUser::init(const DoutPrefixProvider *dpp, rgw::sal::Store* storage,
+int RGWUser::init(const DoutPrefixProvider *dpp, rgw::sal::Driver* _driver,
 		  RGWUserAdminOpState& op_state, optional_yield y)
 {
   init_default();
-  int ret = init_storage(storage);
+  int ret = init_storage(_driver);
   if (ret < 0)
     return ret;
 
@@ -1318,13 +1318,13 @@ void RGWUser::init_default()
   clear_populated();
 }
 
-int RGWUser::init_storage(rgw::sal::Store* storage)
+int RGWUser::init_storage(rgw::sal::Driver* _driver)
 {
-  if (!storage) {
+  if (!_driver) {
     return -EINVAL;
   }
 
-  store = storage;
+  driver = _driver;
 
   clear_populated();
 
@@ -1364,22 +1364,22 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   }
 
   if (!user_id.empty() && (user_id.compare(RGW_USER_ANON_ID) != 0)) {
-    user = store->get_user(user_id);
+    user = driver->get_user(user_id);
     found = (user->load_user(dpp, y) >= 0);
     op_state.found_by_uid = found;
   }
-  if (store->ctx()->_conf.get_val<bool>("rgw_user_unique_email")) {
+  if (driver->ctx()->_conf.get_val<bool>("rgw_user_unique_email")) {
     if (!user_email.empty() && !found) {
-      found = (store->get_user_by_email(dpp, user_email, y, &user) >= 0);
+      found = (driver->get_user_by_email(dpp, user_email, y, &user) >= 0);
       op_state.found_by_email = found;
     }
   }
   if (!swift_user.empty() && !found) {
-    found = (store->get_user_by_swift(dpp, swift_user, y, &user) >= 0);
+    found = (driver->get_user_by_swift(dpp, swift_user, y, &user) >= 0);
     op_state.found_by_key = found;
   }
   if (!access_key.empty() && !found) {
-    found = (store->get_user_by_access_key(dpp, access_key, y, &user) >= 0);
+    found = (driver->get_user_by_access_key(dpp, access_key, y, &user) >= 0);
     op_state.found_by_key = found;
   }
   
@@ -1433,7 +1433,7 @@ int RGWUser::update(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state
   std::string subprocess_msg;
   rgw::sal::User* user = op_state.get_user();
 
-  if (!store) {
+  if (!driver) {
     set_err_msg(err_msg, "couldn't initialize storage");
     return -EINVAL;
   }
@@ -1521,8 +1521,8 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
     }
   }
 
-  std::unique_ptr<rgw::sal::User> old_user = store->get_user(op_state.get_user_info().user_id);
-  std::unique_ptr<rgw::sal::User> new_user = store->get_user(op_state.get_new_uid());
+  std::unique_ptr<rgw::sal::User> old_user = driver->get_user(op_state.get_user_info().user_id);
+  std::unique_ptr<rgw::sal::User> new_user = driver->get_user(op_state.get_new_uid());
   if (old_user->get_tenant() != new_user->get_tenant()) {
     set_err_msg(err_msg, "users have to be under the same tenant namespace "
                 + old_user->get_tenant() + " != " + new_user->get_tenant());
@@ -1531,7 +1531,7 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
   // create a stub user and write only the uid index and buckets object
   std::unique_ptr<rgw::sal::User> user;
-  user = store->get_user(new_user->get_id());
+  user = driver->get_user(new_user->get_id());
 
   const bool exclusive = !op_state.get_overwrite_new_user(); // overwrite if requested
 
@@ -1550,7 +1550,7 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
   //unlink and link buckets to new user
   string marker;
-  CephContext *cct = store->ctx();
+  CephContext *cct = driver->ctx();
   size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
   rgw::sal::BucketList buckets;
 
@@ -1617,7 +1617,7 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
   if (!user_email.empty())
     user_info.user_email = user_email;
 
-  CephContext *cct = store->ctx();
+  CephContext *cct = driver->ctx();
   if (op_state.max_buckets_specified) {
     user_info.max_buckets = op_state.get_max_buckets();
   } else {
@@ -1756,7 +1756,7 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
   rgw::sal::BucketList buckets;
   string marker;
-  CephContext *cct = store->ctx();
+  CephContext *cct = driver->ctx();
   size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
   do {
     ret = user->list_buckets(dpp, marker, string(), max_buckets, false, buckets, y);
@@ -1853,7 +1853,7 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   if (!op_email.empty()) {
     // make sure we are not adding a duplicate email
     if (old_email != op_email) {
-      ret = store->get_user_by_email(dpp, op_email, y, &duplicate_check);
+      ret = driver->get_user_by_email(dpp, op_email, y, &duplicate_check);
       if (ret >= 0 && duplicate_check->get_id().compare(user_id) != 0) {
         set_err_msg(err_msg, "cannot add duplicate email");
         return -ERR_EMAIL_EXIST;
@@ -1908,9 +1908,9 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
     }
 
     string marker;
-    CephContext *cct = store->ctx();
+    CephContext *cct = driver->ctx();
     size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
-    std::unique_ptr<rgw::sal::User> user = store->get_user(user_id);
+    std::unique_ptr<rgw::sal::User> user = driver->get_user(user_id);
     do {
       ret = user->list_buckets(dpp, marker, string(), max_buckets, false, buckets, y);
       if (ret < 0) {
@@ -1928,7 +1928,7 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
         marker = iter->first;
       }
 
-      ret = store->set_buckets_enabled(dpp, bucket_names, !suspended);
+      ret = driver->set_buckets_enabled(dpp, bucket_names, !suspended);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to modify bucket");
         return ret;
@@ -2022,7 +2022,7 @@ int RGWUser::list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
     op_state.max_entries = 1000;
   }
 
-  int ret = store->meta_list_keys_init(dpp, metadata_key, op_state.marker, &handle);
+  int ret = driver->meta_list_keys_init(dpp, metadata_key, op_state.marker, &handle);
   if (ret < 0) {
     return ret;
   }
@@ -2040,7 +2040,7 @@ int RGWUser::list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   do {
     std::list<std::string> keys;
     left = op_state.max_entries - count;
-    ret = store->meta_list_keys_next(dpp, handle, left, keys, &truncated);
+    ret = driver->meta_list_keys_next(dpp, handle, left, keys, &truncated);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     } if (ret != -ENOENT) {
@@ -2056,24 +2056,24 @@ int RGWUser::list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   formatter->dump_bool("truncated", truncated);
   formatter->dump_int("count", count);
   if (truncated) {
-    formatter->dump_string("marker", store->meta_get_marker(handle));
+    formatter->dump_string("marker", driver->meta_get_marker(handle));
   }
 
   // close result object section
   formatter->close_section();
 
-  store->meta_list_keys_complete(handle);
+  driver->meta_list_keys_complete(handle);
 
   flusher.flush();
   return 0;
 }
 
-int RGWUserAdminOp_User::list(const DoutPrefixProvider *dpp, rgw::sal::Store* store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_User::list(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUser user;
 
-  int ret = user.init_storage(store);
+  int ret = user.init_storage(driver);
   if (ret < 0)
     return ret;
 
@@ -2085,7 +2085,7 @@ int RGWUserAdminOp_User::list(const DoutPrefixProvider *dpp, rgw::sal::Store* st
 }
 
 int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
-			      rgw::sal::Store* store, RGWUserAdminOpState& op_state,
+			      rgw::sal::Driver* driver, RGWUserAdminOpState& op_state,
 			      RGWFormatterFlusher& flusher,
 			      optional_yield y)
 {
@@ -2093,7 +2093,7 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
   RGWUser user;
   std::unique_ptr<rgw::sal::User> ruser;
 
-  int ret = user.init(dpp, store, op_state, y);
+  int ret = user.init(dpp, driver, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2106,10 +2106,10 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
   if (ret < 0)
     return ret;
 
-  ruser = store->get_user(info.user_id);
+  ruser = driver->get_user(info.user_id);
 
   if (op_state.sync_stats) {
-    ret = rgw_user_sync_all_stats(dpp, store, ruser.get(), y);
+    ret = rgw_user_sync_all_stats(dpp, driver, ruser.get(), y);
     if (ret < 0) {
       return ret;
     }
@@ -2137,13 +2137,13 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_User::create(const DoutPrefixProvider *dpp,
-				rgw::sal::Store* store,
+				rgw::sal::Driver* driver,
 				RGWUserAdminOpState& op_state,
 				RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(dpp, store, op_state, y);
+  int ret = user.init(dpp, driver, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2171,13 +2171,13 @@ int RGWUserAdminOp_User::create(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_User::modify(const DoutPrefixProvider *dpp,
-				rgw::sal::Store* store,
+				rgw::sal::Driver* driver,
 				RGWUserAdminOpState& op_state,
 				RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(dpp, store, op_state, y);
+  int ret = user.init(dpp, driver, op_state, y);
   if (ret < 0)
     return ret;
   Formatter *formatter = flusher.get_formatter();
@@ -2204,12 +2204,12 @@ int RGWUserAdminOp_User::modify(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_User::remove(const DoutPrefixProvider *dpp,
-				rgw::sal::Store* store, RGWUserAdminOpState& op_state,
+				rgw::sal::Driver* driver, RGWUserAdminOpState& op_state,
 				RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(dpp, store, op_state, y);
+  int ret = user.init(dpp, driver, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2222,14 +2222,14 @@ int RGWUserAdminOp_User::remove(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_Subuser::create(const DoutPrefixProvider *dpp,
-				   rgw::sal::Store* store,
+				   rgw::sal::Driver* driver,
 				   RGWUserAdminOpState& op_state,
 				   RGWFormatterFlusher& flusher,
 				   optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(dpp, store, op_state, y);
+  int ret = user.init(dpp, driver, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2257,12 +2257,12 @@ int RGWUserAdminOp_Subuser::create(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_Subuser::modify(const DoutPrefixProvider *dpp,
-				   rgw::sal::Store* store, RGWUserAdminOpState& op_state,
+				   rgw::sal::Driver* driver, RGWUserAdminOpState& op_state,
 				   RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(dpp, store, op_state, y);
+  int ret = user.init(dpp, driver, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2290,14 +2290,14 @@ int RGWUserAdminOp_Subuser::modify(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_Subuser::remove(const DoutPrefixProvider *dpp,
-				   rgw::sal::Store* store,
+				   rgw::sal::Driver* driver,
 				   RGWUserAdminOpState& op_state,
 				   RGWFormatterFlusher& flusher,
 				   optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(dpp, store, op_state, y);
+  int ret = user.init(dpp, driver, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2313,13 +2313,13 @@ int RGWUserAdminOp_Subuser::remove(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_Key::create(const DoutPrefixProvider *dpp,
-			       rgw::sal::Store* store, RGWUserAdminOpState& op_state,
+			       rgw::sal::Driver* driver, RGWUserAdminOpState& op_state,
 			       RGWFormatterFlusher& flusher,
 			       optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(dpp, store, op_state, y);
+  int ret = user.init(dpp, driver, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2354,14 +2354,14 @@ int RGWUserAdminOp_Key::create(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_Key::remove(const DoutPrefixProvider *dpp,
-			       rgw::sal::Store* store,
+			       rgw::sal::Driver* driver,
 			       RGWUserAdminOpState& op_state,
 			       RGWFormatterFlusher& flusher,
 			       optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(dpp, store, op_state, y);
+  int ret = user.init(dpp, driver, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2377,13 +2377,13 @@ int RGWUserAdminOp_Key::remove(const DoutPrefixProvider *dpp,
 }
 
 int RGWUserAdminOp_Caps::add(const DoutPrefixProvider *dpp,
-			     rgw::sal::Store* store,
+			     rgw::sal::Driver* driver,
 			     RGWUserAdminOpState& op_state,
 			     RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(dpp, store, op_state, y);
+  int ret = user.init(dpp, driver, op_state, y);
   if (ret < 0)
     return ret;
 
@@ -2412,13 +2412,13 @@ int RGWUserAdminOp_Caps::add(const DoutPrefixProvider *dpp,
 
 
 int RGWUserAdminOp_Caps::remove(const DoutPrefixProvider *dpp,
-				rgw::sal::Store* store,
+				rgw::sal::Driver* driver,
 				RGWUserAdminOpState& op_state,
 				RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
-  int ret = user.init(dpp, store, op_state, y);
+  int ret = user.init(dpp, driver, op_state, y);
   if (ret < 0)
     return ret;
 

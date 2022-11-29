@@ -184,20 +184,20 @@ struct RGWObjStateManifest {
 };
 
 class RGWObjectCtx {
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   ceph::shared_mutex lock = ceph::make_shared_mutex("RGWObjectCtx");
 
   std::map<rgw_obj, RGWObjStateManifest> objs_state;
 public:
-  explicit RGWObjectCtx(rgw::sal::Store* _store) : store(_store) {}
+  explicit RGWObjectCtx(rgw::sal::Driver* _driver) : driver(_driver) {}
   RGWObjectCtx(RGWObjectCtx& _o) {
     std::unique_lock wl{lock};
-    this->store = _o.store;
+    this->driver = _o.driver;
     this->objs_state = _o.objs_state;
   }
 
-  rgw::sal::Store* get_store() {
-    return store;
+  rgw::sal::Driver* get_driver() {
+    return driver;
   }
 
   RGWObjStateManifest *get_state(const rgw_obj& obj);
@@ -358,7 +358,7 @@ class RGWRados
   ceph::mutex lock = ceph::make_mutex("rados_timer_lock");
   SafeTimer *timer;
 
-  rgw::sal::RadosStore* store = nullptr;
+  rgw::sal::RadosStore* driver = nullptr;
   RGWGC *gc = nullptr;
   RGWLC *lc;
   RGWObjectExpirer *obj_expirer;
@@ -524,8 +524,8 @@ public:
   void set_context(CephContext *_cct) {
     cct = _cct;
   }
-  void set_store(rgw::sal::RadosStore* _store) {
-    store = _store;
+  void set_store(rgw::sal::RadosStore* _driver) {
+    driver = _driver;
   }
 
   RGWServices svc;
@@ -1213,7 +1213,7 @@ public:
   int bucket_suspended(const DoutPrefixProvider *dpp, rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  int delete_obj(rgw::sal::Store* store,
+  int delete_obj(rgw::sal::Driver* driver,
 		 const DoutPrefixProvider *dpp,
 		 const RGWBucketInfo& bucket_owner,
 		 const rgw_obj& src_obj,

@@ -206,7 +206,7 @@ protected:
   virtual int read_script();
 
 public:
-  Background(rgw::sal::Store* store,
+  Background(rgw::sal::Driver* driver,
       CephContext* cct,
       const std::string& luarocks_path,
       int execute_interval = INIT_EXECUTE_INTERVAL);
@@ -223,7 +223,7 @@ public:
     }
     
     void pause() override;
-    void resume(rgw::sal::Store* _store) override;
+    void resume(rgw::sal::Driver* _driver) override;
 };
 
 } //namepsace rgw::lua

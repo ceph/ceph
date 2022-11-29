@@ -3610,7 +3610,7 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
 extern "C" {
 
-void* newStore(void)
+void* newRadosStore(void)
 {
   rgw::sal::RadosStore* store = new rgw::sal::RadosStore();
   if (store) {
