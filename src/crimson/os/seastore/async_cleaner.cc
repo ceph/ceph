@@ -1061,8 +1061,12 @@ SegmentCleaner::do_reclaim_space(
                         &pin_list, &reclaimed, &runs] {
     reclaimed = 0;
     runs++;
+    auto src = Transaction::src_t::CLEANER;
+    if (is_cold) {
+      src = Transaction::src_t::COLD_CLEANER;
+    }
     return extent_callback->with_transaction_intr(
-      Transaction::src_t::CLEANER,
+      src,
       "clean_reclaim_space",
       [this, &backref_extents, &pin_list, &reclaimed](auto &t)
     {

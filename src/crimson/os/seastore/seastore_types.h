@@ -1741,6 +1741,7 @@ enum class transaction_type_t : uint8_t {
   TRIM_DIRTY,
   TRIM_ALLOC,
   CLEANER,
+  COLD_CLEANER,
   MAX
 };
 
