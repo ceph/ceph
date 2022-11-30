@@ -1064,6 +1064,10 @@ SegmentCleaner::do_reclaim_space(
     auto src = Transaction::src_t::CLEANER;
     if (is_cold) {
       src = Transaction::src_t::COLD_CLEANER;
+    } else {
+      if (&state == &evict_state) {
+	src = Transaction::src_t::EVICT;
+      }
     }
     return extent_callback->with_transaction_intr(
       src,

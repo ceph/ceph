@@ -137,6 +137,7 @@ void Cache::register_metrics()
     {src_t::TRIM_ALLOC, sm::label_instance("src", "TRIM_ALLOC")},
     {src_t::CLEANER, sm::label_instance("src", "CLEANER")},
     {src_t::COLD_CLEANER, sm::label_instance("src", "COLD_CLEANER")},
+    {src_t::EVICT, sm::label_instance("src", "EVICT")},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
