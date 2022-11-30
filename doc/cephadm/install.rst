@@ -391,33 +391,33 @@ referred to as "airgapped".
 Ensure your container image is inside the registry and that you
 have access to all hosts you wish to add to the cluster.
 
-Run a local container registry:
+#. Run a local container registry:
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   podman run --privileged -d --name registry -p 5000:5000 -v /var/lib/registry:/var/lib/registry --restart=always registry:2
+      podman run --privileged -d --name registry -p 5000:5000 -v /var/lib/registry:/var/lib/registry --restart=always registry:2
 
-If you are using an insecure registry, configure Podman or Docker with the
-hostname and port where the registry is running.
+#. If you are using an insecure registry, configure Podman or Docker with the
+   hostname and port where the registry is running.
 
-.. note:: For every host which accesses the local insecure registry, you will need to repeat this step on the host.
+   .. note:: For every host which accesses the local insecure registry, you will need to repeat this step on the host.
 
-Next, push your container image to your local registry.
+#. Next, push your container image to your local registry.
 
-* Ceph container image. See :ref:`containers`.
-* Prometheus container image
-* Node exporter container image
-* Grafana container image
-* Alertmanager container image
+   * Ceph container image. See :ref:`containers`.
+   * Prometheus container image
+   * Node exporter container image
+   * Grafana container image
+   * Alertmanager container image
 
-Now, create a temporary configuration file for setting the montoring
-images. (See :ref:`cephadm_monitoring-images`):
+#. Now, create a temporary configuration file for setting the montoring images.
+   (See :ref:`cephadm_monitoring-images`):
 
-.. prompt:: bash $
+   .. prompt:: bash $
 
-      $ cat <<EOF > initial-ceph.conf
+      cat <<EOF > initial-ceph.conf
 
-::
+   ::
 
       [mgr]
       mgr/cephadm/container_image_prometheus *<hostname>*:5000/prometheus
@@ -425,12 +425,11 @@ images. (See :ref:`cephadm_monitoring-images`):
       mgr/cephadm/container_image_grafana *<hostname>*:5000/grafana
       mgr/cephadm/container_image_alertmanager *<hostname>*:5000/alertmanger
 
-Then run bootstrap using the ``--image`` flag with your container image. For
-example:
+#. Then run bootstrap using the ``--image`` flag with your container image. For
+   example:
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   cephadm --image *<hostname>*:5000/ceph/ceph bootstrap --mon-ip *<mon-ip>*
-
+      cephadm --image *<hostname>*:5000/ceph/ceph bootstrap --mon-ip *<mon-ip>*
 
 .. _cluster network: ../rados/configuration/network-config-ref#cluster-network
