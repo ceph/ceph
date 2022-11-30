@@ -6,9 +6,9 @@
 #include "svc_sys_obj.h"
 #include "svc_sync_modules.h"
 
-#include "rgw/rgw_zone.h"
-#include "rgw/rgw_rest_conn.h"
-#include "rgw/rgw_bucket_sync.h"
+#include "rgw_zone.h"
+#include "rgw_rest_conn.h"
+#include "rgw_bucket_sync.h"
 
 #include "common/errno.h"
 #include "include/random.h"

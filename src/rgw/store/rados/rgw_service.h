@@ -11,7 +11,7 @@
 
 #include "common/async/yield_context.h"
 
-#include "rgw/rgw_common.h"
+#include "rgw_common.h"
 
 struct RGWServices_Def;
 

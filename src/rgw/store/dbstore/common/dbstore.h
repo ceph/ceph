@@ -17,14 +17,14 @@
 #define FMT_HEADER_ONLY 1
 #include "fmt/format.h"
 #include <map>
-#include "rgw/rgw_sal_store.h"
-#include "rgw/rgw_common.h"
-#include "rgw/rgw_bucket.h"
+#include "rgw_sal_store.h"
+#include "rgw_common.h"
+#include "rgw_bucket.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/ceph_context.h"
-#include "rgw/rgw_obj_manifest.h"
-#include "rgw/rgw_multi.h"
+#include "rgw_obj_manifest.h"
+#include "rgw_multi.h"
 
 namespace rgw { namespace store {
 

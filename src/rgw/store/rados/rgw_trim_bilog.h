@@ -24,7 +24,7 @@
 #include "include/encoding.h"
 #include "common/ceph_time.h"
 #include "common/dout.h"
-#include "rgw/rgw_common.h"
+#include "rgw_common.h"
 
 class RGWCoroutine;
 class RGWHTTPManager;

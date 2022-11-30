@@ -25,8 +25,8 @@
 #include "test/librados/test_cxx.h"
 #include "global/global_context.h"
 
-#include "rgw/rgw_tools.h"
-#include "rgw/cls_fifo_legacy.h"
+#include "rgw_tools.h"
+#include "cls_fifo_legacy.h"
 
 #include "gtest/gtest.h"
 
