@@ -9,6 +9,9 @@
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/journal/segment_allocator.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/random_block_manager.h"
+#include "crimson/os/seastore/random_block_manager/block_rb_manager.h"
+#include "crimson/os/seastore/randomblock_manager_group.h"
 
 namespace crimson::os::seastore {
 
@@ -26,6 +29,8 @@ public:
 
   using open_ertr = base_ertr;
   virtual open_ertr::future<> open() = 0;
+
+  virtual paddr_t alloc_paddr(extent_len_t length) = 0;
 
   using alloc_write_ertr = base_ertr;
   using alloc_write_iertr = trans_iertr<alloc_write_ertr>;
@@ -67,6 +72,10 @@ public:
     });
   }
 
+  paddr_t alloc_paddr(extent_len_t length) final {
+    return make_delayed_temp_paddr(0);
+  }
+
 private:
   alloc_write_iertr::future<> do_write(
     Transaction& t,
@@ -79,6 +88,42 @@ private:
 
   journal::SegmentAllocator segment_allocator;
   journal::RecordSubmitter record_submitter;
+  seastar::gate write_guard;
+};
+
+
+class RandomBlockOolWriter : public ExtentOolWriter {
+public:
+  RandomBlockOolWriter(RBMCleaner* rb_cleaner) :
+    rb_cleaner(rb_cleaner) {}
+
+  using open_ertr = ExtentOolWriter::open_ertr;
+  open_ertr::future<> open() final {
+    return open_ertr::now();
+  }
+
+  alloc_write_iertr::future<> alloc_write_ool_extents(
+    Transaction &t,
+    std::list<LogicalCachedExtentRef> &extents) final;
+
+  close_ertr::future<> close() final {
+    return write_guard.close().then([this] {
+      write_guard = seastar::gate();
+      return close_ertr::now();
+    });
+  }
+
+  paddr_t alloc_paddr(extent_len_t length) final {
+    assert(rb_cleaner);
+    return rb_cleaner->alloc_paddr(length);
+  }
+
+private:
+  alloc_write_iertr::future<> do_write(
+    Transaction& t,
+    std::list<LogicalCachedExtentRef> &extent);
+
+  RBMCleaner* rb_cleaner;
   seastar::gate write_guard;
 };
 
@@ -151,36 +196,49 @@ public:
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
     // according to the allocator.
-    auto bp = ceph::bufferptr(
+    auto alloc_paddr = [this](rewrite_gen_t gen, 
+      data_category_t category, extent_len_t length) 
+      -> alloc_result_t {
+      auto bp = ceph::bufferptr(
       buffer::create_page_aligned(length));
-    bp.zero();
+      bp.zero();
+      paddr_t addr;
+      if (gen == INLINE_GENERATION) {
+	addr = make_record_relative_paddr(0);
+      } else if (category == data_category_t::DATA) {
+	assert(data_writers_by_gen[generation_to_writer(gen)]);
+	addr = data_writers_by_gen[
+	  generation_to_writer(gen)]->alloc_paddr(length);
+      } else {
+	assert(category == data_category_t::METADATA);
+	assert(md_writers_by_gen[generation_to_writer(gen)]);
+	addr = md_writers_by_gen[
+	  generation_to_writer(gen)]->alloc_paddr(length);
+      }
+      return {addr,
+	      std::move(bp),
+	      gen};
+    };
 
     if (!is_logical_type(type)) {
       // TODO: implement out-of-line strategy for physical extent.
-      return {make_record_relative_paddr(0),
-              std::move(bp),
-              INLINE_GENERATION};
+      assert(get_extent_category(type) == data_category_t::METADATA);
+      return alloc_paddr(INLINE_GENERATION, data_category_t::METADATA, length);
     }
 
     if (hint == placement_hint_t::COLD) {
       assert(gen == INIT_GENERATION);
-      return {make_delayed_temp_paddr(0),
-              std::move(bp),
-              MIN_REWRITE_GENERATION};
+      return alloc_paddr(MIN_REWRITE_GENERATION, get_extent_category(type), length);
     }
 
     if (get_extent_category(type) == data_category_t::METADATA &&
         gen == INIT_GENERATION) {
       if (prefer_ool) {
-        return {make_delayed_temp_paddr(0),
-                std::move(bp),
-                OOL_GENERATION};
+	return alloc_paddr(OOL_GENERATION, get_extent_category(type), length);
       } else {
         // default not to ool metadata extents to reduce padding overhead.
         // TODO: improve padding so we can default to the prefer_ool path.
-        return {make_record_relative_paddr(0),
-                std::move(bp),
-                INLINE_GENERATION};
+	return alloc_paddr(INLINE_GENERATION, get_extent_category(type), length);
       }
     } else {
       assert(get_extent_category(type) == data_category_t::DATA ||
@@ -190,21 +248,29 @@ public:
       } else if (gen == INIT_GENERATION) {
         gen = OOL_GENERATION;
       }
-      return {make_delayed_temp_paddr(0),
-              std::move(bp),
-              gen};
+      return alloc_paddr(gen, get_extent_category(type), length);
     }
   }
 
   /**
-   * delayed_alloc_or_ool_write
+   * delayed_allocate_and_write
    *
    * Performs delayed allocation and do writes for out-of-line extents.
    */
   using alloc_paddr_iertr = ExtentOolWriter::alloc_write_iertr;
-  alloc_paddr_iertr::future<> delayed_alloc_or_ool_write(
+  alloc_paddr_iertr::future<> delayed_allocate_and_write(
     Transaction& t,
     const std::list<LogicalCachedExtentRef>& delayed_extents);
+
+  /**
+   * write_preallocated_ool_extents
+   *
+   * Performs ool writes for extents with pre-allocated addresses.
+   * See Transaction::pre_alloc_list
+   */
+  alloc_paddr_iertr::future<> write_preallocated_ool_extents(
+    Transaction &t,
+    std::list<LogicalCachedExtentRef> extents);
 
   seastar::future<> stop_background() {
     return background_process.stop_background();
@@ -229,6 +295,10 @@ public:
 
   void mark_space_free(paddr_t addr, extent_len_t len) {
     background_process.mark_space_free(addr, len);
+  }
+
+  void commit_space_used(paddr_t addr, extent_len_t len) {
+    return background_process.commit_space_used(addr, len);
   }
 
   seastar::future<> reserve_projected_usage(std::size_t projected_usage) {
@@ -341,6 +411,14 @@ private:
       }
       assert(cleaner);
       cleaner->mark_space_free(addr, len);
+    }
+
+    void commit_space_used(paddr_t addr, extent_len_t len) {
+      if (state < state_t::SCAN_SPACE) {
+        return;
+      }
+      assert(cleaner);
+      return cleaner->commit_space_used(addr, len);
     }
 
     seastar::future<> reserve_projected_usage(std::size_t projected_usage);

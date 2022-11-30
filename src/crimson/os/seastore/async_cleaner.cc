@@ -1543,4 +1543,184 @@ void SegmentCleaner::print(std::ostream &os, bool is_detailed) const
   os << ")";
 }
 
+RBMCleaner::RBMCleaner(
+  RBMDeviceGroupRef&& rb_group,
+  BackrefManager &backref_manager,
+  bool detailed)
+  : detailed(detailed),
+    rb_group(std::move(rb_group)),
+    backref_manager(backref_manager)
+{}
+
+void RBMCleaner::print(std::ostream &os, bool is_detailed) const
+{
+  // TODO
+  return;
+}
+
+void RBMCleaner::mark_space_used(
+  paddr_t addr,
+  extent_len_t len)
+{
+  LOG_PREFIX(RBMCleaner::mark_space_used);
+  assert(addr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+  auto rbms = rb_group->get_rb_managers();
+  for (auto rbm : rbms) {
+    if (addr.get_device_id() == rbm->get_device_id()) {
+      if (rbm->get_start() <= addr) {
+	INFO("allocate addr: {} len: {}", addr, len);
+	rbm->mark_space_used(addr, len);
+      }
+      return;
+    }
+  }
+}
+
+void RBMCleaner::mark_space_free(
+  paddr_t addr,
+  extent_len_t len)
+{
+  LOG_PREFIX(RBMCleaner::mark_space_free);
+  assert(addr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+  auto rbms = rb_group->get_rb_managers();
+  for (auto rbm : rbms) {
+    if (addr.get_device_id() == rbm->get_device_id()) {
+      if (rbm->get_start() <= addr) {
+	INFO("free addr: {} len: {}", addr, len);
+	rbm->mark_space_free(addr, len);
+      }
+      return;
+    }
+  }
+}
+
+void RBMCleaner::commit_space_used(paddr_t addr, extent_len_t len) 
+{
+  auto rbms = rb_group->get_rb_managers();
+  for (auto rbm : rbms) {
+    if (addr.get_device_id() == rbm->get_device_id()) {
+      if (rbm->get_start() <= addr) {
+	rbm->complete_allocation(addr, len);
+      }
+      return;
+    }
+  }
+}
+
+void RBMCleaner::reserve_projected_usage(std::size_t projected_usage)
+{
+  assert(background_callback->is_ready());
+  stats.projected_used_bytes += projected_usage;
+}
+
+void RBMCleaner::release_projected_usage(std::size_t projected_usage)
+{
+  assert(background_callback->is_ready());
+  ceph_assert(stats.projected_used_bytes >= projected_usage);
+  stats.projected_used_bytes -= projected_usage;
+  background_callback->maybe_wake_blocked_io();
+}
+
+RBMCleaner::clean_space_ret RBMCleaner::clean_space()
+{
+  // TODO 
+  return clean_space_ertr::now();
+}
+
+RBMCleaner::mount_ret RBMCleaner::mount()
+{
+  stats = {};
+  return seastar::do_with(
+    rb_group->get_rb_managers(),
+    [](auto &rbs) {
+    return crimson::do_for_each(
+      rbs.begin(),
+      rbs.end(),
+      [](auto& it) {
+      return it->open(
+      ).handle_error(
+	crimson::ct_error::input_output_error::pass_further(),
+	crimson::ct_error::assert_all{
+	"Invalid error when opening RBM"}
+      );
+    });
+  });
+}
+
+bool RBMCleaner::check_usage()
+{
+  assert(detailed);
+  const auto& rbms = rb_group->get_rb_managers();
+  RBMSpaceTracker tracker(rbms);
+  extent_callback->with_transaction_weak(
+      "check_usage",
+      [this, &tracker, &rbms](auto &t) {
+    return backref_manager.scan_mapped_space(
+      t,
+      [&tracker, &rbms](
+        paddr_t paddr,
+        extent_len_t len,
+        extent_types_t type,
+        laddr_t laddr)
+    {
+      for (auto rbm : rbms) {
+	if (rbm->get_device_id() == paddr.get_device_id()) {
+	  if (is_backref_node(type)) {
+	    assert(laddr == L_ADDR_NULL);
+	    tracker.allocate(
+	      paddr,
+	      len);
+	  } else if (laddr == L_ADDR_NULL) {
+	    tracker.release(
+	      paddr,
+	      len);
+	  } else {
+	    tracker.allocate(
+	      paddr,
+	      len);
+	  }
+	}
+      }
+    });
+  }).unsafe_get0();
+  return equals(tracker);
+}
+
+bool RBMCleaner::equals(const RBMSpaceTracker &_other) const
+{
+  LOG_PREFIX(RBMSpaceTracker::equals);
+  const auto &other = static_cast<const RBMSpaceTracker&>(_other);
+  auto rbs = rb_group->get_rb_managers();
+  //TODO: multiple rbm allocator
+  auto rbm = rbs[0];
+  assert(rbm);
+
+  if (rbm->get_device()->get_available_size() / rbm->get_block_size()
+      != other.block_usage.size()) {
+    assert(0 == "block counts should match");
+    return false;
+  }
+  bool all_match = true;
+  for (auto i = other.block_usage.begin();
+       i != other.block_usage.end(); ++i) {
+    if (i->first < rbm->get_start().as_blk_paddr().get_device_off()) {
+      continue;
+    }
+    auto addr = i->first;
+    auto state = rbm->get_extent_state(
+      convert_abs_addr_to_paddr(addr, rbm->get_device_id()),
+      rbm->get_block_size());
+    if ((i->second.used && state == rbm_extent_state_t::ALLOCATED) ||
+	(!i->second.used && (state == rbm_extent_state_t::FREE ||
+                         state == rbm_extent_state_t::RESERVED))) {
+      // pass
+    } else {
+      all_match = false;
+      ERROR("block addr {} mismatch other used: {}",
+	    addr, i->second.used);
+    }
+  }
+  return all_match;
+}
+
 }

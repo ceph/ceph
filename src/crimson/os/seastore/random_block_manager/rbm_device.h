@@ -176,6 +176,7 @@ public:
     super.journal_size = size;
   }
 };
+using RBMDeviceRef = std::unique_ptr<RBMDevice>;
 
 class EphemeralRBMDevice : public RBMDevice {
 public:

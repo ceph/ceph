@@ -46,47 +46,42 @@ device_config_t get_rbm_ephemeral_device_config(
           secondary_devices};
 }
 
-/* TODO : block allocator */
-BlockRBManager::allocate_ret BlockRBManager::alloc_extent(
-    Transaction &t, size_t size)
+paddr_t BlockRBManager::alloc_extent(size_t size)
 {
-
-  /*
-   * 1. find free blocks using block allocator
-   * 2. add free blocks to transaction
-   *    (the free block is reserved state, not stored)
-   * 3. link free blocks to onode
-   * Due to in-memory block allocator is the next work to do,
-   * just read the block bitmap directly to find free blocks.
-   *
-   */
-  // TODO: block allocation using in-memory block allocator
-  return allocate_ret(
-    allocate_ertr::ready_future_marker{},
-    paddr_t{});
+  LOG_PREFIX(BlockRBManager::alloc_extent);
+  assert(allocator);
+  auto alloc = allocator->alloc_extent(size);
+  ceph_assert((*alloc).num_intervals() == 1);
+  auto extent = (*alloc).begin();
+  ceph_assert(size == extent.get_len());
+  paddr_t paddr = convert_abs_addr_to_paddr(
+    extent.get_start(),
+    device->get_device_id());
+  DEBUG("allocated addr: {}, size: {}, requested size: {}",
+	paddr, extent.get_len(), size);
+  return paddr;
 }
 
-
-BlockRBManager::abort_allocation_ertr::future<> BlockRBManager::abort_allocation(
-    Transaction &t)
+void BlockRBManager::complete_allocation(
+    paddr_t paddr, size_t size)
 {
-  /*
-   * TODO: clear all allocation infos associated with transaction in in-memory allocator
-   */
-  return abort_allocation_ertr::now();
-}
-
-BlockRBManager::write_ertr::future<> BlockRBManager::complete_allocation(
-    Transaction &t)
-{
-  return write_ertr::now();
+  assert(allocator);
+  rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
+  allocator->complete_allocation(addr, size);
 }
 
 BlockRBManager::open_ertr::future<> BlockRBManager::open()
 {
+  assert(device);
   return device->read_rbm_header(RBM_START_ADDRESS
-  ).safe_then([](auto s)
+  ).safe_then([this](auto s)
     -> open_ertr::future<> {
+    auto ool_start = get_start_rbm_addr();
+    allocator->init(
+      ool_start,
+      device->get_available_size() -
+      ool_start,
+      device->get_block_size());
     return open_ertr::now();
   }).handle_error(
     open_ertr::pass_further{},
@@ -137,9 +132,9 @@ BlockRBManager::read_ertr::future<> BlockRBManager::read(
 BlockRBManager::close_ertr::future<> BlockRBManager::close()
 {
   ceph_assert(device);
+  allocator->close();
   return device->close();
 }
-
 
 BlockRBManager::write_ertr::future<> BlockRBManager::write(
   rbm_abs_addr addr,
