@@ -80,6 +80,14 @@ By default, `cephfs-top` connects to cluster name `ceph`. To use a non-default c
 
 Interval should be greater or equal to 0.5 second. Fractional seconds are honoured.
 
+To dump the metrics to stdout without creating a curses display use::
+
+  $ cephfs-top --dump
+
+To dump the metrics of the given filesystem to stdout without creating a curses display use::
+
+  $ cephfs-top --dumpfs <fs_name>
+
 Interactive Commands
 --------------------
 

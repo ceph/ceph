@@ -44,6 +44,14 @@ Options
 
    Refresh interval in seconds (default: 1)
 
+.. option:: --dump
+
+   Dump the metrics to stdout
+
+.. option:: --dumpfs <fs_name>
+
+   Dump the metrics of the given filesystem to stdout
+
 Descriptions of fields
 ======================
 
