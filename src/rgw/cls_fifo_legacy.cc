@@ -424,13 +424,7 @@ int FIFO::apply_update(const DoutPrefixProvider *dpp,
 	       << " version mismatch, canceling: tid=" << tid << dendl;
     return -ECANCELED;
   }
-  auto err = info->apply_update(update);
-  if (err) {
-    lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-	       << " error applying update: " << *err << " tid=" << tid << dendl;
-    return -ECANCELED;
-  }
-
+  info->apply_update(update);
   ++info->version.ver;
 
   return {};
