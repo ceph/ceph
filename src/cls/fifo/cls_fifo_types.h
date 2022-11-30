@@ -15,10 +15,12 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <map>
 #include <optional>
 #include <ostream>
+#include <ranges>
 #include <string>
 #include <vector>
 
@@ -358,8 +360,8 @@ struct info {
     return fmt::format("{}.{}", oid_prefix, part_num);
   }
 
-  std::optional<std::string>
-  apply_update(const update& update) {
+  void apply_update(const update& update) {
+    namespace sr = std::ranges;
     if (update.tail_part_num()) {
       tail_part_num = *update.tail_part_num();
     }
@@ -373,16 +375,13 @@ struct info {
     }
 
     for (const auto& entry : update.journal_entries_add()) {
-      auto iter = journal.find(entry.part_num);
-      if (iter != journal.end() &&
-	  iter->second.op == entry.op) {
-	/* don't allow multiple concurrent (same) operations on the same part,
-	   racing clients should use objv to avoid races anyway */
-	return fmt::format("multiple concurrent operations on same part are not "
-			   "allowed, part num={}", entry.part_num);
+      if (sr::find(journal, entry,
+		   [](const auto &x) { return x.second; })
+	  != journal.end()) {
+	continue;
+      } else {
+	journal.emplace(entry.part_num, entry);
       }
-
-      journal.emplace(entry.part_num, entry);
     }
 
     for (const auto& entry : update.journal_entries_rm()) {
@@ -392,8 +391,6 @@ struct info {
     if (update.head_part_num()) {
       head_part_num = *update.head_part_num();
     }
-
-    return std::nullopt;
   }
 };
 WRITE_CLASS_ENCODER(info)
