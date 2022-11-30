@@ -178,28 +178,45 @@ void ExtentPlacementManager::init(
 {
   writer_refs.clear();
 
-  auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
-  ceph_assert(segment_cleaner != nullptr);
-  auto num_writers = generation_to_writer(REWRITE_GENERATIONS);
-  data_writers_by_gen.resize(num_writers, {});
-  for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
-    writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
-          data_category_t::DATA, gen, *segment_cleaner,
-          segment_cleaner->get_ool_segment_seq_allocator()));
-    data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
-  }
+  if (trimmer->get_journal_type() == journal_type_t::SEGMENTED) {
+    auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
+    ceph_assert(segment_cleaner != nullptr);
+    auto num_writers = generation_to_writer(REWRITE_GENERATIONS);
+    data_writers_by_gen.resize(num_writers, {});
+    for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+	    data_category_t::DATA, gen, *segment_cleaner,
+	    segment_cleaner->get_ool_segment_seq_allocator()));
+      data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
+    }
 
-  md_writers_by_gen.resize(num_writers, {});
-  for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
-    writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
-          data_category_t::METADATA, gen, *segment_cleaner,
-          segment_cleaner->get_ool_segment_seq_allocator()));
-    md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
-  }
+    md_writers_by_gen.resize(num_writers, {});
+    for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+	    data_category_t::METADATA, gen, *segment_cleaner,
+	    segment_cleaner->get_ool_segment_seq_allocator()));
+      md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
+    }
 
-  for (auto *device : segment_cleaner->get_segment_manager_group()
-                                     ->get_segment_managers()) {
-    add_device(device);
+    for (auto *device : segment_cleaner->get_segment_manager_group()
+				       ->get_segment_managers()) {
+      add_device(device);
+    }
+  } else {
+    assert(trimmer->get_journal_type() == journal_type_t::RANDOM_BLOCK);
+    auto rb_cleaner = dynamic_cast<RBMCleaner*>(cleaner.get());
+    ceph_assert(rb_cleaner != nullptr);
+    auto num_writers = generation_to_writer(REWRITE_GENERATIONS);
+    data_writers_by_gen.resize(num_writers, {});
+    md_writers_by_gen.resize(num_writers, {});
+    writer_refs.emplace_back(std::make_unique<RandomBlockOolWriter>(
+	    rb_cleaner));
+    // TODO: implement eviction in RBCleaner and introduce further writers
+    data_writers_by_gen[generation_to_writer(OOL_GENERATION)] = writer_refs.back().get();
+    md_writers_by_gen[generation_to_writer(OOL_GENERATION)] = writer_refs.back().get();
+    for (auto *rb : rb_cleaner->get_rb_group()->get_rb_managers()) {
+      add_device(rb->get_device());
+    }
   }
 
   background_process.init(std::move(trimmer), std::move(cleaner));
@@ -211,13 +228,11 @@ void ExtentPlacementManager::set_primary_device(Device *device)
   primary_device = device;
   if (device->get_backend_type() == backend_type_t::SEGMENTED) {
     prefer_ool = false;
-    ceph_assert(devices_by_id[device->get_device_id()] == device);
   } else {
-    // RBM device is not in the cleaner.
     ceph_assert(device->get_backend_type() == backend_type_t::RANDOM_BLOCK);
     prefer_ool = true;
-    add_device(primary_device);
   }
+  ceph_assert(devices_by_id[device->get_device_id()] == device);
 }
 
 ExtentPlacementManager::open_ertr::future<>
@@ -227,20 +242,26 @@ ExtentPlacementManager::open_for_write()
   INFO("started with {} devices", num_devices);
   ceph_assert(primary_device != nullptr);
   return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
-    return writer->open();
+    if (writer) {
+      return writer->open();
+    }
+    return open_ertr::now();
   }).safe_then([this] {
     return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
-      return writer->open();
+      if (writer) {
+	return writer->open();
+      }
+      return open_ertr::now();
     });
   });
 }
 
 ExtentPlacementManager::alloc_paddr_iertr::future<>
-ExtentPlacementManager::delayed_alloc_or_ool_write(
+ExtentPlacementManager::delayed_allocate_and_write(
     Transaction &t,
     const std::list<LogicalCachedExtentRef> &delayed_extents)
 {
-  LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
+  LOG_PREFIX(ExtentPlacementManager::delayed_allocate_and_write);
   DEBUGT("start with {} delayed extents",
          t, delayed_extents.size());
   assert(writer_refs.size());
@@ -263,16 +284,49 @@ ExtentPlacementManager::delayed_alloc_or_ool_write(
   });
 }
 
+ExtentPlacementManager::alloc_paddr_iertr::future<>
+ExtentPlacementManager::write_preallocated_ool_extents(
+    Transaction &t,
+    std::list<LogicalCachedExtentRef> extents)
+{
+  LOG_PREFIX(ExtentPlacementManager::write_preallocated_ool_extents);
+  DEBUGT("start with {} allocated extents",
+         t, extents.size());
+  assert(writer_refs.size());
+  return seastar::do_with(
+      std::map<ExtentOolWriter*, std::list<LogicalCachedExtentRef>>(),
+      [this, &t, extents=std::move(extents)](auto& alloc_map) {
+    for (auto& extent : extents) {
+      auto writer_ptr = get_writer(
+          extent->get_user_hint(),
+          get_extent_category(extent->get_type()),
+          extent->get_rewrite_generation());
+      alloc_map[writer_ptr].emplace_back(extent);
+    }
+    return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
+      auto writer = p.first;
+      auto& extents = p.second;
+      return writer->alloc_write_ool_extents(t, extents);
+    });
+  });
+}
+
 ExtentPlacementManager::close_ertr::future<>
 ExtentPlacementManager::close()
 {
   LOG_PREFIX(ExtentPlacementManager::close);
   INFO("started");
   return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
-    return writer->close();
+    if (writer) {
+      return writer->close();
+    }
+    return close_ertr::now();
   }).safe_then([this] {
     return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
-      return writer->close();
+      if (writer) {
+	return writer->close();
+      }
+      return close_ertr::now();
     });
   });
 }
@@ -464,6 +518,55 @@ void ExtentPlacementManager::BackgroundProcess::register_metrics()
                      sm::description("IOs that are blocked by cleaning")),
     sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
                      sm::description("the sum of blocking IOs"))
+  });
+}
+
+RandomBlockOolWriter::alloc_write_iertr::future<>
+RandomBlockOolWriter::alloc_write_ool_extents(
+  Transaction& t,
+  std::list<LogicalCachedExtentRef>& extents)
+{
+  if (extents.empty()) {
+    return alloc_write_iertr::now();
+  }
+  return seastar::with_gate(write_guard, [this, &t, &extents] {
+    return do_write(t, extents);
+  });
+}
+
+RandomBlockOolWriter::alloc_write_iertr::future<>
+RandomBlockOolWriter::do_write(
+  Transaction& t,
+  std::list<LogicalCachedExtentRef>& extents)
+{
+  LOG_PREFIX(RandomBlockOolWriter::do_write);
+  assert(!extents.empty());
+  DEBUGT("start with {} allocated extents",
+         t, extents.size());
+  return trans_intr::do_for_each(extents,
+    [this, &t, FNAME](auto& ex) {
+    auto paddr = ex->get_paddr();
+    assert(paddr.is_absolute());
+    RandomBlockManager * rbm = rb_cleaner->get_rbm(paddr); 
+    assert(rbm);
+    TRACE("extent {}, allocated addr {}", ex, paddr);
+    auto& stats = t.get_ool_write_stats();
+    stats.extents.num += 1;
+    stats.extents.bytes += ex->get_length();
+    stats.num_records += 1;
+
+    return rbm->write(paddr,
+      ex->get_bptr()
+    ).handle_error(
+      alloc_write_iertr::pass_further{},
+      crimson::ct_error::assert_all{
+	"Invalid error when writing record"}
+    ).safe_then([&t, &ex, paddr, FNAME]() {
+      TRACET("ool extent written at {} -- {}",
+	     t, paddr, *ex);
+      t.mark_allocated_extent_ool(ex);
+      return alloc_write_iertr::now();
+    });
   });
 }
 

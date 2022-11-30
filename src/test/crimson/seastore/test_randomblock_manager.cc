@@ -55,7 +55,7 @@ struct rbm_test_t :
       0, DEFAULT_TEST_SIZE);
     block_size = device->get_block_size();
     size = device->get_available_size();
-    rbm_manager.reset(new BlockRBManager(device.get(), std::string()));
+    rbm_manager.reset(new BlockRBManager(device.get(), std::string(), false));
     config = get_rbm_ephemeral_device_config(0, 1);
     return device->mount().handle_error(crimson::ct_error::assert_all{}
     ).then([this] {
