@@ -3104,6 +3104,35 @@ void PeeringState::proc_replica_log(
   peer_missing[from].claim(std::move(omissing));
 }
 
+/**
+* Update min_last_complete_ondisk to the minimum
+* last_complete_ondisk version informed by each peer.
+*/
+void PeeringState::calc_min_last_complete_ondisk() {
+  ceph_assert(!acting_recovery_backfill.empty());
+  eversion_t min = last_complete_ondisk;
+  for (const auto& pg_shard : acting_recovery_backfill) {
+    if (pg_shard == get_primary()) {
+      continue;
+    }
+    if (peer_last_complete_ondisk.count(pg_shard) == 0) {
+      psdout(20) << __func__ <<  " no complete info on: "
+                 << pg_shard << dendl;
+      return;
+    }
+    if (peer_last_complete_ondisk[pg_shard] < min) {
+      min = peer_last_complete_ondisk[pg_shard];
+    }
+  }
+  if (min != min_last_complete_ondisk) {
+    psdout(20) << __func__ << " last_complete_ondisk is "
+               << "updated to: " << min
+               << " from: " << min_last_complete_ondisk
+               << dendl;
+    min_last_complete_ondisk = min;
+  }
+}
+
 void PeeringState::fulfill_info(
   pg_shard_t from, const pg_query_t &query,
   pair<pg_shard_t, pg_info_t> &notify_info)
