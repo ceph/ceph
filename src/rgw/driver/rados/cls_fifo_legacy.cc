@@ -121,12 +121,10 @@ void update_meta(lr::ObjectWriteOperation* op, const fifo::objv& objv,
   op->exec(fifo::op::CLASS, fifo::op::UPDATE_META, in);
 }
 
-void part_init(lr::ObjectWriteOperation* op, std::string_view tag,
-	       fifo::data_params params)
+void part_init(lr::ObjectWriteOperation* op, fifo::data_params params)
 {
   fifo::op::init_part ip;
 
-  ip.tag = tag;
   ip.params = params;
 
   cb::list in;
@@ -134,14 +132,13 @@ void part_init(lr::ObjectWriteOperation* op, std::string_view tag,
   op->exec(fifo::op::CLASS, fifo::op::INIT_PART, in);
 }
 
-int push_part(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::string& oid, std::string_view tag,
+int push_part(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::string& oid,
 	      std::deque<cb::list> data_bufs, std::uint64_t tid,
 	      optional_yield y)
 {
   lr::ObjectWriteOperation op;
   fifo::op::push_part pp;
 
-  pp.tag = tag;
   pp.data_bufs = data_bufs;
   pp.total_len = 0;
 
@@ -169,14 +166,13 @@ int push_part(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::string
   return retval;
 }
 
-void push_part(lr::IoCtx& ioctx, const std::string& oid, std::string_view tag,
+void push_part(lr::IoCtx& ioctx, const std::string& oid,
 	       std::deque<cb::list> data_bufs, std::uint64_t tid,
 	       lr::AioCompletion* c)
 {
   lr::ObjectWriteOperation op;
   fifo::op::push_part pp;
 
-  pp.tag = tag;
   pp.data_bufs = data_bufs;
   pp.total_len = 0;
 
@@ -191,12 +187,10 @@ void push_part(lr::IoCtx& ioctx, const std::string& oid, std::string_view tag,
 }
 
 void trim_part(lr::ObjectWriteOperation* op,
-	       std::optional<std::string_view> tag,
 	       std::uint64_t ofs, bool exclusive)
 {
   fifo::op::trim_part tp;
 
-  tp.tag = tag;
   tp.ofs = ofs;
   tp.exclusive = exclusive;
 
@@ -206,16 +200,14 @@ void trim_part(lr::ObjectWriteOperation* op,
 }
 
 int list_part(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::string& oid,
-	      std::optional<std::string_view> tag, std::uint64_t ofs,
-	      std::uint64_t max_entries,
+	      std::uint64_t ofs, std::uint64_t max_entries,
 	      std::vector<fifo::part_list_entry>* entries,
-	      bool* more, bool* full_part, std::string* ptag,
+	      bool* more, bool* full_part,
 	      std::uint64_t tid, optional_yield y)
 {
   lr::ObjectReadOperation op;
   fifo::op::list_part lp;
 
-  lp.tag = tag;
   lp.ofs = ofs;
   lp.max_entries = max_entries;
 
@@ -231,7 +223,6 @@ int list_part(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::string
       if (entries) *entries = std::move(reply.entries);
       if (more) *more = reply.more;
       if (full_part) *full_part = reply.full_part;
-      if (ptag) *ptag = reply.tag;
     } catch (const cb::error& err) {
       ldpp_dout(dpp, -1)
 	<< __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -253,14 +244,12 @@ struct list_entry_completion : public lr::ObjectOperationCompletion {
   std::vector<fifo::part_list_entry>* entries;
   bool* more;
   bool* full_part;
-  std::string* ptag;
   std::uint64_t tid;
 
   list_entry_completion(CephContext* cct, int* r_out, std::vector<fifo::part_list_entry>* entries,
-			bool* more, bool* full_part, std::string* ptag,
-			std::uint64_t tid)
+			bool* more, bool* full_part, std::uint64_t tid)
     : cct(cct), r_out(r_out), entries(entries), more(more),
-      full_part(full_part), ptag(ptag), tid(tid) {}
+      full_part(full_part), tid(tid) {}
   virtual ~list_entry_completion() = default;
   void handle_completion(int r, bufferlist& bl) override {
     if (r >= 0) try {
@@ -270,7 +259,6 @@ struct list_entry_completion : public lr::ObjectOperationCompletion {
 	if (entries) *entries = std::move(reply.entries);
 	if (more) *more = reply.more;
 	if (full_part) *full_part = reply.full_part;
-	if (ptag) *ptag = reply.tag;
       } catch (const cb::error& err) {
 	lderr(cct)
 	  << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -288,18 +276,16 @@ struct list_entry_completion : public lr::ObjectOperationCompletion {
 };
 
 lr::ObjectReadOperation list_part(CephContext* cct,
-				  std::optional<std::string_view> tag,
 				  std::uint64_t ofs,
 				  std::uint64_t max_entries,
 				  int* r_out,
 				  std::vector<fifo::part_list_entry>* entries,
 				  bool* more, bool* full_part,
-				  std::string* ptag, std::uint64_t tid)
+				  std::uint64_t tid)
 {
   lr::ObjectReadOperation op;
   fifo::op::list_part lp;
 
-  lp.tag = tag;
   lp.ofs = ofs;
   lp.max_entries = max_entries;
 
@@ -307,7 +293,7 @@ lr::ObjectReadOperation list_part(CephContext* cct,
   encode(lp, in);
   op.exec(fifo::op::CLASS, fifo::op::LIST_PART, in,
 	  new list_entry_completion(cct, r_out, entries, more, full_part,
-				    ptag, tid));
+				    tid));
   return op;
 }
 
@@ -420,14 +406,6 @@ std::optional<marker> FIFO::to_marker(std::string_view s)
   m.ofs = *o;
   return m;
 }
-
-std::string FIFO::generate_tag() const
-{
-  static constexpr auto HEADER_TAG_SIZE = 16;
-  return gen_rand_alphanumeric_plain(static_cast<CephContext*>(ioctx.cct()),
-				     HEADER_TAG_SIZE);
-}
-
 
 int FIFO::apply_update(const DoutPrefixProvider *dpp,
                        fifo::info* info,
@@ -577,7 +555,7 @@ void FIFO::_update_meta(const DoutPrefixProvider *dpp, const fifo::update& updat
   assert(r >= 0);
 }
 
-int FIFO::create_part(const DoutPrefixProvider *dpp, int64_t part_num, std::string_view tag, std::uint64_t tid,
+int FIFO::create_part(const DoutPrefixProvider *dpp, int64_t part_num, std::uint64_t tid,
 		      optional_yield y)
 {
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -586,7 +564,7 @@ int FIFO::create_part(const DoutPrefixProvider *dpp, int64_t part_num, std::stri
   op.create(false); /* We don't need exclusivity, part_init ensures
 		       we're creating from the same journal entry. */
   std::unique_lock l(m);
-  part_init(&op, tag, info.params);
+  part_init(&op, info.params);
   auto oid = info.part_oid(part_num);
   l.unlock();
   auto r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
@@ -598,7 +576,7 @@ int FIFO::create_part(const DoutPrefixProvider *dpp, int64_t part_num, std::stri
   return r;
 }
 
-int FIFO::remove_part(const DoutPrefixProvider *dpp, int64_t part_num, std::string_view tag, std::uint64_t tid,
+int FIFO::remove_part(const DoutPrefixProvider *dpp, int64_t part_num, std::uint64_t tid,
 		      optional_yield y)
 {
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -636,20 +614,21 @@ int FIFO::process_journal(const DoutPrefixProvider *dpp, std::uint64_t tid, opti
 		   << " processing entry: entry=" << entry << " tid=" << tid
 		   << dendl;
     switch (entry.op) {
-    case fifo::journal_entry::Op::create:
-      r = create_part(dpp, entry.part_num, entry.part_tag, tid, y);
+      using enum fifo::journal_entry::Op;
+    case create:
+      r = create_part(dpp, entry.part_num, tid, y);
       if (entry.part_num > new_max) {
 	new_max = entry.part_num;
       }
       break;
-    case fifo::journal_entry::Op::set_head:
+    case set_head:
       r = 0;
       if (entry.part_num > new_head) {
 	new_head = entry.part_num;
       }
       break;
-    case fifo::journal_entry::Op::remove:
-      r = remove_part(dpp, entry.part_num, entry.part_tag, tid, y);
+    case remove:
+      r = remove_part(dpp, entry.part_num, tid, y);
       if (r == -ENOENT) r = 0;
       if (entry.part_num >= new_tail) {
 	new_tail = entry.part_num + 1;
@@ -745,7 +724,10 @@ int FIFO::_prepare_new_part(const DoutPrefixProvider *dpp, bool is_head, std::ui
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << " entering: tid=" << tid << dendl;
   std::unique_lock l(m);
-  std::vector jentries = { info.next_journal_entry(generate_tag()) };
+  using enum fifo::journal_entry::Op;
+  std::vector<fifo::journal_entry> jentries{{
+      create, info.max_push_part_num + 1
+    }};
   if (info.journal.find(jentries.front().part_num) != info.journal.end()) {
     l.unlock();
     ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -764,10 +746,7 @@ int FIFO::_prepare_new_part(const DoutPrefixProvider *dpp, bool is_head, std::ui
   if (is_head) {
     ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << " needs new head: tid=" << tid << dendl;
-    auto new_head_jentry = jentries.front();
-    new_head_jentry.op = fifo::journal_entry::Op::set_head;
-    new_head_part_num = jentries.front().part_num;
-    jentries.push_back(std::move(new_head_jentry));
+    jentries.push_back({ set_head, jentries.front().part_num });
   }
   l.unlock();
 
@@ -950,7 +929,10 @@ void FIFO::_prepare_new_part(const DoutPrefixProvider *dpp, bool is_head, std::u
 			     lr::AioCompletion* c)
 {
   std::unique_lock l(m);
-  std::vector jentries = { info.next_journal_entry(generate_tag()) };
+  using enum fifo::journal_entry::Op;
+  std::vector<fifo::journal_entry> jentries{{
+      create, info.max_push_part_num + 1
+    }};
   if (info.journal.find(jentries.front().part_num) != info.journal.end()) {
     l.unlock();
     ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -963,10 +945,7 @@ void FIFO::_prepare_new_part(const DoutPrefixProvider *dpp, bool is_head, std::u
   auto version = info.version;
 
   if (is_head) {
-    auto new_head_jentry = jentries.front();
-    new_head_jentry.op = fifo::journal_entry::Op::set_head;
-    new_head_part_num = jentries.front().part_num;
-    jentries.push_back(std::move(new_head_jentry));
+    jentries.push_back({ set_head, jentries.front().part_num });
   }
   l.unlock();
 
@@ -1091,11 +1070,10 @@ int FIFO::push_entries(const DoutPrefixProvider *dpp, const std::deque<cb::list>
 		 << " entering: tid=" << tid << dendl;
   std::unique_lock l(m);
   auto head_part_num = info.head_part_num;
-  auto tag = info.head_tag;
   const auto part_oid = info.part_oid(head_part_num);
   l.unlock();
 
-  auto r = push_part(dpp, ioctx, part_oid, tag, data_bufs, tid, y);
+  auto r = push_part(dpp, ioctx, part_oid, data_bufs, tid, y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " push_part failed: r=" << r << " tid=" << tid << dendl;
@@ -1108,15 +1086,13 @@ void FIFO::push_entries(const std::deque<cb::list>& data_bufs,
 {
   std::unique_lock l(m);
   auto head_part_num = info.head_part_num;
-  auto tag = info.head_tag;
   const auto part_oid = info.part_oid(head_part_num);
   l.unlock();
 
-  push_part(ioctx, part_oid, tag, data_bufs, tid, c);
+  push_part(ioctx, part_oid, data_bufs, tid, c);
 }
 
 int FIFO::trim_part(const DoutPrefixProvider *dpp, int64_t part_num, uint64_t ofs,
-		    std::optional<std::string_view> tag,
 		    bool exclusive, std::uint64_t tid,
 		    optional_yield y)
 {
@@ -1126,7 +1102,7 @@ int FIFO::trim_part(const DoutPrefixProvider *dpp, int64_t part_num, uint64_t of
   std::unique_lock l(m);
   const auto part_oid = info.part_oid(part_num);
   l.unlock();
-  rgw::cls::fifo::trim_part(&op, tag, ofs, exclusive);
+  rgw::cls::fifo::trim_part(&op, ofs, exclusive);
   auto r = rgw_rados_operate(dpp, ioctx, part_oid, &op, y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -1136,7 +1112,6 @@ int FIFO::trim_part(const DoutPrefixProvider *dpp, int64_t part_num, uint64_t of
 }
 
 void FIFO::trim_part(const DoutPrefixProvider *dpp, int64_t part_num, uint64_t ofs,
-		     std::optional<std::string_view> tag,
 		     bool exclusive, std::uint64_t tid,
 		     lr::AioCompletion* c)
 {
@@ -1146,7 +1121,7 @@ void FIFO::trim_part(const DoutPrefixProvider *dpp, int64_t part_num, uint64_t o
   std::unique_lock l(m);
   const auto part_oid = info.part_oid(part_num);
   l.unlock();
-  rgw::cls::fifo::trim_part(&op, tag, ofs, exclusive);
+  rgw::cls::fifo::trim_part(&op, ofs, exclusive);
   auto r = ioctx.aio_operate(part_oid, c, &op);
   ceph_assert(r >= 0);
 }
@@ -1622,8 +1597,8 @@ int FIFO::list(const DoutPrefixProvider *dpp, int max_entries,
     auto part_oid = info.part_oid(part_num);
     l.unlock();
 
-    r = list_part(dpp, ioctx, part_oid, {}, ofs, max_entries, &entries,
-		  &part_more, &part_full, nullptr, tid, y);
+    r = list_part(dpp, ioctx, part_oid, ofs, max_entries, &entries,
+		  &part_more, &part_full, tid, y);
     if (r == -ENOENT) {
       ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		     << " missing part, rereading metadata"
@@ -1735,7 +1710,7 @@ int FIFO::trim(const DoutPrefixProvider *dpp, std::string_view markstr, bool exc
 		   << " pn=" << pn << " tid=" << tid << dendl;
     std::unique_lock l(m);
     l.unlock();
-    r = trim_part(dpp, pn, max_part_size, std::nullopt, false, tid, y);
+    r = trim_part(dpp, pn, max_part_size, false, tid, y);
     if (r < 0 && r == -ENOENT) {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << " trim_part failed: r=" << r
@@ -1744,7 +1719,7 @@ int FIFO::trim(const DoutPrefixProvider *dpp, std::string_view markstr, bool exc
     }
     ++pn;
   }
-  r = trim_part(dpp, part_num, ofs, std::nullopt, exclusive, tid, y);
+  r = trim_part(dpp, part_num, ofs, exclusive, tid, y);
   if (r < 0 && r != -ENOENT) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " trim_part failed: r=" << r
@@ -1837,13 +1812,12 @@ struct Trimmer : public Completion<Trimmer> {
       if (pn < part_num) {
 	ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		       << " pn=" << pn << " tid=" << tid << dendl;
-	fifo->trim_part(dpp, pn++, max_part_size, std::nullopt,
-			false, tid, call(std::move(p)));
+	fifo->trim_part(dpp, pn++, max_part_size, false, tid,
+			call(std::move(p)));
       } else {
 	update = true;
 	canceled = tail_part_num < part_num;
-	fifo->trim_part(dpp, part_num, ofs, std::nullopt, exclusive, tid,
-			call(std::move(p)));
+	fifo->trim_part(dpp, part_num, ofs, exclusive, tid, call(std::move(p)));
       }
       return;
     }
@@ -1870,8 +1844,8 @@ struct Trimmer : public Completion<Trimmer> {
 	std::unique_lock l(fifo->m);
 	const auto max_part_size = fifo->info.params.max_part_size;
 	l.unlock();
-	fifo->trim_part(dpp, pn++, max_part_size, std::nullopt,
-			false, tid, call(std::move(p)));
+	fifo->trim_part(dpp, pn++, max_part_size, false, tid,
+			call(std::move(p)));
 	return;
       }
 
@@ -1880,8 +1854,7 @@ struct Trimmer : public Completion<Trimmer> {
       l.unlock();
       update = true;
       canceled = tail_part_num < part_num;
-      fifo->trim_part(dpp, part_num, ofs, std::nullopt, exclusive, tid,
-		      call(std::move(p)));
+      fifo->trim_part(dpp, part_num, ofs, exclusive, tid, call(std::move(p)));
       return;
     }
 
@@ -1942,8 +1915,7 @@ void FIFO::trim(const DoutPrefixProvider *dpp, std::string_view markstr, bool ex
   } else {
     trimmer->update = true;
   }
-  trim_part(dpp, pn, ofs, std::nullopt, exclusive,
-	    tid, Trimmer::call(std::move(trimmer)));
+  trim_part(dpp, pn, ofs, exclusive, tid, Trimmer::call(std::move(trimmer)));
 }
 
 int FIFO::get_part_info(const DoutPrefixProvider *dpp, int64_t part_num,
@@ -2064,8 +2036,7 @@ private:
     pp_callback,
   } state;
 
-  void create_part(const DoutPrefixProvider *dpp, Ptr&& p, int64_t part_num,
-		   std::string_view tag) {
+  void create_part(const DoutPrefixProvider *dpp, Ptr&& p, int64_t part_num) {
     ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			 << " entering: tid=" << tid << dendl;
     state = entry_callback;
@@ -2073,7 +2044,7 @@ private:
     op.create(false); /* We don't need exclusivity, part_init ensures
 			 we're creating from the  same journal entry. */
     std::unique_lock l(fifo->m);
-    part_init(&op, tag, fifo->info.params);
+    part_init(&op, fifo->info.params);
     auto oid = fifo->info.part_oid(part_num);
     l.unlock();
     auto r = fifo->ioctx.aio_operate(oid, call(std::move(p)), &op);
@@ -2081,8 +2052,7 @@ private:
     return;
   }
 
-  void remove_part(const DoutPrefixProvider *dpp, Ptr&& p, int64_t part_num,
-		   std::string_view tag) {
+  void remove_part(const DoutPrefixProvider *dpp, Ptr&& p, int64_t part_num) {
     ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			 << " entering: tid=" << tid << dendl;
     state = entry_callback;
@@ -2105,7 +2075,8 @@ private:
 			 << " finishing entry: entry=" << entry
 			 << " tid=" << tid << dendl;
 
-    if (entry.op == fifo::journal_entry::Op::remove && r == -ENOENT)
+    using enum fifo::journal_entry::Op;
+    if (entry.op == remove && r == -ENOENT)
       r = 0;
 
     if (r < 0) {
@@ -2116,18 +2087,18 @@ private:
       return;
     } else {
       switch (entry.op) {
-      case fifo::journal_entry::Op::unknown:
-      case fifo::journal_entry::Op::set_head:
+      case unknown:
+      case set_head:
 	// Can't happen. Filtered out in process.
 	complete(std::move(p), -EIO);
 	return;
 
-      case fifo::journal_entry::Op::create:
+      case create:
 	if (entry.part_num > new_max) {
 	  new_max = entry.part_num;
 	}
 	break;
-      case fifo::journal_entry::Op::remove:
+      case remove:
 	if (entry.part_num >= new_tail) {
 	  new_tail = entry.part_num + 1;
 	}
@@ -2269,18 +2240,19 @@ public:
 			   << " tid=" << tid << dendl;
       const auto entry = iter->second;
       switch (entry.op) {
-      case fifo::journal_entry::Op::create:
-	create_part(dpp, std::move(p), entry.part_num, entry.part_tag);
+	using enum fifo::journal_entry::Op;
+      case create:
+	create_part(dpp, std::move(p), entry.part_num);
 	return;
-      case fifo::journal_entry::Op::set_head:
+      case set_head:
 	if (entry.part_num > new_head) {
 	  new_head = entry.part_num;
 	}
 	processed.push_back(entry);
 	++iter;
 	continue;
-      case fifo::journal_entry::Op::remove:
-	remove_part(dpp, std::move(p), entry.part_num, entry.part_tag);
+      case remove:
+	remove_part(dpp, std::move(p), entry.part_num);
 	return;
       default:
 	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -2375,9 +2347,8 @@ public:
       l.unlock();
 
       read = false;
-      auto op = list_part(f->cct, {}, ofs, max_entries, &r_out,
-			  &entries, &part_more, &part_full,
-			  nullptr, tid);
+      auto op = list_part(f->cct, ofs, max_entries, &r_out,
+			  &entries, &part_more, &part_full, tid);
       f->ioctx.aio_operate(part_oid, call(std::move(p)), &op, nullptr);
     } else {
       complete(std::move(p), 0);
