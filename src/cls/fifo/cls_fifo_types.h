@@ -23,6 +23,8 @@
 #include <string>
 #include <vector>
 
+#include <boost/container/flat_set.hpp>
+
 #undef FMT_HEADER_ONLY
 #define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
@@ -117,7 +119,7 @@ inline std::ostream& operator <<(std::ostream& m, const data_params& d) {
 
 struct journal_entry {
   enum class Op {
-    unknown  = 0,
+    unknown  = -1,
     create   = 1,
     set_head = 2,
     remove   = 3,
@@ -125,11 +127,25 @@ struct journal_entry {
 
   std::int64_t part_num{-1};
 
+  bool valid() const {
+    using enum Op;
+    switch (op) {
+    case create: [[fallthrough]];
+    case set_head: [[fallthrough]];
+    case remove:
+      return part_num >= 0;
+
+    default:
+      return false;
+    }
+  }
+
   journal_entry() = default;
   journal_entry(Op op, std::int64_t part_num)
     : op(op), part_num(part_num) {}
 
   void encode(ceph::buffer::list& bl) const {
+    ceph_assert(valid());
     ENCODE_START(1, 1, bl);
     encode((int)op, bl);
     encode(part_num, bl);
@@ -308,8 +324,39 @@ struct info {
   std::int64_t min_push_part_num{0};
   std::int64_t max_push_part_num{-1};
 
-  std::multimap<int64_t, journal_entry> journal;
+  boost::container::flat_set<journal_entry> journal;
+  static_assert(journal_entry::Op::create < journal_entry::Op::set_head);
 
+  // So we can get rid of the multimap without breaking compatibility
+  void encode_journal(bufferlist& bl) const {
+    using ceph::encode;
+    assert(journal.size() <= std::numeric_limits<uint32_t>::max());
+    uint32_t n = static_cast<uint32_t>(journal.size());
+    encode(n, bl);
+    for (const auto& entry : journal) {
+      encode(entry.part_num, bl);
+      encode(entry, bl);
+    }
+  }
+
+  void decode_journal( bufferlist::const_iterator& p) {
+    using enum journal_entry::Op;
+    using ceph::decode;
+    uint32_t n;
+    decode(n, p);
+    journal.clear();
+    while (n--) {
+      decltype(journal_entry::part_num) dummy;
+      decode(dummy, p);
+      journal_entry e;
+      decode(e, p);
+      if (!e.valid()) {
+	throw ceph::buffer::malformed_input();
+      } else {
+	journal.insert(std::move(e));
+      }
+    }
+  }
   bool need_new_head() const {
     return (head_part_num < min_push_part_num);
   }
@@ -332,7 +379,7 @@ struct info {
     std::map<int64_t, std::string> tags;
     encode(tags, bl);
     encode(head_tag, bl);
-    encode(journal, bl);
+    encode_journal(bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
@@ -349,7 +396,7 @@ struct info {
     std::map<int64_t, std::string> tags;
     decode(tags, bl);
     decode(head_tag, bl);
-    decode(journal, bl);
+    decode_journal(bl);
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter* f) const;
@@ -379,19 +426,17 @@ struct info {
     }
 
     for (const auto& entry : update.journal_entries_add()) {
-      if (std::find_if(journal.begin(), journal.end(),
-		       [&entry](const auto &x) { return x.second == entry; })
-	  != journal.end()) {
-	continue;
-      } else {
-	journal.emplace(entry.part_num, entry);
+      auto [iter, inserted] = journal.insert(entry);
+      if (inserted) {
 	changed = true;
       }
     }
 
     for (const auto& entry : update.journal_entries_rm()) {
-      journal.erase(entry.part_num);
-      changed = true;
+      auto count = journal.erase(entry);
+      if (count > 0) {
+	changed = true;
+      }
     }
 
     if (update.head_part_num() && (head_part_num != *update.head_part_num())) {
