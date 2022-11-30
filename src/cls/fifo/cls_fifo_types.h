@@ -126,13 +126,17 @@ struct journal_entry {
     remove   = 3,
   } op{Op::unknown};
 
-  std::int64_t part_num{0};
-  std::string part_tag;
+  std::int64_t part_num{-1};
+
+  journal_entry() = default;
+  journal_entry(Op op, std::int64_t part_num)
+    : op(op), part_num(part_num) {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode((int)op, bl);
     encode(part_num, bl);
+    std::string part_tag;
     encode(part_tag, bl);
     ENCODE_FINISH(bl);
   }
@@ -142,6 +146,7 @@ struct journal_entry {
     decode(i, bl);
     op = static_cast<Op>(i);
     decode(part_num, bl);
+    std::string part_tag;
     decode(part_tag, bl);
     DECODE_FINISH(bl);
   }
@@ -149,8 +154,7 @@ struct journal_entry {
 
   friend bool operator ==(const journal_entry& lhs, const journal_entry& rhs) {
     return (lhs.op == rhs.op &&
-	    lhs.part_num == rhs.part_num &&
-	    lhs.part_tag == rhs.part_tag);
+	    lhs.part_num == rhs.part_num);
   }
 };
 WRITE_CLASS_ENCODER(journal_entry)
@@ -169,8 +173,7 @@ inline std::ostream& operator <<(std::ostream& m, const journal_entry::Op& o) {
 }
 inline std::ostream& operator <<(std::ostream& m, const journal_entry& j) {
   return m << "op: " << j.op << ", "
-	   << "part_num: " << j.part_num <<  ", "
-	   << "part_tag: " << j.part_tag;
+	   << "part_num: " << j.part_num;
 }
 
 // This is actually a useful builder, since otherwise we end up with
@@ -311,9 +314,6 @@ struct info {
   std::int64_t min_push_part_num{0};
   std::int64_t max_push_part_num{-1};
 
-  std::string head_tag;
-  std::map<int64_t, std::string> tags;
-
   std::multimap<int64_t, journal_entry> journal;
 
   bool need_new_head() const {
@@ -334,6 +334,8 @@ struct info {
     encode(head_part_num, bl);
     encode(min_push_part_num, bl);
     encode(max_push_part_num, bl);
+    std::string head_tag;
+    std::map<int64_t, std::string> tags;
     encode(tags, bl);
     encode(head_tag, bl);
     encode(journal, bl);
@@ -349,6 +351,8 @@ struct info {
     decode(head_part_num, bl);
     decode(min_push_part_num, bl);
     decode(max_push_part_num, bl);
+    std::string head_tag;
+    std::map<int64_t, std::string> tags;
     decode(tags, bl);
     decode(head_tag, bl);
     decode(journal, bl);
@@ -359,14 +363,6 @@ struct info {
 
   std::string part_oid(std::int64_t part_num) const {
     return fmt::format("{}.{}", oid_prefix, part_num);
-  }
-
-  journal_entry next_journal_entry(std::string tag) const {
-    journal_entry entry;
-    entry.op = journal_entry::Op::create;
-    entry.part_num = max_push_part_num + 1;
-    entry.part_tag = std::move(tag);
-    return entry;
   }
 
   std::optional<std::string>
@@ -393,10 +389,6 @@ struct info {
 			   "allowed, part num={}", entry.part_num);
       }
 
-      if (entry.op == journal_entry::Op::create) {
-	tags[entry.part_num] = entry.part_tag;
-      }
-
       journal.emplace(entry.part_num, entry);
     }
 
@@ -405,14 +397,7 @@ struct info {
     }
 
     if (update.head_part_num()) {
-      tags.erase(head_part_num);
       head_part_num = *update.head_part_num();
-      auto iter = tags.find(head_part_num);
-      if (iter != tags.end()) {
-	head_tag = iter->second;
-      } else {
-	head_tag.erase();
-      }
     }
 
     return std::nullopt;
@@ -428,8 +413,6 @@ inline std::ostream& operator <<(std::ostream& m, const info& i) {
 	   << "head_part_num: " << i.head_part_num << ", "
 	   << "min_push_part_num: " << i.min_push_part_num << ", "
 	   << "max_push_part_num: " << i.max_push_part_num << ", "
-	   << "head_tag: " << i.head_tag << ", "
-	   << "tags: {" << i.tags << "}, "
 	   << "journal: {" << i.journal;
 }
 
@@ -470,8 +453,6 @@ inline std::ostream& operator <<(std::ostream& m,
 }
 
 struct part_header {
-  std::string tag;
-
   data_params params;
 
   std::uint64_t magic{0};
@@ -485,6 +466,7 @@ struct part_header {
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
+    std::string tag;
     encode(tag, bl);
     encode(params, bl);
     encode(magic, bl);
@@ -498,6 +480,7 @@ struct part_header {
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
+    std::string tag;
     decode(tag, bl);
     decode(params, bl);
     decode(magic, bl);
@@ -513,8 +496,7 @@ struct part_header {
 WRITE_CLASS_ENCODER(part_header)
 inline std::ostream& operator <<(std::ostream& m, const part_header& p) {
   using ceph::operator <<;
-  return m << "tag: " << p.tag << ", "
-	   << "params: {" << p.params << "}, "
+  return m << "params: {" << p.params << "}, "
 	   << "magic: " << p.magic << ", "
 	   << "min_ofs: " << p.min_ofs << ", "
 	   << "last_ofs: " << p.last_ofs << ", "
