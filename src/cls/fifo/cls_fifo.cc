@@ -117,7 +117,6 @@ int read_part_header(cls_method_context_t hctx,
   std::ostringstream ss;
   ss << part_header->max_time;
   CLS_LOG(5, "%s:%d read part_header:\n"
-	  "\ttag=%s\n"
 	  "\tmagic=0x%" PRIx64 "\n"
 	  "\tmin_ofs=%" PRId64 "\n"
 	  "\tlast_ofs=%" PRId64 "\n"
@@ -126,7 +125,6 @@ int read_part_header(cls_method_context_t hctx,
 	  "\tmax_index=%" PRId64 "\n"
 	  "\tmax_time=%s\n",
 	  __PRETTY_FUNCTION__, __LINE__,
-	  part_header->tag.c_str(),
 	  part_header->magic,
 	  part_header->min_ofs,
 	  part_header->last_ofs,
@@ -406,11 +404,6 @@ int init_part(cls_method_context_t hctx, ceph::buffer::list* in,
 
   std::uint64_t size;
 
-  if (op.tag.empty()) {
-    CLS_ERR("%s: tag required", __PRETTY_FUNCTION__);
-    return -EINVAL;
-  }
-
   int r = cls_cxx_stat2(hctx, &size, nullptr);
   if (r < 0 && r != -ENOENT) {
     CLS_ERR("ERROR: %s: cls_cxx_stat2() on obj returned %d", __PRETTY_FUNCTION__, r);
@@ -424,8 +417,7 @@ int init_part(cls_method_context_t hctx, ceph::buffer::list* in,
       return r;
     }
 
-    if (!(part_header.tag == op.tag &&
-          part_header.params == op.params)) {
+    if (!(part_header.params == op.params)) {
       CLS_ERR("%s: failed to re-create existing part with different "
 	      "params", __PRETTY_FUNCTION__);
       return -EEXIST;
@@ -436,7 +428,6 @@ int init_part(cls_method_context_t hctx, ceph::buffer::list* in,
 
   part_header part_header;
 
-  part_header.tag = op.tag;
   part_header.params = op.params;
 
   part_header.min_ofs = CLS_FIFO_MAX_PART_HEADER_SIZE;
@@ -475,21 +466,11 @@ int push_part(cls_method_context_t hctx, ceph::buffer::list* in,
     return -EINVAL;
   }
 
-  if (op.tag.empty()) {
-    CLS_ERR("%s: tag required", __PRETTY_FUNCTION__);
-    return -EINVAL;
-  }
-
   part_header part_header;
   int r = read_part_header(hctx, &part_header);
   if (r < 0) {
     CLS_ERR("%s: failed to read part header", __PRETTY_FUNCTION__);
     return r;
-  }
-
-  if (!(part_header.tag == op.tag)) {
-    CLS_ERR("%s: bad tag", __PRETTY_FUNCTION__);
-    return -EINVAL;
   }
 
   std::uint64_t effective_len = op.total_len + op.data_bufs.size() *
@@ -782,12 +763,6 @@ int trim_part(cls_method_context_t hctx,
     return r;
   }
 
-  if (op.tag &&
-      !(part_header.tag == *op.tag)) {
-    CLS_ERR("%s: bad tag", __PRETTY_FUNCTION__);
-    return -EINVAL;
-  }
-
   if (op.ofs < part_header.min_ofs) {
     return 0;
   }
@@ -866,12 +841,6 @@ int list_part(cls_method_context_t hctx, ceph::buffer::list* in,
     return r;
   }
 
-  if (op.tag &&
-      !(part_header.tag == *op.tag)) {
-    CLS_ERR("%s: bad tag", __PRETTY_FUNCTION__);
-    return -EINVAL;
-  }
-
   EntryReader reader(hctx, part_header, op.ofs);
 
   if (op.ofs >= part_header.min_ofs &&
@@ -884,8 +853,6 @@ int list_part(cls_method_context_t hctx, ceph::buffer::list* in,
   }
 
   op::list_part_reply reply;
-
-  reply.tag = part_header.tag;
 
   auto max_entries = std::min(op.max_entries, op::MAX_LIST_ENTRIES);
 
