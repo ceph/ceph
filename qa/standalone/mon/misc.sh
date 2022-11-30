@@ -169,7 +169,6 @@ function TEST_mon_features() {
     MONC=127.0.0.1:7129 # git grep '\<7129\>' ; there must be only one
     CEPH_ARGS_orig=$CEPH_ARGS
     CEPH_ARGS="--fsid=$fsid --auth-supported=none "
-    CEPH_ARGS+="--mon-initial-members=a,b,c "
     CEPH_ARGS+="--mon-host=$MONA,$MONB,$MONC "
     CEPH_ARGS+="--mon-debug-no-initial-persistent-features "
     CEPH_ARGS+="--mon-debug-no-require-reef "
