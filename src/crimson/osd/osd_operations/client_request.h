@@ -214,12 +214,7 @@ private:
   interruptible_future<> with_sequencer(FuncT&& func);
   auto reply_op_error(const Ref<PG>& pg, int err);
 
-  enum class seq_mode_t {
-    IN_ORDER,
-    OUT_OF_ORDER
-  };
-
-  interruptible_future<seq_mode_t> do_process(
+  interruptible_future<> do_process(
     instance_handle_t &ihref,
     Ref<PG>& pg,
     crimson::osd::ObjectContextRef obc);
@@ -227,7 +222,7 @@ private:
     ::crimson::osd::IOInterruptCondition> process_pg_op(
     Ref<PG> &pg);
   ::crimson::interruptible::interruptible_future<
-    ::crimson::osd::IOInterruptCondition, seq_mode_t> process_op(
+    ::crimson::osd::IOInterruptCondition> process_op(
       instance_handle_t &ihref,
       Ref<PG> &pg);
   bool is_pg_op() const;
