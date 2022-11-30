@@ -125,6 +125,8 @@ example spec file:
     spec:
       port: 4200
 
+.. _cephadm_monitoring-images:
+
 Using custom images
 ~~~~~~~~~~~~~~~~~~~
 
@@ -182,6 +184,8 @@ For example, if you had changed the prometheus image
      .. code-block:: bash
 
           ceph config rm mgr mgr/cephadm/container_image_prometheus
+
+See also :ref:`cephadm-airgap`.
 
 .. _cephadm-overwrite-jinja2-templates:
 
