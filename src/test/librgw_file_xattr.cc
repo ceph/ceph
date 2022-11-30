@@ -23,7 +23,7 @@
 
 #include "include/rados/librgw.h"
 #include "include/rados/rgw_file.h"
-#include "rgw/rgw_file.h"
+#include "rgw_file.h"
 
 #include "gtest/gtest.h"
 #include "common/ceph_argparse.h"

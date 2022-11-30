@@ -396,6 +396,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   RGWZoneParams(const rgw_zone_id& id, const std::string& name) : RGWSystemMetaObj(id.id, name) {}
   RGWZoneParams(const rgw_zone_id& id, const std::string& name, const std::string& _realm_id)
     : RGWSystemMetaObj(id.id, name), realm_id(_realm_id) {}
+  virtual ~RGWZoneParams();
 
   rgw_pool get_pool(CephContext *cct) const override;
   const std::string get_default_oid(bool old_format = false) const override;
@@ -923,6 +924,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
 	       const std::string& _realm_id, const std::list<std::string>& _endpoints)
     : RGWSystemMetaObj(_name, cct , sysobj_svc), endpoints(_endpoints), is_master(_is_master),
       realm_id(_realm_id) {}
+  virtual ~RGWZoneGroup();
 
   bool is_master_zonegroup() const { return is_master;}
   void update_master(const DoutPrefixProvider *dpp, bool _is_master, optional_yield y) {

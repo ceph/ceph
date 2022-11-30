@@ -14,9 +14,9 @@
 #include <iostream>
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
-#include "rgw/rgw_common.h"
-#include "rgw/rgw_rados.h"
-#include "rgw/services/svc_tier_rados.h"
+#include "rgw_common.h"
+#include "rgw_rados.h"
+#include "services/svc_tier_rados.h"
 #include "test_rgw_common.h"
 #include <gtest/gtest.h>
 

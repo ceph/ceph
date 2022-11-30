@@ -15,8 +15,8 @@
 
 #pragma once
 
-#include "rgw/rgw_service.h"
-#include "rgw/rgw_role.h"
+#include "rgw_service.h"
+#include "rgw_role.h"
 #include "svc_meta_be.h"
 
 class RGWSI_Role_RADOS: public RGWServiceInstance

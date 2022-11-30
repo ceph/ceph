@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "rgw/rgw_service.h"
+#include "rgw_service.h"
 
 #include "include/rados/librados.hpp"
 #include "common/async/yield_context.h"

@@ -6,11 +6,11 @@
 #include "svc_zone.h"
 #include "svc_sys_obj.h"
 
-#include "rgw/rgw_tools.h"
-#include "rgw/rgw_mdlog.h"
-#include "rgw/rgw_coroutine.h"
-#include "rgw/rgw_cr_rados.h"
-#include "rgw/rgw_zone.h"
+#include "rgw_tools.h"
+#include "rgw_mdlog.h"
+#include "rgw_coroutine.h"
+#include "rgw_cr_rados.h"
+#include "rgw_zone.h"
 
 #include "common/errno.h"
 

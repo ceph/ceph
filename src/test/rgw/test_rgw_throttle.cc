@@ -12,7 +12,7 @@
  *
  */
 
-#include "rgw/rgw_aio_throttle.h"
+#include "rgw_aio_throttle.h"
 
 #include <optional>
 #include <thread>

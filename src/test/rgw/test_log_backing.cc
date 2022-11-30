@@ -30,8 +30,8 @@
 
 #include "cls/log/cls_log_client.h"
 
-#include "rgw/rgw_tools.h"
-#include "rgw/cls_fifo_legacy.h"
+#include "rgw_tools.h"
+#include "cls_fifo_legacy.h"
 
 #include "gtest/gtest.h"
 

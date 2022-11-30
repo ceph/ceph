@@ -1,12 +1,12 @@
 #ifdef WITH_RADOSGW
 
-#include "rgw/rgw_rados.h"
+#include "rgw_rados.h"
 TYPE(RGWOLHInfo)
 TYPE(RGWObjManifestPart)
 TYPE(RGWObjManifest)
 TYPE(objexp_hint_entry)
 
-#include "rgw/rgw_zone.h"
+#include "rgw_zone.h"
 TYPE(RGWZoneParams)
 TYPE(RGWZone)
 TYPE(RGWZoneGroup)
@@ -14,7 +14,7 @@ TYPE(RGWRealm)
 TYPE(RGWPeriod)
 TYPE(RGWPeriodLatestEpochInfo)
 
-#include "rgw/rgw_acl.h"
+#include "rgw_acl.h"
 TYPE(ACLPermission)
 TYPE(ACLGranteeType)
 TYPE(ACLGrant)
@@ -22,12 +22,12 @@ TYPE(RGWAccessControlList)
 TYPE(ACLOwner)
 TYPE(RGWAccessControlPolicy)
 
-#include "rgw/rgw_cache.h"
+#include "rgw_cache.h"
 TYPE(ObjectMetaInfo)
 TYPE(ObjectCacheInfo)
 TYPE(RGWCacheNotifyInfo)
 
-#include "rgw/rgw_lc.h"
+#include "rgw_lc.h"
 TYPE(RGWLifecycleConfiguration)
 
 #include "cls/rgw/cls_rgw_types.h"
@@ -110,7 +110,7 @@ TYPE(cls::journal::ObjectSetPosition)
 TYPE(cls::journal::Client)
 TYPE(cls::journal::Tag)
 
-#include "rgw/rgw_common.h"
+#include "rgw_common.h"
 TYPE(RGWAccessKey)
 TYPE(RGWSubUser)
 TYPE(RGWUserInfo)
@@ -119,23 +119,23 @@ TYPE(RGWBucketInfo)
 TYPE(RGWBucketEnt)
 TYPE(rgw_obj)
 
-#include "rgw/rgw_log.h"
+#include "rgw_log.h"
 TYPE(rgw_log_entry)
 
-#include "rgw/rgw_meta_sync_status.h"
+#include "rgw_meta_sync_status.h"
 TYPE(rgw_meta_sync_info)
 TYPE(rgw_meta_sync_marker)
 TYPE(rgw_meta_sync_status)
 
-#include "rgw/rgw_multi.h"
+#include "rgw_multi.h"
 TYPE(RGWUploadPartInfo)
 
-#include "rgw/rgw_data_sync.h"
+#include "rgw_data_sync.h"
 TYPE(rgw_data_sync_info)
 TYPE(rgw_data_sync_marker)
 TYPE(rgw_data_sync_status)
 
-#include "rgw/rgw_bucket_encryption.h"
+#include "rgw_bucket_encryption.h"
 TYPE(RGWBucketEncryptionConfig)
 
 #endif

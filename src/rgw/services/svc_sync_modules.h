@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "rgw/rgw_service.h"
-#include "rgw/rgw_sync_module.h"
+#include "rgw_service.h"
+#include "rgw_sync_module.h"
 
 class RGWSI_Zone;
 

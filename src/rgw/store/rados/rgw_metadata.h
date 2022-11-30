@@ -60,7 +60,7 @@ protected:
 
 public:
   RGWMetadataHandler() {}
-  virtual ~RGWMetadataHandler() {}
+  virtual ~RGWMetadataHandler();
   virtual std::string get_type() = 0;
 
   void base_init(CephContext *_cct) {

@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #include "gtest/gtest.h"
 
-#include "rgw/rgw_compression.h"
+#include "rgw_compression.h"
 
 class ut_get_sink : public RGWGetObj_Filter {
   bufferlist sink;

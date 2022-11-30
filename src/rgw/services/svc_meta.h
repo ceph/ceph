@@ -18,7 +18,7 @@
 
 #include "svc_meta_be.h"
 
-#include "rgw/rgw_service.h"
+#include "rgw_service.h"
 
 
 class RGWMetadataLog;

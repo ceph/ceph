@@ -1,5 +1,5 @@
-#include "rgw/rgw_ratelimit.h"
-#include "rgw/rgw_common.h"
+#include "rgw_ratelimit.h"
+#include "rgw_common.h"
 #include "random"
 #include <cstdlib>
 #include <string>

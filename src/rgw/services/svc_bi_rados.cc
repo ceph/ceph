@@ -5,9 +5,9 @@
 #include "svc_bilog_rados.h"
 #include "svc_zone.h"
 
-#include "rgw/rgw_bucket.h"
-#include "rgw/rgw_zone.h"
-#include "rgw/rgw_datalog.h"
+#include "rgw_bucket.h"
+#include "rgw_zone.h"
+#include "rgw_datalog.h"
 
 #include "cls/rgw/cls_rgw_client.h"
 

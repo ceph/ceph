@@ -1,7 +1,8 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+
 #include <lua.hpp>
 #include "services/svc_zone.h"
-#include "services/svc_sys_obj.h"
-#include "common/dout.h"
 #include "rgw_lua_utils.h"
 #include "rgw_sal_rados.h"
 #include "rgw_lua.h"
