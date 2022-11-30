@@ -13,6 +13,7 @@
  *
  */
 
+#include <algorithm>
 #include <cstdint>
 #include <numeric>
 #include <optional>
@@ -602,7 +603,7 @@ int FIFO::process_journal(const DoutPrefixProvider *dpp, std::uint64_t tid, opti
   l.unlock();
 
   int r = 0;
-  for (auto& [n, entry] : tmpjournal) {
+  for (auto& entry : tmpjournal) {
     ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << " processing entry: entry=" << entry << " tid=" << tid
 		   << dendl;
@@ -689,13 +690,9 @@ int FIFO::process_journal(const DoutPrefixProvider *dpp, std::uint64_t tid, opti
 		     << " update canceled, retrying: i=" << i << " tid="
 		     << tid << dendl;
       for (auto& e : processed) {
-	auto jiter = info.journal.find(e.part_num);
-	/* journal entry was already processed */
-	if (jiter == info.journal.end() ||
-	    !(jiter->second == e)) {
-	  continue;
+	if (info.journal.contains(e)) {
+	  new_processed.push_back(e);
 	}
-	new_processed.push_back(e);
       }
       processed = std::move(new_processed);
     }
@@ -721,7 +718,7 @@ int FIFO::_prepare_new_part(const DoutPrefixProvider *dpp, bool is_head, std::ui
   std::vector<fifo::journal_entry> jentries{{
       create, info.max_push_part_num + 1
     }};
-  if (info.journal.find(jentries.front().part_num) != info.journal.end()) {
+  if (info.journal.contains(jentries.front())) {
     l.unlock();
     ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		  << " new part journaled, but not processed: tid="
@@ -753,8 +750,8 @@ int FIFO::_prepare_new_part(const DoutPrefixProvider *dpp, bool is_head, std::ui
     r = _update_meta(dpp, u, version, &canceled, tid, y);
     if (r >= 0 && canceled) {
       std::unique_lock l(m);
-      auto found = (info.journal.find(jentries.front().part_num) !=
-		    info.journal.end());
+      auto found = (info.journal.contains({ create, jentries.front().part_num }) ||
+		    info.journal.contains({ set_head, jentries.front().part_num, }));
       if ((info.max_push_part_num >= jentries.front().part_num &&
 	   info.head_part_num >= new_head_part_num)) {
 	ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -880,12 +877,13 @@ struct NewPartPreparer : public Completion<NewPartPreparer> {
     }
 
     if (canceled) {
+      using enum fifo::journal_entry::Op;
       std::unique_lock l(f->m);
-      auto iter = f->info.journal.find(jentries.front().part_num);
+      auto found = (f->info.journal.contains({create, jentries.front().part_num }) ||
+		    f->info.journal.contains({create, jentries.front().part_num }));
       auto max_push_part_num = f->info.max_push_part_num;
       auto head_part_num = f->info.head_part_num;
       auto version = f->info.version;
-      auto found = (iter != f->info.journal.end());
       l.unlock();
       if ((max_push_part_num >= jentries.front().part_num &&
 	   head_part_num >= new_head_part_num)) {
@@ -926,7 +924,8 @@ void FIFO::_prepare_new_part(const DoutPrefixProvider *dpp, bool is_head, std::u
   std::vector<fifo::journal_entry> jentries{{
       create, info.max_push_part_num + 1
     }};
-  if (info.journal.find(jentries.front().part_num) != info.journal.end()) {
+  if (info.journal.contains({create, jentries.front().part_num}) &&
+      (!is_head || info.journal.contains({set_head, jentries.front().part_num}))) {
     l.unlock();
     ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		  << " new part journaled, but not processed: tid="
@@ -2014,8 +2013,8 @@ private:
   FIFO* const fifo;
 
   std::vector<fifo::journal_entry> processed;
-  std::multimap<std::int64_t, fifo::journal_entry> journal;
-  std::multimap<std::int64_t, fifo::journal_entry>::iterator iter;
+  decltype(fifo->info.journal) journal;
+  decltype(journal)::iterator iter;
   std::int64_t new_tail;
   std::int64_t new_head;
   std::int64_t new_max;
@@ -2173,13 +2172,9 @@ public:
       std::vector<fifo::journal_entry> new_processed;
       std::unique_lock l(fifo->m);
       for (auto& e : processed) {
-	auto jiter = fifo->info.journal.find(e.part_num);
-	/* journal entry was already processed */
-	if (jiter == fifo->info.journal.end() ||
-	    !(jiter->second == e)) {
-	  continue;
+	if (fifo->info.journal.contains(e)) {
+	  new_processed.push_back(e);
 	}
-	new_processed.push_back(e);
       }
       processed = std::move(new_processed);
     }
@@ -2231,7 +2226,7 @@ public:
       ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			   << " processing entry: entry=" << *iter
 			   << " tid=" << tid << dendl;
-      const auto entry = iter->second;
+      const auto entry = *iter;
       switch (entry.op) {
 	using enum fifo::journal_entry::Op;
       case create:
@@ -2264,7 +2259,7 @@ public:
 			 << " entering: tid=" << tid << dendl;
     switch (state) {
     case entry_callback:
-      finish_je(dpp, std::move(p), r, iter->second);
+      finish_je(dpp, std::move(p), r, *iter);
       return;
     case pp_callback:
       auto c = canceled;
