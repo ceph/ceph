@@ -1685,24 +1685,7 @@ public:
   void proc_replica_log(pg_info_t &oinfo, const pg_log_t &olog,
 			pg_missing_t&& omissing, pg_shard_t from);
 
-  void calc_min_last_complete_ondisk() {
-    eversion_t min = last_complete_ondisk;
-    ceph_assert(!acting_recovery_backfill.empty());
-    for (std::set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-	 i != acting_recovery_backfill.end();
-	 ++i) {
-      if (*i == get_primary()) continue;
-      if (peer_last_complete_ondisk.count(*i) == 0)
-	return;   // we don't have complete info
-      eversion_t a = peer_last_complete_ondisk[*i];
-      if (a < min)
-	min = a;
-    }
-    if (min == min_last_complete_ondisk)
-      return;
-    min_last_complete_ondisk = min;
-    return;
-  }
+  void calc_min_last_complete_ondisk();
 
   void fulfill_info(
     pg_shard_t from, const pg_query_t &query,
