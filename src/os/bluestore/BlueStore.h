@@ -880,11 +880,11 @@ public:
     uint32_t needs_reshard_begin = 0;
     uint32_t needs_reshard_end = 0;
 
-    using segment_t = std::map<SharedBlob*, uint64_t /*size*/>;
+    using segment_t = std::map<Blob*, uint64_t /*size*/>;
     using segment_map_t = std::map<uint64_t /*segment id*/, segment_t>;
     void scan_shared_blobs_segmented(CollectionRef& c, OnodeRef& onode,
       uint64_t start, uint64_t length, segment_map_t& segment_map);
-    SharedBlob* find_best_companion(
+    Blob* find_best_companion(
       uint64_t logical_offset, segment_map_t& segment_map);
     void dup(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
       uint64_t&, uint64_t&, uint64_t&);
