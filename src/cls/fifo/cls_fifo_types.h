@@ -105,11 +105,7 @@ struct data_params {
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 
-  bool operator ==(const data_params& rhs) const {
-    return (max_part_size == rhs.max_part_size &&
-	    max_entry_size == rhs.max_entry_size &&
-	    full_size_threshold == rhs.full_size_threshold);
-  }
+  auto operator <=>(const data_params&) const = default;
 };
 WRITE_CLASS_ENCODER(data_params)
 inline std::ostream& operator <<(std::ostream& m, const data_params& d) {
@@ -152,10 +148,7 @@ struct journal_entry {
   }
   void dump(ceph::Formatter* f) const;
 
-  friend bool operator ==(const journal_entry& lhs, const journal_entry& rhs) {
-    return (lhs.op == rhs.op &&
-	    lhs.part_num == rhs.part_num);
-  }
+  auto operator <=>(const journal_entry&) const = default;
 };
 WRITE_CLASS_ENCODER(journal_entry)
 inline std::ostream& operator <<(std::ostream& m, const journal_entry::Op& o) {
