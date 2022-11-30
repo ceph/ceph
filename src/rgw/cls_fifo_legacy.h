@@ -127,9 +127,8 @@ class FIFO {
        std::string oid)
     : ioctx(std::move(ioc)), oid(oid) {}
 
-  std::string generate_tag() const;
-
-  int apply_update(fifo::info* info,
+  int apply_update(const DoutPrefixProvider *dpp,
+                   fifo::info* info,
 		   const fifo::objv& objv,
 		   const fifo::update& update,
 		   std::uint64_t tid);
@@ -139,9 +138,9 @@ class FIFO {
   void _update_meta(const DoutPrefixProvider *dpp, const fifo::update& update,
 		    fifo::objv version, bool* pcanceled,
 		    std::uint64_t tid, lr::AioCompletion* c);
-  int create_part(const DoutPrefixProvider *dpp, int64_t part_num, std::string_view tag, std::uint64_t tid,
+  int create_part(const DoutPrefixProvider *dpp, int64_t part_num, std::uint64_t tid,
 		  optional_yield y);
-  int remove_part(const DoutPrefixProvider *dpp, int64_t part_num, std::string_view tag, std::uint64_t tid,
+  int remove_part(const DoutPrefixProvider *dpp, int64_t part_num, std::uint64_t tid,
 		  optional_yield y);
   int process_journal(const DoutPrefixProvider *dpp, std::uint64_t tid, optional_yield y);
   void process_journal(const DoutPrefixProvider *dpp, std::uint64_t tid, lr::AioCompletion* c);
@@ -154,11 +153,9 @@ class FIFO {
   void push_entries(const std::deque<cb::list>& data_bufs,
 		    std::uint64_t tid, lr::AioCompletion* c);
   int trim_part(const DoutPrefixProvider *dpp, int64_t part_num, uint64_t ofs,
-		std::optional<std::string_view> tag, bool exclusive,
-		std::uint64_t tid, optional_yield y);
-  void trim_part(int64_t part_num, uint64_t ofs,
-		 std::optional<std::string_view> tag, bool exclusive,
-		 std::uint64_t tid, lr::AioCompletion* c);
+		bool exclusive, std::uint64_t tid, optional_yield y);
+  void trim_part(const DoutPrefixProvider *dpp, int64_t part_num, uint64_t ofs,
+		 bool exclusive, std::uint64_t tid, lr::AioCompletion* c);
 
   /// Force refresh of metadata, yielding/blocking style
   int read_meta(const DoutPrefixProvider *dpp, std::uint64_t tid, optional_yield y);

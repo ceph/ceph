@@ -37,7 +37,6 @@ if(NOT WIN32)
   # libcls_* dependencies cascade to osd, kv and other libs that are not
   # available on Windows yet.
   add_subdirectory(cls_hello)
-  add_subdirectory(cls_fifo)
   add_subdirectory(cls_cas)
   add_subdirectory(cls_lock)
   add_subdirectory(cls_log)
