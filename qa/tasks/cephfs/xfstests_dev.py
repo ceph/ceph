@@ -17,7 +17,11 @@ class XFSTestsDev(CephFSTestCase):
 
     def setUp(self):
         super(XFSTestsDev, self).setUp()
+        self.setup_xfsprogs_devs()
         self.prepare_xfstests_devs()
+
+    def setup_xfsprogs_devs(self):
+        self.install_xfsprogs = False
 
     def prepare_xfstests_devs(self):
         self.get_repos()
@@ -35,12 +39,13 @@ class XFSTestsDev(CephFSTestCase):
                                        cwd=self.xfstests_repo_path, omit_sudo=False,
                                        stdout=StringIO(), stderr=StringIO())
 
-        self.mount_a.client_remote.run(args=['sudo', 'make'],
-                                       cwd=self.xfsprogs_repo_path, stdout=StringIO(),
-                                       stderr=StringIO())
-        self.mount_a.client_remote.run(args=['sudo', 'make', 'install'],
-                                       cwd=self.xfsprogs_repo_path, omit_sudo=False,
-                                       stdout=StringIO(), stderr=StringIO())
+        if self.install_xfsprogs:
+            self.mount_a.client_remote.run(args=['sudo', 'make'],
+                                           cwd=self.xfsprogs_repo_path,
+                                           stdout=StringIO(), stderr=StringIO())
+            self.mount_a.client_remote.run(args=['sudo', 'make', 'install'],
+                                           cwd=self.xfsprogs_repo_path, omit_sudo=False,
+                                           stdout=StringIO(), stderr=StringIO())
 
     def get_repos(self):
         """
@@ -57,11 +62,12 @@ class XFSTestsDev(CephFSTestCase):
         self.mount_a.run_shell(['git', 'clone', remoteurl, '--depth', '1',
                                 self.xfstests_repo_path])
 
-        remoteurl = 'https://git.ceph.com/xfsprogs-dev.git'
-        self.xfsprogs_repo_path = self.mount_a.client_remote.mkdtemp(suffix=
-                                                            'xfsprogs-dev')
-        self.mount_a.run_shell(['git', 'clone', remoteurl, '--depth', '1',
-                                self.xfsprogs_repo_path])
+        if self.install_xfsprogs:
+            remoteurl = 'https://git.ceph.com/xfsprogs-dev.git'
+            self.xfsprogs_repo_path = self.mount_a.client_remote.mkdtemp(suffix=
+                                                                'xfsprogs-dev')
+            self.mount_a.run_shell(['git', 'clone', remoteurl, '--depth', '1',
+                                    self.xfsprogs_repo_path])
 
     def get_admin_key(self):
         import configparser
@@ -116,6 +122,12 @@ class XFSTestsDev(CephFSTestCase):
             xfsdump xfsprogs \
             libacl-devel libattr-devel libaio-devel libuuid-devel \
             xfsprogs-devel btrfs-progs-devel python2 sqlite""".split()
+
+            if self.install_xfsprogs:
+                deps += ['inih-devel', 'userspace-rcu-devel', 'libblkid-devel',
+                         'gettext', 'libedit-devel', 'libattr-devel',
+                         'device-mapper-devel', 'libicu-devel']
+
             deps_old_distros = ['xfsprogs-qa-devel']
 
             if distro != 'fedora' and major_ver_num > 7:
@@ -127,6 +139,11 @@ class XFSTestsDev(CephFSTestCase):
             e2fsprogs automake gcc libuuid1 quota attr libattr1-dev make \
             libacl1-dev libaio-dev xfsprogs libgdbm-dev gawk fio dbench \
             uuid-runtime python sqlite3""".split()
+
+            if self.install_xfsprogs:
+                deps += ['libinih-dev', 'liburcu-dev', 'libblkid-dev',
+                         'gettext', 'libedit-dev', 'libattr1-dev',
+                         'libdevmapper-dev', 'libicu-dev', 'pkg-config']
 
             if major_ver_num >= 19:
                 deps[deps.index('python')] ='python2'
@@ -180,8 +197,9 @@ class XFSTestsDev(CephFSTestCase):
                                              self.xfstests_repo_path],
                                        omit_sudo=False, check_status=False)
 
-        self.mount_a.client_remote.run(args=['sudo', 'rm', '-rf',
-                                             self.xfsprogs_repo_path],
-                                       omit_sudo=False, check_status=False)
+        if self.install_xfsprogs:
+            self.mount_a.client_remote.run(args=['sudo', 'rm', '-rf',
+                                                 self.xfsprogs_repo_path],
+                                           omit_sudo=False, check_status=False)
 
         super(XFSTestsDev, self).tearDown()
