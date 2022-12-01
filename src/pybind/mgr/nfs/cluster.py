@@ -201,6 +201,8 @@ class NFSCluster:
 
     def show_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Tuple[int, str, str]:
         try:
+            if cluster_id and cluster_id not in available_clusters(self.mgr):
+                raise ClusterNotFound()
             info_res = {}
             if cluster_id:
                 cluster_ls = [cluster_id]
