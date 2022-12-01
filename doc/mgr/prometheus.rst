@@ -41,6 +41,7 @@ Configuration
 .. confval:: rbd_stats_pools_refresh_interval
 .. confval:: standby_behaviour
 .. confval:: standby_error_status_code
+.. confval:: exclude_perf_counters
 
 By default the module will accept HTTP requests on port ``9283`` on all IPv4
 and IPv6 addresses on the host.  The port and listen address are both
@@ -216,6 +217,15 @@ the module option ``exclude_perf_counters`` to ``false``:
 .. prompt:: bash $
 
    ceph config set mgr mgr/prometheus/exclude_perf_counters false
+
+Ceph daemon performance counters metrics
+-----------------------------------------
+
+With the introduction of ``ceph-exporter`` daemon, the prometheus module will no longer export Ceph daemon
+perf counters as prometheus metrics by default. However, one may re-enable exporting these metrics by setting
+the module option ``exclude_perf_counters`` to ``false``::
+
+    ceph config set mgr mgr/prometheus/exclude_perf_counters false
 
 Statistic names and labels
 ==========================
