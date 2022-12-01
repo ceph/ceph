@@ -867,7 +867,14 @@ void ProtocolV2::execute_connecting()
                           conn, global_seq, peer_global_seq, connect_seq,
                           client_cookie, server_cookie,
                           io_stat_printer{*this});
-            execute_ready(true);
+            dispatchers.ms_handle_connect(
+              seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+            if (unlikely(state != state_t::CONNECTING)) {
+              logger().debug("{} triggered {} after ms_handle_connect(), abort",
+                             conn, get_state_name(state));
+              abort_protocol();
+            }
+            execute_ready();
             break;
            }
            case next_step_t::wait: {
@@ -1594,7 +1601,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
                     conn, global_seq, peer_global_seq, connect_seq,
                     client_cookie, server_cookie,
                     io_stat_printer{*this});
-      execute_ready(false);
+      execute_ready();
     }).handle_exception([this](std::exception_ptr eptr) {
       fault(state_t::ESTABLISHING, "execute_establishing", eptr);
     });
@@ -1750,7 +1757,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                     global_seq, peer_global_seq, connect_seq,
                     client_cookie, server_cookie,
                     io_stat_printer{*this});
-      execute_ready(false);
+      execute_ready();
     }).handle_exception([this](std::exception_ptr eptr) {
       fault(state_t::REPLACING, "trigger_replacing", eptr);
     });
@@ -1924,20 +1931,11 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp, std::size_t m
   });
 }
 
-void ProtocolV2::execute_ready(bool dispatch_connect)
+void ProtocolV2::execute_ready()
 {
   ceph_assert_always(is_socket_valid);
   assert(conn.policy.lossy || (client_cookie != 0 && server_cookie != 0));
   trigger_state(state_t::READY, out_state_t::open, false);
-  if (dispatch_connect) {
-    dispatchers.ms_handle_connect(
-      seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-    if (unlikely(state != state_t::READY)) {
-      logger().debug("{} triggered {} after ms_handle_connect() during execute_ready()",
-                     conn, get_state_name(state));
-      abort_protocol();
-    }
-  }
 #ifdef UNIT_TESTS_BUILT
   if (conn.interceptor) {
     conn.interceptor->register_conn_ready(conn);

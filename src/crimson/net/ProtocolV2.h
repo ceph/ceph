@@ -243,7 +243,7 @@ class ProtocolV2 final : public Protocol {
 
   // READY
   seastar::future<> read_message(utime_t throttle_stamp, std::size_t msg_size);
-  void execute_ready(bool dispatch_connect);
+  void execute_ready();
 
   // STANDBY
   void execute_standby();
