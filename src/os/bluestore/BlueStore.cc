@@ -2523,9 +2523,8 @@ void BlueStore::ExtentMap::dump(Formatter* f) const
 }
 
 void BlueStore::ExtentMap::scan_shared_blobs_segmented(
-  CollectionRef& c, OnodeRef& oldo,
-  uint64_t start, uint64_t length, segment_map_t& segment_map) {
-  const uint64_t segment_size = 1 << 16; //todo read from conf blob size for pool
+  CollectionRef& c, OnodeRef& oldo, uint64_t start, uint64_t length,
+  segment_map_t& segment_map, uint64_t segment_size) {
   // align start, length to segment_size
   uint64_t end = p2roundup(start + length, segment_size);
   start = p2align(start, segment_size);
@@ -2539,7 +2538,7 @@ void BlueStore::ExtentMap::scan_shared_blobs_segmented(
     }
     const bluestore_blob_t& blob = e.blob->get_blob();
     if (blob.is_shared() && !blob.is_compressed()) {
-      // make sure blob is loaded, todo why?
+      // make sure blob is loaded
       c->load_shared_blob(e.blob->shared_blob);
 
       // todo change below code to loop able to touch multiple segments
@@ -2552,8 +2551,7 @@ void BlueStore::ExtentMap::scan_shared_blobs_segmented(
 }
 
 BlueStore::Blob* BlueStore::ExtentMap::find_best_companion(
-  uint64_t logical_offset, segment_map_t& segment_map) {
-  const uint64_t segment_size = 1 << 16; //todo read from conf blob size for pool
+  uint64_t logical_offset, segment_map_t& segment_map, uint64_t segment_size) {
   uint32_t segment_id = logical_offset / segment_size;
   segment_t& segment = segment_map[segment_id];
   Blob* b = nullptr;
@@ -2566,13 +2564,72 @@ BlueStore::Blob* BlueStore::ExtentMap::find_best_companion(
   return b;
 }
 
+// Convert blobs in selected range to shared blobs.
+void BlueStore::ExtentMap::make_range_shared(
+  BlueStore* store, TransContext* txc, CollectionRef& c,
+  OnodeRef& oldo, uint64_t srcoff, uint64_t length)
+{
+  uint64_t end = srcoff + length;
+  uint32_t dirty_range_begin = 0;
+  uint32_t dirty_range_end = 0;
+  segment_map_t segment_map;
+  uint64_t segment_size = store->max_blob_size;
+  scan_shared_blobs_segmented(c, oldo, srcoff, length, segment_map, segment_size);
+
+  bool src_dirty = false;
+  for (auto ep = oldo->extent_map.seek_lextent(srcoff);
+    ep != oldo->extent_map.extent_map.end();
+    ++ep) {
+    auto& e = *ep;
+    if (e.logical_offset >= end) {
+      break;
+    }
+    dout(20) << __func__ << "  src " << e << dendl;
+    const bluestore_blob_t& blob = e.blob->get_blob();
+    // make sure it is shared
+    if (!blob.is_shared()) {
+      // first try to find a shared blob nearby
+      // that can accomodate extra extents
+      Blob* b = blob.is_compressed() ? nullptr :
+	find_best_companion(e.logical_offset, segment_map, segment_size);
+      if (b) {
+	// overwrite previous (empty) shared blob
+	// vv almost like make_blob_shared
+	bluestore_blob_t& blob = e.blob->dirty_blob();
+	blob.set_flag(bluestore_blob_t::FLAG_SHARED);
+	e.blob->shared_blob = b->shared_blob;
+	for (auto p : blob.get_extents()) {
+	  if (p.is_valid()) {
+	    b->shared_blob->get_ref(p.offset, p.length);
+	  }
+	}
+      } else {
+	// no candidate, has to convert to shared
+	c->make_blob_shared(store->_assign_blobid(txc), e.blob);
+      }
+      if (!src_dirty) {
+	src_dirty = true;
+	dirty_range_begin = e.logical_offset;
+      }
+      ceph_assert(e.logical_end() > 0);
+      // -1 to exclude next potential shard
+      dirty_range_end = e.logical_end() - 1;
+    } else {
+      c->load_shared_blob(e.blob->shared_blob);
+    }
+  }
+  if (src_dirty) {
+    oldo->extent_map.dirty_range(dirty_range_begin,
+      dirty_range_end - dirty_range_begin);
+    txc->write_onode(oldo);
+  }
+}
+
 void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
   CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
   uint64_t& length, uint64_t& dstoff) {
 
-  segment_map_t segment_map;
-  scan_shared_blobs_segmented(c, oldo, srcoff, length, segment_map);
-
+  make_range_shared(b, txc, c, oldo, srcoff, length);
   vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
   for (auto& e : oldo->extent_map.extent_map) {
     e.blob->last_encoded_id = -1;
@@ -2599,37 +2656,8 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
     } else { 
       // dup the blob
       const bluestore_blob_t& blob = e.blob->get_blob();
-      // make sure it is shared
-      if (!blob.is_shared()) {
-	// first try to find a shared blob nearby
-	// that can accomodate extra extents
-	Blob* bb = blob.is_compressed() ? nullptr :
-	  find_best_companion(e.logical_offset, segment_map);
-	if (bb) {
-	  // overwrite previous (empty) shared blob
-	  // vv almost like make_blob_shared
-	  bluestore_blob_t& blob = e.blob->dirty_blob();
-	  blob.set_flag(bluestore_blob_t::FLAG_SHARED);
-	  e.blob->shared_blob = bb->shared_blob;
-	  for (auto p : blob.get_extents()) {
-	    if (p.is_valid()) {
-	      bb->shared_blob->get_ref(p.offset, p.length);
-	    }
-	  }
-	} else {
-	  // no candidate, has to convert to shared
-	  c->make_blob_shared(b->_assign_blobid(txc), e.blob);
-	}
-	if (!src_dirty) {
-          src_dirty = true;
-          dirty_range_begin = e.logical_offset;
-	}        
-        ceph_assert(e.logical_end() > 0);
-        // -1 to exclude next potential shard
-        dirty_range_end = e.logical_end() - 1;
-      } else {
-        c->load_shared_blob(e.blob->shared_blob);
-      }
+      ceph_assert(blob.is_shared());
+      ceph_assert(e.blob->shared_blob->is_loaded());
       cb = new Blob();
       e.blob->last_encoded_id = n;
       id_to_blob[n] = cb;

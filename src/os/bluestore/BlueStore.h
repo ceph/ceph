@@ -874,10 +874,12 @@ public:
 
     using segment_t = std::map<Blob*, uint64_t /*size*/>;
     using segment_map_t = std::map<uint64_t /*segment id*/, segment_t>;
-    void scan_shared_blobs_segmented(CollectionRef& c, OnodeRef& onode,
-      uint64_t start, uint64_t length, segment_map_t& segment_map);
-    Blob* find_best_companion(
-      uint64_t logical_offset, segment_map_t& segment_map);
+    void scan_shared_blobs_segmented(CollectionRef& c, OnodeRef& oldo, uint64_t start, uint64_t length,
+				     segment_map_t& segment_map, uint64_t segment_size);
+    Blob* find_best_companion(uint64_t logical_offset,
+			      segment_map_t& segment_map, uint64_t segment_size);
+    void make_range_shared(BlueStore* store, TransContext* txc, CollectionRef& c,
+			   OnodeRef& oldo, uint64_t srcoff, uint64_t length);
     void dup(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
       uint64_t&, uint64_t&, uint64_t&);
 
