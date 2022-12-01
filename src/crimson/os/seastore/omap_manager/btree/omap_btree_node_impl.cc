@@ -263,7 +263,7 @@ OMapInnerNode::list(
               assert(child_result.begin()->first > result.rbegin()->first);
             }
             if (child_result.size() && first && iter == fiter) {
-	      if (config.inclusive) {
+	      if (config.first_inclusive) {
 		assert(child_result.begin()->first >= *first);
 	      } else {
 		assert(child_result.begin()->first > *first);
@@ -271,7 +271,7 @@ OMapInnerNode::list(
             }
             if (child_result.size() && last && iter == liter - 1) {
 	      auto biter = --(child_result.end());
-	      if (config.inclusive) {
+	      if (config.last_inclusive) {
 		assert(biter->first <= *last);
 	      } else {
 		assert(biter->first < *last);
@@ -614,23 +614,25 @@ OMapLeafNode::list(
 {
   LOG_PREFIX(OMapLeafNode::list);
   DEBUGT(
-    "first {} last {}  max_result_size {} inclusive {}, this: {}",
+    "first {} last {}  max_result_size {} first_inclusive {} \
+    last_inclusive {}, this: {}",
     oc.t,
     first ? first->c_str() : "",
     last ? last->c_str() : "",
     config.max_result_size,
-    config.inclusive,
+    config.first_inclusive,
+    config.last_inclusive,
     *this
   );
   auto ret = list_bare_ret(false, {});
   auto &[complete, result] = ret;
   auto iter = first ?
-    (config.inclusive ?
+    (config.first_inclusive ?
      string_lower_bound(*first) :
      string_upper_bound(*first)) :
     iter_begin();
   auto liter = last ?
-    (config.inclusive ?
+    (config.last_inclusive ?
      string_upper_bound(*last) :
      string_lower_bound(*last)) :
     iter_end();

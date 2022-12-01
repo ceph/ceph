@@ -114,37 +114,48 @@ public:
     size_t max_result_size = 128;
 
     /// true denotes behavior like lower_bound, upper_bound otherwise
-    bool inclusive = false;
+    /// range start behavior
+    bool first_inclusive = false;
+    /// range end behavior
+    bool last_inclusive = false;
 
     omap_list_config_t(
       size_t max_result_size,
-      bool inclusive)
+      bool first_inclusive,
+      bool last_inclusive)
       : max_result_size(max_result_size),
-	inclusive(inclusive) {}
+	first_inclusive(first_inclusive),
+	last_inclusive(last_inclusive) {}
     omap_list_config_t() {}
     omap_list_config_t(const omap_list_config_t &) = default;
     omap_list_config_t(omap_list_config_t &&) = default;
     omap_list_config_t &operator=(const omap_list_config_t &) = default;
     omap_list_config_t &operator=(omap_list_config_t &&) = default;
 
-    static omap_list_config_t with_max(size_t max) {
-      omap_list_config_t ret{};
-      ret.max_result_size = max;
-      return ret;
+    auto with_max(size_t max) {
+      this->max_result_size = max;
+      return *this;
     }
 
-    static omap_list_config_t with_inclusive(bool inclusive) {
-      omap_list_config_t ret{};
-      ret.inclusive = inclusive;
-      return ret;
+    auto without_max() {
+      this->max_result_size = std::numeric_limits<size_t>::max();
+      return *this;
+    }
+
+    auto with_inclusive(
+      bool first_inclusive,
+      bool last_inclusive) {
+      this->first_inclusive = first_inclusive;
+      this->last_inclusive = last_inclusive;
+      return *this;
     }
 
     auto with_reduced_max(size_t reduced_by) const {
       assert(reduced_by <= max_result_size);
       return omap_list_config_t(
 	max_result_size - reduced_by,
-	inclusive
-      );
+	first_inclusive,
+	last_inclusive);
     }
   };
   using omap_list_iertr = base_iertr;
