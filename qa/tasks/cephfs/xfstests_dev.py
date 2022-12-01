@@ -52,8 +52,6 @@ class XFSTestsDev(CephFSTestCase):
         Clone xfstests_dev and xfsprogs-dev repositories. If already present,
         update them. The xfsprogs-dev will be used to test the encrypt.
         """
-        from teuthology.orchestra import run
-
         # TODO: make sure that repo is not cloned for every test. it should
         # happen only once.
         remoteurl = 'https://git.ceph.com/xfstests-dev.git'
