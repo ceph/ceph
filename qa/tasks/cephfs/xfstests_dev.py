@@ -37,8 +37,6 @@ class XFSTestsDev(CephFSTestCase):
         """
         Clone xfstests_dev repository. If already present, update it.
         """
-        from teuthology.orchestra import run
-
         # TODO: make sure that repo is not cloned for every test. it should
         # happen only once.
         remoteurl = 'https://git.ceph.com/xfstests-dev.git'
