@@ -598,6 +598,14 @@ class Module(MgrModule):
             min=400,
             max=599,
             runtime=True
+        ),
+        Option(
+            name='exclude_perf_counters',
+            type='bool',
+            default=True,
+            desc='Do not include perf-counters in the metrics output',
+            long_desc='Gathering perf-counters from a single Prometheus exporter can degrade ceph-mgr performance, especially in large clusters. Instead, Ceph-exporter daemons are now used by default for perf-counter gathering. This should only be disabled when no ceph-exporters are deployed.',
+            runtime=True
         )
     ]
 
@@ -1618,26 +1626,10 @@ class Module(MgrModule):
                 self.metrics[path].set(health_metric['value'], labelvalues=(
                     health_metric['type'], daemon_name,))
 
-    @profile_method(True)
-    def collect(self) -> str:
-        # Clear the metrics before scraping
-        for k in self.metrics.keys():
-            self.metrics[k].clear()
-
-        self.get_health()
-        self.get_df()
-        self.get_osd_blocklisted_entries()
-        self.get_pool_stats()
-        self.get_fs()
-        self.get_osd_stats()
-        self.get_quorum_status()
-        self.get_mgr_status()
-        self.get_metadata_and_osd_status()
-        self.get_pg_status()
-        self.get_pool_repaired_objects()
-        self.get_num_objects()
-        self.get_all_daemon_health_metrics()
-
+    def get_perf_counters(self) -> None:
+        """
+        Get the perf counters for all daemons
+        """
         for daemon, counters in self.get_all_perf_counters().items():
             for path, counter_info in counters.items():
                 # Skip histograms, they are represented by long running avgs
@@ -1664,7 +1656,6 @@ class Module(MgrModule):
                             label_names,
                         )
                     self.metrics[_path].set(value, labels)
-
                     _path = path + '_count'
                     if _path not in self.metrics:
                         self.metrics[_path] = Metric(
@@ -1683,8 +1674,30 @@ class Module(MgrModule):
                             label_names,
                         )
                     self.metrics[path].set(value, labels)
-
         self.add_fixed_name_metrics()
+
+    @profile_method(True)
+    def collect(self) -> str:
+        # Clear the metrics before scraping
+        for k in self.metrics.keys():
+            self.metrics[k].clear()
+
+        self.get_health()
+        self.get_df()
+        self.get_osd_blocklisted_entries()
+        self.get_pool_stats()
+        self.get_fs()
+        self.get_osd_stats()
+        self.get_quorum_status()
+        self.get_mgr_status()
+        self.get_metadata_and_osd_status()
+        self.get_pg_status()
+        self.get_pool_repaired_objects()
+        self.get_num_objects()
+        self.get_all_daemon_health_metrics()
+
+        if not self.get_module_option('exclude_perf_counters'):
+            self.get_perf_counters()
         self.get_rbd_stats()
 
         self.get_collect_time_metrics()
