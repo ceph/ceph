@@ -61,6 +61,9 @@ public:
    * socket maintainence interfaces
    */
 
+  // the socket exists and not shutdown
+  bool is_socket_valid() const;
+
   void set_socket(SocketRef &&);
 
   void learn_socket_ephemeral_port_as_connector(uint16_t port);
@@ -119,8 +122,6 @@ public:
 
 private:
   bool has_socket() const;
-
-  bool is_socket_valid() const;
 
   void log_main_preamble(const ceph::bufferlist &bl);
 

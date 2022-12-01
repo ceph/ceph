@@ -45,13 +45,6 @@ class ProtocolV2 final : public Protocol {
   void print_conn(std::ostream&) const final;
 
  private:
-  ceph::bufferlist do_sweep_messages(
-      const std::deque<MessageURef>& msgs,
-      size_t num_msgs,
-      bool require_keepalive,
-      std::optional<utime_t> keepalive_ack,
-      bool require_ack) override;
-
   void notify_out() override;
 
   void notify_out_fault(std::exception_ptr) override;
