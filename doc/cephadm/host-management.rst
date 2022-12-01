@@ -16,13 +16,14 @@ Run a command of this form to list hosts associated with the cluster:
 In commands of this form, the arguments "host-pattern", "label" and
 "host-status" are optional and are used for filtering. 
 
-- "host-pattern" is a regex that will match against hostnames and will only
-  return matching hosts.
+- "host-pattern" is a regex that matches against hostnames and returns only
+  matching hosts.
 - "label" returns only hosts with the specified label.
 - "host-status" returns only hosts with the specified status (currently
   "offline" or "maintenance").
-- Any combination of these filtering flags is valid. You may filter against
-  name, label and/or status simultaneously.
+- Any combination of these filtering flags is valid. It is possible to filter
+  against name, label and status simultaneously, or to filter against any
+  proper subset of name, label and status.
 
 .. _cephadm-adding-hosts:    
     
