@@ -735,7 +735,7 @@ SeaStore::get_attrs_ertr::future<SeaStore::attrs_t> SeaStore::get_attrs(
     [=, this](auto &t, auto& onode) {
       auto& layout = onode.get_layout();
       return _omap_list(onode, layout.xattr_root, t, std::nullopt,
-        OMapManager::omap_list_config_t::with_inclusive(false)
+        OMapManager::omap_list_config_t().with_inclusive(false, false)
       ).si_then([&layout](auto p) {
         auto& attrs = std::get<1>(p);
         ceph::bufferlist bl;
@@ -938,7 +938,7 @@ SeaStore::omap_get_values_ret_t SeaStore::omap_get_values(
     [this, start, ch=std::move(ch)](auto& oid) {
     return omap_list(
       ch, oid, start,
-      OMapManager::omap_list_config_t::with_inclusive(false));
+      OMapManager::omap_list_config_t().with_inclusive(false, false));
   });
 }
 
@@ -1479,9 +1479,9 @@ SeaStore::tm_ret SeaStore::_omap_rmkeyrange(
 	auto &omap_root,
 	auto &first,
 	auto &last) {
-      auto config = OMapManager::omap_list_config_t::with_inclusive(true);
-      config.max_result_size = 
-	std::numeric_limits<decltype(config.max_result_size)>::max();
+      auto config = OMapManager::omap_list_config_t()
+	.with_inclusive(true, false)
+	.without_max();
       return omap_manager.omap_rm_key_range(
 	omap_root,
 	*ctx.transaction,

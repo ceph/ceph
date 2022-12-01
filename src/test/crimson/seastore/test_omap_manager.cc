@@ -143,8 +143,9 @@ struct omap_manager_test_t :
     const std::string &first,
     const std::string &last) {
     logger().debug("rm keys in range {} ~ {}", first, last);
-    auto config = OMapManager::omap_list_config_t::with_max(3000);
-    config.inclusive = true;
+    auto config = OMapManager::omap_list_config_t()
+      .with_max(3000)
+      .with_inclusive(true, false);
 
     with_trans_intr(
       t,
@@ -189,9 +190,9 @@ struct omap_manager_test_t :
       logger().debug("list on start ~ end");
     }
 
-    auto config = OMapManager::omap_list_config_t::with_max(max);
-    config.max_result_size = max;
-    config.inclusive = inclusive;
+    auto config = OMapManager::omap_list_config_t()
+      .with_max(max)
+      .with_inclusive(inclusive, false);
 
     auto [complete, results] = with_trans_intr(
       t,
@@ -201,14 +202,14 @@ struct omap_manager_test_t :
 
     test_omap_t::iterator it, lit;
     if (first) {
-      it = config.inclusive ?
+      it = config.first_inclusive ?
 	test_omap_mappings.lower_bound(*first) :
 	test_omap_mappings.upper_bound(*first);
     } else {
       it = test_omap_mappings.begin();
     }
     if (last) {
-      lit = config.inclusive ?
+      lit = config.last_inclusive ?
 	test_omap_mappings.upper_bound(*last) :
 	test_omap_mappings.lower_bound(*last);
     } else {
