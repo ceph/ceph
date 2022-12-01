@@ -865,6 +865,11 @@ class FSTop(object):
             if fs not in fs_list:
                 help = f"Error: The selected filesystem '{fs}' is not available now. " \
                     "[Press 'q' to go back to home (All Filesystem Info) screen]"
+                # reset the sort/limit settings if fs_list is empty, otherwise continue the
+                # settings for the other filesystems.
+                if not fs_list:
+                    current_states["last_field"] = 'chit'
+                    current_states["limit"] = None
                 self.header.erase()  # erase previous text
                 self.fsstats.erase()
                 self.create_header(stats_json, help, screen_title, 3)
@@ -991,6 +996,9 @@ class FSTop(object):
             vscrollEnd = 0
             if not fs_list:
                 help = "INFO: No filesystem is available [Press 'q' to quit]"
+                # reset the sort/limit settings
+                current_states["last_field"] = 'chit'
+                current_states["limit"] = None
                 self.header.erase()  # erase previous text
                 self.fsstats.erase()
                 self.create_header(stats_json, help, screen_title, 2)
