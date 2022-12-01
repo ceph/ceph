@@ -2,29 +2,6 @@
 Upgrading Ceph
 ==============
 
-.. DANGER:: DATE: 01 NOV 2021. 
-
-   DO NOT UPGRADE TO CEPH PACIFIC FROM AN OLDER VERSION.  
-
-   A recently-discovered bug (https://tracker.ceph.com/issues/53062) can cause
-   data corruption. This bug occurs during OMAP format conversion for
-   clusters that are updated to Pacific. New clusters are not affected by this
-   bug.
-
-   The trigger for this bug is BlueStore's repair/quick-fix functionality. This
-   bug can be triggered in two known ways: 
-
-    (1) manually via the ceph-bluestore-tool, or 
-    (2) automatically, by OSD if ``bluestore_fsck_quick_fix_on_mount`` is set 
-        to true.
-
-   The fix for this bug is expected to be available in Ceph v16.2.7.
-
-   DO NOT set ``bluestore_quick_fix_on_mount`` to true. If it is currently
-   set to true in your configuration, immediately set it to false.
-
-   DO NOT run ``ceph-bluestore-tool``'s repair/quick-fix commands.
-
 Cephadm can safely upgrade Ceph from one bugfix release to the next.  For
 example, you can upgrade from v15.2.0 (the first Octopus release) to the next
 point release, v15.2.1.
