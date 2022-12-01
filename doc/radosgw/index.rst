@@ -42,8 +42,8 @@ Storage Cluster with one API and then retrieve that data with the other API.
    :maxdepth: 1
 
    HTTP Frontends <frontends>
-   Pool Placement and Storage Classes <placement>
    Multisite Configuration <multisite>
+   Pool Placement and Storage Classes <placement>
    Multisite Sync Policy Configuration <multisite-sync-policy>
    Configuring Pools <pools>
    Config Reference <config-ref>
