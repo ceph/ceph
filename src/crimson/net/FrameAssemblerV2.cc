@@ -6,6 +6,10 @@
 #include "Errors.h"
 #include "SocketConnection.h"
 
+#ifdef UNIT_TESTS_BUILT
+#include "Interceptor.h"
+#endif
+
 using ceph::msgr::v2::FrameAssembler;
 using ceph::msgr::v2::FrameError;
 using ceph::msgr::v2::preamble_block_t;
@@ -25,6 +29,20 @@ namespace crimson::net {
 FrameAssemblerV2::FrameAssemblerV2(SocketConnection &_conn)
   : conn{_conn}
 {}
+
+#ifdef UNIT_TESTS_BUILT
+// should be consistent to intercept() in ProtocolV2.cc
+void FrameAssemblerV2::intercept_frame(Tag tag, bool is_write)
+{
+  assert(has_socket());
+  if (conn.interceptor) {
+    auto type = is_write ? bp_type_t::WRITE : bp_type_t::READ;
+    auto action = conn.interceptor->intercept(
+        conn, Breakpoint{tag, type});
+    socket->set_trap(type, action, &conn.interceptor->blocker);
+  }
+}
+#endif
 
 void FrameAssemblerV2::set_is_rev1(bool _is_rev1)
 {
@@ -198,6 +216,9 @@ FrameAssemblerV2::read_main_preamble()
     try {
       rx_preamble.append(buffer::create(std::move(bl)));
       const Tag tag = rx_frame_asm.disassemble_preamble(rx_preamble);
+#ifdef UNIT_TESTS_BUILT
+      intercept_frame(tag, false);
+#endif
       return read_main_t{tag, &rx_frame_asm};
     } catch (FrameError& e) {
       logger().warn("{} read_main_preamble: {}", conn, e.what());
