@@ -213,28 +213,28 @@ options:
 	--nodaemon: use ceph-run as wrapper for mon/osd/mds
 	--redirect-output: only useful with nodaemon, directs output to log file
 	--smallmds: limit mds cache memory limit
-	-m ip:port		specify monitor address
-	-k keep old configuration files (default)
-	-x enable cephx (on by default)
-	-X disable cephx
-	-g --gssapi enable Kerberos/GSSApi authentication
-	-G disable Kerberos/GSSApi authentication
+	-m <ip>:<port>:	specify monitor address
+	-k: keep old configuration files (default)
+	-x: enable cephx (on by default)
+	-X: disable cephx
+	-g, --gssapi: enable Kerberos/GSSApi authentication
+	-G: disable Kerberos/GSSApi authentication
 	--hitset <pool> <hit_set_type>: enable hitset tracking
-	-e : create an erasure pool\
-	-o config		 add extra config parameters to all sections
-	--rgw_port specify ceph rgw http listen port
-	--rgw_frontend specify the rgw frontend configuration
-	--rgw_compression specify the rgw compression plugin
-	--seastore use seastore as crimson osd backend
-	-b, --bluestore use bluestore as the osd objectstore backend (default)
-	-f, --filestore use filestore as the osd objectstore backend
-	-K, --kstore use kstore as the osd objectstore backend
-	--cyanstore use cyanstore as the osd objectstore backend
-	--memstore use memstore as the osd objectstore backend
+	-e: create an erasure pool
+	-o <config>: add extra config parameters to all sections
+	--rgw_port: specify ceph rgw http listen port
+	--rgw_frontend: specify the rgw frontend configuration
+	--rgw_compression: specify the rgw compression plugin
+	--seastore: use seastore as crimson osd backend
+	-b, --bluestore: use bluestore as the osd objectstore backend (default)
+	-f, --filestore: use filestore as the osd objectstore backend
+	-K, --kstore: use kstore as the osd objectstore backend
+	--cyanstore: use cyanstore as the osd objectstore backend
+	--memstore: use memstore as the osd objectstore backend
 	--cache <pool>: enable cache tiering on pool
 	--short: short object names only; necessary for ext4 dev
-	--nolockdep disable lockdep
-	--multimds <count> allow multimds with maximum active count
+	--nolockdep: disable lockdep
+	--multimds <count>: allow multimds with maximum active count
 	--without-dashboard: do not run using mgr dashboard
 	--bluestore-spdk: enable SPDK and with a comma-delimited list of PCI-IDs of NVME device (e.g, 0000:81:00.0)
 	--bluestore-pmem: enable PMEM and with path to a file mapped to PMEM
