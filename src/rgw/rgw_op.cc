@@ -3911,8 +3911,9 @@ void RGWPutObj::execute(optional_yield y)
   std::string labels = ceph::perf_counters::cache_key("z_rgw", {{"Bucket", s->bucket_name}, {"User", s->user->get_display_name()}});
   // TODO delete below logging
   ldpp_dout(this, 20) << "labels for perf counters cache for l_rgw_metrics_put_b: " << labels << dendl;
-  uint64_t rgw_labeled_perfcounters_size = s->cct->_conf.get_val<uint64_t>("rgw_labeled_perfcounters_size");
-  ldpp_dout(this, 20) << "rgw_labeled_perfcounters_size is: " << rgw_labeled_perfcounters_size << dendl;
+  uint64_t target_size = s->cct->_conf.get_val<uint64_t>("labeled_perfcounters_cache_size");
+  bool eviction = s->cct->_conf.get_val<bool>("labeled_perfcounters_cache_eviction");
+  ldpp_dout(this, 20) << "target size for perf counters cache is: " << target_size << " eviction is: " << eviction << dendl;
 
   perf_counters_cache->add(labels);
 

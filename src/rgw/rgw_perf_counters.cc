@@ -69,8 +69,9 @@ int rgw_perf_start(CephContext *cct)
   cct->get_perfcounters_collection()->add(perfcounter);
   std::function<void(PerfCountersBuilder*)> lpcb_init = add_rgw_counters;
 
-  uint64_t target_size = cct->_conf.get_val<uint64_t>("rgw_labeled_perfcounters_size");
-  perf_counters_cache = new PerfCountersCache(cct, target_size, l_rgw_first, l_rgw_last, lpcb_init, "rgw_base");
+  uint64_t target_size = cct->_conf.get_val<uint64_t>("labeled_perfcounters_cache_size");
+  bool eviction = cct->_conf.get_val<bool>("labeled_perfcounters_cache_eviction");
+  perf_counters_cache = new PerfCountersCache(cct, eviction, target_size, l_rgw_first, l_rgw_last, lpcb_init, "rgw_base");
   return 0;
 }
 
