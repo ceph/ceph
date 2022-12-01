@@ -1766,61 +1766,6 @@ void ProtocolV2::trigger_replacing(bool reconnect,
 
 // READY state
 
-ceph::bufferlist ProtocolV2::do_sweep_messages(
-    const std::deque<MessageURef>& msgs,
-    size_t num_msgs,
-    bool require_keepalive,
-    std::optional<utime_t> maybe_keepalive_ack,
-    bool require_ack)
-{
-  ceph::bufferlist bl;
-
-  if (unlikely(require_keepalive)) {
-    auto keepalive_frame = KeepAliveFrame::Encode();
-    bl.append(frame_assembler.get_buffer(keepalive_frame));
-  }
-
-  if (unlikely(maybe_keepalive_ack.has_value())) {
-    auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*maybe_keepalive_ack);
-    bl.append(frame_assembler.get_buffer(keepalive_ack_frame));
-  }
-
-  if (require_ack && num_msgs == 0u) {
-    auto ack_frame = AckFrame::Encode(get_in_seq());
-    bl.append(frame_assembler.get_buffer(ack_frame));
-  }
-
-  std::for_each(msgs.begin(), msgs.begin()+num_msgs, [this, &bl](const MessageURef& msg) {
-    // TODO: move to common code
-    // set priority
-    msg->get_header().src = messenger.get_myname();
-
-    msg->encode(conn.features, 0);
-
-    ceph_assert(!msg->get_seq() && "message already has seq");
-    msg->set_seq(increment_out_seq());
-
-    ceph_msg_header &header = msg->get_header();
-    ceph_msg_footer &footer = msg->get_footer();
-
-    ceph_msg_header2 header2{header.seq,        header.tid,
-                             header.type,       header.priority,
-                             header.version,
-                             ceph_le32(0),      header.data_off,
-                             ceph_le64(get_in_seq()),
-                             footer.flags,      header.compat_version,
-                             header.reserved};
-
-    auto message = MessageFrame::Encode(header2,
-        msg->get_payload(), msg->get_middle(), msg->get_data());
-    logger().debug("{} --> #{} === {} ({})",
-		   conn, msg->get_seq(), *msg, msg->get_type());
-    bl.append(frame_assembler.get_buffer(message));
-  });
-
-  return bl;
-}
-
 void ProtocolV2::notify_out_fault(std::exception_ptr eptr)
 {
   fault(state_t::READY, "notify_out_fault", eptr);

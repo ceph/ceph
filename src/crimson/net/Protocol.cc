@@ -9,13 +9,16 @@
 #include "crimson/net/Errors.h"
 #include "crimson/net/chained_dispatchers.h"
 #include "crimson/net/SocketConnection.h"
+#include "crimson/net/SocketMessenger.h"
 #include "msg/Message.h"
 
 namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_ms);
-  }
+
+seastar::logger& logger() {
+  return crimson::get_logger(ceph_subsys_ms);
 }
+
+} // namespace anonymous
 
 namespace crimson::net {
 
@@ -33,16 +36,58 @@ Protocol::~Protocol()
 }
 
 ceph::bufferlist Protocol::sweep_out_pending_msgs_to_sent(
-      size_t num_msgs,
-      bool require_keepalive,
-      std::optional<utime_t> maybe_keepalive_ack,
-      bool require_ack)
+  bool require_keepalive,
+  std::optional<utime_t> maybe_keepalive_ack,
+  bool require_ack)
 {
-  ceph::bufferlist bl = do_sweep_messages(out_pending_msgs,
-                                          num_msgs,
-                                          require_keepalive,
-                                          maybe_keepalive_ack,
-                                          require_ack);
+  std::size_t num_msgs = out_pending_msgs.size();
+  ceph::bufferlist bl;
+
+  if (unlikely(require_keepalive)) {
+    auto keepalive_frame = KeepAliveFrame::Encode();
+    bl.append(frame_assembler.get_buffer(keepalive_frame));
+  }
+
+  if (unlikely(maybe_keepalive_ack.has_value())) {
+    auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*maybe_keepalive_ack);
+    bl.append(frame_assembler.get_buffer(keepalive_ack_frame));
+  }
+
+  if (require_ack && num_msgs == 0u) {
+    auto ack_frame = AckFrame::Encode(get_in_seq());
+    bl.append(frame_assembler.get_buffer(ack_frame));
+  }
+
+  std::for_each(
+      out_pending_msgs.begin(),
+      out_pending_msgs.begin()+num_msgs,
+      [this, &bl](const MessageURef& msg) {
+    // set priority
+    msg->get_header().src = conn.messenger.get_myname();
+
+    msg->encode(conn.features, 0);
+
+    ceph_assert(!msg->get_seq() && "message already has seq");
+    msg->set_seq(++out_seq);
+
+    ceph_msg_header &header = msg->get_header();
+    ceph_msg_footer &footer = msg->get_footer();
+
+    ceph_msg_header2 header2{header.seq,        header.tid,
+                             header.type,       header.priority,
+                             header.version,
+                             ceph_le32(0),      header.data_off,
+                             ceph_le64(get_in_seq()),
+                             footer.flags,      header.compat_version,
+                             header.reserved};
+
+    auto message = MessageFrame::Encode(header2,
+        msg->get_payload(), msg->get_middle(), msg->get_data());
+    logger().debug("{} --> #{} === {} ({})",
+		   conn, msg->get_seq(), *msg, msg->get_type());
+    bl.append(frame_assembler.get_buffer(message));
+  });
+
   if (!conn.policy.lossy) {
     out_sent_msgs.insert(
         out_sent_msgs.end(),
@@ -69,6 +114,35 @@ seastar::future<> Protocol::send_keepalive()
     notify_out_dispatch();
   }
   return seastar::now();
+}
+
+void Protocol::set_out_state(
+    const Protocol::out_state_t &new_state)
+{
+  ceph_assert_always(!(
+    (new_state == out_state_t::none && out_state != out_state_t::none) ||
+    (new_state == out_state_t::open && out_state == out_state_t::open) ||
+    (new_state != out_state_t::drop && out_state == out_state_t::drop)
+  ));
+
+  if (out_state != out_state_t::open &&
+      new_state == out_state_t::open) {
+    // to open
+    ceph_assert_always(frame_assembler.is_socket_valid());
+  } else if (out_state == out_state_t::open &&
+             new_state != out_state_t::open) {
+    // from open
+    if (out_dispatching) {
+      ceph_assert_always(!out_exit_dispatching.has_value());
+      out_exit_dispatching = seastar::shared_promise<>();
+    }
+  }
+
+  if (out_state != new_state) {
+    out_state = new_state;
+    out_state_changed.set_value();
+    out_state_changed = seastar::shared_promise<>();
+  }
 }
 
 void Protocol::notify_keepalive_ack(utime_t keepalive_ack)
@@ -183,7 +257,6 @@ seastar::future<> Protocol::do_out_dispatch()
   return seastar::repeat([this] {
     switch (out_state) {
      case out_state_t::open: {
-      size_t num_msgs = out_pending_msgs.size();
       bool still_queued = is_out_queued();
       if (unlikely(!still_queued)) {
         return try_exit_out_dispatch();
@@ -193,7 +266,7 @@ seastar::future<> Protocol::do_out_dispatch()
       // sweep all pending out with the concrete Protocol
       return frame_assembler.write(
         sweep_out_pending_msgs_to_sent(
-          num_msgs, need_keepalive, next_keepalive_ack, to_ack > 0)
+          need_keepalive, next_keepalive_ack, to_ack > 0)
       ).then([this, prv_keepalive_ack=next_keepalive_ack, to_ack] {
         need_keepalive = false;
         if (next_keepalive_ack == prv_keepalive_ack) {
@@ -243,22 +316,22 @@ seastar::future<> Protocol::do_out_dispatch()
       ceph_abort();
     }
 
-    std::exception_ptr eptr;
-    try {
-      throw e;
-    } catch(...) {
-      eptr = std::current_exception();
-    }
-    notify_out_fault(eptr);
-
     if (out_state == out_state_t::open) {
       logger().info("{} do_out_dispatch(): fault at {}, going to delay -- {}",
                     conn, out_state, e);
-      out_state = out_state_t::delay;
+      std::exception_ptr eptr;
+      try {
+        throw e;
+      } catch(...) {
+        eptr = std::current_exception();
+      }
+      set_out_state(out_state_t::delay);
+      notify_out_fault(eptr);
     } else {
       logger().info("{} do_out_dispatch(): fault at {} -- {}",
                     conn, out_state, e);
     }
+
     return do_out_dispatch();
   });
 }

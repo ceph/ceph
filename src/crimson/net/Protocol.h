@@ -45,13 +45,6 @@ class Protocol {
   Protocol(ChainedDispatchers& dispatchers,
            SocketConnection& conn);
 
-  virtual ceph::bufferlist do_sweep_messages(
-      const std::deque<MessageURef>& msgs,
-      size_t num_msgs,
-      bool require_keepalive,
-      std::optional<utime_t> maybe_keepalive_ack,
-      bool require_ack) = 0;
-
   virtual void notify_out() = 0;
 
   virtual void notify_out_fault(std::exception_ptr) = 0;
@@ -110,18 +103,9 @@ class Protocol {
     open,
     drop
   };
-
   friend class fmt::formatter<out_state_t>;
-  void set_out_state(const out_state_t& state) {
-    if (out_state == out_state_t::open &&
-        state != out_state_t::open &&
-        out_dispatching) {
-      out_exit_dispatching = seastar::shared_promise<>();
-    }
-    out_state = state;
-    out_state_changed.set_value();
-    out_state_changed = seastar::shared_promise<>();
-  }
+
+  void set_out_state(const out_state_t &new_state);
 
   seastar::future<> wait_out_exit_dispatching() {
     if (out_exit_dispatching) {
@@ -162,10 +146,6 @@ class Protocol {
     in_seq = _in_seq;
   }
 
-  seq_num_t increment_out_seq() {
-    return ++out_seq;
-  }
-
   ChainedDispatchers& dispatchers;
 
   SocketConnection &conn;
@@ -185,7 +165,6 @@ class Protocol {
   seastar::future<> do_out_dispatch();
 
   ceph::bufferlist sweep_out_pending_msgs_to_sent(
-      size_t num_msgs,
       bool require_keepalive,
       std::optional<utime_t> maybe_keepalive_ack,
       bool require_ack);
