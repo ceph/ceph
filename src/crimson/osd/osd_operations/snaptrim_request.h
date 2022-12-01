@@ -116,7 +116,7 @@ private:
 
   Ref<PG> pg;
   PipelineHandle handle;
-  const hobject_t &coid;
+  const hobject_t coid;
   const snapid_t snap_to_trim;
 
 public:
