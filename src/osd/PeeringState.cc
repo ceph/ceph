@@ -7200,21 +7200,6 @@ PeeringState::Incomplete::Incomplete(my_context ctx)
   pl->publish_stats_to_osd();
 }
 
-boost::statechart::result PeeringState::Incomplete::react(const AdvMap &advmap) {
-  DECLARE_LOCALS;
-  int64_t poolnum = ps->info.pgid.pool();
-
-  // Reset if min_size turn smaller than previous value, pg might now be able to go active
-  if (!advmap.osdmap->have_pg_pool(poolnum) ||
-      advmap.lastmap->get_pools().find(poolnum)->second.min_size >
-      advmap.osdmap->get_pools().find(poolnum)->second.min_size) {
-    post_event(advmap);
-    return transit< Reset >();
-  }
-
-  return forward_event();
-}
-
 boost::statechart::result PeeringState::Incomplete::react(const MNotifyRec& notevt) {
   DECLARE_LOCALS;
   psdout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
