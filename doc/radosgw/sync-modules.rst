@@ -29,7 +29,6 @@ for configuring any sync plugin
 
    ElasticSearch Sync Module <elastic-sync-module>
    Cloud Sync Module <cloud-sync-module>
-   PubSub Module <pubsub-module>
    Archive Sync Module <archive-sync-module>
 
 .. note ``rgw`` is the default sync plugin and there is no need to explicitly
@@ -95,5 +94,4 @@ Now start the radosgw in the zone
 .. _`elasticsearch sync module`: ../elastic-sync-module
 .. _`elasticsearch`: ../elastic-sync-module
 .. _`cloud sync module`: ../cloud-sync-module
-.. _`pubsub module`: ../pubsub-module
 .. _`archive sync module`: ../archive-sync-module

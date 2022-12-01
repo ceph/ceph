@@ -178,13 +178,9 @@
     mfa remove                 delete MFA TOTP token
     mfa check                  check MFA TOTP token
     mfa resync                 re-sync MFA TOTP token
-    topic list                 list bucket notifications/pubsub topics
-    topic get                  get a bucket notifications/pubsub topic
-    topic rm                   remove a bucket notifications/pubsub topic
-    subscription get           get a pubsub subscription definition
-    subscription rm            remove a pubsub subscription
-    subscription pull          show events in a pubsub subscription
-    subscription ack           ack (remove) an events in a pubsub subscription
+    topic list                 list bucket notifications topics
+    topic get                  get a bucket notifications topic
+    topic rm                   remove a bucket notifications topic
     script put                 upload a lua script to a context
     script get                 get the lua script of a context
     script rm                  remove the lua scripts of a context
@@ -357,10 +353,8 @@
      --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token
      --totp-pin                the valid value of a TOTP token at a certain time
   
-  Bucket notifications/pubsub options:
-     --topic                   bucket notifications/pubsub topic name
-     --subscription            pubsub subscription name
-     --event-id                event id in a pubsub subscription
+  Bucket notifications options:
+     --topic                   bucket notifications topic name
   
   Script options:
      --context                 context in which the script runs. one of: prerequest, postrequest, background, getdata, putdata
