@@ -103,6 +103,9 @@ public:
 
   template <class F>
   ceph::bufferlist get_buffer(F &tx_frame) {
+#ifdef UNIT_TESTS_BUILT
+    intercept_frame(F::tag, true);
+#endif
     auto bl = tx_frame.get_buffer(tx_frame_asm);
     log_main_preamble(bl);
     return bl;
@@ -120,6 +123,10 @@ private:
   bool is_socket_valid() const;
 
   void log_main_preamble(const ceph::bufferlist &bl);
+
+#ifdef UNIT_TESTS_BUILT
+  void intercept_frame(ceph::msgr::v2::Tag, bool is_write);
+#endif
 
   SocketConnection &conn;
 

@@ -166,14 +166,6 @@ class ProtocolV2 final : public Protocol {
   Timer protocol_timer;
 
  private:
-  seastar::future<FrameAssemblerV2::read_main_t> read_main_preamble();
-
-  template <class F>
-  ceph::bufferlist get_buffer(F &tx_frame);
-
-  template <class F>
-  seastar::future<> write_flush_frame(F &tx_frame);
-
   void fault(state_t expected_state,
              const char *where,
              std::exception_ptr eptr);
