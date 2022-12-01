@@ -47,7 +47,7 @@ class ProtocolV2 final : public Protocol {
  private:
   void notify_out() override;
 
-  void notify_out_fault(std::exception_ptr) override;
+  void notify_out_fault(const char *, std::exception_ptr) override;
 
  private:
   SocketMessenger &messenger;
@@ -107,14 +107,6 @@ class ProtocolV2 final : public Protocol {
   uint64_t global_seq = 0;
   uint64_t peer_global_seq = 0;
   uint64_t connect_seq = 0;
-
-  std::optional<seastar::shared_promise<>> in_exit_dispatching;
-  seastar::future<> wait_in_exit_dispatching() {
-    if (in_exit_dispatching.has_value()) {
-      return in_exit_dispatching->get_shared_future();
-    }
-    return seastar::now();
-  }
 
   seastar::future<> execution_done = seastar::now();
 
@@ -235,7 +227,6 @@ class ProtocolV2 final : public Protocol {
                          uint64_t new_msg_seq);
 
   // READY
-  seastar::future<> read_message(utime_t throttle_stamp, std::size_t msg_size);
   void execute_ready();
 
   // STANDBY
