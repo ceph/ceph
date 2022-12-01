@@ -84,7 +84,6 @@ set(librgw_common_srcs
   rgw_sync_policy.cc
   rgw_pubsub_push.cc
   rgw_notify_event_type.cc
-  rgw_sync_module_pubsub_rest.cc
   rgw_period_history.cc
   rgw_period_puller.cc
   rgw_reshard.cc
@@ -164,7 +163,6 @@ set(librgw_common_srcs
   store/rados/rgw_otp.cc
   store/rados/rgw_period.cc
   store/rados/rgw_rest_pubsub.cc
-  store/rados/rgw_rest_pubsub_common.cc
   store/rados/rgw_rest_realm.cc
   store/rados/rgw_rest_user.cc
   store/rados/rgw_sal_rados.cc
@@ -177,7 +175,6 @@ set(librgw_common_srcs
   store/rados/rgw_sync_module_es.cc
   store/rados/rgw_sync_module_es_rest.cc
   store/rados/rgw_sync_module_log.cc
-  store/rados/rgw_sync_module_pubsub.cc
   store/rados/rgw_sync_trace.cc
   store/rados/rgw_tools.cc
   store/rados/rgw_trim_bilog.cc
