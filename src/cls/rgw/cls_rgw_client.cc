@@ -834,16 +834,10 @@ int cls_rgw_usage_log_trim(IoCtx& io_ctx, const string& oid, const string& user,
   call.bucket = bucket;
   encode(call, in);
 
-  bool done = false;
-  do {
-    ObjectWriteOperation op;
-    op.exec(RGW_CLASS, RGW_USER_USAGE_LOG_TRIM, in);
-    int r = io_ctx.operate(oid, &op);
-    if (r == -ENODATA)
-      done = true;
-    else if (r < 0)
-      return r;
-  } while (!done);
+  ObjectWriteOperation op;
+  op.exec(RGW_CLASS, RGW_USER_USAGE_LOG_TRIM, in);
+  int r = io_ctx.operate(oid, &op);
+  if (r < 0 && r == -ENODATA) return r;
 
   return 0;
 }

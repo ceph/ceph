@@ -3613,66 +3613,67 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
     user_key = user;
     user_key.append("_");
   }
-
-  if (key_iter.empty()) {
-    if (by_user) {
-      usage_record_prefix_by_user(user, start, start_key);
+  while (truncated) {
+    if (key_iter.empty()) {
+      if (by_user) {
+        usage_record_prefix_by_user(user, start, start_key);
+      } else {
+        usage_record_prefix_by_time(start, start_key);
+      }
     } else {
-      usage_record_prefix_by_time(start, start_key);
+      start_key = key_iter;
     }
-  } else {
-    start_key = key_iter;
-  }
 
-  CLS_LOG(20, "usage_iterate_range start_key=%s", start_key.c_str());
-  int ret = cls_cxx_map_get_vals(hctx, start_key, filter_prefix, max_entries, &keys, &truncated_status);
-  if (ret < 0)
-    return ret;
+    CLS_LOG(20, "usage_iterate_range start_key=%s", start_key.c_str());
+    int ret = cls_cxx_map_get_vals(hctx, start_key, filter_prefix, max_entries,
+                                   &keys, &truncated_status);
+    if (ret < 0) return ret;
 
-  *truncated = truncated_status;
+    *truncated = truncated_status;
 
-  auto iter = keys.begin();
-  if (iter == keys.end())
-    return 0;
+    auto iter = keys.begin();
+    if (iter == keys.end()) return 0;
 
-  for (; iter != keys.end(); ++iter) {
-    const string& key = iter->first;
-    rgw_usage_log_entry e;
+    for (; iter != keys.end(); ++iter) {
+      const string& key = iter->first;
+      rgw_usage_log_entry e;
 
-    key_iter = key;
-    if (!by_user && key.compare(end_key) >= 0) {
-      CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
-      *truncated = false;
       key_iter = key;
-      return 0;
-    }
+      if (!by_user && key.compare(end_key) >= 0) {
+        CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
+        *truncated = false;
+        return 0;
+      }
 
-    if (by_user && key.compare(0, user_key.size(), user_key) != 0) {
-      CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
-      *truncated = false;
+      if (by_user && key.compare(0, user_key.size(), user_key) != 0) {
+        CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
+        *truncated = false;
+        return 0;
+      }
+
+      ret = usage_record_decode(iter->second, e);
+      if (ret < 0) return ret;
+
+      if (!bucket.empty() && bucket.compare(e.bucket)) {
+        key_iter = key;
+        continue;
+      }
+
+      if (e.epoch < start) {
+        key_iter = key;
+        continue;
+      }
+
+      /* keys are sorted by epoch, so once we're past end we're done */
+      if (e.epoch >= end) {
+        *truncated = false;
+        return 0;
+      }
+
+      ret = cb(hctx, key, e, param);
+      if (ret < 0) return ret;
       key_iter = key;
-      return 0;
     }
-
-    ret = usage_record_decode(iter->second, e);
-    if (ret < 0)
-      return ret;
-
-    if (!bucket.empty() && bucket.compare(e.bucket))
-      continue;
-
-    if (e.epoch < start)
-      continue;
-
-    /* keys are sorted by epoch, so once we're past end we're done */
-    if (e.epoch >= end) {
-      *truncated = false;
-      return 0;
-    }
-
-    ret = cb(hctx, key, e, param);
-    if (ret < 0)
-      return ret;
   }
   return 0;
 }
@@ -3763,15 +3764,12 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
   }
 
   string iter;
-  bool more;
+  bool more = true;
   bool found = false;
 #define MAX_USAGE_TRIM_ENTRIES 1000
   ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, op.bucket, iter, MAX_USAGE_TRIM_ENTRIES, &more, usage_log_trim_cb, (void *)&found);
   if (ret < 0)
     return ret;
-
-  if (!more && !found)
-    return -ENODATA;
 
   return 0;
 }
