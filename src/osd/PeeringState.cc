@@ -4940,6 +4940,7 @@ boost::statechart::result PeeringState::Peering::react(const AdvMap& advmap)
   psdout(10) << "Peering advmap" << dendl;
   if (prior_set.affected_by_map(*(advmap.osdmap), ps->dpp)) {
     psdout(1) << "Peering, affected_by_map, going to Reset" << dendl;
+    ps->clear_primary_state();
     post_event(advmap);
     return transit< Reset >();
   }
@@ -6975,12 +6976,14 @@ PeeringState::GetLog::GetLog(my_context ctx)
 
 boost::statechart::result PeeringState::GetLog::react(const AdvMap& advmap)
 {
+  DECLARE_LOCALS;
   // make sure our log source didn't go down.  we need to check
   // explicitly because it may not be part of the prior set, which
   // means the Peering state check won't catch it going down.
   if (!advmap.osdmap->is_up(auth_log_shard.osd)) {
     psdout(10) << "GetLog: auth_log_shard osd."
 		       << auth_log_shard.osd << " went down" << dendl;
+    ps->clear_primary_state();
     post_event(advmap);
     return transit< Reset >();
   }
@@ -7059,6 +7062,19 @@ boost::statechart::result PeeringState::WaitActingChange::react(const AdvMap& ad
   DECLARE_LOCALS;
   OSDMapRef osdmap = advmap.osdmap;
 
+  if (ps->should_restart_peering(
+	advmap.up_primary,
+	advmap.acting_primary,
+	advmap.newup,
+	advmap.newacting,
+	advmap.lastmap,
+	advmap.osdmap)) {
+    psdout(10) << "should_restart_peering, clearing primary state and transitioning to Reset"
+		       << dendl;
+    ps->clear_primary_state();
+    post_event(advmap);
+    return transit< Reset >();
+  }
   psdout(10) << "verifying no want_acting " << ps->want_acting << " targets didn't go down" << dendl;
   for (auto p = ps->want_acting.begin(); p != ps->want_acting.end(); ++p) {
     if (!osdmap->is_up(*p)) {
