@@ -7938,15 +7938,16 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, int crush_rule,
     }
   }
   auto max_pgs = max_pgs_per_osd * num_osds;
+  auto projected_pgs_per_osd = projected / num_osds;
   if (projected > max_pgs) {
     if (pool >= 0) {
       *ss << "pool id " << pool;
     }
     *ss << " pg_num " << pg_num << " size " << size
-	<< " would mean " << projected
-	<< " total pgs, which exceeds max " << max_pgs
-	<< " (mon_max_pg_per_osd " << max_pgs_per_osd
-	<< " * num_in_osds " << num_osds << ")";
+	<< " for this new pool would result in " << projected_pgs_per_osd
+	<< " cumulative PGs per OSD (" << projected
+	<< " total PG replicas on " << num_osds
+	<< " 'in' OSDs) which exceeds the mon_max_pg_per_osd value of " << max_pgs_per_osd;
     return -ERANGE;
   }
   return 0;
