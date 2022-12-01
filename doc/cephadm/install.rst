@@ -382,14 +382,18 @@ For more information on these options, see :ref:`one-node-cluster` and
 Deployment in an isolated environment
 -------------------------------------
 
-You can install Cephadm in an isolated environment by using a custom container
-registry. You can either configure Podman or Docker to use an insecure
-registry, or make the registry secure. This is sometimes referred to as
-"airgapping". Registries that are not directly connected to the internet are
-referred to as "airgapped".
+You might need to install cephadm in an environment that is not connected
+directly to the internet (such an environment is also called an "isolated
+environment"). This can be done if a custom container registry is used. Either
+of two kinds of custom container registry can be used in this scenario: (1) a
+Podman-based or Docker-based insecure registry, or (2) a secure registry.
 
-Ensure your container image is inside the registry and that you
-have access to all hosts you wish to add to the cluster.
+The practice of installing software on systems that are not connected directly
+to the internet is called "airgapping" and registries that are not connected
+directly to the internet are referred to as "airgapped".
+
+Make sure that your container image is inside the registry. Make sure that you
+have access to all hosts that you plan to add to the cluster.
 
 #. Run a local container registry:
 
@@ -400,9 +404,11 @@ have access to all hosts you wish to add to the cluster.
 #. If you are using an insecure registry, configure Podman or Docker with the
    hostname and port where the registry is running.
 
-   .. note:: For every host which accesses the local insecure registry, you will need to repeat this step on the host.
+   .. note:: You must repeat this step for every host that accesses the local
+             insecure registry.
 
-#. Next, push your container image to your local registry.
+#. Push your container image to your local registry. Here are some acceptable
+   kinds of container images: 
 
    * Ceph container image. See :ref:`containers`.
    * Prometheus container image
@@ -410,8 +416,8 @@ have access to all hosts you wish to add to the cluster.
    * Grafana container image
    * Alertmanager container image
 
-#. Now, create a temporary configuration file for setting the montoring images.
-   (See :ref:`cephadm_monitoring-images`):
+#. Create a temporary configuration file to store the names of the monitoring
+   images. (See :ref:`cephadm_monitoring-images`):
 
    .. prompt:: bash $
 
@@ -425,8 +431,8 @@ have access to all hosts you wish to add to the cluster.
       mgr/cephadm/container_image_grafana *<hostname>*:5000/grafana
       mgr/cephadm/container_image_alertmanager *<hostname>*:5000/alertmanger
 
-#. Then run bootstrap using the ``--image`` flag with your container image. For
-   example:
+#. Run bootstrap using the ``--image`` flag and pass the name of your
+   container image as the argument of the image flag. For example:
 
    .. prompt:: bash #
 
