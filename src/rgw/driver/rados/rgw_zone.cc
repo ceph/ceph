@@ -900,8 +900,7 @@ int remove_zone_from_group(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "NOTICE: promoted " << m->second.name
          << " as new master_zone of zonegroup " << zonegroup.name << dendl;
     } else {
-      zonegroup.master_zone.clear();
-      ldpp_dout(dpp, 0) << "NOTICE: cleared master_zone of zonegroup "
+      ldpp_dout(dpp, 0) << "NOTICE: removed master_zone of zonegroup "
           << zonegroup.name << dendl;
     }
   }
