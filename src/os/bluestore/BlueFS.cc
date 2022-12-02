@@ -34,6 +34,9 @@ using ceph::decode;
 using ceph::encode;
 using ceph::Formatter;
 
+/* ! temporary code begin ! */
+static utime_t delayed_critical_fail;
+/* ! temporary code end ! */
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::File, bluefs_file, bluefs);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::Dir, bluefs_dir, bluefs);
@@ -2208,6 +2211,24 @@ int64_t BlueFS::_read(
                  << std::hex << x_off << "~" << l << std::dec
                  << " of " << *p << dendl;
 	int r;
+	/* ! temporary code begin ! */
+	if (h->file->fnode.ino == 1) {
+	  r = _bdev_read(p->bdev, p->offset + x_off, l, &buf->bl, ioc[p->bdev], cct->_conf->bluefs_buffered_io);
+	  if (cct->_conf->bluefs_buffered_io) {
+	    bufferlist other;
+	    _bdev_read(p->bdev, p->offset + x_off, l, &other, ioc[p->bdev], false);
+	    if (buf->bl.to_str() != other.to_str()) {
+	      std::stringstream ss;
+	      ss << "DELAYED CRITICAL FAILURE: BlueFS read ino 1 failure happened at "
+		 << ceph_clock_now() << " \n";
+	      add_pending_assert_message(ss.str());
+	      if ((double)delayed_critical_fail == 0) {
+		delayed_critical_fail = ceph_clock_now();
+	      }
+	    }
+	  }
+	} else
+	/* ! temporary code end ! */
 	if (!cct->_conf->bluefs_check_for_zeros) {
 	  r = _bdev_read(p->bdev, p->offset + x_off, l, &buf->bl, ioc[p->bdev],
 			 cct->_conf->bluefs_buffered_io);
@@ -2934,6 +2955,12 @@ void BlueFS::_release_pending_allocations(vector<interval_set<uint64_t>>& to_rel
 
 int BlueFS::_flush_and_sync_log_LD(uint64_t want_seq)
 {
+  /* ! temporary code begin ! */
+  if ((double)delayed_critical_fail != 0) {
+    ceph_assert(delayed_critical_fail + 100 > ceph_clock_now());
+  }
+  /* ! temporary code end ! */
+
   int64_t available_runway;
   do {
     log.lock.lock();

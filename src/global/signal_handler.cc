@@ -235,7 +235,10 @@ void generate_crash_dump(char *base,
 	if (g_assert_msg[0]) {
 	  jf.dump_string("assert_msg", g_assert_msg);
 	}
-
+	std::string pending = ceph::get_pending_assert_message();
+	if (pending.length()) {
+	  jf.dump_string("delayed_message", pending);
+	}
 	// eio?
 	if (g_eio) {
 	  jf.dump_bool("io_error", true);
@@ -340,10 +343,13 @@ static void handle_oneshot_fatal_signal(int signum)
     // off trying than not.
     derr << buf << std::endl;
     bt.print(*_dout);
+    std::string pending = get_pending_assert_message();
+    if (pending.length() > 0) {
+      *_dout << pending << "\n";
+    }
     *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
 	   << "is needed to interpret this.\n"
 	   << dendl;
-
     g_ceph_context->_log->dump_recent();
 
     if (crash_base[0]) {

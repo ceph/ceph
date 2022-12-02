@@ -9,6 +9,9 @@
 #include "crimson/common/log.h"
 
 namespace ceph {
+
+  void add_pending_assert_message(const std::string& msg) {}
+
   [[gnu::cold]] void __ceph_assert_fail(const ceph::assert_data &ctx)
   {
     __ceph_assert_fail(ctx.assertion, ctx.file, ctx.line, ctx.function);

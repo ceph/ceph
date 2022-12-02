@@ -35,6 +35,19 @@ namespace ceph {
     g_assert_context = cct;
   }
 
+  static std::string message_pending;
+  static std::mutex message_lock;
+  void add_pending_assert_message(const std::string& msg)
+  {
+    std::unique_lock l(message_lock);
+    message_pending += msg;
+  }
+  std::string get_pending_assert_message()
+  {
+    std::unique_lock l(message_lock);
+    return message_pending;
+  }
+
   [[gnu::cold]] void __ceph_assert_fail(const char *assertion,
 					const char *file, int line,
 					const char *func)
@@ -52,9 +65,10 @@ namespace ceph {
 
     snprintf(g_assert_msg, sizeof(g_assert_msg),
 	     "%s: In function '%s' thread %llx time %s\n"
-	     "%s: %d: FAILED ceph_assert(%s)\n",
+	     "%s: %d: FAILED ceph_assert(%s)\n%s",
 	     file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
-	     file, line, assertion);
+	     file, line, assertion,
+	     get_pending_assert_message().c_str());
     dout_emergency(g_assert_msg);
 
     // TODO: get rid of this memory allocation.
@@ -128,9 +142,10 @@ namespace ceph {
     BufAppender ba(g_assert_msg, sizeof(g_assert_msg));
     BackTrace *bt = new ClibBackTrace(1);
     ba.printf("%s: In function '%s' thread %llx time %s\n"
-	     "%s: %d: FAILED ceph_assert(%s)\n",
+	     "%s: %d: FAILED ceph_assert(%s)\n%s",
 	     file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
-	     file, line, assertion);
+	     file, line, assertion,
+	     get_pending_assert_message().c_str());
     ba.printf("Assertion details: ");
     va_list args;
     va_start(args, msg);

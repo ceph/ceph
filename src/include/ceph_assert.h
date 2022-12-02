@@ -42,6 +42,8 @@ struct BackTrace;
 #endif
 
 extern void register_assert_context(CephContext *cct);
+extern void add_pending_assert_message(const std::string& msg);
+extern std::string get_pending_assert_message();
 
 struct assert_data {
   const char *assertion;
