@@ -173,7 +173,7 @@ void Protocol::set_out_state(
   if (out_state != new_state) {
     out_state = new_state;
     out_state_changed.set_value();
-    out_state_changed = seastar::shared_promise<>();
+    out_state_changed = seastar::promise<>();
   }
 
   // The above needs to be atomic
@@ -335,7 +335,7 @@ seastar::future<> Protocol::do_out_dispatch()
       } else {
         logger().info("{} do_out_dispatch: delay ...", conn);
       }
-      return out_state_changed.get_shared_future(
+      return out_state_changed.get_future(
       ).then([] { return stop_t::no; });
      case out_state_t::drop:
       ceph_assert(out_dispatching);

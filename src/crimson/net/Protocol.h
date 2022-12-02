@@ -167,7 +167,7 @@ class Protocol {
   out_state_t out_state = out_state_t::none;
 
   // wait until current out_state changed
-  seastar::shared_promise<> out_state_changed;
+  seastar::promise<> out_state_changed;
 
   bool out_dispatching = false;
 
