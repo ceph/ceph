@@ -14,8 +14,7 @@ class ProtocolV2 final : public Protocol {
 
  public:
   ProtocolV2(ChainedDispatchers& dispatchers,
-             SocketConnection& conn,
-             SocketMessenger& messenger);
+             SocketConnection& conn);
   ~ProtocolV2() override;
 
 // public to SocketConnection, but private to the others
@@ -58,6 +57,8 @@ class ProtocolV2 final : public Protocol {
   }
 
  private:
+  SocketConnection &conn;
+
   SocketMessenger &messenger;
 
   bool has_socket = false;
