@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include "auth/AuthRegistry.h"
+
 #include "common/errno.h"
 #include "librados/librados_asio.h"
 
@@ -452,4 +454,46 @@ void rgw_complete_aio_completion(librados::AioCompletion* c, int r) {
   auto pc = c->pc;
   librados::CB_AioCompleteAndSafe cb(pc);
   cb(r);
+}
+
+bool rgw_check_secure_mon_conn(const DoutPrefixProvider *dpp)
+{
+  AuthRegistry reg(dpp->get_cct());
+
+  reg.refresh_config();
+
+  std::vector<uint32_t> methods;
+  std::vector<uint32_t> modes;
+
+  reg.get_supported_methods(CEPH_ENTITY_TYPE_MON, &methods, &modes);
+  ldpp_dout(dpp, 20) << __func__ << "(): auth registy supported: methods=" << methods << " modes=" << modes << dendl;
+
+  for (auto method : methods) {
+    if (!reg.is_secure_method(method)) {
+      ldpp_dout(dpp, 20) << __func__ << "(): method " << method << " is insecure" << dendl;
+      return false;
+    }
+  }
+
+  for (auto mode : modes) {
+    if (!reg.is_secure_mode(mode)) {
+      ldpp_dout(dpp, 20) << __func__ << "(): mode " << mode << " is insecure" << dendl;
+      return false;
+    }
+  }
+
+  return true;
+}
+
+int rgw_clog_warn(librados::Rados* h, const string& msg)
+{
+  string cmd =
+    "{"
+      "\"prefix\": \"log\", "
+      "\"level\": \"warn\", "
+      "\"logtext\": [\"" + msg + "\"]"
+    "}";
+
+  bufferlist inbl;
+  return h->mon_command(cmd, inbl, nullptr, nullptr);
 }

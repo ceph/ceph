@@ -311,3 +311,6 @@ void rgw_complete_aio_completion(librados::AioCompletion* c, int r);
 // (Currently providing nullptr will wipe all attributes.)
 
 std::map<std::string, ceph::buffer::list>* no_change_attrs();
+
+bool rgw_check_secure_mon_conn(const DoutPrefixProvider *dpp);
+int rgw_clog_warn(librados::Rados* h, const std::string& msg);
