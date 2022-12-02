@@ -250,6 +250,12 @@ typedef enum {
 } rbd_group_snap_state_t;
 
 typedef struct {
+  int64_t pool_id;
+  char *image_name;
+  uint64_t snap_id;
+} rbd_group_image_snap_info_t;
+
+typedef struct {
   char *name;
   rbd_group_snap_state_t state;
 } rbd_group_snap_info_t;
@@ -1189,6 +1195,10 @@ CEPH_RBD_API int rbd_diff_iterate2(rbd_image_t image,
                                    uint8_t include_parent, uint8_t whole_object,
 		                   int (*cb)(uint64_t, size_t, int, void *),
                                    void *arg);
+CEPH_RBD_API int rbd_diff_iterate_group_image_snap(rbd_image_t image,
+                      const char *from_snap_name, uint64_t ofs, uint64_t len,
+                      uint8_t include_parent, uint8_t whole_object,
+                      int (*cb)(uint64_t, size_t, int, void *), void *arg);
 CEPH_RBD_API ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
                                const char *buf);
 /*
@@ -1476,6 +1486,15 @@ CEPH_RBD_API int rbd_group_snap_list(rados_ioctx_t group_p,
 CEPH_RBD_API int rbd_group_snap_list_cleanup(rbd_group_snap_info_t *snaps,
                                              size_t group_snap_info_size,
                                              size_t num_entries);
+CEPH_RBD_API int rbd_group_image_snap_list(rados_ioctx_t group_p,
+                      const char *group_name,
+                      const char *group_snap_name,
+                      rbd_group_image_snap_info_t *snaps,
+                      size_t group_snap_info_size,
+                      size_t *num_entries);
+CEPH_RBD_API int rbd_group_image_snap_list_cleanup(rbd_group_image_snap_info_t *snaps,
+                                           size_t group_image_snap_info_size,
+                                           size_t len);
 CEPH_RBD_API int rbd_group_snap_rollback(rados_ioctx_t group_p,
                                          const char *group_name,
                                          const char *snap_name);

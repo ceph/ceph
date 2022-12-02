@@ -150,6 +150,12 @@ namespace librbd {
   } group_image_info_t;
 
   typedef struct {
+    int64_t pool_id;
+    std::string image_name;
+    uint64_t snap_id;
+  } group_image_snap_info_t;
+
+  typedef struct {
     std::string name;
     int64_t pool;
   } group_info_t;
@@ -434,6 +440,10 @@ public:
   int group_snap_list(IoCtx& group_ioctx, const char *group_name,
                       std::vector<group_snap_info_t> *snaps,
                       size_t group_snap_info_size);
+  int group_image_snap_list(IoCtx& group_ioctx, const char *group_name,
+                      const char *group_snap_name,
+                      std::vector<group_image_snap_info_t> *snaps,
+                      size_t group_snap_info_size);
   int group_snap_rollback(IoCtx& io_ctx, const char *group_name,
                           const char *snap_name);
   int group_snap_rollback_with_progress(IoCtx& io_ctx, const char *group_name,
@@ -707,6 +717,9 @@ public:
 		    uint64_t ofs, uint64_t len,
                     bool include_parent, bool whole_object,
 		    int (*cb)(uint64_t, size_t, int, void *), void *arg);
+  int diff_iterate_group_image_snap(const char *from_snap_name, uint64_t ofs,
+        uint64_t len, bool include_parent, bool whole_object,
+        int (*cb)(uint64_t, size_t, int, void *), void *arg);
 
   ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
   /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
