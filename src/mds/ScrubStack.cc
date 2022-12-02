@@ -64,6 +64,11 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
       dout(10) << __func__ << " with {" << *in << "}" << ", already in scrubbing" << dendl;
       return -CEPHFS_EBUSY;
     }
+    if(in->state_test(CInode::STATE_PURGING)) {
+      dout(10) << *obj << " is purging, skip pushing into scrub stack" << dendl;
+      // treating this as success since purge will make sure this inode goes away
+      return 0;
+    }
 
     dout(10) << __func__ << " with {" << *in << "}" << ", top=" << top << dendl;
     in->scrub_initialize(header);
@@ -71,6 +76,11 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
     if (dir->scrub_is_in_progress()) {
       dout(10) << __func__ << " with {" << *dir << "}" << ", already in scrubbing" << dendl;
       return -CEPHFS_EBUSY;
+    }
+    if(dir->get_inode()->state_test(CInode::STATE_PURGING)) {
+      dout(10) << *obj << " is purging, skip pushing into scrub stack" << dendl;
+      // treating this as success since purge will make sure this dir inode goes away
+      return 0;
     }
 
     dout(10) << __func__ << " with {" << *dir << "}" << ", top=" << top << dendl;
