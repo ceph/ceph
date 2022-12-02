@@ -289,4 +289,9 @@ void FrameAssemblerV2::log_main_preamble(const ceph::bufferlist &bl)
                  (int)main_preamble->num_segments, main_preamble->crc);
 }
 
+FrameAssemblerV2Ref FrameAssemblerV2::create(SocketConnection &conn)
+{
+  return std::make_unique<FrameAssemblerV2>(conn);
+}
+
 } // namespace crimson::net

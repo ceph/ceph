@@ -48,8 +48,7 @@ namespace crimson::net {
 Protocol::Protocol(ChainedDispatchers& dispatchers,
                    SocketConnection& conn)
   : dispatchers(dispatchers),
-    conn(conn),
-    frame_assembler(conn)
+    conn(conn)
 {}
 
 Protocol::~Protocol()
@@ -68,17 +67,17 @@ ceph::bufferlist Protocol::sweep_out_pending_msgs_to_sent(
 
   if (unlikely(require_keepalive)) {
     auto keepalive_frame = KeepAliveFrame::Encode();
-    bl.append(frame_assembler.get_buffer(keepalive_frame));
+    bl.append(frame_assembler->get_buffer(keepalive_frame));
   }
 
   if (unlikely(maybe_keepalive_ack.has_value())) {
     auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*maybe_keepalive_ack);
-    bl.append(frame_assembler.get_buffer(keepalive_ack_frame));
+    bl.append(frame_assembler->get_buffer(keepalive_ack_frame));
   }
 
   if (require_ack && num_msgs == 0u) {
     auto ack_frame = AckFrame::Encode(get_in_seq());
-    bl.append(frame_assembler.get_buffer(ack_frame));
+    bl.append(frame_assembler->get_buffer(ack_frame));
   }
 
   std::for_each(
@@ -108,7 +107,7 @@ ceph::bufferlist Protocol::sweep_out_pending_msgs_to_sent(
         msg->get_payload(), msg->get_middle(), msg->get_data());
     logger().debug("{} --> #{} === {} ({})",
 		   conn, msg->get_seq(), *msg, msg->get_type());
-    bl.append(frame_assembler.get_buffer(message));
+    bl.append(frame_assembler->get_buffer(message));
   });
 
   if (!conn.policy.lossy) {
@@ -140,7 +139,8 @@ seastar::future<> Protocol::send_keepalive()
 }
 
 void Protocol::set_out_state(
-    const Protocol::out_state_t &new_state)
+    const Protocol::out_state_t &new_state,
+    FrameAssemblerV2Ref fa)
 {
   ceph_assert_always(!(
     (new_state == out_state_t::none && out_state != out_state_t::none) ||
@@ -149,25 +149,29 @@ void Protocol::set_out_state(
   ));
 
   bool dispatch_in = false;
-  if (out_state != out_state_t::open &&
-      new_state == out_state_t::open) {
+  if (new_state == out_state_t::open) {
     // to open
-    ceph_assert_always(frame_assembler.is_socket_valid());
+    assert(fa != nullptr);
+    ceph_assert_always(frame_assembler == nullptr);
+    frame_assembler = std::move(fa);
+    ceph_assert_always(frame_assembler->is_socket_valid());
     dispatch_in = true;
 #ifdef UNIT_TESTS_BUILT
     if (conn.interceptor) {
       conn.interceptor->register_conn_ready(conn);
     }
 #endif
-  } else if (out_state == out_state_t::open &&
-             new_state != out_state_t::open) {
+  } else if (out_state == out_state_t::open) {
     // from open
-    ceph_assert_always(frame_assembler.is_socket_valid());
-    frame_assembler.shutdown_socket();
+    assert(fa == nullptr);
+    ceph_assert_always(frame_assembler->is_socket_valid());
+    frame_assembler->shutdown_socket();
     if (out_dispatching) {
       ceph_assert_always(!out_exit_dispatching.has_value());
-      out_exit_dispatching = seastar::shared_promise<>();
+      out_exit_dispatching = seastar::promise<>();
     }
+  } else {
+    assert(fa == nullptr);
   }
 
   if (out_state != new_state) {
@@ -176,32 +180,38 @@ void Protocol::set_out_state(
     out_state_changed = seastar::promise<>();
   }
 
-  // The above needs to be atomic
+  /*
+   * not atomic below
+   */
+
   if (dispatch_in) {
     do_in_dispatch();
   }
 }
 
-seastar::future<> Protocol::wait_io_exit_dispatching()
+seastar::future<FrameAssemblerV2Ref> Protocol::wait_io_exit_dispatching()
 {
   ceph_assert_always(out_state != out_state_t::open);
-  ceph_assert_always(!frame_assembler.is_socket_valid());
+  ceph_assert_always(frame_assembler != nullptr);
+  ceph_assert_always(!frame_assembler->is_socket_valid());
   return seastar::when_all(
     [this] {
       if (out_exit_dispatching) {
-        return out_exit_dispatching->get_shared_future();
+        return out_exit_dispatching->get_future();
       } else {
         return seastar::now();
       }
     }(),
     [this] {
       if (in_exit_dispatching) {
-        return in_exit_dispatching->get_shared_future();
+        return in_exit_dispatching->get_future();
       } else {
         return seastar::now();
       }
     }()
-  ).discard_result();
+  ).discard_result().then([this] {
+    return std::move(frame_assembler);
+  });
 }
 
 void Protocol::requeue_out_sent()
@@ -275,7 +285,8 @@ void Protocol::ack_out_sent(seq_num_t seq)
 
 seastar::future<stop_t> Protocol::try_exit_out_dispatch() {
   assert(!is_out_queued());
-  return frame_assembler.flush().then([this] {
+  return frame_assembler->flush(
+  ).then([this] {
     if (!is_out_queued()) {
       // still nothing pending to send after flush,
       // the dispatching can ONLY stop now
@@ -308,7 +319,7 @@ seastar::future<> Protocol::do_out_dispatch()
       auto to_ack = ack_left;
       assert(to_ack == 0 || in_seq > 0);
       // sweep all pending out with the concrete Protocol
-      return frame_assembler.write(
+      return frame_assembler->write(
         sweep_out_pending_msgs_to_sent(
           need_keepalive, next_keepalive_ack, to_ack > 0)
       ).then([this, prv_keepalive_ack=next_keepalive_ack, to_ack] {
@@ -408,7 +419,7 @@ void Protocol::notify_out_dispatch()
 seastar::future<>
 Protocol::read_message(utime_t throttle_stamp, std::size_t msg_size)
 {
-  return frame_assembler.read_frame_payload(
+  return frame_assembler->read_frame_payload(
   ).then([this, throttle_stamp, msg_size](auto payload) {
     if (unlikely(out_state != out_state_t::open)) {
       logger().debug("{} triggered {} during read_message()",
@@ -520,10 +531,10 @@ Protocol::read_message(utime_t throttle_stamp, std::size_t msg_size)
 void Protocol::do_in_dispatch()
 {
   ceph_assert_always(!in_exit_dispatching.has_value());
-  in_exit_dispatching = seastar::shared_promise<>();
+  in_exit_dispatching = seastar::promise<>();
   gate.dispatch_in_background("do_in_dispatch", *this, [this] {
     return seastar::keep_doing([this] {
-      return frame_assembler.read_main_preamble(
+      return frame_assembler->read_main_preamble(
       ).then([this](auto ret) {
         switch (ret.tag) {
           case Tag::MESSAGE: {
@@ -556,7 +567,7 @@ void Protocol::do_in_dispatch()
             });
           }
           case Tag::ACK:
-            return frame_assembler.read_frame_payload(
+            return frame_assembler->read_frame_payload(
             ).then([this](auto payload) {
               // handle_message_ack() logic
               auto ack = AckFrame::Decode(payload->back());
@@ -564,7 +575,7 @@ void Protocol::do_in_dispatch()
               ack_out_sent(ack.seq());
             });
           case Tag::KEEPALIVE2:
-            return frame_assembler.read_frame_payload(
+            return frame_assembler->read_frame_payload(
             ).then([this](auto payload) {
               // handle_keepalive2() logic
               auto keepalive_frame = KeepAliveFrame::Decode(payload->back());
@@ -577,7 +588,7 @@ void Protocol::do_in_dispatch()
               last_keepalive = seastar::lowres_system_clock::now();
             });
           case Tag::KEEPALIVE2_ACK:
-            return frame_assembler.read_frame_payload(
+            return frame_assembler->read_frame_payload(
             ).then([this](auto payload) {
               // handle_keepalive2_ack() logic
               auto keepalive_ack_frame = KeepAliveFrameAck::Decode(payload->back());
