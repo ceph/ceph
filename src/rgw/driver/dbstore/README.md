@@ -47,7 +47,7 @@ To execute DBStore unit test cases (using Gtest framework), from build directory
 
 To execute Sample test file
 
-    ninja src/rgw/store/dbstore/install
+    ninja src/rgw/driver/dbstore/install
     ./bin/dbstore-bin [logfile] [loglevel]
     (default logfile: rgw_dbstore_bin.log, loglevel: 20)
 

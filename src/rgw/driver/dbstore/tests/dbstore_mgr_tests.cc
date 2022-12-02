@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/ceph_context.h"
-#include "rgw/store/dbstore/dbstore_mgr.h"
+#include "rgw/driver/dbstore/dbstore_mgr.h"
 
 #include <filesystem>
 #include <gtest/gtest.h>

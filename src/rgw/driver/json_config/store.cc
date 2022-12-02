@@ -17,7 +17,7 @@
 #include "common/errno.h"
 #include "common/ceph_json.h"
 #include "rgw_zone.h"
-#include "store/immutable_config/store.h"
+#include "driver/immutable_config/store.h"
 #include "store.h"
 
 namespace rgw::sal {
