@@ -108,7 +108,9 @@ struct RGWServices_Def
   RGWServices_Def();
   ~RGWServices_Def();
 
-  int init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
+  int init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync,
+	   librados::Rados* radoshandle, optional_yield y,
+	   const DoutPrefixProvider *dpp);
   void shutdown();
 };
 
@@ -148,14 +150,19 @@ struct RGWServices
   RGWSI_User *user{nullptr};
   RGWSI_Role_RADOS *role{nullptr};
 
-  int do_init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
+  int do_init(CephContext *cct, bool have_cache, bool raw_storage,
+	      bool run_sync, librados::Rados* radoshandle, optional_yield y,
+	      const DoutPrefixProvider *dpp);
 
-  int init(CephContext *cct, bool have_cache, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp) {
-    return do_init(cct, have_cache, false, run_sync, y, dpp);
+  int init(CephContext *cct, bool have_cache, bool run_sync,
+	   librados::Rados* radoshandle, optional_yield y,
+	   const DoutPrefixProvider *dpp) {
+    return do_init(cct, have_cache, false, run_sync, radoshandle, y, dpp);
   }
 
-  int init_raw(CephContext *cct, bool have_cache, optional_yield y, const DoutPrefixProvider *dpp) {
-    return do_init(cct, have_cache, true, false, y, dpp);
+  int init_raw(CephContext *cct, bool have_cache, librados::Rados* radoshandle,
+	       optional_yield y, const DoutPrefixProvider *dpp) {
+    return do_init(cct, have_cache, true, false, radoshandle, y, dpp);
   }
   void shutdown() {
     _svc.shutdown();

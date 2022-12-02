@@ -497,6 +497,17 @@ RGWRadosRemoveOidCR::RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
   set_description() << "remove dest=" << oid;
 }
 
+RGWRadosRemoveOidCR::RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
+					 rgw_rados_ref&& obj,
+					 RGWObjVersionTracker* objv_tracker)
+  : RGWSimpleCoroutine(store->ctx()),
+    ioctx(std::move(obj.ioctx)),
+    oid(std::move(obj.obj.oid)),
+    objv_tracker(objv_tracker)
+{
+  set_description() << "remove dest=" << oid;
+}
+
 int RGWRadosRemoveOidCR::send_request(const DoutPrefixProvider *dpp)
 {
   librados::ObjectWriteOperation op;

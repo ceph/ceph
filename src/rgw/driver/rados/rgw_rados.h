@@ -651,7 +651,7 @@ public:
     RGWRados *store;
     rgw_bucket bucket;
     int shard_id;
-    RGWSI_RADOS::Obj bucket_obj;
+    rgw_rados_ref bucket_obj;
 
     explicit BucketShard(RGWRados *_store) : store(_store), shard_id(-1) {}
     int init(const rgw_bucket& _bucket, const rgw_obj& obj,
@@ -664,7 +664,7 @@ public:
     friend std::ostream& operator<<(std::ostream& out, const BucketShard& bs) {
       out << "BucketShard:{ bucket=" << bs.bucket <<
 	", shard_id=" << bs.shard_id <<
-	", bucket_ojb=" << bs.bucket_obj << "}";
+	", bucket_obj=" << bs.bucket_obj << "}";
       return out;
     }
   };
