@@ -62,7 +62,11 @@ void ScrubStack::dequeue(MDSCacheObject *obj)
 int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
+  bool is_inode_purging = false;
   if (CInode *in = dynamic_cast<CInode*>(obj)) {
+    if(in->state_test(CInode::STATE_PURGING)) {
+      is_inode_purging = true;
+    }
     if (in->scrub_is_in_progress()) {
       dout(10) << __func__ << " with {" << *in << "}" << ", already in scrubbing" << dendl;
       return -CEPHFS_EBUSY;
@@ -71,6 +75,9 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
     dout(10) << __func__ << " with {" << *in << "}" << ", top=" << top << dendl;
     in->scrub_initialize(header);
   } else if (CDir *dir = dynamic_cast<CDir*>(obj)) {
+    if(dir->get_inode()->state_test(CInode::STATE_PURGING)) {
+      is_inode_purging = true;
+    }
     if (dir->scrub_is_in_progress()) {
       dout(10) << __func__ << " with {" << *dir << "}" << ", already in scrubbing" << dendl;
       return -CEPHFS_EBUSY;
@@ -84,15 +91,20 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
     ceph_assert(0 == "queue dentry to scrub stack");
   }
 
-  dout(20) << "enqueue " << *obj << " to " << (top ? "top" : "bottom") << " of ScrubStack" << dendl;
-  if (!obj->item_scrub.is_on_list()) {
-    obj->get(MDSCacheObject::PIN_SCRUBQUEUE);
-    stack_size++;
-  }
-  if (top)
-    scrub_stack.push_front(&obj->item_scrub);
-  else
-    scrub_stack.push_back(&obj->item_scrub);
+  if(!is_inode_purging) {
+    dout(20) << "enqueue " << *obj << " to " << (top ? "top" : "bottom") << " of ScrubStack" << dendl;
+    if (!obj->item_scrub.is_on_list()) {
+      obj->get(MDSCacheObject::PIN_SCRUBQUEUE);
+      stack_size++;
+    }
+    if (top)
+      scrub_stack.push_front(&obj->item_scrub);
+    else
+      scrub_stack.push_back(&obj->item_scrub);
+  } else {
+    dout(20) << *obj << " purging, skip pushing into scrub stack" << dendl;
+  } 
+
   return 0;
 }
 
