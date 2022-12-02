@@ -340,9 +340,9 @@ struct RGWDataSyncEnv {
 
 // pretty ostream output for `radosgw-admin bucket sync run`
 template<typename ...T>
-void pretty_print(const RGWDataSyncEnv* env, T&& ...t) {
+void pretty_print(const RGWDataSyncEnv* env, fmt::format_string<T...> fmt, T&& ...t) {
   if (unlikely(!!env->ostr)) {
-    fmt::print(*env->ostr, std::forward<T>(t)...);
+    fmt::print(*env->ostr, fmt, std::forward<T>(t)...);
     env->ostr->flush();
   }
 }
