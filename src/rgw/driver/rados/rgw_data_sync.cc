@@ -6068,7 +6068,7 @@ int RGWBucketPipeSyncStatusManager::do_init(const DoutPrefixProvider *dpp,
   }
 
   sync_module.reset(new RGWDefaultSyncModuleInstance());
-  auto async_rados = driver->svc()->rados->get_async_processor();
+  auto async_rados = driver->svc()->async_processor;
 
   sync_env.init(this, driver->ctx(), driver,
                 driver->svc(), async_rados, &http_manager,
@@ -6680,7 +6680,7 @@ int rgw_read_bucket_inc_sync_status(const DoutPrefixProvider *dpp,
 
   RGWDataSyncEnv env;
   RGWSyncModuleInstanceRef module; // null sync module
-  env.init(dpp, driver->ctx(), driver, driver->svc(), driver->svc()->rados->get_async_processor(),
+  env.init(dpp, driver->ctx(), driver, driver->svc(), driver->svc()->async_processor,
            nullptr, nullptr, nullptr, module, nullptr);
 
   RGWDataSyncCtx sc;

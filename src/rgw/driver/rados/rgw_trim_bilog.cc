@@ -617,7 +617,7 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 
     get_policy_params.zone = zone_id;
     get_policy_params.bucket = bucket;
-    yield call(new RGWBucketGetSyncPolicyHandlerCR(store->svc()->rados->get_async_processor(),
+    yield call(new RGWBucketGetSyncPolicyHandlerCR(store->svc()->async_processor,
                                                    store,
                                                    get_policy_params,
                                                    source_policy,
@@ -728,14 +728,14 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       }
       while (clean_info && retries < MAX_RETRIES) {
 	yield call(new RGWPutBucketInstanceInfoCR(
-		     store->svc()->rados->get_async_processor(),
+		     store->svc()->async_processor,
 		     store, clean_info->first, false, {},
 		     no_change_attrs(), dpp));
 
 	// Raced, try again.
 	if (retcode == -ECANCELED) {
 	  yield call(new RGWGetBucketInstanceInfoCR(
-		       store->svc()->rados->get_async_processor(),
+		       store->svc()->async_processor,
 		       store, clean_info->first.bucket,
 		       &(clean_info->first), nullptr, dpp));
 	  if (retcode < 0) {
@@ -1132,7 +1132,7 @@ int BucketTrimCR::operate(const DoutPrefixProvider *dpp)
           return buckets.size() < config.buckets_per_interval;
         };
 
-        call(new MetadataListCR(cct, store->svc()->rados->get_async_processor(),
+        call(new MetadataListCR(cct, store->svc()->async_processor,
                                 store->ctl()->meta.mgr,
                                 section, status.marker, cb));
       }
@@ -1219,7 +1219,7 @@ int BucketTrimPollCR::operate(const DoutPrefixProvider *dpp)
 
       // prevent others from trimming for our entire wait interval
       set_status("acquiring trim lock");
-      yield call(new RGWSimpleRadosLockCR(store->svc()->rados->get_async_processor(), store,
+      yield call(new RGWSimpleRadosLockCR(store->svc()->async_processor, store,
                                           obj, name, cookie,
                                           config.trim_interval_sec));
       if (retcode < 0) {
@@ -1232,7 +1232,7 @@ int BucketTrimPollCR::operate(const DoutPrefixProvider *dpp)
       if (retcode < 0) {
         // on errors, unlock so other gateways can try
         set_status("unlocking");
-        yield call(new RGWSimpleRadosUnlockCR(store->svc()->rados->get_async_processor(), store,
+        yield call(new RGWSimpleRadosUnlockCR(store->svc()->async_processor, store,
                                               obj, name, cookie));
       }
     }

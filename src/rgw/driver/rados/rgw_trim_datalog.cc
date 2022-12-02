@@ -224,7 +224,7 @@ int DataLogTrimPollCR::operate(const DoutPrefixProvider *dpp)
       // prevent other gateways from attempting to trim for the duration
       set_status("acquiring trim lock");
 
-      yield call(new RGWSimpleRadosLockCR(store->svc()->rados->get_async_processor(), store,
+      yield call(new RGWSimpleRadosLockCR(store->svc()->async_processor, store,
                                           rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, lock_oid),
                                           "data_trim", lock_cookie,
                                           // interval is a small number and unlikely to overflow

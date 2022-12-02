@@ -1021,7 +1021,7 @@ void RGWRados::finalize()
   /* Before joining any sync threads, drain outstanding requests &
    * mark the async_processor as going_down() */
   if (svc.rados) {
-    svc.rados->stop_processor();
+    svc.async_processor->stop();
   }
 
   if (run_sync_thread) {
@@ -1258,7 +1258,7 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
                       << pt.second.name << " present in zonegroup" << dendl;
       }
     }
-    auto async_processor = svc.rados->get_async_processor();
+    auto async_processor = svc.async_processor;
     std::lock_guard l{meta_sync_thread_lock};
     meta_sync_processor_thread = new RGWMetaSyncProcessorThread(this->driver, async_processor);
     ret = meta_sync_processor_thread->init(dpp);
@@ -1283,7 +1283,7 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
     std::lock_guard dl{data_sync_thread_lock};
     for (auto source_zone : svc.zone->get_data_sync_source_zones()) {
       ldpp_dout(dpp, 5) << "starting data sync thread for zone " << source_zone->name << dendl;
-      auto *thread = new RGWDataSyncProcessorThread(this->driver, svc.rados->get_async_processor(), source_zone);
+      auto *thread = new RGWDataSyncProcessorThread(this->driver, svc.async_processor, source_zone);
       ret = thread->init(dpp);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: failed to initialize data sync thread" << dendl;

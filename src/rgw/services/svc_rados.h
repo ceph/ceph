@@ -28,7 +28,6 @@ struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
 class RGWSI_RADOS : public RGWServiceInstance
 {
   librados::Rados rados;
-  std::unique_ptr<RGWAsyncRadosProcessor> async_processor;
 
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 
@@ -66,15 +65,10 @@ public:
 
   void init() {}
   void shutdown() override;
-  void stop_processor();
 
   std::string cluster_fsid();
   uint64_t instance_id();
   bool check_secure_mon_conn(const DoutPrefixProvider *dpp) const;
-
-  RGWAsyncRadosProcessor *get_async_processor() {
-    return async_processor.get();
-  }
 
   int clog_warn(const std::string& msg);
 

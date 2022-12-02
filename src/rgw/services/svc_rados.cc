@@ -34,25 +34,12 @@ int RGWSI_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)
     return ret;
   }
 
-  async_processor.reset(new RGWAsyncRadosProcessor(cct, cct->_conf->rgw_num_async_rados_threads));
-  async_processor->start();
-
   return 0;
 }
 
 void RGWSI_RADOS::shutdown()
 {
-  if (async_processor) {
-    async_processor->stop();
-  }
   rados.shutdown();
-}
-
-void RGWSI_RADOS::stop_processor()
-{
-  if (async_processor) {
-    async_processor->stop();
-  }
 }
 
 librados::Rados* RGWSI_RADOS::get_rados_handle()
