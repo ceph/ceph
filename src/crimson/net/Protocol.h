@@ -127,7 +127,13 @@ class Protocol {
     return in_seq;
   }
 
-  ChainedDispatchers& dispatchers;
+  void dispatch_accept();
+
+  void dispatch_connect();
+
+  void dispatch_reset(bool is_replace);
+
+  void dispatch_remote_reset();
 
  private:
   bool is_out_queued() const {
@@ -153,6 +159,8 @@ class Protocol {
   seastar::future<> read_message(utime_t throttle_stamp, std::size_t msg_size);
 
   void do_in_dispatch();
+
+  ChainedDispatchers &dispatchers;
 
   SocketConnection &conn;
 

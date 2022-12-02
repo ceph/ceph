@@ -269,6 +269,31 @@ void Protocol::reset_out()
   ack_left = 0;
 }
 
+void Protocol::dispatch_accept()
+{
+  dispatchers.ms_handle_accept(
+    seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+}
+
+void Protocol::dispatch_connect()
+{
+  dispatchers.ms_handle_connect(
+    seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+}
+
+void Protocol::dispatch_reset(bool is_replace)
+{
+  dispatchers.ms_handle_reset(
+    seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
+    is_replace);
+}
+
+void Protocol::dispatch_remote_reset()
+{
+  dispatchers.ms_handle_remote_reset(
+    seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+}
+
 void Protocol::ack_out_sent(seq_num_t seq)
 {
   if (conn.policy.lossy) {  // lossy connections don't keep sent messages

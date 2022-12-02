@@ -253,7 +253,7 @@ class ProtocolV2 final : public Protocol {
 
   // CLOSING
   // reentrant
-  void do_close(bool dispatch_reset,
+  void do_close(bool is_dispatch_reset,
                 std::optional<std::function<void()>> f_accept_new=std::nullopt);
 };
 

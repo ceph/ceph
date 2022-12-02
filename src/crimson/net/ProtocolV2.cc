@@ -13,7 +13,6 @@
 #include "crimson/auth/AuthServer.h"
 #include "crimson/common/formatter.h"
 
-#include "chained_dispatchers.h"
 #include "Errors.h"
 #include "SocketConnection.h"
 #include "SocketMessenger.h"
@@ -67,9 +66,9 @@ seastar::logger& logger() {
   throw std::system_error(make_error_code(crimson::net::error::protocol_aborted));
 }
 
-#define ABORT_IN_CLOSE(dispatch_reset) { \
-  do_close(dispatch_reset);              \
-  abort_protocol();                      \
+#define ABORT_IN_CLOSE(is_dispatch_reset) { \
+  do_close(is_dispatch_reset);              \
+  abort_protocol();                         \
 }
 
 inline void expect_tag(const Tag& expected,
@@ -363,8 +362,7 @@ void ProtocolV2::reset_session(bool full)
     client_cookie = generate_client_cookie();
     peer_global_seq = 0;
     reset_out();
-    dispatchers.ms_handle_remote_reset(
-	seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+    dispatch_remote_reset();
   }
 }
 
@@ -883,8 +881,7 @@ void ProtocolV2::execute_connecting()
                           conn, global_seq, peer_global_seq, connect_seq,
                           client_cookie, server_cookie,
                           io_stat_printer{*this});
-            dispatchers.ms_handle_connect(
-              seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+            dispatch_connect();
             if (unlikely(state != state_t::CONNECTING)) {
               logger().debug("{} triggered {} after ms_handle_connect(), abort",
                              conn, get_state_name(state));
@@ -1593,7 +1590,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
   trigger_state(state_t::ESTABLISHING, out_state_t::delay, false);
   if (existing_conn) {
     static_cast<ProtocolV2*>(existing_conn->protocol.get())->do_close(
-        true /* dispatch_reset */, std::move(accept_me));
+        true /* is_dispatch_reset */, std::move(accept_me));
     if (unlikely(state != state_t::ESTABLISHING)) {
       logger().warn("{} triggered {} during execute_establishing(), "
                     "the accept event will not be delivered!",
@@ -1604,8 +1601,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
     accept_me();
   }
 
-  dispatchers.ms_handle_accept(
-      seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+  dispatch_accept();
   if (unlikely(state != state_t::ESTABLISHING)) {
     logger().debug("{} triggered {} after ms_handle_accept() during execute_establishing()",
                    conn, get_state_name(state));
@@ -1709,8 +1705,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                   new_peer_global_seq,
                   new_connect_seq, new_msg_seq] () mutable {
     ceph_assert_always(state == state_t::REPLACING);
-    dispatchers.ms_handle_accept(
-        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+    dispatch_accept();
     // state may become CLOSING, close mover.socket and abort later
     return wait_exit_io(
     ).then([this] {
@@ -1896,7 +1891,7 @@ seastar::future<> ProtocolV2::close_clean_yielded()
 }
 
 void ProtocolV2::do_close(
-    bool dispatch_reset,
+    bool is_dispatch_reset,
     std::optional<std::function<void()>> f_accept_new)
 {
   if (closed) {
@@ -1907,7 +1902,7 @@ void ProtocolV2::do_close(
 
   bool is_replace = f_accept_new ? true : false;
   logger().info("{} closing: reset {}, replace {}", conn,
-                dispatch_reset ? "yes" : "no",
+                is_dispatch_reset ? "yes" : "no",
                 is_replace ? "yes" : "no");
 
   /*
@@ -1946,10 +1941,8 @@ void ProtocolV2::do_close(
   auto gate_closed = gate.close();
   auto out_closed = close_out();
 
-  if (dispatch_reset) {
-    dispatchers.ms_handle_reset(
-        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
-        is_replace);
+  if (is_dispatch_reset) {
+    dispatch_reset(is_replace);
   }
 
   // asynchronous operations
