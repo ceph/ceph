@@ -96,7 +96,7 @@ int RGWServices_Def::init(CephContext *cct,
                          sysobj_cache.get(),
                          bucket_sobj.get());
   cls->init(zone.get(), radoshandle);
-  config_key_rados->init(rados.get());
+  config_key_rados->init(radoshandle);
   mdlog->init(rados.get(), zone.get(), sysobj.get(), cls.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
   meta_be_sobj->init(sysobj.get(), mdlog.get());
