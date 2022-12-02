@@ -156,10 +156,10 @@ seastar::future<> ProtocolV2::Timer::backoff(double seconds)
 }
 
 ProtocolV2::ProtocolV2(ChainedDispatchers& dispatchers,
-                       SocketConnection& conn,
-                       SocketMessenger& messenger)
+                       SocketConnection& conn)
   : Protocol(dispatchers, conn),
-    messenger{messenger},
+    conn{conn},
+    messenger{conn.messenger},
     frame_assembler{FrameAssemblerV2::create(conn)},
     auth_meta{seastar::make_lw_shared<AuthConnectionMeta>()},
     protocol_timer{conn}

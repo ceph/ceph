@@ -29,7 +29,7 @@ SocketConnection::SocketConnection(SocketMessenger& messenger,
                                    ChainedDispatchers& dispatchers)
   : core(messenger.shard_id()),
     messenger(messenger),
-    protocol(std::make_unique<ProtocolV2>(dispatchers, *this, messenger))
+    protocol(std::make_unique<ProtocolV2>(dispatchers, *this))
 {
 #ifdef UNIT_TESTS_BUILT
   if (messenger.interceptor) {

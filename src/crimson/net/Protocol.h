@@ -129,8 +129,6 @@ class Protocol {
 
   ChainedDispatchers& dispatchers;
 
-  SocketConnection &conn;
-
  private:
   bool is_out_queued() const {
     return (!out_pending_msgs.empty() ||
@@ -155,6 +153,8 @@ class Protocol {
   seastar::future<> read_message(utime_t throttle_stamp, std::size_t msg_size);
 
   void do_in_dispatch();
+
+  SocketConnection &conn;
 
   crimson::common::Gated gate;
 
