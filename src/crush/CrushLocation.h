@@ -7,6 +7,9 @@
 #include <iosfwd>
 #include <map>
 #include <string>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 
 #include "common/ceph_mutex.h"
 #include "include/common_fwd.h"
