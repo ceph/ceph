@@ -12,6 +12,8 @@
 namespace crimson::net {
 
 class SocketConnection;
+class FrameAssemblerV2;
+using FrameAssemblerV2Ref = std::unique_ptr<FrameAssemblerV2>;
 
 class FrameAssemblerV2 {
 public:
@@ -119,6 +121,8 @@ public:
     auto bl = get_buffer(tx_frame);
     return write_flush(std::move(bl));
   }
+
+  static FrameAssemblerV2Ref create(SocketConnection &conn);
 
 private:
   bool has_socket() const;

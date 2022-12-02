@@ -105,9 +105,9 @@ class Protocol {
   };
   friend class fmt::formatter<out_state_t>;
 
-  void set_out_state(const out_state_t &new_state);
+  void set_out_state(const out_state_t &new_state, FrameAssemblerV2Ref fa=nullptr);
 
-  seastar::future<> wait_io_exit_dispatching();
+  seastar::future<FrameAssemblerV2Ref> wait_io_exit_dispatching();
 
   void requeue_out_sent_up_to(seq_num_t seq);
 
@@ -130,8 +130,6 @@ class Protocol {
   ChainedDispatchers& dispatchers;
 
   SocketConnection &conn;
-
-  FrameAssemblerV2 frame_assembler;
 
  private:
   bool is_out_queued() const {
@@ -160,6 +158,8 @@ class Protocol {
 
   crimson::common::Gated gate;
 
+  FrameAssemblerV2Ref frame_assembler;
+
   /*
    * out states for writing
    */
@@ -171,10 +171,7 @@ class Protocol {
 
   bool out_dispatching = false;
 
-  // If another continuation is trying to close or replace socket when
-  // out_dispatching is true and out_state is open, it needs to wait for
-  // out_exit_dispatching until writing is stopped or failed.
-  std::optional<seastar::shared_promise<>> out_exit_dispatching;
+  std::optional<seastar::promise<>> out_exit_dispatching;
 
   /// the seq num of the last transmitted message
   seq_num_t out_seq = 0;
@@ -195,7 +192,7 @@ class Protocol {
    * in states for reading
    */
 
-  std::optional<seastar::shared_promise<>> in_exit_dispatching;
+  std::optional<seastar::promise<>> in_exit_dispatching;
 
   /// the seq num of the last received message
   seq_num_t in_seq = 0;

@@ -49,6 +49,14 @@ class ProtocolV2 final : public Protocol {
 
   void notify_out_fault(const char *, std::exception_ptr) override;
 
+  seastar::future<> wait_exit_io() {
+    if (exit_io.has_value()) {
+      return exit_io->get_shared_future();
+    } else {
+      return seastar::now();
+    }
+  }
+
  private:
   SocketMessenger &messenger;
 
@@ -56,6 +64,10 @@ class ProtocolV2 final : public Protocol {
 
   // the socket exists and it is not shutdown
   bool is_socket_valid = false;
+
+  FrameAssemblerV2Ref frame_assembler;
+
+  std::optional<seastar::shared_promise<>> exit_io;
 
   AuthConnectionMetaRef auth_meta;
 
