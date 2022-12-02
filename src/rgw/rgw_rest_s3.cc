@@ -1765,7 +1765,11 @@ void RGWListBucket_ObjStore_S3::send_common_response()
   s->formatter->dump_string("Prefix", prefix);
   s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty()) {
-    s->formatter->dump_string("Delimiter", delimiter);
+    if (encode_key) {
+      s->formatter->dump_string("Delimiter", url_encode(delimiter, false));
+    } else {
+      s->formatter->dump_string("Delimiter", delimiter);
+    }
   }
   s->formatter->dump_string("IsTruncated", (max && is_truncated ? "true"
               : "false"));
