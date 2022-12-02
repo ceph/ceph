@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string>
 #include <sqlite3.h>
-#include "rgw/store/dbstore/common/dbstore.h"
+#include "rgw/driver/dbstore/common/dbstore.h"
 
 using namespace rgw::store;
 

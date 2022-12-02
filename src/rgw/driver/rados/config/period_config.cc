@@ -13,7 +13,7 @@
  */
 
 #include "rgw_zone.h"
-#include "store/rados/config/store.h"
+#include "driver/rados/config/store.h"
 
 #include "impl.h"
 

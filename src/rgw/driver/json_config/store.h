@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "store/immutable_config/store.h"
+#include "driver/immutable_config/store.h"
 
 namespace rgw::sal {
 

@@ -23,13 +23,13 @@
 
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
-#include "store/rados/config/store.h"
-#include "store/json_config/store.h"
+#include "driver/rados/config/store.h"
+#include "driver/json_config/store.h"
 #include "rgw_d3n_datacache.h"
 
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
-#include "store/dbstore/config/store.h"
+#include "driver/dbstore/config/store.h"
 #endif
 
 #ifdef WITH_RADOSGW_MOTR
