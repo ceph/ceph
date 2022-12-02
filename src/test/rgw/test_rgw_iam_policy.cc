@@ -74,7 +74,6 @@ using rgw::IAM::s3GetPublicAccessBlock;
 using rgw::IAM::s3GetReplicationConfiguration;
 using rgw::IAM::s3ListAllMyBuckets;
 using rgw::IAM::s3ListBucket;
-using rgw::IAM::s3ListBucket;
 using rgw::IAM::s3ListBucketMultipartUploads;
 using rgw::IAM::s3ListBucketVersions;
 using rgw::IAM::s3ListMultipartUploadParts;
