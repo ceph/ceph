@@ -95,6 +95,24 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+int rgw_get_rados_ref(const DoutPrefixProvider* dpp, librados::Rados* rados,
+		      rgw_raw_obj obj, rgw_rados_ref* ref)
+{
+  ref->obj = std::move(obj);
+
+  int r = rgw_init_ioctx(dpp, rados, ref->obj.pool,
+			 ref->ioctx, true, false);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: creating ioctx (pool=" << ref->obj.pool
+        << "); r=" << r << dendl;
+    return r;
+  }
+
+  ref->ioctx.locator_set_key(ref->obj.loc);
+  return 0;
+}
+
+
 map<string, bufferlist>* no_change_attrs() {
   static map<string, bufferlist> no_change;
   return &no_change;

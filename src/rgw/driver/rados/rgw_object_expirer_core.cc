@@ -163,7 +163,7 @@ static int cls_timeindex_trim_repeat(const DoutPrefixProvider *dpp,
   do {
     librados::ObjectWriteOperation op;
     cls_timeindex_trim(op, from_time, to_time, from_marker, to_marker);
-    int r = rgw_rados_operate(dpp, ref.pool.ioctx(), oid, &op, null_yield);
+    int r = rgw_rados_operate(dpp, ref.ioctx, oid, &op, null_yield);
     if (r == -ENODATA)
       done = true;
     else if (r < 0)
@@ -180,15 +180,17 @@ int RGWObjExpStore::objexp_hint_trim(const DoutPrefixProvider *dpp,
                                const string& from_marker,
                                const string& to_marker, optional_yield y)
 {
-  auto obj = rados_svc->obj(rgw_raw_obj(driver->svc()->zone->get_zone_params().log_pool, oid));
-  int r = obj.open(dpp);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
-    return r;
+  rgw_rados_ref ref;
+  auto ret = rgw_get_rados_ref(dpp, driver->getRados()->get_rados_handle(),
+			       {driver->svc()->zone->get_zone_params().log_pool, oid},
+			       &ref);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open oid="
+		      << oid << " (r=" << ret << ")" << dendl;
+    return ret;
   }
-  auto& ref = obj.get_ref();
-  int ret = cls_timeindex_trim_repeat(dpp, ref, oid, utime_t(start_time), utime_t(end_time),
-          from_marker, to_marker, y);
+  ret = cls_timeindex_trim_repeat(dpp, ref, oid, utime_t(start_time), utime_t(end_time),
+				  from_marker, to_marker, y);
   if ((ret < 0 ) && (ret != -ENOENT)) {
     return ret;
   }

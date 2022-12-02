@@ -21,6 +21,12 @@ class optional_yield;
 
 struct obj_version;
 
+struct rgw_rados_ref {
+  librados::IoCtx ioctx;
+  rgw_raw_obj obj;
+};
+int rgw_get_rados_ref(const DoutPrefixProvider* dpp, librados::Rados* rados,
+		      rgw_raw_obj obj, rgw_rados_ref* ref);
 
 int rgw_init_ioctx(const DoutPrefixProvider *dpp,
                    librados::Rados *rados, const rgw_pool& pool,
@@ -100,9 +106,31 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation *op, optional_yield y,
 		      int flags = 0);
+inline int rgw_rados_operate(const DoutPrefixProvider *dpp,
+                             rgw_rados_ref& ref,
+                             librados::ObjectReadOperation *op, bufferlist *pbl,
+                             optional_yield y, int flags = 0)
+{
+  return rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, op, pbl, y, flags);
+}
+
+inline int rgw_rados_operate(const DoutPrefixProvider *dpp,
+                             rgw_rados_ref& ref,
+                             librados::ObjectWriteOperation *op,
+                             optional_yield y, int flags = 0)
+{
+  return rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, op, y, flags);
+}
+
 int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                      bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
                      optional_yield y);
+inline int rgw_rados_notify(const DoutPrefixProvider *dpp, rgw_rados_ref& ref,
+			    bufferlist& bl, uint64_t timeout_ms,
+			    bufferlist* pbl, optional_yield y)
+{
+  return rgw_rados_notify(dpp, ref.ioctx, ref.obj.oid, bl, timeout_ms, pbl, y);
+}
 
 int rgw_tools_init(const DoutPrefixProvider *dpp, CephContext *cct);
 void rgw_tools_cleanup();

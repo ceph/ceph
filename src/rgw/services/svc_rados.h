@@ -245,8 +245,6 @@ public:
   friend Pool::List;
 };
 
-using rgw_rados_ref = RGWSI_RADOS::rados_ref;
-
 inline std::ostream& operator<<(std::ostream& out, const RGWSI_RADOS::Obj& obj) {
   return out << obj.get_raw_obj();
 }

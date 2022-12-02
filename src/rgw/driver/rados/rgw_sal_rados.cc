@@ -1591,7 +1591,7 @@ int RadosObject::get_torrent_info(const DoutPrefixProvider* dpp,
   librados::ObjectReadOperation op;
   op.omap_get_vals_by_keys(keys, &result, nullptr);
 
-  ret = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, nullptr, y);
+  ret = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, &op, nullptr, y);
   if (ret < 0) {
     return ret;
   }
