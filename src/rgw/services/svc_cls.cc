@@ -47,12 +47,15 @@ int RGWSI_Cls::MFA::get_mfa_obj(const DoutPrefixProvider *dpp, const rgw_user& u
 
 int RGWSI_Cls::MFA::get_mfa_ref(const DoutPrefixProvider *dpp, const rgw_user& user, rgw_rados_ref *ref)
 {
-  std::optional<RGWSI_RADOS::Obj> obj;
-  int r = get_mfa_obj(dpp, user, &obj);
+  string oid = get_mfa_oid(user);
+  rgw_raw_obj o(zone_svc->get_zone_params().otp_pool, oid);
+
+  auto r = rgw_get_rados_ref(dpp, rados_svc->get_rados_handle(), o, ref);
   if (r < 0) {
+    ldpp_dout(dpp, 4) << "failed to open rados context for " << o << dendl;
     return r;
   }
-  *ref = obj->get_ref();
+
   return 0;
 }
 
@@ -66,7 +69,7 @@ int RGWSI_Cls::MFA::check_mfa(const DoutPrefixProvider *dpp, const rgw_user& use
 
   rados::cls::otp::otp_check_t result;
 
-  r = rados::cls::otp::OTP::check(cct, ref.pool.ioctx(), ref.obj.oid, otp_id, pin, &result);
+  r = rados::cls::otp::OTP::check(cct, ref.ioctx, ref.obj.oid, otp_id, pin, &result);
   if (r < 0)
     return r;
 
@@ -154,7 +157,7 @@ int RGWSI_Cls::MFA::get_mfa(const DoutPrefixProvider *dpp, const rgw_user& user,
     return r;
   }
 
-  r = rados::cls::otp::OTP::get(nullptr, ref.pool.ioctx(), ref.obj.oid, id, result);
+  r = rados::cls::otp::OTP::get(nullptr, ref.ioctx, ref.obj.oid, id, result);
   if (r < 0) {
     return r;
   }
@@ -172,7 +175,7 @@ int RGWSI_Cls::MFA::list_mfa(const DoutPrefixProvider *dpp, const rgw_user& user
     return r;
   }
 
-  r = rados::cls::otp::OTP::get_all(nullptr, ref.pool.ioctx(), ref.obj.oid, result);
+  r = rados::cls::otp::OTP::get_all(nullptr, ref.ioctx, ref.obj.oid, result);
   if (r < 0) {
     return r;
   }
@@ -190,7 +193,7 @@ int RGWSI_Cls::MFA::otp_get_current_time(const DoutPrefixProvider *dpp, const rg
     return r;
   }
 
-  r = rados::cls::otp::OTP::get_current_time(ref.pool.ioctx(), ref.obj.oid, result);
+  r = rados::cls::otp::OTP::get_current_time(ref.ioctx, ref.obj.oid, result);
   if (r < 0) {
     return r;
   }

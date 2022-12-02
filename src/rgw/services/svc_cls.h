@@ -23,6 +23,8 @@
 
 #include "svc_rados.h"
 
+#include "driver/rados/rgw_tools.h"
+
 
 class RGWSI_Cls : public RGWServiceInstance
 {

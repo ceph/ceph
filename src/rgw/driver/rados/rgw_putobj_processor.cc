@@ -553,7 +553,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
 
   librados::ObjectWriteOperation op;
   cls_rgw_mp_upload_part_info_update(op, p, info);
-  r = rgw_rados_operate(rctx.dpp, meta_obj_ref.pool.ioctx(), meta_obj_ref.obj.oid, &op, rctx.y);
+  r = rgw_rados_operate(rctx.dpp, meta_obj_ref.ioctx, meta_obj_ref.obj.oid, &op, rctx.y);
   ldpp_dout(rctx.dpp, 20) << "Update meta: " << meta_obj_ref.obj.oid << " part " << p << " prefix " << info.manifest.get_prefix() << " return " << r << dendl;
 
   if (r == -EOPNOTSUPP) {
@@ -567,7 +567,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     op = librados::ObjectWriteOperation{};
     op.assert_exists(); // detect races with abort
     op.omap_set(m);
-    r = rgw_rados_operate(rctx.dpp, meta_obj_ref.pool.ioctx(), meta_obj_ref.obj.oid, &op, rctx.y);
+    r = rgw_rados_operate(rctx.dpp, meta_obj_ref.ioctx, meta_obj_ref.obj.oid, &op, rctx.y);
   }
   if (r < 0) {
     return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
