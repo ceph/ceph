@@ -29,7 +29,7 @@ class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
   CephContext *cct;
   RGWSI_Notify *svc;
   int index;
-  RGWSI_RADOS::Obj obj;
+  rgw_rados_ref obj;
   uint64_t watch_handle;
   int register_ret{0};
   bool unregister_done{false};
@@ -51,7 +51,8 @@ class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
   }
 
 public:
-  RGWWatcher(CephContext *_cct, RGWSI_Notify *s, int i, RGWSI_RADOS::Obj& o) : cct(_cct), svc(s), index(i), obj(o), watch_handle(0) {}
+  RGWWatcher(CephContext *_cct, RGWSI_Notify *s, int i, rgw_rados_ref& o)
+    : cct(_cct), svc(s), index(i), obj(o), watch_handle(0) {}
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_id,
@@ -174,7 +175,7 @@ string RGWSI_Notify::get_control_oid(int i)
 }
 
 // do not call pick_obj_control before init_watch
-RGWSI_RADOS::Obj RGWSI_Notify::pick_control_obj(const string& key)
+rgw_rados_ref RGWSI_Notify::pick_control_obj(const string& key)
 {
   uint32_t r = ceph_str_hash_linux(key.c_str(), key.size());
 
@@ -206,17 +207,17 @@ int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
       notify_oid = notify_oid_prefix;
     }
 
-    notify_objs[i] = rados_svc->handle().obj({control_pool, notify_oid});
-    auto& notify_obj = notify_objs[i];
-
-    int r = notify_obj.open(dpp);
+    int r = rgw_get_rados_ref(dpp, rados, { control_pool, notify_oid },
+			      &notify_objs[i]);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: notify_obj.open() returned r=" << r << dendl;
       return r;
     }
+    auto& notify_obj = notify_objs[i];
 
     librados::ObjectWriteOperation op;
     op.create(false);
+
     r = notify_obj.operate(dpp, &op, y);
     if (r < 0 && r != -EEXIST) {
       ldpp_dout(dpp, 0) << "ERROR: notify_obj.operate() returned r=" << r << dendl;
@@ -270,10 +271,6 @@ int RGWSI_Notify::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   assert(zone_svc->is_started()); /* otherwise there's an ordering problem */
 
-  r = rados_svc->start(y, dpp);
-  if (r < 0) {
-    return r;
-  }
   r = finisher_svc->start(y, dpp);
   if (r < 0) {
     return r;
@@ -315,14 +312,14 @@ void RGWSI_Notify::shutdown()
   finalized = true;
 }
 
-int RGWSI_Notify::unwatch(RGWSI_RADOS::Obj& obj, uint64_t watch_handle)
+int RGWSI_Notify::unwatch(rgw_rados_ref& obj, uint64_t watch_handle)
 {
   int r = obj.unwatch(watch_handle);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: rados->unwatch2() returned r=" << r << dendl;
     return r;
   }
-  r = rados_svc->handle().watch_flush();
+  r = rados->watch_flush();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: rados->watch_flush() returned r=" << r << dendl;
     return r;
@@ -392,9 +389,9 @@ int RGWSI_Notify::distribute(const DoutPrefixProvider *dpp, const string& key,
     which will lead to division by 0 in pick_obj_control (num_watchers is 0).
   */
   if (num_watchers > 0) {
-    RGWSI_RADOS::Obj notify_obj = pick_control_obj(key);
+    auto notify_obj = pick_control_obj(key);
 
-    ldpp_dout(dpp, 10) << "distributing notification oid=" << notify_obj.get_ref().obj
+    ldpp_dout(dpp, 10) << "distributing notification oid=" << notify_obj.obj
 		       << " cni=" << cni << dendl;
     return robust_notify(dpp, notify_obj, cni, y);
   }
@@ -443,7 +440,7 @@ static timeout_vector decode_timeouts(const bufferlist& bl)
 }
 
 int RGWSI_Notify::robust_notify(const DoutPrefixProvider *dpp,
-                                RGWSI_RADOS::Obj& notify_obj,
+                                rgw_rados_ref& notify_obj,
 				const RGWCacheNotifyInfo& cni,
                                 optional_yield y)
 {
