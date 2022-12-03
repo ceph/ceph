@@ -605,19 +605,25 @@ Score is given in [0-1] range.
 [0.7 .. 0.9] considerable, but safe fragmentation
 [0.9 .. 1.0] severe fragmentation, may impact BlueFS ability to get space from BlueStore
 
-If detailed report of free fragments is required do::
+If detailed report of free fragments is required do:
 
-  ceph daemon osd.123 bluestore allocator dump block
+.. prompt:: bash $
+
+   ceph daemon osd.123 bluestore allocator dump block
 
 In case when handling OSD process that is not running fragmentation can be
 inspected with `ceph-bluestore-tool`.
-Get fragmentation score::
+Get fragmentation score:
 
-  ceph-bluestore-tool --path /var/lib/ceph/osd/ceph-123 --allocator block free-score
+.. prompt:: bash $
 
-And dump detailed free chunks::
+   ceph-bluestore-tool --path /var/lib/ceph/osd/ceph-123 --allocator block free-score
 
-  ceph-bluestore-tool --path /var/lib/ceph/osd/ceph-123 --allocator block free-dump
+And dump detailed free chunks:
+
+.. prompt:: bash $
+
+   ceph-bluestore-tool --path /var/lib/ceph/osd/ceph-123 --allocator block free-dump
 
 BLUESTORE_LEGACY_STATFS
 _______________________
@@ -630,15 +636,19 @@ not available.  However, if there is a mix of pre-Nautilus and
 post-Nautilus OSDs, the cluster usage statistics reported by ``ceph
 df`` will not be accurate.
 
-The old OSDs can be updated to use the new usage tracking scheme by stopping each OSD, running a repair operation, and the restarting it.  For example, if ``osd.123`` needed to be updated,::
+The old OSDs can be updated to use the new usage tracking scheme by stopping each OSD, running a repair operation, and the restarting it.  For example, if ``osd.123`` needed to be updated,:
 
-  systemctl stop ceph-osd@123
-  ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
-  systemctl start ceph-osd@123
+.. prompt:: bash $
 
-This warning can be disabled with::
+   systemctl stop ceph-osd@123
+   ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
+   systemctl start ceph-osd@123
 
-  ceph config set global bluestore_warn_on_legacy_statfs false
+This warning can be disabled with:
+
+.. prompt:: bash $
+
+   ceph config set global bluestore_warn_on_legacy_statfs false
 
 BLUESTORE_NO_PER_POOL_OMAP
 __________________________
@@ -651,15 +661,19 @@ based on the most recent deep-scrub.
 
 The old OSDs can be updated to track by pool by stopping each OSD,
 running a repair operation, and the restarting it.  For example, if
-``osd.123`` needed to be updated,::
+``osd.123`` needed to be updated,:
 
-  systemctl stop ceph-osd@123
-  ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
-  systemctl start ceph-osd@123
+.. prompt:: bash $
 
-This warning can be disabled with::
+   systemctl stop ceph-osd@123
+   ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
+   systemctl start ceph-osd@123
 
-  ceph config set global bluestore_warn_on_no_per_pool_omap false
+This warning can be disabled with:
+
+.. prompt:: bash $
+
+   ceph config set global bluestore_warn_on_no_per_pool_omap false
 
 BLUESTORE_NO_PER_PG_OMAP
 __________________________
@@ -670,15 +684,19 @@ Pacific.  Per-PG omap enables faster PG removal when PGs migrate.
 
 The older OSDs can be updated to track by PG by stopping each OSD,
 running a repair operation, and the restarting it.  For example, if
-``osd.123`` needed to be updated,::
+``osd.123`` needed to be updated,:
 
-  systemctl stop ceph-osd@123
-  ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
-  systemctl start ceph-osd@123
+.. prompt:: bash $
 
-This warning can be disabled with::
+   systemctl stop ceph-osd@123
+   ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
+   systemctl start ceph-osd@123
 
-  ceph config set global bluestore_warn_on_no_per_pg_omap false
+This warning can be disabled with:
+
+.. prompt:: bash $
+
+   ceph config set global bluestore_warn_on_no_per_pg_omap false
 
 
 BLUESTORE_DISK_SIZE_MISMATCH
@@ -690,13 +708,15 @@ the OSD crashing in the future.
 
 The OSDs in question should be destroyed and reprovisioned.  Care should be
 taken to do this one OSD at a time, and in a way that doesn't put any data at
-risk.  For example, if osd ``$N`` has the error,::
+risk.  For example, if osd ``$N`` has the error:
 
-  ceph osd out osd.$N
-  while ! ceph osd safe-to-destroy osd.$N ; do sleep 1m ; done
-  ceph osd destroy osd.$N
-  ceph-volume lvm zap /path/to/device
-  ceph-volume lvm create --osd-id $N --data /path/to/device
+.. prompt:: bash $
+
+   ceph osd out osd.$N
+   while ! ceph osd safe-to-destroy osd.$N ; do sleep 1m ; done
+   ceph osd destroy osd.$N
+   ceph-volume lvm zap /path/to/device
+   ceph-volume lvm create --osd-id $N --data /path/to/device
 
 BLUESTORE_NO_COMPRESSION
 ________________________
@@ -726,13 +746,17 @@ This alert doesn't require immediate response but corresponding host might need
 additional attention, e.g. upgrading to the latest OS/kernel versions and
 H/W resource utilization monitoring.
 
-This warning can be disabled on all OSDs with::
+This warning can be disabled on all OSDs with:
 
-  ceph config set osd bluestore_warn_on_spurious_read_errors false
+.. prompt:: bash $
 
-Alternatively, it can be disabled on a specific OSD with::
+   ceph config set osd bluestore_warn_on_spurious_read_errors false
 
-  ceph config set osd.123 bluestore_warn_on_spurious_read_errors false
+Alternatively, it can be disabled on a specific OSD with:
+
+.. prompt:: bash $
+
+   ceph config set osd.123 bluestore_warn_on_spurious_read_errors false
 
 
 Device health
@@ -752,14 +776,18 @@ hardware from the system.  Note that the marking out is normally done
 automatically if ``mgr/devicehealth/self_heal`` is enabled based on
 the ``mgr/devicehealth/mark_out_threshold``.
 
-Device health can be checked with::
+Device health can be checked with:
 
-  ceph device info <device-id>
+.. prompt:: bash $
+
+   ceph device info <device-id>
 
 Device life expectancy is set by a prediction model run by
-the mgr or an by external tool via the command::
+the mgr or an by external tool via the command:
 
-  ceph device set-life-expectancy <device-id> <from> <to>
+.. prompt:: bash $
+
+   ceph device set-life-expectancy <device-id> <from> <to>
 
 You can change the stored life expectancy manually, but that usually
 doesn't accomplish anything as whatever tool originally set it will
@@ -814,16 +842,20 @@ requests to be serviced.  Problematic PG states include *peering*,
 *stale*, *incomplete*, and the lack of *active* (if those conditions do not clear
 quickly).
 
-Detailed information about which PGs are affected is available from::
+Detailed information about which PGs are affected is available from:
 
-  ceph health detail
+.. prompt:: bash $
+
+   ceph health detail
 
 In most cases the root cause is that one or more OSDs is currently
 down; see the discussion for ``OSD_DOWN`` above.
 
-The state of specific problematic PGs can be queried with::
+The state of specific problematic PGs can be queried with:
 
-  ceph tell <pgid> query
+.. prompt:: bash $
+
+   ceph tell <pgid> query
 
 PG_DEGRADED
 ___________
@@ -837,16 +869,20 @@ Specifically, one or more PGs:
   enough instances of that placement group in the cluster;
 * has not had the *clean* flag set for some time.
 
-Detailed information about which PGs are affected is available from::
+Detailed information about which PGs are affected is available from:
 
-  ceph health detail
+.. prompt:: bash $
+
+   ceph health detail
 
 In most cases the root cause is that one or more OSDs is currently
 down; see the discussion for ``OSD_DOWN`` above.
 
-The state of specific problematic PGs can be queried with::
+The state of specific problematic PGs can be queried with:
 
-  ceph tell <pgid> query
+.. prompt:: bash $
+
+   ceph tell <pgid> query
 
 
 PG_RECOVERY_FULL
@@ -915,10 +951,12 @@ can be caused by RGW bucket index objects that do not have automatic resharding
 enabled. Please see :ref:`RGW Dynamic Bucket Index Resharding
 <rgw_dynamic_bucket_index_resharding>` for more information on resharding.
 
-The thresholds can be adjusted with::
+The thresholds can be adjusted with:
 
-  ceph config set osd osd_deep_scrub_large_omap_object_key_threshold <keys>
-  ceph config set osd osd_deep_scrub_large_omap_object_value_sum_threshold <bytes>
+.. prompt:: bash $
+
+   ceph config set osd osd_deep_scrub_large_omap_object_key_threshold <keys>
+   ceph config set osd osd_deep_scrub_large_omap_object_value_sum_threshold <bytes>
 
 CACHE_POOL_NEAR_FULL
 ____________________
