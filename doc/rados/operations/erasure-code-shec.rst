@@ -9,7 +9,9 @@ library. It allows ceph to recover data more efficiently than Reed Solomon codes
 Create an SHEC profile
 ======================
 
-To create a new *shec* erasure code profile::
+To create a new *shec* erasure code profile:
+
+.. prompt:: bash $
 
         ceph osd erasure-code-profile set {name} \
              plugin=shec \
@@ -133,10 +135,11 @@ but at least increasing m without increasing c achieves improvement of recovery 
 Erasure code profile examples
 =============================
 
-::
 
-        $ ceph osd erasure-code-profile set SHECprofile \
+.. prompt:: bash $
+
+          ceph osd erasure-code-profile set SHECprofile \
              plugin=shec \
              k=8 m=4 c=3 \
              crush-failure-domain=host
-        $ ceph osd pool create shecpool erasure SHECprofile
+          ceph osd pool create shecpool erasure SHECprofile
