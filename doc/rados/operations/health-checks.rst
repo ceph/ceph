@@ -301,9 +301,11 @@ __________
 
 An OSD is referenced in the CRUSH map hierarchy but does not exist.
 
-The OSD can be removed from the CRUSH hierarchy with::
+The OSD can be removed from the CRUSH hierarchy with:
 
-  ceph osd crush rm osd.<id>
+.. prompt:: bash $
+
+   ceph osd crush rm osd.<id>
 
 OSD_OUT_OF_ORDER_FULL
 _____________________
@@ -313,11 +315,13 @@ and/or `failsafe_full` are not ascending.  In particular, we expect
 `nearfull < backfillfull`, `backfillfull < full`, and `full <
 failsafe_full`.
 
-The thresholds can be adjusted with::
+The thresholds can be adjusted with:
 
-  ceph osd set-nearfull-ratio <ratio>
-  ceph osd set-backfillfull-ratio <ratio>
-  ceph osd set-full-ratio <ratio>
+.. prompt:: bash $
+
+   ceph osd set-nearfull-ratio <ratio>
+   ceph osd set-backfillfull-ratio <ratio>
+   ceph osd set-full-ratio <ratio>
 
 
 OSD_FULL
@@ -326,18 +330,24 @@ ________
 One or more OSDs has exceeded the `full` threshold and is preventing
 the cluster from servicing writes.
 
-Utilization by pool can be checked with::
+Utilization by pool can be checked with:
 
-  ceph df
+.. prompt:: bash $
 
-The currently defined `full` ratio can be seen with::
+   ceph df
 
-  ceph osd dump | grep full_ratio
+The currently defined `full` ratio can be seen with:
+
+.. prompt:: bash $
+
+   ceph osd dump | grep full_ratio
 
 A short-term workaround to restore write availability is to raise the full
-threshold by a small amount::
+threshold by a small amount:
 
-  ceph osd set-full-ratio <ratio>
+.. prompt:: bash $
+
+   ceph osd set-full-ratio <ratio>
 
 New storage should be added to the cluster by deploying more OSDs or
 existing data should be deleted in order to free up space.
@@ -350,9 +360,11 @@ prevent data from being allowed to rebalance to this device.  This is
 an early warning that rebalancing may not be able to complete and that
 the cluster is approaching full.
 
-Utilization by pool can be checked with::
+Utilization by pool can be checked with:
 
-  ceph df
+.. prompt:: bash $
+
+   ceph df
 
 OSD_NEARFULL
 ____________
@@ -360,9 +372,11 @@ ____________
 One or more OSDs has exceeded the `nearfull` threshold.  This is an early
 warning that the cluster is approaching full.
 
-Utilization by pool can be checked with::
+Utilization by pool can be checked with:
 
-  ceph df
+.. prompt:: bash $
+
+   ceph df
 
 OSDMAP_FLAGS
 ____________
@@ -383,10 +397,12 @@ One or more cluster flags of interest has been set.  These flags include:
 * *noscrub*, *nodeep_scrub* - scrubbing is disabled
 * *notieragent* - cache tiering activity is suspended
 
-With the exception of *full*, these flags can be set or cleared with::
+With the exception of *full*, these flags can be set or cleared with:
 
-  ceph osd set <flag>
-  ceph osd unset <flag>
+.. prompt:: bash $
+
+   ceph osd set <flag>
+   ceph osd unset <flag>
 
 OSD_FLAGS
 _________
@@ -401,19 +417,23 @@ These flags include:
 * *noout*: if these OSDs are down they will not automatically be marked
   `out` after the configured interval
 
-These flags can be set and cleared in batch with::
+These flags can be set and cleared in batch with:
 
-  ceph osd set-group <flags> <who>
-  ceph osd unset-group <flags> <who>
+.. prompt:: bash $
 
-For example, ::
+   ceph osd set-group <flags> <who>
+   ceph osd unset-group <flags> <who>
 
-  ceph osd set-group noup,noout osd.0 osd.1
-  ceph osd unset-group noup,noout osd.0 osd.1
-  ceph osd set-group noup,noout host-foo
-  ceph osd unset-group noup,noout host-foo
-  ceph osd set-group noup,noout class-hdd
-  ceph osd unset-group noup,noout class-hdd
+For example:
+
+.. prompt:: bash $
+
+   ceph osd set-group noup,noout osd.0 osd.1
+   ceph osd unset-group noup,noout osd.0 osd.1
+   ceph osd set-group noup,noout host-foo
+   ceph osd unset-group noup,noout host-foo
+   ceph osd set-group noup,noout class-hdd
+   ceph osd unset-group noup,noout class-hdd
 
 OLD_CRUSH_TUNABLES
 __________________
@@ -441,12 +461,14 @@ One or more cache pools is not configured with a *hit set* to track
 utilization, which will prevent the tiering agent from identifying
 cold objects to flush and evict from the cache.
 
-Hit sets can be configured on the cache pool with::
+Hit sets can be configured on the cache pool with:
 
-  ceph osd pool set <poolname> hit_set_type <type>
-  ceph osd pool set <poolname> hit_set_period <period-in-seconds>
-  ceph osd pool set <poolname> hit_set_count <number-of-hitsets>
-  ceph osd pool set <poolname> hit_set_fpp <target-false-positive-rate>
+.. prompt:: bash $
+
+   ceph osd pool set <poolname> hit_set_type <type>
+   ceph osd pool set <poolname> hit_set_period <period-in-seconds>
+   ceph osd pool set <poolname> hit_set_count <number-of-hitsets>
+   ceph osd pool set <poolname> hit_set_fpp <target-false-positive-rate>
 
 OSD_NO_SORTBITWISE
 __________________
@@ -455,9 +477,11 @@ No pre-luminous v12.y.z OSDs are running but the ``sortbitwise`` flag has not
 been set.
 
 The ``sortbitwise`` flag must be set before luminous v12.y.z or newer
-OSDs can start.  You can safely set the flag with::
+OSDs can start.  You can safely set the flag with:
 
-  ceph osd set sortbitwise
+.. prompt:: bash $
+
+   ceph osd set sortbitwise
 
 OSD_FILESTORE
 __________________
@@ -469,28 +493,36 @@ The 'mclock_scheduler' is not supported for filestore OSDs. Therefore, the
 default 'osd_op_queue' is set to 'wpq' for filestore OSDs and is enforced
 even if the user attempts to change it.
 
-Filestore OSDs can be listed with::
+Filestore OSDs can be listed with:
 
-  ceph report | jq -c '."osd_metadata" | .[] | select(.osd_objectstore | contains("filestore")) | {id, osd_objectstore}'
+.. prompt:: bash $
 
-If it is not feasible to migrate Filestore OSDs to Bluestore immediately, you can silence
-this warning temporarily with::
+   ceph report | jq -c '."osd_metadata" | .[] | select(.osd_objectstore | contains("filestore")) | {id, osd_objectstore}'
 
-  ceph health mute OSD_FILESTORE
+If it is not feasible to migrate Filestore OSDs to Bluestore immediately, you
+can silence this warning temporarily with:
+
+.. prompt:: bash $
+
+   ceph health mute OSD_FILESTORE
 
 POOL_FULL
 _________
 
 One or more pools has reached its quota and is no longer allowing writes.
 
-Pool quotas and utilization can be seen with::
+Pool quotas and utilization can be seen with:
 
-  ceph df detail
+.. prompt:: bash $
 
-You can either raise the pool quota with::
+   ceph df detail
 
-  ceph osd pool set-quota <poolname> max_objects <num-objects>
-  ceph osd pool set-quota <poolname> max_bytes <num-bytes>
+You can either raise the pool quota with:
+
+.. prompt:: bash $
+
+   ceph osd pool set-quota <poolname> max_objects <num-objects>
+   ceph osd pool set-quota <poolname> max_bytes <num-bytes>
 
 or delete some existing data to reduce utilization.
 
@@ -505,29 +537,37 @@ condition or even unexpected, but if the administrator's expectation
 was that all metadata would fit on the faster device, it indicates
 that not enough space was provided.
 
-This warning can be disabled on all OSDs with::
+This warning can be disabled on all OSDs with:
 
-  ceph config set osd bluestore_warn_on_bluefs_spillover false
+.. prompt:: bash $
 
-Alternatively, it can be disabled on a specific OSD with::
+   ceph config set osd bluestore_warn_on_bluefs_spillover false
 
-  ceph config set osd.123 bluestore_warn_on_bluefs_spillover false
+Alternatively, it can be disabled on a specific OSD with:
+
+.. prompt:: bash $
+
+   ceph config set osd.123 bluestore_warn_on_bluefs_spillover false
 
 To provide more metadata space, the OSD in question could be destroyed and
 reprovisioned.  This will involve data migration and recovery.
 
 It may also be possible to expand the LVM logical volume backing the
 `db` storage.  If the underlying LV has been expanded, the OSD daemon
-needs to be stopped and BlueFS informed of the device size change with::
+needs to be stopped and BlueFS informed of the device size change with:
 
-  ceph-bluestore-tool bluefs-bdev-expand --path /var/lib/ceph/osd/ceph-$ID
+.. prompt:: bash $
+
+   ceph-bluestore-tool bluefs-bdev-expand --path /var/lib/ceph/osd/ceph-$ID
 
 BLUEFS_AVAILABLE_SPACE
 ______________________
 
-To check how much space is free for BlueFS do::
+To check how much space is free for BlueFS do:
 
-  ceph daemon osd.123 bluestore bluefs available
+.. prompt:: bash $
+
+   ceph daemon osd.123 bluestore bluefs available
 
 This will output up to 3 values: `BDEV_DB free`, `BDEV_SLOW free` and
 `available_from_bluestore`. `BDEV_DB` and `BDEV_SLOW` report amount of space that
@@ -542,18 +582,22 @@ _________________
 
 If BlueFS is running low on available free space and there is little
 `available_from_bluestore` one can consider reducing BlueFS allocation unit size.
-To simulate available space when allocation unit is different do::
+To simulate available space when allocation unit is different do:
 
-  ceph daemon osd.123 bluestore bluefs available <alloc-unit-size>
+.. prompt:: bash $
+
+   ceph daemon osd.123 bluestore bluefs available <alloc-unit-size>
 
 BLUESTORE_FRAGMENTATION
 _______________________
 
 As BlueStore works free space on underlying storage will get fragmented.
 This is normal and unavoidable but excessive fragmentation will cause slowdown.
-To inspect BlueStore fragmentation one can do::
+To inspect BlueStore fragmentation one can do:
 
-  ceph daemon osd.123 bluestore allocator score block
+.. prompt:: bash $
+
+   ceph daemon osd.123 bluestore allocator score block
 
 Score is given in [0-1] range.
 [0.0 .. 0.4] tiny fragmentation
