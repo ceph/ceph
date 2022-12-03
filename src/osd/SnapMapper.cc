@@ -80,12 +80,24 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
   */
 
 #ifdef WITH_SEASTAR
+#include "crimson/common/log.h"
+#include "crimson/osd/pg_interval_interrupt_condition.h"
+  template <typename ValuesT = void>
+  using interruptible_future =
+    ::crimson::interruptible::interruptible_future<
+      ::crimson::osd::IOInterruptCondition, ValuesT>;
+  using interruptor =
+    ::crimson::interruptible::interruptor<
+      ::crimson::osd::IOInterruptCondition>;
+
+#define CRIMSON_DEBUG(FMT_MSG, ...) crimson::get_logger(ceph_subsys_).debug(FMT_MSG, ##__VA_ARGS__)
 int OSDriver::get_keys(
   const std::set<std::string> &keys,
   std::map<std::string, ceph::buffer::list> *out)
 {
+  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
   using crimson::os::FuturizedStore;
-  return os->omap_get_values(
+  return interruptible_future<int>{os->omap_get_values(
     ch, hoid, keys
   ).safe_then([out] (FuturizedStore::omap_values_t&& vals) {
     // just the difference in comparator (`std::less<>` in omap_values_t`)
@@ -94,36 +106,44 @@ int OSDriver::get_keys(
   }, FuturizedStore::read_errorator::all_same_way([] (auto& e) {
     assert(e.value() > 0);
     return -e.value();
-  })).get(); // this requires seastar::thread
+  }))}.get(); // this requires seastar::thread
+  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
 }
 
 int OSDriver::get_next(
   const std::string &key,
   std::pair<std::string, ceph::buffer::list> *next)
 {
+  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
   using crimson::os::FuturizedStore;
-  return os->omap_get_values(
+  return interruptible_future<int>{os->omap_get_values(
     ch, hoid, key
   ).safe_then_unpack([&key, next] (bool, FuturizedStore::omap_values_t&& vals) {
+    CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
     if (auto nit = std::begin(vals); nit == std::end(vals)) {
+      CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
       return -ENOENT;
     } else {
+      CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
       assert(nit->first > key);
       *next = *nit;
       return 0;
     }
   }, FuturizedStore::read_errorator::all_same_way([] {
+    CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
     return -EINVAL;
-  })).get(); // this requires seastar::thread
+  }))}.get(); // this requires seastar::thread
+  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
 }
 
 int OSDriver::get_next_or_current(
   const std::string &key,
   std::pair<std::string, ceph::buffer::list> *next_or_current)
 {
+  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
   using crimson::os::FuturizedStore;
   // let's try to get current first
-  return os->omap_get_values(
+  return interruptible_future<int>{os->omap_get_values(
     ch, hoid, FuturizedStore::omap_keys_t{key}
   ).safe_then([&key, next_or_current] (FuturizedStore::omap_values_t&& vals) {
     assert(vals.size() == 1);
@@ -133,7 +153,8 @@ int OSDriver::get_next_or_current(
     [next_or_current, &key, this] {
     // no current, try next
     return get_next(key, next_or_current);
-  })).get(); // this requires seastar::thread
+  }))}.get(); // this requires seastar::thread
+  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
 }
 #else
 int OSDriver::get_keys(
