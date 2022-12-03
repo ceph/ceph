@@ -13,18 +13,20 @@ understanding of the parameters.
 Create a jerasure profile
 =========================
 
-To create a new *jerasure* erasure code profile::
+To create a new *jerasure* erasure code profile:
+ 
+.. prompt:: bash $
 
-        ceph osd erasure-code-profile set {name} \
-             plugin=jerasure \
-             k={data-chunks} \
-             m={coding-chunks} \
-             technique={reed_sol_van|reed_sol_r6_op|cauchy_orig|cauchy_good|liberation|blaum_roth|liber8tion} \
-             [crush-root={root}] \
-             [crush-failure-domain={bucket-type}] \
-             [crush-device-class={device-class}] \
-             [directory={directory}] \
-             [--force]
+   ceph osd erasure-code-profile set {name} \
+     plugin=jerasure \
+     k={data-chunks} \
+     m={coding-chunks} \
+     technique={reed_sol_van|reed_sol_r6_op|cauchy_orig|cauchy_good|liberation|blaum_roth|liber8tion} \
+     [crush-root={root}] \
+     [crush-failure-domain={bucket-type}] \
+     [crush-device-class={device-class}] \
+     [directory={directory}] \
+     [--force]
 
 Where:
 
