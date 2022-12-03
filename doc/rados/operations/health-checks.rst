@@ -73,9 +73,11 @@ not configured to bind to a v2 port in the cluster's monmap.  This
 means that features specific to the msgr2 protocol (e.g., encryption)
 are not available on some or all connections.
 
-In most cases this can be corrected by issuing the command::
+In most cases this can be corrected by issuing the command:
 
-  ceph mon enable-msgr2
+.. prompt:: bash $
+
+   ceph mon enable-msgr2
 
 That command will change any monitor configured for the old default
 port 6789 to continue to listen for v1 connections on 6789 and also
@@ -130,9 +132,11 @@ This warning may also indicate that the monitor has a bug that is
 preventing it from pruning the cluster metadata it stores.  If the
 problem persists, please report a bug.
 
-The warning threshold may be adjusted with::
+The warning threshold may be adjusted with:
 
-  ceph config set global mon_data_size_warn <size>
+.. prompt:: bash $
+
+   ceph config set global mon_data_size_warn <size>
 
 AUTH_INSECURE_GLOBAL_ID_RECLAIM
 _______________________________
@@ -147,33 +151,43 @@ be necessary until all ceph clients have been upgraded), and the
 allows monitors to detect clients with insecure reclaim early by forcing them to
 reconnect right after they first authenticate).
 
-You can identify which client(s) are using unpatched ceph client code with::
+You can identify which client(s) are using unpatched ceph client code with:
 
-  ceph health detail
+.. prompt:: bash $
+
+   ceph health detail
 
 Clients' global_id reclaim behavior can also seen in the
 ``global_id_status`` field in the dump of clients connected to an
 individual monitor (``reclaim_insecure`` means the client is
-unpatched and is contributing to this health alert)::
+unpatched and is contributing to this health alert):
 
-  ceph tell mon.\* sessions
+.. prompt:: bash $
+
+   ceph tell mon.\* sessions
 
 We strongly recommend that all clients in the system are upgraded to a
 newer version of Ceph that correctly reclaims global_id values.  Once
 all clients have been updated, you can stop allowing insecure reconnections
-with::
+with:
 
-  ceph config set mon auth_allow_insecure_global_id_reclaim false
+.. prompt:: bash $
+
+   ceph config set mon auth_allow_insecure_global_id_reclaim false
 
 If it is impractical to upgrade all clients immediately, you can silence
-this warning temporarily with::
+this warning temporarily with:
 
-  ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM 1w   # 1 week
+.. prompt:: bash $
 
-Although we do NOT recommend doing so, you can also disable this warning indefinitely
-with::
+   ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM 1w   # 1 week
 
-  ceph config set mon mon_warn_on_insecure_global_id_reclaim false
+Although we do NOT recommend doing so, you can also disable this warning
+indefinitely with:
+
+.. prompt:: bash $
+
+   ceph config set mon mon_warn_on_insecure_global_id_reclaim false
 
 AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED
 _______________________________________
@@ -187,19 +201,25 @@ versions of Ceph that correctly and securely reclaim their global_id.
 If the ``AUTH_INSECURE_GLOBAL_ID_RECLAIM`` health alert has not also been raised and
 the ``auth_expose_insecure_global_id_reclaim`` setting has not been disabled (it is
 on by default), then there are currently no clients connected that need to be
-upgraded, and it is safe to disallow insecure global_id reclaim with::
+upgraded, and it is safe to disallow insecure global_id reclaim with:
 
-  ceph config set mon auth_allow_insecure_global_id_reclaim false
+.. prompt:: bash $
+
+   ceph config set mon auth_allow_insecure_global_id_reclaim false
 
 If there are still clients that need to be upgraded, then this alert can be
-silenced temporarily with::
+silenced temporarily with:
 
-  ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED 1w   # 1 week
+.. prompt:: bash $
+
+   ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED 1w   # 1 week
 
 Although we do NOT recommend doing so, you can also disable this warning indefinitely
-with::
+with:
 
-  ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false
+.. prompt:: bash $
+
+   ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false
 
 
 Manager
