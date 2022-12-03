@@ -9,18 +9,20 @@ library.
 Create an isa profile
 =====================
 
-To create a new *isa* erasure code profile::
+To create a new *isa* erasure code profile:
 
-        ceph osd erasure-code-profile set {name} \
-             plugin=isa \
-             technique={reed_sol_van|cauchy} \
-             [k={data-chunks}] \
-             [m={coding-chunks}] \
-             [crush-root={root}] \
-             [crush-failure-domain={bucket-type}] \
-             [crush-device-class={device-class}] \
-             [directory={directory}] \
-             [--force]
+.. prompt:: bash $
+
+   ceph osd erasure-code-profile set {name} \
+     plugin=isa \
+     technique={reed_sol_van|cauchy} \
+     [k={data-chunks}] \
+     [m={coding-chunks}] \
+     [crush-root={root}] \
+     [crush-failure-domain={bucket-type}] \
+     [crush-device-class={device-class}] \
+     [directory={directory}] \
+     [--force]
 
 Where:
 
