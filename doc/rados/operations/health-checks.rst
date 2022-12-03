@@ -968,10 +968,12 @@ requests to the pool may block while data is flushed and evicted
 from the cache, a state that normally leads to very high latencies and
 poor performance.
 
-The cache pool target size can be adjusted with::
+The cache pool target size can be adjusted with:
 
-  ceph osd pool set <cache-pool-name> target_max_bytes <bytes>
-  ceph osd pool set <cache-pool-name> target_max_objects <objects>
+.. prompt:: bash $
+
+   ceph osd pool set <cache-pool-name> target_max_bytes <bytes>
+   ceph osd pool set <cache-pool-name> target_max_objects <objects>
 
 Normal cache flush and evict activity may also be throttled due to reduced
 availability or performance of the base tier, or overall cluster load.
@@ -1000,13 +1002,17 @@ balanced distribution of data because some PGs have roughly twice as
 much data as others.
 
 This is easily corrected by setting the ``pg_num`` value for the
-affected pool(s) to a nearby power of two::
+affected pool(s) to a nearby power of two:
 
-  ceph osd pool set <pool-name> pg_num <value>
+.. prompt:: bash $
 
-This health warning can be disabled with::
+   ceph osd pool set <pool-name> pg_num <value>
 
-  ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
+This health warning can be disabled with:
+
+.. prompt:: bash $
+
+   ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
 
 POOL_TOO_FEW_PGS
 ________________
@@ -1019,18 +1025,24 @@ generated if the ``pg_autoscale_mode`` property on the pool is set to
 ``warn``.
 
 To disable the warning, you can disable auto-scaling of PGs for the
-pool entirely with::
+pool entirely with:
 
-  ceph osd pool set <pool-name> pg_autoscale_mode off
+.. prompt:: bash $
 
-To allow the cluster to automatically adjust the number of PGs,::
+   ceph osd pool set <pool-name> pg_autoscale_mode off
 
-  ceph osd pool set <pool-name> pg_autoscale_mode on
+To allow the cluster to automatically adjust the number of PGs,:
+
+.. prompt:: bash $
+
+   ceph osd pool set <pool-name> pg_autoscale_mode on
 
 You can also manually set the number of PGs for the pool to the
-recommended amount with::
+recommended amount with:
 
-  ceph osd pool set <pool-name> pg_num <new-pg-num>
+.. prompt:: bash $
+
+   ceph osd pool set <pool-name> pg_num <new-pg-num>
 
 Please refer to :ref:`choosing-number-of-placement-groups` and
 :ref:`pg-autoscaler` for more information.
@@ -1050,9 +1062,11 @@ higher load on the Manager and Monitor daemons.
 The simplest way to mitigate the problem is to increase the number of
 OSDs in the cluster by adding more hardware.  Note that the OSD count
 used for the purposes of this health check is the number of "in" OSDs,
-so marking "out" OSDs "in" (if there are any) can also help::
+so marking "out" OSDs "in" (if there are any) can also help:
 
-  ceph osd in <osd id(s)>
+.. prompt:: bash $
+
+   ceph osd in <osd id(s)>
 
 Please refer to :ref:`choosing-number-of-placement-groups` for more
 information.
@@ -1068,18 +1082,24 @@ on the Manager and Monitor daemons.  This warning is generated if the
 ``pg_autoscale_mode`` property on the pool is set to ``warn``.
 
 To disable the warning, you can disable auto-scaling of PGs for the
-pool entirely with::
+pool entirely with:
 
-  ceph osd pool set <pool-name> pg_autoscale_mode off
+.. prompt:: bash $
 
-To allow the cluster to automatically adjust the number of PGs,::
+   ceph osd pool set <pool-name> pg_autoscale_mode off
 
-  ceph osd pool set <pool-name> pg_autoscale_mode on
+To allow the cluster to automatically adjust the number of PGs,:
+
+.. prompt:: bash $
+
+   ceph osd pool set <pool-name> pg_autoscale_mode on
 
 You can also manually set the number of PGs for the pool to the
-recommended amount with::
+recommended amount with:
 
-  ceph osd pool set <pool-name> pg_num <new-pg-num>
+.. prompt:: bash $
+
+   ceph osd pool set <pool-name> pg_num <new-pg-num>
 
 Please refer to :ref:`choosing-number-of-placement-groups` and
 :ref:`pg-autoscaler` for more information.
@@ -1093,9 +1113,11 @@ but the value(s) exceed the total available storage (either by
 themselves or in combination with other pools' actual usage).
 
 This is usually an indication that the ``target_size_bytes`` value for
-the pool is too large and should be reduced or set to zero with::
+the pool is too large and should be reduced or set to zero with:
 
-  ceph osd pool set <pool-name> target_size_bytes 0
+.. prompt:: bash $
+
+   ceph osd pool set <pool-name> target_size_bytes 0
 
 For more information, see :ref:`specifying_pool_target_size`.
 
@@ -1108,9 +1130,11 @@ Only one of these properties should be non-zero. If both are set,
 ``target_size_ratio`` takes precedence and ``target_size_bytes`` is
 ignored.
 
-To reset ``target_size_bytes`` to zero::
+To reset ``target_size_bytes`` to zero:
 
-  ceph osd pool set <pool-name> target_size_bytes 0
+.. prompt:: bash $
+
+   ceph osd pool set <pool-name> target_size_bytes 0
 
 For more information, see :ref:`specifying_pool_target_size`.
 
@@ -1132,9 +1156,11 @@ when the PG count is adjusted from the data migration that is needed
 when ``pgp_num`` is changed.
 
 This is normally resolved by setting ``pgp_num`` to match ``pg_num``,
-triggering the data migration, with::
+triggering the data migration, with:
 
-  ceph osd pool set <pool> pgp_num <pg-num-value>
+.. prompt:: bash $
+
+   ceph osd pool set <pool> pgp_num <pg-num-value>
 
 MANY_OBJECTS_PER_PG
 ___________________
@@ -1162,14 +1188,18 @@ A pool exists that contains one or more objects but has not been
 tagged for use by a particular application.
 
 Resolve this warning by labeling the pool for use by an application.  For
-example, if the pool is used by RBD,::
+example, if the pool is used by RBD,:
 
-  rbd pool init <poolname>
+.. prompt:: bash $
+
+   rbd pool init <poolname>
 
 If the pool is being used by a custom application 'foo', you can also label
-via the low-level command::
+via the low-level command:
 
-  ceph osd pool application enable foo
+.. prompt:: bash $
+
+   ceph osd pool application enable foo
 
 For more information, see :ref:`associate-pool-to-application`.
 
@@ -1180,10 +1210,12 @@ One or more pools has reached (or is very close to reaching) its
 quota.  The threshold to trigger this error condition is controlled by
 the ``mon_pool_quota_crit_threshold`` configuration option.
 
-Pool quotas can be adjusted up or down (or removed) with::
+Pool quotas can be adjusted up or down (or removed) with:
 
-  ceph osd pool set-quota <pool> max_bytes <bytes>
-  ceph osd pool set-quota <pool> max_objects <objects>
+.. prompt:: bash $
+
+   ceph osd pool set-quota <pool> max_bytes <bytes>
+   ceph osd pool set-quota <pool> max_objects <objects>
 
 Setting the quota value to 0 will disable the quota.
 
@@ -1195,10 +1227,12 @@ One or more pools is approaching a configured fullness threshold.
 One threshold that can trigger this warning condition is the
 ``mon_pool_quota_warn_threshold`` configuration option.
 
-Pool quotas can be adjusted up or down (or removed) with::
+Pool quotas can be adjusted up or down (or removed) with:
 
-  ceph osd pool set-quota <pool> max_bytes <bytes>
-  ceph osd pool set-quota <pool> max_objects <objects>
+.. prompt:: bash $
+
+   ceph osd pool set-quota <pool> max_bytes <bytes>
+   ceph osd pool set-quota <pool> max_objects <objects>
 
 Setting the quota value to 0 will disable the quota.
 
@@ -1231,9 +1265,11 @@ Read or write requests to unfound objects will block.
 
 Ideally, a down OSD can be brought back online that has the more
 recent copy of the unfound object.  Candidate OSDs can be identified from the
-peering state for the PG(s) responsible for the unfound object::
+peering state for the PG(s) responsible for the unfound object:
 
-  ceph tell <pgid> query
+.. prompt:: bash $
+
+   ceph tell <pgid> query
 
 If the latest copy of the object is not available, the cluster can be
 told to roll back to a previous version of the object. See
@@ -1247,17 +1283,23 @@ be an indication of extreme load, a slow storage device, or a software
 bug.
 
 The request queue for the daemon in question can be queried with the
-following command, executed from the daemon's host::
+following command, executed from the daemon's host:
 
-  ceph daemon osd.<id> ops
+.. prompt:: bash $
 
-A summary of the slowest recent requests can be seen with::
+   ceph daemon osd.<id> ops
 
-  ceph daemon osd.<id> dump_historic_ops
+A summary of the slowest recent requests can be seen with:
 
-The location of an OSD can be found with::
+.. prompt:: bash $
 
-  ceph osd find osd.<id>
+   ceph daemon osd.<id> dump_historic_ops
+
+The location of an OSD can be found with:
+
+.. prompt:: bash $
+
+   ceph osd find osd.<id>
 
 PG_NOT_SCRUBBED
 _______________
