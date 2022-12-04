@@ -1211,9 +1211,11 @@ PGs will not (deep) scrub if they are not flagged as *clean*, which may
 happen if they are misplaced or degraded (see *PG_AVAILABILITY* and
 *PG_DEGRADED* above).
 
-You can manually initiate a scrub of a clean PG with::
+You can manually initiate a scrub of a clean PG with:
 
-  ceph pg deep-scrub <pgid>
+.. prompt:: bash $
+
+   ceph pg deep-scrub <pgid>
 
 
 PG_SLOW_SNAP_TRIMMING
@@ -1247,23 +1249,31 @@ yet been archived (acknowledged) by the administrator.  This may
 indicate a software bug, a hardware problem (e.g., a failing disk), or
 some other problem.
 
-New crashes can be listed with::
+New crashes can be listed with:
 
-  ceph crash ls-new
+.. prompt:: bash $
 
-Information about a specific crash can be examined with::
+   ceph crash ls-new
 
-  ceph crash info <crash-id>
+Information about a specific crash can be examined with:
+
+.. prompt:: bash $
+
+   ceph crash info <crash-id>
 
 This warning can be silenced by "archiving" the crash (perhaps after
 being examined by an administrator) so that it does not generate this
-warning::
+warning:
 
-  ceph crash archive <crash-id>
+.. prompt:: bash $
 
-Similarly, all new crashes can be archived with::
+   ceph crash archive <crash-id>
 
-  ceph crash archive-all
+Similarly, all new crashes can be archived with:
+
+.. prompt:: bash $
+
+   ceph crash archive-all
 
 Archived crashes will still be visible via ``ceph crash ls`` but not
 ``ceph crash ls-new``.
@@ -1271,9 +1281,53 @@ Archived crashes will still be visible via ``ceph crash ls`` but not
 The time period for what "recent" means is controlled by the option
 ``mgr/crash/warn_recent_interval`` (default: two weeks).
 
-These warnings can be disabled entirely with::
+These warnings can be disabled entirely with:
 
-  ceph config set mgr/crash/warn_recent_interval 0
+.. prompt:: bash $
+
+   ceph config set mgr/crash/warn_recent_interval 0
+
+RECENT_MGR_MODULE_CRASH
+_______________________
+
+One or more ceph-mgr modules has crashed recently, and the crash as
+not yet been archived (acknowledged) by the administrator.  This
+generally indicates a software bug in one of the software modules run
+inside the ceph-mgr daemon.  Although the module that experienced the
+problem maybe be disabled as a result, the function of other modules
+is normally unaffected.
+
+As with the *RECENT_CRASH* health alert, the crash can be inspected with:
+
+.. prompt:: bash $
+
+   ceph crash info <crash-id>
+
+This warning can be silenced by "archiving" the crash (perhaps after
+being examined by an administrator) so that it does not generate this
+warning:
+
+.. prompt:: bash $
+
+   ceph crash archive <crash-id>
+
+Similarly, all new crashes can be archived with:
+
+.. prompt:: bash $
+
+   ceph crash archive-all
+
+Archived crashes will still be visible via ``ceph crash ls`` but not
+``ceph crash ls-new``.
+
+The time period for what "recent" means is controlled by the option
+``mgr/crash/warn_recent_interval`` (default: two weeks).
+
+These warnings can be disabled entirely with:
+
+.. prompt:: bash $
+
+   ceph config set mgr/crash/warn_recent_interval 0
 
 TELEMETRY_CHANGED
 _________________
@@ -1288,21 +1342,27 @@ report, Ceph will require the administrator to re-enable telemetry to
 ensure they have an opportunity to (re)review what information will be
 shared.
 
-To review the contents of the telemetry report,::
+To review the contents of the telemetry report:
 
-  ceph telemetry show
+.. prompt:: bash $
+
+   ceph telemetry show
 
 Note that the telemetry report consists of several optional channels
 that may be independently enabled or disabled.  For more information, see
 :ref:`telemetry`.
 
-To re-enable telemetry (and make this warning go away),::
+To re-enable telemetry (and make this warning go away):
 
-  ceph telemetry on
+.. prompt:: bash $
 
-To disable telemetry (and make this warning go away),::
+   ceph telemetry on
 
-  ceph telemetry off
+To disable telemetry (and make this warning go away):
+
+.. prompt:: bash $
+
+   ceph telemetry off
 
 AUTH_BAD_CAPS
 _____________
@@ -1316,16 +1376,20 @@ capabilities were set with an older version of Ceph that did not
 properly validate their syntax, or if the syntax of the capabilities
 has changed.
 
-The user in question can be removed with::
+The user in question can be removed with:
 
-  ceph auth rm <entity-name>
+.. prompt:: bash $
+
+   ceph auth rm <entity-name>
 
 (This will resolve the health alert, but obviously clients will not be
 able to authenticate as that user.)
 
-Alternatively, the capabilities for the user can be updated with::
+Alternatively, the capabilities for the user can be updated with:
 
-  ceph auth <entity-name> <daemon-type> <caps> [<daemon-type> <caps> ...]
+.. prompt:: bash $
+
+   ceph auth <entity-name> <daemon-type> <caps> [<daemon-type> <caps> ...]
 
 For more information about auth capabilities, see :ref:`user-management`.
 
@@ -1342,9 +1406,11 @@ This option is normally set to five or ten minutes--enough time for a
 host to power-cycle or reboot.
 
 This warning can silenced by setting the
-``mon_warn_on_osd_down_out_interval_zero`` to false::
+``mon_warn_on_osd_down_out_interval_zero`` to false:
 
-  ceph config global mon mon_warn_on_osd_down_out_interval_zero false
+.. prompt:: bash $
+
+   ceph config global mon mon_warn_on_osd_down_out_interval_zero false
 
 DASHBOARD_DEBUG
 _______________
@@ -1355,6 +1421,8 @@ a Python traceback. This behaviour should be disabled in production
 environments because such a traceback might contain and expose sensible
 information.
 
-The debug mode can be disabled with::
+The debug mode can be disabled with:
 
-  ceph dashboard debug disable
+.. prompt:: bash $
+
+   ceph dashboard debug disable
