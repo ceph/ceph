@@ -2003,15 +2003,11 @@ public:
   /// Update lcod for fromosd
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
-    eversion_t lcod) {
-    peer_last_complete_ondisk[fromosd] = lcod;
-  }
+    eversion_t lcod);
 
   /// Update lcod
   void update_last_complete_ondisk(
-    eversion_t lcod) {
-    last_complete_ondisk = lcod;
-  }
+    eversion_t lcod);
 
   /// Update state to reflect recovery up to version
   void recovery_committed_to(eversion_t version);
