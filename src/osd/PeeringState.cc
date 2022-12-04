@@ -4558,6 +4558,24 @@ void PeeringState::set_revert_with_targets(
   }
 }
 
+void PeeringState::update_peer_last_complete_ondisk(
+  pg_shard_t fromosd,
+  eversion_t lcod) {
+  psdout(20) << __func__
+             << " updating peer_last_complete_ondisk"
+             << " of osd: "<< fromosd << " to: "
+             << lcod << dendl;
+  peer_last_complete_ondisk[fromosd] = lcod;
+}
+
+void PeeringState::update_last_complete_ondisk(
+  eversion_t lcod) {
+  psdout(20) << __func__
+             << " updating last_complete_ondisk"
+             << " to: " << lcod << dendl;
+  last_complete_ondisk = lcod;
+}
+
 void PeeringState::prepare_backfill_for_missing(
   const hobject_t &soid,
   const eversion_t &version,
