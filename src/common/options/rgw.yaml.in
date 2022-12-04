@@ -3692,3 +3692,10 @@ options:
   default: tank
   services:
   - rgw
+- name: rgw_perf_counters_cache
+  type: bool
+  level: dev
+  default: false
+  desc: If set to true, rgw creates labeled perf counters and stores them in it's perf counters cache.
+  services:
+  - rgw
