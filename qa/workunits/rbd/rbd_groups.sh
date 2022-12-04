@@ -1,4 +1,6 @@
-#!/bin/sh -ex
+#!/usr/bin/env bash
+
+set -ex
 
 #
 # rbd_consistency_groups.sh - test consistency groups cli commands
