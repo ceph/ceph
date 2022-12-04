@@ -120,6 +120,7 @@ class CherryPyConfig(object):
         # Initialize custom handlers.
         cherrypy.tools.authenticate = AuthManagerTool()
         self.configure_cors()
+        self.configure_csp()
         cherrypy.tools.plugin_hooks_filter_request = cherrypy.Tool(
             'before_handler',
             lambda: PLUGIN_MANAGER.hook.filter_request_before_handler(request=cherrypy.request),
@@ -234,6 +235,18 @@ class CherryPyConfig(object):
             }
             self.update_cherrypy_config(config)
 
+    def configure_csp(self):
+        """
+        Allow to embed page from frame-ancestors other than self if frame_ancestors option is set.
+        """
+        frame_ancestors_urls = mgr.get_localized_module_option('frame_ancestors_sources', '')
+        frame_ancestors_list = [url.strip() for url in frame_ancestors_urls.split(',')]
+        host_sources = "'self' " + " ".join(frame_ancestors_list)
+        csp_header = f'frame-ancestors {host_sources};'
+        cherrypy.config.update({
+            'response.headers.content-security-policy': csp_header
+        })
+
     def cors_tool(self):
         '''
         Handle both simple and complex CORS requests
@@ -335,6 +348,7 @@ class Module(MgrModule, CherryPyConfig):
                min=400, max=599),
         Option(name='redirect_resolve_ip_addr', type='bool', default=False),
         Option(name='cross_origin_url', type='str', default=''),
+        Option(name='frame_ancestors_sources', type='str', default=''),
     ]
     MODULE_OPTIONS.extend(options_schema_list())
     for options in PLUGIN_MANAGER.hook.get_options() or []:
