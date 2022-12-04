@@ -200,3 +200,5 @@ The actual dump is similar to the schema, except that average values are grouped
    }
  }
 
+Labeled Perf Counters
+---------------------

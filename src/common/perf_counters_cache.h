@@ -1,5 +1,4 @@
-#ifndef RGW_PERFCOUNTERS_CACHE_H
-#define RGW_PERFCOUNTERS_CACHE_H
+#pragma once
 
 #include "common/perf_counters.h"
 #include "common/ceph_context.h"
@@ -179,11 +178,17 @@ public:
   void tset(std::string label, int indx, utime_t amt) {
     auto counters = get(label);
     if(counters) {
+      utime_t base_counters_amt = base_counters->tget(indx);
       utime_t old_amt = counters->tget(indx);
       counters->tset(indx, amt);
-      // TODO write a unit test for possible values of delta
-      utime_t delta = old_amt - amt;
-      base_counters->tinc(indx, delta);
+      if(old_amt > amt) {
+        utime_t delta = old_amt - amt;
+        base_counters_amt -= delta;
+      } else if(old_amt < amt) {
+        utime_t delta = amt - old_amt;
+        base_counters_amt += delta;
+      }
+      base_counters->tset(indx, base_counters_amt);
     }
   }
 
@@ -193,6 +198,8 @@ public:
       ceph_assert(it->second->counters);
       cct->get_perfcounters_collection()->remove(it->second->counters);
       delete it->second->counters;
+      // delete CacheEntry*
+      delete it->second;
       curr_size--;
     }
   }
@@ -207,5 +214,3 @@ public:
   ~PerfCountersCache() {}
 
 };
-
-#endif
