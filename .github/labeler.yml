@@ -146,6 +146,7 @@ core:
   - src/tools/monmaptool.cc
   - src/tools/osdmaptool.cc
   - src/tools/rados/**
+  - src/test/librados/**
   - src/test/osd/**
 
 crimson:
