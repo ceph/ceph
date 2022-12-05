@@ -60,6 +60,10 @@ private:
 
 public:
 
+  size_t get_cache_size() {
+    return curr_size;
+  }
+
   PerfCounters* get(std::string key) {
     auto got = cache.find(key);
     if(got != cache.end()) {
@@ -202,13 +206,24 @@ public:
       delete it->second;
       curr_size--;
     }
+    ceph_assert(base_counters);
+    cct->get_perfcounters_collection()->remove(base_counters);
+    delete base_counters;
   }
 
   PerfCountersCache(CephContext *_cct, bool _eviction, size_t _target_size, int _lower_bound, int _upper_bound, 
       std::function<void(PerfCountersBuilder*)> _lpcb_init, std::string _base_counters_name) : cct(_cct), 
       eviction(_eviction), target_size(_target_size), lower_bound(_lower_bound), upper_bound(_upper_bound), 
       lpcb_init(_lpcb_init) {
-      base_counters = add(_base_counters_name, false);
+
+      // create base counters
+      auto lpcb = new PerfCountersBuilder(cct, _base_counters_name, lower_bound, upper_bound, false);
+      lpcb_init(lpcb);
+
+      base_counters = lpcb->create_perf_counters();
+      delete lpcb;
+
+      cct->get_perfcounters_collection()->add(base_counters);
   }
 
   ~PerfCountersCache() {}

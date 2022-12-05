@@ -50,18 +50,11 @@ int main(int argc, char **argv) {
   return RUN_ALL_TESTS();
 }
 
-TEST(PerfCountersCache, NoCacheTest) {
-  AdminSocketClient client(get_rand_socket_path());
-  std::string message;
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf dump\" }", &message));
-  ASSERT_EQ("{}\n", message);
-}
-
 enum {
   TEST_PERFCOUNTERS1_ELEMENT_FIRST = 200,
-  TEST_PERFCOUNTERS1_ELEMENT_1,
-  TEST_PERFCOUNTERS1_ELEMENT_2,
-  TEST_PERFCOUNTERS1_ELEMENT_3,
+  TEST_PERFCOUNTERS_COUNTER,
+  TEST_PERFCOUNTERS_TIME,
+  TEST_PERFCOUNTERS_TIME_AVG,
   TEST_PERFCOUNTERS1_ELEMENT_LAST,
 };
 
@@ -78,16 +71,16 @@ std::string sd(const char *c)
 }
 
 void add_test_counters(PerfCountersBuilder *pcb) {
-  pcb->add_u64(TEST_PERFCOUNTERS1_ELEMENT_1, "element1");
-  pcb->add_time(TEST_PERFCOUNTERS1_ELEMENT_2, "element2");
-  pcb->add_time_avg(TEST_PERFCOUNTERS1_ELEMENT_3, "element3");
+  pcb->add_u64(TEST_PERFCOUNTERS_COUNTER, "test_counter");
+  pcb->add_time(TEST_PERFCOUNTERS_TIME, "test_time");
+  pcb->add_time_avg(TEST_PERFCOUNTERS_TIME_AVG, "test_time_avg");
 }
 
-static PerfCountersCache* setup_test_perf_counters_cache(CephContext *cct)
+
+static PerfCountersCache* setup_test_perf_counters_cache(CephContext *cct, bool eviction = false, uint64_t target_size = 100)
 {
-  uint64_t target_size = 3;
-  bool eviction = false;
-  return new PerfCountersCache(cct, eviction, target_size, TEST_PERFCOUNTERS1_ELEMENT_FIRST, TEST_PERFCOUNTERS1_ELEMENT_LAST, add_test_counters, "test_base_counters");
+  std::string base_counters_name = "test_base_counters";
+  return new PerfCountersCache(cct, eviction, target_size, TEST_PERFCOUNTERS1_ELEMENT_FIRST, TEST_PERFCOUNTERS1_ELEMENT_LAST, add_test_counters, base_counters_name);
 }
 
 void cleanup_test(PerfCountersCache *pcc) {
@@ -95,185 +88,141 @@ void cleanup_test(PerfCountersCache *pcc) {
   delete pcc;
 }
 
-TEST(PerfCountersCache, SingleCacheEntry) {
+TEST(PerfCountersCache, NoCacheTest) {
+  AdminSocketClient client(get_rand_socket_path());
+  std::string message;
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf dump\" }", &message));
+  ASSERT_EQ("{}\n", message);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf schema\" }", &message));
+  ASSERT_EQ("{}\n", message);
+}
+
+TEST(PerfCountersCache, AddLabel) {
   PerfCountersCache *pcc = setup_test_perf_counters_cache(g_ceph_context);
+  size_t cache_size = pcc->get_cache_size();
+  ASSERT_EQ(cache_size, 0);
+
+  std::string label = "testlabel1";
+  pcc->add(label);
+  cache_size = pcc->get_cache_size();
+  ASSERT_EQ(cache_size, 1);
+
+  std::string label2 = "testlabel2";
+  std::string label3 = "testlabel3";
+  pcc->add(label2);
+  pcc->add(label3);
+  cache_size = pcc->get_cache_size();
+  ASSERT_EQ(cache_size, 3);
+  cleanup_test(pcc);
+}
+
+TEST(PerfCountersCache, TestEviction) {
+  PerfCountersCache *pcc = setup_test_perf_counters_cache(g_ceph_context, true, 4);
+  std::string label1 = "testlabel1";
+  std::string label2 = "testlabel2";
+  std::string label3 = "testlabel3";
+  std::string label4 = "testlabel4";
+  std::string label5 = "testlabel5";
+  std::string label6 = "testlabel6";
+
+  pcc->add(label1);
+  pcc->add(label2);
+  pcc->add(label3);
+  pcc->add(label4);
+  size_t cache_size = pcc->get_cache_size();
+  ASSERT_EQ(cache_size, 4);
 
   AdminSocketClient client(get_rand_socket_path());
   std::string message;
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\" }", &message));
-  ASSERT_EQ("{}\n", message);
-  //ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf dump\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"testlabel1\":{},\"testlabel2\":{},\"testlabel3\":{},\"testlabel4\":{}}", message);
 
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf schema\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"testlabel1\":{},\"testlabel2\":{},\"testlabel3\":{},\"testlabel4\":{}}", message);
 
+  pcc->add(label5);
+  pcc->add(label6);
+  cache_size = pcc->get_cache_size();
+  ASSERT_EQ(cache_size, 4);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf dump\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"testlabel3\":{},\"testlabel4\":{},\"testlabel5\":{},\"testlabel6\":{}}", message);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf schema\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"testlabel3\":{},\"testlabel4\":{},\"testlabel5\":{},\"testlabel6\":{}}", message);
+  cleanup_test(pcc);
+}
+
+TEST(PerfCountersCache, TestNoEviction) {
+  PerfCountersCache *pcc = setup_test_perf_counters_cache(g_ceph_context, false, 3);
+  std::string label1 = "testlabel1";
+  std::string label2 = "testlabel2";
+  std::string label3 = "testlabel3";
+  std::string label4 = "testlabel4";
+  std::string label5 = "testlabel5";
+
+  pcc->add(label1);
+  pcc->add(label2);
+  pcc->add(label3);
+  size_t cache_size = pcc->get_cache_size();
+  ASSERT_EQ(cache_size, 3);
+
+  AdminSocketClient client(get_rand_socket_path());
+  std::string message;
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf dump\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"testlabel1\":{},\"testlabel2\":{},\"testlabel3\":{}}", message);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf schema\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"testlabel1\":{},\"testlabel2\":{},\"testlabel3\":{}}", message);
+
+  pcc->add(label4);
+  pcc->add(label5);
+  cache_size = pcc->get_cache_size();
+  ASSERT_EQ(cache_size, 5);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf dump\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"testlabel1\":{},\"testlabel2\":{},\"testlabel3\":{},\"testlabel4\":{},\"testlabel5\":{}}", message);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf schema\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"testlabel1\":{},\"testlabel2\":{},\"testlabel3\":{},\"testlabel4\":{},\"testlabel5\":{}}", message);
+  cleanup_test(pcc);
+}
+
+TEST(PerfCountersCache, TestCacheCounter) {
+  PerfCountersCache *pcc = setup_test_perf_counters_cache(g_ceph_context, false, 3);
+  std::string label1 = "testlabel1";
+  std::string label2 = "testlabel2";
+  std::string label3 = "testlabel3";
+
+  pcc->add(label1);
+  pcc->add(label2);
+
+  // test inc()
+  pcc->inc(label1, TEST_PERFCOUNTERS_COUNTER, 1);
+  pcc->inc(label2, TEST_PERFCOUNTERS_COUNTER, 2);
+
+  AdminSocketClient client(get_rand_socket_path());
+  std::string message;
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf dump\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"testlabel1\":{\"test_counter\":1},\"testlabel2\":{\"test_counter\":2}}", message);
+
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf schema\", \"format\": \"json\"  }", &message));
+  ASSERT_EQ("{\"testlabel1\":{\"test_counter\":{\"type\":2,\"metric_type\":\"gauge\",\"value_type\":\"integer\",\"description\":\"\",\"nick\":\"\",\"priority\":0,\"units\":\"none\"}},\"testlabel2\":{\"test_counter\":{\"type\":2,\"metric_type\":\"gauge\",\"value_type\":\"integer\",\"description\":\"\",\"nick\":\"\",\"priority\":0,\"units\":\"none\"}}}", message);
+
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"test_base_counters\":{\"test_counter\":3,\"test_time\":0.000000000,\"test_time_avg\":{\"avgcount\":0,\"sum\":0.000000000,\"avgtime\":0.000000000}}}", message);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf schema\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"test_base_counters\":{\"test_counter\":{\"type\":2,\"metric_type\":\"gauge\",\"value_type\":\"integer\",\"description\":\"\",\"nick\":\"\",\"priority\":0,\"units\":\"none\"},\"test_time\":{\"type\":1,\"metric_type\":\"gauge\",\"value_type\":\"real\",\"description\":\"\",\"nick\":\"\",\"priority\":0,\"units\":\"none\"},\"test_time_avg\":{\"type\":5,\"metric_type\":\"gauge\",\"value_type\":\"real-integer-pair\",\"description\":\"\",\"nick\":\"\",\"priority\":0,\"units\":\"none\"}}}", message);
+
+  // test dec()
+  pcc->dec(label2, TEST_PERFCOUNTERS_COUNTER, 1);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf dump\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"testlabel1\":{\"test_counter\":1},\"testlabel2\":{\"test_counter\":1}}", message);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"test_base_counters\":{\"test_counter\":2,\"test_time\":0.000000000,\"test_time_avg\":{\"avgcount\":0,\"sum\":0.000000000,\"avgtime\":0.000000000}}}", message);
+
+  // test set_counters()
+  pcc->add(label3);
+  pcc->set_counter(label3, TEST_PERFCOUNTERS_COUNTER, 4);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"labeledperf dump\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"testlabel1\":{\"test_counter\":1},\"testlabel2\":{\"test_counter\":1},\"testlabel3\":{\"test_counter\":4}}", message);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &message));
+  ASSERT_EQ("{\"test_base_counters\":{\"test_counter\":6,\"test_time\":0.000000000,\"test_time_avg\":{\"avgcount\":0,\"sum\":0.000000000,\"avgtime\":0.000000000}}}", message);
 
   cleanup_test(pcc);
-
-  /*
-  PerfCountersCollection *coll = g_ceph_context->get_perfcounters_collection();
-  PerfCounters* fake_pf = setup_test_perfcounters1(g_ceph_context);
-  coll->add(fake_pf);
-  AdminSocketClient client(get_rand_socket_path());
-  std::string msg;
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":0,"
-	    "\"element2\":0.000000000,\"element3\":{\"avgcount\":0,\"sum\":0.000000000,\"avgtime\":0.000000000}}}"), msg);
-  fake_pf->inc(TEST_PERFCOUNTERS1_ELEMENT_1);
-  fake_pf->tset(TEST_PERFCOUNTERS1_ELEMENT_2, utime_t(0, 500000000));
-  fake_pf->tinc(TEST_PERFCOUNTERS1_ELEMENT_3, utime_t(100, 0));
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":1,"
-	    "\"element2\":0.500000000,\"element3\":{\"avgcount\":1,\"sum\":100.000000000,\"avgtime\":100.000000000}}}"), msg);
-  fake_pf->tinc(TEST_PERFCOUNTERS1_ELEMENT_3, utime_t());
-  fake_pf->tinc(TEST_PERFCOUNTERS1_ELEMENT_3, utime_t(20,0));
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":1,\"element2\":0.500000000,"
-	    "\"element3\":{\"avgcount\":3,\"sum\":120.000000000,\"avgtime\":40.000000000}}}"), msg);
-
-  fake_pf->reset();
-  msg.clear();
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":1,"
-	    "\"element2\":0.000000000,\"element3\":{\"avgcount\":0,\"sum\":0.000000000,\"avgtime\":0.000000000}}}"), msg);
-  */
 }
-
-/*
-
-static PerfCounters* setup_test_perfcounters1(CephContext *cct)
-{
-  PerfCountersBuilder bld(cct, "test_perfcounter_1",
-	  TEST_PERFCOUNTERS1_ELEMENT_FIRST, TEST_PERFCOUNTERS1_ELEMENT_LAST);
-  bld.add_u64(TEST_PERFCOUNTERS1_ELEMENT_1, "element1");
-  bld.add_time(TEST_PERFCOUNTERS1_ELEMENT_2, "element2");
-  bld.add_time_avg(TEST_PERFCOUNTERS1_ELEMENT_3, "element3");
-  return bld.create_perf_counters();
-}
-
-enum {
-  TEST_PERFCOUNTERS2_ELEMENT_FIRST = 400,
-  TEST_PERFCOUNTERS2_ELEMENT_FOO,
-  TEST_PERFCOUNTERS2_ELEMENT_BAR,
-  TEST_PERFCOUNTERS2_ELEMENT_LAST,
-};
-
-static PerfCounters* setup_test_perfcounter2(CephContext *cct)
-{
-  PerfCountersBuilder bld(cct, "test_perfcounter_2",
-	  TEST_PERFCOUNTERS2_ELEMENT_FIRST, TEST_PERFCOUNTERS2_ELEMENT_LAST);
-  bld.add_u64(TEST_PERFCOUNTERS2_ELEMENT_FOO, "foo");
-  bld.add_time(TEST_PERFCOUNTERS2_ELEMENT_BAR, "bar");
-  return bld.create_perf_counters();
-}
-
-TEST(PerfCounters, MultiplePerfCounters) {
-  PerfCountersCollection *coll = g_ceph_context->get_perfcounters_collection();
-  coll->clear();
-  PerfCounters* fake_pf1 = setup_test_perfcounters1(g_ceph_context);
-  PerfCounters* fake_pf2 = setup_test_perfcounter2(g_ceph_context);
-  coll->add(fake_pf1);
-  coll->add(fake_pf2);
-  AdminSocketClient client(get_rand_socket_path());
-  std::string msg;
-
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":0,\"element2\":0.000000000,\"element3\":"
-	    "{\"avgcount\":0,\"sum\":0.000000000,\"avgtime\":0.000000000}},\"test_perfcounter_2\":{\"foo\":0,\"bar\":0.000000000}}"), msg);
-
-  fake_pf1->inc(TEST_PERFCOUNTERS1_ELEMENT_1);
-  fake_pf1->inc(TEST_PERFCOUNTERS1_ELEMENT_1, 5);
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":6,\"element2\":0.000000000,\"element3\":"
-	    "{\"avgcount\":0,\"sum\":0.000000000,\"avgtime\":0.000000000}},\"test_perfcounter_2\":{\"foo\":0,\"bar\":0.000000000}}"), msg);
-
-  coll->reset(string("test_perfcounter_1"));
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":6,\"element2\":0.000000000,\"element3\":"
-	    "{\"avgcount\":0,\"sum\":0.000000000,\"avgtime\":0.000000000}},\"test_perfcounter_2\":{\"foo\":0,\"bar\":0.000000000}}"), msg);
-
-  fake_pf1->inc(TEST_PERFCOUNTERS1_ELEMENT_1);
-  fake_pf1->inc(TEST_PERFCOUNTERS1_ELEMENT_1, 6);
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":13,\"element2\":0.000000000,\"element3\":"
-	    "{\"avgcount\":0,\"sum\":0.000000000,\"avgtime\":0.000000000}},\"test_perfcounter_2\":{\"foo\":0,\"bar\":0.000000000}}"), msg);
-
-  coll->reset(string("all"));
-  msg.clear();
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":13,\"element2\":0.000000000,\"element3\":"
-	    "{\"avgcount\":0,\"sum\":0.000000000,\"avgtime\":0.000000000}},\"test_perfcounter_2\":{\"foo\":0,\"bar\":0.000000000}}"), msg);
-
-  coll->remove(fake_pf2);
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":13,\"element2\":0.000000000,"
-	    "\"element3\":{\"avgcount\":0,\"sum\":0.000000000,\"avgtime\":0.000000000}}}"), msg);
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf schema\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":{\"type\":2,\"metric_type\":\"gauge\",\"value_type\":\"integer\",\"description\":\"\",\"nick\":\"\",\"priority\":0,\"units\":\"none\"},\"element2\":{\"type\":1,\"metric_type\":\"gauge\",\"value_type\":\"real\",\"description\":\"\",\"nick\":\"\",\"priority\":0,\"units\":\"none\"},\"element3\":{\"type\":5,\"metric_type\":\"gauge\",\"value_type\":\"real-integer-pair\",\"description\":\"\",\"nick\":\"\",\"priority\":0,\"units\":\"none\"}}}"), msg);
-  coll->clear();
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ("{}", msg);
-}
-
-TEST(PerfCounters, ResetPerfCounters) {
-  AdminSocketClient client(get_rand_socket_path());
-  std::string msg;
-  PerfCountersCollection *coll = g_ceph_context->get_perfcounters_collection();
-  coll->clear();
-  PerfCounters* fake_pf1 = setup_test_perfcounters1(g_ceph_context);
-  coll->add(fake_pf1);
-
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf reset\", \"var\": \"all\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"success\":\"perf reset all\"}"), msg);
-
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf reset\", \"var\": \"test_perfcounter_1\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"success\":\"perf reset test_perfcounter_1\"}"), msg);
-
-  coll->clear();
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf reset\", \"var\": \"test_perfcounter_1\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"error\":\"Not find: test_perfcounter_1\"}"), msg);
-}
-
-enum {
-  TEST_PERFCOUNTERS3_ELEMENT_FIRST = 400,
-  TEST_PERFCOUNTERS3_ELEMENT_READ,
-  TEST_PERFCOUNTERS3_ELEMENT_LAST,
-};
-
-static std::shared_ptr<PerfCounters> setup_test_perfcounter3(CephContext* cct) {
-  PerfCountersBuilder bld(cct, "test_percounter_3",
-      TEST_PERFCOUNTERS3_ELEMENT_FIRST, TEST_PERFCOUNTERS3_ELEMENT_LAST);
-  bld.add_time_avg(TEST_PERFCOUNTERS3_ELEMENT_READ, "read_avg");
-  std::shared_ptr<PerfCounters> p(bld.create_perf_counters());
-  return p;
-}
-
-static void counters_inc_test(std::shared_ptr<PerfCounters> fake_pf) {
-  int i = 100000;
-  utime_t t;
-
-  // set to 1 nsec
-  t.set_from_double(0.000000001);
-  while (i--) {
-    // increase by one, make sure data.u64 equal to data.avgcount
-    fake_pf->tinc(TEST_PERFCOUNTERS3_ELEMENT_READ, t);
-  }
-}
-
-static void counters_readavg_test(std::shared_ptr<PerfCounters> fake_pf) {
-  int i = 100000;
-
-  while (i--) {
-    std::pair<uint64_t, uint64_t> dat = fake_pf->get_tavg_ns(TEST_PERFCOUNTERS3_ELEMENT_READ);
-    // sum and count should be identical as we increment TEST_PERCOUNTERS_ELEMENT_READ by 1 nsec eveytime
-    ASSERT_EQ(dat.first, dat.second);
-  }
-}
-
-TEST(PerfCounters, read_avg) {
-  std::shared_ptr<PerfCounters> fake_pf = setup_test_perfcounter3(g_ceph_context);
-
-  std::thread t1(counters_inc_test, fake_pf);
-  std::thread t2(counters_readavg_test, fake_pf);
-  t2.join();
-  t1.join();
-}
-*/
