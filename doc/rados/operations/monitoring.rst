@@ -13,19 +13,27 @@ Interactive mode
 ----------------
 
 To run the ``ceph`` tool in interactive mode, type ``ceph`` at the command line
-with no arguments.  For example:: 
+with no arguments.  For example:
+
+.. prompt:: bash $
 
 	ceph
-	ceph> health
-	ceph> status
-	ceph> quorum_status
-	ceph> mon stat
+
+.. prompt:: ceph>
+    :prompts: ceph>
+
+    health
+    status
+    quorum_status
+    mon stat
 
 Non-default paths
 -----------------
 
 If you specified non-default locations for your configuration or keyring,
-you may specify their locations::
+you may specify their locations:
+
+.. prompt:: bash $
 
    ceph -c /path/to/conf -k /path/to/keyring health
 
@@ -35,17 +43,24 @@ Checking a Cluster's Status
 After you start your cluster, and before you start reading and/or
 writing data, check your cluster's status first.
 
-To check a cluster's status, execute the following:: 
+To check a cluster's status, execute the following:
 
-	ceph status
+.. prompt:: bash $
+
+   ceph status
 	
-Or:: 
+Or:
 
-	ceph -s
+.. prompt:: bash $
 
-In interactive mode, type ``status`` and press **Enter**. ::
+   ceph -s
 
-	ceph> status
+In interactive mode, type ``status`` and press **Enter**:
+
+.. prompt:: ceph>
+    :prompts: ceph>
+   
+    ceph> status
 
 Ceph will print the cluster status. For example, a tiny Ceph demonstration
 cluster with one of each service may print the following:
@@ -88,14 +103,14 @@ a *cluster log* that records high level events about the whole system.
 This is logged to disk on monitor servers (as ``/var/log/ceph/ceph.log`` by
 default), but can also be monitored via the command line.
 
-To follow the cluster log, use the following command
+To follow the cluster log, use the following command:
 
-:: 
+.. prompt:: bash $
 
-	ceph -w
+   ceph -w
 
 Ceph will print the status of the system, followed by each log message as it
-is emitted.  For example:
+is emitted. For example:
 
 :: 
 
@@ -190,9 +205,12 @@ sent to a mgr, but it can be limited to a particular OSD's interactions by issui
 
 The following command will show all gathered network performance data by specifying a threshold of 0 and sending to the mgr.
 
+.. prompt:: bash $
+
+   ceph daemon /var/run/ceph/ceph-mgr.x.asok dump_osd_network 0
+
 ::
 
-    $ ceph daemon /var/run/ceph/ceph-mgr.x.asok dump_osd_network 0
     {
         "threshold": 0,
         "entries": [
@@ -274,50 +292,73 @@ Muting health checks
 
 Health checks can be muted so that they do not affect the overall
 reported status of the cluster.  Alerts are specified using the health
-check code (see :ref:`health-checks`)::
+check code (see :ref:`health-checks`):
 
-  ceph health mute <code>
+.. prompt:: bash $
+
+   ceph health mute <code>
 
 For example, if there is a health warning, muting it will make the
 cluster report an overall status of ``HEALTH_OK``.  For example, to
-mute an ``OSD_DOWN`` alert,::
+mute an ``OSD_DOWN`` alert,:
 
-  ceph health mute OSD_DOWN
+.. prompt:: bash $
+
+   ceph health mute OSD_DOWN
 
 Mutes are reported as part of the short and long form of the ``ceph health`` command.
-For example, in the above scenario, the cluster would report::
+For example, in the above scenario, the cluster would report:
 
-  $ ceph health
-  HEALTH_OK (muted: OSD_DOWN)
-  $ ceph health detail
-  HEALTH_OK (muted: OSD_DOWN)
-  (MUTED) OSD_DOWN 1 osds down
-      osd.1 is down
+.. prompt:: bash $
 
-A mute can be explicitly removed with::
+   ceph health
 
-  ceph health unmute <code>
+::
 
-For example,::
+   HEALTH_OK (muted: OSD_DOWN)
 
-  ceph health unmute OSD_DOWN
+.. prompt:: bash $
+
+   ceph health detail
+
+::
+
+   HEALTH_OK (muted: OSD_DOWN)
+   (MUTED) OSD_DOWN 1 osds down
+       osd.1 is down
+
+A mute can be explicitly removed with:
+
+.. prompt:: bash $
+
+   ceph health unmute <code>
+
+For example:
+
+.. prompt:: bash $
+
+   ceph health unmute OSD_DOWN
 
 A health check mute may optionally have a TTL (time to live)
 associated with it, such that the mute will automatically expire
 after the specified period of time has elapsed.  The TTL is specified as an optional
-duration argument, e.g.::
+duration argument, e.g.:
 
-  ceph health mute OSD_DOWN 4h    # mute for 4 hours
-  ceph health mute MON_DOWN 15m   # mute for 15  minutes
+.. prompt:: bash $
+
+   ceph health mute OSD_DOWN 4h    # mute for 4 hours
+   ceph health mute MON_DOWN 15m   # mute for 15  minutes
 
 Normally, if a muted health alert is resolved (e.g., in the example
 above, the OSD comes back up), the mute goes away.  If the alert comes
 back later, it will be reported in the usual way.
 
 It is possible to make a mute "sticky" such that the mute will remain even if the
-alert clears.  For example,::
+alert clears.  For example:
 
-  ceph health mute OSD_DOWN 1h --sticky   # ignore any/all down OSDs for next hour
+.. prompt:: bash $
+
+   ceph health mute OSD_DOWN 1h --sticky   # ignore any/all down OSDs for next hour
 
 Most health mutes also disappear if the extent of an alert gets worse.  For example,
 if there is one OSD down, and the alert is muted, the mute will disappear if one
@@ -341,9 +382,11 @@ Checking a Cluster's Usage Stats
 
 To check a cluster's data usage and data distribution among pools, you can
 use the ``df`` option. It is similar to Linux ``df``. Execute 
-the following::
+the following:
 
-	ceph df
+.. prompt:: bash $
+
+   ceph df
 
 The output of ``ceph df`` looks like this::
 
@@ -476,17 +519,23 @@ quorum status after you start the cluster and before reading and/or writing data
 quorum must be present when multiple monitors are running. You should also check
 monitor status periodically to ensure that they are running.
 
-To see display the monitor map, execute the following::
+To see display the monitor map, execute the following:
 
-	ceph mon stat
-	
-Or:: 
+.. prompt:: bash $
 
-	ceph mon dump
+   ceph mon stat
 	
-To check the quorum status for the monitor cluster, execute the following:: 
+Or:
+
+.. prompt:: bash $
+
+   ceph mon dump
 	
-	ceph quorum_status
+To check the quorum status for the monitor cluster, execute the following:
+	
+.. prompt:: bash $
+
+   ceph quorum_status
 
 Ceph will return the quorum status. For example, a Ceph  cluster consisting of
 three monitors may return the following:
@@ -535,13 +584,17 @@ Checking MDS Status
 
 Metadata servers provide metadata services for  CephFS. Metadata servers have
 two sets of states: ``up | down`` and ``active | inactive``. To ensure your
-metadata servers are ``up`` and ``active``,  execute the following:: 
+metadata servers are ``up`` and ``active``,  execute the following:
 
-	ceph mds stat
+.. prompt:: bash $
+
+   ceph mds stat
 	
-To display details of the metadata cluster, execute the following:: 
+To display details of the metadata cluster, execute the following:
 
-	ceph fs dump
+.. prompt:: bash $
+
+   ceph fs dump
 
 
 Checking Placement Group States
@@ -561,19 +614,25 @@ Using the Admin Socket
 The Ceph admin socket allows you to query a daemon via a socket interface. 
 By default, Ceph sockets reside under ``/var/run/ceph``. To access a daemon
 via the admin socket, login to the host running the daemon and use the 
-following command:: 
+following command:
 
-	ceph daemon {daemon-name}
-	ceph daemon {path-to-socket-file}
+.. prompt:: bash $
 
-For example, the following are equivalent::
+   ceph daemon {daemon-name}
+   ceph daemon {path-to-socket-file}
 
-    ceph daemon osd.0 foo
-    ceph daemon /var/run/ceph/ceph-osd.0.asok foo
+For example, the following are equivalent:
 
-To view the available admin socket commands, execute the following command:: 
+.. prompt:: bash $
 
-	ceph daemon {daemon-name} help
+   ceph daemon osd.0 foo
+   ceph daemon /var/run/ceph/ceph-osd.0.asok foo
+
+To view the available admin socket commands, execute the following command:
+
+.. prompt:: bash $
+
+   ceph daemon {daemon-name} help
 
 The admin socket command enables you to show and set your configuration at
 runtime. See `Viewing a Configuration at Runtime`_ for details.
