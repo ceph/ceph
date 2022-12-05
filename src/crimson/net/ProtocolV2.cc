@@ -166,12 +166,6 @@ ProtocolV2::ProtocolV2(ChainedDispatchers& dispatchers,
 
 ProtocolV2::~ProtocolV2() {}
 
-bool ProtocolV2::is_connected() const {
-  return state == state_t::READY ||
-         state == state_t::ESTABLISHING ||
-         state == state_t::REPLACING;
-}
-
 void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
                                const entity_name_t& _peer_name)
 {
