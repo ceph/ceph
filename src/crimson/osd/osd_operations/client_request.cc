@@ -15,6 +15,7 @@
 #include "crimson/osd/osd_connection_priv.h"
 #include "osd/object_state_fmt.h"
 #include "osd/osd_perf_counters.h"
+#include "common/mClockCommon.h"
 
 SET_SUBSYS(osd);
 
@@ -121,7 +122,7 @@ ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
   auto reply = crimson::make_message<MOSDOpReply>(
     m.get(), err, pg->get_osdmap_epoch(),
     m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK),
-    !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
+    !m->has_flag(CEPH_OSD_FLAG_RETURNVEC), 1, dmc::PhaseType::reservation);
   reply->set_reply_versions(eversion_t(), 0);
   reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
   // TODO: gate the crosscore sending
@@ -384,7 +385,8 @@ ClientRequest::process_op(
 	     *pg, *this, this_instance_id);
     auto reply = crimson::make_message<MOSDOpReply>(
       m.get(), completed->err, pg->get_osdmap_epoch(),
-      CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
+      CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false,
+      1, dmc::PhaseType::reservation);
     reply->set_reply_versions(completed->version, completed->user_version);
     // TODO: gate the crosscore sending
     co_await interruptor::make_interruptible(
@@ -565,7 +567,8 @@ ClientRequest::do_process(
     DEBUGDPP("{}: replying with error {}", *pg, *this, err);
 
     auto reply = crimson::make_message<MOSDOpReply>(
-      m.get(), err, pg->get_osdmap_epoch(), 0, false);
+      m.get(), err, pg->get_osdmap_epoch(), 0, false,
+      1, dmc::PhaseType::reservation);
 
     if (!m->ops.empty() && m->ops.back().op.flags & CEPH_OSD_OP_FLAG_FAILOK) {
       reply->set_result(0);
@@ -612,7 +615,9 @@ ClientRequest::do_process(
       result,
       pg->get_osdmap_epoch(),
       0,
-      false);
+      false,
+      1,
+      dmc::PhaseType::reservation);
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     if (obc->obs.exists) {
       reply->set_reply_versions(pg->peering_state.get_info().last_update,
