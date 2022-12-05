@@ -847,6 +847,18 @@ void ScrubStack::dispatch(const cref_t<Message> &m)
   }
 }
 
+bool ScrubStack::remove_inode_if_stacked(CInode *in) {
+  MDSCacheObject *obj = dynamic_cast<MDSCacheObject*>(in);
+  if(obj->item_scrub.is_on_list()) {
+    dout(20) << "removing inode " << *in << " from scrub_stack" << dendl;
+    obj->put(MDSCacheObject::PIN_SCRUBQUEUE);
+    obj->item_scrub.remove_myself();
+    stack_size--;
+    return true;
+  }
+  return false;
+}
+
 void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
 {
 
