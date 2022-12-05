@@ -21,8 +21,6 @@ class Protocol {
   Protocol(Protocol&&) = delete;
   virtual ~Protocol();
 
-  virtual bool is_connected() const = 0;
-
   virtual void close() = 0;
 
   virtual seastar::future<> close_clean_yielded() = 0;
@@ -52,6 +50,10 @@ class Protocol {
 // the write state-machine
  public:
   using clock_t = seastar::lowres_system_clock;
+
+  bool is_connected() const {
+    return protocol_is_connected;
+  }
 
   seastar::future<> send(MessageURef msg);
 
@@ -167,6 +169,8 @@ class Protocol {
   crimson::common::Gated gate;
 
   FrameAssemblerV2Ref frame_assembler;
+
+  bool protocol_is_connected = false;
 
   /*
    * out states for writing

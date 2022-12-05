@@ -151,6 +151,7 @@ void Protocol::set_out_state(
   bool dispatch_in = false;
   if (new_state == out_state_t::open) {
     // to open
+    ceph_assert_always(protocol_is_connected == true);
     assert(fa != nullptr);
     ceph_assert_always(frame_assembler == nullptr);
     frame_assembler = std::move(fa);
@@ -163,6 +164,8 @@ void Protocol::set_out_state(
 #endif
   } else if (out_state == out_state_t::open) {
     // from open
+    ceph_assert_always(protocol_is_connected == true);
+    protocol_is_connected = false;
     assert(fa == nullptr);
     ceph_assert_always(frame_assembler->is_socket_valid());
     frame_assembler->shutdown_socket();
@@ -271,12 +274,17 @@ void Protocol::reset_out()
 
 void Protocol::dispatch_accept()
 {
+  // protocol_is_connected can be from true to true here if the replacing is
+  // happening to a connected connection.
+  protocol_is_connected = true;
   dispatchers.ms_handle_accept(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
 }
 
 void Protocol::dispatch_connect()
 {
+  ceph_assert_always(protocol_is_connected == false);
+  protocol_is_connected = true;
   dispatchers.ms_handle_connect(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
 }

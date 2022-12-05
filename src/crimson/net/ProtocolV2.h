@@ -19,8 +19,6 @@ class ProtocolV2 final : public Protocol {
 
 // public to SocketConnection, but private to the others
  private:
-  bool is_connected() const override;
-
   void close() override;
 
   seastar::future<> close_clean_yielded() override;
