@@ -181,7 +181,8 @@ set(librgw_common_srcs
   store/rados/rgw_trim_datalog.cc
   store/rados/rgw_trim_mdlog.cc
   store/rados/rgw_user.cc
-  store/rados/rgw_zone.cc)
+  store/rados/rgw_zone.cc
+  store/rados/sync_fairness.cc)
 
 list(APPEND librgw_common_srcs
   store/immutable_config/store.cc
