@@ -5,6 +5,7 @@
 #define CEPH_CRUSH_TESTER_H
 
 #include "crush/CrushWrapper.h"
+#include "include/common_fwd.h"
 
 #include <fstream>
 
@@ -347,8 +348,8 @@ public:
    *         large, true otherwise
    */
   bool check_name_maps(unsigned max_id = 0) const;
-  int test();
-  int test_with_fork(int timeout);
+  int test(CephContext* cct);
+  int test_with_fork(CephContext* cct, int timeout);
 
   int compare(CrushWrapper& other);
 };
