@@ -623,6 +623,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
                                                     session->get_push_seq());
           if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
             reply->supported_features = supported_features;
+          session->auth_caps.get_cap_auths(&reply->cap_auths);
           mds->send_message_client(reply, session);
           if (mdcache->is_readonly()) {
             auto m = make_message<MClientSession>(CEPH_SESSION_FORCE_RO);
@@ -913,6 +914,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       reply->supported_features = supported_features;
       reply->metric_spec = supported_metric_spec;
     }
+    session->auth_caps.get_cap_auths(&reply->cap_auths);
     mds->send_message_client(reply, session);
     if (mdcache->is_readonly()) {
       auto m = make_message<MClientSession>(CEPH_SESSION_FORCE_RO);
@@ -1069,6 +1071,7 @@ void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_
 	  reply->supported_features = supported_features;
           reply->metric_spec = supported_metric_spec;
 	}
+	session->auth_caps.get_cap_auths(&reply->cap_auths);
 	mds->send_message_client(reply, session);
 
 	if (mdcache->is_readonly())
@@ -1585,6 +1588,7 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
       reply->supported_features = supported_features;
       reply->metric_spec = supported_metric_spec;
     }
+    session->auth_caps.get_cap_auths(&reply->cap_auths);
     mds->send_message_client(reply, session);
     mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay;
   }

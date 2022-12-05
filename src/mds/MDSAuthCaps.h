@@ -276,6 +276,15 @@ public:
     return false;
   }
 
+  void get_cap_auths(std::vector<MDSCapAuth> *cap_auths)
+  {
+    for (const auto& grant : grants) {
+      cap_auths->emplace_back(MDSCapAuth(grant.match,
+                                grant.spec.allow_read(),
+                                grant.spec.allow_write()));
+    }
+  }
+
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 private:
   std::vector<MDSCapGrant> grants;
