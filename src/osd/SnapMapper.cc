@@ -97,7 +97,7 @@ int OSDriver::get_keys(
 {
   CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
   using crimson::os::FuturizedStore;
-  return interruptible_future<int>{os->omap_get_values(
+  return interruptor::green_get(os->omap_get_values(
     ch, hoid, keys
   ).safe_then([out] (FuturizedStore::omap_values_t&& vals) {
     // just the difference in comparator (`std::less<>` in omap_values_t`)
@@ -106,7 +106,7 @@ int OSDriver::get_keys(
   }, FuturizedStore::read_errorator::all_same_way([] (auto& e) {
     assert(e.value() > 0);
     return -e.value();
-  }))}.get(); // this requires seastar::thread
+  }))); // this requires seastar::thread
   CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
 }
 
@@ -116,7 +116,7 @@ int OSDriver::get_next(
 {
   CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
   using crimson::os::FuturizedStore;
-  return interruptible_future<int>{os->omap_get_values(
+  return interruptor::green_get(os->omap_get_values(
     ch, hoid, key
   ).safe_then_unpack([&key, next] (bool, FuturizedStore::omap_values_t&& vals) {
     CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
@@ -132,7 +132,7 @@ int OSDriver::get_next(
   }, FuturizedStore::read_errorator::all_same_way([] {
     CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
     return -EINVAL;
-  }))}.get(); // this requires seastar::thread
+  }))); // this requires seastar::thread
   CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
 }
 
@@ -143,7 +143,7 @@ int OSDriver::get_next_or_current(
   CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
   using crimson::os::FuturizedStore;
   // let's try to get current first
-  return interruptible_future<int>{os->omap_get_values(
+  return interruptor::green_get(os->omap_get_values(
     ch, hoid, FuturizedStore::omap_keys_t{key}
   ).safe_then([&key, next_or_current] (FuturizedStore::omap_values_t&& vals) {
     assert(vals.size() == 1);
@@ -153,7 +153,7 @@ int OSDriver::get_next_or_current(
     [next_or_current, &key, this] {
     // no current, try next
     return get_next(key, next_or_current);
-  }))}.get(); // this requires seastar::thread
+  }))); // this requires seastar::thread
   CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
 }
 #else
