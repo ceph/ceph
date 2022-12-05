@@ -15,6 +15,7 @@
 #include "rgw_sal_rados.h"
 #include "rgw_sync_trace.h"
 #include "rgw_mdlog.h"
+#include "sync_fairness.h"
 
 #define ERROR_LOGGER_SHARDS 32
 #define RGW_SYNC_ERROR_LOG_SHARD_PREFIX "sync.error-log"
@@ -180,6 +181,7 @@ struct RGWMetaSyncEnv {
   RGWHTTPManager *http_manager{nullptr};
   RGWSyncErrorLogger *error_logger{nullptr};
   RGWSyncTraceManager *sync_tracer{nullptr};
+  rgw::sync_fairness::BidManager* bid_manager{nullptr};
 
   RGWMetaSyncEnv() {}
 
@@ -224,7 +226,7 @@ public:
       http_manager(store->ctx(), completion_mgr),
       status_manager(_sm) {}
 
-  virtual ~RGWRemoteMetaLog() override;
+  ~RGWRemoteMetaLog() override;
 
   int init();
   void finish();

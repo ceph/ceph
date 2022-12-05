@@ -23,6 +23,8 @@ static string mdlog_sync_status_oid = "mdlog.sync-status";
 static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
 static string mdlog_sync_full_sync_index_prefix = "meta.full-sync.index";
 
+static const string meta_sync_bids_oid = "meta-sync-bids";
+
 RGWContinuousLeaseCR::~RGWContinuousLeaseCR() {}
 
 RGWSyncErrorLogger::RGWSyncErrorLogger(rgw::sal::RadosStore* _store, const string &oid_prefix, int _num_shards) : store(_store), num_shards(_num_shards) {
@@ -2232,6 +2234,18 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
     ldpp_dout(dpp, -1) << "ERROR: can't sync, mismatch between num shards, master num_shards=" << mdlog_info.num_shards << " local num_shards=" << num_shards << dendl;
     return -EINVAL;
   }
+
+  // construct and start the bid manager for sync fairness
+  const auto& control_pool = store->svc()->zone->get_zone_params().control_pool;
+  auto control_obj = rgw_raw_obj{control_pool, meta_sync_bids_oid};
+
+  auto bid_manager = rgw::sync_fairness::create_rados_bid_manager(
+      store, control_obj, num_shards);
+  r = bid_manager->start();
+  if (r < 0) {
+    return r;
+  }
+  sync_env.bid_manager = bid_manager.get();
 
   RGWPeriodHistory::Cursor cursor;
   do {
