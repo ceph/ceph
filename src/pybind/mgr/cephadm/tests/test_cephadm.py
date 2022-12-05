@@ -1214,6 +1214,7 @@ class TestCephadm(object):
             def __init__(self, c: str = 'a'):
                 # using 1015 here makes the serialized string exactly 1024 bytes if c is one char
                 self.content = {c: c * 1015}
+                self.path = 'dev/vdc'
 
             def to_json(self):
                 return self.content

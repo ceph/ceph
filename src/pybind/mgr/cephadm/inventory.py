@@ -642,12 +642,10 @@ class HostCache():
             del self.last_autotune[host]
 
     def devices_changed(self, host: str, b: List[inventory.Device]) -> bool:
-        a = self.devices[host]
-        if len(a) != len(b):
-            return True
-        aj = {d.path: d.to_json() for d in a}
-        bj = {d.path: d.to_json() for d in b}
-        if aj != bj:
+        old_devs = inventory.Devices(self.devices[host])
+        new_devs = inventory.Devices(b)
+        # relying on Devices class __eq__ function here
+        if old_devs != new_devs:
             self.mgr.log.info("Detected new or changed devices on %s" % host)
             return True
         return False
