@@ -2695,6 +2695,11 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
 
 int BlueFS::_signal_dirty_to_log(FileWriter *h)
 {
+  if (h->file->deleted) {
+    dout(10) << __func__ << "  deleted, no-op" << dendl;
+    return 0;
+  }
+
   h->file->fnode.mtime = ceph_clock_now();
   ceph_assert(h->file->fnode.ino >= 1);
   if (h->file->dirty_seq == 0) {

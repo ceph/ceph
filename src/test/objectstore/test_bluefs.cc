@@ -911,6 +911,45 @@ TEST(BlueFS, test_truncate_stable_53129) {
   fs.umount();
 }
 
+TEST(BlueFS, broken_unlink_fsync_seq) {
+  uint64_t size = 1048576 * 128;
+  TempBdev bdev{size};
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false, 1048576));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  {
+    /*
+    * This reproduces a weird file op sequence (unlink+fsync) that Octopus
+    * RocksDB might issue to BlueFS when recycle_log_file_num setting is 0
+    * See https://tracker.ceph.com/issues/55636 for more details
+    *
+    */
+    char buf[1048571]; // this is biggish, but intentionally not evenly aligned
+    for (unsigned i = 0; i < sizeof(buf); ++i) {
+      buf[i] = i;
+    }
+    BlueFS::FileWriter *h;
+    ASSERT_EQ(0, fs.mkdir("dir"));
+    ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
+
+    h->append(buf, sizeof(buf));
+    fs.flush(h);
+    h->append(buf, sizeof(buf));
+    fs.unlink("dir", "file");
+    fs.fsync(h);
+    fs.close_writer(h);
+  }
+  fs.umount();
+
+  // remount and check log can replay safe?
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  fs.umount();
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
