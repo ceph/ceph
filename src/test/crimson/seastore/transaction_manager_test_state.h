@@ -33,6 +33,7 @@ public:
   virtual ~EphemeralDevices() {}
   virtual Device* get_primary_device() = 0;
   virtual DeviceRef get_primary_device_ref() = 0;
+  virtual void set_primary_device_ref(DeviceRef) = 0;
 };
 using EphemeralDevicesRef = std::unique_ptr<EphemeralDevices>;
 
@@ -110,6 +111,7 @@ public:
     return segment_manager.get();
   }
   DeviceRef get_primary_device_ref() final;
+  void set_primary_device_ref(DeviceRef) final;
 };
 
 class EphemeralRandomBlockDevices : public EphemeralDevices {
@@ -158,6 +160,7 @@ public:
     return rb_device.get();
   }
   DeviceRef get_primary_device_ref() final;
+  void set_primary_device_ref(DeviceRef) final;
 };
 
 class EphemeralTestState {
@@ -333,124 +336,25 @@ protected:
   }
 };
 
-class TestSegmentManagerWrapper final : public SegmentManager {
-  SegmentManager &sm;
-  device_id_t device_id = 0;
-  secondary_device_set_t set;
-public:
-  TestSegmentManagerWrapper(
-    SegmentManager &sm,
-    device_id_t device_id = 0)
-    : sm(sm), device_id(device_id) {}
-
-  device_id_t get_device_id() const {
-    return device_id;
-  }
-
-  mount_ret mount() final {
-    return mount_ertr::now(); // we handle this above
-  }
-
-  mkfs_ret mkfs(device_config_t c) final {
-    return mkfs_ertr::now(); // we handle this above
-  }
-
-  close_ertr::future<> close() final {
-    return sm.close();
-  }
-
-  secondary_device_set_t& get_secondary_devices() final {
-    return sm.get_secondary_devices();
-  }
-
-  magic_t get_magic() const final {
-    return sm.get_magic();
-  }
-
-  open_ertr::future<SegmentRef> open(segment_id_t id) final {
-    return sm.open(id);
-  }
-
-  release_ertr::future<> release(segment_id_t id) final {
-    return sm.release(id);
-  }
-
-  read_ertr::future<> read(
-    paddr_t addr, size_t len, ceph::bufferptr &out) final {
-    return sm.read(addr, len, out);
-  }
-
-  size_t get_available_size() const final { return sm.get_available_size(); }
-  extent_len_t get_block_size() const final { return sm.get_block_size(); }
-  segment_off_t get_segment_size() const final {
-    return sm.get_segment_size();
-  }
-  const seastore_meta_t &get_meta() const final {
-    return sm.get_meta();
-  }
-  ~TestSegmentManagerWrapper() final {}
-};
 
 DeviceRef EphemeralSegmentedDevices::get_primary_device_ref() {
-  return std::make_unique<TestSegmentManagerWrapper>(*segment_manager);
+  return std::move(segment_manager);
 }
 
-class TestRandomBlockDeviceWrapper final : public Device {
-  RBMDevice &rb_device;
-  device_id_t device_id = 0;
-  secondary_device_set_t set;
-public:
-  TestRandomBlockDeviceWrapper(
-    RBMDevice &rb_device,
-    device_id_t device_id = 0)
-    : rb_device(rb_device), device_id(device_id) {}
-
-  device_id_t get_device_id() const {
-    return device_id;
-  }
-
-  mount_ret mount() final {
-    return mount_ertr::now(); // we handle this above
-  }
-
-  mkfs_ret mkfs(device_config_t c) final {
-    return mkfs_ertr::now(); // we handle this above
-  }
-
-  close_ertr::future<> close() final {
-    return rb_device.close();
-  }
-
-  secondary_device_set_t& get_secondary_devices() final {
-    return rb_device.get_secondary_devices();
-  }
-
-  magic_t get_magic() const final {
-    return rb_device.get_magic();
-  }
-  read_ertr::future<> read(
-    paddr_t addr, size_t len, ceph::bufferptr &out) final {
-    return rb_device.read(addr, len, out);
-  }
-
-  size_t get_available_size() const final { return rb_device.get_available_size(); }
-  extent_len_t get_block_size() const final { return rb_device.get_block_size(); }
-  const seastore_meta_t &get_meta() const final {
-    return rb_device.get_meta();
-  }
-  device_type_t get_device_type() const final {
-    return device_type_t::RANDOM_BLOCK_SSD;
-  }
-
-  backend_type_t get_backend_type() const final {
-    return backend_type_t::RANDOM_BLOCK;
-  }
-
-  ~TestRandomBlockDeviceWrapper() final {}
-};
-
 DeviceRef EphemeralRandomBlockDevices::get_primary_device_ref() {
-  return std::make_unique<TestRandomBlockDeviceWrapper>(*rb_device);
+  return std::move(rb_device);
+}
+
+void EphemeralSegmentedDevices::set_primary_device_ref(DeviceRef dev) {
+  segment_manager = 
+    segment_manager::EphemeralSegmentManagerRef(
+      static_cast<segment_manager::EphemeralSegmentManager*>(dev.release()));
+}
+
+void EphemeralRandomBlockDevices::set_primary_device_ref(DeviceRef dev) {
+  rb_device = 
+    random_block_device::RBMDeviceRef(
+      static_cast<random_block_device::RBMDevice*>(dev.release()));
 }
 
 class SeaStoreTestState : public EphemeralTestState {
@@ -498,6 +402,7 @@ protected:
   }
 
   virtual void _destroy() final {
+    devices->set_primary_device_ref(seastore->get_primary_device_ref());
     seastore.reset();
   }
 
@@ -506,10 +411,10 @@ protected:
   }
 
   virtual FuturizedStore::mount_ertr::future<> _mount() final {
-    return seastore->mount();
+    return seastore->test_mount();
   }
 
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() final {
-    return seastore->mkfs(uuid_d{});
+    return seastore->test_mkfs(uuid_d{});
   }
 };
