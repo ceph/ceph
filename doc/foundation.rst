@@ -103,6 +103,7 @@ Members
 * James Page (Canonical)
 * Joao Luis (SUSE)
 * Josh Durgin (Red Hat) - Ceph Council representative
+* Kenneth Van Alstyne (SoftIron)
 * Matias Bjorling (Western Digital)
 * Matthew Leonard (Bloomberg)
 * Mike Perez (Red Hat) - Ceph community manager
@@ -110,7 +111,6 @@ Members
 * Neha Ojha (Red Hat) - Ceph Council Representative
 * Steven Umbehocker (OSNexus) - General member representative
 * Pawel Sadowski (OVH)
-* Phil Straw (SoftIron)
 * Robin Johnson (DigitalOcean)
 * Xie Xingguo (ZTE)
 * Zhang Shaowen (China Mobile)
