@@ -113,12 +113,12 @@ int RGWServices_Def::init(CephContext *cct,
   zone_utils->init(radoshandle, zone.get());
   quota->init(zone.get());
   sync_modules->init(zone.get());
-  sysobj_core->core_init(rados.get(), zone.get());
+  sysobj_core->core_init(radoshandle, zone.get());
   if (have_cache) {
-    sysobj_cache->init(rados.get(), zone.get(), notify.get());
-    sysobj->init(rados.get(), sysobj_cache.get());
+    sysobj_cache->init(radoshandle, zone.get(), notify.get());
+    sysobj->init(radoshandle, sysobj_cache.get());
   } else {
-    sysobj->init(rados.get(), sysobj_core.get());
+    sysobj->init(radoshandle, sysobj_core.get());
   }
   user_rados->init(radoshandle, zone.get(), sysobj.get(), sysobj_cache.get(),
                    meta.get(), meta_be_sobj.get(), sync_modules.get());

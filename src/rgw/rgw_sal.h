@@ -31,7 +31,6 @@
 
 struct RGWBucketEnt;
 class RGWRESTMgr;
-class RGWAccessListFilter;
 class RGWLC;
 struct rgw_user_bucket;
 class RGWUsageBatch;
@@ -582,7 +581,7 @@ class Bucket {
       rgw_obj_key end_marker;
       std::string ns;
       bool enforce_ns{true};
-      RGWAccessListFilter* access_list_filter{nullptr};
+      rgw::AccessListFilter access_list_filter{};
       RGWBucketListNameFilter force_check_filter;
       bool list_versions{false};
       bool allow_unordered{false};
