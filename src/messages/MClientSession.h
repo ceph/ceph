@@ -15,12 +15,13 @@
 #ifndef CEPH_MCLIENTSESSION_H
 #define CEPH_MCLIENTSESSION_H
 
+#include "mds/MDSAuthCaps.h"
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 
 class MClientSession final : public SafeMessage {
 private:
-  static constexpr int HEAD_VERSION = 5;
+  static constexpr int HEAD_VERSION = 6;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -31,6 +32,7 @@ public:
   std::map<std::string, std::string> metadata;
   feature_bitset_t supported_features;
   metric_spec_t metric_spec;
+  std::vector<MDSCapAuth> cap_auths;
 
   int get_op() const { return head.op; }
   version_t get_seq() const { return head.seq; }
@@ -64,6 +66,8 @@ public:
       out << " seq " << get_seq();
     if (get_op() == CEPH_SESSION_RECALL_STATE)
       out << " max_caps " << head.max_caps << " max_leases " << head.max_leases;
+    if (!cap_auths.empty())
+      out << " cap_auths " << cap_auths;
     out << ")";
   }
 
@@ -81,6 +85,9 @@ public:
     if (header.version >= 5) {
       decode(flags, p);
     }
+    if (header.version >= 6) {
+      decode(cap_auths, p);
+    }
   }
   void encode_payload(uint64_t features) override { 
     using ceph::encode;
@@ -96,6 +103,7 @@ public:
       encode(supported_features, payload);
       encode(metric_spec, payload);
       encode(flags, payload);
+      encode(cap_auths, payload);
     }
   }
 private:
