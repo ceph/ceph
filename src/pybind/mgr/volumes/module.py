@@ -57,7 +57,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         },
         {
             'cmd': 'fs volume info '
-                   'name=vol_name,type=CephString ',
+                   'name=vol_name,type=CephString '
+                   'name=human_readable,type=CephBool,req=false ',
             'desc': "Get the information of a CephFS volume",
             'perm': 'r'
         },
@@ -536,7 +537,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @mgr_cmd_wrap
     def _cmd_fs_volume_info(self, inbuf, cmd):
-        return self.vc.volume_info(vol_name=cmd['vol_name'])
+        return self.vc.volume_info(vol_name=cmd['vol_name'],
+                                   human_readable=cmd.get('human_readable', False))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_create(self, inbuf, cmd):
