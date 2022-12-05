@@ -6,7 +6,15 @@
 
 #include <stdio.h>
 #include <string.h>
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#elif __has_include(<experimental/filesystem>)
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 #include <iostream>
+#include <fstream>
 #include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -222,6 +230,51 @@ void inferring_bluefs_devices(vector<string>& devs, std::string& path)
   }
 }
 
+static void bluefs_import(
+  const string& input_file,
+  const string& dest_file,
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs)
+{
+  int r;
+  std::ifstream f(input_file.c_str(), std::ifstream::binary);
+  if (!f) {
+    r = -errno;
+    cerr << "open " << input_file.c_str() << " failed: " << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  BlueStore bluestore(cct, path);
+  KeyValueDB *db_ptr;
+  r = bluestore.open_db_environment(&db_ptr, false);
+  if (r < 0) {
+    cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  BlueFS* bs = bluestore.get_bluefs();
+
+  BlueFS::FileWriter *h;
+  fs::path file_path(dest_file);
+  const string dir = file_path.parent_path();
+  const string file_name = file_path.filename();
+  bs->open_for_write(dir, file_name, &h, false);
+  uint64_t max_block = 4096;
+  char buf[max_block];
+  uint64_t left = fs::file_size(input_file.c_str());
+  uint64_t size = 0;
+  while (left) {
+    size = std::min(max_block, left);
+    f.read(buf, size);
+    h->append(buf, size);
+    left -= size;
+  }
+  f.close();
+  bs->fsync(h);
+  bs->close_writer(h);
+  bluestore.close_db_environment();
+  return;
+}
+
 int main(int argc, char **argv)
 {
   string out_dir;
@@ -231,6 +284,8 @@ int main(int argc, char **argv)
   string path;
   string action;
   string log_file;
+  string input_file;
+  string dest_file;
   string key, value;
   vector<string> allocs_name;
   string empty_sharding(1, '\0');
@@ -243,6 +298,8 @@ int main(int argc, char **argv)
     ("help,h", "produce help message")
     ("path", po::value<string>(&path), "bluestore path")
     ("out-dir", po::value<string>(&out_dir), "output directory")
+    ("input-file", po::value<string>(&input_file), "import file")
+    ("dest-file", po::value<string>(&dest_file), "destination file")
     ("log-file,l", po::value<string>(&log_file), "log file")
     ("log-level", po::value<int>(&log_level), "log level (30=most, 20=lots, 10=some, 1=little)")
     ("dev", po::value<vector<string>>(&devs), "device(s)")
@@ -262,6 +319,7 @@ int main(int argc, char **argv)
         "repair, "
         "quick-fix, "
         "bluefs-export, "
+        "bluefs-import, "
         "bluefs-bdev-sizes, "
         "bluefs-bdev-expand, "
         "bluefs-bdev-new-db, "
@@ -348,13 +406,23 @@ int main(int argc, char **argv)
     if (devs.empty())
       inferring_bluefs_devices(devs, path);
   }
-  if (action == "bluefs-export" || action == "bluefs-log-dump") {
+  if (action == "bluefs-export" || 
+      action == "bluefs-import" || 
+      action == "bluefs-log-dump") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
     }
     if ((action == "bluefs-export") && out_dir.empty()) {
       cerr << "must specify out-dir to export bluefs" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (action == "bluefs-import" && input_file.empty()) {
+      cerr << "must specify input_file to import bluefs" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (action == "bluefs-import" && dest_file.empty()) {
+      cerr << "must specify dest_file to import bluefs" << std::endl;
       exit(EXIT_FAILURE);
     }
     inferring_bluefs_devices(devs, path);
@@ -599,6 +667,9 @@ int main(int argc, char **argv)
 	   << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
+  }
+  else if (action == "bluefs-import") {
+    bluefs_import(input_file, dest_file, cct.get(), path, devs);
   }
   else if (action == "bluefs-export") {
     BlueFS *fs = open_bluefs_readonly(cct.get(), path, devs);
