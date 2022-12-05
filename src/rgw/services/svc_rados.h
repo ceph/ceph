@@ -8,22 +8,9 @@
 #include "include/rados/librados.hpp"
 #include "common/async/yield_context.h"
 
+#include "rgw_tools.h"
+
 class RGWAsyncRadosProcessor;
-
-class RGWAccessListFilter {
-public:
-  virtual ~RGWAccessListFilter() {}
-  virtual bool filter(const std::string& name, std::string& key) = 0;
-};
-
-struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
-  std::string prefix;
-
-  explicit RGWAccessListFilterPrefix(const std::string& _prefix) : prefix(_prefix) {}
-  bool filter(const std::string& name, std::string& key) override {
-    return (prefix.compare(key.substr(0, prefix.size())) == 0);
-  }
-};
 
 class RGWSI_RADOS : public RGWServiceInstance
 {
@@ -55,7 +42,7 @@ private:
                    librados::IoCtx& ioctx,
                    librados::NObjectIterator& iter,
                    uint32_t num, std::vector<rgw_bucket_dir_entry>& objs,
-                   RGWAccessListFilter *filter,
+                   const rgw::AccessListFilter& filter,
                    bool *is_truncated);
 
 public:
@@ -118,13 +105,14 @@ public:
         bool initialized{false};
         librados::IoCtx ioctx;
         librados::NObjectIterator iter;
-        RGWAccessListFilter *filter{nullptr};
+	rgw::AccessListFilter filter;
       } ctx;
 
       List() {}
       List(Pool *_pool) : pool(_pool) {}
 
-      int init(const DoutPrefixProvider *dpp, const std::string& marker, RGWAccessListFilter *filter = nullptr);
+      int init(const DoutPrefixProvider *dpp, const std::string& marker,
+	       rgw::AccessListFilter filter);
       int get_next(const DoutPrefixProvider *dpp, int max,
                    std::vector<std::string> *oids,
                    bool *is_truncated);

@@ -497,3 +497,42 @@ int rgw_clog_warn(librados::Rados* h, const string& msg)
   bufferlist inbl;
   return h->mon_command(cmd, inbl, nullptr, nullptr);
 }
+
+int rgw_list_pool(const DoutPrefixProvider *dpp,
+		  librados::IoCtx& ioctx,
+		  uint32_t max,
+		  const rgw::AccessListFilter& filter,
+		  std::string& marker,
+		  std::vector<string> *oids,
+		  bool *is_truncated)
+{
+  librados::ObjectCursor oc;
+  if (!oc.from_str(marker)) {
+    ldpp_dout(dpp, 10) << "failed to parse cursor: " << marker << dendl;
+    return -EINVAL;
+  }
+
+  auto iter = ioctx.nobjects_begin(oc);
+  /// Pool_iterate
+  if (iter == ioctx.nobjects_end())
+    return -ENOENT;
+
+  uint32_t i;
+
+  for (i = 0; i < max && iter != ioctx.nobjects_end(); ++i, ++iter) {
+    string oid = iter->get_oid();
+    ldpp_dout(dpp, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
+
+    // fill it in with initial values; we may correct later
+    if (filter && !filter(oid, oid))
+      continue;
+
+    oids->push_back(oid);
+  }
+
+  marker = iter.get_cursor().to_str();
+  if (is_truncated)
+    *is_truncated = (iter != ioctx.nobjects_end());
+
+  return oids->size();
+}

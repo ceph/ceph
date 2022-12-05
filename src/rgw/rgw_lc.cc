@@ -814,7 +814,6 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 				       const multimap<string, lc_op>& prefix_map,
 				       LCWorker* worker, time_t stop_at, bool once)
 {
-  MultipartMetaFilter mp_filter;
   int ret;
   rgw::sal::Bucket::ListParams params;
   rgw::sal::Bucket::ListResults results;
@@ -825,7 +824,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
    * operating on one shard at a time */
   params.allow_unordered = true;
   params.ns = RGW_OBJ_NS_MULTIPART;
-  params.access_list_filter = &mp_filter;
+  params.access_list_filter = MultipartMetaFilter;
 
   const auto event_type = rgw::notify::ObjectExpirationAbortMPU;
 
@@ -1108,7 +1107,7 @@ public:
     return is_expired;
   }
 
-  int process(lc_op_ctx& oc) {
+  int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r;
     if (o.is_delete_marker()) {
@@ -1172,7 +1171,7 @@ public:
       pass_object_lock_check(oc.driver, oc.obj.get(), dpp);
   }
 
-  int process(lc_op_ctx& oc) {
+  int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, oc, true,
 			       rgw::notify::ObjectExpirationNoncurrent);
@@ -1217,7 +1216,7 @@ public:
     return true;
   }
 
-  int process(lc_op_ctx& oc) {
+  int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, oc, true,
 			       rgw::notify::ObjectExpirationDeleteMarker);
@@ -1385,7 +1384,7 @@ public:
     return 0;
   }
 
-  int process(lc_op_ctx& oc) {
+  int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r;
 
@@ -1460,7 +1459,7 @@ protected:
 public:
   LCOpAction_CurrentTransition(const transition_action& _transition)
     : LCOpAction_Transition(_transition) {}
-    int process(lc_op_ctx& oc) {
+    int process(lc_op_ctx& oc) override {
       int r = LCOpAction_Transition::process(oc);
       if (r == 0) {
         if (perfcounter) {
@@ -1485,7 +1484,7 @@ public:
 				  const transition_action& _transition)
     : LCOpAction_Transition(_transition)
     {}
-    int process(lc_op_ctx& oc) {
+    int process(lc_op_ctx& oc) override {
       int r = LCOpAction_Transition::process(oc);
       if (r == 0) {
         if (perfcounter) {

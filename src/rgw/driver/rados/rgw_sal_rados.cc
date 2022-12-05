@@ -751,13 +751,12 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
 {
   rgw::sal::Bucket::ListParams params;
   rgw::sal::Bucket::ListResults results;
-  MultipartMetaFilter mp_filter;
 
   params.prefix = prefix;
   params.delim = delim;
   params.marker = marker;
   params.ns = RGW_OBJ_NS_MULTIPART;
-  params.access_list_filter = &mp_filter;
+  params.access_list_filter = MultipartMetaFilter;
 
   int ret = list(dpp, params, max_uploads, results, y);
 

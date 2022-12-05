@@ -71,7 +71,7 @@ int RGWSI_RADOS::pool_iterate(const DoutPrefixProvider *dpp,
                               librados::IoCtx& io_ctx,
                               librados::NObjectIterator& iter,
                               uint32_t num, vector<rgw_bucket_dir_entry>& objs,
-                              RGWAccessListFilter *filter,
+                              const rgw::AccessListFilter& filter,
                               bool *is_truncated)
 {
   if (iter == io_ctx.nobjects_end())
@@ -86,7 +86,7 @@ int RGWSI_RADOS::pool_iterate(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
 
     // fill it in with initial values; we may correct later
-    if (filter && !filter->filter(oid, oid))
+    if (filter && filter(oid, oid))
       continue;
 
     e.key = oid;
@@ -296,7 +296,7 @@ int RGWSI_RADOS::Pool::open(const DoutPrefixProvider *dpp, const OpenParams& par
   return rados_svc->open_pool_ctx(dpp, pool, state.ioctx, params);
 }
 
-int RGWSI_RADOS::Pool::List::init(const DoutPrefixProvider *dpp, const string& marker, RGWAccessListFilter *filter)
+int RGWSI_RADOS::Pool::List::init(const DoutPrefixProvider *dpp, const string& marker, rgw::AccessListFilter filter)
 {
   if (ctx.initialized) {
     return -EINVAL;
@@ -319,9 +319,6 @@ int RGWSI_RADOS::Pool::List::init(const DoutPrefixProvider *dpp, const string& m
 
   try {
     ctx.iter = ctx.ioctx.nobjects_begin(oc);
-    ctx.filter = filter;
-    ctx.initialized = true;
-    return 0;
   } catch (const std::system_error& e) {
     r = -e.code().value();
     ldpp_dout(dpp, 10) << "nobjects_begin threw " << e.what()
@@ -332,6 +329,10 @@ int RGWSI_RADOS::Pool::List::init(const DoutPrefixProvider *dpp, const string& m
        << ", returning -5" << dendl;
     return -EIO;
   }
+  ctx.filter = std::move(filter);
+  ctx.initialized = true;
+
+  return 0;
 }
 
 int RGWSI_RADOS::Pool::List::get_next(const DoutPrefixProvider *dpp,
