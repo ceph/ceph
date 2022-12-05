@@ -60,7 +60,7 @@ target_link_libraries(ceph_test_rados_api_aio_pp
 
 add_executable(ceph_test_rados_api_asio asio.cc)
 target_link_libraries(ceph_test_rados_api_asio global
-  librados ${UNITTEST_LIBS} Boost::coroutine Boost::context)
+  librados ${UNITTEST_LIBS} spawn)
 
 add_executable(ceph_test_rados_api_list
   list.cc
