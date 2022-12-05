@@ -7,7 +7,6 @@
 #include "common/errno.h"
 #include "librbd/Utils.h"
 #include "librbd/crypto/EncryptionFormat.h"
-#include "librbd/crypto/ShutDownCryptoRequest.h"
 #include "librbd/crypto/Utils.h"
 #include "librbd/crypto/luks/LoadRequest.h"
 #include "librbd/crypto/luks/Magic.h"
@@ -35,30 +34,6 @@ FlattenRequest<I>::FlattenRequest(
 
 template <typename I>
 void FlattenRequest<I>::send() {
-  shutdown_crypto();
-}
-
-template <typename I>
-void FlattenRequest<I>::shutdown_crypto() {
-  auto ctx = create_context_callback<
-        FlattenRequest<I>, &FlattenRequest<I>::handle_shutdown_crypto>(this);
-
-  auto *req = ShutDownCryptoRequest<I>::create(
-          m_image_ctx, &m_encryption_format, ctx);
-  req->send();
-}
-
-template <typename I>
-void FlattenRequest<I>::handle_shutdown_crypto(int r) {
-  if (r < 0) {
-    lderr(m_image_ctx->cct) << "error shutting down crypto: "
-                            << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
-  ceph_assert(m_encryption_format.get() != nullptr);
-
   read_header();
 }
 
@@ -66,16 +41,16 @@ template <typename I>
 void FlattenRequest<I>::read_header() {
   auto ctx = create_context_callback<
         FlattenRequest<I>, &FlattenRequest<I>::handle_read_header>(this);
-
-  uint64_t data_offset = m_encryption_format->get_crypto()->get_data_offset();
-
   auto aio_comp = io::AioCompletion::create_and_start(
           ctx, librbd::util::get_image_ctx(m_image_ctx), io::AIO_TYPE_READ);
+
+  auto crypto = m_image_ctx->encryption_format->get_crypto();
   ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_read(
           *m_image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-          {{0, data_offset}}, io::ReadResult{&m_bl},
-          m_image_ctx->get_data_io_context(), 0, 0, trace);
+          {{0, crypto->get_data_offset()}}, io::ImageArea::CRYPTO_HEADER,
+          io::ReadResult{&m_bl}, m_image_ctx->get_data_io_context(), 0, 0,
+          trace);
   req->send();
 }
 
@@ -121,8 +96,8 @@ void FlattenRequest<I>::write_header() {
   ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_write(
           *m_image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-          {{0, m_bl.length()}}, std::move(m_bl),
-          m_image_ctx->get_data_io_context(), 0, trace);
+          {{0, m_bl.length()}}, io::ImageArea::CRYPTO_HEADER,
+          std::move(m_bl), m_image_ctx->get_data_io_context(), 0, trace);
   req->send();
 }
 
@@ -167,11 +142,6 @@ void FlattenRequest<I>::handle_flush(int r) {
 template <typename I>
 void FlattenRequest<I>::finish(int r) {
   ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
-
-  // restore crypto to image context
-  if (m_encryption_format.get() != nullptr) {
-    util::set_crypto(m_image_ctx, std::move(m_encryption_format));
-  }
 
   m_on_finish->complete(r);
   delete this;

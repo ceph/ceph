@@ -43,7 +43,7 @@ function test_encryption_format() {
   sudo chmod 666 /dev/mapper/cryptsetupdev
 
   # open encryption with librbd
-  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg -t nbd -o encryption-format=luks,encryption-passphrase-file=/tmp/passphrase)
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg -t nbd -o encryption-passphrase-file=/tmp/passphrase)
   sudo chmod 666 $LIBRBD_DEV
 
   # write via librbd && compare
@@ -56,7 +56,18 @@ function test_encryption_format() {
   dd if=$LIBRBD_DEV of=/tmp/cmpdata iflag=direct bs=4M count=4
   cmp -n 16MB /tmp/cmpdata /tmp/testdata2
 
-  sudo rbd device unmap -t nbd $LIBRBD_DEV
+  # FIXME: encryption-aware flatten/resize misbehave if proxied to
+  # RAW_DEV mapping (i.e. if RAW_DEV mapping ows the lock)
+  # (acquire and) release the lock as a side effect
+  rbd bench --io-type read --io-size 1 --io-threads 1 --io-total 1 testimg
+
+  # check that encryption-aware resize compensates LUKS header overhead
+  (( $(sudo blockdev --getsize64 $LIBRBD_DEV) < (32 << 20) ))
+  expect_false rbd resize --size 32M testimg
+  rbd resize --size 32M --encryption-passphrase-file /tmp/passphrase testimg
+  (( $(sudo blockdev --getsize64 $LIBRBD_DEV) == (32 << 20) ))
+
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
 }
 
 function test_clone_encryption() {
@@ -77,7 +88,7 @@ function test_clone_encryption() {
   dd if=$LIBRBD_DEV of=/tmp/cmpdata iflag=direct bs=1M count=1
   cmp -n 1MB /tmp/cmpdata /tmp/testdata1
   dd if=/tmp/testdata1 of=$LIBRBD_DEV seek=1 skip=1 oflag=direct bs=1M count=1
-  sudo rbd device unmap -t nbd $LIBRBD_DEV
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
 
   # second clone (luks2)
   rbd snap create testimg1@snap
@@ -91,10 +102,11 @@ function test_clone_encryption() {
   dd if=$LIBRBD_DEV of=/tmp/cmpdata iflag=direct bs=1M count=2
   cmp -n 2MB /tmp/cmpdata /tmp/testdata1
   dd if=/tmp/testdata1 of=$LIBRBD_DEV seek=2 skip=2 oflag=direct bs=1M count=1
-  sudo rbd device unmap -t nbd $LIBRBD_DEV
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
 
   # flatten
-  rbd flatten testimg2 --encryption-format luks --encryption-format luks --encryption-passphrase-file /tmp/passphrase2 --encryption-passphrase-file /tmp/passphrase
+  expect_false rbd flatten testimg2 --encryption-format luks1 --encryption-format luks2 --encryption-passphrase-file /tmp/passphrase2 --encryption-passphrase-file /tmp/passphrase
+  rbd flatten testimg2 --encryption-format luks2 --encryption-format luks1 --encryption-passphrase-file /tmp/passphrase2 --encryption-passphrase-file /tmp/passphrase
 
   # verify with cryptsetup
   RAW_FLAT_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd)
@@ -102,7 +114,7 @@ function test_clone_encryption() {
   sudo chmod 666 /dev/mapper/cryptsetupdev
   dd if=/dev/mapper/cryptsetupdev of=/tmp/cmpdata iflag=direct bs=1M count=3
   cmp -n 3MB /tmp/cmpdata /tmp/testdata1
-  sudo rbd device unmap -t nbd $RAW_FLAT_DEV
+  _sudo rbd device unmap -t nbd $RAW_FLAT_DEV
 }
 
 function test_clone_and_load_with_a_single_passphrase {
@@ -116,9 +128,10 @@ function test_clone_and_load_with_a_single_passphrase {
 
   if [ "$expectedfail" = "true" ]
   then
-    expect_false rbd flatten testimg1 --encryption-format luks --encryption-passphrase-file /tmp/passphrase2
+    expect_false rbd flatten testimg1 --encryption-passphrase-file /tmp/passphrase2
+    rbd flatten testimg1 --encryption-passphrase-file /tmp/passphrase2 --encryption-passphrase-file /tmp/passphrase
   else
-    rbd flatten testimg1 --encryption-format luks --encryption-passphrase-file /tmp/passphrase2
+    rbd flatten testimg1 --encryption-passphrase-file /tmp/passphrase2
   fi
 
   rbd remove testimg1
@@ -184,8 +197,8 @@ dd if=/dev/urandom of=/tmp/testdata1 bs=4M count=4
 dd if=/dev/urandom of=/tmp/testdata2 bs=4M count=4
 
 # create passphrase files
-echo -n "password" > /tmp/passphrase
-echo -n "password2" > /tmp/passphrase2
+printf "pass\0word\n" > /tmp/passphrase
+printf "\t password2   " > /tmp/passphrase2
 
 # create an image
 rbd create testimg --size=32M

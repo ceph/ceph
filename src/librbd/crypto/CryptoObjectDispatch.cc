@@ -5,6 +5,7 @@
 #include "include/ceph_assert.h"
 #include "include/neorados/RADOS.hpp"
 #include "common/dout.h"
+#include "osdc/Striper.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/crypto/CryptoInterface.h"
@@ -24,6 +25,16 @@ namespace crypto {
 
 using librbd::util::create_context_callback;
 using librbd::util::data_object_name;
+
+template <typename I>
+uint64_t get_file_offset(I* image_ctx, uint64_t object_no,
+                         uint64_t object_off) {
+  auto off = io::util::raw_to_area_offset(
+      *image_ctx, Striper::get_file_offset(image_ctx->cct, &image_ctx->layout,
+                                           object_no, object_off));
+  ceph_assert(off.second == io::ImageArea::DATA);
+  return off.first;
+}
 
 template <typename I>
 struct C_AlignedObjectReadRequest : public Context {
@@ -78,9 +89,7 @@ struct C_AlignedObjectReadRequest : public Context {
         r = 0;
         for (auto& extent: *extents) {
           auto crypto_ret = crypto->decrypt_aligned_extent(
-                  extent,
-                  io::util::get_file_offset(
-                          image_ctx, object_no, extent.offset));
+              extent, get_file_offset(image_ctx, object_no, extent.offset));
           if (crypto_ret != 0) {
             ceph_assert(crypto_ret < 0);
             r = crypto_ret;
@@ -431,6 +440,8 @@ template <typename I>
 CryptoObjectDispatch<I>::CryptoObjectDispatch(
     I* image_ctx, CryptoInterface* crypto)
   : m_image_ctx(image_ctx), m_crypto(crypto) {
+  m_data_offset_object_no = Striper::get_num_objects(image_ctx->layout,
+                                                     crypto->get_data_offset());
 }
 
 template <typename I>
@@ -445,6 +456,10 @@ bool CryptoObjectDispatch<I>::read(
     uint64_t* version, int* object_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
+  if (object_no < m_data_offset_object_no) {
+    return false;
+  }
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << *extents << dendl;
@@ -476,6 +491,10 @@ bool CryptoObjectDispatch<I>::write(
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
+  if (object_no < m_data_offset_object_no) {
+    return false;
+  }
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << data.length() << dendl;
@@ -483,8 +502,7 @@ bool CryptoObjectDispatch<I>::write(
 
   if (m_crypto->is_aligned(object_off, data.length())) {
     auto r = m_crypto->encrypt(
-            &data,
-            io::util::get_file_offset(m_image_ctx, object_no, object_off));
+        &data, get_file_offset(m_image_ctx, object_no, object_off));
     *dispatch_result = r == 0 ? io::DISPATCH_RESULT_CONTINUE
                               : io::DISPATCH_RESULT_COMPLETE;
     on_dispatched->complete(r);
@@ -509,6 +527,10 @@ bool CryptoObjectDispatch<I>::write_same(
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
+  if (object_no < m_data_offset_object_no) {
+    return false;
+  }
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << object_len << dendl;
@@ -544,6 +566,10 @@ bool CryptoObjectDispatch<I>::compare_and_write(
     int* object_dispatch_flags, uint64_t* journal_tid,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
+  if (object_no < m_data_offset_object_no) {
+    return false;
+  }
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << write_data.length()
@@ -568,6 +594,10 @@ bool CryptoObjectDispatch<I>::discard(
         const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
         uint64_t* journal_tid, io::DispatchResult* dispatch_result,
         Context** on_finish, Context* on_dispatched) {
+  if (object_no < m_data_offset_object_no) {
+    return false;
+  }
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
                  << object_off << "~" << object_len << dendl;
@@ -597,6 +627,10 @@ template <typename I>
 int CryptoObjectDispatch<I>::prepare_copyup(
         uint64_t object_no,
         io::SnapshotSparseBufferlist* snapshot_sparse_bufferlist) {
+  if (object_no < m_data_offset_object_no) {
+    return 0;
+  }
+
   ceph::bufferlist current_bl;
   current_bl.append_zero(m_image_ctx->get_object_size());
 
@@ -619,9 +653,8 @@ int CryptoObjectDispatch<I>::prepare_copyup(
       auto [aligned_off, aligned_len] = m_crypto->align(
               extent.get_off(), extent.get_len());
 
-      io::Extents image_extents;
-      io::util::extent_to_file(
-              m_image_ctx, object_no, aligned_off, aligned_len, image_extents);
+      auto [image_extents, _] = io::util::object_to_area_extents(
+          m_image_ctx, object_no, {{aligned_off, aligned_len}});
 
       ceph::bufferlist encrypted_bl;
       uint64_t position = 0;

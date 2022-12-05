@@ -30,9 +30,6 @@ private:
    * <start>
    *    |
    *    v
-   * SHUTDOWN_CRYPTO
-   *    |
-   *    v
    * READ_HEADER
    *    |
    *    v
@@ -42,17 +39,14 @@ private:
    * FLUSH
    *    |
    *    v
-   * <finish> (+ RESTORE_CRYPTO)
+   * <finish>
    *
    * @endverbatim
    */
     I* m_image_ctx;
     Context* m_on_finish;
     ceph::bufferlist m_bl;
-    EncryptionFormat m_encryption_format;
 
-    void shutdown_crypto();
-    void handle_shutdown_crypto(int r);
     void read_header();
     void handle_read_header(int r);
     void write_header();

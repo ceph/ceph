@@ -84,7 +84,7 @@ bool assemble_write_same_extent(
 }
 
 template <typename I>
-void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
+void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* read_extents,
                  librados::snap_t snap_id, const ZTracer::Trace &trace,
                  Context* on_finish) {
 
@@ -92,21 +92,22 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
 
   std::shared_lock image_locker{image_ctx->image_lock};
 
-  // calculate reverse mapping onto the image
   Extents parent_extents;
-  for (auto& extent: *extents) {
-    extent_to_file(image_ctx, object_no, extent.offset, extent.length,
-                   parent_extents);
-  }
-
-  uint64_t parent_overlap = 0;
+  ImageArea area;
+  uint64_t raw_overlap = 0;
   uint64_t object_overlap = 0;
-  int r = image_ctx->get_parent_overlap(snap_id, &parent_overlap);
-  if (r == 0) {
-    object_overlap = image_ctx->prune_parent_extents(parent_extents,
-                                                     parent_overlap);
+  image_ctx->get_parent_overlap(snap_id, &raw_overlap);
+  if (raw_overlap > 0) {
+    // calculate reverse mapping onto the parent image
+    Extents extents;
+    for (const auto& extent : *read_extents) {
+      extents.emplace_back(extent.offset, extent.length);
+    }
+    std::tie(parent_extents, area) = object_to_area_extents(image_ctx,
+                                                            object_no, extents);
+    object_overlap = image_ctx->prune_parent_extents(parent_extents, area,
+                                                     raw_overlap, false);
   }
-
   if (object_overlap == 0) {
     image_locker.unlock();
 
@@ -117,33 +118,34 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
   ldout(cct, 20) << dendl;
 
   ceph::bufferlist* parent_read_bl;
-  if (extents->size() > 1) {
+  if (read_extents->size() > 1) {
     auto parent_comp = new ReadResult::C_ObjectReadMergedExtents(
-            cct, extents, on_finish);
+        cct, read_extents, on_finish);
     parent_read_bl = &parent_comp->bl;
     on_finish = parent_comp;
   } else {
-    parent_read_bl = &extents->front().bl;
+    parent_read_bl = &read_extents->front().bl;
   }
 
   auto comp = AioCompletion::create_and_start(on_finish, image_ctx->parent,
                                               AIO_TYPE_READ);
-  ldout(cct, 20) << "completion " << comp << ", extents " << parent_extents
-                 << dendl;
+  ldout(cct, 20) << "completion=" << comp
+                 << " parent_extents=" << parent_extents
+                 << " area=" << area << dendl;
   auto req = io::ImageDispatchSpec::create_read(
     *image_ctx->parent, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, comp,
-    std::move(parent_extents), ReadResult{parent_read_bl},
+    std::move(parent_extents), area, ReadResult{parent_read_bl},
     image_ctx->parent->get_data_io_context(), 0, 0, trace);
   req->send();
 }
 
 template <typename I>
-int clip_request(I *image_ctx, Extents *image_extents) {
+int clip_request(I* image_ctx, Extents* image_extents, ImageArea area) {
   std::shared_lock image_locker{image_ctx->image_lock};
   for (auto &image_extent : *image_extents) {
     auto clip_len = image_extent.second;
     int r = clip_io(librbd::util::get_image_ctx(image_ctx),
-                    image_extent.first, &clip_len);
+                    image_extent.first, &clip_len, area);
     if (r < 0) {
       return r;
     }
@@ -182,12 +184,11 @@ bool trigger_copyup(I* image_ctx, uint64_t object_no, IOContext io_context,
 }
 
 template <typename I>
-void file_to_extents(I* image_ctx, uint64_t offset, uint64_t length,
-                     uint64_t buffer_offset,
-                     striper::LightweightObjectExtents* object_extents) {
+void area_to_object_extents(I* image_ctx, uint64_t offset, uint64_t length,
+                            ImageArea area, uint64_t buffer_offset,
+                            striper::LightweightObjectExtents* object_extents) {
   Extents extents = {{offset, length}};
-  image_ctx->io_image_dispatcher->remap_extents(
-          extents, IMAGE_EXTENTS_MAP_TYPE_LOGICAL_TO_PHYSICAL);
+  image_ctx->io_image_dispatcher->remap_to_physical(extents, area);
   for (auto [off, len] : extents) {
     Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, off, len, 0,
                              buffer_offset, object_extents);
@@ -195,23 +196,31 @@ void file_to_extents(I* image_ctx, uint64_t offset, uint64_t length,
 }
 
 template <typename I>
-void extent_to_file(I* image_ctx, uint64_t object_no, uint64_t offset,
-                    uint64_t length,
-                    std::vector<std::pair<uint64_t, uint64_t> >& extents) {
-  Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no,
-                          offset, length, extents);
-  image_ctx->io_image_dispatcher->remap_extents(
-          extents, IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL);
+std::pair<Extents, ImageArea> object_to_area_extents(
+    I* image_ctx, uint64_t object_no, const Extents& object_extents) {
+  Extents extents;
+  for (auto [off, len] : object_extents) {
+    Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no, off,
+                            len, extents);
+  }
+  auto area = image_ctx->io_image_dispatcher->remap_to_logical(extents);
+  return {std::move(extents), area};
 }
 
 template <typename I>
-uint64_t get_file_offset(I* image_ctx, uint64_t object_no, uint64_t offset) {
-  auto off = Striper::get_file_offset(image_ctx->cct, &image_ctx->layout,
-                                      object_no, offset);
-  Extents extents = {{off, 0}};
-  image_ctx->io_image_dispatcher->remap_extents(
-          extents, IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL);
+uint64_t area_to_raw_offset(const I& image_ctx, uint64_t offset,
+                            ImageArea area) {
+  Extents extents = {{offset, 0}};
+  image_ctx.io_image_dispatcher->remap_to_physical(extents, area);
   return extents[0].first;
+}
+
+template <typename I>
+std::pair<uint64_t, ImageArea> raw_to_area_offset(const I& image_ctx,
+                                                  uint64_t offset) {
+  Extents extents = {{offset, 0}};
+  auto area = image_ctx.io_image_dispatcher->remap_to_logical(extents);
+  return {extents[0].first, area};
 }
 
 } // namespace util
@@ -222,18 +231,19 @@ template void librbd::io::util::read_parent(
     librbd::ImageCtx *image_ctx, uint64_t object_no, ReadExtents* extents,
     librados::snap_t snap_id, const ZTracer::Trace &trace, Context* on_finish);
 template int librbd::io::util::clip_request(
-    librbd::ImageCtx *image_ctx, Extents *image_extents);
+    librbd::ImageCtx* image_ctx, Extents* image_extents, ImageArea area);
 template bool librbd::io::util::trigger_copyup(
         librbd::ImageCtx *image_ctx, uint64_t object_no, IOContext io_context,
         Context* on_finish);
-template void librbd::io::util::file_to_extents(
-        librbd::ImageCtx *image_ctx, uint64_t offset, uint64_t length,
-        uint64_t buffer_offset,
-        striper::LightweightObjectExtents* object_extents);
-template void librbd::io::util::extent_to_file(
-        librbd::ImageCtx *image_ctx, uint64_t object_no, uint64_t offset,
-        uint64_t length,
-        std::vector<std::pair<uint64_t, uint64_t> >& extents);
-template uint64_t librbd::io::util::get_file_offset(
-        librbd::ImageCtx *image_ctx, uint64_t object_no, uint64_t offset);
- 
+template void librbd::io::util::area_to_object_extents(
+    librbd::ImageCtx* image_ctx, uint64_t offset, uint64_t length,
+    ImageArea area, uint64_t buffer_offset,
+    striper::LightweightObjectExtents* object_extents);
+template auto librbd::io::util::object_to_area_extents(
+    librbd::ImageCtx* image_ctx, uint64_t object_no, const Extents& extents)
+    -> std::pair<Extents, ImageArea>;
+template uint64_t librbd::io::util::area_to_raw_offset(
+    const librbd::ImageCtx& image_ctx, uint64_t offset, ImageArea area);
+template auto librbd::io::util::raw_to_area_offset(
+    const librbd::ImageCtx& image_ctx, uint64_t offset)
+    -> std::pair<uint64_t, ImageArea>;

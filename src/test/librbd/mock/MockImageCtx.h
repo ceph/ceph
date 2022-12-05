@@ -69,7 +69,7 @@ struct MockImageCtx {
   MOCK_CONST_METHOD0(get_object_size, uint64_t());
   MOCK_CONST_METHOD0(get_current_size, uint64_t());
   MOCK_CONST_METHOD1(get_image_size, uint64_t(librados::snap_t));
-  MOCK_CONST_METHOD1(get_effective_image_size, uint64_t(librados::snap_t));
+  MOCK_CONST_METHOD1(get_area_size, uint64_t(io::ImageArea));
   MOCK_CONST_METHOD1(get_object_count, uint64_t(librados::snap_t));
   MOCK_CONST_METHOD1(get_read_flags, int(librados::snap_t));
   MOCK_CONST_METHOD2(get_flags, int(librados::snap_t in_snap_id,
@@ -85,9 +85,12 @@ struct MockImageCtx {
                                           cls::rbd::ParentImageSpec *pspec));
   MOCK_CONST_METHOD1(get_parent_info, const ParentImageInfo*(librados::snap_t));
   MOCK_CONST_METHOD2(get_parent_overlap, int(librados::snap_t in_snap_id,
-                                             uint64_t *overlap));
-  MOCK_CONST_METHOD2(prune_parent_extents, uint64_t(std::vector<std::pair<uint64_t,uint64_t> >& ,
-                                                    uint64_t));
+                                             uint64_t *raw_overlap));
+  MOCK_CONST_METHOD2(reduce_parent_overlap,
+                     std::pair<uint64_t, io::ImageArea>(uint64_t, bool));
+  MOCK_CONST_METHOD4(prune_parent_extents,
+                     uint64_t(std::vector<std::pair<uint64_t, uint64_t>>&,
+                              io::ImageArea, uint64_t, bool));
 
   MOCK_CONST_METHOD2(is_snap_protected, int(librados::snap_t in_snap_id,
                                             bool *is_protected));

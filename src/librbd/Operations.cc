@@ -17,6 +17,7 @@
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
 #include "librbd/asio/ContextWQ.h"
+#include "librbd/io/Utils.h"
 #include "librbd/journal/DisabledPolicy.h"
 #include "librbd/journal/StandardPolicy.h"
 #include "librbd/operation/DisableFeaturesRequest.h"
@@ -540,19 +541,24 @@ void Operations<I>::execute_flatten(ProgressContext &prog_ctx,
     return;
   }
 
-  uint64_t overlap;
-  int r = m_image_ctx.get_parent_overlap(CEPH_NOSNAP, &overlap);
-  ceph_assert(r == 0);
-  ceph_assert(overlap <= m_image_ctx.size);
+  uint64_t crypto_header_objects = Striper::get_num_objects(
+      m_image_ctx.layout,
+      m_image_ctx.get_area_size(io::ImageArea::CRYPTO_HEADER));
 
-  uint64_t overlap_objects = Striper::get_num_objects(m_image_ctx.layout,
-                                                      overlap);
+  uint64_t raw_overlap;
+  int r = m_image_ctx.get_parent_overlap(CEPH_NOSNAP, &raw_overlap);
+  ceph_assert(r == 0);
+  auto overlap = m_image_ctx.reduce_parent_overlap(raw_overlap, false);
+  uint64_t data_overlap_objects = Striper::get_num_objects(
+      m_image_ctx.layout,
+      (overlap.second == io::ImageArea::DATA ? overlap.first : 0));
 
   m_image_ctx.image_lock.unlock_shared();
 
+  // leave encryption header flattening to format-specific handler
   operation::FlattenRequest<I> *req = new operation::FlattenRequest<I>(
-    m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), overlap_objects,
-    prog_ctx);
+      m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish),
+      crypto_header_objects, data_overlap_objects, prog_ctx);
   req->send();
 }
 
@@ -742,9 +748,12 @@ int Operations<I>::resize(uint64_t size, bool allow_shrink, ProgressContext& pro
   CephContext *cct = m_image_ctx.cct;
 
   m_image_ctx.image_lock.lock_shared();
-  ldout(cct, 5) << this << " " << __func__ << ": "
-                << "size=" << m_image_ctx.size << ", "
-                << "new_size=" << size << dendl;
+  uint64_t raw_size = io::util::area_to_raw_offset(m_image_ctx, size,
+                                                   io::ImageArea::DATA);
+  ldout(cct, 5) << this << " " << __func__
+                << ": size=" << size
+                << " raw_size=" << m_image_ctx.size
+                << " new_raw_size=" << raw_size << dendl;
   m_image_ctx.image_lock.unlock_shared();
 
   int r = m_image_ctx.state->refresh_if_required();
@@ -753,7 +762,7 @@ int Operations<I>::resize(uint64_t size, bool allow_shrink, ProgressContext& pro
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP) &&
-      !ObjectMap<>::is_compatible(m_image_ctx.layout, size)) {
+      !ObjectMap<>::is_compatible(m_image_ctx.layout, raw_size)) {
     lderr(cct) << "New size not compatible with object map" << dendl;
     return -EINVAL;
   }
@@ -783,9 +792,12 @@ void Operations<I>::execute_resize(uint64_t size, bool allow_shrink, ProgressCon
 
   CephContext *cct = m_image_ctx.cct;
   m_image_ctx.image_lock.lock_shared();
-  ldout(cct, 5) << this << " " << __func__ << ": "
-                << "size=" << m_image_ctx.size << ", "
-                << "new_size=" << size << dendl;
+  uint64_t raw_size = io::util::area_to_raw_offset(m_image_ctx, size,
+                                                   io::ImageArea::DATA);
+  ldout(cct, 5) << this << " " << __func__
+                << ": size=" << size
+                << " raw_size=" << m_image_ctx.size
+                << " new_raw_size=" << raw_size << dendl;
 
   if (m_image_ctx.snap_id != CEPH_NOSNAP || m_image_ctx.read_only ||
       m_image_ctx.operations_disabled) {
@@ -794,7 +806,7 @@ void Operations<I>::execute_resize(uint64_t size, bool allow_shrink, ProgressCon
     return;
   } else if (m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
                                        m_image_ctx.image_lock) &&
-             !ObjectMap<>::is_compatible(m_image_ctx.layout, size)) {
+             !ObjectMap<>::is_compatible(m_image_ctx.layout, raw_size)) {
     m_image_ctx.image_lock.unlock_shared();
     on_finish->complete(-EINVAL);
     return;
@@ -802,8 +814,8 @@ void Operations<I>::execute_resize(uint64_t size, bool allow_shrink, ProgressCon
   m_image_ctx.image_lock.unlock_shared();
 
   operation::ResizeRequest<I> *req = new operation::ResizeRequest<I>(
-    m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), size, allow_shrink,
-    prog_ctx, journal_op_tid, false);
+      m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), raw_size,
+      allow_shrink, prog_ctx, journal_op_tid, false);
   req->send();
 }
 

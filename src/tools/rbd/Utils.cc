@@ -721,20 +721,19 @@ int get_snap_create_flags(const po::variables_map &vm, uint32_t *flags) {
 }
 
 int get_encryption_options(const boost::program_options::variables_map &vm,
-                           EncryptionOptions* opts) {
+                           EncryptionOptions* result) {
   std::vector<std::string> passphrase_files;
   if (vm.count(at::ENCRYPTION_PASSPHRASE_FILE)) {
     passphrase_files =
             vm[at::ENCRYPTION_PASSPHRASE_FILE].as<std::vector<std::string>>();
   }
 
-  std::vector<librbd::encryption_format_t> formats;
+  std::vector<at::EncryptionFormat> formats;
   if (vm.count(at::ENCRYPTION_FORMAT)) {
-    auto& format_structs =
-            vm[at::ENCRYPTION_FORMAT].as<std::vector<at::EncryptionFormat>>();
-    for (auto& format_struct : format_structs) {
-      formats.push_back((librbd::encryption_format_t)format_struct.format);
-    }
+    formats = vm[at::ENCRYPTION_FORMAT].as<decltype(formats)>();
+  } else if (vm.count(at::ENCRYPTION_PASSPHRASE_FILE)) {
+    formats.resize(passphrase_files.size(),
+                   at::EncryptionFormat{RBD_ENCRYPTION_FORMAT_LUKS});
   }
 
   if (formats.size() != passphrase_files.size()) {
@@ -743,49 +742,44 @@ int get_encryption_options(const boost::program_options::variables_map &vm,
     return -EINVAL;
   }
 
-  auto spec_count = formats.size();
-  if (spec_count == 0) {
-    return 0;
-  }
-
-  opts->luks_opts.reserve(spec_count);
-
-  auto& specs = opts->specs;
-  specs.resize(spec_count);
-  for (size_t i = 0; i < spec_count; ++i) {
-    std::ifstream file(passphrase_files[i].c_str());
-    auto sg = make_scope_guard([&] { file.close(); });
-
-    specs[i].format = formats[i];
-    std::string* passphrase;
-    switch (specs[i].format) {
-      case RBD_ENCRYPTION_FORMAT_LUKS: {
-        auto& luks_opts = opts->luks_opts;
-        luks_opts.emplace_back();
-        specs[i].opts = &luks_opts.back();
-        specs[i].opts_size = sizeof(luks_opts.back());
-        passphrase = &luks_opts.back().passphrase;
-        break;
-      }
-      default:
-        std::cerr << "rbd: unsupported encryption format: " << specs[i].format
-                  << std::endl;
-        return -ENOTSUP;
-    }
-
-    passphrase->assign((std::istreambuf_iterator<char>(file)),
-                       (std::istreambuf_iterator<char>()));
-
+  result->specs.clear();
+  result->specs.reserve(formats.size());
+  for (size_t i = 0; i < formats.size(); ++i) {
+    std::ifstream file(passphrase_files[i], std::ios::in | std::ios::binary);
     if (file.fail()) {
       std::cerr << "rbd: unable to open passphrase file '"
                 << passphrase_files[i] << "': " << cpp_strerror(errno)
                 << std::endl;
       return -errno;
     }
+    std::string passphrase((std::istreambuf_iterator<char>(file)),
+                           std::istreambuf_iterator<char>());
+    file.close();
 
-    if (!passphrase->empty() &&
-        (*passphrase)[passphrase->length() - 1] == '\n') {
-      passphrase->erase(passphrase->length() - 1);
+    switch (formats[i].format) {
+    case RBD_ENCRYPTION_FORMAT_LUKS: {
+      auto opts = new librbd::encryption_luks_format_options_t{
+          std::move(passphrase)};
+      result->specs.push_back(
+          {RBD_ENCRYPTION_FORMAT_LUKS, opts, sizeof(*opts)});
+      break;
+    }
+    case RBD_ENCRYPTION_FORMAT_LUKS1: {
+      auto opts = new librbd::encryption_luks1_format_options_t{
+          .passphrase = std::move(passphrase)};
+      result->specs.push_back(
+          {RBD_ENCRYPTION_FORMAT_LUKS1, opts, sizeof(*opts)});
+      break;
+    }
+    case RBD_ENCRYPTION_FORMAT_LUKS2: {
+      auto opts = new librbd::encryption_luks2_format_options_t{
+          .passphrase = std::move(passphrase)};
+      result->specs.push_back(
+          {RBD_ENCRYPTION_FORMAT_LUKS2, opts, sizeof(*opts)});
+      break;
+    }
+    default:
+      ceph_abort();
     }
   }
 

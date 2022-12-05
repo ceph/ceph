@@ -20,7 +20,10 @@
 namespace librbd {
 
   struct ImageCtx;
-  namespace io { struct AioCompletion; }
+  namespace io {
+  struct AioCompletion;
+  enum class ImageArea;
+  }
 
   class NoOpProgressContext : public ProgressContext
   {
@@ -111,8 +114,6 @@ namespace librbd {
   int break_lock(ImageCtx *ictx, const std::string& client,
 		 const std::string& cookie);
 
-  void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx);
-
   int read_header_bl(librados::IoCtx& io_ctx, const std::string& md_oid,
 		     ceph::bufferlist& header, uint64_t *ver);
   int read_header(librados::IoCtx& io_ctx, const std::string& md_oid,
@@ -122,7 +123,7 @@ namespace librbd {
   void image_info(const ImageCtx *ictx, image_info_t& info, size_t info_size);
   uint64_t oid_to_object_no(const std::string& oid,
 			    const std::string& object_prefix);
-  int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len);
+  int clip_io(ImageCtx* ictx, uint64_t off, uint64_t* len, io::ImageArea area);
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 		       uint64_t size, int order, uint64_t bid);
 

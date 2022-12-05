@@ -89,9 +89,9 @@ struct C_AssembleSnapshotDeltas : public C_AioRequest {
       SnapshotDelta* assembled_image_snapshot_delta) {
     for (auto& [key, object_extents] : object_snapshot_delta) {
       for (auto& object_extent : object_extents) {
-        Extents image_extents;
-        io::util::extent_to_file(image_ctx, object_no, object_extent.get_off(),
-                                 object_extent.get_len(), image_extents);
+        auto [image_extents, _] = io::util::object_to_area_extents(
+            image_ctx, object_no,
+            {{object_extent.get_off(), object_extent.get_len()}});
 
         auto& intervals = (*image_snapshot_delta)[key];
         auto& assembled_intervals = (*assembled_image_snapshot_delta)[key];
@@ -145,10 +145,10 @@ void readahead(I *ictx, const Extents& image_extents, IOContext io_context) {
     return;
   }
 
-  uint64_t image_size = ictx->get_effective_image_size(ictx->snap_id);
+  uint64_t data_size = ictx->get_area_size(ImageArea::DATA);
   ictx->image_lock.unlock_shared();
 
-  auto readahead_extent = ictx->readahead.update(image_extents, image_size);
+  auto readahead_extent = ictx->readahead.update(image_extents, data_size);
   uint64_t readahead_offset = readahead_extent.first;
   uint64_t readahead_length = readahead_extent.second;
 
@@ -156,8 +156,9 @@ void readahead(I *ictx, const Extents& image_extents, IOContext io_context) {
     ldout(ictx->cct, 20) << "(readahead logical) " << readahead_offset << "~"
                          << readahead_length << dendl;
     LightweightObjectExtents readahead_object_extents;
-    io::util::file_to_extents(ictx, readahead_offset, readahead_length, 0,
-                              &readahead_object_extents);
+    io::util::area_to_object_extents(ictx, readahead_offset, readahead_length,
+                                     ImageArea::DATA, 0,
+                                     &readahead_object_extents);
     for (auto& object_extent : readahead_object_extents) {
       ldout(ictx->cct, 20) << "(readahead) "
                            << data_object_name(ictx,
@@ -227,11 +228,11 @@ bool should_update_timestamp(const utime_t& now, const utime_t& timestamp,
 
 template <typename I>
 void ImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
-                               Extents &&image_extents,
+                               Extents &&image_extents, ImageArea area,
                                ReadResult &&read_result, IOContext io_context,
                                int op_flags, int read_flags,
 			       const ZTracer::Trace &parent_trace) {
-  ImageReadRequest<I> req(*ictx, c, std::move(image_extents),
+  ImageReadRequest<I> req(*ictx, c, std::move(image_extents), area,
                           std::move(read_result), io_context, op_flags,
                           read_flags, parent_trace);
   req.send();
@@ -239,21 +240,22 @@ void ImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
 
 template <typename I>
 void ImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
-                                Extents &&image_extents, bufferlist &&bl,
-                                IOContext io_context, int op_flags,
+                                Extents &&image_extents, ImageArea area,
+                                bufferlist &&bl, IOContext io_context,
+                                int op_flags,
 				const ZTracer::Trace &parent_trace) {
-  ImageWriteRequest<I> req(*ictx, c, std::move(image_extents), std::move(bl),
-                           io_context, op_flags, parent_trace);
+  ImageWriteRequest<I> req(*ictx, c, std::move(image_extents), area,
+                           std::move(bl), io_context, op_flags, parent_trace);
   req.send();
 }
 
 template <typename I>
 void ImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
-                                  Extents &&image_extents,
+                                  Extents &&image_extents, ImageArea area,
                                   uint32_t discard_granularity_bytes,
 				  IOContext io_context,
                                   const ZTracer::Trace &parent_trace) {
-  ImageDiscardRequest<I> req(*ictx, c, std::move(image_extents),
+  ImageDiscardRequest<I> req(*ictx, c, std::move(image_extents), area,
                              discard_granularity_bytes, io_context,
                              parent_trace);
   req.send();
@@ -269,11 +271,11 @@ void ImageRequest<I>::aio_flush(I *ictx, AioCompletion *c,
 
 template <typename I>
 void ImageRequest<I>::aio_writesame(I *ictx, AioCompletion *c,
-                                    Extents &&image_extents,
+                                    Extents &&image_extents, ImageArea area,
                                     bufferlist &&bl, IOContext io_context,
                                     int op_flags,
 				    const ZTracer::Trace &parent_trace) {
-  ImageWriteSameRequest<I> req(*ictx, c, std::move(image_extents),
+  ImageWriteSameRequest<I> req(*ictx, c, std::move(image_extents), area,
                                std::move(bl), io_context, op_flags,
                                parent_trace);
   req.send();
@@ -282,12 +284,13 @@ void ImageRequest<I>::aio_writesame(I *ictx, AioCompletion *c,
 template <typename I>
 void ImageRequest<I>::aio_compare_and_write(I *ictx, AioCompletion *c,
                                             Extents &&image_extents,
+                                            ImageArea area,
                                             bufferlist &&cmp_bl,
                                             bufferlist &&bl,
                                             uint64_t *mismatch_offset,
                                             IOContext io_context, int op_flags,
                                             const ZTracer::Trace &parent_trace) {
-  ImageCompareAndWriteRequest<I> req(*ictx, c, std::move(image_extents),
+  ImageCompareAndWriteRequest<I> req(*ictx, c, std::move(image_extents), area,
                                      std::move(cmp_bl), std::move(bl),
                                      mismatch_offset, io_context, op_flags,
                                      parent_trace);
@@ -363,12 +366,12 @@ void ImageRequest<I>::update_timestamp() {
 
 template <typename I>
 ImageReadRequest<I>::ImageReadRequest(I &image_ctx, AioCompletion *aio_comp,
-                                      Extents &&image_extents,
+                                      Extents &&image_extents, ImageArea area,
                                       ReadResult &&read_result,
                                       IOContext io_context, int op_flags,
 				      int read_flags,
                                       const ZTracer::Trace &parent_trace)
-  : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents),
+  : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents), area,
                     io_context, "read", parent_trace),
     m_op_flags(op_flags), m_read_flags(read_flags) {
   aio_comp->read_result = std::move(read_result);
@@ -380,7 +383,8 @@ void ImageReadRequest<I>::send_request() {
   CephContext *cct = image_ctx.cct;
 
   auto &image_extents = this->m_image_extents;
-  if (image_ctx.cache && image_ctx.readahead_max_bytes > 0 &&
+  if (this->m_image_area == ImageArea::DATA &&
+      image_ctx.cache && image_ctx.readahead_max_bytes > 0 &&
       !(m_op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
     readahead(get_image_ctx(&image_ctx), image_extents, this->m_io_context);
   }
@@ -393,8 +397,9 @@ void ImageReadRequest<I>::send_request() {
       continue;
     }
 
-    util::file_to_extents(&image_ctx, extent.first, extent.second, buffer_ofs,
-                          &object_extents);
+    util::area_to_object_extents(&image_ctx, extent.first, extent.second,
+                                 this->m_image_area, buffer_ofs,
+                                 &object_extents);
     buffer_ofs += extent.second;
   }
 
@@ -444,8 +449,9 @@ void AbstractImageWriteRequest<I>::send_request() {
     }
 
     // map to object extents
-    io::util::file_to_extents(&image_ctx, extent.first, extent.second, clip_len,
-                              &object_extents);
+    io::util::area_to_object_extents(&image_ctx, extent.first, extent.second,
+                                     this->m_image_area, clip_len,
+                                     &object_extents);
     clip_len += extent.second;
   }
 
@@ -814,9 +820,9 @@ int ImageCompareAndWriteRequest<I>::prune_object_extents(
 template <typename I>
 ImageListSnapsRequest<I>::ImageListSnapsRequest(
     I& image_ctx, AioCompletion* aio_comp, Extents&& image_extents,
-    SnapIds&& snap_ids, int list_snaps_flags, SnapshotDelta* snapshot_delta,
-    const ZTracer::Trace& parent_trace)
-  : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents),
+    ImageArea area, SnapIds&& snap_ids, int list_snaps_flags,
+    SnapshotDelta* snapshot_delta, const ZTracer::Trace& parent_trace)
+  : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents), area,
                     image_ctx.get_data_io_context(), "list-snaps",
                     parent_trace),
     m_snap_ids(std::move(snap_ids)), m_list_snaps_flags(list_snaps_flags),
@@ -837,8 +843,9 @@ void ImageListSnapsRequest<I>::send_request() {
     }
 
     striper::LightweightObjectExtents object_extents;
-    io::util::file_to_extents(&image_ctx, image_extent.first,
-                              image_extent.second, 0, &object_extents);
+    io::util::area_to_object_extents(&image_ctx, image_extent.first,
+                                     image_extent.second, this->m_image_area, 0,
+                                     &object_extents);
     for (auto& object_extent : object_extents) {
       object_number_extents[object_extent.object_no].emplace_back(
         object_extent.offset, object_extent.length);

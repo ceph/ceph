@@ -86,15 +86,40 @@ struct ProgressContext : public librbd::ProgressContext {
 int get_percentage(uint64_t part, uint64_t whole);
 
 struct EncryptionOptions {
-    std::vector<librbd::encryption_spec_t> specs;
-    std::vector<librbd::encryption_luks_format_options_t> luks_opts;
+  std::vector<librbd::encryption_spec_t> specs;
 
-    ~EncryptionOptions() {
-      for (auto& opts : luks_opts) {
-        auto& passphrase = opts.passphrase;
-        ceph_memzero_s(&passphrase[0], passphrase.size(), passphrase.size());
+  ~EncryptionOptions() {
+    for (auto& spec : specs) {
+      switch (spec.format) {
+      case RBD_ENCRYPTION_FORMAT_LUKS: {
+        auto opts =
+            static_cast<librbd::encryption_luks_format_options_t*>(spec.opts);
+        ceph_memzero_s(opts->passphrase.data(), opts->passphrase.size(),
+                       opts->passphrase.size());
+        delete opts;
+        break;
+      }
+      case RBD_ENCRYPTION_FORMAT_LUKS1: {
+        auto opts =
+            static_cast<librbd::encryption_luks1_format_options_t*>(spec.opts);
+        ceph_memzero_s(opts->passphrase.data(), opts->passphrase.size(),
+                       opts->passphrase.size());
+        delete opts;
+        break;
+      }
+      case RBD_ENCRYPTION_FORMAT_LUKS2: {
+        auto opts =
+            static_cast<librbd::encryption_luks2_format_options_t*>(spec.opts);
+        ceph_memzero_s(opts->passphrase.data(), opts->passphrase.size(),
+                       opts->passphrase.size());
+        delete opts;
+        break;
+      }
+      default:
+        ceph_abort();
       }
     }
+  }
 };
 
 template <typename T, void(T::*MF)(int)>
@@ -176,7 +201,7 @@ int get_snap_create_flags(const boost::program_options::variables_map &vm,
                           uint32_t *flags);
 
 int get_encryption_options(const boost::program_options::variables_map &vm,
-                           EncryptionOptions* opts);
+                           EncryptionOptions* result);
 
 void init_context();
 

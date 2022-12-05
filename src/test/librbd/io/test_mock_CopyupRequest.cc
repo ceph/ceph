@@ -84,20 +84,25 @@ namespace io {
 
 namespace util {
 
-template <> void file_to_extents(
-        MockTestImageCtx* image_ctx, uint64_t offset, uint64_t length,
-        uint64_t buffer_offset,
-        striper::LightweightObjectExtents* object_extents) {
+template <>
+void area_to_object_extents(MockTestImageCtx* image_ctx, uint64_t offset,
+                            uint64_t length, ImageArea area,
+                            uint64_t buffer_offset,
+                            striper::LightweightObjectExtents* object_extents) {
   Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, offset, length,
                            0, buffer_offset, object_extents);
 }
 
-template <> void extent_to_file(
-        MockTestImageCtx* image_ctx, uint64_t object_no, uint64_t offset,
-        uint64_t length,
-        std::vector<std::pair<uint64_t, uint64_t> >& extents) {
-  Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no,
-                          offset, length, extents);
+template <>
+std::pair<Extents, ImageArea> object_to_area_extents(
+    MockTestImageCtx* image_ctx, uint64_t object_no,
+    const Extents& object_extents) {
+  Extents extents;
+  for (auto [off, len] : object_extents) {
+    Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no, off,
+                            len, extents);
+  }
+  return {std::move(extents), ImageArea::DATA};
 }
 
 } // namespace util
@@ -192,7 +197,7 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
 
   void expect_prune_parent_extents(MockTestImageCtx& mock_image_ctx,
                                    uint64_t overlap, uint64_t object_overlap) {
-    EXPECT_CALL(mock_image_ctx, prune_parent_extents(_, overlap))
+    EXPECT_CALL(mock_image_ctx, prune_parent_extents(_, _, overlap, _))
       .WillOnce(WithoutArgs(Invoke([object_overlap]() {
                               return object_overlap;
                             })));
@@ -424,8 +429,8 @@ TEST_F(TestMockIoCopyupRequest, Standard) {
                        {{0, 4096}}, data, 0);
   expect_write(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0), 0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->append_request(&mock_write_request, {});
   req->send();
@@ -481,8 +486,8 @@ TEST_F(TestMockIoCopyupRequest, StandardWithSnaps) {
                        data, 0);
   expect_write(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0), 0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->append_request(&mock_write_request, {});
   req->send();
@@ -521,8 +526,8 @@ TEST_F(TestMockIoCopyupRequest, CopyOnRead) {
   expect_sparse_copyup(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0),
                        {{0, 4096}}, data, 0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->send();
   flush_async_operations(ictx);
@@ -567,8 +572,8 @@ TEST_F(TestMockIoCopyupRequest, CopyOnReadWithSnaps) {
   expect_sparse_copyup(mock_image_ctx, 0, ictx->get_object_name(0), {{0, 4096}},
                        data, 0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->send();
   flush_async_operations(ictx);
@@ -613,8 +618,8 @@ TEST_F(TestMockIoCopyupRequest, DeepCopy) {
                        {}, "", 0);
   expect_write(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0), 0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->append_request(&mock_write_request, {});
   req->send();
@@ -651,8 +656,8 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyOnRead) {
   expect_object_map_update(mock_image_ctx, CEPH_NOSNAP, 0, OBJECT_EXISTS, true,
                            0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->send();
   flush_async_operations(ictx);
@@ -718,8 +723,8 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyWithPostSnaps) {
                        {}, "", 0);
   expect_write(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0), 0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->append_request(&mock_write_request, {});
   req->send();
@@ -790,8 +795,8 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyWithPreAndPostSnaps) {
                        {}, "", 0);
   expect_write(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0), 0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->append_request(&mock_write_request, {});
   req->send();
@@ -832,8 +837,8 @@ TEST_F(TestMockIoCopyupRequest, ZeroedCopyup) {
                        {}, "", 0);
   expect_write(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0), 0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->append_request(&mock_write_request, {});
   req->send();
@@ -872,8 +877,8 @@ TEST_F(TestMockIoCopyupRequest, ZeroedCopyOnRead) {
   expect_sparse_copyup(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0),
                        {}, "", 0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->send();
   flush_async_operations(ictx);
@@ -906,8 +911,8 @@ TEST_F(TestMockIoCopyupRequest, NoOpCopyup) {
   MockAbstractObjectWriteRequest mock_write_request;
   expect_is_empty_write_op(mock_write_request, true);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->append_request(&mock_write_request, {});
   req->send();
@@ -946,8 +951,8 @@ TEST_F(TestMockIoCopyupRequest, RestartWrite) {
   expect_object_map_update(mock_image_ctx, CEPH_NOSNAP, 0, OBJECT_EXISTS, true,
                            0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   expect_add_copyup_ops(mock_write_request1);
   expect_sparse_copyup(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0),
                        {{0, 4096}}, data, 0);
@@ -991,8 +996,8 @@ TEST_F(TestMockIoCopyupRequest, ReadFromParentError) {
 
   expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, "", -EPERM);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   MockAbstractObjectWriteRequest mock_write_request;
   req->append_request(&mock_write_request, {});
@@ -1025,8 +1030,8 @@ TEST_F(TestMockIoCopyupRequest, PrepareCopyupError) {
   expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, data, 0);
   expect_prepare_copyup(mock_image_ctx, -EIO);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   MockAbstractObjectWriteRequest mock_write_request;
   req->append_request(&mock_write_request, {});
@@ -1064,8 +1069,8 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyError) {
 
   expect_is_empty_write_op(mock_write_request, false);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->append_request(&mock_write_request, {});
   req->send();
@@ -1104,8 +1109,8 @@ TEST_F(TestMockIoCopyupRequest, UpdateObjectMapError) {
   expect_object_map_update(mock_image_ctx, CEPH_NOSNAP, 0, OBJECT_EXISTS, true,
                            -EINVAL);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->append_request(&mock_write_request, {});
   req->send();
@@ -1157,8 +1162,8 @@ TEST_F(TestMockIoCopyupRequest, CopyupError) {
                        data, -EPERM);
   expect_write(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0), 0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->append_request(&mock_write_request, {});
   req->send();
@@ -1203,7 +1208,8 @@ TEST_F(TestMockIoCopyupRequest, SparseCopyupNotSupported) {
   expect_copyup(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0), data, 0);
   expect_write(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0), 0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->append_request(&mock_write_request, {});
   req->send();
@@ -1257,8 +1263,8 @@ TEST_F(TestMockIoCopyupRequest, ProcessCopyup) {
                        {{2048, 1024}}, data.substr(0, 1024), 0);
   expect_write(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0), 0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->append_request(&mock_write_request, {{0, 1024}});
   req->send();
@@ -1321,8 +1327,8 @@ TEST_F(TestMockIoCopyupRequest, ProcessCopyupOverwrite) {
                        {{0, 1024}, {2048, 1024}}, data.substr(0, 2048), 0);
   expect_write(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0), 0);
 
-  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
-                                   {{0, 4096}}, {});
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}},
+                                   ImageArea::DATA, {});
   mock_image_ctx.copyup_list[0] = req;
   req->append_request(&mock_write_request, {{0, 1024}});
   req->send();

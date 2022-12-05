@@ -872,7 +872,7 @@ CEPH_RBD_API int rbd_encryption_load(rbd_image_t image,
  * interpreted as plaintext.
  */
 CEPH_RBD_API int rbd_encryption_load2(rbd_image_t image,
-                                      rbd_encryption_spec_t *specs,
+                                      const rbd_encryption_spec_t *specs,
                                       size_t spec_count);
 
 /* snapshots */

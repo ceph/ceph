@@ -600,7 +600,7 @@ public:
                         size_t opts_size);
   int encryption_load(encryption_format_t format, encryption_options_t opts,
                       size_t opts_size);
-  int encryption_load2(encryption_spec_t *specs, size_t spec_count);
+  int encryption_load2(const encryption_spec_t *specs, size_t spec_count);
 
   /* striping */
   uint64_t get_stripe_unit() const;
