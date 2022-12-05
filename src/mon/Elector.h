@@ -188,7 +188,7 @@ class Elector : public ElectionOwner, RankProvider {
    * Send a ping to the specified peer.
    * @n optional time that we will use instead of calling ceph_clock_now()
    */
-  void send_peer_ping(int peer, const utime_t *n=NULL);
+  bool send_peer_ping(int peer, const utime_t *n=NULL);
   /**
    * Check the state of pinging the specified peer. This is our
    * "tick" for heartbeating; scheduled by itself and begin_peer_ping().
