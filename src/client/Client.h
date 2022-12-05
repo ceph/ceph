@@ -982,6 +982,7 @@ protected:
   void update_snap_trace(const bufferlist& bl, SnapRealm **realm_ret, bool must_flush=true);
   void invalidate_snaprealm_and_children(SnapRealm *realm);
 
+  void refresh_snapdir_attrs(Inode *in, Inode *diri);
   Inode *open_snapdir(Inode *diri);
 
   int get_fd() {
