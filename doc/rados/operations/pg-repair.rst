@@ -14,38 +14,52 @@ Commands for Diagnosing Placement-group Problems
 ================================================
 The commands in this section provide various ways of diagnosing broken placement groups.
 
-The following command provides a high-level (low detail) overview of the health of the ceph cluster::
+The following command provides a high-level (low detail) overview of the health of the ceph cluster:
 
-   # ceph health detail
+.. prompt:: bash #
 
-The following command provides more detail on the status of the placement groups::
+   ceph health detail
 
-   # ceph pg dump --format=json-pretty
+The following command provides more detail on the status of the placement groups:
 
-The following command lists inconsistent placement groups::
+.. prompt:: bash #
 
-   # rados list-inconsistent-pg {pool}
+   ceph pg dump --format=json-pretty
 
-The following command lists inconsistent rados objects::
+The following command lists inconsistent placement groups:
 
-   # rados list-inconsistent-obj {pgid}
+.. prompt:: bash #
 
-The following command lists inconsistent snapsets in the given placement group::
+   rados list-inconsistent-pg {pool}
 
-   # rados list-inconsistent-snapset {pgid}
+The following command lists inconsistent rados objects:
+
+.. prompt:: bash #
+
+   rados list-inconsistent-obj {pgid}
+
+The following command lists inconsistent snapsets in the given placement group:
+
+.. prompt:: bash #
+
+   rados list-inconsistent-snapset {pgid}
 
 
 Commands for Repairing Placement Groups
 =======================================
-The form of the command to repair a broken placement group is::
+The form of the command to repair a broken placement group is:
 
-   # ceph pg repair {pgid}
+.. prompt:: bash #
+
+   ceph pg repair {pgid}
 
 Where ``{pgid}`` is the id of the affected placement group.
 
-For example::
+For example:
 
-   # ceph pg repair 1.4
+.. prompt:: bash #
+
+   ceph pg repair 1.4
 
 More Information on Placement Group Repair
 ==========================================
