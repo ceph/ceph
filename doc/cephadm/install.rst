@@ -426,10 +426,10 @@ have access to all hosts that you plan to add to the cluster.
    ::
 
       [mgr]
-      mgr/cephadm/container_image_prometheus *<hostname>*:5000/prometheus
-      mgr/cephadm/container_image_node_exporter *<hostname>*:5000/node_exporter
-      mgr/cephadm/container_image_grafana *<hostname>*:5000/grafana
-      mgr/cephadm/container_image_alertmanager *<hostname>*:5000/alertmanger
+      mgr/cephadm/container_image_prometheus = *<hostname>*:5000/prometheus
+      mgr/cephadm/container_image_node_exporter = *<hostname>*:5000/node_exporter
+      mgr/cephadm/container_image_grafana = *<hostname>*:5000/grafana
+      mgr/cephadm/container_image_alertmanager = *<hostname>*:5000/alertmanger
 
 #. Run bootstrap using the ``--image`` flag and pass the name of your
    container image as the argument of the image flag. For example:
