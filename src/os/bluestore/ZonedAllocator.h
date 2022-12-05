@@ -76,8 +76,8 @@ public:
   uint64_t get_free() override;
 
   void dump() override;
-  void dump(std::function<void(uint64_t offset,
-                               uint64_t length)> notify) override;
+  void foreach(
+    std::function<void(uint64_t offset, uint64_t length)> notify) override;
 
   void zoned_set_zone_states(std::vector<zone_state_t> &&_zone_states) override;
   bool zoned_get_zones_to_clean(std::deque<uint64_t> *zones_to_clean) override;

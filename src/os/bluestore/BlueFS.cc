@@ -3804,7 +3804,7 @@ size_t BlueFS::probe_alloc_avail(int dev, uint64_t alloc_size)
     total += p2align(len, alloc_size);
   };
   if (alloc[dev]) {
-    alloc[dev]->dump(iterated_allocation);
+    alloc[dev]->foreach(iterated_allocation);
   }
   return total;
 }

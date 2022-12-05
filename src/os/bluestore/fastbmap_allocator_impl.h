@@ -503,7 +503,7 @@ public:
 
   static inline ssize_t count_0s(slot_t slot_val, size_t start_pos);
   static inline ssize_t count_1s(slot_t slot_val, size_t start_pos);
-  void dump(std::function<void(uint64_t offset, uint64_t length)> notify);
+  void foreach_internal(std::function<void(uint64_t offset, uint64_t length)> notify);
 };
 
 
@@ -578,6 +578,22 @@ public:
     _mark_l2_on_l1(l2_pos, l2_pos_end);
     return allocated;
   }
+
+  void foreach_internal(
+    std::function<void(uint64_t offset, uint64_t length)> notify)
+  {
+    size_t alloc_size = get_min_alloc_size();
+    auto multiply_by_alloc_size = [alloc_size, notify](size_t off, size_t len) {
+      notify(off * alloc_size, len * alloc_size);
+    };
+    std::lock_guard l(lock);
+    l1.foreach_internal(multiply_by_alloc_size);
+  }
+  double get_fragmentation_internal() {
+    std::lock_guard l(lock);
+    return l1.get_fragmentation();
+  }
+
 protected:
   ceph::mutex lock = ceph::make_mutex("AllocatorLevel02::lock");
   L1 l1;
@@ -823,10 +839,6 @@ protected:
   void _shutdown()
   {
     last_pos = 0;
-  }
-  double _get_fragmentation() {
-    std::lock_guard l(lock);
-    return l1.get_fragmentation();
   }
 };
 
