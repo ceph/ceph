@@ -110,13 +110,15 @@ struct interrupt_cond_t {
   void reset() {
     if (--ref_count == 0) {
       INTR_FUT_DEBUG(
-	"call_with_interruption_impl clearing interrupt_cond: {},{}",
+	"{}: clearing interrupt_cond: {},{}",
+        __func__,
 	(void*)interrupt_cond.get(),
 	typeid(InterruptCond).name());
       interrupt_cond.release();
     } else {
       INTR_FUT_DEBUG(
-	"call_with_interruption_impl end without clearing interrupt_cond: {},{}, ref_count: {}",
+	"{}: end without clearing interrupt_cond: {},{}, ref_count: {}",
+        __func__,
 	(void*)interrupt_cond.get(),
 	typeid(InterruptCond).name(),
 	ref_count);
