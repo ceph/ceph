@@ -20,6 +20,7 @@
 #include "mds/MDLog.h"
 #include "mds/CDir.h"
 #include "mds/CDentry.h"
+#include "mds/ScrubStack.h"
 #include "events/EUpdate.h"
 #include "messages/MClientRequest.h"
 
@@ -296,6 +297,11 @@ void StrayManager::enqueue(CDentry *dn, bool trunc)
   ceph_assert(dnl);
   CInode *in = dnl->get_inode();
   ceph_assert(in);
+
+  //remove inode from scrub stack if it is being purged
+  if(mds->scrubstack->remove_inode_if_stacked(in)) {
+    dout(20) << "removed " << *in << " from the scrub stack" << dendl;
+  }
 
   /* We consider a stray to be purging as soon as it is enqueued, to avoid
    * enqueing it twice */
