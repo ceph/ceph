@@ -108,8 +108,8 @@ void FormatRequest<I>::send() {
   uint64_t image_size = m_image_ctx->get_image_size(CEPH_NOSNAP);
   m_image_ctx->image_lock.unlock_shared();
 
-  if (m_header.get_data_offset() >= image_size) {
-    lderr(m_image_ctx->cct) << "image is too small. format requires more than "
+  if (m_header.get_data_offset() > image_size) {
+    lderr(m_image_ctx->cct) << "image is too small, format requires "
                             << m_header.get_data_offset() << " bytes" << dendl;
     finish(-ENOSPC);
     return;
@@ -167,7 +167,7 @@ void FormatRequest<I>::send() {
   ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_write(
           *m_image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-          {{0, bl.length()}}, std::move(bl),
+          {{0, bl.length()}}, io::ImageArea::DATA, std::move(bl),
           m_image_ctx->get_data_io_context(), 0, trace);
   req->send();
 }

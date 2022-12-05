@@ -974,7 +974,7 @@ int Image<I>::encryption_format(I* ictx, encryption_format_t format,
 }
 
 template <typename I>
-int Image<I>::encryption_load(I* ictx, encryption_spec_t *specs,
+int Image<I>::encryption_load(I* ictx, const encryption_spec_t *specs,
                               size_t spec_count, bool c_api) {
   std::vector<std::unique_ptr<crypto::EncryptionFormat<I>>> formats;
 
