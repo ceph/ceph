@@ -1,5 +1,6 @@
 overrides:
   ceph:
+    wait-for-scrub: false
     log-ignorelist:
     - but it is still running
     - objects unfound and apparently lost
@@ -31,3 +32,4 @@ tasks:
     thrash_primary_affinity: false
     ceph_objectstore_tool: false
     chance_inject_pause_short: 0
+    chance_thrash_cluster_full: 0
