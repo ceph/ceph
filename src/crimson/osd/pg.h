@@ -539,9 +539,6 @@ public:
     eversion_t &version);
 
 private:
-  void fill_op_params_bump_pg_version(
-    osd_op_params_t& osd_op_p,
-    const bool user_modify);
   using do_osd_ops_ertr = crimson::errorator<
    crimson::ct_error::eagain>;
   using do_osd_ops_iertr =
