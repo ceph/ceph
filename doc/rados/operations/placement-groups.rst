@@ -629,9 +629,11 @@ To get the number of placement groups in a pool, execute the following:
 Get a Cluster's PG Statistics
 =============================
 
-To get the statistics for the placement groups in your cluster, execute the following::
+To get the statistics for the placement groups in your cluster, execute the following:
 
-        ceph pg dump [--format {format}]
+.. prompt:: bash #
+
+   ceph pg dump [--format {format}]
 
 Valid formats are ``plain`` (default) and ``json``.
 
@@ -640,9 +642,11 @@ Get Statistics for Stuck PGs
 ============================
 
 To get the statistics for all placement groups stuck in a specified state,
-execute the following::
+execute the following:
 
-        ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format <format>] [-t|--threshold <seconds>]
+.. prompt:: bash #
+
+   ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format <format>] [-t|--threshold <seconds>]
 
 **Inactive** Placement groups cannot process reads or writes because they are waiting for an OSD
 with the most up-to-date data to come up and in.
@@ -661,33 +665,43 @@ of seconds the placement group is stuck before including it in the returned stat
 Get a PG Map
 ============
 
-To get the placement group map for a particular placement group, execute the following::
+To get the placement group map for a particular placement group, execute the following:
 
-        ceph pg map {pg-id}
+.. prompt:: bash #
 
-For example::
+   ceph pg map {pg-id}
 
-        ceph pg map 1.6c
+For example: 
 
-Ceph will return the placement group map, the placement group, and the OSD status::
+.. prompt:: bash #
 
-        osdmap e13 pg 1.6c (1.6c) -> up [1,0] acting [1,0]
+   ceph pg map 1.6c
+
+Ceph will return the placement group map, the placement group, and the OSD status:
+
+.. prompt:: bash #
+
+   osdmap e13 pg 1.6c (1.6c) -> up [1,0] acting [1,0]
 
 
 Get a PGs Statistics
 ====================
 
-To retrieve statistics for a particular placement group, execute the following::
+To retrieve statistics for a particular placement group, execute the following:
 
-        ceph pg {pg-id} query
+.. prompt:: bash #
+
+   ceph pg {pg-id} query
 
 
 Scrub a Placement Group
 =======================
 
-To scrub a placement group, execute the following::
+To scrub a placement group, execute the following:
 
-        ceph pg scrub {pg-id}
+.. prompt:: bash #
+
+   ceph pg scrub {pg-id}
 
 Ceph checks the primary and any replica nodes, generates a catalog of all objects
 in the placement group and compares them to ensure that no objects are missing
@@ -695,9 +709,11 @@ or mismatched, and their contents are consistent.  Assuming the replicas all
 match, a final semantic sweep ensures that all of the snapshot-related object
 metadata is consistent. Errors are reported via logs.
 
-To scrub all placement groups from a specific pool, execute the following::
+To scrub all placement groups from a specific pool, execute the following:
 
-        ceph osd pool scrub {pool-name}
+.. prompt:: bash #
+
+   ceph osd pool scrub {pool-name}
 
 Prioritize backfill/recovery of a Placement Group(s)
 ====================================================
@@ -709,19 +725,23 @@ machines and other PGs may be used by inactive machines/less relevant data).
 In that case, you may want to prioritize recovery of those groups so
 performance and/or availability of data stored on those groups is restored
 earlier. To do this (mark particular placement group(s) as prioritized during
-backfill or recovery), execute the following::
+backfill or recovery), execute the following:
 
-        ceph pg force-recovery {pg-id} [{pg-id #2}] [{pg-id #3} ...]
-        ceph pg force-backfill {pg-id} [{pg-id #2}] [{pg-id #3} ...]
+.. prompt:: bash #
+
+   ceph pg force-recovery {pg-id} [{pg-id #2}] [{pg-id #3} ...]
+   ceph pg force-backfill {pg-id} [{pg-id #2}] [{pg-id #3} ...]
 
 This will cause Ceph to perform recovery or backfill on specified placement
 groups first, before other placement groups. This does not interrupt currently
 ongoing backfills or recovery, but causes specified PGs to be processed
 as soon as possible. If you change your mind or prioritize wrong groups,
-use::
+use:
 
-        ceph pg cancel-force-recovery {pg-id} [{pg-id #2}] [{pg-id #3} ...]
-        ceph pg cancel-force-backfill {pg-id} [{pg-id #2}] [{pg-id #3} ...]
+.. prompt:: bash #
+
+   ceph pg cancel-force-recovery {pg-id} [{pg-id #2}] [{pg-id #3} ...]
+   ceph pg cancel-force-backfill {pg-id} [{pg-id #2}] [{pg-id #3} ...]
 
 This will remove "force" flag from those PGs and they will be processed
 in default order. Again, this doesn't affect currently processed placement
@@ -731,15 +751,19 @@ The "force" flag is cleared automatically after recovery or backfill of group
 is done.
 
 Similarly, you may use the following commands to force Ceph to perform recovery
-or backfill on all placement groups from a specified pool first::
+or backfill on all placement groups from a specified pool first:
 
-        ceph osd pool force-recovery {pool-name}
-        ceph osd pool force-backfill {pool-name}
+.. prompt:: bash #
 
-or::
+   ceph osd pool force-recovery {pool-name}
+   ceph osd pool force-backfill {pool-name}
 
-        ceph osd pool cancel-force-recovery {pool-name}
-        ceph osd pool cancel-force-backfill {pool-name}
+or:
+
+.. prompt:: bash #
+
+   ceph osd pool cancel-force-recovery {pool-name}
+   ceph osd pool cancel-force-backfill {pool-name}
 
 to restore to the default recovery or backfill priority if you change your mind.
 
@@ -748,9 +772,11 @@ priority computations, so use them with caution!
 Especially, if you have multiple pools that are currently sharing the same
 underlying OSDs, and some particular pools hold data more important than others,
 we recommend you use the following command to re-arrange all pools's
-recovery/backfill priority in a better order::
+recovery/backfill priority in a better order:
 
-        ceph osd pool set {pool-name} recovery_priority {value}
+.. prompt:: bash #
+
+   ceph osd pool set {pool-name} recovery_priority {value}
 
 For example, if you have 10 pools you could make the most important one priority 10,
 next 9, etc. Or you could leave most pools alone and have say 3 important pools
@@ -771,9 +797,11 @@ are recovered.
 
 Currently the only supported option is "revert", which will either roll back to
 a previous version of the object or (if it was a new object) forget about it
-entirely. To mark the "unfound" objects as "lost", execute the following::
+entirely. To mark the "unfound" objects as "lost", execute the following:
 
-        ceph pg {pg-id} mark_unfound_lost revert|delete
+.. prompt:: bash #
+
+   ceph pg {pg-id} mark_unfound_lost revert|delete
 
 .. important:: Use this feature with caution, because it may confuse
    applications that expect the object(s) to exist.
