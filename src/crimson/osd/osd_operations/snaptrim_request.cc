@@ -137,16 +137,18 @@ seastar::future<seastar::stop_iteration> SnapTrimRequest::with_pg(
           logger().error("{}: get_next_objects_to_trim returned {}",
                          *this, cpp_strerror(r));
           ceph_abort_msg("get_next_objects_to_trim returned an invalid code");
+        } else {
+          assert(!to_trim.empty());
         }
+        logger().debug("{}: async almost done line {}", *this, __LINE__);
         return std::make_optional(std::move(to_trim));
-      }).then([&shard_services, this] (const auto& to_trim) {
-        if (!to_trim) {
-          return seastar::make_ready_future<seastar::stop_iteration>(
+      }).then_interruptible([&shard_services, this] (const auto& to_trim) {
+        if (!to_trim || to_trim->empty()) {
+          return interruptor::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         }
-        assert(!to_trim->empty());
         for (const auto& object : *to_trim) {
-          logger().debug("{}: trimming {}", object);
+          logger().debug("{}: trimming {}", *this, object);
           auto [op, fut] = shard_services.start_operation<SnapTrimObjSubRequest>(
             pg,
             object,
