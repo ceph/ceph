@@ -57,7 +57,7 @@ SegmentedOolWriter::write_record(
       TRACET("{} ool extent written at {} -- {}",
              t, segment_allocator.get_name(),
              extent_addr, *extent);
-      t.mark_delayed_extent_ool(extent, extent_addr);
+      t.update_delayed_ool_extent_addr(extent, extent_addr);
       extent_addr = extent_addr.as_seg_paddr().add_offset(
           extent->get_length());
     }
@@ -256,31 +256,44 @@ ExtentPlacementManager::open_for_write()
   });
 }
 
-ExtentPlacementManager::alloc_paddr_iertr::future<>
-ExtentPlacementManager::delayed_allocate_and_write(
-    Transaction &t,
-    const std::list<LogicalCachedExtentRef> &delayed_extents)
+ExtentPlacementManager::dispatch_result_t
+ExtentPlacementManager::dispatch_delayed_extents(Transaction &t)
 {
-  LOG_PREFIX(ExtentPlacementManager::delayed_allocate_and_write);
-  DEBUGT("start with {} delayed extents",
-         t, delayed_extents.size());
-  assert(writer_refs.size());
-  return seastar::do_with(
-      std::map<ExtentOolWriter*, std::list<LogicalCachedExtentRef>>(),
-      [this, &t, &delayed_extents](auto& alloc_map) {
-    for (auto& extent : delayed_extents) {
-      // For now, just do ool allocation for any delayed extent
+  dispatch_result_t res;
+  res.delayed_extents = t.get_delayed_alloc_list();
+
+  // init projected usage
+  for (auto &extent : t.get_inline_block_list()) {
+    if (extent->is_valid()) {
+      res.usage.inline_usage += extent->get_length();
+    }
+  }
+
+  for (auto &extent : res.delayed_extents) {
+    if (dispatch_delayed_extent(extent)) {
+      res.usage.inline_usage += extent->get_length();
+      t.mark_delayed_extent_inline(extent);
+    } else {
+      res.usage.ool_usage += extent->get_length();
+      t.mark_delayed_extent_ool(extent);
       auto writer_ptr = get_writer(
           extent->get_user_hint(),
           get_extent_category(extent->get_type()),
           extent->get_rewrite_generation());
-      alloc_map[writer_ptr].emplace_back(extent);
+      res.alloc_map[writer_ptr].emplace_back(extent);
     }
-    return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
-      auto writer = p.first;
-      auto& extents = p.second;
-      return writer->alloc_write_ool_extents(t, extents);
-    });
+  }
+  return res;
+}
+
+ExtentPlacementManager::alloc_paddr_iertr::future<>
+ExtentPlacementManager::write_delayed_ool_extents(
+    Transaction& t,
+    extents_by_writer_t& alloc_map) {
+  return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
+    auto writer = p.first;
+    auto& extents = p.second;
+    return writer->alloc_write_ool_extents(t, extents);
   });
 }
 
@@ -570,4 +583,12 @@ RandomBlockOolWriter::do_write(
   });
 }
 
+std::ostream &operator<<(std::ostream &out, const ExtentPlacementManager::projected_usage_t &usage)
+{
+  return out << "projected_usage_t("
+             << "inline_usage=" << usage.inline_usage
+             << ", ool_usage=" << usage.ool_usage << ")";
 }
+
+}
+

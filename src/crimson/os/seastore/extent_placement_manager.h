@@ -253,14 +253,41 @@ public:
   }
 
   /**
-   * delayed_allocate_and_write
+   * dispatch_result_t
    *
-   * Performs delayed allocation and do writes for out-of-line extents.
+   * ool extents are placed in alloc_map and passed to
+   * EPM::write_delayed_ool_extents,
+   * delayed_extents is used to update lba mapping.
+   * usage is used to reserve projected space
+   */
+  struct projected_usage_t {
+    std::size_t inline_usage = 0;
+    std::size_t ool_usage = 0;
+  };
+  using extents_by_writer_t =
+    std::map<ExtentOolWriter*, std::list<LogicalCachedExtentRef>>;
+  struct dispatch_result_t {
+    extents_by_writer_t alloc_map;
+    std::list<LogicalCachedExtentRef> delayed_extents;
+    projected_usage_t usage;
+  };
+
+  /**
+   * dispatch_delayed_extents
+   *
+   * Performs delayed allocation
+   */
+  dispatch_result_t dispatch_delayed_extents(Transaction& t);
+
+  /**
+   * write_delayed_ool_extents
+   *
+   * Do writes for out-of-line extents.
    */
   using alloc_paddr_iertr = ExtentOolWriter::alloc_write_iertr;
-  alloc_paddr_iertr::future<> delayed_allocate_and_write(
+  alloc_paddr_iertr::future<> write_delayed_ool_extents(
     Transaction& t,
-    const std::list<LogicalCachedExtentRef>& delayed_extents);
+    extents_by_writer_t& alloc_map);
 
   /**
    * write_preallocated_ool_extents
@@ -331,6 +358,18 @@ private:
     ceph_assert(devices_by_id[device_id] == nullptr);
     devices_by_id[device_id] = device;
     ++num_devices;
+  }
+
+  /**
+   * dispatch_delayed_extent
+   *
+   * Specify the extent inline or ool
+   * return true indicates inline otherwise ool
+   */
+  bool dispatch_delayed_extent(LogicalCachedExtentRef& extent) {
+    // TODO: all delayed extents are ool currently
+    boost::ignore_unused(extent);
+    return false;
   }
 
   ExtentOolWriter* get_writer(placement_hint_t hint,
@@ -536,4 +575,12 @@ private:
 
 using ExtentPlacementManagerRef = std::unique_ptr<ExtentPlacementManager>;
 
+std::ostream &operator<<(std::ostream &, const ExtentPlacementManager::projected_usage_t &);
+
 }
+
+#if FMT_VERSION >= 90000
+template <>
+struct fmt::formatter<crimson::os::seastore::ExtentPlacementManager::projected_usage_t>
+  : fmt::ostream_formatter {};
+#endif
