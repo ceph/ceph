@@ -85,8 +85,9 @@ seastar::future<seastar::stop_iteration> SnapTrimRequest::start()
   }
   return maybe_delay.then([this] {
     return with_pg(pg->get_shard_services(), pg);
-  }).finally([ref=std::move(ref)] {
+  }).finally([ref=std::move(ref), this] {
     logger().debug("{}: complete", *ref);
+    return handle.complete();
   });
 }
 
