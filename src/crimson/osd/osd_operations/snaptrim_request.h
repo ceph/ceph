@@ -88,7 +88,11 @@ public:
   static constexpr OperationTypeCode type =
     OperationTypeCode::snaptrimobj_subrequest;
 
-  SnapTrimObjSubRequest(const hobject_t& coid, snapid_t snap_to_trim) :
+  SnapTrimObjSubRequest(
+    Ref<PG> pg,
+    const hobject_t& coid,
+    snapid_t snap_to_trim)
+  : pg(std::move(pg)),
     coid(coid),
     snap_to_trim(snap_to_trim) {
   }
@@ -116,6 +120,7 @@ private:
 
   Ref<PG> pg;
   PipelineHandle handle;
+  osd_op_params_t osd_op_p;
   const hobject_t coid;
   const snapid_t snap_to_trim;
 

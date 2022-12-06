@@ -174,9 +174,6 @@ CommonPGPipeline& SnapTrimObjSubRequest::pp()
 
 seastar::future<> SnapTrimObjSubRequest::start()
 {
-  logger().debug("{}", __func__);
-  return seastar::now();
-
   logger().debug("{}: start", *this);
 
   IRef ref = this;
@@ -187,8 +184,9 @@ seastar::future<> SnapTrimObjSubRequest::start()
   }
   return maybe_delay.then([this] {
     return with_pg(pg->get_shard_services(), pg);
-  }).finally([ref=std::move(ref)] {
+  }).finally([ref=std::move(ref), this] {
     logger().debug("{}: complete", *ref);
+    return handle.complete();
   });
 }
 
@@ -196,7 +194,6 @@ std::pair<ceph::os::Transaction,
           std::vector<pg_log_entry_t>>
 SnapTrimObjSubRequest::remove_or_update(ObjectContextRef obc, ObjectContextRef head_obc)
 {
-  snapid_t snap_to_trim;
   // FIXME above
   ceph::os::Transaction txn{};
   std::vector<pg_log_entry_t> log_entries{};
@@ -233,7 +230,7 @@ SnapTrimObjSubRequest::remove_or_update(ObjectContextRef obc, ObjectContextRef h
     }
   }
   int64_t num_objects_before_trim = delta_stats.num_objects;
-  auto at_version = pg->next_version();
+  osd_op_p.at_version = pg->next_version();
   if (new_snaps.empty()) {
     // remove clone
     logger().info("{}: {} snaps {} -> {} ... deleting",
@@ -282,34 +279,68 @@ SnapTrimObjSubRequest::remove_or_update(ObjectContextRef obc, ObjectContextRef h
       pg_log_entry_t{
 	pg_log_entry_t::DELETE,
 	coid,
-        at_version,
+        osd_op_p.at_version,
 	coi.version,
 	0,
 	osd_reqid_t(),
 	coi.mtime, // will be replaced in `apply_to()`
 	0}
       );
-    txn.remove(pg->get_collection_ref()->get_cid(),
-	       ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD});
-
-    // TODO: ensure the log entry has the correct snaps
-    //txn.update_snaps(
-    //  coid,
-    //  old_snaps,
-    //  new_snaps);
+    txn.remove(
+      pg->get_collection_ref()->get_cid(),
+      ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD});
 
     coi = object_info_t(coid);
 
-    at_version.version++;
   } else {
-    // TODO
+    // save adjusted snaps for this object
+    logger().info("{}: {} snaps {} -> {}",
+                  *this, coid, old_snaps, new_snaps);
+    snapset.clone_snaps[coid.snap] =
+      std::vector<snapid_t>(new_snaps.rbegin(), new_snaps.rend());
+    // we still do a 'modify' event on this object just to trigger a
+    // snapmapper.update ... :(
+
+    coi.prior_version = coi.version;
+    coi.version = osd_op_p.at_version;
+    ceph::bufferlist bl;
+    encode(coi, bl, pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+    txn.setattr(
+      pg->get_collection_ref()->get_cid(),
+      ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD},
+      OI_ATTR,
+      bl);
+    log_entries.emplace_back(
+      pg_log_entry_t{
+	pg_log_entry_t::MODIFY,
+	coid,
+	coi.version,
+	coi.prior_version,
+	0,
+	osd_reqid_t(),
+	coi.mtime,
+	0}
+      );
+    logger().info("{}: {} =====",
+                  *this, __LINE__);
+    logger().info("{}: {} =====",
+                  *this, __LINE__);
   }
+
+  //
+  // TODO: ensure the log entry has the correct snaps
+  //txn.update_snaps(
+  //  coid,
+  //  old_snaps,
+  //  new_snaps);
+
+  osd_op_p.at_version = pg->next_version();
 
   // save head snapset
   logger().debug("{}: {} new snapset {} on {}",
                  *this, coid, snapset, head_obc->obs.oi);
+  const auto head_oid = coid.get_head();
   if (snapset.clones.empty() && head_obc->obs.oi.is_whiteout()) {
-    const auto head_oid = coid.get_head();
     // NOTE: this arguably constitutes minor interference with the
     // tiering agent if this is a cache tier since a snap trim event
     // is effectively evicting a whiteout we might otherwise want to
@@ -320,7 +351,7 @@ SnapTrimObjSubRequest::remove_or_update(ObjectContextRef obc, ObjectContextRef h
       pg_log_entry_t{
 	pg_log_entry_t::DELETE,
 	head_oid,
-	at_version,
+	osd_op_p.at_version,
 	head_obc->obs.oi.version,
 	0,
 	osd_reqid_t(),
@@ -346,44 +377,37 @@ SnapTrimObjSubRequest::remove_or_update(ObjectContextRef obc, ObjectContextRef h
     txn.remove(pg->get_collection_ref()->get_cid(),
 	       ghobject_t{head_oid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD});
   } else {
-# if 0
-    if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
-      // filter SnapSet::snaps for the benefit of pre-octopus
-      // peers. This is perhaps overly conservative in that I'm not
-      // certain they need this, but let's be conservative here.
-      dout(10) << coid << " filtering snapset on " << head_oid << dendl;
-      snapset.filter(pool.info);
-    } else {
-      snapset.snaps.clear();
-    }
-    dout(10) << coid << " writing updated snapset on " << head_oid
-	     << ", snapset is " << snapset << dendl;
-    ctx->log.push_back(
-      pg_log_entry_t(
+    snapset.snaps.clear();
+    logger().info("{}: writing updated snapset on {}, snapset is {}",
+                  *this, head_oid, snapset);
+    log_entries.emplace_back(
+      pg_log_entry_t{
 	pg_log_entry_t::MODIFY,
 	head_oid,
-	ctx->at_version,
+	osd_op_p.at_version,
 	head_obc->obs.oi.version,
 	0,
 	osd_reqid_t(),
-	ctx->mtime,
-	0)
+	coi.mtime,
+	0}
       );
 
     head_obc->obs.oi.prior_version = head_obc->obs.oi.version;
-    head_obc->obs.oi.version = ctx->at_version;
+    head_obc->obs.oi.version = osd_op_p.at_version;
 
-    map <string, bufferlist, less<>> attrs;
-    bl.clear();
+    std::map<std::string, ceph::bufferlist, std::less<>> attrs;
+    ceph::bufferlist bl;
     encode(snapset, bl);
     attrs[SS_ATTR] = std::move(bl);
 
     bl.clear();
     encode(head_obc->obs.oi, bl,
-	     get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+           pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
     attrs[OI_ATTR] = std::move(bl);
-    t->setattrs(head_oid, attrs);
-#endif
+    txn.setattrs(
+      pg->get_collection_ref()->get_cid(),
+      ghobject_t{head_oid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD},
+      attrs);
   }
 
   // Stats reporting - Set number of objects trimmed
@@ -416,21 +440,26 @@ seastar::future<> SnapTrimObjSubRequest::with_pg(
       return enter_stage<interruptor>(
         pp().get_obc);
     }).then_interruptible([this] {
+      logger().debug("{}: getting obc for {}", *this, coid);
       // end of commonality
       // with_cone_obc lock both clone's and head's obcs
       return pg->with_clone_obc<RWState::RWWRITE>(coid, [this](auto clone_obc) {
+        logger().debug("{}: got clone_obc={}", *this, clone_obc);
         return enter_stage<interruptor>(
           pp().process
         ).then_interruptible([this, clone_obc=std::move(clone_obc)]() mutable {
+          logger().debug("{}: processing clone_obc={}", *this, clone_obc);
           auto head_obc = clone_obc->head;
-          osd_op_params_t osd_op_p{};
-          auto [txn, log_entries] = remove_or_update(clone_obc, head_obc);
-          auto [submitted, all_completed] = pg->submit_transaction(
-            std::move(clone_obc),
-            std::move(txn),
-            std::move(osd_op_p),
-            std::move(log_entries));
-          return submitted.then_interruptible([this] {
+          return interruptor::async([=, this]() mutable {
+            auto [txn, log_entries] = remove_or_update(clone_obc, head_obc);
+            auto [submitted, all_completed] = pg->submit_transaction(
+              std::move(clone_obc),
+              std::move(txn),
+              std::move(osd_op_p),
+              std::move(log_entries));
+            submitted.get();
+            all_completed.get();
+          }).then_interruptible([this] {
             return enter_stage<interruptor>(
               wait_repop
             );
