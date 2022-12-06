@@ -60,6 +60,17 @@ struct version_stat_t {
   }
 };
 
+struct projected_usage_t {
+  std::size_t inline_usage = 0;
+  std::size_t ool_usage = 0;
+};
+inline std::ostream &operator<<(std::ostream &out, const projected_usage_t &usage) {
+  return out << "projected_usage_t("
+	     << "inline_usage=" << usage.inline_usage
+	     << ", ool_usage=" << usage.ool_usage
+	     << ")";
+}
+
 /**
  * Transaction
  *
@@ -466,6 +477,21 @@ public:
     return existing_block_stats;
   }
 
+  projected_usage_t get_projected_usage() const {
+    projected_usage_t usage;
+    for (auto &extent : written_ool_block_list) {
+      if (extent->is_valid()) {
+        usage.ool_usage += extent->get_length();
+      }
+    }
+    for (auto &extent : inline_block_list) {
+      if (extent->is_valid()) {
+        usage.inline_usage += extent->get_length();
+      }
+    }
+    return usage;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -626,4 +652,5 @@ using with_trans_ertr = typename T::base_ertr::template extend<crimson::ct_error
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::io_stat_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::projected_usage_t> : fmt::ostream_formatter {};
 #endif
