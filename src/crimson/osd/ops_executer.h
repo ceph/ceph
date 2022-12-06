@@ -42,6 +42,8 @@ class PG;
 
 // OpsExecuter -- a class for executing ops targeting a certain object.
 class OpsExecuter : public seastar::enable_lw_shared_from_this<OpsExecuter> {
+  friend class SnapTrimObjSubEvent;
+
   using call_errorator = crimson::errorator<
     crimson::stateful_ec,
     crimson::ct_error::enoent,

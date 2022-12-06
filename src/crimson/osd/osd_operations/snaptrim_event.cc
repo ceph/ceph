@@ -4,6 +4,7 @@
 #include <ranges>
 
 #include "crimson/osd/osd_operations/snaptrim_event.h"
+#include "crimson/osd/ops_executer.h"
 #include "crimson/osd/pg.h"
 #include "include/expected.hpp"
 
@@ -297,6 +298,8 @@ SnapTrimObjSubEvent::remove_or_update(
 
     coi = object_info_t(coid);
 
+    auto smtxn = pg->osdriver.get_transaction(&txn);
+    OpsExecuter::snap_map_remove(coid, pg->snap_mapper, smtxn);
   } else {
     // save adjusted snaps for this object
     logger().info("{}: {} snaps {} -> {}",
@@ -326,6 +329,8 @@ SnapTrimObjSubEvent::remove_or_update(
 	coi.mtime,
 	0}
       );
+    auto smtxn = pg->osdriver.get_transaction(&txn);
+    OpsExecuter::snap_map_modify(coid, new_snaps, pg->snap_mapper, smtxn);
   }
 
   osd_op_p.at_version = pg->next_version();
