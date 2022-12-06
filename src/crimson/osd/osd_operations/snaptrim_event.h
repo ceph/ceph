@@ -61,6 +61,13 @@ private:
   private:
     std::vector<id_done_t> subops;
   } subop_blocker;
+
+  // we don't need to synchronize with other instances of SnapTrimEvent;
+  // it's here for the sake of op tracking.
+  struct WaitSubop : OrderedConcurrentPhaseT<WaitSubop> {
+    static constexpr auto type_name = "SnapTrimEvent::wait_subop";
+  } wait_subop;
+
   PipelineHandle handle;
   Ref<PG> pg;
   SnapMapper& snap_mapper;
@@ -76,6 +83,7 @@ public:
     CommonPGPipeline::RecoverMissing::BlockingEvent,
     CommonPGPipeline::GetOBC::BlockingEvent,
     CommonPGPipeline::Process::BlockingEvent,
+    WaitSubop::BlockingEvent,
     CompletionEvent
   > tracking_events;
 };
