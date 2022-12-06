@@ -1413,6 +1413,28 @@ public:
     return ret;
   }
 
+  template <class FutureT>
+  static decltype(auto) green_get(FutureT&& fut) {
+    if (fut.available()) {
+      return fut.get();
+    } else {
+      // destined to wait!
+      auto interruption_condition = interrupt_cond<InterruptCond>.interrupt_cond;
+      INTR_FUT_DEBUG(
+        "green_get() waiting, interrupt_cond: {},{}",
+        (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+        typeid(InterruptCond).name());
+      interrupt_cond<InterruptCond>.reset();
+      auto&& value = fut.get();
+      interrupt_cond<InterruptCond>.set(interruption_condition);
+      INTR_FUT_DEBUG(
+        "green_get() got, interrupt_cond: {},{}",
+        (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+        typeid(InterruptCond).name());
+      return std::move(value);
+    }
+  }
+
   static void yield() {
     ceph_assert(interrupt_cond<InterruptCond>.interrupt_cond);
     auto interruption_condition = interrupt_cond<InterruptCond>.interrupt_cond;
