@@ -100,6 +100,10 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
 
   void update_journal_tails(journal_seq_t, journal_seq_t) final {}
 
+  bool try_reserve_inline_usage(std::size_t) final { return true; }
+
+  void release_inline_usage(std::size_t) final {}
+
   /*
    * SegmentProvider interfaces
    */
