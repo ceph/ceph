@@ -11,7 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
-
+#include "global/global_context.h"
 #include "include/common_fwd.h"
 #include "common/cmdparse.h"
 #include "common/Formatter.h"
@@ -19,6 +19,7 @@
 #include "common/strtol.h"
 #include "json_spirit/json_spirit.h"
 
+#define dout_context g_ceph_context
 using std::is_same_v;
 using std::ostringstream;
 using std::string;
@@ -720,12 +721,20 @@ bool cmd_getval_compat_cephbool(
   const cmdmap_t& cmdmap,
   const std::string& k, bool& val)
 {
+  //use try...catch to protect cmd_getval from crashing calling daemon in case of mal-formated cmd input
   try {
     return cmd_getval(cmdmap, k, val);
   } catch (bad_cmd_get& e) {
     // try as legacy/compat CephChoices
     std::string t;
-    if (!cmd_getval(cmdmap, k, t)) {
+    bool ret;
+    try {
+      ret = cmd_getval(cmdmap, k, t);
+    } catch (bad_cmd_get& e2) {
+      derr << __func__ << ": bad command exception: " << e2.what() << dendl;
+      return false;
+    }
+    if (!ret) {
       return false;
     }
     std::string expected = "--"s + k;

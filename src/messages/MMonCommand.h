@@ -15,13 +15,17 @@
 #ifndef CEPH_MMONCOMMAND_H
 #define CEPH_MMONCOMMAND_H
 
+#include "global/global_context.h"
+#include "common/cmdparse.h"
 #include "messages/PaxosServiceMessage.h"
 
 #include <vector>
 #include <string>
 
+#define dout_context g_ceph_context
 using ceph::common::cmdmap_from_json;
 using ceph::common::cmd_getval;
+using ceph::common::bad_cmd_get;
 
 class MMonCommand final : public PaxosServiceMessage {
 public:
@@ -55,22 +59,27 @@ public:
     std::ostringstream ss;
     std::string prefix;
     cmdmap_from_json(cmd, &cmdmap, ss);
-    cmd_getval(cmdmap, "prefix", prefix);
-    // Some config values contain sensitive data, so don't log them
-    o << "mon_command(";
-    if (prefix == "config set") {
-      std::string name;
-      cmd_getval(cmdmap, "name", name);
-      o << "[{prefix=" << prefix << ", name=" << name << "}]";
-    } else if (prefix == "config-key set") {
-      std::string key;
-      cmd_getval(cmdmap, "key", key);
-      o << "[{prefix=" << prefix << ", key=" << key << "}]";
-    } else {
-      for (unsigned i=0; i<cmd.size(); i++) {
-        if (i) o << ' ';
-        o << cmd[i];
+    try {
+      cmd_getval(cmdmap, "prefix", prefix);
+      // Some config values contain sensitive data, so don't log them
+      o << "mon_command(";
+      if (prefix == "config set") {
+        std::string name;
+        cmd_getval(cmdmap, "name", name);
+        o << "[{prefix=" << prefix << ", name=" << name << "}]";
+      } else if (prefix == "config-key set") {
+        std::string key;
+        cmd_getval(cmdmap, "key", key);
+        o << "[{prefix=" << prefix << ", key=" << key << "}]";
+      } else {
+        for (unsigned i=0; i<cmd.size(); i++) {
+          if (i) o << ' ';
+          o << cmd[i];
+        }
       }
+    } catch (bad_cmd_get& e) {
+      derr << __func__ << ": bad command exception: " << e.what() << dendl;
+      return;
     }
     o << " v " << version << ")";
   }

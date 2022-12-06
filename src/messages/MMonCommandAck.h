@@ -15,10 +15,14 @@
 #ifndef CEPH_MMONCOMMANDACK_H
 #define CEPH_MMONCOMMANDACK_H
 
+#include "global/global_context.h"
+#include "common/cmdparse.h"
 #include "messages/PaxosServiceMessage.h"
 
+#define dout_context g_ceph_context
 using ceph::common::cmdmap_from_json;
 using ceph::common::cmd_getval;
+using ceph::common::bad_cmd_get;
 
 class MMonCommandAck final : public PaxosServiceMessage {
 public:
@@ -40,22 +44,28 @@ public:
     std::ostringstream ss;
     std::string prefix;
     cmdmap_from_json(cmd, &cmdmap, ss);
-    cmd_getval(cmdmap, "prefix", prefix);
-    // Some config values contain sensitive data, so don't log them
-    o << "mon_command_ack(";
-    if (prefix == "config set") {
-      std::string name;
-      cmd_getval(cmdmap, "name", name);
-      o << "[{prefix=" << prefix
-        << ", name=" << name << "}]"
-        << "=" << r << " " << rs << " v" << version << ")";
-    } else if (prefix == "config-key set") {
-      std::string key;
-      cmd_getval(cmdmap, "key", key);
-      o << "[{prefix=" << prefix << ", key=" << key << "}]"
-        << "=" << r << " " << rs << " v" << version << ")";
-    } else {
-      o << cmd;
+    try {
+      cmd_getval(cmdmap, "prefix", prefix);
+      // Some config values contain sensitive data, so don't log them
+      o << "mon_command_ack(";
+      if (prefix == "config set") {
+        std::string name;
+        cmd_getval(cmdmap, "name", name);
+        o << "[{prefix=" << prefix
+          << ", name=" << name << "}]"
+          << "=" << r << " " << rs << " v" << version << ")";
+      } else if (prefix == "config-key set") {
+        std::string key;
+        cmd_getval(cmdmap, "key", key);
+        o << "[{prefix=" << prefix << ", key=" << key << "}]"
+          << "=" << r << " " << rs << " v" << version << ")";
+      } else {
+        o << cmd;
+      }
+    }
+    catch (bad_cmd_get& e) {
+      derr << __func__ << ": bad command exception: " << e.what() << dendl;
+      return;
     }
     o << "=" << r << " " << rs << " v" << version << ")";
   }
