@@ -1009,6 +1009,8 @@ CachedExtentRef Cache::duplicate_for_write(
 
   auto ret = i->duplicate_for_write();
   ret->prior_instance = i;
+  // duplicate_for_write won't occur after ool write finished
+  assert(!i->prior_poffset);
   t.add_mutated_extent(ret);
   if (ret->get_type() == extent_types_t::ROOT) {
     t.root = ret->cast<RootBlock>();
