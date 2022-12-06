@@ -20,7 +20,7 @@
  * fuse.h is included.
  */
 #ifndef FUSE_USE_VERSION
-#define FUSE_USE_VERSION	35
+#define FUSE_USE_VERSION	312
 #endif
 
 #include <fuse.h>
