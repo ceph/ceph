@@ -552,6 +552,35 @@ std::size_t JournalTrimmerImpl::get_alloc_journal_size() const
   return static_cast<std::size_t>(ret);
 }
 
+seastar::future<> JournalTrimmerImpl::trim() {
+  return seastar::when_all(
+    [this] {
+      if (should_trim_alloc()) {
+        return trim_alloc(
+        ).handle_error(
+          crimson::ct_error::assert_all{
+            "encountered invalid error in trim_alloc"
+          }
+        );
+      } else {
+        return seastar::now();
+      }
+    },
+    [this] {
+      if (should_trim_dirty()) {
+        return trim_dirty(
+        ).handle_error(
+          crimson::ct_error::assert_all{
+            "encountered invalid error in trim_dirty"
+          }
+        );
+      } else {
+        return seastar::now();
+      }
+    }
+  ).discard_result();
+}
+
 JournalTrimmerImpl::trim_ertr::future<>
 JournalTrimmerImpl::trim_alloc()
 {

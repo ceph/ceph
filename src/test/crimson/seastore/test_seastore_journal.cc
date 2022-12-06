@@ -104,6 +104,10 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
 
   void release_inline_usage(std::size_t) final {}
 
+  std::size_t get_trim_size_per_cycle() const final {
+    return 0;
+  }
+
   /*
    * SegmentProvider interfaces
    */

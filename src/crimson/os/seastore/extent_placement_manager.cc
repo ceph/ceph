@@ -513,21 +513,24 @@ seastar::future<>
 ExtentPlacementManager::BackgroundProcess::do_background_cycle()
 {
   assert(is_ready());
-  if (trimmer->should_trim_alloc()) {
-    return trimmer->trim_alloc(
-    ).handle_error(
-      crimson::ct_error::assert_all{
-	"do_background_cycle encountered invalid error in trim_alloc"
-      }
-    );
-  } else if (trimmer->should_trim_dirty()) {
-    return trimmer->trim_dirty(
-    ).handle_error(
-      crimson::ct_error::assert_all{
-	"do_background_cycle encountered invalid error in trim_dirty"
-      }
-    );
-  } else if (cleaner->should_clean_space()) {
+  bool trimmer_reserve_success = true;
+  if (trimmer->should_trim()) {
+    trimmer_reserve_success =
+      cleaner->try_reserve_projected_usage(
+        trimmer->get_trim_size_per_cycle());
+  }
+
+  if (trimmer->should_trim() && trimmer_reserve_success) {
+    return trimmer->trim(
+    ).finally([this] {
+      cleaner->release_projected_usage(
+          trimmer->get_trim_size_per_cycle());
+    });
+  } else if (cleaner->should_clean_space() ||
+             // make sure cleaner will start
+             // when the trimmer should run but
+             // failed to reserve space.
+             !trimmer_reserve_success) {
     return cleaner->clean_space(
     ).handle_error(
       crimson::ct_error::assert_all{

@@ -441,6 +441,8 @@ public:
     return std::min(get_alloc_tail(), get_dirty_tail());
   }
 
+  virtual std::size_t get_trim_size_per_cycle() const = 0;
+
   bool check_is_ready() const {
     return (get_journal_head() != JOURNAL_SEQ_NULL &&
             get_dirty_tail() != JOURNAL_SEQ_NULL &&
@@ -519,6 +521,11 @@ public:
   void update_journal_tails(
       journal_seq_t dirty_tail, journal_seq_t alloc_tail) final;
 
+  std::size_t get_trim_size_per_cycle() const final {
+    return config.rewrite_backref_bytes_per_cycle +
+      config.rewrite_dirty_bytes_per_cycle;
+  }
+
   journal_type_t get_journal_type() const {
     return journal_type;
   }
@@ -545,6 +552,10 @@ public:
     return get_alloc_tail_target() > journal_alloc_tail;
   }
 
+  bool should_trim() const {
+    return should_trim_alloc() || should_trim_dirty();
+  }
+
   bool should_block_io_on_trim() const {
     return get_tail_limit() >
       get_journal_tail().add_offset(
@@ -566,11 +577,7 @@ public:
     reserved_usage -= usage;
   }
 
-  using trim_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  trim_ertr::future<> trim_dirty();
-
-  trim_ertr::future<> trim_alloc();
+  seastar::future<> trim();
 
   static JournalTrimmerImplRef create(
       BackrefManager &backref_manager,
@@ -589,6 +596,12 @@ public:
   friend std::ostream &operator<<(std::ostream &, const stat_printer_t &);
 
 private:
+  using trim_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  trim_ertr::future<> trim_dirty();
+
+  trim_ertr::future<> trim_alloc();
+
   journal_seq_t get_tail_limit() const;
   journal_seq_t get_dirty_tail_target() const;
   journal_seq_t get_alloc_tail_target() const;
