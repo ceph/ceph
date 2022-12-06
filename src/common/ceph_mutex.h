@@ -17,6 +17,15 @@
 #if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 #include <seastar/core/condition-variable.hh>
 
+#include "crimson/common/log.h"
+#include "include/ceph_assert.h"
+
+#ifndef NDEBUG
+#define FUT_DEBUG(FMT_MSG, ...) crimson::get_logger(ceph_subsys_).trace(FMT_MSG, ##__VA_ARGS__)
+#else
+#define FUT_DEBUG(FMT_MSG, ...)
+#endif
+
 namespace ceph {
   // an empty class satisfying the mutex concept
   struct dummy_mutex {
@@ -38,14 +47,18 @@ namespace ceph {
   struct green_condition_variable : private seastar::condition_variable {
     template <class LockT>
     void wait(LockT&&) {
+      FUT_DEBUG("green_condition_variable::{}: before blocking", __func__);
       seastar::condition_variable::wait().get();
+      FUT_DEBUG("green_condition_variable::{}: after blocking", __func__);
     }
 
     void notify_one() noexcept {
+      FUT_DEBUG("green_condition_variable::{}", __func__);
       signal();
     }
 
     void notify_all() noexcept {
+      FUT_DEBUG("green_condition_variable::{}", __func__);
       broadcast();
     }
   };
