@@ -167,6 +167,10 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 
   void release_inline_usage(std::size_t) final {}
 
+  std::size_t get_trim_size_per_cycle() const final {
+    return 0;
+  }
+
   auto submit_record(record_t&& record) {
     entries.push_back(record);
     OrderingHandle handle = get_dummy_ordering_handle();
