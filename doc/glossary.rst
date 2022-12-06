@@ -294,7 +294,8 @@
                 See :term:`RGW`.
 
 	RBD
-		The block storage component of Ceph.
+                The block storage component of Ceph. Also called "RADOS Block
+                Device" or :term:`Ceph Block Device`.
 
 	Reliable Autonomic Distributed Object Store
                 The core set of storage software which stores the user's data
