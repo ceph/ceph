@@ -593,9 +593,11 @@ Set the Number of Placement Groups
 
 To set the number of placement groups in a pool, you must specify the
 number of placement groups at the time you create the pool.
-See `Create a Pool`_ for details.  Even after a pool is created you can also change the number of placement groups with::
+See `Create a Pool`_ for details.  Even after a pool is created you can also change the number of placement groups with:
 
-        ceph osd pool set {pool-name} pg_num {pg_num}
+.. prompt:: bash # 
+
+   ceph osd pool set {pool-name} pg_num {pg_num}
 
 After you increase the number of placement groups, you must also
 increase the number of placement groups for placement (``pgp_num``)
@@ -605,9 +607,11 @@ algorithm. Increasing ``pg_num`` splits the placement groups but data
 will not be migrated to the newer placement groups until placement
 groups for placement, ie. ``pgp_num`` is increased. The ``pgp_num``
 should be equal to the ``pg_num``.  To increase the number of
-placement groups for placement, execute the following::
+placement groups for placement, execute the following:
 
-        ceph osd pool set {pool-name} pgp_num {pgp_num}
+.. prompt:: bash #
+
+   ceph osd pool set {pool-name} pgp_num {pgp_num}
 
 When decreasing the number of PGs, ``pgp_num`` is adjusted
 automatically for you.
@@ -615,9 +619,11 @@ automatically for you.
 Get the Number of Placement Groups
 ==================================
 
-To get the number of placement groups in a pool, execute the following::
+To get the number of placement groups in a pool, execute the following:
 
-        ceph osd pool get {pool-name} pg_num
+.. prompt:: bash #
+   
+   ceph osd pool get {pool-name} pg_num
 
 
 Get a Cluster's PG Statistics
