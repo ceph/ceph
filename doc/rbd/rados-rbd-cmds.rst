@@ -28,26 +28,33 @@ Create a Block Device Pool
 Create a Block Device User
 ==========================
 
-Unless specified, the ``rbd`` command will access the Ceph cluster using the ID
-``admin``. This ID allows full administrative access to the cluster. It is
-recommended that you utilize a more restricted user wherever possible.
+Unless otherwise specified, the ``rbd`` command uses the Ceph user ID ``admin``
+to access the Ceph cluster. The ``admin`` Ceph user ID allows full
+administrative access to the cluster. We recommend that you acess the Ceph
+cluster with a Ceph user ID that has fewer permissions than the ``admin`` Ceph
+user ID does. We call this non-``admin`` Ceph user ID a "block device user" or
+"Ceph user".
 
-To `create a Ceph user`_, with ``ceph`` specify the ``auth get-or-create``
-command, user name, monitor caps, and OSD caps::
+To `create a Ceph user`_, use the ``ceph auth get-or-create`` command to
+specify user name, monitor caps (capabilities), and OSD caps (capabilities):
 
-        ceph auth get-or-create client.{ID} mon 'profile rbd' osd 'profile {profile name} [pool={pool-name}][, profile ...]' mgr 'profile rbd [pool={pool-name}]'
+.. prompt:: bash $
 
-For example, to create a user ID named ``qemu`` with read-write access to the
-pool ``vms`` and read-only access to the pool ``images``, execute the
-following::
+   ceph auth get-or-create client.{ID} mon 'profile rbd' osd 'profile {profile name} [pool={pool-name}][, profile ...]' mgr 'profile rbd [pool={pool-name}]'
 
-	ceph auth get-or-create client.qemu mon 'profile rbd' osd 'profile rbd pool=vms, profile rbd-read-only pool=images' mgr 'profile rbd pool=images'
+For example: to create a user ID named ``qemu`` with read-write access to the
+pool ``vms`` and read-only access to the pool ``images``, run the
+following command:
 
-The output from the ``ceph auth get-or-create`` command will be the keyring for
-the specified user, which can be written to ``/etc/ceph/ceph.client.{ID}.keyring``.
+.. prompt:: bash $
 
-.. note:: The user ID can be specified when using the ``rbd`` command by
-        providing the ``--id {id}`` optional argument.
+   ceph auth get-or-create client.qemu mon 'profile rbd' osd 'profile rbd pool=vms, profile rbd-read-only pool=images' mgr 'profile rbd pool=images'
+
+The output from the ``ceph auth get-or-create`` command is the keyring for the
+specified user, which can be written to ``/etc/ceph/ceph.client.{ID}.keyring``.
+
+.. note:: Specify the user ID by providing the ``--id {id} argument when using
+   the ``rbd`` command. This argument is optional. 
 
 Creating a Block Device Image
 =============================
