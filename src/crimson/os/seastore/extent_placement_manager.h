@@ -464,6 +464,7 @@ private:
 
     void release_projected_usage(projected_usage_t usage) {
       ceph_assert(is_ready());
+      trimmer->release_inline_usage(usage.inline_usage);
       cleaner->release_projected_usage(usage.inline_usage + usage.ool_usage);
     }
 
@@ -535,6 +536,17 @@ private:
       return trimmer->should_block_io_on_trim() ||
              cleaner->should_block_io_on_clean();
     }
+
+    struct reserve_result_t {
+      bool reserve_inline_success = true;
+      bool reserve_ool_success = true;
+
+      bool is_successful() const {
+        return reserve_inline_success && reserve_ool_success;
+      }
+    };
+
+    reserve_result_t try_reserve(const projected_usage_t &usage);
 
     seastar::future<> do_background_cycle();
 

@@ -419,47 +419,68 @@ ExtentPlacementManager::BackgroundProcess::run_until_halt()
   );
 }
 
+ExtentPlacementManager::BackgroundProcess::reserve_result_t
+ExtentPlacementManager::BackgroundProcess::try_reserve(
+    const projected_usage_t &usage)
+{
+  reserve_result_t res {
+    trimmer->try_reserve_inline_usage(usage.inline_usage),
+    cleaner->try_reserve_projected_usage(usage.inline_usage + usage.ool_usage)
+  };
+
+  if (!res.is_successful()) {
+    if (res.reserve_inline_success) {
+      trimmer->release_inline_usage(usage.inline_usage);
+    }
+    if (res.reserve_ool_success) {
+      cleaner->release_projected_usage(usage.inline_usage + usage.ool_usage);
+    }
+  }
+  return res;
+}
+
 seastar::future<>
 ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     projected_usage_t usage)
 {
-  auto projected_usage = usage.inline_usage + usage.ool_usage;
   ceph_assert(is_ready());
   ceph_assert(!blocking_io);
   // The pipeline configuration prevents another IO from entering
   // prepare until the prior one exits and clears this.
   ++stats.io_count;
-  bool is_blocked = false;
-  if (trimmer->should_block_io_on_trim()) {
-    is_blocked = true;
-    ++stats.io_blocked_count_trim;
-  }
-  if (cleaner->should_block_io_on_clean()) {
-    is_blocked = true;
-    ++stats.io_blocked_count_clean;
-  }
-  if (is_blocked) {
+
+  auto res = try_reserve(usage);
+  if (res.is_successful()) {
+    return seastar::now();
+  } else {
+    if (!res.reserve_inline_success) {
+      ++stats.io_blocked_count_trim;
+    }
+    if (!res.reserve_ool_success) {
+      ++stats.io_blocked_count_clean;
+    }
     ++stats.io_blocking_num;
     ++stats.io_blocked_count;
     stats.io_blocked_sum += stats.io_blocking_num;
-  }
-  return seastar::do_until(
-    [this] {
-      log_state("reserve_projected_usage(await_hard_limits)");
-      return !should_block_io();
-    },
-    [this] {
+
+    return seastar::repeat([this, usage] {
       blocking_io = seastar::promise<>();
-      return blocking_io->get_future();
-    }
-  ).then([this, is_blocked, projected_usage] {
-    ceph_assert(!blocking_io);
-    if (is_blocked) {
-      assert(stats.io_blocking_num > 0);
-      --stats.io_blocking_num;
-    }
-    cleaner->reserve_projected_usage(projected_usage);
-  });
+      return blocking_io->get_future(
+      ).then([this, usage] {
+        ceph_assert(!blocking_io);
+        auto res = try_reserve(usage);
+        if (res.is_successful()) {
+          assert(stats.io_blocking_num > 0);
+          --stats.io_blocking_num;
+          return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes);
+        } else {
+          return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::no);
+        }
+      });
+    });
+  }
 }
 
 seastar::future<>

@@ -163,6 +163,10 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
     return seastar::now();
   }
 
+  bool try_reserve_inline_usage(std::size_t) final { return true; }
+
+  void release_inline_usage(std::size_t) final {}
+
   auto submit_record(record_t&& record) {
     entries.push_back(record);
     OrderingHandle handle = get_dummy_ordering_handle();

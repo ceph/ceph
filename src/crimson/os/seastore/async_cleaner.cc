@@ -411,7 +411,8 @@ JournalTrimmerImpl::JournalTrimmerImpl(
     config(config),
     journal_type(type),
     roll_start(roll_start),
-    roll_size(roll_size)
+    roll_size(roll_size),
+    reserved_usage(0)
 {
   config.validate();
   ceph_assert(roll_start >= 0);
@@ -1504,12 +1505,18 @@ segment_id_t SegmentCleaner::get_next_reclaim_segment() const
   }
 }
 
-void SegmentCleaner::reserve_projected_usage(std::size_t projected_usage)
+bool SegmentCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 {
   assert(background_callback->is_ready());
   stats.projected_used_bytes += projected_usage;
-  ++stats.projected_count;
-  stats.projected_used_bytes_sum += stats.projected_used_bytes;
+  if (should_block_io_on_clean()) {
+    stats.projected_used_bytes -= projected_usage;
+    return false;
+  } else {
+    ++stats.projected_count;
+    stats.projected_used_bytes_sum += stats.projected_used_bytes;
+    return true;
+  }
 }
 
 void SegmentCleaner::release_projected_usage(std::size_t projected_usage)
@@ -1607,10 +1614,11 @@ void RBMCleaner::commit_space_used(paddr_t addr, extent_len_t len)
   }
 }
 
-void RBMCleaner::reserve_projected_usage(std::size_t projected_usage)
+bool RBMCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 {
   assert(background_callback->is_ready());
   stats.projected_used_bytes += projected_usage;
+  return true;
 }
 
 void RBMCleaner::release_projected_usage(std::size_t projected_usage)
