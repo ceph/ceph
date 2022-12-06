@@ -151,9 +151,15 @@ seastar::future<seastar::stop_iteration> SnapTrimEvent::with_pg(
             snapid);
           subop_blocker.emplace_back(op->get_id(), std::move(fut));
         }
-        return subop_blocker.wait_completion().then([] {
-          return seastar::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::no);
+        return enter_stage<interruptor>(
+          wait_subop
+        ).then_interruptible([this] {
+          logger().debug("{}: awaiting completion", *this);
+          return subop_blocker.wait_completion().then([this] {
+            logger().debug("{}: all completed", *this);
+            return interruptor::make_ready_future<seastar::stop_iteration>(
+              seastar::stop_iteration::no);
+          });
         });
       });
     });
