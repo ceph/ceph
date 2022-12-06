@@ -9,7 +9,6 @@
 #include "svc_notify.h"
 #include "svc_finisher.h"
 #include "svc_zone.h"
-#include "svc_rados.h"
 
 #include "rgw_zone.h"
 

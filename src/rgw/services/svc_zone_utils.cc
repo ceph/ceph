@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "svc_zone_utils.h"
-#include "svc_rados.h"
 #include "svc_zone.h"
 
 #undef FMT_HEADER_ONLY

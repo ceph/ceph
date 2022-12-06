@@ -5,8 +5,6 @@
 
 #include "rgw_service.h"
 
-#include "svc_rados.h"
-
 #include "rgw_tools.h"
 
 

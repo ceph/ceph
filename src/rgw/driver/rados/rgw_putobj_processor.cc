@@ -126,8 +126,8 @@ void RadosWriter::add_write_hint(librados::ObjectWriteOperation& op) {
 
 int RadosWriter::set_stripe_obj(const rgw_raw_obj& raw_obj)
 {
-  stripe_obj = store->svc.rados->obj(raw_obj);
-  return stripe_obj.open(dpp);
+  return rgw_get_rados_ref(dpp, store->get_rados_handle(), raw_obj,
+			   &stripe_obj);
 }
 
 int RadosWriter::process(bufferlist&& bl, uint64_t offset)
@@ -145,8 +145,9 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
     op.write(offset, data);
   }
   constexpr uint64_t id = 0; // unused
-  auto& ref = stripe_obj.get_ref();
-  auto c = aio->get(ref.obj, Aio::librados_op(ref.pool.ioctx(), std::move(op), y), cost, id);
+  auto c = aio->get(stripe_obj.obj, Aio::librados_op(stripe_obj.ioctx,
+						     std::move(op), y),
+		    cost, id);
   return process_completed(c, &written);
 }
 
@@ -160,8 +161,9 @@ int RadosWriter::write_exclusive(const bufferlist& data)
   op.write_full(data);
 
   constexpr uint64_t id = 0; // unused
-  auto& ref = stripe_obj.get_ref();
-  auto c = aio->get(ref.obj, Aio::librados_op(ref.pool.ioctx(), std::move(op), y), cost, id);
+  auto c = aio->get(stripe_obj.obj, Aio::librados_op(stripe_obj.ioctx,
+						     std::move(op), y),
+		    cost, id);
   auto d = aio->drain();
   c.splice(c.end(), d);
   return process_completed(c, &written);

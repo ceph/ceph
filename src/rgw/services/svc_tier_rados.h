@@ -20,8 +20,6 @@
 
 #include "rgw_service.h"
 
-#include "svc_rados.h"
-
 extern const std::string MP_META_SUFFIX;
 
 class RGWMPObj {
