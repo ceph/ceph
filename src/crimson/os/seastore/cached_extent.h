@@ -202,12 +202,16 @@ public:
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
   virtual std::ostream &print_detail(std::ostream &out) const { return out; }
   std::ostream &print(std::ostream &out) const {
+    std::string prior_poffset_str = prior_poffset
+      ? fmt::format("{}", *prior_poffset)
+      : "nullopt";
     out << "CachedExtent(addr=" << this
 	<< ", type=" << get_type()
 	<< ", version=" << version
 	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
 	<< ", modify_time=" << sea_time_point_printer_t{modify_time}
 	<< ", paddr=" << get_paddr()
+	<< ", prior_paddr=" << prior_poffset_str
 	<< ", length=" << get_length()
 	<< ", state=" << state
 	<< ", last_committed_crc=" << last_committed_crc
@@ -414,6 +418,14 @@ public:
   bool is_inline() const {
     return poffset.is_relative();
   }
+
+  paddr_t get_prior_paddr_and_reset() {
+    assert(prior_poffset);
+    auto ret = *prior_poffset;
+    prior_poffset.reset();
+    return ret;
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -465,6 +477,9 @@ private:
 
   /// address of original block -- relative iff is_pending() and is_clean()
   paddr_t poffset;
+
+  /// relative address before ool write, used to update mapping
+  std::optional<paddr_t> prior_poffset = std::nullopt;
 
   /// used to wait while in-progress commit completes
   std::optional<seastar::shared_promise<>> io_wait_promise;
@@ -531,7 +546,13 @@ protected:
     last_committed_crc = crc;
   }
 
-  void set_paddr(paddr_t offset) { poffset = offset; }
+  void set_paddr(paddr_t offset, bool need_update_mapping = false) {
+    if (need_update_mapping) {
+      assert(!prior_poffset);
+      prior_poffset = poffset;
+    }
+    poffset = offset;
+  }
 
   /**
    * maybe_generate_relative

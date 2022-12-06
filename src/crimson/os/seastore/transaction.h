@@ -180,7 +180,8 @@ public:
   void mark_delayed_extent_inline(LogicalCachedExtentRef& ref) {
     write_set.erase(*ref);
     assert(ref->get_paddr().is_delayed());
-    ref->set_paddr(make_record_relative_paddr(offset));
+    ref->set_paddr(make_record_relative_paddr(offset),
+                   /* need_update_mapping: */ true);
     offset += ref->get_length();
     inline_block_list.push_back(ref);
     write_set.insert(*ref);
@@ -189,7 +190,7 @@ public:
   void mark_delayed_extent_ool(LogicalCachedExtentRef& ref, paddr_t final_addr) {
     write_set.erase(*ref);
     assert(ref->get_paddr().is_delayed());
-    ref->set_paddr(final_addr);
+    ref->set_paddr(final_addr, /* need_update_mapping: */ true);
     assert(!ref->get_paddr().is_null());
     assert(!ref->is_inline());
     written_ool_block_list.push_back(ref);
