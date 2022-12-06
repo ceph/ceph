@@ -19,8 +19,6 @@ class ProtocolV2 final : public Protocol {
 
 // public to SocketConnection, but private to the others
  private:
-  void close() override;
-
   seastar::future<> close_clean_yielded() override;
 
 #ifdef UNIT_TESTS_BUILT
@@ -45,6 +43,8 @@ class ProtocolV2 final : public Protocol {
   void notify_out() override;
 
   void notify_out_fault(const char *, std::exception_ptr) override;
+
+  void notify_mark_down() override;
 
   seastar::future<> wait_exit_io() {
     if (exit_io.has_value()) {

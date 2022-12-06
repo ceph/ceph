@@ -138,6 +138,34 @@ seastar::future<> Protocol::send_keepalive()
   return seastar::now();
 }
 
+void Protocol::mark_down()
+{
+  ceph_assert_always(out_state != out_state_t::none);
+  need_dispatch_reset = false;
+  if (out_state == out_state_t::drop) {
+    return;
+  }
+
+  logger().info("{} mark_down() with {}",
+                conn, io_stat_printer{*this});
+  set_out_state(out_state_t::drop);
+  notify_mark_down();
+}
+
+void Protocol::print_io_stat(std::ostream &out) const
+{
+  out << "io_stat("
+      << "out_state=" << fmt::format("{}", out_state)
+      << ", in_seq=" << in_seq
+      << ", out_seq=" << out_seq
+      << ", out_pending_msgs_size=" << out_pending_msgs.size()
+      << ", out_sent_msgs_size=" << out_sent_msgs.size()
+      << ", need_ack=" << (ack_left > 0)
+      << ", need_keepalive=" << need_keepalive
+      << ", need_keepalive_ack=" << bool(next_keepalive_ack)
+      << ")";
+}
+
 void Protocol::set_out_state(
     const Protocol::out_state_t &new_state,
     FrameAssemblerV2Ref fa)
@@ -274,6 +302,9 @@ void Protocol::reset_out()
 
 void Protocol::dispatch_accept()
 {
+  if (out_state == out_state_t::drop) {
+    return;
+  }
   // protocol_is_connected can be from true to true here if the replacing is
   // happening to a connected connection.
   protocol_is_connected = true;
@@ -283,6 +314,9 @@ void Protocol::dispatch_accept()
 
 void Protocol::dispatch_connect()
 {
+  if (out_state == out_state_t::drop) {
+    return;
+  }
   ceph_assert_always(protocol_is_connected == false);
   protocol_is_connected = true;
   dispatchers.ms_handle_connect(
@@ -291,6 +325,11 @@ void Protocol::dispatch_connect()
 
 void Protocol::dispatch_reset(bool is_replace)
 {
+  ceph_assert_always(out_state == out_state_t::drop);
+  if (!need_dispatch_reset) {
+    return;
+  }
+  need_dispatch_reset = false;
   dispatchers.ms_handle_reset(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
     is_replace);
@@ -298,6 +337,9 @@ void Protocol::dispatch_reset(bool is_replace)
 
 void Protocol::dispatch_remote_reset()
 {
+  if (out_state == out_state_t::drop) {
+    return;
+  }
   dispatchers.ms_handle_remote_reset(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
 }
