@@ -421,8 +421,9 @@ ExtentPlacementManager::BackgroundProcess::run_until_halt()
 
 seastar::future<>
 ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
-    std::size_t projected_usage)
+    projected_usage_t usage)
 {
+  auto projected_usage = usage.inline_usage + usage.ool_usage;
   ceph_assert(is_ready());
   ceph_assert(!blocking_io);
   // The pipeline configuration prevents another IO from entering

@@ -312,12 +312,6 @@ public:
     return fresh_block_stats;
   }
 
-  size_t get_allocation_size() const {
-    size_t ret = 0;
-    for_each_fresh_block([&ret](auto &e) { ret += e->get_length(); });
-    return ret;
-  }
-
   using src_t = transaction_type_t;
   src_t get_src() const {
     return src;

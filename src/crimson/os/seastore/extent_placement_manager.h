@@ -328,12 +328,12 @@ public:
     return background_process.commit_space_used(addr, len);
   }
 
-  seastar::future<> reserve_projected_usage(std::size_t projected_usage) {
-    return background_process.reserve_projected_usage(projected_usage);
+  seastar::future<> reserve_projected_usage(projected_usage_t usage) {
+    return background_process.reserve_projected_usage(usage);
   }
 
-  void release_projected_usage(std::size_t projected_usage) {
-    return background_process.release_projected_usage(projected_usage);
+  void release_projected_usage(projected_usage_t usage) {
+    background_process.release_projected_usage(usage);
   }
 
   // Testing interfaces
@@ -460,11 +460,11 @@ private:
       return cleaner->commit_space_used(addr, len);
     }
 
-    seastar::future<> reserve_projected_usage(std::size_t projected_usage);
+    seastar::future<> reserve_projected_usage(projected_usage_t usage);
 
-    void release_projected_usage(std::size_t projected_usage) {
+    void release_projected_usage(projected_usage_t usage) {
       ceph_assert(is_ready());
-      return cleaner->release_projected_usage(projected_usage);
+      cleaner->release_projected_usage(usage.inline_usage + usage.ool_usage);
     }
 
     seastar::future<> stop_background();
