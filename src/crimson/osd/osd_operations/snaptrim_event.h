@@ -19,24 +19,28 @@ namespace ceph {
   class Formatter;
 }
 
+class SnapMapper;
+
 namespace crimson::osd {
 
 class OSD;
 class ShardServices;
 class PG;
 
+// trim up to `max` objects for snapshot `snapid
 class SnapTrimEvent final : public PhasedOperationT<SnapTrimEvent> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::snaptrim_event;
 
-  SnapTrimEvent(Ref<PG> pg, snapid_t snapid)
+  SnapTrimEvent(Ref<PG> pg, SnapMapper& snap_mapper, snapid_t snapid)
     : pg(std::move(pg)),
+      snap_mapper(snap_mapper),
       snapid(snapid) {}
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
-  seastar::future<> start();
-  seastar::future<> with_pg(
+  seastar::future<seastar::stop_iteration> start();
+  seastar::future<seastar::stop_iteration> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
 
 private:
@@ -59,6 +63,7 @@ private:
   } subop_blocker;
   PipelineHandle handle;
   Ref<PG> pg;
+  SnapMapper& snap_mapper;
   const snapid_t snapid;
 
 public:
