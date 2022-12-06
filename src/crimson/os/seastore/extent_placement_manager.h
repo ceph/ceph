@@ -463,9 +463,10 @@ private:
     seastar::future<> reserve_projected_usage(projected_usage_t usage);
 
     void release_projected_usage(projected_usage_t usage) {
-      ceph_assert(is_ready());
-      trimmer->release_inline_usage(usage.inline_usage);
-      cleaner->release_projected_usage(usage.inline_usage + usage.ool_usage);
+      if (is_ready()) {
+        trimmer->release_inline_usage(usage.inline_usage);
+        cleaner->release_projected_usage(usage.inline_usage + usage.ool_usage);
+      }
     }
 
     seastar::future<> stop_background();

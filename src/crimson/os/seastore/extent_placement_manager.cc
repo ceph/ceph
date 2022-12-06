@@ -443,7 +443,9 @@ seastar::future<>
 ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     projected_usage_t usage)
 {
-  ceph_assert(is_ready());
+  if (!is_ready()) {
+    return seastar::now();
+  }
   ceph_assert(!blocking_io);
   // The pipeline configuration prevents another IO from entering
   // prepare until the prior one exits and clears this.
@@ -470,7 +472,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
         ceph_assert(!blocking_io);
         auto res = try_reserve(usage);
         if (res.is_successful()) {
-          assert(stats.io_blocking_num > 0);
+          assert(stats.io_blocking_num == 1);
           --stats.io_blocking_num;
           return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
