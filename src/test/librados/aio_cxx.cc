@@ -2288,35 +2288,6 @@ void pool_io_callback(completion_t cb, void *arg /* Actually AioCompletion* */)
   }
 }
 
-TEST(LibRadosAio, SimplePoolEIOFlag) {
-  AioTestDataPP test_data;
-  ASSERT_EQ("", test_data.init());
-
-    auto my_completion = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
-    ASSERT_TRUE(my_completion);
-
-    bufferlist empty;
-    ASSERT_EQ(0, test_data.m_cluster.mon_command(
-      fmt::format(R"({{
-                  "prefix": "osd pool set",
-                  "pool": "{}",
-                  "var": "eio",
-                  "val": "true"
-                  }})", test_data.m_pool_name),
-      empty, nullptr, nullptr));
-
-    bufferlist bl;
-    bl.append("some data");
-
-    ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion.get(),
-                                             bl, bl.length(), 0));
-    {
-      TestAlarm alarm;
-      ASSERT_EQ(0, my_completion->wait_for_complete());
-    }
-    ASSERT_EQ(-EIO, my_completion->get_return_value());
-}
-
 TEST(LibRadosAio, PoolEIOFlag) {
   AioTestDataPP test_data;
   ASSERT_EQ("", test_data.init());
@@ -2326,9 +2297,10 @@ TEST(LibRadosAio, PoolEIOFlag) {
   std::thread *t = nullptr;
   
   unsigned max = 100;
+  unsigned timeout = max * 10;
   unsigned long i = 1;
   my_lock.lock();
-  for (; min_failed == 0 && i <= max; ++i) {
+  for (; min_failed == 0 && i <= timeout; ++i) {
     io_info *info = new io_info;
     info->i = i;
     info->c = Rados::aio_create_completion();
@@ -2366,7 +2338,7 @@ TEST(LibRadosAio, PoolEIOFlag) {
 
   // wait for ios to finish
   for (; !inflight.empty(); ++i) {
-    cout << "waiting for " << inflight << std::endl;
+    cout << "waiting for " << inflight.size() << std::endl;
     my_lock.unlock();
     sleep(1);
     my_lock.lock();
