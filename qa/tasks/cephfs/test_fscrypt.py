@@ -7,15 +7,18 @@ from tasks.cephfs.xfstests_dev import XFSTestsDev
 log = getLogger(__name__)
 
 
-class TestACLs(XFSTestsDev):
+class TestFscrypt(XFSTestsDev):
 
-    def test_acls(self):
+    def setup_xfsprogs_devs(self):
+        self.install_xfsprogs = True
+
+    def test_fscrypt(self):
         from tasks.cephfs.fuse_mount import FuseMount
         from tasks.cephfs.kernel_mount import KernelMount
 
         # TODO: make xfstests-dev compatible with ceph-fuse. xfstests-dev
         # remounts CephFS before running tests using kernel, so ceph-fuse
-        # mounts are never actually testsed.
+        # mounts are never actually tested.
         if isinstance(self.mount_a, FuseMount):
             log.info('client is fuse mounted')
             self.skipTest('Requires kernel client; xfstests-dev not '\
@@ -28,9 +31,9 @@ class TestACLs(XFSTestsDev):
         # and error message in some cases) and print custom log messages
         # accordingly.
         proc = self.mount_a.client_remote.run(args=['sudo', './check',
-            'generic/099'], cwd=self.xfstests_repo_path, stdout=StringIO(),
-            stderr=StringIO(), timeout=30, check_status=False,omit_sudo=False,
-            label='running tests for ACLs from xfstests-dev')
+            '-g', 'encrypt'], cwd=self.xfstests_repo_path, stdout=StringIO(),
+            stderr=StringIO(), timeout=900, check_status=False,omit_sudo=False,
+            label='running tests for encrypt from xfstests-dev')
 
         if proc.returncode != 0:
             log.info('Command failed.')
@@ -39,6 +42,8 @@ class TestACLs(XFSTestsDev):
         log.info(f'Command stdout -\n{stdout}')
         log.info(f'Command stderr -\n{stderr}')
 
+        # Currently only the 395,396,397,421,429,435,440,580,593,595 and 598
+        # of the 26 test cases will be actually ran, all the others will be
+        # skipped for now because of not supporting features in kernel or kceph.
         self.assertEqual(proc.returncode, 0)
-        success_line = 'Passed all 1 tests'
-        self.assertIn(success_line, stdout)
+        self.assertIn('Passed all 26 tests', stdout)
