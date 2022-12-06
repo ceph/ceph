@@ -16,14 +16,17 @@ details.
 Create a Block Device Pool
 ==========================
 
-#. On the admin node, use the ``ceph`` tool to `create a pool`_.
+#. Use the ``ceph`` tool to `create a pool`_.
 
-#. On the admin node, use the ``rbd`` tool to initialize the pool for use by RBD::
+#. Use the ``rbd`` tool to initialize the pool for use by RBD:
 
-        rbd pool init <pool-name>
+   .. prompt:: bash $
 
-.. note:: The ``rbd`` tool assumes a default pool name of 'rbd' when not
-   provided.
+      rbd pool init <pool-name>
+
+   .. note:: The ``rbd`` tool assumes a default pool name of 'rbd' if no pool
+      name is specified in the command.
+
 
 Create a Block Device User
 ==========================
