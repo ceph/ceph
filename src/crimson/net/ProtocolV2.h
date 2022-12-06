@@ -37,8 +37,6 @@ class ProtocolV2 final : public Protocol {
   void start_accept(SocketRef&& socket,
                     const entity_addr_t& peer_addr) override;
 
-  void print_conn(std::ostream&) const final;
-
  private:
   void notify_out() override;
 
@@ -121,14 +119,14 @@ class ProtocolV2 final : public Protocol {
 
   seastar::future<> execution_done = seastar::now();
 
-  template <typename Func>
-  void gated_execute(const char* what, Func&& func) {
-    gate.dispatch_in_background(what, *this, [this, &func] {
+  template <typename Func, typename T>
+  void gated_execute(const char *what, T &who, Func &&func) {
+    gate.dispatch_in_background(what, who, [this, &who, &func] {
       if (!execution_done.available()) {
         // discard the unready future
         gate.dispatch_in_background(
           "gated_execute_abandon",
-          *this,
+          who,
           [fut=std::move(execution_done)]() mutable {
             return std::move(fut);
           }

@@ -35,8 +35,6 @@ class Protocol {
   virtual void start_accept(SocketRef&& socket,
                             const entity_addr_t& peer_addr) = 0;
 
-  virtual void print_conn(std::ostream&) const = 0;
-
  protected:
   Protocol(ChainedDispatchers& dispatchers,
            SocketConnection& conn);
@@ -209,11 +207,6 @@ class Protocol {
   clock_t::time_point last_keepalive_ack;
 };
 
-inline std::ostream& operator<<(std::ostream& out, const Protocol& proto) {
-  proto.print_conn(out);
-  return out;
-}
-
 inline std::ostream& operator<<(
     std::ostream& out, Protocol::io_stat_printer stat) {
   stat.protocol.print_io_stat(out);
@@ -246,7 +239,3 @@ struct fmt::formatter<crimson::net::Protocol::out_state_t>
     return formatter<string_view>::format(name, ctx);
   }
 };
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::net::Protocol> : fmt::ostream_formatter {};
-#endif

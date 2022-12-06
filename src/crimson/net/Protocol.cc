@@ -479,7 +479,7 @@ void Protocol::notify_out_dispatch()
      [[fallthrough]];
    case out_state_t::delay:
     assert(!gate.is_closed());
-    gate.dispatch_in_background("do_out_dispatch", *this, [this] {
+    gate.dispatch_in_background("do_out_dispatch", conn, [this] {
       return do_out_dispatch();
     });
     return;
@@ -607,7 +607,7 @@ void Protocol::do_in_dispatch()
 {
   ceph_assert_always(!in_exit_dispatching.has_value());
   in_exit_dispatching = seastar::promise<>();
-  gate.dispatch_in_background("do_in_dispatch", *this, [this] {
+  gate.dispatch_in_background("do_in_dispatch", conn, [this] {
     return seastar::keep_doing([this] {
       return frame_assembler->read_main_preamble(
       ).then([this](auto ret) {
