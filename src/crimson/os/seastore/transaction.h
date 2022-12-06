@@ -198,13 +198,17 @@ public:
     write_set.insert(*ref);
   }
 
-  void mark_delayed_extent_ool(LogicalCachedExtentRef& ref, paddr_t final_addr) {
+  void mark_delayed_extent_ool(LogicalCachedExtentRef& ref) {
+    written_ool_block_list.push_back(ref);
+  }
+
+  void update_delayed_ool_extent_addr(LogicalCachedExtentRef& ref,
+                                      paddr_t final_addr) {
     write_set.erase(*ref);
     assert(ref->get_paddr().is_delayed());
     ref->set_paddr(final_addr, /* need_update_mapping: */ true);
     assert(!ref->get_paddr().is_null());
     assert(!ref->is_inline());
-    written_ool_block_list.push_back(ref);
     write_set.insert(*ref);
   }
 
