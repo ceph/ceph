@@ -120,7 +120,7 @@ seastar::future<seastar::stop_iteration> SnapTrimRequest::with_pg(
       return enter_stage<interruptor>(
         pp().process);
     }).then_interruptible([&shard_services, this] {
-      return seastar::async([this] {
+      return interruptor::async([this] {
         std::vector<hobject_t> to_trim;
         using crimson::common::local_conf;
         const auto max =
