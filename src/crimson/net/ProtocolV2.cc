@@ -1862,7 +1862,7 @@ void ProtocolV2::execute_server_wait()
 
 // CLOSING state
 
-void ProtocolV2::close()
+void ProtocolV2::notify_mark_down()
 {
   do_close(false);
 }

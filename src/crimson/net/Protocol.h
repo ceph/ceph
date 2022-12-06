@@ -21,8 +21,6 @@ class Protocol {
   Protocol(Protocol&&) = delete;
   virtual ~Protocol();
 
-  virtual void close() = 0;
-
   virtual seastar::future<> close_clean_yielded() = 0;
 
 #ifdef UNIT_TESTS_BUILT
@@ -46,6 +44,8 @@ class Protocol {
   virtual void notify_out() = 0;
 
   virtual void notify_out_fault(const char *where, std::exception_ptr) = 0;
+
+  virtual void notify_mark_down() = 0;
 
 // the write state-machine
  public:
@@ -71,24 +71,17 @@ class Protocol {
     last_keepalive_ack = when;
   }
 
+  void mark_down();
+
   struct io_stat_printer {
     const Protocol &protocol;
   };
-  void print_io_stat(std::ostream &out) const {
-    out << "io_stat("
-        << "in_seq=" << in_seq
-        << ", out_seq=" << out_seq
-        << ", out_pending_msgs_size=" << out_pending_msgs.size()
-        << ", out_sent_msgs_size=" << out_sent_msgs.size()
-        << ", need_ack=" << (ack_left > 0)
-        << ", need_keepalive=" << need_keepalive
-        << ", need_keepalive_ack=" << bool(next_keepalive_ack)
-        << ")";
-  }
+  void print_io_stat(std::ostream &out) const;
 
 // TODO: encapsulate a SessionedSender class
  protected:
   seastar::future<> close_out() {
+    ceph_assert_always(out_state == out_state_t::drop);
     assert(!gate.is_closed());
     return gate.close();
   }
@@ -171,6 +164,8 @@ class Protocol {
   FrameAssemblerV2Ref frame_assembler;
 
   bool protocol_is_connected = false;
+
+  bool need_dispatch_reset = true;
 
   /*
    * out states for writing

@@ -104,7 +104,7 @@ void SocketConnection::set_last_keepalive_ack(clock_t::time_point when)
 void SocketConnection::mark_down()
 {
   assert(seastar::this_shard_id() == shard_id());
-  protocol->close();
+  protocol->mark_down();
 }
 
 void
