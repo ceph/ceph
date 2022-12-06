@@ -443,7 +443,7 @@ seastar::future<> SnapTrimObjSubRequest::with_pg(
       logger().debug("{}: getting obc for {}", *this, coid);
       // end of commonality
       // with_cone_obc lock both clone's and head's obcs
-      return pg->with_clone_obc<RWState::RWWRITE>(coid, [this](auto clone_obc) {
+      return pg->obc_loader.with_clone_obc<RWState::RWWRITE>(coid, [this](auto clone_obc) {
         logger().debug("{}: got clone_obc={}", *this, clone_obc);
         return enter_stage<interruptor>(
           pp().process
