@@ -20,40 +20,54 @@ Each pool has a ``pg_autoscale_mode`` property that can be set to ``off``, ``on`
 * ``on``: Enable automated adjustments of the PG count for the given pool.
 * ``warn``: Raise health alerts when the PG count should be adjusted
 
-To set the autoscaling mode for an existing pool::
+To set the autoscaling mode for an existing pool:
 
-  ceph osd pool set <pool-name> pg_autoscale_mode <mode>
+.. prompt:: bash #
 
-For example to enable autoscaling on pool ``foo``::
+   ceph osd pool set <pool-name> pg_autoscale_mode <mode>
 
-  ceph osd pool set foo pg_autoscale_mode on
+For example to enable autoscaling on pool ``foo``:
+
+.. prompt:: bash #
+
+   ceph osd pool set foo pg_autoscale_mode on
 
 You can also configure the default ``pg_autoscale_mode`` that is
-set on any pools that are subsequently created::
+set on any pools that are subsequently created:
 
-  ceph config set global osd_pool_default_pg_autoscale_mode <mode>
+.. prompt:: bash #
+
+   ceph config set global osd_pool_default_pg_autoscale_mode <mode>
 
 You can disable or enable the autoscaler for all pools with
 the ``noautoscale`` flag. By default this flag is set to  be ``off``,
-but you can turn it ``on`` by using the command::
+but you can turn it ``on`` by using the command:
 
-  ceph osd pool set noautoscale
+.. prompt:: bash $
 
-You can turn it ``off`` using the command::
+   ceph osd pool set noautoscale
 
-  ceph osd pool unset noautoscale
+You can turn it ``off`` using the command:
 
-To ``get`` the value of the flag use the command::
+.. prompt:: bash #
 
-  ceph osd pool get noautoscale
+   ceph osd pool unset noautoscale
+
+To ``get`` the value of the flag use the command:
+
+.. prompt:: bash #
+
+   ceph osd pool get noautoscale
 
 Viewing PG scaling recommendations
 ----------------------------------
 
 You can view each pool, its relative utilization, and any suggested changes to
-the PG count with this command::
+the PG count with this command:
 
-  ceph osd pool autoscale-status
+.. prompt:: bash #
+
+   ceph osd pool autoscale-status
 
 Output will be something like::
 
@@ -103,7 +117,9 @@ change is in progress).  **NEW PG_NUM**, if present, is what the
 system believes the pool's ``pg_num`` should be changed to.  It is
 always a power of 2, and will only be present if the "ideal" value
 varies from the current value by more than a factor of 3 by default.
-This factor can be be adjusted with::
+This factor can be be adjusted with:
+
+.. prompt:: bash #
 
   ceph osd pool set threshold 2.0
 
@@ -152,9 +168,11 @@ than a factor of 3 off from what it thinks it should be.
 
 The target number of PGs per OSD is based on the
 ``mon_target_pg_per_osd`` configurable (default: 100), which can be
-adjusted with::
+adjusted with:
 
-  ceph config set global mon_target_pg_per_osd 100
+.. prompt:: bash #
+
+   ceph config set global mon_target_pg_per_osd 100
 
 The autoscaler analyzes pools and adjusts on a per-subtree basis.
 Because each pool may map to a different CRUSH rule, and each rule may
@@ -179,17 +197,23 @@ scales down when the usage ratio across the pool is not even.
 However, if the pool doesn't have the `bulk` flag, the pool will
 start out with minimal PGs and only when there is more usage in the pool.
 
-To create pool with `bulk` flag::
+To create pool with `bulk` flag:
 
-  ceph osd pool create <pool-name> --bulk
+.. prompt:: bash #
 
-To set/unset `bulk` flag of existing pool::
+   ceph osd pool create <pool-name> --bulk
 
-  ceph osd pool set <pool-name> bulk <true/false/1/0>
+To set/unset `bulk` flag of existing pool:
 
-To get `bulk` flag of existing pool::
+.. prompt:: bash #
 
-  ceph osd pool get <pool-name> bulk
+   ceph osd pool set <pool-name> bulk <true/false/1/0>
+
+To get `bulk` flag of existing pool:
+
+.. prompt:: bash #
+
+   ceph osd pool get <pool-name> bulk
 
 .. _specifying_pool_target_size:
 
@@ -210,14 +234,18 @@ The *target size* of a pool can be specified in two ways: either in
 terms of the absolute size of the pool (i.e., bytes), or as a weight
 relative to other pools with a ``target_size_ratio`` set.
 
-For example::
+For example:
 
-  ceph osd pool set mypool target_size_bytes 100T
+.. prompt:: bash #
+
+   ceph osd pool set mypool target_size_bytes 100T
 
 will tell the system that `mypool` is expected to consume 100 TiB of
-space.  Alternatively::
+space.  Alternatively:
 
-  ceph osd pool set mypool target_size_ratio 1.0
+.. prompt:: bash # 
+
+   ceph osd pool set mypool target_size_ratio 1.0
 
 will tell the system that `mypool` is expected to consume 1.0 relative
 to the other pools with ``target_size_ratio`` set. If `mypool` is the
@@ -244,10 +272,12 @@ parallelism client will see when doing IO, even when a pool is mostly
 empty.  Setting the lower bound prevents Ceph from reducing (or
 recommending you reduce) the PG number below the configured number.
 
-You can set the minimum or maximum number of PGs for a pool with::
+You can set the minimum or maximum number of PGs for a pool with:
 
-  ceph osd pool set <pool-name> pg_num_min <num>
-  ceph osd pool set <pool-name> pg_num_max <num>
+.. prompt:: bash #
+
+   ceph osd pool set <pool-name> pg_num_min <num>
+   ceph osd pool set <pool-name> pg_num_max <num>
 
 You can also specify the minimum or maximum PG count at pool creation
 time with the optional ``--pg-num-min <num>`` or ``--pg-num-max
@@ -258,9 +288,11 @@ time with the optional ``--pg-num-min <num>`` or ``--pg-num-max
 A preselection of pg_num
 ========================
 
-When creating a new pool with::
+When creating a new pool with:
 
-        ceph osd pool create {pool-name} [pg_num]
+.. prompt:: bash #
+
+   ceph osd pool create {pool-name} [pg_num]
 
 it is optional to choose the value of ``pg_num``.  If you do not
 specify ``pg_num``, the cluster can (by default) automatically tune it
@@ -269,7 +301,7 @@ for you based on how much data is stored in the pool (see above, :ref:`pg-autosc
 Alternatively, ``pg_num`` can be explicitly provided.  However,
 whether you specify a ``pg_num`` value or not does not affect whether
 the value is automatically tuned by the cluster after the fact.  To
-enable or disable auto-tuning::
+enable or disable auto-tuning:
 
   ceph osd pool set {pool-name} pg_autoscale_mode (on|off|warn)
 
