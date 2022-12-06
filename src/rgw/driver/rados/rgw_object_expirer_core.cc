@@ -32,7 +32,6 @@
 #include "rgw_zone.h"
 #include "rgw_sal_rados.h"
 
-#include "services/svc_rados.h"
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_bi_rados.h"
@@ -108,8 +107,11 @@ int RGWObjExpStore::objexp_hint_add(const DoutPrefixProvider *dpp,
   cls_timeindex_add(op, utime_t(delete_at), keyext, hebl);
 
   string shard_name = objexp_hint_get_shardname(objexp_key_shard(obj_key, cct->_conf->rgw_objexp_hints_num_shards));
-  auto obj = rados_svc->obj(rgw_raw_obj(driver->svc()->zone->get_zone_params().log_pool, shard_name));
-  int r = obj.open(dpp);
+  rgw_rados_ref obj;
+  int r = rgw_get_rados_ref(dpp, driver->getRados()->get_rados_handle(),
+			    { driver->svc()->zone->get_zone_params().log_pool,
+			      shard_name },
+			    &obj);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
     return r;
@@ -131,8 +133,10 @@ int RGWObjExpStore::objexp_hint_list(const DoutPrefixProvider *dpp,
   cls_timeindex_list(op, utime_t(start_time), utime_t(end_time), marker, max_entries, entries,
         out_marker, truncated);
 
-  auto obj = rados_svc->obj(rgw_raw_obj(driver->svc()->zone->get_zone_params().log_pool, oid));
-  int r = obj.open(dpp);
+  rgw_rados_ref obj;
+  int r = rgw_get_rados_ref(dpp, driver->getRados()->get_rados_handle(),
+			    { driver->svc()->zone->get_zone_params().log_pool,
+			      oid }, &obj);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
     return r;

@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "svc_zone.h"
-#include "svc_rados.h"
 #include "svc_sys_obj.h"
 #include "svc_sync_modules.h"
 

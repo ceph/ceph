@@ -3,7 +3,6 @@
 
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_core.h"
-#include "svc_rados.h"
 #include "svc_zone.h"
 
 #include "rgw_zone.h"

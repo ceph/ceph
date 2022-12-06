@@ -3,7 +3,6 @@
 
 
 #include "svc_cls.h"
-#include "svc_rados.h"
 #include "svc_zone.h"
 
 #include "rgw_zone.h"

@@ -21,8 +21,6 @@
 
 #include "rgw_service.h"
 
-#include "svc_rados.h"
-
 #include "driver/rados/rgw_tools.h"
 
 

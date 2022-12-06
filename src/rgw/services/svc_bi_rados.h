@@ -21,7 +21,6 @@
 #include "rgw_tools.h"
 
 #include "svc_bi.h"
-#include "svc_rados.h"
 #include "svc_tier_rados.h"
 
 struct rgw_bucket_dir_header;
