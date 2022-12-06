@@ -354,7 +354,7 @@ class TestSnapSchedules(CephFSTestCase):
         log.debug(f'snapshots: {snapshots}');
 
         result = self.fs_snap_schedule_cmd('status', path=dir_path,
-                                           snap_schedule='1M', format='json')
+                                           format='json')
         json_res = json.loads(result)[0]
         db_count = int(json_res['created_count'])
         log.debug(f'json_res: {json_res}')
