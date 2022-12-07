@@ -222,12 +222,6 @@ class CephadmServe:
         self.log.debug('_refresh_hosts_and_daemons')
         bad_hosts = []
         failures = []
-
-        if self.mgr.manage_etc_ceph_ceph_conf or self.mgr.keys.keys:
-            client_files = self._calc_client_files()
-        else:
-            client_files = {}
-
         agents_down: List[str] = []
 
         @forall_hosts
@@ -303,9 +297,9 @@ class CephadmServe:
                 self.log.debug(f"autotuning memory for {host}")
                 self._autotune_host_memory(host)
 
-            self._write_client_files(client_files, host)
-
         refresh(self.mgr.cache.get_hosts())
+
+        self._write_all_client_files()
 
         self.mgr.agent_helpers._update_agent_down_healthcheck(agents_down)
         self.mgr.http_server.config_update()
@@ -1099,6 +1093,18 @@ class CephadmServe:
                 self.log.warning(
                     f'unable to calc client keyring {ks.entity} placement {ks.placement}: {e}')
         return client_files
+
+    def _write_all_client_files(self) -> None:
+        if self.mgr.manage_etc_ceph_ceph_conf or self.mgr.keys.keys:
+            client_files = self._calc_client_files()
+        else:
+            client_files = {}
+
+        @forall_hosts
+        def _write_files(host: str) -> None:
+            self._write_client_files(client_files, host)
+
+        _write_files(self.mgr.cache.get_hosts())
 
     def _write_client_files(self,
                             client_files: Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]],
