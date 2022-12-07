@@ -202,3 +202,46 @@ The actual dump is similar to the schema, except that average values are grouped
 
 Labeled Perf Counters
 ---------------------
+
+A Ceph daemon also has the ability to emit a set of the similar perf counter instances with varying labels. These counters are intended for visualizing specific metrics in 3rd party tools like the Prometheus and Grafana.
+
+For example, the below counters show put and get byte statistics for different users on different buckets::
+
+  {
+    "Bucket:bkt1:User:user1:": {
+        "put_b": 1048576,
+        "put_initial_lat": {
+            "avgcount": 1,
+            "sum": 0.013000200,
+            "avgtime": 0.013000200
+        }
+    },
+    "Bucket:bkt2:User:user1:": {
+        "put_b": 1048576,
+        "put_initial_lat": {
+            "avgcount": 1,
+            "sum": 0.016000246,
+            "avgtime": 0.016000246
+        }
+    },
+    "Bucket:bkt1:User:user2:": {
+        "get_b": 1048576,
+        "get_initial_lat": {
+            "avgcount": 1,
+            "sum": 0.003000046,
+            "avgtime": 0.003000046
+        },
+        "put_b": 1048576,
+        "put_initial_lat": {
+            "avgcount": 1,
+            "sum": 0.014000215,
+            "avgtime": 0.014000215
+        }
+    }
+  }
+
+A daemon's perf counters cache is stored in memory and a daemon's perf counter cache can evict perf counters. The number of labeled perf counter instances can grow very quickly, thus eviction is is recommended to be turned on. Eviction in the perf counters cache is turned on with the global config variable `labeled_perfcounters_cache_eviction` being set to `True`.
+
+There is also a config variable to set for the number of labled perf counters instances that are stored in the cache before eviction. See the config variable `labeled_perfcounters_cache_size`. Currently the least recently accessed counters are evicted first once the cache size limit is reached.
+
+Labeled perf counters can be accessed via `ceph {daemon name} labeledperf dump` and their schema can be viewed via `ceph {daemon name} labeledperf schema`.

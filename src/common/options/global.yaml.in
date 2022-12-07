@@ -6368,13 +6368,15 @@ options:
   level: advanced
   desc: Number of labeled perfcounters the perfcounters cache can store
   default: 1000
+  see_also:
+  - labeled_perfcounters_cache_eviction
   services:
   - common
 - name: labeled_perfcounters_cache_eviction
   type: bool
   level: advanced
   desc: Whether or not the labeled perfcounters cache evicts the least recently updated counters once labeled_perfcounters_cache_size is reached
-  default: false
+  default: true
   see_also:
   - labeled_perfcounters_cache_size
   services:
