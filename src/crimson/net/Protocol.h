@@ -78,8 +78,14 @@ class Protocol {
 
 // TODO: encapsulate a SessionedSender class
  protected:
-  seastar::future<> close_io() {
+  seastar::future<> close_io(
+      bool is_dispatch_reset,
+      bool is_replace) {
     ceph_assert_always(io_state == io_state_t::drop);
+
+    if (is_dispatch_reset) {
+      dispatch_reset(is_replace);
+    }
     assert(!gate.is_closed());
     return gate.close();
   }
@@ -102,15 +108,11 @@ class Protocol {
 
   seastar::future<FrameAssemblerV2Ref> wait_io_exit_dispatching();
 
+  void reset_session(bool full);
+
   void requeue_out_sent_up_to(seq_num_t seq);
 
   void requeue_out_sent();
-
-  void reset_out();
-
-  void reset_in() {
-    in_seq = 0;
-  }
 
   bool is_out_queued_or_sent() const {
     return is_out_queued() || !out_sent_msgs.empty();
@@ -124,17 +126,19 @@ class Protocol {
 
   void dispatch_connect();
 
+ private:
   void dispatch_reset(bool is_replace);
 
   void dispatch_remote_reset();
 
- private:
   bool is_out_queued() const {
     return (!out_pending_msgs.empty() ||
             ack_left > 0 ||
             need_keepalive ||
             next_keepalive_ack.has_value());
   }
+
+  void reset_out();
 
   seastar::future<stop_t> try_exit_out_dispatch();
 
@@ -153,6 +157,7 @@ class Protocol {
 
   void do_in_dispatch();
 
+private:
   ChainedDispatchers &dispatchers;
 
   SocketConnection &conn;
