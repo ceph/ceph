@@ -483,7 +483,7 @@ int map_device_using_suprocess(std::string arguments, int timeout_ms)
     } else {
       // The process closed the pipe without notifying us or exiting.
       // This is quite unlikely, but we'll terminate the process.
-      dout(5) << "Terminating unresponsive process." << dendl;
+      dout(0) << "Terminating unresponsive process." << dendl;
       TerminateProcess(pi.hProcess, 1);
       exit_code = -EINVAL;
     }
@@ -502,7 +502,7 @@ int map_device_using_suprocess(std::string arguments, int timeout_ms)
 
 BOOL WINAPI console_handler_routine(DWORD dwCtrlType)
 {
-  dout(5) << "Received control signal: " << dwCtrlType
+  dout(0) << "Received control signal: " << dwCtrlType
           << ". Exiting." << dendl;
 
   std::unique_lock l{shutdown_lock};
@@ -606,12 +606,12 @@ int restart_registered_mappings(
       continue;
     }
     if (cfg.wnbd_mapped) {
-      dout(5) << __func__ << ": device already mapped: "
+      dout(1) << __func__ << ": device already mapped: "
               << cfg.devpath << dendl;
       continue;
     }
     if (!cfg.persistent) {
-      dout(5) << __func__ << ": cleaning up non-persistent mapping: "
+      dout(1) << __func__ << ": cleaning up non-persistent mapping: "
               << cfg.devpath << dendl;
       r = remove_config_from_registry(&cfg);
       if (r) {
@@ -640,7 +640,7 @@ int restart_registered_mappings(
           return;
         }
 
-        dout(5) << "Remapping: " << cfg.devpath
+        dout(1) << "Remapping: " << cfg.devpath
                 << ". Timeout: " << time_left_ms << " ms." << dendl;
 
         // We'll try to map all devices and return a non-zero value
@@ -651,7 +651,7 @@ int restart_registered_mappings(
           derr << "Could not create mapping: "
                << cfg.devpath << ". Error: " << r << dendl;
         } else {
-          dout(5) << "Successfully remapped: " << cfg.devpath << dendl;
+          dout(1) << "Successfully remapped: " << cfg.devpath << dendl;
         }
       });
   }
@@ -704,7 +704,7 @@ int disconnect_all_mappings(
         cfg.hard_disconnect_fallback = true;
         cfg.soft_disconnect_timeout = time_left_ms / 1000;
 
-        dout(5) << "Removing mapping: " << cfg.devpath
+        dout(1) << "Removing mapping: " << cfg.devpath
                 << ". Timeout: " << cfg.soft_disconnect_timeout
                 << "s. Hard disconnect: " << cfg.hard_disconnect
                 << dendl;
@@ -715,7 +715,7 @@ int disconnect_all_mappings(
           derr << "Could not remove mapping: " << cfg.devpath
                << ". Error: " << r << dendl;
         } else {
-          dout(5) << "Successfully removed mapping: " << cfg.devpath << dendl;
+          dout(1) << "Successfully removed mapping: " << cfg.devpath << dendl;
         }
       });
   }
@@ -774,14 +774,14 @@ class RBDService : public ServiceBase {
     {
       switch(request->command) {
         case Connect:
-          dout(5) << "Received device connect request. Command line: "
+          dout(1) << "Received device connect request. Command line: "
                   << (char*)request->arguments << dendl;
           // TODO: use the configured service map timeout.
           // TODO: add ceph.conf options.
           return map_device_using_suprocess(
             (char*)request->arguments, DEFAULT_MAP_TIMEOUT_MS);
         default:
-          dout(5) << "Received unsupported command: "
+          dout(1) << "Received unsupported command: "
                   << request->command << dendl;
           return -ENOSYS;
       }
