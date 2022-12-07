@@ -2425,6 +2425,7 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
         session->seq = m->get_seq();
 
       reinit_mds_features(session.get(), m);
+      cap_auths = std::move(m->cap_auths);
 
       renew_caps(session.get());
       session->state = MetaSession::STATE_OPEN;
@@ -5882,6 +5883,66 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   // may drop inode's last ref
   if (deleted_inode)
     _try_to_trim_inode(in, true);
+}
+
+int Client::mds_check_access(std::string& path, const UserPerm& perms, int mask)
+{
+  const gid_t *gids;
+  int count = perms.get_gids(&gids);
+  std::vector<uint64_t> gid_list;
+  bool root_squash_perms = true;
+  MDSCapAuth *rw_perms_s = nullptr;
+
+  ldout(cct, 25) << __func__ << " path " << path << ", uid " << perms.uid()
+                 << ", gid " << perms.gid() << ", mask " << mask << dendl;
+
+  if (count) {
+    gid_list.reserve(count);
+    for (int i = 0; i < count; ++i) {
+      gid_list.push_back(gids[i]);
+    }
+  }
+
+  for (auto& s: cap_auths) {
+    ldout(cct, 20) << __func__ << " auth match path " << s.match.path << " r: " << s.readable
+                   << " w: " << s.writeable << dendl;
+    ldout(cct, 20) << " match.uid " << s.match.uid << dendl;
+    if (s.match.match(path, perms.uid(), perms.gid(), &gid_list)) {
+      ldout(cct, 20) << " is matched" << dendl;
+      // always follow the last auth caps' permision
+      root_squash_perms = true;
+      rw_perms_s = nullptr;
+
+      if ((mask & MAY_WRITE) && s.writeable &&
+	  s.match.root_squash && ((perms.uid() == 0) || (perms.gid() == 0))) {
+        root_squash_perms = false;
+      }
+
+      if (((mask & MAY_WRITE) && !s.writeable) ||
+          ((mask & MAY_READ) && !s.readable)) {
+	rw_perms_s = &s;
+      }
+    } else {
+      ldout(cct, 20) << " is mismatched" << dendl;
+    }
+  }
+
+  if (root_squash_perms && rw_perms_s == nullptr) {
+    return 0;
+  }
+
+  if (!root_squash_perms) {
+    ldout(cct, 10) << __func__ << " permission denied, root_squash is enabled and user"
+                   << " (uid " << perms.uid() << ", gid " << perms.gid()
+                   << ") isn't allowed to write" << dendl;
+  }
+  if (rw_perms_s) {
+    ldout(cct, 10) << __func__ << " permission denied, mds auth caps readable/writeable:"
+                   << rw_perms_s->readable << "/" << rw_perms_s->writeable << ", request r/w:"
+                   << !!(mask & MAY_READ) << "/" << !!(mask & MAY_WRITE) << dendl;
+  }
+
+  return -CEPHFS_EACCES;
 }
 
 int Client::inode_permission(Inode *in, const UserPerm& perms, unsigned want)
