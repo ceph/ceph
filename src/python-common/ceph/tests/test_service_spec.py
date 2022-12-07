@@ -301,7 +301,9 @@ service_name: iscsi.iscsi
 networks:
 - ::0/8
 spec:
-  api_user: api_user
+  api_password: admin
+  api_port: 5000
+  api_user: admin
   pool: pool
   trusted_ip_list:
   - ::1
