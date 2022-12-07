@@ -839,6 +839,7 @@ class RGWSpec(ServiceSpec):
         service_id: myrealm.myzone
         spec:
             rgw_realm: myrealm
+            rgw_zonegroup: myzonegroup
             rgw_zone: myzone
             ssl: true
             rgw_frontend_port: 1234
@@ -851,6 +852,7 @@ class RGWSpec(ServiceSpec):
     MANAGED_CONFIG_OPTIONS = ServiceSpec.MANAGED_CONFIG_OPTIONS + [
         'rgw_zone',
         'rgw_realm',
+        'rgw_zonegroup',
         'rgw_frontends',
     ]
 
@@ -859,6 +861,7 @@ class RGWSpec(ServiceSpec):
                  service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  rgw_realm: Optional[str] = None,
+                 rgw_zonegroup: Optional[str] = None,
                  rgw_zone: Optional[str] = None,
                  rgw_frontend_port: Optional[int] = None,
                  rgw_frontend_ssl_certificate: Optional[List[str]] = None,
@@ -871,6 +874,9 @@ class RGWSpec(ServiceSpec):
                  subcluster: Optional[str] = None,  # legacy, only for from_json on upgrade
                  extra_container_args: Optional[List[str]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 rgw_realm_token: Optional[str] = None,
+                 update_endpoints: Optional[bool] = False,
+                 zone_endpoints: Optional[str] = None  # commad separated endpoints list
                  ):
         assert service_type == 'rgw', service_type
 
@@ -885,8 +891,16 @@ class RGWSpec(ServiceSpec):
             extra_container_args=extra_container_args, custom_configs=custom_configs)
 
         #: The RGW realm associated with this service. Needs to be manually created
+        #: if the spec is being applied directly to cephdam. In case of rgw module
+        #: the realm is created automatically.
         self.rgw_realm: Optional[str] = rgw_realm
+        #: The RGW zonegroup associated with this service. Needs to be manually created
+        #: if the spec is being applied directly to cephdam. In case of rgw module
+        #: the zonegroup is created automatically.
+        self.rgw_zonegroup: Optional[str] = rgw_zonegroup
         #: The RGW zone associated with this service. Needs to be manually created
+        #: if the spec is being applied directly to cephdam. In case of rgw module
+        #: the zone is created automatically.
         self.rgw_zone: Optional[str] = rgw_zone
         #: Port of the RGW daemons
         self.rgw_frontend_port: Optional[int] = rgw_frontend_port
@@ -896,6 +910,9 @@ class RGWSpec(ServiceSpec):
         self.rgw_frontend_type: Optional[str] = rgw_frontend_type
         #: enable SSL
         self.ssl = ssl
+        self.rgw_realm_token = rgw_realm_token
+        self.update_endpoints = update_endpoints
+        self.zone_endpoints = zone_endpoints
 
     def get_port_start(self) -> List[int]:
         return [self.get_port()]
@@ -915,8 +932,7 @@ class RGWSpec(ServiceSpec):
             raise SpecValidationError(
                     'Cannot add RGW: Realm specified but no zone specified')
         if self.rgw_zone and not self.rgw_realm:
-            raise SpecValidationError(
-                    'Cannot add RGW: Zone specified but no realm specified')
+            raise SpecValidationError('Cannot add RGW: Zone specified but no realm specified')
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
