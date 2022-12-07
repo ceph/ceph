@@ -23,7 +23,7 @@
 
 namespace crimson::net {
 
-class Protocol;
+class ProtocolV2;
 class SocketMessenger;
 class SocketConnection;
 using SocketConnectionRef = seastar::shared_ptr<SocketConnection>;
@@ -32,10 +32,48 @@ using SocketConnectionRef = seastar::shared_ptr<SocketConnection>;
 class Interceptor;
 #endif
 
+/**
+ * ConnectionHandler
+ *
+ * The interface class to implement Connection, called by SocketConnection.
+ */
+class ConnectionHandler {
+public:
+  using clock_t = seastar::lowres_system_clock;
+
+  virtual ~ConnectionHandler() = default;
+
+  ConnectionHandler(const ConnectionHandler &) = delete;
+  ConnectionHandler(ConnectionHandler &&) = delete;
+  ConnectionHandler &operator=(const ConnectionHandler &) = delete;
+  ConnectionHandler &operator=(ConnectionHandler &&) = delete;
+
+  virtual bool is_connected() const = 0;
+
+  virtual seastar::future<> send(MessageURef) = 0;
+
+  virtual seastar::future<> send_keepalive() = 0;
+
+  virtual clock_t::time_point get_last_keepalive() const = 0;
+
+  virtual clock_t::time_point get_last_keepalive_ack() const = 0;
+
+  virtual void set_last_keepalive_ack(clock_t::time_point) = 0;
+
+  virtual void mark_down() = 0;
+
+protected:
+  ConnectionHandler() = default;
+};
+
 class SocketConnection : public Connection {
   const seastar::shard_id core;
+
   SocketMessenger& messenger;
-  std::unique_ptr<Protocol> protocol;
+
+  std::unique_ptr<ConnectionHandler> io_handler;
+
+  std::unique_ptr<ProtocolV2> protocol;
 
   SocketRef socket;
 
@@ -178,7 +216,7 @@ private:
   bool peer_wins() const;
 #endif
 
-  friend class Protocol;
+  friend class IOHandler;
   friend class ProtocolV2;
   friend class FrameAssemblerV2;
 };

@@ -3,48 +3,60 @@
 
 #pragma once
 
+#include <seastar/core/shared_future.hh>
 #include <seastar/core/sleep.hh>
 
-#include "Protocol.h"
+#include "io_handler.h"
 
 namespace crimson::net {
 
-class ProtocolV2 final : public Protocol {
+class ProtocolV2 final : public HandshakeListener {
   using AuthConnectionMetaRef = seastar::lw_shared_ptr<AuthConnectionMeta>;
 
- public:
-  ProtocolV2(ChainedDispatchers& dispatchers,
-             SocketConnection& conn);
-  ~ProtocolV2() override;
+public:
+  ProtocolV2(SocketConnection &,
+             IOHandler &);
 
-// public to SocketConnection, but private to the others
- private:
-  seastar::future<> close_clean_yielded() override;
+  ~ProtocolV2() final;
+
+  ProtocolV2(const ProtocolV2 &) = delete;
+  ProtocolV2(ProtocolV2 &&) = delete;
+  ProtocolV2 &operator=(const ProtocolV2 &) = delete;
+  ProtocolV2 &operator=(ProtocolV2 &&) = delete;
+
+/**
+ * as HandshakeListener
+ */
+private:
+  void notify_out() final;
+
+  void notify_out_fault(const char *, std::exception_ptr) final;
+
+  void notify_mark_down() final;
+
+/*
+* as ProtocolV2 to be called by SocketConnection
+*/
+public:
+  void start_connect(const entity_addr_t& peer_addr,
+                     const entity_name_t& peer_name);
+
+  void start_accept(SocketRef&& socket,
+                    const entity_addr_t& peer_addr);
+
+  seastar::future<> close_clean_yielded();
 
 #ifdef UNIT_TESTS_BUILT
-  bool is_closed_clean() const override {
+  bool is_closed_clean() const {
     return closed_clean;
   }
 
-  bool is_closed() const override {
+  bool is_closed() const {
     return closed;
   }
 
 #endif
-  void start_connect(const entity_addr_t& peer_addr,
-                     const entity_name_t& peer_name) override;
-
-  void start_accept(SocketRef&& socket,
-                    const entity_addr_t& peer_addr) override;
-
- private:
-  void notify_out() override;
-
-  void notify_out_fault(const char *, std::exception_ptr) override;
-
-  void notify_mark_down() override;
-
- private:
+private:
   seastar::future<> wait_exit_io() {
     if (exit_io.has_value()) {
       return exit_io->get_shared_future();
@@ -80,7 +92,7 @@ class ProtocolV2 final : public Protocol {
     return statenames[static_cast<int>(state)];
   }
 
-  void trigger_state(state_t state, io_state_t io_state, bool reentrant);
+  void trigger_state(state_t state, IOHandler::io_state_t io_state, bool reentrant);
 
   template <typename Func, typename T>
   void gated_execute(const char *what, T &who, Func &&func) {
@@ -196,10 +208,12 @@ class ProtocolV2 final : public Protocol {
   void do_close(bool is_dispatch_reset,
                 std::optional<std::function<void()>> f_accept_new=std::nullopt);
 
- private:
+private:
   SocketConnection &conn;
 
   SocketMessenger &messenger;
+
+  IOHandler &io_handler;
 
   bool has_socket = false;
 
@@ -253,6 +267,18 @@ class ProtocolV2 final : public Protocol {
   };
   Timer protocol_timer;
 };
+
+struct create_handlers_ret {
+  std::unique_ptr<ConnectionHandler> io_handler;
+  std::unique_ptr<ProtocolV2> protocol;
+};
+inline create_handlers_ret create_handlers(ChainedDispatchers &dispatchers, SocketConnection &conn) {
+  std::unique_ptr<ConnectionHandler> io_handler = std::make_unique<IOHandler>(dispatchers, conn);
+  IOHandler &io_handler_concrete = static_cast<IOHandler&>(*io_handler);
+  auto protocol = std::make_unique<ProtocolV2>(conn, io_handler_concrete);
+  io_handler_concrete.set_handshake_listener(*protocol);
+  return {std::move(io_handler), std::move(protocol)};
+}
 
 } // namespace crimson::net
 

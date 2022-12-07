@@ -3,41 +3,30 @@
 
 #pragma once
 
-#include <seastar/core/gate.hh>
-#include <seastar/core/shared_future.hh>
 #include <seastar/util/later.hh>
 
 #include "crimson/common/gated.h"
-#include "crimson/common/log.h"
 #include "Fwd.h"
 #include "SocketConnection.h"
 #include "FrameAssemblerV2.h"
 
 namespace crimson::net {
 
-class Protocol {
-// public to SocketConnection
- public:
-  Protocol(Protocol&&) = delete;
-  virtual ~Protocol();
+/**
+ * HandshakeListener
+ *
+ * The interface class for IOHandler to notify the ProtocolV2 for handshake.
+ *
+ * The notifications may be cross-core and asynchronous.
+ */
+class HandshakeListener {
+public:
+  virtual ~HandshakeListener() = default;
 
-  virtual seastar::future<> close_clean_yielded() = 0;
-
-#ifdef UNIT_TESTS_BUILT
-  virtual bool is_closed_clean() const = 0;
-
-  virtual bool is_closed() const = 0;
-
-#endif
-  virtual void start_connect(const entity_addr_t& peer_addr,
-                             const entity_name_t& peer_name) = 0;
-
-  virtual void start_accept(SocketRef&& socket,
-                            const entity_addr_t& peer_addr) = 0;
-
- protected:
-  Protocol(ChainedDispatchers& dispatchers,
-           SocketConnection& conn);
+  HandshakeListener(const HandshakeListener&) = delete;
+  HandshakeListener(HandshakeListener &&) = delete;
+  HandshakeListener &operator=(const HandshakeListener &) = delete;
+  HandshakeListener &operator=(HandshakeListener &&) = delete;
 
   virtual void notify_out() = 0;
 
@@ -45,39 +34,71 @@ class Protocol {
 
   virtual void notify_mark_down() = 0;
 
-// the write state-machine
- public:
-  using clock_t = seastar::lowres_system_clock;
+protected:
+  HandshakeListener() = default;
+};
 
-  bool is_connected() const {
+/**
+ * IOHandler
+ *
+ * Implements the message read and write paths after the handshake, and also be
+ * responsible to dispatch events. It is supposed to be working on the same
+ * core with the underlying socket and the FrameAssemblerV2 class.
+ */
+class IOHandler final : public ConnectionHandler {
+public:
+  IOHandler(ChainedDispatchers &,
+            SocketConnection &);
+
+  ~IOHandler() final;
+
+  IOHandler(const IOHandler &) = delete;
+  IOHandler(IOHandler &&) = delete;
+  IOHandler &operator=(const IOHandler &) = delete;
+  IOHandler &operator=(IOHandler &&) = delete;
+
+/*
+ * as ConnectionHandler
+ */
+private:
+  bool is_connected() const final {
     return protocol_is_connected;
   }
 
-  seastar::future<> send(MessageURef msg);
+  seastar::future<> send(MessageURef msg) final;
 
-  seastar::future<> send_keepalive();
+  seastar::future<> send_keepalive() final;
 
-  clock_t::time_point get_last_keepalive() const {
+  clock_t::time_point get_last_keepalive() const final {
     return last_keepalive;
   }
 
-  clock_t::time_point get_last_keepalive_ack() const {
+  clock_t::time_point get_last_keepalive_ack() const final {
     return last_keepalive_ack;
   }
 
-  void set_last_keepalive_ack(clock_t::time_point when) {
+  void set_last_keepalive_ack(clock_t::time_point when) final {
     last_keepalive_ack = when;
   }
 
-  void mark_down();
+  void mark_down() final;
+
+/*
+ * as IOHandler to be called by ProtocolV2 handshake
+ *
+ * The calls may be cross-core and asynchronous
+ */
+public:
+  void set_handshake_listener(HandshakeListener &hl) {
+    ceph_assert_always(handshake_listener == nullptr);
+    handshake_listener = &hl;
+  }
 
   struct io_stat_printer {
-    const Protocol &protocol;
+    const IOHandler &io_handler;
   };
   void print_io_stat(std::ostream &out) const;
 
-// TODO: encapsulate a SessionedSender class
- protected:
   seastar::future<> close_io(
       bool is_dispatch_reset,
       bool is_replace) {
@@ -93,14 +114,14 @@ class Protocol {
   /**
    * io_state_t
    *
-   * The io_state is changed with protocol state atomically, indicating the
-   * IOHandler behavior of the according protocol state.
+   * The io_state is changed with the protocol state, to control the
+   * io behavior accordingly.
    */
   enum class io_state_t : uint8_t {
-    none,
-    delay,
-    open,
-    drop
+    none,  // no IO is possible as the connection is not available to the user yet.
+    delay, // IO is delayed until open.
+    open,  // Dispatch In and Out concurrently.
+    drop   // Drop IO as the connection is closed.
   };
   friend class fmt::formatter<io_state_t>;
 
@@ -162,6 +183,8 @@ private:
 
   SocketConnection &conn;
 
+  HandshakeListener *handshake_listener = nullptr;
+
   crimson::common::Gated gate;
 
   FrameAssemblerV2Ref frame_assembler;
@@ -213,19 +236,19 @@ private:
 };
 
 inline std::ostream& operator<<(
-    std::ostream& out, Protocol::io_stat_printer stat) {
-  stat.protocol.print_io_stat(out);
+    std::ostream& out, IOHandler::io_stat_printer stat) {
+  stat.io_handler.print_io_stat(out);
   return out;
 }
 
 } // namespace crimson::net
 
 template <>
-struct fmt::formatter<crimson::net::Protocol::io_state_t>
+struct fmt::formatter<crimson::net::IOHandler::io_state_t>
   : fmt::formatter<std::string_view> {
   template <typename FormatContext>
-  auto format(crimson::net::Protocol::io_state_t state, FormatContext& ctx) {
-    using enum crimson::net::Protocol::io_state_t;
+  auto format(crimson::net::IOHandler::io_state_t state, FormatContext& ctx) {
+    using enum crimson::net::IOHandler::io_state_t;
     std::string_view name;
     switch (state) {
     case none:

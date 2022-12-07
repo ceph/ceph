@@ -28,9 +28,11 @@ using crimson::common::local_conf;
 SocketConnection::SocketConnection(SocketMessenger& messenger,
                                    ChainedDispatchers& dispatchers)
   : core(messenger.shard_id()),
-    messenger(messenger),
-    protocol(std::make_unique<ProtocolV2>(dispatchers, *this))
+    messenger(messenger)
 {
+  auto ret = create_handlers(dispatchers, *this);
+  io_handler = std::move(ret.io_handler);
+  protocol = std::move(ret.protocol);
 #ifdef UNIT_TESTS_BUILT
   if (messenger.interceptor) {
     interceptor = messenger.interceptor;
@@ -44,7 +46,7 @@ SocketConnection::~SocketConnection() {}
 bool SocketConnection::is_connected() const
 {
   assert(seastar::this_shard_id() == shard_id());
-  return protocol->is_connected();
+  return io_handler->is_connected();
 }
 
 #ifdef UNIT_TESTS_BUILT
@@ -71,7 +73,7 @@ seastar::future<> SocketConnection::send(MessageURef msg)
   return seastar::smp::submit_to(
     shard_id(),
     [this, msg=std::move(msg)]() mutable {
-      return protocol->send(std::move(msg));
+      return io_handler->send(std::move(msg));
     });
 }
 
@@ -80,31 +82,31 @@ seastar::future<> SocketConnection::send_keepalive()
   return seastar::smp::submit_to(
     shard_id(),
     [this] {
-      return protocol->send_keepalive();
+      return io_handler->send_keepalive();
     });
 }
 
 SocketConnection::clock_t::time_point
 SocketConnection::get_last_keepalive() const
 {
-  return protocol->get_last_keepalive();
+  return io_handler->get_last_keepalive();
 }
 
 SocketConnection::clock_t::time_point
 SocketConnection::get_last_keepalive_ack() const
 {
-  return protocol->get_last_keepalive_ack();
+  return io_handler->get_last_keepalive_ack();
 }
 
 void SocketConnection::set_last_keepalive_ack(clock_t::time_point when)
 {
-  protocol->set_last_keepalive_ack(when);
+  io_handler->set_last_keepalive_ack(when);
 }
 
 void SocketConnection::mark_down()
 {
   assert(seastar::this_shard_id() == shard_id());
-  protocol->mark_down();
+  io_handler->mark_down();
 }
 
 void

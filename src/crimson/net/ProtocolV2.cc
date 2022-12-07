@@ -12,9 +12,9 @@
 #include "crimson/auth/AuthClient.h"
 #include "crimson/auth/AuthServer.h"
 #include "crimson/common/formatter.h"
+#include "crimson/common/log.h"
 
 #include "Errors.h"
-#include "SocketConnection.h"
 #include "SocketMessenger.h"
 
 #ifdef UNIT_TESTS_BUILT
@@ -23,6 +23,8 @@
 
 using namespace ceph::msgr::v2;
 using crimson::common::local_conf;
+using io_state_t = crimson::net::IOHandler::io_state_t;
+using io_stat_printer = crimson::net::IOHandler::io_stat_printer;
 
 namespace {
 
@@ -154,11 +156,11 @@ seastar::future<> ProtocolV2::Timer::backoff(double seconds)
   });
 }
 
-ProtocolV2::ProtocolV2(ChainedDispatchers& dispatchers,
-                       SocketConnection& conn)
-  : Protocol(dispatchers, conn),
-    conn{conn},
+ProtocolV2::ProtocolV2(SocketConnection& conn,
+                       IOHandler &io_handler)
+  : conn{conn},
     messenger{conn.messenger},
+    io_handler{io_handler},
     frame_assembler{FrameAssemblerV2::create(conn)},
     auth_meta{seastar::make_lw_shared<AuthConnectionMeta>()},
     protocol_timer{conn}
@@ -225,9 +227,9 @@ void ProtocolV2::trigger_state(state_t new_state, io_state_t new_io_state, bool 
   if (new_state == state_t::READY) {
     // I'm not responsible to shutdown the socket at READY
     is_socket_valid = false;
-    set_io_state(new_io_state, std::move(frame_assembler));
+    io_handler.set_io_state(new_io_state, std::move(frame_assembler));
   } else {
-    set_io_state(new_io_state, nullptr);
+    io_handler.set_io_state(new_io_state, nullptr);
   }
 
   /*
@@ -236,7 +238,7 @@ void ProtocolV2::trigger_state(state_t new_state, io_state_t new_io_state, bool 
 
   if (pre_state == state_t::READY) {
     gate.dispatch_in_background("exit_io", conn, [this] {
-      return wait_io_exit_dispatching(
+      return io_handler.wait_io_exit_dispatching(
       ).then([this](FrameAssemblerV2Ref fa) {
         frame_assembler = std::move(fa);
         exit_io->set_value();
@@ -308,20 +310,20 @@ void ProtocolV2::fault(
   }
 
   if (conn.policy.server ||
-      (conn.policy.standby && !is_out_queued_or_sent())) {
+      (conn.policy.standby && !io_handler.is_out_queued_or_sent())) {
     if (conn.policy.server) {
       logger().info("{} protocol {} {} fault as server, going to STANDBY {} -- {}",
                     conn,
                     get_state_name(state),
                     where,
-                    io_stat_printer{*this},
+                    io_stat_printer{io_handler},
                     e_what);
     } else {
       logger().info("{} protocol {} {} fault with nothing to send, going to STANDBY {} -- {}",
                     conn,
                     get_state_name(state),
                     where,
-                    io_stat_printer{*this},
+                    io_stat_printer{io_handler},
                     e_what);
     }
     execute_standby();
@@ -331,7 +333,7 @@ void ProtocolV2::fault(
                   conn,
                   get_state_name(state),
                   where,
-                  io_stat_printer{*this},
+                  io_stat_printer{io_handler},
                   e_what);
     execute_wait(false);
   } else {
@@ -341,7 +343,7 @@ void ProtocolV2::fault(
                   conn,
                   get_state_name(state),
                   where,
-                  io_stat_printer{*this},
+                  io_stat_printer{io_handler},
                   e_what);
     execute_connecting();
   }
@@ -355,7 +357,7 @@ void ProtocolV2::reset_session(bool full)
     client_cookie = generate_client_cookie();
     peer_global_seq = 0;
   }
-  do_reset_session(full);
+  io_handler.reset_session(full);
 }
 
 seastar::future<std::tuple<entity_type_t, entity_addr_t>>
@@ -633,7 +635,7 @@ ProtocolV2::client_connect()
         return frame_assembler->read_frame_payload(
         ).then([this](auto payload) {
           // handle_server_ident() logic
-          requeue_out_sent();
+          io_handler.requeue_out_sent();
           auto server_ident = ServerIdentFrame::Decode(payload->back());
           logger().debug("{} GOT ServerIdentFrame:"
                          " addrs={}, gid={}, gs={},"
@@ -709,12 +711,12 @@ ProtocolV2::client_reconnect()
                                           server_cookie,
                                           global_seq,
                                           connect_seq,
-                                          get_in_seq());
+                                          io_handler.get_in_seq());
   logger().debug("{} WRITE ReconnectFrame: addrs={}, client_cookie={},"
                  " server_cookie={}, gs={}, cs={}, in_seq={}",
                  conn, messenger.get_myaddrs(),
                  client_cookie, server_cookie,
-                 global_seq, connect_seq, get_in_seq());
+                 global_seq, connect_seq, io_handler.get_in_seq());
   return frame_assembler->write_flush_frame(reconnect).then([this] {
     return frame_assembler->read_main_preamble();
   }).then([this](auto ret) {
@@ -764,7 +766,7 @@ ProtocolV2::client_reconnect()
           auto reconnect_ok = ReconnectOkFrame::Decode(payload->back());
           logger().debug("{} GOT ReconnectOkFrame: msg_seq={}",
                          conn, reconnect_ok.msg_seq());
-          requeue_out_sent_up_to(reconnect_ok.msg_seq());
+          io_handler.requeue_out_sent_up_to(reconnect_ok.msg_seq());
           return seastar::make_ready_future<next_step_t>(next_step_t::ready);
         });
       default: {
@@ -872,8 +874,8 @@ void ProtocolV2::execute_connecting()
                           "client_cookie={}, server_cookie={}, {}",
                           conn, global_seq, peer_global_seq, connect_seq,
                           client_cookie, server_cookie,
-                          io_stat_printer{*this});
-            dispatch_connect();
+                          io_stat_printer{io_handler});
+            io_handler.dispatch_connect();
             if (unlikely(state != state_t::CONNECTING)) {
               logger().debug("{} triggered {} after ms_handle_connect(), abort",
                              conn, get_state_name(state));
@@ -1593,7 +1595,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
     accept_me();
   }
 
-  dispatch_accept();
+  io_handler.dispatch_accept();
   if (unlikely(state != state_t::ESTABLISHING)) {
     logger().debug("{} triggered {} after ms_handle_accept() during execute_establishing()",
                    conn, get_state_name(state));
@@ -1613,7 +1615,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
                     "client_cookie={}, server_cookie={}, {}",
                     conn, global_seq, peer_global_seq, connect_seq,
                     client_cookie, server_cookie,
-                    io_stat_printer{*this});
+                    io_stat_printer{io_handler});
       execute_ready();
     }).handle_exception([this](std::exception_ptr eptr) {
       fault(state_t::ESTABLISHING, "execute_establishing", eptr);
@@ -1633,8 +1635,8 @@ ProtocolV2::send_server_ident()
   logger().debug("{} UPDATE: gs={} for server ident", conn, global_seq);
 
   // this is required for the case when this connection is being replaced
-  requeue_out_sent_up_to(0);
-  do_reset_session(false);
+  io_handler.requeue_out_sent_up_to(0);
+  io_handler.reset_session(false);
 
   if (!conn.policy.lossy) {
     server_cookie = ceph::util::generate_random_number<uint64_t>(1, -1ll);
@@ -1699,7 +1701,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
        new_peer_global_seq,
        new_connect_seq, new_msg_seq] () mutable {
     ceph_assert_always(state == state_t::REPLACING);
-    dispatch_accept();
+    io_handler.dispatch_accept();
     // state may become CLOSING, close mover.socket and abort later
     return wait_exit_io(
     ).then([this] {
@@ -1742,9 +1744,9 @@ void ProtocolV2::trigger_replacing(bool reconnect,
       if (reconnect) {
         connect_seq = new_connect_seq;
         // send_reconnect_ok() logic
-        requeue_out_sent_up_to(new_msg_seq);
-        auto reconnect_ok = ReconnectOkFrame::Encode(get_in_seq());
-        logger().debug("{} WRITE ReconnectOkFrame: msg_seq={}", conn, get_in_seq());
+        io_handler.requeue_out_sent_up_to(new_msg_seq);
+        auto reconnect_ok = ReconnectOkFrame::Encode(io_handler.get_in_seq());
+        logger().debug("{} WRITE ReconnectOkFrame: msg_seq={}", conn, io_handler.get_in_seq());
         return frame_assembler->write_flush_frame(reconnect_ok);
       } else {
         client_cookie = new_client_cookie;
@@ -1769,7 +1771,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                     conn, reconnect ? "reconnected" : "connected",
                     global_seq, peer_global_seq, connect_seq,
                     client_cookie, server_cookie,
-                    io_stat_printer{*this});
+                    io_stat_printer{io_handler});
       execute_ready();
     }).handle_exception([this](std::exception_ptr eptr) {
       fault(state_t::REPLACING, "trigger_replacing", eptr);
@@ -1933,7 +1935,7 @@ void ProtocolV2::do_close(
   }
   assert(!gate.is_closed());
   auto handshake_closed = gate.close();
-  auto io_closed = close_io(
+  auto io_closed = io_handler.close_io(
       is_dispatch_reset, is_replace);
 
   // asynchronous operations
