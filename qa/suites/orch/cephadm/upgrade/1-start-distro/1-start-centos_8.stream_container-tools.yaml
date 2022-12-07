@@ -14,8 +14,6 @@ tasks:
     cephadm_git_url: https://github.com/ceph/ceph
     # avoid --cap-add=PTRACE + --privileged for older cephadm versions
     allow_ptrace: false
-    # deploy additional mons the "old" (octopus) way
-    add_mons_via_daemon_add: true
     avoid_pacific_features: true
 
 roles:
@@ -39,4 +37,3 @@ roles:
   - prometheus.a
   - grafana.a
   - node-exporter.b
-  - ceph.iscsi.iscsi.a
