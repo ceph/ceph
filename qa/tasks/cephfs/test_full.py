@@ -2,11 +2,7 @@ import json
 import logging
 import os
 from textwrap import dedent
-try:
-    from typing import Optional
-except:
-    # make it work for python2
-    pass
+from typing import Optional
 from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -22,7 +18,7 @@ class FullnessTestCase(CephFSTestCase):
     data_only = False
 
     # Subclasses define how many bytes should be written to achieve fullness
-    pool_capacity = None  # type: Optional[int]
+    pool_capacity: Optional[int] = None
     fill_mb = None
 
     def is_full(self):
