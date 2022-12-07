@@ -234,6 +234,9 @@ public:
 
   void handle_client_fsync(MDRequestRef& mdr);
 
+  bool is_unlink_pending(CDentry *dn);
+  void wait_for_pending_unlink(CDentry *dn, MDRequestRef& mdr);
+
   // open
   void handle_client_open(MDRequestRef& mdr);
   void handle_client_openc(MDRequestRef& mdr);  // O_CREAT variant.

@@ -8107,6 +8107,10 @@ void MDCache::dispatch(const cref_t<Message> &m)
   case MSG_MDS_DENTRYUNLINK:
     handle_dentry_unlink(ref_cast<MDentryUnlink>(m));
     break;
+  case MSG_MDS_DENTRYUNLINK_ACK:
+    handle_dentry_unlink_ack(ref_cast<MDentryUnlinkAck>(m));
+    break;
+
 
   case MSG_MDS_FRAGMENTNOTIFY:
     handle_fragment_notify(ref_cast<MMDSFragmentNotify>(m));
@@ -11025,7 +11029,8 @@ void MDCache::handle_dentry_link(const cref_t<MDentryLink> &m)
 
 // UNLINK
 
-void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr)
+void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn,
+                                 MDRequestRef& mdr, bool unlinking)
 {
   dout(10) << __func__ << " " << *dn << dendl;
   // share unlink news with replicas
@@ -11036,6 +11041,11 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
     straydn->list_replicas(replicas);
     CInode *strayin = straydn->get_linkage()->get_inode();
     strayin->encode_snap_blob(snapbl);
+  }
+
+  if (unlinking) {
+    ceph_assert(!straydn);
+    dn->replica_unlinking_ref = 0;
   }
   for (set<mds_rank_t>::iterator it = replicas.begin();
        it != replicas.end();
@@ -11049,12 +11059,21 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
 	 rejoin_gather.count(*it)))
       continue;
 
-    auto unlink = make_message<MDentryUnlink>(dn->get_dir()->dirfrag(), dn->get_name());
+    auto unlink = make_message<MDentryUnlink>(dn->get_dir()->dirfrag(),
+                                              dn->get_name(), unlinking);
     if (straydn) {
       encode_replica_stray(straydn, *it, unlink->straybl);
       unlink->snapbl = snapbl;
     }
     mds->send_message_mds(unlink, *it);
+    if (unlinking) {
+      dn->replica_unlinking_ref++;
+      dn->get(CDentry::PIN_WAITUNLINKSTATE);
+    }
+  }
+
+  if (unlinking && dn->replica_unlinking_ref) {
+    dn->add_waiter(CDentry::WAIT_UNLINK_STATE, new C_MDS_RetryRequest(this, mdr));
   }
 }
 
@@ -11063,23 +11082,40 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
   // straydn
   CDentry *straydn = nullptr;
   CInode *strayin = nullptr;
+
   if (m->straybl.length())
     decode_replica_stray(straydn, &strayin, m->straybl, mds_rank_t(m->get_source().num()));
+
+  boost::intrusive_ptr<MDentryUnlinkAck> ack;
+  CDentry::linkage_t *dnl;
+  CDentry *dn;
+  CInode *in;
+  bool hadrealm;
 
   CDir *dir = get_dirfrag(m->get_dirfrag());
   if (!dir) {
     dout(7) << __func__ << " don't have dirfrag " << m->get_dirfrag() << dendl;
+    if (m->is_unlinking())
+      goto ack;
   } else {
-    CDentry *dn = dir->lookup(m->get_dn());
+    dn = dir->lookup(m->get_dn());
     if (!dn) {
       dout(7) << __func__ << " don't have dentry " << *dir << " dn " << m->get_dn() << dendl;
+      if (m->is_unlinking())
+        goto ack;
     } else {
       dout(7) << __func__ << " on " << *dn << dendl;
-      CDentry::linkage_t *dnl = dn->get_linkage();
+
+      if (m->is_unlinking()) {
+        dn->state_set(CDentry::STATE_UNLINKING);
+        goto ack;
+      }
+
+      dnl = dn->get_linkage();
 
       // open inode?
       if (dnl->is_primary()) {
-	CInode *in = dnl->get_inode();
+	in = dnl->get_inode();
 	dn->dir->unlink_inode(dn);
 	ceph_assert(straydn);
 	straydn->dir->link_primary_inode(straydn, in);
@@ -11090,11 +11126,12 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	in->first = straydn->first;
 
 	// update subtree map?
-	if (in->is_dir()) 
+	if (in->is_dir()) {
 	  adjust_subtree_after_rename(in, dir, false);
+	}
 
 	if (m->snapbl.length()) {
-	  bool hadrealm = (in->snaprealm ? true : false);
+	  hadrealm = (in->snaprealm ? true : false);
 	  in->decode_snap_blob(m->snapbl);
 	  ceph_assert(in->snaprealm);
 	  if (!hadrealm)
@@ -11105,7 +11142,7 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	if (in->is_any_caps() &&
 	    !in->state_test(CInode::STATE_EXPORTINGCAPS))
 	  migrator->export_caps(in);
-	
+
 	straydn = NULL;
       } else {
 	ceph_assert(!straydn);
@@ -11113,6 +11150,7 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	dn->dir->unlink_inode(dn);
       }
       ceph_assert(dnl->is_null());
+      dn->state_clear(CDentry::STATE_UNLINKING);
     }
   }
 
@@ -11124,8 +11162,36 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
     trim_dentry(straydn, ex);
     send_expire_messages(ex);
   }
+  return;
+
+ack:
+  ack = make_message<MDentryUnlinkAck>(m->get_dirfrag(), m->get_dn());
+  mds->send_message(ack, m->get_connection());
 }
 
+void MDCache::handle_dentry_unlink_ack(const cref_t<MDentryUnlinkAck> &m)
+{
+  CDir *dir = get_dirfrag(m->get_dirfrag());
+  if (!dir) {
+    dout(7) << __func__ << " don't have dirfrag " << m->get_dirfrag() << dendl;
+  } else {
+    CDentry *dn = dir->lookup(m->get_dn());
+    if (!dn) {
+      dout(7) << __func__ << " don't have dentry " << *dir << " dn " << m->get_dn() << dendl;
+    } else {
+      dout(7) << __func__ << " on " << *dn << " ref "
+	      << dn->replica_unlinking_ref << " -> "
+	      << dn->replica_unlinking_ref - 1 << dendl;
+      dn->replica_unlinking_ref--;
+      if (!dn->replica_unlinking_ref) {
+        MDSContext::vec finished;
+        dn->take_waiting(CDentry::WAIT_UNLINK_STATE, finished);
+        mds->queue_waiters(finished);
+      }
+      dn->put(CDentry::PIN_WAITUNLINKSTATE);
+    }
+  }
+}
 
 
 
