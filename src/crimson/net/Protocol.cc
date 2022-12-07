@@ -122,7 +122,7 @@ ceph::bufferlist Protocol::sweep_out_pending_msgs_to_sent(
 
 seastar::future<> Protocol::send(MessageURef msg)
 {
-  if (out_state != out_state_t::drop) {
+  if (io_state != io_state_t::drop) {
     out_pending_msgs.push_back(std::move(msg));
     notify_out_dispatch();
   }
@@ -140,22 +140,22 @@ seastar::future<> Protocol::send_keepalive()
 
 void Protocol::mark_down()
 {
-  ceph_assert_always(out_state != out_state_t::none);
+  ceph_assert_always(io_state != io_state_t::none);
   need_dispatch_reset = false;
-  if (out_state == out_state_t::drop) {
+  if (io_state == io_state_t::drop) {
     return;
   }
 
   logger().info("{} mark_down() with {}",
                 conn, io_stat_printer{*this});
-  set_out_state(out_state_t::drop);
+  set_io_state(io_state_t::drop);
   notify_mark_down();
 }
 
 void Protocol::print_io_stat(std::ostream &out) const
 {
   out << "io_stat("
-      << "out_state=" << fmt::format("{}", out_state)
+      << "io_state=" << fmt::format("{}", io_state)
       << ", in_seq=" << in_seq
       << ", out_seq=" << out_seq
       << ", out_pending_msgs_size=" << out_pending_msgs.size()
@@ -166,18 +166,18 @@ void Protocol::print_io_stat(std::ostream &out) const
       << ")";
 }
 
-void Protocol::set_out_state(
-    const Protocol::out_state_t &new_state,
+void Protocol::set_io_state(
+    const Protocol::io_state_t &new_state,
     FrameAssemblerV2Ref fa)
 {
   ceph_assert_always(!(
-    (new_state == out_state_t::none && out_state != out_state_t::none) ||
-    (new_state == out_state_t::open && out_state == out_state_t::open) ||
-    (new_state != out_state_t::drop && out_state == out_state_t::drop)
+    (new_state == io_state_t::none && io_state != io_state_t::none) ||
+    (new_state == io_state_t::open && io_state == io_state_t::open) ||
+    (new_state != io_state_t::drop && io_state == io_state_t::drop)
   ));
 
   bool dispatch_in = false;
-  if (new_state == out_state_t::open) {
+  if (new_state == io_state_t::open) {
     // to open
     ceph_assert_always(protocol_is_connected == true);
     assert(fa != nullptr);
@@ -190,7 +190,7 @@ void Protocol::set_out_state(
       conn.interceptor->register_conn_ready(conn);
     }
 #endif
-  } else if (out_state == out_state_t::open) {
+  } else if (io_state == io_state_t::open) {
     // from open
     ceph_assert_always(protocol_is_connected == true);
     protocol_is_connected = false;
@@ -205,10 +205,10 @@ void Protocol::set_out_state(
     assert(fa == nullptr);
   }
 
-  if (out_state != new_state) {
-    out_state = new_state;
-    out_state_changed.set_value();
-    out_state_changed = seastar::promise<>();
+  if (io_state != new_state) {
+    io_state = new_state;
+    io_state_changed.set_value();
+    io_state_changed = seastar::promise<>();
   }
 
   /*
@@ -222,7 +222,7 @@ void Protocol::set_out_state(
 
 seastar::future<FrameAssemblerV2Ref> Protocol::wait_io_exit_dispatching()
 {
-  ceph_assert_always(out_state != out_state_t::open);
+  ceph_assert_always(io_state != io_state_t::open);
   ceph_assert_always(frame_assembler != nullptr);
   ceph_assert_always(!frame_assembler->is_socket_valid());
   return seastar::when_all(
@@ -247,7 +247,7 @@ seastar::future<FrameAssemblerV2Ref> Protocol::wait_io_exit_dispatching()
 
 void Protocol::requeue_out_sent()
 {
-  assert(out_state != out_state_t::open);
+  assert(io_state != io_state_t::open);
   if (out_sent_msgs.empty()) {
     return;
   }
@@ -269,7 +269,7 @@ void Protocol::requeue_out_sent()
 
 void Protocol::requeue_out_sent_up_to(seq_num_t seq)
 {
-  assert(out_state != out_state_t::open);
+  assert(io_state != io_state_t::open);
   if (out_sent_msgs.empty() && out_pending_msgs.empty()) {
     logger().debug("{} nothing to requeue, reset out_seq from {} to seq {}",
                    conn, out_seq, seq);
@@ -291,7 +291,7 @@ void Protocol::requeue_out_sent_up_to(seq_num_t seq)
 
 void Protocol::reset_out()
 {
-  assert(out_state != out_state_t::open);
+  assert(io_state != io_state_t::open);
   out_seq = 0;
   out_pending_msgs.clear();
   out_sent_msgs.clear();
@@ -302,7 +302,7 @@ void Protocol::reset_out()
 
 void Protocol::dispatch_accept()
 {
-  if (out_state == out_state_t::drop) {
+  if (io_state == io_state_t::drop) {
     return;
   }
   // protocol_is_connected can be from true to true here if the replacing is
@@ -314,7 +314,7 @@ void Protocol::dispatch_accept()
 
 void Protocol::dispatch_connect()
 {
-  if (out_state == out_state_t::drop) {
+  if (io_state == io_state_t::drop) {
     return;
   }
   ceph_assert_always(protocol_is_connected == false);
@@ -325,7 +325,7 @@ void Protocol::dispatch_connect()
 
 void Protocol::dispatch_reset(bool is_replace)
 {
-  ceph_assert_always(out_state == out_state_t::drop);
+  ceph_assert_always(io_state == io_state_t::drop);
   if (!need_dispatch_reset) {
     return;
   }
@@ -337,7 +337,7 @@ void Protocol::dispatch_reset(bool is_replace)
 
 void Protocol::dispatch_remote_reset()
 {
-  if (out_state == out_state_t::drop) {
+  if (io_state == io_state_t::drop) {
     return;
   }
   dispatchers.ms_handle_remote_reset(
@@ -372,7 +372,7 @@ seastar::future<stop_t> Protocol::try_exit_out_dispatch() {
         out_exit_dispatching = std::nullopt;
         logger().info("{} do_out_dispatch: nothing queued at {},"
                       " set out_exit_dispatching",
-                      conn, out_state);
+                      conn, io_state);
       }
       return seastar::make_ready_future<stop_t>(stop_t::yes);
     } else {
@@ -385,8 +385,8 @@ seastar::future<stop_t> Protocol::try_exit_out_dispatch() {
 seastar::future<> Protocol::do_out_dispatch()
 {
   return seastar::repeat([this] {
-    switch (out_state) {
-     case out_state_t::open: {
+    switch (io_state) {
+     case io_state_t::open: {
       bool still_queued = is_out_queued();
       if (unlikely(!still_queued)) {
         return try_exit_out_dispatch();
@@ -412,7 +412,7 @@ seastar::future<> Protocol::do_out_dispatch()
         }
       });
      }
-     case out_state_t::delay:
+     case io_state_t::delay:
       // delay out dispatching until open
       if (out_exit_dispatching) {
         out_exit_dispatching->set_value();
@@ -421,9 +421,9 @@ seastar::future<> Protocol::do_out_dispatch()
       } else {
         logger().info("{} do_out_dispatch: delay ...", conn);
       }
-      return out_state_changed.get_future(
+      return io_state_changed.get_future(
       ).then([] { return stop_t::no; });
-     case out_state_t::drop:
+     case io_state_t::drop:
       ceph_assert(out_dispatching);
       out_dispatching = false;
       if (out_exit_dispatching) {
@@ -442,24 +442,24 @@ seastar::future<> Protocol::do_out_dispatch()
         e.code() != std::errc::connection_reset &&
         e.code() != error::negotiation_failure) {
       logger().error("{} do_out_dispatch(): unexpected error at {} -- {}",
-                     conn, out_state, e);
+                     conn, io_state, e);
       ceph_abort();
     }
 
-    if (out_state == out_state_t::open) {
+    if (io_state == io_state_t::open) {
       logger().info("{} do_out_dispatch(): fault at {}, going to delay -- {}",
-                    conn, out_state, e);
+                    conn, io_state, e);
       std::exception_ptr eptr;
       try {
         throw e;
       } catch(...) {
         eptr = std::current_exception();
       }
-      set_out_state(out_state_t::delay);
+      set_io_state(io_state_t::delay);
       notify_out_fault("do_out_dispatch", eptr);
     } else {
       logger().info("{} do_out_dispatch(): fault at {} -- {}",
-                    conn, out_state, e);
+                    conn, io_state, e);
     }
 
     return do_out_dispatch();
@@ -474,16 +474,16 @@ void Protocol::notify_out_dispatch()
     return;
   }
   out_dispatching = true;
-  switch (out_state) {
-   case out_state_t::open:
+  switch (io_state) {
+   case io_state_t::open:
      [[fallthrough]];
-   case out_state_t::delay:
+   case io_state_t::delay:
     assert(!gate.is_closed());
     gate.dispatch_in_background("do_out_dispatch", conn, [this] {
       return do_out_dispatch();
     });
     return;
-   case out_state_t::drop:
+   case io_state_t::drop:
     out_dispatching = false;
     return;
    default:
@@ -496,9 +496,9 @@ Protocol::read_message(utime_t throttle_stamp, std::size_t msg_size)
 {
   return frame_assembler->read_frame_payload(
   ).then([this, throttle_stamp, msg_size](auto payload) {
-    if (unlikely(out_state != out_state_t::open)) {
+    if (unlikely(io_state != io_state_t::open)) {
       logger().debug("{} triggered {} during read_message()",
-                     conn, out_state);
+                     conn, io_state);
       abort_protocol();
     }
 
@@ -597,7 +597,7 @@ Protocol::read_message(utime_t throttle_stamp, std::size_t msg_size)
 
     // TODO: change MessageRef with seastar::shared_ptr
     auto msg_ref = MessageRef{message, false};
-    assert(out_state == out_state_t::open);
+    assert(io_state == io_state_t::open);
     // throttle the reading process by the returned future
     return dispatchers.ms_dispatch(conn_ref, std::move(msg_ref));
   });
@@ -688,14 +688,14 @@ void Protocol::do_in_dispatch()
         e_what = e.what();
       }
 
-      if (out_state == out_state_t::open) {
+      if (io_state == io_state_t::open) {
         logger().info("{} do_in_dispatch(): fault at {}, going to delay -- {}",
-                      conn, out_state, e_what);
-        set_out_state(out_state_t::delay);
+                      conn, io_state, e_what);
+        set_io_state(io_state_t::delay);
         notify_out_fault("do_in_dispatch", eptr);
       } else {
         logger().info("{} do_in_dispatch(): fault at {} -- {}",
-                      conn, out_state, e_what);
+                      conn, io_state, e_what);
       }
     }).finally([this] {
       ceph_assert_always(in_exit_dispatching.has_value());

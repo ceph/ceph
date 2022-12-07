@@ -107,7 +107,7 @@ class ProtocolV2 final : public Protocol {
     return statenames[static_cast<int>(state)];
   }
 
-  void trigger_state(state_t state, out_state_t out_state, bool reentrant);
+  void trigger_state(state_t state, io_state_t io_state, bool reentrant);
 
   uint64_t peer_supported_features = 0;
 

@@ -201,7 +201,7 @@ void ProtocolV2::start_accept(SocketRef&& new_socket,
   execute_accepting();
 }
 
-void ProtocolV2::trigger_state(state_t new_state, out_state_t _out_state, bool reentrant)
+void ProtocolV2::trigger_state(state_t new_state, io_state_t new_io_state, bool reentrant)
 {
   if (!reentrant && new_state == state) {
     logger().error("{} is not allowed to re-trigger state {}",
@@ -225,9 +225,9 @@ void ProtocolV2::trigger_state(state_t new_state, out_state_t _out_state, bool r
   if (new_state == state_t::READY) {
     // I'm not responsible to shutdown the socket at READY
     is_socket_valid = false;
-    set_out_state(_out_state, std::move(frame_assembler));
+    set_io_state(new_io_state, std::move(frame_assembler));
   } else {
-    set_out_state(_out_state, nullptr);
+    set_io_state(new_io_state, nullptr);
   }
 
   /*
@@ -780,7 +780,7 @@ ProtocolV2::client_reconnect()
 void ProtocolV2::execute_connecting()
 {
   ceph_assert_always(!is_socket_valid);
-  trigger_state(state_t::CONNECTING, out_state_t::delay, false);
+  trigger_state(state_t::CONNECTING, io_state_t::delay, false);
   gated_execute("execute_connecting", conn, [this] {
       global_seq = messenger.get_global_seq();
       assert(client_cookie != 0);
@@ -1468,7 +1468,7 @@ ProtocolV2::server_reconnect()
 void ProtocolV2::execute_accepting()
 {
   assert(is_socket_valid);
-  trigger_state(state_t::ACCEPTING, out_state_t::none, false);
+  trigger_state(state_t::ACCEPTING, io_state_t::none, false);
   gate.dispatch_in_background("execute_accepting", conn, [this] {
       return seastar::futurize_invoke([this] {
           INTERCEPT_N_RW(custom_bp_t::SOCKET_ACCEPTED);
@@ -1581,7 +1581,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
   };
 
   ceph_assert_always(is_socket_valid);
-  trigger_state(state_t::ESTABLISHING, out_state_t::delay, false);
+  trigger_state(state_t::ESTABLISHING, io_state_t::delay, false);
   if (existing_conn) {
     static_cast<ProtocolV2*>(existing_conn->protocol.get())->do_close(
         true /* is_dispatch_reset */, std::move(accept_me));
@@ -1681,7 +1681,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                                    uint64_t new_connect_seq,
                                    uint64_t new_msg_seq)
 {
-  trigger_state(state_t::REPLACING, out_state_t::delay, false);
+  trigger_state(state_t::REPLACING, io_state_t::delay, false);
   ceph_assert_always(has_socket);
   ceph_assert_always(!mover.socket->is_shutdown());
   if (is_socket_valid) {
@@ -1791,7 +1791,7 @@ void ProtocolV2::execute_ready()
   assert(conn.policy.lossy || (client_cookie != 0 && server_cookie != 0));
   protocol_timer.cancel();
   ceph_assert_always(is_socket_valid);
-  trigger_state(state_t::READY, out_state_t::open, false);
+  trigger_state(state_t::READY, io_state_t::open, false);
 }
 
 // STANDBY state
@@ -1799,7 +1799,7 @@ void ProtocolV2::execute_ready()
 void ProtocolV2::execute_standby()
 {
   ceph_assert_always(!is_socket_valid);
-  trigger_state(state_t::STANDBY, out_state_t::delay, false);
+  trigger_state(state_t::STANDBY, io_state_t::delay, false);
 }
 
 void ProtocolV2::notify_out()
@@ -1816,7 +1816,7 @@ void ProtocolV2::notify_out()
 void ProtocolV2::execute_wait(bool max_backoff)
 {
   ceph_assert_always(!is_socket_valid);
-  trigger_state(state_t::WAIT, out_state_t::delay, false);
+  trigger_state(state_t::WAIT, io_state_t::delay, false);
   gated_execute("execute_wait", conn, [this, max_backoff] {
     double backoff = protocol_timer.last_dur();
     if (max_backoff) {
@@ -1848,7 +1848,7 @@ void ProtocolV2::execute_wait(bool max_backoff)
 void ProtocolV2::execute_server_wait()
 {
   ceph_assert_always(is_socket_valid);
-  trigger_state(state_t::SERVER_WAIT, out_state_t::none, false);
+  trigger_state(state_t::SERVER_WAIT, io_state_t::none, false);
   gated_execute("execute_server_wait", conn, [this] {
     return frame_assembler->read_exactly(1
     ).then([this](auto bl) {
@@ -1924,7 +1924,7 @@ void ProtocolV2::do_close(
     ceph_assert(false);
   }
   protocol_timer.cancel();
-  trigger_state(state_t::CLOSING, out_state_t::drop, false);
+  trigger_state(state_t::CLOSING, io_state_t::drop, false);
 
   if (f_accept_new) {
     (*f_accept_new)();
@@ -1934,8 +1934,8 @@ void ProtocolV2::do_close(
     is_socket_valid = false;
   }
   assert(!gate.is_closed());
-  auto gate_closed = gate.close();
-  auto out_closed = close_out();
+  auto handshake_closed = gate.close();
+  auto io_closed = close_io();
 
   if (is_dispatch_reset) {
     dispatch_reset(is_replace);
@@ -1944,7 +1944,7 @@ void ProtocolV2::do_close(
   // asynchronous operations
   assert(!closed_clean_fut.valid());
   closed_clean_fut = seastar::when_all(
-      std::move(gate_closed), std::move(out_closed)
+      std::move(handshake_closed), std::move(io_closed)
   ).discard_result().then([this] {
     ceph_assert_always(!exit_io.has_value());
     if (has_socket) {
