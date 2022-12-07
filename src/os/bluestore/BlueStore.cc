@@ -1105,22 +1105,17 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     if (new_size >= lru.size()) {
       return; // don't even try
     } 
-    uint64_t n = lru.size() - new_size;
-    auto p = lru.end();
-    ceph_assert(p != lru.begin());
-    --p;
-    ceph_assert(num >= n);
-    while (n-- > 0) {
-      BlueStore::Onode *o = &*p;
+    uint64_t n = num - new_size; // note: we might get empty LRU
+                                 // before n == 0 due to pinned
+                                 // entries. And hence being unable
+                                 // to reach new_size target.
+    while (n-- > 0 && lru.size() > 0) {
+      BlueStore::Onode *o = &lru.back();
+      lru.pop_back();
+
       dout(20) << __func__ << "  rm " << o->oid << " "
                << o->nref << " " << o->cached << dendl;
 
-      if (p != lru.begin()) {
-        lru.erase(p--);
-      } else {
-        ceph_assert(n == 0);
-        lru.erase(p);
-      }
       if (o->pin_nref > 1) {
         dout(20) << __func__ << " " << this << " " << " " << " " << o->oid << dendl;
       } else {
