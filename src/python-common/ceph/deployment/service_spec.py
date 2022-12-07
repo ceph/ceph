@@ -970,6 +970,9 @@ class IscsiServiceSpec(ServiceSpec):
         if not self.api_secure and self.ssl_cert and self.ssl_key:
             self.api_secure = True
 
+    def get_port_start(self) -> List[int]:
+        return [self.api_port or 5000]
+
     def validate(self) -> None:
         super(IscsiServiceSpec, self).validate()
 
