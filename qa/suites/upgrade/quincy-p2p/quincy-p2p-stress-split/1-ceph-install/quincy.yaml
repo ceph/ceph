@@ -1,0 +1,21 @@
+meta:
+- desc: |
+   install ceph/quincy v17.2.0
+   Overall upgrade path is - quincy-latest.point -1 => quincy-latest
+tasks:
+- install:
+    tag: v17.2.0
+    exclude_packages: ['librados3']
+    extra_packages: ['librados2']
+- print: "**** done install quincy v17.2.0"
+- ceph:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release quincy
+      - ceph osd set-require-min-compat-client quincy
+- print: "**** done ceph"
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false
