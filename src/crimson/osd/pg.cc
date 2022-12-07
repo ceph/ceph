@@ -457,13 +457,15 @@ void PG::on_active_actmap()
     [this] {
       const auto to_trim = snap_trimq.range_start();
       snap_trimq.erase(to_trim);
-      return seastar::repeat([to_trim, this] {
+      const auto needs_pause = !snap_trimq.empty();
+      return seastar::repeat([to_trim, needs_pause, this] {
         logger().debug("{}: going to start SnapTrimEvent, to_trim={}",
                        *this, to_trim);
         return shard_services.start_operation<SnapTrimEvent>(
           this,
           snap_mapper,
-          to_trim).second;
+          to_trim,
+          needs_pause).second;
       }).then([this, trimmed=to_trim] {
         logger().debug("{}: trimmed snap={}", *this, trimmed);
       });
