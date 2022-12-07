@@ -3897,6 +3897,10 @@ bool OSDMonitor::preprocess_alive(MonOpRequestRef op)
   return false;
 
  ignore:
+  if (session && session->proxy_con) {
+    dout(10) << __func__ << " reply forward op tid " << session->proxy_tid << dendl;
+    session->proxy_con->send_message(new MRoute(session->proxy_tid, nullptr));
+  }
   return true;
 }
 

@@ -4153,7 +4153,8 @@ void Monitor::send_reply(MonOpRequestRef op, Message *reply)
   if (session->proxy_con) {
     dout(15) << "send_reply routing reply to " << con->get_peer_addr()
 	     << " via " << session->proxy_con->get_peer_addr()
-	     << " for request " << *req << dendl;
+	     << " for request " << *req
+             << " tid " << session->proxy_tid << dendl;
     session->proxy_con->send_message(new MRoute(session->proxy_tid, reply));
     op->mark_event("reply: send routed request");
   } else {
@@ -4170,7 +4171,8 @@ void Monitor::no_reply(MonOpRequestRef op)
   if (session->proxy_con) {
     dout(10) << "no_reply to " << req->get_source_inst()
 	     << " via " << session->proxy_con->get_peer_addr()
-	     << " for request " << *req << dendl;
+	     << " for request " << *req
+             << " tid " << session->proxy_tid << dendl;
     session->proxy_con->send_message(new MRoute(session->proxy_tid, NULL));
     op->mark_event("no_reply: send routed request");
   } else {
