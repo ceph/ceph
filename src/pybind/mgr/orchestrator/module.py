@@ -1156,6 +1156,7 @@ Usage:
                    placement: Optional[str] = None,
                    _end_positional_: int = 0,
                    realm: Optional[str] = None,
+                   zonegroup: Optional[str] = None,
                    zone: Optional[str] = None,
                    port: Optional[int] = None,
                    ssl: bool = False,
@@ -1178,6 +1179,7 @@ Usage:
         spec = RGWSpec(
             service_id=svc_id,
             rgw_realm=realm,
+            rgw_zonegroup=zonegroup,
             rgw_zone=zone,
             rgw_frontend_port=port,
             ssl=ssl,
