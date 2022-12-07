@@ -238,8 +238,11 @@ private:
   DeepCopyHandler* m_deep_copy_handler = nullptr;
 
   TimeRollingMean m_bytes_per_second;
+  uint64_t m_last_snapshot_sync_seconds = 0;
 
   uint64_t m_snapshot_bytes = 0;
+  uint64_t m_last_snapshot_bytes = 0;
+
   boost::accumulators::accumulator_set<
     uint64_t, boost::accumulators::stats<
       boost::accumulators::tag::rolling_mean>> m_bytes_per_snapshot{
