@@ -525,6 +525,16 @@ public:
     with_obc_func_t&& f);
 
   interruptible_future<> handle_rep_op(Ref<MOSDRepOp> m);
+  void log_operation(
+    std::vector<pg_log_entry_t>&& logv,
+    const eversion_t &trim_to,
+    const eversion_t &roll_forward_to,
+    const eversion_t &min_last_complete_ondisk,
+    bool transaction_applied,
+    ObjectStore::Transaction &txn,
+    bool async = false);
+  void replica_clear_repop_obc(
+    const std::vector<pg_log_entry_t> &logv);
   void handle_rep_op_reply(const MOSDRepOpReply& m);
   interruptible_future<> do_update_log_missing(Ref<MOSDPGUpdateLogMissing> m);
   interruptible_future<> do_update_log_missing_reply(
