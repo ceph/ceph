@@ -148,6 +148,25 @@ public:
     }
   }
 
+  /*
+   * Clears unreferenced elements from the lru set [from, to]
+   */
+  void clear_range(
+    const K& from,
+    const K& to) {
+      auto from_iter = lru_set.lower_bound(from);
+      auto to_iter = lru_set.upper_bound(to);
+      for (auto i = from_iter; i != to_iter; ) {
+        if (!(*i).lru) {
+          unreferenced_list.erase(lru_list_t::s_iterator_to(*i));
+          i = lru_set.erase_and_dispose(i, [](auto *p)
+            { delete p; } );
+        } else {
+          i++;
+        }
+      }
+  }
+
   /**
    * Returns the TRef corresponding to k if it exists or
    * nullptr otherwise.
