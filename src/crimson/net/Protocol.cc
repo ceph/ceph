@@ -245,6 +245,16 @@ seastar::future<FrameAssemblerV2Ref> Protocol::wait_io_exit_dispatching()
   });
 }
 
+void Protocol::reset_session(bool full)
+{
+  // reset in
+  in_seq = 0;
+  if (full) {
+    reset_out();
+    dispatch_remote_reset();
+  }
+}
+
 void Protocol::requeue_out_sent()
 {
   assert(io_state != io_state_t::open);

@@ -44,6 +44,7 @@ class ProtocolV2 final : public Protocol {
 
   void notify_mark_down() override;
 
+ private:
   seastar::future<> wait_exit_io() {
     if (exit_io.has_value()) {
       return exit_io->get_shared_future();
@@ -52,33 +53,6 @@ class ProtocolV2 final : public Protocol {
     }
   }
 
- private:
-  SocketConnection &conn;
-
-  SocketMessenger &messenger;
-
-  bool has_socket = false;
-
-  // the socket exists and it is not shutdown
-  bool is_socket_valid = false;
-
-  FrameAssemblerV2Ref frame_assembler;
-
-  std::optional<seastar::shared_promise<>> exit_io;
-
-  AuthConnectionMetaRef auth_meta;
-
-  crimson::common::Gated gate;
-
-  bool closed = false;
-
-  // become valid only after closed == true
-  seastar::shared_future<> closed_clean_fut;
-
-#ifdef UNIT_TESTS_BUILT
-  bool closed_clean = false;
-
-#endif
   enum class state_t {
     NONE = 0,
     ACCEPTING,
@@ -91,7 +65,6 @@ class ProtocolV2 final : public Protocol {
     REPLACING,
     CLOSING
   };
-  state_t state = state_t::NONE;
 
   static const char *get_state_name(state_t state) {
     const char *const statenames[] = {"NONE",
@@ -108,16 +81,6 @@ class ProtocolV2 final : public Protocol {
   }
 
   void trigger_state(state_t state, io_state_t io_state, bool reentrant);
-
-  uint64_t peer_supported_features = 0;
-
-  uint64_t client_cookie = 0;
-  uint64_t server_cookie = 0;
-  uint64_t global_seq = 0;
-  uint64_t peer_global_seq = 0;
-  uint64_t connect_seq = 0;
-
-  seastar::future<> execution_done = seastar::now();
 
   template <typename Func, typename T>
   void gated_execute(const char *what, T &who, Func &&func) {
@@ -141,25 +104,6 @@ class ProtocolV2 final : public Protocol {
     });
   }
 
-  class Timer {
-    double last_dur_ = 0.0;
-    const SocketConnection& conn;
-    std::optional<seastar::abort_source> as;
-   public:
-    Timer(SocketConnection& conn) : conn(conn) {}
-    double last_dur() const { return last_dur_; }
-    seastar::future<> backoff(double seconds);
-    void cancel() {
-      last_dur_ = 0.0;
-      if (as) {
-        as->request_abort();
-        as = std::nullopt;
-      }
-    }
-  };
-  Timer protocol_timer;
-
- private:
   void fault(state_t expected_state,
              const char *where,
              std::exception_ptr eptr);
@@ -251,6 +195,63 @@ class ProtocolV2 final : public Protocol {
   // reentrant
   void do_close(bool is_dispatch_reset,
                 std::optional<std::function<void()>> f_accept_new=std::nullopt);
+
+ private:
+  SocketConnection &conn;
+
+  SocketMessenger &messenger;
+
+  bool has_socket = false;
+
+  // the socket exists and it is not shutdown
+  bool is_socket_valid = false;
+
+  FrameAssemblerV2Ref frame_assembler;
+
+  std::optional<seastar::shared_promise<>> exit_io;
+
+  AuthConnectionMetaRef auth_meta;
+
+  crimson::common::Gated gate;
+
+  bool closed = false;
+
+  // become valid only after closed == true
+  seastar::shared_future<> closed_clean_fut;
+
+#ifdef UNIT_TESTS_BUILT
+  bool closed_clean = false;
+
+#endif
+  state_t state = state_t::NONE;
+
+  uint64_t peer_supported_features = 0;
+
+  uint64_t client_cookie = 0;
+  uint64_t server_cookie = 0;
+  uint64_t global_seq = 0;
+  uint64_t peer_global_seq = 0;
+  uint64_t connect_seq = 0;
+
+  seastar::future<> execution_done = seastar::now();
+
+  class Timer {
+    double last_dur_ = 0.0;
+    const SocketConnection& conn;
+    std::optional<seastar::abort_source> as;
+   public:
+    Timer(SocketConnection& conn) : conn(conn) {}
+    double last_dur() const { return last_dur_; }
+    seastar::future<> backoff(double seconds);
+    void cancel() {
+      last_dur_ = 0.0;
+      if (as) {
+        as->request_abort();
+        as = std::nullopt;
+      }
+    }
+  };
+  Timer protocol_timer;
 };
 
 } // namespace crimson::net

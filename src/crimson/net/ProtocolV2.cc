@@ -351,13 +351,11 @@ void ProtocolV2::reset_session(bool full)
 {
   server_cookie = 0;
   connect_seq = 0;
-  reset_in();
   if (full) {
     client_cookie = generate_client_cookie();
     peer_global_seq = 0;
-    reset_out();
-    dispatch_remote_reset();
   }
+  do_reset_session(full);
 }
 
 seastar::future<std::tuple<entity_type_t, entity_addr_t>>
@@ -1636,7 +1634,7 @@ ProtocolV2::send_server_ident()
 
   // this is required for the case when this connection is being replaced
   requeue_out_sent_up_to(0);
-  reset_in();
+  do_reset_session(false);
 
   if (!conn.policy.lossy) {
     server_cookie = ceph::util::generate_random_number<uint64_t>(1, -1ll);
@@ -1935,11 +1933,8 @@ void ProtocolV2::do_close(
   }
   assert(!gate.is_closed());
   auto handshake_closed = gate.close();
-  auto io_closed = close_io();
-
-  if (is_dispatch_reset) {
-    dispatch_reset(is_replace);
-  }
+  auto io_closed = close_io(
+      is_dispatch_reset, is_replace);
 
   // asynchronous operations
   assert(!closed_clean_fut.valid());
