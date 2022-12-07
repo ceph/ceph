@@ -14,6 +14,9 @@ using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
 
+const uint64_t page_size = 4096;
+const uint64_t large_chunk_size = 1ul << 22;
+
 int queue_write_head(cls_method_context_t hctx, cls_queue_head& head)
 {
   bufferlist bl;
@@ -43,7 +46,7 @@ int queue_write_head(cls_method_context_t hctx, cls_queue_head& head)
 
 int queue_read_head(cls_method_context_t hctx, cls_queue_head& head)
 {
-  uint64_t chunk_size = 1024, start_offset = 0;
+  uint64_t chunk_size = page_size, start_offset = 0;
 
   bufferlist bl_head;
   const auto  ret = cls_cxx_read(hctx, start_offset, chunk_size, &bl_head);
@@ -281,7 +284,6 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
   }
 
   op_ret.is_truncated = true;
-  uint64_t chunk_size = 1024;
   uint64_t contiguous_data_size = 0, size_to_read = 0;
   bool wrap_around = false;
 
@@ -310,11 +312,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
   
     bufferlist bl_chunk;
     //Read chunk size at a time, if it is less than contiguous data size, else read contiguous data size
-    if (contiguous_data_size > chunk_size) {
-      size_to_read = chunk_size;
-    } else {
-      size_to_read = contiguous_data_size;
-    }
+    size_to_read = std::min(contiguous_data_size, large_chunk_size);
     CLS_LOG(10, "INFO: queue_list_entries(): size_to_read is %lu", size_to_read);
     if (size_to_read == 0) {
       next_marker = head.tail;
