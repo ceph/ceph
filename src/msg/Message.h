@@ -544,6 +544,10 @@ extern Message *decode_message(CephContext *cct, int crcflags,
 class SafeMessage : public Message {
 public:
   using Message::Message;
+  bool is_a_client() const {
+    return get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT;
+  }
+
 private:
   using RefCountedObject::get;
   using RefCountedObject::put;
