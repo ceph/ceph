@@ -921,6 +921,8 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
 {
   if (! is_applicable(s)) {
     return result_t::deny(-EPERM);
+  } else if (s->op_type == RGW_OP_PUBSUB_TOPIC_CREATE) {
+    return result_t::deny(-EACCES);
   } else {
     RGWUserInfo user_info;
     rgw_get_anon_user(user_info);
