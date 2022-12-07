@@ -272,8 +272,9 @@ class RbdService(object):
     def _rbd_image(cls, ioctx, pool_name, namespace, image_name):  # pylint: disable=R0912
         with rbd.Image(ioctx, image_name) as img:
             stat = img.stat()
+            mirror_info = img.mirror_image_get_info()
             mirror_mode = img.mirror_image_get_mode()
-            if mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL:
+            if mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL and mirror_info['state'] != rbd.RBD_MIRROR_IMAGE_DISABLED:  # noqa E501 #pylint: disable=line-too-long
                 stat['mirror_mode'] = 'journal'
             elif mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
                 stat['mirror_mode'] = 'snapshot'
@@ -283,11 +284,10 @@ class RbdService(object):
                     if scheduled_image['image'] == get_image_spec(pool_name, namespace, image_name):
                         stat['schedule_info'] = scheduled_image
             else:
-                stat['mirror_mode'] = 'unknown'
+                stat['mirror_mode'] = 'Disabled'
 
             stat['name'] = image_name
 
-            mirror_info = img.mirror_image_get_info()
             stat['primary'] = None
             if mirror_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED:
                 stat['primary'] = mirror_info['primary']
