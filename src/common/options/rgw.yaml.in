@@ -1864,7 +1864,7 @@ options:
   level: advanced
   desc: Bucket ACLs override object ACLs
   long_desc: If not empty, a string that selects that mode of operation. 'recurse'
-    will use bucket's ACL for the authorizaton. 'full-control' will allow users that
+    will use bucket's ACL for the authorization. 'full-control' will allow users that
     users that have full control permission on the bucket have access to the object.
   services:
   - rgw
