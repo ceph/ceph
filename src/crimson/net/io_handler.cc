@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "Protocol.h"
+#include "io_handler.h"
 
 #include "auth/Auth.h"
 
@@ -9,7 +9,6 @@
 #include "crimson/common/log.h"
 #include "crimson/net/Errors.h"
 #include "crimson/net/chained_dispatchers.h"
-#include "crimson/net/SocketConnection.h"
 #include "crimson/net/SocketMessenger.h"
 #include "msg/Message.h"
 
@@ -45,19 +44,19 @@ std::size_t get_msg_size(const FrameAssembler &rx_frame_asm)
 
 namespace crimson::net {
 
-Protocol::Protocol(ChainedDispatchers& dispatchers,
-                   SocketConnection& conn)
+IOHandler::IOHandler(ChainedDispatchers &dispatchers,
+                     SocketConnection &conn)
   : dispatchers(dispatchers),
     conn(conn)
 {}
 
-Protocol::~Protocol()
+IOHandler::~IOHandler()
 {
   ceph_assert(gate.is_closed());
   assert(!out_exit_dispatching);
 }
 
-ceph::bufferlist Protocol::sweep_out_pending_msgs_to_sent(
+ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
   bool require_keepalive,
   std::optional<utime_t> maybe_keepalive_ack,
   bool require_ack)
@@ -120,7 +119,7 @@ ceph::bufferlist Protocol::sweep_out_pending_msgs_to_sent(
   return bl;
 }
 
-seastar::future<> Protocol::send(MessageURef msg)
+seastar::future<> IOHandler::send(MessageURef msg)
 {
   if (io_state != io_state_t::drop) {
     out_pending_msgs.push_back(std::move(msg));
@@ -129,7 +128,7 @@ seastar::future<> Protocol::send(MessageURef msg)
   return seastar::now();
 }
 
-seastar::future<> Protocol::send_keepalive()
+seastar::future<> IOHandler::send_keepalive()
 {
   if (!need_keepalive) {
     need_keepalive = true;
@@ -138,7 +137,7 @@ seastar::future<> Protocol::send_keepalive()
   return seastar::now();
 }
 
-void Protocol::mark_down()
+void IOHandler::mark_down()
 {
   ceph_assert_always(io_state != io_state_t::none);
   need_dispatch_reset = false;
@@ -149,10 +148,10 @@ void Protocol::mark_down()
   logger().info("{} mark_down() with {}",
                 conn, io_stat_printer{*this});
   set_io_state(io_state_t::drop);
-  notify_mark_down();
+  handshake_listener->notify_mark_down();
 }
 
-void Protocol::print_io_stat(std::ostream &out) const
+void IOHandler::print_io_stat(std::ostream &out) const
 {
   out << "io_stat("
       << "io_state=" << fmt::format("{}", io_state)
@@ -166,8 +165,8 @@ void Protocol::print_io_stat(std::ostream &out) const
       << ")";
 }
 
-void Protocol::set_io_state(
-    const Protocol::io_state_t &new_state,
+void IOHandler::set_io_state(
+    const IOHandler::io_state_t &new_state,
     FrameAssemblerV2Ref fa)
 {
   ceph_assert_always(!(
@@ -220,7 +219,7 @@ void Protocol::set_io_state(
   }
 }
 
-seastar::future<FrameAssemblerV2Ref> Protocol::wait_io_exit_dispatching()
+seastar::future<FrameAssemblerV2Ref> IOHandler::wait_io_exit_dispatching()
 {
   ceph_assert_always(io_state != io_state_t::open);
   ceph_assert_always(frame_assembler != nullptr);
@@ -245,7 +244,7 @@ seastar::future<FrameAssemblerV2Ref> Protocol::wait_io_exit_dispatching()
   });
 }
 
-void Protocol::reset_session(bool full)
+void IOHandler::reset_session(bool full)
 {
   // reset in
   in_seq = 0;
@@ -255,7 +254,7 @@ void Protocol::reset_session(bool full)
   }
 }
 
-void Protocol::requeue_out_sent()
+void IOHandler::requeue_out_sent()
 {
   assert(io_state != io_state_t::open);
   if (out_sent_msgs.empty()) {
@@ -277,7 +276,7 @@ void Protocol::requeue_out_sent()
   notify_out_dispatch();
 }
 
-void Protocol::requeue_out_sent_up_to(seq_num_t seq)
+void IOHandler::requeue_out_sent_up_to(seq_num_t seq)
 {
   assert(io_state != io_state_t::open);
   if (out_sent_msgs.empty() && out_pending_msgs.empty()) {
@@ -299,7 +298,7 @@ void Protocol::requeue_out_sent_up_to(seq_num_t seq)
   requeue_out_sent();
 }
 
-void Protocol::reset_out()
+void IOHandler::reset_out()
 {
   assert(io_state != io_state_t::open);
   out_seq = 0;
@@ -310,7 +309,7 @@ void Protocol::reset_out()
   ack_left = 0;
 }
 
-void Protocol::dispatch_accept()
+void IOHandler::dispatch_accept()
 {
   if (io_state == io_state_t::drop) {
     return;
@@ -322,7 +321,7 @@ void Protocol::dispatch_accept()
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
 }
 
-void Protocol::dispatch_connect()
+void IOHandler::dispatch_connect()
 {
   if (io_state == io_state_t::drop) {
     return;
@@ -333,7 +332,7 @@ void Protocol::dispatch_connect()
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
 }
 
-void Protocol::dispatch_reset(bool is_replace)
+void IOHandler::dispatch_reset(bool is_replace)
 {
   ceph_assert_always(io_state == io_state_t::drop);
   if (!need_dispatch_reset) {
@@ -345,7 +344,7 @@ void Protocol::dispatch_reset(bool is_replace)
     is_replace);
 }
 
-void Protocol::dispatch_remote_reset()
+void IOHandler::dispatch_remote_reset()
 {
   if (io_state == io_state_t::drop) {
     return;
@@ -354,7 +353,7 @@ void Protocol::dispatch_remote_reset()
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
 }
 
-void Protocol::ack_out_sent(seq_num_t seq)
+void IOHandler::ack_out_sent(seq_num_t seq)
 {
   if (conn.policy.lossy) {  // lossy connections don't keep sent messages
     return;
@@ -368,7 +367,7 @@ void Protocol::ack_out_sent(seq_num_t seq)
   }
 }
 
-seastar::future<stop_t> Protocol::try_exit_out_dispatch() {
+seastar::future<stop_t> IOHandler::try_exit_out_dispatch() {
   assert(!is_out_queued());
   return frame_assembler->flush(
   ).then([this] {
@@ -392,7 +391,7 @@ seastar::future<stop_t> Protocol::try_exit_out_dispatch() {
   });
 }
 
-seastar::future<> Protocol::do_out_dispatch()
+seastar::future<> IOHandler::do_out_dispatch()
 {
   return seastar::repeat([this] {
     switch (io_state) {
@@ -403,7 +402,6 @@ seastar::future<> Protocol::do_out_dispatch()
       }
       auto to_ack = ack_left;
       assert(to_ack == 0 || in_seq > 0);
-      // sweep all pending out with the concrete Protocol
       return frame_assembler->write(
         sweep_out_pending_msgs_to_sent(
           need_keepalive, next_keepalive_ack, to_ack > 0)
@@ -466,7 +464,7 @@ seastar::future<> Protocol::do_out_dispatch()
         eptr = std::current_exception();
       }
       set_io_state(io_state_t::delay);
-      notify_out_fault("do_out_dispatch", eptr);
+      handshake_listener->notify_out_fault("do_out_dispatch", eptr);
     } else {
       logger().info("{} do_out_dispatch(): fault at {} -- {}",
                     conn, io_state, e);
@@ -476,9 +474,9 @@ seastar::future<> Protocol::do_out_dispatch()
   });
 }
 
-void Protocol::notify_out_dispatch()
+void IOHandler::notify_out_dispatch()
 {
-  notify_out();
+  handshake_listener->notify_out();
   if (out_dispatching) {
     // already dispatching
     return;
@@ -502,7 +500,7 @@ void Protocol::notify_out_dispatch()
 }
 
 seastar::future<>
-Protocol::read_message(utime_t throttle_stamp, std::size_t msg_size)
+IOHandler::read_message(utime_t throttle_stamp, std::size_t msg_size)
 {
   return frame_assembler->read_frame_payload(
   ).then([this, throttle_stamp, msg_size](auto payload) {
@@ -613,7 +611,7 @@ Protocol::read_message(utime_t throttle_stamp, std::size_t msg_size)
   });
 }
 
-void Protocol::do_in_dispatch()
+void IOHandler::do_in_dispatch()
 {
   ceph_assert_always(!in_exit_dispatching.has_value());
   in_exit_dispatching = seastar::promise<>();
@@ -702,7 +700,7 @@ void Protocol::do_in_dispatch()
         logger().info("{} do_in_dispatch(): fault at {}, going to delay -- {}",
                       conn, io_state, e_what);
         set_io_state(io_state_t::delay);
-        notify_out_fault("do_in_dispatch", eptr);
+        handshake_listener->notify_out_fault("do_in_dispatch", eptr);
       } else {
         logger().info("{} do_in_dispatch(): fault at {} -- {}",
                       conn, io_state, e_what);
