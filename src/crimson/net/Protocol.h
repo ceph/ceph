@@ -78,27 +78,27 @@ class Protocol {
 
 // TODO: encapsulate a SessionedSender class
  protected:
-  seastar::future<> close_out() {
-    ceph_assert_always(out_state == out_state_t::drop);
+  seastar::future<> close_io() {
+    ceph_assert_always(io_state == io_state_t::drop);
     assert(!gate.is_closed());
     return gate.close();
   }
 
   /**
-   * out_state_t
+   * io_state_t
    *
-   * The out_state is changed with protocol state atomically, indicating the
-   * out behavior of the according protocol state.
+   * The io_state is changed with protocol state atomically, indicating the
+   * IOHandler behavior of the according protocol state.
    */
-  enum class out_state_t : uint8_t {
+  enum class io_state_t : uint8_t {
     none,
     delay,
     open,
     drop
   };
-  friend class fmt::formatter<out_state_t>;
+  friend class fmt::formatter<io_state_t>;
 
-  void set_out_state(const out_state_t &new_state, FrameAssemblerV2Ref fa=nullptr);
+  void set_io_state(const io_state_t &new_state, FrameAssemblerV2Ref fa=nullptr);
 
   seastar::future<FrameAssemblerV2Ref> wait_io_exit_dispatching();
 
@@ -165,14 +165,14 @@ class Protocol {
 
   bool need_dispatch_reset = true;
 
+  io_state_t io_state = io_state_t::none;
+
+  // wait until current io_state changed
+  seastar::promise<> io_state_changed;
+
   /*
    * out states for writing
    */
-
-  out_state_t out_state = out_state_t::none;
-
-  // wait until current out_state changed
-  seastar::promise<> out_state_changed;
 
   bool out_dispatching = false;
 
@@ -216,11 +216,11 @@ inline std::ostream& operator<<(
 } // namespace crimson::net
 
 template <>
-struct fmt::formatter<crimson::net::Protocol::out_state_t>
+struct fmt::formatter<crimson::net::Protocol::io_state_t>
   : fmt::formatter<std::string_view> {
   template <typename FormatContext>
-  auto format(crimson::net::Protocol::out_state_t state, FormatContext& ctx) {
-    using enum crimson::net::Protocol::out_state_t;
+  auto format(crimson::net::Protocol::io_state_t state, FormatContext& ctx) {
+    using enum crimson::net::Protocol::io_state_t;
     std::string_view name;
     switch (state) {
     case none:
