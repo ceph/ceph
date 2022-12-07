@@ -32,10 +32,14 @@ class SnapTrimEvent final : public PhasedOperationT<SnapTrimEvent> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::snaptrim_event;
 
-  SnapTrimEvent(Ref<PG> pg, SnapMapper& snap_mapper, snapid_t snapid)
+  SnapTrimEvent(Ref<PG> pg,
+                SnapMapper& snap_mapper,
+                const snapid_t snapid,
+                const bool needs_pause)
     : pg(std::move(pg)),
       snap_mapper(snap_mapper),
-      snapid(snapid) {}
+      snapid(snapid),
+      needs_pause(needs_pause) {}
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
@@ -68,10 +72,18 @@ private:
     static constexpr auto type_name = "SnapTrimEvent::wait_subop";
   } wait_subop;
 
+  // an instantiator can instruct us to go over this stage and then
+  // wait for the future to implement throttling. It is implemented
+  // that way to for the sake of tracking ops.
+  struct WaitTrimTimer : OrderedExclusivePhaseT<WaitTrimTimer> {
+    static constexpr auto type_name = "SnapTrimEvent::wait_trim_timer";
+  } wait_trim_timer;
+
   PipelineHandle handle;
   Ref<PG> pg;
   SnapMapper& snap_mapper;
   const snapid_t snapid;
+  const bool needs_pause;
 
 public:
   PipelineHandle& get_handle() { return handle; }
@@ -84,6 +96,7 @@ public:
     CommonPGPipeline::GetOBC::BlockingEvent,
     CommonPGPipeline::Process::BlockingEvent,
     WaitSubop::BlockingEvent,
+    WaitTrimTimer::BlockingEvent,
     CompletionEvent
   > tracking_events;
 };

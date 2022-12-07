@@ -64,6 +64,7 @@ void SnapTrimEvent::print(std::ostream &lhs) const
   lhs << "SnapTrimEvent("
       << "pgid=" << pg->get_pgid()
       << " snapid=" << snapid
+      << " needs_pause=" << needs_pause
       << ")";
 }
 
@@ -155,11 +156,28 @@ seastar::future<seastar::stop_iteration> SnapTrimEvent::with_pg(
           wait_subop
         ).then_interruptible([this] {
           logger().debug("{}: awaiting completion", *this);
-          return subop_blocker.wait_completion().then([this] {
-            logger().debug("{}: all completed", *this);
-            return interruptor::make_ready_future<seastar::stop_iteration>(
-              seastar::stop_iteration::no);
+          return subop_blocker.wait_completion();
+        }).then_interruptible([this] {
+          if (!needs_pause) {
+            return interruptor::now();
+          }
+          // let's know operators we're waiting
+          return enter_stage<interruptor>(
+            wait_trim_timer
+          ).then_interruptible([this] {
+            using crimson::common::local_conf;
+            const auto time_to_sleep =
+              local_conf().template get_val<double>("osd_snap_trim_sleep");
+            logger().debug("{}: time_to_sleep {}", *this, time_to_sleep);
+            // TODO: this logic should be more sophisticated and distinguish
+            // between SSDs, HDDs and the hybrid case
+            return seastar::sleep(
+              std::chrono::milliseconds(std::lround(time_to_sleep * 1000)));
           });
+        }).then_interruptible([this] {
+          logger().debug("{}: all completed", *this);
+          return interruptor::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::no);
         });
       });
     });
