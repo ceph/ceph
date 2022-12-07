@@ -185,6 +185,16 @@ class Rbd(RESTController):
             if size and size != image.size():
                 image.resize(size)
 
+            mirror_image_info = image.mirror_image_get_info()
+            if enable_mirror and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_DISABLED:
+                RbdMirroringService.enable_image(
+                    image_name, pool_name, namespace,
+                    MIRROR_IMAGE_MODE[mirror_mode])
+            elif (enable_mirror is False
+                  and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED):
+                RbdMirroringService.disable_image(
+                    image_name, pool_name, namespace)
+
             # check enable/disable features
             if features is not None:
                 curr_features = format_bitmask(image.features())
@@ -207,16 +217,6 @@ class Rbd(RESTController):
 
             RbdConfiguration(pool_ioctx=ioctx, image_name=image_name).set_configuration(
                 configuration)
-
-            mirror_image_info = image.mirror_image_get_info()
-            if enable_mirror and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_DISABLED:
-                RbdMirroringService.enable_image(
-                    image_name, pool_name, namespace,
-                    MIRROR_IMAGE_MODE[mirror_mode])
-            elif (enable_mirror is False
-                  and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED):
-                RbdMirroringService.disable_image(
-                    image_name, pool_name, namespace)
 
             if primary and not mirror_image_info['primary']:
                 RbdMirroringService.promote_image(

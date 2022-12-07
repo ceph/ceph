@@ -452,6 +452,9 @@ describe('RbdFormComponent', () => {
 
       it('should set and disable exclusive-lock only for the journal mode', () => {
         component.poolMirrorMode = 'pool';
+        component.mirroring = true;
+        const journal = fixture.debugElement.query(By.css('#journal')).nativeElement;
+        journal.click();
         fixture.detectChanges();
         const exclusiveLocks = fixture.debugElement.query(By.css('#exclusive-lock')).nativeElement;
         expect(exclusiveLocks.checked).toBe(true);
@@ -462,6 +465,7 @@ describe('RbdFormComponent', () => {
         component.mirroring = true;
         fixture.detectChanges();
         const journal = fixture.debugElement.query(By.css('#journal')).nativeElement;
+        journal.click();
         expect(journal.checked).toBe(true);
         const request = component.createRequest();
         expect(request.features).toContain('journaling');
@@ -471,6 +475,7 @@ describe('RbdFormComponent', () => {
         component.mirroring = true;
         fixture.detectChanges();
         const journal = fixture.debugElement.query(By.css('#journal')).nativeElement;
+        journal.click();
         expect(journal.checked).toBe(true);
         const request = component.editRequest();
         expect(request.features).toContain('journaling');
