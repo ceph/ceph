@@ -13138,10 +13138,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    bool force_no_fake = false;
-    cmd_getval(cmdmap, "yes_i_really_really_mean_it", force_no_fake);
     bool force = false;
-    cmd_getval(cmdmap, "yes_i_really_really_mean_it_not_faking", force);
+    cmd_getval(cmdmap, "yes_i_really_really_mean_it", force);
+    bool force_no_fake = false;
+    cmd_getval(cmdmap, "yes_i_really_really_mean_it_not_faking", force_no_fake);
     if (poolstr2 != poolstr ||
 	(!force && !force_no_fake)) {
       ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " << poolstr
