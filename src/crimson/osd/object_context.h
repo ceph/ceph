@@ -263,6 +263,11 @@ public:
     return obc_lru.get(hoid);
   }
 
+  void clear_range(const hobject_t &from,
+                   const hobject_t &to) {
+    obc_lru.clear_range(from, to);
+  }
+
   const char** get_tracked_conf_keys() const final;
   void handle_conf_change(const crimson::common::ConfigProxy& conf,
                           const std::set <std::string> &changed) final;

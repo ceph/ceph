@@ -146,3 +146,63 @@ TEST(LRU, eviction_live_ref) {
     }
   }
 }
+
+TEST(LRU, clear_range) {
+  LRUTest cache;
+  const unsigned SIZE = 10;
+  cache.set_target_size(SIZE);
+  {
+    auto [ref, existed] = cache.add(1, 4);
+    ASSERT_FALSE(existed);
+  }
+  {
+    auto [ref, existed] = cache.add(2, 4);
+    ASSERT_FALSE(existed);
+  }
+  {
+    auto [ref, existed] = cache.add(3, 4);
+    ASSERT_FALSE(existed);
+  }
+  // Unlike above, the reference is not being destroyed
+  auto [live_ref1, existed1] = cache.add(4, 4);
+  ASSERT_FALSE(existed1);
+
+  auto [live_ref2, existed2] = cache.add(5, 4);
+  ASSERT_FALSE(existed2);
+
+  cache.clear_range(0,4);
+
+  // Should not exists (Unreferenced):
+  {
+    auto [ref, existed] = cache.add(1, 4);
+    ASSERT_FALSE(existed);
+  }
+  {
+    auto [ref, existed] = cache.add(2, 4);
+    ASSERT_FALSE(existed);
+  }
+  {
+    auto [ref, existed] = cache.add(3, 4);
+    ASSERT_FALSE(existed);
+  }
+  // Should exist (Still being referenced):
+  {
+    auto [ref, existed] = cache.add(4, 4);
+    ASSERT_TRUE(existed);
+  }
+  // Should exists (Still being referenced and wasn't removed)
+  {
+    auto [ref, existed] = cache.add(5, 4);
+    ASSERT_TRUE(existed);
+  }
+  // Test out of bound deletion:
+  {
+    cache.clear_range(3,8);
+    auto [ref, existed] = cache.add(4, 4);
+    ASSERT_TRUE(existed);
+  }
+  {
+    auto [ref, existed] = cache.add(3, 4);
+    ASSERT_FALSE(existed);
+  }
+}
