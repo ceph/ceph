@@ -12,6 +12,15 @@ options:
   services:
   - rgw
   with_legacy: true
+# An user can have up to 100 IAM user policies.
+- name: rgw_user_policies_max_num
+  type: int
+  level: advanced
+  desc: Max number of IAM user policies on a single user
+  default: 100
+  services:
+  - rgw
+  with_legacy: true
 # According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html),
 # An cors can have up to 100 rules.
 - name: rgw_cors_rules_max_num
