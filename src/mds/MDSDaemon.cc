@@ -552,7 +552,8 @@ int MDSDaemon::init()
       continue;
     }
     derr << "ERROR: failed to refresh rotating keys, "
-         << "maximum retry time reached." << dendl;
+         << "maximum retry time reached."
+	 << " Maybe I have a clock skew against the monitors?" << dendl;
     std::lock_guard locker{mds_lock};
     suicide();
     return -CEPHFS_ETIMEDOUT;
