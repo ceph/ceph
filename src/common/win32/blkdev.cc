@@ -12,6 +12,9 @@
  *
  */
 
+#include <windows.h>
+#include <winioctl.h>
+
 #include <errno.h>
 #include "common/blkdev.h"
 
@@ -47,7 +50,25 @@ int BlkDev::dev(char *dev, size_t max) const
 
 int BlkDev::get_size(int64_t *psize) const
 {
-  return -EOPNOTSUPP;
+  DWORD bytesReturned = 0;
+
+  GET_LENGTH_INFORMATION length = {};
+
+  BOOL succeeded = DeviceIoControl(
+    (HANDLE) _get_osfhandle(fd),
+    IOCTL_DISK_GET_LENGTH_INFO,
+    NULL,
+    0,
+    (LPVOID) &length,
+    (DWORD) sizeof(length),
+    &bytesReturned,
+    NULL);
+  if (!succeeded) {
+    return -EINVAL;
+  }
+
+  *psize = length.Length.QuadPart;
+  return 0;
 }
 
 bool BlkDev::support_discard() const

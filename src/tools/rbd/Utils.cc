@@ -16,6 +16,7 @@
 #include <fstream>
 #include <iostream>
 #include <regex>
+#include <string_view>
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 
@@ -1198,6 +1199,22 @@ int mgr_command(librados::Rados& rados, const std::string& cmd,
 
   return 0;
 }
+
+#ifdef _WIN32
+bool is_blk_dev(std::string_view path)
+{
+  std::string sanitized_path(path);
+  std::replace(sanitized_path.begin(), sanitized_path.end(), '/', '\\');
+  return sanitized_path.starts_with("\\\\.\\PhysicalDrive");
+}
+#else
+bool is_blk_dev(std::string_view path)
+{
+  struct stat st;
+  int r = stat(std::string(path).c_str(), &st);
+  return !r && S_ISBLK(st.st_mode);
+}
+#endif
 
 } // namespace utils
 } // namespace rbd

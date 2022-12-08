@@ -6,6 +6,7 @@
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "include/Context.h"
+#include "common/blkdev.h"
 #include "common/errno.h"
 #include "common/Throttle.h"
 #include "include/encoding.h"
@@ -319,9 +320,11 @@ class C_Export : public Context
 {
 public:
   C_Export(OrderedThrottle &ordered_throttle, librbd::Image &image,
-	   uint64_t fd_offset, uint64_t offset, uint64_t length, int fd)
+           uint64_t fd_offset, uint64_t offset, uint64_t length, int fd,
+           bool is_blk_dev)
     : m_throttle(ordered_throttle), m_image(image), m_dest_offset(fd_offset),
-      m_offset(offset), m_length(length), m_fd(fd)
+      m_offset(offset), m_length(length), m_fd(fd),
+      m_is_blk_dev(is_blk_dev)
   {
   }
 
@@ -355,7 +358,7 @@ public:
     }
 
     ceph_assert(m_bufferlist.length() == static_cast<size_t>(r));
-    if (m_fd != STDOUT_FILENO) {
+    if (m_fd != STDOUT_FILENO && !m_is_blk_dev) {
       if (m_bufferlist.is_zero()) {
         return;
       }
@@ -369,6 +372,12 @@ public:
       }
     }
 
+#ifdef _WIN32
+    if (m_is_blk_dev) {
+      // Need to ensure that the writes are sector aligned.
+      m_bufferlist.rebuild();
+    }
+#endif
     r = m_bufferlist.write_fd(m_fd);
     if (r < 0) {
       cerr << "rbd: error writing to destination image at offset "
@@ -384,6 +393,7 @@ private:
   uint64_t m_offset;
   uint64_t m_length;
   int m_fd;
+  bool m_is_blk_dev;
 };
 
 const uint32_t MAX_KEYS = 64;
@@ -519,7 +529,7 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
 
 static int do_export_v1(librbd::Image& image, librbd::image_info_t &info,
                         int fd, uint64_t period, int max_concurrent_ops,
-                        utils::ProgressContext &pc)
+                        utils::ProgressContext &pc, bool is_blk_dev)
 {
   int r = 0;
   size_t file_size = 0;
@@ -531,7 +541,7 @@ static int do_export_v1(librbd::Image& image, librbd::image_info_t &info,
 
     uint64_t length = std::min(period, info.size - offset);
     C_Export *ctx = new C_Export(throttle, image, file_size + offset, offset,
-                                 length, fd);
+                                 length, fd, is_blk_dev);
     ctx->send();
 
     pc.update_progress(offset, info.size);
@@ -539,7 +549,7 @@ static int do_export_v1(librbd::Image& image, librbd::image_info_t &info,
 
   file_size += info.size;
   r = throttle.wait_for_ret();
-  if (fd != 1) {
+  if (fd != STDOUT_FILENO && !is_blk_dev) {
     if (r >= 0) {
       r = ftruncate(fd, file_size);
       if (r < 0)
@@ -564,12 +574,50 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress,
   int fd;
   int max_concurrent_ops = g_conf().get_val<uint64_t>("rbd_concurrent_management_ops");
   bool to_stdout = (strcmp(path, "-") == 0);
+  bool is_blk_dev = false;
   if (to_stdout) {
     fd = STDOUT_FILENO;
   } else {
-    fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_BINARY, 0644);
-    if (fd < 0) {
-      return -errno;
+    if (utils::is_blk_dev(path)) {
+      // On Windows, we need read access in order to retrieve the block
+      // device size.  On Linux, O_EXCL checks whether the block device
+      // is in use.
+      fd = open(path, O_RDWR | O_EXCL | O_BINARY);
+      if (fd < 0) {
+        return -errno;
+      }
+
+      is_blk_dev = true;
+      if (export_format == 1) {
+        uint64_t bdev_size;
+        BlkDev blkdev(fd);
+        r = blkdev.get_size((int64_t*)&bdev_size);
+        if (r < 0) {
+          std::cerr << "rbd: unable to retrieve destination block device size: "
+                    << cpp_strerror(r) << std::endl;
+          close(fd);
+          return r;
+        }
+        if (bdev_size != info.size) {
+          std::cerr << "rbd: destination block device size does not match "
+                    << "source image size: " << bdev_size << " != " << info.size
+                    << std::endl;
+          close(fd);
+          return -EINVAL;
+        }
+      } else {
+#ifdef _WIN32
+        std::cerr << "rbd: exporting to raw block devices is only allowed "
+                  << "using the v1 image format" << std::endl;
+        close(fd);
+        return -EINVAL;
+#endif
+      }
+    } else {
+      fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_BINARY, 0644);
+      if (fd < 0) {
+        return -errno;
+      }
     }
 #ifdef HAVE_POSIX_FADVISE
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
@@ -580,7 +628,8 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress,
   uint64_t period = image.get_stripe_count() * (1ull << info.order);
 
   if (export_format == 1)
-    r = do_export_v1(image, info, fd, period, max_concurrent_ops, pc);
+    r = do_export_v1(image, info, fd, period, max_concurrent_ops, pc,
+                     is_blk_dev);
   else
     r = do_export_v2(image, info, fd, period, max_concurrent_ops, pc);
 
