@@ -359,7 +359,8 @@ public:
   static const int STUCK_UNDERSIZED = (1<<2);
   static const int STUCK_DEGRADED = (1<<3);
   static const int STUCK_STALE = (1<<4);
-  
+  static const int STUCK_PEERING = (1<<5);
+
   PGMap()
     : version(0),
       last_osdmap_epoch(0), last_pg_scan(0)
