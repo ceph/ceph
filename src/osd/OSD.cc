@@ -1059,10 +1059,15 @@ void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epo
     peer_con = osd->cluster_messenger->get_loopback_connection();
   } else {
     peer_con = osd->cluster_messenger->connect_to_osd(
-	next_map->get_cluster_addrs(peer), false, true);
+	next_map->get_cluster_addrs(peer), false, true, true);
   }
-  maybe_share_map(peer_con.get(), next_map);
-  peer_con->send_message(m);
+  if(peer_con) {
+    maybe_share_map(peer_con.get(), next_map);
+    peer_con->send_message(m);
+  }
+  else {
+    dout(5) << __func__ << ": getting a NULL connection. abort sending message." << dendl;
+  }
   release_map(next_map);
 }
 
@@ -1083,10 +1088,15 @@ void OSDService::send_message_osd_cluster(std::vector<std::pair<int, Message*>>&
       peer_con = osd->cluster_messenger->get_loopback_connection();
     } else {
       peer_con = osd->cluster_messenger->connect_to_osd(
-	  next_map->get_cluster_addrs(iter.first), false, true);
+	  next_map->get_cluster_addrs(iter.first), false, true, true);
     }
-    maybe_share_map(peer_con.get(), next_map);
-    peer_con->send_message(iter.second);
+    if(peer_con) {
+      maybe_share_map(peer_con.get(), next_map);
+      peer_con->send_message(iter.second);
+    }
+    else {
+      dout(5) << __func__ << ": getting a NULL connection. abort sending message." << dendl;
+    }
   }
   release_map(next_map);
 }
@@ -1106,7 +1116,7 @@ ConnectionRef OSDService::get_con_osd_cluster(int peer, epoch_t from_epoch)
     con = osd->cluster_messenger->get_loopback_connection();
   } else {
     con = osd->cluster_messenger->connect_to_osd(
-	next_map->get_cluster_addrs(peer), false, true);
+	next_map->get_cluster_addrs(peer), false, true, true);
   }
   release_map(next_map);
   return con;

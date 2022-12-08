@@ -6,6 +6,8 @@
 
 #include <list>
 #include <map>
+#include <condition_variable>
+#include <mutex>
 
 #include "AsyncConnection.h"
 #include "include/buffer.h"
@@ -106,6 +108,9 @@ protected:
   AsyncConnection *connection;
   AsyncMessenger *messenger;
   CephContext *cct;
+
+  std::condition_variable  ready_cond;
+  std::mutex ready_lock;
 public:
   std::shared_ptr<AuthConnectionMeta> auth_meta;
 
@@ -134,6 +139,16 @@ public:
 
   int get_con_mode() const {
     return auth_meta->con_mode;
+  }
+  int wait_for_ready() {
+    std::unique_lock locker{ready_lock};
+    //timeout 1 second
+    if (ready_cond.wait_for(locker, ceph::make_timespan(1),
+                            [this] { return is_connected(); })) {
+      return 0;
+    } else {
+      return ETIMEDOUT;
+    }
   }
 };
 

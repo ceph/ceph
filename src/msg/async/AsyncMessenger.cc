@@ -699,7 +699,7 @@ int AsyncMessenger::send_to(Message *m, int type, const entity_addrvec_t& addrs)
 
 ConnectionRef AsyncMessenger::connect_to(int type,
 					 const entity_addrvec_t& addrs,
-					 bool anon, bool not_local_dest)
+					 bool anon, bool not_local_dest, bool must_connected)
 {
   if (!not_local_dest) {
     if (*my_addrs == addrs ||
@@ -722,6 +722,17 @@ ConnectionRef AsyncMessenger::connect_to(int type,
   } else {
     conn = create_connect(av, type, false);
     ldout(cct, 10) << __func__ << " " << av << " new " << conn << dendl;
+  }
+
+  if(must_connected){
+    auto *c = conn.get();
+    if(c->wait_for_ready() != 0)
+    {
+      ldout(cct, 5) << __func__
+                    << ": connection could not get ready after 1 s. not sending message"
+                    << dendl;
+      return NULL;
+    }
   }
 
   return conn;

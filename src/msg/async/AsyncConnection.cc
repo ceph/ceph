@@ -494,6 +494,10 @@ bool AsyncConnection::is_connected() {
   return protocol->is_connected();
 }
 
+int AsyncConnection::wait_for_ready() {
+  return protocol->wait_for_ready();
+}
+
 void AsyncConnection::connect(const entity_addrvec_t &addrs, int type,
                               entity_addr_t &target) {
 

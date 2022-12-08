@@ -1301,11 +1301,13 @@ CtPtr ProtocolV2::ready() {
 
   {
     std::lock_guard<std::mutex> l(connection->write_lock);
+    std::lock_guard<std::mutex> l2(ready_lock);
     can_write = true;
     if (!out_queue.empty()) {
       connection->center->dispatch_event_external(connection->write_handler);
     }
   }
+  ready_cond.notify_all();
 
   connection->maybe_start_delay_thread();
 

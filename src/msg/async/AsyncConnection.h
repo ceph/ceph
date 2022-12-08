@@ -114,6 +114,7 @@ private:
   bool unregistered = false;
 public:
   void maybe_start_delay_thread();
+  int wait_for_ready();
 
   std::ostream& _conn_prefix(std::ostream *_dout);
 
