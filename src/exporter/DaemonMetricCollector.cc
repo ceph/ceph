@@ -1,5 +1,7 @@
 #include "DaemonMetricCollector.h"
 
+#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/split.hpp>
 #include <boost/json/src.hpp>
 #include <chrono>
 #include <filesystem>
@@ -134,6 +136,8 @@ void DaemonMetricCollector::dump_asok_metrics() {
     }
     json_object dump = boost::json::parse(perf_dump_response).as_object();
     json_object schema = boost::json::parse(perf_schema_response).as_object();
+    auto prio_limit = g_conf().get_val<int64_t>("exporter_prio_limit");
+
     for (auto &perf : schema) {
       std::string perf_group = {perf.key().begin(), perf.key().end()};
       json_object perf_group_object = perf.value().as_object();
@@ -141,7 +145,7 @@ void DaemonMetricCollector::dump_asok_metrics() {
         std::string perf_name = {perf_counter.key().begin(),
                                  perf_counter.key().end()};
         json_object perf_info = perf_counter.value().as_object();
-        auto prio_limit = g_conf().get_val<int64_t>("exporter_prio_limit");
+
         if (perf_info["priority"].as_int64() < prio_limit) {
           continue;
         }
@@ -157,6 +161,55 @@ void DaemonMetricCollector::dump_asok_metrics() {
         dump_asok_metric(perf_info, perf_values, name, labels);
       }
     }
+    // fetch labeled perf counters if config enabled
+    bool labeledperf = g_conf().get_val<bool>("exporter_fetch_labeledperf");
+    if (labeledperf) {
+       std::string labeled_perf_dump_response =
+        asok_request(sock_client, "labeledperf dump", daemon_name);
+      if (labeled_perf_dump_response.size() == 0) {
+          failures++;
+          continue;
+      }
+      std::string labeled_perf_schema_response =
+          asok_request(sock_client, "labeledperf schema", daemon_name);
+      if (labeled_perf_schema_response.size() == 0) {
+        failures++;
+        continue;
+      }
+
+      json_object labeled_dump = boost::json::parse(labeled_perf_dump_response).as_object();
+      json_object labeled_schema = boost::json::parse(labeled_perf_schema_response).as_object();
+
+      for (auto &labeled_perf : labeled_schema) {
+      std::string labeled_perf_group = {labeled_perf.key().begin(), labeled_perf.key().end()};
+      json_object labeled_perf_group_object = labeled_perf.value().as_object();
+      for (auto &labeled_perf_counter : labeled_perf_group_object) {
+        std::string labeled_perf_name = {labeled_perf_counter.key().begin(),
+                                 labeled_perf_counter.key().end()};
+        json_object labeled_perf_info = labeled_perf_counter.value().as_object();
+        if (labeled_perf_info["priority"].as_int64() < prio_limit) {
+          continue;
+        }
+        if (labeled_perf_group.find("z_rgw") == 0) {
+        std::vector<std::string> result;
+        labels_t labels;
+        boost::split(result, labeled_perf_group, boost::is_any_of(":"));
+        std::string labeled_name = "ceph_" + result[0] + "_" + labeled_perf_name;
+
+        // fetch labels from metric name
+        result.pop_back();
+        result.erase(result.begin());
+        for (std::vector<std::string>::iterator itr = result.begin();
+               itr != result.end(); itr += 2) {
+            labels[*(itr)] = quote(*(itr + 1));
+          }
+
+        json_value labeled_perf_values = labeled_dump[labeled_perf_group].as_object()[labeled_perf_name];
+        dump_asok_metric(labeled_perf_info, labeled_perf_values, labeled_name, labels);
+      }
+    }
+    }
+  }
   }
   dout(10) << "Perf counters retrieved for " << clients.size() - failures << "/"
            << clients.size() << " daemons." << dendl;

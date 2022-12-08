@@ -136,7 +136,7 @@ std::string AdminSocket::create_wakeup_pipe(int *pipe_rd, int *pipe_wr)
     oss << "AdminSocket::create_wakeup_pipe error: " << cpp_strerror(e);
     return oss.str();
   }
-  
+
   *pipe_rd = pipefd[0];
   *pipe_wr = pipefd[1];
   return "";
@@ -350,6 +350,12 @@ void AdminSocket::do_accept()
 	  break;
 	case 2:
 	  c = "perfcounters_schema";
+	  break;
+  case 3:
+	  c = "labeledperfcounters_dump";
+	  break;
+  case 4:
+	  c = "labeledperfcounters_schema";
 	  break;
 	default:
 	  c = "foo";

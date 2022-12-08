@@ -52,6 +52,8 @@ int main(int argc, char **argv) {
       cct->_conf.set_val("exporter_prio_limit", val);
     } else if (ceph_argparse_witharg(args, i, &val, "--stats-period", (char *)NULL)) {
       cct->_conf.set_val("exporter_stats_period", val);
+    } else if (ceph_argparse_witharg(args, i, &val, "--labeledperf", (char *)NULL)) {
+      cct->_conf.set_val("exporter_fetch_labeledperf", val);
     } else {
       ++i;
     }
