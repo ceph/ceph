@@ -1941,6 +1941,10 @@ void PGMap::get_stuck_stats(
 	val = i->second.last_unstale;
     }
 
+    if ((types & STUCK_PEERING) && (i->second.state & PG_STATE_PEERING)) {
+      if (i->second.last_peered < val)
+	val = i->second.last_peered;
+    }
     // val is now the earliest any of the requested stuck states began
     if (val < cutoff) {
       stuck_pgs[i->first] = i->second;
@@ -1991,6 +1995,8 @@ int PGMap::dump_stuck_pg_stats(
       stuck_types |= PGMap::STUCK_DEGRADED;
     else if (*i == "stale")
       stuck_types |= PGMap::STUCK_STALE;
+    else if (*i == "peering")
+      stuck_types |= PGMap::STUCK_PEERING;
     else {
       ds << "Unknown type: " << *i << std::endl;
       return -EINVAL;
@@ -3842,6 +3848,33 @@ static void _try_mark_pg_stale(
     newstat->state |= PG_STATE_STALE;
     newstat->last_unstale = ceph_clock_now();
   }
+
+    if ((cur.state & PG_STATE_PEERING) == 0 &&
+      cur.acting_primary != -1 &&
+      osdmap.is_down(cur.acting_primary)) {
+    pg_stat_t *newstat;
+    auto q = pending_inc->pg_stat_updates.find(pgid);
+    if (q != pending_inc->pg_stat_updates.end()) {
+      if ((q->second.acting_primary == cur.acting_primary) ||
+	  ((q->second.state & PG_STATE_PEERING) == 0 &&
+	   q->second.acting_primary != -1 &&
+	   osdmap.is_down(q->second.acting_primary))) {
+	newstat = &q->second;
+      } else {
+	// pending update is no longer down or already stale
+	return;
+      }
+    } else {
+      newstat = &pending_inc->pg_stat_updates[pgid];
+      *newstat = cur;
+    }
+    dout(10) << __func__ << " marking pg " << pgid
+	     << " stale (acting_primary " << newstat->acting_primary
+	     << ")" << dendl;
+    newstat->state |= PG_STATE_PEERING;
+    newstat->last_peered = ceph_clock_now();
+  }
+
 }
 
 void PGMapUpdater::check_down_pgs(
