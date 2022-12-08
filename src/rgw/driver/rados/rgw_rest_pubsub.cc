@@ -510,7 +510,15 @@ RGWOp *RGWHandler_REST_PSTopic_AWS::op_post()
 }
 
 int RGWHandler_REST_PSTopic_AWS::authorize(const DoutPrefixProvider* dpp, optional_yield y) {
-  return RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
+  const auto rc = RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
+  if (rc < 0) {
+    return rc;
+  }
+  if (s->auth.identity->is_anonymous()) {
+    ldpp_dout(dpp, 1) << "anonymous user not allowed in topic operations" << dendl;
+    return -ERR_INVALID_REQUEST;
+  }
+  return 0;
 }
 
 namespace {
