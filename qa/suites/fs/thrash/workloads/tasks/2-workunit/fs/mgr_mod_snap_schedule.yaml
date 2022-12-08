@@ -1,0 +1,5 @@
+tasks:
+  - workunit:
+      clients:
+        client.0:
+          - suites/mgr_mod_snap_schedule.sh
