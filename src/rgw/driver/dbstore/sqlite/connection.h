@@ -18,8 +18,6 @@
 #include <memory>
 #include <sqlite3.h>
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
 
 #include "sqlite/statement.h"

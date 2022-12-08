@@ -17,8 +17,6 @@
 #include <initializer_list>
 #include <map>
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
 
 #include <sqlite3.h>

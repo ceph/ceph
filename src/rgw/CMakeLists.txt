@@ -215,6 +215,8 @@ if(WITH_JAEGER)
 endif()
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
+target_compile_definitions(rgw_common
+  PUBLIC "FMT_HEADER_ONLY")
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"
