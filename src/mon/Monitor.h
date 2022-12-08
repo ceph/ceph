@@ -911,7 +911,13 @@ public:
         std::ostringstream ds;
         std::string prefix;
         cmdmap_from_json(m->cmd, &cmdmap, ds);
-        cmd_getval(cmdmap, "prefix", prefix);
+        try {
+          cmd_getval(cmdmap, "prefix", prefix);
+        } catch (bad_cmd_get& e){
+          mon.reply_command(op, -EINVAL, e.what(), 0);
+          return;
+        }
+
         if (prefix != "config set" && prefix != "config-key set")
           ss << "cmd='" << m->cmd << "': finished";
 

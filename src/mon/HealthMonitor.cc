@@ -222,7 +222,13 @@ bool HealthMonitor::prepare_update(MonOpRequestRef op)
   case MSG_MON_HEALTH_CHECKS:
     return prepare_health_checks(op);
   case MSG_MON_COMMAND:
-    return prepare_command(op);
+    try {
+      return prepare_command(op);
+    } catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon.reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
   default:
     return false;
   }

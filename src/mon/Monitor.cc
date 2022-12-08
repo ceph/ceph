@@ -127,10 +127,15 @@ using ceph::mono_clock;
 using ceph::mono_time;
 using ceph::timespan_str;
 
+class AdminHook;
 
 static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name() << ") e" << mon->monmap->get_epoch() << " ";
+}
+
+static ostream& _prefix(std::ostream *_dout, const AdminHook *hook) {
+  return *_dout << "AdminHook: ";
 }
 
 const string Monitor::MONITOR_NAME = "monitor";
@@ -296,9 +301,14 @@ public:
 	   std::ostream& errss,
 	   bufferlist& out) override {
     stringstream outss;
-    int r = mon->do_admin_command(command, cmdmap, f, errss, outss);
-    out.append(outss);
-    return r;
+    try {
+      int r = mon->do_admin_command(command, cmdmap, f, errss, outss);
+      out.append(outss);
+      return r;
+    } catch (const bad_cmd_get& e){
+      derr << __func__ << ": bad command exception: " << e.what() << dendl;
+      return -EINVAL;
+    }
   }
 };
 
@@ -4534,7 +4544,12 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       return;
     case MSG_COMMAND:
       op->set_type_command();
-      handle_tell_command(op);
+      try {
+        handle_tell_command(op);
+      } catch (const bad_cmd_get& e) {
+        reply_command(op, -EINVAL, e.what(), 0);
+        return;
+      }
       return;
   }
 
@@ -4637,7 +4652,12 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     // handle_command() does its own caps checking
     case MSG_MON_COMMAND:
       op->set_type_command();
-      handle_command(op);
+      try {
+        handle_command(op);
+      } catch (const bad_cmd_get& e) {
+        reply_command(op, -EINVAL, e.what(), 0);
+        return;
+      }
       return;
   }
 
