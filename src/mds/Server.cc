@@ -3299,6 +3299,30 @@ CDentry* Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
   return straydn;
 }
 
+CDir* Server::get_quota_root(CDir *dir) {
+    auto cur = dir;
+    while (true) {
+        if (cur->inode->is_root()) {
+            return cur;
+        }
+        if (cur->inode->get_projected_inode()->quota.is_enable()) {
+            return cur;
+        }
+        cur = cur->get_parent_dir();
+    }
+}
+
+bool Server::is_nfiles_quota_exceeded(CDir *dir) {
+    auto quota_root = get_quota_root(dir);
+    auto quota = quota_root->inode->get_projected_inode()->quota;
+
+    if(!quota.is_enable()) {
+        return false;
+    }
+    nest_info_t rstat = quota_root->get_projected_fnode()->rstat;
+    return rstat.rfiles + rstat.rsubdirs >= quota.max_files;
+}
+
 /** prepare_new_inode
  *
  * create a new inode.  set c/m/atime.  hit dir pop.
@@ -4546,6 +4570,10 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   if (mdr->dn[0].size() == 1)
     mds->locker->create_lock_cache(mdr, diri, &mdr->dir_layout);
 
+  if (is_nfiles_quota_exceeded(dn->get_dir())) {
+    respond_to_request(mdr, -EDQUOT);
+    return;
+  }
   // create inode.
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
 				   req->head.args.open.mode | S_IFREG, &layout);
@@ -6834,6 +6862,11 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   else
     layout = mdcache->default_file_layout;
 
+  if (is_nfiles_quota_exceeded(dn->get_dir())) {
+    respond_to_request(mdr, -EDQUOT);
+    return;
+  }
+
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), mode, &layout);
   ceph_assert(newi);
 
@@ -6933,6 +6966,11 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   }
   dn->set_alternate_name(req->get_alternate_name());
 
+  if (is_nfiles_quota_exceeded(dn->get_dir())) {
+    respond_to_request(mdr, -EDQUOT);
+    return;
+  }
+
   // new inode
   unsigned mode = req->head.args.mkdir.mode;
   mode &= ~S_IFMT;
@@ -7029,6 +7067,11 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
     respond_to_request(mdr, -CEPHFS_ENAMETOOLONG);
   }
   dn->set_alternate_name(req->get_alternate_name());
+
+  if (is_nfiles_quota_exceeded(dn->get_dir())) {
+    respond_to_request(mdr, -EDQUOT);
+    return;
+  }
 
   unsigned mode = S_IFLNK | 0777;
   CInode *newi = prepare_new_inode(mdr, dir, inodeno_t(req->head.ino), mode);

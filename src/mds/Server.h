@@ -308,6 +308,8 @@ public:
    * this bypasses the asserts to make sure we're journaling the right
    * things on the right nodes */
   void _rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  CDir* get_quota_root(CDir *dir);
+  bool is_nfiles_quota_exceeded(CDir *dir);
 
   // slaving
   void handle_peer_rename_prep(MDRequestRef& mdr);
