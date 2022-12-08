@@ -452,6 +452,13 @@ int do_import_diff(librados::Rados &rados, librbd::Image &image,
   if (strcmp(path, "-") == 0) {
     fd = STDIN_FILENO;
   } else {
+#ifdef _WIN32
+    if (utils::is_blk_dev(path)) {
+      cerr << "rbd: importing diffs from raw block devices "
+           << "isn't currently supported." << std::endl;
+      return -EINVAL;
+    }
+#endif
     fd = open(path, O_RDONLY|O_BINARY);
     if (fd < 0) {
       r = -errno;
@@ -853,20 +860,29 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
       goto done2;
     }
 
-    if ((fstat(fd, &stat_buf)) < 0) {
-      r = -errno;
-      std::cerr << "rbd: stat error " << path << std::endl;
-      goto done;
-    }
-    if (S_ISDIR(stat_buf.st_mode)) {
-      r = -EISDIR;
-      std::cerr << "rbd: cannot import a directory" << std::endl;
-      goto done;
-    }
-    if (stat_buf.st_size)
+    // fstat fails when used with Windows paths such as \\.\PhysicalDrive1.
+    // We'll rely on blkdev.get_size instead.
+    if (!utils::is_blk_dev(path)) {
+      if ((fstat(fd, &stat_buf)) < 0) {
+        r = -errno;
+        std::cerr << "rbd: stat error " << path << std::endl;
+        goto done;
+      }
+      if (S_ISDIR(stat_buf.st_mode)) {
+        r = -EISDIR;
+        std::cerr << "rbd: cannot import a directory" << std::endl;
+        goto done;
+      }
       size = (uint64_t)stat_buf.st_size;
-
-    if (!size) {
+    } else {
+#ifdef _WIN32
+      if (import_format != 1) {
+        std::cerr << "rbd: importing from raw block devices is only allowed "
+                  << "using the v1 image format" << std::endl;
+        r = -EINVAL;
+        goto done;
+      }
+#endif
       int64_t bdev_size = 0;
       BlkDev blkdev(fd);
       r = blkdev.get_size(&bdev_size);
