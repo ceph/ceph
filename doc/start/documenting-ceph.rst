@@ -352,7 +352,7 @@ distributions, execute the following:
 .. prompt:: bash $
 
 	sudo apt-get install gcc python-dev python3-pip libxml2-dev libxslt-dev doxygen graphviz ant ditaa
-	sudo apt-get install python-sphinx
+	sudo apt-get install python3-sphinx python3-venv
 
 For Fedora distributions, execute the following:
 
