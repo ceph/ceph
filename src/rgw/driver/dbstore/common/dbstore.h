@@ -11,10 +11,6 @@
 #include <iostream>
 #include <mutex>
 #include <condition_variable>
-// this seems safe to use, at least for now--arguably, we should
-// prefer header-only fmt, in general
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include "fmt/format.h"
 #include <map>
 #include "rgw_sal_store.h"
