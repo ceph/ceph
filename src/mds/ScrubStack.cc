@@ -607,8 +607,21 @@ void ScrubStack::scrub_status(Formatter *f) {
   if (state == STATE_IDLE) {
     if (scrubbing_map.empty())
       *css << "no active scrubs running";
-    else
+    else if (!is_scrubbing()) {
+      for (auto it = scrubbing_map.begin(); it != scrubbing_map.end();) {
+        auto& header = it->second;
+        CInode *in = mdcache->get_inode(header->get_origin());
+        if(in->is_mdsdir() && !in->state_test(CInode::STATE_PURGING)) {
+          *css << "no scrub running, redundant ~mdsdir inode removed from scrubbing_map";
+		      scrubbing_map.erase(it++);
+        } else {
+	  ++it;
+  	}
+      }
+    }  
+    else {
       *css << state << " (waiting for more scrubs)";
+    }
   } else if (state == STATE_RUNNING) {
     if (clear_stack) {
       *css << "ABORTING";
