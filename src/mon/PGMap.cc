@@ -1212,10 +1212,12 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       stat_osd_sub(t->first, t->second);
       osd_stat.erase(t);
     }
-    for (auto i = pool_statfs.begin();  i != pool_statfs.end(); ++i) {
+    for (auto i = pool_statfs.begin();  i != pool_statfs.end();) {
       if (i->first.second == *p) {
 	pg_pool_sum[i->first.first].sub(i->second);
-	pool_statfs.erase(i);
+	i = pool_statfs.erase(i);
+      } else {
+        ++i;
       }
     }
   }
