@@ -19,7 +19,7 @@ fi
 
 for i in ${TESTS}
 do
-    RBD_FEATURES=$i unittest_librbd
+    RBD_FEATURES=$i CEPH_ARGS='--log_to_stderr true --debug-rbd 20' unittest_librbd
 done
 
 echo OK
