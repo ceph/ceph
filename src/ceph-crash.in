@@ -66,6 +66,9 @@ def post_crash(path):
 def scrape_path(path):
     for p in os.listdir(path):
         crashpath = os.path.join(path, p)
+        if not os.access(crashpath, os.R_OK):
+            log.warning('unable to read crash path %s' % (crashpath))
+            continue
         metapath = os.path.join(crashpath, 'meta')
         donepath = os.path.join(crashpath, 'done')
         if os.path.isfile(metapath):
