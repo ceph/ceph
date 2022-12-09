@@ -21,8 +21,8 @@
 #include "rgw_lc.h"
 #include "rgw_multi.h"
 
-#include "store/dbstore/common/dbstore.h"
-#include "store/dbstore/dbstore_mgr.h"
+#include "driver/dbstore/common/dbstore.h"
+#include "driver/dbstore/dbstore_mgr.h"
 
 namespace rgw { namespace sal {
 
@@ -752,7 +752,7 @@ public:
                        optional_yield y) override;
   };
 
-  class DBStore : public StoreStore {
+  class DBStore : public StoreDriver {
     private:
       /* DBStoreManager is used in case multiple
        * connections are needed one for each tenant.

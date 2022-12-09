@@ -19,10 +19,10 @@
 
 namespace rgw { namespace sal {
 
-class StoreStore : public Store {
+class StoreDriver : public Driver {
   public:
-    StoreStore() {}
-    virtual ~StoreStore() = default;
+    StoreDriver() {}
+    virtual ~StoreDriver() = default;
 
     virtual uint64_t get_new_req_id() override {
       return ceph::util::generate_random_number<uint64_t>();

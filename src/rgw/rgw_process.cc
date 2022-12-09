@@ -90,7 +90,7 @@ void RGWProcess::RGWWQ::_process(RGWRequest *req, ThreadPool::TPHandle &) {
   process->req_throttle.put(1);
   perfcounter->inc(l_rgw_qactive, -1);
 }
-bool rate_limit(rgw::sal::Store* store, req_state* s) {
+bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   // we dont want to limit health check or system or admin requests
   const auto& is_admin_or_system = s->user->get_info();
   if ((s->op_type ==  RGW_OP_GET_HEALTH_CHECK) || is_admin_or_system.admin || is_admin_or_system.system)
@@ -101,7 +101,7 @@ bool rate_limit(rgw::sal::Store* store, req_state* s) {
   RGWRateLimitInfo global_anon;
   RGWRateLimitInfo* bucket_ratelimit;
   RGWRateLimitInfo* user_ratelimit;
-  store->get_ratelimit(global_bucket, global_user, global_anon);
+  driver->get_ratelimit(global_bucket, global_user, global_anon);
   bucket_ratelimit = &global_bucket;
   user_ratelimit = &global_user;
   s->user->get_id().to_str(userfind);
@@ -166,7 +166,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
                               RGWRequest * const req,
                               req_state * const s,
 			                        optional_yield y,
-                              rgw::sal::Store* store,
+                              rgw::sal::Driver* driver,
                               const bool skip_retarget)
 {
   ldpp_dout(op, 2) << "init permissions" << dendl;
@@ -244,7 +244,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   op->pre_exec();
 
   ldpp_dout(op, 2) << "check rate limiting" << dendl;
-  if (rate_limit(store, s)) {
+  if (rate_limit(driver, s)) {
     return -ERR_RATE_LIMITED;
   }
   ldpp_dout(op, 2) << "executing" << dendl;
@@ -261,7 +261,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   return 0;
 }
 
-int process_request(rgw::sal::Store* const store,
+int process_request(rgw::sal::Driver* const driver,
                     RGWREST* const rest,
                     RGWRequest* const req,
                     const std::string& frontend_prefix,
@@ -288,7 +288,7 @@ int process_request(rgw::sal::Store* const store,
   req_state *s = &rstate;
 
   s->ratelimit_data = ratelimit;
-  std::unique_ptr<rgw::sal::User> u = store->get_user(rgw_user());
+  std::unique_ptr<rgw::sal::User> u = driver->get_user(rgw_user());
   s->set_user(u);
 
   if (ret < 0) {
@@ -297,9 +297,9 @@ int process_request(rgw::sal::Store* const store,
     return ret;
   }
 
-  s->req_id = store->zone_unique_id(req->id);
-  s->trans_id = store->zone_unique_trans_id(req->id);
-  s->host_id = store->get_host_id();
+  s->req_id = driver->zone_unique_id(req->id);
+  s->trans_id = driver->zone_unique_trans_id(req->id);
+  s->host_id = driver->get_host_id();
   s->yield = yield;
 
   ldpp_dout(s, 2) << "initializing for trans_id = " << s->trans_id << dendl;
@@ -308,7 +308,7 @@ int process_request(rgw::sal::Store* const store,
   int init_error = 0;
   bool should_log = false;
   RGWRESTMgr *mgr;
-  RGWHandler_REST *handler = rest->get_handler(store, s,
+  RGWHandler_REST *handler = rest->get_handler(driver, s,
                                                auth_registry,
                                                frontend_prefix,
                                                client_io, &mgr, &init_error);
@@ -339,7 +339,7 @@ int process_request(rgw::sal::Store* const store,
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read pre request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op, script);
+      rc = rgw::lua::request::execute(driver, rest, olog, s, op, script);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute pre request script. error: " << rc << dendl;
       }
@@ -393,7 +393,7 @@ int process_request(rgw::sal::Store* const store,
     s->trace->SetAttribute(tracing::rgw::OP, op->name());
     s->trace->SetAttribute(tracing::rgw::TYPE, tracing::rgw::REQUEST);
 
-    ret = rgw_process_authenticated(handler, op, req, s, yield, store);
+    ret = rgw_process_authenticated(handler, op, req, s, yield, driver);
     if (ret < 0) {
       abort_early(s, op, ret, handler, yield);
       goto done;
@@ -424,7 +424,7 @@ done:
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read post request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op, script);
+      rc = rgw::lua::request::execute(driver, rest, olog, s, op, script);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
       }

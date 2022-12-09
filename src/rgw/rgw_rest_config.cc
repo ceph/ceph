@@ -33,7 +33,7 @@
 using namespace std;
 
 void RGWOp_ZoneConfig_Get::send_response() {
-  const RGWZoneParams& zone_params = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone_params();
+  const RGWZoneParams& zone_params = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone_params();
 
   set_req_state_err(s, op_ret);
   dump_errno(s);

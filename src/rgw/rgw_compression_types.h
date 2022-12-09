@@ -15,8 +15,6 @@
 
 #pragma once
 
-#include "rgw_common.h"
-
 struct compression_block {
   uint64_t old_ofs;
   uint64_t new_ofs;

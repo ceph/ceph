@@ -377,7 +377,7 @@ class WebIdentityApplier : public IdentityApplier {
   std::string user_name;
 protected:
   CephContext* const cct;
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   std::string role_session;
   std::string role_tenant;
   std::unordered_multimap<std::string, std::string> token_claims;
@@ -392,14 +392,14 @@ protected:
                       RGWUserInfo& user_info) const;     /* out */
 public:
   WebIdentityApplier( CephContext* const cct,
-                      rgw::sal::Store* store,
+                      rgw::sal::Driver* driver,
                       const std::string& role_session,
                       const std::string& role_tenant,
                       const std::unordered_multimap<std::string, std::string>& token_claims,
                       boost::optional<std::multimap<std::string,std::string>> role_tags,
                       boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags)
       : cct(cct),
-      store(store),
+      driver(driver),
       role_session(role_session),
       role_tenant(role_tenant),
       token_claims(token_claims),
@@ -583,7 +583,7 @@ protected:
   CephContext* const cct;
 
   /* Read-write is intensional here due to RGWUserInfo creation process. */
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
 
   /* Supplemental strategy for extracting permissions from ACLs. Its results
    * will be combined (ORed) with a default strategy that is responsible for
@@ -601,13 +601,13 @@ protected:
 
 public:
   RemoteApplier(CephContext* const cct,
-                rgw::sal::Store* store,
+                rgw::sal::Driver* driver,
                 acl_strategy_t&& extra_acl_strategy,
                 const AuthInfo& info,
 		rgw::auth::ImplicitTenants& implicit_tenant_context,
                 rgw::auth::ImplicitTenants::implicit_tenant_flag_bits implicit_tenant_bit)
     : cct(cct),
-      store(store),
+      driver(driver),
       extra_acl_strategy(std::move(extra_acl_strategy)),
       info(info),
       implicit_tenant_context(implicit_tenant_context),

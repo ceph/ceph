@@ -24,7 +24,7 @@ public:
   RGWRESTMgr_Info() = default;
   ~RGWRESTMgr_Info() override = default;
 
-  RGWHandler_REST* get_handler(rgw::sal::Store* store,
+  RGWHandler_REST* get_handler(rgw::sal::Driver* driver,
 			       req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {

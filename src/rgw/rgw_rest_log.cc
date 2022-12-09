@@ -78,7 +78,7 @@ void RGWOp_MDLog_List::execute(optional_yield y) {
 
   if (period.empty()) {
     ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_zone()->get_current_period_id();
+    period = driver->get_zone()->get_current_period_id();
     if (period.empty()) {
       ldpp_dout(this, 5) << "Missing period id" << dendl;
       op_ret = -EINVAL;
@@ -86,7 +86,7 @@ void RGWOp_MDLog_List::execute(optional_yield y) {
     }
   }
 
-  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone, static_cast<rgw::sal::RadosStore*>(store)->svc()->cls, period};
+  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone, static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls, period};
 
   meta_log.init_list_entries(shard_id, {}, {}, marker, &handle);
 
@@ -112,7 +112,7 @@ void RGWOp_MDLog_List::send_response() {
     for (list<cls_log_entry>::iterator iter = entries.begin();
 	 iter != entries.end(); ++iter) {
       cls_log_entry& entry = *iter;
-      static_cast<rgw::sal::RadosStore*>(store)->ctl()->meta.mgr->dump_log_entry(entry, s->formatter);
+      static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->dump_log_entry(entry, s->formatter);
       flusher.flush();
     }
     s->formatter->close_section();
@@ -123,7 +123,7 @@ void RGWOp_MDLog_List::send_response() {
 
 void RGWOp_MDLog_Info::execute(optional_yield y) {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
-  period = static_cast<rgw::sal::RadosStore*>(store)->svc()->mdlog->read_oldest_log_period(y, s);
+  period = static_cast<rgw::sal::RadosStore*>(driver)->svc()->mdlog->read_oldest_log_period(y, s);
   op_ret = period.get_error();
 }
 
@@ -156,7 +156,7 @@ void RGWOp_MDLog_ShardInfo::execute(optional_yield y) {
 
   if (period.empty()) {
     ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_zone()->get_current_period_id();
+    period = driver->get_zone()->get_current_period_id();
 
     if (period.empty()) {
       ldpp_dout(this, 5) << "Missing period id" << dendl;
@@ -164,7 +164,7 @@ void RGWOp_MDLog_ShardInfo::execute(optional_yield y) {
       return;
     }
   }
-  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone, static_cast<rgw::sal::RadosStore*>(store)->svc()->cls, period};
+  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone, static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls, period};
 
   op_ret = meta_log.get_info(this, shard_id, &info);
 }
@@ -222,7 +222,7 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
 
   if (period.empty()) {
     ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_zone()->get_current_period_id();
+    period = driver->get_zone()->get_current_period_id();
 
     if (period.empty()) {
       ldpp_dout(this, 5) << "Missing period id" << dendl;
@@ -230,7 +230,7 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
       return;
     }
   }
-  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone, static_cast<rgw::sal::RadosStore*>(store)->svc()->cls, period};
+  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone, static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls, period};
 
   op_ret = meta_log.trim(this, shard_id, {}, {}, {}, marker);
 }
@@ -249,7 +249,7 @@ void RGWOp_MDLog_Lock::execute(optional_yield y) {
 
   if (period.empty()) {
     ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_zone()->get_current_period_id();
+    period = driver->get_zone()->get_current_period_id();
   }
 
   if (period.empty() ||
@@ -270,7 +270,7 @@ void RGWOp_MDLog_Lock::execute(optional_yield y) {
     return;
   }
 
-  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone, static_cast<rgw::sal::RadosStore*>(store)->svc()->cls, period};
+  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone, static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls, period};
   unsigned dur;
   dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
   if (!err.empty() || dur <= 0) {
@@ -297,7 +297,7 @@ void RGWOp_MDLog_Unlock::execute(optional_yield y) {
 
   if (period.empty()) {
     ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_zone()->get_current_period_id();
+    period = driver->get_zone()->get_current_period_id();
   }
 
   if (period.empty() ||
@@ -317,7 +317,7 @@ void RGWOp_MDLog_Unlock::execute(optional_yield y) {
     return;
   }
 
-  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone, static_cast<rgw::sal::RadosStore*>(store)->svc()->cls, period};
+  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone, static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls, period};
   op_ret = meta_log.unlock(s, shard_id, zone_id, locker_id);
 }
 
@@ -352,13 +352,13 @@ void RGWOp_MDLog_Notify::execute(optional_yield y) {
     return;
   }
 
-  if (store->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
+  if (driver->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     for (set<int>::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
       ldpp_dout(this, 20) << __func__ << "(): updated shard=" << *iter << dendl;
     }
   }
 
-  store->wakeup_meta_sync_shards(updated_shards);
+  driver->wakeup_meta_sync_shards(updated_shards);
 
   op_ret = 0;
 }
@@ -414,7 +414,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
     b.name = bn;
     b.bucket_id = bucket_instance;
   }
-  op_ret = store->get_bucket(s, nullptr, b, &bucket, y);
+  op_ret = driver->get_bucket(s, nullptr, b, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
     return;
@@ -451,7 +451,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_list(s, bucket->get_info(), log_layout, shard_id,
+    int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bilog_rados->log_list(s, bucket->get_info(), log_layout, shard_id,
                                                marker, max_entries - count,
                                                entries, &truncated);
     if (ret < 0) {
@@ -541,7 +541,7 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
     b.name = bn;
     b.bucket_id = bucket_instance;
   }
-  op_ret = store->get_bucket(s, nullptr, b, &bucket, y);
+  op_ret = driver->get_bucket(s, nullptr, b, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
     return;
@@ -635,13 +635,13 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
     b.name = bn;
     b.bucket_id = bucket_instance;
   }
-  op_ret = store->get_bucket(s, nullptr, b, &bucket, y);
+  op_ret = driver->get_bucket(s, nullptr, b, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
     return;
   }
 
-  op_ret = bilog_trim(this, static_cast<rgw::sal::RadosStore*>(store),
+  op_ret = bilog_trim(this, static_cast<rgw::sal::RadosStore*>(driver),
 		      bucket->get_info(), gen, shard_id,
 		      start_marker, end_marker);
   if (op_ret < 0) {
@@ -688,7 +688,7 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
 
   // Note that last_marker is updated to be the marker of the last
   // entry listed
-  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->list_entries(this, shard_id,
+  op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados->list_entries(this, shard_id,
 						     max_entries, entries,
 						     marker, &last_marker,
 						     &truncated);
@@ -749,7 +749,7 @@ void RGWOp_DATALog_ShardInfo::execute(optional_yield y) {
     return;
   }
 
-  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->get_info(this, shard_id, &info);
+  op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados->get_info(this, shard_id, &info);
 }
 
 void RGWOp_DATALog_ShardInfo::send_response() {
@@ -794,7 +794,7 @@ void RGWOp_DATALog_Notify::execute(optional_yield y) {
     return;
   }
 
-  if (store->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
+  if (driver->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     for (bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> >::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
       ldpp_dout(this, 20) << __func__ << "(): updated shard=" << iter->first << dendl;
       bc::flat_set<rgw_data_notify_entry>& entries = iter->second;
@@ -805,7 +805,7 @@ void RGWOp_DATALog_Notify::execute(optional_yield y) {
     }
   }
 
-  store->wakeup_data_sync_shards(this, source_zone, updated_shards);
+  driver->wakeup_data_sync_shards(this, source_zone, updated_shards);
 
   op_ret = 0;
 }
@@ -842,7 +842,7 @@ void RGWOp_DATALog_Notify2::execute(optional_yield y) {
     return;
   }
 
-  if (store->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
+  if (driver->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     for (bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> >::iterator iter =
         updated_shards.begin(); iter != updated_shards.end(); ++iter) {
       ldpp_dout(this, 20) << __func__ << "(): updated shard=" << iter->first << dendl;
@@ -854,7 +854,7 @@ void RGWOp_DATALog_Notify2::execute(optional_yield y) {
     }
   }
 
-  store->wakeup_data_sync_shards(this, source_zone, updated_shards);
+  driver->wakeup_data_sync_shards(this, source_zone, updated_shards);
 
   op_ret = 0;
 }
@@ -898,7 +898,7 @@ void RGWOp_DATALog_Delete::execute(optional_yield y) {
     return;
   }
 
-  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->trim_entries(this, shard_id, marker);
+  op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados->trim_entries(this, shard_id, marker);
 }
 
 // not in header to avoid pulling in rgw_sync.h
@@ -918,7 +918,7 @@ public:
 
 void RGWOp_MDLog_Status::execute(optional_yield y)
 {
-  auto sync = static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_meta_sync_manager();
+  auto sync = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_meta_sync_manager();
   if (sync == nullptr) {
     ldpp_dout(this, 1) << "no sync manager" << dendl;
     op_ret = -ENOENT;
@@ -984,7 +984,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
 
   // read the bucket instance info for num_shards
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  op_ret = store->get_bucket(s, nullptr, b, &bucket, y);
+  op_ret = driver->get_bucket(s, nullptr, b, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 4) << "failed to read bucket info: " << cpp_strerror(op_ret) << dendl;
     return;
@@ -1003,7 +1003,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
     }
   }
 
-  const auto& local_zone_id = store->get_zone()->get_id();
+  const auto& local_zone_id = driver->get_zone()->get_id();
 
   if (!merge) {
     rgw_sync_bucket_pipe pipe;
@@ -1016,7 +1016,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
 
     op_ret = rgw_read_bucket_full_sync_status(
       this,
-      static_cast<rgw::sal::RadosStore*>(store),
+      static_cast<rgw::sal::RadosStore*>(driver),
       pipe,
       &status.sync_status,
       s->yield);
@@ -1028,7 +1028,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
 
     op_ret = rgw_read_bucket_inc_sync_status(
       this,
-      static_cast<rgw::sal::RadosStore*>(store),
+      static_cast<rgw::sal::RadosStore*>(driver),
       pipe,
       status.sync_status.incremental_gen,
       &status.inc_status);
@@ -1041,7 +1041,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
   rgw_zone_id source_zone_id(source_zone);
 
   RGWBucketSyncPolicyHandlerRef source_handler;
-  op_ret = store->get_sync_policy_handler(s, source_zone_id, source_bucket, &source_handler, y);
+  op_ret = driver->get_sync_policy_handler(s, source_zone_id, source_bucket, &source_handler, y);
   if (op_ret < 0) {
     ldpp_dout(this, -1) << "could not get bucket sync policy handler (r=" << op_ret << ")" << dendl;
     return;
@@ -1068,7 +1068,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
     if (*pipe.dest.bucket != pinfo->bucket) {
       opt_dest_info.emplace();
       std::unique_ptr<rgw::sal::Bucket> dest_bucket;
-      op_ret = store->get_bucket(s, nullptr, *pipe.dest.bucket, &dest_bucket, y);
+      op_ret = driver->get_bucket(s, nullptr, *pipe.dest.bucket, &dest_bucket, y);
       if (op_ret < 0) {
         ldpp_dout(this, 4) << "failed to read target bucket info (bucket=: " << cpp_strerror(op_ret) << dendl;
         return;
@@ -1081,7 +1081,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
 
     op_ret = rgw_read_bucket_full_sync_status(
       this,
-      static_cast<rgw::sal::RadosStore*>(store),
+      static_cast<rgw::sal::RadosStore*>(driver),
       pipe,
       &status.sync_status,
       s->yield);
@@ -1091,7 +1091,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
     }
 
     current_status.resize(status.sync_status.shards_done_with_gen.size());
-    int r = rgw_read_bucket_inc_sync_status(this, static_cast<rgw::sal::RadosStore*>(store),
+    int r = rgw_read_bucket_inc_sync_status(this, static_cast<rgw::sal::RadosStore*>(driver),
 					    pipe, status.sync_status.incremental_gen, &current_status);
     if (r < 0) {
       ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_inc_sync_status() on pipe=" << pipe << " returned ret=" << r << dendl;
@@ -1157,7 +1157,7 @@ public:
 void RGWOp_DATALog_Status::execute(optional_yield y)
 {
   const auto source_zone = s->info.args.get("source-zone");
-  auto sync = store->get_data_sync_manager(source_zone);
+  auto sync = driver->get_data_sync_manager(source_zone);
   if (sync == nullptr) {
     ldpp_dout(this, 1) << "no sync manager for source-zone " << source_zone << dendl;
     op_ret = -ENOENT;

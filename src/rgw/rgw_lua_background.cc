@@ -56,13 +56,13 @@ int RGWTable::increment_by(lua_State* L) {
   return 0;
 }
 
-Background::Background(rgw::sal::Store* store,
+Background::Background(rgw::sal::Driver* driver,
     CephContext* cct,
       const std::string& luarocks_path,
       int execute_interval) :
     execute_interval(execute_interval),
     dp(cct, dout_subsys, "lua background: "),
-    lua_manager(store->get_lua_manager()),
+    lua_manager(driver->get_lua_manager()),
     cct(cct),
     luarocks_path(luarocks_path) {}
 
@@ -96,8 +96,8 @@ void Background::pause() {
   cond.notify_all();
 }
 
-void Background::resume(rgw::sal::Store* store) {
-  lua_manager = store->get_lua_manager();
+void Background::resume(rgw::sal::Driver* driver) {
+  lua_manager = driver->get_lua_manager();
   paused = false;
   cond.notify_all();
 }

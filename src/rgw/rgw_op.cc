@@ -218,7 +218,7 @@ static int get_user_policy_from_attr(const DoutPrefixProvider *dpp,
  */
 int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp, 
                                        CephContext *cct,
-				       rgw::sal::Store* store,
+				       rgw::sal::Driver* driver,
 				       RGWBucketInfo& bucket_info,
 				       map<string, bufferlist>& bucket_attrs,
 				       RGWAccessControlPolicy *policy,
@@ -232,7 +232,7 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
       return ret;
   } else {
     ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
-    std::unique_ptr<rgw::sal::User> user = store->get_user(bucket_info.owner);
+    std::unique_ptr<rgw::sal::User> user = driver->get_user(bucket_info.owner);
     /* object exists, but policy is broken */
     int r = user->load_user(dpp, y);
     if (r < 0)
@@ -245,7 +245,7 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
 
 static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp, 
                                     CephContext *cct,
-				    rgw::sal::Store* store,
+				    rgw::sal::Driver* driver,
 				    RGWBucketInfo& bucket_info,
 				    map<string, bufferlist>& bucket_attrs,
 				    RGWAccessControlPolicy *policy,
@@ -266,7 +266,7 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   } else if (ret == -ENODATA) {
     /* object exists, but policy is broken */
     ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
-    std::unique_ptr<rgw::sal::User> user = store->get_user(bucket_info.owner);
+    std::unique_ptr<rgw::sal::User> user = driver->get_user(bucket_info.owner);
     ret = user->load_user(dpp, y);
     if (ret < 0)
       return ret;
@@ -334,7 +334,7 @@ vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
 }
 
 static int read_bucket_policy(const DoutPrefixProvider *dpp, 
-                              rgw::sal::Store* store,
+                              rgw::sal::Driver* driver,
                               req_state *s,
                               RGWBucketInfo& bucket_info,
                               map<string, bufferlist>& bucket_attrs,
@@ -352,7 +352,7 @@ static int read_bucket_policy(const DoutPrefixProvider *dpp,
     return 0;
   }
 
-  int ret = rgw_op_get_bucket_policy_from_attr(dpp, s->cct, store, bucket_info, bucket_attrs, policy, y);
+  int ret = rgw_op_get_bucket_policy_from_attr(dpp, s->cct, driver, bucket_info, bucket_attrs, policy, y);
   if (ret == -ENOENT) {
       ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -361,7 +361,7 @@ static int read_bucket_policy(const DoutPrefixProvider *dpp,
 }
 
 static int read_obj_policy(const DoutPrefixProvider *dpp, 
-                           rgw::sal::Store* store,
+                           rgw::sal::Driver* driver,
                            req_state *s,
                            RGWBucketInfo& bucket_info,
                            map<string, bufferlist>& bucket_attrs,
@@ -396,14 +396,14 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   }
   policy = get_iam_policy_from_attr(s->cct, bucket_attrs, bucket->get_tenant());
 
-  int ret = get_obj_policy_from_attr(dpp, s->cct, store, bucket_info,
+  int ret = get_obj_policy_from_attr(dpp, s->cct, driver, bucket_info,
 				     bucket_attrs, acl, storage_class, object,
 				     s->yield);
   if (ret == -ENOENT) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy(s->cct);
-    ret = rgw_op_get_bucket_policy_from_attr(dpp, s->cct, store, bucket_info, bucket_attrs, &bucket_policy, y);
+    ret = rgw_op_get_bucket_policy_from_attr(dpp, s->cct, driver, bucket_info, bucket_attrs, &bucket_policy, y);
     if (ret < 0) {
       return ret;
     }
@@ -450,7 +450,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
  * only_bucket: If true, reads the user and bucket ACLs rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
-int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* store, req_state* s, optional_yield y)
+int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, req_state* s, optional_yield y)
 {
   int ret = 0;
 
@@ -480,14 +480,14 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
   /* check if copy source is within the current domain */
   if (!s->src_bucket_name.empty()) {
     std::unique_ptr<rgw::sal::Bucket> src_bucket;
-    ret = store->get_bucket(dpp, nullptr,
+    ret = driver->get_bucket(dpp, nullptr,
 			    rgw_bucket(s->src_tenant_name,
 				       s->src_bucket_name,
 				       s->bucket_instance_id),
 			    &src_bucket, y);
     if (ret == 0) {
       string& zonegroup = src_bucket->get_info().zonegroup;
-      s->local_source = store->get_zone()->get_zonegroup().equals(zonegroup);
+      s->local_source = driver->get_zone()->get_zonegroup().equals(zonegroup);
     }
   }
 
@@ -504,7 +504,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
 
     /* This is the only place that s->bucket is created.  It should never be
      * overwritten. */
-    ret = store->get_bucket(dpp, s->user.get(), rgw_bucket(rgw_bucket_key(s->bucket_tenant, s->bucket_name, s->bucket_instance_id)), &s->bucket, y);
+    ret = driver->get_bucket(dpp, s->user.get(), rgw_bucket(rgw_bucket_key(s->bucket_tenant, s->bucket_name, s->bucket_instance_id)), &s->bucket, y);
     if (ret < 0) {
       if (ret != -ENOENT) {
 	string bucket_log;
@@ -522,7 +522,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
     
     s->bucket_mtime = s->bucket->get_modification_time();
     s->bucket_attrs = s->bucket->get_attrs();
-    ret = read_bucket_policy(dpp, store, s, s->bucket->get_info(),
+    ret = read_bucket_policy(dpp, driver, s, s->bucket->get_info(),
 			     s->bucket->get_attrs(),
 			     s->bucket_acl.get(), s->bucket->get_key(), y);
     acct_acl_user = {
@@ -533,7 +533,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
     s->bucket_owner = s->bucket_acl->get_owner();
 
     std::unique_ptr<rgw::sal::ZoneGroup> zonegroup;
-    int r = store->get_zonegroup(s->bucket->get_info().zonegroup, &zonegroup);
+    int r = driver->get_zonegroup(s->bucket->get_info().zonegroup, &zonegroup);
     if (!r) {
       s->zonegroup_endpoint = zonegroup->get_endpoint();
       s->zonegroup_name = zonegroup->get_name();
@@ -542,14 +542,14 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
       ret = r;
     }
 
-    if (!store->get_zone()->get_zonegroup().equals(s->bucket->get_info().zonegroup)) {
+    if (!driver->get_zone()->get_zonegroup().equals(s->bucket->get_info().zonegroup)) {
       ldpp_dout(dpp, 0) << "NOTICE: request for data in a different zonegroup ("
           << s->bucket->get_info().zonegroup << " != "
-          << store->get_zone()->get_zonegroup().get_id() << ")" << dendl;
+          << driver->get_zone()->get_zonegroup().get_id() << ")" << dendl;
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
        */
-      if (store->get_zone()->get_zonegroup().is_master_zonegroup() && s->system_request) {
+      if (driver->get_zone()->get_zonegroup().is_master_zonegroup() && s->system_request) {
         /*If this is the master, don't redirect*/
       } else if (s->op_type == RGW_OP_GET_BUCKET_LOCATION ) {
         /* If op is get bucket location, don't redirect */
@@ -564,7 +564,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
     s->dest_placement.storage_class = s->info.storage_class;
     s->dest_placement.inherit_from(s->bucket->get_placement_rule());
 
-    if (!store->valid_placement(s->dest_placement)) {
+    if (!driver->valid_placement(s->dest_placement)) {
       ldpp_dout(dpp, 0) << "NOTICE: invalid dest placement: " << s->dest_placement.to_str() << dendl;
       return -EINVAL;
     }
@@ -574,7 +574,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
 
   /* handle user ACL only for those APIs which support it */
   if (s->user_acl) {
-    std::unique_ptr<rgw::sal::User> acl_user = store->get_user(acct_acl_user.uid);
+    std::unique_ptr<rgw::sal::User> acl_user = driver->get_user(acct_acl_user.uid);
 
     ret = acl_user->read_attrs(dpp, y);
     if (!ret) {
@@ -630,7 +630,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
     ret = -EACCES;
   }
 
-  bool success = store->get_zone()->get_redirect_endpoint(&s->redirect_zone_endpoint);
+  bool success = driver->get_zone()->get_redirect_endpoint(&s->redirect_zone_endpoint);
   if (success) {
     ldpp_dout(dpp, 20) << "redirect_zone_endpoint=" << s->redirect_zone_endpoint << dendl;
   }
@@ -644,7 +644,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
  * only_bucket: If true, reads the bucket ACL rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
-int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 			      req_state *s, bool prefetch_data, optional_yield y)
 {
   int ret = 0;
@@ -659,7 +659,7 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
     if (prefetch_data) {
       s->object->set_prefetch_data();
     }
-    ret = read_obj_policy(dpp, store, s, s->bucket->get_info(), s->bucket_attrs,
+    ret = read_obj_policy(dpp, driver, s, s->bucket->get_info(), s->bucket_attrs,
 			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket.get(),
                           s->object.get(), y);
   }
@@ -848,7 +848,7 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, req_state
   }
 }
 
-void rgw_build_iam_environment(rgw::sal::Store* store,
+void rgw_build_iam_environment(rgw::sal::Driver* driver,
 	                              req_state* s)
 {
   const auto& m = s->info.env->get_map();
@@ -997,7 +997,7 @@ int RGWOp::verify_op_mask()
     return -EPERM;
   }
 
-  if (!s->system_request && (required_mask & RGW_OP_TYPE_MODIFY) && !store->get_zone()->is_writeable()) {
+  if (!s->system_request && (required_mask & RGW_OP_TYPE_MODIFY) && !driver->get_zone()->is_writeable()) {
     ldpp_dout(this, 5) << "NOTICE: modify request to a read-only zone by a "
         "non-system user, permission denied"  << dendl;
     return -EPERM;
@@ -1155,7 +1155,7 @@ void RGWPutBucketTags::execute(optional_yield y)
   if (op_ret < 0) 
     return;
 
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
   }
@@ -1185,7 +1185,7 @@ int RGWDeleteBucketTags::verify_permission(optional_yield y)
 void RGWDeleteBucketTags::execute(optional_yield y)
 {
   bufferlist in_data;
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1240,7 +1240,7 @@ void RGWPutBucketReplication::execute(optional_yield y) {
   if (op_ret < 0) 
     return;
 
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1282,7 +1282,7 @@ int RGWDeleteBucketReplication::verify_permission(optional_yield y)
 void RGWDeleteBucketReplication::execute(optional_yield y)
 {
   bufferlist in_data;
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1345,7 +1345,7 @@ int RGWOp::init_quota()
   }
 
   std::unique_ptr<rgw::sal::User> owner_user =
-			store->get_user(s->bucket->get_info().owner);
+			driver->get_user(s->bucket->get_info().owner);
   rgw::sal::User* user;
 
   if (s->user->get_id() == s->bucket_owner.get_id()) {
@@ -1358,7 +1358,7 @@ int RGWOp::init_quota()
     
   }
 
-  store->get_quota(quota);
+  driver->get_quota(quota);
 
   if (s->bucket->get_info().quota.enabled) {
     quota.bucket_quota = s->bucket->get_info().quota;
@@ -1650,7 +1650,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
 
 static int iterate_user_manifest_parts(const DoutPrefixProvider *dpp, 
                                        CephContext * const cct,
-                                       rgw::sal::Store* const store,
+                                       rgw::sal::Driver* const driver,
                                        const off_t ofs,
                                        const off_t end,
                                        rgw::sal::Bucket* bucket,
@@ -1757,7 +1757,7 @@ struct rgw_slo_part {
 
 static int iterate_slo_parts(const DoutPrefixProvider *dpp,
                              CephContext *cct,
-                             rgw::sal::Store*store,
+                             rgw::sal::Driver* driver,
                              off_t ofs,
                              off_t end,
                              map<uint64_t, rgw_slo_part>& slo_parts,
@@ -1875,14 +1875,14 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
 
   if (bucket_name.compare(s->bucket->get_name()) != 0) {
     map<string, bufferlist> bucket_attrs;
-    r = store->get_bucket(this, s->user.get(), s->user->get_tenant(), bucket_name, &ubucket, y);
+    r = driver->get_bucket(this, s->user.get(), s->user->get_tenant(), bucket_name, &ubucket, y);
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
 		       << bucket_name << dendl;
       return r;
     }
     bucket_acl = &_bucket_acl;
-    r = read_bucket_policy(this, store, s, ubucket->get_info(), bucket_attrs, bucket_acl, ubucket->get_key(), y);
+    r = read_bucket_policy(this, driver, s, ubucket->get_info(), bucket_attrs, bucket_acl, ubucket->get_key(), y);
     if (r < 0) {
       ldpp_dout(this, 0) << "failed to read bucket policy" << dendl;
       return r;
@@ -1900,7 +1900,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
    * - total length (of the parts we are going to send to client),
    * - overall DLO's content size,
    * - md5 sum of overall DLO's content (for etag of Swift API). */
-  r = iterate_user_manifest_parts(this, s->cct, store, ofs, end,
+  r = iterate_user_manifest_parts(this, s->cct, driver, ofs, end,
         pbucket, obj_prefix, bucket_acl, *bucket_policy,
         nullptr, &s->obj_size, &lo_etag,
 	nullptr /* cb */, nullptr /* cb arg */, y);
@@ -1914,7 +1914,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
     return r;
   }
 
-  r = iterate_user_manifest_parts(this, s->cct, store, ofs, end,
+  r = iterate_user_manifest_parts(this, s->cct, driver, ofs, end,
         pbucket, obj_prefix, bucket_acl, *bucket_policy,
         &total_len, nullptr, nullptr,
 	nullptr, nullptr, y);
@@ -1928,7 +1928,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
     return 0;
   }
 
-  r = iterate_user_manifest_parts(this, s->cct, store, ofs, end,
+  r = iterate_user_manifest_parts(this, s->cct, driver, ofs, end,
         pbucket, obj_prefix, bucket_acl, *bucket_policy,
         nullptr, nullptr, nullptr,
 	get_obj_user_manifest_iterate_cb, (void *)this, y);
@@ -2005,7 +2005,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
 	RGWAccessControlPolicy& _bucket_acl = allocated_acls.back();
 
 	std::unique_ptr<rgw::sal::Bucket> tmp_bucket;
-	int r = store->get_bucket(this, s->user.get(), s->user->get_tenant(), bucket_name, &tmp_bucket, y);
+	int r = driver->get_bucket(this, s->user.get(), s->user->get_tenant(), bucket_name, &tmp_bucket, y);
         if (r < 0) {
           ldpp_dout(this, 0) << "could not get bucket info for bucket="
 			   << bucket_name << dendl;
@@ -2013,7 +2013,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
         }
         bucket = tmp_bucket.get();
         bucket_acl = &_bucket_acl;
-        r = read_bucket_policy(this, store, s, tmp_bucket->get_info(), tmp_bucket->get_attrs(), bucket_acl,
+        r = read_bucket_policy(this, driver, s, tmp_bucket->get_info(), tmp_bucket->get_attrs(), bucket_acl,
                                tmp_bucket->get_key(), y);
         if (r < 0) {
           ldpp_dout(this, 0) << "failed to read bucket ACL for bucket "
@@ -2069,7 +2069,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
                     << " total=" << total_len
                     << dendl;
 
-  r = iterate_slo_parts(this, s->cct, store, ofs, end, slo_parts,
+  r = iterate_slo_parts(this, s->cct, driver, ofs, end, slo_parts,
         get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0) {
     return r;
@@ -2199,7 +2199,7 @@ void RGWGetObj::execute(optional_yield y)
       op_ret = -EINVAL;
       goto done_err;
     }
-    torrent.init(s, store);
+    torrent.init(s, driver);
     rgw_obj obj = s->object->get_obj();
     op_ret = torrent.get_torrent_file(s->object.get(), total_len, bl, obj);
     if (op_ret < 0)
@@ -2439,7 +2439,7 @@ void RGWListBuckets::execute(optional_yield y)
      * isn't actually used in a given account. In such situation its usage
      * stats would be simply full of zeros. */
     std::set<std::string> targets;
-    if (store->get_zone()->get_zonegroup().get_placement_target_names(targets)) {
+    if (driver->get_zone()->get_zonegroup().get_placement_target_names(targets)) {
       for (const auto& policy : targets) {
 	policies_stats.emplace(policy, decltype(policies_stats)::mapped_type());
       }
@@ -2530,13 +2530,13 @@ void RGWGetUsage::execute(optional_yield y)
     }    
   }
 
-  op_ret = rgw_user_sync_all_stats(this, store, s->user.get(), y);
+  op_ret = rgw_user_sync_all_stats(this, driver, s->user.get(), y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to sync user stats" << dendl;
     return;
   }
 
-  op_ret = rgw_user_get_all_buckets_stats(this, store, s->user.get(), buckets_usage, y);
+  op_ret = rgw_user_get_all_buckets_stats(this, driver, s->user.get(), buckets_usage, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to get user's buckets stats" << dendl;
     return;
@@ -2582,7 +2582,7 @@ void RGWStatAccount::execute(optional_yield y)
        * isn't actually used in a given account. In such situation its usage
        * stats would be simply full of zeros. */
       std::set<std::string> names;
-      store->get_zone()->get_zonegroup().get_placement_target_names(names);
+      driver->get_zone()->get_zonegroup().get_placement_target_names(names);
       for (const auto& policy : names) {
         policies_stats.emplace(policy, decltype(policies_stats)::mapped_type());
       }
@@ -2698,7 +2698,7 @@ void RGWSetBucketVersioning::execute(optional_yield y)
     }
   }
 
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -2787,7 +2787,7 @@ void RGWSetBucketWebsite::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << " forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -2830,7 +2830,7 @@ void RGWDeleteBucketWebsite::execute(optional_yield y)
 
   bufferlist in_data;
 
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: forward_to_master failed on bucket=" << s->bucket->get_name()
       << "returned err=" << op_ret << dendl;
@@ -2875,7 +2875,7 @@ void RGWStatBucket::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->get_bucket(this, s->user.get(), s->bucket->get_key(), &bucket, y);
+  op_ret = driver->get_bucket(this, s->user.get(), s->bucket->get_key(), &bucket, y);
   if (op_ret) {
     return;
   }
@@ -3215,7 +3215,7 @@ void RGWCreateBucket::execute(optional_yield y)
 
   if (!relaxed_region_enforcement &&
       !location_constraint.empty() &&
-      !store->get_zone()->has_zonegroup_api(location_constraint)) {
+      !driver->get_zone()->has_zonegroup_api(location_constraint)) {
       ldpp_dout(this, 0) << "location constraint (" << location_constraint << ")"
                        << " can't be found." << dendl;
       op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
@@ -3223,10 +3223,10 @@ void RGWCreateBucket::execute(optional_yield y)
       return;
   }
 
-  if (!relaxed_region_enforcement && !store->get_zone()->get_zonegroup().is_master_zonegroup() && !location_constraint.empty() &&
-      store->get_zone()->get_zonegroup().get_api_name() != location_constraint) {
+  if (!relaxed_region_enforcement && !driver->get_zone()->get_zonegroup().is_master_zonegroup() && !location_constraint.empty() &&
+      driver->get_zone()->get_zonegroup().get_api_name() != location_constraint) {
     ldpp_dout(this, 0) << "location constraint (" << location_constraint << ")"
-                     << " doesn't match zonegroup" << " (" << store->get_zone()->get_zonegroup().get_api_name() << ")"
+                     << " doesn't match zonegroup" << " (" << driver->get_zone()->get_zonegroup().get_api_name() << ")"
                      << dendl;
     op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
     s->err.message = "The specified location-constraint is not valid";
@@ -3234,12 +3234,12 @@ void RGWCreateBucket::execute(optional_yield y)
   }
 
   std::set<std::string> names;
-  store->get_zone()->get_zonegroup().get_placement_target_names(names);
+  driver->get_zone()->get_zonegroup().get_placement_target_names(names);
   if (!placement_rule.name.empty() &&
       !names.count(placement_rule.name)) {
     ldpp_dout(this, 0) << "placement target (" << placement_rule.name << ")"
                      << " doesn't exist in the placement targets of zonegroup"
-                     << " (" << store->get_zone()->get_zonegroup().get_api_name() << ")" << dendl;
+                     << " (" << driver->get_zone()->get_zonegroup().get_api_name() << ")" << dendl;
     op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
     s->err.message = "The specified placement target does not exist";
     return;
@@ -3249,7 +3249,7 @@ void RGWCreateBucket::execute(optional_yield y)
    * specific request */
   {
     std::unique_ptr<rgw::sal::Bucket> tmp_bucket;
-    op_ret = store->get_bucket(this, s->user.get(), s->bucket_tenant,
+    op_ret = driver->get_bucket(this, s->user.get(), s->bucket_tenant,
 			       s->bucket_name, &tmp_bucket, y);
     if (op_ret < 0 && op_ret != -ENOENT)
       return;
@@ -3257,7 +3257,7 @@ void RGWCreateBucket::execute(optional_yield y)
 
     if (s->bucket_exists) {
       if (!s->system_request &&
-	  store->get_zone()->get_zonegroup().get_id() !=
+	  driver->get_zone()->get_zonegroup().get_id() !=
 	  tmp_bucket->get_info().zonegroup) {
 	op_ret = -EEXIST;
 	return;
@@ -3275,10 +3275,10 @@ void RGWCreateBucket::execute(optional_yield y)
   if (s->system_request) {
     zonegroup_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
     if (zonegroup_id.empty()) {
-      zonegroup_id = store->get_zone()->get_zonegroup().get_id();
+      zonegroup_id = driver->get_zone()->get_zonegroup().get_id();
     }
   } else {
-    zonegroup_id = store->get_zone()->get_zonegroup().get_id();
+    zonegroup_id = driver->get_zone()->get_zonegroup().get_id();
   }
 
   /* Encode special metadata first as we're using std::map::emplace under
@@ -3458,7 +3458,7 @@ void RGWDeleteBucket::execute(optional_yield y)
   }
 
   bufferlist in_data;
-  op_ret = store->forward_request_to_master(this, s->user.get(), &ot.read_version, in_data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), &ot.read_version, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       /* adjust error, we want to return with NoSuchBucket and not
@@ -3528,7 +3528,7 @@ int RGWPutObj::init_processing(optional_yield y) {
       }
     }
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    ret = store->get_bucket(this, s->user.get(), copy_source_tenant_name, copy_source_bucket_name,
+    ret = driver->get_bucket(this, s->user.get(), copy_source_tenant_name, copy_source_bucket_name,
 			      &bucket, y);
     if (ret < 0) {
       ldpp_dout(this, 5) << __func__ << "(): get_bucket() returned ret=" << ret << dendl;
@@ -3591,7 +3591,7 @@ int RGWPutObj::verify_permission(optional_yield y)
     boost::optional<Policy> policy;
     map<string, bufferlist> cs_attrs;
     std::unique_ptr<rgw::sal::Bucket> cs_bucket;
-    int ret = store->get_bucket(NULL, copy_source_bucket_info, &cs_bucket);
+    int ret = driver->get_bucket(NULL, copy_source_bucket_info, &cs_bucket);
     if (ret < 0)
       return ret;
 
@@ -3602,7 +3602,7 @@ int RGWPutObj::verify_permission(optional_yield y)
     cs_object->set_prefetch_data();
 
     /* check source object permissions */
-    if (ret = read_obj_policy(this, store, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
+    if (ret = read_obj_policy(this, driver, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
 			policy, cs_bucket.get(), cs_object.get(), y, true); ret < 0) {
       return ret;
     }
@@ -3792,7 +3792,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   new_end = lst;
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  ret = store->get_bucket(nullptr, copy_source_bucket_info, &bucket);
+  ret = driver->get_bucket(nullptr, copy_source_bucket_info, &bucket);
   if (ret < 0)
     return ret;
 
@@ -3965,7 +3965,7 @@ void RGWPutObj::execute(optional_yield y)
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res
-		     = store->get_notification(
+		     = driver->get_notification(
 		       s->object.get(), s->src_object.get(), s,
 		       rgw::notify::ObjectCreatedPut);
   if(!multipart) {
@@ -4009,7 +4009,7 @@ void RGWPutObj::execute(optional_yield y)
       op_ret = -ERR_INVALID_BUCKET_STATE;
       return;
     }
-    processor = store->get_append_writer(this, s->yield, s->object->clone(),
+    processor = driver->get_append_writer(this, s->yield, s->object->clone(),
 					 s->bucket_owner.get_id(),
 					 pdest_placement, s->req_id, position,
 					 &cur_accounted_size);
@@ -4022,7 +4022,7 @@ void RGWPutObj::execute(optional_yield y)
         version_id = s->object->get_instance();
       }
     }
-    processor = store->get_atomic_writer(this, s->yield, s->object->clone(),
+    processor = driver->get_atomic_writer(this, s->yield, s->object->clone(),
 					 s->bucket_owner.get_id(),
 					 pdest_placement, olh_epoch, s->req_id);
   }
@@ -4035,7 +4035,7 @@ void RGWPutObj::execute(optional_yield y)
   }
   if ((! copy_source.empty()) && !copy_source_range) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    op_ret = store->get_bucket(nullptr, copy_source_bucket_info, &bucket);
+    op_ret = driver->get_bucket(nullptr, copy_source_bucket_info, &bucket);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to get bucket with error" << op_ret << dendl;
       return;
@@ -4074,7 +4074,7 @@ void RGWPutObj::execute(optional_yield y)
   // no filters by default
   rgw::sal::DataProcessor *filter = processor.get();
 
-  const auto& compression_type = store->get_compression_type(*pdest_placement);
+  const auto& compression_type = driver->get_compression_type(*pdest_placement);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
@@ -4266,7 +4266,7 @@ void RGWPutObj::execute(optional_yield y)
   /* produce torrent */
   if (s->cct->_conf->rgw_torrent_flag && (ofs == torrent.get_data_len()))
   {
-    torrent.init(s, store);
+    torrent.init(s, driver);
     torrent.set_create_date(mtime);
     op_ret =  torrent.complete(y);
     if (0 != op_ret)
@@ -4375,7 +4375,7 @@ void RGWPostObj::execute(optional_yield y)
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res
-    = store->get_notification(s->object.get(), s->src_object.get(), s, rgw::notify::ObjectCreatedPost);
+    = driver->get_notification(s->object.get(), s->src_object.get(), s, rgw::notify::ObjectCreatedPost);
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
@@ -4419,7 +4419,7 @@ void RGWPostObj::execute(optional_yield y)
     }
 
     std::unique_ptr<rgw::sal::Writer> processor;
-    processor = store->get_atomic_writer(this, s->yield, std::move(obj),
+    processor = driver->get_atomic_writer(this, s->yield, std::move(obj),
 					 s->bucket_owner.get_id(),
 					 &s->dest_placement, 0, s->req_id);
     op_ret = processor->prepare(s->yield);
@@ -4438,7 +4438,7 @@ void RGWPostObj::execute(optional_yield y)
     if (encrypt != nullptr) {
       filter = encrypt.get();
     } else {
-      const auto& compression_type = store->get_compression_type(s->dest_placement);
+      const auto& compression_type = driver->get_compression_type(s->dest_placement);
       if (compression_type != "none") {
         plugin = Compressor::create(s->cct, compression_type);
         if (!plugin) {
@@ -4842,7 +4842,7 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
 
   try {
     deleter = std::unique_ptr<RGWBulkDelete::Deleter>(\
-          new RGWBulkDelete::Deleter(this, store, s));
+          new RGWBulkDelete::Deleter(this, driver, s));
   } catch (const std::bad_alloc&) {
     return -ENOMEM;
   }
@@ -5059,7 +5059,7 @@ void RGWDeleteObj::execute(optional_yield y)
       rgw::notify::ObjectRemovedDeleteMarkerCreated :
       rgw::notify::ObjectRemovedDelete;
     std::unique_ptr<rgw::sal::Notification> res
-      = store->get_notification(s->object.get(), s->src_object.get(), s,
+      = driver->get_notification(s->object.get(), s->src_object.get(), s,
 				event_type);
     op_ret = res->publish_reserve(this);
     if (op_ret < 0) {
@@ -5183,7 +5183,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
     return op_ret;
   }
 
-  op_ret = store->get_bucket(this, s->user.get(),
+  op_ret = driver->get_bucket(this, s->user.get(),
 			     rgw_bucket(src_tenant_name,
 					src_bucket_name,
 					s->bucket_instance_id),
@@ -5205,7 +5205,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
     rgw_placement_rule src_placement;
 
     /* check source object permissions */
-    op_ret = read_obj_policy(this, store, s, src_bucket->get_info(), src_bucket->get_attrs(), &src_acl, &src_placement.storage_class,
+    op_ret = read_obj_policy(this, driver, s, src_bucket->get_info(), src_bucket->get_attrs(), &src_acl, &src_placement.storage_class,
 			     src_policy, src_bucket.get(), s->src_object.get(), y);
     if (op_ret < 0) {
       return op_ret;
@@ -5299,7 +5299,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
                                                            or intra region sync */
     dest_bucket = src_bucket->clone();
   } else {
-    op_ret = store->get_bucket(this, s->user.get(), dest_tenant_name, dest_bucket_name, &dest_bucket, y);
+    op_ret = driver->get_bucket(this, s->user.get(), dest_tenant_name, dest_bucket_name, &dest_bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         ldpp_dout(this, 0) << "ERROR: Destination Bucket not found for user: " << s->user->get_id().to_str() << dendl;
@@ -5313,7 +5313,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
   dest_object->set_atomic();
 
   /* check dest bucket permissions */
-  op_ret = read_bucket_policy(this, store, s, dest_bucket->get_info(),
+  op_ret = read_bucket_policy(this, driver, s, dest_bucket->get_info(),
 			      dest_bucket->get_attrs(),
                               &dest_bucket_policy, dest_bucket->get_key(), y);
   if (op_ret < 0) {
@@ -5462,7 +5462,7 @@ void RGWCopyObj::execute(optional_yield y)
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res
-				   = store->get_notification(
+				   = driver->get_notification(
 				     s->object.get(), s->src_object.get(),
 				     s, rgw::notify::ObjectCreatedCopy);
   op_ret = res->publish_reserve(this);
@@ -5743,7 +5743,7 @@ void RGWPutACLs::execute(optional_yield y)
   }
 
   if (!s->canned_acl.empty() || s->has_acl_header) {
-    op_ret = get_policy_from_state(store, s, ss);
+    op_ret = get_policy_from_state(driver, s, ss);
     if (op_ret < 0)
       return;
 
@@ -5787,7 +5787,7 @@ void RGWPutACLs::execute(optional_yield y)
     if (s->canned_acl.empty()) {
       in_data.append(data);
     }
-    op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+    op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
@@ -5800,7 +5800,7 @@ void RGWPutACLs::execute(optional_yield y)
     *_dout << dendl;
   }
 
-  op_ret = policy->rebuild(this, store, &owner, new_policy, s->err.message);
+  op_ret = policy->rebuild(this, driver, &owner, new_policy, s->err.message);
   if (op_ret < 0)
     return;
 
@@ -5916,13 +5916,13 @@ void RGWPutLC::execute(optional_yield y)
     ldpp_dout(this, 15) << "New LifecycleConfiguration:" << ss.str() << dendl;
   }
 
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
 
-  op_ret = store->get_rgwlc()->set_bucket_config(s->bucket.get(), s->bucket_attrs, &new_config);
+  op_ret = driver->get_rgwlc()->set_bucket_config(s->bucket.get(), s->bucket_attrs, &new_config);
   if (op_ret < 0) {
     return;
   }
@@ -5932,13 +5932,13 @@ void RGWPutLC::execute(optional_yield y)
 void RGWDeleteLC::execute(optional_yield y)
 {
   bufferlist data;
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
 
-  op_ret = store->get_rgwlc()->remove_bucket_config(s->bucket.get(), s->bucket_attrs);
+  op_ret = driver->get_rgwlc()->remove_bucket_config(s->bucket.get(), s->bucket_attrs);
   if (op_ret < 0) {
     return;
   }
@@ -5984,7 +5984,7 @@ void RGWPutCORS::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -6010,7 +6010,7 @@ int RGWDeleteCORS::verify_permission(optional_yield y)
 void RGWDeleteCORS::execute(optional_yield y)
 {
   bufferlist data;
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -6132,7 +6132,7 @@ void RGWSetRequestPayment::execute(optional_yield y)
   if (op_ret < 0)
     return;
   
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -6428,7 +6428,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res
-    = store->get_notification(meta_obj.get(), nullptr, s, rgw::notify::ObjectCreatedCompleteMultipartUpload, &s->object->get_name());
+    = driver->get_notification(meta_obj.get(), nullptr, s, rgw::notify::ObjectCreatedCompleteMultipartUpload, &s->object->get_name());
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
@@ -6962,7 +6962,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
                           rgw::notify::ObjectRemovedDeleteMarkerCreated :
                           rgw::notify::ObjectRemovedDelete;
   std::unique_ptr<rgw::sal::Notification> res
-          = store->get_notification(obj.get(), s->src_object.get(), s, event_type);
+          = driver->get_notification(obj.get(), s->src_object.get(), s, event_type);
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     send_partial_response(o, false, "", op_ret, formatter_flush_cond);
@@ -7102,8 +7102,8 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
                                                ACLOwner& bucket_owner /* out */,
 					       optional_yield y)
 {
-  RGWAccessControlPolicy bacl(store->ctx());
-  int ret = read_bucket_policy(dpp, store, s, binfo, battrs, &bacl, binfo.bucket, y);
+  RGWAccessControlPolicy bacl(driver->ctx());
+  int ret = read_bucket_policy(dpp, driver, s, binfo, battrs, &bacl, binfo.bucket, y);
   if (ret < 0) {
     return false;
   }
@@ -7124,7 +7124,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
   ACLOwner bowner;
   RGWObjVersionTracker ot;
 
-  int ret = store->get_bucket(dpp, s->user.get(), s->user->get_tenant(), path.bucket_name, &bucket, y);
+  int ret = driver->get_bucket(dpp, s->user.get(), s->user->get_tenant(), path.bucket_name, &bucket, y);
   if (ret < 0) {
     goto binfo_fail;
   }
@@ -7228,7 +7228,7 @@ void RGWBulkDelete::pre_exec()
 
 void RGWBulkDelete::execute(optional_yield y)
 {
-  deleter = std::unique_ptr<Deleter>(new Deleter(this, store, s));
+  deleter = std::unique_ptr<Deleter>(new Deleter(this, driver, s));
 
   bool is_truncated = false;
   do {
@@ -7359,11 +7359,11 @@ static void forward_req_info(const DoutPrefixProvider *dpp, CephContext *cct, re
   info.effective_uri = "/" + bucket_name;
 }
 
-void RGWBulkUploadOp::init(rgw::sal::Store* const store,
+void RGWBulkUploadOp::init(rgw::sal::Driver* const driver,
                            req_state* const s,
                            RGWHandler* const h)
 {
-  RGWOp::init(store, s, h);
+  RGWOp::init(driver, s, h);
 }
 
 int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
@@ -7406,7 +7406,7 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
   forward_req_info(this, s->cct, info, bucket_name);
 
   op_ret = s->user->create_bucket(this, new_bucket,
-                                store->get_zone()->get_zonegroup().get_id(),
+                                driver->get_zone()->get_zonegroup().get_id(),
                                 placement_rule, swift_ver_location,
                                 pquota_info, policy, attrs,
                                 out_info, ep_objv,
@@ -7427,8 +7427,8 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
                                                     ACLOwner& bucket_owner /* out */,
 						    optional_yield y)
 {
-  RGWAccessControlPolicy bacl(store->ctx());
-  op_ret = read_bucket_policy(this, store, s, binfo, battrs, &bacl, binfo.bucket, y);
+  RGWAccessControlPolicy bacl(driver->ctx());
+  op_ret = read_bucket_policy(this, driver, s, binfo, battrs, &bacl, binfo.bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "cannot read_policy() for bucket" << dendl;
     return false;
@@ -7504,7 +7504,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   std::unique_ptr<rgw::sal::Bucket> bucket;
   ACLOwner bowner;
 
-  op_ret = store->get_bucket(this, s->user.get(), rgw_bucket(rgw_bucket_key(s->user->get_tenant(), bucket_name)), &bucket, y);
+  op_ret = driver->get_bucket(this, s->user.get(), rgw_bucket(rgw_bucket_key(s->user->get_tenant(), bucket_name)), &bucket, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       ldpp_dout(this, 20) << "non existent directory=" << bucket_name << dendl;
@@ -7535,7 +7535,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   dest_placement.inherit_from(bucket->get_placement_rule());
 
   std::unique_ptr<rgw::sal::Writer> processor;
-  processor = store->get_atomic_writer(this, s->yield, std::move(obj),
+  processor = driver->get_atomic_writer(this, s->yield, std::move(obj),
 				       bowner.get_id(),
 				       &s->dest_placement, 0, s->req_id);
   op_ret = processor->prepare(s->yield);
@@ -7547,7 +7547,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   /* No filters by default. */
   rgw::sal::DataProcessor *filter = processor.get();
 
-  const auto& compression_type = store->get_compression_type(dest_placement);
+  const auto& compression_type = driver->get_compression_type(dest_placement);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
   if (compression_type != "none") {
@@ -7994,11 +7994,11 @@ RGWHandler::~RGWHandler()
 {
 }
 
-int RGWHandler::init(rgw::sal::Store* _store,
+int RGWHandler::init(rgw::sal::Driver* _driver,
                      req_state *_s,
                      rgw::io::BasicClient *cio)
 {
-  store = _store;
+  driver = _driver;
   s = _s;
 
   return 0;
@@ -8006,14 +8006,14 @@ int RGWHandler::init(rgw::sal::Store* _store,
 
 int RGWHandler::do_init_permissions(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  int ret = rgw_build_bucket_policies(dpp, store, s, y);
+  int ret = rgw_build_bucket_policies(dpp, driver, s, y);
   if (ret < 0) {
     ldpp_dout(dpp, 10) << "init_permissions on " << s->bucket
         << " failed, ret=" << ret << dendl;
     return ret==-ENODATA ? -EACCES : ret;
   }
 
-  rgw_build_iam_environment(store, s);
+  rgw_build_iam_environment(driver, s);
   return ret;
 }
 
@@ -8023,7 +8023,7 @@ int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket, optional_yield 
     /* already read bucket info */
     return 0;
   }
-  int ret = rgw_build_object_policies(op, store, s, op->prefetch_data(), y);
+  int ret = rgw_build_object_policies(op, driver, s, op->prefetch_data(), y);
 
   if (ret < 0) {
     ldpp_dout(op, 10) << "read_permissions on " << s->bucket << ":"
@@ -8105,7 +8105,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -8204,7 +8204,7 @@ int RGWDeleteBucketPolicy::verify_permission(optional_yield y)
 void RGWDeleteBucketPolicy::execute(optional_yield y)
 {
   bufferlist data;
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -8270,7 +8270,7 @@ void RGWPutBucketObjectLock::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -8564,7 +8564,7 @@ void RGWGetObjLegalHold::execute(optional_yield y)
 
 void RGWGetClusterStat::execute(optional_yield y)
 {
-  op_ret = store->cluster_stat(stats_op);
+  op_ret = driver->cluster_stat(stats_op);
 }
 
 int RGWGetBucketPolicyStatus::verify_permission(optional_yield y)
@@ -8632,7 +8632,7 @@ void RGWPutBucketPublicAccessBlock::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -8708,7 +8708,7 @@ int RGWDeleteBucketPublicAccessBlock::verify_permission(optional_yield y)
 void RGWDeleteBucketPublicAccessBlock::execute(optional_yield y)
 {
   bufferlist data;
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -8763,7 +8763,7 @@ void RGWPutBucketEncryption::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -8818,7 +8818,7 @@ int RGWDeleteBucketEncryption::verify_permission(optional_yield y)
 void RGWDeleteBucketEncryption::execute(optional_yield y)
 {
   bufferlist data;
-  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
