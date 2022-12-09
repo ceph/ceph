@@ -250,6 +250,7 @@ target_link_libraries(rgw_common
     ${ALLOC_LIBS}
   PUBLIC
     ${LUA_LIBRARIES}
+    RapidJSON::RapidJSON
     spawn)
 target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
@@ -356,7 +357,6 @@ add_library(rgw_a STATIC
 target_compile_definitions(rgw_a PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 
 target_include_directories(rgw_a
-  SYSTEM PUBLIC "../rapidjson/include"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
@@ -491,6 +491,7 @@ target_link_libraries(rgw
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   PUBLIC
+  RapidJSON::RapidJSON
   dmclock::dmclock)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
