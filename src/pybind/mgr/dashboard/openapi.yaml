@@ -224,6 +224,8 @@ paths:
                   type: string
                 features:
                   type: string
+                metadata:
+                  type: string
                 mirror_mode:
                   type: string
                 name:
@@ -566,6 +568,8 @@ paths:
                   type: string
                 features:
                   type: string
+                metadata:
+                  type: string
                 mirror_mode:
                   type: string
                 name:
@@ -632,6 +636,8 @@ paths:
                 dest_pool_name:
                   type: string
                 features:
+                  type: string
+                metadata:
                   type: string
                 obj_size:
                   type: integer
@@ -901,6 +907,8 @@ paths:
                 data_pool:
                   type: string
                 features:
+                  type: string
+                metadata:
                   type: string
                 obj_size:
                   type: integer

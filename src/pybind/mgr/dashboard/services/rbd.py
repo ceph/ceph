@@ -378,6 +378,8 @@ class RbdService(object):
             stat['configuration'] = RbdConfiguration(
                 pool_ioctx=ioctx, image_name=image_name, image_ioctx=img).list()
 
+            stat['metadata'] = RbdImageMetadataService(img).list()
+
             return stat
 
     @classmethod
@@ -550,3 +552,32 @@ class RbdMirroringService:
     @classmethod
     def snapshot_schedule_remove(cls, image_spec: str):
         _rbd_support_remote('mirror_snapshot_schedule_remove', image_spec)
+
+
+class RbdImageMetadataService(object):
+    def __init__(self, image):
+        self._image = image
+
+    def list(self):
+        result = self._image.metadata_list()
+        # filter out configuration metadata
+        return {v[0]: v[1] for v in result if not v[0].startswith('conf_')}
+
+    def get(self, name):
+        return self._image.metadata_get(name)
+
+    def set(self, name, value):
+        self._image.metadata_set(name, value)
+
+    def remove(self, name):
+        try:
+            self._image.metadata_remove(name)
+        except KeyError:
+            pass
+
+    def set_metadata(self, metadata):
+        for name, value in metadata.items():
+            if value is not None:
+                self.set(name, value)
+            else:
+                self.remove(name)
