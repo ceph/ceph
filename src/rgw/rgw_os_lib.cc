@@ -11,7 +11,7 @@
 namespace rgw {
 
 /* static */
-  int RGWHandler_Lib::init_from_header(rgw::sal::Store* store,
+  int RGWHandler_Lib::init_from_header(rgw::sal::Driver* driver,
 				       req_state *s)
   {
     string req;
@@ -52,10 +52,10 @@ namespace rgw {
       if (pos >= 0) {
 	// XXX ugh, another copy
 	string encoded_obj_str = req.substr(pos+1);
-	s->object = store->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
+	s->object = driver->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
       }
     } else {
-      s->object = store->get_object(rgw_obj_key(req_name, s->info.args.get("versionId")));
+      s->object = driver->get_object(rgw_obj_key(req_name, s->info.args.get("versionId")));
     }
     return 0;
   } /* init_from_header */

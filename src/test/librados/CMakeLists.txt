@@ -128,6 +128,9 @@ target_link_libraries(ceph_test_rados_api_service_pp
 add_executable(ceph_test_rados_api_tier_pp
   tier_cxx.cc
   $<TARGET_OBJECTS:unit-main>)
+target_include_directories(ceph_test_rados_api_tier_pp
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(ceph_test_rados_api_tier_pp
   librados global ${UNITTEST_LIBS} Boost::system radostest-cxx cls_cas_internal
   cls_cas_client spawn)

@@ -320,7 +320,7 @@ add_executable(ceph_test_librgw_file_nfsns
 target_include_directories(ceph_test_librgw_file_nfsns
   PUBLIC "${LUA_INCLUDE_DIR}"
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados")
 target_link_libraries(ceph_test_librgw_file_nfsns
   rgw
   librados
@@ -352,7 +352,7 @@ add_executable(ceph_test_librgw_file_marker
 target_include_directories(ceph_test_librgw_file_marker
   PUBLIC "${LUA_INCLUDE_DIR}"
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados")
 target_link_libraries(ceph_test_librgw_file_marker
   rgw
   librados
@@ -370,7 +370,7 @@ add_executable(ceph_test_librgw_file_xattr
 target_include_directories(ceph_test_librgw_file_xattr
   PUBLIC "${LUA_INCLUDE_DIR}"
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados")
 target_link_libraries(ceph_test_librgw_file_xattr
   rgw
   librados
@@ -399,7 +399,7 @@ add_executable(test_rgw_ldap
   )
 target_include_directories(test_rgw_ldap
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados")
 target_link_libraries(test_rgw_ldap
   librados
   ceph-common

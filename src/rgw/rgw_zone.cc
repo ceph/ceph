@@ -567,7 +567,7 @@ int RGWZoneParams::fix_pool_names(const DoutPrefixProvider *dpp, optional_yield 
   list<string> zones;
   int r = zone_svc->list_zones(dpp, zones);
   if (r < 0) {
-    ldpp_dout(dpp, 10) << "WARNING: store->list_zones() returned r=" << r << dendl;
+    ldpp_dout(dpp, 10) << "WARNING: driver->list_zones() returned r=" << r << dendl;
   }
 
   set<rgw_pool> pools;

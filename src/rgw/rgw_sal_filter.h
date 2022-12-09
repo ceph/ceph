@@ -144,15 +144,15 @@ public:
   }
 };
 
-class FilterStore : public Store {
+class FilterDriver : public Driver {
 protected:
-  Store* next;
+  Driver* next;
 private:
   std::unique_ptr<FilterZone> zone;
 
 public:
-  FilterStore(Store* _next) : next(_next) {}
-  virtual ~FilterStore() = default;
+  FilterDriver(Driver* _next) : next(_next) {}
+  virtual ~FilterDriver() = default;
 
   virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
   virtual const std::string get_name() const override;

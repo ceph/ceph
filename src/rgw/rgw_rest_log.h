@@ -328,7 +328,7 @@ public:
   RGWRESTMgr_Log() = default;
   ~RGWRESTMgr_Log() override = default;
 
-  RGWHandler_REST* get_handler(rgw::sal::Store* store,
+  RGWHandler_REST* get_handler(rgw::sal::Driver* driver,
 			       req_state* const,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefixs) override {

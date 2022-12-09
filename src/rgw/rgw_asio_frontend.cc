@@ -190,7 +190,7 @@ void handle_connection(boost::asio::io_context& context,
   // don't impose a limit on the body, since we read it in pieces
   static constexpr size_t body_limit = std::numeric_limits<size_t>::max();
 
-  auto cct = env.store->ctx();
+  auto cct = env.driver->ctx();
 
   // read messages from the stream until eof
   for (;;) {
@@ -239,7 +239,7 @@ void handle_connection(boost::asio::io_context& context,
       }
 
       // process the request
-      RGWRequest req{env.store->get_new_req_id()};
+      RGWRequest req{env.driver->get_new_req_id()};
 
       auto& socket = stream.lowest_layer();
       const auto& remote_endpoint = socket.remote_endpoint(ec);
@@ -266,7 +266,7 @@ void handle_connection(boost::asio::io_context& context,
       string user = "-";
       const auto started = ceph::coarse_real_clock::now();
       ceph::coarse_real_clock::duration latency{};
-      process_request(env.store, env.rest, &req, env.uri_prefix,
+      process_request(env.driver, env.rest, &req, env.uri_prefix,
                       *env.auth_registry, &client, env.olog, y,
                       scheduler, &user, &latency,
                       env.ratelimiting->get_active(),
@@ -409,7 +409,7 @@ class AsioFrontend {
   std::vector<std::thread> threads;
   std::atomic<bool> going_down{false};
 
-  CephContext* ctx() const { return env.store->ctx(); }
+  CephContext* ctx() const { return env.driver->ctx(); }
   std::optional<dmc::ClientCounters> client_counters;
   std::unique_ptr<dmc::ClientConfig> client_config;
   void accept(Listener& listener, boost::system::error_code ec);
@@ -418,7 +418,7 @@ class AsioFrontend {
   AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf,
 	       dmc::SchedulerCtx& sched_ctx)
     : env(env), conf(conf), pause_mutex(context.get_executor()),
-    lua_manager(env.store->get_lua_manager())
+    lua_manager(env.driver->get_lua_manager())
   {
     auto sched_t = dmc::get_scheduler_t(ctx());
     switch(sched_t){
@@ -444,7 +444,7 @@ class AsioFrontend {
   void stop();
   void join();
   void pause();
-  void unpause(rgw::sal::Store* store, rgw_auth_registry_ptr_t);
+  void unpause(rgw::sal::Driver* driver, rgw_auth_registry_ptr_t);
 };
 
 unsigned short parse_port(const char *input, boost::system::error_code& ec)
@@ -755,7 +755,7 @@ int AsioFrontend::get_config_key_val(string name,
     return -EINVAL;
   }
 
-  int r = env.store->get_config_key_val(name, pbl);
+  int r = env.driver->get_config_key_val(name, pbl);
   if (r < 0) {
     lderr(ctx()) << type << " was not found: " << name << dendl;
     return r;
@@ -911,7 +911,7 @@ int AsioFrontend::init_ssl()
       key_is_cert = true;
     }
 
-    ExpandMetaVar emv(env.store->get_zone());
+    ExpandMetaVar emv(env.driver->get_zone());
 
     cert = emv.process_str(*cert);
     key = emv.process_str(*key);
@@ -1110,12 +1110,12 @@ void AsioFrontend::pause()
   }
 }
 
-void AsioFrontend::unpause(rgw::sal::Store* const store,
+void AsioFrontend::unpause(rgw::sal::Driver* const driver,
                            rgw_auth_registry_ptr_t auth_registry)
 {
-  env.store = store;
+  env.driver = driver;
   env.auth_registry = std::move(auth_registry);
-  lua_manager = store->get_lua_manager();
+  lua_manager = driver->get_lua_manager();
 
   // unpause to unblock connections
   pause_mutex.unlock();
@@ -1175,8 +1175,8 @@ void RGWAsioFrontend::pause_for_new_config()
 }
 
 void RGWAsioFrontend::unpause_with_new_config(
-  rgw::sal::Store* const store,
+  rgw::sal::Driver* const driver,
   rgw_auth_registry_ptr_t auth_registry
 ) {
-  impl->unpause(store, std::move(auth_registry));
+  impl->unpause(driver, std::move(auth_registry));
 }

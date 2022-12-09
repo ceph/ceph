@@ -846,7 +846,7 @@ void create_top_metatable(lua_State* L, req_state* s, const char* op_name) {
 }
 
 int execute(
-    rgw::sal::Store* store,
+    rgw::sal::Driver* driver,
     RGWREST* rest,
     OpsLogSink* olog,
     req_state* s, 
@@ -858,8 +858,8 @@ int execute(
   lua_state_guard lguard(L);
 
   open_standard_libs(L);
-  set_package_path(L, store ?
-      store->get_luarocks_path() : 
+  set_package_path(L, driver ?
+      driver->get_luarocks_path() :
       "");
 
   create_debug_action(L, s->cct);  

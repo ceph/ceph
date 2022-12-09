@@ -29,7 +29,7 @@ int RGWRestRole::verify_permission(optional_yield y)
   }
 
   string role_name = s->info.args.get("RoleName");
-  std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name,
+  std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name,
 							    s->user->get_tenant());
   if (op_ret = role->get(s, y); op_ret < 0) {
     if (op_ret == -ENOENT) {
@@ -191,7 +191,7 @@ void RGWCreateRole::execute(optional_yield y)
     return;
   }
   std::string user_tenant = s->user->get_tenant();
-  std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name,
+  std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name,
 							    user_tenant,
 							    role_path,
 							    trust_policy,
@@ -206,7 +206,7 @@ void RGWCreateRole::execute(optional_yield y)
 
   std::string role_id;
 
-  if (!store->is_meta_master()) {
+  if (!driver->is_meta_master()) {
     RGWXMLDecoder::XMLParser parser;
     if (!parser.init()) {
       ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
@@ -236,7 +236,7 @@ void RGWCreateRole::execute(optional_yield y)
       RGWAccessKey cred = it->second;
       key.key = cred.key;
     }
-    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    op_ret = driver->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -319,7 +319,7 @@ void RGWDeleteRole::execute(optional_yield y)
     return;
   }
 
-  if (!store->is_meta_master()) {
+  if (!driver->is_meta_master()) {
     is_master = false;
     RGWXMLDecoder::XMLParser parser;
     if (!parser.init()) {
@@ -340,7 +340,7 @@ void RGWDeleteRole::execute(optional_yield y)
       RGWAccessKey cred = it->second;
       key.key = cred.key;
     }
-    master_op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    master_op_ret = driver->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
     if (master_op_ret < 0) {
       op_ret = master_op_ret;
       ldpp_dout(this, 0) << "forward_iam_request_to_master returned ret=" << op_ret << dendl;
@@ -413,7 +413,7 @@ void RGWGetRole::execute(optional_yield y)
   if (op_ret < 0) {
     return;
   }
-  std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name,
+  std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name,
 							    s->user->get_tenant());
   op_ret = role->get(s, y);
 
@@ -463,7 +463,7 @@ void RGWModifyRoleTrustPolicy::execute(optional_yield y)
     return;
   }
 
-  if (!store->is_meta_master()) {
+  if (!driver->is_meta_master()) {
     RGWXMLDecoder::XMLParser parser;
     if (!parser.init()) {
       ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
@@ -485,7 +485,7 @@ void RGWModifyRoleTrustPolicy::execute(optional_yield y)
       RGWAccessKey cred = it->second;
       key.key = cred.key;
     }
-    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    op_ret = driver->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -536,7 +536,7 @@ void RGWListRoles::execute(optional_yield y)
     return;
   }
   vector<std::unique_ptr<rgw::sal::RGWRole>> result;
-  op_ret = store->get_roles(s, y, path_prefix, s->user->get_tenant(), result);
+  op_ret = driver->get_roles(s, y, path_prefix, s->user->get_tenant(), result);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListRolesResponse");
@@ -584,7 +584,7 @@ void RGWPutRolePolicy::execute(optional_yield y)
     return;
   }
 
-  if (!store->is_meta_master()) {
+  if (!driver->is_meta_master()) {
     RGWXMLDecoder::XMLParser parser;
     if (!parser.init()) {
       ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
@@ -607,7 +607,7 @@ void RGWPutRolePolicy::execute(optional_yield y)
       RGWAccessKey cred = it->second;
       key.key = cred.key;
     }
-    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    op_ret = driver->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -717,7 +717,7 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
     return;
   }
 
-  if (!store->is_meta_master()) {
+  if (!driver->is_meta_master()) {
     RGWXMLDecoder::XMLParser parser;
     if (!parser.init()) {
       ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
@@ -739,7 +739,7 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
       RGWAccessKey cred = it->second;
       key.key = cred.key;
     }
-    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    op_ret = driver->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -786,7 +786,7 @@ void RGWTagRole::execute(optional_yield y)
     return;
   }
 
-  if (!store->is_meta_master()) {
+  if (!driver->is_meta_master()) {
     RGWXMLDecoder::XMLParser parser;
     if (!parser.init()) {
       ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
@@ -813,7 +813,7 @@ void RGWTagRole::execute(optional_yield y)
       RGWAccessKey cred = it->second;
       key.key = cred.key;
     }
-    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    op_ret = driver->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -900,7 +900,7 @@ void RGWUntagRole::execute(optional_yield y)
     return;
   }
 
-  if (!store->is_meta_master()) {
+  if (!driver->is_meta_master()) {
     RGWXMLDecoder::XMLParser parser;
     if (!parser.init()) {
       ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
@@ -931,7 +931,7 @@ void RGWUntagRole::execute(optional_yield y)
       RGWAccessKey cred = it->second;
       key.key = cred.key;
     }
-    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    op_ret = driver->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;
@@ -970,7 +970,7 @@ void RGWUpdateRole::execute(optional_yield y)
     return;
   }
 
-  if (!store->is_meta_master()) {
+  if (!driver->is_meta_master()) {
     RGWXMLDecoder::XMLParser parser;
     if (!parser.init()) {
       ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
@@ -992,7 +992,7 @@ void RGWUpdateRole::execute(optional_yield y)
       RGWAccessKey cred = it->second;
       key.key = cred.key;
     }
-    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    op_ret = driver->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
       return;

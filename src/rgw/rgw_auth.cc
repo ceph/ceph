@@ -369,7 +369,7 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
                                               const string& display_name,
                                               RGWUserInfo& user_info) const      /* out */
 {
-  std::unique_ptr<rgw::sal::User> user = store->get_user(acct_user);
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(acct_user);
   user->get_info().display_name = display_name;
   user->get_info().type = TYPE_WEB;
   user->get_info().max_buckets =
@@ -392,7 +392,7 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   federated_user.tenant = role_tenant;
   federated_user.ns = "oidc";
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(federated_user);
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(federated_user);
 
   //Check in oidc namespace
   if (user->load_user(dpp, null_yield) >= 0) {
@@ -646,7 +646,7 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
     new_acct_user.tenant = new_acct_user.id;
   }
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(new_acct_user);
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(new_acct_user);
   user->get_info().display_name = info.acct_name;
   if (info.acct_type) {
     //ldap/keystone for s3 users
@@ -705,7 +705,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
 	;	/* suppress lookup for id used by "other" protocol */
   else if (acct_user.tenant.empty()) {
     const rgw_user tenanted_uid(acct_user.id, acct_user.id);
-    user = store->get_user(tenanted_uid);
+    user = driver->get_user(tenanted_uid);
 
     if (user->load_user(dpp, null_yield) >= 0) {
       /* Succeeded. */
@@ -714,7 +714,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
     }
   }
 
-  user = store->get_user(acct_user);
+  user = driver->get_user(acct_user);
 
   if (split_mode && implicit_tenant)
 	;	/* suppress lookup for id used by "other" protocol */
