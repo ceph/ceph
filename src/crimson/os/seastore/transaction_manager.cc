@@ -278,12 +278,13 @@ TransactionManager::submit_transaction(
   return trans_intr::make_interruptible(
     t.get_handle().enter(write_pipeline.reserve_projected_usage)
   ).then_interruptible([this, FNAME, &t] {
-    size_t projected_usage = t.get_allocation_size();
+    auto dispatch_result = epm->dispatch_delayed_extents(t);
+    auto projected_usage = dispatch_result.usage;
     SUBTRACET(seastore_t, "waiting for projected_usage: {}", t, projected_usage);
     return trans_intr::make_interruptible(
       epm->reserve_projected_usage(projected_usage)
-    ).then_interruptible([this, &t] {
-      return submit_transaction_direct(t);
+    ).then_interruptible([this, &t, dispatch_result = std::move(dispatch_result)] {
+      return do_submit_transaction(t, std::move(dispatch_result));
     }).finally([this, FNAME, projected_usage, &t] {
       SUBTRACET(seastore_t, "releasing projected_usage: {}", t, projected_usage);
       epm->release_projected_usage(projected_usage);
@@ -296,29 +297,30 @@ TransactionManager::submit_transaction_direct(
   Transaction &tref,
   std::optional<journal_seq_t> trim_alloc_to)
 {
-  LOG_PREFIX(TransactionManager::submit_transaction_direct);
+  return do_submit_transaction(
+    tref,
+    epm->dispatch_delayed_extents(tref),
+    trim_alloc_to);
+}
+
+TransactionManager::submit_transaction_direct_ret
+TransactionManager::do_submit_transaction(
+  Transaction &tref,
+  ExtentPlacementManager::dispatch_result_t dispatch_result,
+  std::optional<journal_seq_t> trim_alloc_to)
+{
+  LOG_PREFIX(TransactionManager::do_submit_transaction);
   SUBTRACET(seastore_t, "start", tref);
   return trans_intr::make_interruptible(
     tref.get_handle().enter(write_pipeline.ool_writes)
-  ).then_interruptible([this, FNAME, &tref] {
-    auto delayed_extents = tref.get_delayed_alloc_list();
-    auto num_extents = delayed_extents.size();
-    SUBTRACET(seastore_t, "process {} delayed extents", tref, num_extents);
-    std::vector<paddr_t> delayed_paddrs;
-    delayed_paddrs.reserve(num_extents);
-    for (auto& ext : delayed_extents) {
-      assert(ext->get_paddr().is_delayed());
-      delayed_paddrs.push_back(ext->get_paddr());
-    }
-    return seastar::do_with(
-      std::move(delayed_extents),
-      std::move(delayed_paddrs),
-      [this, FNAME, &tref](auto& delayed_extents, auto& delayed_paddrs)
-    {
-      return epm->delayed_allocate_and_write(tref, delayed_extents
-      ).si_then([this, FNAME, &tref, &delayed_extents, &delayed_paddrs] {
+  ).then_interruptible([this, FNAME, &tref,
+			dispatch_result = std::move(dispatch_result)] {
+    return seastar::do_with(std::move(dispatch_result),
+			    [this, FNAME, &tref](auto &dispatch_result) {
+      return epm->write_delayed_ool_extents(tref, dispatch_result.alloc_map
+      ).si_then([this, FNAME, &tref, &dispatch_result] {
         SUBTRACET(seastore_t, "update delayed extent mappings", tref);
-        return lba_manager->update_mappings(tref, delayed_extents, delayed_paddrs);
+        return lba_manager->update_mappings(tref, dispatch_result.delayed_extents);
       }).handle_error_interruptible(
         crimson::ct_error::input_output_error::pass_further(),
         crimson::ct_error::assert_all("invalid error")

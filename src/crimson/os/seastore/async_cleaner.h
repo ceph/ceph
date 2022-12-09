@@ -426,11 +426,22 @@ public:
   virtual void update_journal_tails(
       journal_seq_t dirty_tail, journal_seq_t alloc_tail) = 0;
 
+  // try reserve the projected usage in journal
+  // returns if the reservation is successful
+  // if the reservation is successful, user should call
+  // release_inline_usage to restore.
+  virtual bool try_reserve_inline_usage(std::size_t usage) = 0;
+
+  // release the projected usage in journal
+  virtual void release_inline_usage(std::size_t usage) = 0;
+
   virtual ~JournalTrimmer() {}
 
   journal_seq_t get_journal_tail() const {
     return std::min(get_alloc_tail(), get_dirty_tail());
   }
+
+  virtual std::size_t get_trim_size_per_cycle() const = 0;
 
   bool check_is_ready() const {
     return (get_journal_head() != JOURNAL_SEQ_NULL &&
@@ -510,6 +521,11 @@ public:
   void update_journal_tails(
       journal_seq_t dirty_tail, journal_seq_t alloc_tail) final;
 
+  std::size_t get_trim_size_per_cycle() const final {
+    return config.rewrite_backref_bytes_per_cycle +
+      config.rewrite_dirty_bytes_per_cycle;
+  }
+
   journal_type_t get_journal_type() const {
     return journal_type;
   }
@@ -536,15 +552,32 @@ public:
     return get_alloc_tail_target() > journal_alloc_tail;
   }
 
-  bool should_block_io_on_trim() const {
-    return get_tail_limit() > get_journal_tail();
+  bool should_trim() const {
+    return should_trim_alloc() || should_trim_dirty();
   }
 
-  using trim_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  trim_ertr::future<> trim_dirty();
+  bool should_block_io_on_trim() const {
+    return get_tail_limit() >
+      get_journal_tail().add_offset(
+        journal_type, reserved_usage, roll_start, roll_size);
+  }
 
-  trim_ertr::future<> trim_alloc();
+  bool try_reserve_inline_usage(std::size_t usage) final {
+    reserved_usage += usage;
+    if (should_block_io_on_trim()) {
+      reserved_usage -= usage;
+      return false;
+    } else {
+      return true;
+    }
+  }
+
+  void release_inline_usage(std::size_t usage) final {
+    ceph_assert(reserved_usage >= usage);
+    reserved_usage -= usage;
+  }
+
+  seastar::future<> trim();
 
   static JournalTrimmerImplRef create(
       BackrefManager &backref_manager,
@@ -563,6 +596,12 @@ public:
   friend std::ostream &operator<<(std::ostream &, const stat_printer_t &);
 
 private:
+  using trim_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  trim_ertr::future<> trim_dirty();
+
+  trim_ertr::future<> trim_alloc();
+
   journal_seq_t get_tail_limit() const;
   journal_seq_t get_dirty_tail_target() const;
   journal_seq_t get_alloc_tail_target() const;
@@ -582,6 +621,8 @@ private:
   journal_seq_t journal_head;
   journal_seq_t journal_dirty_tail;
   journal_seq_t journal_alloc_tail;
+
+  std::size_t reserved_usage;
 
   seastar::metrics::metric_group metrics;
 };
@@ -1053,7 +1094,7 @@ public:
   }
 
   std::unique_ptr<RBMSpaceTracker> make_empty() const {
-    auto ret = std::make_unique<RBMSpaceTracker>(*this); 
+    auto ret = std::make_unique<RBMSpaceTracker>(*this);
     ret->reset();
     return ret;
   }
@@ -1093,7 +1134,11 @@ public:
 
   virtual void commit_space_used(paddr_t, extent_len_t) = 0;
 
-  virtual void reserve_projected_usage(std::size_t) = 0;
+  // try reserve the projected usage in cleaner
+  // returns if the reservation is successful
+  // if the reservation is successful, user should call
+  // release_projected_usage to restore.
+  virtual bool try_reserve_projected_usage(std::size_t) = 0;
 
   virtual void release_projected_usage(std::size_t) = 0;
 
@@ -1254,7 +1299,7 @@ public:
     mark_space_used(addr, len);
   }
 
-  void reserve_projected_usage(std::size_t) final;
+  bool try_reserve_projected_usage(std::size_t) final;
 
   void release_projected_usage(size_t) final;
 
@@ -1501,7 +1546,7 @@ private:
      * projected_used_bytes
      *
      * Sum of projected bytes used by each transaction between throttle
-     * acquisition and commit completion.  See reserve_projected_usage()
+     * acquisition and commit completion.  See try_reserve_projected_usage()
      */
     uint64_t projected_used_bytes = 0;
     uint64_t projected_count = 0;
@@ -1582,7 +1627,7 @@ public:
 
   void commit_space_used(paddr_t, extent_len_t) final;
 
-  void reserve_projected_usage(std::size_t) final;
+  bool try_reserve_projected_usage(std::size_t) final;
 
   void release_projected_usage(size_t) final;
 
