@@ -637,6 +637,11 @@ private:
     Transaction& t,
     LogicalCachedExtentRef extent);
 
+  submit_transaction_direct_ret do_submit_transaction(
+    Transaction &t,
+    ExtentPlacementManager::dispatch_result_t dispatch_result,
+    std::optional<journal_seq_t> seq_to_trim = std::nullopt);
+
 public:
   // Testing interfaces
   auto get_epm() {
