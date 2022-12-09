@@ -3913,7 +3913,7 @@ void RGWPutObj::execute(optional_yield y)
   std::unique_ptr<rgw::sal::Notification> res
 		     = store->get_notification(
 		       s->object.get(), s->src_object.get(), s,
-		       rgw::notify::ObjectCreatedPut);
+		       rgw::notify::ObjectCreatedPut, y);
   if(!multipart) {
     op_ret = res->publish_reserve(this, obj_tags.get());
     if (op_ret < 0) {
@@ -4313,7 +4313,7 @@ void RGWPostObj::execute(optional_yield y)
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res
-    = store->get_notification(s->object.get(), s->src_object.get(), s, rgw::notify::ObjectCreatedPost);
+    = store->get_notification(s->object.get(), s->src_object.get(), s, rgw::notify::ObjectCreatedPost, y);
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
@@ -5003,7 +5003,7 @@ void RGWDeleteObj::execute(optional_yield y)
       rgw::notify::ObjectRemovedDelete;
     std::unique_ptr<rgw::sal::Notification> res
       = store->get_notification(s->object.get(), s->src_object.get(), s,
-				event_type);
+				event_type, y);
     op_ret = res->publish_reserve(this);
     if (op_ret < 0) {
       return;
@@ -5406,7 +5406,7 @@ void RGWCopyObj::execute(optional_yield y)
   std::unique_ptr<rgw::sal::Notification> res
 				   = store->get_notification(
 				     s->object.get(), s->src_object.get(),
-				     s, rgw::notify::ObjectCreatedCopy);
+				     s, rgw::notify::ObjectCreatedCopy, y);
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
@@ -6371,7 +6371,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res
-    = store->get_notification(meta_obj.get(), nullptr, s, rgw::notify::ObjectCreatedCompleteMultipartUpload, &s->object->get_name());
+    = store->get_notification(meta_obj.get(), nullptr, s, rgw::notify::ObjectCreatedCompleteMultipartUpload, y, &s->object->get_name());
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
@@ -6908,7 +6908,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
     rgw::notify::ObjectRemovedDeleteMarkerCreated :
     rgw::notify::ObjectRemovedDelete;
   std::unique_ptr<rgw::sal::Notification> res
-    = store->get_notification(obj.get(), s->src_object.get(), s, event_type);
+    = store->get_notification(obj.get(), s->src_object.get(), s, event_type, y);
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     send_partial_response(o, false, "", op_ret, formatter_flush_cond);
