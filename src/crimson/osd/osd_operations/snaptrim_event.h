@@ -131,7 +131,7 @@ private:
 
   using remove_or_update_ret_t =
     std::pair<ceph::os::Transaction, std::vector<pg_log_entry_t>>;
-  tl::expected<remove_or_update_ret_t, int>
+  interruptible_future<remove_or_update_ret_t>
   remove_or_update(ObjectContextRef obc, ObjectContextRef head_obc);
 
   // we don't need to synchronize with other instances started by
