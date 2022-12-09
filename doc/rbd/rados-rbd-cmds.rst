@@ -87,33 +87,47 @@ the default pool ``rbd``, execute the following::
 Listing Block Device Images
 ===========================
 
-To list block devices in the ``rbd`` pool, execute the following
-(i.e., ``rbd`` is the default pool name):: 
+To list block devices in the ``rbd`` pool, run the following command:
 
-	rbd ls
+.. prompt:: bash $
 
-To list block devices in a particular pool, execute the following,
-but replace ``{poolname}`` with the name of the pool:: 
+   rbd ls
 
-	rbd ls {poolname}
+.. note:: ``rbd`` is the default pool name, and ``rbd ls`` lists the commands
+   in the default pool.
+
+To list block devices in a particular pool, run the following command, but
+replace ``{poolname}`` with the name of the pool: 
+
+.. prompt:: bash $
+
+   rbd ls {poolname}
 	
-For example::
+For example:
 
-	rbd ls swimmingpool
+.. prompt:: bash $
 
-To list deferred delete block devices in the ``rbd`` pool, execute the 
-following:: 
+   rbd ls swimmingpool
 
-        rbd trash ls
+To list "deferred delete" block devices in the ``rbd`` pool, run the
+following command:
 
-To list deferred delete block devices in a particular pool, execute the 
-following, but replace ``{poolname}`` with the name of the pool:: 
+.. prompt:: bash $
 
-        rbd trash ls {poolname}
+   rbd trash ls
 
-For example::
+To list "deferred delete" block devices in a particular pool, run the 
+following command, but replace ``{poolname}`` with the name of the pool:
 
-        rbd trash ls swimmingpool
+.. prompt:: bash $
+
+   rbd trash ls {poolname}
+
+For example:
+
+.. prompt:: bash $
+
+   rbd trash ls swimmingpool
 
 Retrieving Image Information
 ============================
