@@ -176,13 +176,24 @@ Resizing a Block Device Image
 =============================
 
 :term:`Ceph Block Device` images are thin provisioned. They don't actually use
-any physical storage  until you begin saving data to them. However, they do have
-a maximum capacity  that you set with the ``--size`` option. If you want to
-increase (or decrease) the maximum size of a Ceph Block Device image, execute
-the following:: 
+any physical storage until you begin saving data to them. However, they do have
+a maximum capacity that you set with the ``--size`` option. If you want to
+increase (or decrease) the maximum size of a Ceph Block Device image, run one
+of the following commands:
 
-	rbd resize --size 2048 foo (to increase)
-	rbd resize --size 2048 foo --allow-shrink (to decrease)
+Increasing the Size of a Block Device Image
+-------------------------------------------
+
+.. prompt:: bash $
+
+   rbd resize --size 2048 foo
+
+Decreasing the Size of a Block Device Image
+-------------------------------------------
+
+.. prompt:: bash $
+
+   rbd resize --size 2048 foo --allow-shrink
 
 
 Removing a Block Device Image
