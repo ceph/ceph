@@ -1,4 +1,4 @@
--e../../python-common
+-e ../../python-common
 asyncmock
 cherrypy
 cryptography
