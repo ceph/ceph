@@ -199,53 +199,82 @@ Decreasing the Size of a Block Device Image
 Removing a Block Device Image
 =============================
 
-To remove a block device, execute the following, but replace ``{image-name}``
-with the name of the image you want to remove:: 
+To remove a block device, run the following command, but replace
+``{image-name}`` with the name of the image you want to remove:
 
-	rbd rm {image-name}
+.. prompt:: bash $
 
-For example:: 
+   rbd rm {image-name}
 
-	rbd rm foo
- 
-To remove a block device from a pool, execute the following, but replace 
-``{image-name}`` with the name of the image to remove and replace 
-``{pool-name}`` with the name of the pool:: 
+For example:
 
-	rbd rm {pool-name}/{image-name}
+.. prompt:: bash $
 
-For example:: 
+   rbd rm foo
 
-	rbd rm swimmingpool/bar
+Removing a Block Device from a Pool
+-----------------------------------
 
-To defer delete a block device from a pool, execute the following, but 
-replace ``{image-name}`` with the name of the image to move and replace 
-``{pool-name}`` with the name of the pool:: 
+To remove a block device from a pool, run the following command but replace
+``{image-name}`` with the name of the image to be removed, and replace
+``{pool-name}`` with the name of the pool from which the image is to be
+removed:
 
-        rbd trash mv {pool-name}/{image-name}
+.. prompt:: bash $
 
-For example:: 
+   rbd rm {pool-name}/{image-name}
 
-        rbd trash mv swimmingpool/bar
+For example:
 
-To remove a deferred block device from a pool, execute the following, but 
-replace ``{image-id}`` with the id of the image to remove and replace 
-``{pool-name}`` with the name of the pool:: 
+.. prompt:: bash $
 
-        rbd trash rm {pool-name}/{image-id}
+   rbd rm swimmingpool/bar
 
-For example:: 
+"Defer Deleting" a Block Device from a Pool
+-------------------------------------------
 
-        rbd trash rm swimmingpool/2bf4474b0dc51
+To defer delete a block device from a pool (which entails moving it to the
+"trash" and deleting it later), run the following command but replace
+``{image-name}`` with the name of the image to be moved to the trash and
+replace ``{pool-name}`` with the name of the pool:
+
+.. prompt:: bash $
+
+   rbd trash mv {pool-name}/{image-name}
+
+For example:
+
+.. prompt:: bash $
+
+   rbd trash mv swimmingpool/bar
+
+Removing a Deferred Block Device from a Pool
+--------------------------------------------
+
+To remove a deferred block device from a pool, run the following command but
+replace ``{image-}`` with the ID of the image to be removed, and replace
+``{pool-name}`` with the name of the pool from which the image is to be
+removed:
+
+.. prompt:: bash $
+
+   rbd trash rm {pool-name}/{image-}
+
+For example:
+
+.. prompt:: bash $
+   
+   rbd trash rm swimmingpool/2bf4474b0dc51
 
 .. note::
 
-  * You can move an image to the trash even it has snapshot(s) or actively 
-    in-use by clones, but can not be removed from trash.
+  * You can move an image to the trash even if it has snapshot(s) or is
+    actively in use by clones. However, you cannot remove it from the trash
+    under those conditions.
 
-  * You can use *--expires-at* to set the defer time (default is ``now``), 
-    and if its deferment time has not expired, it can not be removed unless 
-    you use *--force*.
+  * You can use ``--expires-at`` to set the deferment time (default is
+    ``now``). If the deferment time has not yet arrived, you cannot remove the
+    image unless you use ``--force``.
 
 Restoring a Block Device Image
 ==============================
