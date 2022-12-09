@@ -132,24 +132,39 @@ For example:
 Retrieving Image Information
 ============================
 
-To retrieve information from a particular image, execute the following,
-but replace ``{image-name}`` with the name for the image:: 
+To retrieve information from a particular image, run the following command, but
+replace ``{image-name}`` with the name for the image:
 
-	rbd info {image-name}
+.. prompt:: bash $
+
+   rbd info {image-name}
 	
-For example::
+For example:
 
-	rbd info foo
+.. prompt:: bash $
+
+   rbd info foo
 	
-To retrieve information from an image within a pool, execute the following,
-but replace ``{image-name}`` with the name of the image and replace ``{pool-name}``
-with the name of the pool:: 
+To retrieve information from an image within a pool, run the following command,
+but replace ``{image-name}`` with the name of the image and replace
+``{pool-name}`` with the name of the pool:
 
-	rbd info {pool-name}/{image-name}
+.. prompt:: bash $
 
-For example:: 
+   rbd info {pool-name}/{image-name}
 
-	rbd info swimmingpool/bar
+For example:
+
+.. prompt:: bash $
+
+   rbd info swimmingpool/bar
+
+.. note:: Other naming conventions are possible, and might conflict with the
+   naming convention described here. For example, ``userid/<uuid>`` is a
+   possible name for an RBD image, and such a name might (at the least) be
+   confusing. In the intrest of helping the reader of this documentation to
+   form a clear idea of the way that RBD images are named, we offer this
+   syntax: ``rbd -p {pool-name} | info {image-name}``.
 
 Resizing a Block Device Image
 =============================
