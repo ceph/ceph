@@ -103,6 +103,7 @@ ReservingReplicas::ReservingReplicas(my_context ctx) : my_base(ctx)
 {
   dout(10) << "-- state -->> ReservingReplicas" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  scrbr->scrub_begin();
   scrbr->reserve_replicas();
 }
 
