@@ -1,5 +1,5 @@
 pytest-cov==2.7.1
--e../../python-common
+-e ../../python-common
 kubernetes
 requests-mock
 pyyaml
