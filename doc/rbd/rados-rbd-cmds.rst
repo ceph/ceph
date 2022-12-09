@@ -65,24 +65,30 @@ Creating a Block Device Image
 =============================
 
 Before you can add a block device to a node, you must create an image for it in
-the :term:`Ceph Storage Cluster` first. To create a block device image, execute
-the  following::
+the :term:`Ceph Storage Cluster`. To create a block device image, run a command of this form: 
 
-	rbd create --size {megabytes} {pool-name}/{image-name}
+.. prompt:: bash $
+
+   rbd create --size {megabytes} {pool-name}/{image-name}
 
 For example, to create a 1GB image named ``bar`` that stores information in a
-pool named ``swimmingpool``, execute the following::
+pool named ``swimmingpool``, run this command:
 
-	rbd create --size 1024 swimmingpool/bar
+.. prompt:: bash $
 
-If you don't specify pool when creating an image, it will be stored in the
-default pool ``rbd``. For example, to create a 1GB image named ``foo`` stored in
-the default pool ``rbd``, execute the following::
+   rbd create --size 1024 swimmingpool/bar
 
-	rbd create --size 1024 foo
+If you don't specify a pool when you create an image, then the image will be
+stored in the default pool ``rbd``. For example, if you ran this command, you
+wuold create a 1GB image named ``foo`` that is stored in the default pool
+``rbd``:
 
-.. note:: You must create a pool first before you can specify it as a 
-   source. See `Storage Pools`_ for details.
+.. prompt:: bash $
+
+   rbd create --size 1024 foo
+
+.. note:: You must create a pool before you can specify it as a source. See
+   `Storage Pools`_ for details.
 
 Listing Block Device Images
 ===========================
