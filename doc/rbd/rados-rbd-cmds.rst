@@ -239,30 +239,47 @@ For example::
 Restoring a Block Device Image
 ==============================
 
-To restore a deferred delete block device in the rbd pool, execute the 
-following, but replace ``{image-id}`` with the id of the image::
+To restore a deferred delete block device in the rbd pool, run the 
+following command but replace ``{image-id}`` with the ID of the image:
 
-        rbd trash restore {image-id}
+.. prompt:: bash $
 
-For example:: 
+   rbd trash restore {image-id}
 
-        rbd trash restore 2bf4474b0dc51
+For example:
 
-To restore a deferred delete block device in a particular pool, execute 
-the following, but replace ``{image-id}`` with the id of the image and 
-replace ``{pool-name}`` with the name of the pool::
+.. prompt:: bash $
 
-        rbd trash restore {pool-name}/{image-id}
+   rbd trash restore 2bf4474b0dc51
 
-For example:: 
+Restoring a Block Device Image in a Specific Pool
+-------------------------------------------------
 
-        rbd trash restore swimmingpool/2bf4474b0dc51
+To restore a deferred delete block device in a particular pool, run the
+following command but replace ``{image-id}`` with the ID of the image and
+replace ``{pool-name}`` with the name of the pool:
+
+.. prompt:: bash $
+
+  rbd trash restore {pool-name}/{image-id}
+
+For example:
+
+.. prompt:: bash $
+
+   rbd trash restore swimmingpool/2bf4474b0dc51
+
+
+Renaming an Image While Restoring It
+------------------------------------
 
 You can also use ``--image`` to rename the image while restoring it. 
 
-For example::
+For example:
 
-        rbd trash restore swimmingpool/2bf4474b0dc51 --image new-name
+.. prompt:: bash $
+   
+   rbd trash restore swimmingpool/2bf4474b0dc51 --image new-name
 
 
 .. _create a pool: ../../rados/operations/pools/#create-a-pool
