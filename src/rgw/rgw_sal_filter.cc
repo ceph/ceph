@@ -275,12 +275,12 @@ std::unique_ptr<Completions> FilterDriver::get_completions(void)
 
 std::unique_ptr<Notification> FilterDriver::get_notification(rgw::sal::Object* obj,
 				rgw::sal::Object* src_obj, req_state* s,
-				rgw::notify::EventType event_type,
+				rgw::notify::EventType event_type, optional_yield y,
 				const std::string* object_name)
 {
   std::unique_ptr<Notification> n = next->get_notification(nextObject(obj),
 							   nextObject(src_obj),
-							   s, event_type,
+							   s, event_type, y,
 							   object_name);
   return std::make_unique<FilterNotification>(std::move(n));
 }
