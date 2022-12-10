@@ -133,6 +133,11 @@ private:
     ObjectContextRef obc,
     ceph::os::Transaction& txn,
     std::vector<pg_log_entry_t>& log_entries);
+  interruptible_future<> adjust_snaps(
+    ObjectContextRef obc,
+    const std::set<snapid_t>& new_snaps,
+    ceph::os::Transaction& txn,
+    std::vector<pg_log_entry_t>& log_entries);
 
   using remove_or_update_ret_t =
     std::pair<ceph::os::Transaction, std::vector<pg_log_entry_t>>;
