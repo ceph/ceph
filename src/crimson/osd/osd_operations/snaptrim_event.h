@@ -133,6 +133,11 @@ private:
     ObjectContextRef obc,
     ceph::os::Transaction& txn,
     std::vector<pg_log_entry_t>& log_entries);
+  void remove_head_whiteout(
+    ObjectContextRef obc,
+    ObjectContextRef head_obc,
+    ceph::os::Transaction& txn,
+    std::vector<pg_log_entry_t>& log_entries);
   interruptible_future<> adjust_snaps(
     ObjectContextRef obc,
     const std::set<snapid_t>& new_snaps,

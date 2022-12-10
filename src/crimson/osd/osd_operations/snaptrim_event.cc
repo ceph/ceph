@@ -281,6 +281,50 @@ SnapTrimObjSubEvent::remove_clone(
   return OpsExecuter::snap_map_remove(coid, pg->snap_mapper, pg->osdriver, txn);
 }
 
+void SnapTrimObjSubEvent::remove_head_whiteout(
+  ObjectContextRef obc,
+  ObjectContextRef head_obc,
+  ceph::os::Transaction& txn,
+  std::vector<pg_log_entry_t>& log_entries
+) {
+  // NOTE: this arguably constitutes minor interference with the
+  // tiering agent if this is a cache tier since a snap trim event
+  // is effectively evicting a whiteout we might otherwise want to
+  // keep around.
+  const auto head_oid = coid.get_head();
+  logger().info("{}: {} removing {}",
+                *this, coid, head_oid);
+  log_entries.emplace_back(
+    pg_log_entry_t{
+      pg_log_entry_t::DELETE,
+      head_oid,
+      osd_op_p.at_version,
+      head_obc->obs.oi.version,
+      0,
+      osd_reqid_t(),
+      obc->obs.oi.mtime, // will be replaced in `apply_to()`
+      0}
+    );
+  logger().info("{}: remove snap head", *this);
+  object_info_t& oi = head_obc->obs.oi;
+  delta_stats.num_objects--;
+  if (oi.is_dirty()) {
+    delta_stats.num_objects_dirty--;
+  }
+  if (oi.is_omap()) {
+    delta_stats.num_objects_omap--;
+  }
+  if (oi.is_whiteout()) {
+    logger().debug("{}: trimming whiteout on {}",
+                   *this, oi.soid);
+    delta_stats.num_whiteouts--;
+  }
+  head_obc->obs.exists = false;
+  head_obc->obs.oi = object_info_t(head_oid);
+  txn.remove(pg->get_collection_ref()->get_cid(),
+             ghobject_t{head_oid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD});
+}
+
 SnapTrimObjSubEvent::interruptible_future<>
 SnapTrimObjSubEvent::adjust_snaps(
   ObjectContextRef obc,
@@ -372,44 +416,10 @@ SnapTrimObjSubEvent::remove_or_update(
     // save head snapset
     logger().debug("{}: {} new snapset {} on {}",
                    *this, coid, obc->ssc->snapset, head_obc->obs.oi);
-    const auto head_oid = coid.get_head();
     if (obc->ssc->snapset.clones.empty() && head_obc->obs.oi.is_whiteout()) {
-      // NOTE: this arguably constitutes minor interference with the
-      // tiering agent if this is a cache tier since a snap trim event
-      // is effectively evicting a whiteout we might otherwise want to
-      // keep around.
-      logger().info("{}: {} removing {}",
-                    *this, coid, head_oid);
-      log_entries.emplace_back(
-        pg_log_entry_t{
-          pg_log_entry_t::DELETE,
-          head_oid,
-          osd_op_p.at_version,
-          head_obc->obs.oi.version,
-          0,
-          osd_reqid_t(),
-          obc->obs.oi.mtime, // will be replaced in `apply_to()`
-          0}
-        );
-      logger().info("{}: remove snap head", *this);
-      object_info_t& oi = head_obc->obs.oi;
-      delta_stats.num_objects--;
-      if (oi.is_dirty()) {
-        delta_stats.num_objects_dirty--;
-      }
-      if (oi.is_omap()) {
-        delta_stats.num_objects_omap--;
-      }
-      if (oi.is_whiteout()) {
-        logger().debug("{}: trimming whiteout on {}",
-                       *this, oi.soid);
-        delta_stats.num_whiteouts--;
-      }
-      head_obc->obs.exists = false;
-      head_obc->obs.oi = object_info_t(head_oid);
-      txn.remove(pg->get_collection_ref()->get_cid(),
-                 ghobject_t{head_oid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD});
+      remove_head_whiteout(obc, head_obc, txn, log_entries);
     } else {
+      const auto head_oid = coid.get_head();
       obc->ssc->snapset.snaps.clear();
       logger().info("{}: writing updated snapset on {}, snapset is {}",
                     *this, head_oid, obc->ssc->snapset);
