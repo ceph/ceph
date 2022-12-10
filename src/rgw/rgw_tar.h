@@ -69,7 +69,7 @@ enum class FileType : char {
 
 class HeaderView {
 protected:
-  /* Everythng is char here (ASCII encoding), so we don't need to worry about
+  /* Everything is char here (ASCII encoding), so we don't need to worry about
    * the struct padding. */
   const struct header_t {
     char filename[100];
@@ -86,7 +86,7 @@ protected:
   static_assert(sizeof(*header) == BLOCK_SIZE,
                 "The TAR header must be exactly BLOCK_SIZE length");
 
-  /* The label is far more imporant from what the code really does. */
+  /* The label is far more important from what the code really does. */
   static size_t pos2len(const size_t pos) {
     return pos + 1;
   }
