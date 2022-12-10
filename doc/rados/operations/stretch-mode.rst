@@ -65,15 +65,19 @@ just as susceptible to netsplit issues, but are much more tolerant of
 component availability outages than 2-site clusters are.
 
 To enter stretch mode, you must set the location of each monitor, matching
-your CRUSH map. For instance, to place ``mon.a`` in your first data center ::
+your CRUSH map. For instance, to place ``mon.a`` in your first data center:
 
-  $ ceph mon set_location a datacenter=site1
+.. prompt:: bash $
+
+   ceph mon set_location a datacenter=site1
 
 Next, generate a CRUSH rule which will place 2 copies in each data center. This
-will require editing the CRUSH map directly::
+will require editing the CRUSH map directly:
 
-  $ ceph osd getcrushmap > crush.map.bin
-  $ crushtool -d crush.map.bin -o crush.map.txt
+.. prompt:: bash $
+
+   ceph osd getcrushmap > crush.map.bin
+   crushtool -d crush.map.bin -o crush.map.txt
 
 Now edit the ``crush.map.txt`` file to add a new rule. Here
 there is only one other rule, so this is ID 1, but you may need
@@ -93,10 +97,12 @@ named ``site1`` and ``site2``::
           step emit
   }
 
-Finally, inject the CRUSH map to make the rule available to the cluster::
+Finally, inject the CRUSH map to make the rule available to the cluster:
 
-  $ crushtool -c crush.map.txt -o crush2.map.bin
-  $ ceph osd setcrushmap -i crush2.map.bin
+.. prompt:: bash $
+
+   crushtool -c crush.map.txt -o crush2.map.bin
+   ceph osd setcrushmap -i crush2.map.bin
 
 If you aren't already running your monitors in connectivity mode, do so with
 the instructions in `Changing Monitor Elections`_.
@@ -107,10 +113,12 @@ And lastly, tell the cluster to enter stretch mode. Here, ``mon.e`` is the
 tiebreaker and we are splitting across data centers. ``mon.e`` should be also
 set a datacenter, that will differ from ``site1`` and ``site2``. For this
 purpose you can create another datacenter bucket named ```site3`` in your
-CRUSH and place ``mon.e`` there ::
+CRUSH and place ``mon.e`` there:
 
-  $ ceph mon set_location e datacenter=site3
-  $ ceph mon enable_stretch_mode e stretch_rule datacenter
+.. prompt:: bash $
+
+   ceph mon set_location e datacenter=site3
+   ceph mon enable_stretch_mode e stretch_rule datacenter
 
 When stretch mode is enabled, the OSDs will only take PGs active when
 they peer across data centers (or whatever other CRUSH bucket type
@@ -163,9 +171,11 @@ running with more than 2 full sites.
 Other commands
 ==============
 If your tiebreaker monitor fails for some reason, you can replace it. Turn on
-a new monitor and run ::
+a new monitor and run:
 
-  $ ceph mon set_new_tiebreaker mon.<new_mon_name>
+.. prompt:: bash $
+
+   ceph mon set_new_tiebreaker mon.<new_mon_name>
 
 This command will protest if the new monitor is in the same location as existing
 non-tiebreaker monitors. This command WILL NOT remove the previous tiebreaker
@@ -180,9 +190,11 @@ bucket type you specified when running ``enable_stretch_mode``.
 
 When in stretch degraded mode, the cluster will go into "recovery" mode automatically
 when the disconnected data center comes back. If that doesn't work, or you want to
-enable recovery mode early, you can invoke ::
+enable recovery mode early, you can invoke:
 
-  $ ceph osd force_recovery_stretch_mode --yes-i-really-mean-it
+.. prompt:: bash $
+
+   ceph osd force_recovery_stretch_mode --yes-i-really-mean-it
 
 But this command should not be necessary; it is included to deal with
 unanticipated situations.
@@ -191,9 +203,11 @@ When in recovery mode, the cluster should go back into normal stretch mode
 when the PGs are healthy. If this doesn't happen, or you want to force the
 cross-data-center peering early and are willing to risk data downtime (or have
 verified separately that all the PGs can peer, even if they aren't fully
-recovered), you can invoke ::
+recovered), you can invoke:
 
-  $ ceph osd force_healthy_stretch_mode --yes-i-really-mean-it
+.. prompt:: bash $
+
+   ceph osd force_healthy_stretch_mode --yes-i-really-mean-it
 
 This command should not be necessary; it is included to deal with
 unanticipated situations. But you might wish to invoke it to remove
