@@ -253,7 +253,8 @@ target_link_libraries(rgw_common
   PUBLIC
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
-    spawn)
+    spawn
+    fmt::fmt)
 target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
