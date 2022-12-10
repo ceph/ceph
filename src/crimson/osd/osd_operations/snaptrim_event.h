@@ -129,6 +129,11 @@ public:
 private:
   object_stat_sum_t delta_stats;
 
+  interruptible_future<> remove_clone(
+    ObjectContextRef obc,
+    ceph::os::Transaction& txn,
+    std::vector<pg_log_entry_t>& log_entries);
+
   using remove_or_update_ret_t =
     std::pair<ceph::os::Transaction, std::vector<pg_log_entry_t>>;
   interruptible_future<remove_or_update_ret_t>

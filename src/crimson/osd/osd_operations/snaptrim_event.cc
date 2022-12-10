@@ -212,6 +212,75 @@ seastar::future<> SnapTrimObjSubEvent::start()
   });
 }
 
+SnapTrimObjSubEvent::interruptible_future<>
+SnapTrimObjSubEvent::remove_clone(
+  ObjectContextRef obc,
+  ceph::os::Transaction& txn,
+  std::vector<pg_log_entry_t>& log_entries
+) {
+  const auto p = std::find(
+    obc->ssc->snapset.clones.begin(),
+    obc->ssc->snapset.clones.end(),
+    coid.snap);
+  if (p == obc->ssc->snapset.clones.end()) {
+    logger().error("{}: Snap {} not in clones",
+                   *this, coid.snap);
+    //return -ENOENT;
+  }
+  assert(p != obc->ssc->snapset.clones.end());
+  snapid_t last = coid.snap;
+  delta_stats.num_bytes -= obc->ssc->snapset.get_clone_bytes(last);
+
+  if (p != obc->ssc->snapset.clones.begin()) {
+    // not the oldest... merge overlap into next older clone
+    std::vector<snapid_t>::iterator n = p - 1;
+    hobject_t prev_coid = coid;
+    prev_coid.snap = *n;
+
+    // does the classical OSD really need is_present_clone(prev_coid)?
+    delta_stats.num_bytes -= obc->ssc->snapset.get_clone_bytes(*n);
+    obc->ssc->snapset.clone_overlap[*n].intersection_of(
+      obc->ssc->snapset.clone_overlap[*p]);
+    delta_stats.num_bytes += obc->ssc->snapset.get_clone_bytes(*n);
+  }
+  delta_stats.num_objects--;
+  if (obc->obs.oi.is_dirty()) {
+    delta_stats.num_objects_dirty--;
+  }
+  if (obc->obs.oi.is_omap()) {
+    delta_stats.num_objects_omap--;
+  }
+  if (obc->obs.oi.is_whiteout()) {
+    logger().debug("{}: trimming whiteout on {}",
+                   *this, coid);
+    delta_stats.num_whiteouts--;
+  }
+  delta_stats.num_object_clones--;
+
+  obc->obs.exists = false;
+  obc->ssc->snapset.clones.erase(p);
+  obc->ssc->snapset.clone_overlap.erase(last);
+  obc->ssc->snapset.clone_size.erase(last);
+  obc->ssc->snapset.clone_snaps.erase(last);
+
+  log_entries.emplace_back(
+    pg_log_entry_t{
+      pg_log_entry_t::DELETE,
+      coid,
+      osd_op_p.at_version,
+      obc->obs.oi.version,
+      0,
+      osd_reqid_t(),
+      obc->obs.oi.mtime, // will be replaced in `apply_to()`
+      0}
+    );
+  txn.remove(
+    pg->get_collection_ref()->get_cid(),
+    ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD});
+  obc->obs.oi = object_info_t(coid);
+  return OpsExecuter::snap_map_remove(coid, pg->snap_mapper, pg->osdriver, txn);
+}
+
 SnapTrimObjSubEvent::interruptible_future<
   SnapTrimObjSubEvent::remove_or_update_ret_t>
 SnapTrimObjSubEvent::remove_or_update(
@@ -242,15 +311,6 @@ SnapTrimObjSubEvent::remove_or_update(
     }
   }
 
-  std::vector<snapid_t>::iterator p = obc->ssc->snapset.clones.end();
-  if (new_snaps.empty()) {
-    p = std::find(obc->ssc->snapset.clones.begin(), obc->ssc->snapset.clones.end(), coid.snap);
-    if (p == obc->ssc->snapset.clones.end()) {
-      logger().error("{}: Snap {} not in clones",
-                     *this, coid.snap);
-    }
-  }
-
   return seastar::do_with(ceph::os::Transaction{}, [=, this](auto&& txn) {
   std::vector<pg_log_entry_t> log_entries{};
 
@@ -258,67 +318,10 @@ SnapTrimObjSubEvent::remove_or_update(
   osd_op_p.at_version = pg->next_version();
   auto ret = interruptor::now();
   if (new_snaps.empty()) {
-    // remove clone
+    // remove clone from snapset
     logger().info("{}: {} snaps {} -> {} ... deleting",
                   *this, coid, old_snaps, new_snaps);
-
-    // ...from snapset
-    assert(p != obc->ssc->snapset.clones.end());
-
-    snapid_t last = coid.snap;
-    delta_stats.num_bytes -= obc->ssc->snapset.get_clone_bytes(last);
-
-    if (p != obc->ssc->snapset.clones.begin()) {
-      // not the oldest... merge overlap into next older clone
-      std::vector<snapid_t>::iterator n = p - 1;
-      hobject_t prev_coid = coid;
-      prev_coid.snap = *n;
-
-      // does the classical OSD really need is_present_clone(prev_coid)?
-      delta_stats.num_bytes -= obc->ssc->snapset.get_clone_bytes(*n);
-      obc->ssc->snapset.clone_overlap[*n].intersection_of(
-	obc->ssc->snapset.clone_overlap[*p]);
-      delta_stats.num_bytes += obc->ssc->snapset.get_clone_bytes(*n);
-    }
-    delta_stats.num_objects--;
-    if (obc->obs.oi.is_dirty()) {
-      delta_stats.num_objects_dirty--;
-    }
-    if (obc->obs.oi.is_omap()) {
-      delta_stats.num_objects_omap--;
-    }
-    if (obc->obs.oi.is_whiteout()) {
-      logger().debug("{}: trimming whiteout on {}",
-                     *this, coid);
-      delta_stats.num_whiteouts--;
-    }
-    delta_stats.num_object_clones--;
-
-    obc->obs.exists = false;
-
-    obc->ssc->snapset.clones.erase(p);
-    obc->ssc->snapset.clone_overlap.erase(last);
-    obc->ssc->snapset.clone_size.erase(last);
-    obc->ssc->snapset.clone_snaps.erase(last);
-
-    log_entries.emplace_back(
-      pg_log_entry_t{
-	pg_log_entry_t::DELETE,
-	coid,
-        osd_op_p.at_version,
-	obc->obs.oi.version,
-	0,
-	osd_reqid_t(),
-	obc->obs.oi.mtime, // will be replaced in `apply_to()`
-	0}
-      );
-    txn.remove(
-      pg->get_collection_ref()->get_cid(),
-      ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD});
-
-    obc->obs.oi = object_info_t(coid);
-
-    ret = OpsExecuter::snap_map_remove(coid, pg->snap_mapper, pg->osdriver, txn);
+    ret = remove_clone(obc, txn, log_entries);
   } else {
     // save adjusted snaps for this object
     logger().info("{}: {} snaps {} -> {}",
