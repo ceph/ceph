@@ -3472,7 +3472,7 @@ public:
       status.shards_done_with_gen.resize(marker_mgr.get().size());
       status.incremental_gen = info.latest_gen;
 
-      ldout(cct, 20) << "writing bucket sync status during init. state=" << status.state << ". marker=" << status.full.position.to_str() << dendl;
+      ldout(cct, 20) << "writing bucket sync status during init. state=" << status.state << ". marker=" << status.full.position << dendl;
 
       // write bucket sync status
       using CR = RGWSimpleRadosWriteCR<rgw_bucket_sync_status>;

@@ -381,28 +381,33 @@ struct rgw_obj_key {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-
-  std::string to_str() const {
-    if (instance.empty()) {
-      return name;
-    }
-    char buf[name.size() + instance.size() + 16];
-    snprintf(buf, sizeof(buf), "%s[%s]", name.c_str(), instance.c_str());
-    return buf;
-  }
 };
 WRITE_CLASS_ENCODER(rgw_obj_key)
 
-inline std::ostream& operator<<(std::ostream& out, const rgw_obj_key &o) {
-  return out << o.to_str();
-}
-
+#if FMT_VERSION >= 90000
 template<> struct fmt::formatter<rgw_obj_key> : fmt::formatter<std::string_view> {
   template <typename FormatContext>
   auto format(const rgw_obj_key& key, FormatContext& ctx) const {
-    return formatter<std::string_view>::format(key.to_str(), ctx);
+    if (key.instance.empty()) {
+      return formatter<std::string_view>::format(key.name, ctx);
+    } else {
+      return fmt::format_to(ctx.out(), "{}[{}]", key.name, key.instance);
+    }
   }
 };
+#endif
+
+inline std::ostream& operator<<(std::ostream& out, const rgw_obj_key &key) {
+#if FMT_VERSION >= 90000
+  return out << fmt::format("{}", key);
+#else
+  if (key.instance.empty()) {
+    return out << fmt::format("{}", key.name);
+  } else {
+    return out << fmt::format("{}[{}]", key.name, key.instance);
+  }
+#endif
+}
 
 struct rgw_raw_obj {
   rgw_pool pool;
