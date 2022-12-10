@@ -143,6 +143,11 @@ private:
     const std::set<snapid_t>& new_snaps,
     ceph::os::Transaction& txn,
     std::vector<pg_log_entry_t>& log_entries);
+  void update_head(
+    ObjectContextRef obc,
+    ObjectContextRef head_obc,
+    ceph::os::Transaction& txn,
+    std::vector<pg_log_entry_t>& log_entries);
 
   using remove_or_update_ret_t =
     std::pair<ceph::os::Transaction, std::vector<pg_log_entry_t>>;
