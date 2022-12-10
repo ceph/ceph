@@ -362,6 +362,46 @@ SnapTrimObjSubEvent::adjust_snaps(
     coid, new_snaps, pg->snap_mapper, pg->osdriver, txn);
 }
 
+void SnapTrimObjSubEvent::update_head(
+  ObjectContextRef obc,
+  ObjectContextRef head_obc,
+  ceph::os::Transaction& txn,
+  std::vector<pg_log_entry_t>& log_entries
+) {
+  const auto head_oid = coid.get_head();
+  obc->ssc->snapset.snaps.clear();
+  logger().info("{}: writing updated snapset on {}, snapset is {}",
+                *this, head_oid, obc->ssc->snapset);
+  log_entries.emplace_back(
+    pg_log_entry_t{
+      pg_log_entry_t::MODIFY,
+      head_oid,
+      osd_op_p.at_version,
+      head_obc->obs.oi.version,
+      0,
+      osd_reqid_t(),
+      obc->obs.oi.mtime,
+      0}
+    );
+
+  head_obc->obs.oi.prior_version = head_obc->obs.oi.version;
+  head_obc->obs.oi.version = osd_op_p.at_version;
+
+  std::map<std::string, ceph::bufferlist, std::less<>> attrs;
+  ceph::bufferlist bl;
+  encode(obc->ssc->snapset, bl);
+  attrs[SS_ATTR] = std::move(bl);
+
+  bl.clear();
+  encode(head_obc->obs.oi, bl,
+         pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+  attrs[OI_ATTR] = std::move(bl);
+  txn.setattrs(
+    pg->get_collection_ref()->get_cid(),
+    ghobject_t{head_oid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD},
+    attrs);
+}
+
 SnapTrimObjSubEvent::interruptible_future<
   SnapTrimObjSubEvent::remove_or_update_ret_t>
 SnapTrimObjSubEvent::remove_or_update(
@@ -419,40 +459,8 @@ SnapTrimObjSubEvent::remove_or_update(
     if (obc->ssc->snapset.clones.empty() && head_obc->obs.oi.is_whiteout()) {
       remove_head_whiteout(obc, head_obc, txn, log_entries);
     } else {
-      const auto head_oid = coid.get_head();
-      obc->ssc->snapset.snaps.clear();
-      logger().info("{}: writing updated snapset on {}, snapset is {}",
-                    *this, head_oid, obc->ssc->snapset);
-      log_entries.emplace_back(
-        pg_log_entry_t{
-          pg_log_entry_t::MODIFY,
-          head_oid,
-          osd_op_p.at_version,
-          head_obc->obs.oi.version,
-          0,
-          osd_reqid_t(),
-          obc->obs.oi.mtime,
-          0}
-        );
-
-      head_obc->obs.oi.prior_version = head_obc->obs.oi.version;
-      head_obc->obs.oi.version = osd_op_p.at_version;
-
-      std::map<std::string, ceph::bufferlist, std::less<>> attrs;
-      ceph::bufferlist bl;
-      encode(obc->ssc->snapset, bl);
-      attrs[SS_ATTR] = std::move(bl);
-
-      bl.clear();
-      encode(head_obc->obs.oi, bl,
-             pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-      attrs[OI_ATTR] = std::move(bl);
-      txn.setattrs(
-        pg->get_collection_ref()->get_cid(),
-        ghobject_t{head_oid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD},
-        attrs);
+      update_head(obc, head_obc, txn, log_entries);
     }
-
     // Stats reporting - Set number of objects trimmed
     if (num_objects_before_trim > delta_stats.num_objects) {
       //int64_t num_objects_trimmed =
