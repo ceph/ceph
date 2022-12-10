@@ -168,9 +168,7 @@ For example:
 .. note:: Other naming conventions are possible, and might conflict with the
    naming convention described here. For example, ``userid/<uuid>`` is a
    possible name for an RBD image, and such a name might (at the least) be
-   confusing. In the intrest of helping the reader of this documentation to
-   form a clear idea of the way that RBD images are named, we offer this
-   syntax: ``rbd -p {pool-name} | info {image-name}``.
+   confusing. 
 
 Resizing a Block Device Image
 =============================
