@@ -19,56 +19,56 @@ if(APPLE)
   list(APPEND fuse_suffixes osxfuse)
 endif()
 
-find_package(PkgConfig QUIET)
-if(PKG_CONFIG_FOUND)
-  pkg_search_module(PKG_FUSE QUIET ${fuse_names})
+find_package(PkgConfig QUIET REQUIRED)
+pkg_search_module(FUSE IMPORTED_TARGET GLOBAL QUIET ${fuse_names})
 
+if(FUSE_FOUND)
+  add_library(FUSE::FUSE INTERFACE IMPORTED)
+  target_link_libraries(FUSE::FUSE INTERFACE PkgConfig::FUSE)
+  set(FUSE_LIBRARY ${FUSE_LIBRARIES})
+  set(FUSE_INCLUDE_DIR ${FUSE_INCLUDE_DIRS})
   string(REGEX REPLACE "([0-9]+)\.([0-9]+)\.([0-9]+)"
-    "\\1" FUSE_MAJOR_VERSION "${PKG_FUSE_VERSION}")
+    "\\1" FUSE_MAJOR_VERSION "${FUSE_VERSION}")
   string(REGEX REPLACE "([0-9]+)\.([0-9]+)\.([0-9]+)"
-    "\\2" FUSE_MINOR_VERSION "${PKG_FUSE_VERSION}")
+    "\\2" FUSE_MINOR_VERSION "${FUSE_VERSION}")
+endif()
 
+if(NOT FUSE_INCLUDE_DIR)
   find_path(
     FUSE_INCLUDE_DIR
     NAMES fuse_common.h fuse_lowlevel.h fuse.h
-    HINTS ${PKG_FUSE_INCLUDE_DIRS}
     PATH_SUFFIXES ${fuse_suffixes}
     NO_DEFAULT_PATH)
+endif()
 
-  find_library(FUSE_LIBRARIES
-    NAMES ${fuse_names}
-    HINTS ${PKG_FUSE_LIBDIR}
-    NO_DEFAULT_PATH)
-else()
-  find_path(
-    FUSE_INCLUDE_DIR
-    NAMES fuse_common.h fuse_lowlevel.h fuse.h
-    PATH_SUFFIXES ${fuse_suffixes})
-
-  find_library(FUSE_LIBRARIES
-    NAMES ${fuse_names}
-    PATHS /usr/local/lib64 /usr/local/lib)
-
+if(FUSE_INCLUDE_DIR AND NOT FUSE_VERSION)
   foreach(ver "MAJOR" "MINOR")
     file(STRINGS "${FUSE_INCLUDE_DIR}/fuse_common.h" fuse_ver_${ver}_line
       REGEX "^#define[\t ]+FUSE_${ver}_VERSION[\t ]+[0-9]+$")
     string(REGEX REPLACE ".*#define[\t ]+FUSE_${ver}_VERSION[\t ]+([0-9]+)$"
       "\\1" FUSE_${ver}_VERSION "${fuse_ver_${ver}_line}")
   endforeach()
+  set(FUSE_VERSION
+    "${FUSE_MAJOR_VERSION}.${FUSE_MINOR_VERSION}")
 endif()
 
-set(FUSE_VERSION
-  "${FUSE_MAJOR_VERSION}.${FUSE_MINOR_VERSION}")
+if(NOT FUSE_LIBRARY)
+  find_library(FUSE_LIBRARY
+    NAMES ${fuse_names}
+    NO_DEFAULT_PATH)
+endif()
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(FUSE
-  REQUIRED_VARS FUSE_LIBRARIES FUSE_INCLUDE_DIR
+  REQUIRED_VARS FUSE_LIBRARY FUSE_INCLUDE_DIR
   VERSION_VAR FUSE_VERSION)
 
 mark_as_advanced(
-  FUSE_INCLUDE_DIR)
+  FUSE_INCLUDE_DIR
+  FUSE_LIBRARY)
 
 if(FUSE_FOUND)
+  set(FUSE_LIBRARIES ${FUSE_LIBRARY})
   set(FUSE_INCLUDE_DIRS ${FUSE_INCLUDE_DIR})
   if(NOT TARGET FUSE::FUSE)
     add_library(FUSE::FUSE UNKNOWN IMPORTED)
