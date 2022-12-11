@@ -3372,6 +3372,17 @@ class OSD::C_Tick_WithoutOSDLock : public Context {
   }
 };
 
+class OSD::C_Bootup_Timeout : public Context {
+  OSD *osd;
+  int old_state;
+  int duration;
+  public:
+  explicit C_Bootup_Timeout(OSD *o, int s, int t) : osd(o), old_state(s), duration(t) {}
+  void finish(int r) override {
+    osd->bootup_timeout(old_state, duration);
+  }
+};
+
 int OSD::enable_disable_fuse(bool stop)
 {
 #ifdef HAVE_LIBFUSE
@@ -6145,6 +6156,29 @@ void OSD::tick_without_osd_lock()
   service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(get_tick_interval(),
 					      new C_Tick_WithoutOSDLock(this));
+}
+
+void OSD::bootup_timeout(int s, int t)
+{
+  dout(10) << "tick_timer bootup_timeout" << dendl;
+  int state = get_state();
+  if (s == state) {
+    dout(0) << "tick_timer bootup_timeout, osd has being " << get_state_name(state) << " state for " << t << " seconds, exit" << dendl;
+    exit(ETIMEDOUT);
+  }
+}
+
+void OSD::set_state(int s) {
+  state = s;
+  if (bootup_timeout_callback != nullptr) {
+    tick_timer.cancel_event(bootup_timeout_callback);
+    bootup_timeout_callback = nullptr;
+  }
+  int duration = cct->_conf->osd_bootup_timeout;
+  if ((state == STATE_PREBOOT || state == STATE_BOOTING) && duration > 0) {
+    dout(10) << "tick_timer " << get_state_name(state) << dendl;
+    bootup_timeout_callback = tick_timer.add_event_after(duration, new C_Bootup_Timeout(this, state, duration));
+  }
 }
 
 // Usage:

@@ -1129,6 +1129,7 @@ protected:
   PerfCounters* create_recoverystate_perf();
   void tick();
   void tick_without_osd_lock();
+  void bootup_timeout(int s, int t);
   void _dispatch(Message *m);
 
   void check_osdmap_features();
@@ -1241,6 +1242,8 @@ public:
 private:
   class C_Tick;
   class C_Tick_WithoutOSDLock;
+  class C_Bootup_Timeout;
+  Context *bootup_timeout_callback = nullptr;
 
   // -- config settings --
   float m_osd_pg_epoch_max_lag_factor;
@@ -1286,9 +1289,7 @@ public:
   int get_state() const {
     return state;
   }
-  void set_state(int s) {
-    state = s;
-  }
+  void set_state(int s);
   bool is_initializing() const {
     return state == STATE_INITIALIZING;
   }
