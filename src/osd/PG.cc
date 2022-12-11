@@ -1737,9 +1737,9 @@ void PG::on_new_interval()
   projected_last_update = eversion_t();
   cancel_recovery();
 
-  assert(m_scrubber);
+  ceph_assert(m_scrubber);
   // log some scrub data before we react to the interval
-  dout(30) << __func__ << (is_scrub_queued_or_active() ? " scrubbing " : " ")
+  dout(20) << __func__ << (is_scrub_queued_or_active() ? " scrubbing " : " ")
            << "flags: " << m_planned_scrub << dendl;
 
   m_scrubber->on_primary_change(__func__, m_planned_scrub);
