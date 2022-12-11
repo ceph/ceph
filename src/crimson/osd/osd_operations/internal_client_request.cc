@@ -27,6 +27,7 @@ InternalClientRequest::InternalClientRequest(Ref<PG> pg)
   : pg(std::move(pg))
 {
   assert(bool(this->pg));
+  assert(this->pg->is_primary());
 }
 
 InternalClientRequest::~InternalClientRequest()

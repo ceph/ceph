@@ -211,7 +211,13 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
     *this
   ).then_interruptible(
     [this, pg]() mutable {
-    return do_recover_missing(pg, m->get_hobj());
+    if (pg->is_primary()) {
+      return do_recover_missing(pg, m->get_hobj());
+    } else {
+      logger().debug("process_op: Skipping do_recover_missing"
+                     "on non primary pg");
+      return interruptor::now();
+    }
   }).then_interruptible([this, pg, &ihref]() mutable {
     return pg->already_complete(m->get_reqid()).then_interruptible(
       [this, pg, &ihref](auto completed) mutable
