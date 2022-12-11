@@ -402,7 +402,7 @@ void SnapTrimObjSubEvent::update_head(
     attrs);
 }
 
-SnapTrimObjSubEvent::interruptible_future<
+SnapTrimObjSubEvent::remove_or_update_iertr::future<
   SnapTrimObjSubEvent::remove_or_update_ret_t>
 SnapTrimObjSubEvent::remove_or_update(
   ObjectContextRef obc,
@@ -412,15 +412,18 @@ SnapTrimObjSubEvent::remove_or_update(
   if (citer == obc->ssc->snapset.clone_snaps.end()) {
     logger().error("{}: No clone_snaps in snapset {} for object {}",
                    *this, obc->ssc->snapset, coid);
+    return crimson::ct_error::enoent::make();
   }
   const auto& old_snaps = citer->second;
   if (old_snaps.empty()) {
     logger().error("{}: no object info snaps for object {}",
                    *this, coid);
+    return crimson::ct_error::enoent::make();
   }
   if (obc->ssc->snapset.seq == 0) {
     logger().error("{}: no snapset.seq for object {}",
                    *this, coid);
+    return crimson::ct_error::enoent::make();
   }
   const OSDMapRef& osdmap = pg->get_osdmap();
   std::set<snapid_t> new_snaps;
@@ -507,8 +510,8 @@ seastar::future<> SnapTrimObjSubEvent::with_pg(
           logger().debug("{}: processing clone_obc={}", *this, clone_obc);
           return remove_or_update(
             clone_obc, clone_obc->head
-          ).then_unpack_interruptible([clone_obc, this]
-                                      (auto&& txn, auto&& log_entries) mutable {
+          ).safe_then_unpack_interruptible([clone_obc, this]
+                                           (auto&& txn, auto&& log_entries) mutable {
             auto [submitted, all_completed] = pg->submit_transaction(
               std::move(clone_obc),
               std::move(txn),
