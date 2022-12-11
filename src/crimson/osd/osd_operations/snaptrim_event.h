@@ -149,9 +149,14 @@ private:
     ceph::os::Transaction& txn,
     std::vector<pg_log_entry_t>& log_entries);
 
+  using remove_or_update_ertr =
+    crimson::errorator<crimson::ct_error::enoent>;
+  using remove_or_update_iertr =
+    crimson::interruptible::interruptible_errorator<
+      IOInterruptCondition, remove_or_update_ertr>;
   using remove_or_update_ret_t =
     std::pair<ceph::os::Transaction, std::vector<pg_log_entry_t>>;
-  interruptible_future<remove_or_update_ret_t>
+  remove_or_update_iertr::future<remove_or_update_ret_t>
   remove_or_update(ObjectContextRef obc, ObjectContextRef head_obc);
 
   // we don't need to synchronize with other instances started by
