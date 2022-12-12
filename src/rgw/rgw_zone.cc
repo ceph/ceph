@@ -766,6 +766,7 @@ void RGWZonePlacementInfo::dump(Formatter *f) const
   encode_json("storage_classes", storage_classes, f);
   encode_json("data_extra_pool", data_extra_pool, f);
   encode_json("index_type", (uint32_t)index_type, f);
+  encode_json("inline_data", inline_data, f);
 
   /* no real need for backward compatibility of compression_type and data_pool in here,
    * rather not clutter the output */
@@ -778,6 +779,7 @@ void RGWZonePlacementInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("data_extra_pool", data_extra_pool, obj);
   uint32_t it;
   JSONDecoder::decode_json("index_type", it, obj);
+  JSONDecoder::decode_json("inline_data", inline_data, obj);
   index_type = (rgw::BucketIndexType)it;
 
   /* backward compatibility, these are now defined in storage_classes */
@@ -1364,3 +1366,4 @@ int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
 }
 
 } // namespace rgw
+
