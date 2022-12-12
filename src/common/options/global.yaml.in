@@ -6183,6 +6183,14 @@ options:
   min: 0
   flags:
   - runtime
+- name: osd_bootup_timeout
+  type: secs
+  level: advanced
+  desc: timeout for osd bootup (0 is unlimited)
+  default: 300
+  min: 300
+  flags:
+  - runtime
 # true if LTTng-UST tracepoints should be enabled
 - name: rados_tracing
   type: bool
