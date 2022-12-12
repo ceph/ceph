@@ -113,7 +113,8 @@ class Rbd(RESTController):
     @RESTController.MethodMap(version=APIVersion(2, 0))  # type: ignore
     def list(self, pool_name=None, offset: int = 0, limit: int = DEFAULT_LIMIT,
              search: str = '', sort: str = ''):
-        return self._rbd_list(pool_name, offset=offset, limit=limit, search=search, sort=sort)
+        return self._rbd_list(pool_name, offset=int(offset), limit=int(limit),
+                              search=search, sort=sort)
 
     @handle_rbd_error()
     @handle_rados_error('pool')
