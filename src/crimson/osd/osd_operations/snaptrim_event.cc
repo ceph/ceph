@@ -212,7 +212,7 @@ seastar::future<> SnapTrimObjSubEvent::start()
   });
 }
 
-SnapTrimObjSubEvent::interruptible_future<>
+SnapTrimObjSubEvent::remove_or_update_iertr::future<>
 SnapTrimObjSubEvent::remove_clone(
   ObjectContextRef obc,
   ceph::os::Transaction& txn,
@@ -225,7 +225,7 @@ SnapTrimObjSubEvent::remove_clone(
   if (p == obc->ssc->snapset.clones.end()) {
     logger().error("{}: Snap {} not in clones",
                    *this, coid.snap);
-    //return -ENOENT;
+    return crimson::ct_error::enoent::make();
   }
   assert(p != obc->ssc->snapset.clones.end());
   snapid_t last = coid.snap;
@@ -440,7 +440,7 @@ SnapTrimObjSubEvent::remove_or_update(
 
   int64_t num_objects_before_trim = delta_stats.num_objects;
   osd_op_p.at_version = pg->next_version();
-  auto ret = interruptor::now();
+  auto ret = remove_or_update_iertr::now();
   if (new_snaps.empty()) {
     // remove clone from snapset
     logger().info("{}: {} snaps {} -> {} ... deleting",
@@ -452,7 +452,7 @@ SnapTrimObjSubEvent::remove_or_update(
                   *this, coid, old_snaps, new_snaps);
     ret = adjust_snaps(obc, new_snaps, txn, log_entries);
   }
-  return std::move(ret).then_interruptible(
+  return std::move(ret).safe_then_interruptible(
     [&txn, obc, num_objects_before_trim, log_entries=std::move(log_entries), head_obc=std::move(head_obc), this]() mutable {
     osd_op_p.at_version = pg->next_version();
 
@@ -470,9 +470,9 @@ SnapTrimObjSubEvent::remove_or_update(
       //  num_objects_before_trim - delta_stats.num_objects;
       //add_objects_trimmed_count(num_objects_trimmed);
     }
-  }).then_interruptible(
+  }).safe_then_interruptible(
     [txn=std::move(txn), log_entries=std::move(log_entries)] () mutable {
-    return interruptor::make_ready_future<remove_or_update_ret_t>(
+    return remove_or_update_iertr::make_ready_future<remove_or_update_ret_t>(
       std::make_pair(std::move(txn), std::move(log_entries)));
   });
   });
