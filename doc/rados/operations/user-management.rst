@@ -30,13 +30,17 @@ of the specified user (usually via the command line). If you do not specify a
 user name, Ceph will use ``client.admin`` as the default user name. If you do
 not specify a keyring, Ceph will look for a keyring via the ``keyring`` setting
 in the Ceph configuration. For example, if you execute the ``ceph health``
-command without specifying a user or keyring::
+command without specifying a user or keyring:
 
-	ceph health
+.. prompt:: bash $
 
-Ceph interprets the command like this::
+   ceph health
 
-	ceph -n client.admin --keyring=/etc/ceph/ceph.client.admin.keyring health
+Ceph interprets the command like this:
+
+.. prompt:: bash $
+
+   ceph -n client.admin --keyring=/etc/ceph/ceph.client.admin.keyring health
 
 Alternatively, you may use the ``CEPH_ARGS`` environment variable to avoid
 re-entry of the user name and secret.
@@ -381,7 +385,9 @@ Management`_ for details.
 List Users
 ----------
 
-To list the users in your cluster, execute the following::
+To list the users in your cluster, execute the following:
+
+.. prompt:: bash $
 
 	ceph auth ls
 
@@ -426,18 +432,24 @@ Get a User
 ----------
 
 To retrieve a specific user, key and capabilities, execute the
-following::
+following:
 
-	ceph auth get {TYPE.ID}
+.. prompt:: bash $
 
-For example::
+   ceph auth get {TYPE.ID}
 
-	ceph auth get client.admin
+For example:
+
+.. prompt:: bash $
+
+   ceph auth get client.admin
 
 You may also use the ``-o {filename}`` option with ``ceph auth get`` to
-save the output to a file. Developers may also execute the following::
+save the output to a file. Developers may also execute the following:
 
-	ceph auth export {TYPE.ID}
+.. prompt:: bash $
+
+   ceph auth export {TYPE.ID}
 
 The ``auth export`` command is identical to ``auth get``.
 
@@ -476,12 +488,14 @@ the ``ceph auth caps`` command.
 
 A typical user has at least read capabilities on the Ceph monitor and
 read and write capability on Ceph OSDs. Additionally, a user's OSD permissions
-are often restricted to accessing a particular pool. ::
+are often restricted to accessing a particular pool:
 
-	ceph auth add client.john mon 'allow r' osd 'allow rw pool=liverpool'
-	ceph auth get-or-create client.paul mon 'allow r' osd 'allow rw pool=liverpool'
-	ceph auth get-or-create client.george mon 'allow r' osd 'allow rw pool=liverpool' -o george.keyring
-	ceph auth get-or-create-key client.ringo mon 'allow r' osd 'allow rw pool=liverpool' -o ringo.key
+.. prompt:: bash $
+
+   ceph auth add client.john mon 'allow r' osd 'allow rw pool=liverpool'
+   ceph auth get-or-create client.paul mon 'allow r' osd 'allow rw pool=liverpool'
+   ceph auth get-or-create client.george mon 'allow r' osd 'allow rw pool=liverpool' -o george.keyring
+   ceph auth get-or-create-key client.ringo mon 'allow r' osd 'allow rw pool=liverpool' -o ringo.key
 
 
 .. important:: If you provide a user with capabilities to OSDs, but you DO NOT
@@ -497,25 +511,31 @@ Modify User Capabilities
 The ``ceph auth caps`` command allows you to specify a user and change the
 user's capabilities. Setting new capabilities will overwrite current capabilities.
 To view current capabilities run ``ceph auth get USERTYPE.USERID``.  To add
-capabilities, you should also specify the existing capabilities when using the form::
+capabilities, you should also specify the existing capabilities when using the form:
 
-	ceph auth caps USERTYPE.USERID {daemon} 'allow [r|w|x|*|...] [pool={pool-name}] [namespace={namespace-name}]' [{daemon} 'allow [r|w|x|*|...] [pool={pool-name}] [namespace={namespace-name}]']
+.. prompt:: bash $
 
-For example::
+   ceph auth caps USERTYPE.USERID {daemon} 'allow [r|w|x|*|...] [pool={pool-name}] [namespace={namespace-name}]' [{daemon} 'allow [r|w|x|*|...] [pool={pool-name}] [namespace={namespace-name}]']
 
-	ceph auth get client.john
-	ceph auth caps client.john mon 'allow r' osd 'allow rw pool=liverpool'
-	ceph auth caps client.paul mon 'allow rw' osd 'allow rwx pool=liverpool'
-	ceph auth caps client.brian-manager mon 'allow *' osd 'allow *'
+For example:
+
+.. prompt:: bash $
+
+   ceph auth get client.john
+   ceph auth caps client.john mon 'allow r' osd 'allow rw pool=liverpool'
+   ceph auth caps client.paul mon 'allow rw' osd 'allow rwx pool=liverpool'
+   ceph auth caps client.brian-manager mon 'allow *' osd 'allow *'
 
 See `Authorization (Capabilities)`_ for additional details on capabilities.
 
 Delete a User
 -------------
 
-To delete a user, use ``ceph auth del``::
+To delete a user, use ``ceph auth del``:
 
-	ceph auth del {TYPE}.{ID}
+.. prompt:: bash $
+
+   ceph auth del {TYPE}.{ID}
 
 Where ``{TYPE}`` is one of ``client``, ``osd``, ``mon``, or ``mds``,
 and ``{ID}`` is the user name or ID of the daemon.
@@ -524,29 +544,37 @@ and ``{ID}`` is the user name or ID of the daemon.
 Print a User's Key
 ------------------
 
-To print a user's authentication key to standard output, execute the following::
+To print a user's authentication key to standard output, execute the following:
 
-	ceph auth print-key {TYPE}.{ID}
+.. prompt:: bash $
+
+   ceph auth print-key {TYPE}.{ID}
 
 Where ``{TYPE}`` is one of ``client``, ``osd``, ``mon``, or ``mds``,
 and ``{ID}`` is the user name or ID of the daemon.
 
 Printing a user's key is useful when you need to populate client
-software with a user's key  (e.g., libvirt). ::
+software with a user's key  (e.g., libvirt):
 
-	mount -t ceph serverhost:/ mountpoint -o name=client.user,secret=`ceph auth print-key client.user`
+.. prompt:: bash $
+
+   mount -t ceph serverhost:/ mountpoint -o name=client.user,secret=`ceph auth print-key client.user`
 
 Import a User(s)
 ----------------
 
 To import one or more users, use ``ceph auth import`` and
-specify a keyring::
+specify a keyring:
 
-	ceph auth import -i /path/to/keyring
+.. prompt:: bash $
 
-For example::
+   ceph auth import -i /path/to/keyring
 
-	sudo ceph auth import -i /etc/ceph/ceph.keyring
+For example:
+
+.. prompt:: bash $
+
+   sudo ceph auth import -i /etc/ceph/ceph.keyring
 
 
 .. note:: The Ceph storage cluster will add new users, their keys and their
@@ -592,18 +620,22 @@ Storage Cluster. Ceph Clients access keyrings to lookup a user name and
 retrieve the user's key.
 
 The ``ceph-authtool`` utility allows you to create a keyring. To create an
-empty keyring, use ``--create-keyring`` or ``-C``. For example::
+empty keyring, use ``--create-keyring`` or ``-C``. For example:
 
-	ceph-authtool --create-keyring /path/to/keyring
+.. prompt:: bash $
+
+   ceph-authtool --create-keyring /path/to/keyring
 
 When creating a keyring with multiple users, we recommend using the cluster name
 (e.g., ``$cluster.keyring``) for the keyring filename and saving it in the
 ``/etc/ceph`` directory so that the ``keyring`` configuration default setting
 will pick up the filename without requiring you to specify it in the local copy
 of your Ceph configuration file. For example, create ``ceph.keyring`` by
-executing the following::
+executing the following:
 
-	sudo ceph-authtool -C /etc/ceph/ceph.keyring
+.. prompt:: bash $
+
+   sudo ceph-authtool -C /etc/ceph/ceph.keyring
 
 When creating a keyring with a single user, we recommend using the cluster name,
 the user type and the user name and saving it in the ``/etc/ceph`` directory.
@@ -625,17 +657,21 @@ keyring.
 
 When you only want to use one user per keyring, the `Get a User`_ procedure with
 the ``-o`` option will save the output in the keyring file format. For example,
-to create a keyring for the ``client.admin`` user, execute the following::
+to create a keyring for the ``client.admin`` user, execute the following:
 
-	sudo ceph auth get client.admin -o /etc/ceph/ceph.client.admin.keyring
+.. prompt:: bash $
+
+   sudo ceph auth get client.admin -o /etc/ceph/ceph.client.admin.keyring
 
 Notice that we use the recommended file format for an individual user.
 
 When you want to import users to a keyring, you can use ``ceph-authtool``
 to specify the destination keyring and the source keyring.
-For example::
+For example:
 
-	sudo ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
+.. prompt:: bash $
+
+   sudo ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
 
 Create a User
 -------------
@@ -643,35 +679,45 @@ Create a User
 Ceph provides the `Add a User`_ function to create a user directly in the Ceph
 Storage Cluster. However, you can also create a user, keys and capabilities
 directly on a Ceph client keyring. Then, you can import the user to the Ceph
-Storage Cluster. For example::
+Storage Cluster. For example:
 
-	sudo ceph-authtool -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx' /etc/ceph/ceph.keyring
+.. prompt:: bash $
+
+   sudo ceph-authtool -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx' /etc/ceph/ceph.keyring
 
 See `Authorization (Capabilities)`_ for additional details on capabilities.
 
 You can also create a keyring and add a new user to the keyring simultaneously.
-For example::
+For example:
 
-	sudo ceph-authtool -C /etc/ceph/ceph.keyring -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx' --gen-key
+.. prompt:: bash $
+
+   sudo ceph-authtool -C /etc/ceph/ceph.keyring -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx' --gen-key
 
 In the foregoing scenarios, the new user ``client.ringo`` is only in the
 keyring. To add the new user to the Ceph Storage Cluster, you must still add
-the new user to the Ceph Storage Cluster. ::
+the new user to the Ceph Storage Cluster:
 
-	sudo ceph auth add client.ringo -i /etc/ceph/ceph.keyring
+.. prompt:: bash $
+
+   sudo ceph auth add client.ringo -i /etc/ceph/ceph.keyring
 
 Modify a User
 -------------
 
 To modify the capabilities of a user record in a keyring, specify the keyring,
-and the user followed by the capabilities. For example::
+and the user followed by the capabilities. For example:
 
-	sudo ceph-authtool /etc/ceph/ceph.keyring -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx'
+.. prompt:: bash $
+
+   sudo ceph-authtool /etc/ceph/ceph.keyring -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx'
 
 To update the user to the Ceph Storage Cluster, you must update the user
-in the keyring to the user entry in the Ceph Storage Cluster. ::
+in the keyring to the user entry in the Ceph Storage Cluster:
 
-	sudo ceph auth import -i /etc/ceph/ceph.keyring
+.. prompt:: bash $
+
+   sudo ceph auth import -i /etc/ceph/ceph.keyring
 
 See `Import a User(s)`_ for details on updating a Ceph Storage Cluster user
 from a keyring.
@@ -692,10 +738,12 @@ Ceph supports the following usage for user name and secret:
               ``-n`` options enable you to specify the ID portion of the user
               name (e.g., ``admin``, ``user1``, ``foo``, etc.). You can specify
               the user with the ``--id`` and omit the type. For example,
-              to specify user ``client.foo`` enter the following::
+              to specify user ``client.foo`` enter the following:
 
-               ceph --id foo --keyring /path/to/keyring health
-               ceph --user foo --keyring /path/to/keyring health
+              .. prompt:: bash $
+
+                 ceph --id foo --keyring /path/to/keyring health
+                 ceph --user foo --keyring /path/to/keyring health
 
 
 ``--name`` | ``-n``
@@ -704,10 +752,12 @@ Ceph supports the following usage for user name and secret:
               ``client.admin``, ``client.user1``). The ``--name`` and ``-n``
               options enables you to specify the fully qualified user name.
               You must specify the user type (typically ``client``) with the
-              user ID. For example::
+              user ID. For example:
 
-               ceph --name client.foo --keyring /path/to/keyring health
-               ceph -n client.foo --keyring /path/to/keyring health
+              .. prompt:: bash $
+
+                 ceph --name client.foo --keyring /path/to/keyring health
+                 ceph -n client.foo --keyring /path/to/keyring health
 
 
 ``--keyring``
@@ -718,9 +768,11 @@ Ceph supports the following usage for user name and secret:
               ``--secret`` for another purpose. You may retrieve a keyring with
               ``ceph auth get-or-create`` and store it locally. This is a
               preferred approach, because you can switch user names without
-              switching the keyring path. For example::
+              switching the keyring path. For example:
 
-               sudo rbd map --id foo --keyring /path/to/keyring mypool/myimage
+              .. prompt:: bash $
+
+                 sudo rbd map --id foo --keyring /path/to/keyring mypool/myimage
 
 
 .. _pools: ../pools
