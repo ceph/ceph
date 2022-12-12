@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include <sys/types.h>
@@ -115,6 +115,19 @@ static void usage()
        << "                    get OSD fsid for the given block device\n"
        << std::endl;
   generic_server_usage();
+}
+
+entity_addrvec_t make_osd_addrs(entity_addr_t a)
+{
+  entity_addrvec_t addrs;
+  if (a.get_port() == 0) {
+    a.set_type(entity_addr_t::TYPE_MSGR2);
+    a.set_port(6800);
+    addrs.v.push_back(a);
+  } else {
+    addrs.v.push_back(a);
+  }
+  return addrs;
 }
 
 int main(int argc, const char **argv)
@@ -472,7 +485,7 @@ flushjournal_out:
     }
     forker.exit(0);
   }
-  
+
   {
     int r = extblkdev::preload(g_ceph_context);
     if (r < 0) {
@@ -614,7 +627,7 @@ flushjournal_out:
 
   ms_objecter->set_default_policy(Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
-  entity_addrvec_t public_addrs, cluster_addrs;
+  entity_addrvec_t public_addrs, bind_addrs, cluster_addrs;
   r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &public_addrs,
 		     iface_preferred_numa_node);
   if (r < 0) {
@@ -628,10 +641,22 @@ flushjournal_out:
     forker.exit(1);
   }
 
+  // check if the public_bind_addr option is set
+  if (!g_conf()->public_bind_addr.is_blank_ip()) {
+    bind_addrs = make_osd_addrs(g_conf()->public_bind_addr);
+  }
+
+  if (!g_conf()->public_addr.is_blank_ip()) {
+    public_addrs = make_osd_addrs(g_conf()->public_addr);
+  }
+
   if (ms_public->bindv(public_addrs) < 0)
     forker.exit(1);
 
   if (ms_cluster->bindv(cluster_addrs) < 0)
+    forker.exit(1);
+
+  if (ms_public->bindv(bind_addrs) < 0)
     forker.exit(1);
 
   bool is_delay = g_conf().get_val<bool>("osd_heartbeat_use_min_delay_socket");
