@@ -7024,9 +7024,11 @@ void RGWDeleteMultiObj::execute(optional_yield y)
       handle_individual_object(obj_key, y, &*formatter_flush_cond);
     }
   }
-  wait_flush(y, &*formatter_flush_cond, [this, n=multi_delete->objects.size()] {
-    return n == ops_log_entries.size();
-  });
+  if (formatter_flush_cond) {
+    wait_flush(y, &*formatter_flush_cond, [this, n=multi_delete->objects.size()] {
+      return n == ops_log_entries.size();
+    });
+  }
 
   /*  set the return code to zero, errors at this point will be
   dumped to the response */
