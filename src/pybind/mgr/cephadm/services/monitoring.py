@@ -371,11 +371,24 @@ class PrometheusService(CephadmService):
                         "service": dd.service_name(),
                     })
 
+        # scrape ceph-exporters
+        ceph_exporter_targets = []
+        for dd in self.mgr.cache.get_daemons_by_service('ceph-exporter'):
+            assert dd.hostname is not None
+            deps.append(dd.name())
+            addr = dd.ip if dd.ip else self._inventory_get_fqdn(dd.hostname)
+            port = dd.ports[0] if dd.ports else 9926
+            ceph_exporter_targets.append({
+                'url': build_url(host=addr, port=port).lstrip('/'),
+                'hostname': dd.hostname
+            })
+
         # generate the prometheus configuration
         context = {
             'alertmgr_targets': alertmgr_targets,
             'mgr_scrape_list': mgr_scrape_list,
             'haproxy_targets': haproxy_targets,
+            'ceph_exporter_targets': ceph_exporter_targets,
             'nodes': nodes,
         }
         r: Dict[str, Any] = {
