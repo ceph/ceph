@@ -6159,58 +6159,19 @@ int RGWRados::Object::Read::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_
   return 0;
 }
 
-int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, const rgw_obj& obj_instance, BucketShard **pbs, std::function<int(BucketShard *)> call)
-{
-  RGWRados *store = target->get_store();
-  BucketShard *bs = nullptr;
-  int r;
-
-#define NUM_RESHARD_RETRIES 10
-  for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
-    int ret = get_bucket_shard(&bs, dpp);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to get BucketShard object. obj=" << 
-        obj_instance.key << ". ret=" << ret << dendl;
-      return ret;
-    }
-
-    r = call(bs);
-    if (r != -ERR_BUSY_RESHARDING) {
-      break;
-    }
-
-    ldpp_dout(dpp, 10) <<
-      "NOTICE: resharding operation on bucket index detected, blocking. obj=" << 
-      obj_instance.key << dendl;
-
-    r = store->block_while_resharding(bs, obj_instance, target->bucket_info, null_yield, dpp);
-    if (r == -ERR_BUSY_RESHARDING) {
-      ldpp_dout(dpp, 10) << __func__ <<
-	" NOTICE: block_while_resharding() still busy. obj=" <<
-        obj_instance.key << dendl;
-      continue;
-    } else if (r < 0) {
-      ldpp_dout(dpp, 0) << __func__ <<
-	" ERROR: block_while_resharding() failed. obj=" <<
-        obj_instance.key << ". ret=" << cpp_strerror(-r) << dendl;
-      return r;
-    }
-
-    ldpp_dout(dpp, 20) << "reshard completion identified. obj=" << obj_instance.key << dendl;
-    i = 0; /* resharding is finished, make sure we can retry */
-    invalidate_bs();
-  } // for loop
-
+int RGWRados::Bucket::UpdateIndex::guard_reshard(
+    const DoutPrefixProvider* dpp, const rgw_obj& obj_instance,
+    BucketShard** pbs, std::function<int(BucketShard*)> call) {
+  RGWRados* store = target->get_store();
+  int r =
+      store->guard_reshard(dpp, &bs, obj_instance, target->bucket_info, call);
   if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket shard callback failed. obj=" << 
-      obj_instance.key << ". ret=" << cpp_strerror(-r) << dendl;
     return r;
   }
-
+  invalidate_bs();
   if (pbs) {
-    *pbs = bs;
+    *pbs = &bs;
   }
-
   return 0;
 }
 
@@ -6791,7 +6752,7 @@ int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
   rgw_obj obj;
   const rgw_obj *pobj = &obj_instance;
   int r;
-
+#define NUM_RESHARD_RETRIES 10
   for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
     r = bs->init(pobj->bucket, *pobj, nullptr /* no RGWBucketInfo */, dpp);
     if (r < 0) {
@@ -6821,7 +6782,8 @@ int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
       return r;
     }
 
-    ldpp_dout(dpp, 20) << "reshard completion identified" << dendl;
+    ldpp_dout(dpp, 20) << "reshard completion identified. obj="
+                       << obj_instance.key << dendl;
     i = 0; /* resharding is finished, make sure we can retry */
   } // for loop
 
