@@ -41,25 +41,23 @@ auto proxy_method_on_core(
 }
 
 /**
- * sharded_map_seq
+ * reactor_map_seq
  *
- * Invokes f on each shard of t sequentially.  Caller may assume that
+ * Invokes f on each reactor sequentially, Caller may assume that
  * f will not be invoked concurrently on multiple cores.
  */
-template <typename T, typename F>
-auto sharded_map_seq(T &t, F &&f) {
-  using ret_type = decltype(f(t.local()));
-  // seastar::smp::submit_to because sharded::invoke_on doesn't have
-  // a const overload.
+template <typename F>
+auto reactor_map_seq(F &&f) {
+  using ret_type = decltype(f());
   if constexpr (is_errorated_future_v<ret_type>) {
     auto ret = crimson::do_for_each(
       seastar::smp::all_cpus().begin(),
       seastar::smp::all_cpus().end(),
-      [&t, f=std::move(f)](auto core) mutable {
+      [f=std::move(f)](auto core) mutable {
 	return seastar::smp::submit_to(
 	  core,
-	  [&t, &f] {
-	    return std::invoke(f, t.local());
+	  [&f] {
+	    return std::invoke(f);
 	  });
       });
     return ret_type(ret);
@@ -67,14 +65,28 @@ auto sharded_map_seq(T &t, F &&f) {
     return seastar::do_for_each(
       seastar::smp::all_cpus().begin(),
       seastar::smp::all_cpus().end(),
-      [&t, f=std::move(f)](auto core) mutable {
+      [f=std::move(f)](auto core) mutable {
 	return seastar::smp::submit_to(
 	  core,
-	  [&t, &f] {
-	    return std::invoke(f, t.local());
+	  [&f] {
+	    return std::invoke(f);
 	  });
       });
   }
+}
+
+/**
+ * sharded_map_seq
+ *
+ * Invokes f on each shard of t sequentially.  Caller may assume that
+ * f will not be invoked concurrently on multiple cores.
+ */
+template <typename T, typename F>
+auto sharded_map_seq(T &t, F &&f) {
+  return reactor_map_seq(
+    [&t, f=std::forward<F>(f)]() mutable {
+      return std::invoke(f, t.local());
+    });
 }
 
 }
