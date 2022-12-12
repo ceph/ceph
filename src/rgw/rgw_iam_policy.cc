@@ -21,25 +21,18 @@ namespace {
 constexpr int dout_subsys = ceph_subsys_rgw;
 }
 
-using std::bitset;
 using std::dec;
-using std::find;
 using std::hex;
 using std::int64_t;
-using std::move;
-using std::pair;
 using std::size_t;
 using std::string;
 using std::stringstream;
 using std::ostream;
 using std::uint16_t;
 using std::uint64_t;
-using std::unordered_map;
 
 using boost::container::flat_set;
 using std::regex;
-using std::regex_constants::ECMAScript;
-using std::regex_constants::optimize;
 using std::regex_match;
 using std::smatch;
 
@@ -50,7 +43,6 @@ using rapidjson::Reader;
 using rapidjson::kParseCommentsFlag;
 using rapidjson::kParseNumbersAsStringsFlag;
 using rapidjson::StringStream;
-using rapidjson::ParseResult;
 
 using rgw::auth::Principal;
 
@@ -165,10 +157,10 @@ static const actpair actpairs[] =
 
 struct PolicyParser;
 
-const Keyword top[1]{"<Top>", TokenKind::pseudo, TokenID::Top, 0, false,
-    false};
-const Keyword cond_key[1]{"<Condition Key>", TokenKind::cond_key,
-    TokenID::CondKey, 0, true, false};
+const Keyword top[1]{{"<Top>", TokenKind::pseudo, TokenID::Top, 0, false,
+			false}};
+const Keyword cond_key[1]{{"<Condition Key>", TokenKind::cond_key,
+			     TokenID::CondKey, 0, true, false}};
 
 struct ParseState {
   PolicyParser* pp;
@@ -442,15 +434,13 @@ bool ParseState::key(const char* s, size_t l) {
 // which will make all of this ever so much nicer.
 static boost::optional<Principal> parse_principal(CephContext* cct, TokenID t,
 						  string&& s) {
-  // Wildcard!
   if ((t == TokenID::AWS) && (s == "*")) {
+    // Wildcard!
     return Principal::wildcard();
-
-    // Do nothing for now.
   } else if (t == TokenID::CanonicalUser) {
-
-  }  // AWS and Federated ARNs
-   else if (t == TokenID::AWS || t == TokenID::Federated) {
+    // Do nothing for now.
+  } else if (t == TokenID::AWS || t == TokenID::Federated) {
+    // AWS and Federated ARNs
     if (auto a = ARN::parse(s)) {
       if (a->resource == "root") {
 	return Principal::tenant(std::move(a->account));
