@@ -38,3 +38,12 @@ scrape_configs:
       tls_config:
         ca_file: root_cert.pem
 {% endif %}
+
+{% if ceph_exporter_sd_url %}
+  - job_name: 'ceph-exporter'
+    honor_labels: true
+    http_sd_configs:
+    - url: {{ ceph_exporter_sd_url }}
+      tls_config:
+        ca_file: root_cert.pem
+{% endif %}
