@@ -3118,7 +3118,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     cerr << "WARNING: pool copy does not preserve user_version, which some "
-	 << "    apps may rely on." << std::endl;
+	 << "apps may rely on." << std::endl;
 
     if (rados.get_pool_is_selfmanaged_snaps_mode(src_pool)) {
       cerr << "WARNING: pool " << src_pool << " has selfmanaged snaps, which are not preserved\n"
