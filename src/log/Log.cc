@@ -71,6 +71,7 @@ Log::~Log()
 
 void Log::_configure_stderr()
 {
+#ifndef _WIN32
   struct stat info;
   if (int rc = fstat(m_fd_stderr, &info); rc == -1) {
     std::cerr << "failed to stat stderr: " << cpp_strerror(errno) << std::endl;
@@ -81,6 +82,8 @@ void Log::_configure_stderr()
     /* Set O_NONBLOCK on FIFO stderr file. We want to ensure atomic debug log
      * writes so they do not get partially read by e.g. buggy container
      * runtimes. See also IEEE Std 1003.1-2017 and Log::_log_stderr below.
+     *
+     * This isn't required on Windows.
      */
     int flags = fcntl(m_fd_stderr, F_GETFL);
     if (flags == -1) {
@@ -97,6 +100,7 @@ void Log::_configure_stderr()
     }
     do_stderr_poll = true;
   }
+#endif // !_WIN32
 }
 
 
