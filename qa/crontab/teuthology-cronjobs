@@ -131,6 +131,8 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 23 14 * * 5 CEPH_BRANCH=quincy; MACHINE_NAME=smithi; SUITE_NAME=upgrade:pacific-x; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 10 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 70 --force-priority
 
 
+35 01 * * 7  CEPH_BRANCH=quincy; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s   upgrade/quincy-p2p -k distro -e $CEPH_QA_EMAIL
+
 
 ### upgrade runs for reef release
 ###### on smithi
