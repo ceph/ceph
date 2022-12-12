@@ -576,7 +576,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 
   string marker;
   string next_marker;
-  bool truncated;
+  bool truncated = false;
   IoCtx *ctx = new IoCtx;
   do {
     int max = 100;
