@@ -85,7 +85,7 @@ def get_radosgw_endpoint():
     port = [i for i in x if ':' in i][0].split(':')[1]
     log.info('radosgw port: %s' % port)
     proto = "http"
-    hostname = 'localhost'
+    hostname = '127.0.0.1'
 
     if port == '443':
         proto = "https"
