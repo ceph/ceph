@@ -94,7 +94,7 @@ void RGWOp_Usage_Delete::execute(optional_yield y) {
   RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
 
   if (rgw::sal::User::empty(user.get()) &&
-      !bucket_name.empty() &&
+      bucket_name.empty() &&
       !start &&
       end == (uint64_t)-1) {
     bool remove_all;
