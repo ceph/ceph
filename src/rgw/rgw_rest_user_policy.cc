@@ -162,7 +162,8 @@ void RGWPutUserPolicy::execute(optional_yield y)
     ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
     op_ret = -EIO;
   } catch (rgw::IAM::PolicyParseException& e) {
-    ldpp_dout(this, 20) << "failed to parse policy: " << e.what() << dendl;
+    ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;
+    s->err.message = e.what();
     op_ret = -ERR_MALFORMED_DOC;
   }
 
