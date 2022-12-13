@@ -274,4 +274,13 @@ monitoring:
   - src/pybind/mgr/dashboard/ci/check_grafana_dashboards.py
   - src/pybind/mgr/prometheus/**
   - monitoring/**  
-  
+ 
+telemetry:
+  - doc/mgr/telemetry.rst
+  - qa/suites/upgrade/telemetry-upgrade/**
+  - qa/workunits/test_telemetry_pacific.sh
+  - qa/workunits/test_telemetry_pacific_x.sh
+  - qa/workunits/test_telemetry_quincy.sh
+  - qa/workunits/test_telemetry_quincy_x.sh
+  - src/pybind/mgr/telemetry/**
+  - src/telemetry/**
