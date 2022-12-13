@@ -108,7 +108,7 @@ function(do_build_boost root_dir version)
     "using ${toolset}"
     " : "
     " : ${CMAKE_CXX_COMPILER}"
-    " : <compileflags>-fPIC <compileflags>-w"
+    " : <compileflags>-fPIC <compileflags>-w <compileflags>-Wno-everything"
     " ;\n")
   if(with_python_version)
     find_package(Python3 ${with_python_version} QUIET REQUIRED
