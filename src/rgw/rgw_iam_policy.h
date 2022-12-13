@@ -18,6 +18,10 @@
 #include <boost/thread/shared_mutex.hpp>
 #include <boost/variant.hpp>
 
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include <fmt/format.h>
+
 #include "common/ceph_time.h"
 #include "common/iso_8601.h"
 
@@ -496,11 +500,19 @@ std::ostream& operator <<(std::ostream& m, const Statement& s);
 
 struct PolicyParseException : public std::exception {
   rapidjson::ParseResult pr;
+  std::string msg;
 
-  explicit PolicyParseException(rapidjson::ParseResult&& pr)
-    : pr(pr) { }
+  explicit PolicyParseException(const rapidjson::ParseResult pr,
+				const std::string& annotation)
+    : pr(pr),
+      msg(fmt::format("At character offset {}, {}",
+		      pr.Offset(),
+		      (pr.Code() == rapidjson::kParseErrorTermination ?
+		       annotation :
+		       rapidjson::GetParseError_En(pr.Code())))) {}
+
   const char* what() const noexcept override {
-    return rapidjson::GetParseError_En(pr.Code());
+    return msg.c_str();
   }
 };
 
