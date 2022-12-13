@@ -871,7 +871,7 @@ constexpr auto PLACEMENT_HINT_NULL = placement_hint_t::NUM_HINTS;
 
 std::ostream& operator<<(std::ostream& out, placement_hint_t h);
 
-enum class alignas(4) device_type_t : uint_fast8_t {
+enum class device_type_t : uint8_t {
   NONE = 0,
   HDD,
   SSD,

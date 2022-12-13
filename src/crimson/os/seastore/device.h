@@ -14,7 +14,7 @@ namespace crimson::os::seastore {
 
 using magic_t = uint64_t;
 
-struct device_spec_t{
+struct device_spec_t {
   magic_t magic = 0;
   device_type_t dtype = device_type_t::NONE;
   device_id_t id = DEVICE_ID_NULL;
@@ -25,7 +25,7 @@ struct device_spec_t{
     denc(v.id, p);
     DENC_FINISH(p);
   }
-};
+} __attribute__ ((packed));
 
 std::ostream& operator<<(std::ostream&, const device_spec_t&);
 
