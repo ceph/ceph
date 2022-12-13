@@ -246,16 +246,19 @@ class CherryPyConfig(object):
         resp_head = cherrypy.response.headers
 
         # Always set response headers necessary for 'simple' CORS.
-        req_header_origin_url = req_head.get('Access-Control-Allow-Origin')
+        req_header_cross_origin_url = req_head.get('Access-Control-Allow-Origin')
         cross_origin_urls = mgr.get_localized_module_option('cross_origin_url', '')
         cross_origin_url_list = [url.strip() for url in cross_origin_urls.split(',')]
-        if req_header_origin_url in cross_origin_url_list:
-            resp_head['Access-Control-Allow-Origin'] = req_header_origin_url
+        if req_header_cross_origin_url in cross_origin_url_list:
+            resp_head['Access-Control-Allow-Origin'] = req_header_cross_origin_url
         resp_head['Access-Control-Expose-Headers'] = 'GET, POST'
         resp_head['Access-Control-Allow-Credentials'] = 'true'
 
         # Non-simple CORS preflight request; short-circuit the normal handler.
         if cherrypy.request.method == 'OPTIONS':
+            req_header_origin_url = req_head.get('Origin')
+            if req_header_origin_url in cross_origin_url_list:
+                resp_head['Access-Control-Allow-Origin'] = req_header_origin_url
             ac_method = req_head.get('Access-Control-Request-Method', None)
 
             allowed_methods = ['GET', 'POST']
