@@ -226,12 +226,6 @@ void ExtentPlacementManager::set_primary_device(Device *device)
 {
   ceph_assert(primary_device == nullptr);
   primary_device = device;
-  if (device->get_backend_type() == backend_type_t::SEGMENTED) {
-    prefer_ool = false;
-  } else {
-    ceph_assert(device->get_backend_type() == backend_type_t::RANDOM_BLOCK);
-    prefer_ool = true;
-  }
   ceph_assert(devices_by_id[device->get_device_id()] == device);
 }
 
