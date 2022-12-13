@@ -32,10 +32,6 @@
 #include "rgw_lc_tier.h"
 #include "rgw_notify.h"
 
-// this seems safe to use, at least for now--arguably, we should
-// prefer header-only fmt, in general
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include "fmt/format.h"
 
 #include "services/svc_sys_obj.h"
