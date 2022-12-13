@@ -2212,7 +2212,6 @@ void CInode::decode_lock_state(int type, const bufferlist& bl)
   auto p = bl.cbegin();
 
   DECODE_START(1, p);
-  utime_t tm;
 
   snapid_t newfirst;
   using ceph::decode;
