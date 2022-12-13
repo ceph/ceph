@@ -450,13 +450,13 @@ seastar::future<> IOHandler::do_out_dispatch()
         e.code() != std::errc::connection_reset &&
         e.code() != error::negotiation_failure) {
       logger().error("{} do_out_dispatch(): unexpected error at {} -- {}",
-                     conn, io_state, e);
+                     conn, io_state, e.what());
       ceph_abort();
     }
 
     if (io_state == io_state_t::open) {
       logger().info("{} do_out_dispatch(): fault at {}, going to delay -- {}",
-                    conn, io_state, e);
+                    conn, io_state, e.what());
       std::exception_ptr eptr;
       try {
         throw e;
@@ -467,7 +467,7 @@ seastar::future<> IOHandler::do_out_dispatch()
       handshake_listener->notify_out_fault("do_out_dispatch", eptr);
     } else {
       logger().info("{} do_out_dispatch(): fault at {} -- {}",
-                    conn, io_state, e);
+                    conn, io_state, e.what());
     }
 
     return do_out_dispatch();
