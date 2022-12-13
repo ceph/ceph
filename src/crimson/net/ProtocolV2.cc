@@ -1527,9 +1527,15 @@ void ProtocolV2::execute_accepting()
            default:
             ceph_abort("impossible next step");
           }
-        }).handle_exception([this] (std::exception_ptr eptr) {
+        }).handle_exception([this](std::exception_ptr eptr) {
+          const char *e_what;
+          try {
+            std::rethrow_exception(eptr);
+          } catch (std::exception &e) {
+            e_what = e.what();
+          }
           logger().info("{} execute_accepting(): fault at {}, going to CLOSING -- {}",
-                        conn, get_state_name(state), eptr);
+                        conn, get_state_name(state), e_what);
           do_close(false);
         });
     });
@@ -1834,9 +1840,15 @@ void ProtocolV2::execute_wait(bool max_backoff)
       }
       logger().info("{} execute_wait(): going to CONNECTING", conn);
       execute_connecting();
-    }).handle_exception([this] (std::exception_ptr eptr) {
+    }).handle_exception([this](std::exception_ptr eptr) {
+      const char *e_what;
+      try {
+        std::rethrow_exception(eptr);
+      } catch (std::exception &e) {
+        e_what = e.what();
+      }
       logger().info("{} execute_wait(): protocol aborted at {} -- {}",
-                    conn, get_state_name(state), eptr);
+                    conn, get_state_name(state), e_what);
       assert(state == state_t::REPLACING ||
              state == state_t::CLOSING);
     });
@@ -1854,9 +1866,15 @@ void ProtocolV2::execute_server_wait()
     ).then([this](auto bl) {
       logger().warn("{} SERVER_WAIT got read, abort", conn);
       abort_in_fault();
-    }).handle_exception([this] (std::exception_ptr eptr) {
+    }).handle_exception([this](std::exception_ptr eptr) {
+      const char *e_what;
+      try {
+        std::rethrow_exception(eptr);
+      } catch (std::exception &e) {
+        e_what = e.what();
+      }
       logger().info("{} execute_server_wait(): fault at {}, going to CLOSING -- {}",
-                    conn, get_state_name(state), eptr);
+                    conn, get_state_name(state), e_what);
       do_close(false);
     });
   });
