@@ -2399,6 +2399,230 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
   return true;
 }
 
+// Checks if two Blobs can be joined together.
+// The important (unchecked) condition is that both Blobs belong to the same object.
+// Verifies if 'other' Blob can be deleted but its content moved to 'this' Blob.
+// Requirements:
+// 1) checksums: same type and size
+// 2) tracker: same au size
+// 3) extents: must be disjointed
+// 4) unused: must not be present
+//
+// Returns:
+// false - Blobs are incompatible
+// true - Blobs can be merged
+//
+// Returned blob_width is a distance between 'other' Blob's blob_start() and last logical_offset
+// that can refer to 'other' Blob extents. It is used to limit iteration on ExtentMap.
+bool BlueStore::Blob::can_merge_blob(const Blob* other, uint32_t& blob_width) const
+{
+  const Blob* x = other;
+  const Blob* y = this;
+  // checksums
+  const bluestore_blob_t& xb = x->get_blob();
+  const bluestore_blob_t& yb = y->get_blob();
+  if (xb.has_csum() != yb.has_csum()) return false;
+  if (xb.has_csum()) {
+    if (xb.csum_type != yb.csum_type) return false;
+    if (xb.csum_chunk_order != yb.csum_chunk_order) return false;
+  }
+  // trackers
+  const bluestore_blob_use_tracker_t& xtr = x->get_blob_use_tracker();
+  const bluestore_blob_use_tracker_t& ytr = y->get_blob_use_tracker();
+  if (xtr.au_size != ytr.au_size) return false;
+  // unused
+  if (xb.has_unused() || yb.has_unused()) return false;
+  // extents
+  // the success is when there is no offset that is used by both blobs
+  auto skip_empty = [&](const PExtentVector& list, PExtentVector::const_iterator& it, uint32_t& pos) {
+    while (it != list.end() && !it->is_valid()) {
+      pos += it->length;
+      ++it;
+    }
+  };
+  bool can_merge = true;
+  const PExtentVector& xe = x->get_blob().get_extents();
+  const PExtentVector& ye = y->get_blob().get_extents();
+  PExtentVector::const_iterator xi = xe.begin();
+  PExtentVector::const_iterator yi = ye.begin();
+  uint32_t xp = 0;
+  uint32_t yp = 0;
+
+  skip_empty(xe, xi, xp);
+  skip_empty(ye, yi, yp);
+
+  while (xi != xe.end() && yi != ye.end()) {
+    if (xp <= yp) {
+      if (yp < xp + xi->length) {
+	// collision
+	can_merge = false;
+	break;
+      }
+      xp += xi->length;
+      ++xi;
+      skip_empty(xe, xi, xp);
+    } else {
+      if (xp < yp + yi->length) {
+	// collision
+	can_merge = false;
+	break;
+      }
+      yp += yi->length;
+      ++yi;
+      skip_empty(ye, yi, yp);
+    }
+  }
+  if (can_merge) {
+    // scan remaining extents in x
+    while (xi != xe.end()) {
+      xp += xi->length;
+      ++xi;
+    }
+    blob_width = xp;
+  }  return can_merge;
+}
+
+// Merges 2 blobs together. Move extents, csum, tracker from src to dst.
+void BlueStore::Blob::merge_blob(Blob* src)
+{
+  Blob* dst = this;
+  const bluestore_blob_t& src_blob = src->get_blob();
+  bluestore_blob_t& dst_blob = dst->dirty_blob();
+
+  ceph_assert(src_blob.has_csum() == dst_blob.has_csum());
+  ceph_assert(!src_blob.has_csum() || src_blob.csum_type == dst_blob.csum_type);
+  ceph_assert(src_blob.csum_chunk_order == dst_blob.csum_chunk_order);
+
+  const PExtentVector& src_extents = src_blob.get_extents();
+  const PExtentVector& dst_extents = dst_blob.get_extents();
+  PExtentVector tmp_extents;
+  tmp_extents.reserve(src_extents.size() + dst_extents.size());
+  constexpr uint32_t end_pos = std::numeric_limits<uint32_t>::max();
+
+  uint32_t csum_chunk_order = src_blob.csum_chunk_order;
+  uint32_t csum_value_size;
+  const char* src_csum_ptr;
+  char* dst_csum_ptr;
+  if (src_blob.has_csum()) {
+    csum_value_size = src_blob.get_csum_value_size();
+    if (src_blob.csum_data.length() > dst_blob.csum_data.length()) {
+      buffer::ptr t(src_blob.csum_data.length());
+      memcpy(t.c_str(), dst_blob.csum_data.c_str(), dst_blob.csum_data.length());
+      std::swap(t, dst_blob.csum_data);
+    }
+    src_csum_ptr = src_blob.csum_data.c_str();
+    dst_csum_ptr = dst_blob.csum_data.c_str();
+  }
+  const bluestore_blob_use_tracker_t& src_tracker = src->get_blob_use_tracker();
+  bluestore_blob_use_tracker_t& dst_tracker = dst->dirty_blob_use_tracker();
+  ceph_assert(src_tracker.au_size == dst_tracker.au_size);
+  uint32_t tracker_au_size = src_tracker.au_size;
+  if (src_tracker.get_num_au() > dst_tracker.get_num_au()) {
+    dst_tracker.add_tail(src_tracker.get_num_au() * dst_tracker.au_size, dst_tracker.au_size);
+  }
+  const uint32_t* src_tracker_aus = src_tracker.get_au_array();
+  uint32_t* dst_tracker_aus = dst_tracker.dirty_au_array();
+
+  auto skip_empty = [&](const PExtentVector& list, PExtentVector::const_iterator& it, uint32_t& pos) {
+    while (it != list.end()) {
+      if (it->is_valid()) {
+	return;
+      }
+      pos += it->length;
+      ++it;
+    }
+    pos = end_pos;
+    return;
+  };
+
+  auto move_data = [&](uint32_t pos, uint32_t len) {
+    if (src_blob.has_csum()) {
+      // copy csum
+      ceph_assert((pos % (1 << csum_chunk_order)) == 0);
+      ceph_assert((len % (1 << csum_chunk_order)) == 0);
+      uint32_t start = p2align(pos, uint32_t(1 << csum_chunk_order));
+      uint32_t end = p2roundup(pos + len, uint32_t(1 << csum_chunk_order));
+      uint32_t item_no = start >> csum_chunk_order;
+      uint32_t item_cnt = (end - start) >> csum_chunk_order;
+      ceph_assert(dst_blob.csum_data.length() >= (item_no + item_cnt) * csum_value_size);
+      memcpy(dst_csum_ptr + item_no * csum_value_size,
+	     src_csum_ptr + item_no * csum_value_size,
+	     item_cnt * csum_value_size);
+    }
+    uint32_t start = p2align(pos, tracker_au_size) / tracker_au_size;
+    uint32_t end = p2roundup(pos + len, tracker_au_size) / tracker_au_size;
+    for (uint32_t i = start; i < end; i++) {
+      ceph_assert(i < dst_tracker.get_num_au());
+      dst_tracker_aus[i] += src_tracker_aus[i];
+    }
+  };
+
+  // Main loop creates new PExtentVector by merging src and dst PExtentVectors.
+  // It will replace dst's PExtentVector.
+  // When we process extent from dst, csum and tracer data is already in place.
+  // When we process extent from src, we need to copy csum and tracer to dst.
+
+  uint32_t src_pos = 0; //offset of next non-empty extent
+  uint32_t dst_pos = 0;
+  uint32_t pos = 0; //already processed amount
+  auto src_it = src_extents.begin(); // iterator to next non-empty extent
+  auto dst_it = dst_extents.begin();
+
+  skip_empty(src_extents, src_it, src_pos);
+  skip_empty(dst_extents, dst_it, dst_pos);
+  while (src_it != src_extents.end() || dst_it != dst_extents.end()) {
+    if (src_pos > pos) {
+      if (dst_pos > pos) {
+	// empty space
+	uint32_t m = std::min(src_pos - pos, dst_pos - pos);
+	// emit empty
+	tmp_extents.emplace_back(bluestore_pextent_t::INVALID_OFFSET, m);
+	//src_pos -= m;
+	//dst_pos -= m;
+	pos += m;
+      } else {
+	// copy from dst, src must not have conflicting extent
+	ceph_assert(src_pos >= dst_pos + dst_it->length);
+	// use extent from destination
+	tmp_extents.push_back(*dst_it);
+	dst_pos += dst_it->length;
+	pos = dst_pos;
+	++dst_it;
+	skip_empty(dst_extents, dst_it, dst_pos);
+      }
+    } else {
+      // copy from src, dst must not have conflicting extent
+      ceph_assert(dst_pos >= src_pos + src_it->length);
+      // use extent from source
+      tmp_extents.push_back(*src_it);
+      // copy blob data
+      move_data(src_pos, src_it->length);
+      src_pos += src_it->length;
+      pos = src_pos;
+      ++src_it;
+      skip_empty(src_extents, src_it, src_pos);
+    }
+  }
+  // now apply freshly merged tmp_extents into dst blob
+  dst_blob.dirty_extents().swap(tmp_extents);
+
+  // move BufferSpace buffers
+  while(!src->bc.buffer_map.empty()) {
+    auto buf = src->bc.buffer_map.extract(src->bc.buffer_map.cbegin());
+    dst->bc.buffer_map.insert(std::move(buf));
+  }
+  // move BufferSpace writing
+  auto wrt_dst_it = dst->bc.writing.begin();
+  while(!src->bc.writing.empty()) {
+    Buffer& buf = src->bc.writing.front();
+    src->bc.writing.pop_front();
+    while (wrt_dst_it != dst->bc.writing.end() && wrt_dst_it->seq < buf.seq) {
+      ++wrt_dst_it;
+    }
+    dst->bc.writing.insert(wrt_dst_it, buf);
+  }
+}
+
 void BlueStore::Blob::finish_write(uint64_t seq)
 {
   while (true) {
@@ -2551,18 +2775,49 @@ void BlueStore::ExtentMap::scan_shared_blobs_segmented(
 }
 
 BlueStore::Blob* BlueStore::ExtentMap::find_best_companion(
-  uint64_t logical_offset, segment_map_t& segment_map, uint64_t segment_size) {
-  uint32_t segment_id = logical_offset / segment_size;
-  segment_t& segment = segment_map[segment_id];
-  Blob* b = nullptr;
-  uint64_t max = 0;
-  for (auto i : segment) {
-    if (i.second > max) {
-      b = i.first;
+  Blob* blob_to_dissolve, uint32_t blob_start, uint32_t& blob_width,
+  segment_map_t& segment_map, uint64_t segment_size)
+{
+  dout(30) << __func__ << std::hex << " blob_start=0x" << blob_start << std::dec << dendl;
+  Blob* result = nullptr;
+  for (auto it = candidates.find(blob_start);
+       it != candidates.end() && it->first == blob_start;
+       ++it) {
+    dout(30) << __func__ << " trying " << it->second << dendl;
+    if (it->second->can_merge_blob(blob_to_dissolve, blob_width)) {
+      dout(20) << __func__ << " merging " << blob_to_dissolve << " to " << it->second << dendl;
+      result = it->second;
+      break;
     }
   }
-  return b;
+  return nullptr;
 }
+
+void BlueStore::ExtentMap::reblob_extents(uint32_t blob_start, uint32_t blob_end,
+					  BlobRef from_blob, BlobRef to_blob)
+{
+  auto prev = extent_map.end();
+  for (auto ep = seek_lextent(blob_start); ep != extent_map.end();) {
+    auto& e = *ep;
+    if (e.logical_offset > blob_end) break;
+    if (e.blob == from_blob) {
+      e.blob = to_blob;
+    }
+    if (prev != extent_map.end()) {
+      if (prev->blob == e.blob &&
+	  prev->blob_offset + prev->length == e.blob_offset &&
+	  prev->logical_offset + prev->length == e.logical_offset) {
+	prev->length += e.length;
+	ep = extent_map.erase(ep);
+	// prev still the same
+	continue;
+      }
+    }
+    prev = ep;
+    ++ep;
+  }
+}
+
 
 // Convert blobs in selected range to shared blobs.
 void BlueStore::ExtentMap::make_range_shared(
@@ -2575,47 +2830,82 @@ void BlueStore::ExtentMap::make_range_shared(
   segment_map_t segment_map;
   uint64_t segment_size = store->max_blob_size;
   scan_shared_blobs_segmented(c, oldo, srcoff, length, segment_map, segment_size);
+  // ^ also scan regular blobs to
+  // 1) find blob_start
+  // 2) make sure all extents have the same blob_start
 
   bool src_dirty = false;
   for (auto ep = oldo->extent_map.seek_lextent(srcoff);
-    ep != oldo->extent_map.extent_map.end();
-    ++ep) {
+    ep != oldo->extent_map.extent_map.end(); ) {
     auto& e = *ep;
     if (e.logical_offset >= end) {
       break;
     }
-    dout(20) << __func__ << "  src " << e << dendl;
+    dout(20) << __func__ << " src " << e << dendl;
     const bluestore_blob_t& blob = e.blob->get_blob();
     // make sure it is shared
     if (!blob.is_shared()) {
+      if (!src_dirty) {
+	src_dirty = true;
+	dirty_range_begin = e.logical_offset;
+      }
+
       // first try to find a shared blob nearby
       // that can accomodate extra extents
+      uint32_t blob_width; //to signal when extents end
+      dout(20) << __func__ << std::hex
+	       << " e.blob_start=" << e.blob_start()
+	       << " e.logical_offset=" << e.logical_offset
+	       << " segment_size=" << segment_size
+	       << std::dec << dendl;
       Blob* b = blob.is_compressed() ? nullptr :
-	find_best_companion(e.logical_offset, segment_map, segment_size);
+	find_best_companion(e.blob.get(), e.blob_start(), blob_width,
+			    segment_map, segment_size);
       if (b) {
-	// overwrite previous (empty) shared blob
-	// vv almost like make_blob_shared
-	bluestore_blob_t& blob = e.blob->dirty_blob();
-	blob.set_flag(bluestore_blob_t::FLAG_SHARED);
-	e.blob->shared_blob = b->shared_blob;
+	dout(20) << __func__ << " merging to: " << *b << dendl;
+	b->merge_blob(e.blob.get());
 	for (auto p : blob.get_extents()) {
 	  if (p.is_valid()) {
 	    b->shared_blob->get_ref(p.offset, p.length);
 	  }
 	}
+	
+	for (auto& i : extent_map) {
+	  dout(20) << " pre " << i << dendl;
+	}
+	// reblob extents might erase e
+	// uint32_t blob_start = e.blob_start();
+	uint32_t logical_offset = e.logical_offset;
+	dirty_range_end = e.blob_start() + blob_width;
+	reblob_extents(e.blob_start(), e.blob_start() + blob_width,
+		       e.blob, b);
+	for (auto& i : extent_map) {
+	  dout(20) << " post " << i << dendl;
+	}
+	dout(20) << __func__ << " merged: " << *b << dendl;
+	ep = oldo->extent_map.seek_lextent(logical_offset);
       } else {
 	// no candidate, has to convert to shared
 	c->make_blob_shared(store->_assign_blobid(txc), e.blob);
+	ceph_assert(e.logical_end() > 0);
+	// -1 to exclude next potential shard
+	dirty_range_end = e.logical_end() - 1;
+	++ep;
       }
+#if 0
       if (!src_dirty) {
 	src_dirty = true;
 	dirty_range_begin = e.logical_offset;
       }
+#endif
+#if 0
       ceph_assert(e.logical_end() > 0);
       // -1 to exclude next potential shard
       dirty_range_end = e.logical_end() - 1;
+#endif
     } else {
       c->load_shared_blob(e.blob->shared_blob);
+      ++ep;
     }
   }
   if (src_dirty) {
