@@ -199,16 +199,9 @@ SnapTrimObjSubEvent::remove_or_update_iertr::future<>
 SnapTrimObjSubEvent::start()
 {
   logger().debug("{}: start", *this);
-
-  IRef ref = this;
-  auto maybe_delay = seastar::now();
-  if (auto delay = 0; delay) {
-    maybe_delay = seastar::sleep(
-      std::chrono::milliseconds(std::lround(delay * 1000)));
-  }
-  return maybe_delay.then([this] {
-    return with_pg(pg->get_shard_services(), pg);
-  }).finally([ref=std::move(ref), this] {
+  return with_pg(
+    pg->get_shard_services(), pg
+  ).finally([ref=IRef{this}, this] {
     logger().debug("{}: complete", *ref);
     return handle.complete();
   });
