@@ -8132,8 +8132,9 @@ void RGWPutBucketPolicy::execute(optional_yield y)
 	return op_ret;
       });
   } catch (rgw::IAM::PolicyParseException& e) {
-    ldpp_dout(this, 20) << "failed to parse policy: " << e.what() << dendl;
+    ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;
     op_ret = -EINVAL;
+    s->err.message = e.what();
   }
 }
 
