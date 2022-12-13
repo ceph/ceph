@@ -25,6 +25,46 @@ if (Request.CopyFrom ~= nil) then
   }
 end
 
+local bucket = {}
+if (Request.Bucket ~= nil) then
+  bucket = {
+    Tenant = Request.Bucket.Tenant,
+    Name = Request.Bucket.Name,
+    Marker = Request.Bucket.Marker,
+    Id = Request.Bucket.Id,
+    Count = Request.Bucket.Count,
+    Size = Request.Bucket.Size,
+    ZoneGroupId = Request.Bucket.ZoneGroupId,
+    CreationTime = Request.Bucket.CreationTime,
+    MTime = Request.Bucket.MTime,
+    Quota = {
+      MaxSize = Request.Bucket.Quota.MaxSize,
+      MaxObjects = Request.Bucket.Quota.MaxObjects,
+      Enabled = Request.Bucket.Quota.Enabled,
+      Rounded = Request.Bucket.Quota.Rounded
+    },
+    PlacementRule = {
+      Name = Request.Bucket.PlacementRule.Name,
+      StorageClass = Request.Bucket.PlacementRule.StorageClass
+    },
+    User = {
+      Tenant = Request.Bucket.User.Tenant,
+      Id = Request.Bucket.User.Id
+    }
+  }
+end
+
+local object = {}
+if (Request.Object ~= nil) then
+  object = {
+    Name = Request.Object.Name,
+    Instance = Request.Object.Instance,
+    Id = Request.Object.Id,
+    Size = Request.Object.Size,
+    MTime = Request.Object.MTime
+  }
+end
+
 local res, status = client:index{
   index = "rgw",
   type = "Request",
@@ -42,38 +82,8 @@ local res, status = client:index{
       Message = Request.Response.Message
     },
     SwiftAccountName = Request.SwiftAccountName,
-    Bucket = {
-      Tenant = Request.Bucket.Tenant,
-      Name = Request.Bucket.Name,
-      Marker = Request.Bucket.Marker,
-      Id = Request.Bucket.Id,
-      Count = Request.Bucket.Count,
-      Size = Request.Bucket.Size,
-      ZoneGroupId = Request.Bucket.ZoneGroupId,
-      CreationTime = Request.Bucket.CreationTime,
-      MTime = Request.Bucket.MTime,
-      Quota = {
-        MaxSize = Request.Bucket.Quota.MaxSize,
-        MaxObjects = Request.Bucket.Quota.MaxObjects,
-        Enabled = Request.Bucket.Quota.Enabled,
-        Rounded = Request.Bucket.Quota.Rounded
-      },
-      PlacementRule = {
-        Name = Request.Bucket.PlacementRule.Name,
-        StorageClass = Request.Bucket.PlacementRule.StorageClass
-      },
-      User = {
-        Tenant = Request.Bucket.User.Tenant,
-        Id = Request.Bucket.User.Id
-      }
-    },
-    Object = {
-      Name = Request.Object.Name,
-      Instance = Request.Object.Instance,
-      Id = Request.Object.Id,
-      Size = Request.Object.Size,
-      MTime = Request.Object.MTime
-    },
+    Bucket = bucket,
+    Object = object,
     CopyFrom = copyfrom,
     ObjectOwner = {
       DisplayName = Request.ObjectOwner.DisplayName,
