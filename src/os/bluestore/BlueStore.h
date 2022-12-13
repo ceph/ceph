@@ -620,6 +620,9 @@ public:
     const bluestore_blob_use_tracker_t& get_blob_use_tracker() const {
       return used_in_blob;
     }
+    bluestore_blob_use_tracker_t& dirty_blob_use_tracker() {
+      return used_in_blob;
+    }
     bool is_referenced() const {
       return used_in_blob.is_not_empty();
     }
@@ -638,6 +641,9 @@ public:
              used_in_blob.can_split() &&
              get_blob().can_split();
     }
+
+    bool can_merge_blob(const Blob* other, uint32_t& blob_end) const;
+    void merge_blob(Blob* other);
 
     bool can_split_at(uint32_t blob_offset) const {
       return used_in_blob.can_split_at(blob_offset) &&
@@ -884,10 +890,13 @@ public:
     using segment_map_t = std::map<uint64_t /*segment id*/, segment_t>;
     void scan_shared_blobs_segmented(CollectionRef& c, OnodeRef& oldo, uint64_t start, uint64_t length,
 				     segment_map_t& segment_map, uint64_t segment_size);
-    Blob* find_best_companion(uint64_t logical_offset,
+    Blob* find_best_companion(Blob* blob_to_dissolve, uint32_t blob_start, uint32_t& blob_width,
 			      segment_map_t& segment_map, uint64_t segment_size);
     void make_range_shared(BlueStore* store, TransContext* txc, CollectionRef& c,
 			   OnodeRef& oldo, uint64_t srcoff, uint64_t length);
+    void reblob_extents(uint32_t blob_start, uint32_t blob_end,
+			BlobRef from_blob, BlobRef to_blob);
+
     void dup(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
       uint64_t&, uint64_t&, uint64_t&);
 
@@ -1475,6 +1484,7 @@ private:
     OnodeCacheShard *cache;
 
   private:
+  public:
     /// forward lookups
     mempool::bluestore_cache_meta::unordered_map<ghobject_t,OnodeRef> onode_map;
 
