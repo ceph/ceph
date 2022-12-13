@@ -13,7 +13,8 @@ ceph telemetry preview-all
 
 # Assert that new collections are available
 COLLECTIONS=$(ceph telemetry collection ls)
-NEW_COLLECTIONS=("perf_perf" "basic_mds_metadata" "basic_pool_usage" "basic_rook_v01" "perf_memory_metrics")
+NEW_COLLECTIONS=("perf_perf" "basic_mds_metadata" "basic_pool_usage"
+                 "basic_rook_v01" "perf_memory_metrics" "basic_pool_options_bluestore")
 for col in ${NEW_COLLECTIONS[@]}; do
     if ! [[ $COLLECTIONS == *$col* ]];
     then
