@@ -183,17 +183,18 @@ List all collections with::
 
   ceph telemetry collection ls
 
-  NAME                  STATUS                                               DESC
-  basic_base            REPORTING                                            Basic information about the cluster (capacity, number and type of daemons, version, etc.)
-  basic_mds_metadata    NOT REPORTING: NOT OPTED-IN                          MDS metadata
-  basic_pool_usage      NOT REPORTING: NOT OPTED-IN                          Default pool application and usage statistics
-  basic_usage_by_class  NOT REPORTING: NOT OPTED-IN                          Default device class usage statistics
-  crash_base            REPORTING                                            Information about daemon crashes (daemon type and version, backtrace, etc.)
-  device_base           REPORTING                                            Information about device health metrics
-  ident_base            NOT REPORTING: CHANNEL ident IS OFF                  User-provided identifying information about the cluster
-  perf_memory_metrics   NOT REPORTING: NOT OPTED-IN, CHANNEL perf IS OFF     Heap stats and mempools for mon and mds
-  perf_perf             NOT REPORTING: NOT OPTED-IN, CHANNEL perf IS OFF     Information about performance counters of the cluster
-
+  NAME                            STATUS                                               DESC
+  basic_base                      NOT REPORTING: NOT OPTED-IN                          Basic information about the cluster (capacity, number and type of daemons, version, etc.)
+  basic_mds_metadata              NOT REPORTING: NOT OPTED-IN                          MDS metadata
+  basic_pool_options_bluestore    NOT REPORTING: NOT OPTED-IN                          Per-pool bluestore config options
+  basic_pool_usage                NOT REPORTING: NOT OPTED-IN                          Default pool application and usage statistics
+  basic_rook_v01                  NOT REPORTING: NOT OPTED-IN                          Basic Rook deployment data
+  basic_usage_by_class            NOT REPORTING: NOT OPTED-IN                          Default device class usage statistics
+  crash_base                      NOT REPORTING: NOT OPTED-IN                          Information about daemon crashes (daemon type and version, backtrace, etc.)
+  device_base                     NOT REPORTING: NOT OPTED-IN                          Information about device health metrics
+  ident_base                      NOT REPORTING: NOT OPTED-IN, CHANNEL ident IS OFF    User-provided identifying information about the cluster
+  perf_memory_metrics             NOT REPORTING: NOT OPTED-IN, CHANNEL perf IS OFF     Heap stats and mempools for mon and mds
+  perf_perf                       NOT REPORTING: NOT OPTED-IN, CHANNEL perf IS OFF     Information about performance counters of the cluster
 
 Where:
 

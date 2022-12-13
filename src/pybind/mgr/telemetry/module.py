@@ -70,6 +70,7 @@ class Collection(str, enum.Enum):
     basic_usage_by_class = 'basic_usage_by_class'
     basic_rook_v01 = 'basic_rook_v01'
     perf_memory_metrics = 'perf_memory_metrics'
+    basic_pool_options_bluestore = 'basic_pool_options_bluestore'
 
 MODULE_COLLECTION : List[Dict] = [
     {
@@ -130,6 +131,12 @@ MODULE_COLLECTION : List[Dict] = [
         "name": Collection.perf_memory_metrics,
         "description": "Heap stats and mempools for mon and mds",
         "channel": "perf",
+        "nag": False
+    },
+    {
+        "name": Collection.basic_pool_options_bluestore,
+        "description": "Per-pool bluestore config options",
+        "channel": "basic",
         "nag": False
     },
 ]
@@ -1086,7 +1093,17 @@ class Module(MgrModule):
                                             'wr': pool_stats['wr'],
                                             'wr_bytes': pool_stats['wr_bytes']
                         }
-
+                    pool_data['options'] = {}
+                    # basic_pool_options_bluestore collection
+                    if self.is_enabled_collection(Collection.basic_pool_options_bluestore):
+                        bluestore_options = ['compression_algorithm',
+                                             'compression_mode',
+                                             'compression_required_ratio',
+                                             'compression_min_blob_size',
+                                             'compression_max_blob_size']
+                        for option in bluestore_options:
+                            if option in pool['options']:
+                                pool_data['options'][option] = pool['options'][option]
                 cast(List[Dict[str, Any]], report['pools']).append(pool_data)
                 if 'rbd' in pool['application_metadata']:
                     rbd_num_pools += 1
