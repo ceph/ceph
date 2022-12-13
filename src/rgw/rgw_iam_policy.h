@@ -523,8 +523,14 @@ struct Policy {
 
   std::vector<Statement> statements;
 
+  // reject_invalid_principals should be set to
+  // `cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals")`
+  // when executing operations that *set* a bucket policy, but should
+  // be false when reading a stored bucket policy so as not to break
+  // backwards configuration.
   Policy(CephContext* cct, const std::string& tenant,
-	 const bufferlist& text);
+	 const bufferlist& text,
+	 bool reject_invalid_principals);
 
   Effect eval(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida,

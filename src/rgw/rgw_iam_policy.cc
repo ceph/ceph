@@ -178,6 +178,8 @@ struct ParseState {
 
   void annotate(std::string&& a);
 
+  boost::optional<Principal> parse_principal(string&& s, string* errmsg);
+
   ParseState(PolicyParser* pp, const Keyword* w)
     : pp(pp), w(w) {}
 
@@ -210,6 +212,8 @@ struct PolicyParser : public BaseReaderHandler<UTF8<>, PolicyParser> {
   const string& tenant;
   Policy& policy;
   uint32_t v = 0;
+
+  const bool reject_invalid_principals;
 
   uint32_t seen = 0;
 
@@ -313,8 +317,10 @@ struct PolicyParser : public BaseReaderHandler<UTF8<>, PolicyParser> {
     v = 0;
   }
 
-  PolicyParser(CephContext* cct, const string& tenant, Policy& policy)
-    : cct(cct), tenant(tenant), policy(policy) {}
+  PolicyParser(CephContext* cct, const string& tenant, Policy& policy,
+	       bool reject_invalid_principals)
+    : cct(cct), tenant(tenant), policy(policy),
+      reject_invalid_principals(reject_invalid_principals) {}
   PolicyParser(const PolicyParser& policy) = delete;
 
   bool StartObject() {
@@ -457,14 +463,17 @@ bool ParseState::key(const char* s, size_t l) {
 
 // I should just rewrite a few helper functions to use iterators,
 // which will make all of this ever so much nicer.
-static boost::optional<Principal> parse_principal(CephContext* cct, TokenID t,
-						  string&& s) {
-  if ((t == TokenID::AWS) && (s == "*")) {
+boost::optional<Principal> ParseState::parse_principal(string&& s,
+						       string* errmsg) {
+  if ((w->id == TokenID::AWS) && (s == "*")) {
     // Wildcard!
     return Principal::wildcard();
-  } else if (t == TokenID::CanonicalUser) {
+  } else if (w->id == TokenID::CanonicalUser) {
     // Do nothing for now.
-  } else if (t == TokenID::AWS || t == TokenID::Federated) {
+    if (errmsg)
+      *errmsg = "RGW does not support canonical users.";
+    return boost::none;
+  } else if (w->id == TokenID::AWS || w->id == TokenID::Federated) {
     // AWS and Federated ARNs
     if (auto a = ARN::parse(s)) {
       if (a->resource == "root") {
@@ -494,20 +503,31 @@ static boost::optional<Principal> parse_principal(CephContext* cct, TokenID t,
 	  return Principal::assumed_role(std::move(a->account), match[2]);
 	}
       }
-    } else {
-      if (std::none_of(s.begin(), s.end(),
+    } else if (std::none_of(s.begin(), s.end(),
 		       [](const char& c) {
 			 return (c == ':') || (c == '/');
 		       })) {
-	// Since tenants are simply prefixes, there's no really good
-	// way to see if one exists or not. So we return the thing and
-	// let them try to match against it.
-	return Principal::tenant(std::move(s));
-      }
+      // Since tenants are simply prefixes, there's no really good
+      // way to see if one exists or not. So we return the thing and
+      // let them try to match against it.
+      return Principal::tenant(std::move(s));
     }
+    if (errmsg)
+      *errmsg =
+	fmt::format(
+	  "`{}` is not a supported AWS or Federated ARN. Supported ARNs are "
+	  "forms like: "
+	  "`arn:aws:iam::tenant:root` or a bare tenant name for a tenant, "
+	  "`arn:aws:iam::tenant:role/role-name` for a role, "
+	  "`arn:aws:sts::tenant:assumed-role/role-name/role-session-name` "
+	  "for an assumed role, "
+	  "`arn:aws:iam::tenant:user/user-name` for a user, "
+	  "`arn:aws:iam::tenant:oidc-provider/idp-url` for OIDC.", s);
   }
 
-  ldout(cct, 0) << "Supplied principal is discarded: " << s << dendl;
+  if (errmsg)
+    *errmsg = fmt::format("RGW does not support principals of type `{}`.",
+			  w->name);
   return boost::none;
 }
 
@@ -634,8 +654,15 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
     auto& pri = pp->s[pp->s.size() - 2].w->id == TokenID::Principal ?
       t->princ : t->noprinc;
 
-    if (auto o = parse_principal(pp->cct, w->id, string(s, l))) {
+    string errmsg;
+    if (auto o = parse_principal({s, l}, &errmsg)) {
       pri.emplace(std::move(*o));
+    } else if (pp->reject_invalid_principals) {
+      annotate(std::move(errmsg));
+      return false;
+    } else {
+      ldout(cct, 0) << "Ignored principle `" << std::string_view{s, l} << "`: "
+		    << errmsg << dendl;
     }
   } else {
     // Failure
@@ -1524,10 +1551,11 @@ ostream& operator <<(ostream& m, const Statement& s) {
 }
 
 Policy::Policy(CephContext* cct, const string& tenant,
-	       const bufferlist& _text)
+	       const bufferlist& _text,
+	       bool reject_invalid_principals)
   : text(_text.to_str()) {
   StringStream ss(text.data());
-  PolicyParser pp(cct, tenant, *this);
+  PolicyParser pp(cct, tenant, *this, reject_invalid_principals);
   auto pr = Reader{}.Parse<kParseNumbersAsStringsFlag |
 			   kParseCommentsFlag>(ss, pp);
   if (!pr) {

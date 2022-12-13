@@ -6785,7 +6785,10 @@ int main(int argc, const char **argv)
       }
       bufferlist bl = bufferlist::static_from_string(assume_role_doc);
       try {
-        const rgw::IAM::Policy p(g_ceph_context, tenant, bl);
+        const rgw::IAM::Policy p(
+	  g_ceph_context, tenant, bl,
+	  g_ceph_context->_conf.get_val<bool>(
+	    "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
         cerr << "failed to parse policy: " << e.what() << std::endl;
         return -EINVAL;
@@ -6840,7 +6843,9 @@ int main(int argc, const char **argv)
 
       bufferlist bl = bufferlist::static_from_string(assume_role_doc);
       try {
-        const rgw::IAM::Policy p(g_ceph_context, tenant, bl);
+        const rgw::IAM::Policy p(g_ceph_context, tenant, bl,
+				 g_ceph_context->_conf.get_val<bool>(
+				   "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
         cerr << "failed to parse policy: " << e.what() << std::endl;
         return -EINVAL;
@@ -6898,7 +6903,9 @@ int main(int argc, const char **argv)
         bl = bufferlist::static_from_string(perm_policy_doc);
       }
       try {
-        const rgw::IAM::Policy p(g_ceph_context, tenant, bl);
+        const rgw::IAM::Policy p(g_ceph_context, tenant, bl,
+				 g_ceph_context->_conf.get_val<bool>(
+				   "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
         cerr << "failed to parse perm policy: " << e.what() << std::endl;
         return -EINVAL;
