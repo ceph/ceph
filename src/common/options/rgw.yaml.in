@@ -3701,3 +3701,14 @@ options:
   default: tank
   services:
   - rgw
+- name: rgw_policy_reject_invalid_principals
+  type: bool
+  level: basic
+  desc: Whether to reject policies with invalid principals
+  long_desc: If true, policies with invalid principals will be
+    rejected. We don't support Canonical User identifiers or some
+    other form of policies that Amazon does, so if you are mirroring
+    policies between RGW and AWS, you may wish to set this to false.
+  default: true
+  services:
+  - rgw
