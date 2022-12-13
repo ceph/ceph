@@ -308,6 +308,12 @@
                 Amazon S3 RESTful API and the OpenStack Swift API. Also called
                 "RADOS Gateway" and "Ceph Object Gateway".
 
+        secrets
+                Secrets are credentials used to perform digital authentication
+                whenever privileged users must access systems that require
+                authentication. Secrets can be passwords, API keys, tokens, SSH
+                keys, private certificates, or encryption keys.
+
         SDS
                 Software-defined storage.
 
