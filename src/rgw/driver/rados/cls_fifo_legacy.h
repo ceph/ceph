@@ -25,8 +25,6 @@
 #include <string_view>
 #include <vector>
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
 
 #include "include/rados/librados.hpp"

@@ -14,8 +14,6 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/system/error_code.hpp>
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
 
 #include "include/rados/librados.hpp"
