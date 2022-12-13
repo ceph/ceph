@@ -54,14 +54,15 @@ private:
   struct SubOpBlocker : crimson::BlockerT<SubOpBlocker> {
     static constexpr const char* type_name = "CompoundOpBlocker";
 
-    using id_done_t = std::pair<crimson::Operation::id_t, seastar::future<>>;
+    using id_done_t = std::pair<crimson::Operation::id_t,
+                                interruptible_future<>>;
 
     void dump_detail(Formatter *f) const final;
 
     template <class... Args>
     void emplace_back(Args&&... args);
 
-    seastar::future<> wait_completion();
+    interruptible_future<> wait_completion();
   private:
     std::vector<id_done_t> subops;
   } subop_blocker;
@@ -106,6 +107,12 @@ public:
 // cannot revisite a pipeline's stage it already saw.
 class SnapTrimObjSubEvent : public PhasedOperationT<SnapTrimObjSubEvent> {
 public:
+  using remove_or_update_ertr =
+    crimson::errorator<crimson::ct_error::enoent>;
+  using remove_or_update_iertr =
+    crimson::interruptible::interruptible_errorator<
+      IOInterruptCondition, remove_or_update_ertr>;
+
   static constexpr OperationTypeCode type =
     OperationTypeCode::snaptrimobj_subevent;
 
@@ -120,20 +127,14 @@ public:
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
-  seastar::future<> start();
-  seastar::future<> with_pg(
+  remove_or_update_iertr::future<> start();
+  remove_or_update_iertr::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
 
   CommonPGPipeline& pp();
 
 private:
   object_stat_sum_t delta_stats;
-
-  using remove_or_update_ertr =
-    crimson::errorator<crimson::ct_error::enoent>;
-  using remove_or_update_iertr =
-    crimson::interruptible::interruptible_errorator<
-      IOInterruptCondition, remove_or_update_ertr>;
 
   remove_or_update_iertr::future<> remove_clone(
     ObjectContextRef obc,
