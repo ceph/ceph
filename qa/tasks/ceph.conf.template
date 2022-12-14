@@ -55,8 +55,9 @@
 	osd debug shutdown = true
         osd debug op order = true
         osd debug verify stray on activate = true
+        osd debug trim objects = true
 
-	osd open classes on start = true
+        osd open classes on start = true
         osd debug pg log writeout = true
 
 	osd deep scrub update digest min age = 30
