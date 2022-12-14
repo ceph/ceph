@@ -322,8 +322,8 @@ BuildRequires:  libpmem-devel
 BuildRequires:  libpmemobj-devel >= 1.8
 %endif
 %if 0%{with system_arrow}
-BuildRequires:  arrow-devel
-BuildRequires:  parquet-devel
+BuildRequires:  libarrow-devel
+BuildRequires:  parquet-libs-devel
 %endif
 %if 0%{with system_utf8proc}
 BuildRequires:  utf8proc-devel
