@@ -24,8 +24,10 @@
 #include "common/ceph_context.h"
 #include "global/global_init.h"
 #include "rgw_auth.h"
+#include "rgw_auth_registry.h"
 #include "rgw_iam_policy.h"
 #include "rgw_op.h"
+#include "rgw_process_env.h"
 #include "rgw_sal_rados.h"
 
 
@@ -906,13 +908,14 @@ TEST_F(IPPolicyTest, asNetworkInvalid) {
 }
 
 TEST_F(IPPolicyTest, IPEnvironment) {
+  RGWProcessEnv penv;
   // Unfortunately RGWCivetWeb is too tightly tied to civetweb to test RGWCivetWeb::init_env.
   RGWEnv rgw_env;
   rgw::sal::RadosStore store;
   std::unique_ptr<rgw::sal::User> user = store.get_user(rgw_user());
   rgw_env.set("REMOTE_ADDR", "192.168.1.1");
   rgw_env.set("HTTP_HOST", "1.2.3.4");
-  req_state rgw_req_state(cct.get(), &rgw_env, 0);
+  req_state rgw_req_state(cct.get(), penv, &rgw_env, 0);
   rgw_req_state.set_user(user);
   rgw_build_iam_environment(&store, &rgw_req_state);
   auto ip = rgw_req_state.env.find("aws:SourceIp");

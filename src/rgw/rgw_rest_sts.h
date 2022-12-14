@@ -85,7 +85,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::TokenExtractor,
                         public rgw::auth::WebIdentityApplier::Factory {
   rgw::sal::Driver* driver;
-  ImplicitTenants& implicit_tenant_context;
+  const ImplicitTenants& implicit_tenant_context;
 
   /* The engine. */
   const WebTokenEngine web_token_engine;
@@ -111,7 +111,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
 public:
   DefaultStrategy(CephContext* const cct,
-                  ImplicitTenants& implicit_tenant_context,
+                  const ImplicitTenants& implicit_tenant_context,
                   rgw::sal::Driver* driver)
     : driver(driver),
       implicit_tenant_context(implicit_tenant_context),

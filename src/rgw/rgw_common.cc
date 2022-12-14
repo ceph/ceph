@@ -269,8 +269,9 @@ void req_info::rebuild_from(req_info& src)
 }
 
 
-req_state::req_state(CephContext* _cct, RGWEnv* e, uint64_t id)
-  : cct(_cct), info(_cct, e), id(id)
+req_state::req_state(CephContext* _cct, const RGWProcessEnv& penv,
+                     RGWEnv* e, uint64_t id)
+  : cct(_cct), penv(penv), info(_cct, e), id(id)
 {
   enable_ops_log = e->get_enable_ops_log();
   enable_usage_log = e->get_enable_usage_log();
