@@ -421,9 +421,8 @@ int FIFO::apply_update(const DoutPrefixProvider *dpp,
 	       << " version mismatch, canceling: tid=" << tid << dendl;
     return -ECANCELED;
   }
-  info->apply_update(update);
-  ++info->version.ver;
 
+  info->apply_update(update);
   return {};
 }
 
