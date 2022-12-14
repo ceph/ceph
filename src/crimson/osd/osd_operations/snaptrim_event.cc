@@ -1,8 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <ranges>
-
 #include "crimson/osd/osd_operations/snaptrim_event.h"
 #include "crimson/osd/ops_executer.h"
 #include "crimson/osd/pg.h"
@@ -35,8 +33,8 @@ void SnapTrimEvent::SubOpBlocker::dump_detail(Formatter *f) const
 {
   f->open_array_section("dependent_operations");
   {
-    for (const auto &i : subops | std::views::keys) {
-      f->dump_unsigned("op_id", i);
+    for (const auto &kv : subops) {
+      f->dump_unsigned("op_id", kv.first);
     }
   }
   f->close_section();
