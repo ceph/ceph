@@ -31,7 +31,7 @@ POSIX semantics for various reasons:
   writes are not coherently propagated to other clients' caches.  That
   is, if a page is cached on host A, and then updated on host B, host
   A's page is not coherently invalidated.  (Shared writable mmap
-  appears to be quite rare--we have yet to here any complaints about this
+  appears to be quite rare--we have yet to hear any complaints about this
   behavior, and implementing cache coherency properly is complex.)
 - CephFS clients present a hidden ``.snap`` directory that is used to
   access, create, delete, and rename snapshots.  Although the virtual
