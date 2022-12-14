@@ -25,7 +25,7 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
-    CEPH_ARGS+="--debug-bluestore 20 "
+    CEPH_ARGS+="--debug-mclock 20 "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
@@ -190,9 +190,77 @@ function TEST_profile_custom_to_builtin() {
     teardown $dir || return 1
 }
 
-main test-mclock-profile-switch "$@"
+function TEST_recovery_limit_adjustment_mclock() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+
+    run_osd $dir 0 --osd_op_queue=mclock_scheduler || return 1
+    local recoveries=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+        config get osd_recovery_max_active)
+    # Get default value
+    echo "$recoveries" | grep --quiet 'osd_recovery_max_active' || return 1
+
+    # Change the recovery limit without setting
+    # osd_mclock_override_recovery_settings option. Verify that the recovery
+    # limit is retained at its default value.
+    ceph config set osd.0 osd_recovery_max_active 10 || return 1
+    sleep 2 # Allow time for change to take effect
+    local max_recoveries=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+        config get osd_recovery_max_active)
+    test "$max_recoveries" = "$recoveries" || return 1
+
+    # Change recovery limit after setting osd_mclock_override_recovery_settings.
+    # Verify that the recovery limit is modified.
+    ceph config set osd.0 osd_mclock_override_recovery_settings true || return 1
+    ceph config set osd.0 osd_recovery_max_active 10 || return 1
+    sleep 2 # Allow time for change to take effect
+    max_recoveries=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+        config get osd_recovery_max_active)
+    test "$max_recoveries" = '{"osd_recovery_max_active":"10"}' || return 1
+
+    teardown $dir || return 1
+}
+
+function TEST_backfill_limit_adjustment_mclock() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+
+    run_osd $dir 0 --osd_op_queue=mclock_scheduler || return 1
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+        config get osd_max_backfills)
+    # Get default value
+    echo "$backfills" | grep --quiet 'osd_max_backfills' || return 1
+
+    # Change the backfill limit without setting
+    # osd_mclock_override_recovery_settings option. Verify that the backfill
+    # limit is retained at its default value.
+    ceph config set osd.0 osd_max_backfills 20 || return 1
+    sleep 2 # Allow time for change to take effect
+    local max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+        config get osd_max_backfills)
+    test "$max_backfills" = "$backfills" || return 1
+
+    # Change backfills limit after setting osd_mclock_override_recovery_settings.
+    # Verify that the backfills limit is modified.
+    ceph config set osd.0 osd_mclock_override_recovery_settings true || return 1
+    ceph config set osd.0 osd_max_backfills 20 || return 1
+    sleep 2 # Allow time for change to take effect
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+        config get osd_max_backfills)
+    test "$max_backfills" =  '{"osd_max_backfills":"20"}' || return 1
+
+    teardown $dir || return 1
+}
+
+main mclock-config "$@"
 
 # Local Variables:
 # compile-command: "cd build ; make -j4 && \
-#   ../qa/run-standalone.sh test-mclock-profile-switch.sh"
+#   ../qa/run-standalone.sh mclock-config.sh"
 # End:
