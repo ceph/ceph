@@ -3149,6 +3149,28 @@ options:
   - rgw_dynamic_resharding
   - rgw_max_objs_per_shard
   min: 1
+- name: rgw_resharding_multiplier
+  type: uint
+  level: dev
+  default: 2
+  min: 1
+  fmt_desc: multiplication factor for scaling up shard counts
+  services:
+  - rgw
+  see_also:
+  - rgw_dynamic_resharding
+  - rgw_max_objs_per_shard
+- name: rgw_resharding_multiplier_multisite
+  type: uint
+  level: dev
+  default: 8
+  min: 1
+  fmt_desc: multiplication factor for scaling up shard counts in multisite
+  services:
+  - rgw
+  see_also:
+  - rgw_dynamic_resharding
+  - rgw_max_objs_per_shard
 - name: rgw_reshard_thread_interval
   type: uint
   level: advanced

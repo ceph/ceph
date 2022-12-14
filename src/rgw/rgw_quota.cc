@@ -967,17 +967,18 @@ public:
                            bool& need_resharding, uint32_t *suggested_num_shards) override
   {
     if (num_objs > num_shards * max_objs_per_shard) {
-      ldpp_dout(dpp, 0) << __func__ << ": resharding needed: stats.num_objects=" << num_objs
-             << " shard max_objects=" <<  max_objs_per_shard * num_shards << dendl;
       need_resharding = true;
       if (suggested_num_shards) {
-        uint32_t obj_multiplier = 2;
+        uint64_t obj_multiplier = driver->ctx()->_conf.get_val<uint64_t>("rgw_resharding_multiplier");
         if (is_multisite) {
           // if we're maintaining bilogs for multisite, reshards are significantly
           // more expensive. scale up the shard count much faster to minimize the
           // number of reshard events during a write workload
-          obj_multiplier = 8;
+          obj_multiplier = driver->ctx()->_conf.get_val<uint64_t>("rgw_resharding_multiplier_multisite");
         }
+        ldpp_dout(dpp, 0) << __func__ << ": resharding needed: stats.num_objects=" << num_objs
+                << " shard max_objects=" <<  max_objs_per_shard * num_shards
+                << " obj_multiplier=" << obj_multiplier << dendl;
         *suggested_num_shards = num_objs * obj_multiplier / max_objs_per_shard;
       }
     } else {
