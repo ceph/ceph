@@ -194,6 +194,11 @@ options:
     load on busy clusters.
   default: false
   with_legacy: true
+- name: osd_debug_trim_objects
+  type: bool
+  level: advanced
+  desc: Asserts that no clone-objects were added to a snap after we start trimming it
+  default: false
 - name: osd_repair_during_recovery
   type: bool
   level: advanced
