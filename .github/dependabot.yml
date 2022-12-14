@@ -20,3 +20,74 @@ updates:
       prefix: ".github/workflows:"
     pull-request-branch-name:
       separator: "-"
+  
+  - package-ecosystem: "pip"
+    directory: "/src"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "pip"
+    pull-request-branch-name:
+      separator: "-"
+    open-pull-requests-limit: 20
+
+  - package-ecosystem: "pip"
+    directory: "/monitoring"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "pip"
+    pull-request-branch-name:
+      separator: "-"
+    open-pull-requests-limit: 20
+
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "maven"
+    pull-request-branch-name:
+      separator: "-"
+    open-pull-requests-limit: 20
+  
+  - package-ecosystem: "docker"
+    directory: "src/cephadm/containers/keepalived"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "docker"
+    pull-request-branch-name:
+      separator: "-"
+    open-pull-requests-limit: 20
+
+  - package-ecosystem: "docker"
+    directory: "src/script/kubejacker"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "docker"
+    pull-request-branch-name:
+      separator: "-"
+    open-pull-requests-limit: 20
+
+  - package-ecosystem: "docker"
+    directory: "src/test/debian-strech"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "docker"
+    pull-request-branch-name:
+      separator: "-"
+    open-pull-requests-limit: 20
+
+  - package-ecosystem: "docker"
+    directory: "/src/cephadm/box"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "docker"
+    pull-request-branch-name:
+      separator: "-"
+    open-pull-requests-limit: 20
+  
