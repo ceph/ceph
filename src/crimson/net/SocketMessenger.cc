@@ -43,7 +43,7 @@ SocketMessenger::SocketMessenger(const entity_name_t& myname,
 
 SocketMessenger::~SocketMessenger()
 {
-  logger().debug("{}: {}", __func__, logic_name);
+  logger().debug("~SocketMessenger: {}", logic_name);
   ceph_assert(!listener);
 }
 

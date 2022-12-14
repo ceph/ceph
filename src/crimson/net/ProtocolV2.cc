@@ -460,7 +460,7 @@ ProtocolV2::banner_exchange(bool is_connect)
       //5. read peer HelloFrame
       return frame_assembler->read_main_preamble();
     }).then([this](auto ret) {
-      expect_tag(Tag::HELLO, ret.tag, conn, __func__);
+      expect_tag(Tag::HELLO, ret.tag, conn, "read_hello_frame");
       return frame_assembler->read_frame_payload();
     }).then([this](auto payload) {
       // 6. process peer HelloFrame
@@ -544,7 +544,7 @@ seastar::future<> ProtocolV2::handle_auth_reply()
           return finish_auth();
         });
       default: {
-        unexpected_tag(ret.tag, conn, __func__);
+        unexpected_tag(ret.tag, conn, "handle_auth_reply");
         return seastar::now();
       }
     }
@@ -959,7 +959,7 @@ seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, boo
     ).then([this] {
       return frame_assembler->read_main_preamble();
     }).then([this](auto ret) {
-      expect_tag(Tag::AUTH_REQUEST_MORE, ret.tag, conn, __func__);
+      expect_tag(Tag::AUTH_REQUEST_MORE, ret.tag, conn, "read_auth_request_more");
       return frame_assembler->read_frame_payload();
     }).then([this](auto payload) {
       auto auth_more = AuthRequestMoreFrame::Decode(payload->back());
@@ -984,7 +984,7 @@ seastar::future<> ProtocolV2::server_auth()
 {
   return frame_assembler->read_main_preamble(
   ).then([this](auto ret) {
-    expect_tag(Tag::AUTH_REQUEST, ret.tag, conn, __func__);
+    expect_tag(Tag::AUTH_REQUEST, ret.tag, conn, "read_auth_request");
     return frame_assembler->read_frame_payload();
   }).then([this](auto payload) {
     // handle_auth_request() logic
@@ -1280,7 +1280,7 @@ ProtocolV2::read_reconnect()
 {
   return frame_assembler->read_main_preamble(
   ).then([this](auto ret) {
-    expect_tag(Tag::SESSION_RECONNECT, ret.tag, conn, "read_reconnect");
+    expect_tag(Tag::SESSION_RECONNECT, ret.tag, conn, "read_session_reconnect");
     return server_reconnect();
   });
 }
