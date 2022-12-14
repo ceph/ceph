@@ -807,6 +807,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
     osd_op_params.clean_regions.mark_omap_dirty();
     // TODO: 3) Calculate clone_overlaps by following overlaps
     //          forward from rollback snapshot
+    //          https://tracker.ceph.com/issues/58263
     return rollback_iertr::now();
   }).safe_then_interruptible([] {
     logger().debug("PGBackend::rollback succefully");
