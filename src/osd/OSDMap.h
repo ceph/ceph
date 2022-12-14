@@ -404,7 +404,8 @@ public:
 
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t>> new_pg_upmap;
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<std::pair<int32_t,int32_t>>> new_pg_upmap_items;
-    mempool::osdmap::set<pg_t> old_pg_upmap, old_pg_upmap_items;
+    mempool::osdmap::map<pg_t, int32_t> new_pg_upmap_primary;
+    mempool::osdmap::set<pg_t> old_pg_upmap, old_pg_upmap_items, old_pg_upmap_primary;
     mempool::osdmap::map<int64_t, snap_interval_set_t> new_removed_snaps;
     mempool::osdmap::map<int64_t, snap_interval_set_t> new_purged_snaps;
 
@@ -575,6 +576,7 @@ private:
   // remap (post-CRUSH, pre-up)
   mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t>> pg_upmap; ///< remap pg
   mempool::osdmap::map<pg_t,mempool::osdmap::vector<std::pair<int32_t,int32_t>>> pg_upmap_items; ///< remap osds in up set
+  mempool::osdmap::map<pg_t, int32_t> pg_upmap_primaries; ///< remap primary of a pg
 
   mempool::osdmap::map<int64_t,pg_pool_t> pools;
   mempool::osdmap::map<int64_t,std::string> pool_name;
