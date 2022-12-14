@@ -956,6 +956,7 @@ using lextent_list_t = addr_extent_list_base_t<
 }
 
 #if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::lba_pin_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LBAPin> : fmt::ostream_formatter {};
