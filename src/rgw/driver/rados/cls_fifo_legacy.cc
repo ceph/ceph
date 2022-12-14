@@ -39,7 +39,8 @@ namespace fifo = rados::cls::fifo;
 
 using ceph::from_error_code;
 
-inline constexpr auto MAX_RACE_RETRIES = 10;
+inline constexpr auto MAX_RACE_RETRIES = 50;
+inline constexpr auto BACKOFF_EVERY = 10;
 
 void create_meta(lr::ObjectWriteOperation* op,
 		 std::string_view id,
@@ -651,6 +652,7 @@ int FIFO::process_journal(const DoutPrefixProvider *dpp, std::uint64_t tid, opti
   bool canceled = true;
 
   for (auto i = 0; canceled && i < MAX_RACE_RETRIES; ++i) {
+    maybe_backoff(dpp, tid, i);
     ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << " postprocessing: i=" << i << " tid=" << tid << dendl;
 
@@ -745,6 +747,7 @@ int FIFO::_prepare_new_part(const DoutPrefixProvider *dpp,
   int r = 0;
   bool canceled = true;
   for (auto i = 0; canceled && i < MAX_RACE_RETRIES; ++i) {
+    maybe_backoff(dpp, tid, i);
     canceled = false;
     ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << " updating metadata: i=" << i << " tid=" << tid << dendl;
@@ -831,6 +834,7 @@ int FIFO::_prepare_new_head(const DoutPrefixProvider *dpp,
   r = 0;
   bool canceled = true;
   for (auto i = 0; canceled && i < MAX_RACE_RETRIES; ++i) {
+    maybe_backoff(dpp, tid, i);
     canceled = false;
     ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << " updating metadata: i=" << i << " tid=" << tid << dendl;
@@ -924,6 +928,7 @@ struct NewPartPreparer : public Completion<NewPartPreparer> {
       }
       if (!found) {
 	++i;
+	f->maybe_backoff(dpp, tid, i);
 	f->_update_meta(dpp, fifo::update{}
 			.journal_entries_add(jentries),
                         version, &canceled, tid, call(std::move(p)));
@@ -1045,6 +1050,7 @@ struct NewHeadPreparer : public Completion<NewHeadPreparer> {
       }
       if (!found) {
 	++i;
+	f->maybe_backoff(dpp, tid, i);
 	fifo::journal_entry jentry;
 	jentry.op = set_head;
 	jentry.part_num = new_head_part_num;
@@ -1301,6 +1307,19 @@ void FIFO::read_meta(const DoutPrefixProvider *dpp, std::uint64_t tid, lr::AioCo
   assert(r >= 0);
 }
 
+void FIFO::maybe_backoff(const DoutPrefixProvider* dpp, std::uint64_t tid,
+			 int tries)
+{
+  if (tries > 0 && (tries % BACKOFF_EVERY == 0)) {
+    auto b = get_backoff();
+    ldpp_dout(dpp, 1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		      << " sleeping for " << b.count() << " milliseconds. "
+		      << "tries=" << tries << " tid=" << tid << dendl;
+
+    std::this_thread::sleep_for(b);
+  }
+}
+
 const fifo::info& FIFO::meta() const {
   return info;
 }
@@ -1363,6 +1382,7 @@ int FIFO::push(const DoutPrefixProvider *dpp, const std::vector<cb::list>& data_
   bool canceled = true;
   while ((!remaining.empty() || !batch.empty()) &&
 	 (retries <= MAX_RACE_RETRIES)) {
+    maybe_backoff(dpp, tid, retries);
     ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << " preparing push: remaining=" << remaining.size()
 		   << " batch=" << batch.size() << " retries=" << retries
@@ -1516,6 +1536,7 @@ struct Pusher : public Completion<Pusher> {
 
   void read_meta(const DoutPrefixProvider *dpp, Ptr&& p) {
     ++i;
+    f->maybe_backoff(dpp, tid, i);
     state = meta_reading;
     f->read_meta(dpp, tid, call(std::move(p)));
   }
@@ -1826,6 +1847,7 @@ int FIFO::trim(const DoutPrefixProvider *dpp, std::string_view markstr, bool exc
   while ((tail_part_num < part_num) &&
 	 canceled &&
 	 (retries <= MAX_RACE_RETRIES)) {
+    maybe_backoff(dpp, tid, retries);
     r = _update_meta(dpp, fifo::update{}.tail_part_num(part_num), objv, &canceled,
 		     tid, y);
     if (r < 0) {
@@ -1963,6 +1985,7 @@ struct Trimmer : public Completion<Trimmer> {
 	return;
       }
       ++retries;
+      fifo->maybe_backoff(dpp, tid, retries);
       fifo->_update_meta(dpp, fifo::update{}
 			 .tail_part_num(part_num), objv, &canceled,
                          tid, call(std::move(p)));
@@ -2266,6 +2289,7 @@ public:
 			   << race_retries << " tid=" << tid << dendl;
 
       ++race_retries;
+      fifo->maybe_backoff(dpp, tid, race_retries);
 
       std::vector<fifo::journal_entry> new_processed;
       std::unique_lock l(fifo->m);

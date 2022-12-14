@@ -17,6 +17,7 @@
 #define CEPH_RGW_CLS_FIFO_LEGACY_H
 
 #include <cstdint>
+#include <cstdlib>
 #include <deque>
 #include <map>
 #include <memory>
@@ -121,6 +122,17 @@ class FIFO {
 
   std::optional<marker> to_marker(std::string_view s);
 
+  unsigned int randseed = static_cast<int>(
+    (ceph::coarse_mono_clock::now().time_since_epoch().count()) +
+    getpid());
+
+  std::chrono::milliseconds get_backoff() {
+    std::unique_lock l(m);
+    auto b = rand_r(&randseed) % 100;
+    l.unlock();
+    return std::chrono::milliseconds(b);
+  }
+
   FIFO(lr::IoCtx&& ioc,
        std::string oid)
     : ioctx(std::move(ioc)), oid(oid) {}
@@ -160,6 +172,11 @@ class FIFO {
   int read_meta(const DoutPrefixProvider *dpp, std::uint64_t tid, optional_yield y);
   /// Force refresh of metadata, with a librados Completion
   void read_meta(const DoutPrefixProvider *dpp, std::uint64_t tid, lr::AioCompletion* c);
+  /// Sleep for a random number of milliseconds if we've been having
+  /// lots of retries
+  void maybe_backoff(const DoutPrefixProvider* dpp, std::uint64_t tid,
+		     int tries);
+
 
 public:
 
