@@ -49,6 +49,11 @@ namespace fifo = rados::cls::fifo;
 namespace s = spawn;
 namespace sc = std::chrono;
 
+#if FMT_VERSION >= 90000
+template<>
+struct fmt::formatter<bpo::options_description> : fmt::ostream_formatter {};
+#endif
+
 namespace {
 static constexpr auto PUSH = 0x01 << 0;
 static constexpr auto PULL = 0x01 << 1;

@@ -25,7 +25,9 @@
 #undef FMT_HEADER_ONLY
 #define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
-
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/types.h"
@@ -522,3 +524,10 @@ inline std::ostream& operator <<(std::ostream& m, const part_header& p) {
 	   << "max_time: " << p.max_time;
 }
 } // namespace rados::cls::fifo
+
+#if FMT_VERSION >= 90000
+template<>
+struct fmt::formatter<rados::cls::fifo::info> : fmt::ostream_formatter {};
+template<>
+struct fmt::formatter<rados::cls::fifo::part_header> : fmt::ostream_formatter {};
+#endif
