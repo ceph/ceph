@@ -589,7 +589,7 @@ RandomBlockOolWriter::do_write(
     assert(paddr.is_absolute());
     RandomBlockManager * rbm = rb_cleaner->get_rbm(paddr); 
     assert(rbm);
-    TRACE("extent {}, allocated addr {}", ex, paddr);
+    TRACE("extent {}, allocated addr {}", fmt::ptr(ex.get()), paddr);
     auto& stats = t.get_ool_write_stats();
     stats.extents.num += 1;
     stats.extents.bytes += ex->get_length();
