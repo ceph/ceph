@@ -181,6 +181,13 @@ public:
     MAX
   };
 
+  // for test
+  mount_ertr::future<> test_mount();
+  mkfs_ertr::future<> test_mkfs(uuid_d new_osd_fsid);
+  DeviceRef get_primary_device_ref() {
+    return std::move(device);
+  }
+
 private:
   struct internal_context_t {
     CollectionRef ch;
@@ -435,6 +442,7 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
   seastar::future<> write_fsid(uuid_d new_osd_fsid);
+  seastar::future<> _mkfs(uuid_d new_osd_fsid);
 };
 
 seastar::future<std::unique_ptr<SeaStore>> make_seastore(
