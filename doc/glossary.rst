@@ -214,6 +214,17 @@
                 A back end for OSD daemons, where a Journal is needed and files
                 are written to the filesystem.
 
+        FQDN
+                **F**\ully **Q**\ualified **D**\omain **N**\ame. A domain name
+                that is applied to a node in a network and that specifies the
+                node's exact location in the tree hierarchy of the DNS.
+
+                In the context of Ceph cluster administration, FQDNs are often
+                applied to hosts. In this documentation, the term "FQDN" is
+                used mostly to distinguish between FQDNs and relatively simpler
+                hostnames, which do not specify the exact location of the host
+                in the tree hierarchy of the DNS but merely name the host.
+
 	Host
                 Any single machine or server in a Ceph Cluster. See :term:`Ceph
                 Node`.
