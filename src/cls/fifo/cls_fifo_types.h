@@ -173,16 +173,16 @@ inline std::ostream& operator <<(std::ostream& m, const journal_entry& j) {
 // This is actually a useful builder, since otherwise we end up with
 // four uint64_ts in a row and only care about a subset at a time.
 class update {
-  std::optional<std::uint64_t> tail_part_num_;
-  std::optional<std::uint64_t> head_part_num_;
-  std::optional<std::uint64_t> min_push_part_num_;
-  std::optional<std::uint64_t> max_push_part_num_;
+  std::optional<std::int64_t> tail_part_num_;
+  std::optional<std::int64_t> head_part_num_;
+  std::optional<std::int64_t> min_push_part_num_;
+  std::optional<std::int64_t> max_push_part_num_;
   std::vector<fifo::journal_entry> journal_entries_add_;
   std::vector<fifo::journal_entry> journal_entries_rm_;
 
 public:
 
-  update&& tail_part_num(std::optional<std::uint64_t> num) noexcept {
+  update&& tail_part_num(std::optional<std::int64_t> num) noexcept {
     tail_part_num_ = num;
     return std::move(*this);
   }
@@ -190,7 +190,7 @@ public:
     return tail_part_num_;
   }
 
-  update&& head_part_num(std::optional<std::uint64_t> num) noexcept {
+  update&& head_part_num(std::optional<std::int64_t> num) noexcept {
     head_part_num_ = num;
     return std::move(*this);
   }
@@ -198,7 +198,7 @@ public:
     return head_part_num_;
   }
 
-  update&& min_push_part_num(std::optional<std::uint64_t> num)
+  update&& min_push_part_num(std::optional<std::int64_t> num)
     noexcept {
     min_push_part_num_ = num;
     return std::move(*this);
@@ -207,7 +207,7 @@ public:
     return min_push_part_num_;
   }
 
-  update&& max_push_part_num(std::optional<std::uint64_t> num) noexcept {
+  update&& max_push_part_num(std::optional<std::int64_t> num) noexcept {
     max_push_part_num_ = num;
     return std::move(*this);
   }
@@ -359,17 +359,23 @@ struct info {
     return fmt::format("{}.{}", oid_prefix, part_num);
   }
 
-  void apply_update(const update& update) {
-    if (update.tail_part_num()) {
+  bool apply_update(const update& update) {
+    bool changed = false;
+    if (update.tail_part_num() && (tail_part_num != *update.tail_part_num())) {
       tail_part_num = *update.tail_part_num();
+      changed = true;
     }
 
-    if (update.min_push_part_num()) {
+    if (update.min_push_part_num() &&
+	(min_push_part_num !=  *update.min_push_part_num())) {
       min_push_part_num = *update.min_push_part_num();
+      changed = true;
     }
 
-    if (update.max_push_part_num()) {
+    if (update.max_push_part_num() &&
+	(max_push_part_num != *update.max_push_part_num())) {
       max_push_part_num = *update.max_push_part_num();
+      changed = true;
     }
 
     for (const auto& entry : update.journal_entries_add()) {
@@ -379,16 +385,23 @@ struct info {
 	continue;
       } else {
 	journal.emplace(entry.part_num, entry);
+	changed = true;
       }
     }
 
     for (const auto& entry : update.journal_entries_rm()) {
       journal.erase(entry.part_num);
+      changed = true;
     }
 
-    if (update.head_part_num()) {
+    if (update.head_part_num() && (head_part_num != *update.head_part_num())) {
       head_part_num = *update.head_part_num();
+      changed = true;
     }
+    if (changed) {
+      ++version.ver;
+    }
+    return changed;
   }
 };
 WRITE_CLASS_ENCODER(info)
