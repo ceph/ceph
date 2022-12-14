@@ -342,15 +342,13 @@ class MirrorSnapshotScheduleHandler:
     def init_schedule_queue(self):
         self.queue = {}
         self.images = {}
+        self.schedules = Schedules(self)
         self.refresh_images()
         self.log.debug("MirrorSnapshotScheduleHandler: queue is initialized")
 
     def load_schedules(self):
         self.log.info("MirrorSnapshotScheduleHandler: load_schedules")
-
-        schedules = Schedules(self)
-        schedules.load(namespace_validator, image_validator)
-        self.schedules = schedules
+        self.schedules.load(namespace_validator, image_validator)
 
     def refresh_images(self):
         elapsed = (datetime.now() - self.last_refresh_images).total_seconds()

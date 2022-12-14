@@ -63,15 +63,13 @@ class TrashPurgeScheduleHandler:
     def init_schedule_queue(self):
         self.queue = {}
         self.pools = {}
+        self.schedules = Schedules(self)
         self.refresh_pools()
         self.log.debug("TrashPurgeScheduleHandler: queue is initialized")
 
     def load_schedules(self):
         self.log.info("TrashPurgeScheduleHandler: load_schedules")
-
-        schedules = Schedules(self)
-        schedules.load()
-        self.schedules = schedules
+        self.schedules.load()
 
     def refresh_pools(self):
         elapsed = (datetime.now() - self.last_refresh_pools).total_seconds()
