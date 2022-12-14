@@ -518,7 +518,7 @@ private:
   };
 public:
   ImplicitTenants(const ConfigProxy& c) { recompute_value(c);}
-  ImplicitTenantValue get_value() {
+  ImplicitTenantValue get_value() const {
     return ImplicitTenantValue(saved);
   }
 private:
@@ -591,7 +591,7 @@ protected:
   const acl_strategy_t extra_acl_strategy;
 
   const AuthInfo info;
-  rgw::auth::ImplicitTenants& implicit_tenant_context;
+  const rgw::auth::ImplicitTenants& implicit_tenant_context;
   const rgw::auth::ImplicitTenants::implicit_tenant_flag_bits implicit_tenant_bit;
 
   virtual void create_account(const DoutPrefixProvider* dpp,
@@ -604,7 +604,7 @@ public:
                 rgw::sal::Driver* driver,
                 acl_strategy_t&& extra_acl_strategy,
                 const AuthInfo& info,
-		rgw::auth::ImplicitTenants& implicit_tenant_context,
+		const rgw::auth::ImplicitTenants& implicit_tenant_context,
                 rgw::auth::ImplicitTenants::implicit_tenant_flag_bits implicit_tenant_bit)
     : cct(cct),
       driver(driver),

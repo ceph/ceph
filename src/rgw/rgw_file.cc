@@ -1659,10 +1659,12 @@ namespace rgw {
 	return -EIO;
       }
 
+      const RGWProcessEnv& penv = g_rgwlib->get_fe()->get_process()->get_env();
+
       /* start */
       std::string object_name = relative_object_name();
       f->write_req =
-	new RGWWriteRequest(g_rgwlib->get_driver(),
+	new RGWWriteRequest(g_rgwlib->get_driver(), penv,
 			    g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 			    this, bucket_name(), object_name);
       rc = g_rgwlib->get_fe()->start_req(f->write_req);

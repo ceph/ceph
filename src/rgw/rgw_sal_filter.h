@@ -305,9 +305,7 @@ public:
 
   virtual CephContext* ctx(void) override;
 
-  virtual const std::string& get_luarocks_path() const override;
-  virtual void set_luarocks_path(const std::string& path) override;
-  virtual void  register_admin_apis(RGWRESTMgr* mgr)override {
+  virtual void register_admin_apis(RGWRESTMgr* mgr) override {
       return next->register_admin_apis(mgr);
   }
 };

@@ -881,7 +881,6 @@ class DaosMultipartUpload : public StoreMultipartUpload {
 
 class DaosStore : public StoreDriver {
  private:
-  std::string luarocks_path;
   DaosZone zone;
   RGWSyncModuleInstanceRef sync_module;
 
@@ -1043,14 +1042,6 @@ class DaosStore : public StoreDriver {
   virtual void finalize(void) override;
 
   virtual CephContext* ctx(void) override { return cctx; }
-
-  virtual const std::string& get_luarocks_path() const override {
-    return luarocks_path;
-  }
-
-  virtual void set_luarocks_path(const std::string& path) override {
-    luarocks_path = path;
-  }
 
   virtual int initialize(CephContext* cct,
                          const DoutPrefixProvider* dpp) override;

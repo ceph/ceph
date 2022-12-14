@@ -180,10 +180,10 @@ namespace rgw {
     req_state rstate;
   public:
 
-    RGWLibContinuedReq(CephContext* _cct,
+    RGWLibContinuedReq(CephContext* _cct, const RGWProcessEnv& penv,
 		       std::unique_ptr<rgw::sal::User> _user)
       :  RGWLibRequest(_cct, std::move(_user)), io_ctx(),
-	 rstate(_cct, &io_ctx.get_env(), id)
+	 rstate(_cct, penv, &io_ctx.get_env(), id)
       {
 	io_ctx.init(_cct);
 

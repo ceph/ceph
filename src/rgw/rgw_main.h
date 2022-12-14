@@ -25,7 +25,6 @@
 #include "rgw_realm_reloader.h"
 #include "rgw_ldap.h"
 #include "rgw_lua.h"
-#include "rgw_lua_background.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_ratelimit.h"
 
@@ -51,6 +50,8 @@ public:
 
 namespace rgw {
 
+namespace lua { class Background; }
+
 class RGWLib;
 class AppMain {
   /* several components should be initalized only if librgw is
@@ -75,8 +76,8 @@ class AppMain {
   std::unique_ptr<RGWFrontendPauser> fe_pauser;
   std::unique_ptr<RGWRealmWatcher> realm_watcher;
   std::unique_ptr<RGWPauser> rgw_pauser;
-  rgw::sal::Driver* driver;
   DoutPrefixProvider* dpp;
+  RGWProcessEnv env;
 
 public:
   AppMain(DoutPrefixProvider* dpp)
@@ -87,7 +88,7 @@ public:
 	       = []() { /* nada */});
 
   rgw::sal::Driver* get_driver() {
-    return driver;
+    return env.driver;
   }
 
   rgw::LDAPHelper* get_ldh() {
