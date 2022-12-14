@@ -157,9 +157,7 @@ seastar::future<> Socket::close() {
 seastar::future<> Socket::inject_delay () {
   if (float delay_period = local_conf()->ms_inject_internal_delays;
       delay_period) {
-    logger().debug("{}: sleep for {}",
-                  __func__,
-                  delay_period);
+    logger().debug("Socket::inject_delay: sleep for {}", delay_period);
     return seastar::sleep(
       std::chrono::milliseconds((int)(delay_period * 1000.0)));
   }
@@ -171,9 +169,9 @@ void Socket::inject_failure()
   if (local_conf()->ms_inject_socket_failures) {
     uint64_t rand =
       ceph::util::generate_random_number<uint64_t>(1, RAND_MAX);
-      if (rand % local_conf()->ms_inject_socket_failures == 0) {
+    if (rand % local_conf()->ms_inject_socket_failures == 0) {
       if (true) {
-        logger().warn("{} injecting socket failure", __func__);
+        logger().warn("Socket::inject_failure: injecting socket failure");
 	throw std::system_error(make_error_code(
 	  crimson::net::error::negotiation_failure));
       }
