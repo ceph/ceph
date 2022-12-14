@@ -871,7 +871,7 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
   for (auto it: role.role_policies) {
     try {
       bufferlist bl = bufferlist::static_from_string(it);
-      const rgw::IAM::Policy p(s->cct, role.tenant, bl);
+      const rgw::IAM::Policy p(s->cct, role.tenant, bl, false);
       s->iam_user_policies.push_back(std::move(p));
     } catch (rgw::IAM::PolicyParseException& e) {
       //Control shouldn't reach here as the policy has already been
@@ -884,7 +884,7 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
     try {
       string policy = this->token_attrs.token_policy;
       bufferlist bl = bufferlist::static_from_string(policy);
-      const rgw::IAM::Policy p(s->cct, role.tenant, bl);
+      const rgw::IAM::Policy p(s->cct, role.tenant, bl, false);
       s->session_policies.push_back(std::move(p));
     } catch (rgw::IAM::PolicyParseException& e) {
       //Control shouldn't reach here as the policy has already been

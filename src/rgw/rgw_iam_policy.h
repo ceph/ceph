@@ -18,6 +18,10 @@
 #include <boost/thread/shared_mutex.hpp>
 #include <boost/variant.hpp>
 
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include <fmt/format.h>
+
 #include "common/ceph_time.h"
 #include "common/iso_8601.h"
 
@@ -496,11 +500,19 @@ std::ostream& operator <<(std::ostream& m, const Statement& s);
 
 struct PolicyParseException : public std::exception {
   rapidjson::ParseResult pr;
+  std::string msg;
 
-  explicit PolicyParseException(rapidjson::ParseResult&& pr)
-    : pr(pr) { }
+  explicit PolicyParseException(const rapidjson::ParseResult pr,
+				const std::string& annotation)
+    : pr(pr),
+      msg(fmt::format("At character offset {}, {}",
+		      pr.Offset(),
+		      (pr.Code() == rapidjson::kParseErrorTermination ?
+		       annotation :
+		       rapidjson::GetParseError_En(pr.Code())))) {}
+
   const char* what() const noexcept override {
-    return rapidjson::GetParseError_En(pr.Code());
+    return msg.c_str();
   }
 };
 
@@ -511,8 +523,14 @@ struct Policy {
 
   std::vector<Statement> statements;
 
+  // reject_invalid_principals should be set to
+  // `cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals")`
+  // when executing operations that *set* a bucket policy, but should
+  // be false when reading a stored bucket policy so as not to break
+  // backwards configuration.
   Policy(CephContext* cct, const std::string& tenant,
-	 const bufferlist& text);
+	 const bufferlist& text,
+	 bool reject_invalid_principals);
 
   Effect eval(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida,

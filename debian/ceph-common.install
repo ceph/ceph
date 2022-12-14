@@ -37,6 +37,7 @@ usr/share/man/man8/crushdiff.8
 usr/share/man/man8/mount.ceph.8
 usr/share/man/man8/rados.8
 usr/share/man/man8/radosgw-admin.8
+usr/share/man/man8/rgw-policy-check.8
 usr/share/man/man8/rbd.8
 usr/share/man/man8/rbdmap.8
 usr/share/man/man8/rbd-replay*.8

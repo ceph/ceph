@@ -141,7 +141,9 @@ void RGWPutUserPolicy::execute(optional_yield y)
   }
 
   try {
-    const Policy p(s->cct, s->user->get_tenant(), bl);
+    const Policy p(
+      s->cct, s->user->get_tenant(), bl,
+      s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     map<string, string> policies;
     if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
       bufferlist out_bl = it->second;
@@ -160,7 +162,8 @@ void RGWPutUserPolicy::execute(optional_yield y)
     ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
     op_ret = -EIO;
   } catch (rgw::IAM::PolicyParseException& e) {
-    ldpp_dout(this, 20) << "failed to parse policy: " << e.what() << dendl;
+    ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;
+    s->err.message = e.what();
     op_ret = -ERR_MALFORMED_DOC;
   }
 

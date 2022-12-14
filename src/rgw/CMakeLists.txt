@@ -462,6 +462,12 @@ target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 
+set(radosgw_polparser_srcs
+  rgw_polparser.cc)
+add_executable(rgw-policy-check ${radosgw_polparser_srcs})
+target_link_libraries(rgw-policy-check ${rgw_libs})
+install(TARGETS rgw-policy-check DESTINATION bin)
+
 set(librgw_srcs
   librgw.cc)
 add_library(rgw SHARED ${librgw_srcs})
