@@ -96,7 +96,7 @@
     "@types/cypress-cucumber-preprocessor": "4.0.1",
     "@types/jest": "28.1.3",
     "@types/lodash": "4.14.161",
-    "@types/node": "12.12.62",
+    "@types/node": "18.11.15",
     "@types/swagger-ui": "3.52.0",
     "@typescript-eslint/eslint-plugin": "5.27.1",
     "@typescript-eslint/parser": "5.27.1",
