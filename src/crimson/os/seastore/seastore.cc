@@ -168,6 +168,17 @@ seastar::future<> SeaStore::stop()
   return seastar::now();
 }
 
+SeaStore::mount_ertr::future<> SeaStore::test_mount()
+{
+  init_managers();
+  return transaction_manager->mount(
+  ).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::test_mount"
+    }
+  );
+}
+
 SeaStore::mount_ertr::future<> SeaStore::mount()
 {
   return device->mount(
@@ -244,6 +255,66 @@ seastar::future<> SeaStore::write_fsid(uuid_d new_osd_fsid)
       return seastar::now();
      }
    });
+}
+
+seastar::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
+{
+  init_managers();
+  return transaction_manager->mkfs(
+  ).safe_then([this] {
+    init_managers();
+    return transaction_manager->mount();
+  }).safe_then([this] {
+    return repeat_eagain([this] {
+      return transaction_manager->with_transaction_intr(
+	Transaction::src_t::MUTATE,
+	"mkfs_seastore",
+	[this](auto& t)
+      {
+	return onode_manager->mkfs(t
+	).si_then([this, &t] {
+	  return collection_manager->mkfs(t);
+	}).si_then([this, &t](auto coll_root) {
+	  transaction_manager->write_collection_root(
+	    t, coll_root);
+	  return transaction_manager->submit_transaction(t);
+	});
+      });
+    });
+  }).safe_then([this, new_osd_fsid] {
+    return write_fsid(new_osd_fsid);
+  }).safe_then([this] {
+    return read_meta("type").then([this] (auto tuple) {
+      auto [ret, type] = tuple;
+      if (ret == 0 && type == "seastore") {
+	return seastar::now();
+      } else if (ret == 0 && type != "seastore") {
+	LOG_PREFIX(SeaStore::mkfs);
+	ERROR("expected seastore, but type is {}", type);
+	throw std::runtime_error("store type error");
+      } else {
+	return write_meta("type", "seastore");
+      }
+    });
+  }).safe_then([this] {
+    return write_meta("mkfs_done", "yes");
+  }).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::_mkfs"
+    }
+  );
+}
+
+SeaStore::mkfs_ertr::future<> SeaStore::test_mkfs(uuid_d new_osd_fsid)
+{
+
+  return read_meta("mkfs_done").then([this, new_osd_fsid] (auto tuple) {
+    auto [done, value] = tuple;
+    if (done == 0) {
+      return seastar::now();
+    } 
+    return _mkfs(new_osd_fsid);
+  });
 }
 
 SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
@@ -327,48 +398,10 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
         });
       }).safe_then([this] {
         return device->mount();
-      }).safe_then([this] {
-        init_managers();
-        return transaction_manager->mkfs();
-      }).safe_then([this] {
-        init_managers();
-        return transaction_manager->mount();
-      }).safe_then([this] {
-        return repeat_eagain([this] {
-          return transaction_manager->with_transaction_intr(
-            Transaction::src_t::MUTATE,
-            "mkfs_seastore",
-            [this](auto& t)
-          {
-            return onode_manager->mkfs(t
-            ).si_then([this, &t] {
-              return collection_manager->mkfs(t);
-            }).si_then([this, &t](auto coll_root) {
-              transaction_manager->write_collection_root(
-                t, coll_root);
-              return transaction_manager->submit_transaction(t);
-            });
-          });
-        });
       }).safe_then([this, new_osd_fsid] {
-        return write_fsid(new_osd_fsid);
+	return _mkfs(new_osd_fsid);
       }).safe_then([this] {
-        return read_meta("type").then([this] (auto tuple) {
-          auto [ret, type] = tuple;
-          if (ret == 0 && type == "seastore") {
-            return seastar::now();
-          } else if (ret == 0 && type != "seastore") {
-            LOG_PREFIX(SeaStore::mkfs);
-            ERROR("expected seastore, but type is {}", type);
-            throw std::runtime_error("store type error");
-          } else {
-            return write_meta("type", "seastore");
-          }
-        });
-      }).safe_then([this] {
-        return write_meta("mkfs_done", "yes");
-      }).safe_then([this] {
-        return umount();
+	return umount();
       }).handle_error(
         crimson::ct_error::assert_all{
           "Invalid error in SeaStore::mkfs"
