@@ -26,6 +26,7 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--osd_max_backfills=10 "
+    CEPH_ARGS+="--osd_mclock_override_recovery_settings=true "
     export objects=600
     export poolprefix=test
 
