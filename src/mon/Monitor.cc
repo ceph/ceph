@@ -6587,10 +6587,19 @@ void Monitor::notify_new_monmap(bool can_change_external_state, bool remove_rank
     dout(10) << __func__ << " we have " << monmap->removed_ranks.size() << " removed ranks" << dendl;
     for (auto i = monmap->removed_ranks.rbegin();
         i != monmap->removed_ranks.rend(); ++i) {
-      int rank = *i;
-      dout(10) << __func__ << " removing rank " << rank << dendl;
+      int remove_rank = *i;
+      dout(10) << __func__ << " removing rank " << remove_rank << dendl;
+      if (rank == remove_rank) {
+        dout(5) << "We are removing our own rank, probably we"
+          << " are removed from monmap before we shutdown ... dropping." << dendl;
+        continue;
+      }
       int new_rank = monmap->get_rank(messenger->get_myaddrs());
-      elector.notify_rank_removed(rank, new_rank);
+      if (new_rank == -1) {
+        dout(5) << "We no longer exists in the monmap! ... dropping." << dendl;
+        continue;
+      }
+      elector.notify_rank_removed(remove_rank, new_rank);
     }
   }
 
