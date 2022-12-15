@@ -2457,7 +2457,8 @@ TEST(LibCephFS, SnapXattrs) {
   ASSERT_LT(alen, xbuflen);
   gxattrv[alen] = '\0';
   char *s = strchr(gxattrv, '.');
-  ASSERT_NE(0, s);
+  char *q = NULL;
+  ASSERT_NE(q, s);
   ASSERT_LT(s, gxattrv + alen);
   ASSERT_EQ('.', *s);
   *s = '\0';
@@ -2485,7 +2486,7 @@ TEST(LibCephFS, SnapXattrs) {
   ASSERT_LT(alen, xbuflen);
   gxattrv2[alen] = '\0';
   s = strchr(gxattrv2, '.');
-  ASSERT_NE(0, s);
+  ASSERT_NE(q, s);
   ASSERT_LT(s, gxattrv2 + alen);
   ASSERT_EQ('.', *s);
   *s = '\0';
