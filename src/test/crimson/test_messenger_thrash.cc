@@ -107,7 +107,7 @@ class SyntheticDispatcher final
   std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef con,
                                                MessageRef m) {
     if (verbose) {
-      logger().warn("{}: con = {}", __func__, con);
+      logger().warn("{}: con = {}", __func__, *con);
     }
     // MSG_COMMAND is used to disorganize regular message flow
     if (m->get_type() == MSG_COMMAND) {
@@ -119,7 +119,7 @@ class SyntheticDispatcher final
     decode(pl, p);
     if (pl.who == Payload::PING) {
       logger().info(" {} conn= {} {}", __func__,
-        m->get_connection(), pl);
+        *m->get_connection(), pl);
       return reply_message(m, pl);
     } else {
       ceph_assert(pl.who == Payload::PONG);
@@ -137,11 +137,11 @@ class SyntheticDispatcher final
   }
 
   void ms_handle_accept(crimson::net::ConnectionRef conn) {
-    logger().info("{} - Connection:{}", __func__, conn);
+    logger().info("{} - Connection:{}", __func__, *conn);
   }
 
   void ms_handle_connect(crimson::net::ConnectionRef conn) {
-    logger().info("{} - Connection:{}", __func__, conn);
+    logger().info("{} - Connection:{}", __func__, *conn);
   }
 
   void ms_handle_reset(crimson::net::ConnectionRef con, bool is_replace);
@@ -173,7 +173,7 @@ class SyntheticDispatcher final
     sent[pl.seq] = pl.data;
     conn_sent[&*con].push_back(pl.seq);
     logger().info("{} conn= {} send i= {}",
-      __func__, con, pl.seq);
+      __func__, *con, pl.seq);
 
     return con->send(std::move(m));
   }

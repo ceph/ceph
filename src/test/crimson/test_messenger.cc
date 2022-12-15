@@ -985,7 +985,7 @@ class FailoverSuite : public Dispatcher {
           throw std::runtime_error(fmt::format(
                 "The connected connection [{}] {} doesn't"
                 " match the tracked connection [{}] {}",
-                result.index, *result.conn, tracked_index, tracked_conn));
+                result.index, *result.conn, tracked_index, *tracked_conn));
         }
         if (pending_send == 0 && pending_peer_receive == 0 && pending_receive == 0) {
           result.state = conn_state_t::established;
@@ -1574,7 +1574,7 @@ class FailoverTestPeer : public Dispatcher {
       break;
      }
      default:
-      logger().error("{} got unexpected msg from cmd client: {}", *c, m);
+      logger().error("{} got unexpected msg from cmd client: {}", *c, *m);
       ceph_abort();
     }
     return {seastar::now()};
