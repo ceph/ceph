@@ -2220,12 +2220,25 @@ inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp,
         return -E2BIG;
       }
 
-      auto rval = attrs.emplace(std::move(attr_name), ceph::bufferlist());
+      auto rval = attrs.emplace(attr_name, ceph::bufferlist());
       /* At the moment the value of the freshly created attribute key-value
        * pair is an empty bufferlist. */
 
       ceph::bufferlist& bl = rval.first->second;
-      bl.append(xattr.c_str(), xattr.size() + 1);
+      if (attr_name == RGW_ATTR_TAGS) {
+        RGWObjTags obj_tags;
+        int ret = obj_tags.set_from_string(xattr);
+        if (ret < 0) {
+          ldpp_subdout(dpp, rgw, 10)
+              << "setting obj tags failed with " << ret << dendl;
+          if (ret == -ERR_INVALID_TAG) {
+            ret = -EINVAL;  // s3 returns only -EINVAL for PUT requests
+          }
+          return ret;
+        }
+        obj_tags.encode(bl);
+      } else
+        bl.append(xattr.c_str(), xattr.size() + 1);
     }
   }
 
