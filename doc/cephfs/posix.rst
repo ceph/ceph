@@ -67,11 +67,10 @@ as client data may not even be flushed to the server until the file is
 closed (and more generally writes will be significantly more
 time-shifted than CephFS, leading to less predictable results).
 
-However, all of there are very close to POSIX, and most of the time
-applications don't notice too much.  Many other storage systems (e.g.,
-HDFS) claim to be "POSIX-like" but diverge significantly from the
-standard by dropping support for things like in-place file
-modifications, truncate, or directory renames.
+Regardless, these are all similar enough to POSIX, and applications still work
+most of the time. Many other storage systems (e.g., HDFS) claim to be
+"POSIX-like" but diverge significantly from the standard by dropping support
+for things like in-place file modifications, truncate, or directory renames.
 
 
 Bottom line
