@@ -72,11 +72,10 @@ most of the time. Many other storage systems (e.g., HDFS) claim to be
 "POSIX-like" but diverge significantly from the standard by dropping support
 for things like in-place file modifications, truncate, or directory renames.
 
-
 Bottom line
 -----------
 
-CephFS relaxes more than local Linux kernel file systems (e.g., writes
+CephFS relaxes more than local Linux kernel file systems (for example, writes
 spanning object boundaries may be torn).  It relaxes strictly less
 than NFS when it comes to multiclient consistency, and generally less
 than NFS when it comes to write atomicity.
