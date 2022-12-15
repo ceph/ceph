@@ -195,76 +195,98 @@ OMapInnerNode::rm_key(omap_context_t oc, const std::string &key)
 OMapInnerNode::list_ret
 OMapInnerNode::list(
   omap_context_t oc,
-  const std::optional<std::string> &start,
+  const std::optional<std::string> &first,
+  const std::optional<std::string> &last,
   omap_list_config_t config)
 {
   LOG_PREFIX(OMapInnerNode::list);
-  if (start) {
-    DEBUGT("start={}, this: {}", oc.t, *start, *this);
+  if (first && last) {
+    DEBUGT("first: {}, last: {}, this: {}", oc.t, *first, *last, *this);
+    assert(*first <= *last);
+  } else if (first) {
+    DEBUGT("first: {}, this: {}", oc.t, *first, *this);
+  } else if (last) {
+    DEBUGT("last: {}, this: {}", oc.t, *last, *this);
   } else {
     DEBUGT("this: {}", oc.t, *this);
   }
 
-  auto child_iter = start ?
-    get_containing_child(*start) :
+  auto first_iter = first ?
+    get_containing_child(*first) :
     iter_cbegin();
-  assert(child_iter != iter_cend());
+  auto last_iter = last ?
+    get_containing_child(*last) + 1:
+    iter_cend();
+  assert(first_iter != iter_cend());
 
   return seastar::do_with(
-    child_iter,
-    iter_cend(),
+    first_iter,
+    last_iter,
+    iter_t(first_iter),
     list_bare_ret(false, {}),
-    true,
-    start,
-    [this, oc, config](
-      auto &biter,
-      auto &eiter,
-      auto &ret,
-      bool &first_entry,
-      auto &start)
+    [this, &first, &last, oc, config](
+      auto &fiter,
+      auto &liter,
+      auto &iter,
+      auto &ret)
     {
       auto &complete = std::get<0>(ret);
       auto &result = std::get<1>(ret);
       return trans_intr::repeat(
-	[&, config, oc, this]() -> list_iertr::future<seastar::stop_iteration> {
-	  if (biter == eiter  || result.size() == config.max_result_size) {
-	    complete = biter == eiter;
-	    return list_iertr::make_ready_future<seastar::stop_iteration>(
-	      seastar::stop_iteration::yes);
-	  }
-	  auto laddr = biter->get_val();
-	  return omap_load_extent(
-	    oc, laddr,
-	    get_meta().depth - 1
-	  ).si_then([&, config, oc] (auto &&extent) {
+        [&, config, oc, this]() -> list_iertr::future<seastar::stop_iteration>
+      {
+        if (iter == liter || result.size() == config.max_result_size) {
+          complete = iter == liter;
+          return list_iertr::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes);
+        }
+        auto laddr = iter->get_val();
+        return omap_load_extent(
+          oc, laddr,
+          get_meta().depth - 1
+        ).si_then([&, config, oc](auto &&extent) {
+	  return seastar::do_with(
+	    iter == fiter ? first : std::optional<std::string>(std::nullopt),
+	    iter == liter - 1 ? last : std::optional<std::string>(std::nullopt),
+	    [&result, extent = std::move(extent), config, oc](
+	      auto &nfirst,
+	      auto &nlast) {
 	    return extent->list(
 	      oc,
-	      first_entry ? start : std::nullopt,
-	      config.with_reduced_max(result.size())
-	    ).si_then([&, config](auto &&child_ret) mutable {
-	      boost::ignore_unused(config);   // avoid clang warning;
-	      auto &[child_complete, child_result] = child_ret;
-	      if (result.size() && child_result.size()) {
-		assert(child_result.begin()->first > result.rbegin()->first);
+	      nfirst,
+	      nlast,
+	      config.with_reduced_max(result.size()));
+	  }).si_then([&, config](auto &&child_ret) mutable {
+	    boost::ignore_unused(config);   // avoid clang warning;
+            auto &[child_complete, child_result] = child_ret;
+            if (result.size() && child_result.size()) {
+              assert(child_result.begin()->first > result.rbegin()->first);
+            }
+            if (child_result.size() && first && iter == fiter) {
+	      if (config.first_inclusive) {
+		assert(child_result.begin()->first >= *first);
+	      } else {
+		assert(child_result.begin()->first > *first);
 	      }
-	      if (child_result.size() && start && first_entry) {
-		if (config.inclusive) {
-		  assert(child_result.begin()->first >= *start);
-		} else {
-		  assert(child_result.begin()->first > *start);
-		}
+            }
+            if (child_result.size() && last && iter == liter - 1) {
+	      auto biter = --(child_result.end());
+	      if (config.last_inclusive) {
+		assert(biter->first <= *last);
+	      } else {
+		assert(biter->first < *last);
 	      }
-	      result.merge(std::move(child_result));
-	      ++biter;
-	      assert(child_complete || result.size() == config.max_result_size);
-	      first_entry = false;
-	      return list_iertr::make_ready_future<seastar::stop_iteration>(
-		seastar::stop_iteration::no);
-	    });
-	  });
-	}).si_then([&ret, ref = OMapNodeRef(this)] {
-	  return list_iertr::make_ready_future<list_bare_ret>(std::move(ret));
-	});
+            }
+            result.merge(std::move(child_result));
+            ++iter;
+            assert(child_complete || result.size() == config.max_result_size);
+            return list_iertr::make_ready_future<seastar::stop_iteration>(
+              seastar::stop_iteration::no);
+          });
+        });
+      }).si_then([&ret, ref = OMapNodeRef(this)] {
+        return list_iertr::make_ready_future<list_bare_ret>(std::move(ret));
+      });
     });
 }
 
@@ -586,31 +608,40 @@ OMapLeafNode::rm_key(omap_context_t oc, const std::string &key)
 OMapLeafNode::list_ret
 OMapLeafNode::list(
   omap_context_t oc,
-  const std::optional<std::string> &start,
+  const std::optional<std::string> &first,
+  const std::optional<std::string> &last,
   omap_list_config_t config)
 {
   LOG_PREFIX(OMapLeafNode::list);
   DEBUGT(
-    "start {} max_result_size {} inclusive {}, this: {}",
+    "first {} last {}  max_result_size {} first_inclusive {} \
+    last_inclusive {}, this: {}",
     oc.t,
-    start ? start->c_str() : "",
+    first ? first->c_str() : "",
+    last ? last->c_str() : "",
     config.max_result_size,
-    config.inclusive,
+    config.first_inclusive,
+    config.last_inclusive,
     *this
   );
   auto ret = list_bare_ret(false, {});
   auto &[complete, result] = ret;
-  auto iter = start ?
-    (config.inclusive ?
-     string_lower_bound(*start) :
-     string_upper_bound(*start)) :
+  auto iter = first ?
+    (config.first_inclusive ?
+     string_lower_bound(*first) :
+     string_upper_bound(*first)) :
     iter_begin();
+  auto liter = last ?
+    (config.last_inclusive ?
+     string_upper_bound(*last) :
+     string_lower_bound(*last)) :
+    iter_end();
 
-  for (; iter != iter_end() && result.size() < config.max_result_size; iter++) {
+  for (; iter != liter && result.size() < config.max_result_size; iter++) {
     result.emplace(std::make_pair(iter->get_key(), iter->get_val()));
   }
 
-  complete = (iter == iter_end());
+  complete = (iter == liter);
 
   return list_iertr::make_ready_future<list_bare_ret>(
     std::move(ret));
