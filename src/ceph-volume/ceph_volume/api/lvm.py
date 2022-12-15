@@ -794,7 +794,7 @@ def get_all_devices_vgs(name_prefix=''):
         verbose_on_failure=False
     )
     vgs = _output_parser(stdout, vg_fields)
-    return [VolumeGroup(**vg) for vg in vgs]
+    return [VolumeGroup(**vg) for vg in vgs if vg['vg_name']]
 
 #################################
 #
