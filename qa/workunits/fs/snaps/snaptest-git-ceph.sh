@@ -8,10 +8,10 @@ trap -- 'retry' EXIT
 retry() {
     rm -rf ceph
     # double the timeout value
-    timeout 3600 git clone git://git.ceph.com/ceph.git
+    timeout 3600 git clone https://git.ceph.com/ceph.git
 }
 rm -rf ceph
-timeout 1800 git clone git://git.ceph.com/ceph.git
+timeout 1800 git clone https://git.ceph.com/ceph.git
 trap - EXIT
 cd ceph
 
