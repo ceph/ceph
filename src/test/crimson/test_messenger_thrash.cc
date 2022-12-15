@@ -1,15 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "common/ceph_argparse.h"
-#include "messages/MPing.h"
-#include "messages/MCommand.h"
-#include "crimson/auth/DummyAuth.h"
-#include "crimson/common/log.h"
-#include "crimson/net/Connection.h"
-#include "crimson/net/Dispatcher.h"
-#include "crimson/net/Messenger.h"
-
 #include <map>
 #include <random>
 #include <fmt/format.h>
@@ -20,6 +11,15 @@
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/core/with_timeout.hh>
+
+#include "common/ceph_argparse.h"
+#include "messages/MPing.h"
+#include "messages/MCommand.h"
+#include "crimson/auth/DummyAuth.h"
+#include "crimson/common/log.h"
+#include "crimson/net/Connection.h"
+#include "crimson/net/Dispatcher.h"
+#include "crimson/net/Messenger.h"
 
 using namespace std::chrono_literals;
 namespace bpo = boost::program_options;
