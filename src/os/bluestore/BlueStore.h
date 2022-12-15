@@ -464,7 +464,7 @@ public:
       discard(cache, offset, (uint32_t)-1 - offset);
     }
 
-    bool _dup_writing(BufferCacheShard* cache, BufferSpace* bc);
+    bool _dup_writing(BufferCacheShard* cache, BufferSpace* to);
     void split(BufferCacheShard* cache, size_t pos, BufferSpace &r);
 
     void dump(BufferCacheShard* cache, ceph::Formatter *f) const {
@@ -886,12 +886,12 @@ public:
     uint32_t needs_reshard_begin = 0;
     uint32_t needs_reshard_end = 0;
 
-    using segment_t = std::map<Blob*, uint64_t /*size*/>;
-    using segment_map_t = std::map<uint64_t /*segment id*/, segment_t>;
-    void scan_shared_blobs_segmented(CollectionRef& c, OnodeRef& oldo, uint64_t start, uint64_t length,
-				     segment_map_t& segment_map, uint64_t segment_size);
-    Blob* find_best_companion(Blob* blob_to_dissolve, uint32_t blob_start, uint32_t& blob_width,
-			      segment_map_t& segment_map, uint64_t segment_size);
+    void scan_shared_blobs(CollectionRef& c, OnodeRef& oldo, uint64_t start, uint64_t length,
+			   std::multimap<uint64_t /*blob_start*/, Blob*>& candidates);
+
+    Blob* find_mergable_companion(Blob* blob_to_dissolve, uint32_t blob_start, uint32_t& blob_width,
+				  std::multimap<uint64_t /*blob_start*/, Blob*>& candidates);
+
     void make_range_shared(BlueStore* store, TransContext* txc, CollectionRef& c,
 			   OnodeRef& oldo, uint64_t srcoff, uint64_t length);
     void reblob_extents(uint32_t blob_start, uint32_t blob_end,
