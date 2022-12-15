@@ -524,6 +524,15 @@ std::ostream& operator<<(std::ostream& out, const conn_state_t& state) {
   }
 }
 
+} // anonymous namespace
+
+#if FMT_VERSION >= 90000
+template<>
+struct fmt::formatter<conn_state_t> : fmt::ostream_formatter {};
+#endif
+
+namespace {
+
 struct ConnResult {
   ConnectionRef conn;
   unsigned index;
