@@ -943,7 +943,15 @@ int Monitor::init()
   osdmon()->get_filestore_osd_list();
 
   state = STATE_PROBING;
+
   bootstrap();
+
+  if (!elector.peer_tracker_is_clean()){
+    dout(10) << "peer_tracker looks inconsistent"
+      << " previous bad logic, clearing ..." << dendl;
+    elector.notify_clear_peer_state();
+  }
+
   // add features of myself into feature_map
   session_map.feature_map.add_mon(con_self->get_features());
   return 0;
@@ -1996,10 +2004,16 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
 			       !has_ever_joined)) {
       dout(10) << " got newer/committed monmap epoch " << newmap->get_epoch()
 	       << ", mine was " << monmap->get_epoch() << dendl;
+      int epoch_diff = newmap->get_epoch() - monmap->get_epoch();
       delete newmap;
       monmap->decode(m->monmap_bl);
-      notify_new_monmap(false);
-
+      dout(20) << "has_ever_joined: " << has_ever_joined << dendl;
+      if (epoch_diff == 1 && has_ever_joined) {
+        notify_new_monmap(false);
+      } else {
+        notify_new_monmap(false, false);
+        elector.notify_clear_peer_state();
+      }
       bootstrap();
       return;
     }
@@ -6595,7 +6609,7 @@ void Monitor::set_mon_crush_location(const string& loc)
   need_set_crush_loc = true;
 }
 
-void Monitor::notify_new_monmap(bool can_change_external_state)
+void Monitor::notify_new_monmap(bool can_change_external_state, bool remove_rank_elector)
 {
   if (need_set_crush_loc) {
     auto my_info_i = monmap->mon_info.find(name);
@@ -6605,12 +6619,25 @@ void Monitor::notify_new_monmap(bool can_change_external_state)
     }
   }
   elector.notify_strategy_maybe_changed(monmap->strategy);
-  dout(30) << __func__ << "we have " << monmap->removed_ranks.size() << " removed ranks" << dendl;
-  for (auto i = monmap->removed_ranks.rbegin();
-       i != monmap->removed_ranks.rend(); ++i) {
-    unsigned rank = *i;
-    dout(10) << __func__ << "removing rank " << rank << dendl;
-    elector.notify_rank_removed(rank);
+  if (remove_rank_elector){
+    dout(10) << __func__ << " we have " << monmap->ranks.size()<< " ranks" << dendl;
+    dout(10) << __func__ << " we have " << monmap->removed_ranks.size() << " removed ranks" << dendl;
+    for (auto i = monmap->removed_ranks.rbegin();
+        i != monmap->removed_ranks.rend(); ++i) {
+      int remove_rank = *i;
+      dout(10) << __func__ << " removing rank " << remove_rank << dendl;
+      if (rank == remove_rank) {
+        dout(5) << "We are removing our own rank, probably we"
+          << " are removed from monmap before we shutdown ... dropping." << dendl;
+        continue;
+      }
+      int new_rank = monmap->get_rank(messenger->get_myaddrs());
+      if (new_rank == -1) {
+        dout(5) << "We no longer exists in the monmap! ... dropping." << dendl;
+        continue;
+      }
+      elector.notify_rank_removed(remove_rank, new_rank);
+    }
   }
 
   if (monmap->stretch_mode_enabled) {
