@@ -106,7 +106,6 @@
 %bcond_with cephfs_shell
 %endif
 %bcond_with system_arrow
-%bcond_with system_utf8proc
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8
 %global weak_deps 1
 %endif
@@ -324,8 +323,6 @@ BuildRequires:  libpmemobj-devel >= 1.8
 %if 0%{with system_arrow}
 BuildRequires:  libarrow-devel
 BuildRequires:  parquet-libs-devel
-%endif
-%if 0%{with system_utf8proc}
 BuildRequires:  utf8proc-devel
 %endif
 %if 0%{with seastar}
@@ -1420,8 +1417,6 @@ cmake .. \
 %endif
 %if 0%{with system_arrow}
     -DWITH_SYSTEM_ARROW:BOOL=ON \
-%endif
-%if 0%{with system_utf8proc}
     -DWITH_SYSTEM_UTF8PROC:BOOL=ON \
 %endif
 %if 0%{with seastar}
