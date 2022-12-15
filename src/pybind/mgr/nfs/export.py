@@ -1,5 +1,8 @@
 import errno
 import json
+import stat
+
+import cephfs
 import logging
 from typing import (
     List,
@@ -18,6 +21,7 @@ from rados import TimedOut, ObjectNotFound, Rados, LIBRADOS_ALL_NSPACES
 from object_format import ErrorResponse
 from orchestrator import NoOrchestrator
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
+from mgr_util import CephfsClient, open_filesystem
 
 from .ganesha_conf import (
     CephFSFSAL,
@@ -179,12 +183,13 @@ class AppliedExportResults:
         return -errno.EIO if self.has_error else 0
 
 
-class ExportMgr:
+class ExportMgr(CephfsClient["Module"]):
     def __init__(
             self,
             mgr: 'Module',
             export_ls: Optional[Dict[str, List[Export]]] = None
     ) -> None:
+        super().__init__(mgr)
         self.mgr = mgr
         self.rados_pool = POOL_NAME
         self._exports: Optional[Dict[str, List[Export]]] = export_ls
@@ -658,6 +663,17 @@ class ExportMgr:
                              access_type: str,
                              clients: list = [],
                              sectype: Optional[List[str]] = None) -> Dict[str, Any]:
+
+        with open_filesystem(self, fs_name) as fs_handle:
+            try:
+                stx = fs_handle.statx(path.encode('utf-8'),
+                                      cephfs.CEPH_STATX_MODE, 0)
+                if not stat.S_ISDIR(stx.get('mode')):
+                    raise NFSException(f"Failed to create export: path {path} "
+                                       f"is not a dir")
+            except cephfs.Error:
+                raise NFSInvalidOperation(f"Failed to create export: "
+                                          f"path {path} is invalid")
         pseudo_path = normalize_path(pseudo_path)
 
         if not self._fetch_export(cluster_id, pseudo_path):
