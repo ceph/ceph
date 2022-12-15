@@ -8332,9 +8332,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "crush rule " << p.get_crush_rule() << " type does not match pool";
       return -EINVAL;
     }
-    int r = check_pg_num(pool, p.get_pg_num(), n, p.get_crush_rule(), &ss);
-    if (r < 0) {
-      return r;
+    if (n > p.size) {
+      // only when increasing pool size
+      int r = check_pg_num(pool, p.get_pg_num(), n, p.get_crush_rule(), &ss);
+      if (r < 0) {
+        return r;
+      }
     }
     p.size = n;
     p.min_size = g_conf().get_osd_pool_default_min_size(p.size);
