@@ -49,11 +49,13 @@ struct Payload {
 };
 WRITE_CLASS_DENC(Payload)
 
-std::ostream& operator<<(std::ostream& out, const Payload &pl)
-{
-  return out << "reply=" << pl.who << " i = " << pl.seq;
-}
-
+template<>
+struct fmt::formatter<Payload> : fmt::formatter<std::string_view> {
+  template <typename FormatContext>
+  auto format(const Payload& pl, FormatContext& ctx) const {
+    return fmt::format_to(ctx.out(), "reply={} i={}", pl.who, pl.seq);
+  }
+};
 
 namespace {
 
