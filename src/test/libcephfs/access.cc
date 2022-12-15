@@ -29,6 +29,8 @@
 #include <vector>
 #include "json_spirit/json_spirit.h"
 
+#include "include/fs_types.h"
+
 #ifdef __linux__
 #include <limits.h>
 #include <sys/xattr.h>
