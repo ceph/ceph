@@ -29,7 +29,7 @@ from .utils import (
     conf_obj_name,
     available_clusters,
     check_fs,
-    restart_nfs_service)
+    restart_nfs_service, check_cephfs_path)
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -631,6 +631,9 @@ class ExportMgr:
                              access_type: str,
                              clients: list = [],
                              sectype: Optional[List[str]] = None) -> Tuple[int, str, str]:
+
+        check_cephfs_path(self.mgr, fs_name, path)
+
         pseudo_path = normalize_path(pseudo_path)
 
         if not self._fetch_export(cluster_id, pseudo_path):
