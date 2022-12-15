@@ -1615,7 +1615,8 @@ class FailoverTestPeer : public Dispatcher {
       ceph_assert(test_suite);
       return test_suite->markdown();
      default:
-      logger().error("TestPeer got unexpected command {} from Test", m_cmd);
+      logger().error("TestPeer got unexpected command {} from Test",
+		     fmt::ptr(m_cmd.get()));
       ceph_abort();
       return seastar::now();
     }
