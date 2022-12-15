@@ -5579,7 +5579,9 @@ int BlueStore::_open_bdev(bool create)
     goto fail;
 
   if (create && cct->_conf->bdev_enable_discard) {
-    bdev->discard(0, bdev->get_size());
+    interval_set<uint64_t> whole_device;
+    whole_device.insert(0, bdev->get_size());
+    bdev->try_discard(whole_device, false);
   }
 
   if (bdev->supported_bdev_label()) {
@@ -13051,24 +13053,18 @@ void BlueStore::_txc_finish(TransContext *txc)
 
 void BlueStore::_txc_release_alloc(TransContext *txc)
 {
+  bool discard_queued = false;
   // it's expected we're called with lazy_release_lock already taken!
-  if (likely(!cct->_conf->bluestore_debug_no_reuse_blocks)) {
-    int r = 0;
-    if (cct->_conf->bdev_enable_discard && cct->_conf->bdev_async_discard) {
-      r = bdev->queue_discard(txc->released);
-      if (r == 0) {
-	dout(10) << __func__ << "(queued) " << txc << " " << std::hex
-		 << txc->released << std::dec << dendl;
-	goto out;
-      }
-    } else if (cct->_conf->bdev_enable_discard) {
-      for (auto p = txc->released.begin(); p != txc->released.end(); ++p) {
-	  bdev->discard(p.get_start(), p.get_len());
-      }
-    }
-    dout(10) << __func__ << "(sync) " << txc << " " << std::hex
-             << txc->released << std::dec << dendl;
-    alloc->release(txc->released);
+  if (unlikely(cct->_conf->bluestore_debug_no_reuse_blocks)) {
+      goto out;
+  }
+  discard_queued = bdev->try_discard(txc->released);
+  // if async discard succeeded, will do alloc->release when discard callback
+  // else we should release here
+  if (!discard_queued) {
+      dout(10) << __func__ << "(sync) " << txc << " " << std::hex
+               << txc->released << std::dec << dendl;
+      alloc->release(txc->released);
   }
 
 out:

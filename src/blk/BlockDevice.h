@@ -287,8 +287,7 @@ public:
     bool buffered,
     int write_hint = WRITE_LIFE_NOT_SET) = 0;
   virtual int flush() = 0;
-  virtual int discard(uint64_t offset, uint64_t len) { return 0; }
-  virtual int queue_discard(interval_set<uint64_t> &to_release) { return -1; }
+  virtual bool try_discard(interval_set<uint64_t> &to_release, bool async=true) { return false; }
   virtual void discard_drain() { return; }
 
   // for managing buffered readers/writers
