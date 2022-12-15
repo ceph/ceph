@@ -111,7 +111,7 @@ Members
 * Neha Ojha (Red Hat) - Ceph Council Representative
 * Steven Umbehocker (OSNexus) - General member representative
 * Pawel Sadowski (OVH)
-* Robin Johnson (DigitalOcean)
+* Alex Marangone (DigitalOcean)
 * Xie Xingguo (ZTE)
 * Zhang Shaowen (China Mobile)
 
