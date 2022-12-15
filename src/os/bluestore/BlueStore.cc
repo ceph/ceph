@@ -2609,6 +2609,7 @@ void BlueStore::Blob::merge_blob(Blob* src)
   // move BufferSpace buffers
   while(!src->bc.buffer_map.empty()) {
     auto buf = src->bc.buffer_map.extract(src->bc.buffer_map.cbegin());
+    buf.mapped()->space = &dst->bc;
     dst->bc.buffer_map.insert(std::move(buf));
   }
   // move BufferSpace writing
@@ -2746,37 +2747,49 @@ void BlueStore::ExtentMap::dump(Formatter* f) const
   f->close_section();
 }
 
-void BlueStore::ExtentMap::scan_shared_blobs_segmented(
+void BlueStore::ExtentMap::scan_shared_blobs(
   CollectionRef& c, OnodeRef& oldo, uint64_t start, uint64_t length,
-  segment_map_t& segment_map, uint64_t segment_size) {
-  // align start, length to segment_size
-  uint64_t end = p2roundup(start + length, segment_size);
-  start = p2align(start, segment_size);
+  std::multimap<uint64_t /*blob.logical_offset*/, Blob*>& candidates)
+{
 
+  uint64_t end = start + length;
+  // last_encoded_id will be used to process each blob only once
+  // so reset them first
   for (auto ep = oldo->extent_map.seek_lextent(start);
-    ep != oldo->extent_map.extent_map.end();
-    ++ep) {
-    Extent& e = *ep;
-    if (e.logical_offset >= end) {
+       ep != oldo->extent_map.extent_map.end();
+       ++ep) {
+    // ep->logical_offset and ep->blob_start() are different
+    // ep->blob_start() allows us to include blobs that do have some empty space in the beginning
+    if (ep->blob_start() >= end) {
       break;
     }
-    const bluestore_blob_t& blob = e.blob->get_blob();
-    if (blob.is_shared() && !blob.is_compressed()) {
-      // make sure blob is loaded
-      c->load_shared_blob(e.blob->shared_blob);
+    ep->blob->last_encoded_id = -1;
+  }
 
-      // todo change below code to loop able to touch multiple segments
-      uint32_t segment_id = e.logical_offset / segment_size;
-      segment_t& segment = segment_map[segment_id];
-      uint64_t& size_in_shared_blob = segment[e.blob.get()];
-      size_in_shared_blob += e.length;
+  for (auto ep = oldo->extent_map.seek_lextent(start);
+       ep != oldo->extent_map.extent_map.end();
+       ++ep) {
+    if (ep->blob_start() >= end) {
+      break;
+    }
+    if (ep->blob->last_encoded_id == -1) {
+      const bluestore_blob_t& blob = ep->blob->get_blob();
+      if (blob.is_shared() && !blob.is_compressed()) {
+	// excellent time to load the blob
+	c->load_shared_blob(ep->blob->shared_blob);
+
+	// todo consider change to emplace_hint
+	candidates.emplace(ep->blob_start(), ep->blob.get());
+      }
+      // mark as processed
+      ep->blob->last_encoded_id = 0;
     }
   }
 }
 
-BlueStore::Blob* BlueStore::ExtentMap::find_best_companion(
+BlueStore::Blob* BlueStore::ExtentMap::find_mergable_companion(
   Blob* blob_to_dissolve, uint32_t blob_start, uint32_t& blob_width,
-  segment_map_t& segment_map, uint64_t segment_size)
+  std::multimap<uint64_t /*blob_start*/, Blob*>& candidates)
 {
   dout(30) << __func__ << std::hex << " blob_start=0x" << blob_start << std::dec << dendl;
   Blob* result = nullptr;
@@ -2790,7 +2803,7 @@ BlueStore::Blob* BlueStore::ExtentMap::find_best_companion(
       break;
     }
   }
-  return nullptr;
+  return result;
 }
 
 void BlueStore::ExtentMap::reblob_extents(uint32_t blob_start, uint32_t blob_end,
@@ -2827,9 +2840,9 @@ void BlueStore::ExtentMap::make_range_shared(
   uint64_t end = srcoff + length;
   uint32_t dirty_range_begin = 0;
   uint32_t dirty_range_end = 0;
-  segment_map_t segment_map;
-  uint64_t segment_size = store->max_blob_size;
-  scan_shared_blobs_segmented(c, oldo, srcoff, length, segment_map, segment_size);
+
+  std::multimap<uint64_t /*blob_start*/, Blob*> candidates;
+  scan_shared_blobs(c, oldo, srcoff, length, candidates);
   // ^ also scan regular blobs to
   // 1) find blob_start
   // 2) make sure all extents have the same blob_start
@@ -2856,11 +2869,9 @@ void BlueStore::ExtentMap::make_range_shared(
       dout(20) << __func__ << std::hex
 	       << " e.blob_start=" << e.blob_start()
 	       << " e.logical_offset=" << e.logical_offset
-	       << " segment_size=" << segment_size
 	       << std::dec << dendl;
       Blob* b = blob.is_compressed() ? nullptr :
-	find_best_companion(e.blob.get(), e.blob_start(), blob_width,
-			    segment_map, segment_size);
+	find_mergable_companion(e.blob.get(), e.blob_start(), blob_width, candidates);
       if (b) {
 	dout(20) << __func__ << " merging to: " << *b << dendl;
 	b->merge_blob(e.blob.get());
