@@ -725,3 +725,17 @@ class TestNFS(MgrTestCase):
         exec_cmd_invalid('export', 'info')
         exec_cmd_invalid('export', 'info', 'clusterid')
         exec_cmd_invalid('export', 'apply')
+
+    def test_nfs_export_with_invalid_path(self):
+        """
+        Test that nfs exports can't be created with invalid path
+        """
+        self._test_create_cluster()
+        try:
+            self._create_export(export_id='123',
+                                extra_cmd=['--pseudo-path', self.pseudo_path,
+                                           '--path', '/non_existent_dir'])
+        except CommandFailedError as e:
+            if e.exitstatus != errno.ENOENT:
+                raise
+        self._test_delete_cluster()
