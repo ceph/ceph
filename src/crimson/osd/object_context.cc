@@ -3,6 +3,8 @@
 
 #include "crimson/osd/object_context.h"
 
+#include <fmt/ranges.h>
+
 #include "common/Formatter.h"
 #include "crimson/common/config_proxy.h"
 
