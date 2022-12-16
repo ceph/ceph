@@ -337,8 +337,13 @@ struct RGWDataSyncEnv {
 };
 
 // pretty ostream output for `radosgw-admin bucket sync run`
+#if FMT_VERSION >= 90000
 template<typename ...T>
 void pretty_print(const RGWDataSyncEnv* env, fmt::format_string<T...> fmt, T&& ...t) {
+#else
+template<typename S, typename ...T>
+void pretty_print(const RGWDataSyncEnv* env, const S& fmt, T&& ...t) {
+#endif
   if (unlikely(!!env->ostr)) {
     fmt::print(*env->ostr, fmt, std::forward<T>(t)...);
     env->ostr->flush();
