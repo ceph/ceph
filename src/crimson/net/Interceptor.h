@@ -42,15 +42,6 @@ enum class bp_action_t {
   STALL
 };
 
-inline std::ostream& operator<<(std::ostream& out, const bp_action_t& action) {
-  static const char *const action_names[] = {"CONTINUE",
-                                             "FAULT",
-                                             "BLOCK",
-                                             "STALL"};
-  assert(static_cast<size_t>(action) < std::size(action_names));
-  return out << action_names[static_cast<size_t>(action)];
-}
-
 class socket_blocker {
   std::optional<seastar::abort_source> p_blocked;
   std::optional<seastar::abort_source> p_unblocked;
@@ -122,11 +113,39 @@ struct Breakpoint {
   bool operator<(const Breakpoint& x) const { return bp < x.bp; }
 };
 
-inline std::ostream& operator<<(std::ostream& out, const Breakpoint& bp) {
-  if (auto custom_bp = std::get_if<custom_bp_t>(&bp.bp)) {
-    return out << get_bp_name(*custom_bp);
-  } else {
-    auto tag_bp = std::get<tag_bp_t>(bp.bp);
+struct Interceptor {
+  socket_blocker blocker;
+  virtual ~Interceptor() {}
+  virtual void register_conn(Connection& conn) = 0;
+  virtual void register_conn_ready(Connection& conn) = 0;
+  virtual void register_conn_closed(Connection& conn) = 0;
+  virtual void register_conn_replaced(Connection& conn) = 0;
+  virtual bp_action_t intercept(Connection& conn, Breakpoint bp) = 0;
+};
+
+} // namespace crimson::net
+
+template<>
+struct fmt::formatter<crimson::net::bp_action_t> : fmt::formatter<std::string_view> {
+  template <typename FormatContext>
+  auto format(const crimson::net::bp_action_t& action, FormatContext& ctx) const {
+    static const char *const action_names[] = {"CONTINUE",
+                                               "FAULT",
+                                               "BLOCK",
+                                               "STALL"};
+    assert(static_cast<size_t>(action) < std::size(action_names));
+    return formatter<std::string_view>::format(action_names[static_cast<size_t>(action)], ctx);
+  }
+};
+
+template<>
+struct fmt::formatter<crimson::net::Breakpoint> : fmt::formatter<std::string_view> {
+  template <typename FormatContext>
+  auto format(const crimson::net::Breakpoint& bp, FormatContext& ctx) const {
+    if (auto custom_bp = std::get_if<crimson::net::custom_bp_t>(&bp.bp)) {
+      return formatter<std::string_view>::format(crimson::net::get_bp_name(*custom_bp), ctx);
+    }
+    auto tag_bp = std::get<crimson::net::tag_bp_t>(bp.bp);
     static const char *const tag_names[] = {"NONE",
                                             "HELLO",
                                             "AUTH_REQUEST",
@@ -149,19 +168,8 @@ inline std::ostream& operator<<(std::ostream& out, const Breakpoint& bp) {
                                             "KEEPALIVE2_ACK",
                                             "ACK"};
     assert(static_cast<size_t>(tag_bp.tag) < std::size(tag_names));
-    return out << tag_names[static_cast<size_t>(tag_bp.tag)]
-               << (tag_bp.type == bp_type_t::WRITE ? "_WRITE" : "_READ");
+    return fmt::format_to(ctx.out(), "{}_{}",
+			  tag_names[static_cast<size_t>(tag_bp.tag)],
+			  tag_bp.type == crimson::net::bp_type_t::WRITE ? "WRITE" : "READ");
   }
-}
-
-struct Interceptor {
-  socket_blocker blocker;
-  virtual ~Interceptor() {}
-  virtual void register_conn(Connection& conn) = 0;
-  virtual void register_conn_ready(Connection& conn) = 0;
-  virtual void register_conn_closed(Connection& conn) = 0;
-  virtual void register_conn_replaced(Connection& conn) = 0;
-  virtual bp_action_t intercept(Connection& conn, Breakpoint bp) = 0;
 };
-
-} // namespace crimson::net

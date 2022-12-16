@@ -524,6 +524,15 @@ std::ostream& operator<<(std::ostream& out, const conn_state_t& state) {
   }
 }
 
+} // anonymous namespace
+
+#if FMT_VERSION >= 90000
+template<>
+struct fmt::formatter<conn_state_t> : fmt::ostream_formatter {};
+#endif
+
+namespace {
+
 struct ConnResult {
   ConnectionRef conn;
   unsigned index;
@@ -976,7 +985,7 @@ class FailoverSuite : public Dispatcher {
           throw std::runtime_error(fmt::format(
                 "The connected connection [{}] {} doesn't"
                 " match the tracked connection [{}] {}",
-                result.index, *result.conn, tracked_index, tracked_conn));
+                result.index, *result.conn, tracked_index, *tracked_conn));
         }
         if (pending_send == 0 && pending_peer_receive == 0 && pending_receive == 0) {
           result.state = conn_state_t::established;
@@ -1565,7 +1574,7 @@ class FailoverTestPeer : public Dispatcher {
       break;
      }
      default:
-      logger().error("{} got unexpected msg from cmd client: {}", *c, m);
+      logger().error("{} got unexpected msg from cmd client: {}", *c, *m);
       ceph_abort();
     }
     return {seastar::now()};
@@ -1615,7 +1624,8 @@ class FailoverTestPeer : public Dispatcher {
       ceph_assert(test_suite);
       return test_suite->markdown();
      default:
-      logger().error("TestPeer got unexpected command {} from Test", m_cmd);
+      logger().error("TestPeer got unexpected command {} from Test",
+		     fmt::ptr(m_cmd.get()));
       ceph_abort();
       return seastar::now();
     }

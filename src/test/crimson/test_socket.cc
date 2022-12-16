@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/ceph_argparse.h"
+#include <fmt/os.h>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>

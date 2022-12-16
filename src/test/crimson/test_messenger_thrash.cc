@@ -1,15 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "common/ceph_argparse.h"
-#include "messages/MPing.h"
-#include "messages/MCommand.h"
-#include "crimson/auth/DummyAuth.h"
-#include "crimson/common/log.h"
-#include "crimson/net/Connection.h"
-#include "crimson/net/Dispatcher.h"
-#include "crimson/net/Messenger.h"
-
 #include <map>
 #include <random>
 #include <fmt/format.h>
@@ -20,6 +11,15 @@
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/core/with_timeout.hh>
+
+#include "common/ceph_argparse.h"
+#include "messages/MPing.h"
+#include "messages/MCommand.h"
+#include "crimson/auth/DummyAuth.h"
+#include "crimson/common/log.h"
+#include "crimson/net/Connection.h"
+#include "crimson/net/Dispatcher.h"
+#include "crimson/net/Messenger.h"
 
 using namespace std::chrono_literals;
 namespace bpo = boost::program_options;
@@ -49,11 +49,13 @@ struct Payload {
 };
 WRITE_CLASS_DENC(Payload)
 
-std::ostream& operator<<(std::ostream& out, const Payload &pl)
-{
-  return out << "reply=" << pl.who << " i = " << pl.seq;
-}
-
+template<>
+struct fmt::formatter<Payload> : fmt::formatter<std::string_view> {
+  template <typename FormatContext>
+  auto format(const Payload& pl, FormatContext& ctx) const {
+    return fmt::format_to(ctx.out(), "reply={} i={}", pl.who, pl.seq);
+  }
+};
 
 namespace {
 
@@ -105,7 +107,7 @@ class SyntheticDispatcher final
   std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef con,
                                                MessageRef m) {
     if (verbose) {
-      logger().warn("{}: con = {}", __func__, con);
+      logger().warn("{}: con = {}", __func__, *con);
     }
     // MSG_COMMAND is used to disorganize regular message flow
     if (m->get_type() == MSG_COMMAND) {
@@ -117,7 +119,7 @@ class SyntheticDispatcher final
     decode(pl, p);
     if (pl.who == Payload::PING) {
       logger().info(" {} conn= {} {}", __func__,
-        m->get_connection(), pl);
+        *m->get_connection(), pl);
       return reply_message(m, pl);
     } else {
       ceph_assert(pl.who == Payload::PONG);
@@ -135,11 +137,11 @@ class SyntheticDispatcher final
   }
 
   void ms_handle_accept(crimson::net::ConnectionRef conn) {
-    logger().info("{} - Connection:{}", __func__, conn);
+    logger().info("{} - Connection:{}", __func__, *conn);
   }
 
   void ms_handle_connect(crimson::net::ConnectionRef conn) {
-    logger().info("{} - Connection:{}", __func__, conn);
+    logger().info("{} - Connection:{}", __func__, *conn);
   }
 
   void ms_handle_reset(crimson::net::ConnectionRef con, bool is_replace);
@@ -171,7 +173,7 @@ class SyntheticDispatcher final
     sent[pl.seq] = pl.data;
     conn_sent[&*con].push_back(pl.seq);
     logger().info("{} conn= {} send i= {}",
-      __func__, con, pl.seq);
+      __func__, *con, pl.seq);
 
     return con->send(std::move(m));
   }
