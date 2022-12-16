@@ -512,8 +512,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     derr << "Python module requested unknown data '" << what << "'" << dendl;
     Py_RETURN_NONE;
   }
-  without_gil_t no_gil;
-  no_gil.acquire_gil();
   if(ttl_seconds) {
     return jf.get();
   } else {
