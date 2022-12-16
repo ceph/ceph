@@ -229,6 +229,8 @@ void handle_connection(boost::asio::io_context& context,
       return;
     }
 
+    int http_ret = 0;
+
     {
       auto lock = pause_mutex.async_lock_shared(yield[ec]);
       if (ec == boost::asio::error::operation_aborted) {
@@ -266,7 +268,6 @@ void handle_connection(boost::asio::io_context& context,
       if (cct->_conf->rgw_beast_enable_async) {
         y = optional_yield{context, yield};
       }
-      int http_ret = 0;
       string user = "-";
       const auto started = ceph::coarse_real_clock::now();
       ceph::coarse_real_clock::duration latency{};
@@ -292,7 +293,7 @@ void handle_connection(boost::asio::io_context& context,
       }
     }
 
-    if (!parser.keep_alive()) {
+    if (!parser.keep_alive() || http_ret != 200) {
       return;
     }
 
