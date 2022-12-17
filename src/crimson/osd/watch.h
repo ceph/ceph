@@ -68,6 +68,7 @@ public:
   ~Watch();
 
   seastar::future<> connect(crimson::net::ConnectionFRef, bool);
+  void disconnect();
   bool is_alive() const {
     return true;
   }

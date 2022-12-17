@@ -90,6 +90,13 @@ seastar::future<> Watch::connect(crimson::net::ConnectionFRef conn, bool)
   return seastar::now();
 }
 
+void Watch::disconnect()
+{
+  ceph_assert(!conn);
+  timeout_timer.cancel();
+  timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
+}
+
 seastar::future<> Watch::send_notify_msg(NotifyRef notify)
 {
   logger().info("{} for notify(id={})", __func__, notify->ninfo.notify_id);
