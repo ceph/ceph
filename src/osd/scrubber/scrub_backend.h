@@ -544,7 +544,7 @@ struct fmt::formatter<std::pair<hobject_t, data_omap_digests_t>> {
 
   template <typename FormatContext>
   auto format(const std::pair<hobject_t, data_omap_digests_t>& x,
-	      FormatContext& ctx)
+	      FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(),
 			  "{{ {} - {} }}",
