@@ -614,11 +614,19 @@ flushjournal_out:
 
   ms_objecter->set_default_policy(Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
-  entity_addrvec_t public_addrs, cluster_addrs;
+  entity_addrvec_t public_addrs, public_bind_addrs, cluster_addrs;
   r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &public_addrs,
 		     iface_preferred_numa_node);
   if (r < 0) {
     derr << "Failed to pick public address." << dendl;
+    forker.exit(1);
+  }
+  r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC_BIND, &public_bind_addrs,
+		     iface_preferred_numa_node);
+  if (r == -ENOENT) {
+    public_bind_addrs = public_addrs;
+  } else if (r < 0) {
+    derr << "Failed to pick public_bind address." << dendl;
     forker.exit(1);
   }
   r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_CLUSTER, &cluster_addrs,
@@ -628,8 +636,14 @@ flushjournal_out:
     forker.exit(1);
   }
 
-  if (ms_public->bindv(public_addrs) < 0)
+  if (ms_public->bindv(public_bind_addrs) < 0)
     forker.exit(1);
+
+  // if the public and public bind addr are different set the msgr addr
+  // to the public one, now that the bind is complete.
+  if (public_addrs != public_bind_addrs) {
+    ms_public->set_addrs(public_addrs);
+  }
 
   if (ms_cluster->bindv(cluster_addrs) < 0)
     forker.exit(1);
