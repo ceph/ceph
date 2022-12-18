@@ -354,10 +354,15 @@ int pick_addresses(
   addrs->v.clear();
 
   unsigned addrt = (flags & (CEPH_PICK_ADDRESS_PUBLIC |
+			     CEPH_PICK_ADDRESS_PUBLIC_BIND |
 			     CEPH_PICK_ADDRESS_CLUSTER));
   if (addrt == 0 ||
       addrt == (CEPH_PICK_ADDRESS_PUBLIC |
-		CEPH_PICK_ADDRESS_CLUSTER)) {
+		CEPH_PICK_ADDRESS_CLUSTER) ||
+      addrt == (CEPH_PICK_ADDRESS_PUBLIC_BIND |
+		CEPH_PICK_ADDRESS_CLUSTER) ||
+      addrt == (CEPH_PICK_ADDRESS_PUBLIC_BIND |
+		CEPH_PICK_ADDRESS_PUBLIC)) {
     return -EINVAL;
   }
   unsigned msgrv = flags & (CEPH_PICK_ADDRESS_MSGR1 |
@@ -400,6 +405,13 @@ int pick_addresses(
     networks = cct->_conf.get_val<std::string>("public_network");
     interfaces =
       cct->_conf.get_val<std::string>("public_network_interface");
+  } else if (addrt & CEPH_PICK_ADDRESS_PUBLIC_BIND) {
+    addr = cct->_conf.get_val<entity_addr_t>("public_bind_addr");
+    // XXX: we don't support _network nor _network_interface for
+    // the public_bind addrs yet.
+    if (addr.is_blank_ip()) {
+      return -ENOENT;
+    }
   } else {
     addr = cct->_conf.get_val<entity_addr_t>("cluster_addr");
     networks = cct->_conf.get_val<std::string>("cluster_network");
