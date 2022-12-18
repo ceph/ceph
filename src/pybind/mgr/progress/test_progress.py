@@ -13,7 +13,7 @@ from progress import module
 class TestPgRecoveryEvent(object):
     # Testing PgRecoveryEvent class
 
-    def setup(self):
+    def setup_method(self):
         # Creating the class and Mocking 
         # a bunch of attributes for testing
         module._module = mock.Mock() # just so Event._refresh() works
@@ -90,7 +90,7 @@ class OSDMap:
 class TestModule(object):
     # Testing Module Class
     
-    def setup(self):
+    def setup_method(self):
         # Creating the class and Mocking a
         # bunch of attributes for testing
 
