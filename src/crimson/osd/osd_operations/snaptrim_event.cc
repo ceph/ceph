@@ -46,7 +46,7 @@ void SnapTrimEvent::SubOpBlocker::emplace_back(Args&&... args)
   subops.emplace_back(std::forward<Args>(args)...);
 };
 
-SnapTrimEvent::interruptible_future<>
+SnapTrimEvent::remove_or_update_iertr::future<>
 SnapTrimEvent::SubOpBlocker::wait_completion()
 {
   return interruptor::do_for_each(subops, [](auto&& kv) {
@@ -70,7 +70,8 @@ void SnapTrimEvent::dump_detail(Formatter *f) const
   f->close_section();
 }
 
-seastar::future<seastar::stop_iteration> SnapTrimEvent::start()
+SnapTrimEvent::remove_or_update_ertr::future<seastar::stop_iteration>
+SnapTrimEvent::start()
 {
   logger().debug("{}: {}", *this, __func__);
   return with_pg(
@@ -86,7 +87,8 @@ CommonPGPipeline& SnapTrimEvent::pp()
   return pg->request_pg_pipeline;
 }
 
-seastar::future<seastar::stop_iteration> SnapTrimEvent::with_pg(
+SnapTrimEvent::remove_or_update_ertr::future<seastar::stop_iteration>
+SnapTrimEvent::with_pg(
   ShardServices &shard_services, Ref<PG> _pg)
 {
   return interruptor::with_interruption([&shard_services, this] {
@@ -135,8 +137,8 @@ seastar::future<seastar::stop_iteration> SnapTrimEvent::with_pg(
         return to_trim;
       }).then_interruptible([&shard_services, this] (const auto& to_trim) {
         if (to_trim.empty()) {
-          // ENOENT
-          return interruptor::make_ready_future<seastar::stop_iteration>(
+          // the legit ENOENT -> done
+          return remove_or_update_iertr::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         }
         for (const auto& object : to_trim) {
@@ -147,7 +149,7 @@ seastar::future<seastar::stop_iteration> SnapTrimEvent::with_pg(
             snapid);
           subop_blocker.emplace_back(
             op->get_id(),
-            std::move(fut).handle_error_interruptible(crimson::ct_error::assert_all{})
+            std::move(fut)
           );
         }
         return enter_stage<interruptor>(
@@ -155,7 +157,7 @@ seastar::future<seastar::stop_iteration> SnapTrimEvent::with_pg(
         ).then_interruptible([this] {
           logger().debug("{}: awaiting completion", *this);
           return subop_blocker.wait_completion();
-        }).then_interruptible([this] {
+        }).safe_then_interruptible([this] {
           if (!needs_pause) {
             return interruptor::now();
           }
@@ -172,9 +174,9 @@ seastar::future<seastar::stop_iteration> SnapTrimEvent::with_pg(
             return seastar::sleep(
               std::chrono::milliseconds(std::lround(time_to_sleep * 1000)));
           });
-        }).then_interruptible([this] {
+        }).safe_then_interruptible([this] {
           logger().debug("{}: all completed", *this);
-          return interruptor::make_ready_future<seastar::stop_iteration>(
+          return remove_or_update_iertr::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::no);
         });
       });
@@ -182,7 +184,7 @@ seastar::future<seastar::stop_iteration> SnapTrimEvent::with_pg(
   }, [this](std::exception_ptr eptr) {
     // TODO: better debug output
     logger().debug("{}: interrupted {}", *this, eptr);
-    return seastar::make_ready_future<seastar::stop_iteration>(
+    return remove_or_update_ertr::make_ready_future<seastar::stop_iteration>(
       seastar::stop_iteration::no);
   }, pg);
 }

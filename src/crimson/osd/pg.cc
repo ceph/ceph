@@ -468,7 +468,7 @@ void PG::on_active_actmap()
           this,
           snap_mapper,
           to_trim,
-          needs_pause).second;
+          needs_pause).second.handle_error(crimson::ct_error::assert_all{});
       }).then([this, trimmed=to_trim] {
         logger().debug("{}: trimmed snap={}", *this, trimmed);
       });

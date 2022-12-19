@@ -30,6 +30,12 @@ class PG;
 // trim up to `max` objects for snapshot `snapid
 class SnapTrimEvent final : public PhasedOperationT<SnapTrimEvent> {
 public:
+  using remove_or_update_ertr =
+    crimson::errorator<crimson::ct_error::enoent>;
+  using remove_or_update_iertr =
+    crimson::interruptible::interruptible_errorator<
+      IOInterruptCondition, remove_or_update_ertr>;
+
   static constexpr OperationTypeCode type = OperationTypeCode::snaptrim_event;
 
   SnapTrimEvent(Ref<PG> pg,
@@ -43,8 +49,8 @@ public:
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
-  seastar::future<seastar::stop_iteration> start();
-  seastar::future<seastar::stop_iteration> with_pg(
+  remove_or_update_ertr::future<seastar::stop_iteration> start();
+  remove_or_update_ertr::future<seastar::stop_iteration> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
 
 private:
@@ -55,14 +61,14 @@ private:
     static constexpr const char* type_name = "CompoundOpBlocker";
 
     using id_done_t = std::pair<crimson::Operation::id_t,
-                                interruptible_future<>>;
+                                remove_or_update_iertr::future<>>;
 
     void dump_detail(Formatter *f) const final;
 
     template <class... Args>
     void emplace_back(Args&&... args);
 
-    interruptible_future<> wait_completion();
+    remove_or_update_iertr::future<> wait_completion();
   private:
     std::vector<id_done_t> subops;
   } subop_blocker;
