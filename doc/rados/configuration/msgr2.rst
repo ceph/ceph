@@ -188,16 +188,21 @@ By default, ``ms_bind_msgr2`` is true starting with Nautilus 14.2.z.
 However, until the monitors start using v2, only limited services will
 start advertising v2 addresses.
 
-For most users, the monitors are binding to the default legacy port ``6789`` for the v1 protocol.  When this is the case, enabling v2 is as simple as::
+For most users, the monitors are binding to the default legacy port ``6789``
+for the v1 protocol.  When this is the case, enabling v2 is as simple as:
 
-  ceph mon enable-msgr2
+.. prompt:: bash $
+
+   ceph mon enable-msgr2
 
 If the monitors are bound to non-standard ports, you will need to
 specify an additional port for v2 explicitly.  For example, if your
 monitor ``mon.a`` binds to ``1.2.3.4:1111``, and you want to add v2 on
-port ``1112``,::
+port ``1112``:
 
-  ceph mon set-addrs a [v2:1.2.3.4:1112,v1:1.2.3.4:1111]
+.. prompt:: bash $
+
+   ceph mon set-addrs a [v2:1.2.3.4:1112,v1:1.2.3.4:1111]
 
 Once the monitors bind to v2, each daemon will start advertising a v2
 address when it is next restarted.
