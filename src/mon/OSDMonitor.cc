@@ -7880,65 +7880,74 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
   return 0;
 }
 
-int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, ostream *ss)
+/*
+* Get the number of 'in' osds according to the crush_rule,
+*/
+uint32_t OSDMonitor::get_osd_num_by_crush(int crush_rule)
+{
+  set<int> out_osds;
+  set<int> crush_in_osds;
+  set<int> roots;
+  CrushWrapper newcrush = _get_pending_crush();
+  newcrush.find_takes_by_rule(crush_rule, &roots);
+  for (auto root : roots) {
+    const char *rootname = newcrush.get_item_name(root);
+    set<int> crush_all_osds;
+    newcrush.get_leaves(rootname, &crush_all_osds);
+    std::set_difference(crush_all_osds.begin(), crush_all_osds.end(),
+                        out_osds.begin(), out_osds.end(),
+                        std::inserter(crush_in_osds, crush_in_osds.end()));
+  }
+  return crush_in_osds.size();
+}
+
+int OSDMonitor::check_pg_num(int64_t pool,
+                             int pg_num,
+                             int size,
+                             int crush_rule,
+                             ostream *ss)
 {
   auto max_pgs_per_osd = g_conf().get_val<uint64_t>("mon_max_pg_per_osd");
   uint64_t projected = 0;
-  unsigned osd_num = 0;
-  // assume min cluster size 3
-  auto num_osds = std::max(osdmap.get_num_in_osds(), 3u);
+  uint32_t osd_num_by_crush = 0;
+  set<int64_t> crush_pool_ids;
   if (pool < 0) {
     // a new pool
     projected += pg_num * size;
   }
-  if (mapping.get_epoch() >= osdmap.get_epoch()) {
-    set<int> roots;
-    CrushWrapper newcrush = _get_pending_crush();
-    newcrush.find_takes_by_rule(crush_rule, &roots);
-    int max_osd = osdmap.get_max_osd();
-    for (auto root : roots) {
-      const char *rootname = newcrush.get_item_name(root);
-      set<int> osd_ids;
-      newcrush.get_leaves(rootname, &osd_ids);
-      unsigned out_osd = 0;
-      for (auto id : osd_ids) {
-	if (id > max_osd) { 
-	  out_osd++;
-	  continue;
-	}
-	projected += mapping.get_osd_acting_pgs(id).size();
-      }
-      osd_num += osd_ids.size() - out_osd;
-    }
-    if (pool >= 0) {
-      // update an existing pool's pg num.
-      // already counted the pgs of this `pool` by iterating crush map, so
-      // remove them using adding the specified pg num
-      projected += pg_num * size;
-      projected -= mapping.get_num_acting_pgs(pool);
-    }
-    num_osds = std::max(osd_num, 3u);  // assume min cluster size 3
-  } else {
-    // use pg_num target for evaluating the projected pg num
-    for (const auto& [pool_id, pool_info] : osdmap.get_pools()) {
+
+  osd_num_by_crush = get_osd_num_by_crush(crush_rule);
+  osdmap.get_pool_ids_by_rule(crush_rule, &crush_pool_ids);
+
+  for (const auto& [pool_id, pool_info] : osdmap.get_pools()) {
+    // Check only for pools affected by crush rule
+    if (crush_pool_ids.contains(pool_id)) {
       if (pool_id == pool) {
-	projected += pg_num * size;
+        // Specified pool, use given pg_num and size values.
+        projected += pg_num * size;
       } else {
-	projected += pool_info.get_pg_num_target() * pool_info.get_size();
+        // Use pg_num_target for evaluating the projected pg num
+        projected += pool_info.get_pg_num_target() * pool_info.get_size();
       }
     }
   }
-  auto max_pgs = max_pgs_per_osd * num_osds;
-  auto projected_pgs_per_osd = projected / num_osds;
-  if (projected > max_pgs) {
+  // assume min cluster size 3
+  osd_num_by_crush = std::max(osd_num_by_crush, 3u);
+  auto projected_pgs_per_osd = projected / osd_num_by_crush;
+
+  if (projected_pgs_per_osd > max_pgs_per_osd) {
     if (pool >= 0) {
       *ss << "pool id " << pool;
     }
-    *ss << " pg_num " << pg_num << " size " << size
-	<< " for this new pool would result in " << projected_pgs_per_osd
-	<< " cumulative PGs per OSD (" << projected
-	<< " total PG replicas on " << num_osds
-	<< " 'in' OSDs) which exceeds the mon_max_pg_per_osd value of " << max_pgs_per_osd;
+    *ss << " pg_num " << pg_num
+        << " size " << size
+        << " for this pool would result in "
+        << projected_pgs_per_osd
+        << " cumulative PGs per OSD (" << projected
+        << " total PG replicas on " << osd_num_by_crush
+        << " 'in' root OSDs by crush rule) "
+        << "which exceeds the mon_max_pg_per_osd "
+        << "value of " << max_pgs_per_osd;
     return -ERANGE;
   }
   return 0;
