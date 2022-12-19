@@ -7738,7 +7738,17 @@ paths:
       - RgwBucket
   /api/rgw/bucket/getEncryptionConfig:
     get:
-      parameters: []
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: owner
+        schema:
+          type: string
       responses:
         '200':
           content:
