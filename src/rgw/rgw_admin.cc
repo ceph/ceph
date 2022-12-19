@@ -371,6 +371,7 @@ void usage()
   cout << "   --realm-id=<id>           realm id\n";
   cout << "   --realm-new-name=<name>   realm new name\n";
   cout << "   --rgw-zonegroup=<name>    zonegroup name\n";
+  cout << "   --api-name=<name>         zonegroup API name\n";
   cout << "   --zonegroup-id=<id>       zonegroup id\n";
   cout << "   --zonegroup-new-name=<name>\n";
   cout << "                             zonegroup new name\n";
