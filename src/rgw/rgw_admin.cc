@@ -10289,7 +10289,7 @@ next:
 
     list<rados::cls::otp::otp_info_t> result;
     int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.list_mfa(dpp(), user->get_id(), &result, null_yield);
-    if (ret < 0) {
+    if (ret < 0 && ret != -ENOENT) {
       cerr << "MFA listing failed, error: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
