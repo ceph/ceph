@@ -1,3 +1,5 @@
+.. _rados-cephx-config-ref:
+
 ========================
  Cephx Config Reference
 ========================
