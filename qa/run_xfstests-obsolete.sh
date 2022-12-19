@@ -33,7 +33,7 @@ PROGNAME=$(basename $0)
 
 # xfstests is downloaded from this git repository and then built.
 # XFSTESTS_REPO="git://oss.sgi.com/xfs/cmds/xfstests.git"
-XFSTESTS_REPO="https://git.ceph.com/xfstests-dev.git"
+XFSTESTS_REPO="git://git.kernel.org/pub/scm/fs/xfs/xfstests-dev.git"
 
 # Default command line option values
 COUNT="1"
