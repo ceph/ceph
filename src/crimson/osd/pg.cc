@@ -455,6 +455,9 @@ void PG::on_active_actmap()
   std::ignore = seastar::do_until(
     [this] { return snap_trimq.empty(); },
     [this] {
+      peering_state.state_set(PG_STATE_SNAPTRIM);
+      peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
+      publish_stats_to_osd();
       const auto to_trim = snap_trimq.range_start();
       snap_trimq.erase(to_trim);
       const auto needs_pause = !snap_trimq.empty();
@@ -469,6 +472,9 @@ void PG::on_active_actmap()
       }).then([this, trimmed=to_trim] {
         logger().debug("{}: trimmed snap={}", *this, trimmed);
       });
+    }).finally([this] {
+      peering_state.state_clear(PG_STATE_SNAPTRIM);
+      publish_stats_to_osd();
     });
 }
 
