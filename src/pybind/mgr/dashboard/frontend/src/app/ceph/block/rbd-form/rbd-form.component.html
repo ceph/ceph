@@ -281,7 +281,7 @@
           <label class="cd-col-form-label"
                  i18n>Schedule Interval
           <cd-helper i18n-html
-                     html="Create Mirror-Snapshots automatically on a periodic basis. The interval can be specified in days, hours, or minutes using d, h, m suffix respectively.">
+                     html="Create Mirror-Snapshots automatically on a periodic basis. The interval can be specified in days, hours, or minutes using d, h, m suffix respectively. To create mirror snapshots, you must import or create and have available peers to mirror">
           </cd-helper></label>
           <div class="cd-col-form-input">
             <input id="schedule"
@@ -291,7 +291,7 @@
                    formControlName="schedule"
                    i18n-placeholder
                    placeholder="e.g., 12h or 1d or 10m"
-                   [attr.disabled]="(mode === rbdFormMode.editing) ? true : null">
+                   [attr.disabled]="(peerConfigured === false) ? true : null">
           </div>
         </div>
 

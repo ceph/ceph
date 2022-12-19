@@ -67,6 +67,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
   }>(1);
 
   pool: string;
+  peerConfigured = false;
 
   advancedEnabled = false;
 
@@ -193,11 +194,11 @@ export class RbdFormComponent extends CdForm implements OnInit {
             return acc;
           }, {})
         ),
-        mirroring: new FormControl(false),
+        mirroring: new FormControl(''),
         schedule: new FormControl('', {
           validators: [Validators.pattern(/^([0-9]+)d|([0-9]+)h|([0-9]+)m$/)] // check schedule interval to be in format - 1d or 1h or 1m
         }),
-        mirroringMode: new FormControl(this.mirroringOptions[0]),
+        mirroringMode: new FormControl(''),
         stripingUnit: new FormControl(this.defaultStripingUnit),
         stripingCount: new FormControl(this.defaultStripingCount, {
           updateOn: 'blur'
@@ -257,6 +258,16 @@ export class RbdFormComponent extends CdForm implements OnInit {
   setMirrorMode() {
     this.mirroring = !this.mirroring;
     this.setExclusiveLock();
+    this.checkPeersConfigured();
+  }
+
+  checkPeersConfigured(poolname?: string) {
+    var Poolname = poolname ? poolname : this.rbdForm.get('pool').value;
+    this.rbdMirroringService.getPeerForPool(Poolname).subscribe((resp: any) => {
+      if (resp.length > 0) {
+        this.peerConfigured = true;
+      }
+    });
   }
 
   setPoolMirrorMode() {
@@ -274,10 +285,6 @@ export class RbdFormComponent extends CdForm implements OnInit {
           this.mirroring = false;
           this.rbdForm.get('mirroring').setValue(this.mirroring);
           this.rbdForm.get('mirroring').disable();
-        } else if (this.mode !== this.rbdFormMode.editing) {
-          this.rbdForm.get('mirroring').enable();
-          this.mirroring = true;
-          this.rbdForm.get('mirroring').setValue(this.mirroring);
         }
       });
     }
@@ -319,6 +326,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
           this.snapName = decodeURIComponent(params.snap);
         }
         promises['rbd'] = this.rbdService.get(imageSpec);
+        this.checkPeersConfigured(imageSpec.poolName);
       });
     } else {
       // New image
@@ -636,6 +644,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
     request.name = this.rbdForm.getValue('name');
     request.schedule_interval = this.rbdForm.getValue('schedule');
     request.size = this.formatter.toBytes(this.rbdForm.getValue('size'));
+
     if (this.poolMirrorMode === 'image') {
       request.mirror_mode = this.rbdForm.getValue('mirroringMode');
     }
