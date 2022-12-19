@@ -66,6 +66,7 @@ def health_status_to_number(status: str) -> int:
         return 2
     raise ValueError(f'unknown status "{status}"')
 
+
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
 
 OSD_BLOCKLIST = ['osd_blocklist_count']
