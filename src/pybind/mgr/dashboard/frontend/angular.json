@@ -75,7 +75,7 @@
               "lodash"
             ],
             "i18nMissingTranslation": "ignore",
-            "outputPath": "dist",
+            "outputPath": "dist/upstream",
             "index": "src/index.html",
             "main": "src/main.ts",
             "tsConfig": "tsconfig.app.json",

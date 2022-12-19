@@ -45,7 +45,7 @@ class LanguageMixin(object):
                     'lang': self.LANGUAGES_PATH_MAP[lang]['lang'],
                     'path': self.LANGUAGES_PATH_MAP[lang]['path']
                 }
-        with open(os.path.normpath("{}/../package.json".format(mgr.get_frontend_path())),
+        with open(os.path.normpath(mgr.get_frontend_package_json_path()),
                   "r") as f:
             config = json.load(f)
         self.DEFAULT_LANGUAGE = config['config']['locale']

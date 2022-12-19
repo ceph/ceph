@@ -46,7 +46,7 @@ else:
     mgr = mock.Mock()
     mgr.get_frontend_path.return_value = os.path.abspath(os.path.join(
         os.path.dirname(__file__),
-        'frontend/dist'))
+        'frontend/dist/dist-link'))
 
     import rbd
 

@@ -372,16 +372,33 @@ class Module(MgrModule, CherryPyConfig):
         return True, ""
 
     @classmethod
-    def get_frontend_path(cls):
+    def get_frontend_package_json_path(cls):
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        path = os.path.join(current_dir, 'frontend/dist')
+        # dist-link is a link to the dist folder to distribute. By default,
+        # we link to the build produced in upstream which is created under dist/upstream.
+        path = os.path.join(current_dir, 'frontend/package.json')
         if os.path.exists(path):
             return path
         else:
             path = os.path.join(current_dir,
                                 '../../../../build',
                                 'src/pybind/mgr/dashboard',
-                                'frontend/dist')
+                                'frontend/package.json')
+            return os.path.abspath(path)
+
+    @classmethod
+    def get_frontend_path(cls):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # dist-link is a link to the dist folder to distribute. By default,
+        # we link to the build produced in upstream which is created under dist/upstream.
+        path = os.path.join(current_dir, 'frontend/dist/dist-link')
+        if os.path.exists(path):
+            return path
+        else:
+            path = os.path.join(current_dir,
+                                '../../../../build',
+                                'src/pybind/mgr/dashboard',
+                                'frontend/dist/dist-link')
             return os.path.abspath(path)
 
     def serve(self):
