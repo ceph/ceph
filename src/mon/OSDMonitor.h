@@ -515,6 +515,7 @@ private:
 				const std::string &erasure_code_profile,
 				unsigned *stripe_width,
 				std::ostream *ss);
+  uint32_t get_osd_num_by_crush(int crush_rule);
   int check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, std::ostream* ss);
   int prepare_new_pool(std::string& name,
 		       int crush_rule,
