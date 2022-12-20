@@ -175,6 +175,40 @@ struct MDSCapMatch {
 };
 WRITE_CLASS_ENCODER(MDSCapMatch)
 
+struct MDSCapAuth {
+  MDSCapAuth() {}
+  MDSCapAuth(MDSCapMatch m, bool r, bool w) :
+    match(m), readable(r), writeable(w) {}
+
+  const MDSCapAuth& operator=(const MDSCapAuth& m) {
+    match = m.match;
+    readable = m.readable;
+    writeable = m.writeable;
+    return *this;
+  }
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(match, bl);
+    encode(readable, bl);
+    encode(writeable, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_START(1, p);
+    decode(match, p);
+    decode(readable, p);
+    decode(writeable, p);
+    DECODE_FINISH(p);
+  }
+
+  MDSCapMatch match;
+  bool readable;
+  bool writeable;
+};
+WRITE_CLASS_ENCODER(MDSCapAuth)
+
 struct MDSCapGrant {
   MDSCapGrant(const MDSCapSpec &spec_, const MDSCapMatch &match_,
 	      boost::optional<std::string> n)
@@ -248,6 +282,7 @@ private:
 };
 
 std::ostream &operator<<(std::ostream &out, const MDSCapMatch &match);
+std::ostream &operator<<(std::ostream &out, const MDSCapAuth &auth);
 std::ostream &operator<<(std::ostream &out, const MDSCapSpec &spec);
 std::ostream &operator<<(std::ostream &out, const MDSCapGrant &grant);
 std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);

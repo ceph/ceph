@@ -456,3 +456,9 @@ ostream &operator<<(ostream &out, const MDSAuthCaps &cap)
   return out;
 }
 
+ostream &operator<<(ostream &out, const MDSCapAuth &auth)
+{
+  out << "MDSCapAuth(" << auth.match << "readable="
+      << auth.readable << ", writeable=" << auth.writeable << ")";
+  return out;
+}
