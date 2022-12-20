@@ -222,6 +222,7 @@ public:
 
   void cluster_log(const std::string &channel, clog_type prio,
     const std::string &message);
+  PyObject* get_daemon_health_metrics();
 
   bool inject_python_on() const;
   void update_cache_metrics();
