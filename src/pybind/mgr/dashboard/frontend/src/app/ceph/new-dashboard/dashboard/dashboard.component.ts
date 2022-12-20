@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
+import { take } from 'rxjs/operators';
 
 import { ClusterService } from '~/app/shared/api/cluster.service';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
@@ -28,12 +29,15 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 })
 export class DashboardComponent implements OnInit, OnDestroy {
   detailsCardData: DashboardDetails = {};
-  osdSettings$: Observable<any>;
+  osdSettingsService: any;
+  osdSettings: any;
   interval = new Subscription();
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
   color: string;
-  capacity$: Observable<any>;
+  capacityService: any;
+  capacity: any;
+  healthData$: Observable<Object>;
   prometheusAlerts$: Observable<AlertmanagerAlert[]>;
 
   isAlertmanagerConfigured = false;
@@ -72,10 +76,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.getHealth();
       this.triggerPrometheusAlerts();
+      this.getCapacityCardData();
     });
     this.getDetailsCardData();
-    this.osdSettings$ = this.osdService.getOsdSettings();
-    this.capacity$ = this.clusterService.getCapacity();
   }
 
   ngOnDestroy() {
@@ -107,6 +110,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const version = summary.version.replace('ceph version ', '').split(' ');
       this.detailsCardData.cephVersion =
         version[0] + ' ' + version.slice(2, version.length).join(' ');
+    });
+  }
+
+  getCapacityCardData() {
+    this.osdSettingsService = this.osdService
+      .getOsdSettings()
+      .pipe(take(1))
+      .subscribe((data: any) => {
+        this.osdSettings = data;
+      });
+    this.capacityService = this.clusterService.getCapacity().subscribe((data: any) => {
+      this.capacity = data;
     });
   }
 
