@@ -149,8 +149,8 @@ list of realms.
 
 Set the ``usage_trim_older_than_days`` config option to the amount of
 days usage logs older than this should be trimmed. Optionally you can
-set the interval that trim will be performed with ``usage_trim_interval``,
-it defaults to every twelve hours.
+set the interval in seconds that trim will be performed with
+``usage_trim_interval``, it defaults to every twelve hours.
 
 The below example will trim logs from start date 1970-01-01 to the current
 date minus 30 days.
