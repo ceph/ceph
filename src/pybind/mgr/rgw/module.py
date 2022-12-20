@@ -111,7 +111,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                desc='Trim usage log entries older than this amount of days, must be set to a positive value'),
         Option(name='usage_trim_interval',
                default=43200,
-               desc='Interval between trimming usage log entries, defaults to 12 hours'),
+               desc='Interval in seconds between trimming usage log entries, defaults to 12 hours'),
     ]
 
     # These are "native" Ceph options that this module cares about.
