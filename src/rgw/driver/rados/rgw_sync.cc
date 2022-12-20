@@ -1194,6 +1194,10 @@ int RGWLastCallerWinsCR::operate(const DoutPrefixProvider *dpp) {
       cr = nullptr;
       yield call(call_cr);
       /* cr might have been modified at this point */
+      if (retcode < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: RGWLastCallerWinsCR() failed: retcode=" << retcode << dendl;
+        return set_cr_error(retcode);
+      }
     }
     return set_cr_done();
   }
