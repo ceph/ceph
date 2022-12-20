@@ -19,6 +19,7 @@
 #include <string_view>
 #include <vector>
 
+#include "include/encoding.h"
 #include "include/common_fwd.h"
 #include "include/types.h"
 #include "common/debug.h"
@@ -158,12 +159,34 @@ struct MDSCapMatch {
    */
   bool match_path(std::string_view target_path) const;
 
-  int64_t uid;       // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(uid, bl);
+    encode(gids, bl);
+    encode(path, bl);
+    encode(fs_name, bl);
+    encode(root_squash, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_START(1, p);
+    decode(uid, p);
+    decode(gids, p);
+    decode(path, p);
+    decode(fs_name, p);
+    decode(root_squash, p);
+    DECODE_FINISH(p);
+  }
+
+  // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
+  int64_t uid = MDS_AUTH_UID_ANY;
   std::vector<gid_t> gids;  // Use these GIDs
   std::string path;  // Require path to be child of this (may be "" or "/" for any)
   std::string fs_name;
   bool root_squash=false;
 };
+WRITE_CLASS_ENCODER(MDSCapMatch)
 
 struct MDSCapGrant {
   MDSCapGrant(const MDSCapSpec &spec_, const MDSCapMatch &match_,
