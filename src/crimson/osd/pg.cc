@@ -452,11 +452,13 @@ Context *PG::on_clean()
 void PG::on_active_actmap()
 {
   logger().debug("{}: {} snap_trimq={}", *this, __func__, snap_trimq);
+  peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
   std::ignore = seastar::do_until(
-    [this] { return snap_trimq.empty(); },
+    [this] { return snap_trimq.empty()
+                    && !peering_state.state_test(PG_STATE_SNAPTRIM_ERROR);
+    },
     [this] {
       peering_state.state_set(PG_STATE_SNAPTRIM);
-      peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
       publish_stats_to_osd();
       const auto to_trim = snap_trimq.range_start();
       snap_trimq.erase(to_trim);
@@ -468,7 +470,16 @@ void PG::on_active_actmap()
           this,
           snap_mapper,
           to_trim,
-          needs_pause).second.handle_error(crimson::ct_error::assert_all{});
+          needs_pause
+        ).second.handle_error(
+          crimson::ct_error::enoent::handle([this] {
+            logger().error("{}: ENOENT saw, trimming stopped", *this);
+            peering_state.state_set(PG_STATE_SNAPTRIM_ERROR);
+            publish_stats_to_osd();
+            return seastar::make_ready_future<seastar::stop_iteration>(
+              seastar::stop_iteration::yes);
+          })
+        );
       }).then([this, trimmed=to_trim] {
         logger().debug("{}: trimmed snap={}", *this, trimmed);
       });
