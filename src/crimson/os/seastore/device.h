@@ -25,7 +25,7 @@ struct device_spec_t {
     denc(v.id, p);
     DENC_FINISH(p);
   }
-} __attribute__ ((packed));
+};
 
 std::ostream& operator<<(std::ostream&, const device_spec_t&);
 
