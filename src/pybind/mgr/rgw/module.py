@@ -382,8 +382,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             endDate = (datetime.today() - timedelta(days=self.usage_trim_older_than_days)).strftime('%Y-%m-%d')
             realms = cast(str, self.usage_trim_realms, default='').split(',')
             for realm in realms:
-                self.log.info('Running usage trim for realm {} with startDate={} and endDate={}'.format(
-                              realm, startDate, endDate))
+                self.log.info(f'Running usage trim for realm {realm} with startDate={startDate} and endDate={endDate}')
                 try:
                     RGWAM(self.env).usage_op().trim(realm=realm, startDate=startDate, endDate=endDate)
                 except Exception:
