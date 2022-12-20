@@ -219,7 +219,7 @@ void RGWListOIDCProviders::execute(optional_yield y)
     s->formatter->open_object_section("ListOpenIDConnectProvidersResult");
     s->formatter->open_array_section("OpenIDConnectProviderList");
     for (const auto& it : result) {
-      s->formatter->open_object_section("Arn");
+      s->formatter->open_object_section("member");
       auto& arn = it->get_arn();
       ldpp_dout(s, 0) << "ARN: " << arn << dendl;
       s->formatter->dump_string("Arn", arn);
