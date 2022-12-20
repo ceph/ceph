@@ -115,8 +115,17 @@ struct MDSCapMatch {
     normalize_path();
   }
 
+  const MDSCapMatch& operator=(const MDSCapMatch& m) {
+    uid = m.uid;
+    gids = m.gids;
+    path = m.path;
+    fs_name = m.fs_name;
+    root_squash = m.root_squash;
+    return *this;
+  }
+
   void normalize_path();
-  
+
   bool is_match_all() const
   {
     return uid == MDS_AUTH_UID_ANY && path == "";
