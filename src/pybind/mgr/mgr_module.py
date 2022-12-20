@@ -2283,6 +2283,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_mds_perf_counters(query_id)
 
+    def get_daemon_health_metrics(self) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get the list of health metrics per daemon. This includes SLOW_OPS health metrics
+        in MON and OSD daemons, and PENDING_CREATING_PGS health metrics for OSDs.
+        """
+        return self._ceph_get_daemon_health_metrics()
+
     def is_authorized(self, arguments: Dict[str, str]) -> bool:
         """
         Verifies that the current session caps permit executing the py service
