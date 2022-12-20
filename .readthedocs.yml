@@ -1,10 +1,6 @@
 ---
 # Read the Docs configuration file
 # See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
-#
-# The pre_build command checks if we're building a named branch (i.e., not a PR).
-# If so, check out doc/releases from the main branch before building so
-# it's always up to date on docs.ceph.com/en/*.
 
 version: 2
 formats: []
@@ -15,9 +11,6 @@ build:
   apt_packages:
     - ditaa
     - graphviz
-  jobs:
-    pre_build:
-      - bash admin/rtd-checkout-main
 python:
   install:
     - requirements: admin/doc-requirements.txt
