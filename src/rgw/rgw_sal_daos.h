@@ -934,7 +934,7 @@ class DaosStore : public StoreDriver {
   virtual std::unique_ptr<Completions> get_completions(void) override;
   virtual std::unique_ptr<Notification> get_notification(
       rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
-      rgw::notify::EventType event_type,
+      rgw::notify::EventType event_type, optional_yield y,
       const std::string* object_name = nullptr) override;
   virtual std::unique_ptr<Notification> get_notification(
       const DoutPrefixProvider* dpp, rgw::sal::Object* obj,

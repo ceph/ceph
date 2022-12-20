@@ -970,7 +970,8 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     const req_state* _s,
 			     rgw::sal::Object* _object,
 			     rgw::sal::Object* _src_object,
-			     const std::string* _object_name) :
+			     const std::string* _object_name,
+			     optional_yield y) :
   dpp(_s), store(_store), s(_s), size(0) /* XXX */,
   object(_object), src_object(_src_object), bucket(_s->bucket.get()),
   object_name(_object_name),
@@ -980,7 +981,7 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
   user_id(_s->user->get_id().id),
   user_tenant(_s->user->get_id().tenant),
   req_id(_s->req_id),
-  yield(_s->yield)
+  yield(y)
 {}
 
 reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
