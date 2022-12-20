@@ -151,6 +151,21 @@ void RGWPutUserPolicy::execute(optional_yield y)
     }
     bufferlist in_bl;
     policies[policy_name] = policy;
+#define USER_POLICIES_MAX_NUM 100
+    int max_num = s->cct->_conf->rgw_user_policies_max_num;
+    if (max_num < 0) {
+      max_num = USER_POLICIES_MAX_NUM;
+    }
+    if (policies.size() > max_num) {
+      ldpp_dout(this, 4) << "IAM user policies has reached the num config: "
+                         << max_num << ", cant add another" << dendl;
+      op_ret = -ERR_INVALID_REQUEST;
+      s->err.message =
+          "The number of IAM user policies should not exceed allowed limit "
+          "of " +
+          std::to_string(max_num) + " policies.";
+      return;
+    }
     encode(policies, in_bl);
     user->get_attrs()[RGW_ATTR_USER_POLICY] = in_bl;
 
