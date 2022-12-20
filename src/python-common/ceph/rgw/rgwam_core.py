@@ -424,15 +424,16 @@ class UsageOp:
     def __init__(self, env):
         self.env = env
 
-    def trim(self, realm: EntityKey = None, startDate: str = '', endDate: str = ''):
+    def trim(self, realm: EntityKey = None, startDate: Optional[str] = None,
+             endDate: Optional[str] = None):
         ze = ZoneEnv(self.env, realm=realm)
 
         params = ['trim']
 
-        if startDate != '':
+        if startDate is not None:
             params += ['--start-date=%s' % startDate]
 
-        if endDate != '':
+        if endDate is not None:
             params += ['--end-date=%s' % endDate]
 
         return RGWAdminCmd(ze).run(params)
