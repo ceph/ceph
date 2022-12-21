@@ -2063,12 +2063,15 @@ int64_t BlueFS::_read(
                  << std::hex << x_off << "~" << l << std::dec
                  << " of " << *p << dendl;
 	int r;
+	// when reading BlueFS log (only happens on startup) use non-buffered io
+	// it makes it in sync with logic in _flush_range()
+	bool use_buffered_io = h->file->fnode.ino == 1 ? false : cct->_conf->bluefs_buffered_io;
 	if (!cct->_conf->bluefs_check_for_zeros) {
 	  r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-				  cct->_conf->bluefs_buffered_io);
+				  use_buffered_io);
 	} else {
 	  r = read(p->bdev, p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-		   cct->_conf->bluefs_buffered_io);
+		   use_buffered_io);
 	}
         ceph_assert(r == 0);
       }
