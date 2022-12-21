@@ -151,11 +151,9 @@ void RGWPutUserPolicy::execute(optional_yield y)
     }
     bufferlist in_bl;
     policies[policy_name] = policy;
-#define USER_POLICIES_MAX_NUM 100
-    int max_num = s->cct->_conf->rgw_user_policies_max_num;
-    if (max_num < 0) {
-      max_num = USER_POLICIES_MAX_NUM;
-    }
+    constexpr unsigned int USER_POLICIES_MAX_NUM = 100;
+    const unsigned int max_num = s->cct->_conf->rgw_user_policies_max_num < 0 ? 
+      USER_POLICIES_MAX_NUM : s->cct->_conf->rgw_user_policies_max_num;
     if (policies.size() > max_num) {
       ldpp_dout(this, 4) << "IAM user policies has reached the num config: "
                          << max_num << ", cant add another" << dendl;
