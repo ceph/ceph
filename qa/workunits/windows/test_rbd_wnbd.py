@@ -360,11 +360,14 @@ class RbdImage(object):
         # Retrieve the drive letter.
         cmd = (
             "powershell.exe", "-command",
-            f"(Get-Partition -DiskNumber {self.disk_number})[0].DriveLetter")
+            f"(Get-Partition -DiskNumber {self.disk_number}"
+            " | ? { $_.DriveLetter }).DriveLetter")
         result = execute(*cmd)
 
+        # The PowerShell command will place a null character if no drive letter
+        # is available. For example, we can receive "\x00\r\n".
         self.drive_letter = result.stdout.decode().strip()
-        if len(self.drive_letter) != 1:
+        if not self.drive_letter.isalpha() or len(self.drive_letter) != 1:
             raise CephTestException(
                 "Invalid drive letter received: %s" % self.drive_letter)
 
