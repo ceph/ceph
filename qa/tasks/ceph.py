@@ -1585,6 +1585,20 @@ def restart(ctx, config):
     if config.get('wait-for-osds-up', False):
         for cluster in clusters:
             ctx.managers[cluster].wait_for_all_osds_up()
+    if config.get('expected-failure') is not None:
+        log.info('Checking for expected-failure in osds logs after restart...')
+        expected_fail = config.get('expected-failure')
+        is_osd = teuthology.is_type('osd')
+        for role in daemons:
+            if not is_osd(role):
+                continue
+            (remote,) = ctx.cluster.only(role).remotes.keys()
+            cluster, type_, id_ = teuthology.split_role(role)
+            remote.run(
+               args = ['sudo',
+                       'egrep', expected_fail,
+                       '/var/log/ceph/{cluster}-{type_}.{id_}.log'.format(cluster=cluster, type_=type_, id_=id_),
+                ])
     yield
 
 
@@ -1899,7 +1913,8 @@ def task(ctx, config):
         finally:
             # set pg_num_targets back to actual pg_num, so we don't have to
             # wait for pending merges (which can take a while!)
-            ctx.managers[config['cluster']].stop_pg_num_changes()
+            if not config.get('skip_stop_pg_num_changes', True):
+                ctx.managers[config['cluster']].stop_pg_num_changes()
 
             if config.get('wait-for-scrub', True):
                 # wait for pgs to become active+clean in case any
