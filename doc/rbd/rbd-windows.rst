@@ -142,6 +142,34 @@ initializes a partition::
     # Show the partition letter (for example, "D:" or "F:"):
     (Get-Partition -DiskNumber $diskNumber).DriveLetter
 
+SAN policy
+----------
+
+The Windows SAN policy determines which disks will be automatically mounted.
+The default policy (``offlineShared``) specifies that:
+
+  All newly discovered disks that do not reside on a shared bus (such as SCSI
+  and iSCSI) are brought online and made read-write. Disks that are left
+  offline will be read-only by default."
+
+Note that recent WNBD driver versions report rbd-wnbd disks as SAS, which is
+also considered a shared bus. As a result, the disks will be offline and
+read-only by default.
+
+In order to turn a disk online (mounting the disk partitions) and clear the
+read-only flag, use the following commands::
+
+  Set-Disk -Number $diskNumber -IsOffline $false
+  Set-Disk -Number $diskNumber -IsReadOnly $false
+
+Please check the `Limitations`_ section to learn about the Windows limitations
+that affect automatically mounted disks.
+
+Windows documentation:
+
+* `SAN policy reference`_
+* `san command`_
+* `StorageSetting command`_
 
 Limitations
 -----------
@@ -175,6 +203,22 @@ There are a few possible ways of avoiding this Hyper-V limitation:
 * use the Openstack Hyper-V driver, which automatically refreshes the VM disk
   attachments before powering them back on.
 
+Automatically mounted disks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Disks that are marked as "online" or "writable" will remain so after being
+reconnected (e.g. due to host reboots, Ceph service restarts, etc).
+
+Unfortunately, Windows restores the disk status based on the disk number,
+ignoring the disk unique identifier. However, the disk numbers can change
+after being reconnected. This issue also affects iSCSI and Fibre Channel disks.
+
+Let's assume that the `SAN policy`_ is set to ``offlineShared``, three
+RBD images are attached and disk 1 is turned online. After a reboot, disk 1
+will become online but it may now correspond to a different RBD image. This can
+be an issue if the disk that was mounted on the host was actually meant for a
+VM.
+
 Troubleshooting
 ===============
 
@@ -186,3 +230,6 @@ Please consult the `Windows troubleshooting`_ page.
 .. _WNBD driver: https://github.com/cloudbase/wnbd
 .. _Msvm_StorageAllocationSettingData: https://docs.microsoft.com/en-us/windows/win32/hyperv_v2/msvm-storageallocationsettingdata
 .. _WMI: https://docs.microsoft.com/en-us/windows/win32/wmisdk/wmi-start-page
+.. _san command: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/san
+.. _StorageSetting command: https://learn.microsoft.com/en-us/powershell/module/storage/set-storagesetting?view=windowsserver2022-ps
+.. _SAN policy reference: https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-partitionmanager-sanpolicy
