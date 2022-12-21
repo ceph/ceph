@@ -90,10 +90,13 @@ describe('RbdService', () => {
   });
 
   it('should call createSnapshot', () => {
-    service.createSnapshot(new ImageSpec('poolName', null, 'rbdName'), 'snapshotName').subscribe();
+    service
+      .createSnapshot(new ImageSpec('poolName', null, 'rbdName'), 'snapshotName', false)
+      .subscribe();
     const req = httpTesting.expectOne('api/block/image/poolName%2FrbdName/snap');
     expect(req.request.body).toEqual({
-      snapshot_name: 'snapshotName'
+      snapshot_name: 'snapshotName',
+      mirrorImageSnapshot: false
     });
     expect(req.request.method).toBe('POST');
   });
