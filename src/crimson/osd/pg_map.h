@@ -162,6 +162,8 @@ public:
    */
   void pg_creation_canceled(spg_t pgid);
 
+  void remove_pg(spg_t pgid);
+
   pgs_t& get_pgs() { return pgs; }
   const pgs_t& get_pgs() const { return pgs; }
   auto get_pg_count() const { return pgs.size(); }

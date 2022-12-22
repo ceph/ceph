@@ -344,9 +344,8 @@ public:
     // Not needed yet
   }
 
-  void on_removal(ceph::os::Transaction &t) final {
-    // TODO
-  }
+  void on_removal(ceph::os::Transaction &t) final;
+
   std::pair<ghobject_t, bool>
   do_delete_work(ceph::os::Transaction &t, ghobject_t _next) final;
 
