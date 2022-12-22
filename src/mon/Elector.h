@@ -358,6 +358,11 @@ class Elector : public ElectionOwner, RankProvider {
    */
   void start_participating();
   /**
+  * Check if our peer_tracker is self-consistent, not suffering from
+  * https://tracker.ceph.com/issues/58049
+  */
+  bool peer_tracker_is_clean();
+  /**
    * Forget everything about our peers. :(
    */
   void notify_clear_peer_state();
@@ -371,7 +376,7 @@ class Elector : public ElectionOwner, RankProvider {
    * This is safe to call even if we haven't joined or are currently
    * in a quorum.
    */
-  void notify_rank_removed(int rank_removed);
+  void notify_rank_removed(int rank_removed, int new_rank);
   void notify_strategy_maybe_changed(int strategy);
   /**
    * Set the disallowed leaders.

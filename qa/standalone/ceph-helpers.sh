@@ -496,7 +496,7 @@ function test_run_mon() {
 
     setup $dir || return 1
 
-    run_mon $dir a --mon-initial-members=a || return 1
+    run_mon $dir a || return 1
     ceph mon dump | grep "mon.a" || return 1
     kill_daemons $dir || return 1
 
