@@ -1450,14 +1450,14 @@ void ReplicatedBackend::prepare_pull(
 
   ceph_assert(!pulling.count(soid));
   pull_from_peer[fromshard].insert(soid);
-  pull_info_t &pi = pulling[soid];
-  pi.from = fromshard;
-  pi.soid = soid;
-  pi.head_ctx = headctx;
-  pi.recovery_info = op.recovery_info;
-  pi.recovery_progress = op.recovery_progress;
-  pi.cache_dont_need = h->cache_dont_need;
-  pi.lock_manager = std::move(lock_manager);
+  pull_info_t &pull_info = pulling[soid];
+  pull_info.from = fromshard;
+  pull_info.soid = soid;
+  pull_info.head_ctx = headctx;
+  pull_info.recovery_info = op.recovery_info;
+  pull_info.recovery_progress = op.recovery_progress;
+  pull_info.cache_dont_need = h->cache_dont_need;
+  pull_info.lock_manager = std::move(lock_manager);
 }
 
 /*
@@ -1798,18 +1798,18 @@ bool ReplicatedBackend::handle_pull_response(
     return false;
   }
 
-  pull_info_t &pi = piter->second;
-  if (pi.recovery_info.size == (uint64_t(-1))) {
-    pi.recovery_info.size = pop.recovery_info.size;
-    pi.recovery_info.copy_subset.intersection_of(
+  pull_info_t &pull_info = piter->second;
+  if (pull_info.recovery_info.size == (uint64_t(-1))) {
+    pull_info.recovery_info.size = pop.recovery_info.size;
+    pull_info.recovery_info.copy_subset.intersection_of(
       pop.recovery_info.copy_subset);
   }
   // If primary doesn't have object info and didn't know version
-  if (pi.recovery_info.version == eversion_t()) {
-    pi.recovery_info.version = pop.version;
+  if (pull_info.recovery_info.version == eversion_t()) {
+    pull_info.recovery_info.version = pop.version;
   }
 
-  bool first = pi.recovery_progress.first;
+  bool first = pull_info.recovery_progress.first;
   if (first) {
     // attrs only reference the origin bufferlist (decode from
     // MOSDPGPush message) whose size is much greater than attrs in
@@ -1821,23 +1821,23 @@ bool ReplicatedBackend::handle_pull_response(
     for (auto& a : attrset) {
       a.second.rebuild();
     }
-    pi.obc = get_parent()->get_obc(pi.recovery_info.soid, attrset);
+    pull_info.obc = get_parent()->get_obc(pull_info.recovery_info.soid, attrset);
     if (attrset.find(SS_ATTR) != attrset.end()) {
       bufferlist ssbv = attrset.at(SS_ATTR);
       SnapSet ss(ssbv);
-      assert(!pi.obc->ssc->exists || ss.seq  == pi.obc->ssc->snapset.seq);
+      assert(!pull_info.obc->ssc->exists || ss.seq  == pull_info.obc->ssc->snapset.seq);
     }
-    pi.recovery_info.oi = pi.obc->obs.oi;
-    pi.recovery_info = recalc_subsets(
-      pi.recovery_info,
-      pi.obc->ssc,
-      pi.lock_manager);
+    pull_info.recovery_info.oi = pull_info.obc->obs.oi;
+    pull_info.recovery_info = recalc_subsets(
+      pull_info.recovery_info,
+      pull_info.obc->ssc,
+      pull_info.lock_manager);
   }
 
 
   interval_set<uint64_t> usable_intervals;
   bufferlist usable_data;
-  trim_pushed_data(pi.recovery_info.copy_subset,
+  trim_pushed_data(pull_info.recovery_info.copy_subset,
 		   data_included,
 		   data,
 		   &usable_intervals,
@@ -1846,24 +1846,24 @@ bool ReplicatedBackend::handle_pull_response(
   data = std::move(usable_data);
 
 
-  pi.recovery_progress = pop.after_progress;
+  pull_info.recovery_progress = pop.after_progress;
 
-  dout(10) << "new recovery_info " << pi.recovery_info
-           << ", new progress " << pi.recovery_progress
+  dout(10) << "new recovery_info " << pull_info.recovery_info
+           << ", new progress " << pull_info.recovery_progress
            << dendl;
   interval_set<uint64_t> data_zeros;
   uint64_t z_offset = pop.before_progress.data_recovered_to;
   uint64_t z_length = pop.after_progress.data_recovered_to - pop.before_progress.data_recovered_to;
   if (z_length)
     data_zeros.insert(z_offset, z_length);
-  bool complete = pi.is_complete();
+  bool complete = pull_info.is_complete();
   bool clear_omap = !pop.before_progress.omap_complete;
 
-  submit_push_data(pi.recovery_info,
+  submit_push_data(pull_info.recovery_info,
                   first,
                   complete,
                   clear_omap,
-                  pi.cache_dont_need,
+                  pull_info.cache_dont_need,
                   data_zeros,
                   data_included,
                   data,
@@ -1872,26 +1872,26 @@ bool ReplicatedBackend::handle_pull_response(
                   pop.omap_entries,
                   t);
 
-  pi.stat.num_keys_recovered += pop.omap_entries.size();
-  pi.stat.num_bytes_recovered += data.length();
+  pull_info.stat.num_keys_recovered += pop.omap_entries.size();
+  pull_info.stat.num_bytes_recovered += data.length();
   get_parent()->get_logger()->inc(l_osd_rbytes, pop.omap_entries.size() + data.length());
 
   if (complete) {
-    pi.stat.num_objects_recovered++;
+    pull_info.stat.num_objects_recovered++;
     // XXX: This could overcount if regular recovery is needed right after a repair
     if (get_parent()->pg_is_repair()) {
-      pi.stat.num_objects_repaired++;
+      pull_info.stat.num_objects_repaired++;
       get_parent()->inc_osd_stat_repaired();
     }
     clear_pull_from(piter);
-    to_continue->push_back({hoid, pi.stat});
+    to_continue->push_back({hoid, pull_info.stat});
     get_parent()->on_local_recover(
-      hoid, pi.recovery_info, pi.obc, false, t);
+      hoid, pull_info.recovery_info, pull_info.obc, false, t);
     return false;
   } else {
     response->soid = pop.soid;
-    response->recovery_info = pi.recovery_info;
-    response->recovery_progress = pi.recovery_progress;
+    response->recovery_info = pull_info.recovery_info;
+    response->recovery_progress = pull_info.recovery_progress;
     return true;
   }
 }
