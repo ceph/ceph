@@ -5,6 +5,3 @@ import { Component } from '@angular/core';
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.scss']
 })
-export class DashboardComponent {
-  hasGrafana = false; // TODO: Temporary var, remove when grafana is implemented
-}
