@@ -1561,28 +1561,28 @@ int ReplicatedBackend::prep_push(
   const auto missing_iter = pmissing_iter->second.get_items().find(soid);
   assert(missing_iter != pmissing_iter->second.get_items().end());
   // take note.
-  push_info_t &pi = pushing[soid][peer];
-  pi.obc = obc;
-  pi.recovery_info.size = obc->obs.oi.size;
-  pi.recovery_info.copy_subset = data_subset;
-  pi.recovery_info.clone_subset = clone_subsets;
-  pi.recovery_info.soid = soid;
-  pi.recovery_info.oi = obc->obs.oi;
-  pi.recovery_info.ss = pop->recovery_info.ss;
-  pi.recovery_info.version = version;
-  pi.recovery_info.object_exist = missing_iter->second.clean_regions.object_is_exist();
-  pi.recovery_progress.omap_complete = !missing_iter->second.clean_regions.omap_is_dirty();
-  pi.lock_manager = std::move(lock_manager);
+  push_info_t &push_info = pushing[soid][peer];
+  push_info.obc = obc;
+  push_info.recovery_info.size = obc->obs.oi.size;
+  push_info.recovery_info.copy_subset = data_subset;
+  push_info.recovery_info.clone_subset = clone_subsets;
+  push_info.recovery_info.soid = soid;
+  push_info.recovery_info.oi = obc->obs.oi;
+  push_info.recovery_info.ss = pop->recovery_info.ss;
+  push_info.recovery_info.version = version;
+  push_info.recovery_info.object_exist = missing_iter->second.clean_regions.object_is_exist();
+  push_info.recovery_progress.omap_complete = !missing_iter->second.clean_regions.omap_is_dirty();
+  push_info.lock_manager = std::move(lock_manager);
 
   ObjectRecoveryProgress new_progress;
-  int r = build_push_op(pi.recovery_info,
-			pi.recovery_progress,
+  int r = build_push_op(push_info.recovery_info,
+			push_info.recovery_progress,
 			&new_progress,
 			pop,
-			&(pi.stat), cache_dont_need);
+			&(push_info.stat), cache_dont_need);
   if (r < 0)
     return r;
-  pi.recovery_progress = new_progress;
+  push_info.recovery_progress = new_progress;
   return 0;
 }
 
@@ -2203,18 +2203,18 @@ bool ReplicatedBackend::handle_push_reply(
 	     << dendl;
     return false;
   } else {
-    push_info_t *pi = &pushing[soid][peer];
+    push_info_t *push_info = &pushing[soid][peer];
     bool error = pushing[soid].begin()->second.recovery_progress.error;
 
-    if (!pi->recovery_progress.data_complete && !error) {
+    if (!push_info->recovery_progress.data_complete && !error) {
       dout(10) << " pushing more from, "
-	       << pi->recovery_progress.data_recovered_to
-	       << " of " << pi->recovery_info.copy_subset << dendl;
+	       << push_info->recovery_progress.data_recovered_to
+	       << " of " << push_info->recovery_info.copy_subset << dendl;
       ObjectRecoveryProgress new_progress;
       int r = build_push_op(
-	pi->recovery_info,
-	pi->recovery_progress, &new_progress, reply,
-	&(pi->stat));
+	push_info->recovery_info,
+	push_info->recovery_progress, &new_progress, reply,
+	&(push_info->stat));
       // Handle the case of a read error right after we wrote, which is
       // hopefully extremely rare.
       if (r < 0) {
@@ -2223,19 +2223,19 @@ bool ReplicatedBackend::handle_push_reply(
 	error = true;
 	goto done;
       }
-      pi->recovery_progress = new_progress;
+      push_info->recovery_progress = new_progress;
       return true;
     } else {
       // done!
 done:
       if (!error)
-	get_parent()->on_peer_recover( peer, soid, pi->recovery_info);
+	get_parent()->on_peer_recover( peer, soid, push_info->recovery_info);
 
-      get_parent()->release_locks(pi->lock_manager);
-      object_stat_sum_t stat = pi->stat;
-      eversion_t v = pi->recovery_info.version;
+      get_parent()->release_locks(push_info->lock_manager);
+      object_stat_sum_t stat = push_info->stat;
+      eversion_t v = push_info->recovery_info.version;
       pushing[soid].erase(peer);
-      pi = NULL;
+      push_info = nullptr;
 
       if (pushing[soid].empty()) {
 	if (!error)
