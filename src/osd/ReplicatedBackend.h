@@ -187,7 +187,7 @@ private:
   std::map<hobject_t, std::map<pg_shard_t, PushInfo>> pushing;
 
   // pull
-  struct PullInfo {
+  struct pull_info_t {
     pg_shard_t from;
     hobject_t soid;
     ObjectRecoveryProgress recovery_progress;
@@ -216,15 +216,15 @@ private:
     }
   };
 
-  std::map<hobject_t, PullInfo> pulling;
+  std::map<hobject_t, pull_info_t> pulling;
 
   // Reverse mapping from osd peer to objects being pulled from that peer
   std::map<pg_shard_t, std::set<hobject_t> > pull_from_peer;
   void clear_pull(
-    std::map<hobject_t, PullInfo>::iterator piter,
+    std::map<hobject_t, pull_info_t>::iterator piter,
     bool clear_pull_from_peer = true);
   void clear_pull_from(
-    std::map<hobject_t, PullInfo>::iterator piter);
+    std::map<hobject_t, pull_info_t>::iterator piter);
 
   void _do_push(OpRequestRef op);
   void _do_pull_response(OpRequestRef op);
