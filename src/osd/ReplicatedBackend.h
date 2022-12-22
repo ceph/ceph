@@ -155,7 +155,7 @@ public:
 
 private:
   // push
-  struct PushInfo {
+  struct push_info_t {
     ObjectRecoveryProgress recovery_progress;
     ObjectRecoveryInfo recovery_info;
     ObjectContextRef obc;
@@ -175,7 +175,7 @@ private:
       }
     }
   };
-  std::map<hobject_t, std::map<pg_shard_t, PushInfo>> pushing;
+  std::map<hobject_t, std::map<pg_shard_t, push_info_t>> pushing;
 
   // pull
   struct pull_info_t {

@@ -1561,7 +1561,7 @@ int ReplicatedBackend::prep_push(
   const auto missing_iter = pmissing_iter->second.get_items().find(soid);
   assert(missing_iter != pmissing_iter->second.get_items().end());
   // take note.
-  PushInfo &pi = pushing[soid][peer];
+  push_info_t &pi = pushing[soid][peer];
   pi.obc = obc;
   pi.recovery_info.size = obc->obs.oi.size;
   pi.recovery_info.copy_subset = data_subset;
@@ -2203,7 +2203,7 @@ bool ReplicatedBackend::handle_push_reply(
 	     << dendl;
     return false;
   } else {
-    PushInfo *pi = &pushing[soid][peer];
+    push_info_t *pi = &pushing[soid][peer];
     bool error = pushing[soid].begin()->second.recovery_progress.error;
 
     if (!pi->recovery_progress.data_complete && !error) {
