@@ -874,6 +874,7 @@ if(WITH_RBD)
   if(WITH_FUSE)
     add_subdirectory(rbd_fuse)
   endif()
+  add_subdirectory(liblsvd)
 
   install(PROGRAMS
     ceph-rbdnamer
