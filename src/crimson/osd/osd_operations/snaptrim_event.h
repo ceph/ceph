@@ -35,6 +35,10 @@ public:
   using remove_or_update_iertr =
     crimson::interruptible::interruptible_errorator<
       IOInterruptCondition, remove_or_update_ertr>;
+  using snap_trim_ertr = remove_or_update_ertr::extend<
+    crimson::ct_error::eagain>;
+  using snap_trim_iertr = remove_or_update_iertr::extend<
+    crimson::ct_error::eagain>;
 
   static constexpr OperationTypeCode type = OperationTypeCode::snaptrim_event;
 
@@ -49,8 +53,8 @@ public:
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
-  remove_or_update_ertr::future<seastar::stop_iteration> start();
-  remove_or_update_ertr::future<seastar::stop_iteration> with_pg(
+  snap_trim_ertr::future<seastar::stop_iteration> start();
+  snap_trim_ertr::future<seastar::stop_iteration> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
 
 private:

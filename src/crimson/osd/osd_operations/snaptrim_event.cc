@@ -70,7 +70,7 @@ void SnapTrimEvent::dump_detail(Formatter *f) const
   f->close_section();
 }
 
-SnapTrimEvent::remove_or_update_ertr::future<seastar::stop_iteration>
+SnapTrimEvent::snap_trim_ertr::future<seastar::stop_iteration>
 SnapTrimEvent::start()
 {
   logger().debug("{}: {}", *this, __func__);
@@ -87,7 +87,7 @@ CommonPGPipeline& SnapTrimEvent::pp()
   return pg->request_pg_pipeline;
 }
 
-SnapTrimEvent::remove_or_update_ertr::future<seastar::stop_iteration>
+SnapTrimEvent::snap_trim_ertr::future<seastar::stop_iteration>
 SnapTrimEvent::with_pg(
   ShardServices &shard_services, Ref<PG> _pg)
 {
@@ -138,7 +138,7 @@ SnapTrimEvent::with_pg(
       }).then_interruptible([&shard_services, this] (const auto& to_trim) {
         if (to_trim.empty()) {
           // the legit ENOENT -> done
-          return remove_or_update_iertr::make_ready_future<seastar::stop_iteration>(
+          return snap_trim_iertr::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         }
         for (const auto& object : to_trim) {
@@ -176,16 +176,14 @@ SnapTrimEvent::with_pg(
           });
         }).safe_then_interruptible([this] {
           logger().debug("{}: all completed", *this);
-          return remove_or_update_iertr::make_ready_future<seastar::stop_iteration>(
+          return snap_trim_iertr::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::no);
         });
       });
     });
-  }, [this](std::exception_ptr eptr) {
-    // TODO: better debug output
+  }, [this](std::exception_ptr eptr) -> snap_trim_ertr::future<seastar::stop_iteration> {
     logger().debug("{}: interrupted {}", *this, eptr);
-    return remove_or_update_ertr::make_ready_future<seastar::stop_iteration>(
-      seastar::stop_iteration::no);
+    return crimson::ct_error::eagain::make();
   }, pg);
 }
 
