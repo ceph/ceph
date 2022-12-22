@@ -1,0 +1,86 @@
+[31/234] Building CXX object src/liblsvd/CMakeFiles/lsvd_rnd_test.dir/lsvd_rnd_test.cc.o
+/mnt/nvme/cephx/src/liblsvd/lsvd_rnd_test.cc: In function ‘void check_crc(sector_t, const char*, size_t)’:
+/mnt/nvme/cephx/src/liblsvd/lsvd_rnd_test.cc:150:22: warning: unused variable ‘crc1’ [-Wunused-variable]
+  150 |             unsigned crc1 = 0, crc2 = 0;
+      |                      ^~~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_rnd_test.cc:150:32: warning: unused variable ‘crc2’ [-Wunused-variable]
+  150 |             unsigned crc1 = 0, crc2 = 0;
+      |                                ^~~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_rnd_test.cc:145:30: warning: unused variable ‘ptr’ [-Wunused-variable]
+  145 |         const unsigned char *ptr = buf + i;
+      |                              ^~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_rnd_test.cc: In function ‘void run_test(long unsigned int, cfg*)’:
+/mnt/nvme/cephx/src/liblsvd/lsvd_rnd_test.cc:200:9: warning: unused variable ‘rv’ [-Wunused-variable]
+  200 |     int rv = rbd_open(io, cfg->obj_prefix, &img, NULL);
+      |         ^~
+[44/234] Building CXX object src/liblsvd/CMakeFiles/lsvd_crash_test.dir/lsvd_crash_test.cc.o
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc: In function ‘void lose_writes(cfg*)’:
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:211:10: warning: unused variable ‘super’ [-Wunused-variable]
+  211 |     auto super = (j_super*)buf;
+      |          ^~~~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc: In function ‘void save_super(cfg*)’:
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:329:23: warning: comparison of integer expressions of different signedness: ‘int’ and ‘uint32_t’ {aka ‘unsigned int’} [-Wsign-compare]
+  329 |     for (int i = 0; i < sh->ckpts_len/4; i++) {
+      |                     ~~^~~~~~~~~~~~~~~~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc: In function ‘void check_rcache(cfg*)’:
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:369:10: warning: variable ‘failed’ set but not used [-Wunused-but-set-variable]
+  369 |     bool failed = false;
+      |          ^~~~~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc: In function ‘void save_wcache_state(cfg*)’:
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:447:10: warning: unused variable ‘super’ [-Wunused-variable]
+  447 |     auto super = (j_super*)wcache_state_buf;
+      |          ^~~~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc: In function ‘std::string get_cache_filename(cfg*)’:
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:155:1: warning: control reaches end of non-void function [-Wreturn-type]
+  155 | }
+      | ^
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc: In function ‘void lose_writes(cfg*)’:
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:218:10: warning: ‘*(j_write_super*)(&buf[0]).j_write_super::base’ may be used uninitialized [-Wmaybe-uninitialized]
+  218 |     auto base = w_super->base, limit = w_super->limit;
+      |          ^~~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:209:10: note: ‘buf’ declared here
+  209 |     char buf[4096];
+      |          ^~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:218:32: warning: ‘*(j_write_super*)(&buf[0]).j_write_super::limit’ may be used uninitialized [-Wmaybe-uninitialized]
+  218 |     auto base = w_super->base, limit = w_super->limit;
+      |                                ^~~~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:209:10: note: ‘buf’ declared here
+  209 |     char buf[4096];
+      |          ^~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:227:18: warning: ‘*(j_hdr*)(&buf[0]).j_hdr::magic’ may be used uninitialized [-Wmaybe-uninitialized]
+  227 |         if (hdr->magic != LSVD_MAGIC || hdr->type != LSVD_J_DATA || hdr->seq != seq+1)
+      |             ~~~~~^~~~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:209:10: note: ‘buf’ declared here
+  209 |     char buf[4096];
+      |          ^~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:226:24: warning: ‘*(j_hdr*)(&buf[0]).j_hdr::seq’ may be used uninitialized [-Wmaybe-uninitialized]
+  226 |             seq = hdr->seq - 1;
+      |                   ~~~~~^~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:209:10: note: ‘buf’ declared here
+  209 |     char buf[4096];
+      |          ^~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:227:46: warning: ‘*(j_hdr*)(&buf[0]).j_hdr::type’ may be used uninitialized [-Wmaybe-uninitialized]
+  227 |         if (hdr->magic != LSVD_MAGIC || hdr->type != LSVD_J_DATA || hdr->seq != seq+1)
+      |                                         ~~~~~^~~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:209:10: note: ‘buf’ declared here
+  209 |     char buf[4096];
+      |          ^~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:227:74: warning: ‘*(j_hdr*)(&buf[0]).j_hdr::seq’ may be used uninitialized [-Wmaybe-uninitialized]
+  227 |         if (hdr->magic != LSVD_MAGIC || hdr->type != LSVD_J_DATA || hdr->seq != seq+1)
+      |                                                                     ~~~~~^~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:209:10: note: ‘buf’ declared here
+  209 |     char buf[4096];
+      |          ^~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:231:19: warning: ‘*(j_hdr*)(&buf[0]).j_hdr::len’ may be used uninitialized [-Wmaybe-uninitialized]
+  231 |         i += hdr->len;
+      |              ~~~~~^~~
+/mnt/nvme/cephx/src/liblsvd/lsvd_crash_test.cc:209:10: note: ‘buf’ declared here
+  209 |     char buf[4096];
+      |          ^~~
+[46/234] Building CXX object src/test/CMakeFiles/test_cors.dir/test_cors.cc.o
+/mnt/nvme/cephx/src/test/test_cors.cc: In function ‘void send_cors(std::set<std::__cxx11::basic_string<char> >, std::set<std::__cxx11::basic_string<char> >, std::__cxx11::list<std::__cxx11::basic_string<char> >, uint8_t, unsigned int)’:
+/mnt/nvme/cephx/src/test/test_cors.cc:346:8: warning: array subscript -7 is outside array bounds of ‘RGWCORSConfiguration [1]’ [-Warray-bounds]
+  346 |     s3 = static_cast<RGWCORSConfiguration_S3 *>(&config);
+      |     ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/mnt/nvme/cephx/src/test/test_cors.cc:342:26: note: while referencing ‘config’
+  342 |     RGWCORSConfiguration config;
