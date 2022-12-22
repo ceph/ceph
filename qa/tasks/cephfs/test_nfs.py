@@ -730,3 +730,12 @@ class TestNFS(MgrTestCase):
         exec_cmd_invalid('export', 'info')
         exec_cmd_invalid('export', 'info', 'clusterid')
         exec_cmd_invalid('export', 'apply')
+
+    def test_non_existent_cluster(self):
+        """
+        Test that cluster info doesn't throw junk data for non-existent cluster
+        """
+        cluseter_ls = self._nfs_cmd('cluster', 'ls')
+        self.assertNotIn('foo', cluseter_ls, 'cluster foo exists')
+        cluster_info = self._nfs_cmd('cluster', 'info', 'foo')
+        self.assertIn('cluster does not exist', cluster_info)
