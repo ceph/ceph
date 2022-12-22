@@ -478,6 +478,10 @@ void PG::on_active_actmap()
             publish_stats_to_osd();
             return seastar::make_ready_future<seastar::stop_iteration>(
               seastar::stop_iteration::yes);
+          }), crimson::ct_error::eagain::handle([this] {
+            logger().info("{}: EAGAIN saw, trimming restarted", *this);
+            return seastar::make_ready_future<seastar::stop_iteration>(
+              seastar::stop_iteration::no);
           })
         );
       }).then([this, trimmed=to_trim] {
