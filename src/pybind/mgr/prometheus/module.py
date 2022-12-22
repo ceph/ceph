@@ -11,6 +11,7 @@ import enum
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
 from rbd import RBD
+import rbd
 from collections import namedtuple
 import yaml
 
@@ -1093,7 +1094,8 @@ class Module(MgrModule):
             host = cast(str, server.get('hostname', ''))
             for service in cast(List[ServiceInfoT], server.get('services', [])):
                 ret.update({(service['id'], service['type']): (host,
-                                                               service.get('ceph_version', 'unknown'),
+                                                               service.get(
+                                                                   'ceph_version', 'unknown'),
                                                                service.get('name', ''))})
         return ret
 
@@ -1436,7 +1438,6 @@ class Module(MgrModule):
                 counters[i][0] += c['c'][i][0]
                 counters[i][1] += c['c'][i][1]
 
-        label_names = ("pool", "namespace", "image")
         for pool_id, pool in self.rbd_stats['pools'].items():
             pool_name = pool['name']
             for nspace_name, images in pool['images'].items():
@@ -1444,13 +1445,22 @@ class Module(MgrModule):
                     image_name = images[image_id]['n']
                     counters = images[image_id]['c']
                     i = 0
+                    label_names = ["pool", "namespace", "image"]
+                    labels = [pool_name, nspace_name, image_name]
+
+                    for k, v in images[image_id]['metadata'].items():
+                        label_names.append(k)
+                        labels.append(v)
+
+                    label_names = tuple(label_names)
+                    labels = tuple(labels)
+
                     for key in counters_info:
                         counter_info = counters_info[key]
                         stattype = self._stattype_to_str(counter_info['type'])
-                        labels = (pool_name, nspace_name, image_name)
                         if counter_info['type'] == self.PERFCOUNTER_COUNTER:
                             path = 'rbd_' + key
-                            if path not in self.metrics:
+                            if path not in self.metrics or self.metrics[path].labelnames != label_names:
                                 self.metrics[path] = Metric(
                                     stattype,
                                     path,
@@ -1460,7 +1470,7 @@ class Module(MgrModule):
                             self.metrics[path].set(counters[i][0], labels)
                         elif counter_info['type'] == self.PERFCOUNTER_LONGRUNAVG:
                             path = 'rbd_' + key + '_sum'
-                            if path not in self.metrics:
+                            if path not in self.metrics or self.metrics[path].labelnames != label_names:
                                 self.metrics[path] = Metric(
                                     stattype,
                                     path,
@@ -1469,7 +1479,7 @@ class Module(MgrModule):
                                 )
                             self.metrics[path].set(counters[i][0], labels)
                             path = 'rbd_' + key + '_count'
-                            if path not in self.metrics:
+                            if path not in self.metrics or self.metrics[path].labelnames != label_names:
                                 self.metrics[path] = Metric(
                                     'counter',
                                     path,
@@ -1482,7 +1492,7 @@ class Module(MgrModule):
     def refresh_rbd_stats_pools(self, pools: Dict[str, Set[str]]) -> None:
         self.log.debug('refreshing rbd pools %s' % (pools))
 
-        rbd = RBD()
+        rbd_inst = RBD()
         counters_info = self.rbd_stats['counters_info']
         for pool_name, cfg_ns_names in pools.items():
             try:
@@ -1496,13 +1506,13 @@ class Module(MgrModule):
                     if cfg_ns_names:
                         nspace_names = list(cfg_ns_names)
                     else:
-                        nspace_names = [''] + rbd.namespace_list(ioctx)
+                        nspace_names = [''] + rbd_inst.namespace_list(ioctx)
                     for nspace_name in pool['images']:
                         if nspace_name not in nspace_names:
                             del pool['images'][nspace_name]
                     for nspace_name in nspace_names:
                         if nspace_name and\
-                           not rbd.namespace_exists(ioctx, nspace_name):
+                           not rbd_inst.namespace_exists(ioctx, nspace_name):
                             self.log.debug('unknown namespace %s for pool %s' %
                                            (nspace_name, pool_name))
                             continue
@@ -1511,13 +1521,17 @@ class Module(MgrModule):
                             pool['images'][nspace_name] = {}
                         namespace = pool['images'][nspace_name]
                         images = {}
-                        for image_meta in RBD().list2(ioctx):
-                            image = {'n': image_meta['name']}
+                        for image_meta in rbd_inst.list2(ioctx):
+                            image = {'n': image_meta['name'], 'metadata': {}}
                             image_id = image_meta['id']
                             if image_id in namespace:
                                 image['c'] = namespace[image_id]['c']
                             else:
                                 image['c'] = [[0, 0] for x in counters_info]
+
+                            with rbd.Image(ioctx, name=image_meta['name']) as image_inst:
+                                for k, v in image_inst.metadata_list():
+                                    image['metadata'][k] = v
                             images[image_id] = image
                         pool['images'][nspace_name] = images
             except Exception as e:
