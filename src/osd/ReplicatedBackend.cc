@@ -1450,7 +1450,7 @@ void ReplicatedBackend::prepare_pull(
 
   ceph_assert(!pulling.count(soid));
   pull_from_peer[fromshard].insert(soid);
-  PullInfo &pi = pulling[soid];
+  pull_info_t &pi = pulling[soid];
   pi.from = fromshard;
   pi.soid = soid;
   pi.head_ctx = headctx;
@@ -1798,7 +1798,7 @@ bool ReplicatedBackend::handle_pull_response(
     return false;
   }
 
-  PullInfo &pi = piter->second;
+  pull_info_t &pi = piter->second;
   if (pi.recovery_info.size == (uint64_t(-1))) {
     pi.recovery_info.size = pop.recovery_info.size;
     pi.recovery_info.copy_subset.intersection_of(
@@ -2349,7 +2349,7 @@ void ReplicatedBackend::_failed_pull(pg_shard_t from, const hobject_t &soid)
 }
 
 void ReplicatedBackend::clear_pull_from(
-  map<hobject_t, PullInfo>::iterator piter)
+  map<hobject_t, pull_info_t>::iterator piter)
 {
   auto from = piter->second.from;
   pull_from_peer[from].erase(piter->second.soid);
@@ -2358,7 +2358,7 @@ void ReplicatedBackend::clear_pull_from(
 }
 
 void ReplicatedBackend::clear_pull(
-  map<hobject_t, PullInfo>::iterator piter,
+  map<hobject_t, pull_info_t>::iterator piter,
   bool clear_pull_from_peer)
 {
   if (clear_pull_from_peer) {
