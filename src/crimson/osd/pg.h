@@ -415,7 +415,10 @@ public:
   }
 
   void rebuild_missing_set_with_deletes(PGLog &pglog) final {
-    ceph_assert(0 == "Impossible for crimson");
+    pglog.rebuild_missing_set_with_deletes_crimson(
+      shard_services.get_store(),
+      coll_ref,
+      peering_state.get_info()).get();
   }
 
   PerfCounters &get_peering_perf() final {
