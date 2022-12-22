@@ -282,6 +282,17 @@ unsigned PG::get_target_pg_log_entries() const
   }
 }
 
+void PG::on_removal(ceph::os::Transaction &t) {
+  t.register_on_commit(
+    new LambdaContext(
+      [this](int r) {
+      ceph_assert(r == 0);
+      (void)shard_services.start_operation<LocalPeeringEvent>(
+        this, pg_whoami, pgid, float(0.001), get_osdmap_epoch(),
+        get_osdmap_epoch(), PeeringState::DeleteSome());
+  }));
+}
+
 void PG::on_activate(interval_set<snapid_t>)
 {
   projected_last_update = peering_state.get_info().last_update;
@@ -370,8 +381,47 @@ void PG::prepare_write(pg_info_t &info,
 std::pair<ghobject_t, bool>
 PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
 {
-  // TODO
-  return {_next, false};
+  logger().info("removing pg {}", pgid);
+  auto fut = interruptor::make_interruptible(
+    shard_services.get_store().list_objects(
+      coll_ref,
+      _next,
+      ghobject_t::get_max(),
+      local_conf()->osd_target_transaction_size));
+
+  auto [objs_to_rm, next] = fut.get();
+  if (objs_to_rm.empty()) {
+    logger().info("all objs removed, removing coll for {}", pgid);
+    t.remove(coll_ref->get_cid(), pgmeta_oid);
+    t.remove_collection(coll_ref->get_cid());
+    (void) shard_services.get_store().do_transaction(
+      coll_ref, std::move(t)).then([this] {
+      return shard_services.remove_pg(pgid);
+    });
+    return {next, false};
+  } else {
+    for (auto &obj : objs_to_rm) {
+      if (obj == pgmeta_oid) {
+        continue;
+      }
+      logger().trace("pg {}, removing obj {}", pgid, obj);
+      t.remove(coll_ref->get_cid(), obj);
+    }
+    t.register_on_commit(
+      new LambdaContext([this](int r) {
+      ceph_assert(r == 0);
+      logger().trace("triggering more pg delete {}", pgid);
+      (void) shard_services.start_operation<LocalPeeringEvent>(
+        this,
+        pg_whoami,
+        pgid,
+        float(0.001),
+        get_osdmap_epoch(),
+        get_osdmap_epoch(),
+        PeeringState::DeleteSome{});
+    }));
+    return {next, true};
+  }
 }
 
 void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)

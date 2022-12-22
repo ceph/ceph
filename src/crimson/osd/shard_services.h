@@ -353,6 +353,14 @@ public:
     return local_state.store;
   }
 
+  auto remove_pg(spg_t pgid) {
+    local_state.pg_map.remove_pg(pgid);
+    return with_singleton(
+      [pgid](auto &osstate) {
+      osstate.pg_to_shard_mapping.remove_pg(pgid);
+    });
+  }
+
   crimson::common::CephContext *get_cct() {
     return &(local_state.cct);
   }
