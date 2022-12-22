@@ -1206,4 +1206,85 @@ seastar::future<> PGLog::read_log_and_missing_crimson(
   });
 }
 
+seastar::future<> PGLog::rebuild_missing_set_with_deletes_crimson(
+  crimson::os::FuturizedStore &store,
+  crimson::os::CollectionRef ch,
+  const pg_info_t &info)
+{
+  // save entries not generated from the current log (e.g. added due
+  // to repair, EIO handling, or divergent_priors).
+  map<hobject_t, pg_missing_item> extra_missing;
+  for (const auto& p : missing.get_items()) {
+    if (!log.logged_object(p.first)) {
+      ldpp_dout(this, 20) << __func__ << " extra missing entry: " << p.first
+	       << " " << p.second << dendl;
+      extra_missing[p.first] = p.second;
+    }
+  }
+  missing.clear();
+
+  // go through the log and add items that are not present or older
+  // versions on disk, just as if we were reading the log + metadata
+  // off disk originally
+  return seastar::do_with(
+    set<hobject_t>(),
+    log.log.rbegin(),
+    [this, &store, ch, &info](auto &did, auto &it) {
+    return seastar::repeat([this, &store, ch, &info, &it, &did] {
+      if (it == log.log.rend()) {
+	return seastar::make_ready_future<seastar::stop_iteration>(
+	  seastar::stop_iteration::yes);
+      }
+      auto &log_entry = *it;
+      it++;
+      if (log_entry.version <= info.last_complete)
+	return seastar::make_ready_future<seastar::stop_iteration>(
+	  seastar::stop_iteration::yes);
+      if (log_entry.soid > info.last_backfill ||
+	  log_entry.is_error() ||
+	  did.find(log_entry.soid) != did.end())
+	return seastar::make_ready_future<seastar::stop_iteration>(
+	  seastar::stop_iteration::no);
+      did.insert(log_entry.soid);
+      return store.get_attr(
+	ch,
+	ghobject_t(log_entry.soid, ghobject_t::NO_GEN, info.pgid.shard),
+	OI_ATTR
+      ).safe_then([this, &log_entry](auto bv) {
+	object_info_t oi(bv);
+	ldpp_dout(this, 20)
+	  << "rebuild_missing_set_with_deletes_crimson found obj "
+	  << log_entry.soid
+	  << " version = " << oi.version << dendl;
+	if (oi.version < log_entry.version) {
+	  ldpp_dout(this, 20)
+	    << "rebuild_missing_set_with_deletes_crimson missing obj "
+	    << log_entry.soid
+	    << " for version = " << log_entry.version << dendl;
+	  missing.add(
+	    log_entry.soid,
+	    log_entry.version,
+	    oi.version,
+	    log_entry.is_delete());
+	}
+      },
+      crimson::ct_error::enoent::handle([this, &log_entry] {
+	ldpp_dout(this, 20)
+	  << "rebuild_missing_set_with_deletes_crimson missing object "
+	  << log_entry.soid << dendl;
+	missing.add(
+	  log_entry.soid,
+	  log_entry.version,
+	  eversion_t(),
+	  log_entry.is_delete());
+      }),
+      crimson::ct_error::enodata::handle([] { ceph_abort("unexpected enodata"); })
+      ).then([] {
+	return seastar::stop_iteration::no;
+      });
+    });
+  }).then([this] {
+    set_missing_may_contain_deletes();
+  });
+}
 #endif
