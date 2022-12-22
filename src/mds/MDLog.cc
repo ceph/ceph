@@ -1159,17 +1159,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   // state doesn't change in between.
   uint32_t events_transcribed = 0;
   while (1) {
-    while (!old_journal->is_readable() &&
-	   old_journal->get_read_pos() < old_journal->get_write_pos() &&
-	   !old_journal->get_error()) {
-
-      // Issue a journal prefetch
-      C_SaferCond readable_waiter;
-      old_journal->wait_for_readable(&readable_waiter);
-
-      // Wait for a journal prefetch to complete
-      readable_waiter.wait();
-    }
+    old_journal->check_isreadable();
     if (old_journal->get_error()) {
       r = old_journal->get_error();
       dout(0) << "_replay journaler got error " << r << ", aborting" << dendl;
@@ -1309,13 +1299,7 @@ void MDLog::_replay_thread()
   int r = 0;
   while (1) {
     // wait for read?
-    while (!journaler->is_readable() &&
-	   journaler->get_read_pos() < journaler->get_write_pos() &&
-	   !journaler->get_error()) {
-      C_SaferCond readable_waiter;
-      journaler->wait_for_readable(&readable_waiter);
-      r = readable_waiter.wait();
-    }
+    journaler->check_isreadable(); 
     if (journaler->get_error()) {
       r = journaler->get_error();
       dout(0) << "_replay journaler got error " << r << ", aborting" << dendl;
