@@ -11326,6 +11326,11 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
       }
       ceph_assert(dnl->is_null());
       dn->state_clear(CDentry::STATE_UNLINKING);
+
+      MDSContext::vec finished;
+      dn->take_waiting(CDentry::WAIT_UNLINK_FINISH, finished);
+      mds->queue_waiters(finished);
+
     }
   }
 
