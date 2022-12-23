@@ -82,20 +82,11 @@ int io_queue_run2(io_context_t ctx, struct timespec *timeout)
         ret += n;
         //for (ep = events, i = n; i-- > 0; ep++) {
 	struct io_event *ep = events;
-	if (__lsvd_dbg_reverse) 
-	    for (i = n-1; i >= 0; i--) {
-		io_callback_t cb = (io_callback_t)ep[i].data;
-		struct iocb *iocb = ep[i].obj;
-		ANNOTATE_HAPPENS_AFTER(iocb);
-		cb(ctx, iocb, ep[i].res, ep[i].res2);
-	    }
-	else
-	    for (i = 0; i < n; i++) {
-		io_callback_t cb = (io_callback_t)ep[i].data;
-		struct iocb *iocb = ep[i].obj;
-		ANNOTATE_HAPPENS_AFTER(iocb);
-		cb(ctx, iocb, ep[i].res, ep[i].res2);
-	    }
+	for (i = 0; i < n; i++) {
+	    io_callback_t cb = (io_callback_t)ep[i].data;
+	    struct iocb *iocb = ep[i].obj;
+	    cb(ctx, iocb, ep[i].res, ep[i].res2);
+	}
     } while (n >= 0);
 
     return ret ? ret : n;               /* return number of events or error */

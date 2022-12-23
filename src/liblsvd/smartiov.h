@@ -24,7 +24,8 @@ public:
     smartiov() {}
     smartiov(const iovec *iov, int iovcnt) {
 	for (int i = 0; i < iovcnt; i++)
-	    iovs.push_back(iov[i]);
+            if (iov[i].iov_len > 0)
+                iovs.push_back(iov[i]);
     }
     smartiov(char *buf, size_t len) {
         iovs.push_back((iovec){buf, len});
@@ -34,7 +35,8 @@ public:
     }
     void ingest(const iovec *iov, int iovcnt) {
 	for (int i = 0; i < iovcnt; i++)
-	    iovs.push_back(iov[i]);
+            if (iov[i].iov_len > 0)
+                iovs.push_back(iov[i]);
     }
     iovec *data(void) {
 	return iovs.data();
