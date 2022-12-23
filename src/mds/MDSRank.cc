@@ -1023,9 +1023,10 @@ bool MDSRankDispatcher::ms_dispatch(const cref_t<Message> &m)
   if (m->get_source().is_mds()) {
     const Message *msg = m.get();
     const MMDSOp *op = dynamic_cast<const MMDSOp*>(msg);
-    if (!op)
-      dout(0) << typeid(*msg).name() << " is not an MMDSOp type" << dendl;
-    ceph_assert(op);
+    const SafeMessage *op1 = dynamic_cast<const SafeMessage*>(msg);
+    if (!op && !op1)
+      dout(0) << typeid(*msg).name() << " is not an MMDSOp or SafeMessage type" << dendl;
+    ceph_assert(op || op1);
   }
   else if (m->get_source().is_client()) {
     Session *session = static_cast<Session*>(m->get_connection()->get_priv().get());
@@ -1178,6 +1179,7 @@ bool MDSRank::is_valid_message(const cref_t<Message> &m) {
       type == CEPH_MSG_CLIENT_RECONNECT ||
       type == CEPH_MSG_CLIENT_RECLAIM ||
       type == CEPH_MSG_CLIENT_REQUEST ||
+      type == CEPH_MSG_CLIENT_REPLY ||
       type == MSG_MDS_PEER_REQUEST ||
       type == MSG_MDS_HEARTBEAT ||
       type == MSG_MDS_TABLE_REQUEST ||
@@ -1231,6 +1233,7 @@ void MDSRank::handle_message(const cref_t<Message> &m)
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_CLIENT);
       // fall-thru
     case CEPH_MSG_CLIENT_REQUEST:
+    case CEPH_MSG_CLIENT_REPLY:
       server->dispatch(m);
       break;
     case MSG_MDS_PEER_REQUEST:

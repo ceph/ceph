@@ -151,6 +151,31 @@ class Finisher;
 class ScrubStack;
 class C_ExecAndReply;
 
+struct MDSMetaRequest {
+private:
+  int _op;
+  ceph_tid_t _tid;
+  CDentry *_dentry = NULL;
+public:
+  explicit MDSMetaRequest(int op) : _op(op) { }
+  ~MDSMetaRequest() {
+    _dentry->put(CDentry::PIN_PURGING);
+  }
+
+  void set_dentry(CDentry *d) {
+    ceph_assert(_dentry == NULL);
+    _dentry = d;
+    _dentry->get(CDentry::PIN_PURGING);
+  }
+  CDentry *dentry() {
+    return _dentry;
+  }
+
+  int get_op() { return _op; }
+  void set_tid(ceph_tid_t t) { _tid = t; }
+  ceph_tid_t get_tid() { return _tid; }
+};
+
 /**
  * The public part of this class's interface is what's exposed to all
  * the various subsystems (server, mdcache, etc), such as pointers
@@ -415,6 +440,8 @@ class MDSRank {
 
     PerfCounters *logger = nullptr, *mlogger = nullptr;
     OpTracker op_tracker;
+
+    std::map<ceph_tid_t, MDSMetaRequest*> internal_client_requests;
 
     // The last different state I held before current
     MDSMap::DaemonState last_state = MDSMap::STATE_BOOT;
