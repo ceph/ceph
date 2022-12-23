@@ -17,7 +17,9 @@ This builds `liblsvd.so`, which provides most of the basic RBD API; you can use 
 
 ## stability
 
-As of Dec 22 it still suffers from occasional lost completions - I did a download and full build of Ceph on a 16-VCPU VM, and I had to restart QEMU half a dozen times when dropped I/Os caused hung processes.
+[fixed] As of Dec 22 it still suffers from occasional lost completions - I did a download and full build of Ceph on a 16-VCPU VM, and I had to restart QEMU half a dozen times when dropped I/Os caused hung processes.
+
+Full Ceph compile runs without incident.
 
 ## Configuration
 
