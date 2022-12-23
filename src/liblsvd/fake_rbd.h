@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <sys/uio.h>
-#include <rados/librados.h>
+#include "include/rados/librados.h"
 
 /* the following types have to be compatible with the real librbd.h
  */

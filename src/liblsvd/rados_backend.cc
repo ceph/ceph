@@ -7,7 +7,7 @@
  *              LGPL-2.1-or-later
  */
 
-#include <rados/librados.h>
+#include "include/rados/librados.h"
 
 #include <vector>
 #include <sstream>
