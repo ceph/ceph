@@ -179,10 +179,8 @@ To install the ``librados`` extension for PHP, you need to execute the following
       make
       sudo make install
 
-#. Enable ``phprados`` in php.ini by adding:
+#. Enable ``phprados`` by adding the following line to ``php.ini``::
    
-   .. prompt:: bash $
-
       extension=rados.so
 
 
