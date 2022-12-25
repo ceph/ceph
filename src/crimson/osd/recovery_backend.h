@@ -130,7 +130,7 @@ public:
     static constexpr const char* type_name = "WaitForObjectRecovery";
 
     crimson::osd::ObjectContextRef obc;
-    std::optional<pull_info_t> pi;
+    std::optional<pull_info_t> pull_info;
     std::map<pg_shard_t, PushInfo> pushing;
 
     seastar::future<> wait_for_readable() {
