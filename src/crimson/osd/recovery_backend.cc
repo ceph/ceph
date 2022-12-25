@@ -41,8 +41,9 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
   temp_contents.clear();
 
   for (auto& [soid, recovery_waiter] : recovering) {
-    if ((recovery_waiter->pi && recovery_waiter->pi->is_complete())
-	|| (!recovery_waiter->pi
+    if ((recovery_waiter->pull_info
+         && recovery_waiter->pull_info->is_complete())
+	|| (!recovery_waiter->pull_info
 	  && recovery_waiter->obc && recovery_waiter->obc->obs.exists)) {
       recovery_waiter->obc->interrupt(
 	  ::crimson::common::actingset_changed(
