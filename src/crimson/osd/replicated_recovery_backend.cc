@@ -312,28 +312,30 @@ ReplicatedRecoveryBackend::prep_push(
   logger().debug("prep_push: {} data_subset {} to {}",
                  soid, data_subset, pg_shard);
 
-  auto& pi = recovery_waiter.pushing[pg_shard];
+  auto& push_info = recovery_waiter.pushing[pg_shard];
   pg.begin_peer_recover(pg_shard, soid);
   const auto pmissing_iter = pg.get_shard_missing().find(pg_shard);
   const auto missing_iter = pmissing_iter->second.get_items().find(soid);
   assert(missing_iter != pmissing_iter->second.get_items().end());
 
-  pi.obc = obc;
-  pi.recovery_info.size = obc->obs.oi.size;
-  pi.recovery_info.copy_subset = data_subset;
-  pi.recovery_info.soid = soid;
-  pi.recovery_info.oi = obc->obs.oi;
-  pi.recovery_info.version = obc->obs.oi.version;
-  pi.recovery_info.object_exist =
+  push_info.obc = obc;
+  push_info.recovery_info.size = obc->obs.oi.size;
+  push_info.recovery_info.copy_subset = data_subset;
+  push_info.recovery_info.soid = soid;
+  push_info.recovery_info.oi = obc->obs.oi;
+  push_info.recovery_info.version = obc->obs.oi.version;
+  push_info.recovery_info.object_exist =
     missing_iter->second.clean_regions.object_is_exist();
-  pi.recovery_progress.omap_complete =
+  push_info.recovery_progress.omap_complete =
     !missing_iter->second.clean_regions.omap_is_dirty();
 
-  return build_push_op(pi.recovery_info, pi.recovery_progress, &pi.stat).then_interruptible(
+  return build_push_op(push_info.recovery_info,
+                       push_info.recovery_progress,
+                       &push_info.stat).then_interruptible(
     [this, soid, pg_shard](auto pop) {
     auto& recovery_waiter = get_recovering(soid);
-    auto& pi = recovery_waiter.pushing[pg_shard];
-    pi.recovery_progress = pop.after_progress;
+    auto& push_info = recovery_waiter.pushing[pg_shard];
+    push_info.recovery_progress = pop.after_progress;
     return pop;
   });
 }
@@ -886,21 +888,25 @@ ReplicatedRecoveryBackend::_handle_push_reply(
     logger().debug("huh, i wasn't pushing {} to osd.{}", soid, peer);
     return seastar::make_ready_future<std::optional<PushOp>>();
   } else {
-    auto& pi = recovering_iter->second->pushing[peer];
-    bool error = pi.recovery_progress.error;
-    if (!pi.recovery_progress.data_complete && !error) {
-      return build_push_op(pi.recovery_info, pi.recovery_progress,
-			   &pi.stat).then_interruptible([&pi] (auto pop) {
-        pi.recovery_progress = pop.after_progress;
+    auto& push_info = recovering_iter->second->pushing[peer];
+    bool error = push_info.recovery_progress.error;
+    if (!push_info.recovery_progress.data_complete && !error) {
+      return build_push_op(push_info.recovery_info, push_info.recovery_progress,
+			   &push_info.stat
+      ).then_interruptible([&push_info] (auto pop) {
+        push_info.recovery_progress = pop.after_progress;
 	return seastar::make_ready_future<std::optional<PushOp>>(std::move(pop));
-      }).handle_exception_interruptible([recovering_iter, &pi, peer] (auto e) {
-        pi.recovery_progress.error = true;
+      }).handle_exception_interruptible(
+        [recovering_iter, &push_info, peer] (auto e) {
+        push_info.recovery_progress.error = true;
         recovering_iter->second->set_push_failed(peer, e);
         return seastar::make_ready_future<std::optional<PushOp>>();
       });
     }
     if (!error) {
-      pg.get_recovery_handler()->on_peer_recover(peer, soid, pi.recovery_info);
+      pg.get_recovery_handler()->on_peer_recover(peer,
+                                                 soid,
+                                                 push_info.recovery_info);
     }
     recovering_iter->second->set_pushed(peer);
     return seastar::make_ready_future<std::optional<PushOp>>();
