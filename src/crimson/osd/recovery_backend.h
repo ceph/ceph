@@ -99,7 +99,7 @@ protected:
   crimson::os::CollectionRef coll;
   PGBackend* backend;
 
-  struct PullInfo {
+  struct pull_info_t {
     pg_shard_t from;
     hobject_t soid;
     ObjectRecoveryProgress recovery_progress;
@@ -130,7 +130,7 @@ public:
     static constexpr const char* type_name = "WaitForObjectRecovery";
 
     crimson::osd::ObjectContextRef obc;
-    std::optional<PullInfo> pi;
+    std::optional<pull_info_t> pi;
     std::map<pg_shard_t, PushInfo> pushing;
 
     seastar::future<> wait_for_readable() {

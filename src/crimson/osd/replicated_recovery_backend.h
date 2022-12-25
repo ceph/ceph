@@ -53,7 +53,7 @@ protected:
     pg_shard_t pg_shard);
   void prepare_pull(
     PullOp& po,
-    PullInfo& pi,
+    pull_info_t& pi,
     const hobject_t& soid,
     eversion_t need);
   std::vector<pg_shard_t> get_shards_to_push(

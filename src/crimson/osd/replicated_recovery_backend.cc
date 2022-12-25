@@ -115,7 +115,7 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
   }
   PullOp po;
   auto& recovery_waiter = get_recovering(soid);
-  recovery_waiter.pi = std::make_optional<RecoveryBackend::PullInfo>();
+  recovery_waiter.pi = std::make_optional<RecoveryBackend::pull_info_t>();
   auto& pi = *recovery_waiter.pi;
   prepare_pull(po, pi, soid, need);
   auto msg = crimson::make_message<MOSDPGPull>();
@@ -337,7 +337,7 @@ ReplicatedRecoveryBackend::prep_push(
   });
 }
 
-void ReplicatedRecoveryBackend::prepare_pull(PullOp& po, PullInfo& pi,
+void ReplicatedRecoveryBackend::prepare_pull(PullOp& po, pull_info_t& pi,
   const hobject_t& soid,
   eversion_t need) {
   logger().debug("{}: {}, {}", __func__, soid, need);
