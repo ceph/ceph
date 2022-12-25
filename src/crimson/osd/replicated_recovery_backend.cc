@@ -113,19 +113,19 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
   if (!local_missing.is_missing(soid)) {
     return seastar::make_ready_future<>();
   }
-  PullOp po;
+  PullOp pull_op;
   auto& recovery_waiter = get_recovering(soid);
   recovery_waiter.pull_info =
     std::make_optional<RecoveryBackend::pull_info_t>();
   auto& pull_info = *recovery_waiter.pull_info;
-  prepare_pull(po, pull_info, soid, need);
+  prepare_pull(pull_op, pull_info, soid, need);
   auto msg = crimson::make_message<MOSDPGPull>();
   msg->from = pg.get_pg_whoami();
   msg->set_priority(pg.get_recovery_op_priority());
   msg->pgid = pg.get_pgid();
   msg->map_epoch = pg.get_osdmap_epoch();
   msg->min_epoch = pg.get_last_peering_reset();
-  msg->set_pulls({std::move(po)});
+  msg->set_pulls({std::move(pull_op)});
   return interruptor::make_interruptible(
     shard_services.send_to_osd(
       pull_info.from.osd,
@@ -340,7 +340,7 @@ ReplicatedRecoveryBackend::prep_push(
   });
 }
 
-void ReplicatedRecoveryBackend::prepare_pull(PullOp& po,
+void ReplicatedRecoveryBackend::prepare_pull(PullOp& pull_op,
   pull_info_t& pull_info,
   const hobject_t& soid,
   eversion_t need) {
@@ -352,24 +352,24 @@ void ReplicatedRecoveryBackend::prepare_pull(PullOp& po,
   pg_shard_t fromshard = *(m[soid].begin());
 
   //TODO: skipped snap objects case for now
-  po.recovery_info.copy_subset.insert(0, (uint64_t) -1);
-  po.recovery_info.copy_subset.intersection_of(
+  pull_op.recovery_info.copy_subset.insert(0, (uint64_t) -1);
+  pull_op.recovery_info.copy_subset.intersection_of(
     missing_iter->second.clean_regions.get_dirty_regions());
-  po.recovery_info.size = ((uint64_t) -1);
-  po.recovery_info.object_exist =
+  pull_op.recovery_info.size = ((uint64_t) -1);
+  pull_op.recovery_info.object_exist =
     missing_iter->second.clean_regions.object_is_exist();
-  po.recovery_info.soid = soid;
-  po.soid = soid;
-  po.recovery_progress.data_complete = false;
-  po.recovery_progress.omap_complete =
+  pull_op.recovery_info.soid = soid;
+  pull_op.soid = soid;
+  pull_op.recovery_progress.data_complete = false;
+  pull_op.recovery_progress.omap_complete =
     !missing_iter->second.clean_regions.omap_is_dirty();
-  po.recovery_progress.data_recovered_to = 0;
-  po.recovery_progress.first = true;
+  pull_op.recovery_progress.data_recovered_to = 0;
+  pull_op.recovery_progress.first = true;
 
   pull_info.from = fromshard;
   pull_info.soid = soid;
-  pull_info.recovery_info = po.recovery_info;
-  pull_info.recovery_progress = po.recovery_progress;
+  pull_info.recovery_info = pull_op.recovery_info;
+  pull_info.recovery_progress = pull_op.recovery_progress;
 }
 
 RecoveryBackend::interruptible_future<PushOp>
