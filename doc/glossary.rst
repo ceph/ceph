@@ -19,12 +19,12 @@
                 distributed metadata management and POSIX semantics.
 
 	Ceph Block Device
-                A software instrument that orchestrates the storage of
-                block-based data in Ceph. Ceph Block Device (also called "RBD",
-                or "RADOS block device") splits block-based application data
+                Also called "RADOS Block Device" and :term:`RBD`. A software
+                instrument that orchestrates the storage of block-based data in
+                Ceph. Ceph Block Device splits block-based application data
                 into "chunks". RADOS stores these chunks as objects. Ceph Block
                 Device orchestrates the storage of those objects across the
-                storage cluster. See also :term:`RBD`.
+                storage cluster. 
 
 	Ceph Block Storage
                 One of the three kinds of storage supported by Ceph (the other
@@ -61,9 +61,10 @@
                 See :term:`CephFS`
 
 	:ref:`CephFS<ceph-file-system>`
-                The Ceph File System, or CephFS, is a POSIX-compliant file
-                system built on top of Ceph’s distributed object store, RADOS.
-                See :ref:`CephFS Architecture <arch-cephfs>` for more details.
+                The **C**\eph **F**\ile **S**\ystem, or CephFS, is a
+                POSIX-compliant file system built on top of Ceph’s distributed
+                object store, RADOS.  See :ref:`CephFS Architecture
+                <arch-cephfs>` for more details.
 
 	Ceph Interim Release
                 A version of Ceph that has not yet been put through quality
@@ -189,17 +190,18 @@
                 Architecture document<architecture_cluster_map>` for details.
 
 	CRUSH
-                Controlled Replication Under Scalable Hashing. It is the
-                algorithm Ceph uses to compute object storage locations.
+                **C**\ontrolled **R**\eplication **U**\nder **S**\calable
+                **H**\ashing. The algorithm that Ceph uses to compute object
+                storage locations.
 
 	CRUSH rule
                 The CRUSH data placement rule that applies to a particular
-                pool(s).
+                pool or pools.
 
         DAS
-                Direct-Attached Storage. Storage that is attached directly to
-                the computer accessing it, without passing through a network.
-                Contrast with NAS and SAN.
+                **D**\irect-**A**\ttached **S**\torage. Storage that is
+                attached directly to the computer accessing it, without passing
+                through a network.  Contrast with NAS and SAN.
 
 	:ref:`Dashboard<mgr-dashboard>`
                 A built-in web-based Ceph management and monitoring application
@@ -231,14 +233,16 @@
                 Node`.
 
 	LVM tags
-                Extensible metadata for LVM volumes and groups. It is used to
-                store Ceph-specific information about devices and its
-                relationship with OSDs.
+                **L**\ogical **V**\olume **M**\anager tags. Extensible metadata
+                for LVM volumes and groups. They are used to store
+                Ceph-specific information about devices and its relationship
+                with OSDs.
 
 	:ref:`MDS<cephfs_add_remote_mds>`
-                The Ceph metadata server daemon. Also referred to as
-                "ceph-mds". The Ceph metadata server daemon is required to run
-                the CephFS file system. The MDS stores all filesystem metadata. 
+                The Ceph **M**\eta\ **D**\ata **S**\erver daemon. Also referred
+                to as "ceph-mds". The Ceph metadata server daemon is required
+                to run the CephFS file system. The MDS stores all filesystem
+                metadata. 
 
 	MGR
                 The Ceph manager software, which collects all the state from
@@ -306,19 +310,19 @@
                 See :term:`RGW`.
 
 	RBD
-                The block storage component of Ceph. Also called "RADOS Block
-                Device" or :term:`Ceph Block Device`.
+                **R**\ADOS **B**\lock **D**\evice. See :term:`Ceph Block
+                Device`.
 
 	Reliable Autonomic Distributed Object Store
                 The core set of storage software which stores the user's data
                 (MON+OSD). See also :term:`RADOS`.
 
 	:ref:`RGW<object-gateway>`
-                **R**\ADOS **G**\ate **W**\ay.
+                **R**\ADOS **G**\ate\ **w**\ay.
 
-                The component of Ceph that provides a gateway to both the
-                Amazon S3 RESTful API and the OpenStack Swift API. Also called
-                "RADOS Gateway" and "Ceph Object Gateway".
+                Also called "Ceph Object Gateway". The component of Ceph that
+                provides a gateway to both the Amazon S3 RESTful API and the
+                OpenStack Swift API. 
 
         secrets
                 Secrets are credentials used to perform digital authentication
@@ -327,7 +331,7 @@
                 keys, private certificates, or encryption keys.
 
         SDS
-                Software-defined storage.
+                **S**\oftware-**d**\efined **S**\torage.
 
 	systemd oneshot
                 A systemd ``type`` where a command is defined in ``ExecStart``
