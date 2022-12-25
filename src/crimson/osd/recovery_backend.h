@@ -112,7 +112,7 @@ protected:
     }
   };
 
-  struct PushInfo {
+  struct push_info_t {
     ObjectRecoveryProgress recovery_progress;
     ObjectRecoveryInfo recovery_info;
     crimson::osd::ObjectContextRef obc;
@@ -131,7 +131,7 @@ public:
 
     crimson::osd::ObjectContextRef obc;
     std::optional<pull_info_t> pull_info;
-    std::map<pg_shard_t, PushInfo> pushing;
+    std::map<pg_shard_t, push_info_t> pushing;
 
     seastar::future<> wait_for_readable() {
       return readable.get_shared_future();
