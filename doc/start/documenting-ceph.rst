@@ -703,7 +703,7 @@ properly without this space.
 Linking Customs
 ~~~~~~~~~~~~~~~
 
-By custom established when Ceph was still being developed by Inktank,
+By a custom established when Ceph was still being developed by Inktank,
 contributors to the documentation of the Ceph project preferred to use the
 convention of putting ``.. _Link Text: ../path`` links at the bottom of the
 document and linking to them using references of the form ``:ref:`path```. This
