@@ -534,27 +534,6 @@ class OSDThrasher(Thrasher):
             if imp_remote != exp_remote:
                 imp_remote.run(args=cmd)
 
-            # apply low split settings to each pool
-            if not self.ceph_manager.cephadm:
-                for pool in self.ceph_manager.list_pools():
-                    cmd = ("CEPH_ARGS='--filestore-merge-threshold 1 "
-                           "--filestore-split-multiple 1' sudo -E "
-                           + 'ceph-objectstore-tool '
-                           + ' '.join(prefix + [
-                               '--data-path', FSPATH.format(id=imp_osd),
-                               '--journal-path', JPATH.format(id=imp_osd),
-                           ])
-                           + " --op apply-layout-settings --pool " + pool).format(id=osd)
-                    proc = imp_remote.run(args=cmd,
-                                          wait=True, check_status=False,
-                                          stderr=StringIO())
-                    if 'Couldn\'t find pool' in proc.stderr.getvalue():
-                        continue
-                    if proc.exitstatus:
-                        raise Exception("ceph-objectstore-tool apply-layout-settings"
-                                        " failed with {status}".format(status=proc.exitstatus))
-
-
     def blackhole_kill_osd(self, osd=None):
         """
         If all else fails, kill the osd.
