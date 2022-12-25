@@ -52,7 +52,7 @@ protected:
     eversion_t need,
     pg_shard_t pg_shard);
   void prepare_pull(
-    PullOp& po,
+    PullOp& pull_op,
     pull_info_t& pull_info,
     const hobject_t& soid,
     eversion_t need);
