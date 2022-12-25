@@ -91,19 +91,15 @@ public:
   void dump_recovery_info(ceph::Formatter *f) const override {
     {
       f->open_array_section("pull_from_peer");
-      for (std::map<pg_shard_t, std::set<hobject_t> >::const_iterator i = pull_from_peer.begin();
-	   i != pull_from_peer.end();
-	   ++i) {
+      for (const auto& i : pull_from_peer) {
 	f->open_object_section("pulling_from");
-	f->dump_stream("pull_from") << i->first;
+	f->dump_stream("pull_from") << i.first;
 	{
 	  f->open_array_section("pulls");
-	  for (std::set<hobject_t>::const_iterator j = i->second.begin();
-	       j != i->second.end();
-	       ++j) {
+	  for (const auto& j : i.second) {
 	    f->open_object_section("pull_info");
-	    ceph_assert(pulling.count(*j));
-	    pulling.find(*j)->second.dump(f);
+	    ceph_assert(pulling.count(j));
+	    pulling.find(j)->second.dump(f);
 	    f->close_section();
 	  }
 	  f->close_section();
@@ -114,22 +110,17 @@ public:
     }
     {
       f->open_array_section("pushing");
-      for (std::map<hobject_t, std::map<pg_shard_t, PushInfo>>::const_iterator i =
-	     pushing.begin();
-	   i != pushing.end();
-	   ++i) {
+      for(const auto& i : pushing) {
 	f->open_object_section("object");
-	f->dump_stream("pushing") << i->first;
+	f->dump_stream("pushing") << i.first;
 	{
 	  f->open_array_section("pushing_to");
-	  for (std::map<pg_shard_t, PushInfo>::const_iterator j = i->second.begin();
-	       j != i->second.end();
-	       ++j) {
+	  for (const auto& j : i.second) {
 	    f->open_object_section("push_progress");
-	    f->dump_stream("pushing_to") << j->first;
+	    f->dump_stream("pushing_to") << j.first;
 	    {
 	      f->open_object_section("push_info");
-	      j->second.dump(f);
+	      j.second.dump(f);
 	      f->close_section();
 	    }
 	    f->close_section();
