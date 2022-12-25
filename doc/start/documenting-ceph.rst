@@ -173,8 +173,8 @@ http://tracker.ceph.com/issues/4000.
    contributions in a single commit. When you keep documentation
    commits separate from source code commits, it simplifies the review
    process. We highly recommend that any pull request that adds a feature or
-   a configuration option, should also include a documentation commit,
-   describing the relevant changes/options.
+   a configuration option should also include a documentation commit that
+   describes the changes.
 
 Before you create your branch name, ensure that it doesn't already exist in the
 local or remote repository. :
@@ -644,31 +644,70 @@ The Ceph project uses `paragraph level markup`_ to highlight points.
    additional details.
 
 
-TOC and Hyperlinks
-------------------
+Table of Contents (TOC) and Hyperlinks
+---------------------------------------
 
-All documents must be linked from another document or a table of contents,
-otherwise you will receive a warning when building the documentation.
+The documents in the Ceph documentation suite follow certain conventions that
+are explained in this section.
 
-The Ceph project uses the ``.. toctree::`` directive. See `The TOC tree`_
-for details. When rendering a TOC, consider specifying the ``:maxdepth:`` 
-parameter so the rendered TOC is reasonably terse.
+Every document (every ``.rst`` file) in the Sphinx-controlled Ceph
+documentation suite must be linked either (1) from another document in the
+documentation suite or (2) from a table of contents (TOC). If any document in
+the documentation suite is not linked in this way, the ``build-doc`` script
+generates warnings when it tries to build the documentation. 
 
-Document authors should prefer to use the ``:ref:`` syntax where a link target
-contains a specific unique identifier (e.g., ``.. _unique-target-id:``), and  a
-reference to the target specifically references the target  (e.g.,
-``:ref:`unique-target-id```) so that if source files are moved or the
-information architecture changes, the links will still work. See
-`Cross referencing arbitrary locations`_ for details.
+The Ceph project uses the ``.. toctree::`` directive. See `The TOC tree`_ for
+details. When rendering a table of contents (TOC), specify the ``:maxdepth:``
+parameter so that the rendered TOC is not too long.
 
-Ceph documentation also uses the backtick (accent grave) character followed by
-the link text, another backtick and an underscore. Sphinx allows you to
-incorporate the link destination inline; however, we prefer to use the use the
-``.. _Link Text: ../path`` convention at the bottom of the document, because it
-improves the readability of the document in a command line interface.
+Use the ``:ref:`` syntax where a link target contains a specific unique
+identifier (for example, ``.. _unique-target-id:``). A link to the section
+designated by ``.. _unique-target-id:`` looks like this:
+``:ref:`unique-target-id```. If this convention is followed, the links within
+the ``.rst`` source files will work even if the source files are moved within
+the ``ceph/doc`` directory. See `Cross referencing arbitrary locations`_ for
+details.
+
+External Hyperlink Example
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+It is also possible to create a link to a section of the documentation and to
+have custom text appear in the body of the link. This is useful when it is more
+important to preserve the text of the sentence containing the link than it is
+to refer explicitly to the title of the section being linked to.
+
+For example, RST that links to the Sphinx Python Document Generator homepage
+and generates a sentence reading "Click here to learn more about Python
+Sphinx." looks like this: 
+
+* ``Click `here <https://www.sphinx-doc.org>`_ to learn more about Python
+  Sphinx.`` 
+
+And here it is, rendered:
+
+* Click `here <https://www.sphinx-doc.org>`_ to learn more about Python Sphinx. 
+
+Pay special attention to the underscore after the backtick. If you forget to
+include it and this is your first day working with RST, there's a chance that
+you'll spend all day wondering what went wrong without realizing that you
+omitted that underscore. Also, pay special attention to the space between the
+substitution text (in this case, "here") and the less-than bracket that sets
+the explicit link apart from the substition text. The link will not render
+properly without this space.
+
+Linking Customs
+~~~~~~~~~~~~~~~
+
+By custom established when Ceph was still being developed by Inktank,
+contributors to the documentation of the Ceph project preferred to use the
+convention of putting ``.. _Link Text: ../path`` links at the bottom of the
+document and linking to them using references of the form ``:ref:`path```. This
+convention was preferred because it made the documents more readable in a
+command line interface. As of 2023, though, we have no preference for one over
+the other. Use whichever convention makes the text easier to read.
 
 
-.. _Python Sphinx: http://sphinx-doc.org
+.. _Python Sphinx: https://www.sphinx-doc.org
 .. _restructuredText: http://docutils.sourceforge.net/rst.html
 .. _Fork and Pull: https://help.github.com/articles/using-pull-requests
 .. _github: http://github.com
