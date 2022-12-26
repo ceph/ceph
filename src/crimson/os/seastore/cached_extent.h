@@ -362,7 +362,7 @@ public:
   paddr_t get_paddr() const { return poffset; }
 
   /// Returns length of extent
-  virtual extent_len_t get_length() const { return ptr.length(); }
+  virtual extent_len_t get_length() const { return len; }
 
   /// Returns version, get_version() == 0 iff is_clean()
   extent_version_t get_version() const {
@@ -481,6 +481,9 @@ private:
   /// relative address before ool write, used to update mapping
   std::optional<paddr_t> prior_poffset = std::nullopt;
 
+  /// length of the CachedExtent
+  size_t len = 0;
+
   /// used to wait while in-progress commit completes
   std::optional<seastar::shared_promise<>> io_wait_promise;
   void set_io_wait() {
@@ -511,13 +514,15 @@ private:
 
 protected:
   CachedExtent(CachedExtent &&other) = delete;
-  CachedExtent(ceph::bufferptr &&ptr) : ptr(std::move(ptr)) {}
+  CachedExtent(ceph::bufferptr &&ptr)
+    : ptr(std::move(ptr)), len(this->ptr.length()) {}
   CachedExtent(const CachedExtent &other)
     : state(other.state),
       dirty_from_or_retired_at(other.dirty_from_or_retired_at),
       ptr(other.ptr.c_str(), other.ptr.length()),
       version(other.version),
-      poffset(other.poffset) {}
+      poffset(other.poffset),
+      len(other.len) {}
 
   struct share_buffer_t {};
   CachedExtent(const CachedExtent &other, share_buffer_t) :
@@ -525,7 +530,8 @@ protected:
     dirty_from_or_retired_at(other.dirty_from_or_retired_at),
     ptr(other.ptr),
     version(other.version),
-    poffset(other.poffset) {}
+    poffset(other.poffset),
+    len(other.len) {}
 
   struct retired_placeholder_t{};
   CachedExtent(retired_placeholder_t) : state(extent_state_t::INVALID) {}
