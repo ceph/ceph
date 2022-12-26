@@ -466,17 +466,26 @@ void Elector::begin_peer_ping(int peer)
   live_pinging.insert(peer);
   dead_pinging.erase(peer);
   peer_acked_ping[peer] = ceph_clock_now();
-  send_peer_ping(peer);
+  if (!send_peer_ping(peer)) return;
   mon->timer.add_event_after(ping_timeout / PING_DIVISOR,
 			     new C_MonContext{mon, [this, peer](int) {
 				 ping_check(peer);
 			       }});
 }
 
-void Elector::send_peer_ping(int peer, const utime_t *n)
+bool Elector::send_peer_ping(int peer, const utime_t *n)
 {
   dout(10) << __func__ << " to peer " << peer << dendl;
-
+  if (peer >= mon->monmap->ranks.size()) {
+    // Monitor no longer exists in the monmap,
+    // therefore, we shouldn't ping this monitor
+    // since we cannot lookup the address!
+    dout(5) << "peer: " << peer << " >= ranks_size: "
+      << mon->monmap->ranks.size() << " ... dropping to prevent "
+      << "https://tracker.ceph.com/issues/50089" << dendl;
+    live_pinging.erase(peer);
+    return false;
+  }
   utime_t now;
   if (n != NULL) {
     now = *n;
@@ -486,20 +495,13 @@ void Elector::send_peer_ping(int peer, const utime_t *n)
   MMonPing *ping = new MMonPing(MMonPing::PING, now, peer_tracker.get_encoded_bl());
   mon->messenger->send_to_mon(ping, mon->monmap->get_addrs(peer));
   peer_sent_ping[peer] = now;
+  return true;
 }
 
 void Elector::ping_check(int peer)
 {
   dout(20) << __func__ << " to peer " << peer << dendl;
 
-  if (peer >= mon->monmap->ranks.size()) {
-    // Monitor no longer exists in the monmap,
-    // therefore, we shouldn't ping this monitor
-    // since we cannot lookup the address!
-    dout(20) << __func__ << "peer >= ranks_size" << dendl;
-    live_pinging.erase(peer);
-    return;
-  }
   if (!live_pinging.count(peer) &&
       !dead_pinging.count(peer)) {
     dout(20) << __func__ << peer << " is no longer marked for pinging" << dendl;
@@ -516,7 +518,7 @@ void Elector::ping_check(int peer)
   }
 
   if (acked_ping == newest_ping) {
-    send_peer_ping(peer, &now);
+    if (!send_peer_ping(peer, &now)) return;
   }
 
   mon->timer.add_event_after(ping_timeout / PING_DIVISOR,
@@ -590,7 +592,7 @@ void Elector::handle_ping(MonOpRequestRef op)
     }
     utime_t now = ceph_clock_now();
     if (now - m->stamp > ping_timeout / PING_DIVISOR) {
-      send_peer_ping(prank, &now);
+      if (!send_peer_ping(prank, &now)) return;
     }
     break;
   }
