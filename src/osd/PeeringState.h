@@ -406,7 +406,7 @@ public:
 
     // ====================== PG deletion =======================
     /// Notification of removal complete, t must be populated to complete removal
-    virtual void on_removal(ObjectStore::Transaction &t) = 0;
+    virtual void on_removal(ObjectStore::Transaction &t, bool is_deleting=false) = 0;
     /// Perform incremental removal work
     virtual std::pair<ghobject_t, bool> do_delete_work(
       ObjectStore::Transaction &t, ghobject_t _next) = 0;

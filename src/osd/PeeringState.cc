@@ -6670,7 +6670,7 @@ PeeringState::Deleting::Deleting(my_context ctx)
   ps->pg_log.reset_backfill();
   ps->dirty_info = true;
 
-  pl->on_removal(t);
+  pl->on_removal(t, true);
 }
 
 boost::statechart::result PeeringState::Deleting::react(

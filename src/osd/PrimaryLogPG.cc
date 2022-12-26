@@ -12865,11 +12865,12 @@ void PrimaryLogPG::on_flushed()
   }
 }
 
-void PrimaryLogPG::on_removal(ObjectStore::Transaction &t)
+void PrimaryLogPG::on_removal(ObjectStore::Transaction &t,
+                              bool is_deleting)
 {
   dout(10) << __func__ << dendl;
 
-  on_shutdown();
+  on_shutdown(is_deleting);
 
   t.register_on_commit(new C_DeleteMore(this, get_osdmap_epoch()));
 }
@@ -12891,7 +12892,7 @@ void PrimaryLogPG::clear_cache()
   object_contexts.clear();
 }
 
-void PrimaryLogPG::on_shutdown()
+void PrimaryLogPG::on_shutdown(bool is_deleting)
 {
   dout(10) << __func__ << dendl;
 
@@ -12926,7 +12927,12 @@ void PrimaryLogPG::on_shutdown()
   clear_async_reads();
 
   osd->remote_reserver.cancel_reservation(info.pgid);
-  osd->local_reserver.cancel_reservation(info.pgid);
+
+  // PG Deleting need to request local_reserver
+  // and limit the stray PG concurrent deleting,
+  // it will be cancel by Deleting::exit(), not here
+  if (!is_deleting)
+    osd->local_reserver.cancel_reservation(info.pgid);
 
   clear_primary_state();
   cancel_recovery();

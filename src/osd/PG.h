@@ -704,7 +704,7 @@ public:
   void with_heartbeat_peers(std::function<void(int)>&& f);
 
   void shutdown();
-  virtual void on_shutdown() = 0;
+  virtual void on_shutdown(bool is_deleting=false) = 0;
 
   bool get_must_scrub() const;
   Scrub::schedule_result_t sched_scrub();
