@@ -62,15 +62,13 @@ class TrashPurgeScheduleHandler:
         self.queue: Dict[str, List[Tuple[str, str]]] = {}
         # pool_id => {namespace => pool_name}
         self.pools: Dict[str, Dict[str, str]] = {}
+        self.schedules = Schedules(self)
         self.refresh_pools()
         self.log.debug("TrashPurgeScheduleHandler: queue is initialized")
 
     def load_schedules(self) -> None:
         self.log.info("TrashPurgeScheduleHandler: load_schedules")
-
-        schedules = Schedules(self)
-        schedules.load()
-        self.schedules = schedules
+        self.schedules.load()
 
     def refresh_pools(self) -> float:
         elapsed = (datetime.now() - self.last_refresh_pools).total_seconds()
