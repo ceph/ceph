@@ -786,12 +786,24 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
     r = Trash<I>::list(io_ctx, trash_entries, false);
     if (r < 0) {
       return r;
-    } else if (r >= 0) {
-      for (auto& entry : trash_entries) {
-        if (entry.name == image_name &&
-            entry.source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
-          return Trash<I>::remove(io_ctx, entry.id, true, prog_ctx);
+    }
+    for (auto& entry : trash_entries) {
+      if (entry.name == image_name &&
+          entry.source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
+        cls::rbd::TrashImageSpec spec;
+        r = cls_client::trash_get(&io_ctx, entry.id, &spec);
+        if (r < 0) {
+          lderr(cct) << "error getting image id " << entry.id
+                     << " info from trash: " << cpp_strerror(r) << dendl;
+          return r;
         }
+        if (spec.state == cls::rbd::TRASH_IMAGE_STATE_MOVING) {
+          r = Trash<I>::move(io_ctx, entry.source, entry.name, entry.id, 0);
+          if (r < 0) {
+            return r;
+          }
+        }
+        return Trash<I>::remove(io_ctx, entry.id, true, prog_ctx);
       }
     }
 
