@@ -3849,32 +3849,6 @@ static void _try_mark_pg_stale(
     newstat->last_unstale = ceph_clock_now();
   }
 
-    if ((cur.state & PG_STATE_PEERING) == 0 &&
-      cur.acting_primary != -1 &&
-      osdmap.is_down(cur.acting_primary)) {
-    pg_stat_t *newstat;
-    auto q = pending_inc->pg_stat_updates.find(pgid);
-    if (q != pending_inc->pg_stat_updates.end()) {
-      if ((q->second.acting_primary == cur.acting_primary) ||
-	  ((q->second.state & PG_STATE_PEERING) == 0 &&
-	   q->second.acting_primary != -1 &&
-	   osdmap.is_down(q->second.acting_primary))) {
-	newstat = &q->second;
-      } else {
-	// pending update is no longer down or already stale
-	return;
-      }
-    } else {
-      newstat = &pending_inc->pg_stat_updates[pgid];
-      *newstat = cur;
-    }
-    dout(10) << __func__ << " marking pg " << pgid
-	     << " stale (acting_primary " << newstat->acting_primary
-	     << ")" << dendl;
-    newstat->state |= PG_STATE_PEERING;
-    newstat->last_peered = ceph_clock_now();
-  }
-
 }
 
 void PGMapUpdater::check_down_pgs(
