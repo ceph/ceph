@@ -1530,6 +1530,7 @@ public:
         for (sid = 0; sid < each->num_shards; sid++) {
           bs.bucket = source_bs.bucket;
           bs.shard_id = sid;
+	  pool = sync_env->svc->zone->get_zone_params().log_pool;
           error_repo = datalog_oid_for_error_repo(sc, sync_env->driver, pool, source_bs);
           tn->log(10, SSTR("writing shard_id " << sid << " of gen " << each->gen << " to error repo for retry"));
           yield_spawn_window(rgw::error_repo::write_cr(sync_env->driver->svc()->rados, error_repo,
@@ -5620,6 +5621,10 @@ class RGWSyncBucketCR : public RGWCoroutine {
   RGWObjVersionTracker objv;
   bool init_check_compat = false;
   rgw_bucket_index_marker_info info;
+  rgw_raw_obj error_repo;
+  rgw_bucket_shard source_bs;
+  rgw_pool pool;
+  uint64_t current_gen;
 
   RGWSyncTraceNodeRef tn;
 
@@ -5837,10 +5842,32 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
         // lease not required for incremental sync
         RELEASE_LOCK(bucket_lease_cr);
 
+        assert(sync_pair.source_bs.shard_id >= 0);
         // if a specific gen was requested, compare that to the sync status
         if (gen) {
-          const auto current_gen = bucket_status.incremental_gen;
+          current_gen = bucket_status.incremental_gen;
+	  source_bs = sync_pair.source_bs;
           if (*gen > current_gen) {
+	    /* In case the data log entry is missing for previous gen, it may
+	     * not be marked complete and the sync can get stuck. To avoid it,
+	     * may be we can add this (shardid, gen) to error repo to force
+	     * sync and mark that shard as completed.
+	     */
+	    pool = sc->env->svc->zone->get_zone_params().log_pool;
+            if ((static_cast<std::size_t>(source_bs.shard_id) < bucket_status.shards_done_with_gen.size()) &&
+	       !bucket_status.shards_done_with_gen[source_bs.shard_id]) {
+	      // use the error repo and sync status timestamp from the datalog shard corresponding to source_bs
+              error_repo = datalog_oid_for_error_repo(sc, sc->env->driver,
+			   pool, source_bs);
+              yield call(rgw::error_repo::write_cr(sc->env->driver->svc()->rados, error_repo,
+                                              rgw::error_repo::encode_key(source_bs, current_gen),
+                                              ceph::real_clock::zero()));
+              if (retcode < 0) {
+                tn->log(0, SSTR("ERROR: failed to log prev gen entry (bucket=" << source_bs.bucket << ", shard_id=" << source_bs.shard_id << ", gen=" << current_gen << " in error repo: retcode=" << retcode));
+              } else {
+                tn->log(20, SSTR("logged prev gen entry (bucket=" << source_bs.bucket << ", shard_id=" << source_bs.shard_id << ", gen=" << current_gen << " in error repo: retcode=" << retcode));
+	      }
+	    }
             retcode = -EAGAIN;
             tn->log(10, SSTR("ERROR: requested sync of future generation "
                              << *gen << " > " << current_gen
@@ -5854,7 +5881,6 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
           }
         }
 
-        assert(sync_pair.source_bs.shard_id >= 0);
         if (static_cast<std::size_t>(sync_pair.source_bs.shard_id) >= bucket_status.shards_done_with_gen.size()) {
           tn->log(1, SSTR("bucket shard " << sync_pair.source_bs << " index out of bounds"));
           return set_cr_done(); // return success so we don't retry
