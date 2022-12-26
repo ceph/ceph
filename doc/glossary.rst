@@ -61,7 +61,7 @@
                 See :term:`CephFS`
 
 	:ref:`CephFS<ceph-file-system>`
-                The **C**\eph **F**\ile **S**\ystem, or CephFS, is a
+                The **Ceph F**\ile **S**\ystem, or CephFS, is a
                 POSIX-compliant file system built on top of Ceph’s distributed
                 object store, RADOS.  See :ref:`CephFS Architecture
                 <arch-cephfs>` for more details.
@@ -78,8 +78,8 @@
                 The Ceph manager daemon (ceph-mgr) is a daemon that runs
                 alongside monitor daemons to provide monitoring and interfacing
                 to external monitoring and management systems. Since the
-                Luminous release (12.x), the ceph-mgr daemon is required in
-                order for the Ceph cluster to function properly.
+                Luminous release (12.x), no Ceph cluster functions properly
+                unless it contains a running ceph-mgr daemon. 
 
 	Ceph Manager Dashboard
                 See :term:`Ceph Dashboard`.
@@ -90,10 +90,10 @@
 	Ceph Monitor
                 A daemon that maintains a map of the state of the cluster. This
                 "cluster state" includes the monitor map, the manager map, the
-                OSD map, and the CRUSH map. A minimum of three monitors is
-                required in order for the Ceph cluster to be both redundant and
-                highly-available. Ceph monitors and the nodes on which they run
-                are often referred to as "mon"s. See :ref:`Monitor Config
+                OSD map, and the CRUSH map. A Ceph cluster must contain a
+                minimum of three running monitors in order to be both redundant
+                and highly-available. Ceph monitors and the nodes on which they
+                run are often referred to as "mon"s. See :ref:`Monitor Config
                 Reference <monitor-config-reference>`.
 
 	Ceph Node
@@ -240,9 +240,9 @@
 
 	:ref:`MDS<cephfs_add_remote_mds>`
                 The Ceph **M**\eta\ **D**\ata **S**\erver daemon. Also referred
-                to as "ceph-mds". The Ceph metadata server daemon is required
-                to run the CephFS file system. The MDS stores all filesystem
-                metadata. 
+                to as "ceph-mds". The Ceph metadata server daemon must be
+                running in any Ceph cluster that runs the CephFS file system.
+                The MDS stores all filesystem metadata. 
 
 	MGR
                 The Ceph manager software, which collects all the state from
