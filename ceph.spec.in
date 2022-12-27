@@ -666,6 +666,7 @@ Requires:       python%{python3_pkgversion}-dateutil
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-pyyaml
 Requires:       python%{python3_pkgversion}-werkzeug
+Requires:       python%{python3_pkgversion}-packaging
 %endif
 %if 0%{?suse_version}
 Requires:       python%{python3_pkgversion}-CherryPy
