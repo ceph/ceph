@@ -120,9 +120,10 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
                 continue
             # any LV present is considered a taken slot
             occupied_slots = len(dev.lvs)
-            dev_size = dev.vg_size[0]
-            # this only looks at the first vg on device, unsure if there is a better
-            # way
+            total_size = 0
+            for t_size in vg_devices:
+                 total_size = total_size + dev.vg_size[0]
+            dev_size = total_size
             abs_size = disk.Size(b=int(dev_size / requested_slots))
             free_size = dev.vg_free[0]
             relative_size = int(abs_size) / dev_size
