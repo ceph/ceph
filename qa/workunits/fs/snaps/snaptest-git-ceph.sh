@@ -2,7 +2,7 @@
 
 set -e
 
-git clone git://git.ceph.com/ceph.git
+git clone https://git.ceph.com/ceph.git
 cd ceph
 
 versions=`seq 1 21`
