@@ -80,7 +80,7 @@ pool named ``swimmingpool``, run this command:
 
 If you don't specify a pool when you create an image, then the image will be
 stored in the default pool ``rbd``. For example, if you ran this command, you
-wuold create a 1GB image named ``foo`` that is stored in the default pool
+would create a 1GB image named ``foo`` that is stored in the default pool
 ``rbd``:
 
 .. prompt:: bash $
