@@ -876,7 +876,7 @@ public:
   /** can_change_external_state if we can do things like
    *  call elections as a result of the new map.
    */
-  void notify_new_monmap(bool can_change_external_state=false);
+  void notify_new_monmap(bool can_change_external_state=false, bool remove_rank_elector=true);
 
 public:
   struct C_Command : public C_MonOp {

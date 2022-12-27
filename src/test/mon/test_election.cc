@@ -106,7 +106,7 @@ struct Owner : public ElectionOwner, RankProvider {
  Owner(int r, ElectionLogic::election_strategy es, double tracker_halflife,
        Election *p) : parent(p), rank(r), persisted_epoch(0),
     ever_joined(false),
-    peer_tracker(this, rank, tracker_halflife, 5),
+    peer_tracker(this, rank, tracker_halflife, 5, g_ceph_context),
     logic(this, es, &peer_tracker, 0.0005, g_ceph_context),
     victory_accepters(0),
     timer_steps(-1), timer_election(true) {
@@ -124,9 +124,13 @@ struct Owner : public ElectionOwner, RankProvider {
   // don't need to do anything with our state right now
   void notify_bump_epoch() {}
   void notify_rank_removed(int removed_rank) {
-    peer_tracker.notify_rank_removed(removed_rank);
-    if (rank > removed_rank)
+    ldout(g_ceph_context, 1) << "removed_rank: " << removed_rank << dendl;
+    ldout(g_ceph_context, 1) << "rank before: " << rank << dendl;
+    if (removed_rank < rank) {
       --rank;
+    }
+    peer_tracker.notify_rank_removed(removed_rank, rank);
+    ldout(g_ceph_context, 1) << "rank after: " << rank << dendl;
   }
   void notify_deleted() { rank_deleted = true; rank = -1; cancel_timer(); }
   // pass back to ElectionLogic; we don't need this redirect ourselves
@@ -216,7 +220,7 @@ struct Owner : public ElectionOwner, RankProvider {
     }
   }
   void receive_scores(bufferlist bl) {
-    ConnectionTracker oct(bl);
+    ConnectionTracker oct(bl, g_ceph_context);
     peer_tracker.receive_peer_report(oct);
     ldout(g_ceph_context, 10) << "received scores " << oct << dendl;
   }
@@ -362,7 +366,7 @@ void Election::propose_to(int from, int to, epoch_t e, bufferlist& cbl)
   Owner *o = electors[to];
   ConnectionTracker *oct = NULL;
   if (cbl.length()) {
-    oct = new ConnectionTracker(cbl); // we leak these on blocked cons, meh
+    oct = new ConnectionTracker(cbl, g_ceph_context); // we leak these on blocked cons, meh
   }
   queue_election_message(from, to, [o, from, e, oct] {
       o->receive_propose(from, e, oct);
