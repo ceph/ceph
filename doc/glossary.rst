@@ -67,8 +67,7 @@
                 <arch-cephfs>` for more details.
 
 	Ceph Interim Release
-                A version of Ceph that has not yet been put through quality
-                assurance testing. May contain new features.
+                See :term:`Releases`.
 
 	Ceph Kernel Modules
                 The collection of kernel modules that can be used to interact
@@ -144,24 +143,20 @@
                 `https://github.com/ceph`_.
 
 	Ceph Point Release
-                Any ad hoc release that includes only bug fixes and security
-                fixes.
+                See :term:`Releases`.
 
 	Ceph Project
                 The aggregate term for the people, software, mission and
                 infrastructure of Ceph.
 
 	Ceph Release
-		Any distinct numbered version of Ceph.
+                See :term:`Releases`.
 
 	Ceph Release Candidate
-                A major version of Ceph that has undergone initial quality
-                assurance testing and is ready for beta testers.
+                See :term:`Releases`.
 
 	Ceph Stable Release
-                A major version of Ceph where all features from the preceding
-                interim releases have been put through quality assurance
-                testing successfully.
+                See :term:`Releases`.
 
 	Ceph Stack
 		A collection of two or more components of Ceph.
@@ -311,6 +306,29 @@
 	RBD
                 **R**\ADOS **B**\lock **D**\evice. See :term:`Ceph Block
                 Device`.
+
+        Releases
+
+	        Ceph Interim Release
+                        A version of Ceph that has not yet been put through
+                        quality assurance testing. May contain new features.
+
+                Ceph Point Release
+                        Any ad hoc release that includes only bug fixes and
+                        security fixes.
+
+                Ceph Release
+                        Any distinct numbered version of Ceph.
+
+                Ceph Release Candidate
+                        A major version of Ceph that has undergone initial
+                        quality assurance testing and is ready for beta
+                        testers.
+
+                Ceph Stable Release
+                        A major version of Ceph where all features from the
+                        preceding interim releases have been put through
+                        quality assurance testing successfully.
 
 	Reliable Autonomic Distributed Object Store
                 The core set of storage software which stores the user's data
