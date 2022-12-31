@@ -192,9 +192,9 @@
                 pool(s).
 
         DAS
-                Direct-Attached Storage. Storage that is attached directly to
-                the computer accessing it, without passing through a network.
-                Contrast with NAS and SAN.
+                **D**\irect-\ **A**\ttached **S**\torage. Storage that is
+                attached directly to the computer accessing it, without passing
+                through a network.  Contrast with NAS and SAN.
 
 	:ref:`Dashboard<mgr-dashboard>`
                 A built-in web-based Ceph management and monitoring application
