@@ -194,7 +194,7 @@
                 pool or pools.
 
         DAS
-                **D**\irect-**A**\ttached **S**\torage. Storage that is
+                **D**\irect-\ **A**\ttached **S**\torage. Storage that is
                 attached directly to the computer accessing it, without passing
                 through a network.  Contrast with NAS and SAN.
 
