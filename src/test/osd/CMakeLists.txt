@@ -83,6 +83,13 @@ add_executable(unittest_scrub_sched
 add_ceph_unittest(unittest_scrub_sched)
 target_link_libraries(unittest_scrub_sched osd os global ${CMAKE_DL_LIBS} mon ${BLKID_LIBRARIES})
 
+# unittest_scrub_schedjob
+add_executable(unittest_scrub_schedjob
+  test_scrub_schedjob.cc
+  )
+add_ceph_unittest(unittest_scrub_schedjob)
+target_link_libraries(unittest_scrub_schedjob osd os global ${CMAKE_DL_LIBS} mon ${BLKID_LIBRARIES})
+
 # unittest_pglog
 add_executable(unittest_pglog
   TestPGLog.cc

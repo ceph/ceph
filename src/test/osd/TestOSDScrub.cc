@@ -28,6 +28,28 @@
 #include "mon/MonClient.h"
 #include "common/ceph_argparse.h"
 #include "msg/Messenger.h"
+#include "osd/scrubber/scrub_queue.h"
+
+class ScrubQueueOverride : public ScrubQueue {
+
+public:
+  ScrubQueueOverride(CephContext* cct, OSDService& osds) :
+      ScrubQueue(cct, osds)
+  {
+  }
+
+  void set_test_time(utime_t t)
+  {
+    now = t;
+  }
+
+  utime_t scrub_clock_now() const override
+  {
+    return now;
+  }
+
+  utime_t now;
+};
 
 class TestOSDScrub: public OSD {
 
@@ -49,10 +71,15 @@ public:
 	  hb_front_server, hb_back_server,
 	  osdc_messenger, mc, dev, jdev, ictx)
   {
+    test_scrub_queue = std::make_unique<ScrubQueueOverride>(cct, this->service);
   }
 
+  // access the 'current time' provided by ScrubQueue
+  std::unique_ptr<ScrubQueueOverride> test_scrub_queue;
+
   bool scrub_time_permit(utime_t now) {
-    return service.get_scrub_services().scrub_time_permit(now);
+    test_scrub_queue->set_test_time(now);
+    return test_scrub_queue->scrub_time_permit();
   }
 };
 
