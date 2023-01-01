@@ -711,6 +711,66 @@ convention was preferred because it made the documents more readable in a
 command line interface. As of 2023, though, we have no preference for one over
 the other. Use whichever convention makes the text easier to read.
 
+Quirks of ReStructured Text
+---------------------------
+
+External Links
+~~~~~~~~~~~~~~
+
+.. _external_link_with_inline_text:
+
+This is the formula for links to addresses external to the Ceph documentation:
+
+::
+
+   `inline text <http:www.foo.com>`_
+
+.. note:: Do not fail to include the space between the inline text and the
+   less-than sign. 
+   
+   Do not fail to include the underscore after the final backtick.
+
+   The convention for linking to addresses external to the Ceph documentation
+   and defining inline text is a convention that includes a space between the
+   inline text and the less-than sign that precedes the external address. This
+   is precisely the opposite of :ref:`the convention for inline text that links
+   to a location inside the Ceph
+   documentation<internal_link_with_inline_text>`. 
+
+
+Internal Links
+~~~~~~~~~~~~~~
+
+To link to a section in the Ceph documentation, you must define a target link
+before the section and then link to that target from another location in the
+documentation. Here are the formulas for targets and links to those targets:
+
+Target::
+
+   .. _target:
+
+   Title of Targeted Section
+   =========================
+
+   Lorem ipsum...
+
+Link to target::
+
+   :ref:`target`
+
+.. _internal_link_with_inline_text:
+
+Link to target with inline text::
+
+   :ref:`inline text<target>`
+
+.. note:: 
+
+   There is no space between "inline text" and the less-than sign that
+   immediately follows it. This is precisely the opposite of :ref:`the
+   convention for inline text that links to a location outside of the Ceph
+   documentation<external_link_with_inline_text>`. 
+
 
 .. _Python Sphinx: https://www.sphinx-doc.org
 .. _restructuredText: http://docutils.sourceforge.net/rst.html
