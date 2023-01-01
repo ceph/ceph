@@ -674,7 +674,16 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       whiteout = true;
     }
     return do_write_op([this, whiteout](auto& backend, auto& os, auto& txn) {
-      return backend.remove(os, txn, delta_stats, whiteout);
+      int num_bytes = 0;
+      // Calculate num_bytes to be removed
+      if (obc->obs.oi.soid.is_snap()) {
+        ceph_assert(obc->ssc->snapset.clone_overlap.count(obc->obs.oi.soid.snap));
+        num_bytes = obc->ssc->snapset.get_clone_bytes(obc->obs.oi.soid.snap);
+      } else {
+        num_bytes = obc->obs.oi.size;
+      }
+      return backend.remove(os, txn, *osd_op_params,
+                            delta_stats, whiteout, num_bytes);
     });
   }
   case CEPH_OSD_OP_CALL:
@@ -961,7 +970,17 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
   osd_op_params->at_version.version++;
   encode(cloned_snaps, cloning_ctx->log_entry.snaps);
 
-  // TODO: update most recent clone_overlap and usage stats
+  // update most recent clone_overlap and usage stats
+  assert(cloning_ctx->new_snapset.clones.size() > 0);
+  // In classic, we check for evicted clones before
+  // adjusting the clone_overlap.
+  // This check is redundant here since `clone_obc`
+  // was just created (See prepare_clone()).
+  interval_set<uint64_t> &newest_overlap =
+    cloning_ctx->new_snapset.clone_overlap.rbegin()->second;
+  osd_op_params->modified_ranges.intersection_of(newest_overlap);
+  delta_stats.num_bytes += osd_op_params->modified_ranges.size();
+  newest_overlap.subtract(osd_op_params->modified_ranges);
   return cloning_ctx;
 }
 
