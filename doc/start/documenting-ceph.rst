@@ -668,6 +668,8 @@ the ``.rst`` source files will work even if the source files are moved within
 the ``ceph/doc`` directory. See `Cross referencing arbitrary locations`_ for
 details.
 
+.. _start_external_hyperlink_example:
+
 External Hyperlink Example
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -680,12 +682,14 @@ For example, RST that links to the Sphinx Python Document Generator homepage
 and generates a sentence reading "Click here to learn more about Python
 Sphinx." looks like this: 
 
-* ``Click `here <https://www.sphinx-doc.org>`_ to learn more about Python
-  Sphinx.`` 
+::
+
+    ``Click `here <https://www.sphinx-doc.org>`_ to learn more about Python
+    Sphinx.`` 
 
 And here it is, rendered:
 
-* Click `here <https://www.sphinx-doc.org>`_ to learn more about Python Sphinx. 
+Click `here <https://www.sphinx-doc.org>`_ to learn more about Python Sphinx. 
 
 Pay special attention to the underscore after the backtick. If you forget to
 include it and this is your first day working with RST, there's a chance that
@@ -725,20 +729,22 @@ This is the formula for links to addresses external to the Ceph documentation:
    
    Do not fail to include the underscore after the final backtick.
 
-   The convention for linking to addresses external to the Ceph documentation
-   and defining inline text is a convention that includes a space between the
-   inline text and the less-than sign that precedes the external address. This
-   is precisely the opposite of :ref:`the convention for inline text that links
-   to a location inside the Ceph
-   documentation<internal_link_with_inline_text>`. 
+   To link to addresses that are external to the Ceph documentation, you have
+   to include a space between the inline text and the angle bracket that
+   precedes the external address. This is precisely the opposite of :ref:`the
+   convention for inline text that links to a location inside the Ceph
+   documentation<internal_link_with_inline_text>`. If this seems inconsistent
+   and confusing to you, then you're right. It is inconsistent and confusing.
 
+See also ":ref:`External Hyperlink Example<start_external_hyperlink_example>`".
 
 Internal Links
 ~~~~~~~~~~~~~~
 
-To link to a section in the Ceph documentation, you must define a target link
-before the section and then link to that target from another location in the
-documentation. Here are the formulas for targets and links to those targets:
+To link to a section that is in the Ceph documentation, you must (1) define a
+target link before the section and then (2) link to that target from another
+location in the documentation. Here are the formulas for targets and links to
+those targets:
 
 Target::
 
@@ -761,10 +767,11 @@ Link to target with inline text::
 
 .. note:: 
 
-   There is no space between "inline text" and the less-than sign that
+   There is no space between "inline text" and the angle bracket that
    immediately follows it. This is precisely the opposite of :ref:`the
    convention for inline text that links to a location outside of the Ceph
-   documentation<external_link_with_inline_text>`. 
+   documentation<external_link_with_inline_text>`. If this seems inconsistent
+   and confusing to you, then you're right. It is inconsistent and confusing.
 
 
 .. _Python Sphinx: https://www.sphinx-doc.org
