@@ -442,4 +442,61 @@ _sudo rbd device detach ${DEV} --device-type nbd
 expect_false get_pid ${POOL}
 DEV=
 
+# test discard granularity with journaling
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
+get_pid ${POOL}
+rbd config image set ${POOL}/${IMAGE} rbd_discard_granularity_bytes 4096
+rbd feature enable ${POOL}/${IMAGE} journaling
+# since a discard will now be pruned to only whole blocks (0..4095, 4096..8191)
+# let us test all the cases around those alignments. 512 is the smallest
+# possible block blkdiscard allows us to use. Thus the test checks
+# 512 before, on the alignment, 512 after.
+_sudo blkdiscard --offset 0 --length $((4096-512)) ${DEV}
+_sudo blkdiscard --offset 0 --length 4096 ${DEV}
+_sudo blkdiscard --offset 0 --length $((4096+512)) ${DEV}
+_sudo blkdiscard --offset 512 --length $((8192-1024)) ${DEV}
+_sudo blkdiscard --offset 512 --length $((8192-512)) ${DEV}
+_sudo blkdiscard --offset 512 --length 8192 ${DEV}
+expected='Entry: tag_id=1, commit_tid=1
+{
+    "event_type": "AioDiscard",
+    "offset": 0,
+    "length": 4096,
+    "discard_granularity_bytes": 4096,
+Entry: tag_id=1, commit_tid=2
+{
+    "event_type": "AioDiscard",
+    "offset": 0,
+    "length": 4096,
+    "discard_granularity_bytes": 4096,
+Entry: tag_id=1, commit_tid=3
+{
+    "event_type": "AioDiscard",
+    "offset": 4096,
+    "length": 4096,
+    "discard_granularity_bytes": 4096,
+Entry: tag_id=1, commit_tid=4
+{
+    "event_type": "AioDiscard",
+    "offset": 4096,
+    "length": 4096,
+    "discard_granularity_bytes": 4096,'
+out=`rbd journal inspect --pool ${POOL} --image ${IMAGE} --verbose | \
+    grep -A5 --no-group-separator Entry`
+rbd config image rm ${POOL}/${IMAGE} rbd_discard_granularity_bytes
+[ "${out}" == "${expected}" ]
+# wait for commit log to be empty, 10 seconds should be well enough
+tries=0
+queue_length=`rbd journal inspect --pool ${POOL} --image ${IMAGE} | awk '/entries inspected/ {print $1}'`
+while [ ${tries} -lt 10 ] && [ ${queue_length} -gt 0 ]; do
+    rbd journal inspect --pool ${POOL} --image ${IMAGE} --verbose
+    sleep 1
+    queue_length=`rbd journal inspect --pool ${POOL} --image ${IMAGE} | awk '/entries inspected/ {print $1}'`
+    tries=$((tries+1))
+done
+rbd feature disable ${POOL}/${IMAGE} journaling
+[ ${queue_length} -eq 0 ]
+unmap_device ${DEV} ${PID}
+DEV=
+
 echo OK
