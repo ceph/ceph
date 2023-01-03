@@ -100,6 +100,7 @@ def run_shell_command(command: str, expect_error=False) -> str:
     )
 
     out = ''
+    err = ''
     # let's read when output comes so it is in real time
     while True:
         # TODO: improve performance of this part, I think this part is a problem
@@ -111,15 +112,14 @@ def run_shell_command(command: str, expect_error=False) -> str:
                 sys.stdout.write(pout)
                 sys.stdout.flush()
             out += pout
+
     process.wait()
 
-    # no last break line
-    err = (
-        process.stderr.read().decode().rstrip()
-    )  # remove trailing whitespaces and new lines
+    err += process.stderr.read().decode('latin1').strip()
     out = out.strip()
 
     if process.returncode != 0 and not expect_error:
+        err = colored(err, Colors.FAIL);
         raise RuntimeError(f'Failed command: {command}\n{err}')
         sys.exit(1)
     return out
@@ -144,7 +144,7 @@ def run_cephadm_shell_command(command: str, expect_error=False) -> str:
     config = Config.get('config')
     keyring = Config.get('keyring')
 
-    with_cephadm_image = 'CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:master'
+    with_cephadm_image = 'CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:main'
     out = run_shell_command(
         f'{with_cephadm_image} cephadm --verbose shell --config {config} --keyring {keyring} -- {command}',
         expect_error,
