@@ -1002,7 +1002,7 @@ sets known as *profiles*.  As of the Octopus release these are:
  * ``firefly``: the values supported by the firefly release
  * ``hammer``: the values supported by the hammer release
  * ``jewel``: the values supported by the jewel release
- * ``optimal``: the best (ie optimal) values of the current version of Ceph
+ * ``optimal``: the best (i.e. optimal) values of the current version of Ceph
  * ``default``: the default values of a new cluster installed from
    scratch. These values, which depend on the current version of Ceph,
    are hardcoded and are generally a mix of optimal and legacy values.
