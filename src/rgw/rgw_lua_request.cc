@@ -342,6 +342,71 @@ struct BucketMetaTable : public EmptyMetaTable {
   }
 };
 
+rgw::sal::Object* get_object_with_atttributes(const req_state* s, rgw::sal::Object* obj) {
+  // in case of copy obj, the tags and metadata are taken from source
+  const auto src_obj = s->src_object ? s->src_object.get() : obj;
+  if (src_obj->get_attrs().empty()) {
+    if (!src_obj->get_bucket() && s->bucket) {
+      src_obj->set_bucket(s->bucket.get());
+    }
+    if (!src_obj->get_bucket()) {
+      ldpp_dout(s, 20) << "Lua INFO: cannot get attributes from object: " << 
+        src_obj->get_key() << ". no bucket set for object" << dendl;
+      return nullptr;
+    }
+    const auto ret = src_obj->get_obj_attrs(s->yield, s);
+    if (ret < 0) {
+      ldpp_dout(s, 20) << "Lua INFO: cannot get attributes from object: " << 
+        src_obj->get_key() << ". ret = " << ret << dendl;
+      return nullptr;
+    }
+  }
+  return src_obj;
+}
+
+void metadata_from_attributes(const req_state* s, rgw::sal::Object* obj, meta_map_t& metadata) {
+  metadata = s->info.x_meta_map;
+  const auto src_obj = get_object_with_atttributes(s, obj);
+  if (!src_obj) {
+    return;
+  }
+  for (auto& attr : src_obj->get_attrs()) {
+    if (boost::algorithm::starts_with(attr.first, RGW_ATTR_META_PREFIX)) {
+      std::string_view key(attr.first);
+      key.remove_prefix(sizeof(RGW_ATTR_PREFIX)-1);
+      // we want to pass a null terminated version
+      // of the bufferlist, hence "to_str().c_str()"
+      metadata.emplace(key, attr.second.to_str().c_str());
+    }
+  }
+}
+
+void tags_from_attributes(const req_state* s, rgw::sal::Object* obj, RGWObjTags::tag_map_t& tags) {
+  const auto& request_tags = s->tagset.get_tags();
+  const auto src_obj = get_object_with_atttributes(s, obj);
+  if (!src_obj) {
+    tags = request_tags;
+    return;
+  }
+  const auto& attrs = src_obj->get_attrs();
+  const auto attr_iter = attrs.find(RGW_ATTR_TAGS);
+  if (attr_iter != attrs.end()) {
+    auto bliter = attr_iter->second.cbegin();
+    RGWObjTags obj_tags_wrapper;
+    try {
+      ::decode(obj_tags_wrapper, bliter);
+    } catch(buffer::error&) {
+      // not able to decode object tags
+      tags = request_tags;
+      return;
+    }
+    const auto& obj_tags = obj_tags_wrapper.get_tags();
+    // avoid duplicates between request and object tags
+    std::set_union(request_tags.begin(), request_tags.end(), obj_tags.begin(), obj_tags.end(), 
+        std::inserter(tags, std::end(tags)));
+  }
+}
+
 struct ObjectMetaTable : public EmptyMetaTable {
   static const std::string TableName() {return "Object";}
   static std::string Name() {return TableName() + "Meta";}
@@ -349,7 +414,8 @@ struct ObjectMetaTable : public EmptyMetaTable {
   using Type = rgw::sal::Object;
 
   static int IndexClosure(lua_State* L) {
-    const auto obj = reinterpret_cast<const Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    auto obj = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -363,6 +429,20 @@ struct ObjectMetaTable : public EmptyMetaTable {
       lua_pushinteger(L, obj->get_obj_size());
     } else if (strcasecmp(index, "MTime") == 0) {
       pushtime(L, obj->get_mtime());
+    } else if (strcasecmp(index, "Metadata") == 0) {
+      meta_map_t metadata;
+      metadata_from_attributes(s, obj, metadata);
+      create_owning_metatable<StringMapMetaTable<meta_map_t>, meta_map_t>(
+          L, 
+          false, 
+          std::forward<meta_map_t>(metadata));
+    } else if (strcasecmp(index, "Tags") == 0) {
+      RGWObjTags::tag_map_t tags;
+      tags_from_attributes(s, obj, tags);
+      create_owning_metatable<StringMapMetaTable<RGWObjTags::tag_map_t>, RGWObjTags::tag_map_t>(
+          L,
+          false, 
+          std::forward<RGWObjTags::tag_map_t>(tags));
     } else {
       return error_unknown_field(L, index, TableName());
     }
@@ -725,7 +805,7 @@ struct CopyFromMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Bucket") == 0) {
       pushstring(L, s->src_bucket_name);
     } else if (strcasecmp(index, "Object") == 0) {
-      create_metatable<ObjectMetaTable>(L, false, s->src_object);
+      create_metatable<ObjectMetaTable>(L, false, s->src_object, s);
     } else {
       return error_unknown_field(L, index, TableName());
     }
@@ -759,7 +839,7 @@ struct RequestMetaTable : public EmptyMetaTable {
 
   // __index closure that expect req_state to be captured
   static int IndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     const auto op_name = reinterpret_cast<const char*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
@@ -783,7 +863,7 @@ struct RequestMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Bucket") == 0) {
       create_metatable<BucketMetaTable>(L, false, s);
     } else if (strcasecmp(index, "Object") == 0) {
-      create_metatable<ObjectMetaTable>(L, false, s->object);
+      create_metatable<ObjectMetaTable>(L, false, s->object, s);
     } else if (strcasecmp(index, "CopyFrom") == 0) {
       if (s->op_type == RGW_OP_COPY_OBJ) {
         create_metatable<CopyFromMetaTable>(L, s);

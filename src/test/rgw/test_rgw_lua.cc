@@ -167,6 +167,9 @@ tracing::Tracer tracer;
 #define INIT_TRACE tracer.init("test"); \
                    s.trace = tracer.start_trace("test", true);
 
+#define MAKE_STORE auto store = std::unique_ptr<sal::RadosStore>(new sal::RadosStore); \
+                        store->setRados(new RGWRados);
+
 TEST(TestRGWLua, EmptyScript)
 {
   const std::string script;
@@ -378,6 +381,94 @@ TEST(TestRGWLua, WriteBucketFail)
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_NE(rc, 0);
+}
+
+TEST(TestRGWLua, Object)
+{
+  const std::string script = R"(
+    name = "myname"
+    ver = "ver1"
+    ns = "_myns"
+    assert(Request.Object)
+    assert(Request.Object.Name == name)
+    assert(Request.Object.Instance == ver)
+    assert(Request.Object.Id == ns..":"..ver.."_"..name)
+    assert(Request.Object.Size == 0)
+    assert(Request.Object.Mtime)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  rgw_obj_key k;
+  k.name = "myname";
+  k.ns = "myns";
+  k.instance = "ver1";
+  s.object.reset(new sal::RadosObject(nullptr, k));
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, ObjectTags)
+{
+  const std::string script = R"(
+    assert(Request.Object)
+    assert(Request.Object.Tags)
+    assert(#Request.Object.Tags == 4)
+    local t = {hello = "world", foo = "bar", goodbye = "cruel world", ka = "boom"}
+    for k, v in pairs(Request.Object.Tags) do
+      assert(t[k] == v)
+    end
+  )";
+
+  DEFINE_REQ_STATE;
+  MAKE_STORE;
+
+  rgw_obj_key k;
+  rgw_bucket b;
+  s.bucket.reset(new sal::RadosBucket(store.get(), b));
+  s.object.reset(new sal::RadosObject(store.get(), k, s.bucket.get()));
+  s.tagset.add_tag("hello", "world");
+  s.tagset.add_tag("foo", "bar");
+  s.tagset.add_tag("goodbye", "cruel world");
+  s.tagset.add_tag("ka", "boom");
+
+  const auto rc = lua::request::execute(store.get(), nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, MissingObject)
+{
+  const std::string script = R"(
+    assert(not Request.Object)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, MissingObjectFields)
+{
+  const std::string script = R"(
+    assert(Request.Object)
+    assert(Request.Object.Tags)
+    assert(Request.Object.Metadata)
+    assert(#Request.Object.Tags == 0)
+    assert(#Request.Object.Metadata == 0)
+  )";
+
+  DEFINE_REQ_STATE;
+  MAKE_STORE;
+
+  rgw_obj_key k;
+  rgw_bucket b;
+  s.bucket.reset(new sal::RadosBucket(store.get(), b));
+  s.object.reset(new sal::RadosObject(store.get(), k, s.bucket.get()));
+
+  const auto rc = lua::request::execute(store.get(), nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
 }
 
 TEST(TestRGWLua, GenericAttributes)
@@ -633,9 +724,6 @@ TEST(TestRGWLua, NotAllowedInLib)
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_NE(rc, 0);
 }
-
-#define MAKE_STORE auto store = std::unique_ptr<sal::RadosStore>(new sal::RadosStore); \
-                        store->setRados(new RGWRados);
 
 TEST(TestRGWLua, OpsLog)
 {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <string.h>
 #include <memory>
 #include <map>
@@ -124,41 +125,117 @@ void create_metatable(lua_State* L, bool toplevel, Upvalues... upvalues)
     // give table a name (in cae of "toplevel")
     lua_setglobal(L, MetaTable::TableName().c_str());
   }
+
   // create metatable
   [[maybe_unused]] const auto rc = luaL_newmetatable(L, MetaTable::Name().c_str());
+  const auto table_stack_pos = lua_gettop(L);
+  
+  // add "index" closure to metatable
   lua_pushliteral(L, "__index");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::IndexClosure, upvals_size);
-  lua_rawset(L, -3);
+  lua_rawset(L, table_stack_pos);
+
+  // add "newindex" closure to metatable
   lua_pushliteral(L, "__newindex");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::NewIndexClosure, upvals_size);
-  lua_rawset(L, -3);
+  lua_rawset(L, table_stack_pos);
+
+  // add "pairs" closure to metatable
   lua_pushliteral(L, "__pairs");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::PairsClosure, upvals_size);
-  lua_rawset(L, -3);
+  lua_rawset(L, table_stack_pos);
+  
+  // add "len" closure to metatable
   lua_pushliteral(L, "__len");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::LenClosure, upvals_size);
-  lua_rawset(L, -3);
+  lua_rawset(L, table_stack_pos);
+
   // tie metatable and table
+  ceph_assert(lua_gettop(L) == table_stack_pos);
   lua_setmetatable(L, -2);
 }
 
-template<typename MetaTable>
-void create_metatable(lua_State* L, bool toplevel, std::unique_ptr<typename MetaTable::Type>& ptr)
+template<typename Type>
+int value_dtor(lua_State* L) {
+  auto value  = reinterpret_cast<Type*>(lua_touserdata(L, -1));
+  value->~Type();
+  return NO_RETURNVAL;
+}
+
+template<typename MetaTable, typename Type>
+void create_owning_metatable(lua_State* L, bool toplevel, Type&& value)
+{
+  const auto table_name = MetaTable::TableName() + typeid(Type).name();
+  // create lua owned user data
+  auto buff = lua_newuserdata(L, sizeof(Type));
+  new (buff) Type(std::move(value));
+  const auto userdata_stack_pos = lua_gettop(L);
+  if (toplevel) {
+    // duplicate the userdata to make sure it remain in the stack
+    lua_pushvalue(L, -1);
+    // give table a name (in cae of "toplevel")
+    lua_setglobal(L, table_name.c_str());
+  }
+
+  // create metatable
+  [[maybe_unused]] auto rc = luaL_newmetatable(L, table_name.c_str());
+  const auto table_stack_pos = lua_gettop(L);
+  
+  // allocate userdata and call ctor
+  // add dtor to garbage collector of the userdata metatable
+  lua_pushliteral(L, "__gc");
+  lua_pushcfunction(L, value_dtor<Type>);
+  // add gc to metatable
+  lua_rawset(L, table_stack_pos);
+  
+  // add "index" closure to metatable
+  lua_pushliteral(L, "__index");
+  lua_pushvalue(L, userdata_stack_pos);
+  lua_pushcclosure(L, MetaTable::IndexClosure, ONE_UPVAL);
+  lua_rawset(L, table_stack_pos);
+
+  // add "newindex" closure to metatable
+  lua_pushliteral(L, "__newindex");
+  lua_pushvalue(L, userdata_stack_pos);
+  lua_pushcclosure(L, MetaTable::NewIndexClosure, ONE_UPVAL);
+  lua_rawset(L, table_stack_pos);
+
+  // add "pairs" closure to metatable
+  lua_pushliteral(L, "__pairs");
+  lua_pushvalue(L, userdata_stack_pos);
+  lua_pushcclosure(L, MetaTable::PairsClosure, ONE_UPVAL);
+  lua_rawset(L, table_stack_pos);
+  
+  // add "len" closure to metatable
+  lua_pushliteral(L, "__len");
+  lua_pushvalue(L, userdata_stack_pos);
+  lua_pushcclosure(L, MetaTable::LenClosure, ONE_UPVAL);
+  lua_rawset(L, table_stack_pos);
+
+  // tie metatable and userdata
+  ceph_assert(lua_gettop(L) == table_stack_pos);
+  lua_setmetatable(L, -2);
+}
+
+// create a metatable when the first upvalue is a unique pointer reference
+// no ownership is passed, and the raw pointer is passed
+template<typename MetaTable, typename... Upvalues>
+void create_metatable(lua_State* L, bool toplevel, std::unique_ptr<typename MetaTable::Type>& ptr, Upvalues... upvalues)
 {
   if (ptr) {
-    create_metatable<MetaTable>(L, toplevel, reinterpret_cast<void*>(ptr.get()));
+    create_metatable<MetaTable>(L, toplevel, reinterpret_cast<void*>(ptr.get()), upvalues...);
   } else {
     lua_pushnil(L);
   }
@@ -286,6 +363,10 @@ struct StringMapMetaTable : public EmptyMetaTable {
       const auto it = map->find(std::string(index));
       ceph_assert(it != map->end());
       next_it = std::next(it);
+      // avoid infinite loop in case of multimap-like structures
+      while (next_it != map->end() && next_it->first == it->first) {
+        next_it = std::next(it);
+      }
     }
 
     if (next_it == map->end()) {
