@@ -106,7 +106,7 @@ def check_selinux():
 
 class Cluster(Target):
     _help = 'Manage docker cephadm boxes'
-    actions = ['bootstrap', 'start', 'down', 'list', 'sh', 'setup', 'cleanup']
+    actions = ['bootstrap', 'start', 'down', 'list', 'sh', 'setup', 'cleanup', 'doctor']
 
     def set_args(self):
         self.parser.add_argument(
@@ -136,12 +136,15 @@ class Cluster(Target):
     def cleanup(self):
         cleanup_box()
 
+    def _set_cephadm_path(self):
+        cephadm_path = os.environ.get('CEPHADM_PATH')
+        os.symlink('/cephadm/cephadm.py', cephadm_path)
+
     @ensure_inside_container
     def bootstrap(self):
         print('Running bootstrap on seed')
+        self._set_cephadm_path()
         cephadm_path = os.environ.get('CEPHADM_PATH')
-        os.symlink('/cephadm/cephadm', cephadm_path)
-
 
         if engine() == 'docker':
             # restart to ensure docker is using daemon.json
@@ -254,7 +257,7 @@ class Cluster(Target):
                 dcflags += f' -f {Config.get("docker_v1_yaml")}'
             run_shell_command(f'{engine_compose()} {dcflags} up --scale hosts={hosts} -d')
         else:
-            run_shell_command(f'{engine_compose()} -f {Config.get("podman_yaml")} --podman-run-args "--group-add keep-groups --network=host --device /dev/fuse -it {loop_device_arg}" up --scale hosts={hosts} -d')
+            run_shell_command(f'{engine_compose()} -f {Config.get("podman_yaml")} --podman-run-args "--group-add keep-groups --device /dev/fuse -it {loop_device_arg}" up --scale hosts={hosts} -d')
 
         run_shell_command('sudo sysctl net.ipv4.conf.all.forwarding=1')
         run_shell_command('sudo iptables -P FORWARD ACCEPT')
@@ -320,6 +323,11 @@ class Cluster(Target):
         print(colored(f'dashboard available at https://{dashboard_ip}:8443', Colors.OKGREEN))
 
         print('Bootstrap finished successfully')
+
+    @ensure_outside_container
+    def doctor(self):
+        self._set_cephadm_path()
+
 
     @ensure_outside_container
     def down(self):

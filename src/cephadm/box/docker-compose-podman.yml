@@ -51,10 +51,10 @@ services:
   hosts:
     extends:
       service: cephadm-host-base
-    scale: 1
+    scale: 2
 
 
 volumes:
   var-lib-docker:
 
-network_mode: public
+network_mode: bridge
