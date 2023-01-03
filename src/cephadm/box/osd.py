@@ -3,6 +3,7 @@ import os
 from typing import Dict
 
 from util import (
+    BoxType,
     Config,
     Target,
     ensure_inside_container,
@@ -129,7 +130,7 @@ def deploy_osds_in_vg(vg: str):
         verbose = '-v' if Config.get('verbose') else ''
         print('Redirecting deploy osd in vg to inside container')
         run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} --engine {engine()} osd deploy --vg {vg}', 1, 'seed'
+            f'/cephadm/box/box.py {verbose} --engine {engine()} osd deploy --vg {vg}', 1, BoxType.SEED
         )
 
 

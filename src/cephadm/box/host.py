@@ -10,10 +10,11 @@ from util import (
     run_dc_shell_command,
     run_shell_command,
     engine,
+    BoxType
 )
 
 
-def _setup_ssh(container_type, container_index):
+def _setup_ssh(container_type: BoxType, container_index):
     if inside_container():
         if not os.path.exists('/root/.ssh/known_hosts'):
             run_shell_command('ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N ""')
@@ -28,7 +29,7 @@ def _setup_ssh(container_type, container_index):
         print('Redirecting to _setup_ssh to container')
         verbose = '-v' if Config.get('verbose') else ''
         run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} --engine {engine()} host setup_ssh {container_type} {container_index}',
+            f'/cephadm/box/box.py {verbose} --engine {engine()} host setup_ssh {BoxType.to_string(container_type)} {container_index}',
             container_index,
             container_type,
         )
@@ -48,9 +49,9 @@ def _add_hosts(ips: Union[List[str], str], hostnames: Union[List[str], str]):
         hostnames = ' '.join(hostnames)
         hostnames = f'{hostnames}'
         run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} --engine {engine()} host add_hosts seed 1 --ips {ips} --hostnames {hostnames}',
+            f'/cephadm/box/box.py {verbose} --engine {engine()} host add_hosts seed {BoxType.to_string(BoxType.SEED)} --ips {ips} --hostnames {hostnames}',
             1,
-            'seed',
+            BoxType.SEED,
         )
 
 
@@ -74,9 +75,9 @@ def _copy_cluster_ssh_key(ips: Union[List[str], str]):
         ips = f'{ips}'
         # assume we only have one seed
         run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} --engine {engine()} host copy_cluster_ssh_key seed 1 --ips {ips}',
+            f'/cephadm/box/box.py {verbose} --engine {engine()} host copy_cluster_ssh_key {BoxType.to_string(BoxType.SEED)} 1 --ips {ips}',
             1,
-            'seed',
+            BoxType.SEED,
         )
 
 
@@ -98,7 +99,9 @@ class Host(Target):
         )
 
     def setup_ssh(self):
-        _setup_ssh(Config.get('container_type') ,Config.get('container_index'))
+        type_ = Config.get('container_type')
+        index = Config.get('container_index')
+        _setup_ssh(type_, index)
 
     def add_hosts(self):
         ips = Config.get('ips')

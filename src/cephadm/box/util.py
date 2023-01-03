@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import enum
 from typing import Any, Callable, Dict
 
 class Colors:
@@ -41,7 +42,6 @@ class Config:
     @staticmethod
     def add_args(args: Dict[str, str]) -> None:
         Config.args.update(args)
-
 
 class Target:
     def __init__(self, argv, subparsers):
@@ -91,7 +91,7 @@ def ensure_inside_container(func) -> bool:
 def colored(msg, color: Colors):
     return color + msg + Colors.ENDC
 
-def run_shell_command(command: str, expect_error=False) -> str:
+def run_shell_command(command: str, expect_error=False, verbose=True) -> str:
     if Config.get('verbose'):
         print(f'{colored("Running command", Colors.HEADER)}: {colored(command, Colors.OKBLUE)}')
 
@@ -108,7 +108,7 @@ def run_shell_command(command: str, expect_error=False) -> str:
         if pout == '' and process.poll() is not None:
             break
         if pout:
-            if Config.get('verbose'):
+            if Config.get('verbose') and verbose:
                 sys.stdout.write(pout)
                 sys.stdout.flush()
             out += pout
@@ -125,7 +125,31 @@ def run_shell_command(command: str, expect_error=False) -> str:
     return out
 
 
-def run_dc_shell_commands(index, box_type, commands: str, expect_error=False) -> str:
+class BoxType(enum.IntEnum):
+    SEED = 0 # where we bootstrap cephadm
+    HOST = 1
+    @staticmethod
+    def to_enum(value: str):
+        if value == 'seed':
+            return BoxType.SEED
+        elif value == 'host':
+            return BoxType.HOST
+        else:
+            print(f'Wrong container type {value}')
+            sys.exit(1)
+
+    @staticmethod
+    def to_string(box_type):
+        if box_type == BoxType.SEED:
+            return 'seed'
+        elif box_type == BoxType.HOST:
+            return 'host'
+        else:
+            print(f'Wrong container type {type_}')
+            sys.exit(1)
+
+
+def run_dc_shell_commands(index, box_type: BoxType, commands: str, expect_error=False) -> str:
     for command in commands.split('\n'):
         command = command.strip()
         if not command:
@@ -153,9 +177,16 @@ def run_cephadm_shell_command(command: str, expect_error=False) -> str:
 
 
 def run_dc_shell_command(
-    command: str, index: int, box_type: str, expect_error=False
+    command: str, index: int, box_type: BoxType, expect_error=False
 ) -> str:
-    container_id = get_container_id(f'{box_type}_{index}')
+    box_type_str = 'box_hosts'
+    if box_type == BoxType.SEED:
+        index = 0
+        if engine() == 'docker':
+            box_type_str = 'seed'
+            index = 1
+
+    container_id = get_container_id(f'{box_type_str}_{index}')
     print(container_id)
     out = run_shell_command(
         f'{engine()} exec -it {container_id} {command}', expect_error
@@ -174,27 +205,38 @@ def engine():
 def engine_compose():
     return f'{engine()}-compose'
 
+def get_seed_name():
+    if engine() == 'docker':
+        return 'seed'
+    elif engine() == 'podman':
+        return 'box_hosts_0'
+    else:
+        print(f'unkown engine {engine()}')
+        sys.exit(1)
+
+
 @ensure_outside_container
 def get_boxes_container_info(with_seed: bool = False) -> Dict[str, Any]:
     # NOTE: this could be cached
-    IP = 0
-    CONTAINER_NAME = 1
-    HOSTNAME = 2
-    # fstring extrapolation will mistakenly try to extrapolate inspect options
-    ips_query = engine() + " inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} %tab% {{.Name}} %tab% {{.Config.Hostname}}' $("+ engine() + " ps -aq) | sed 's#%tab%#\t#g' | sed 's#/##g' | sort -t . -k 1,1n -k 2,2n -k 3,3n -k 4,4n"
-    out = run_shell_command(ips_query)
+    ips_query = engine() + " inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} %tab% {{.Name}} %tab% {{.Config.Hostname}}' $("+ engine() + " ps -aq) --format json"
+    containers = json.loads(run_shell_command(ips_query, verbose=False))
     # FIXME: if things get more complex a class representing a container info might be useful,
     # for now representing data this way is faster.
     info = {'size': 0, 'ips': [], 'container_names': [], 'hostnames': []}
-    for line in out.split('\n'):
-        container = line.split()
+    for container in containers:
         # Most commands use hosts only
-        name_filter = 'box_' if with_seed else 'box_hosts'
-        if container[1].strip()[: len(name_filter)] == name_filter:
+        name = container['Name']
+        if name.startswith('box_hosts'):
+            if not with_seed and name == get_seed_name():
+                continue
             info['size'] += 1
-            info['ips'].append(container[IP])
-            info['container_names'].append(container[CONTAINER_NAME])
-            info['hostnames'].append(container[HOSTNAME])
+            print(container['NetworkSettings'])
+            if 'Networks' in container['NetworkSettings']:
+                info['ips'].append(container['NetworkSettings']['Networks']['box_network']['IPAddress'])
+            else:
+                info['ips'].append('n/a')
+            info['container_names'].append(name)
+            info['hostnames'].append(container['Config']['Hostname'])
     return info
 
 
@@ -202,7 +244,7 @@ def get_orch_hosts():
     if inside_container():
         orch_host_ls_out = run_cephadm_shell_command('ceph orch host ls --format json')
     else:
-        orch_host_ls_out = run_dc_shell_command('cephadm shell --keyring /etc/ceph/ceph.keyring --config /etc/ceph/ceph.conf -- ceph orch host ls --format json', 1, 'seed')
+        orch_host_ls_out = run_dc_shell_command('cephadm shell --keyring /etc/ceph/ceph.keyring --config /etc/ceph/ceph.conf -- ceph orch host ls --format json', 1, get_seed_name())
         sp = orch_host_ls_out.split('\n')
         orch_host_ls_out  = sp[len(sp) - 1]
         print('xd', orch_host_ls_out)
