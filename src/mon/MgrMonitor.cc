@@ -815,9 +815,9 @@ void MgrMonitor::tick()
       && last_beacon.at(pending_map.active_gid) < cutoff
       && mon.osdmon()->is_writeable()) {
     const std::string old_active_name = pending_map.active_name;
+    dout(4) << "Dropping active " << pending_map.active_gid << dendl;
     drop_active();
     propose = true;
-    dout(4) << "Dropping active" << pending_map.active_gid << dendl;
     if (promote_standby()) {
       dout(4) << "Promoted standby " << pending_map.active_gid << dendl;
       mon.clog->info() << "Manager daemon " << old_active_name

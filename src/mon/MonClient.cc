@@ -960,6 +960,11 @@ void MonClient::tick()
       schedule_tick();
     });
 
+  if (!_opened()) {
+    ldout(cct, 10) << __func__ << " not opened." << dendl;
+    _reopen_session();
+  }
+
   _check_auth_tickets();
   _check_tell_commands();
   
