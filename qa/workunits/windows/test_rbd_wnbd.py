@@ -374,18 +374,33 @@ class RbdImage(object):
             self.remove()
 
     @Tracer.trace
-    def init_fs(self):
-        if not self.mapped:
-            raise CephTestException("Unable to create fs, image not mapped.")
-
+    @retry_decorator()
+    def _init_disk(self):
         cmd = ("powershell.exe", "-command",
                f"Get-Disk -Number {self.disk_number} | "
-               "Initialize-Disk -PassThru | "
-               "New-Partition -AssignDriveLetter -UseMaximumSize | "
-               "Format-Volume -Force -Confirm:$false")
+               "Initialize-Disk")
         execute(*cmd)
 
-        # Retrieve the drive letter.
+    @Tracer.trace
+    @retry_decorator()
+    def _create_partition(self):
+        cmd = ("powershell.exe", "-command",
+               f"Get-Disk -Number {self.disk_number} | "
+               "New-Partition -AssignDriveLetter -UseMaximumSize")
+        execute(*cmd)
+
+    @Tracer.trace
+    @retry_decorator()
+    def _format_volume(self):
+        cmd = (
+            "powershell.exe", "-command",
+             f"(Get-Partition -DiskNumber {self.disk_number}"
+             " | ? { $_.DriveLetter }) | Format-Volume -Force -Confirm:$false")
+        execute(*cmd)
+
+    @Tracer.trace
+    @retry_decorator()
+    def _get_drive_letter(self):
         cmd = (
             "powershell.exe", "-command",
             f"(Get-Partition -DiskNumber {self.disk_number}"
@@ -398,6 +413,16 @@ class RbdImage(object):
         if not self.drive_letter.isalpha() or len(self.drive_letter) != 1:
             raise CephTestException(
                 "Invalid drive letter received: %s" % self.drive_letter)
+
+    @Tracer.trace
+    def init_fs(self):
+        if not self.mapped:
+            raise CephTestException("Unable to create fs, image not mapped.")
+
+        self._init_disk()
+        self._create_partition()
+        self._format_volume()
+        self._get_drive_letter()
 
     @Tracer.trace
     def get_fs_capacity(self):
