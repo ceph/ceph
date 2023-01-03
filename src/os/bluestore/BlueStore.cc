@@ -17149,37 +17149,8 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
       r = -ENOTEMPTY;
       goto out;
     }
-    vector<ghobject_t> ls;
-    ghobject_t next;
-    // Enumerate onodes in db, up to nonexistent_count + 1
-    // then check if all of them are marked as non-existent.
-    // Bypass the check if (next != ghobject_t::get_max())
-    r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(),
-                         nonexistent_count + 1, false, &ls, &next);
-    if (r >= 0) {
-      // If true mean collecton has more objects than nonexistent_count,
-      // so bypass check.
-      bool exists = (!next.is_max());
-      for (auto it = ls.begin(); !exists && it < ls.end(); ++it) {
-        dout(10) << __func__ << " oid " << *it << dendl;
-        auto onode = (*c)->onode_map.lookup(*it);
-        exists = !onode || onode->exists;
-        if (exists) {
-          dout(1) << __func__ << " " << *it
-	  << " exists in db, "
-	  << (!onode ? "not present in ram" : "present in ram")
-	  << dendl;
-        }
-      }
-      if (!exists) {
-        _do_remove_collection(txc, c);
-        r = 0;
-      } else {
-        dout(10) << __func__ << " " << cid
-                 << " is non-empty" << dendl;
-	r = -ENOTEMPTY;
-      }
-    }
+    _do_remove_collection(txc, c);
+    r = 0;
   }
 out:
   dout(10) << __func__ << " " << cid << " = " << r << dendl;
