@@ -211,8 +211,8 @@ distribution units, pods, rows, rooms, and data centers. With the exception of
 the leaf nodes representing OSDs, the rest of the hierarchy is arbitrary, and
 you may define it according to your own needs.
 
-We recommend adapting your CRUSH map to your firms's hardware naming conventions
-and using instances names that reflect the physical hardware. Your naming
+We recommend adapting your CRUSH map to your firm's hardware naming conventions
+and using instance names that reflect the physical hardware. Your naming
 practice can make it easier to administer the cluster and troubleshoot
 problems when an OSD and/or other hardware malfunctions and the administrator
 need access to physical hardware.
