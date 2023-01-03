@@ -729,10 +729,10 @@ This is the formula for links to addresses external to the Ceph documentation:
    
    Do not fail to include the underscore after the final backtick.
 
-   To link to addresses that are external to the Ceph documentation, you have
-   to include a space between the inline text and the angle bracket that
-   precedes the external address. This is precisely the opposite of :ref:`the
-   convention for inline text that links to a location inside the Ceph
+   To link to addresses that are external to the Ceph documentation, include a
+   space between the inline text and the angle bracket that precedes the
+   external address. This is precisely the opposite of :ref:`the convention for
+   inline text that links to a location inside the Ceph
    documentation<internal_link_with_inline_text>`. If this seems inconsistent
    and confusing to you, then you're right. It is inconsistent and confusing.
 
@@ -741,10 +741,10 @@ See also ":ref:`External Hyperlink Example<start_external_hyperlink_example>`".
 Internal Links
 ~~~~~~~~~~~~~~
 
-To link to a section that is in the Ceph documentation, you must (1) define a
-target link before the section and then (2) link to that target from another
-location in the documentation. Here are the formulas for targets and links to
-those targets:
+To link to a section in the Ceph documentation, you must (1) define a target
+link before the section and then (2) link to that target from another location
+in the documentation. Here are the formulas for targets and links to those
+targets:
 
 Target::
 
