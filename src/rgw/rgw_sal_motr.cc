@@ -619,11 +619,9 @@ int MotrBucket::check_bucket_shards(const DoutPrefixProvider *dpp)
   return 0;
 }
 
-int MotrBucket::chown(const DoutPrefixProvider *dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker)
+int MotrBucket::chown(const DoutPrefixProvider *dpp, User& new_user, optional_yield y)
 {
   // TODO: update bucket with new owner
-
-  /* XXX: Update policies of all the bucket->objects with new user */
   return 0;
 }
 
@@ -1102,6 +1100,11 @@ int MotrObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::
 
 int MotrObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
     bool must_exist, optional_yield y)
+{
+  return 0;
+}
+
+int MotrObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
 {
   return 0;
 }
