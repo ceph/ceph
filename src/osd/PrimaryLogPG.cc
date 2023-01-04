@@ -1001,8 +1001,7 @@ void PrimaryLogPG::do_command(
 {
   string format;
   cmd_getval(cmdmap, "format", format);
-  std::unique_ptr<Formatter> f(Formatter::create(
-				 format, "json-pretty", "json-pretty"));
+  auto f(Formatter::create_unique(format, "json-pretty", "json-pretty"));
   int ret = 0;
   stringstream ss;   // stderr error message stream
   bufferlist outbl;  // if empty at end, we'll dump formatter as output
@@ -15074,12 +15073,11 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
 	     << ", evict_effort " << agent_state->evict_effort
 	     << dendl;
     dout(30) << "agent_state:\n";
-    Formatter *f = Formatter::create("");
+    auto f = Formatter::create_unique("");
     f->open_object_section("agent_state");
-    agent_state->dump(f);
+    agent_state->dump(f.get());
     f->close_section();
     f->flush(*_dout);
-    delete f;
     *_dout << dendl;
 
     if (1000000 - temp_upper >= agent_state->evict_effort)
