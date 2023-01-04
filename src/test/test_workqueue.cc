@@ -86,13 +86,13 @@ TEST(WorkQueue, change_timeout){
     tp.start();
     twq wq(2, 20, &tp);
     // check timeout and suicide
-    ASSERT_EQ(ceph::make_timespan(2), wq.timeout_interval);
-    ASSERT_EQ(ceph::make_timespan(20), wq.suicide_interval);
+    ASSERT_EQ(ceph::make_timespan(2), wq.timeout_interval.load());
+    ASSERT_EQ(ceph::make_timespan(20), wq.suicide_interval.load());
 
     // change the timeout and suicide and then check them
     wq.set_timeout(4);
     wq.set_suicide_timeout(40);
-    ASSERT_EQ(ceph::make_timespan(4), wq.timeout_interval);
-    ASSERT_EQ(ceph::make_timespan(40), wq.suicide_interval);
+    ASSERT_EQ(ceph::make_timespan(4), wq.timeout_interval.load());
+    ASSERT_EQ(ceph::make_timespan(40), wq.suicide_interval.load());
     tp.stop();
 }
