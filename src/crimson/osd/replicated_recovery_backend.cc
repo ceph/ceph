@@ -799,11 +799,23 @@ ReplicatedRecoveryBackend::_handle_pull_response(
   if (pull_info.recovery_progress.first) {
     prepare_waiter = pg.obc_loader.with_obc<RWState::RWNONE>(
       pull_info.recovery_info.soid,
-      [&pull_info, &recovery_waiter, &push_op](auto, auto obc) {
+      [this, &pull_info, &recovery_waiter, &push_op](auto, auto obc) {
         pull_info.obc = obc;
         recovery_waiter.obc = obc;
-        obc->obs.oi.decode_no_oid(push_op.attrset.at(OI_ATTR), push_op.soid);
+        obc->obs.oi.decode_no_oid(push_op.attrset.at(OI_ATTR),
+                                  push_op.soid);
+        if (push_op.attrset.contains(SS_ATTR)) {
+          bufferlist ssbl = push_op.attrset.at(SS_ATTR);
+          SnapSet ss(ssbl);
+          assert(!pull_info.obc->ssc->exists ||
+                 ss.seq == pull_info.obc->ssc->snapset.seq);
+        }
         pull_info.recovery_info.oi = obc->obs.oi;
+        if (pull_info.recovery_info.soid.snap &&
+            pull_info.recovery_info.soid.snap < CEPH_NOSNAP) {
+            recalc_subsets(pull_info.recovery_info,
+                           pull_info.obc->ssc);
+        }
         return crimson::osd::PG::load_obc_ertr::now();
       }).handle_error_interruptible(crimson::ct_error::assert_all{});
   };
@@ -855,6 +867,17 @@ ReplicatedRecoveryBackend::_handle_pull_response(
       }
     });
   });
+}
+
+void ReplicatedRecoveryBackend::recalc_subsets(
+    ObjectRecoveryInfo& recovery_info,
+    crimson::osd::SnapSetContextRef ssc)
+{
+  assert(ssc);
+  auto subsets = crimson::osd::calc_clone_subsets(
+    ssc->snapset, recovery_info.soid, pg.get_local_missing(),
+    pg.get_info().last_backfill);
+  crimson::osd::set_subsets(subsets, recovery_info);
 }
 
 RecoveryBackend::interruptible_future<>
