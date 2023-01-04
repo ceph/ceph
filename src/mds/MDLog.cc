@@ -810,6 +810,11 @@ void MDLog::_maybe_expired(LogSegment *ls, int op_prio)
 {
   if (mds->mdcache->is_readonly()) {
     dout(10) << "_maybe_expired, ignoring read-only FS" <<  dendl;
+    submit_mutex.lock();
+    ceph_assert(expiring_segments.count(ls));
+    expiring_segments.erase(ls);
+    expiring_events -= ls->num_events;
+    submit_mutex.unlock();
     return;
   }
 
