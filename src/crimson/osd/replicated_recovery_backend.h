@@ -82,6 +82,9 @@ protected:
     PushOp& push_op,
     PullOp* response,
     ceph::os::Transaction* t);
+  void recalc_subsets(
+    ObjectRecoveryInfo& recovery_info,
+    crimson::osd::SnapSetContextRef ssc);
   std::pair<interval_set<uint64_t>, ceph::bufferlist> trim_pushed_data(
     const interval_set<uint64_t> &copy_subset,
     const interval_set<uint64_t> &intervals_received,
