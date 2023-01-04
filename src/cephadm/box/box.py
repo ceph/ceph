@@ -116,8 +116,8 @@ def setup_podman_env(hosts: int = 1, osd_devs={}):
         --privileged \\
         --cpus 12 \\
         -e CEPH_BRANCH=main \\
-        -v /home/peristocles/redhat/cephbare/origin/main:/ceph:z \\
-        -v /home/peristocles/redhat/cephbare/origin/main/src/cephadm:/cephadm:z \\
+        -v ../../../:/ceph:z \\
+        -v ../:/cephadm:z \\
         -v /run/udev:/run/udev \\
         -v /sys/dev/block:/sys/dev/block \\
         -v /sys/fs/cgroup:/sys/fs/cgroup \\
