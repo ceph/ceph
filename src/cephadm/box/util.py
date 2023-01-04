@@ -27,6 +27,7 @@ class Config:
         'docker_yaml': 'docker-compose-docker.yml',
         'docker_v1_yaml': 'docker-compose.cgroup1.yml',
         'podman_yaml': 'docker-compose-podman.yml',
+        'loop_img_dir': 'loop-images',
     }
 
     @staticmethod
@@ -167,10 +168,11 @@ def run_shell_commands(commands: str, expect_error=False) -> str:
 def run_cephadm_shell_command(command: str, expect_error=False) -> str:
     config = Config.get('config')
     keyring = Config.get('keyring')
+    fsid = Config.get('fsid')
 
     with_cephadm_image = 'CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:main'
     out = run_shell_command(
-        f'{with_cephadm_image} cephadm --verbose shell --config {config} --keyring {keyring} -- {command}',
+        f'{with_cephadm_image} cephadm --verbose shell --fsid {fsid} --config {config} --keyring {keyring} -- {command}',
         expect_error,
     )
     return out
@@ -244,9 +246,8 @@ def get_orch_hosts():
     if inside_container():
         orch_host_ls_out = run_cephadm_shell_command('ceph orch host ls --format json')
     else:
-        orch_host_ls_out = run_dc_shell_command('cephadm shell --keyring /etc/ceph/ceph.keyring --config /etc/ceph/ceph.conf -- ceph orch host ls --format json', 1, get_seed_name())
+        orch_host_ls_out = run_dc_shell_command(f'cephadm shell --keyring /etc/ceph/ceph.keyring --config /etc/ceph/ceph.conf -- ceph orch host ls --format json', 1, BoxType.SEED)
         sp = orch_host_ls_out.split('\n')
         orch_host_ls_out  = sp[len(sp) - 1]
-        print('xd', orch_host_ls_out)
     hosts = json.loads(orch_host_ls_out)
     return hosts
