@@ -106,36 +106,47 @@ def check_selinux():
         print(colored('selinux should be disabled, please disable it if you '
                        'don\'t want unexpected behaviour.', Colors.WARNING))
 
-def setup_podman_env(hosts: int = 1):
+def setup_podman_env(hosts: int = 1, osd_devs={}):
     network_name = 'box_network'
     networks = run_shell_command('podman network ls')
     if network_name not in networks:
         run_shell_command(f'podman network create -d bridge {network_name}')
 
     run_default_options = """--group-add keep-groups --device /dev/fuse -it -d \\
-        --cap-add SYS_ADMIN --cap-add NET_ADMIN --cap-add SYS_TIME --cap-add SYS_RAWIO --cap-add MKNOD \\
-        --cap-add NET_RAW --cap-add SETUID --cap-add SETGID --cap-add CHOWN --cap-add SYS_PTRACE \\
-        --cap-add SYS_TTY_CONFIG --cap-add CAP_AUDIT_WRITE --cap-add CAP_AUDIT_CONTROL \\
-        -e CEPH_BRANCH=main -v /home/peristocles/redhat/cephbare/origin/main:/ceph:z \\
+        --privileged \\
+        --cpus 12 \\
+        -e CEPH_BRANCH=main \\
+        -v /home/peristocles/redhat/cephbare/origin/main:/ceph:z \\
         -v /home/peristocles/redhat/cephbare/origin/main/src/cephadm:/cephadm:z \\
-        -v /run/udev:/run/udev -v /sys/dev/block:/sys/dev/block -v /sys/fs/cgroup:/sys/fs/cgroup \\
-        -v /dev/fuse:/dev/fuse -v /dev/disk:/dev/disk -v /dev/mapper:/dev/mapper \\
+        -v /run/udev:/run/udev \\
+        -v /sys/dev/block:/sys/dev/block \\
+        -v /sys/fs/cgroup:/sys/fs/cgroup \\
+        -v /dev/fuse:/dev/fuse \\
+        -v /dev/disk:/dev/disk \\
+        -v /sys/devices/virtual/block:/sys/devices/virtual/block \\
+        -v /sys/dev/block:/dev/dev/block:rshared \\
+        -v /sys/block:/dev/block \\
+        -v /dev/mapper:/dev/mapper \\
         -v /dev/mapper/control:/dev/mapper/control \\
         --stop-signal RTMIN+3 -m 20g cephadm-box \\
       """
     def add_option(dest, src):
         dest = f'{src} {dest}'
         return dest
+    for osd_dev in osd_devs.values():
+        device = osd_dev["device"]
+        run_default_options = add_option(run_default_options, f'--device {device}:{device}')
+        
 
     for host in range(hosts+1): # 0 will be the seed
         options = run_default_options
         options = add_option(options, f'--name box_hosts_{host}')
+        options = add_option(options, f'--network {network_name}')
         if host == 0:
             options = add_option(options, f'-p 8443:8443') # dashboard
             options = add_option(options, f'-p 3000:3000') # grafana
             options = add_option(options, f'-p 9093:9093') # alertmanager
             options = add_option(options, f'-p 9095:9095') # prometheus
-            options = add_option(options, f'--network {network_name}')
         
         run_shell_command(f'podman run {options}')
 
@@ -168,14 +179,9 @@ class Cluster(Target):
     def cleanup(self):
         cleanup_box()
 
-    def _set_cephadm_path(self):
-        cephadm_path = os.environ.get('CEPHADM_PATH')
-        os.symlink('/cephadm/cephadm.py', cephadm_path)
-
     @ensure_inside_container
     def bootstrap(self):
         print('Running bootstrap on seed')
-        self._set_cephadm_path()
         cephadm_path = str(os.environ.get('CEPHADM_PATH'))
 
         if engine() == 'docker':
@@ -272,14 +278,9 @@ class Cluster(Target):
 
         used_loop = ""
         if not Config.get('skip_create_loop'):
-            print('Adding logical volumes (block devices) in loopback device...')
+            print('Creating OSD devices...')
             used_loop = osd.create_loopback_devices(osds)
             print(f'Added {osds} logical volumes in a loopback device')
-        loop_device_arg = ""
-        if used_loop:
-            loop_device_arg = f'--device {used_loop} -v /dev/vg1:/dev/vg1:Z'
-            for o in range(osds):
-                loop_device_arg += f' --device /dev/dm-{o}'
 
         print('Starting containers')
 
@@ -289,7 +290,7 @@ class Cluster(Target):
                 dcflags += f' -f {Config.get("docker_v1_yaml")}'
             run_shell_command(f'{engine_compose()} {dcflags} up --scale hosts={hosts} -d')
         else:
-            setup_podman_env(hosts=hosts)
+            setup_podman_env(hosts=hosts, osd_devs=osd.load_osd_devices())
 
         run_shell_command('sudo sysctl net.ipv4.conf.all.forwarding=1')
         run_shell_command('sudo iptables -P FORWARD ACCEPT')
@@ -327,24 +328,21 @@ class Cluster(Target):
         )
         run_dc_shell_command(box_bootstrap_command, 1, BoxType.SEED)
 
-        info = get_boxes_container_info()
-        ips = info['ips']
-        hostnames = info['hostnames']
-        print(ips)
-        host._copy_cluster_ssh_key(ips)
 
         expanded = Config.get('expanded')
         if expanded:
-            host._add_hosts(ips, hostnames)
-
-        # TODO: add osds
-        if expanded and not Config.get('skip-deploy-osds'):
-            if engine() == 'podman':
-                print('osd deployment not supported in podman')
-            else:
+            info = get_boxes_container_info()
+            ips = info['ips']
+            hostnames = info['hostnames']
+            print(ips)
+            if hosts > 0:
+                host._copy_cluster_ssh_key(ips)
+                host._add_hosts(ips, hostnames)
+            if not Config.get('skip-deploy-osds'):
                 print('Deploying osds... This could take up to minutes')
-                osd.deploy_osds_in_vg('vg1')
+                osd.deploy_osds(osds)
                 print('Osds deployed')
+
 
         dashboard_ip = 'localhost'
         info = get_boxes_container_info(with_seed=True)
@@ -358,8 +356,7 @@ class Cluster(Target):
 
     @ensure_outside_container
     def doctor(self):
-        self._set_cephadm_path()
-
+        pass
 
     @ensure_outside_container
     def down(self):
