@@ -731,11 +731,9 @@ int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp)
   return next->check_bucket_shards(dpp);
 }
 
-int FilterBucket::chown(const DoutPrefixProvider* dpp, User* new_user,
-			User* old_user, optional_yield y,
-			const std::string* marker)
+int FilterBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y)
 {
-  return next->chown(dpp, new_user, old_user, y, marker);
+  return next->chown(dpp, new_user, y);
 }
 
 int FilterBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive,
@@ -1053,6 +1051,11 @@ int FilterObject::omap_set_val_by_key(const DoutPrefixProvider *dpp,
 				      bool must_exist, optional_yield y)
 {
   return next->omap_set_val_by_key(dpp, key, val, must_exist, y);
+}
+
+int FilterObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+{
+  return next->chown(new_user, dpp, y);
 }
 
 int FilterObject::FilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)

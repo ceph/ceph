@@ -14,6 +14,7 @@
 #include "rgw_common.h"
 #include "rgw_tools.h"
 #include "rgw_metadata.h"
+#include "rgw/rgw_bucket.h"
 
 #include "rgw_string.h"
 #include "rgw_sal.h"
@@ -37,18 +38,6 @@ class RGWUserCtl;
 class RGWBucketCtl;
 class RGWZone;
 struct RGWZoneParams;
-
-extern void init_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id);
-extern int rgw_bucket_parse_bucket_key(CephContext *cct, const std::string& key,
-                                       rgw_bucket* bucket, int *shard_id);
-
-extern std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
-                                              const std::string& bucket_name);
-
-[[nodiscard]] int rgw_parse_url_bucket(const std::string& bucket,
-                                       const std::string& auth_tenant,
-                                       std::string &tenant_name,
-                                       std::string &bucket_name);
 
 // this is used as a filter to RGWRados::cls_bucket_list_ordered; it
 // conforms to the type RGWBucketListNameFilter
@@ -224,7 +213,7 @@ extern int rgw_object_get_attr(rgw::sal::Driver* driver, rgw::sal::Object* obj,
 			       const char* attr_name, bufferlist& out_bl,
 			       optional_yield y);
 
-extern void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User* user, bool fix, optional_yield y, const DoutPrefixProvider *dpp);
+extern void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& user, bool fix, optional_yield y, const DoutPrefixProvider *dpp);
 
 struct RGWBucketAdminOpState {
   rgw_user uid;
@@ -688,10 +677,6 @@ public:
 		    optional_yield y,
                     const DoutPrefixProvider *dpp,
                     bool update_entrypoint = true);
-
-  int chown(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
-            const rgw_user& user_id, const std::string& display_name,
-            const std::string& marker, optional_yield y, const DoutPrefixProvider *dpp);
 
   int read_buckets_stats(std::map<std::string, RGWBucketEnt>& m,
                          optional_yield y,

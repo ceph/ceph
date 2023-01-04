@@ -1580,7 +1580,8 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
         return ret;
       }
 
-      ret = bucket->chown(dpp, new_user.get(), old_user.get(), y);
+      ret = rgw_chown_bucket_and_objects(driver, bucket.get(), new_user.get(),
+					 std::string(), nullptr, dpp, y);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to run bucket chown" + cpp_strerror(-ret));
         return ret;
