@@ -167,6 +167,14 @@ def execute(*args, **kwargs):
     return result
 
 
+def ps_execute(*args, **kwargs):
+    # Disable PS progress bar, causes issues when invoked remotely.
+    prefix = "$global:ProgressPreference = 'SilentlyContinue' ; "
+    return execute(
+        "powershell.exe", "-NonInteractive",
+        "-Command", prefix, *args, **kwargs)
+
+
 def array_stats(array: list):
     mean = sum(array) / len(array) if len(array) else 0
     variance = (sum((i - mean) ** 2 for i in array) / len(array)
@@ -327,16 +335,14 @@ class RbdImage(object):
     @Tracer.trace
     @retry_decorator(additional_details="couldn't clear disk read-only flag")
     def set_writable(self):
-        execute(
-            "powershell.exe", "-command",
+        ps_execute(
             "Set-Disk", "-Number", str(self.disk_number),
             "-IsReadOnly", "$false")
 
     @Tracer.trace
     @retry_decorator(additional_details="couldn't bring the disk online")
     def set_online(self):
-        execute(
-            "powershell.exe", "-command",
+        ps_execute(
             "Set-Disk", "-Number", str(self.disk_number),
             "-IsOffline", "$false")
 
@@ -376,36 +382,30 @@ class RbdImage(object):
     @Tracer.trace
     @retry_decorator()
     def _init_disk(self):
-        cmd = ("powershell.exe", "-command",
-               f"Get-Disk -Number {self.disk_number} | "
-               "Initialize-Disk")
-        execute(*cmd)
+        cmd = f"Get-Disk -Number {self.disk_number} | Initialize-Disk"
+        ps_execute(cmd)
 
     @Tracer.trace
     @retry_decorator()
     def _create_partition(self):
-        cmd = ("powershell.exe", "-command",
-               f"Get-Disk -Number {self.disk_number} | "
+        cmd = (f"Get-Disk -Number {self.disk_number} | "
                "New-Partition -AssignDriveLetter -UseMaximumSize")
-        execute(*cmd)
+        ps_execute(cmd)
 
     @Tracer.trace
     @retry_decorator()
     def _format_volume(self):
         cmd = (
-            "powershell.exe", "-command",
-             f"(Get-Partition -DiskNumber {self.disk_number}"
-             " | ? { $_.DriveLetter }) | Format-Volume -Force -Confirm:$false")
-        execute(*cmd)
+            f"(Get-Partition -DiskNumber {self.disk_number}"
+            " | ? { $_.DriveLetter }) | Format-Volume -Force -Confirm:$false")
+        ps_execute(cmd)
 
     @Tracer.trace
     @retry_decorator()
     def _get_drive_letter(self):
-        cmd = (
-            "powershell.exe", "-command",
-            f"(Get-Partition -DiskNumber {self.disk_number}"
-            " | ? { $_.DriveLetter }).DriveLetter")
-        result = execute(*cmd)
+        cmd = (f"(Get-Partition -DiskNumber {self.disk_number}"
+               " | ? { $_.DriveLetter }).DriveLetter")
+        result = ps_execute(cmd)
 
         # The PowerShell command will place a null character if no drive letter
         # is available. For example, we can receive "\x00\r\n".
@@ -429,9 +429,8 @@ class RbdImage(object):
         if not self.drive_letter:
             raise CephTestException("No drive letter available")
 
-        cmd = ("powershell.exe", "-command",
-               f"(Get-Volume -DriveLetter {self.drive_letter}).Size")
-        result = execute(*cmd)
+        cmd = f"(Get-Volume -DriveLetter {self.drive_letter}).Size"
+        result = ps_execute(cmd)
 
         return int(result.stdout.decode().strip())
 
