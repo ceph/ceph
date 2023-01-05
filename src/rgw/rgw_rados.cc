@@ -7061,32 +7061,24 @@ int RGWRados::bucket_index_read_olh_log(const DoutPrefixProvider *dpp,
 
   cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), string());
 
-  ret = guard_reshard(dpp, &bs, obj_instance, bucket_info,
-		      [&](BucketShard *bs) -> int {
-	                auto& ref = bs->bucket_obj.get_ref();
-			ObjectReadOperation op;
-			cls_rgw_guard_bucket_resharding(op, -ERR_BUSY_RESHARDING);
+  auto& shard_ref = bs.bucket_obj.get_ref();
+  ObjectReadOperation op;
 
-                        rgw_cls_read_olh_log_ret log_ret;
-                        int op_ret = 0;
-			cls_rgw_get_olh_log(op, key, ver_marker, olh_tag, log_ret, op_ret); 
-                        bufferlist outbl;
-                        int r =  rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, &outbl, null_yield);
-                        if (r < 0) {
-                          return r;
-                        }
-                        if (op_ret < 0) {
-                          return op_ret;
-                        }
-
-                        *log = std::move(log_ret.log);
-                        *is_truncated = log_ret.is_truncated;
-                        return r;
-		      });
-  if (ret < 0) {
-    ldpp_dout(dpp, 20) << "cls_rgw_get_olh_log() returned r=" << r << dendl;
-    return ret;
+  rgw_cls_read_olh_log_ret log_ret;
+  int op_ret = 0;
+  cls_rgw_get_olh_log(op, key, ver_marker, olh_tag, log_ret, op_ret); 
+  bufferlist outbl;
+  r =  rgw_rados_operate(dpp, shard_ref.pool.ioctx(), shard_ref.obj.oid, &op, &outbl, null_yield);
+  if (r < 0) {
+    return r;
   }
+  if (op_ret < 0) {
+    ldpp_dout(dpp, 20) << "cls_rgw_get_olh_log() returned op_ret=" << op_ret << dendl;
+    return op_ret;
+  }
+
+  *log = std::move(log_ret.log);
+  *is_truncated = log_ret.is_truncated;
 
   return 0;
 }
