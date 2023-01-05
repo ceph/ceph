@@ -1,3 +1,7 @@
+dt { 
+    scroll-margin-top: 3em; 
+}
+
 ul.simple > li > ul > li:last-child {
     margin-block-end : 1em;
 }
