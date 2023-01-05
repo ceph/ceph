@@ -30,6 +30,7 @@ class ClientIO : public io::RestfulClient,
   RGWEnv env;
 
   rgw::io::StaticOutputBufferer<> txbuf;
+  bool sent100continue = false;
 
  public:
   ClientIO(parser_type& parser, bool is_ssl,
@@ -54,6 +55,8 @@ class ClientIO : public io::RestfulClient,
   RGWEnv& get_env() noexcept override {
     return env;
   }
+
+  bool sent_100_continue() const { return sent100continue; }
 };
 
 } // namespace asio
