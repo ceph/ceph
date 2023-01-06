@@ -4452,6 +4452,26 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     return;
   }
 
+  CF_MDS_RetryRequestFactory cf(mdcache, mdr, false);
+  int r = mdcache->path_traverse(mdr, cf, req->get_filepath(), 0, NULL);
+  if (r > 0) return;
+  if (r == 0) {
+    // it existed.
+    handle_client_open(mdr);
+    return;
+  }
+  if (r < 0 && r != -CEPHFS_ENOENT) {
+    if (r == -CEPHFS_ESTALE) {
+      dout(10) << "FAIL on CEPHFS_ESTALE but attempting recovery" << dendl;
+      MDSContext *c = new C_MDS_TryFindInode(this, mdr);
+      mdcache->find_ino_peers(req->get_filepath().get_ino(), c);
+    } else {
+      dout(10) << "FAIL on error " << r << dendl;
+      respond_to_request(mdr, r);
+    }
+    return;
+  }
+
   bool excl = req->head.args.open.flags & CEPH_O_EXCL;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true, !excl, true);
   if (!dn)
@@ -4463,19 +4483,6 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   }
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
-  if (!excl && !dnl->is_null()) {
-    // it existed.
-    mds->locker->xlock_downgrade(&dn->lock, mdr.get());
-
-    MutationImpl::LockOpVec lov;
-    lov.add_rdlock(&dnl->get_inode()->snaplock);
-    if (!mds->locker->acquire_locks(mdr, lov))
-      return;
-
-    handle_client_open(mdr);
-    return;
-  }
-
   ceph_assert(dnl->is_null());
 
   if (req->get_alternate_name().size() > alternate_name_max) {
