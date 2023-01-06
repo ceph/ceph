@@ -2975,7 +2975,7 @@ std::unique_ptr<Completions> MotrStore::get_completions(void)
 }
 
 std::unique_ptr<Notification> MotrStore::get_notification(Object* obj, Object* src_obj, req_state* s,
-    rgw::notify::EventType event_type, const string* object_name)
+    rgw::notify::EventType event_type, optional_yield y, const string* object_name)
 {
   return std::make_unique<MotrNotification>(obj, src_obj, event_type);
 }
