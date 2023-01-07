@@ -56,7 +56,7 @@ MEMO = None
 REMOVE = False
 POOL = None
 NEXT_SNAP = None
-CONF = None
+CONF = os.environ['CEPH_CONF']
 
 DIR_PATTERN = re.compile(r'[0-9a-fA-F]{8,}\.[0-9a-fA-F]+')
 
@@ -90,7 +90,7 @@ def traverse(MEMO, ioctx):
 if __name__ == '__main__':
     outpath = os.path.join(os.path.expanduser('~'), os.path.basename(sys.argv[0]))
     P = argparse.ArgumentParser(description="remove CephFS metadata dentries with invalid first snapshot")
-    P.add_argument('--conf', action='store', help='Ceph conf file', type=str)
+    P.add_argument('--conf', action='store', help='Ceph conf file', type=str, default=CONF)
     P.add_argument('--debug', action='store', help='debug file', type=str, default=outpath+'.log')
     P.add_argument('--memo', action='store', help='db for traversed dirs', default=outpath+'.memo')
     P.add_argument('--next-snap', action='store', help='force next-snap (dev)', type=int)
