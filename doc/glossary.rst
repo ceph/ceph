@@ -112,9 +112,7 @@
                 and Ceph storage clusters.
 
 	Ceph Object Storage
-                The object storage "product", service or capabilities, which
-                consists essentially of a Ceph Storage Cluster and a Ceph Object
-                Gateway.
+                See :term:`Ceph Object Store`.
 
 	Ceph Object Store
                 A Ceph Object Store consists of a :term:`Ceph Storage Cluster`
@@ -250,16 +248,15 @@
                 See :term:`OSD`.
 
 	OSD
-                Probably :term:`Ceph Object Storage Daemon<Ceph OSD>`, but not
-                necessarily. Sometimes (especially in older correspondence, and
-                especially in documentation that is not specifically written
-                for Ceph), "OSD" means "**O**\bject **S**\torage **D**\evice",
-                which refers to a physical or logical storage unit (for
-                example: LUN). The Ceph community has always used the term
-                "OSD" to refer to :term:`Ceph OSD Daemon` despite an industry
-                push in the mid-2010s to insist that "OSD" should refer to
-                "Object Storage Device", so it is important to know which
-                meaning is intended. 
+                Probably :term:`Ceph OSD`, but not necessarily. Sometimes
+                (especially in older correspondence, and especially in
+                documentation that is not written specifically for Ceph), "OSD"
+                means "**O**\bject **S**\torage **D**\evice", which refers to a
+                physical or logical storage unit (for example: LUN). The Ceph
+                community has always used the term "OSD" to refer to
+                :term:`Ceph OSD Daemon` despite an industry push in the
+                mid-2010s to insist that "OSD" should refer to "Object Storage
+                Device", so it is important to know which meaning is intended. 
 
 	OSD fsid
                 This is a unique identifier used to identify an OSD. It is
