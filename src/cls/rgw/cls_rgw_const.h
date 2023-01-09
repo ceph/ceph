@@ -64,6 +64,9 @@ constexpr int RGWBIAdvanceAndRetryError = -EFBIG;
 #define RGW_LC_GET_HEAD "lc_get_head"
 #define RGW_LC_LIST_ENTRIES "lc_list_entries"
 
+/* multipart */
+#define RGW_MP_UPLOAD_PART_INFO_UPDATE "mp_upload_part_info_update"
+
 /* resharding */
 #define RGW_RESHARD_ADD "reshard_add"
 #define RGW_RESHARD_LIST "reshard_list"
