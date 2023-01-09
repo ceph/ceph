@@ -1305,14 +1305,24 @@ class CephadmServe:
             eca = daemon_spec.extra_container_args
             if eca:
                 for a in eca:
-                    daemon_spec.extra_args.append(f'--extra-container-args={a}')
+                    # args with spaces need to be split into multiple args
+                    # in order to work properly
+                    args = a.split(' ')
+                    for arg in args:
+                        if arg:
+                            daemon_spec.extra_args.append(f'--extra-container-args={arg}')
         except AttributeError:
             eca = None
         try:
             eea = daemon_spec.extra_entrypoint_args
             if eea:
                 for a in eea:
-                    daemon_spec.extra_args.append(f'--extra-entrypoint-args={a}')
+                    # args with spaces need to be split into multiple args
+                    # in order to work properly
+                    args = a.split(' ')
+                    for arg in args:
+                        if arg:
+                            daemon_spec.extra_args.append(f'--extra-entrypoint-args={arg}')
         except AttributeError:
             eea = None
         return daemon_spec, eca, eea
