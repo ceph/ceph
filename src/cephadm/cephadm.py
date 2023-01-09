@@ -4180,6 +4180,7 @@ class MgrListener(Thread):
                     err_str = f'Failed to extract length of payload from message: {e}'
                     conn.send(err_str.encode())
                     logger.error(err_str)
+                    continue
                 while True:
                     payload = conn.recv(length).decode()
                     if not payload:
@@ -4337,6 +4338,10 @@ WantedBy=ceph-{fsid}.target
         self.stop = True
         if self.mgr_listener.is_alive():
             self.mgr_listener.shutdown()
+        if self.ls_gatherer.is_alive():
+            self.ls_gatherer.shutdown()
+        if self.volume_gatherer.is_alive():
+            self.volume_gatherer.shutdown()
 
     def wakeup(self) -> None:
         self.event.set()
@@ -4404,10 +4409,11 @@ WantedBy=ceph-{fsid}.target
             # part of the networks info is returned as a set which is not JSON
             # serializable. The set must be converted to a list
             networks = list_networks(self.ctx)
-            networks_list = {}
+            networks_list: Dict[str, Dict[str, List[str]]] = {}
             for key in networks.keys():
+                networks_list[key] = {}
                 for k, v in networks[key].items():
-                    networks_list[key] = {k: list(v)}
+                    networks_list[key][k] = list(v)
 
             data = json.dumps({'host': self.host,
                                'ls': (self.ls_gatherer.data if self.ack == self.ls_gatherer.ack
@@ -4547,6 +4553,7 @@ WantedBy=ceph-{fsid}.target
                 # case for a new daemon in ls or an old daemon no longer appearing.
                 # If that happens we need a full ls
                 logger.info('Change detected in state of daemons. Running full daemon ls')
+                self.cached_ls_values = {}
                 ls = list_daemons(self.ctx)
                 for d in ls:
                     self.cached_ls_values[d['name']] = d
@@ -4578,6 +4585,7 @@ WantedBy=ceph-{fsid}.target
             if need_full_ls:
                 logger.info('Change detected in state of daemons. Running full daemon ls')
                 ls = list_daemons(self.ctx)
+                self.cached_ls_values = {}
                 for d in ls:
                     self.cached_ls_values[d['name']] = d
                 return (ls, True)
