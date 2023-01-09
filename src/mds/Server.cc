@@ -6966,10 +6966,6 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   }
   dn->set_alternate_name(req->get_alternate_name());
 
-  if (is_nfiles_quota_exceeded(dn->get_dir())) {
-    respond_to_request(mdr, -EDQUOT);
-    return;
-  }
 
   // new inode
   unsigned mode = req->head.args.mkdir.mode;
