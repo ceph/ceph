@@ -12,6 +12,7 @@ from util import (
     get_orch_hosts,
     run_cephadm_shell_command,
     run_dc_shell_command,
+    get_container_engine,
     run_shell_command,
 )
 
@@ -100,6 +101,7 @@ def deploy_osds(count: int):
     osd_devs = load_osd_devices()
     hosts = get_orch_hosts()
     host_index = 0
+    seed = get_container_engine().get_seed()
     v = '-v' if Config.get('verbose') else ''
     for osd in osd_devs.values():
         deployed = False
@@ -108,8 +110,7 @@ def deploy_osds(count: int):
             hostname = hosts[host_index]['hostname']
             deployed = run_dc_shell_command(
                 f'/cephadm/box/box.py {v} osd deploy --data {osd["device"]} --hostname {hostname}',
-                1,
-                BoxType.SEED
+                seed
             )
             deployed = 'created osd' in deployed.lower() or 'already created?' in deployed.lower()
             print('Waiting 5 seconds to re-run deploy osd...')
