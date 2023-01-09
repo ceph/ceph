@@ -2283,6 +2283,48 @@ int RadosObject::swift_versioning_copy(const DoutPrefixProvider* dpp, optional_y
                                         y);
 }
 
+int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
+                                               optional_yield y,
+                                               RadosMultipartPart *part,
+                                               list<rgw_obj_index_key>& remove_objs)
+{
+  cls_rgw_obj_chain chain;
+  for (auto& ppfx : part->get_past_prefixes()) {
+    rgw_obj past_obj;
+    past_obj.init_ns(bucket->get_key(), ppfx + "." + std::to_string(part->info.num), mp_ns);
+    rgw_obj_index_key past_key;
+    past_obj.key.get_index_key(&past_key);
+    // Remove past upload part objects from index, too.
+    remove_objs.push_back(past_key);
+
+    RGWObjManifest manifest = part->get_manifest();
+    manifest.set_prefix(ppfx);
+    RGWObjManifest::obj_iterator miter = manifest.obj_begin(dpp);
+    for (; miter != manifest.obj_end(dpp); ++miter) {
+      rgw_raw_obj raw_part_obj = miter.get_location().get_raw_obj(store);
+      cls_rgw_obj_key part_key(raw_part_obj.oid);
+      chain.push_obj(raw_part_obj.pool.to_str(), part_key, raw_part_obj.loc);
+    }
+  }
+  if (store->getRados()->get_gc() == nullptr) {
+    // Delete objects inline if gc hasn't been initialised (in case when bypass gc is specified)
+    store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id());
+  } else {
+    // use upload id as tag and do it synchronously
+    auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id());
+    if (ret < 0 && leftover_chain) {
+      ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
+      if (ret == -ENOENT) {
+        return -ERR_NO_SUCH_UPLOAD;
+      }
+      // Delete objects inline if send chain to gc fails
+      store->getRados()->delete_objs_inline(dpp, *leftover_chain, mp_obj.get_upload_id());
+    }
+  }
+  return 0;
+}
+
+
 int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
 {
   std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
@@ -2326,6 +2368,8 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
           rgw_obj_index_key key;
           head->get_key().get_index_key(&key);
           remove_objs.push_back(key);
+
+          cleanup_part_history(dpp, null_yield, obj_part, remove_objs);
         }
       }
       parts_accounted_size += obj_part->info.accounted_size;
@@ -2605,6 +2649,11 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
         return ret;
       } else {
         manifest.append(dpp, obj_part.manifest, store->svc()->zone->get_zonegroup(), store->svc()->zone->get_zone_params());
+        auto manifest_prefix = part->info.manifest.get_prefix();
+        if (not manifest_prefix.empty()) {
+          // It has an explicit prefix. Override the default one.
+          src_obj.init_ns(bucket->get_key(), manifest_prefix + "." + std::to_string(part->info.num), mp_ns);
+        }
       }
 
       bool part_compressed = (obj_part.cs_info.compression_type != "none");
@@ -2641,6 +2690,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
       src_obj.key.get_index_key(&remove_key);
 
       remove_objs.push_back(remove_key);
+
+      cleanup_part_history(dpp, y, part, remove_objs);
 
       ofs += obj_part.size;
       accounted_size += obj_part.accounted_size;
