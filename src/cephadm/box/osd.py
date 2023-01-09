@@ -111,8 +111,9 @@ def deploy_osds(count: int):
                 1,
                 BoxType.SEED
             )
-            deployed = 'created osd' in deployed.lower()
-            time.sleep(2)
+            deployed = 'created osd' in deployed.lower() or 'already created?' in deployed.lower()
+            print('Waiting 5 seconds to re-run deploy osd...')
+            time.sleep(5)
         host_index = (host_index + 1) % len(hosts)
 
 

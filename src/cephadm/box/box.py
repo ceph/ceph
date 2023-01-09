@@ -113,18 +113,30 @@ def setup_podman_env(hosts: int = 1, osd_devs={}):
         run_shell_command(f'podman network create -d bridge {network_name}')
 
     run_default_options = """--group-add keep-groups --device /dev/fuse -it -d \\
-        --privileged \\
-        --cpus 12 \\
+        --cap-add SYS_ADMIN \\
+        --cap-add NET_ADMIN \\
+        --cap-add SYS_TIME \\
+        --cap-add SYS_RAWIO \\
+        --cap-add MKNOD \\
+        --cap-add NET_RAW \\
+        --cap-add SETUID \\
+        --cap-add SETGID \\
+        --cap-add CHOWN \\
+        --cap-add SYS_PTRACE \\
+        --cap-add SYS_TTY_CONFIG \\
+        --cap-add CAP_AUDIT_WRITE \\
+        --cap-add CAP_AUDIT_CONTROL \\
         -e CEPH_BRANCH=main \\
         -v ../../../:/ceph:z \\
         -v ../:/cephadm:z \\
         -v /run/udev:/run/udev \\
+        --tmpfs /run \\
+        --tmpfs /tmp \\
         -v /sys/dev/block:/sys/dev/block \\
-        -v /sys/fs/cgroup:/sys/fs/cgroup \\
+        -v /sys/fs/cgroup:/sys/fs/cgroup:ro \\
         -v /dev/fuse:/dev/fuse \\
         -v /dev/disk:/dev/disk \\
         -v /sys/devices/virtual/block:/sys/devices/virtual/block \\
-        -v /sys/dev/block:/dev/dev/block:rshared \\
         -v /sys/block:/dev/block \\
         -v /dev/mapper:/dev/mapper \\
         -v /dev/mapper/control:/dev/mapper/control \\
@@ -291,6 +303,11 @@ class Cluster(Target):
             run_shell_command(f'{engine_compose()} {dcflags} up --scale hosts={hosts} -d')
         else:
             setup_podman_env(hosts=hosts, osd_devs=osd.load_osd_devices())
+
+        # Umounting somehow brings back the contents of the host /sys/dev/block. 
+        # On startup /sys/dev/block is empty. After umount, we can see symlinks again
+        # so that lsblk is able to run as expected
+        run_dc_shell_command('umount /sys/dev/block', 1, BoxType.SEED)
 
         run_shell_command('sudo sysctl net.ipv4.conf.all.forwarding=1')
         run_shell_command('sudo iptables -P FORWARD ACCEPT')
