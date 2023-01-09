@@ -2,8 +2,10 @@ import json
 import os
 import subprocess
 import sys
-import enum
-from typing import Any, Callable, Dict
+import copy
+from abc import ABCMeta, abstractmethod
+from enum import Enum
+from typing import Any, Callable, Dict, List
 
 class Colors:
     HEADER = '\033[95m'
@@ -92,7 +94,26 @@ def ensure_inside_container(func) -> bool:
 def colored(msg, color: Colors):
     return color + msg + Colors.ENDC
 
-def run_shell_command(command: str, expect_error=False, verbose=True) -> str:
+class BoxType(str, Enum):
+  SEED = 'seed'
+  HOST = 'host'
+
+class HostContainer:
+    def __init__(self, _name, _type) -> None:
+        self._name: str = _name
+        self._type: BoxType = _type
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def type(self) -> BoxType:
+        return self._type
+    def __str__(self) -> str:
+        return f'{self.name} {self.type}'
+
+def run_shell_command(command: str, expect_error=False, verbose=True, expect_exit_code=0) -> str:
     if Config.get('verbose'):
         print(f'{colored("Running command", Colors.HEADER)}: {colored(command, Colors.OKBLUE)}')
 
@@ -119,43 +140,20 @@ def run_shell_command(command: str, expect_error=False, verbose=True) -> str:
     err += process.stderr.read().decode('latin1').strip()
     out = out.strip()
 
-    if process.returncode != 0 and not expect_error:
+    if process.returncode != 0 and not expect_error and process.returncode != expect_exit_code:
         err = colored(err, Colors.FAIL);
-        raise RuntimeError(f'Failed command: {command}\n{err}')
+        
+        raise RuntimeError(f'Failed command: {command}\n{err}\nexit code: {process.returncode}')
         sys.exit(1)
     return out
 
 
-class BoxType(enum.IntEnum):
-    SEED = 0 # where we bootstrap cephadm
-    HOST = 1
-    @staticmethod
-    def to_enum(value: str):
-        if value == 'seed':
-            return BoxType.SEED
-        elif value == 'host':
-            return BoxType.HOST
-        else:
-            print(f'Wrong container type {value}')
-            sys.exit(1)
-
-    @staticmethod
-    def to_string(box_type):
-        if box_type == BoxType.SEED:
-            return 'seed'
-        elif box_type == BoxType.HOST:
-            return 'host'
-        else:
-            print(f'Wrong container type {type_}')
-            sys.exit(1)
-
-
-def run_dc_shell_commands(index, box_type: BoxType, commands: str, expect_error=False) -> str:
+def run_dc_shell_commands(commands: str, container: HostContainer, expect_error=False) -> str:
     for command in commands.split('\n'):
         command = command.strip()
         if not command:
             continue
-        run_dc_shell_command(command.strip(), index, box_type, expect_error=expect_error)
+        run_dc_shell_command(command.strip(), container, expect_error=expect_error)
 
 def run_shell_commands(commands: str, expect_error=False) -> str:
     for command in commands.split('\n'):
@@ -179,20 +177,9 @@ def run_cephadm_shell_command(command: str, expect_error=False) -> str:
 
 
 def run_dc_shell_command(
-    command: str, index: int, box_type: BoxType, expect_error=False
+        command: str, container: HostContainer, expect_error=False
 ) -> str:
-    box_type_str = 'box_hosts'
-    if box_type == BoxType.SEED:
-        index = 0
-        if engine() == 'docker':
-            box_type_str = 'seed'
-            index = 1
-
-    container_id = get_container_id(f'{box_type_str}_{index}')
-    print(container_id)
-    out = run_shell_command(
-        f'{engine()} exec -it {container_id} {command}', expect_error
-    )
+    out = get_container_engine().run_exec(container, command, expect_error=expect_error)
     return out
 
 def inside_container() -> bool:
@@ -246,8 +233,189 @@ def get_orch_hosts():
     if inside_container():
         orch_host_ls_out = run_cephadm_shell_command('ceph orch host ls --format json')
     else:
-        orch_host_ls_out = run_dc_shell_command(f'cephadm shell --keyring /etc/ceph/ceph.keyring --config /etc/ceph/ceph.conf -- ceph orch host ls --format json', 1, BoxType.SEED)
+        orch_host_ls_out = run_dc_shell_command(f'cephadm shell --keyring /etc/ceph/ceph.keyring --config /etc/ceph/ceph.conf -- ceph orch host ls --format json', 
+                                                get_container_engine().get_seed())
         sp = orch_host_ls_out.split('\n')
         orch_host_ls_out  = sp[len(sp) - 1]
     hosts = json.loads(orch_host_ls_out)
     return hosts
+
+
+class ContainerEngine(metaclass=ABCMeta):
+    @property
+    @abstractmethod
+    def command(self) -> str: pass
+
+    @property
+    @abstractmethod
+    def seed_name(self) -> str: pass
+
+    @property
+    @abstractmethod
+    def dockerfile(self) -> str: pass
+
+    @property
+    def host_name_prefix(self) -> str: 
+        return 'box_hosts_'
+
+    @abstractmethod
+    def up(self, hosts: int): pass
+
+    def run_exec(self, container: HostContainer, command: str, expect_error: bool = False):
+        return run_shell_command(' '.join([self.command, 'exec', container.name, command]), 
+                                 expect_error=expect_error) 
+
+    def run(self, engine_command: str, expect_error: bool = False):
+        return run_shell_command(' '.join([self.command, engine_command]), expect_error=expect_error) 
+
+    def get_containers(self) -> List[HostContainer]:
+        ps_out = json.loads(run_shell_command('podman ps --format json'))
+        containers = [] 
+        for container in ps_out:
+            if not container['Names']:
+                raise RuntimeError(f'Container {container} missing name')
+            name = container['Names'][0]
+            if name == self.seed_name:
+                containers.append(HostContainer(name, BoxType.SEED))
+            elif name.startswith(self.host_name_prefix):
+                containers.append(HostContainer(name, BoxType.HOST))
+        return containers
+
+    def get_seed(self) -> HostContainer:
+        for container in self.get_containers():
+            if container.type == BoxType.SEED:
+                return container
+        raise RuntimeError('Missing seed container')
+
+    def get_container(self, container_name: str):
+        containers = self.get_containers()
+        for container in containers:
+            if container.name == container_name:
+                return container
+        return None
+
+
+    def restart(self):
+        pass
+
+
+class DockerEngine(ContainerEngine):
+    command = 'docker'
+    seed_name = 'seed'
+    dockerfile = 'DockerfileDocker'
+
+    def restart(self):
+        run_shell_command('systemctl restart docker')
+
+    def up(self, hosts: int):
+        dcflags = f'-f {Config.get("docker_yaml")}'
+        if not os.path.exists('/sys/fs/cgroup/cgroup.controllers'):
+            dcflags += f' -f {Config.get("docker_v1_yaml")}'
+        run_shell_command(f'{engine_compose()} {dcflags} up --scale hosts={hosts} -d')
+
+class PodmanEngine(ContainerEngine):
+    command = 'podman'
+    seed_name = 'box_hosts_0'
+    dockerfile = 'DockerfilePodman'
+
+    CAPS = [
+            "SYS_ADMIN",
+            "NET_ADMIN",
+            "SYS_TIME",
+            "SYS_RAWIO",
+            "MKNOD",
+            "NET_RAW",
+            "SETUID",
+            "SETGID",
+            "CHOWN",
+            "SYS_PTRACE",
+            "SYS_TTY_CONFIG",
+            "CAP_AUDIT_WRITE",
+            "CAP_AUDIT_CONTROL",
+            ]
+
+    VOLUMES = [
+                '../../../:/ceph:z',
+                '../:/cephadm:z',
+                '/run/udev:/run/udev',
+                '/sys/dev/block:/sys/dev/block',
+                '/sys/fs/cgroup:/sys/fs/cgroup:ro',
+                '/dev/fuse:/dev/fuse',
+                '/dev/disk:/dev/disk',
+                '/sys/devices/virtual/block:/sys/devices/virtual/block',
+                '/sys/block:/dev/block',
+                '/dev/mapper:/dev/mapper',
+                '/dev/mapper/control:/dev/mapper/control',
+            ]
+
+    TMPFS = ['/run', '/tmp']
+
+    # FIXME: right now we are assuming every service will be exposed through the seed, but this is far
+    # from the truth. Services can be deployed on different hosts so we need a system to manage this.
+    SEED_PORTS = [
+            8443, # dashboard
+            3000, # grafana
+            9093, # alertmanager
+            9095  # prometheus
+            ]
+
+
+    def setup_podman_env(self, hosts: int = 1, osd_devs={}):
+        network_name = 'box_network'
+        networks = run_shell_command('podman network ls')
+        if network_name not in networks:
+            run_shell_command(f'podman network create -d bridge {network_name}')
+
+        args = [
+                '--group-add', 'keep-groups', 
+                '--device', '/dev/fuse' ,
+                '-it' ,
+                '-d',
+                '-e', 'CEPH_BRANCH=main',
+                '--stop-signal', 'RTMIN+3'
+                ]
+
+        for cap in self.CAPS:
+            args.append('--cap-add')
+            args.append(cap)
+
+        for volume in self.VOLUMES:
+            args.append('-v')
+            args.append(volume)
+
+        for tmp in self.TMPFS:
+            args.append('--tmpfs')
+            args.append(tmp)
+
+
+        for osd_dev in osd_devs.values():
+            device = osd_dev["device"]
+            args.append('--device')
+            args.append(f'{device}:{device}')
+
+
+        for host in range(hosts+1): # 0 will be the seed
+            options = copy.copy(args)
+            options.append('--name')
+            options.append(f'box_hosts_{host}')
+            options.append('--network')
+            options.append(f'{network_name}')
+            if host == 0:
+                for port in self.SEED_PORTS:
+                    options.append('-p')
+                    options.append(f'{port}:{port}')
+
+            options.append('cephadm-box')
+            options = ' '.join(options)
+
+            run_shell_command(f'podman run {options}')
+
+    def up(self, hosts: int):
+        import osd
+        self.setup_podman_env(hosts=hosts, osd_devs=osd.load_osd_devices())
+
+def get_container_engine() -> ContainerEngine:
+    if engine() == 'docker':
+        return DockerEngine()
+    else:
+        return PodmanEngine()
