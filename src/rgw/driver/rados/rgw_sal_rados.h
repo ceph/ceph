@@ -630,6 +630,7 @@ public:
 
   /* For RadosStore code */
   RGWObjManifest& get_manifest() { return info.manifest; }
+  const std::set<std::string>& get_past_prefixes() const { return info.past_prefixes; }
 
   friend class RadosMultipartUpload;
 };
@@ -679,6 +680,11 @@ public:
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;
+protected:
+  int cleanup_part_history(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           RadosMultipartPart* part,
+                           std::list<rgw_obj_index_key>& remove_objs);
 };
 
 class MPRadosSerializer : public StoreMPSerializer {
