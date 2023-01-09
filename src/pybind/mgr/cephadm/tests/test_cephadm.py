@@ -525,6 +525,35 @@ class TestCephadm(object):
                     image='',
                 )
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_extra_entrypoint_and_container_args_with_spaces(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='node-exporter',
+                              extra_entrypoint_args=['--entrypoint-arg-with-value value', '--some-other-arg   3'],
+                              extra_container_args=['--cpus    2', '--container-arg-with-value value']),
+                              CephadmOrchestrator.apply_node_exporter):
+                _run_cephadm.assert_called_with(
+                    'test', 'node-exporter.test', 'deploy', [
+                        '--name', 'node-exporter.test',
+                        '--meta-json', ('{"service_name": "node-exporter", "ports": [9100], "ip": null, "deployed_by": [], "rank": null, '
+                                        '"rank_generation": null, "extra_container_args": ["--cpus    2", "--container-arg-with-value value"], '
+                                        '"extra_entrypoint_args": ["--entrypoint-arg-with-value value", "--some-other-arg   3"]}'),
+                        '--config-json', '-',
+                        '--tcp-ports', '9100',
+                        '--extra-container-args=--cpus',
+                        '--extra-container-args=2',
+                        '--extra-container-args=--container-arg-with-value',
+                        '--extra-container-args=value',
+                        '--extra-entrypoint-args=--entrypoint-arg-with-value',
+                        '--extra-entrypoint-args=value',
+                        '--extra-entrypoint-args=--some-other-arg',
+                        '--extra-entrypoint-args=3'
+                    ],
+                    stdin='{}',
+                    image='',
+                )
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
