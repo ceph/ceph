@@ -10,6 +10,7 @@
 #include "include/types.h"
 #include "global/global_context.h"
 #include "common/Cond.h"
+#include "common/ceph_crypto.h"
 #include "test/librados/test_cxx.h"
 #include "test/librados/testcase_cxx.h"
 #include "json_spirit/json_spirit.h"
@@ -29,6 +30,7 @@
 
 using namespace std;
 using namespace librados;
+using ceph::crypto::SHA1;
 
 typedef RadosTestPP LibRadosTierPP;
 typedef RadosTestECPP LibRadosTierECPP;
@@ -108,9 +110,14 @@ void manifest_set_chunk(Rados& cluster, librados::IoCtx& src_ioctx,
   completion->release();
 }
 
-#include "common/ceph_crypto.h"
-using ceph::crypto::SHA1;
-#include "rgw/rgw_common.h"
+static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
+{
+  int i;
+  str[0] = '\0';
+  for (i = 0; i < len; i++) {
+    sprintf(&str[i*2], "%02x", (int)buf[i]);
+  }
+}
 
 void check_fp_oid_refcount(librados::IoCtx& ioctx, std::string foid, uint64_t count,
 			   std::string fp_algo = NULL)
@@ -3549,9 +3556,6 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   cluster.wait_for_latest_osdmap();
 }
 
-#include "common/ceph_crypto.h"
-using ceph::crypto::SHA1;
-#include "rgw/rgw_common.h"
 TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
   SKIP_IF_CRIMSON();
   // skip test if not yet nautilus

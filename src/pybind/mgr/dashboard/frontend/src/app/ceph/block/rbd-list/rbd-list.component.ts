@@ -53,6 +53,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   parentTpl: TemplateRef<any>;
   @ViewChild('nameTpl')
   nameTpl: TemplateRef<any>;
+  @ViewChild('ScheduleTpl', { static: true })
+  ScheduleTpl: TemplateRef<any>;
   @ViewChild('mirroringTpl', { static: true })
   mirroringTpl: TemplateRef<any>;
   @ViewChild('flattenTpl', { static: true })
@@ -305,6 +307,13 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         flexGrow: 3,
         sortable: false,
         cellTemplate: this.mirroringTpl
+      },
+      {
+        name: $localize`Next Scheduled Snapshot`,
+        prop: 'mirror_mode',
+        flexGrow: 3,
+        sortable: false,
+        cellTemplate: this.ScheduleTpl
       }
     ];
 

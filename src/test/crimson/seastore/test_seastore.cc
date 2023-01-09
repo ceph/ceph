@@ -55,7 +55,8 @@ ghobject_t make_temp_oid(int i) {
 
 struct seastore_test_t :
   public seastar_test_suite_t,
-  SeaStoreTestState {
+  SeaStoreTestState,
+  ::testing::WithParamInterface<const char*> {
 
   coll_t coll_name{spg_t{pg_t{0, 0}}};
   CollectionRef coll;
@@ -63,7 +64,16 @@ struct seastore_test_t :
   seastore_test_t() {}
 
   seastar::future<> set_up_fut() final {
-    return tm_setup(
+    std::string j_type = GetParam();
+    journal_type_t journal;
+    if (j_type == "segmented") {
+      journal = journal_type_t::SEGMENTED;
+    } else if (j_type == "circularbounded") {
+      journal = journal_type_t::RANDOM_BLOCK;
+    } else {
+      ceph_assert(0 == "no support");
+    }
+    return tm_setup(journal
     ).then([this] {
       return seastore->create_new_collection(coll_name);
     }).then([this](auto coll_ref) {
@@ -594,7 +604,7 @@ auto contains(const T &t, const V &v) {
     v) != t.end();
 }
 
-TEST_F(seastore_test_t, collection_create_list_remove)
+TEST_P(seastore_test_t, collection_create_list_remove)
 {
   run_async([this] {
     coll_t test_coll{spg_t{pg_t{1, 0}}};
@@ -624,7 +634,7 @@ TEST_F(seastore_test_t, collection_create_list_remove)
   });
 }
 
-TEST_F(seastore_test_t, meta) {
+TEST_P(seastore_test_t, meta) {
   run_async([this] {
     set_meta("key1", "value1");
     set_meta("key2", "value2");
@@ -638,7 +648,7 @@ TEST_F(seastore_test_t, meta) {
   });
 }
 
-TEST_F(seastore_test_t, touch_stat_list_remove)
+TEST_P(seastore_test_t, touch_stat_list_remove)
 {
   run_async([this] {
     auto &test_obj = get_object(make_oid(0));
@@ -677,12 +687,12 @@ static const seastore_test_t::list_test_cases_t temp_list_cases{
   {        0, bound_t::get_temp_end(), bound_t::get_max()     },
 };
 
-TEST_F(seastore_test_t, list_objects_temp_only)
+TEST_P(seastore_test_t, list_objects_temp_only)
 {
   run_async([this] { test_list(5, 0, temp_list_cases); });
 }
 
-TEST_F(seastore_test_t, list_objects_temp_overlap)
+TEST_P(seastore_test_t, list_objects_temp_overlap)
 {
   run_async([this] { test_list(5, 5, temp_list_cases); });
 }
@@ -713,12 +723,12 @@ static const seastore_test_t::list_test_cases_t normal_list_cases{
   {        0, bound_t::get_normal_begin(), bound_t::get_max()    },
 };
 
-TEST_F(seastore_test_t, list_objects_normal_only)
+TEST_P(seastore_test_t, list_objects_normal_only)
 {
   run_async([this] { test_list(5, 0, normal_list_cases); });
 }
 
-TEST_F(seastore_test_t, list_objects_normal_overlap)
+TEST_P(seastore_test_t, list_objects_normal_overlap)
 {
   run_async([this] { test_list(5, 5, normal_list_cases); });
 }
@@ -730,7 +740,7 @@ bufferlist make_bufferlist(size_t len) {
   return bl;
 }
 
-TEST_F(seastore_test_t, omap_test_simple)
+TEST_P(seastore_test_t, omap_test_simple)
 {
   run_async([this] {
     auto &test_obj = get_object(make_oid(0));
@@ -745,7 +755,7 @@ TEST_F(seastore_test_t, omap_test_simple)
   });
 }
 
-TEST_F(seastore_test_t, attr)
+TEST_P(seastore_test_t, attr)
 {
   run_async([this] {
     auto& test_obj = get_object(make_oid(0));
@@ -887,7 +897,7 @@ TEST_F(seastore_test_t, attr)
   });
 }
 
-TEST_F(seastore_test_t, omap_test_iterator)
+TEST_P(seastore_test_t, omap_test_iterator)
 {
   run_async([this] {
     auto make_key = [](unsigned i) {
@@ -908,7 +918,7 @@ TEST_F(seastore_test_t, omap_test_iterator)
 }
 
 
-TEST_F(seastore_test_t, simple_extent_test)
+TEST_P(seastore_test_t, simple_extent_test)
 {
   run_async([this] {
     auto &test_obj = get_object(make_oid(0));
@@ -925,7 +935,7 @@ TEST_F(seastore_test_t, simple_extent_test)
   });
 }
 
-TEST_F(seastore_test_t, fiemap_empty)
+TEST_P(seastore_test_t, fiemap_empty)
 {
   run_async([this] {
     auto &test_obj = get_object(make_oid(0));
@@ -940,7 +950,7 @@ TEST_F(seastore_test_t, fiemap_empty)
   });
 }
 
-TEST_F(seastore_test_t, fiemap_holes)
+TEST_P(seastore_test_t, fiemap_holes)
 {
   run_async([this] {
     const uint64_t MAX_EXTENTS = 100;
@@ -990,7 +1000,7 @@ TEST_F(seastore_test_t, fiemap_holes)
   });
 }
 
-TEST_F(seastore_test_t, sparse_read)
+TEST_P(seastore_test_t, sparse_read)
 {
   run_async([this] {
     const uint64_t MAX_EXTENTS = 100;
@@ -1020,7 +1030,7 @@ TEST_F(seastore_test_t, sparse_read)
   });
 }
 
-TEST_F(seastore_test_t, zero)
+TEST_P(seastore_test_t, zero)
 {
   run_async([this] {
     auto test_zero = [this](
@@ -1077,3 +1087,11 @@ TEST_F(seastore_test_t, zero)
       (BS * 4) + 128);
   });
 }
+INSTANTIATE_TEST_SUITE_P(
+  seastore_test,
+  seastore_test_t,
+  ::testing::Values (
+    "segmented",
+    "circularbounded"
+  )
+);

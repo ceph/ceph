@@ -719,5 +719,30 @@ local g = import 'grafonnet/grafana.libsonnet';
         11,
         9
       ),
+      $.addTableSchema(
+        '$datasource',
+        'This table shows the 10 hosts with the highest number of slow ops',
+        { col: 2, desc: true },
+        [
+          $.overviewStyle('Instance', 'instance', 'string', 'short'),
+          $.overviewStyle('Slow Ops', 'Value', 'number', 'none'),
+          $.overviewStyle('', '/.*/', 'hidden', 'short'),
+        ],
+        'Top Slow Ops per Host',
+        'table'
+      )
+      .addTarget(
+        $.addTargetSchema(
+          |||
+            topk(10,
+              (sum by (instance)(ceph_daemon_health_metrics{type="SLOW_OPS", ceph_daemon=~"osd.*"}))
+            )
+          ||| % $.matchers(),
+          '',
+          'table',
+          1,
+          true
+        )
+      ) + { gridPos: { x: 0, y: 40, w: 4, h: 8 } },
     ]),
 }

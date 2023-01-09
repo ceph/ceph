@@ -16,61 +16,74 @@ struct ImageCtx;
 namespace crypto {
 namespace luks {
 
-// This class is derived from only for the sake of the 'format' operation.
-// The 'load' and 'flatten' operations are handled the same for all three
-// variants.
 template <typename ImageCtxT>
-class LUKSEncryptionFormat : public crypto::EncryptionFormat<ImageCtxT> {
-
+class EncryptionFormat : public crypto::EncryptionFormat<ImageCtxT> {
 public:
-    LUKSEncryptionFormat(std::string_view passphrase);
-    LUKSEncryptionFormat(encryption_algorithm_t alg,
-                         std::string_view passphrase);
+  void flatten(ImageCtxT* ictx, Context* on_finish) override;
 
-    std::unique_ptr<crypto::EncryptionFormat<ImageCtxT>>
-    clone() const override {
-      // clone() should be called only when handling the 'load' operation,
-      // so decaying LUKS{1,2}EncryptionFormat into LUKSEncryptionFormat is fine
-      return std::unique_ptr<crypto::EncryptionFormat<ImageCtxT>>(
-              new LUKSEncryptionFormat(m_passphrase));
-    }
-
-    void format(ImageCtxT* ictx, Context* on_finish) override;
-    void load(ImageCtxT* ictx, std::string* detected_format_name,
-              Context* on_finish) override;
-    void flatten(ImageCtxT* ictx, Context* on_finish) override;
-
-    CryptoInterface* get_crypto() override {
-      ceph_assert(m_crypto);
-      return m_crypto.get();
-    }
+  CryptoInterface* get_crypto() override {
+    ceph_assert(m_crypto);
+    return m_crypto.get();
+  }
 
 protected:
-    virtual encryption_format_t get_format() const {
-      return RBD_ENCRYPTION_FORMAT_LUKS;
-    }
-
-    std::string_view m_passphrase;
-    encryption_algorithm_t m_alg;
-    std::unique_ptr<CryptoInterface> m_crypto;
+  std::unique_ptr<CryptoInterface> m_crypto;
 };
 
 template <typename ImageCtxT>
-class LUKS1EncryptionFormat : public LUKSEncryptionFormat<ImageCtxT> {
-    using LUKSEncryptionFormat<ImageCtxT>::LUKSEncryptionFormat;
+class LUKSEncryptionFormat : public EncryptionFormat<ImageCtxT> {
+public:
+  LUKSEncryptionFormat(std::string_view passphrase)
+      : m_passphrase(passphrase) {}
 
-    encryption_format_t get_format() const override {
-      return RBD_ENCRYPTION_FORMAT_LUKS1;
-    }
+  std::unique_ptr<crypto::EncryptionFormat<ImageCtxT>> clone() const override {
+    return std::make_unique<LUKSEncryptionFormat>(m_passphrase);
+  }
+
+  void format(ImageCtxT* ictx, Context* on_finish) override;
+  void load(ImageCtxT* ictx, std::string* detected_format_name,
+            Context* on_finish) override;
+
+private:
+  std::string_view m_passphrase;
 };
 
 template <typename ImageCtxT>
-class LUKS2EncryptionFormat : public LUKSEncryptionFormat<ImageCtxT> {
-    using LUKSEncryptionFormat<ImageCtxT>::LUKSEncryptionFormat;
+class LUKS1EncryptionFormat : public EncryptionFormat<ImageCtxT> {
+public:
+  LUKS1EncryptionFormat(encryption_algorithm_t alg, std::string_view passphrase)
+      : m_alg(alg), m_passphrase(passphrase) {}
 
-    encryption_format_t get_format() const override {
-      return RBD_ENCRYPTION_FORMAT_LUKS2;
-    }
+  std::unique_ptr<crypto::EncryptionFormat<ImageCtxT>> clone() const override {
+    return std::make_unique<LUKS1EncryptionFormat>(m_alg, m_passphrase);
+  }
+
+  void format(ImageCtxT* ictx, Context* on_finish) override;
+  void load(ImageCtxT* ictx, std::string* detected_format_name,
+            Context* on_finish) override;
+
+private:
+  encryption_algorithm_t m_alg;
+  std::string_view m_passphrase;
+};
+
+template <typename ImageCtxT>
+class LUKS2EncryptionFormat : public EncryptionFormat<ImageCtxT> {
+public:
+  LUKS2EncryptionFormat(encryption_algorithm_t alg, std::string_view passphrase)
+      : m_alg(alg), m_passphrase(passphrase) {}
+
+  std::unique_ptr<crypto::EncryptionFormat<ImageCtxT>> clone() const override {
+    return std::make_unique<LUKS2EncryptionFormat>(m_alg, m_passphrase);
+  }
+
+  void format(ImageCtxT* ictx, Context* on_finish) override;
+  void load(ImageCtxT* ictx, std::string* detected_format_name,
+            Context* on_finish) override;
+
+private:
+  encryption_algorithm_t m_alg;
+  std::string_view m_passphrase;
 };
 
 } // namespace luks

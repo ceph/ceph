@@ -160,7 +160,7 @@ class FSTop(object):
     def __init__(self, args):
         self.rados = None
         self.stdscr = None  # curses instance
-        self.current_screen = ""
+        self.active_screen = ""
         self.client_name = args.id
         self.cluster_name = args.cluster
         self.conffile = args.conffile
@@ -306,7 +306,7 @@ class FSTop(object):
                 endmenu = True
             elif key == ord('q'):
                 self.stdscr.erase()
-                if isinstance(current_states['last_fs'], list):
+                if self.active_screen == FS_TOP_ALL_FS_APP:
                     self.run_all_display()
                 else:
                     self.run_display()
@@ -346,20 +346,19 @@ class FSTop(object):
                 curr_row1 += 1
             elif key == curses.KEY_ENTER or key in [10, 13]:
                 self.stdscr.erase()
-                last_fs = current_states["last_fs"]
                 if curr_row1 != len(field_menu) - 1:
                     current_states["last_field"] = (field_menu[curr_row1].split('='))[0]
                 else:
                     current_states["last_field"] = 'chit'
                 self.header.erase()  # erase the previous text
-                if isinstance(last_fs, list):
+                if self.active_screen == FS_TOP_ALL_FS_APP:
                     self.run_all_display()
                 else:
                     self.run_display()
                 endwhile = True
             elif key == ord('q'):
                 self.stdscr.erase()
-                if isinstance(current_states['last_fs'], list):
+                if self.active_screen == FS_TOP_ALL_FS_APP:
                     self.run_all_display()
                 else:
                     self.run_display()
@@ -454,7 +453,7 @@ class FSTop(object):
                         current_states["limit"] = key[:-1]
                 self.stdscr.erase()
                 self.header.erase()  # erase the previous text
-                if isinstance(current_states['last_fs'], list):
+                if self.active_screen == FS_TOP_ALL_FS_APP:
                     self.run_all_display()
                 else:
                     self.run_display()
@@ -760,26 +759,35 @@ class FSTop(object):
         global metrics_dict, current_states
         counters = [m.upper() for m in stats_json[GLOBAL_COUNTERS_KEY]]
         self.tablehead_y += 2
-        res = stats_json[CLIENT_METADATA_KEY].get(fs_name, {})
+        res = stats_json[GLOBAL_METRICS_KEY].get(fs_name, {})
         client_cnt = len(res)
         self.fsstats.addstr(self.tablehead_y, 0, FS_TOP_NAME_TOPL_FMT.format(
             fs_name=fs_name, client_count=client_cnt), curses.A_BOLD | curses.A_ITALIC)
         self.tablehead_y += 2
+        metrics_dict_client = metrics_dict.get(fs_name, {})
+        if len(metrics_dict) > len(fs_list):
+            stale_fs = set(metrics_dict) - set(fs_list)
+            for key in stale_fs:
+                del metrics_dict[key]
+        if len(metrics_dict_client) > client_cnt:
+            stale_clients = set(metrics_dict_client) - set(res)
+            for key in stale_clients:
+                del metrics_dict_client[key]
         if client_cnt:
-            if len(metrics_dict.get(fs_name, {})) != client_cnt:
-                sort_list = sorted(list(stats_json[GLOBAL_METRICS_KEY].get(fs_name, {}).keys()))
+            if len(metrics_dict_client) != client_cnt:
+                sort_list = sorted(list(res.keys()))
             else:
                 sort_arg = current_states['last_field']
-                sort_list = sorted(list(stats_json[GLOBAL_METRICS_KEY].get(fs_name, {}).keys()),
+                sort_list = sorted(list(res.keys()),
                                    key=lambda x: metrics_dict[fs_name].get(x, {}).get(sort_arg, 0),
                                    reverse=True)
             if current_states['limit'] is not None and int(current_states['limit']) < client_cnt:
                 sort_list = sort_list[0:int(current_states['limit'])]
             for client_id in sort_list:
                 self.create_client(
-                    fs_name, client_id,
-                    stats_json[GLOBAL_METRICS_KEY].get(fs_name, {}).get(client_id, {}),
-                    counters, res.get(client_id, {}), self.tablehead_y)
+                    fs_name, client_id, res.get(client_id, {}), counters,
+                    stats_json[CLIENT_METADATA_KEY].get(fs_name, {}).get(client_id, {}),
+                    self.tablehead_y)
                 self.tablehead_y += 1
 
     def create_header(self, stats_json, help, screen_title="", color_id=0):
@@ -819,7 +827,7 @@ class FSTop(object):
         self.header.erase()
         self.fsstats.erase()
 
-        self.current_screen = FS_TOP_FS_SELECTED_APP
+        self.active_screen = FS_TOP_FS_SELECTED_APP
         screen_title = "Selected Filesystem Info"
         help_commands = "m - select a filesystem | s - sort menu | l - limit number of clients"\
                         " | r - reset to default | q - home (All Filesystem Info) screen"
@@ -856,6 +864,11 @@ class FSTop(object):
             if fs not in fs_list:
                 help = f"Error: The selected filesystem '{fs}' is not available now. " \
                     "[Press 'q' to go back to home (All Filesystem Info) screen]"
+                # reset the sort/limit settings if fs_list is empty, otherwise continue the
+                # settings for the other filesystems.
+                if not fs_list:
+                    current_states["last_field"] = 'chit'
+                    current_states["limit"] = None
                 self.header.erase()  # erase previous text
                 self.fsstats.erase()
                 self.create_header(stats_json, help, screen_title, 3)
@@ -864,7 +877,7 @@ class FSTop(object):
                 help = "COMMANDS: " + help_commands
                 self.fsstats.erase()  # erase previous text
 
-                client_metadata = stats_json[CLIENT_METADATA_KEY].get(fs, {})
+                client_metadata = stats_json[GLOBAL_METRICS_KEY].get(fs, {})
                 if current_states['limit'] is not None and \
                    int(current_states['limit']) < len(client_metadata):
                     num_client = int(current_states['limit'])
@@ -944,10 +957,10 @@ class FSTop(object):
 
     def run_all_display(self):
         # clear text from the previous screen
-        if self.current_screen == FS_TOP_FS_SELECTED_APP:
+        if self.active_screen == FS_TOP_FS_SELECTED_APP:
             self.header.erase()
 
-        self.current_screen = FS_TOP_ALL_FS_APP
+        self.active_screen = FS_TOP_ALL_FS_APP
         screen_title = "All Filesystem Info"
         curses.init_pair(2, curses.COLOR_CYAN, -1)
 
@@ -982,6 +995,9 @@ class FSTop(object):
             vscrollEnd = 0
             if not fs_list:
                 help = "INFO: No filesystem is available [Press 'q' to quit]"
+                # reset the sort/limit settings
+                current_states["last_field"] = 'chit'
+                current_states["limit"] = None
                 self.header.erase()  # erase previous text
                 self.fsstats.erase()
                 self.create_header(stats_json, help, screen_title, 2)
@@ -993,7 +1009,7 @@ class FSTop(object):
                 self.fsstats.erase()  # erase previous text
                 for index, fs in enumerate(fs_list):
                     #  Get the vscrollEnd in advance
-                    client_metadata = stats_json[CLIENT_METADATA_KEY].get(fs, {})
+                    client_metadata = stats_json[GLOBAL_METRICS_KEY].get(fs, {})
                     if current_states['limit'] is not None and \
                        int(current_states['limit']) < len(client_metadata):
                         num_client = int(current_states['limit'])

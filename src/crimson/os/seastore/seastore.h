@@ -181,6 +181,13 @@ public:
     MAX
   };
 
+  // for test
+  mount_ertr::future<> test_mount();
+  mkfs_ertr::future<> test_mkfs(uuid_d new_osd_fsid);
+  DeviceRef get_primary_device_ref() {
+    return std::move(device);
+  }
+
 private:
   struct internal_context_t {
     CollectionRef ch;
@@ -304,21 +311,16 @@ private:
     omap_root_t &&root,
     const omap_keys_t &keys) const;
 
-  using _omap_list_bare_ret = OMapManager::omap_list_bare_ret;
-  using _omap_list_ret = OMapManager::omap_list_ret;
-  _omap_list_ret _omap_list(
+  friend class SeaStoreOmapIterator;
+
+  using omap_list_bare_ret = OMapManager::omap_list_bare_ret;
+  using omap_list_ret = OMapManager::omap_list_ret;
+  omap_list_ret omap_list(
     Onode &onode,
     const omap_root_le_t& omap_root,
     Transaction& t,
     const std::optional<std::string>& start,
     OMapManager::omap_list_config_t config) const;
-
-  friend class SeaStoreOmapIterator;
-  omap_get_values_ret_t omap_list(
-    CollectionRef ch,
-    const ghobject_t &oid,
-    const std::optional<std::string> &_start,
-    OMapManager::omap_list_config_t config);
 
   void init_managers();
 
@@ -435,6 +437,7 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
   seastar::future<> write_fsid(uuid_d new_osd_fsid);
+  seastar::future<> _mkfs(uuid_d new_osd_fsid);
 };
 
 seastar::future<std::unique_ptr<SeaStore>> make_seastore(

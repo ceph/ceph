@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - Reduced data availability
+      - Degraded data redundancy

@@ -76,15 +76,14 @@ using bid_t = decltype(BlueStore::Blob::id);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
 			      bluestore_cache_onode);
 
-// bluestore_cache_other
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Buffer, bluestore_buffer,
-			      bluestore_Buffer);
+			      bluestore_cache_buffer);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Extent, bluestore_extent,
-			      bluestore_Extent);
+			      bluestore_extent);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Blob, bluestore_blob,
-			      bluestore_Blob);
+			      bluestore_blob);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::SharedBlob, bluestore_shared_blob,
-			      bluestore_SharedBlob);
+			      bluestore_shared_blob);
 
 // bluestore_txc
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::TransContext, bluestore_transcontext,
@@ -5580,7 +5579,9 @@ int BlueStore::_open_bdev(bool create)
     goto fail;
 
   if (create && cct->_conf->bdev_enable_discard) {
-    bdev->discard(0, bdev->get_size());
+    interval_set<uint64_t> whole_device;
+    whole_device.insert(0, bdev->get_size());
+    bdev->try_discard(whole_device, false);
   }
 
   if (bdev->supported_bdev_label()) {
@@ -13052,24 +13053,18 @@ void BlueStore::_txc_finish(TransContext *txc)
 
 void BlueStore::_txc_release_alloc(TransContext *txc)
 {
+  bool discard_queued = false;
   // it's expected we're called with lazy_release_lock already taken!
-  if (likely(!cct->_conf->bluestore_debug_no_reuse_blocks)) {
-    int r = 0;
-    if (cct->_conf->bdev_enable_discard && cct->_conf->bdev_async_discard) {
-      r = bdev->queue_discard(txc->released);
-      if (r == 0) {
-	dout(10) << __func__ << "(queued) " << txc << " " << std::hex
-		 << txc->released << std::dec << dendl;
-	goto out;
-      }
-    } else if (cct->_conf->bdev_enable_discard) {
-      for (auto p = txc->released.begin(); p != txc->released.end(); ++p) {
-	  bdev->discard(p.get_start(), p.get_len());
-      }
-    }
-    dout(10) << __func__ << "(sync) " << txc << " " << std::hex
-             << txc->released << std::dec << dendl;
-    alloc->release(txc->released);
+  if (unlikely(cct->_conf->bluestore_debug_no_reuse_blocks)) {
+      goto out;
+  }
+  discard_queued = bdev->try_discard(txc->released);
+  // if async discard succeeded, will do alloc->release when discard callback
+  // else we should release here
+  if (!discard_queued) {
+      dout(10) << __func__ << "(sync) " << txc << " " << std::hex
+               << txc->released << std::dec << dendl;
+      alloc->release(txc->released);
   }
 
 out:
@@ -15570,6 +15565,18 @@ int BlueStore::_do_alloc_write(
 
   // compress (as needed) and calc needed space
   uint64_t need = 0;
+  uint64_t data_size = 0;
+  // 'need' is amount of space that must be provided by allocator.
+  // 'data_size' is a size of data that will be transferred to disk.
+  // Note that data_size is always <= need. This comes from:
+  // - write to blob was unaligned, and there is free space
+  // - data has been compressed
+  //
+  // We make one decision and apply it to all blobs.
+  // All blobs will be deferred or none will.
+  // We assume that allocator does its best to provide contiguous space,
+  // and the condition is : (data_size < deferred).
+
   auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
   for (auto& wi : wctx->writes) {
     if (c && wi.blob_length > min_alloc_size) {
@@ -15616,6 +15623,7 @@ int BlueStore::_do_alloc_write(
 	  txc->statfs_delta.compressed_allocated() += result_len;
 	  logger->inc(l_bluestore_compress_success_count);
 	  need += result_len;
+	  data_size += result_len;
 	} else {
 	  rejected = true;
 	}
@@ -15628,6 +15636,7 @@ int BlueStore::_do_alloc_write(
 		 << dendl;
 	logger->inc(l_bluestore_compress_rejected_count);
 	need += wi.blob_length;
+	data_size += wi.bl.length();
       } else {
 	rejected = true;
       }
@@ -15642,6 +15651,7 @@ int BlueStore::_do_alloc_write(
 		 << std::dec << dendl;
 	logger->inc(l_bluestore_compress_rejected_count);
 	need += wi.blob_length;
+	data_size += wi.bl.length();
       }
       log_latency("compress@_do_alloc_write",
 	l_bluestore_compress_lat,
@@ -15649,10 +15659,11 @@ int BlueStore::_do_alloc_write(
 	cct->_conf->bluestore_log_op_age );
     } else {
       need += wi.blob_length;
+      data_size += wi.bl.length();
     }
   }
   PExtentVector prealloc;
-  prealloc.reserve(2 * wctx->writes.size());;
+  prealloc.reserve(2 * wctx->writes.size());
   int64_t prealloc_left = 0;
   prealloc_left = alloc->allocate(
     need, min_alloc_size, need,
@@ -15670,10 +15681,10 @@ int BlueStore::_do_alloc_write(
   }
   _collect_allocation_stats(need, min_alloc_size, prealloc);
 
-  dout(20) << __func__ << " prealloc " << prealloc << dendl;
+  dout(20) << __func__ << std::hex << " need=0x" << need << " data=0x" << data_size
+	   << " prealloc " << prealloc << dendl;
   auto prealloc_pos = prealloc.begin();
   ceph_assert(prealloc_pos != prealloc.end());
-  uint64_t prealloc_pos_length = prealloc_pos->length;
 
   for (auto& wi : wctx->writes) {
     bluestore_blob_t& dblob = wi.b->dirty_blob();
@@ -15736,20 +15747,15 @@ int BlueStore::_do_alloc_write(
 
     PExtentVector extents;
     int64_t left = final_length;
-    bool has_chunk2defer = false;
     auto prefer_deferred_size_snapshot = prefer_deferred_size.load();
     while (left > 0) {
       ceph_assert(prealloc_left > 0);
-      has_chunk2defer |= (prealloc_pos_length < prefer_deferred_size_snapshot);
       if (prealloc_pos->length <= left) {
 	prealloc_left -= prealloc_pos->length;
 	left -= prealloc_pos->length;
 	txc->statfs_delta.allocated() += prealloc_pos->length;
 	extents.push_back(*prealloc_pos);
 	++prealloc_pos;
-	if (prealloc_pos != prealloc.end()) {
-	  prealloc_pos_length = prealloc_pos->length;
-	}
       } else {
 	extents.emplace_back(prealloc_pos->offset, left);
 	prealloc_pos->offset += left;
@@ -15795,7 +15801,7 @@ int BlueStore::_do_alloc_write(
 
     // queue io
     if (!g_conf()->bluestore_debug_omit_block_device_write) {
-      if (has_chunk2defer && l->length() < prefer_deferred_size_snapshot) {
+      if (data_size < prefer_deferred_size_snapshot) {
 	dout(20) << __func__ << " deferring 0x" << std::hex
 		 << l->length() << std::dec << " write via deferred" << dendl;
 	bluestore_deferred_op_t *op = _get_deferred_op(txc, l->length());

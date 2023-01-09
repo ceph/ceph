@@ -223,19 +223,29 @@ void TrimRequest<I>::send_copyup_objects() {
 
   IOContext io_context;
   bool has_snapshots;
-  uint64_t parent_overlap;
+  uint64_t copyup_end;
   {
     std::shared_lock image_locker{image_ctx.image_lock};
 
     io_context = image_ctx.get_data_io_context();
     has_snapshots = !image_ctx.snaps.empty();
-    int r = image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
-    ceph_assert(r == 0);
-  }
 
-  // copyup is only required for portion of image that overlaps parent
-  uint64_t copyup_end = Striper::get_num_objects(image_ctx.layout,
-                                                 parent_overlap);
+    uint64_t crypto_header_objects = Striper::get_num_objects(
+        image_ctx.layout,
+        image_ctx.get_area_size(io::ImageArea::CRYPTO_HEADER));
+
+    uint64_t raw_overlap;
+    int r = image_ctx.get_parent_overlap(CEPH_NOSNAP, &raw_overlap);
+    ceph_assert(r == 0);
+    auto overlap = image_ctx.reduce_parent_overlap(raw_overlap, false);
+    uint64_t data_overlap_objects = Striper::get_num_objects(
+        image_ctx.layout,
+        (overlap.second == io::ImageArea::DATA ? overlap.first : 0));
+
+    // copyup is only required for portion of image that overlaps parent
+    ceph_assert(m_delete_start >= crypto_header_objects);
+    copyup_end = crypto_header_objects + data_overlap_objects;
+  }
 
   // TODO: protect against concurrent shrink and snap create?
   // skip to remove if no copyup is required.

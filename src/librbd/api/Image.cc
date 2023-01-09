@@ -737,8 +737,7 @@ int Image<I>::snap_set(I *ictx,
   std::string name(snap_name == nullptr ? "" : snap_name);
   if (!name.empty()) {
     std::shared_lock image_locker{ictx->image_lock};
-    snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace{},
-                                snap_name);
+    snap_id = ictx->get_snap_id(snap_namespace, snap_name);
     if (snap_id == CEPH_NOSNAP) {
       return -ENOENT;
     }
@@ -787,12 +786,24 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
     r = Trash<I>::list(io_ctx, trash_entries, false);
     if (r < 0) {
       return r;
-    } else if (r >= 0) {
-      for (auto& entry : trash_entries) {
-        if (entry.name == image_name &&
-            entry.source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
-          return Trash<I>::remove(io_ctx, entry.id, true, prog_ctx);
+    }
+    for (auto& entry : trash_entries) {
+      if (entry.name == image_name &&
+          entry.source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
+        cls::rbd::TrashImageSpec spec;
+        r = cls_client::trash_get(&io_ctx, entry.id, &spec);
+        if (r < 0) {
+          lderr(cct) << "error getting image id " << entry.id
+                     << " info from trash: " << cpp_strerror(r) << dendl;
+          return r;
         }
+        if (spec.state == cls::rbd::TRASH_IMAGE_STATE_MOVING) {
+          r = Trash<I>::move(io_ctx, entry.source, entry.name, entry.id, 0);
+          if (r < 0) {
+            return r;
+          }
+        }
+        return Trash<I>::remove(io_ctx, entry.id, true, prog_ctx);
       }
     }
 
@@ -975,7 +986,7 @@ int Image<I>::encryption_format(I* ictx, encryption_format_t format,
 }
 
 template <typename I>
-int Image<I>::encryption_load(I* ictx, encryption_spec_t *specs,
+int Image<I>::encryption_load(I* ictx, const encryption_spec_t *specs,
                               size_t spec_count, bool c_api) {
   std::vector<std::unique_ptr<crypto::EncryptionFormat<I>>> formats;
 

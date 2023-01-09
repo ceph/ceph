@@ -31,42 +31,6 @@ inline ImageCtx *get_image_ctx(MockImageCtx *image_ctx) {
 
 namespace librbd {
 namespace crypto {
-
-namespace util {
-
-template <>
-void set_crypto(MockTestImageCtx *image_ctx,
-                std::unique_ptr<MockEncryptionFormat> encryption_format) {
-  image_ctx->encryption_format = std::move(encryption_format);
-}
-
-} // namespace util
-
-template <>
-struct ShutDownCryptoRequest<MockTestImageCtx> {
-  Context *on_finish = nullptr;
-  std::unique_ptr<MockEncryptionFormat>* format;
-  static ShutDownCryptoRequest *s_instance;
-  static ShutDownCryptoRequest *create(
-          MockTestImageCtx *image_ctx,
-          std::unique_ptr<MockEncryptionFormat>* format,
-          Context *on_finish) {
-    ceph_assert(s_instance != nullptr);
-    s_instance->format = format;
-    s_instance->on_finish = on_finish;
-    return s_instance;
-  }
-
-  MOCK_METHOD0(send, void());
-
-  ShutDownCryptoRequest() {
-    s_instance = this;
-  }
-};
-
-ShutDownCryptoRequest<MockTestImageCtx> *ShutDownCryptoRequest<
-        MockTestImageCtx>::s_instance = nullptr;
-
 namespace luks {
 
 using ::testing::_;
@@ -75,7 +39,6 @@ using ::testing::Return;
 
 struct TestMockCryptoLuksFlattenRequest : public TestMockFixture {
   typedef FlattenRequest<MockTestImageCtx> MockFlattenRequest;
-  typedef ShutDownCryptoRequest<MockTestImageCtx> MockShutDownCryptoRequest;
 
   const size_t OBJECT_SIZE = 4 * 1024 * 1024;
   const uint64_t DATA_OFFSET = MockCryptoInterface::DATA_OFFSET;
@@ -86,7 +49,6 @@ struct TestMockCryptoLuksFlattenRequest : public TestMockFixture {
   MockFlattenRequest* mock_flatten_request;
   MockEncryptionFormat* mock_encryption_format;
   MockCryptoInterface mock_crypto;
-  MockShutDownCryptoRequest mock_shutdown_crypto_request;
   C_SaferCond finished_cond;
   Context *on_finish = &finished_cond;
   Context* image_read_request;
@@ -123,17 +85,6 @@ struct TestMockCryptoLuksFlattenRequest : public TestMockFixture {
     if (magic_switched) {
       ASSERT_EQ(0, Magic::replace_magic(mock_image_ctx->cct, header_bl));
     }
-  }
-
-  void expect_shutdown_crypto(int r = 0) {
-    EXPECT_CALL(mock_shutdown_crypto_request, send()).WillOnce(
-                    Invoke([this, r]() {
-                      if (r == 0) {
-                        *mock_shutdown_crypto_request.format =
-                                std::move(mock_image_ctx->encryption_format);
-                      }
-                      mock_shutdown_crypto_request.on_finish->complete(r);
-    }));
   }
 
   void expect_get_crypto() {
@@ -224,7 +175,6 @@ struct TestMockCryptoLuksFlattenRequest : public TestMockFixture {
 
 TEST_F(TestMockCryptoLuksFlattenRequest, LUKS1) {
   generate_header(CRYPT_LUKS1, "aes", 32, "xts-plain64", 512, true);
-  expect_shutdown_crypto();
   expect_get_crypto();
   expect_image_read(0, DATA_OFFSET);
   mock_flatten_request->send();
@@ -241,7 +191,6 @@ TEST_F(TestMockCryptoLuksFlattenRequest, LUKS1) {
 
 TEST_F(TestMockCryptoLuksFlattenRequest, LUKS2) {
   generate_header(CRYPT_LUKS2, "aes", 32, "xts-plain64", 4096, true);
-  expect_shutdown_crypto();
   expect_get_crypto();
   expect_image_read(0, DATA_OFFSET);
   mock_flatten_request->send();
@@ -256,17 +205,8 @@ TEST_F(TestMockCryptoLuksFlattenRequest, LUKS2) {
   ASSERT_EQ(mock_encryption_format, mock_image_ctx->encryption_format.get());
 }
 
-TEST_F(TestMockCryptoLuksFlattenRequest, FailShutDownCrypto) {
-  generate_header(CRYPT_LUKS2, "aes", 32, "xts-plain64", 4096, true);
-  expect_shutdown_crypto(-EIO);
-  mock_flatten_request->send();
-  ASSERT_EQ(-EIO, finished_cond.wait());
-  ASSERT_EQ(mock_encryption_format, mock_image_ctx->encryption_format.get());
-}
-
 TEST_F(TestMockCryptoLuksFlattenRequest, FailedRead) {
   generate_header(CRYPT_LUKS2, "aes", 32, "xts-plain64", 4096, true);
-  expect_shutdown_crypto();
   expect_get_crypto();
   expect_image_read(0, DATA_OFFSET);
   mock_flatten_request->send();
@@ -278,7 +218,6 @@ TEST_F(TestMockCryptoLuksFlattenRequest, FailedRead) {
 
 TEST_F(TestMockCryptoLuksFlattenRequest, AlreadyFlattened) {
   generate_header(CRYPT_LUKS2, "aes", 32, "xts-plain64", 4096, false);
-  expect_shutdown_crypto();
   expect_get_crypto();
   expect_image_read(0, DATA_OFFSET);
   mock_flatten_request->send();
@@ -295,7 +234,6 @@ TEST_F(TestMockCryptoLuksFlattenRequest, AlreadyFlattened) {
 
 TEST_F(TestMockCryptoLuksFlattenRequest, FailedWrite) {
   generate_header(CRYPT_LUKS2, "aes", 32, "xts-plain64", 4096, true);
-  expect_shutdown_crypto();
   expect_get_crypto();
   expect_image_read(0, DATA_OFFSET);
   mock_flatten_request->send();
@@ -310,7 +248,6 @@ TEST_F(TestMockCryptoLuksFlattenRequest, FailedWrite) {
 
 TEST_F(TestMockCryptoLuksFlattenRequest, FailedFlush) {
   generate_header(CRYPT_LUKS2, "aes", 32, "xts-plain64", 4096, true);
-  expect_shutdown_crypto();
   expect_get_crypto();
   expect_image_read(0, DATA_OFFSET);
   mock_flatten_request->send();

@@ -319,7 +319,7 @@ class MotrBucket : public StoreBucket {
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual int update_container_stats(const DoutPrefixProvider *dpp) override;
     virtual int check_bucket_shards(const DoutPrefixProvider *dpp) override;
-    virtual int chown(const DoutPrefixProvider *dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker = nullptr) override;
+    virtual int chown(const DoutPrefixProvider *dpp, User& new_user, optional_yield y) override;
     virtual int put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time mtime) override;
     virtual bool is_owner(User* user) override;
     virtual int check_empty(const DoutPrefixProvider *dpp, optional_yield y) override;
@@ -674,6 +674,7 @@ class MotrObject : public StoreObject {
         Attrs* vals) override;
     virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
         bool must_exist, optional_yield y) override;
+    virtual int chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y) override;
   private:
     //int read_attrs(const DoutPrefixProvider* dpp, Motr::Object::Read &read_op, optional_yield y, rgw_obj* target_obj = nullptr);
 
@@ -897,9 +898,8 @@ public:
   int delete_parts(const DoutPrefixProvider *dpp);
 };
 
-class MotrStore : public StoreStore {
+class MotrStore : public StoreDriver {
   private:
-    std::string luarocks_path;
     MotrZone zone;
     RGWSyncModuleInstanceRef sync_module;
 
@@ -953,7 +953,7 @@ class MotrStore : public StoreStore {
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
     virtual std::unique_ptr<Completions> get_completions(void) override;
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj,
-        req_state* s, rgw::notify::EventType event_type, const std::string* object_name=nullptr) override;
+        req_state* s, rgw::notify::EventType event_type, optional_yield y, const std::string* object_name=nullptr) override;
     virtual std::unique_ptr<Notification> get_notification(const DoutPrefixProvider* dpp, rgw::sal::Object* obj,
         rgw::sal::Object* src_obj, rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
         std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y) override;
@@ -1033,13 +1033,6 @@ class MotrStore : public StoreStore {
       return cctx;
     }
 
-    virtual const std::string& get_luarocks_path() const override {
-      return luarocks_path;
-    }
-
-    virtual void set_luarocks_path(const std::string& path) override {
-      luarocks_path = path;
-    }
     virtual void register_admin_apis(RGWRESTMgr* mgr) override { };
 
     int open_idx(struct m0_uint128 *id, bool create, struct m0_idx *out);

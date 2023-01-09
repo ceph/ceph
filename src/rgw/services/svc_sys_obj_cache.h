@@ -4,8 +4,8 @@
 #pragma once
 
 #include "common/RWLock.h"
-#include "rgw/rgw_service.h"
-#include "rgw/rgw_cache.h"
+#include "rgw_service.h"
+#include "rgw_cache.h"
 
 #include "svc_sys_obj_core.h"
 

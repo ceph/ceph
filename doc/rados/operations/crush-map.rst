@@ -184,9 +184,11 @@ will be the total of all devices contained beneath it.  Normally
 weights are in units of terabytes (TB).
 
 You can get a simple view the of CRUSH hierarchy for your cluster,
-including weights, with::
+including weights, with:
 
-  ceph osd tree
+.. prompt:: bash $
+
+   ceph osd tree
 
 Rules
 -----
@@ -208,13 +210,17 @@ erasure coded), the *failure domain*, and optionally a *device class*.
 In rare cases rules must be written by hand by manually editing the
 CRUSH map.
 
-You can see what rules are defined for your cluster with::
+You can see what rules are defined for your cluster with:
 
-  ceph osd crush rule ls
+.. prompt:: bash $
 
-You can view the contents of the rules with::
+   ceph osd crush rule ls
 
-  ceph osd crush rule dump
+You can view the contents of the rules with:
+
+.. prompt:: bash $
+
+   ceph osd crush rule dump
 
 Device classes
 --------------
@@ -224,34 +230,44 @@ default, OSDs automatically set their class at startup to
 `hdd`, `ssd`, or `nvme` based on the type of device they are backed
 by.
 
-The device class for one or more OSDs can be explicitly set with::
+The device class for one or more OSDs can be explicitly set with:
 
-  ceph osd crush set-device-class <class> <osd-name> [...]
+.. prompt:: bash $
+
+   ceph osd crush set-device-class <class> <osd-name> [...]
 
 Once a device class is set, it cannot be changed to another class
-until the old class is unset with::
+until the old class is unset with:
 
-  ceph osd crush rm-device-class <osd-name> [...]
+.. prompt:: bash $
+
+   ceph osd crush rm-device-class <osd-name> [...]
 
 This allows administrators to set device classes without the class
 being changed on OSD restart or by some other script.
 
-A placement rule that targets a specific device class can be created with::
+A placement rule that targets a specific device class can be created with:
 
-  ceph osd crush rule create-replicated <rule-name> <root> <failure-domain> <class>
+.. prompt:: bash $
 
-A pool can then be changed to use the new rule with::
+   ceph osd crush rule create-replicated <rule-name> <root> <failure-domain> <class>
 
-  ceph osd pool set <pool-name> crush_rule <rule-name>
+A pool can then be changed to use the new rule with:
+
+.. prompt:: bash $
+
+   ceph osd pool set <pool-name> crush_rule <rule-name>
 
 Device classes are implemented by creating a "shadow" CRUSH hierarchy
 for each device class in use that contains only devices of that class.
 CRUSH rules can then distribute data over the shadow hierarchy.
 This approach is fully backward compatible with
 old Ceph clients.  You can view the CRUSH hierarchy with shadow items
-with::
+with:
 
-  ceph osd crush tree --show-shadow
+.. prompt:: bash $
+
+   ceph osd crush tree --show-shadow
 
 For older clusters created before Luminous that relied on manually
 crafted CRUSH maps to maintain per-device-type hierarchies, there is a
@@ -295,9 +311,11 @@ There are two types of weight sets supported:
 
 When weight sets are in use, the weights associated with each node in
 the hierarchy is visible as a separate column (labeled either
-``(compat)`` or the pool name) from the command::
+``(compat)`` or the pool name) from the command:
 
-  ceph osd tree
+.. prompt:: bash $
+
+   ceph osd tree
 
 When both *compat* and *per-pool* weight sets are in use, data
 placement for a particular pool will use its own per-pool weight set
@@ -320,9 +338,11 @@ Add/Move an OSD
 .. note: OSDs are normally automatically added to the CRUSH map when
          the OSD is created.  This command is rarely needed.
 
-To add or move an OSD in the CRUSH map of a running cluster::
+To add or move an OSD in the CRUSH map of a running cluster:
 
-  ceph osd crush set {name} {weight} root={root} [{bucket-type}={bucket-name} ...]
+.. prompt:: bash $
+
+   ceph osd crush set {name} {weight} root={root} [{bucket-type}={bucket-name} ...]
 
 Where:
 
@@ -359,9 +379,11 @@ Where:
 
 
 The following example adds ``osd.0`` to the hierarchy, or moves the
-OSD from a previous location. ::
+OSD from a previous location:
 
-  ceph osd crush set osd.0 1.0 root=default datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1
+.. prompt:: bash $
+
+   ceph osd crush set osd.0 1.0 root=default datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1
 
 
 Adjust OSD weight
@@ -372,9 +394,11 @@ Adjust OSD weight
          is rarely needed.
 
 To adjust an OSD's CRUSH weight in the CRUSH map of a running cluster, execute
-the following::
+the following:
 
-  ceph osd crush reweight {name} {weight}
+.. prompt:: bash $
+
+   ceph osd crush reweight {name} {weight}
 
 Where:
 
@@ -403,9 +427,11 @@ Remove an OSD
    ``ceph osd purge`` command.  This command is rarely needed.
 
 To remove an OSD from the CRUSH map of a running cluster, execute the
-following::
+following:
 
-  ceph osd crush remove {name}
+.. prompt:: bash $
+
+   ceph osd crush remove {name}
 
 Where:
 
@@ -431,9 +457,11 @@ Add a Bucket
    ``default`` or other root as described below.
 
 To add a bucket in the CRUSH map of a running cluster, execute the
-``ceph osd crush add-bucket`` command::
+``ceph osd crush add-bucket`` command:
 
-  ceph osd crush add-bucket {bucket-name} {bucket-type}
+.. prompt:: bash $
+
+   ceph osd crush add-bucket {bucket-name} {bucket-type}
 
 Where:
 
@@ -453,17 +481,21 @@ Where:
 :Example: ``rack``
 
 
-The following example adds the ``rack12`` bucket to the hierarchy::
+The following example adds the ``rack12`` bucket to the hierarchy:
 
-  ceph osd crush add-bucket rack12 rack
+.. prompt:: bash $
+
+   ceph osd crush add-bucket rack12 rack
 
 Move a Bucket
 -------------
 
 To move a bucket to a different location or position in the CRUSH map
-hierarchy, execute the following::
+hierarchy, execute the following:
 
-  ceph osd crush move {bucket-name} {bucket-type}={bucket-name}, [...]
+.. prompt:: bash $
+
+   ceph osd crush move {bucket-name} {bucket-type}={bucket-name}, [...]
 
 Where:
 
@@ -484,9 +516,11 @@ Where:
 Remove a Bucket
 ---------------
 
-To remove a bucket from the CRUSH hierarchy, execute the following::
+To remove a bucket from the CRUSH hierarchy, execute the following:
 
-  ceph osd crush remove {bucket-name}
+.. prompt:: bash $
+
+   ceph osd crush remove {bucket-name}
 
 .. note:: A bucket must be empty before removing it from the CRUSH hierarchy.
 
@@ -499,9 +533,11 @@ Where:
 :Required: Yes
 :Example: ``rack12``
 
-The following example removes the ``rack12`` bucket from the hierarchy::
+The following example removes the ``rack12`` bucket from the hierarchy:
 
-  ceph osd crush remove rack12
+.. prompt:: bash $
+
+   ceph osd crush remove rack12
 
 Creating a compat weight set
 ----------------------------
@@ -509,24 +545,32 @@ Creating a compat weight set
 .. note: This step is normally done automatically by the ``balancer``
    module when enabled.
 
-To create a *compat* weight set::
+To create a *compat* weight set:
 
-  ceph osd crush weight-set create-compat
+.. prompt:: bash $
 
-Weights for the compat weight set can be adjusted with::
+   ceph osd crush weight-set create-compat
 
-  ceph osd crush weight-set reweight-compat {name} {weight}
+Weights for the compat weight set can be adjusted with:
 
-The compat weight set can be destroyed with::
+.. prompt:: bash $
 
-  ceph osd crush weight-set rm-compat
+   ceph osd crush weight-set reweight-compat {name} {weight}
+
+The compat weight set can be destroyed with:
+
+.. prompt:: bash $
+
+   ceph osd crush weight-set rm-compat
 
 Creating per-pool weight sets
 -----------------------------
 
-To create a weight set for a specific pool,::
+To create a weight set for a specific pool:
 
-  ceph osd crush weight-set create {pool-name} {mode}
+.. prompt:: bash $
+
+   ceph osd crush weight-set create {pool-name} {mode}
 
 .. note:: Per-pool weight sets require that all servers and daemons
           run Luminous v12.2.z or later.
@@ -553,17 +597,23 @@ Where:
 :Required: Yes
 :Example: ``flat``
 
-To adjust the weight of an item in a weight set::
+To adjust the weight of an item in a weight set:
 
-  ceph osd crush weight-set reweight {pool-name} {item-name} {weight [...]}
+.. prompt:: bash $
 
-To list existing weight sets,::
+   ceph osd crush weight-set reweight {pool-name} {item-name} {weight [...]}
 
-  ceph osd crush weight-set ls
+To list existing weight sets:
 
-To remove a weight set,::
+.. prompt:: bash $
 
-  ceph osd crush weight-set rm {pool-name}
+   ceph osd crush weight-set ls
+
+To remove a weight set:
+
+.. prompt:: bash $
+
+   ceph osd crush weight-set rm {pool-name}
 
 Creating a rule for a replicated pool
 -------------------------------------
@@ -588,9 +638,11 @@ classify themselves as either ``hdd`` or ``ssd``, depending on the
 underlying type of device being used.  These classes can also be
 customized.
 
-To create a replicated rule,::
+To create a replicated rule:
 
-  ceph osd crush rule create-replicated {name} {root} {failure-domain-type} [{class}]
+.. prompt:: bash $
+
+   ceph osd crush rule create-replicated {name} {root} {failure-domain-type} [{class}]
 
 Where:
 
@@ -635,13 +687,17 @@ you must include this information in the *erasure code profile*.  A CRUSH
 rule will then be created from that either explicitly or automatically when
 the profile is used to create a pool.
 
-The erasure code profiles can be listed with::
+The erasure code profiles can be listed with:
 
-  ceph osd erasure-code-profile ls
+.. prompt:: bash $
 
-An existing profile can be viewed with::
+   ceph osd erasure-code-profile ls
 
-  ceph osd erasure-code-profile get {profile-name}
+An existing profile can be viewed with:
+
+.. prompt:: bash $
+
+   ceph osd erasure-code-profile get {profile-name}
 
 Normally profiles should never be modified; instead, a new profile
 should be created and used when creating a new pool or creating a new
@@ -659,9 +715,11 @@ The erasure code profile properties of interest are:
  * **crush-device-class**: the device class on which to place data [default: none, meaning all devices are used].
  * **k** and **m** (and, for the ``lrc`` plugin, **l**): these determine the number of erasure code shards, affecting the resulting CRUSH rule.
 
-Once a profile is defined, you can create a CRUSH rule with::
+Once a profile is defined, you can create a CRUSH rule with:
 
-  ceph osd crush rule create-erasure {name} {profile-name}
+.. prompt:: bash $
+
+   ceph osd crush rule create-erasure {name} {profile-name}
 
 .. note: When creating a new pool, it is not actually necessary to
    explicitly create the rule.  If the erasure code profile alone is
@@ -671,9 +729,11 @@ Once a profile is defined, you can create a CRUSH rule with::
 Deleting rules
 --------------
 
-Rules that are not in use by pools can be deleted with::
+Rules that are not in use by pools can be deleted with:
 
-  ceph osd crush rule rm {rule-name}
+.. prompt:: bash $
+
+   ceph osd crush rule rm {rule-name}
 
 
 .. _crush-map-tunables:
@@ -882,14 +942,18 @@ To make this warning go away, you have two options:
    result in some data movement (possibly as much as 10%).  This is the
    preferred route, but should be taken with care on a production cluster
    where the data movement may affect performance.  You can enable optimal
-   tunables with::
+   tunables with:
+
+   .. prompt:: bash $
 
       ceph osd crush tunables optimal
 
    If things go poorly (e.g., too much load) and not very much
    progress has been made, or there is a client compatibility problem
    (old kernel CephFS or RBD clients, or pre-Bobtail ``librados``
-   clients), you can switch back with::
+   clients), you can switch back with:
+
+   .. prompt:: bash $
 
       ceph osd crush tunables legacy
 
@@ -899,7 +963,9 @@ To make this warning go away, you have two options:
       mon_warn_on_legacy_crush_tunables = false
 
    For the change to take effect, you will need to restart the monitors, or
-   apply the option to running monitors with::
+   apply the option to running monitors with:
+
+   .. prompt:: bash $
 
       ceph tell mon.\* config set mon_warn_on_legacy_crush_tunables false
 
@@ -936,7 +1002,7 @@ sets known as *profiles*.  As of the Octopus release these are:
  * ``firefly``: the values supported by the firefly release
  * ``hammer``: the values supported by the hammer release
  * ``jewel``: the values supported by the jewel release
- * ``optimal``: the best (ie optimal) values of the current version of Ceph
+ * ``optimal``: the best (i.e. optimal) values of the current version of Ceph
  * ``default``: the default values of a new cluster installed from
    scratch. These values, which depend on the current version of Ceph,
    are hardcoded and are generally a mix of optimal and legacy values.
@@ -944,9 +1010,11 @@ sets known as *profiles*.  As of the Octopus release these are:
    LTS release, or the most recent release for which we generally expect
    most users to have up-to-date clients for.
 
-You can apply a profile to a running cluster with the command::
+You can apply a profile to a running cluster with the command:
 
- ceph osd crush tunables {PROFILE}
+.. prompt:: bash $
+
+   ceph osd crush tunables {PROFILE}
 
 Note that this may result in data movement, potentially quite a bit.  Study
 release notes and documentation carefully before changing the profile on a
@@ -986,19 +1054,20 @@ interface bandwidth and CPU cycles more evenly.
 By default, all ceph OSDs have primary affinity of ``1``, which indicates that
 any OSD may act as a primary with equal probability.
 
-You can reduce a Ceph OSD's primary affinity so that CRUSH is less likely to choose
-the OSD as primary in a PG's acting set.::
+You can reduce a Ceph OSD's primary affinity so that CRUSH is less likely to
+choose the OSD as primary in a PG's acting set.:
 
-	ceph osd primary-affinity <osd-id> <weight>
+.. prompt:: bash $
 
-You may set an OSD's primary affinity to a real number in the range
-``[0-1]``, where ``0`` indicates that the OSD may **NOT** be used as a primary
-and ``1`` indicates that an OSD may be used as a primary.  When the weight is
-between these extremes, it is less likely that
-CRUSH will select that OSD as a primary.  The process for
-selecting the lead OSD is more nuanced than a simple probability based on
-relative affinity values, but measurable results can be achieved even with
-first-order approximations of desirable values.
+   ceph osd primary-affinity <osd-id> <weight>
+
+You may set an OSD's primary affinity to a real number in the range ``[0-1]``,
+where ``0`` indicates that the OSD may **NOT** be used as a primary and ``1``
+indicates that an OSD may be used as a primary.  When the weight is between
+these extremes, it is less likely that CRUSH will select that OSD as a primary.
+The process for selecting the lead OSD is more nuanced than a simple
+probability based on relative affinity values, but measurable results can be
+achieved even with first-order approximations of desirable values.
 
 Custom CRUSH Rules
 ------------------
@@ -1045,7 +1114,6 @@ must not contain the same servers::
                step chooseleaf firstn -1 type host
                step emit
         }
-
 
 
 Note also that on failure of an SSD, requests to a PG will be served temporarily

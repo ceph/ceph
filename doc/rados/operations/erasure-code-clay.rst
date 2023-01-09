@@ -38,31 +38,35 @@ to achieve recovery from an OSD failure.
 Erasure-code profile examples
 =============================
 
-An example configuration that can be used to observe reduced bandwidth usage::
+An example configuration that can be used to observe reduced bandwidth usage:
 
-        $ ceph osd erasure-code-profile set CLAYprofile \
-             plugin=clay \
-             k=4 m=2 d=5 \
-             crush-failure-domain=host
-        $ ceph osd pool create claypool erasure CLAYprofile
+.. prompt:: bash $
+
+   ceph osd erasure-code-profile set CLAYprofile \
+      plugin=clay \
+      k=4 m=2 d=5 \
+      crush-failure-domain=host
+   ceph osd pool create claypool erasure CLAYprofile
 
 
 Creating a clay profile
 =======================
 
-To create a new clay code profile::
+To create a new clay code profile:
 
-        ceph osd erasure-code-profile set {name} \
-             plugin=clay \
-             k={data-chunks} \
-             m={coding-chunks} \
-             [d={helper-chunks}] \
-             [scalar_mds={plugin-name}] \
-             [technique={technique-name}] \
-             [crush-failure-domain={bucket-type}] \
-             [crush-device-class={device-class}] \
-             [directory={directory}] \
-             [--force]
+.. prompt:: bash $
+
+   ceph osd erasure-code-profile set {name} \
+        plugin=clay \
+        k={data-chunks} \
+        m={coding-chunks} \
+        [d={helper-chunks}] \
+        [scalar_mds={plugin-name}] \
+        [technique={technique-name}] \
+        [crush-failure-domain={bucket-type}] \
+        [crush-device-class={device-class}] \
+        [directory={directory}] \
+        [--force]
 
 Where:
 

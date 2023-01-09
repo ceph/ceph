@@ -19,7 +19,7 @@
 
 #include "cls/otp/cls_otp_types.h"
 
-#include "rgw/rgw_service.h"
+#include "rgw_service.h"
 
 #include "svc_otp_types.h"
 #include "svc_meta_be_otp.h"

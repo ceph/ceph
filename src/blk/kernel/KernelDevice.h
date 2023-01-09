@@ -84,12 +84,13 @@ private:
 
   void _aio_thread();
   void _discard_thread();
-  int queue_discard(interval_set<uint64_t> &to_release) override;
+  int _queue_discard(interval_set<uint64_t> &to_release);
+  bool try_discard(interval_set<uint64_t> &to_release, bool async = true) override;
 
   int _aio_start();
   void _aio_stop();
 
-  int _discard_start();
+  void _discard_start();
   void _discard_stop();
 
   void _aio_log_start(IOContext *ioc, uint64_t offset, uint64_t length);
@@ -144,7 +145,7 @@ public:
 		bool buffered,
 		int write_hint = WRITE_LIFE_NOT_SET) override;
   int flush() override;
-  int discard(uint64_t offset, uint64_t len) override;
+  int _discard(uint64_t offset, uint64_t len);
 
   // for managing buffered readers/writers
   int invalidate_cache(uint64_t off, uint64_t len) override;

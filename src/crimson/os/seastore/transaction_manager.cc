@@ -278,12 +278,13 @@ TransactionManager::submit_transaction(
   return trans_intr::make_interruptible(
     t.get_handle().enter(write_pipeline.reserve_projected_usage)
   ).then_interruptible([this, FNAME, &t] {
-    size_t projected_usage = t.get_allocation_size();
+    auto dispatch_result = epm->dispatch_delayed_extents(t);
+    auto projected_usage = dispatch_result.usage;
     SUBTRACET(seastore_t, "waiting for projected_usage: {}", t, projected_usage);
     return trans_intr::make_interruptible(
       epm->reserve_projected_usage(projected_usage)
-    ).then_interruptible([this, &t] {
-      return submit_transaction_direct(t);
+    ).then_interruptible([this, &t, dispatch_result = std::move(dispatch_result)] {
+      return do_submit_transaction(t, std::move(dispatch_result));
     }).finally([this, FNAME, projected_usage, &t] {
       SUBTRACET(seastore_t, "releasing projected_usage: {}", t, projected_usage);
       epm->release_projected_usage(projected_usage);
@@ -296,34 +297,44 @@ TransactionManager::submit_transaction_direct(
   Transaction &tref,
   std::optional<journal_seq_t> trim_alloc_to)
 {
-  LOG_PREFIX(TransactionManager::submit_transaction_direct);
+  return do_submit_transaction(
+    tref,
+    epm->dispatch_delayed_extents(tref),
+    trim_alloc_to);
+}
+
+TransactionManager::submit_transaction_direct_ret
+TransactionManager::do_submit_transaction(
+  Transaction &tref,
+  ExtentPlacementManager::dispatch_result_t dispatch_result,
+  std::optional<journal_seq_t> trim_alloc_to)
+{
+  LOG_PREFIX(TransactionManager::do_submit_transaction);
   SUBTRACET(seastore_t, "start", tref);
   return trans_intr::make_interruptible(
     tref.get_handle().enter(write_pipeline.ool_writes)
-  ).then_interruptible([this, FNAME, &tref] {
-    auto delayed_extents = tref.get_delayed_alloc_list();
-    auto num_extents = delayed_extents.size();
-    SUBTRACET(seastore_t, "process {} delayed extents", tref, num_extents);
-    std::vector<paddr_t> delayed_paddrs;
-    delayed_paddrs.reserve(num_extents);
-    for (auto& ext : delayed_extents) {
-      assert(ext->get_paddr().is_delayed());
-      delayed_paddrs.push_back(ext->get_paddr());
-    }
-    return seastar::do_with(
-      std::move(delayed_extents),
-      std::move(delayed_paddrs),
-      [this, FNAME, &tref](auto& delayed_extents, auto& delayed_paddrs)
-    {
-      return epm->delayed_alloc_or_ool_write(tref, delayed_extents
-      ).si_then([this, FNAME, &tref, &delayed_extents, &delayed_paddrs] {
+  ).then_interruptible([this, FNAME, &tref,
+			dispatch_result = std::move(dispatch_result)] {
+    return seastar::do_with(std::move(dispatch_result),
+			    [this, FNAME, &tref](auto &dispatch_result) {
+      return epm->write_delayed_ool_extents(tref, dispatch_result.alloc_map
+      ).si_then([this, FNAME, &tref, &dispatch_result] {
         SUBTRACET(seastore_t, "update delayed extent mappings", tref);
-        return lba_manager->update_mappings(tref, delayed_extents, delayed_paddrs);
+        return lba_manager->update_mappings(tref, dispatch_result.delayed_extents);
       }).handle_error_interruptible(
         crimson::ct_error::input_output_error::pass_further(),
         crimson::ct_error::assert_all("invalid error")
       );
     });
+  }).si_then([this, FNAME, &tref] {
+    auto allocated_extents = tref.get_valid_pre_alloc_list();
+    auto num_extents = allocated_extents.size();
+    SUBTRACET(seastore_t, "process {} allocated extents", tref, num_extents);
+    return epm->write_preallocated_ool_extents(tref, allocated_extents
+    ).handle_error_interruptible(
+      crimson::ct_error::input_output_error::pass_further(),
+      crimson::ct_error::assert_all("invalid error")
+    );
   }).si_then([this, FNAME, &tref] {
     SUBTRACET(seastore_t, "about to prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
@@ -629,17 +640,27 @@ TransactionManagerRef make_transaction_manager(
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
+  auto rbs = std::make_unique<RBMDeviceGroup>();
   auto backref_manager = create_backref_manager(*cache);
 
   auto p_backend_type = primary_device->get_backend_type();
 
   if (p_backend_type == backend_type_t::SEGMENTED) {
     sms->add_segment_manager(static_cast<SegmentManager*>(primary_device));
+  } else {
+    auto rbm = std::make_unique<BlockRBManager>(
+      static_cast<RBMDevice*>(primary_device), "", is_test);
+    rbs->add_rb_manager(std::move(rbm));
   }
 
   for (auto &p_dev : secondary_devices) {
-    ceph_assert(p_dev->get_backend_type() == backend_type_t::SEGMENTED);
-    sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
+    if (p_dev->get_backend_type() == backend_type_t::SEGMENTED) {
+      sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
+    } else {
+      auto rbm = std::make_unique<BlockRBManager>(
+	static_cast<RBMDevice*>(p_dev), "", is_test);
+      rbs->add_rb_manager(std::move(rbm));
+    }
   }
 
   auto journal_type = p_backend_type;
@@ -680,30 +701,33 @@ TransactionManagerRef make_transaction_manager(
       *backref_manager, trimmer_config,
       journal_type, roll_start, roll_size);
 
-  auto segment_cleaner = SegmentCleaner::create(
-    cleaner_config,
-    std::move(sms),
-    *backref_manager,
-    cleaner_is_detailed);
+  AsyncCleanerRef cleaner;
+  JournalRef journal;
 
   if (journal_type == journal_type_t::SEGMENTED) {
+    cleaner = SegmentCleaner::create(
+      cleaner_config,
+      std::move(sms),
+      *backref_manager,
+      cleaner_is_detailed);
+    auto segment_cleaner = static_cast<SegmentCleaner*>(cleaner.get());
     cache->set_segment_provider(*segment_cleaner);
     segment_cleaner->set_journal_trimmer(*journal_trimmer);
-  }
-
-  JournalRef journal;
-  if (journal_type == journal_type_t::SEGMENTED) {
     journal = journal::make_segmented(
       *segment_cleaner,
       *journal_trimmer);
   } else {
+    cleaner = RBMCleaner::create(
+      std::move(rbs),
+      *backref_manager,
+      cleaner_is_detailed);
     journal = journal::make_circularbounded(
       *journal_trimmer,
       static_cast<random_block_device::RBMDevice*>(primary_device),
       "");
   }
 
-  epm->init(std::move(journal_trimmer), std::move(segment_cleaner));
+  epm->init(std::move(journal_trimmer), std::move(cleaner));
   epm->set_primary_device(primary_device);
 
   return std::make_unique<TransactionManager>(

@@ -961,7 +961,7 @@ COMMAND("osd force-create-pg "
 COMMAND("osd pg-temp "
 	"name=pgid,type=CephPgid "
 	"name=id,type=CephOsdName,n=N,req=false",
-	"set pg_temp mapping pgid:[<id> [<id>...]] (developers only)",
+	"set pg_temp mapping <pgid>:[<id> [<id>...]] (developers only)",
         "osd", "rw")
 COMMAND("osd pg-upmap "
 	"name=pgid,type=CephPgid "
@@ -980,6 +980,15 @@ COMMAND("osd pg-upmap-items "
 COMMAND("osd rm-pg-upmap-items "
 	"name=pgid,type=CephPgid",
 	"clear pg_upmap_items mapping for <pgid> (developers only)",
+        "osd", "rw")
+COMMAND("osd pg-upmap-primary "
+	"name=pgid,type=CephPgid "
+	"name=id,type=CephOsdName ",
+	"set pg primary osd <pgid>:<id> (id (osd) must be part of pgid)",
+        "osd", "rw")
+COMMAND("osd rm-pg-upmap-primary "
+	"name=pgid,type=CephPgid ",
+	"clear pg primary setting for <pgid>",
         "osd", "rw")
 COMMAND("osd primary-temp "
 	"name=pgid,type=CephPgid "

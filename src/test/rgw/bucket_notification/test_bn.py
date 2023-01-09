@@ -29,7 +29,6 @@ from . import(
 
 from .api import PSTopicS3, \
     PSNotificationS3, \
-    delete_all_s3_topics, \
     delete_all_objects, \
     put_object_tagging, \
     admin
@@ -476,6 +475,7 @@ def stop_kafka_receiver(receiver, task):
 def get_ip():
     return 'localhost'
 
+
 def get_ip_http():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -485,6 +485,7 @@ def get_ip_http():
     finally:
         s.close()
     return ip
+
 
 def connection():
     hostname = get_config_host()
@@ -499,14 +500,16 @@ def connection():
 
     return conn
 
+
 def connection2():
-    vstart_access_key = '0555b35654ad1656d804'
-    vstart_secret_key = 'h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
-    hostname = get_ip()
+    hostname = get_config_host()
+    port_no = 8001
+    vstart_access_key = get_access_key()
+    vstart_secret_key = get_secret_key()
 
     conn = S3Connection(aws_access_key_id=vstart_access_key,
-                      aws_secret_access_key=vstart_secret_key,
-                      is_secure=False, port=8001, host=hostname,
+                  aws_secret_access_key=vstart_secret_key,
+                      is_secure=False, port=port_no, host=hostname, 
                       calling_format='boto.s3.connection.OrdinaryCallingFormat')
 
     return conn
@@ -517,39 +520,55 @@ def connection2():
 ##############
 
 
-@attr('modification_required')
+@attr('basic_test')
 def test_ps_s3_topic_on_master():
     """ test s3 topics set/get/delete on master """
-    return SkipTest('Get tenant function required.')
-
+    
+    access_key = str(time.time())
+    secret_key = str(time.time())
+    uid = 'superman' + str(time.time())
+    tenant = 'kaboom'
+    _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])  
+    assert_equal(result, 0)
+    conn = S3Connection(aws_access_key_id=access_key,
+                  aws_secret_access_key=secret_key,
+                      is_secure=False, port=get_config_port(), host=get_config_host(), 
+                      calling_format='boto.s3.connection.OrdinaryCallingFormat')
     zonegroup = 'default' 
     bucket_name = gen_bucket_name()
-    conn = connection()
     topic_name = bucket_name + TOPIC_SUFFIX
-
-    # clean all topics
-    delete_all_s3_topics(conn, zonegroup)
 
     # create s3 topics
     endpoint_address = 'amqp://127.0.0.1:7001/vhost_1'
     endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
     topic_conf1 = PSTopicS3(conn, topic_name+'_1', zonegroup, endpoint_args=endpoint_args)
+    # clean all topics
+    try:
+        result = topic_conf1.get_list()[0]['ListTopicsResponse']['ListTopicsResult']['Topics']
+        topics = []
+        if result is not None:
+            topics = result['member']
+        for topic in topics:
+            topic_conf1.del_config(topic_arn=topic['TopicArn'])
+    except Exception as err:
+        print('failed to do topic cleanup: ' + str(err))
+
     topic_arn = topic_conf1.set_config()
     assert_equal(topic_arn,
-                 'arn:aws:sns:' + zonegroup + ':' + get_tenant() + ':' + topic_name + '_1')
+                 'arn:aws:sns:' + zonegroup + ':' + tenant + ':' + topic_name + '_1')
 
     endpoint_address = 'http://127.0.0.1:9001'
     endpoint_args = 'push-endpoint='+endpoint_address
     topic_conf2 = PSTopicS3(conn, topic_name+'_2', zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf2.set_config()
     assert_equal(topic_arn,
-                 'arn:aws:sns:' + zonegroup + ':' + get_tenant() + ':' + topic_name + '_2')
+                 'arn:aws:sns:' + zonegroup + ':' + tenant + ':' + topic_name + '_2')
     endpoint_address = 'http://127.0.0.1:9002'
     endpoint_args = 'push-endpoint='+endpoint_address
     topic_conf3 = PSTopicS3(conn, topic_name+'_3', zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf3.set_config()
     assert_equal(topic_arn,
-                 'arn:aws:sns:' + zonegroup + ':' + get_tenant() + ':' + topic_name + '_3')
+                 'arn:aws:sns:' + zonegroup + ':' + tenant + ':' + topic_name + '_3')
 
     # get topic 3
     result, status = topic_conf3.get_config()
@@ -573,15 +592,93 @@ def test_ps_s3_topic_on_master():
 
     # delete topics
     result = topic_conf2.del_config()
-    # TODO: should be 200OK
-    # assert_equal(status, 200)
+    assert_equal(status, 200)
     result = topic_conf3.del_config()
-    # TODO: should be 200OK
-    # assert_equal(status, 200)
+    assert_equal(status, 200)
 
     # get topic list, make sure it is empty
     result, status = topic_conf1.get_list()
     assert_equal(result['ListTopicsResponse']['ListTopicsResult']['Topics'], None)
+
+
+@attr('basic_test')
+def test_ps_s3_topic_admin_on_master():
+    """ test s3 topics set/get/delete on master """
+    
+    access_key = str(time.time())
+    secret_key = str(time.time())
+    uid = 'superman' + str(time.time())
+    tenant = 'kaboom'
+    _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])  
+    assert_equal(result, 0)
+    conn = S3Connection(aws_access_key_id=access_key,
+                  aws_secret_access_key=secret_key,
+                      is_secure=False, port=get_config_port(), host=get_config_host(), 
+                      calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    zonegroup = 'default' 
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topics
+    endpoint_address = 'amqp://127.0.0.1:7001/vhost_1'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf1 = PSTopicS3(conn, topic_name+'_1', zonegroup, endpoint_args=endpoint_args)
+    # clean all topics
+    try:
+        result = topic_conf1.get_list()[0]['ListTopicsResponse']['ListTopicsResult']['Topics']
+        topics = []
+        if result is not None:
+            topics = result['member']
+        for topic in topics:
+            topic_conf1.del_config(topic_arn=topic['TopicArn'])
+    except Exception as err:
+        print('failed to do topic cleanup: ' + str(err))
+
+    topic_arn1 = topic_conf1.set_config()
+    assert_equal(topic_arn1,
+                 'arn:aws:sns:' + zonegroup + ':' + tenant + ':' + topic_name + '_1')
+
+    endpoint_address = 'http://127.0.0.1:9001'
+    endpoint_args = 'push-endpoint='+endpoint_address
+    topic_conf2 = PSTopicS3(conn, topic_name+'_2', zonegroup, endpoint_args=endpoint_args)
+    topic_arn2 = topic_conf2.set_config()
+    assert_equal(topic_arn2,
+                 'arn:aws:sns:' + zonegroup + ':' + tenant + ':' + topic_name + '_2')
+    endpoint_address = 'http://127.0.0.1:9002'
+    endpoint_args = 'push-endpoint='+endpoint_address
+    topic_conf3 = PSTopicS3(conn, topic_name+'_3', zonegroup, endpoint_args=endpoint_args)
+    topic_arn3 = topic_conf3.set_config()
+    assert_equal(topic_arn3,
+                 'arn:aws:sns:' + zonegroup + ':' + tenant + ':' + topic_name + '_3')
+
+    # get topic 3 via commandline
+    result = admin(['topic', 'get', '--topic', topic_name+'_3', '--tenant', tenant])  
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['topic']['arn'], topic_arn3)
+
+    # delete topic 3
+    _, result = admin(['topic', 'rm', '--topic', topic_name+'_3', '--tenant', tenant])  
+    assert_equal(result, 0)
+
+    # try to get a deleted topic
+    _, result = admin(['topic', 'get', '--topic', topic_name+'_3', '--tenant', tenant])  
+    assert_equal(result, 2)
+
+    # get the remaining 2 topics
+    result = admin(['topic', 'list', '--tenant', tenant])  
+    parsed_result = json.loads(result[0])
+    assert_equal(len(parsed_result['topics']), 2)
+
+    # delete topics
+    _, result = admin(['topic', 'rm', '--topic', topic_name+'_1', '--tenant', tenant])  
+    assert_equal(result, 0)
+    _, result = admin(['topic', 'rm', '--topic', topic_name+'_2', '--tenant', tenant])  
+    assert_equal(result, 0)
+
+    # get topic list, make sure it is empty
+    result = admin(['topic', 'list', '--tenant', tenant])  
+    parsed_result = json.loads(result[0])
+    assert_equal(len(parsed_result['topics']), 0)
 
 
 @attr('modification_required')
@@ -2165,9 +2262,10 @@ def test_ps_s3_multipart_on_master():
     # delete the bucket
     conn.delete_bucket(bucket_name)
 
+META_PREFIX = 'x-amz-meta-'
 
 @attr('amqp_test')
-def test_ps_s3_metadata_on_master():
+def test_ps_s3_metadata_filter_on_master():
     """ test s3 notification of metadata on master """
 
     hostname = get_ip()
@@ -2177,9 +2275,9 @@ def test_ps_s3_metadata_on_master():
     # create bucket
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(bucket_name)
-    topic_name = bucket_name + TOPIC_SUFFIX
+    topic_name = bucket_name + TOPIC_SUFFIX 
 
-    # start amqp receiver
+    # start amqp receivers
     exchange = 'ex1'
     task, receiver = create_amqp_receiver_thread(exchange, topic_name)
     task.start()
@@ -2193,18 +2291,17 @@ def test_ps_s3_metadata_on_master():
     notification_name = bucket_name + NOTIFICATION_SUFFIX
     meta_key = 'meta1'
     meta_value = 'This is my metadata value'
-    meta_prefix = 'x-amz-meta-'
-    topic_conf_list = [{'Id': notification_name,'TopicArn': topic_arn,
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
         'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
         'Filter': {
             'Metadata': {
-                'FilterRules': [{'Name': meta_prefix+meta_key, 'Value': meta_value}]
+                'FilterRules': [{'Name': META_PREFIX+meta_key, 'Value': meta_value}]
             }
         }
     }]
 
     s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
-    response, status = s3_notification_conf.set_config()
+    _, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
 
     expected_keys = []
@@ -2224,6 +2321,7 @@ def test_ps_s3_metadata_on_master():
     # but override the metadata value
     key_name = 'another_copy_of_foo'
     bucket.copy_key(key_name, bucket.name, key.name, metadata={meta_key: 'kaboom'})
+    # this key is not in the expected keys due to the different meta value
 
     # create objects in the bucket using multi-part upload
     fp = tempfile.NamedTemporaryFile(mode='w+b')
@@ -2247,7 +2345,7 @@ def test_ps_s3_metadata_on_master():
     time.sleep(5)
     # check amqp receiver
     events = receiver.get_and_reset_events()
-    assert_equal(len(events), 3) # PUT, COPY, Multipart Complete
+    assert_equal(len(events), len(expected_keys))
     for event in events:
         assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
 
@@ -2257,7 +2355,104 @@ def test_ps_s3_metadata_on_master():
     print('wait for 5sec for the messages...')
     time.sleep(5)
     # check amqp receiver
-    #assert_equal(len(receiver.get_and_reset_events()), len(expected_keys))
+    events = receiver.get_and_reset_events()
+    assert_equal(len(events), len(expected_keys))
+    for event in events:
+        assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
+
+    # cleanup
+    stop_amqp_receiver(receiver, task)
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+
+
+@attr('amqp_test')
+def test_ps_s3_metadata_on_master():
+    """ test s3 notification of metadata on master """
+
+    hostname = get_ip()
+    conn = connection()
+    zonegroup = 'default'
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # start amqp receivers
+    exchange = 'ex1'
+    task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+    task.start()
+
+    # create s3 topic
+    endpoint_address = 'amqp://' + hostname
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=routable'
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    meta_key = 'meta1'
+    meta_value = 'This is my metadata value'
+    meta_prefix = 'x-amz-meta-'
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+    }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket
+    key_name = 'foo'
+    key = bucket.new_key(key_name)
+    key.set_metadata(meta_key, meta_value)
+    key.set_contents_from_string('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    # update the object
+    another_meta_key = 'meta2'
+    key.set_metadata(another_meta_key, meta_value)
+    key.set_contents_from_string('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
+
+    # create objects in the bucket using COPY
+    key_name = 'copy_of_foo'
+    bucket.copy_key(key_name, bucket.name, key.name)
+    
+    # create objects in the bucket using multi-part upload
+    fp = tempfile.NamedTemporaryFile(mode='w+b')
+    chunk_size = 1024*1024*5 # 5MB
+    object_size = 10*chunk_size
+    content = bytearray(os.urandom(object_size))
+    fp.write(content)
+    fp.flush()
+    fp.seek(0)
+    key_name = 'multipart_foo'
+    uploader = bucket.initiate_multipart_upload(key_name,
+            metadata={meta_key: meta_value})
+    for i in range(1,5):
+        uploader.upload_part_from_file(fp, i, size=chunk_size)
+        fp.seek(i*chunk_size)
+    uploader.complete_upload()
+    fp.close()
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+    # check amqp receiver
+    events = receiver.get_and_reset_events()
+    for event in events:
+        value = [x['val'] for x in event['Records'][0]['s3']['object']['metadata'] if x['key'] == META_PREFIX+meta_key]
+        assert_equal(value[0], meta_value)
+
+    # delete objects
+    for key in bucket.list():
+        key.delete()
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+    # check amqp receiver
+    events = receiver.get_and_reset_events()
+    for event in events:
+        value = [x['val'] for x in event['Records'][0]['s3']['object']['metadata'] if x['key'] == META_PREFIX+meta_key]
+        assert_equal(value[0], meta_value)
 
     # cleanup
     stop_amqp_receiver(receiver, task)

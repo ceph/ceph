@@ -83,23 +83,23 @@ To deploy RGWs serving the multisite *myorg* realm and the *us-east-1* zone on
 
 .. prompt:: bash #
 
-   ceph orch apply rgw east --realm=myorg --zone=us-east-1 --placement="2 myhost1 myhost2"
+   ceph orch apply rgw east --realm=myorg --zonegroup=us-east-zg-1 --zone=us-east-1 --placement="2 myhost1 myhost2"
 
 Note that in a multisite situation, cephadm only deploys the daemons.  It does not create
-or update the realm or zone configurations.  To create a new realm and zone, you need to do
-something like:
+or update the realm or zone configurations.  To create a new realms, zones and zonegroups
+you can use :ref:`mgr-rgw-module` or manually using something like:
 
 .. prompt:: bash #
 
-  radosgw-admin realm create --rgw-realm=<realm-name> --default
-  
-.. prompt:: bash #
-
-  radosgw-admin zonegroup create --rgw-zonegroup=<zonegroup-name>  --master --default
+  radosgw-admin realm create --rgw-realm=<realm-name>
 
 .. prompt:: bash #
 
-  radosgw-admin zone create --rgw-zonegroup=<zonegroup-name> --rgw-zone=<zone-name> --master --default
+  radosgw-admin zonegroup create --rgw-zonegroup=<zonegroup-name>  --master
+
+.. prompt:: bash #
+
+  radosgw-admin zone create --rgw-zonegroup=<zonegroup-name> --rgw-zone=<zone-name> --master
 
 .. prompt:: bash #
 
@@ -164,8 +164,10 @@ for RGW with a minimum set of configuration options.  The orchestrator will
 deploy and manage a combination of haproxy and keepalived to provide load
 balancing on a floating virtual IP.
 
-If SSL is used, then SSL must be configured and terminated by the ingress service
-and not RGW itself.
+If the RGW service is configured with SSL enabled, then the ingress service
+will use the `ssl` and `verify none` options in the backend configuration.
+Trust verification is disabled because the backends are accessed by IP 
+address instead of FQDN.
 
 .. image:: ../../images/HAProxy_for_RGW.svg
 
@@ -186,8 +188,7 @@ between all the RGW daemons available.
 Prerequisites
 -------------
 
-* An existing RGW service, without SSL.  (If you want SSL service, the certificate
-  should be configured on the ingress service, not the RGW service.)
+* An existing RGW service.
 
 Deploying
 ---------

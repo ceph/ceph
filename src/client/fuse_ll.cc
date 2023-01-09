@@ -1603,11 +1603,26 @@ int CephFuse::Handle::loop()
   auto fuse_multithreaded = client->cct->_conf.get_val<bool>(
     "fuse_multithreaded");
   if (fuse_multithreaded) {
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 1)
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 12)
     {
-      struct fuse_loop_config conf = { 0 };
+      struct fuse_loop_config *conf = fuse_loop_cfg_create();
+      ceph_assert(conf != nullptr);
 
-      conf.clone_fd = opts.clone_fd;
+      fuse_loop_cfg_set_clone_fd(conf, opts.clone_fd);
+      fuse_loop_cfg_set_idle_threads(conf, opts.max_idle_threads);
+      fuse_loop_cfg_set_max_threads(conf, opts.max_threads);
+
+      int r = fuse_session_loop_mt(se, conf);
+
+      fuse_loop_cfg_destroy(conf);
+      return r;
+    }
+#elif FUSE_VERSION >= FUSE_MAKE_VERSION(3, 1)
+    {
+      struct fuse_loop_config conf = {
+        clone_fd: opts.clone_fd,
+        max_idle_threads: opts.max_idle_threads
+      };
       return fuse_session_loop_mt(se, &conf);
     }
 #elif FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)

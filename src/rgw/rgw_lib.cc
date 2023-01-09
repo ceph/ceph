@@ -204,14 +204,14 @@ namespace rgw {
     rgw_env.set("HTTP_HOST", "");
 
     /* XXX and -then- bloat up req_state with string copies from it */
-    req_state rstate(req->cct, &rgw_env, req->id);
+    req_state rstate(req->cct, env, &rgw_env, req->id);
     req_state *s = &rstate;
 
     // XXX fix this
     s->cio = io;
 
     /* XXX and -then- stash req_state pointers everywhere they are needed */
-    ret = req->init(rgw_env, store, io, s);
+    ret = req->init(rgw_env, env.driver, io, s);
     if (ret < 0) {
       ldpp_dout(op, 10) << "failed to initialize request" << dendl;
       abort_req(s, op, ret);
@@ -307,7 +307,7 @@ namespace rgw {
               << e.what() << dendl;
     }
     if (should_log) {
-      rgw_log_op(nullptr /* !rest */, s, op, olog);
+      rgw_log_op(nullptr /* !rest */, s, op, env.olog);
     }
 
     int http_ret = s->err.http_ret;
@@ -347,7 +347,7 @@ namespace rgw {
 
     rgw_env.set("HTTP_HOST", "");
 
-    int ret = req->init(rgw_env, store, &io_ctx, s);
+    int ret = req->init(rgw_env, env.driver, &io_ctx, s);
     if (ret < 0) {
       ldpp_dout(op, 10) << "failed to initialize request" << dendl;
       abort_req(s, op, ret);
@@ -449,8 +449,9 @@ namespace rgw {
 
   int RGWLibFrontend::init()
   {
-    pprocess = new RGWLibProcess(g_ceph_context, &env,
-				 g_conf()->rgw_thread_pool_size, conf);
+    std::string uri_prefix; // empty
+    pprocess = new RGWLibProcess(g_ceph_context, env,
+				 g_conf()->rgw_thread_pool_size, uri_prefix, conf);
     return 0;
   }
 
@@ -499,7 +500,7 @@ namespace rgw {
     main.init_http_clients();
 
     main.init_storage();
-    if (! main.get_store()) {
+    if (! main.get_driver()) {
       mutex.lock();
       init_timer.cancel_all_events();
       init_timer.shutdown();
@@ -544,10 +545,10 @@ namespace rgw {
     return 0;
   } /* RGWLib::stop() */
 
-  int RGWLibIO::set_uid(rgw::sal::Store* store, const rgw_user& uid)
+  int RGWLibIO::set_uid(rgw::sal::Driver* driver, const rgw_user& uid)
   {
-    const DoutPrefix dp(store->ctx(), dout_subsys, "librgw: ");
-    std::unique_ptr<rgw::sal::User> user = store->get_user(uid);
+    const DoutPrefix dp(driver->ctx(), dout_subsys, "librgw: ");
+    std::unique_ptr<rgw::sal::User> user = driver->get_user(uid);
     /* object exists, but policy is broken */
     int ret = user->load_user(&dp, null_yield);
     if (ret < 0) {
@@ -561,7 +562,7 @@ namespace rgw {
   int RGWLibRequest::read_permissions(RGWOp* op, optional_yield y) {
     /* bucket and object ops */
     int ret =
-      rgw_build_bucket_policies(op, g_rgwlib->get_store(), get_state(), y);
+      rgw_build_bucket_policies(op, g_rgwlib->get_driver(), get_state(), y);
     if (ret < 0) {
       ldpp_dout(op, 10) << "read_permissions (bucket policy) on "
 				  << get_state()->bucket << ":"
@@ -572,7 +573,7 @@ namespace rgw {
 	ret = -EACCES;
     } else if (! only_bucket()) {
       /* object ops */
-      ret = rgw_build_object_policies(op, g_rgwlib->get_store(), get_state(),
+      ret = rgw_build_object_policies(op, g_rgwlib->get_driver(), get_state(),
 				      op->prefetch_data(), y);
       if (ret < 0) {
 	ldpp_dout(op, 10) << "read_permissions (object policy) on"

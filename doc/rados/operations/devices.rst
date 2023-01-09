@@ -1,4 +1,3 @@
-
 .. _devices:
 
 Device Management
@@ -11,19 +10,25 @@ provide tools to predict and/or automatically respond to hardware failure.
 Device tracking
 ---------------
 
-You can query which storage devices are in use with::
+You can query which storage devices are in use with:
 
-  ceph device ls
+.. prompt:: bash $
 
-You can also list devices by daemon or by host::
+   ceph device ls
 
-  ceph device ls-by-daemon <daemon>
-  ceph device ls-by-host <host>
+You can also list devices by daemon or by host:
+
+.. prompt:: bash $
+
+   ceph device ls-by-daemon <daemon>
+   ceph device ls-by-host <host>
 
 For any individual device, you can query information about its
-location and how it is being consumed with::
+location and how it is being consumed with:
 
-  ceph device info <devid>
+.. prompt:: bash $
+
+   ceph device info <devid>
 
 Identifying physical devices
 ----------------------------
@@ -34,18 +39,22 @@ failed disks easy and less error-prone.  Use the following command::
   device light on|off <devid> [ident|fault] [--force]
 
 The ``<devid>`` parameter is the device identification. You can obtain this
-information using the following command::
+information using the following command:
 
-  ceph device ls
+.. prompt:: bash $
+
+   ceph device ls
 
 The ``[ident|fault]`` parameter is used to set the kind of light to blink.
 By default, the `identification` light is used.
 
 .. note::
    This command needs the Cephadm or the Rook `orchestrator <https://docs.ceph.com/docs/master/mgr/orchestrator/#orchestrator-cli-module>`_ module enabled.
-   The orchestrator module enabled is shown by executing the following command::
+   The orchestrator module enabled is shown by executing the following command:
 
-     ceph orch status
+   .. prompt:: bash $
+
+      ceph orch status
 
 The command behind the scene to blink the drive LEDs is `lsmcli`. If you need
 to customize this command you can configure this via a Jinja2 template::
@@ -77,40 +86,54 @@ or unrecoverable read errors.  Other device types like SAS and NVMe
 implement a similar set of metrics (via slightly different standards).
 All of these can be collected by Ceph via the ``smartctl`` tool.
 
-You can enable or disable health monitoring with::
+You can enable or disable health monitoring with:
 
-  ceph device monitoring on
+.. prompt:: bash $
 
-or::
+   ceph device monitoring on
 
-  ceph device monitoring off
+or:
+
+.. prompt:: bash $
+
+   ceph device monitoring off
 
 
 Scraping
 --------
 
-If monitoring is enabled, metrics will automatically be scraped at regular intervals.  That interval can be configured with::
+If monitoring is enabled, metrics will automatically be scraped at regular intervals.  That interval can be configured with:
 
-  ceph config set mgr mgr/devicehealth/scrape_frequency <seconds>
+.. prompt:: bash $
+
+   ceph config set mgr mgr/devicehealth/scrape_frequency <seconds>
 
 The default is to scrape once every 24 hours.
 
-You can manually trigger a scrape of all devices with::
+You can manually trigger a scrape of all devices with:
+   
+.. prompt:: bash $
 
-  ceph device scrape-health-metrics
+   ceph device scrape-health-metrics
 
-A single device can be scraped with::
+A single device can be scraped with:
 
-  ceph device scrape-health-metrics <device-id>
+.. prompt:: bash $
 
-Or a single daemon's devices can be scraped with::
+   ceph device scrape-health-metrics <device-id>
 
-  ceph device scrape-daemon-health-metrics <who>
+Or a single daemon's devices can be scraped with:
+
+.. prompt:: bash $
+
+   ceph device scrape-daemon-health-metrics <who>
 
 The stored health metrics for a device can be retrieved (optionally
-for a specific timestamp) with::
+for a specific timestamp) with:
 
-  ceph device get-health-metrics <devid> [sample-timestamp]
+.. prompt:: bash $
+
+   ceph device get-health-metrics <devid> [sample-timestamp]
 
 Failure prediction
 ------------------
@@ -121,29 +144,39 @@ health metrics it collects.  There are three modes:
 * *none*: disable device failure prediction.
 * *local*: use a pre-trained prediction model from the ceph-mgr daemon
 
-The prediction mode can be configured with::
+The prediction mode can be configured with:
 
-  ceph config set global device_failure_prediction_mode <mode>
+.. prompt:: bash $
+
+   ceph config set global device_failure_prediction_mode <mode>
 
 Prediction normally runs in the background on a periodic basis, so it
 may take some time before life expectancy values are populated.  You
-can see the life expectancy of all devices in output from::
+can see the life expectancy of all devices in output from:
 
-  ceph device ls
+.. prompt:: bash $
 
-You can also query the metadata for a specific device with::
+   ceph device ls
 
-  ceph device info <devid>
+You can also query the metadata for a specific device with:
 
-You can explicitly force prediction of a device's life expectancy with::
+.. prompt:: bash $
 
-  ceph device predict-life-expectancy <devid>
+   ceph device info <devid>
+
+You can explicitly force prediction of a device's life expectancy with:
+
+.. prompt:: bash $
+
+   ceph device predict-life-expectancy <devid>
 
 If you are not using Ceph's internal device failure prediction but
 have some external source of information about device failures, you
-can inform Ceph of a device's life expectancy with::
+can inform Ceph of a device's life expectancy with:
 
-  ceph device set-life-expectancy <devid> <from> [<to>]
+.. prompt:: bash $
+
+   ceph device set-life-expectancy <devid> <from> [<to>]
 
 Life expectancies are expressed as a time interval so that
 uncertainty can be expressed in the form of a wide interval. The
@@ -156,9 +189,11 @@ The ``mgr/devicehealth/warn_threshold`` controls how soon an expected
 device failure must be before we generate a health warning.
 
 The stored life expectancy of all devices can be checked, and any
-appropriate health alerts generated, with::
+appropriate health alerts generated, with:
 
-  ceph device check-health
+.. prompt:: bash $
+
+   ceph device check-health
 
 Automatic Mitigation
 --------------------

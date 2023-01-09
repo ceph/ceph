@@ -364,7 +364,9 @@ Different deployment scenarios
 Single host
 -----------
 
-To configure a Ceph cluster to run on a single host, use the ``--single-host-defaults`` flag when bootstrapping. For use cases of this, see :ref:`one-node-cluster`.
+To configure a Ceph cluster to run on a single host, use the
+``--single-host-defaults`` flag when bootstrapping. For use cases of this, see
+:ref:`one-node-cluster`.
 
 The ``--single-host-defaults`` flag sets the following configuration options::
 
@@ -372,30 +374,68 @@ The ``--single-host-defaults`` flag sets the following configuration options::
   global/osd_pool_default_size = 2
   mgr/mgr_standby_modules = False
 
-For more information on these options, see :ref:`one-node-cluster` and ``mgr_standby_modules`` in :ref:`mgr-administrator-guide`.
+For more information on these options, see :ref:`one-node-cluster` and
+``mgr_standby_modules`` in :ref:`mgr-administrator-guide`.
+
+.. _cephadm-airgap:
 
 Deployment in an isolated environment
 -------------------------------------
 
-You can install Cephadm in an isolated environment by using a custom container registry. You can either configure Podman or Docker to use an insecure registry, or make the registry secure. Ensure your container image is inside the registry and that you have access to all hosts you wish to add to the cluster.
+You might need to install cephadm in an environment that is not connected
+directly to the internet (such an environment is also called an "isolated
+environment"). This can be done if a custom container registry is used. Either
+of two kinds of custom container registry can be used in this scenario: (1) a
+Podman-based or Docker-based insecure registry, or (2) a secure registry.
 
-Run a local container registry:
+The practice of installing software on systems that are not connected directly
+to the internet is called "airgapping" and registries that are not connected
+directly to the internet are referred to as "airgapped".
 
-.. prompt:: bash #
+Make sure that your container image is inside the registry. Make sure that you
+have access to all hosts that you plan to add to the cluster.
 
-   podman run --privileged -d --name registry -p 5000:5000 -v /var/lib/registry:/var/lib/registry --restart=always registry:2
+#. Run a local container registry:
 
-If you are using an insecure registry, configure Podman or Docker with the hostname and port where the registry is running.
+   .. prompt:: bash #
 
-.. note:: For every host which accesses the local insecure registry, you will need to repeat this step on the host.
+      podman run --privileged -d --name registry -p 5000:5000 -v /var/lib/registry:/var/lib/registry --restart=always registry:2
 
-Next, push your container image to your local registry.
+#. If you are using an insecure registry, configure Podman or Docker with the
+   hostname and port where the registry is running.
 
-Then run bootstrap using the ``--image`` flag with your container image. For example:
+   .. note:: You must repeat this step for every host that accesses the local
+             insecure registry.
 
-.. prompt:: bash #
+#. Push your container image to your local registry. Here are some acceptable
+   kinds of container images: 
 
-   cephadm --image *<hostname>*:5000/ceph/ceph bootstrap --mon-ip *<mon-ip>*
+   * Ceph container image. See :ref:`containers`.
+   * Prometheus container image
+   * Node exporter container image
+   * Grafana container image
+   * Alertmanager container image
 
+#. Create a temporary configuration file to store the names of the monitoring
+   images. (See :ref:`cephadm_monitoring-images`):
+
+   .. prompt:: bash $
+
+      cat <<EOF > initial-ceph.conf
+
+   ::
+
+      [mgr]
+      mgr/cephadm/container_image_prometheus = *<hostname>*:5000/prometheus
+      mgr/cephadm/container_image_node_exporter = *<hostname>*:5000/node_exporter
+      mgr/cephadm/container_image_grafana = *<hostname>*:5000/grafana
+      mgr/cephadm/container_image_alertmanager = *<hostname>*:5000/alertmanger
+
+#. Run bootstrap using the ``--image`` flag and pass the name of your
+   container image as the argument of the image flag. For example:
+
+   .. prompt:: bash #
+
+      cephadm --image *<hostname>*:5000/ceph/ceph bootstrap --mon-ip *<mon-ip>*
 
 .. _cluster network: ../rados/configuration/network-config-ref#cluster-network

@@ -168,6 +168,8 @@ rgw_http_errors rgw_http_iam_errors({
 using namespace std;
 using namespace ceph::crypto;
 
+thread_local bool is_asio_thread = false;
+
 rgw_err::
 rgw_err()
 {
@@ -267,8 +269,9 @@ void req_info::rebuild_from(req_info& src)
 }
 
 
-req_state::req_state(CephContext* _cct, RGWEnv* e, uint64_t id)
-  : cct(_cct), info(_cct, e), id(id)
+req_state::req_state(CephContext* _cct, const RGWProcessEnv& penv,
+                     RGWEnv* e, uint64_t id)
+  : cct(_cct), penv(penv), info(_cct, e), id(id)
 {
   enable_ops_log = e->get_enable_ops_log();
   enable_usage_log = e->get_enable_usage_log();
@@ -3057,3 +3060,13 @@ rgw_global_init(const std::map<std::string,std::string> *defaults,
   // Finish global init, indicating we already ran pre-init
   return global_init(defaults, args, module_type, code_env, flags, false);
 }
+
+void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
+{
+  write_version.ver = 1;
+#define TAG_LEN 24
+
+  write_version.tag.clear();
+  append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
+}
+

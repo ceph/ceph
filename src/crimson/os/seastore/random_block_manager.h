@@ -44,6 +44,12 @@ struct rbm_metadata_header_t {
 
 };
 
+enum class rbm_extent_state_t {
+  FREE,		// not allocated
+  RESERVED,	// extent is reserved by alloc_new_extent, but is not persistent
+  ALLOCATED,	// extent is persistent
+};
+
 class Device;
 using rbm_abs_addr = uint64_t;
 constexpr rbm_abs_addr RBM_START_ADDRESS = 0;
@@ -84,26 +90,21 @@ public:
     >;
   using allocate_ret = allocate_ertr::future<paddr_t>;
   // allocator, return start addr of allocated blocks
-  virtual allocate_ret alloc_extent(Transaction &t, size_t size) = 0;
+  virtual paddr_t alloc_extent(size_t size) = 0;
 
-  using abort_allocation_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg
-    >;
-  virtual abort_allocation_ertr::future<> abort_allocation(Transaction &t) = 0;
+  virtual void mark_space_used(paddr_t paddr, size_t len) = 0;
+  virtual void mark_space_free(paddr_t paddr, size_t len) = 0;
 
-  using complete_allocation_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange
-    >;
-  virtual write_ertr::future<> complete_allocation(Transaction &t) = 0;
+  virtual void complete_allocation(paddr_t addr, size_t size) = 0;
 
   virtual size_t get_size() const = 0;
   virtual extent_len_t get_block_size() const = 0;
   virtual uint64_t get_free_blocks() const = 0;
   virtual device_id_t get_device_id() const = 0;
+  virtual const seastore_meta_t &get_meta() const = 0;
+  virtual Device* get_device() = 0;
+  virtual paddr_t get_start() = 0;
+  virtual rbm_extent_state_t get_extent_state(paddr_t addr, size_t size) = 0;
   virtual ~RandomBlockManager() {}
 };
 using RandomBlockManagerRef = std::unique_ptr<RandomBlockManager>;
@@ -122,3 +123,7 @@ std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)
 WRITE_CLASS_DENC_BOUNDED(
   crimson::os::seastore::rbm_metadata_header_t
 )
+
+#if FMT_VERSION >= 90000
+template<> struct fmt::formatter<crimson::os::seastore::rbm_metadata_header_t> : fmt::ostream_formatter {};
+#endif

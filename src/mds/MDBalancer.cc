@@ -1243,8 +1243,7 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
     }
 
     // merge?
-    if (dir->get_frag() != frag_t() && dir->should_merge() &&
-	merge_pending.count(dir->dirfrag()) == 0) {
+    if (dir->should_merge() && merge_pending.count(dir->dirfrag()) == 0) {
       queue_merge(dir);
     }
   }
