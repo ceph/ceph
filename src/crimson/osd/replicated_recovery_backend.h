@@ -6,6 +6,7 @@
 #include "crimson/common/interruptible_future.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/recovery_backend.h"
+#include "crimson/osd/object_metadata_helper.h"
 
 #include "messages/MOSDPGPull.h"
 #include "messages/MOSDPGPush.h"
