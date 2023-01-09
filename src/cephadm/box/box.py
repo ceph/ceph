@@ -6,6 +6,7 @@ import json
 import sys
 import host
 import osd
+from multiprocessing import Process, Pool
 from util import (
     BoxType,
     Config,
@@ -75,15 +76,15 @@ def image_exists(image_name: str):
 def get_ceph_image():
     print('Getting ceph image')
     engine = get_container_engine()
-    engine.run('pull {CEPH_IMAGE}')
+    engine.run(f'pull {CEPH_IMAGE}')
     # update
-    engine.run('build -t {CEPH_IMAGE} docker/ceph')
+    engine.run(f'build -t {CEPH_IMAGE} docker/ceph')
     if not os.path.exists('docker/ceph/image'):
         os.mkdir('docker/ceph/image')
 
     remove_ceph_image_tar()
 
-    engine.run('save {CEPH_IMAGE} -o {CEPH_IMAGE_TAR}')
+    engine.run(f'save {CEPH_IMAGE} -o {CEPH_IMAGE_TAR}')
     run_shell_command(f'chmod 777 {CEPH_IMAGE_TAR}')
     print('Ceph image added')
 
@@ -109,6 +110,11 @@ def check_selinux():
     if 'Disabled' not in selinux:
         print(colored('selinux should be disabled, please disable it if you '
                        'don\'t want unexpected behaviour.', Colors.WARNING))
+def dashboard_setup():
+    command = f'cd {DASHBOARD_PATH} && npm install'
+    run_shell_command(command)
+    command = f'cd {DASHBOARD_PATH} && npm run build'
+    run_shell_command(command)
 
 class Cluster(Target):
     _help = 'Manage docker cephadm boxes'
@@ -126,14 +132,31 @@ class Cluster(Target):
         self.parser.add_argument('--skip-monitoring-stack', action='store_true', help='skip monitoring stack')
         self.parser.add_argument('--skip-dashboard', action='store_true', help='skip dashboard')
         self.parser.add_argument('--expanded', action='store_true', help='deploy 3 hosts and 3 osds')
+        self.parser.add_argument('--jobs', type=int, help='Number of jobs scheduled in parallel')
 
     @ensure_outside_container
     def setup(self):
         check_cgroups()
         check_selinux()
 
-        get_ceph_image()
-        get_box_image()
+        targets = [
+                get_ceph_image,
+                get_box_image,
+                dashboard_setup
+        ]
+        results = []
+        jobs = Config.get('jobs')
+        if jobs:
+            jobs = int(jobs)
+        else:
+            jobs = None
+        pool = Pool(jobs)
+        for target in targets:
+            results.append(pool.apply_async(target))
+
+        for result in results:
+            result.wait()
+
 
     @ensure_outside_container
     def cleanup(self):
