@@ -40,6 +40,7 @@ function munge_ceph_spec_in {
     # http://rpm.org/user_doc/conditional_builds.html
     if $with_seastar; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
+        sed -i -e 's/%bcond_without cephfs_java/%bcond_with cephfs_java/g' $OUTFILE
     fi
     if $with_zbd; then
         sed -i -e 's/%bcond_with zbd/%bcond_without zbd/g' $OUTFILE
