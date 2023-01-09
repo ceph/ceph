@@ -1068,6 +1068,26 @@ int cls_rgw_lc_list(IoCtx& io_ctx, const string& oid,
   return r;
 }
 
+int cls_rgw_mp_upload_part_info_update(librados::IoCtx& io_ctx,
+                                       const std::string& oid,
+                                       const std::string& part_key,
+                                       const RGWUploadPartInfo& info)
+{
+  buffer::list in, out;
+  cls_rgw_mp_upload_part_info_update_op op;
+
+  // For now, there doesn't appear to be a need for an encoded
+  // result -- we might in future want to return a copy of the final
+  // RGWUploadPartInfo
+ 
+  op.part_key = part_key;
+  op.info = info;
+  encode(op, in);
+
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_MP_UPLOAD_PART_INFO_UPDATE, in, out);
+  return r;
+}
+
 void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry)
 {
   bufferlist in;
