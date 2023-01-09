@@ -581,3 +581,9 @@ void PGRecovery::on_backfill_reserved()
   // (but stopped one).
   start_backfill_recovery(BackfillState::Triggered{});
 }
+
+void PGRecovery::on_backfill_canceled()
+{
+  using BackfillState = crimson::osd::BackfillState;
+  start_backfill_recovery(BackfillState::Cancel{});
+}
