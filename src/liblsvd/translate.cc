@@ -548,6 +548,7 @@ public:
 	std::unique_lock lk(m);
 	while (!done)
 	    cv.wait(lk);
+	lk.unlock();
 	delete this;		// always call wait
     }
 
