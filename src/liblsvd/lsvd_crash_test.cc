@@ -282,17 +282,20 @@ int print_status(struct cfg *cfg) {
     auto cache = get_cache_filename(cfg);
     char buf[4096];
     int fd = open(cache.c_str(), O_RDONLY);
-    pread(fd, buf, sizeof(buf), 0);
+    if(pread(fd, buf, sizeof(buf), 0) < 0)
+	exit(1);
     auto super = (j_super*)buf;
     assert(super->magic == LSVD_MAGIC && super->type == LSVD_J_SUPER);
-    pread(fd, buf, sizeof(buf), super->write_super * 4096);
+    if (pread(fd, buf, sizeof(buf), super->write_super * 4096) < 0)
+	exit(1);
     auto w_super = (j_write_super*)buf;
     assert(w_super->magic == LSVD_MAGIC && w_super->type == LSVD_J_W_SUPER);
     auto base = w_super->base, limit = w_super->limit;
 
     int seq = 0, highest = 0;
     for (int i = base; i < limit;) {
-	pread(fd, buf, sizeof(buf), i * 4096);
+	if (pread(fd, buf, sizeof(buf), i * 4096) < 0)
+	    exit(1);
 	auto hdr = (j_hdr*)buf;
 	if (seq == 0)
 	    seq = hdr->seq - 1;
@@ -318,7 +321,8 @@ void save_super(struct cfg *cfg) {
     std::string super(cfg->obj_prefix);
     fs::copy_file(super, super + "." + std::string(buf));
     int fd = open(cfg->obj_prefix, O_RDONLY);
-    read(fd, super_buf, sizeof(super_buf));
+    if (read(fd, super_buf, sizeof(super_buf)) < 0)
+	exit(1);
     printf("saved %s crc %08x\n", cfg->obj_prefix,
 	   (uint32_t)crc32(0, (const unsigned char*)super_buf, 4096));
     close(fd);
@@ -326,7 +330,7 @@ void save_super(struct cfg *cfg) {
     auto sh = (super_hdr*)(h+1);
     auto cp = (int*)(super_buf + sh->ckpts_offset);
     ckpt_files.clear();
-    for (int i = 0; i < sh->ckpts_len/4; i++) {
+    for (int i = 0; i < (int)sh->ckpts_len/4; i++) {
 	char buf[128];
 	sprintf(buf, "%s.%08x", cfg->obj_prefix, cp[i]);
 	ckpt_files.push_back(std::string(buf));
@@ -338,7 +342,8 @@ void restore_super(struct cfg *cfg) {
     int fd = open(cfg->obj_prefix, O_WRONLY, 0);
     printf("restoring super crc %08x\n",
 	   (uint32_t)crc32(0, (const unsigned char*)super_buf, 4096));
-    pwrite(fd, super_buf, sizeof(super_buf), 0);
+    if (pwrite(fd, super_buf, sizeof(super_buf), 0) < 0)
+	exit(1);
     close(fd);
     for (auto s : ckpt_files) {
 	if (access(s.c_str(), R_OK) != 0) {
@@ -371,11 +376,13 @@ void check_rcache(struct cfg *cfg) {
     auto cache = get_cache_filename(cfg);
     int fd = open(cache.c_str(), O_RDONLY);
     char buf1[4096];
-    pread(fd, buf1, 4096, 2*4096);
+    if (pread(fd, buf1, 4096, 2*4096) < 0)
+	exit(1);
     auto r_super = (j_read_super*)buf1;
     size_t map_bytes = r_super->map_blocks * 4096;
     auto _flat_map = malloc(map_bytes);
-    pread(fd, _flat_map, map_bytes, r_super->map_start * 4096);
+    if (pread(fd, _flat_map, map_bytes, r_super->map_start * 4096) < 0)
+	exit(1);
     auto flat_map = (extmap::obj_offset*)_flat_map;
 
     std::set<int> objects;
@@ -417,7 +424,8 @@ void check_rcache(struct cfg *cfg) {
 	char buf[64*1024];
 	memset(buf, 0, sizeof(buf));
 	// 16 4KB pages in a 64KB block
-	pread(fd, buf, sizeof(buf), (r_super->base + i*16) * 4096L);
+	if (pread(fd, buf, sizeof(buf), (r_super->base + i*16) * 4096L) < 0)
+	    exit(1);
 	uint32_t crc2 = crc32(0, (unsigned char*)buf, 64*1024);
 	if (crc1 != crc2) {
 	    failed = true;
@@ -443,20 +451,20 @@ void save_wcache_state(struct cfg *cfg) {
     fs::copy_file(cache, cache + "." + std::string(buf));
 
     int fd = open(cache.c_str(), O_RDONLY);
-    pread(fd, wcache_state_buf, 4096, 1*4096); // assume write super is block 1
+    // assume write super is block 1
+    if (pread(fd, wcache_state_buf, 4096, 1*4096) < 0)
+	exit(1); 
     auto super = (j_super*)wcache_state_buf;
     assert(super->magic == LSVD_MAGIC && super->type == LSVD_J_W_SUPER);
     close(fd);
 }
 void restore_wcache_state(struct cfg *cfg) {
     auto cache = get_cache_filename(cfg);
-#if 0
-    fs::copy_file(cache + ".bak", cache, fs::copy_options::overwrite_existing);
-#else
     int fd = open(cache.c_str(), O_WRONLY, 0777);
-    pwrite(fd, wcache_state_buf, 4096, 1*4096); // assume write super is block 1
+    // assume write super is block 1
+    if (pwrite(fd, wcache_state_buf, 4096, 1*4096) < 0)
+	exit(1);
     close(fd);
-#endif
 }
 
 extern char *p_log, *logbuf;
