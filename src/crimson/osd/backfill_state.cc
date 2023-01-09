@@ -99,6 +99,27 @@ BackfillState::Initial::react(const BackfillState::Triggered& evt)
   }
 }
 
+BackfillState::Cancelled::Cancelled(my_context ctx)
+  : my_base(ctx)
+{
+  ceph_assert(peering_state().get_backfill_targets().size());
+}
+
+boost::statechart::result
+BackfillState::Cancelled::react(const BackfillState::Triggered& evt)
+{
+  logger().debug("{}: backfill re-triggered", __func__);
+  ceph_assert(peering_state().is_backfilling());
+  if (Enqueuing::all_enqueued(peering_state(),
+                              backfill_state().backfill_info,
+                              backfill_state().peer_backfill_info)) {
+    logger().debug("{}: switching to Done state", __func__);
+    return transit<BackfillState::Done>();
+  } else {
+    logger().debug("{}: switching to Enqueuing state", __func__);
+    return transit<BackfillState::Enqueuing>();
+  }
+}
 
 // -- Enqueuing
 void BackfillState::Enqueuing::maybe_update_range()
@@ -442,6 +463,15 @@ BackfillState::ReplicasScanning::react(ReplicaScanned evt)
     logger().debug("{}: canceled backfill (too full?)", __func__);
   }
   return discard_event();
+}
+
+boost::statechart::result
+BackfillState::ReplicasScanning::react(Cancel evt)
+{
+  logger().debug("{}: cancelled within ReplicasScanning",
+                 __func__);
+  waiting_on_backfill.clear();
+  return transit<Cancelled>();
 }
 
 boost::statechart::result
