@@ -10448,7 +10448,7 @@ next:
 
       auto b = ps.get_bucket(bucket->get_key());
       ret = b->get_topics(&result);
-      if (ret < 0) {
+      if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
@@ -10456,7 +10456,7 @@ next:
     } else {
       rgw_pubsub_topics result;
       int ret = ps.get_topics(&result);
-      if (ret < 0) {
+      if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
