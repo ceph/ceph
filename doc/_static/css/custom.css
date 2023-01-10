@@ -10,6 +10,10 @@ section {
     scroll-margin-top: 4em; 
 }
 
+span {
+    scroll-margin-top: 2em; 
+}
+
 ul.simple > li > ul > li:last-child {
     margin-block-end : 1em;
 }
