@@ -499,13 +499,12 @@ private:
     // primary or remote
     if (dn->get_projected_linkage()->is_remote()) {
       add_remote_dentry(dn, dirty);
-      return;
     } else if (dn->get_projected_linkage()->is_null()) {
       add_null_dentry(dn, dirty);
-      return;
+    } else {
+      ceph_assert(dn->get_projected_linkage()->is_primary());
+      add_primary_dentry(dn, 0, dirty, dirty_parent, dirty_pool);
     }
-    ceph_assert(dn->get_projected_linkage()->is_primary());
-    add_primary_dentry(dn, 0, dirty, dirty_parent, dirty_pool);
   }
 
   void add_root(bool dirty, CInode *in) {
