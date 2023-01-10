@@ -154,16 +154,16 @@ To facilitate the development of crimson, following options would be handy when
 using ``vstart.sh``,
 
 ``--crimson``
-    start ``crimson-osd`` instead of ``ceph-osd``
+    Start ``crimson-osd`` instead of ``ceph-osd``.
 
 ``--nodaemon``
-    do not daemonize the service
+    Do not daemonize the service.
 
 ``--redirect-output``
-    redirect the stdout and stderr of service to ``out/$type.$num.stdout``.
+    Tedirect the stdout and stderr of service to ``out/$type.$num.stdout``.
 
 ``--osd-args``
-    pass extra command line options to crimson-osd or ceph-osd. It's quite
+    Pass extra command line options to crimson-osd or ceph-osd. It's quite
     useful for passing Seastar options to crimson-osd. For instance, you could
     use ``--osd-args "--memory 2G"`` to set the memory to use. Please refer
     the output of::
@@ -173,14 +173,31 @@ using ``vstart.sh``,
     for more Seastar specific command line options.
 
 ``--cyanstore``
-    use CyanStore as the object store backend.
+    Use CyanStore as the object store backend.
 
 ``--bluestore``
-    use the alienized BlueStore as the object store backend. This is the default
+    Use the alienized BlueStore as the object store backend. This is the default
     setting, if not specified otherwise.
 
 ``--memstore``
-    use the alienized MemStore as the object store backend.
+    Use the alienized MemStore as the object store backend.
+
+``--seastore``
+    Use SeaStore as the back end object store.
+
+``--seastore-devs``
+    Specify the block device used by SeaStore.
+
+``--seastore-secondary-devs``
+    Optional.  SeaStore supports multiple devices.  Enable this feature by
+    passing the block device to this option.
+
+``--seastore-secondary-devs-type``
+    Optional.  Specify device type of secondary devices.  When the secondary
+    device is slower than main device passed to ``--seastore-devs``, the cold
+    data in faster device will be evicted to the slower devices over time.
+    Valid types include ``HDD``, ``SSD``(default), ``ZNS``, and ``RANDOM_BLOCK_SSD``
+    Note secondary devices should not be faster than the main device.
 
 ``--seastore``
     use SeaStore as the object store backend.
@@ -193,6 +210,15 @@ So, a typical command to start a single-crimson-node cluster is::
     --osd-args "--memory 4G"
 
 Where we assign 4 GiB memory, a single thread running on core-0 to crimson-osd.
+
+Another SeaStore example::
+
+  $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x \
+    --without-dashboard --seastore \
+    --crimson --redirect-output \
+    --seastore-devs /dev/sda \
+    --seastore-secondary-devs /dev/sdb \
+    --seastore-secondary-devs-type HDD
 
 You could stop the vstart cluster using::
 
