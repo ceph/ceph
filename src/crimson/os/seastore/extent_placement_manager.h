@@ -419,8 +419,8 @@ private:
               AsyncCleanerRef &&_cleaner) {
       trimmer = std::move(_trimmer);
       trimmer->set_background_callback(this);
-      cleaner = std::move(_cleaner);
-      cleaner->set_background_callback(this);
+      main_cleaner = std::move(_cleaner);
+      main_cleaner->set_background_callback(this);
     }
 
     journal_type_t get_journal_type() const {
@@ -429,11 +429,11 @@ private:
 
     void set_extent_callback(ExtentCallbackInterface *cb) {
       trimmer->set_extent_callback(cb);
-      cleaner->set_extent_callback(cb);
+      main_cleaner->set_extent_callback(cb);
     }
 
     store_statfs_t get_stat() const {
-      return cleaner->get_stat();
+      return main_cleaner->get_stat();
     }
 
     using mount_ret = ExtentPlacementManager::mount_ret;
@@ -443,13 +443,13 @@ private:
       trimmer->reset();
       stats = {};
       register_metrics();
-      return cleaner->mount();
+      return main_cleaner->mount();
     }
 
     void start_scan_space() {
       ceph_assert(state == state_t::MOUNT);
       state = state_t::SCAN_SPACE;
-      ceph_assert(cleaner->check_usage_is_empty());
+      ceph_assert(main_cleaner->check_usage_is_empty());
     }
 
     void start_background();
@@ -458,24 +458,24 @@ private:
       if (state < state_t::SCAN_SPACE) {
         return;
       }
-      assert(cleaner);
-      cleaner->mark_space_used(addr, len);
+      assert(main_cleaner);
+      main_cleaner->mark_space_used(addr, len);
     }
 
     void mark_space_free(paddr_t addr, extent_len_t len) {
       if (state < state_t::SCAN_SPACE) {
         return;
       }
-      assert(cleaner);
-      cleaner->mark_space_free(addr, len);
+      assert(main_cleaner);
+      main_cleaner->mark_space_free(addr, len);
     }
 
     void commit_space_used(paddr_t addr, extent_len_t len) {
       if (state < state_t::SCAN_SPACE) {
         return;
       }
-      assert(cleaner);
-      return cleaner->commit_space_used(addr, len);
+      assert(main_cleaner);
+      return main_cleaner->commit_space_used(addr, len);
     }
 
     seastar::future<> reserve_projected_usage(projected_usage_t usage);
@@ -483,7 +483,7 @@ private:
     void release_projected_usage(projected_usage_t usage) {
       if (is_ready()) {
         trimmer->release_inline_usage(usage.inline_usage);
-        cleaner->release_projected_usage(usage.inline_usage + usage.ool_usage);
+        main_cleaner->release_projected_usage(usage.inline_usage + usage.ool_usage);
       }
     }
 
@@ -495,13 +495,13 @@ private:
     // Testing interfaces
 
     bool check_usage() {
-      return cleaner->check_usage();
+      return main_cleaner->check_usage();
     }
 
     seastar::future<> run_until_halt();
     
     bool is_no_background() const {
-      return !trimmer || !cleaner;
+      return !trimmer || !main_cleaner;
     }
 
   protected:
@@ -552,7 +552,7 @@ private:
 
     bool background_should_run() const {
       assert(is_ready());
-      return cleaner->should_clean_space()
+      return main_cleaner->should_clean_space()
         || trimmer->should_trim_dirty()
         || trimmer->should_trim_alloc();
     }
@@ -560,7 +560,7 @@ private:
     bool should_block_io() const {
       assert(is_ready());
       return trimmer->should_block_io_on_trim() ||
-             cleaner->should_block_io_on_clean();
+             main_cleaner->should_block_io_on_clean();
     }
 
     struct reserve_result_t {
@@ -589,7 +589,7 @@ private:
     seastar::metrics::metric_group metrics;
 
     JournalTrimmerImplRef trimmer;
-    AsyncCleanerRef cleaner;
+    AsyncCleanerRef main_cleaner;
 
     std::optional<seastar::future<>> process_join;
     std::optional<seastar::promise<>> blocking_background;
