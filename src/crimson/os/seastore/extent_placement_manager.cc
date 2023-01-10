@@ -546,12 +546,71 @@ ExtentPlacementManager::BackgroundProcess::run()
   });
 }
 
+/**
+ * Reservation Process
+ *
+ * Most of transctions need to reserve its space usage before performing the
+ * ool writes and committing transactions. If the space reservation is
+ * unsuccessful, the current transaction is blocked, and waits for new
+ * background transactions to finish.
+ *
+ * The following are the reservation requirements for each transaction type:
+ * 1. MUTATE transaction:
+ *      (1) inline usage on the trimmer,
+ *      (2) inline usage with OOL usage on the main cleaner,
+ *      (3) cold OOL usage to the cold cleaner(if it exists).
+ * 2. TRIM_DIRTY/TRIM_ALLOC transaction:
+ *      (1) all extents usage on the main cleaner,
+ *      (2) usage on the cold cleaner(if it exists)
+ * 3. CLEANER_MAIN:
+ *      (1) cleaned extents size on the cold cleaner(if it exists).
+ * 4. CLEANER_COLD transction does not require space reservation.
+ *
+ * The reserve implementation should satisfy the following conditions:
+ * 1. The reservation should be atomic. If a reservation involves several reservations,
+ *    such as the MUTATE transaction that needs to reserve space on both the trimmer
+ *    and cleaner at the same time, the successful condition is that all of its
+ *    sub-reservations succeed. If one or more operations fail, the entire reservation
+ *    fails, and the successful operation should be reverted.
+ * 2. The reserve/block relationship should form a DAG to avoid deadlock. For example,
+ *    TRIM_ALLOC transaction might be blocked by cleaner due to the failure of reserving
+ *    on the cleaner. In such cases, the cleaner must not reserve space on the trimmer
+ *    since the trimmer is already blocked by itself.
+ *
+ * Finally the reserve relationship can be represented as follows:
+ *
+ *    +-------------------------+----------------+
+ *    |                         |                |
+ *    |                         v                v
+ * MUTATE ---> TRIM_* ---> CLEANER_MAIN ---> CLEANER_COLD
+ *              |                                ^
+ *              |                                |
+ *              +--------------------------------+
+ */
+bool ExtentPlacementManager::BackgroundProcess::try_reserve_cold(std::size_t usage)
+{
+  if (has_cold_tier()) {
+    return cold_cleaner->try_reserve_projected_usage(usage);
+  } else {
+    assert(usage == 0);
+    return true;
+  }
+}
+void ExtentPlacementManager::BackgroundProcess::abort_cold_usage(
+  std::size_t usage, bool success)
+{
+  if (has_cold_tier() && success) {
+    cold_cleaner->release_projected_usage(usage);
+  }
+}
+
 reserve_cleaner_result_t
 ExtentPlacementManager::BackgroundProcess::try_reserve_cleaner(
   const cleaner_usage_t &usage)
 {
   return {
-    main_cleaner->try_reserve_projected_usage(usage.main_usage)
+    main_cleaner->try_reserve_projected_usage(usage.main_usage),
+    try_reserve_cold(usage.cold_ool_usage)
   };
 }
 
@@ -562,6 +621,7 @@ void ExtentPlacementManager::BackgroundProcess::abort_cleaner_usage(
   if (result.reserve_main_success) {
     main_cleaner->release_projected_usage(usage.main_usage);
   }
+  abort_cold_usage(usage.cold_ool_usage, result.reserve_cold_success);
 }
 
 reserve_io_result_t
@@ -591,11 +651,22 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
   bool should_trim = trimmer->should_trim();
   bool proceed_trim = false;
   auto trim_size = trimmer->get_trim_size_per_cycle();
-  cleaner_usage_t trim_usage{trim_size};
+  cleaner_usage_t trim_usage{
+    trim_size,
+    // We take a cautious policy here that the trimmer also reserves
+    // the max value on cold cleaner even if no extents will be rewritten
+    // to the cold tier. Cleaner also takes the same policy.
+    // The reason is that we don't know the exact value of reservation until
+    // the construction of trimmer transaction completes after which the reservation
+    // might fail then the trimmer is possible to be invalidated by cleaner.
+    // Reserving the max size at first could help us avoid these trouble.
+    has_cold_tier() ? trim_size : 0
+  };
 
+  reserve_cleaner_result_t trim_reserve_res;
   if (should_trim) {
-    auto res = try_reserve_cleaner(trim_usage);
-    if (res.is_successful()) {
+    trim_reserve_res = try_reserve_cleaner(trim_usage);
+    if (trim_reserve_res.is_successful()) {
       proceed_trim = true;
     } else {
       abort_cleaner_usage(trim_usage, trim_reserve_res);
@@ -605,21 +676,65 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
   if (proceed_trim) {
     return trimmer->trim(
     ).finally([this, trim_usage] {
-      abort_cleaner_usage(trim_usage, {true});
+      abort_cleaner_usage(trim_usage, {true, true});
     });
-  } else if (main_cleaner->should_clean_space() ||
-             // make sure cleaner will start
-             // when the trimmer should run but
-             // failed to reserve space.
-             (should_trim && !proceed_trim)) {
-    return main_cleaner->clean_space(
-    ).handle_error(
-      crimson::ct_error::assert_all{
-	"do_background_cycle encountered invalid error in clean_space"
-      }
-    );
   } else {
-    return seastar::now();
+    bool should_clean_main =
+      main_cleaner->should_clean_space() ||
+      // make sure cleaner will start
+      // when the trimmer should run but
+      // failed to reserve space.
+      (should_trim && !proceed_trim &&
+       !trim_reserve_res.reserve_main_success);
+    bool proceed_clean_main = false;
+
+    auto main_cold_usage = main_cleaner->get_reclaim_size_per_cycle();
+    if (should_clean_main) {
+      if (has_cold_tier()) {
+        proceed_clean_main = try_reserve_cold(main_cold_usage);
+      } else {
+        proceed_clean_main = true;
+      }
+    }
+
+    bool proceed_clean_cold = false;
+    if (has_cold_tier() &&
+        (cold_cleaner->should_clean_space() ||
+         (should_trim && !proceed_trim &&
+          !trim_reserve_res.reserve_cold_success) ||
+         (should_clean_main && !proceed_clean_main))) {
+      proceed_clean_cold = true;
+    }
+
+    if (!proceed_clean_main && !proceed_clean_cold) {
+      ceph_abort("no background process will start");
+    }
+    return seastar::when_all(
+      [this, proceed_clean_main, main_cold_usage] {
+        if (!proceed_clean_main) {
+          return seastar::now();
+        }
+        return main_cleaner->clean_space(
+        ).handle_error(
+          crimson::ct_error::assert_all{
+            "do_background_cycle encountered invalid error in main clean_space"
+          }
+        ).finally([this, main_cold_usage] {
+          abort_cold_usage(main_cold_usage, true);
+        });
+      },
+      [this, proceed_clean_cold] {
+        if (!proceed_clean_cold) {
+          return seastar::now();
+        }
+        return cold_cleaner->clean_space(
+        ).handle_error(
+          crimson::ct_error::assert_all{
+            "do_background_cycle encountered invalid error in cold clean_space"
+          }
+        );
+      }
+    ).discard_result();
   }
 }
 
