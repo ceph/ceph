@@ -135,7 +135,8 @@ void Cache::register_metrics()
     {src_t::READ, sm::label_instance("src", "READ")},
     {src_t::TRIM_DIRTY, sm::label_instance("src", "TRIM_DIRTY")},
     {src_t::TRIM_ALLOC, sm::label_instance("src", "TRIM_ALLOC")},
-    {src_t::CLEANER, sm::label_instance("src", "CLEANER")},
+    {src_t::CLEANER_MAIN, sm::label_instance("src", "CLEANER_MAIN")},
+    {src_t::CLEANER_COLD, sm::label_instance("src", "CLEANER_COLD")},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
@@ -624,8 +625,10 @@ void Cache::register_metrics()
            src2 == Transaction::src_t::READ) ||
           (src1 == Transaction::src_t::TRIM_DIRTY &&
            src2 == Transaction::src_t::TRIM_DIRTY) ||
-          (src1 == Transaction::src_t::CLEANER &&
-           src2 == Transaction::src_t::CLEANER) ||
+          (src1 == Transaction::src_t::CLEANER_MAIN &&
+           src2 == Transaction::src_t::CLEANER_MAIN) ||
+          (src1 == Transaction::src_t::CLEANER_COLD &&
+           src2 == Transaction::src_t::CLEANER_COLD) ||
           (src1 == Transaction::src_t::TRIM_ALLOC &&
            src2 == Transaction::src_t::TRIM_ALLOC)) {
         continue;
@@ -1389,7 +1392,8 @@ record_t Cache::prepare_record(
   auto &rewrite_version_stats = t.get_rewrite_version_stats();
   if (trans_src == Transaction::src_t::TRIM_DIRTY) {
     stats.committed_dirty_version.increment_stat(rewrite_version_stats);
-  } else if (trans_src == Transaction::src_t::CLEANER) {
+  } else if (trans_src == Transaction::src_t::CLEANER_MAIN ||
+             trans_src == Transaction::src_t::CLEANER_COLD) {
     stats.committed_reclaim_version.increment_stat(rewrite_version_stats);
   } else {
     assert(rewrite_version_stats.is_clear());
