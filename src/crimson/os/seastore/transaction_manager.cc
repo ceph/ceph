@@ -643,6 +643,7 @@ TransactionManagerRef make_transaction_manager(
   auto rbs = std::make_unique<RBMDeviceGroup>();
   auto backref_manager = create_backref_manager(*cache);
   SegmentManagerGroupRef cold_sms = nullptr;
+  std::vector<SegmentProvider*> segment_providers_by_id{DEVICE_ID_MAX, nullptr};
 
   auto p_backend_type = primary_device->get_backend_type();
 
@@ -722,6 +723,12 @@ TransactionManagerRef make_transaction_manager(
       epm->get_ool_segment_seq_allocator(),
       cleaner_is_detailed,
       /* is_cold = */ true);
+    if (journal_type == journal_type_t::SEGMENTED) {
+      for (auto id : cold_segment_cleaner->get_device_ids()) {
+        segment_providers_by_id[id] =
+          static_cast<SegmentProvider*>(cold_segment_cleaner.get());
+      }
+    }
   }
 
   if (journal_type == journal_type_t::SEGMENTED) {
@@ -732,7 +739,10 @@ TransactionManagerRef make_transaction_manager(
       epm->get_ool_segment_seq_allocator(),
       cleaner_is_detailed);
     auto segment_cleaner = static_cast<SegmentCleaner*>(cleaner.get());
-    cache->set_segment_provider(*segment_cleaner);
+    for (auto id : segment_cleaner->get_device_ids()) {
+      segment_providers_by_id[id] =
+        static_cast<SegmentProvider*>(segment_cleaner);
+    }
     segment_cleaner->set_journal_trimmer(*journal_trimmer);
     journal = journal::make_segmented(
       *segment_cleaner,
@@ -747,6 +757,8 @@ TransactionManagerRef make_transaction_manager(
       static_cast<random_block_device::RBMDevice*>(primary_device),
       "");
   }
+
+  cache->set_segment_providers(std::move(segment_providers_by_id));
 
   epm->init(std::move(journal_trimmer),
 	    std::move(cleaner),
