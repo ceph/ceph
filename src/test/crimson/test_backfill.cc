@@ -154,6 +154,14 @@ public:
     }
   }
 
+  template <class EventT>
+  void next_round2() {
+    ceph_assert(events_to_dispatch.size());
+    ceph_assert(typeid(*events_to_dispatch.front()) == typeid(EventT));
+    backfill_state.process_event(std::move(events_to_dispatch.front()));
+    events_to_dispatch.pop_front();
+  }
+
   void next_till_done() {
     while (!events_to_dispatch.empty()) {
       next_round();
