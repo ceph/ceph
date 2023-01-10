@@ -69,6 +69,10 @@ class EphemeralSegmentManager final : public SegmentManager {
   const ephemeral_config_t config;
   std::optional<device_config_t> device_config;
 
+  device_type_t get_device_type() const final {
+    return device_type_t::SEGMENTED_EPHEMERAL;
+  }
+
   size_t get_offset(paddr_t addr) {
     auto& seg_addr = addr.as_seg_paddr();
     return (seg_addr.get_segment_id().device_segment_id() * config.segment_size) +
