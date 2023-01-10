@@ -8004,6 +8004,65 @@ void BlueStore::_fsck_check_statfs(
   }
 }
 
+void BlueStore::_fsck_foreach_shared_blob(
+  std::function< void (coll_t, ghobject_t, uint64_t, const bluestore_blob_t&)> cb) {
+  auto it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
+  if (it) {
+    CollectionRef c;
+    spg_t pgid;
+    for (it->lower_bound(string()); it->valid(); it->next()) {
+      dout(30) << __func__ << " key "
+	       << pretty_binary_string(it->key())
+	       << dendl;
+      if (is_extent_shard_key(it->key())) {
+	continue;
+      }
+
+      ghobject_t oid;
+      int r = get_key_object(it->key(), &oid);
+      if (r < 0) {
+	continue;
+      }
+
+      if (!c ||
+	  oid.shard_id != pgid.shard ||
+	  oid.hobj.get_logical_pool() != (int64_t)pgid.pool() ||
+	  !c->contains(oid)) {
+	c = nullptr;
+	for (auto& p : coll_map) {
+	  if (p.second->contains(oid)) {
+	    c = p.second;
+	    break;
+	  }
+	}
+	if (!c) {
+	  continue;
+	}
+      }
+      dout(20) << __func__
+	       << " inspecting shared blob refs for col:" << c->cid
+	       << " obj:" << oid
+	       << dendl;
+
+      OnodeRef o;
+      o.reset(Onode::create_decode(c, oid, it->key(), it->value()));
+      o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+
+      _dump_onode<30>(cct, *o);
+
+      mempool::bluestore_fsck::set<BlobRef> passed_sbs;
+      for (auto& e : o->extent_map.extent_map) {
+	auto& b = e.blob->get_blob();
+	if (b.is_shared() && passed_sbs.count(e.blob) == 0) {
+	  auto sbid = e.blob->shared_blob->get_sbid();
+	  cb(c->cid, oid, sbid, b);
+	  passed_sbs.emplace(e.blob);
+	}
+      } // for ... extent_map
+    } // for ... it->valid
+  } //if (it(PREFIX_OBJ))
+}
+
 void BlueStore::_fsck_repair_shared_blobs(
   BlueStoreRepairer& repairer,
   shared_blob_2hash_tracker_t& sb_ref_counts,
@@ -8015,73 +8074,10 @@ void BlueStore::_fsck_repair_shared_blobs(
   if (!sb_ref_mismatches) // not expected to succeed, just in case
     return;
 
-
-  auto foreach_shared_blob = [&](std::function<
-    void (coll_t,
-          ghobject_t,
-          uint64_t,
-          const bluestore_blob_t&)> cb) {
-      auto it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
-      if (it) {
-        CollectionRef c;
-        spg_t pgid;
-        for (it->lower_bound(string()); it->valid(); it->next()) {
-          dout(30) << __func__ << " key "
-	           << pretty_binary_string(it->key())
-	           << dendl;
-          if (is_extent_shard_key(it->key())) {
-	    continue;
-          }
-
-          ghobject_t oid;
-          int r = get_key_object(it->key(), &oid);
-          if (r < 0) {
-	    continue;
-          }
-
-          if (!c ||
-	    oid.shard_id != pgid.shard ||
-	    oid.hobj.get_logical_pool() != (int64_t)pgid.pool() ||
-	    !c->contains(oid)) {
-	    c = nullptr;
-	    for (auto& p : coll_map) {
-	      if (p.second->contains(oid)) {
-	        c = p.second;
-	        break;
-	      }
-	    }
-	    if (!c) {
-	      continue;
-	    }
-          }
-          dout(20) << __func__
-                   << " inspecting shared blob refs for col:" << c->cid
-	           << " obj:" << oid
-	           << dendl;
-
-          OnodeRef o;
-          o.reset(Onode::create_decode(c, oid, it->key(), it->value()));
-          o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
-
-          _dump_onode<30>(cct, *o);
-
-          mempool::bluestore_fsck::set<BlobRef> passed_sbs;
-          for (auto& e : o->extent_map.extent_map) {
-	    auto& b = e.blob->get_blob();
-	    if (b.is_shared() && passed_sbs.count(e.blob) == 0) {
-	      auto sbid = e.blob->shared_blob->get_sbid();
-	      cb(c->cid, oid, sbid, b);
-	      passed_sbs.emplace(e.blob);
-	    }
-          } // for ... extent_map
-        } // for ... it->valid
-      } //if (it(PREFIX_OBJ))
-    }; //foreach_shared_blob fn declaration
-
   mempool::bluestore_fsck::map<uint64_t, bluestore_extent_ref_map_t> refs_map;
 
   // first iteration over objects to identify all the broken sbids
-  foreach_shared_blob( [&](coll_t cid,
+  _fsck_foreach_shared_blob( [&](coll_t cid,
                            ghobject_t oid,
                            uint64_t sbid,
                            const bluestore_blob_t& b) {
@@ -8106,7 +8102,7 @@ void BlueStore::_fsck_repair_shared_blobs(
   });
 
   // second iteration over objects to build new ref map for the broken sbids
-  foreach_shared_blob( [&](coll_t cid,
+  _fsck_foreach_shared_blob( [&](coll_t cid,
                            ghobject_t oid,
                            uint64_t sbid,
                            const bluestore_blob_t& b) {
