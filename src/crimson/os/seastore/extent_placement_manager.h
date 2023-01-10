@@ -128,6 +128,49 @@ private:
   seastar::gate write_guard;
 };
 
+struct cleaner_usage_t {
+  // The size of all extents write to the main devices, including inline extents
+  // and out-of-line extents.
+  std::size_t main_usage = 0;
+  // TODO: add cold_ool_usage
+};
+
+struct reserve_cleaner_result_t {
+  bool reserve_main_success = true;
+
+  bool is_successful() const {
+    return reserve_main_success;
+  }
+};
+
+/**
+ * io_usage_t
+ *
+ * io_usage_t describes the space usage consumed by client IO.
+ */
+struct io_usage_t {
+  // The total size of all inlined extents, not including deltas and other metadata
+  // produced by Cache::prepare_record.
+  std::size_t inline_usage = 0;
+  cleaner_usage_t cleaner_usage;
+  friend std::ostream &operator<<(std::ostream &out, const io_usage_t &usage) {
+    return out << "io_usage_t("
+               << "inline_usage=" << usage.inline_usage
+               << ", main_cleaner_usage=" << usage.cleaner_usage.main_usage
+               << ")";
+  }
+};
+
+struct reserve_io_result_t {
+  bool reserve_inline_success = true;
+  reserve_cleaner_result_t cleaner_result;
+
+  bool is_successful() const {
+    return reserve_inline_success &&
+      cleaner_result.is_successful();
+  }
+};
+
 class ExtentPlacementManager {
 public:
   ExtentPlacementManager() {
@@ -269,16 +312,12 @@ public:
    * delayed_extents is used to update lba mapping.
    * usage is used to reserve projected space
    */
-  struct projected_usage_t {
-    std::size_t inline_usage = 0;
-    std::size_t ool_usage = 0;
-  };
   using extents_by_writer_t =
     std::map<ExtentOolWriter*, std::list<LogicalCachedExtentRef>>;
   struct dispatch_result_t {
     extents_by_writer_t alloc_map;
     std::list<LogicalCachedExtentRef> delayed_extents;
-    projected_usage_t usage;
+    io_usage_t usage;
   };
 
   /**
@@ -337,11 +376,11 @@ public:
     return background_process.commit_space_used(addr, len);
   }
 
-  seastar::future<> reserve_projected_usage(projected_usage_t usage) {
+  seastar::future<> reserve_projected_usage(io_usage_t usage) {
     return background_process.reserve_projected_usage(usage);
   }
 
-  void release_projected_usage(projected_usage_t usage) {
+  void release_projected_usage(const io_usage_t &usage) {
     background_process.release_projected_usage(usage);
   }
 
@@ -478,12 +517,12 @@ private:
       return main_cleaner->commit_space_used(addr, len);
     }
 
-    seastar::future<> reserve_projected_usage(projected_usage_t usage);
+    seastar::future<> reserve_projected_usage(io_usage_t usage);
 
-    void release_projected_usage(projected_usage_t usage) {
+    void release_projected_usage(const io_usage_t &usage) {
       if (is_ready()) {
         trimmer->release_inline_usage(usage.inline_usage);
-        main_cleaner->release_projected_usage(usage.inline_usage + usage.ool_usage);
+        main_cleaner->release_projected_usage(usage.cleaner_usage.main_usage);
       }
     }
 
@@ -529,6 +568,15 @@ private:
     }
 
   private:
+    // reserve helpers
+    reserve_cleaner_result_t try_reserve_cleaner(const cleaner_usage_t &usage);
+    void abort_cleaner_usage(const cleaner_usage_t &usage,
+                             const reserve_cleaner_result_t &result);
+
+    reserve_io_result_t try_reserve_io(const io_usage_t &usage);
+    void abort_io_usage(const io_usage_t &usage,
+                        const reserve_io_result_t &result);
+
     bool is_running() const {
       if (state == state_t::RUNNING) {
         assert(process_join);
@@ -562,17 +610,6 @@ private:
       return trimmer->should_block_io_on_trim() ||
              main_cleaner->should_block_io_on_clean();
     }
-
-    struct reserve_result_t {
-      bool reserve_inline_success = true;
-      bool reserve_ool_success = true;
-
-      bool is_successful() const {
-        return reserve_inline_success && reserve_ool_success;
-      }
-    };
-
-    reserve_result_t try_reserve(const projected_usage_t &usage);
 
     seastar::future<> do_background_cycle();
 
@@ -612,12 +649,8 @@ private:
 
 using ExtentPlacementManagerRef = std::unique_ptr<ExtentPlacementManager>;
 
-std::ostream &operator<<(std::ostream &, const ExtentPlacementManager::projected_usage_t &);
-
 }
 
 #if FMT_VERSION >= 90000
-template <>
-struct fmt::formatter<crimson::os::seastore::ExtentPlacementManager::projected_usage_t>
-  : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::io_usage_t> : fmt::ostream_formatter {};
 #endif
