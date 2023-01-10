@@ -567,6 +567,15 @@ private:
     return backref_entryrefs_by_seq;
   }
 
+  const segment_info_t* get_segment_info(segment_id_t sid) {
+    auto provider = segment_providers_by_device_id[sid.device_id()];
+    if (provider) {
+      return &provider->get_seg_info(sid);
+    } else {
+      return nullptr;
+    }
+  }
+
 public:
   /**
    * get_extent_by_type
@@ -685,9 +694,8 @@ public:
    *
    * FIXME: This is specific to the segmented implementation
    */
-  void set_segment_provider(SegmentProvider &sp) {
-    assert(segment_provider == nullptr);
-    segment_provider = &sp;
+  void set_segment_providers(std::vector<SegmentProvider*> &&providers) {
+    segment_providers_by_device_id = std::move(providers);
   }
 
   /**
@@ -980,7 +988,7 @@ private:
   journal_seq_t last_commit = JOURNAL_SEQ_MIN;
 
   // FIXME: This is specific to the segmented implementation
-  SegmentProvider *segment_provider = nullptr;
+  std::vector<SegmentProvider*> segment_providers_by_device_id;
 
   /**
    * dirty
