@@ -5,6 +5,7 @@
 
 #include "rgw_http_client.h"
 
+using namespace std;
 class RGWGetDataCB;
 
 class RGWHTTPSimpleRequest : public RGWHTTPClient {
@@ -246,11 +247,14 @@ public:
   ~RGWRESTStreamS3PutObj() override;
 
   void send_init(rgw::sal::Object* obj);
+  //void send_init(rgw_bucket* bucket);
+  void send_init(const DoutPrefixProvider *dpp, rgw_bucket* bucket);
   void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, std::map<std::string, bufferlist>& rgw_attrs);
   void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, const std::map<std::string, std::string>& http_attrs,
                   RGWAccessControlPolicy& policy);
   void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key);
 
+  void put_bucket_init(const DoutPrefixProvider *dpp, RGWAccessKey& key, rgw_bucket* bucket, map<string, bufferlist>& attrs);
   void put_obj_init(const DoutPrefixProvider *dpp, RGWAccessKey& key, rgw::sal::Object* obj, std::map<std::string, bufferlist>& attrs);
 
   RGWGetDataCB *get_out_cb() { return out_cb; }

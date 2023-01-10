@@ -28,6 +28,7 @@ class S3FilterStore : public FilterStore {
   private:
 
   public:
+	CephContext *_cct;
     S3FilterStore(Store* _next) : FilterStore(_next) 
     {
       //d4n_cache = new RGWD4NCache();
@@ -38,9 +39,12 @@ class S3FilterStore : public FilterStore {
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
     virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
-	/*
+	
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
-
+	int get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y);
+	int get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket);
+	int get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y);
+	
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
@@ -48,6 +52,7 @@ class S3FilterStore : public FilterStore {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
+	/*
     RGWBlockDirectory* get_block_dir() { return blk_dir; }
     cache_block* get_cache_block() { return c_blk; }
     RGWD4NCache* get_d4n_cache() { return d4n_cache; }
@@ -83,6 +88,10 @@ class S3FilterUser : public FilterUser {
 };
 
 class S3FilterBucket : public FilterBucket {
+  /*protected:
+    RGWBucketEnt ent;
+    RGWBucketInfo info;
+  */
   private:
     S3FilterStore* filter;
 
@@ -90,12 +99,20 @@ class S3FilterBucket : public FilterBucket {
     S3FilterBucket(std::unique_ptr<Bucket> _next, User* _user, S3FilterStore* _filter) :
       FilterBucket(std::move(_next), _user), 
       filter(_filter) {}
+	/*
+    S3FilterBucket(const rgw_bucket& _b, User* _user, S3FilterStore* _filter):
+	  FilterBucket(std::move(_next), _user), 
+      filter(_filter) 
+	 { ent.bucket = _b; info.bucket = _b; }
+	 */
+
     virtual ~S3FilterBucket() = default;
    
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
+	//virtual RGWBucketInfo& get_info() override;
 };
 
-/*
+
 class S3FilterObject : public FilterObject {
   private:
     S3FilterStore* filter;
@@ -108,7 +125,7 @@ class S3FilterObject : public FilterObject {
 										 source(_source) {}
       virtual ~S3FilterReadOp() = default;
 
-      virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
+      //virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
     };
 
     struct S3FilterDeleteOp : FilterDeleteOp {
@@ -118,7 +135,7 @@ class S3FilterObject : public FilterObject {
 										     source(_source) {}
       virtual ~S3FilterDeleteOp() = default;
 
-      virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
+      //virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
     };
 
     S3FilterObject(std::unique_ptr<Object> _next, S3FilterStore* _filter) : FilterObject(std::move(_next)),
@@ -130,39 +147,39 @@ class S3FilterObject : public FilterObject {
     virtual ~S3FilterObject() = default;
 
     virtual const std::string &get_name() const override { return next->get_name(); }
-    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y) override;
-    virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
-                            rgw_obj* target_obj = NULL) override;
-    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-                               optional_yield y, const DoutPrefixProvider* dpp) override;
-    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y) override;
+    //virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
+    //                        Attrs* delattrs, optional_yield y) override;
+    //virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
+    //                        rgw_obj* target_obj = NULL) override;
+    //virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
+    //                           optional_yield y, const DoutPrefixProvider* dpp) override;
+    //virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
+    //                           optional_yield y) override;
 
     virtual std::unique_ptr<ReadOp> get_read_op() override;
     virtual std::unique_ptr<DeleteOp> get_delete_op() override;
 };
 
-class D4NFilterWriter : public FilterWriter {
-  private:
-    D4NFilterStore* filter; 
-    const DoutPrefixProvider* save_dpp;
-    bool atomic;
+class S3FilterWriter : public FilterWriter {
+private:
+  S3FilterStore* filter; 
+  const DoutPrefixProvider* save_dpp;
+  bool atomic;
 
-  public:
-    D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterStore* _filter, std::unique_ptr<Object> _head_obj, 
-	const DoutPrefixProvider* _dpp) : FilterWriter(std::move(_next), std::move(_head_obj)),
+public:
+  S3FilterWriter(std::unique_ptr<Writer> _next, S3FilterStore* _filter, std::unique_ptr<Object> _head_obj, 
+					  const DoutPrefixProvider* _dpp) : FilterWriter(std::move(_next), std::move(_head_obj)),
 					  filter(_filter),
 					  save_dpp(_dpp), atomic(false) {}
-    D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterStore* _filter, std::unique_ptr<Object> _head_obj, 
-	const DoutPrefixProvider* _dpp, bool _atomic) : FilterWriter(std::move(_next), std::move(_head_obj)),
-							filter(_filter),
-							save_dpp(_dpp), atomic(_atomic) {}
-    virtual ~D4NFilterWriter() = default;
+  S3FilterWriter(std::unique_ptr<Writer> _next, S3FilterStore* _filter, std::unique_ptr<Object> _head_obj, 
+					  const DoutPrefixProvider* _dpp, bool _atomic) : FilterWriter(std::move(_next), std::move(_head_obj)),
+					  filter(_filter),
+					  save_dpp(_dpp), atomic(_atomic) {}
 
-    virtual int prepare(optional_yield y);
-    virtual int process(bufferlist&& data, uint64_t offset) override;
-    virtual int complete(size_t accounted_size, const std::string& etag,
+  virtual ~S3FilterWriter() = default;
+
+  virtual int process(bufferlist&& data, uint64_t offset) override;
+  virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
                        ceph::real_time delete_at,
@@ -170,8 +187,8 @@ class D4NFilterWriter : public FilterWriter {
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y) override;
-   bool is_atomic() { return atomic; };
-   const DoutPrefixProvider* dpp() { return save_dpp; }
 };
-*/
+
+
+
 } } // namespace rgw::sal

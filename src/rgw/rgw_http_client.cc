@@ -73,22 +73,34 @@ struct rgw_http_req_data : public RefCountedObject {
   }
 
   int wait(optional_yield y) {
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (done) {
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       return ret;
     }
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (y) {
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       auto& context = y.get_io_context();
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       auto& yield = y.get_yield_context();
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       boost::system::error_code ec;
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       async_wait(context, yield[ec]);
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       return -ec.value();
     }
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     // work on asio threads should be asynchronous, so warn when they block
     if (is_asio_thread) {
       dout(20) << "WARNING: blocking http request" << dendl;
     }
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     std::unique_lock l{lock};
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     cond.wait(l, [this]{return done==true;});
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     return ret;
   }
 

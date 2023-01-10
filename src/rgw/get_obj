@@ -1,0 +1,303 @@
+rgw_admin.cc:  int ret = conn->forward(dpp(), user, info, nullptr, MAX_REST_RESPONSE, &in_data, &response, null_yield);
+rgw_amqp.cc:  conn->status = AMQP_STATUS_OK; 
+rgw_amqp.cc:  conn->reply_type = AMQP_RESPONSE_NORMAL;
+rgw_amqp.cc:  conn->reply_code = RGW_AMQP_NO_REPLY_CODE;
+rgw_amqp.cc:    conn->status = RGW_AMQP_STATUS_CONN_ALLOC_FAILED;
+rgw_amqp.cc:    conn->status = RGW_AMQP_STATUS_SOCKET_ALLOC_FAILED;
+rgw_amqp.cc:    if (!conn->verify_ssl) {
+rgw_amqp.cc:    if (conn->ca_location.has_value()) {
+rgw_amqp.cc:      const auto s = amqp_ssl_socket_set_cacert(socket, conn->ca_location.get().c_str());
+rgw_amqp.cc:        conn->status = RGW_AMQP_STATUS_SOCKET_CACERT_FAILED;
+rgw_amqp.cc:        conn->reply_code = s;
+rgw_amqp.cc:    conn->status = RGW_AMQP_STATUS_SOCKET_OPEN_FAILED;
+rgw_amqp.cc:    conn->reply_type = RGW_AMQP_RESPONSE_SOCKET_ERROR;
+rgw_amqp.cc:    conn->reply_code = s;
+rgw_amqp.cc:    conn->status = RGW_AMQP_STATUS_LOGIN_FAILED;
+rgw_amqp.cc:    conn->reply_type = reply.reply_type;
+rgw_amqp.cc:    conn->reply_code = reply_to_code(reply);
+rgw_amqp.cc:      amqp_cstring_bytes(conn->exchange.c_str()),
+rgw_amqp.cc:    conn->state = state;
+rgw_amqp.cc:    conn->reply_to_queue = amqp_bytes_malloc_dup(queue_ok->queue);
+rgw_amqp.cc:  conn->exchange = exchange;
+rgw_amqp.cc:  conn->user.assign(info.user);
+rgw_amqp.cc:  conn->password.assign(info.password);
+rgw_amqp.cc:  conn->mandatory = mandatory_delivery;
+rgw_amqp.cc:  conn->cct = cct;
+rgw_amqp.cc:  conn->use_ssl = info.ssl;
+rgw_amqp.cc:  conn->verify_ssl = verify_ssl;
+rgw_amqp.cc:  conn->ca_location = ca_location;
+rgw_amqp.cc:    conn->timestamp = ceph_clock_now();
+rgw_amqp.cc:    if (!conn->is_ok()) {
+rgw_amqp.cc:      ldout(conn->cct, 1) << "AMQP publish: connection had an issue while message was in the queue" << dendl;
+rgw_amqp.cc:      const auto rc = amqp_basic_publish(conn->state,
+rgw_amqp.cc:        amqp_cstring_bytes(conn->exchange.c_str()),
+rgw_amqp.cc:        ldout(conn->cct, 20) << "AMQP publish (no callback): OK" << dendl;
+rgw_amqp.cc:      ldout(conn->cct, 1) << "AMQP publish (no callback): failed with error " << status_to_string(rc) << dendl;
+rgw_amqp.cc:      conn->destroy(rc);
+rgw_amqp.cc:    props.reply_to = conn->reply_to_queue;
+rgw_amqp.cc:    const auto rc = amqp_basic_publish(conn->state,
+rgw_amqp.cc:      amqp_cstring_bytes(conn->exchange.c_str()),
+rgw_amqp.cc:      conn->mandatory,
+rgw_amqp.cc:      auto const q_len = conn->callbacks.size();
+rgw_amqp.cc:        ldout(conn->cct, 20) << "AMQP publish (with callback, tag=" << conn->delivery_tag << "): OK. Queue has: " << q_len << " callbacks" << dendl;
+rgw_amqp.cc:        conn->callbacks.emplace_back(conn->delivery_tag++, message->cb);
+rgw_amqp.cc:        ldout(conn->cct, 1) << "AMQP publish (with callback): failed with error: callback queue full" << dendl;
+rgw_amqp.cc:      ldout(conn->cct, 1) << "AMQP publish (with callback): failed with error: " << status_to_string(rc) << dendl;
+rgw_amqp.cc:      conn->destroy(rc);
+rgw_amqp.cc:        if(conn->timestamp.sec() + max_idle_time < ceph_clock_now()) {
+rgw_amqp.cc:          ldout(conn->cct, 20) << "Time for deleting a connection due to idle behaviour: " << ceph_clock_now() << dendl;
+rgw_amqp.cc:        if (!conn->is_ok()) {
+rgw_amqp.cc:          if (now >= conn->next_reconnect) {
+rgw_amqp.cc:            info.user = const_cast<char*>(conn->user.c_str());
+rgw_amqp.cc:            info.password = const_cast<char*>(conn->password.c_str());
+rgw_amqp.cc:            info.ssl = conn->use_ssl;
+rgw_amqp.cc:            ldout(conn->cct, 20) << "AMQP run: retry connection" << dendl;
+rgw_amqp.cc:              ldout(conn->cct, 10) << "AMQP run: connection (" << to_string(conn_key) << ") retry failed. error: " <<
+rgw_amqp.cc:                status_to_string(conn->status) << " (" << conn->reply_code << ")"  << dendl;
+rgw_amqp.cc:              conn->next_reconnect = now + reconnect_time;
+rgw_amqp.cc:              ldout(conn->cct, 10) << "AMQP run: connection (" << to_string(conn_key) << ") retry successfull" << dendl;
+rgw_amqp.cc:        const auto rc = amqp_simple_wait_frame_noblock(conn->state, &frame, &read_timeout);
+rgw_amqp.cc:          ldout(conn->cct, 1) << "AMQP run: connection read error: " << status_to_string(rc) << dendl;
+rgw_amqp.cc:          conn->destroy(rc);
+rgw_amqp.cc:          ldout(conn->cct, 10) << "AMQP run: ignoring non n/ack messages. frame type: " 
+rgw_amqp.cc:              ldout(conn->cct, 10) << "AMQP run: connection was closed by broker" << dendl;
+rgw_amqp.cc:              conn->destroy(rc);
+rgw_amqp.cc:            ldout(conn->cct, 10) << "AMQP run: message was not routable" << dendl;
+rgw_amqp.cc:            ldout(conn->cct, 10) << "AMQP run: unexpected message" << dendl;
+rgw_amqp.cc:        const auto& callbacks_end = conn->callbacks.end();
+rgw_amqp.cc:        const auto& callbacks_begin = conn->callbacks.begin();
+rgw_amqp.cc:            ldout(conn->cct, 20) << "AMQP run: multiple n/acks received with tag=" << tag << " and result=" << result << dendl;
+rgw_amqp.cc:            while (it->tag <= tag && it != conn->callbacks.end()) {
+rgw_amqp.cc:              ldout(conn->cct, 20) << "AMQP run: invoking callback with tag=" << it->tag << dendl;
+rgw_amqp.cc:              it = conn->callbacks.erase(it);
+rgw_amqp.cc:            ldout(conn->cct, 20) << "AMQP run: n/ack received, invoking callback with tag=" << tag << " and result=" << result << dendl;
+rgw_amqp.cc:            conn->callbacks.erase(tag_it);
+rgw_amqp.cc:          ldout(conn->cct, 10) << "AMQP run: unsolicited n/ack received with tag=" << tag << dendl;
+rgw_amqp.cc:    if (!conn->is_ok()) {
+rgw_amqp.cc:              status_to_string(conn->status) << "(" << conn->reply_code << ")" << dendl;
+rgw_amqp.cc:    ldout(cct, 10) << "AMQP connect: new connection status is: " << status_to_string(conn->status) << dendl;
+rgw_amqp.cc:    if (!conn || !conn->is_ok()) {
+rgw_amqp.cc:    if (!conn || !conn->is_ok()) {
+rgw_asio_frontend.cc:        boost::asio::ssl::stream<tcp_socket&> stream{conn->socket, *ssl_context};
+rgw_asio_frontend.cc:                                            conn->buffer.data(), yield[ec]);
+rgw_asio_frontend.cc:        conn->buffer.consume(bytes);
+rgw_asio_frontend.cc:                          conn->buffer, true, pause_mutex, scheduler.get(),
+rgw_asio_frontend.cc:        conn->socket.shutdown(tcp::socket::shutdown_both, ec);
+rgw_asio_frontend.cc:        handle_connection(context, env, conn->socket, timeout, header_limit,
+rgw_asio_frontend.cc:                          conn->buffer, false, pause_mutex, scheduler.get(),
+rgw_asio_frontend.cc:        conn->socket.shutdown(tcp_socket::shutdown_both, ec);
+rgw_data_sync.cc:  int ret = sc.conn->get_json_resource(dpp, "/admin/log", pairs, null_yield, *log_info);
+rgw_data_sync.cc:		     dpp, sc->conn->get_remote_id(), "data.init", "",
+rgw_data_sync.cc:		       dpp, sc->conn->get_remote_id(), "data.init", "",
+rgw_data_sync.cc:          yield call(sync_env->error_logger->log_error_cr(dpp, sc->conn->get_remote_id(), "data",
+rgw_data_sync.cc:        yield call(sync_env->error_logger->log_error_cr(dpp, sc->conn->get_remote_id(), "data", error_ss.str(), -retcode, string("failed to sync object") + cpp_strerror(-sync_status)));
+rgw_data_sync.cc:  int r = conn->get_json_resource(dpp, "/admin/log/", params, y, info);
+rgw_kafka.cc:    str += "\nBroker: " + conn->broker; 
+rgw_kafka.cc:    str += conn->use_ssl ? "\nUse SSL" : ""; 
+rgw_kafka.cc:    str += conn->ca_location ? "\nCA Location: " + *(conn->ca_location) : "";
+rgw_kafka.cc:    ldout(conn->cct, 20) << "Kafka run: n/ack received, (no callback) with result=" << result << dendl;
+rgw_kafka.cc:  const auto& callbacks_end = conn->callbacks.end();
+rgw_kafka.cc:  const auto& callbacks_begin = conn->callbacks.begin();
+rgw_kafka.cc:      ldout(conn->cct, 20) << "Kafka run: n/ack received, invoking callback with tag=" << 
+rgw_kafka.cc:      conn->callbacks.erase(tag_it);
+rgw_kafka.cc:    ldout(conn->cct, 10) << "Kafka run: unsolicited n/ack received with tag=" << 
+rgw_kafka.cc:  conn->status = STATUS_OK; 
+rgw_kafka.cc:  conn->temp_conf = rd_kafka_conf_new();
+rgw_kafka.cc:  if (!conn->temp_conf) {
+rgw_kafka.cc:    conn->status = STATUS_CONF_ALLOC_FAILED;
+rgw_kafka.cc:  if (rd_kafka_conf_set(conn->temp_conf, "bootstrap.servers", conn->broker.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+rgw_kafka.cc:  if (conn->use_ssl) {
+rgw_kafka.cc:    if (!conn->user.empty()) {
+rgw_kafka.cc:      if (rd_kafka_conf_set(conn->temp_conf, "security.protocol", "SASL_SSL", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+rgw_kafka.cc:              rd_kafka_conf_set(conn->temp_conf, "sasl.mechanism", "PLAIN", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+rgw_kafka.cc:              rd_kafka_conf_set(conn->temp_conf, "sasl.username", conn->user.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+rgw_kafka.cc:              rd_kafka_conf_set(conn->temp_conf, "sasl.password", conn->password.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+rgw_kafka.cc:      ldout(conn->cct, 20) << "Kafka connect: successfully configured SSL+SASL security" << dendl;
+rgw_kafka.cc:      if (rd_kafka_conf_set(conn->temp_conf, "security.protocol", "SSL", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+rgw_kafka.cc:      ldout(conn->cct, 20) << "Kafka connect: successfully configured SSL security" << dendl;
+rgw_kafka.cc:    if (conn->ca_location) {
+rgw_kafka.cc:      if (rd_kafka_conf_set(conn->temp_conf, "ssl.ca.location", conn->ca_location->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+rgw_kafka.cc:      ldout(conn->cct, 20) << "Kafka connect: successfully configured CA location" << dendl;
+rgw_kafka.cc:      ldout(conn->cct, 20) << "Kafka connect: using default CA location" << dendl;
+rgw_kafka.cc:    // if (rd_kafka_conf_set(conn->temp_conf, "enable.ssl.certificate.verification", "0", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+rgw_kafka.cc:    ldout(conn->cct, 20) << "Kafka connect: successfully configured security" << dendl;
+rgw_kafka.cc:  rd_kafka_conf_set_dr_msg_cb(conn->temp_conf, message_callback);
+rgw_kafka.cc:  rd_kafka_conf_set_opaque(conn->temp_conf, conn.get());
+rgw_kafka.cc:  conn->producer = rd_kafka_new(RD_KAFKA_PRODUCER, conn->temp_conf, errstr, sizeof(errstr));
+rgw_kafka.cc:  if (!conn->producer) {
+rgw_kafka.cc:    conn->status = rd_kafka_last_error();
+rgw_kafka.cc:    ldout(conn->cct, 1) << "Kafka connect: failed to create producer: " << errstr << dendl;
+rgw_kafka.cc:  ldout(conn->cct, 20) << "Kafka connect: successfully created new producer" << dendl;
+rgw_kafka.cc:  conn->temp_conf = nullptr;
+rgw_kafka.cc:  conn->status = rd_kafka_last_error();
+rgw_kafka.cc:  ldout(conn->cct, 1) << "Kafka connect: configuration failed: " << errstr << dendl;
+rgw_kafka.cc:    conn->timestamp = ceph_clock_now(); 
+rgw_kafka.cc:    if (!conn->is_ok()) {
+rgw_kafka.cc:      ldout(conn->cct, 1) << "Kafka publish: connection had an issue while message was in the queue. error: " << status_to_string(conn->status) << dendl;
+rgw_kafka.cc:        message->cb(conn->status);
+rgw_kafka.cc:    auto topic_it = std::find(conn->topics.begin(), conn->topics.end(), message->topic);
+rgw_kafka.cc:    if (topic_it == conn->topics.end()) {
+rgw_kafka.cc:      topic = rd_kafka_topic_new(conn->producer, message->topic.c_str(), nullptr);
+rgw_kafka.cc:        ldout(conn->cct, 1) << "Kafka publish: failed to create topic: " << message->topic << " error: " << status_to_string(err) << dendl;
+rgw_kafka.cc:        conn->destroy(err);
+rgw_kafka.cc:      conn->topics.push_back(topic);
+rgw_kafka.cc:      ldout(conn->cct, 20) << "Kafka publish: successfully created topic: " << message->topic << dendl;
+rgw_kafka.cc:        ldout(conn->cct, 20) << "Kafka publish: reused existing topic: " << message->topic << dendl;
+rgw_kafka.cc:    const auto tag = (message->cb == nullptr ? nullptr : new uint64_t(conn->delivery_tag++));
+rgw_kafka.cc:      ldout(conn->cct, 10) << "Kafka publish: failed to produce: " << rd_kafka_err2str(err) << dendl;
+rgw_kafka.cc:      conn->destroy(err);
+rgw_kafka.cc:      auto const q_len = conn->callbacks.size();
+rgw_kafka.cc:        ldout(conn->cct, 20) << "Kafka publish (with callback, tag=" << *tag << "): OK. Queue has: " << q_len << " callbacks" << dendl;
+rgw_kafka.cc:        conn->callbacks.emplace_back(*tag, message->cb);
+rgw_kafka.cc:        ldout(conn->cct, 1) << "Kafka publish (with callback): failed with error: callback queue full" << dendl;
+rgw_kafka.cc:        ldout(conn->cct, 20) << "Kafka publish (no callback): OK" << dendl;
+rgw_kafka.cc:        if(conn->timestamp.sec() + max_idle_time < ceph_clock_now()) {
+rgw_kafka.cc:          ldout(conn->cct, 20) << "Time for deleting a connection due to idle behaviour: " << ceph_clock_now() << dendl;
+rgw_kafka.cc:        if (!conn->is_ok()) {
+rgw_kafka.cc:          ldout(conn->cct, 10) << "Kafka run: connection status is: " << status_to_string(conn->status) << dendl;
+rgw_kafka.cc:          ldout(conn->cct, 20) << "Kafka run: retry connection" << dendl;
+rgw_kafka.cc:            ldout(conn->cct, 10) << "Kafka run: connection (" << broker << ") retry failed" << dendl;
+rgw_kafka.cc:            ldout(conn->cct, 10) << "Kafka run: connection (" << broker << ") retry successfull" << dendl;
+rgw_kafka.cc:        reply_count += rd_kafka_poll(conn->producer, read_timeout_ms);
+rgw_kafka.cc:    if (!conn || !conn->is_ok()) {
+rgw_kafka.cc:    if (!conn || !conn->is_ok()) {
+rgw_period_puller.cc:  req_info info(conn->get_ctx(), &env);
+rgw_period_puller.cc:  int r = conn->forward(dpp, user, info, nullptr, MAX_REST_RESPONSE, nullptr, &data, y);
+rgw_period_pusher.cc:      if (++counter < conn->get_endpoint_count())
+rgw_rados.cc:  int ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr,
+rgw_rados.cc:  ret = conn->complete_request(in_stream_req, nullptr, &set_mtime, psize,
+rgw_rados.cc:  ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr,
+rgw_rados.cc:  ret = conn->complete_request(in_stream_req, &etag, &set_mtime,
+rgw_rados.cc:  int ret = rest_master_conn->put_obj_async_init(dpp, user_id, dest_obj, src_attrs, &out_stream_req);
+rgw_rados.cc:  ret = rest_master_conn->complete_request(out_stream_req, etag, mtime, null_yield);
+rgw_rest_conn.cc:  : cct(_conn->get_ctx()), conn(_conn), resource(_resource),
+rgw_rest_conn.cc:    req(cct, conn->get_url(), &cb, NULL, NULL, _conn->get_api_name())
+rgw_rest_conn.cc:  : cct(_conn->get_ctx()), conn(_conn), resource(_resource), params(_params),
+rgw_rest_conn.cc:    cb(bl), mgr(_mgr), req(cct, conn->get_url(), &cb, NULL, NULL, _conn->get_api_name())
+rgw_rest_conn.cc:  conn->populate_params(params, nullptr, conn->get_self_zonegroup());
+rgw_rest_conn.cc:  int ret = req.send_request(dpp, &conn->get_key(), headers, resource, mgr);
+rgw_rest_conn.cc:  int ret = req.send_request(dpp, &conn->get_key(), headers, resource, mgr);
+rgw_rest_conn.cc:  : cct(_conn->get_ctx()), conn(_conn), method(_method), resource(_resource),
+rgw_rest_conn.cc:    req(cct, method.c_str(), conn->get_url(), &cb, NULL, NULL, _conn->get_api_name(), _conn->get_host_style())
+rgw_rest_conn.cc:  : cct(_conn->get_ctx()), conn(_conn), method(_method), resource(_resource), params(params),
+rgw_rest_conn.cc:    cb(bl), mgr(_mgr), req(cct, method.c_str(), conn->get_url(), &cb, NULL, NULL, _conn->get_api_name(), _conn->get_host_style())
+rgw_rest_conn.cc:  conn->populate_params(params, nullptr, conn->get_self_zonegroup());
+rgw_rest_conn.cc:  int ret = req.send_request(dpp, &conn->get_key(), headers, resource, mgr);
+rgw_rest_conn.cc:  int ret = req.send_request(dpp, &conn->get_key(), headers, resource, mgr);
+rgw_sal_s3.cc:  ret = conn->put_obj_async(user_id, dest_obj, astate->size, src_attrs, true, &wr, url, accesskey);
+rgw_sal_s3.cc:  ret = conn->complete_request(wr, etag, nullptr);
+rgw_sync.cc:  int ret = conn->get_json_resource(dpp, "/admin/log", pairs, null_yield, *log_info);
+rgw_sync.cc:        yield call(sync_env->error_logger->log_error_cr(dpp, sync_env->conn->get_remote_id(), section, key, -sync_status,
+rgw_sync_checkpoint.cc:  return rgw_read_remote_bilog_info(dpp, conn->second, *pipe.source.bucket,
+rgw_sync_module_aws.cc:    int ret = conn->get_obj(dpp, src_obj, req_params, false /* send */, &in_req);
+rgw_sync_module_aws.cc:      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): conn->get_obj() returned ret=" << ret << dendl;
+rgw_sync_module_aws.cc:      target->conn->put_obj_send_init(dest_obj, params, &out_req);
+rgw_sync_module_aws.cc:      target->conn->put_obj_send_init(dest_obj, nullptr, &out_req);
+rgw_sync_module_aws.cc:    r->send_ready(dpp, target->conn->get_key(), new_attrs, policy);
+rgw_sync_module_es_rest.cc:  op_ret = conn->get_resource(s, resource, &params, &extra_headers,
+services/svc_zone.cc:  int ret = conn->get_url(*endpoint);
+services/svc_zone.cc:    ldout(cct, 0) << "ERROR: redirect zone, conn->get_endpoint() returned ret=" << ret << dendl;
+store/dbstore/config/sqlite.cc:      auto& stmt = conn->statements["realm_upd"];
+store/dbstore/config/sqlite.cc:        stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      if (!::sqlite3_changes(conn->db.get())) { // VersionNumber/Tag mismatch
+store/dbstore/config/sqlite.cc:      auto& stmt = conn->statements["realm_rename"];
+store/dbstore/config/sqlite.cc:        stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      if (!::sqlite3_changes(conn->db.get())) { // VersionNumber/Tag mismatch
+store/dbstore/config/sqlite.cc:      auto& stmt = conn->statements["realm_del"];
+store/dbstore/config/sqlite.cc:        stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      if (!::sqlite3_changes(conn->db.get())) {
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["def_realm_ins"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["def_realm_ups"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["def_realm_sel"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["def_realm_del"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    if (!::sqlite3_changes(conn->db.get())) {
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["realm_ins"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["realm_ups"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["realm_sel_id"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["realm_sel_def"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["realm_sel_names"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["period_ins"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["period_ups"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["period_del"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    if (!::sqlite3_changes(conn->db.get())) {
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["period_sel_ids"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      auto& stmt = conn->statements["zonegroup_upd"];
+store/dbstore/config/sqlite.cc:        stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      if (!::sqlite3_changes(conn->db.get())) { // VersionNumber/Tag mismatch
+store/dbstore/config/sqlite.cc:      auto& stmt = conn->statements["zonegroup_rename"];
+store/dbstore/config/sqlite.cc:        stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      if (!::sqlite3_changes(conn->db.get())) { // VersionNumber/Tag mismatch
+store/dbstore/config/sqlite.cc:      auto& stmt = conn->statements["zonegroup_del"];
+store/dbstore/config/sqlite.cc:        stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      if (!::sqlite3_changes(conn->db.get())) { // VersionNumber/Tag mismatch
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["def_zonegroup_ins"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["def_zonegroup_ups"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["def_zonegroup_sel"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["def_zonegroup_del"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    if (!::sqlite3_changes(conn->db.get())) {
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["zonegroup_ins"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["zonegroup_ups"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["zonegroup_sel_id"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["zonegroup_sel_name"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["zonegroup_sel_def"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["zonegroup_sel_names"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      auto& stmt = conn->statements["zone_upd"];
+store/dbstore/config/sqlite.cc:        stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      if (!::sqlite3_changes(conn->db.get())) { // VersionNumber/Tag mismatch
+store/dbstore/config/sqlite.cc:      auto& stmt = conn->statements["zone_rename"];
+store/dbstore/config/sqlite.cc:        stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      if (!::sqlite3_changes(conn->db.get())) { // VersionNumber/Tag mismatch
+store/dbstore/config/sqlite.cc:      auto& stmt = conn->statements["zone_del"];
+store/dbstore/config/sqlite.cc:        stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      if (!::sqlite3_changes(conn->db.get())) { // VersionNumber/Tag mismatch
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["def_zone_ins"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["def_zone_ups"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["def_zone_sel"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["def_zone_del"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    if (!::sqlite3_changes(conn->db.get())) {
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["zone_ins"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["zone_ups"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["zone_sel_id"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["zone_sel_name"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["zone_sel_def"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["zone_sel_names"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:    auto& stmt = conn->statements["period_conf_sel"];
+store/dbstore/config/sqlite.cc:      stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["period_conf_ins"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:      stmt = &conn->statements["period_conf_ups"];
+store/dbstore/config/sqlite.cc:        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+store/dbstore/config/sqlite.cc:  apply_schema_migrations(dpp, conn->db.get());

@@ -695,6 +695,39 @@ int RGWRESTGenerateHTTPHeaders::sign(const DoutPrefixProvider *dpp, RGWAccessKey
   return 0;
 }
 
+void RGWRESTStreamS3PutObj::send_init(const DoutPrefixProvider *dpp, rgw_bucket* bucket)
+{
+  string resource_str;
+  string resource;
+  string new_url = url;
+  string new_host = host;
+
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  const auto& bucket_name = bucket->name;
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+
+  resource_str = bucket_name;
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " : bucket name is: " << resource_str << dendl;
+
+  //do not encode slash in object key name
+  url_encode(resource_str, resource, false);
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " : url encode: " << resource << dendl;
+
+  if (new_url[new_url.size() - 1] != '/')
+    new_url.append("/");
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " : new_url is: " << new_url <<  dendl;
+
+  method = "PUT";
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  headers_gen.init(method, new_host, resource_prefix, new_url, resource, params, api_name);
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+
+  url = headers_gen.get_url();
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " : url is: " << url << dendl;
+}
+
+
+
 void RGWRESTStreamS3PutObj::send_init(rgw::sal::Object* obj)
 {
   string resource_str;
@@ -750,6 +783,15 @@ void RGWRESTStreamS3PutObj::send_ready(const DoutPrefixProvider *dpp, RGWAccessK
   }
 
   out_cb = new RGWRESTStreamOutCB(this);
+}
+
+void RGWRESTStreamS3PutObj::put_bucket_init(const DoutPrefixProvider *dpp, RGWAccessKey& key, rgw_bucket* bucket, map<string, bufferlist>& attrs)
+{
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  send_init(dpp, bucket);
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  send_ready(dpp, key, attrs);
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 }
 
 void RGWRESTStreamS3PutObj::put_obj_init(const DoutPrefixProvider *dpp, RGWAccessKey& key, rgw::sal::Object* obj, map<string, bufferlist>& attrs)
@@ -936,41 +978,64 @@ int RGWHTTPStreamRWRequest::complete_request(optional_yield y,
                                              map<string, string> *pattrs,
                                              map<string, string> *pheaders)
 {
-  int ret = wait(y);
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  int ret = wait(null_yield);
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (ret < 0) {
     return ret;
   }
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   unique_lock guard(out_headers_lock);
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (etag) {
     set_str_from_headers(out_headers, "ETAG", *etag);
   }
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (status >= 0) {
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (mtime) {
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       string mtime_str;
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       if (!mtime_str.empty()) {
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         int ret = parse_rgwx_mtime(this, cct, mtime_str, mtime);
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         if (ret < 0) {
           return ret;
         }
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       } else {
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         *mtime = real_time();
       }
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     }
     if (psize) {
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       string size_str;
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       set_str_from_headers(out_headers, "RGWX_OBJECT_SIZE", size_str);
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       string err;
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       *psize = strict_strtoll(size_str.c_str(), 10, &err);
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       if (!err.empty()) {
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         ldpp_dout(this, 0) << "ERROR: failed parsing embedded metadata object size (" << size_str << ") to int " << dendl;
         return -EIO;
       }
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     }
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   }
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   for (auto iter = out_headers.begin(); pattrs && iter != out_headers.end(); ++iter) {
     const string& attr_name = iter->first;
     if (attr_name.compare(0, sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1, RGW_HTTP_RGWX_ATTR_PREFIX) == 0) {
@@ -991,10 +1056,13 @@ int RGWHTTPStreamRWRequest::complete_request(optional_yield y,
       (*pattrs)[buf] = iter->second;
     }
   }
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   if (pheaders) {
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     *pheaders = std::move(out_headers);
   }
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   return status;
 }
 
