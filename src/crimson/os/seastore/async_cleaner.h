@@ -1150,6 +1150,8 @@ public:
   using clean_space_ret = clean_space_ertr::future<>;
   virtual clean_space_ret clean_space() = 0;
 
+  virtual const std::set<device_id_t>& get_device_ids() const = 0;
+
   // test only
   virtual bool check_usage() = 0;
 
@@ -1328,6 +1330,10 @@ public:
   }
 
   clean_space_ret clean_space() final;
+
+  const std::set<device_id_t>& get_device_ids() const final {
+    return sm_group->get_device_ids();
+  }
 
   // Testing interfaces
 
@@ -1642,6 +1648,10 @@ public:
   }
 
   clean_space_ret clean_space() final;
+
+  const std::set<device_id_t>& get_device_ids() const final {
+    return rb_group->get_device_ids();
+  }
 
   RandomBlockManager* get_rbm(paddr_t paddr) {
     auto rbs = rb_group->get_rb_managers();
