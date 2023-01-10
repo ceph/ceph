@@ -1211,7 +1211,8 @@ public:
     SegmentManagerGroupRef&& sm_group,
     BackrefManager &backref_manager,
     SegmentSeqAllocator &segment_seq_allocator,
-    bool detailed);
+    bool detailed,
+    bool is_cold);
 
   void set_journal_trimmer(JournalTrimmer &_trimmer) {
     trimmer = &_trimmer;
@@ -1222,9 +1223,11 @@ public:
       SegmentManagerGroupRef&& sm_group,
       BackrefManager &backref_manager,
       SegmentSeqAllocator &ool_seq_allocator,
-      bool detailed) {
+      bool detailed,
+      bool is_cold = false) {
     return std::make_unique<SegmentCleaner>(
-        config, std::move(sm_group), backref_manager, ool_seq_allocator, detailed);
+        config, std::move(sm_group), backref_manager,
+        ool_seq_allocator, detailed, is_cold);
   }
 
   /*
@@ -1524,6 +1527,7 @@ private:
   }
 
   const bool detailed;
+  const bool is_cold;
   const config_t config;
 
   SegmentManagerGroupRef sm_group;
