@@ -16,15 +16,10 @@ Synopsis
 Description
 ===========
 
-**ceph-rbdnamer** prints the pool and image name for the given RBD devices
-to stdout. It is used by `udev` (using a rule like the one below) to
-set up a device symlink.
-
-
-::
-
-        KERNEL=="rbd[0-9]*", PROGRAM="/usr/bin/ceph-rbdnamer %n", SYMLINK+="rbd/%c{1}/%c{2}"
-
+**ceph-rbdnamer** prints the pool, namespace, image and snapshot names
+for a given RBD device to stdout. It is used by `udev` device manager
+to set up RBD device symlinks. The appropriate `udev` rules are
+provided in a file named `50-rbd.rules`.
 
 Availability
 ============
