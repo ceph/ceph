@@ -399,8 +399,10 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type)
     return os << "TRIM_DIRTY";
   case transaction_type_t::TRIM_ALLOC:
     return os << "TRIM_ALLOC";
-  case transaction_type_t::CLEANER:
-    return os << "CLEANER";
+  case transaction_type_t::CLEANER_MAIN:
+    return os << "CLEANER_MAIN";
+  case transaction_type_t::CLEANER_COLD:
+    return os << "CLEANER_COLD";
   case transaction_type_t::MAX:
     return os << "TRANS_TYPE_NULL";
   default:
