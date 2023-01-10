@@ -831,8 +831,10 @@ SegmentCleaner::SegmentCleaner(
   SegmentManagerGroupRef&& sm_group,
   BackrefManager &backref_manager,
   SegmentSeqAllocator &segment_seq_allocator,
-  bool detailed)
+  bool detailed,
+  bool is_cold)
   : detailed(detailed),
+    is_cold(is_cold),
     config(config),
     sm_group(std::move(sm_group)),
     backref_manager(backref_manager),
@@ -854,7 +856,13 @@ void SegmentCleaner::register_metrics()
   i = get_bucket_index(UTIL_STATE_EMPTY);
   stats.segment_util.buckets[i].count = segments.get_num_segments();
 
-  metrics.add_group("segment_cleaner", {
+  std::string prefix;
+  if (is_cold) {
+    prefix.append("cold_");
+  }
+  prefix.append("segment_cleaner");
+
+  metrics.add_group(prefix, {
     sm::make_counter("segments_number",
 		     [this] { return segments.get_num_segments(); },
 		     sm::description("the number of segments")),
