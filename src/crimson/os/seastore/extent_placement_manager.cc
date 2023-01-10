@@ -190,7 +190,7 @@ void ExtentPlacementManager::init(
     for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
 	    data_category_t::DATA, gen, *segment_cleaner,
-	    segment_cleaner->get_ool_segment_seq_allocator()));
+            *ool_segment_seq_allocator));
       data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
     }
 
@@ -198,7 +198,7 @@ void ExtentPlacementManager::init(
     for (rewrite_gen_t gen = OOL_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
 	    data_category_t::METADATA, gen, *segment_cleaner,
-	    segment_cleaner->get_ool_segment_seq_allocator()));
+            *ool_segment_seq_allocator));
       md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
     }
 
