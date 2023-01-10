@@ -151,10 +151,10 @@ vstart.sh
 The following options aree handy when using ``vstart.sh``,
 
 ``--crimson``
-    start ``crimson-osd`` instead of ``ceph-osd``
+    Start ``crimson-osd`` instead of ``ceph-osd``.
 
 ``--nodaemon``
-    do not daemonize the service
+    Do not daemonize the service.
 
 ``--redirect-output``
     Redirect the ``stdout`` and ``stderr`` to ``out/$type.$num.stdout``.
@@ -170,7 +170,7 @@ The following options aree handy when using ``vstart.sh``,
     for additional Seastar-specific command line options.
 
 ``--cyanstore``
-    use CyanStore as the object store backend.
+    Use CyanStore as the object store backend.
 
 ``--bluestore``
     Use the alienized BlueStore as the object store backend. This is the default.
