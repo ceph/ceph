@@ -566,7 +566,13 @@ int get_iface_numa_node(
     fn = fmt::format("/sys/class/net/{}/bonding/slaves", ifa);
     fd = ::open(fn.c_str(), O_RDONLY);
     if (fd < 0) {
-      return -errno;
+      std::string_view delimiter = ".";
+      std::string_view bond = ifa.substr(0, ifa.find(delimiter));
+      fn = fmt::format("/sys/class/net/{}/lower_{}/bonding/slaves", ifa, bond);
+      fd = ::open(fn.c_str(), O_RDONLY);
+      if (fd < 0) {
+         return -errno;
+      }
     }
     ifatype = iface_t::BOND_PORT;
   }
