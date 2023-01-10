@@ -709,6 +709,7 @@ TransactionManagerRef make_transaction_manager(
       cleaner_config,
       std::move(sms),
       *backref_manager,
+      epm->get_ool_segment_seq_allocator(),
       cleaner_is_detailed);
     auto segment_cleaner = static_cast<SegmentCleaner*>(cleaner.get());
     cache->set_segment_provider(*segment_cleaner);
