@@ -126,17 +126,31 @@ class ReplicaReservations {
   /// a no-reply timeout handler
   struct no_reply_t {
     explicit no_reply_t(
-      OSDService* osds,
-      const ConfigProxy& conf,
-      ReplicaReservations& parent,
-      std::string_view log_prfx);
+	PGRef pg,
+	OSDService* osds,
+	const ConfigProxy& conf,
+	ReplicaReservations& parent,
+        epoch_t epoch,
+	std::string_view log_prfx);
 
     ~no_reply_t();
+
+    /// cancel the alarm - while holding the PG lock, but not the
+    /// sleep-timer lock
+    void cancel_future_alarm();
+
+    PGRef m_pg;
     OSDService* m_osds;
-    const ConfigProxy& m_conf;
     ReplicaReservations& m_parent;
+    epoch_t m_epoch;
     std::string m_log_prfx;
-    Context* m_abort_callback{nullptr};
+    Context* m_callback{nullptr};
+    /**
+   * when the callback is triggered by the sleep-timer, it should
+   * be ignored. Note - this is our way to deactivate the alarm
+   * without locking the sleep-timer mutex.
+   */
+    bool m_was_deleted{false};
   };
 
   PG* m_pg;
