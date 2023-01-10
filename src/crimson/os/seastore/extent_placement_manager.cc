@@ -264,15 +264,16 @@ ExtentPlacementManager::dispatch_delayed_extents(Transaction &t)
   for (auto &extent : t.get_inline_block_list()) {
     if (extent->is_valid()) {
       res.usage.inline_usage += extent->get_length();
+      res.usage.cleaner_usage.main_usage += extent->get_length();
     }
   }
 
   for (auto &extent : res.delayed_extents) {
+    res.usage.cleaner_usage.main_usage += extent->get_length();
     if (dispatch_delayed_extent(extent)) {
       res.usage.inline_usage += extent->get_length();
       t.mark_delayed_extent_inline(extent);
     } else {
-      res.usage.ool_usage += extent->get_length();
       t.mark_delayed_extent_ool(extent);
       auto writer_ptr = get_writer(
           extent->get_user_hint(),
@@ -417,29 +418,9 @@ ExtentPlacementManager::BackgroundProcess::run_until_halt()
   );
 }
 
-ExtentPlacementManager::BackgroundProcess::reserve_result_t
-ExtentPlacementManager::BackgroundProcess::try_reserve(
-    const projected_usage_t &usage)
-{
-  reserve_result_t res {
-    trimmer->try_reserve_inline_usage(usage.inline_usage),
-    main_cleaner->try_reserve_projected_usage(usage.inline_usage + usage.ool_usage)
-  };
-
-  if (!res.is_successful()) {
-    if (res.reserve_inline_success) {
-      trimmer->release_inline_usage(usage.inline_usage);
-    }
-    if (res.reserve_ool_success) {
-      main_cleaner->release_projected_usage(usage.inline_usage + usage.ool_usage);
-    }
-  }
-  return res;
-}
-
 seastar::future<>
 ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
-    projected_usage_t usage)
+    io_usage_t usage)
 {
   if (!is_ready()) {
     return seastar::now();
@@ -449,14 +430,15 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
   // prepare until the prior one exits and clears this.
   ++stats.io_count;
 
-  auto res = try_reserve(usage);
+  auto res = try_reserve_io(usage);
   if (res.is_successful()) {
     return seastar::now();
   } else {
+    abort_io_usage(usage, res);
     if (!res.reserve_inline_success) {
       ++stats.io_blocked_count_trim;
     }
-    if (!res.reserve_ool_success) {
+    if (!res.cleaner_result.is_successful()) {
       ++stats.io_blocked_count_clean;
     }
     ++stats.io_blocking_num;
@@ -468,13 +450,14 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
       return blocking_io->get_future(
       ).then([this, usage] {
         ceph_assert(!blocking_io);
-        auto res = try_reserve(usage);
+        auto res = try_reserve_io(usage);
         if (res.is_successful()) {
           assert(stats.io_blocking_num == 1);
           --stats.io_blocking_num;
           return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         } else {
+          abort_io_usage(usage, res);
           return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::no);
         }
@@ -509,28 +492,72 @@ ExtentPlacementManager::BackgroundProcess::run()
   });
 }
 
+reserve_cleaner_result_t
+ExtentPlacementManager::BackgroundProcess::try_reserve_cleaner(
+  const cleaner_usage_t &usage)
+{
+  return {
+    main_cleaner->try_reserve_projected_usage(usage.main_usage)
+  };
+}
+
+void ExtentPlacementManager::BackgroundProcess::abort_cleaner_usage(
+  const cleaner_usage_t &usage,
+  const reserve_cleaner_result_t &result)
+{
+  if (result.reserve_main_success) {
+    main_cleaner->release_projected_usage(usage.main_usage);
+  }
+}
+
+reserve_io_result_t
+ExtentPlacementManager::BackgroundProcess::try_reserve_io(
+  const io_usage_t &usage)
+{
+  return {
+    trimmer->try_reserve_inline_usage(usage.inline_usage),
+    try_reserve_cleaner(usage.cleaner_usage)
+  };
+}
+
+void ExtentPlacementManager::BackgroundProcess::abort_io_usage(
+  const io_usage_t &usage,
+  const reserve_io_result_t &result)
+{
+  if (result.reserve_inline_success) {
+    trimmer->release_inline_usage(usage.inline_usage);
+  }
+  abort_cleaner_usage(usage.cleaner_usage, result.cleaner_result);
+}
+
 seastar::future<>
 ExtentPlacementManager::BackgroundProcess::do_background_cycle()
 {
   assert(is_ready());
-  bool trimmer_reserve_success = true;
-  if (trimmer->should_trim()) {
-    trimmer_reserve_success =
-      main_cleaner->try_reserve_projected_usage(
-        trimmer->get_trim_size_per_cycle());
+  bool should_trim = trimmer->should_trim();
+  bool proceed_trim = false;
+  auto trim_size = trimmer->get_trim_size_per_cycle();
+  cleaner_usage_t trim_usage{trim_size};
+
+  if (should_trim) {
+    auto res = try_reserve_cleaner(trim_usage);
+    if (res.is_successful()) {
+      proceed_trim = true;
+    } else {
+      abort_cleaner_usage(trim_usage, trim_reserve_res);
+    }
   }
 
-  if (trimmer->should_trim() && trimmer_reserve_success) {
+  if (proceed_trim) {
     return trimmer->trim(
-    ).finally([this] {
-      main_cleaner->release_projected_usage(
-          trimmer->get_trim_size_per_cycle());
+    ).finally([this, trim_usage] {
+      abort_cleaner_usage(trim_usage, {true});
     });
   } else if (main_cleaner->should_clean_space() ||
              // make sure cleaner will start
              // when the trimmer should run but
              // failed to reserve space.
-             !trimmer_reserve_success) {
+             (should_trim && !proceed_trim)) {
     return main_cleaner->clean_space(
     ).handle_error(
       crimson::ct_error::assert_all{
@@ -609,12 +636,4 @@ RandomBlockOolWriter::do_write(
   });
 }
 
-std::ostream &operator<<(std::ostream &out, const ExtentPlacementManager::projected_usage_t &usage)
-{
-  return out << "projected_usage_t("
-             << "inline_usage=" << usage.inline_usage
-             << ", ool_usage=" << usage.ool_usage << ")";
 }
-
-}
-
