@@ -8022,7 +8022,7 @@ void BlueStore::_fsck_check_statfs(
 }
 
 void BlueStore::_fsck_foreach_shared_blob(
-  std::function< void (coll_t, ghobject_t, uint64_t, const bluestore_blob_t&)> cb) {
+  std::function< bool (coll_t, ghobject_t, uint64_t, const bluestore_blob_t&)> cb) {
   auto it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
   if (it) {
     CollectionRef c;
@@ -8072,12 +8072,15 @@ void BlueStore::_fsck_foreach_shared_blob(
 	auto& b = e.blob->get_blob();
 	if (b.is_shared() && passed_sbs.count(e.blob) == 0) {
 	  auto sbid = e.blob->shared_blob->get_sbid();
-	  cb(c->cid, oid, sbid, b);
+	  if (cb(c->cid, oid, sbid, b) == false) {
+	    goto stop_iterating;
+	  }
 	  passed_sbs.emplace(e.blob);
 	}
       } // for ... extent_map
     } // for ... it->valid
   } //if (it(PREFIX_OBJ))
+ stop_iterating:;
 }
 
 void BlueStore::_fsck_repair_shared_blobs(
@@ -8100,7 +8103,7 @@ void BlueStore::_fsck_repair_shared_blobs(
                            const bluestore_blob_t& b) {
     auto it = refs_map.lower_bound(sbid);
     if(it != refs_map.end() && it->first == sbid) {
-      return;
+      return true;
     }
     for (auto& p : b.get_extents()) {
       if (p.is_valid() &&
@@ -8111,11 +8114,12 @@ void BlueStore::_fsck_repair_shared_blobs(
         dout(20) << __func__
                  << " broken shared blob found for col:" << cid
 	         << " obj:" << oid
-	         << " sbid 0x " << std::hex << sbid << std::dec
+	         << " sbid 0x" << std::hex << sbid << std::dec
 	         << dendl;
 	break;
       }
     }
+    return true;
   });
 
   // second iteration over objects to build new ref map for the broken sbids
@@ -8125,7 +8129,7 @@ void BlueStore::_fsck_repair_shared_blobs(
                            const bluestore_blob_t& b) {
     auto it = refs_map.find(sbid);
     if(it == refs_map.end()) {
-      return;
+      return true;
     }
     for (auto& p : b.get_extents()) {
       if (p.is_valid()) {
@@ -8133,6 +8137,7 @@ void BlueStore::_fsck_repair_shared_blobs(
 	break;
       }
     }
+    return true;
   });
 
   // update shared blob records
@@ -9467,6 +9472,29 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
          << " shared blob references aren't matching, at least "
          << sb_ref_mismatches << " found" << dendl;
     errors += sb_ref_mismatches;
+    if (!repair) {
+      uint32_t cnts = 0;
+      _fsck_foreach_shared_blob( [&](coll_t cid,
+				     ghobject_t oid,
+				     uint64_t sbid,
+				     const bluestore_blob_t& b) {
+	for (auto& p : b.get_extents()) {
+	  if (p.is_valid() &&
+	      !sb_ref_counts.test_all_zero_range(sbid,
+						 p.offset,
+						 p.length)) {
+	    derr << "fsck possibly broken shared blob found for col:" << cid
+		 << " obj:" << oid
+		 << " sbid 0x" << std::hex << sbid << std::dec
+		 << " " << p
+		 << dendl;
+	    ++cnts;
+	    break;
+	  }
+	}
+	return cnts <= MAX_FSCK_ERROR_LINES;
+      });
+    }
   }
 
   if (depth != FSCK_SHALLOW && repair) {
