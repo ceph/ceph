@@ -79,7 +79,7 @@ To add each new host to the cluster, perform two steps:
 Removing Hosts
 ==============
 
-A host can safely be removed from a the cluster after all daemons are removed
+A host can safely be removed from the cluster after all daemons are removed
 from it.
 
 To drain all daemons from a host, run a command of the following form:
@@ -88,23 +88,26 @@ To drain all daemons from a host, run a command of the following form:
 
    ceph orch host drain *<host>*
 
-The '_no_schedule' label will be applied to the host. See :ref:`cephadm-special-host-labels`
+The ``_no_schedule`` label will be applied to the host. See
+:ref:`cephadm-special-host-labels`.
 
-All osds on the host will be scheduled to be removed. You can check osd removal progress with the following:
+All osds on the host will be scheduled to be removed. You can check the progress of the osd removal operation with the following command:
 
 .. prompt:: bash #
 
    ceph orch osd rm status
 
-see :ref:`cephadm-osd-removal` for more details about osd removal
+See :ref:`cephadm-osd-removal` for more details about osd removal.
 
-You can check if there are no daemons left on the host with the following:
+Use the following command to determine whether any daemons are still on the
+host:
 
 .. prompt:: bash #
 
    ceph orch ps <host> 
 
-Once all daemons are removed you can remove the host with the following:
+After all daemons have been removed from the host, remove the host from the
+cluster by running the following command: 
 
 .. prompt:: bash #
 
@@ -113,14 +116,16 @@ Once all daemons are removed you can remove the host with the following:
 Offline host removal
 --------------------
 
-If a host is offline and can not be recovered it can still be removed from the cluster with the following:
+Even if a host is offline and can not be recovered, it can be removed from the
+cluster by running a command of the following form:
 
 .. prompt:: bash #
 
    ceph orch host rm <host> --offline --force
 
-This can potentially cause data loss as osds will be forcefully purged from the cluster by calling ``osd purge-actual`` for each osd.
-Service specs that still contain this host should be manually updated.
+.. warning:: This can potentially cause data loss. This command forcefully
+   purges OSDs from the cluster by calling ``osd purge-actual`` for each OSD.
+   Any service specs that still contain this host should be manually updated.
 
 .. _orchestrator-host-labels:
 
