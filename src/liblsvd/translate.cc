@@ -568,6 +568,7 @@ public:
 	if (!waiting) 
 	    delete this;
 	else {
+	    std::unique_lock lk(m);
 	    done = true;
 	    cv.notify_one();
 	}
