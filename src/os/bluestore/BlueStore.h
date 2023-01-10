@@ -2797,8 +2797,9 @@ private:
     int64_t& errors,
     int64_t &warnings,
     BlueStoreRepairer* repairer);
+  // When cb returns false stops iterating.
   void _fsck_foreach_shared_blob(
-    std::function< void (coll_t, ghobject_t, uint64_t, const bluestore_blob_t&)> cb);
+    std::function< bool (coll_t, ghobject_t, uint64_t, const bluestore_blob_t&)> cb);
   void _fsck_repair_shared_blobs(
     BlueStoreRepairer& repairer,
     shared_blob_2hash_tracker_t& sb_ref_counts,
