@@ -138,9 +138,11 @@ struct cleaner_usage_t {
 
 struct reserve_cleaner_result_t {
   bool reserve_main_success = true;
+  bool reserve_cold_success = true;
 
   bool is_successful() const {
-    return reserve_main_success;
+    return reserve_main_success &&
+      reserve_cold_success;
   }
 };
 
@@ -589,6 +591,9 @@ private:
       if (is_ready()) {
         trimmer->release_inline_usage(usage.inline_usage);
         main_cleaner->release_projected_usage(usage.cleaner_usage.main_usage);
+        if (has_cold_tier()) {
+          cold_cleaner->release_projected_usage(usage.cleaner_usage.cold_ool_usage);
+        }
       }
     }
 
@@ -636,6 +641,9 @@ private:
 
   private:
     // reserve helpers
+    bool try_reserve_cold(std::size_t usage);
+    void abort_cold_usage(std::size_t usage, bool success);
+
     reserve_cleaner_result_t try_reserve_cleaner(const cleaner_usage_t &usage);
     void abort_cleaner_usage(const cleaner_usage_t &usage,
                              const reserve_cleaner_result_t &result);
@@ -668,14 +676,16 @@ private:
     bool background_should_run() const {
       assert(is_ready());
       return main_cleaner->should_clean_space()
-        || trimmer->should_trim_dirty()
-        || trimmer->should_trim_alloc();
+        || (has_cold_tier() && cold_cleaner->should_clean_space())
+        || trimmer->should_trim();
     }
 
     bool should_block_io() const {
       assert(is_ready());
       return trimmer->should_block_io_on_trim() ||
-             main_cleaner->should_block_io_on_clean();
+             main_cleaner->should_block_io_on_clean() ||
+             (has_cold_tier() &&
+              cold_cleaner->should_block_io_on_clean());
     }
 
     seastar::future<> do_background_cycle();
