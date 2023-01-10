@@ -1210,11 +1210,8 @@ public:
     config_t config,
     SegmentManagerGroupRef&& sm_group,
     BackrefManager &backref_manager,
+    SegmentSeqAllocator &segment_seq_allocator,
     bool detailed);
-
-  SegmentSeqAllocator& get_ool_segment_seq_allocator() {
-    return *ool_segment_seq_allocator;
-  }
 
   void set_journal_trimmer(JournalTrimmer &_trimmer) {
     trimmer = &_trimmer;
@@ -1224,9 +1221,10 @@ public:
       config_t config,
       SegmentManagerGroupRef&& sm_group,
       BackrefManager &backref_manager,
+      SegmentSeqAllocator &ool_seq_allocator,
       bool detailed) {
     return std::make_unique<SegmentCleaner>(
-        config, std::move(sm_group), backref_manager, detailed);
+        config, std::move(sm_group), backref_manager, ool_seq_allocator, detailed);
   }
 
   /*
@@ -1521,7 +1519,7 @@ private:
     auto new_usage = calc_utilization(segment);
     adjust_segment_util(old_usage, new_usage);
     if (s_type == segment_type_t::OOL) {
-      ool_segment_seq_allocator->set_next_segment_seq(seq);
+      ool_segment_seq_allocator.set_next_segment_seq(seq);
     }
   }
 
@@ -1574,7 +1572,7 @@ private:
   BackgroundListener *background_callback = nullptr;
 
   // TODO: drop once paddr->journal_seq_t is introduced
-  SegmentSeqAllocatorRef ool_segment_seq_allocator;
+  SegmentSeqAllocator &ool_segment_seq_allocator;
 };
 
 class RBMCleaner;
