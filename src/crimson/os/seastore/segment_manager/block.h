@@ -132,6 +132,9 @@ public:
     size_t len,
     ceph::bufferptr &out) final;
 
+  device_type_t get_device_type() const final {
+    return superblock.config.spec.dtype;
+  }
   size_t get_available_size() const final {
     return superblock.size;
   }
