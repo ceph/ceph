@@ -132,7 +132,8 @@ struct cleaner_usage_t {
   // The size of all extents write to the main devices, including inline extents
   // and out-of-line extents.
   std::size_t main_usage = 0;
-  // TODO: add cold_ool_usage
+  // The size of extents write to the cold devices
+  std::size_t cold_ool_usage = 0;
 };
 
 struct reserve_cleaner_result_t {
@@ -157,6 +158,7 @@ struct io_usage_t {
     return out << "io_usage_t("
                << "inline_usage=" << usage.inline_usage
                << ", main_cleaner_usage=" << usage.cleaner_usage.main_usage
+               << ", cold_cleaner_usage=" << usage.cleaner_usage.cold_ool_usage
                << ")";
   }
 };
@@ -180,7 +182,7 @@ public:
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
   }
 
-  void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&);
+  void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&, AsyncCleanerRef &&);
 
   SegmentSeqAllocator &get_ool_segment_seq_allocator() const {
     return *ool_segment_seq_allocator;
@@ -275,7 +277,7 @@ public:
       return alloc_paddr(INLINE_GENERATION, data_category_t::METADATA, length);
     }
 
-    if (get_backend_type() == backend_type_t::SEGMENTED &&
+    if (get_main_backend_type() == backend_type_t::SEGMENTED &&
 	is_lba_backref_node(type)) {
       // with SEGMENTED, lba-backref extents must be INLINE
       return alloc_paddr(INLINE_GENERATION, data_category_t::METADATA, length);
@@ -288,22 +290,22 @@ public:
 
     if (get_extent_category(type) == data_category_t::METADATA &&
         gen == INIT_GENERATION) {
-      if (get_backend_type() == backend_type_t::SEGMENTED) {
+      if (get_main_backend_type() == backend_type_t::SEGMENTED) {
 	// with SEGMENTED, default not to ool metadata extents to reduce 
 	// padding overhead.
 	// TODO: improve padding so we can default to the ool path.
 	return alloc_paddr(INLINE_GENERATION, get_extent_category(type), length);
       } else {
 	 // with RBM, all extents must be OOL
-	assert(get_backend_type() ==
+	assert(get_main_backend_type() ==
 	       backend_type_t::RANDOM_BLOCK);
 	return alloc_paddr(OOL_GENERATION, get_extent_category(type), length);
       }
     } else {
       assert(get_extent_category(type) == data_category_t::DATA ||
              gen >= MIN_REWRITE_GENERATION);
-      if (gen > MAX_REWRITE_GENERATION) {
-        gen = MAX_REWRITE_GENERATION;
+      if (gen > dynamic_max_rewrite_generation) {
+        gen = dynamic_max_rewrite_generation;
       } else if (gen == INIT_GENERATION) {
         gen = OOL_GENERATION;
       }
@@ -391,9 +393,9 @@ public:
     background_process.release_projected_usage(usage);
   }
 
-  backend_type_t get_backend_type() const {
+  backend_type_t get_main_backend_type() const {
     if (!background_process.is_no_background()) {
-      return background_process.get_backend_type();
+      return background_process.get_main_backend_type();
     } 
     // for test
     assert(primary_device);
@@ -442,6 +444,7 @@ private:
     assert(hint < placement_hint_t::NUM_HINTS);
     assert(is_rewrite_generation(gen));
     assert(gen != INLINE_GENERATION);
+    assert(gen <= dynamic_max_rewrite_generation);
     if (category == data_category_t::DATA) {
       return data_writers_by_gen[generation_to_writer(gen)];
     } else {
@@ -462,24 +465,40 @@ private:
     BackgroundProcess() = default;
 
     void init(JournalTrimmerImplRef &&_trimmer,
-              AsyncCleanerRef &&_cleaner) {
+              AsyncCleanerRef &&_cleaner,
+              AsyncCleanerRef &&_cold_cleaner) {
       trimmer = std::move(_trimmer);
       trimmer->set_background_callback(this);
       main_cleaner = std::move(_cleaner);
       main_cleaner->set_background_callback(this);
+      if (_cold_cleaner) {
+        cold_cleaner = std::move(_cold_cleaner);
+        cold_cleaner->set_background_callback(this);
+      }
     }
 
     journal_type_t get_journal_type() const {
       return trimmer->get_journal_type();
     }
 
+    bool has_cold_tier() const {
+      return cold_cleaner.get() != nullptr;
+    }
+
     void set_extent_callback(ExtentCallbackInterface *cb) {
       trimmer->set_extent_callback(cb);
       main_cleaner->set_extent_callback(cb);
+      if (has_cold_tier()) {
+        cold_cleaner->set_extent_callback(cb);
+      }
     }
 
     store_statfs_t get_stat() const {
-      return main_cleaner->get_stat();
+      auto stat = main_cleaner->get_stat();
+      if (has_cold_tier()) {
+        stat.add(cold_cleaner->get_stat());
+      }
+      return stat;
     }
 
     using mount_ret = ExtentPlacementManager::mount_ret;
@@ -489,13 +508,18 @@ private:
       trimmer->reset();
       stats = {};
       register_metrics();
-      return main_cleaner->mount();
+      return main_cleaner->mount(
+      ).safe_then([this] {
+        return has_cold_tier() ? cold_cleaner->mount() : mount_ertr::now();
+      });
     }
 
     void start_scan_space() {
       ceph_assert(state == state_t::MOUNT);
       state = state_t::SCAN_SPACE;
       ceph_assert(main_cleaner->check_usage_is_empty());
+      ceph_assert(!has_cold_tier() ||
+                  cold_cleaner->check_usage_is_empty());
     }
 
     void start_background();
@@ -534,14 +558,15 @@ private:
     }
 
     seastar::future<> stop_background();
-    backend_type_t get_backend_type() const {
+    backend_type_t get_main_backend_type() const {
       return get_journal_type();
     }
 
     // Testing interfaces
 
     bool check_usage() {
-      return main_cleaner->check_usage();
+      return main_cleaner->check_usage() &&
+        (!has_cold_tier() || cold_cleaner->check_usage());
     }
 
     seastar::future<> run_until_halt();
@@ -635,6 +660,11 @@ private:
     JournalTrimmerImplRef trimmer;
     AsyncCleanerRef main_cleaner;
 
+    /*
+     * cold tier (optional, see has_cold_tier())
+     */
+    AsyncCleanerRef cold_cleaner;
+
     std::optional<seastar::future<>> process_join;
     std::optional<seastar::promise<>> blocking_background;
     std::optional<seastar::promise<>> blocking_io;
@@ -651,6 +681,7 @@ private:
   Device* primary_device = nullptr;
   std::size_t num_devices = 0;
 
+  rewrite_gen_t dynamic_max_rewrite_generation;
   BackgroundProcess background_process;
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
