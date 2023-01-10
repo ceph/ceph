@@ -46,6 +46,7 @@ Cache::Cache(
   LOG_PREFIX(Cache::Cache);
   INFO("created, lru_size={}", lru.get_capacity());
   register_metrics();
+  segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
 }
 
 Cache::~Cache()
@@ -1116,12 +1117,13 @@ record_t Cache::prepare_record(
       auto stype = segment_type_t::NULL_SEG;
 
       // FIXME: This is specific to the segmented implementation
-      if (segment_provider != nullptr &&
-          i->get_paddr().get_addr_type() == paddr_types_t::SEGMENT) {
+      if (i->get_paddr().get_addr_type() == paddr_types_t::SEGMENT) {
         auto sid = i->get_paddr().as_seg_paddr().get_segment_id();
-        auto &sinfo = segment_provider->get_seg_info(sid);
-        sseq = sinfo.seq;
-        stype = sinfo.type;
+        auto sinfo = get_segment_info(sid);
+        if (sinfo) {
+          sseq = sinfo->seq;
+          stype = sinfo->type;
+        }
       }
 
       record.push_back(
@@ -1660,21 +1662,22 @@ Cache::replay_delta(
    * safetly skip these deltas because the extent must already
    * have been rewritten.
    */
-  if (segment_provider != nullptr &&
-      delta.paddr != P_ADDR_NULL &&
+  if (delta.paddr != P_ADDR_NULL &&
       delta.paddr.get_addr_type() == paddr_types_t::SEGMENT) {
     auto& seg_addr = delta.paddr.as_seg_paddr();
-    auto& seg_info = segment_provider->get_seg_info(seg_addr.get_segment_id());
-    auto delta_paddr_segment_seq = seg_info.seq;
-    auto delta_paddr_segment_type = seg_info.type;
-    if (delta_paddr_segment_seq != delta.ext_seq ||
-        delta_paddr_segment_type != delta.seg_type) {
-      DEBUG("delta is obsolete, delta_paddr_segment_seq={},"
-            " delta_paddr_segment_type={} -- {}",
-            segment_seq_printer_t{delta_paddr_segment_seq},
-            delta_paddr_segment_type,
-            delta);
-      return replay_delta_ertr::make_ready_future<bool>(false);
+    auto seg_info = get_segment_info(seg_addr.get_segment_id());
+    if (seg_info) {
+      auto delta_paddr_segment_seq = seg_info->seq;
+      auto delta_paddr_segment_type = seg_info->type;
+      if (delta_paddr_segment_seq != delta.ext_seq ||
+          delta_paddr_segment_type != delta.seg_type) {
+        DEBUG("delta is obsolete, delta_paddr_segment_seq={},"
+              " delta_paddr_segment_type={} -- {}",
+              segment_seq_printer_t{delta_paddr_segment_seq},
+              delta_paddr_segment_type,
+              delta);
+        return replay_delta_ertr::make_ready_future<bool>(false);
+      }
     }
   }
 
