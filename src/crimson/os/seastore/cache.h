@@ -1225,8 +1225,10 @@ private:
              src2 == Transaction::src_t::READ));
     assert(!(src1 == Transaction::src_t::TRIM_DIRTY &&
              src2 == Transaction::src_t::TRIM_DIRTY));
-    assert(!(src1 == Transaction::src_t::CLEANER &&
-             src2 == Transaction::src_t::CLEANER));
+    assert(!(src1 == Transaction::src_t::CLEANER_MAIN &&
+	     src2 == Transaction::src_t::CLEANER_MAIN));
+    assert(!(src1 == Transaction::src_t::CLEANER_COLD &&
+	     src2 == Transaction::src_t::CLEANER_COLD));
     assert(!(src1 == Transaction::src_t::TRIM_ALLOC &&
              src2 == Transaction::src_t::TRIM_ALLOC));
 
