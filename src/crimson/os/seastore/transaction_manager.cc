@@ -722,6 +722,9 @@ TransactionManagerRef make_transaction_manager(
       epm->get_ool_segment_seq_allocator(),
       cleaner_is_detailed,
       /* is_cold = */ true);
+    if (journal_type == journal_type_t::SEGMENTED) {
+      cache->set_segment_provider(cold_segment_cleaner.get());
+    }
   }
 
   if (journal_type == journal_type_t::SEGMENTED) {
@@ -732,7 +735,7 @@ TransactionManagerRef make_transaction_manager(
       epm->get_ool_segment_seq_allocator(),
       cleaner_is_detailed);
     auto segment_cleaner = static_cast<SegmentCleaner*>(cleaner.get());
-    cache->set_segment_provider(*segment_cleaner);
+    cache->set_segment_provider(segment_cleaner);
     segment_cleaner->set_journal_trimmer(*journal_trimmer);
     journal = journal::make_segmented(
       *segment_cleaner,
