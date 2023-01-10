@@ -77,8 +77,10 @@ maybe_kill() {
 }
 
 do_killcephadm() {
-    FSID=$($CEPH_BIN/ceph -c $conf_fn fsid)
-    sudo $CEPHADM rm-cluster --fsid $FSID --force
+    local FSID=$($CEPH_BIN/ceph -c $conf_fn fsid)
+    if [ -n "$FSID" ]; then
+        sudo $CEPHADM rm-cluster --fsid $FSID --force
+    fi
 }
 
 do_umountall() {

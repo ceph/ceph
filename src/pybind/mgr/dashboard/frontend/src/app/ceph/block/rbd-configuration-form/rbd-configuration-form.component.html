@@ -50,18 +50,16 @@
                        cdIops>
               </ng-container>
             </ng-container>
-            <span class="input-group-append">
-              <button class="btn btn-light"
-                      type="button"
-                      data-toggle="button"
-                      [ngClass]="{'active': isDisabled(option.name)}"
-                      title="Remove the local configuration value. The parent configuration value will be inherited and used instead."
-                      i18n-title
-                      (click)="reset(option.name)">
-                <i [ngClass]="[icons.erase]"
-                   aria-hidden="true"></i>
-              </button>
-            </span>
+            <button class="btn btn-light"
+                    type="button"
+                    data-toggle="button"
+                    [ngClass]="{'active': isDisabled(option.name)}"
+                    title="Remove the local configuration value. The parent configuration value will be inherited and used instead."
+                    i18n-title
+                    (click)="reset(option.name)">
+              <i [ngClass]="[icons.erase]"
+                 aria-hidden="true"></i>
+            </button>
           </div>
           <span i18n
                 class="invalid-feedback"

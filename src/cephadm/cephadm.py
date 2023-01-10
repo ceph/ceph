@@ -233,9 +233,8 @@ class ContainerEngine:
     def __init__(self) -> None:
         self.path = find_program(self.EXE)
 
-    @classmethod
     @property
-    def EXE(cls) -> str:
+    def EXE(self) -> str:
         raise NotImplementedError()
 
     def __str__(self) -> str:
@@ -3317,7 +3316,7 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
     # Open ports explicitly required for the daemon
     if ports:
         fw = Firewalld(ctx)
-        fw.open_ports(ports)
+        fw.open_ports(ports + fw.external_ports.get(daemon_type, []))
         fw.apply_rules()
 
     if reconfig and daemon_type not in Ceph.daemons:
@@ -3553,6 +3552,18 @@ def deploy_daemon_units(
 
 
 class Firewalld(object):
+
+    # for specifying ports we should always open when opening
+    # ports for a daemon of that type. Main use case is for ports
+    # that we should open when deploying the daemon type but that
+    # the daemon itself may not necessarily need to bind to the port.
+    # This needs to be handed differently as we don't want to fail
+    # deployment if the port cannot be bound to but we still want to
+    # open the port in the firewall.
+    external_ports: Dict[str, List[int]] = {
+        'iscsi': [3260]  # 3260 is the well known iSCSI port
+    }
+
     def __init__(self, ctx):
         # type: (CephadmContext) -> None
         self.ctx = ctx
@@ -4169,6 +4180,7 @@ class MgrListener(Thread):
                     err_str = f'Failed to extract length of payload from message: {e}'
                     conn.send(err_str.encode())
                     logger.error(err_str)
+                    continue
                 while True:
                     payload = conn.recv(length).decode()
                     if not payload:
@@ -4326,6 +4338,10 @@ WantedBy=ceph-{fsid}.target
         self.stop = True
         if self.mgr_listener.is_alive():
             self.mgr_listener.shutdown()
+        if self.ls_gatherer.is_alive():
+            self.ls_gatherer.shutdown()
+        if self.volume_gatherer.is_alive():
+            self.volume_gatherer.shutdown()
 
     def wakeup(self) -> None:
         self.event.set()
@@ -4393,10 +4409,11 @@ WantedBy=ceph-{fsid}.target
             # part of the networks info is returned as a set which is not JSON
             # serializable. The set must be converted to a list
             networks = list_networks(self.ctx)
-            networks_list = {}
+            networks_list: Dict[str, Dict[str, List[str]]] = {}
             for key in networks.keys():
+                networks_list[key] = {}
                 for k, v in networks[key].items():
-                    networks_list[key] = {k: list(v)}
+                    networks_list[key][k] = list(v)
 
             data = json.dumps({'host': self.host,
                                'ls': (self.ls_gatherer.data if self.ack == self.ls_gatherer.ack
@@ -4536,6 +4553,7 @@ WantedBy=ceph-{fsid}.target
                 # case for a new daemon in ls or an old daemon no longer appearing.
                 # If that happens we need a full ls
                 logger.info('Change detected in state of daemons. Running full daemon ls')
+                self.cached_ls_values = {}
                 ls = list_daemons(self.ctx)
                 for d in ls:
                     self.cached_ls_values[d['name']] = d
@@ -4567,6 +4585,7 @@ WantedBy=ceph-{fsid}.target
             if need_full_ls:
                 logger.info('Change detected in state of daemons. Running full daemon ls')
                 ls = list_daemons(self.ctx)
+                self.cached_ls_values = {}
                 for d in ls:
                     self.cached_ls_values[d['name']] = d
                 return (ls, True)
@@ -7109,6 +7128,13 @@ def command_rm_daemon(ctx):
          verbosity=CallVerbosity.DEBUG)
     call(ctx, ['systemctl', 'disable', unit_name],
          verbosity=CallVerbosity.DEBUG)
+
+    # force remove rgw admin socket file if leftover
+    if daemon_type in ['rgw']:
+        rgw_asok_path = f'/var/run/ceph/{ctx.fsid}/ceph-client.{ctx.name}.*.asok'
+        call(ctx, ['rm', '-rf', rgw_asok_path],
+             verbosity=CallVerbosity.DEBUG)
+
     data_dir = get_data_dir(ctx.fsid, ctx.data_dir, daemon_type, daemon_id)
     if daemon_type in ['mon', 'osd', 'prometheus'] and \
        not ctx.force_delete_data:

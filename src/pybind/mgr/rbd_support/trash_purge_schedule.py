@@ -1,8 +1,6 @@
-import errno
 import json
 import rados
 import rbd
-import re
 import traceback
 
 from datetime import datetime
@@ -10,7 +8,7 @@ from threading import Condition, Lock, Thread
 from typing import Any, Dict, List, Optional, Tuple
 
 from .common import get_rbd_pools
-from .schedule import LevelSpec, Interval, StartTime, Schedule, Schedules
+from .schedule import LevelSpec, Schedules
 
 
 class TrashPurgeScheduleHandler:
@@ -64,15 +62,13 @@ class TrashPurgeScheduleHandler:
         self.queue: Dict[str, List[Tuple[str, str]]] = {}
         # pool_id => {namespace => pool_name}
         self.pools: Dict[str, Dict[str, str]] = {}
+        self.schedules = Schedules(self)
         self.refresh_pools()
         self.log.debug("TrashPurgeScheduleHandler: queue is initialized")
 
     def load_schedules(self) -> None:
         self.log.info("TrashPurgeScheduleHandler: load_schedules")
-
-        schedules = Schedules(self)
-        schedules.load()
-        self.schedules = schedules
+        self.schedules.load()
 
     def refresh_pools(self) -> float:
         elapsed = (datetime.now() - self.last_refresh_pools).total_seconds()
@@ -262,10 +258,10 @@ class TrashPurgeScheduleHandler:
                         continue
                     pool_name = self.pools[pool_id][namespace]
                     scheduled.append({
-                        'schedule_time' : schedule_time,
-                        'pool_id' : pool_id,
-                        'pool_name' : pool_name,
-                        'namespace' : namespace
+                        'schedule_time': schedule_time,
+                        'pool_id': pool_id,
+                        'pool_name': pool_name,
+                        'namespace': namespace
                     })
-        return 0, json.dumps({'scheduled' : scheduled}, indent=4,
+        return 0, json.dumps({'scheduled': scheduled}, indent=4,
                              sort_keys=True), ""

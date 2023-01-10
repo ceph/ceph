@@ -491,7 +491,7 @@ auth_selection_t ScrubBackend::select_auth_object(const hobject_t& ho,
           (shard_ret.oi.version == auth_version &&
            dcount(shard_ret.oi) > dcount(ret_auth.auth_oi))) {
 
-        dout(30) << fmt::format("{}: using {} moved auth oi {:p} <-> {:p}",
+        dout(20) << fmt::format("{}: using {} moved auth oi {:p} <-> {:p}",
                                 __func__,
                                 l,
                                 (void*)&ret_auth.auth_oi,
@@ -565,7 +565,7 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
                                                   const pg_shard_t& srd,
                                                   shard_info_map_t& shard_map)
 {
-  //  'maps' (called with this_chunk->maps originaly): this_chunk->maps
+  //  'maps' (originally called with this_chunk->maps): this_chunk->maps
   //  'auth_oi' (called with 'auth_oi', which wasn't initialized at call site)
   //     - create and return
   //  'shard_map' - the one created in select_auth_object()
@@ -1062,17 +1062,25 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
                                                      ho.has_snapset());
 
       dout(20) << fmt::format(
-                    "{}: {} {} {} shards: {} {} {}",
-                    __func__,
-                    (m_repair ? " repair " : " "),
-                    (m_is_replicated ? "replicated " : ""),
-                    (srd == auth_sel.auth_shard ? "auth" : ""),
-                    auth_sel.shard_map.size(),
-                    (auth_sel.digest_match ? " digest_match " : " "),
-                    (auth_sel.shard_map[srd].only_data_digest_mismatch_info()
-                       ? "'info mismatch info'"
-                       : ""))
-               << dendl;
+		    "{}: {}{} <{}:{}> shards: {} {} {}", __func__,
+		    (m_repair ? "repair " : ""),
+		    (m_is_replicated ? "replicated " : ""), srd,
+		    (srd == auth_sel.auth_shard ? "auth" : "-"),
+		    auth_sel.shard_map.size(),
+		    (auth_sel.digest_match ? " digest_match " : " "),
+		    (auth_sel.shard_map[srd].only_data_digest_mismatch_info()
+		       ? "'info mismatch info'"
+		       : ""))
+	       << dendl;
+      if (discrep_found) {
+	dout(10) << fmt::format(
+		      "{}: <{}> auth:{} ({}/{}) vs {} ({}/{}) {}", __func__, ho,
+		      auth_sel.auth_shard, auth_object.omap_digest_present,
+		      auth_object.omap_digest, srd,
+		      smap.objects[ho].omap_digest_present ? true : false,
+		      smap.objects[ho].omap_digest, ss.str())
+		 << dendl;
+      }
 
       // If all replicas match, but they don't match object_info we can
       // repair it by using missing_digest mechanism

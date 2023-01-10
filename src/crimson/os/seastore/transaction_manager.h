@@ -320,7 +320,7 @@ public:
       t,
       len,
       placement_hint,
-      0);
+      INIT_GENERATION);
     return lba_manager->alloc_extent(
       t,
       laddr_hint,
@@ -486,7 +486,7 @@ public:
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent,
-    reclaim_gen_t target_generation,
+    rewrite_gen_t target_generation,
     sea_time_point modify_time) final;
 
   using ExtentCallbackInterface::get_extents_if_live_ret;
@@ -636,6 +636,11 @@ private:
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,
     LogicalCachedExtentRef extent);
+
+  submit_transaction_direct_ret do_submit_transaction(
+    Transaction &t,
+    ExtentPlacementManager::dispatch_result_t dispatch_result,
+    std::optional<journal_seq_t> seq_to_trim = std::nullopt);
 
 public:
   // Testing interfaces

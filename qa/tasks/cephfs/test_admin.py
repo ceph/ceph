@@ -1387,3 +1387,80 @@ class TestAdminCommandDumpLoads(CephFSTestCase):
         self.assertIn("dirfrags", loads)
         for d in loads["dirfrags"]:
             self.assertLessEqual(d["path"].count("/"), 1)
+
+class TestFsBalRankMask(CephFSTestCase):
+    """
+    Tests ceph fs set <fs_name> bal_rank_mask
+    """
+
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 2
+
+    def test_bal_rank_mask(self):
+        """
+        check whether a specified bal_rank_mask value is valid or not.
+        """
+        bal_rank_mask = '0x0'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = '0'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = '-1'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = 'all'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = '0x1'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = '1'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = 'f0'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = 'ab'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = '0xfff0'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        MAX_MDS = 256
+        bal_rank_mask = '0x' + 'f' * int(MAX_MDS / 4)
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = ''
+        log.info("set bal_rank_mask to empty string")
+        try:
+            self.fs.set_bal_rank_mask(bal_rank_mask)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+
+        bal_rank_mask = '0x1' + 'f' * int(MAX_MDS / 4)
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        try:
+            self.fs.set_bal_rank_mask(bal_rank_mask)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)

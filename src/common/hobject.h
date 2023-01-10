@@ -15,6 +15,10 @@
 #ifndef __CEPH_OS_HOBJECT_H
 #define __CEPH_OS_HOBJECT_H
 
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
+
 #include "include/types.h"
 
 #include "json_spirit/json_spirit_value.h"
@@ -500,6 +504,10 @@ namespace std {
 } // namespace std
 
 std::ostream& operator<<(std::ostream& out, const ghobject_t& o);
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<ghobject_t> : fmt::ostream_formatter {};
+#endif
 
 extern int cmp(const ghobject_t& l, const ghobject_t& r);
 

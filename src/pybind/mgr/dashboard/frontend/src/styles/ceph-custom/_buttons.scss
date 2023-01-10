@@ -1,27 +1,39 @@
 @use './src/styles/vendor/variables' as vv;
 
 /* Reset checkbox success color */
-.was-validated .custom-control-input:valid,
-.custom-control-input.is-valid {
-  ~ .custom-control-label {
+.was-validated .form-check-input:valid,
+.form-check-input.is-valid {
+  border-color: rgba(vv.$primary, 0.8);
+
+  &:checked {
+    background-color: vv.$primary;
+    border-color: rgba(vv.$primary, 0.8);
+    box-shadow: 0 0 3px 2px rgba(vv.$primary, 0.5);
+  }
+
+  &:focus {
+    border-color: rgba(vv.$primary, 0.8);
+    box-shadow: 0 0 3px 2px rgba(vv.$primary, 0.5);
+  }
+
+  ~ .form-check-label {
     color: initial;
   }
 
-  &:checked ~ .custom-control-label::before {
+  &:checked ~ .form-check-label::before {
     background-color: $component-active-bg;
-    border-color: $custom-control-indicator-checked-border-color;
   }
 
-  ~ .custom-control-label::before {
-    border-color: $custom-control-indicator-border-color;
+  ~ .form-check-label::before {
+    border-color: rgba(vv.$primary, 0.8);
   }
 
   &:focus ~ .custom-control-label::before {
-    box-shadow: $custom-control-indicator-focus-box-shadow;
+    box-shadow: 0 0 3px 2px rgba(vv.$primary, 0.5);
   }
 
   &:focus:not(:checked) ~ .custom-control-label::before {
-    border-color: $custom-control-indicator-focus-border-color;
+    border-color: rgba(vv.$primary, 0.8);
   }
 }
 
@@ -39,6 +51,10 @@
     background-color: vv.$gray-200;
     border-color: vv.$gray-400 !important;
   }
+}
+
+.btn-primary {
+  @extend .btn-accent;
 }
 
 // We have some inputs that don't have a corresponding formControlName,

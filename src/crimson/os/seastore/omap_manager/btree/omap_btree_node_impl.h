@@ -69,7 +69,8 @@ struct OMapInnerNode
 
   list_ret list(
     omap_context_t oc,
-    const std::optional<std::string> &start,
+    const std::optional<std::string> &first,
+    const std::optional<std::string> &last,
     omap_list_config_t config) final;
 
   clear_ret clear(omap_context_t oc) final;
@@ -186,7 +187,8 @@ struct OMapLeafNode
 
   list_ret list(
     omap_context_t oc,
-    const std::optional<std::string> &start,
+    const std::optional<std::string> &first,
+    const std::optional<std::string> &last,
     omap_list_config_t config) final;
 
   clear_ret clear(
@@ -241,3 +243,8 @@ using OMapLeafNodeRef = OMapLeafNode::OMapLeafNodeRef;
 std::ostream &operator<<(std::ostream &out, const omap_inner_key_t &rhs);
 std::ostream &operator<<(std::ostream &out, const omap_leaf_key_t &rhs);
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::omap_manager::OMapInnerNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::omap_manager::OMapLeafNode> : fmt::ostream_formatter {};
+#endif

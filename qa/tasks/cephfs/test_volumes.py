@@ -5825,7 +5825,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
 
         # insert delay at the beginning of snapshot clone
-        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 10)
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 15)
 
         # schedule a clones
         for clone in clone_list:
@@ -5833,7 +5833,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
         # remove track file for third clone to make it orphan
         meta_path = os.path.join(".", "volumes", "_nogroup", subvolume, ".meta")
-        pending_clones_result = self.mount_a.run_shell(f"sudo grep \"clone snaps\" -A3 {meta_path}", omit_sudo=False, stdout=StringIO(), stderr=StringIO())
+        pending_clones_result = self.mount_a.run_shell(['sudo', 'grep', 'clone snaps', '-A3', meta_path], omit_sudo=False, stdout=StringIO(), stderr=StringIO())
         third_clone_track_id = pending_clones_result.stdout.getvalue().splitlines()[3].split(" = ")[0]
         third_clone_track_path = os.path.join(".", "volumes", "_index", "clone", third_clone_track_id)
         self.mount_a.run_shell(f"sudo rm -f {third_clone_track_path}", omit_sudo=False)

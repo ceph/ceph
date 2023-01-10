@@ -33,6 +33,7 @@ public:
     uint64_t get_data_offset();
     const char* get_cipher();
     const char* get_cipher_mode();
+    const char* get_format_name();
 
 private:
     void libcryptsetup_log(int level, const char* msg);

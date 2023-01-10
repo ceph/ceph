@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple,
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec, CustomContainerSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, CustomContainerSpec, PlacementSpec, RGWSpec
 from ceph.utils import datetime_now
 
 import orchestrator
@@ -222,12 +222,6 @@ class CephadmServe:
         self.log.debug('_refresh_hosts_and_daemons')
         bad_hosts = []
         failures = []
-
-        if self.mgr.manage_etc_ceph_ceph_conf or self.mgr.keys.keys:
-            client_files = self._calc_client_files()
-        else:
-            client_files = {}
-
         agents_down: List[str] = []
 
         @forall_hosts
@@ -303,9 +297,9 @@ class CephadmServe:
                 self.log.debug(f"autotuning memory for {host}")
                 self._autotune_host_memory(host)
 
-            self._write_client_files(client_files, host)
-
         refresh(self.mgr.cache.get_hosts())
+
+        self._write_all_client_files()
 
         self.mgr.agent_helpers._update_agent_down_healthcheck(agents_down)
         self.mgr.http_server.config_update()
@@ -598,6 +592,35 @@ class CephadmServe:
                 self.mgr.set_health_warning('CEPHADM_FAILED_SET_OPTION', f'Failed to set {len(options_failed_to_set)} option(s)', len(
                     options_failed_to_set), options_failed_to_set)
 
+    def _update_rgw_endpoints(self, rgw_spec: RGWSpec) -> None:
+
+        if not rgw_spec.update_endpoints or rgw_spec.rgw_realm_token is None:
+            return
+
+        ep = []
+        protocol = 'https' if rgw_spec.ssl else 'http'
+        for s in self.mgr.cache.get_daemons_by_service(rgw_spec.service_name()):
+            if s.ports:
+                for p in s.ports:
+                    ep.append(f'{protocol}://{s.hostname}:{p}')
+        zone_update_cmd = {
+            'prefix': 'rgw zone modify',
+            'realm_name': rgw_spec.rgw_realm,
+            'zonegroup_name': rgw_spec.rgw_zonegroup,
+            'zone_name': rgw_spec.rgw_zone,
+            'realm_token': rgw_spec.rgw_realm_token,
+            'zone_endpoints': ep,
+        }
+        self.log.debug(f'rgw cmd: {zone_update_cmd}')
+        rc, out, err = self.mgr.mon_command(zone_update_cmd)
+        rgw_spec.update_endpoints = (rc != 0)  # keep trying on failure
+        if rc != 0:
+            self.log.error(f'Error when trying to update rgw zone: {err}')
+            self.mgr.set_health_warning('CEPHADM_RGW', 'Cannot update rgw endpoints, error: {err}', 1,
+                                        [f'Cannot update rgw endpoints for daemon {rgw_spec.service_name()}, error: {err}'])
+        else:
+            self.mgr.remove_health_warning('CEPHADM_RGW')
+
     def _apply_service(self, spec: ServiceSpec) -> bool:
         """
         Schedule a service.  Deploy new daemons or remove old ones, depending
@@ -856,6 +879,9 @@ class CephadmServe:
                     # This can be accomplished by scheduling a restart of the active mgr.
                     self.mgr._schedule_daemon_action(active_mgr.name(), 'restart')
 
+            if service_type == 'rgw':
+                self._update_rgw_endpoints(cast(RGWSpec, spec))
+
             # remove any?
             def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
                 daemon_ids = [d.daemon_id for d in remove_daemons]
@@ -1099,6 +1125,18 @@ class CephadmServe:
                 self.log.warning(
                     f'unable to calc client keyring {ks.entity} placement {ks.placement}: {e}')
         return client_files
+
+    def _write_all_client_files(self) -> None:
+        if self.mgr.manage_etc_ceph_ceph_conf or self.mgr.keys.keys:
+            client_files = self._calc_client_files()
+        else:
+            client_files = {}
+
+        @forall_hosts
+        def _write_files(host: str) -> None:
+            self._write_client_files(client_files, host)
+
+        _write_files(self.mgr.cache.get_hosts())
 
     def _write_client_files(self,
                             client_files: Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]],

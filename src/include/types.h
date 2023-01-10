@@ -611,6 +611,10 @@ inline std::ostream &operator<<(std::ostream &out, const sha_digest_t<S> &b) {
   return out << str;
 }
 
+#if FMT_VERSION >= 90000
+template <uint8_t S> struct fmt::formatter<sha_digest_t<S>> : fmt::ostream_formatter {};
+#endif
+
 using sha1_digest_t = sha_digest_t<20>;
 WRITE_CLASS_ENCODER(sha1_digest_t)
 

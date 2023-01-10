@@ -383,7 +383,7 @@ private:
    */
   void handle_write_error(int r);
 
-  bool _is_readable();
+  bool _have_next_entry();
 
   void _finish_erase(int data_result, C_OnFinisher *completion);
   class C_EraseFinish;
@@ -459,6 +459,7 @@ public:
   void wait_for_flush(Context *onsafe = 0);
   void flush(Context *onsafe = 0);
   void wait_for_readable(Context *onfinish);
+  void _wait_for_readable(Context *onfinish);
   bool have_waiter() const;
   void wait_for_prezero(Context *onfinish);
 
@@ -527,6 +528,7 @@ public:
   int get_error() { return error; }
   bool is_readonly() { return readonly; }
   bool is_readable();
+  bool _is_readable();
   bool try_read_entry(bufferlist& bl);
   uint64_t get_write_pos() const { return write_pos; }
   uint64_t get_write_safe_pos() const { return safe_pos; }
@@ -536,6 +538,7 @@ public:
   size_t get_journal_envelope_size() const { 
     return journal_stream.get_envelope_size(); 
   }
+  void check_isreadable();
 };
 WRITE_CLASS_ENCODER(Journaler::Header)
 

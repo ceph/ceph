@@ -10,7 +10,7 @@ cd-info-card {
 
     .card-body {
       .card-title {
-        @extend .pl-2;
+        @extend .ps-2;
       }
 
       .card-text {
@@ -21,7 +21,7 @@ cd-info-card {
 }
 
 .btn-toolbar cd-table-actions.btn-group {
-  @extend .mr-2;
+  @extend .me-2;
 }
 
 cd-table {
@@ -85,11 +85,11 @@ cd-health {
 
 cd-logs {
   label {
-    @extend .mr-2;
+    @extend .me-2;
   }
 
   .form-inline > .form-group {
-    @extend .mr-3;
+    @extend .me-3;
     @extend .mb-3;
   }
 }
@@ -101,7 +101,7 @@ cd-about {
 
   dt {
     @extend .col-4;
-    @extend .font-weight-bold;
+    @extend .fw-bold;
   }
 
   dd {
@@ -120,10 +120,4 @@ legend {
 // All '.fa' icons will have fixed width
 .fa {
   @extend .fa-fw;
-}
-
-pre:not(cd-api-docs *) {
-  @extend .card;
-  @extend .bg-light;
-  @extend .p-2;
 }

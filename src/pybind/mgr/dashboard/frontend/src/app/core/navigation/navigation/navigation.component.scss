@@ -18,7 +18,7 @@
 ::ng-deep cd-navigation .cd-navbar-top {
   .cd-navbar-brand {
     background: vv.$secondary;
-    border-top: 4px solid vv.$primary-wcag-aa-large-text;
+    border-top: 4px solid vv.$primary;
 
     .navbar-brand,
     .navbar-brand:hover {
@@ -49,7 +49,7 @@
     }
 
     .cd-navbar-utility > .active > a {
-      background-color: vv.$primary-wcag-aa-large-text;
+      background-color: vv.$primary;
       color: vv.$gray-200;
     }
 
@@ -83,7 +83,7 @@
   .navbar-nav > li > .cd-navbar > a:hover,
   .navbar-nav > li > a:hover,
   .navbar-nav > li:hover {
-    background-color: vv.$primary-wcag-aa-large-text;
+    background-color: vv.$primary;
   }
 
   .navbar-nav > .open > .cd-navbar > [ngbDropdown] > a,
@@ -119,7 +119,7 @@
       }
 
       .open .dropdown-menu {
-        background-color: vv.$primary-wcag-aa-large-text;
+        background-color: vv.$primary;
         border: 0;
         padding-bottom: 0;
         padding-top: 0;
@@ -131,12 +131,12 @@
       }
 
       .open .dropdown-menu > .active > a {
-        background-color: vv.$primary-wcag-aa-large-text;
+        background-color: vv.$primary;
       }
     }
 
     .navbar-nav > li > a:hover {
-      background-color: vv.$primary-wcag-aa-large-text;
+      background-color: vv.$primary;
     }
   }
 }
@@ -150,7 +150,7 @@ $sidebar-width: 200px;
 .cd-navbar-primary .active > a,
 .cd-navbar-primary > .active > a:focus,
 .cd-navbar-primary > .active > a:hover {
-  background-color: vv.$primary-wcag-aa-large-text !important;
+  background-color: vv.$primary !important;
   border: 0 !important;
   color: vv.$white !important;
 }
@@ -197,7 +197,7 @@ $sidebar-width: 200px;
         text-decoration: none;
 
         &:hover {
-          background: vv.$primary-wcag-aa-large-text;
+          background: vv.$primary;
           color: vv.$white;
         }
 
@@ -221,6 +221,7 @@ $sidebar-width: 200px;
       content: '\f054';
       font-family: 'ForkAwesome';
       font-size: 1rem;
+      margin-top: 2px;
       position: absolute;
       right: 20px;
       transition: transform 0.3s ease-in-out;

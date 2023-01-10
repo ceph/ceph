@@ -208,9 +208,6 @@ After running the above command:
 * If you remove an OSD and clean the LVM physical volume, a new OSD will be
   created automatically.
 
-To disable the automatic creation of OSD on available devices, use the
-``unmanaged`` parameter:
-
 If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter:
 
 .. prompt:: bash #
@@ -313,6 +310,7 @@ Expected output::
 
 This resets the initial state of the OSD and takes it off the removal queue.
 
+.. _cephadm-replacing-an-osd:
 
 Replacing an OSD
 ----------------

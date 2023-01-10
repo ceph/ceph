@@ -19,8 +19,8 @@
 #include <map>
 #include <random>
 
-#include "rgw/rgw_ldap.h"
-#include "rgw/rgw_token.h"
+#include "rgw_ldap.h"
+#include "rgw_token.h"
 
 #include "gtest/gtest.h"
 #include "common/ceph_argparse.h"

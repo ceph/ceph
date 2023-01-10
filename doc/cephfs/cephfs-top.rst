@@ -86,9 +86,20 @@ Interactive Commands
 1. m : Filesystem selection
       Displays a menu of filesystems for selection.
 
-2. q : Quit
+2. s : Sort field selection
+      Designates the sort field.  'cap_hit' is the default.
+
+3. l : Client limit
+      Sets the limit on the number of clients to be displayed.
+
+4. r : Reset
+      Resets the sort field and limit value to the default.
+
+5. q : Quit
       Exit the utility if you are at the home screen (all filesystem info),
       otherwise escape back to the home screen.
+
+The metrics display can be scrolled using the Arrow Keys, PgUp/PgDn, Home/End and mouse.
 
 Sample screenshot running `cephfs-top` with 2 filesystems:
 

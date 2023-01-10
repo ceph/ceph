@@ -133,6 +133,7 @@ $grid-breakpoints: (
 .badge-cd-label-light-green {
   background-color: $light-green-300;
   color: $white;
+  font-weight: bolder;
 }
 
 // angular-tree-component
@@ -162,7 +163,57 @@ tags-input .tags {
   pointer-events: none;
 }
 
+a {
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
 .clickable,
 a {
   cursor: pointer;
+  text-decoration: none;
+}
+
+a.nav-link,
+a.btn-light {
+  text-decoration: none;
+}
+
+// Overrides the badge to rounded-pill
+.badge {
+  @extend .badge, .rounded-pill, .mb-1;
+}
+
+// Overriding badges to match the class name of badges in Bootstrap v5
+.badge-primary {
+  @extend .badge, .bg-primary;
+}
+
+.badge-secondary {
+  @extend .badge, .bg-secondary;
+}
+
+.badge-success {
+  @extend .badge, .bg-success;
+}
+
+.badge-danger {
+  @extend .badge, .bg-danger;
+}
+
+.badge-info {
+  @extend .badge, .bg-primary;
+}
+
+.badge-warning {
+  @extend .badge, .bg-warning, .text-dark;
+}
+
+.badge-light {
+  @extend .badge, .bg-light, .text-dark;
+}
+
+.badge-dark {
+  @extend .badge, .bg-dark;
 }

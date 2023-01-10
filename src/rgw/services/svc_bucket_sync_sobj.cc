@@ -3,9 +3,9 @@
 #include "svc_sys_obj_cache.h"
 #include "svc_bucket_sobj.h"
 
-#include "rgw/rgw_bucket_sync.h"
-#include "rgw/rgw_zone.h"
-#include "rgw/rgw_sync_policy.h"
+#include "rgw_bucket_sync.h"
+#include "rgw_zone.h"
+#include "rgw_sync_policy.h"
 
 #define dout_subsys ceph_subsys_rgw
 

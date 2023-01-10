@@ -89,31 +89,31 @@ int FilterZoneGroup::get_zone_by_name(const std::string& name, std::unique_ptr<Z
   return 0;
 }
 
-int FilterStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
+int FilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   zone = std::make_unique<FilterZone>(next->get_zone()->clone());
 
   return 0;
 }
 
-const std::string FilterStore::get_name() const
+const std::string FilterDriver::get_name() const
 {
   std::string name = "filter<" + next->get_name() + ">";
   return name;
 }
 
-std::string FilterStore::get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y)
+std::string FilterDriver::get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y)
 {
   return next->get_cluster_id(dpp, y);
 }
 
-std::unique_ptr<User> FilterStore::get_user(const rgw_user &u)
+std::unique_ptr<User> FilterDriver::get_user(const rgw_user &u)
 {
   std::unique_ptr<User> user = next->get_user(u);
   return std::make_unique<FilterUser>(std::move(user));
 }
 
-int FilterStore::get_user_by_access_key(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user)
+int FilterDriver::get_user_by_access_key(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user)
 {
   std::unique_ptr<User> nu;
   int ret;
@@ -127,7 +127,7 @@ int FilterStore::get_user_by_access_key(const DoutPrefixProvider* dpp, const std
   return 0;
 }
 
-int FilterStore::get_user_by_email(const DoutPrefixProvider* dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user)
+int FilterDriver::get_user_by_email(const DoutPrefixProvider* dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user)
 {
   std::unique_ptr<User> nu;
   int ret;
@@ -141,7 +141,7 @@ int FilterStore::get_user_by_email(const DoutPrefixProvider* dpp, const std::str
   return 0;
 }
 
-int FilterStore::get_user_by_swift(const DoutPrefixProvider* dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user)
+int FilterDriver::get_user_by_swift(const DoutPrefixProvider* dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user)
 {
   std::unique_ptr<User> nu;
   int ret;
@@ -155,13 +155,13 @@ int FilterStore::get_user_by_swift(const DoutPrefixProvider* dpp, const std::str
   return 0;
 }
 
-std::unique_ptr<Object> FilterStore::get_object(const rgw_obj_key& k)
+std::unique_ptr<Object> FilterDriver::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> o = next->get_object(k);
   return std::make_unique<FilterObject>(std::move(o));
 }
 
-int FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+int FilterDriver::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
   std::unique_ptr<Bucket> nb;
   int ret;
@@ -176,7 +176,7 @@ int FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bu
   return 0;
 }
 
-int FilterStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
+int FilterDriver::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
 {
   std::unique_ptr<Bucket> nb;
   int ret;
@@ -191,7 +191,7 @@ int FilterStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Buc
   return 0;
 }
 
-int FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
+int FilterDriver::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
   std::unique_ptr<Bucket> nb;
   int ret;
@@ -206,12 +206,12 @@ int FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::s
   return 0;
 }
 
-bool FilterStore::is_meta_master()
+bool FilterDriver::is_meta_master()
 {
   return next->is_meta_master();
 }
 
-int FilterStore::forward_request_to_master(const DoutPrefixProvider *dpp,
+int FilterDriver::forward_request_to_master(const DoutPrefixProvider *dpp,
 					   User* user, obj_version* objv,
 					   bufferlist& in_data,
 					   JSONParser* jp, req_info& info,
@@ -220,7 +220,7 @@ int FilterStore::forward_request_to_master(const DoutPrefixProvider *dpp,
   return next->forward_request_to_master(dpp, user, objv, in_data, jp, info, y);
 }
 
-int FilterStore::forward_iam_request_to_master(const DoutPrefixProvider *dpp,
+int FilterDriver::forward_iam_request_to_master(const DoutPrefixProvider *dpp,
 					       const RGWAccessKey& key,
 					       obj_version* objv,
 					       bufferlist& in_data,
@@ -231,17 +231,17 @@ int FilterStore::forward_iam_request_to_master(const DoutPrefixProvider *dpp,
   return next->forward_iam_request_to_master(dpp, key, objv, in_data, parser, info, y);
 }
 
-std::string FilterStore::zone_unique_id(uint64_t unique_num)
+std::string FilterDriver::zone_unique_id(uint64_t unique_num)
 {
   return next->zone_unique_id(unique_num);
 }
 
-std::string FilterStore::zone_unique_trans_id(uint64_t unique_num)
+std::string FilterDriver::zone_unique_trans_id(uint64_t unique_num)
 {
   return next->zone_unique_trans_id(unique_num);
 }
 
-int FilterStore::get_zonegroup(const std::string& id,
+int FilterDriver::get_zonegroup(const std::string& id,
 			       std::unique_ptr<ZoneGroup>* zonegroup)
 {
   std::unique_ptr<ZoneGroup> ngz;
@@ -256,36 +256,36 @@ int FilterStore::get_zonegroup(const std::string& id,
   return 0;
 }
 
-int FilterStore::cluster_stat(RGWClusterStat& stats)
+int FilterDriver::cluster_stat(RGWClusterStat& stats)
 {
   return next->cluster_stat(stats);
 }
 
-std::unique_ptr<Lifecycle> FilterStore::get_lifecycle(void)
+std::unique_ptr<Lifecycle> FilterDriver::get_lifecycle(void)
 {
   std::unique_ptr<Lifecycle> lc = next->get_lifecycle();
   return std::make_unique<FilterLifecycle>(std::move(lc));
 }
 
-std::unique_ptr<Completions> FilterStore::get_completions(void)
+std::unique_ptr<Completions> FilterDriver::get_completions(void)
 {
   std::unique_ptr<Completions> c = next->get_completions();
   return std::make_unique<FilterCompletions>(std::move(c));
 }
 
-std::unique_ptr<Notification> FilterStore::get_notification(rgw::sal::Object* obj,
+std::unique_ptr<Notification> FilterDriver::get_notification(rgw::sal::Object* obj,
 				rgw::sal::Object* src_obj, req_state* s,
-				rgw::notify::EventType event_type,
+				rgw::notify::EventType event_type, optional_yield y,
 				const std::string* object_name)
 {
   std::unique_ptr<Notification> n = next->get_notification(nextObject(obj),
 							   nextObject(src_obj),
-							   s, event_type,
+							   s, event_type, y,
 							   object_name);
   return std::make_unique<FilterNotification>(std::move(n));
 }
 
-std::unique_ptr<Notification> FilterStore::get_notification(const DoutPrefixProvider* dpp,
+std::unique_ptr<Notification> FilterDriver::get_notification(const DoutPrefixProvider* dpp,
 				rgw::sal::Object* obj, rgw::sal::Object* src_obj,
 				rgw::notify::EventType event_type,
 				rgw::sal::Bucket* _bucket, std::string& _user_id,
@@ -302,57 +302,57 @@ std::unique_ptr<Notification> FilterStore::get_notification(const DoutPrefixProv
   return std::make_unique<FilterNotification>(std::move(n));
 }
 
-RGWLC* FilterStore::get_rgwlc()
+RGWLC* FilterDriver::get_rgwlc()
 {
   return next->get_rgwlc();
 }
 
-RGWCoroutinesManagerRegistry* FilterStore::get_cr_registry()
+RGWCoroutinesManagerRegistry* FilterDriver::get_cr_registry()
 {
   return next->get_cr_registry();
 }
 
-int FilterStore::log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info)
+int FilterDriver::log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info)
 {
     return next->log_usage(dpp, usage_info);
 }
 
-int FilterStore::log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl)
+int FilterDriver::log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl)
 {
     return next->log_op(dpp, oid, bl);
 }
 
-int FilterStore::register_to_service_map(const DoutPrefixProvider *dpp,
+int FilterDriver::register_to_service_map(const DoutPrefixProvider *dpp,
 					 const std::string& daemon_type,
 					 const std::map<std::string, std::string>& meta)
 {
   return next->register_to_service_map(dpp, daemon_type, meta);
 }
 
-void FilterStore::get_quota(RGWQuota& quota)
+void FilterDriver::get_quota(RGWQuota& quota)
 {
   return next->get_quota(quota);
 }
 
-void FilterStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit,
+void FilterDriver::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit,
 				RGWRateLimitInfo& user_ratelimit,
 				RGWRateLimitInfo& anon_ratelimit)
 {
   return next->get_ratelimit(bucket_ratelimit, user_ratelimit, anon_ratelimit);
 }
 
-int FilterStore::set_buckets_enabled(const DoutPrefixProvider* dpp,
+int FilterDriver::set_buckets_enabled(const DoutPrefixProvider* dpp,
 				     std::vector<rgw_bucket>& buckets, bool enabled)
 {
     return next->set_buckets_enabled(dpp, buckets, enabled);
 }
 
-uint64_t FilterStore::get_new_req_id()
+uint64_t FilterDriver::get_new_req_id()
 {
     return next->get_new_req_id();
 }
 
-int FilterStore::get_sync_policy_handler(const DoutPrefixProvider* dpp,
+int FilterDriver::get_sync_policy_handler(const DoutPrefixProvider* dpp,
 					 std::optional<rgw_zone_id> zone,
 					 std::optional<rgw_bucket> bucket,
 					 RGWBucketSyncPolicyHandlerRef* phandler,
@@ -361,29 +361,29 @@ int FilterStore::get_sync_policy_handler(const DoutPrefixProvider* dpp,
   return next->get_sync_policy_handler(dpp, zone, bucket, phandler, y);
 }
 
-RGWDataSyncStatusManager* FilterStore::get_data_sync_manager(const rgw_zone_id& source_zone)
+RGWDataSyncStatusManager* FilterDriver::get_data_sync_manager(const rgw_zone_id& source_zone)
 {
   return next->get_data_sync_manager(source_zone);
 }
 
-void FilterStore::wakeup_meta_sync_shards(std::set<int>& shard_ids)
+void FilterDriver::wakeup_meta_sync_shards(std::set<int>& shard_ids)
 {
   return next->wakeup_meta_sync_shards(shard_ids);
 }
 
-void FilterStore::wakeup_data_sync_shards(const DoutPrefixProvider *dpp,
+void FilterDriver::wakeup_data_sync_shards(const DoutPrefixProvider *dpp,
 					  const rgw_zone_id& source_zone,
 					  boost::container::flat_map<int, boost::container::flat_set<rgw_data_notify_entry>>& shard_ids)
 {
   return next->wakeup_data_sync_shards(dpp, source_zone, shard_ids);
 }
 
-int FilterStore::clear_usage(const DoutPrefixProvider *dpp)
+int FilterDriver::clear_usage(const DoutPrefixProvider *dpp)
 {
   return next->clear_usage(dpp);
 }
 
-int FilterStore::read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
+int FilterDriver::read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 				uint64_t end_epoch, uint32_t max_entries,
 				bool* is_truncated, RGWUsageIter& usage_iter,
 				std::map<rgw_user_bucket, rgw_usage_log_entry>& usage)
@@ -392,60 +392,60 @@ int FilterStore::read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_ep
 			      is_truncated, usage_iter, usage);
 }
 
-int FilterStore::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
+int FilterDriver::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 				uint64_t end_epoch)
 {
   return next->trim_all_usage(dpp, start_epoch, end_epoch);
 }
 
-int FilterStore::get_config_key_val(std::string name, bufferlist* bl)
+int FilterDriver::get_config_key_val(std::string name, bufferlist* bl)
 {
   return next->get_config_key_val(name, bl);
 }
 
-int FilterStore::meta_list_keys_init(const DoutPrefixProvider *dpp,
+int FilterDriver::meta_list_keys_init(const DoutPrefixProvider *dpp,
 				     const std::string& section,
 				     const std::string& marker, void** phandle)
 {
   return next->meta_list_keys_init(dpp, section, marker, phandle);
 }
 
-int FilterStore::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle,
+int FilterDriver::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle,
 				     int max, std::list<std::string>& keys,
 				     bool* truncated)
 {
   return next->meta_list_keys_next(dpp, handle, max, keys, truncated);
 }
 
-void FilterStore::meta_list_keys_complete(void* handle)
+void FilterDriver::meta_list_keys_complete(void* handle)
 {
   next->meta_list_keys_complete(handle);
 }
 
-std::string FilterStore::meta_get_marker(void* handle)
+std::string FilterDriver::meta_get_marker(void* handle)
 {
   return next->meta_get_marker(handle);
 }
 
-int FilterStore::meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key,
+int FilterDriver::meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key,
 			     optional_yield y)
 {
   return next->meta_remove(dpp, metadata_key, y);
 }
 
-const RGWSyncModuleInstanceRef& FilterStore::get_sync_module()
+const RGWSyncModuleInstanceRef& FilterDriver::get_sync_module()
 {
   return next->get_sync_module();
 }
 
-std::unique_ptr<LuaManager> FilterStore::get_lua_manager()
+std::unique_ptr<LuaManager> FilterDriver::get_lua_manager()
 {
   std::unique_ptr<LuaManager> nm = next->get_lua_manager();
 
   return std::make_unique<FilterLuaManager>(std::move(nm));
 }
 
-std::unique_ptr<RGWRole> FilterStore::get_role(std::string name,
+std::unique_ptr<RGWRole> FilterDriver::get_role(std::string name,
 					      std::string tenant,
 					      std::string path,
 					      std::string trust_policy,
@@ -455,17 +455,17 @@ std::unique_ptr<RGWRole> FilterStore::get_role(std::string name,
   return next->get_role(name, tenant, path, trust_policy, max_session_duration_str, tags);
 }
 
-std::unique_ptr<RGWRole> FilterStore::get_role(std::string id)
+std::unique_ptr<RGWRole> FilterDriver::get_role(std::string id)
 {
   return next->get_role(id);
 }
 
-std::unique_ptr<RGWRole> FilterStore::get_role(const RGWRoleInfo& info)
+std::unique_ptr<RGWRole> FilterDriver::get_role(const RGWRoleInfo& info)
 {
   return next->get_role(info);
 }
 
-int FilterStore::get_roles(const DoutPrefixProvider *dpp,
+int FilterDriver::get_roles(const DoutPrefixProvider *dpp,
 			   optional_yield y,
 			   const std::string& path_prefix,
 			   const std::string& tenant,
@@ -474,19 +474,19 @@ int FilterStore::get_roles(const DoutPrefixProvider *dpp,
   return next->get_roles(dpp, y, path_prefix, tenant, roles);
 }
 
-std::unique_ptr<RGWOIDCProvider> FilterStore::get_oidc_provider()
+std::unique_ptr<RGWOIDCProvider> FilterDriver::get_oidc_provider()
 {
   return next->get_oidc_provider();
 }
 
-int FilterStore::get_oidc_providers(const DoutPrefixProvider *dpp,
+int FilterDriver::get_oidc_providers(const DoutPrefixProvider *dpp,
 				    const std::string& tenant,
 				    std::vector<std::unique_ptr<RGWOIDCProvider>>& providers)
 {
   return next->get_oidc_providers(dpp, tenant, providers);
 }
 
-std::unique_ptr<Writer> FilterStore::get_append_writer(const DoutPrefixProvider *dpp,
+std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
 				  const rgw_user& owner,
@@ -505,7 +505,7 @@ std::unique_ptr<Writer> FilterStore::get_append_writer(const DoutPrefixProvider 
   return std::make_unique<FilterWriter>(std::move(writer), std::move(_head_obj));
 }
 
-std::unique_ptr<Writer> FilterStore::get_atomic_writer(const DoutPrefixProvider *dpp,
+std::unique_ptr<Writer> FilterDriver::get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
 				  const rgw_user& owner,
@@ -522,34 +522,24 @@ std::unique_ptr<Writer> FilterStore::get_atomic_writer(const DoutPrefixProvider 
   return std::make_unique<FilterWriter>(std::move(writer), std::move(_head_obj));
 }
 
-const std::string& FilterStore::get_compression_type(const rgw_placement_rule& rule)
+const std::string& FilterDriver::get_compression_type(const rgw_placement_rule& rule)
 {
   return next->get_compression_type(rule);
 }
 
-bool FilterStore::valid_placement(const rgw_placement_rule& rule)
+bool FilterDriver::valid_placement(const rgw_placement_rule& rule)
 {
   return next->valid_placement(rule);
 }
 
-void FilterStore::finalize(void)
+void FilterDriver::finalize(void)
 {
   next->finalize();
 }
 
-CephContext* FilterStore::ctx(void)
+CephContext* FilterDriver::ctx(void)
 {
   return next->ctx();
-}
-
-const std::string& FilterStore::get_luarocks_path() const
-{
-  return next->get_luarocks_path();
-}
-
-void FilterStore::set_luarocks_path(const std::string& path)
-{
-  next->set_luarocks_path(path);
 }
 
 int FilterUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
@@ -741,11 +731,9 @@ int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp)
   return next->check_bucket_shards(dpp);
 }
 
-int FilterBucket::chown(const DoutPrefixProvider* dpp, User* new_user,
-			User* old_user, optional_yield y,
-			const std::string* marker)
+int FilterBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y)
 {
-  return next->chown(dpp, new_user, old_user, y, marker);
+  return next->chown(dpp, new_user, y);
 }
 
 int FilterBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive,
@@ -1065,6 +1053,11 @@ int FilterObject::omap_set_val_by_key(const DoutPrefixProvider *dpp,
   return next->omap_set_val_by_key(dpp, key, val, must_exist, y);
 }
 
+int FilterObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+{
+  return next->chown(new_user, dpp, y);
+}
+
 int FilterObject::FilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
   /* Copy params into next */
@@ -1373,11 +1366,11 @@ int FilterLuaManager::list_packages(const DoutPrefixProvider* dpp, optional_yiel
 
 extern "C" {
 
-rgw::sal::Store* newBaseFilter(rgw::sal::Store* next)
+rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next)
 {
-  rgw::sal::FilterStore* store = new rgw::sal::FilterStore(next);
+  rgw::sal::FilterDriver* driver = new rgw::sal::FilterDriver(next);
 
-  return store;
+  return driver;
 }
 
 }

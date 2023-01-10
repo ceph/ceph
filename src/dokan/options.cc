@@ -29,7 +29,6 @@ Map options:
   -l [ --mountpoint ] arg     mountpoint (path or drive letter) (e.g -l x)
   -x [ --root-path ] arg      mount a Ceph filesystem subdirectory
 
-  -t [ --thread-count] arg    thread count
   --operation-timeout arg     Dokan operation timeout. Default: 120s.
 
   --debug                     enable debug output
@@ -40,6 +39,8 @@ Map options:
   --current-session-only      expose the mount only to the current user session
   --removable                 use a removable drive
   --win-vol-name arg          The Windows volume name. Default: Ceph - <fs_name>.
+  --win-vol-serial arg        The Windows volume serial number. Default: <fs_id>.
+  --max-path-len              The value of the maximum path length. Default: 256.
 
 Unmap options:
   -l [ --mountpoint ] arg     mountpoint (path or drive letter) (e.g -l x).
@@ -84,6 +85,10 @@ int parse_args(
   std::ostringstream err;
   std::string mountpoint;
   std::string win_vol_name;
+  std::string win_vol_serial;
+  std::string max_path_len;
+
+  int thread_count;
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
@@ -109,18 +114,32 @@ int parse_args(
     } else if (ceph_argparse_witharg(args, i, &win_vol_name,
                                      "--win-vol-name", (char *)NULL)) {
       cfg->win_vol_name = to_wstring(win_vol_name);
+    } else if (ceph_argparse_witharg(args, i, &win_vol_serial,
+                                     "--win-vol-serial", (char *)NULL)) {
+      cfg->win_vol_serial = std::stoul(win_vol_serial);
+    } else if (ceph_argparse_witharg(args, i, &max_path_len,
+                                     "--max-path-len", (char*)NULL)) {
+      unsigned long max_path_length = std::stoul(max_path_len);
+
+      if (max_path_length > 32767) {
+        *err_msg << "ceph-dokan: maximum path length should not "
+                 << "exceed " << 32767;
+        return -EINVAL;
+      }
+
+      if (max_path_length < 256) {
+        *err_msg << "ceph-dokan: maximum path length should not "
+                 << "have a value lower than 256";
+        return -EINVAL;
+      }
+
+      cfg->max_path_len = max_path_length;
     } else if (ceph_argparse_flag(args, i, "--current-session-only", (char *)NULL)) {
       cfg->current_session_only = true;
-    } else if (ceph_argparse_witharg(args, i, (int*)&cfg->thread_count,
+    } else if (ceph_argparse_witharg(args, i, &thread_count,
                                      err, "--thread-count", "-t", (char *)NULL)) {
-      if (!err.str().empty()) {
-        *err_msg << "ceph-dokan: " << err.str();
-        return -EINVAL;
-      }
-      if (cfg->thread_count < 0) {
-        *err_msg << "ceph-dokan: Invalid argument for thread-count";
-        return -EINVAL;
-      }
+      std::cerr << "ceph-dokan: the thread count parameter is not supported by Dokany v2 "
+                << "and has been deprecated." << std::endl;
     } else if (ceph_argparse_witharg(args, i, (int*)&cfg->operation_timeout,
                                      err, "--operation-timeout", (char *)NULL)) {
       if (!err.str().empty()) {
@@ -187,7 +206,6 @@ int parse_args(
 int set_dokan_options(Config *cfg, PDOKAN_OPTIONS dokan_options) {
   ZeroMemory(dokan_options, sizeof(DOKAN_OPTIONS));
   dokan_options->Version = DOKAN_VERSION;
-  dokan_options->ThreadCount = cfg->thread_count;
   dokan_options->MountPoint = cfg->mountpoint.c_str();
   dokan_options->Timeout = cfg->operation_timeout * 1000;
 

@@ -332,38 +332,6 @@ struct rgw_pubsub_s3_event {
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_s3_event)
 
-struct rgw_pubsub_event {
-  constexpr static const char* const json_type_plural = "events";
-  std::string id;
-  std::string event_name;
-  std::string source;
-  ceph::real_time timestamp;
-  JSONFormattable info;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(id, bl);
-    encode(event_name, bl);
-    encode(source, bl);
-    encode(timestamp, bl);
-    encode(info, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(id, bl);
-    decode(event_name, bl);
-    decode(source, bl);
-    decode(timestamp, bl);
-    decode(info, bl);
-    DECODE_FINISH(bl);
-  }
-
-  void dump(Formatter *f) const;
-};
-WRITE_CLASS_ENCODER(rgw_pubsub_event)
-
 // setting a unique ID for an event based on object hash and timestamp
 void set_event_id(std::string& id, const std::string& hash, const utime_t& ts);
 
@@ -525,8 +493,7 @@ struct rgw_pubsub_topic_filter {
     encode(topic, bl);
     // events are stored as a vector of std::strings
     std::vector<std::string> tmp_events;
-    const auto converter = s3_id.empty() ? rgw::notify::to_ceph_string : rgw::notify::to_string;
-    std::transform(events.begin(), events.end(), std::back_inserter(tmp_events), converter);
+    std::transform(events.begin(), events.end(), std::back_inserter(tmp_events), rgw::notify::to_string);
     encode(tmp_events, bl);
     encode(s3_id, bl);
     encode(s3_filter, bl);
@@ -675,79 +642,10 @@ public:
     int remove_notifications(const DoutPrefixProvider *dpp, optional_yield y);
   };
 
-  // base class for subscription
-  class Sub {
-    friend class RGWPubSub;
-  protected:
-    RGWPubSub* const ps;
-    const std::string sub;
-    rgw_raw_obj sub_meta_obj;
-
-    int read_sub(rgw_pubsub_sub_config *result, RGWObjVersionTracker* objv_tracker);
-    int write_sub(const DoutPrefixProvider *dpp, const rgw_pubsub_sub_config& sub_conf,
-		  RGWObjVersionTracker* objv_tracker, optional_yield y);
-    int remove_sub(const DoutPrefixProvider *dpp, RGWObjVersionTracker* objv_tracker, optional_yield y);
-  public:
-    Sub(RGWPubSub *_ps, const std::string& _sub) : ps(_ps), sub(_sub) {
-      ps->get_sub_meta_obj(sub, &sub_meta_obj);
-    }
-
-    virtual ~Sub() = default;
-
-    int subscribe(const DoutPrefixProvider *dpp, const std::string& topic_name, const rgw_pubsub_sub_dest& dest, optional_yield y,
-		  const std::string& s3_id="");
-    int unsubscribe(const DoutPrefixProvider *dpp, const std::string& topic_name, optional_yield y);
-    int get_conf(rgw_pubsub_sub_config* result);
-    
-    static const int DEFAULT_MAX_EVENTS = 100;
-    // followint virtual methods should only be called in derived
-    virtual int list_events(const DoutPrefixProvider *dpp, const std::string& marker, int max_events) {ceph_assert(false);}
-    virtual int remove_event(const DoutPrefixProvider *dpp, const std::string& event_id) {ceph_assert(false);}
-    virtual void dump(Formatter* f) const {ceph_assert(false);}
-  };
-
-  // subscription with templated list of events to support both S3 compliant and Ceph specific events
-  template<typename EventType>
-  class SubWithEvents : public Sub {
-  private:
-    struct list_events_result {
-      std::string next_marker;
-      bool is_truncated{false};
-      void dump(Formatter *f) const;
-      std::vector<EventType> events;
-    } list;
-
-  public:
-    SubWithEvents(RGWPubSub *_ps, const std::string& _sub) : Sub(_ps, _sub) {}
-
-    virtual ~SubWithEvents() = default;
-    
-    int list_events(const DoutPrefixProvider *dpp, const std::string& marker, int max_events) override;
-    int remove_event(const DoutPrefixProvider *dpp, const std::string& event_id) override;
-    void dump(Formatter* f) const override;
-  };
-
   using BucketRef = std::shared_ptr<Bucket>;
-  using SubRef = std::shared_ptr<Sub>;
 
   BucketRef get_bucket(const rgw_bucket& bucket) {
     return std::make_shared<Bucket>(this, bucket);
-  }
-
-  SubRef get_sub(const std::string& sub) {
-    return std::make_shared<Sub>(this, sub);
-  }
-  
-  SubRef get_sub_with_events(const std::string& sub) {
-    auto tmpsub = Sub(this, sub);
-    rgw_pubsub_sub_config conf;
-    if (tmpsub.get_conf(&conf) < 0) {
-      return nullptr;
-    }
-    if (conf.s3_id.empty()) {
-      return std::make_shared<SubWithEvents<rgw_pubsub_event>>(this, sub);
-    }
-    return std::make_shared<SubWithEvents<rgw_pubsub_s3_event>>(this, sub);
   }
 
   void get_meta_obj(rgw_raw_obj *obj) const;

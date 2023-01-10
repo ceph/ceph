@@ -35,7 +35,7 @@ context to_context(const std::string& s);
 // verify a lua script
 bool verify(const std::string& script, std::string& err_msg);
 
-// store a lua script in a context
+// driver a lua script in a context
 int write_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, const std::string& script);
 
 // read the stored lua script from a context
@@ -49,17 +49,19 @@ using packages_t = std::set<std::string>;
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 
 // add a lua package to the allowlist
-int add_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, const std::string& package_name, bool allow_compilation);
+int add_package(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y, const std::string& package_name, bool allow_compilation);
 
 // remove a lua package from the allowlist
-int remove_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, const std::string& package_name);
+int remove_package(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y, const std::string& package_name);
 
 // list lua packages in the allowlist
-int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, packages_t& packages);
+int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y, packages_t& packages);
 
 // install all packages from the allowlist
 // return the list of packages that failed to install and the output of the install command
-int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, packages_t& failed_packages, std::string& output);
+int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
+                     optional_yield y, const std::string& luarocks_path,
+                     packages_t& failed_packages, std::string& output);
 #endif
 }
 

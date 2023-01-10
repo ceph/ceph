@@ -105,15 +105,15 @@ PGBackend::load_metadata(const hobject_t& oid)
           bool object_corrupted = true;
           if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
             object_corrupted = false;
-            logger().debug(
-              "load_metadata: object {} and snapset {} present",
-              oid, ssiter->second);
             bufferlist bl = std::move(ssiter->second);
             if (bl.length()) {
               ret->ssc = new crimson::osd::SnapSetContext(oid.get_snapdir());
               try {
                 ret->ssc->snapset = SnapSet(bl);
                 ret->ssc->exists = true;
+                logger().debug(
+                  "load_metadata: object {} and snapset {} present",
+                   oid, ret->ssc->snapset);
               } catch (const buffer::error&) {
                 logger().warn("unable to decode SnapSet");
                 throw crimson::osd::invalid_argument();
@@ -766,6 +766,55 @@ PGBackend::write_iertr::future<> PGBackend::writefull(
     op.flags);
 }
 
+using mocked_load_clone_obc_ertr = crimson::errorator<
+  crimson::ct_error::enoent,
+  crimson::ct_error::object_corrupted>;
+using mocked_lock_clone_obc_iertr =
+  ::crimson::interruptible::interruptible_errorator<
+    ::crimson::osd::IOInterruptCondition,
+    mocked_load_clone_obc_ertr>;
+
+static mocked_lock_clone_obc_iertr::future<crimson::osd::ObjectContextRef>
+mocked_load_clone_obc(const auto& coid)
+{
+  return crimson::ct_error::enoent::make();
+}
+
+static auto head2clone(const hobject_t& hoid)
+{
+  // TODO: transform hoid into coid
+  return hoid;
+}
+
+PGBackend::rollback_iertr::future<> PGBackend::rollback(
+  const SnapSet &ss,
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params,
+  object_stat_sum_t& delta_stats)
+{
+  assert(os.oi.soid.is_head());
+  logger().debug("{} deleting {} and rolling back to old snap {}",
+                  __func__, os.oi.soid, osd_op.op.snap.snapid);
+  return mocked_load_clone_obc(
+    head2clone(os.oi.soid)
+  ).safe_then_interruptible([](auto clone_obc) {
+    // TODO: implement me!
+    static_cast<void>(clone_obc);
+    return remove_iertr::now();
+  }, crimson::ct_error::enoent::handle([this, &os, &txn, &delta_stats] {
+    // there's no snapshot here, or there's no object.
+    // if there's no snapshot, we delete the object; otherwise, do nothing.
+    logger().debug("rollback: deleting head on {}"
+                   " because got ENOENT|whiteout on obc lookup",
+                   os.oi.soid);
+    return remove(os, txn, delta_stats, true /*whiteout*/);
+  }), mocked_load_clone_obc_ertr::assert_all{
+    "unexpected error code in rollback"
+  });
+}
+
 PGBackend::append_ierrorator::future<> PGBackend::append(
   ObjectState& os,
   OSDOp& osd_op,
@@ -1198,22 +1247,18 @@ PGBackend::rm_xattr(
 }
 
 void PGBackend::clone(
-  object_info_t& snap_oi,
-  ObjectState& os,
-  ObjectState& d_os,
+  /* const */object_info_t& snap_oi,
+  const ObjectState& os,
+  const ObjectState& d_os,
   ceph::os::Transaction& txn)
 {
-  // Prepend the cloning operation to txn
-  ceph::os::Transaction c_txn;
-  c_txn.clone(coll->get_cid(), ghobject_t{os.oi.soid}, ghobject_t{d_os.oi.soid});
-  // Operations will be removed from txn while appending
-  c_txn.append(txn);
-  txn = std::move(c_txn);
-
-  ceph::bufferlist bv;
-  snap_oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
-
-  txn.setattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, OI_ATTR, bv);
+  // See OpsExecutor::execute_clone documentation
+  txn.clone(coll->get_cid(), ghobject_t{os.oi.soid}, ghobject_t{d_os.oi.soid});
+  {
+    ceph::bufferlist bv;
+    snap_oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
+    txn.setattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, OI_ATTR, bv);
+  }
   txn.rmattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, SS_ATTR);
 }
 

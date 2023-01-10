@@ -168,6 +168,17 @@ seastar::future<> SeaStore::stop()
   return seastar::now();
 }
 
+SeaStore::mount_ertr::future<> SeaStore::test_mount()
+{
+  init_managers();
+  return transaction_manager->mount(
+  ).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::test_mount"
+    }
+  );
+}
+
 SeaStore::mount_ertr::future<> SeaStore::mount()
 {
   return device->mount(
@@ -244,6 +255,66 @@ seastar::future<> SeaStore::write_fsid(uuid_d new_osd_fsid)
       return seastar::now();
      }
    });
+}
+
+seastar::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
+{
+  init_managers();
+  return transaction_manager->mkfs(
+  ).safe_then([this] {
+    init_managers();
+    return transaction_manager->mount();
+  }).safe_then([this] {
+    return repeat_eagain([this] {
+      return transaction_manager->with_transaction_intr(
+	Transaction::src_t::MUTATE,
+	"mkfs_seastore",
+	[this](auto& t)
+      {
+	return onode_manager->mkfs(t
+	).si_then([this, &t] {
+	  return collection_manager->mkfs(t);
+	}).si_then([this, &t](auto coll_root) {
+	  transaction_manager->write_collection_root(
+	    t, coll_root);
+	  return transaction_manager->submit_transaction(t);
+	});
+      });
+    });
+  }).safe_then([this, new_osd_fsid] {
+    return write_fsid(new_osd_fsid);
+  }).safe_then([this] {
+    return read_meta("type").then([this] (auto tuple) {
+      auto [ret, type] = tuple;
+      if (ret == 0 && type == "seastore") {
+	return seastar::now();
+      } else if (ret == 0 && type != "seastore") {
+	LOG_PREFIX(SeaStore::mkfs);
+	ERROR("expected seastore, but type is {}", type);
+	throw std::runtime_error("store type error");
+      } else {
+	return write_meta("type", "seastore");
+      }
+    });
+  }).safe_then([this] {
+    return write_meta("mkfs_done", "yes");
+  }).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::_mkfs"
+    }
+  );
+}
+
+SeaStore::mkfs_ertr::future<> SeaStore::test_mkfs(uuid_d new_osd_fsid)
+{
+
+  return read_meta("mkfs_done").then([this, new_osd_fsid] (auto tuple) {
+    auto [done, value] = tuple;
+    if (done == 0) {
+      return seastar::now();
+    } 
+    return _mkfs(new_osd_fsid);
+  });
 }
 
 SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
@@ -327,48 +398,10 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
         });
       }).safe_then([this] {
         return device->mount();
-      }).safe_then([this] {
-        init_managers();
-        return transaction_manager->mkfs();
-      }).safe_then([this] {
-        init_managers();
-        return transaction_manager->mount();
-      }).safe_then([this] {
-        return repeat_eagain([this] {
-          return transaction_manager->with_transaction_intr(
-            Transaction::src_t::MUTATE,
-            "mkfs_seastore",
-            [this](auto& t)
-          {
-            return onode_manager->mkfs(t
-            ).si_then([this, &t] {
-              return collection_manager->mkfs(t);
-            }).si_then([this, &t](auto coll_root) {
-              transaction_manager->write_collection_root(
-                t, coll_root);
-              return transaction_manager->submit_transaction(t);
-            });
-          });
-        });
       }).safe_then([this, new_osd_fsid] {
-        return write_fsid(new_osd_fsid);
+	return _mkfs(new_osd_fsid);
       }).safe_then([this] {
-        return read_meta("type").then([this] (auto tuple) {
-          auto [ret, type] = tuple;
-          if (ret == 0 && type == "seastore") {
-            return seastar::now();
-          } else if (ret == 0 && type != "seastore") {
-            LOG_PREFIX(SeaStore::mkfs);
-            ERROR("expected seastore, but type is {}", type);
-            throw std::runtime_error("store type error");
-          } else {
-            return write_meta("type", "seastore");
-          }
-        });
-      }).safe_then([this] {
-        return write_meta("mkfs_done", "yes");
-      }).safe_then([this] {
-        return umount();
+	return umount();
       }).handle_error(
         crimson::ct_error::assert_all{
           "Invalid error in SeaStore::mkfs"
@@ -734,8 +767,8 @@ SeaStore::get_attrs_ertr::future<SeaStore::attrs_t> SeaStore::get_attrs(
     op_type_t::GET_ATTRS,
     [=, this](auto &t, auto& onode) {
       auto& layout = onode.get_layout();
-      return _omap_list(onode, layout.xattr_root, t, std::nullopt,
-        OMapManager::omap_list_config_t::with_inclusive(false)
+      return omap_list(onode, layout.xattr_root, t, std::nullopt,
+        OMapManager::omap_list_config_t().with_inclusive(false, false)
       ).si_then([&layout](auto p) {
         auto& attrs = std::get<1>(p);
         ceph::bufferlist bl;
@@ -879,7 +912,7 @@ SeaStore::_omap_get_values_ret SeaStore::_omap_get_values(
   );
 }
 
-SeaStore::_omap_list_ret SeaStore::_omap_list(
+SeaStore::omap_list_ret SeaStore::omap_list(
   Onode &onode,
   const omap_root_le_t& omap_root,
   Transaction& t,
@@ -889,7 +922,7 @@ SeaStore::_omap_list_ret SeaStore::_omap_list(
   auto root = omap_root.get(
     onode.get_metadata_hint(device->get_block_size()));
   if (root.is_null()) {
-    return seastar::make_ready_future<_omap_list_bare_ret>(
+    return seastar::make_ready_future<omap_list_bare_ret>(
       true, omap_values_t{}
     );
   }
@@ -897,19 +930,19 @@ SeaStore::_omap_list_ret SeaStore::_omap_list(
     BtreeOMapManager(*transaction_manager),
     root,
     start,
-    [&t, config](auto &manager, auto& root, auto& start) {
-      return manager.omap_list(root, t, start, config);
-    });
+    std::optional<std::string>(std::nullopt),
+    [&t, config](auto &manager, auto &root, auto &start, auto &end) {
+      return manager.omap_list(root, t, start, end, config);
+  });
 }
 
-SeaStore::omap_get_values_ret_t SeaStore::omap_list(
+SeaStore::omap_get_values_ret_t SeaStore::omap_get_values(
   CollectionRef ch,
   const ghobject_t &oid,
-  const std::optional<string> &start,
-  OMapManager::omap_list_config_t config)
+  const std::optional<string> &start)
 {
   auto c = static_cast<SeastoreCollection*>(ch.get());
-  LOG_PREFIX(SeaStore::omap_list);
+  LOG_PREFIX(SeaStore::omap_get_values);
   DEBUG("{} {}", c->get_cid(), oid);
   using ret_bare_t = std::tuple<bool, SeaStore::omap_values_t>;
   return repeat_with_onode<ret_bare_t>(
@@ -918,25 +951,13 @@ SeaStore::omap_get_values_ret_t SeaStore::omap_list(
     Transaction::src_t::READ,
     "omap_list",
     op_type_t::OMAP_LIST,
-    [this, config, &start](auto &t, auto &onode) {
-      return _omap_list(
+    [this, start](auto &t, auto &onode) {
+      return omap_list(
 	onode,
 	onode.get_layout().omap_root,
-	t, start, config
-      );
-    });
-}
-
-SeaStore::omap_get_values_ret_t SeaStore::omap_get_values(
-  CollectionRef ch,
-  const ghobject_t &oid,
-  const std::optional<string> &start)
-{
-  return seastar::do_with(oid, start,
-			  [this, ch=std::move(ch)](auto& oid, auto& start) {
-    return omap_list(
-      ch, oid, start,
-      OMapManager::omap_list_config_t::with_inclusive(false));
+	t,
+	start,
+	OMapManager::omap_list_config_t().with_inclusive(false, false));
   });
 }
 
@@ -1457,8 +1478,43 @@ SeaStore::tm_ret SeaStore::_omap_rmkeyrange(
 {
   LOG_PREFIX(SeaStore::_omap_rmkeyrange);
   DEBUGT("{} first={} last={}", *ctx.transaction, *onode, first, last);
-  assert(0 == "not supported yet");
-  return tm_iertr::now();
+  if (first > last) {
+    ERRORT("range error, first: {} > last:{}", *ctx.transaction, first, last);
+    ceph_abort();
+  }
+  auto omap_root = onode->get_layout().omap_root.get(
+    onode->get_metadata_hint(device->get_block_size()));
+  if (omap_root.is_null()) {
+    return seastar::now();
+  } else {
+    return seastar::do_with(
+      BtreeOMapManager(*transaction_manager),
+      onode->get_layout().omap_root.get(
+        onode->get_metadata_hint(device->get_block_size())),
+      std::move(first),
+      std::move(last),
+      [&ctx, &onode](
+	auto &omap_manager,
+	auto &omap_root,
+	auto &first,
+	auto &last) {
+      auto config = OMapManager::omap_list_config_t()
+	.with_inclusive(true, false)
+	.without_max();
+      return omap_manager.omap_rm_key_range(
+	omap_root,
+	*ctx.transaction,
+	first,
+	last,
+	config
+      ).si_then([&] {
+        if (omap_root.must_update()) {
+          onode->get_mutable_layout(*ctx.transaction
+          ).omap_root.update(omap_root);
+        }
+      });
+    });
+  }
 }
 
 SeaStore::tm_ret SeaStore::_truncate(

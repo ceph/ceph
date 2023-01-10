@@ -17,6 +17,13 @@
 
 SET_SUBSYS(seastore_onode);
 
+namespace fmt {
+template <typename T>
+const void* ptr(const ::boost::intrusive_ptr<T>& p) {
+  return p.get();
+}
+}
+
 namespace crimson::os::seastore::onode {
 /*
  * tree_cursor_t
@@ -717,13 +724,13 @@ eagain_ifuture<Ref<Node>> Node::load(
     if (!field_type) {
       ERRORT("load addr={:x}, is_level_tail={} error, "
              "got invalid header -- {}",
-             c.t, addr, expect_is_level_tail, extent);
+             c.t, addr, expect_is_level_tail, fmt::ptr(extent));
       ceph_abort("fatal error");
     }
     if (header.get_is_level_tail() != expect_is_level_tail) {
       ERRORT("load addr={:x}, is_level_tail={} error, "
              "is_level_tail mismatch -- {}",
-             c.t, addr, expect_is_level_tail, extent);
+             c.t, addr, expect_is_level_tail, fmt::ptr(extent));
       ceph_abort("fatal error");
     }
 
@@ -732,7 +739,7 @@ eagain_ifuture<Ref<Node>> Node::load(
       if (extent->get_length() != c.vb.get_leaf_node_size()) {
         ERRORT("load addr={:x}, is_level_tail={} error, "
                "leaf length mismatch -- {}",
-               c.t, addr, expect_is_level_tail, extent);
+               c.t, addr, expect_is_level_tail, fmt::ptr(extent));
         ceph_abort("fatal error");
       }
       auto impl = LeafNodeImpl::load(extent, *field_type);
@@ -743,7 +750,7 @@ eagain_ifuture<Ref<Node>> Node::load(
       if (extent->get_length() != c.vb.get_internal_node_size()) {
         ERRORT("load addr={:x}, is_level_tail={} error, "
                "internal length mismatch -- {}",
-               c.t, addr, expect_is_level_tail, extent);
+               c.t, addr, expect_is_level_tail, fmt::ptr(extent));
         ceph_abort("fatal error");
       }
       auto impl = InternalNodeImpl::load(extent, *field_type);

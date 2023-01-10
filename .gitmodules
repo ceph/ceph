@@ -38,9 +38,6 @@
 [submodule "src/blkin"]
 	path = src/blkin
 	url = https://github.com/ceph/blkin
-[submodule "src/rapidjson"]
-	path = src/rapidjson
-	url = https://github.com/ceph/rapidjson
 [submodule "src/dmclock"]
 	path = src/dmclock
 	url = https://github.com/ceph/dmclock.git

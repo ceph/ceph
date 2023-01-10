@@ -104,10 +104,9 @@ public:
     ssc = std::move(_ssc);
   }
 
-  void set_clone_state(ObjectState &&_obs, Ref &&_head) {
+  void set_clone_state(ObjectState &&_obs) {
     ceph_assert(!is_head());
     obs = std::move(_obs);
-    head = _head;
   }
 
   /// pass the provided exception to any waiting consumers of this ObjectContext
@@ -268,5 +267,8 @@ public:
   void handle_conf_change(const crimson::common::ConfigProxy& conf,
                           const std::set <std::string> &changed) final;
 };
+
+std::optional<hobject_t> resolve_oid(const SnapSet &ss,
+                                     const hobject_t &oid);
 
 } // namespace crimson::osd

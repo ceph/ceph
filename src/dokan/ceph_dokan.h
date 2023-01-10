@@ -11,7 +11,6 @@
 #pragma once
 
 #define CEPH_DOKAN_IO_DEFAULT_TIMEOUT 60 * 5 // Seconds
-#define CEPH_DOKAN_DEFAULT_THREAD_COUNT 10
 
 // Avoid conflicting COM types, exposed when using C++.
 #define _OLE2_H_
@@ -28,13 +27,13 @@ struct Config {
   bool dokan_stderr = false;
 
   int operation_timeout = CEPH_DOKAN_IO_DEFAULT_TIMEOUT;
-  int thread_count = CEPH_DOKAN_DEFAULT_THREAD_COUNT;
 
   std::wstring mountpoint = L"";
   std::string root_path = "/";
 
   std::wstring win_vol_name = L"";
   unsigned long win_vol_serial = 0;
+  unsigned long max_path_len = 256;
 };
 
 extern Config *g_cfg;

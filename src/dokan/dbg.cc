@@ -16,9 +16,9 @@
 #include "common/dout.h"
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rbd
+#define dout_subsys ceph_subsys_client
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd-wnbd: "
+#define dout_prefix *_dout << "ceph-dokan: "
 
 #define check_flag(stream, val, flag) if (val & flag) { stream << "[" #flag "]"; }
 #define check_flag_eq(stream, val, flag) if (val == flag) { stream << "[" #flag "]"; }

@@ -76,7 +76,7 @@
           <div class="cd-col-form-input">
             <select id="owner"
                     name="owner"
-                    class="form-control"
+                    class="form-select"
                     formControlName="owner"
                     [autofocus]="editing">
               <option i18n
@@ -105,7 +105,7 @@
               <select id="placement-target"
                       name="placement-target"
                       formControlName="placement-target"
-                      class="form-control">
+                      class="form-select">
                 <option i18n
                         *ngIf="placementTargets === null"
                         [ngValue]="null">Loading...</option>
@@ -243,7 +243,7 @@
                    for="lock_mode"
                    i18n>Mode</label>
             <div class="cd-col-form-input">
-              <select class="form-control"
+              <select class="form-select"
                       formControlName="lock_mode"
                       name="lock_mode"
                       id="lock_mode">
@@ -285,13 +285,13 @@
           <div class="form-group row">
             <div class="cd-col-form-offset">
               <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
+                <input class="form-check-input"
                        id="encryption_enabled"
                        name="encryption_enabled"
                        formControlName="encryption_enabled"
                        type="checkbox"
                        [attr.disabled]="!kmsVaultConfig && !s3VaultConfig ? true : null">
-                <label class="custom-control-label"
+                <label class="form-check-label"
                        for="encryption_enabled"
                        i18n>Encryption</label>
                 <cd-helper>
@@ -307,15 +307,15 @@
           <div *ngIf="bucketForm.getValue('encryption_enabled')">
             <div class="form-group row">
               <div class="cd-col-form-offset">
-                <div class="custom-control custom-radio custom-control-inline pl-5">
-                  <input class="custom-control-input"
+                <div class="custom-control custom-radio custom-control-inline ps-5">
+                  <input class="form-check-input"
                          formControlName="encryption_type"
                          id="sse_S3_enabled"
                          type="radio"
                          name="encryption_type"
                          value="AES256"
                          [attr.disabled]="!s3VaultConfig ? true : null">
-                  <label class="custom-control-label"
+                  <label class="form-control-label"
                          for="sse_S3_enabled"
                          i18n>SSE-S3 Encryption</label>
                 </div>
@@ -324,22 +324,22 @@
 
             <div class="form-group row">
               <div class="cd-col-form-offset">
-                <div class="custom-control custom-radio custom-control-inline pl-5">
-                  <input class="custom-control-input"
+                <div class="custom-control custom-radio custom-control-inline ps-5">
+                  <input class="form-check-input"
                          formControlName="encryption_type"
                          id="kms_enabled"
                          name="encryption_type"
                          value="aws:kms"
                          [attr.disabled]="!kmsVaultConfig ? true : null"
                          type="radio">
-                  <label class="custom-control-label"
+                  <label class="form-control-label"
                          for="kms_enabled"
                          i18n>Connect to an external key management service</label>
                 </div>
               </div>
             </div>
 
-            <div *ngIf="bucketForm.getValue('encryption_type') == 'aws:kms'">
+            <div *ngIf="bucketForm.getValue('encryption_type') === 'aws:kms'">
               <div class="form-group row">
                 <label class="cd-col-form-label required"
                        for="kms_provider"
@@ -347,7 +347,7 @@
                 <div class="cd-col-form-input">
                   <select id="kms_provider"
                           name="kms_provider"
-                          class="form-control"
+                          class="form-select"
                           formControlName="kms_provider"
                           [autofocus]="editing">
                     <option i18n
@@ -363,7 +363,7 @@
               </div>
             </div>
 
-            <div *ngIf="bucketForm.getValue('encryption_type') == 'aws:kms'">
+            <div *ngIf="bucketForm.getValue('encryption_type') === 'aws:kms'">
               <div class="form-group row">
                 <label class="cd-col-form-label required"
                        for="keyId"

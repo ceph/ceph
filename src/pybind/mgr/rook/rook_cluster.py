@@ -1065,7 +1065,7 @@ class RookCluster(object):
             return rook_nfsgw
 
         create_ganesha_pool(mgr)
-        NFSRados(mgr_module, service_id).write_obj('', f'conf-nfs.{spec.service_id}')
+        NFSRados(mgr_module.rados, service_id).write_obj('', f'conf-nfs.{spec.service_id}')
         return self._create_or_patch(cnfs.CephNFS, 'cephnfses', service_id,
                 _update_nfs, _create_nfs)
 

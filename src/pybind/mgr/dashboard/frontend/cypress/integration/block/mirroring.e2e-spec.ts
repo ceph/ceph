@@ -59,7 +59,7 @@ describe('Mirroring page', () => {
           cy.get('input[name=name]').clear().type(name);
           cy.get(`select[name=poolType]`).select('replicated');
           cy.get(`select[name=poolType] option:checked`).contains('replicated');
-          cy.get('.float-left.mr-2.select-menu-edit').click();
+          cy.get('.float-start.me-2.select-menu-edit').click();
           cy.get('.popover-body').should('be.visible');
           // Choose rbd as the application label
           cy.get('.select-menu-item-content').contains('rbd').click();

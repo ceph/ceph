@@ -8,6 +8,9 @@
 #include "common/hobject_fmt.h"
 #include "osd/osd_types.h"
 #include <fmt/chrono.h>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 
 template <>
 struct fmt::formatter<osd_reqid_t> {
@@ -324,3 +327,12 @@ struct fmt::formatter<ScrubMap> {
 
   bool debug_log{false};
 };
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<ObjectRecoveryInfo> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ObjectRecoveryProgress> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<PastIntervals> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<pg_log_op_return_item_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<watch_info_t> : fmt::ostream_formatter {};
+template <bool TrackChanges> struct fmt::formatter<pg_missing_set<TrackChanges>> : fmt::ostream_formatter {};
+#endif

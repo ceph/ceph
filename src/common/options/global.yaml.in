@@ -3548,6 +3548,36 @@ options:
 # osd_*_priority determines the ratio of available io between client and
 # recovery.  Each option may be set between
 # 1..63.
+- name: rocksdb_cf_compact_on_deletion
+  type: bool
+  level: dev
+  desc: Compact the column family when a certain number of tombstones are observed within a given window.
+  long_desc: 'This setting instructs RocksDB to compact a column family when a certain
+    number of tombstones are observed during iteration within a certain sliding window.
+    For instance if rocksdb_cf_compact_on_deletion_sliding_window is 8192 and
+    rocksdb_cf_compact_on_deletion_trigger is 4096,  then once 4096 tombstones are
+    observed after iteration over 8192 entries, the column family will be compacted.'
+  default: true
+  with_legacy: true
+  see_also:
+  - rocksdb_cf_compact_on_deletion_sliding_window
+  - rocksdb_cf_compact_on_deletion_trigger
+- name: rocksdb_cf_compact_on_deletion_sliding_window
+  type: int
+  level: dev
+  desc: The sliding window to use when rocksdb_cf_compact_on_deletion is enabled.
+  default: 32768
+  with_legacy: true
+  see_also:
+  - rocksdb_cf_compact_on_deletion
+- name: rocksdb_cf_compact_on_deletion_trigger
+  type: int
+  level: dev
+  desc: The trigger to use when rocksdb_cf_compact_on_deletion is enabled.
+  default: 16384
+  with_legacy: true
+  see_also:
+  - rocksdb_cf_compact_on_deletion
 - name: osd_client_op_priority
   type: uint
   level: advanced
@@ -4911,7 +4941,7 @@ options:
   type: str
   level: advanced
   desc: Full set of rocksdb settings to override
-  default: compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456,writable_file_max_buffer_size=0,compaction_readahead_size=2097152,max_background_compactions=2,max_total_wal_size=1073741824
+  default: compression=kNoCompression,max_write_buffer_number=128,min_write_buffer_number_to_merge=16,compaction_style=kCompactionStyleLevel,write_buffer_size=8388608,max_background_jobs=4,level0_file_num_compaction_trigger=8,max_bytes_for_level_base=1073741824,max_bytes_for_level_multiplier=8,compaction_readahead_size=2MB,max_total_wal_size=1073741824,writable_file_max_buffer_size=0,ttl=21600
   with_legacy: true
 - name: bluestore_rocksdb_options_annex
   type: str
@@ -4993,6 +5023,14 @@ options:
   level: dev
   desc: Remove allocation info from RocksDB and store the info in a new allocation file
   default: true
+  with_legacy: true
+- name: bluestore_debug_inject_allocation_from_file_failure
+  type: float
+  level: dev
+  desc: Enables random error injections when restoring allocation map from file.
+  long_desc: Specifies error injection probability for restoring allocation map from file
+    hence causing full recovery. Intended primarily for testing.
+  default: 0
   with_legacy: true
 - name: bluestore_fsck_on_umount_deep
   type: bool

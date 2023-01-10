@@ -30,6 +30,10 @@
 #define HAVE_KQUEUE 1
 #endif
 
+#ifdef _WIN32
+#define HAVE_POLL 1
+#endif
+
 #ifdef __sun
 #include <sys/feature_tests.h>
 #ifdef _DTRACE_VERSION

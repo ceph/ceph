@@ -14,6 +14,7 @@
 #include "include/stringify.h"
 #include "include/scope_guard.h"
 #include "common/ceph_mutex.h"
+#include <fmt/format.h>
 
 #include "test_cxx.h"
 #include "crimson_utils.h"
@@ -2267,6 +2268,10 @@ void pool_io_callback(completion_t cb, void *arg /* Actually AioCompletion* */)
 {
   io_info *info = (io_info *)arg;
   unsigned long i = info->i;
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, info->c->wait_for_complete());
+  }
   int r = info->c->get_return_value();
   //cout << "finish " << i << " r = " << r << std::endl;
 
@@ -2292,9 +2297,10 @@ TEST(LibRadosAio, PoolEIOFlag) {
   std::thread *t = nullptr;
   
   unsigned max = 100;
+  unsigned timeout = max * 10;
   unsigned long i = 1;
   my_lock.lock();
-  for (; min_failed == 0; ++i) {
+  for (; min_failed == 0 && i <= timeout; ++i) {
     io_info *info = new io_info;
     info->i = i;
     info->c = Rados::aio_create_completion();
@@ -2309,14 +2315,18 @@ TEST(LibRadosAio, PoolEIOFlag) {
       t = new std::thread(
 	[&] {
 	  bufferlist empty;
-	  int r = test_data.m_cluster.mon_command(
-	    "{\"prefix\": \"osd pool set\", \"pool\": \"" + test_data.m_pool_name +
-	    "\", \"var\": \"eio\", \"val\": \"true\"}", empty, nullptr, nullptr);
-	  ceph_assert(r == 0);
+	  ASSERT_EQ(0, test_data.m_cluster.mon_command(
+	    fmt::format(R"({{
+	                "prefix": "osd pool set",
+	                "pool": "{}",
+	                "var": "eio",
+	                "val": "true"
+	                }})", test_data.m_pool_name),
+	    empty, nullptr, nullptr));
 	});
     }
 
-    std::this_thread::sleep_for(10'000us);
+    std::this_thread::sleep_for(10ms);
     my_lock.lock();
     if (r < 0) {
       inflight.erase(i);
@@ -2328,7 +2338,7 @@ TEST(LibRadosAio, PoolEIOFlag) {
 
   // wait for ios to finish
   for (; !inflight.empty(); ++i) {
-    cout << "waiting for " << inflight << std::endl;
+    cout << "waiting for " << inflight.size() << std::endl;
     my_lock.unlock();
     sleep(1);
     my_lock.lock();

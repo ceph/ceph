@@ -32,16 +32,16 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static rgw::sal::Store* store = NULL;
+static rgw::sal::Driver* driver = NULL;
 
 class StoreDestructor {
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
 
 public:
-  explicit StoreDestructor(rgw::sal::Store* _s) : store(_s) {}
+  explicit StoreDestructor(rgw::sal::Driver* _s) : driver(_s) {}
   ~StoreDestructor() {
-    if (store) {
-      StoreManager::close_storage(store);
+    if (driver) {
+      DriverManager::close_storage(driver);
     }
   }
 };
@@ -80,19 +80,19 @@ int main(const int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   const DoutPrefix dp(cct.get(), dout_subsys, "rgw object expirer: ");
-  StoreManager::Config cfg;
+  DriverManager::Config cfg;
   cfg.store_name = "rados";
   cfg.filter_name = "none";
-  store = StoreManager::get_storage(&dp, g_ceph_context, cfg, false, false, false, false, false);
-  if (!store) {
+  driver = DriverManager::get_storage(&dp, g_ceph_context, cfg, false, false, false, false, false);
+  if (!driver) {
     std::cerr << "couldn't init storage provider" << std::endl;
     return EIO;
   }
 
-  /* Guard to not forget about closing the rados store. */
-  StoreDestructor store_dtor(store);
+  /* Guard to not forget about closing the rados driver. */
+  StoreDestructor store_dtor(driver);
 
-  RGWObjectExpirer objexp(store);
+  RGWObjectExpirer objexp(driver);
   objexp.start_processor();
 
   const utime_t interval(g_ceph_context->_conf->rgw_objexp_gc_interval, 0);

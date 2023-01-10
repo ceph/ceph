@@ -186,6 +186,19 @@ public:
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats);
+  using rollback_ertr = crimson::errorator<
+    crimson::ct_error::enoent>;
+  using rollback_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      rollback_ertr>;
+  rollback_iertr::future<> rollback(
+    const SnapSet &ss,
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params,
+    object_stat_sum_t& delta_stats);
   write_iertr::future<> truncate(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -261,9 +274,9 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
   void clone(
-    object_info_t& snap_oi,
-    ObjectState& os,
-    ObjectState& d_os,
+    /* const */object_info_t& snap_oi,
+    const ObjectState& os,
+    const ObjectState& d_os,
     ceph::os::Transaction& trans);
   interruptible_future<struct stat> stat(
     CollectionRef c,

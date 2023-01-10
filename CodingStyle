@@ -156,9 +156,9 @@ For Angular code, we follow the official Angular style guide:
     https://angular.io/guide/styleguide
 
 To check whether your code is conformant with the style guide, we use a
-combination of TSLint, Codelyzer and Prettier:
+combination of ESLint, Codelyzer and Prettier:
 
-    https://palantir.github.io/tslint/
+    https://eslint.org/
     http://codelyzer.com/
     https://prettier.io/
 

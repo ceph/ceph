@@ -33,14 +33,12 @@
                      type="password"
                      [(ngModel)]="secret_key"
                      [readonly]="true">
-              <span class="input-group-append">
-                <button type="button"
-                        class="btn btn-light"
-                        cdPasswordButton="secret_key">
-                </button>
-                <cd-copy-2-clipboard-button source="secret_key">
-                </cd-copy-2-clipboard-button>
-              </span>
+              <button type="button"
+                      class="btn btn-light"
+                      cdPasswordButton="secret_key">
+              </button>
+              <cd-copy-2-clipboard-button source="secret_key">
+              </cd-copy-2-clipboard-button>
             </div>
           </div>
         </div>
