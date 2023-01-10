@@ -145,7 +145,7 @@ Replacing an OSD
 ----------------
 
 .. note:: If the instructions in this section do not work for you, try the
-   instructions in the cephadm documentation ::ref:`cephadm-replacing-an-osd`.
+   instructions in the cephadm documentation: :ref:`cephadm-replacing-an-osd`.
 
 When disks fail, or if an administrator wants to reprovision OSDs with a new
 backend, for instance, for switching from FileStore to BlueStore, OSDs need to
