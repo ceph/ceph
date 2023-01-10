@@ -182,6 +182,23 @@ using ``vstart.sh``,
 ``--memstore``
     use the alienized MemStore as the object store backend.
 
+``--seastore``
+    use the SeaStore as object store backend.
+
+``--seastore-devs``
+    specify the block device used by SeaStore.
+
+``--seastore-secondary-devs``
+    Optional.  SeaStore supports multiple devices.  Enable this feature by
+    passing the block device to this option.
+
+``--seastore-secondary-devs-type``
+    Optional.  Specify device type of secondary devices.  When the secondary
+    device is slower than main device passed to ``--seastore-devs``, the cold
+    data in faster device will be evicted to the slower devices over time.
+    Valid args include: HDD, SSD(default), ZNS and RANDOM_BLOCK_SSD.
+    Note secondary devices should not be faster than the main device.
+
 So, a typical command to start a single-crimson-node cluster is::
 
   $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x \
@@ -190,6 +207,15 @@ So, a typical command to start a single-crimson-node cluster is::
     --osd-args "--memory 4G"
 
 Where we assign 4 GiB memory, a single thread running on core-0 to crimson-osd.
+
+Another SeaStore example::
+
+  $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x \
+    --without-dashboard --seastore \
+    --crimson --redirect-output \
+    --seastore-devs /dev/sda \
+    --seastore-secondary-devs /dev/sdb \
+    --seastore-secondary-devs-type HDD
 
 You could stop the vstart cluster using::
 
