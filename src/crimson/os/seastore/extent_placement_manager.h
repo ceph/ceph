@@ -173,11 +173,18 @@ struct reserve_io_result_t {
 
 class ExtentPlacementManager {
 public:
-  ExtentPlacementManager() {
+  ExtentPlacementManager()
+    : ool_segment_seq_allocator(
+          std::make_unique<SegmentSeqAllocator>(segment_type_t::OOL))
+  {
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
   }
 
   void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&);
+
+  SegmentSeqAllocator &get_ool_segment_seq_allocator() const {
+    return *ool_segment_seq_allocator;
+  }
 
   void set_primary_device(Device *device);
 
@@ -645,6 +652,8 @@ private:
   std::size_t num_devices = 0;
 
   BackgroundProcess background_process;
+  // TODO: drop once paddr->journal_seq_t is introduced
+  SegmentSeqAllocatorRef ool_segment_seq_allocator;
 };
 
 using ExtentPlacementManagerRef = std::unique_ptr<ExtentPlacementManager>;

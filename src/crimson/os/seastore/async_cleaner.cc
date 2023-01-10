@@ -830,13 +830,13 @@ SegmentCleaner::SegmentCleaner(
   config_t config,
   SegmentManagerGroupRef&& sm_group,
   BackrefManager &backref_manager,
+  SegmentSeqAllocator &segment_seq_allocator,
   bool detailed)
   : detailed(detailed),
     config(config),
     sm_group(std::move(sm_group)),
     backref_manager(backref_manager),
-    ool_segment_seq_allocator(
-      new SegmentSeqAllocator(segment_type_t::OOL))
+    ool_segment_seq_allocator(segment_seq_allocator)
 {
   config.validate();
 }
