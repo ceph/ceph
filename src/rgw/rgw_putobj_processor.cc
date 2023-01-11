@@ -502,8 +502,9 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   meta_obj->set_in_extra_data(true);
 
   rgw_raw_obj meta_raw_obj;
-  dynamic_cast<rgw::sal::RadosObject*>(meta_obj.get())->get_raw_obj(&meta_raw_obj);
-
+  store->getRados()->obj_to_raw(meta_obj->get_bucket()->get_placement_rule(), 
+                                meta_obj->get_obj(),
+                                &meta_raw_obj);
   rgw_rados_ref meta_obj_ref;
   r = store->getRados()->get_raw_obj_ref(dpp, meta_raw_obj, &meta_obj_ref);
   if (r < 0) {
