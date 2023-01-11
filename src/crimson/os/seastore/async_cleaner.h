@@ -1144,6 +1144,8 @@ public:
 
   virtual bool should_block_io_on_clean() const = 0;
 
+  virtual bool can_clean_space() const = 0;
+
   virtual bool should_clean_space() const = 0;
 
   using clean_space_ertr = base_ertr;
@@ -1315,6 +1317,11 @@ public:
     }
     auto aratio = get_projected_available_ratio();
     return aratio < config.available_ratio_hard_limit;
+  }
+
+  bool can_clean_space() const final {
+    assert(background_callback->is_ready());
+    return get_segments_reclaimable() > 0;
   }
 
   bool should_clean_space() const final {
@@ -1646,6 +1653,10 @@ public:
   void release_projected_usage(size_t) final;
 
   bool should_block_io_on_clean() const final {
+    return false;
+  }
+
+  bool can_clean_space() const final {
     return false;
   }
 
