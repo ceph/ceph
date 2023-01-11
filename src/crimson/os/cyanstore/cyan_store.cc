@@ -123,17 +123,17 @@ seastar::future<> CyanStore::ShardStores::mkfs()
   return crimson::write_file(std::move(bl), fn);
 }
 
-seastar::future<std::vector<coll_t>>
+seastar::future<std::vector<coll_core_t>>
 CyanStore::list_collections()
 {
-  return seastar::do_with(std::vector<coll_t>{}, [this](auto &collections) {
+  return seastar::do_with(std::vector<coll_core_t>{}, [this](auto &collections) {
     return shard_stores.map([](auto &local_store) {
       return local_store.list_collections();
-    }).then([&collections](std::vector<std::vector<coll_t>> results) {
+    }).then([&collections](std::vector<std::vector<coll_core_t>> results) {
       for (auto& colls : results) {
         collections.insert(collections.end(), colls.begin(), colls.end());
       }
-      return seastar::make_ready_future<std::vector<coll_t>>(
+      return seastar::make_ready_future<std::vector<coll_core_t>>(
         std::move(collections));
     });
   });
@@ -233,14 +233,14 @@ CyanStore::ShardStores::open_collection(const coll_t& cid)
   return seastar::make_ready_future<CollectionRef>(_get_collection(cid));
 }
 
-seastar::future<std::vector<coll_t>>
+seastar::future<std::vector<coll_core_t>>
 CyanStore::ShardStores::list_collections()
 {
-  std::vector<coll_t> collections;
+  std::vector<coll_core_t> collections;
   for (auto& coll : coll_map) {
-    collections.push_back(coll.first);
+    collections.push_back(std::make_pair(coll.first, seastar::this_shard_id()));
   }
-  return seastar::make_ready_future<std::vector<coll_t>>(std::move(collections));
+  return seastar::make_ready_future<std::vector<coll_core_t>>(std::move(collections));
 }
 
 CyanStore::read_errorator::future<ceph::bufferlist>
