@@ -1149,6 +1149,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
 {
   LOG_PREFIX(SegmentCleaner::clean_space);
   assert(background_callback->is_ready());
+  ceph_assert(can_clean_space());
   if (!reclaim_state) {
     segment_id_t seg_id = get_next_reclaim_segment();
     auto &segment_info = segments[seg_id];

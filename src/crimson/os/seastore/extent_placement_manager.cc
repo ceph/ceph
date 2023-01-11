@@ -680,7 +680,7 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
     });
   } else {
     bool should_clean_main =
-      main_cleaner->should_clean_space() ||
+      main_cleaner_should_run() ||
       // make sure cleaner will start
       // when the trimmer should run but
       // failed to reserve space.
