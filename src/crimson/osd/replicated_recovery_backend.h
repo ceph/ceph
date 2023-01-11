@@ -52,8 +52,8 @@ protected:
     eversion_t need,
     pg_shard_t pg_shard);
   void prepare_pull(
-    PullOp& po,
-    PullInfo& pi,
+    PullOp& pull_op,
+    pull_info_t& pull_info,
     const hobject_t& soid,
     eversion_t need);
   std::vector<pg_shard_t> get_shards_to_push(
@@ -66,7 +66,7 @@ protected:
   ///          recovery @c pop.soid
   interruptible_future<bool> _handle_pull_response(
     pg_shard_t from,
-    PushOp& pop,
+    PushOp& push_op,
     PullOp* response,
     ceph::os::Transaction* t);
   std::pair<interval_set<uint64_t>, ceph::bufferlist> trim_pushed_data(
@@ -90,7 +90,7 @@ protected:
     ObjectStore::Transaction *t);
   interruptible_future<> _handle_push(
     pg_shard_t from,
-    PushOp& pop,
+    PushOp& push_op,
     PushReplyOp *response,
     ceph::os::Transaction *t);
   interruptible_future<std::optional<PushOp>> _handle_push_reply(
