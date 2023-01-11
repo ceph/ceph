@@ -22,6 +22,7 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/object_context_loader.h"
 #include "replicated_backend.h"
 #include "replicated_recovery_backend.h"
 #include "ec_backend.h"
@@ -766,53 +767,65 @@ PGBackend::write_iertr::future<> PGBackend::writefull(
     op.flags);
 }
 
-using mocked_load_clone_obc_ertr = crimson::errorator<
-  crimson::ct_error::enoent,
-  crimson::ct_error::object_corrupted>;
-using mocked_lock_clone_obc_iertr =
-  ::crimson::interruptible::interruptible_errorator<
-    ::crimson::osd::IOInterruptCondition,
-    mocked_load_clone_obc_ertr>;
-
-static mocked_lock_clone_obc_iertr::future<crimson::osd::ObjectContextRef>
-mocked_load_clone_obc(const auto& coid)
-{
-  return crimson::ct_error::enoent::make();
-}
-
-static auto head2clone(const hobject_t& hoid)
-{
-  // TODO: transform hoid into coid
-  return hoid;
-}
-
 PGBackend::rollback_iertr::future<> PGBackend::rollback(
-  const SnapSet &ss,
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn,
   osd_op_params_t& osd_op_params,
-  object_stat_sum_t& delta_stats)
+  object_stat_sum_t& delta_stats,
+  crimson::osd::ObjectContextRef head,
+  crimson::osd::ObjectContextLoader& obc_loader)
 {
+  const ceph_osd_op& op = osd_op.op;
+  snapid_t snapid = (uint64_t)op.snap.snapid;
   assert(os.oi.soid.is_head());
   logger().debug("{} deleting {} and rolling back to old snap {}",
-                  __func__, os.oi.soid, osd_op.op.snap.snapid);
-  return mocked_load_clone_obc(
-    head2clone(os.oi.soid)
-  ).safe_then_interruptible([](auto clone_obc) {
-    // TODO: implement me!
-    static_cast<void>(clone_obc);
-    return remove_iertr::now();
-  }, crimson::ct_error::enoent::handle([this, &os, &txn, &delta_stats] {
-    // there's no snapshot here, or there's no object.
-    // if there's no snapshot, we delete the object; otherwise, do nothing.
-    logger().debug("rollback: deleting head on {}"
-                   " because got ENOENT|whiteout on obc lookup",
-                   os.oi.soid);
-    return remove(os, txn, delta_stats, true /*whiteout*/);
-  }), mocked_load_clone_obc_ertr::assert_all{
-    "unexpected error code in rollback"
-  });
+                  __func__, os.oi.soid ,snapid);
+  hobject_t target_coid = os.oi.soid;
+  target_coid.snap = snapid;
+  return obc_loader.with_clone_obc_only<RWState::RWREAD>(
+    head, target_coid,
+    [this, &os, &txn, &delta_stats, &osd_op_params]
+    (auto clone_obc) {
+    logger().debug("PGBackend::rollback: loaded clone_obc: {}",
+                   clone_obc->obs.oi.soid);
+    // 1) Delete current head
+    if (os.exists) {
+      txn.remove(coll->get_cid(), ghobject_t{os.oi.soid,
+                                  ghobject_t::NO_GEN, shard});
+    }
+    // 2) Clone correct snapshot into head
+    txn.clone(coll->get_cid(), ghobject_t{clone_obc->obs.oi.soid},
+                               ghobject_t{os.oi.soid});
+    //    Copy clone obc.os.oi to os.oi
+    os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+    os.oi.copy_user_bits(clone_obc->obs.oi);
+    delta_stats.num_bytes -= os.oi.size;
+    delta_stats.num_bytes += clone_obc->obs.oi.size;
+    osd_op_params.clean_regions.mark_data_region_dirty(0,
+      std::max(os.oi.size, clone_obc->obs.oi.size));
+    osd_op_params.clean_regions.mark_omap_dirty();
+    // TODO: 3) Calculate clone_overlaps by following overlaps
+    //          forward from rollback snapshot
+    //          https://tracker.ceph.com/issues/58263
+    return rollback_iertr::now();
+  }).safe_then_interruptible([] {
+    logger().debug("PGBackend::rollback succefully");
+    return rollback_iertr::now();
+  },// there's no snapshot here, or there's no object.
+    // if there's no snapshot, we delete the object;
+    // otherwise, do nothing.
+    crimson::ct_error::enoent::handle(
+    [this, &os, &snapid, &txn, &delta_stats] {
+      logger().debug("PGBackend::rollback: deleting head on {}"
+                     " with snap_id of {}"
+                     " because got ENOENT|whiteout on obc lookup",
+                     os.oi.soid, snapid);
+      return remove(os, txn, delta_stats, false);
+    }),
+    rollback_ertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error in rollback"}
+  );
 }
 
 PGBackend::append_ierrorator::future<> PGBackend::append(
@@ -949,6 +962,10 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
     return crimson::ct_error::enoent::make();
   }
 
+  if (!os.exists) {
+    logger().debug("{} {} does not exist",__func__, os.oi.soid);
+    return seastar::now();
+  }
   if (whiteout && os.oi.is_whiteout()) {
     logger().debug("{} whiteout set on {} ",__func__, os.oi.soid);
     return seastar::now();
