@@ -415,6 +415,7 @@ private:
       actual_write_size -= left_ext_size;
       left_ext_size = 0;
       left_operation = overwrite_operation_t::OVERWRITE_ZERO;
+    // FIXME: left_paddr can be absolute and pending
     } else if (left_paddr.is_relative() ||
 	       left_paddr.is_delayed()) {
       aligned_data_size += left_ext_size;
@@ -426,6 +427,7 @@ private:
       actual_write_size -= right_ext_size;
       right_ext_size = 0;
       right_operation = overwrite_operation_t::OVERWRITE_ZERO;
+    // FIXME: right_paddr can be absolute and pending
     } else if (right_paddr.is_relative() ||
 	       right_paddr.is_delayed()) {
       aligned_data_size += right_ext_size;
