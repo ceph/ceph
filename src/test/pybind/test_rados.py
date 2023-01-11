@@ -409,6 +409,16 @@ class TestIoctx(object):
         self.ioctx.remove_snap("snap1")
         self.ioctx.remove_object("insnap")
 
+    @attr('rollback')
+    def test_snap_rollback_removed(self):
+        self.ioctx.write("insnap", b"contents1")
+        self.ioctx.create_snap("snap1")
+        self.ioctx.write("insnap", b"contents2")
+        self.ioctx.snap_rollback("insnap", "snap1")
+        eq(self.ioctx.read("insnap"), b"contents1")
+        self.ioctx.remove_snap("snap1")
+        self.ioctx.remove_object("insnap")
+
     def test_snap_read(self):
         self.ioctx.write("insnap", b"contents1")
         self.ioctx.create_snap("snap1")
