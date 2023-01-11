@@ -530,3 +530,26 @@ the **ptl-tool** have the following form::
              client: move client_lock to _unmount()
              client: add timer_lock support
      Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+Miscellaneous
+-------------
+
+--set-upstream
+^^^^^^^^^^^^^^
+
+If you forget to include the ``--set-upstream origin x`` option in your ``git
+push`` command, you will see the following error message:
+
+::
+
+   fatal: The current branch {x} has no upstream branch.
+   To push the current branch and set the remote as upstream, use
+      git push --set-upstream origin {x}
+
+To set up git to automatically create the upstream branch that corresponds to
+the branch in your local working copy, run this command from within the
+``ceph/`` directory:
+
+.. prompt:: bash $
+
+   git config --global push.autoSetupRemote true
