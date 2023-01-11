@@ -91,13 +91,13 @@ To drain all daemons from a host, run a command of the following form:
 The ``_no_schedule`` label will be applied to the host. See
 :ref:`cephadm-special-host-labels`.
 
-All osds on the host will be scheduled to be removed. You can check the progress of the osd removal operation with the following command:
+All OSDs on the host will be scheduled to be removed. You can check the progress of the OSD removal operation with the following command:
 
 .. prompt:: bash #
 
    ceph orch osd rm status
 
-See :ref:`cephadm-osd-removal` for more details about osd removal.
+See :ref:`cephadm-osd-removal` for more details about OSD removal.
 
 Use the following command to determine whether any daemons are still on the
 host:
