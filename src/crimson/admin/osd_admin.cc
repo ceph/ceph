@@ -240,7 +240,9 @@ public:
           }
           for (const auto& [labels, metric] : metric_family) {
             if (metric && metric->is_enabled()) {
+	      f->open_object_section(""); // enclosed by array
               DumpMetricsHook::dump_metric_value(f, full_name, *metric, labels);
+	      f->close_section();
             }
           }
         }
