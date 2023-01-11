@@ -19,6 +19,7 @@ class Transaction;
 }
 
 namespace crimson::os {
+using coll_core_t = FuturizedStore::coll_core_t;
 class AlienStore final : public FuturizedStore {
 public:
   AlienStore(const std::string& type,
@@ -69,7 +70,7 @@ public:
 
   seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
   seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
-  seastar::future<std::vector<coll_t>> list_collections() final;
+  seastar::future<std::vector<coll_core_t>> list_collections() final;
 
   seastar::future<> do_transaction_no_callbacks(
     CollectionRef c,
