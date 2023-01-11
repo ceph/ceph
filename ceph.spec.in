@@ -46,7 +46,6 @@
 %endif
 %endif
 %bcond_without selinux
-%bcond_without cephfs_java
 %bcond_without amqp_endpoint
 %bcond_without kafka_endpoint
 %bcond_without lttng
