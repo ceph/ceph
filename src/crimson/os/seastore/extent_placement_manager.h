@@ -261,10 +261,12 @@ public:
       if (gen == INLINE_GENERATION) {
 	addr = make_record_relative_paddr(0);
       } else if (category == data_category_t::DATA) {
+        gen = background_process.adjust_generation(gen);
 	assert(data_writers_by_gen[generation_to_writer(gen)]);
 	addr = data_writers_by_gen[
 	  generation_to_writer(gen)]->alloc_paddr(length);
       } else {
+        gen = background_process.adjust_generation(gen);
 	assert(category == data_category_t::METADATA);
 	assert(md_writers_by_gen[generation_to_writer(gen)]);
 	addr = md_writers_by_gen[
@@ -484,6 +486,14 @@ private:
         for (auto id : cold_cleaner->get_device_ids()) {
           cleaners_by_device_id[id] = cold_cleaner.get();
         }
+
+        eviction_state.init(
+          crimson::common::get_conf<double>(
+            "seastore_multiple_tiers_stop_evict_ratio"),
+          crimson::common::get_conf<double>(
+            "seastore_multiple_tiers_default_evict_ratio"),
+          crimson::common::get_conf<double>(
+            "seastore_multiple_tiers_fast_evict_ratio"));
       }
     }
 
@@ -585,6 +595,14 @@ private:
       }
     }
 
+    rewrite_gen_t adjust_generation(rewrite_gen_t gen) {
+      if (has_cold_tier()) {
+        return eviction_state.adjust_generation_with_eviction(gen);
+      } else {
+        return gen;
+      }
+    }
+
     seastar::future<> reserve_projected_usage(io_usage_t usage);
 
     void release_projected_usage(const io_usage_t &usage) {
@@ -673,11 +691,28 @@ private:
       }
     }
 
-    bool background_should_run() const {
+    // background_should_run() should be atomic with do_background_cycle()
+    // to make sure the condition is consistent.
+    bool background_should_run() {
       assert(is_ready());
-      return main_cleaner->should_clean_space()
-        || (has_cold_tier() && cold_cleaner->should_clean_space())
+      maybe_update_eviction_mode();
+      return main_cleaner_should_run()
+        || cold_cleaner_should_run()
         || trimmer->should_trim();
+    }
+
+    bool main_cleaner_should_run() const {
+      assert(is_ready());
+      return main_cleaner->should_clean_space() ||
+        (has_cold_tier() &&
+         main_cleaner->can_clean_space() &&
+         eviction_state.is_fast_mode());
+    }
+
+    bool cold_cleaner_should_run() const {
+      assert(is_ready());
+      return has_cold_tier() &&
+        cold_cleaner->should_clean_space();
     }
 
     bool should_block_io() const {
@@ -687,6 +722,123 @@ private:
              (has_cold_tier() &&
               cold_cleaner->should_block_io_on_clean());
     }
+
+    void maybe_update_eviction_mode() {
+      if (has_cold_tier()) {
+        auto main_alive_ratio = main_cleaner->get_stat().get_used_raw_ratio();
+        eviction_state.maybe_update_eviction_mode(main_alive_ratio);
+      }
+    }
+
+    struct eviction_state_t {
+      enum class eviction_mode_t {
+        STOP,     // generation greater than or equal to MIN_COLD_GENERATION
+                  // will be set to MIN_COLD_GENERATION - 1, which means
+                  // no extents will be evicted.
+        DEFAULT,  // generation incremented with each rewrite. Extents will
+                  // be evicted when generation reaches MIN_COLD_GENERATION.
+        FAST,     // map all generations located in
+                  // [MIN_REWRITE_GENERATION, MIN_COLD_GENERATIOIN) to
+                  // MIN_COLD_GENERATION.
+      };
+
+      eviction_mode_t eviction_mode;
+      double stop_evict_ratio;
+      double default_evict_ratio;
+      double fast_evict_ratio;
+
+      void init(double stop_ratio,
+                double default_ratio,
+                double fast_ratio) {
+        ceph_assert(0 <= stop_ratio);
+        ceph_assert(stop_ratio < default_ratio);
+        ceph_assert(default_ratio < fast_ratio);
+        ceph_assert(fast_ratio <= 1);
+        eviction_mode = eviction_mode_t::STOP;
+        stop_evict_ratio = stop_ratio;
+        default_evict_ratio = default_ratio;
+        fast_evict_ratio = fast_ratio;
+      }
+
+      bool is_stop_mode() const {
+        return eviction_mode == eviction_mode_t::STOP;
+      }
+
+      bool is_default_mode() const {
+        return eviction_mode == eviction_mode_t::DEFAULT;
+      }
+
+      bool is_fast_mode() const {
+        return eviction_mode == eviction_mode_t::FAST;
+      }
+
+      rewrite_gen_t adjust_generation_with_eviction(rewrite_gen_t gen) {
+        rewrite_gen_t ret = gen;
+        switch(eviction_mode) {
+        case eviction_mode_t::STOP:
+          if (gen == MIN_COLD_GENERATION) {
+            ret = MIN_COLD_GENERATION - 1;
+          }
+          break;
+        case eviction_mode_t::DEFAULT:
+          break;
+        case eviction_mode_t::FAST:
+          if (gen >= MIN_REWRITE_GENERATION && gen < MIN_COLD_GENERATION) {
+            ret = MIN_COLD_GENERATION;
+          }
+          break;
+        default:
+          ceph_abort("impossible");
+        }
+        return ret;
+      }
+
+      // We change the state of eviction_mode according to the alive ratio
+      // of the main cleaner.
+      //
+      // Use A, B, C, D to represent the state of alive ratio:
+      //   A: alive ratio <= stop_evict_ratio
+      //   B: alive ratio <= default_evict_ratio
+      //   C: alive ratio <= fast_evict_ratio
+      //   D: alive ratio >  fast_evict_ratio
+      //
+      // and use X, Y, Z to shorten the state of eviction_mode_t:
+      //   X: STOP
+      //   Y: DEFAULT
+      //   Z: FAST
+      //
+      // Then we can use a form like (A && X) to describe the current state
+      // of the main cleaner, which indicates the alive ratio is less than or
+      // equal to stop_evict_ratio and current eviction mode is STOP.
+      //
+      // all valid state transitions show as follow:
+      //   (A && X) => (B && X) => (C && Y) => (D && Z) =>
+      //   (C && Z) => (B && Y) => (A && X)
+      //                      `--> (C && Y) => ...
+      //
+      // when the system restarts, the init state is (_ && X), the
+      // transitions should be:
+      // (_ && X) -> (A && X) => normal transition
+      //          -> (B && X) => normal transition
+      //          -> (C && X) => (C && Y) => normal transition
+      //          -> (D && X) => (D && Z) => normal transition
+      void maybe_update_eviction_mode(double main_alive_ratio) {
+        if (main_alive_ratio <= stop_evict_ratio) {
+          eviction_mode = eviction_mode_t::STOP;
+        } else if (main_alive_ratio <= default_evict_ratio) {
+          if (eviction_mode > eviction_mode_t::DEFAULT) {
+            eviction_mode = eviction_mode_t::DEFAULT;
+          }
+        } else if (main_alive_ratio <= fast_evict_ratio) {
+          if (eviction_mode < eviction_mode_t::DEFAULT) {
+            eviction_mode = eviction_mode_t::DEFAULT;
+          }
+        } else {
+          assert(main_alive_ratio > fast_evict_ratio);
+          eviction_mode = eviction_mode_t::FAST;
+        }
+      }
+    };
 
     seastar::future<> do_background_cycle();
 
@@ -716,6 +868,7 @@ private:
     std::optional<seastar::promise<>> blocking_io;
     bool is_running_until_halt = false;
     state_t state = state_t::STOP;
+    eviction_state_t eviction_state;
   };
 
   std::vector<ExtentOolWriterRef> writer_refs;
