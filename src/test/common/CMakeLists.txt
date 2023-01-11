@@ -361,9 +361,16 @@ add_executable(unittest_async_completion test_async_completion.cc)
 add_ceph_unittest(unittest_async_completion)
 target_link_libraries(unittest_async_completion ceph-common Boost::system)
 
+
 add_executable(unittest_async_max_concurrent_for_each test_async_max_concurrent_for_each.cc)
 add_ceph_unittest(unittest_async_max_concurrent_for_each)
 target_link_libraries(unittest_async_max_concurrent_for_each ceph-common Boost::system Boost::context)
+
+if(NOT WIN32)
+add_executable(unittest_async_co_throttle test_async_co_throttle.cc)
+add_ceph_unittest(unittest_async_co_throttle)
+target_link_libraries(unittest_async_co_throttle ceph-common Boost::system)
+endif(NOT WIN32)
 
 add_executable(unittest_async_shared_mutex test_async_shared_mutex.cc)
 add_ceph_unittest(unittest_async_shared_mutex)
