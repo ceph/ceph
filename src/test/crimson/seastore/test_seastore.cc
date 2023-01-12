@@ -615,10 +615,15 @@ TEST_P(seastore_test_t, collection_create_list_remove)
 	t.create_collection(test_coll, 4);
 	do_transaction(std::move(t));
       }
-      auto collections = seastore->list_collections().get0();
-      EXPECT_EQ(collections.size(), 2);
-      EXPECT_TRUE(contains(collections, coll_name));
-      EXPECT_TRUE(contains(collections,  test_coll));
+      auto colls_cores = seastore->list_collections().get0();
+      std::vector<coll_t> colls;
+      colls.resize(colls_cores.size());
+      std::transform(
+        colls_cores.begin(), colls_cores.end(), colls.begin(),
+        [](auto p) { return p.first; });
+      EXPECT_EQ(colls.size(), 2);
+      EXPECT_TRUE(contains(colls, coll_name));
+      EXPECT_TRUE(contains(colls,  test_coll));
     }
 
     {
@@ -627,9 +632,14 @@ TEST_P(seastore_test_t, collection_create_list_remove)
 	t.remove_collection(test_coll);
 	do_transaction(std::move(t));
       }
-      auto collections = seastore->list_collections().get0();
-      EXPECT_EQ(collections.size(), 1);
-      EXPECT_TRUE(contains(collections, coll_name));
+      auto colls_cores = seastore->list_collections().get0();
+      std::vector<coll_t> colls;
+      colls.resize(colls_cores.size());
+      std::transform(
+        colls_cores.begin(), colls_cores.end(), colls.begin(),
+        [](auto p) { return p.first; });
+      EXPECT_EQ(colls.size(), 1);
+      EXPECT_TRUE(contains(colls, coll_name));
     }
   });
 }

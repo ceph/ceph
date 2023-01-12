@@ -49,15 +49,16 @@ seastar::future<> PGShardManager::load_pgs()
 {
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   return get_local_state().store.list_collections(
-  ).then([this](auto colls) {
+  ).then([this](auto colls_cores) {
     return seastar::parallel_for_each(
-      colls,
-      [this](auto coll) {
+      colls_cores,
+      [this](auto coll_core) {
+        auto[coll, shard_core] = coll_core;
 	spg_t pgid;
 	if (coll.is_pg(&pgid)) {
 	  auto core = get_osd_singleton_state(
 	  ).pg_to_shard_mapping.maybe_create_pg(
-	    pgid);
+	    pgid, shard_core);
 	  return with_remote_shard_state(
 	    core,
 	    [pgid](

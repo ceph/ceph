@@ -18,7 +18,7 @@ FuturizedStore::create(const std::string& type,
   if (type == "cyanstore") {
     using crimson::os::CyanStore;
     return seastar::make_ready_future<std::unique_ptr<FuturizedStore>>(
-      std::make_unique<ShardedStoreProxy<CyanStore>>(data));
+      std::make_unique<CyanStore>(data));
   } else if (type == "seastore") {
     return crimson::os::seastore::make_seastore(
       data, values
