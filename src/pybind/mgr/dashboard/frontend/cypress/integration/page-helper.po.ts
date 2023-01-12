@@ -261,7 +261,7 @@ export abstract class PageHelper {
     this.waitDataTableToLoad();
 
     this.setPageSize('10');
-    cy.get('cd-table .search input').first().clear().type(text);
+    cy.get('[aria-label=search]').first().clear({ force: true }).type(text);
   }
 
   clearTableSearchInput() {
