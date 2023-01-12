@@ -43,7 +43,6 @@ PerShardState::PerShardState(
     store(store),
     perf(perf), recoverystate_perf(recoverystate_perf),
     throttler(crimson::common::local_conf()),
-    obc_registry(crimson::common::local_conf()),
     next_tid(
       static_cast<ceph_tid_t>(seastar::this_shard_id()) <<
       (std::numeric_limits<ceph_tid_t>::digits - 8)),

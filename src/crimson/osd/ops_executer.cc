@@ -956,8 +956,7 @@ std::pair<object_info_t, ObjectContextRef> OpsExecuter::prepare_clone(
   if (pg->is_primary()) {
     // lookup_or_create
     auto [c_obc, existed] =
-      pg->get_shard_services().get_cached_obc(
-        std::move(coid));
+      pg->obc_registry.get_cached_obc(std::move(coid));
     assert(!existed);
     c_obc->obs.oi = static_snap_oi;
     c_obc->obs.exists = true;
