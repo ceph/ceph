@@ -4164,12 +4164,12 @@ static int rgw_mp_upload_part_info_update(cls_method_context_t hctx, bufferlist 
   RGWUploadPartInfo stored_info;
 
   int ret = read_omap_entry(hctx, op.part_key, &stored_info);
-  if (ret < 0 and ret != -ENOENT) {
+  if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
 
   /* merge all the prior (stored) manifest prefixes to carry forward */
-  if (not stored_info.manifest.empty()) {
+  if (!stored_info.manifest.empty()) {
     op.info.past_prefixes.insert(stored_info.manifest.get_prefix());
   }
   op.info.past_prefixes.merge(stored_info.past_prefixes);
@@ -4180,7 +4180,7 @@ static int rgw_mp_upload_part_info_update(cls_method_context_t hctx, bufferlist 
     CLS_LOG(1, "ERROR: Current prefix %s is also a past prefix for part %s",
             op.info.manifest.get_prefix().c_str(),
             op.part_key.c_str());
-    return -EINVAL;
+    return -EEXIST;
   }
 
   bufferlist bl;
