@@ -7,6 +7,7 @@
 
 import json
 import logging
+import os
 import time
 
 from py_tests.internal import exception
@@ -87,6 +88,28 @@ class RbdImage(object):
 
         return wait_for_disk()
 
+    @Tracer.trace
+    def _wait_for_fs(self,
+                     timeout: int = 60,
+                     retry_interval: int = 2):
+        @utils.retry_decorator(
+            retried_exceptions=exception.CephTestException,
+            additional_details="the mapped fs isn't available yet",
+            timeout=timeout,
+            retry_interval=retry_interval)
+        def wait_for_fs():
+            drive_letter = self._get_drive_letter()
+            path = f"{drive_letter}:\\"
+
+            LOG.debug("Waiting for disk to be accessible: %s %s",
+                      self.name, self.path)
+
+            if not os.path.exists(path):
+                raise exception.CephTestException(
+                    f"path not available yet: {path}")
+
+        return wait_for_fs()
+
     @property
     def path(self):
         return f"\\\\.\\PhysicalDrive{self.disk_number}"
@@ -118,6 +141,25 @@ class RbdImage(object):
 
         elapsed = time.time() - tstart
         self._wait_for_disk(timeout=timeout - elapsed)
+
+    @Tracer.trace
+    def refresh_after_remap(self, timeout: int = 60):
+        tstart = time.time()
+
+        # The disk number may change after a remap, we need to refresh it.
+        self.disk_number = self.get_disk_number(timeout=timeout)
+
+        elapsed = time.time() - tstart
+        self._wait_for_disk(timeout=timeout - elapsed)
+
+        if self.drive_letter:
+            elapsed = time.time() - tstart
+            self._wait_for_fs(timeout=timeout - elapsed)
+
+            drive_letter = self._get_drive_letter()
+
+            # We expect the drive letter to remain the same after a remap.
+            assert self.drive_letter == drive_letter
 
     @Tracer.trace
     def unmap(self):
@@ -170,10 +212,11 @@ class RbdImage(object):
 
         # The PowerShell command will place a null character if no drive letter
         # is available. For example, we can receive "\x00\r\n".
-        self.drive_letter = result.stdout.decode().strip()
-        if not self.drive_letter.isalpha() or len(self.drive_letter) != 1:
+        drive_letter = result.stdout.decode().strip()
+        if not drive_letter.isalpha() or len(drive_letter) != 1:
             raise exception.CephTestException(
-                "Invalid drive letter received: %s" % self.drive_letter)
+                "Invalid drive letter received: %s" % drive_letter)
+        return drive_letter
 
     @Tracer.trace
     def init_fs(self):
@@ -186,7 +229,7 @@ class RbdImage(object):
         self._init_disk()
         self._create_partition()
         self._format_volume()
-        self._get_drive_letter()
+        self.drive_letter = self._get_drive_letter()
 
     @Tracer.trace
     def get_fs_capacity(self):
