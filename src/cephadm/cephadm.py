@@ -26,7 +26,7 @@ import errno
 import struct
 import ssl
 from enum import Enum
-from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast, Set, Iterable
+from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast, Set, Iterable, TextIO
 
 import re
 import uuid
@@ -3393,6 +3393,15 @@ def deploy_daemon_units(
     ports: Optional[List[int]] = None,
 ) -> None:
     # cmd
+
+    def add_stop_actions(f: TextIO) -> None:
+        # following generated script basically checks if the container exists
+        # before stopping it. Exit code will be success either if it doesn't
+        # exist or if it exists and is stopped successfully.
+        container_exists = f'{ctx.container_engine.path} inspect %s &>/dev/null'
+        f.write(f'! {container_exists % c.old_cname} || {" ".join(c.stop_cmd(old_cname=True))} \n')
+        f.write(f'! {container_exists % c.cname} || {" ".join(c.stop_cmd())} \n')
+
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
     with open(data_dir + '/unit.run.new', 'w') as f, \
             open(data_dir + '/unit.meta.new', 'w') as metaf:
@@ -3479,6 +3488,9 @@ def deploy_daemon_units(
 
     # post-stop command(s)
     with open(data_dir + '/unit.poststop.new', 'w') as f:
+        # this is a fallback to eventually stop any underlying container that was not stopped properly by unit.stop,
+        # this could happen in very slow setups as described in the issue https://tracker.ceph.com/issues/58242.
+        add_stop_actions(f)
         if daemon_type == 'osd':
             assert osd_fsid
             poststop = get_ceph_volume_container(
@@ -3508,13 +3520,7 @@ def deploy_daemon_units(
 
     # post-stop command(s)
     with open(data_dir + '/unit.stop.new', 'w') as f:
-        # following generated script basically checks if the container exists
-        # before stopping it. Exit code will be success either if it doesn't
-        # exist or if it exists and is stopped successfully.
-        container_exists = f'{ctx.container_engine.path} inspect %s &>/dev/null'
-        f.write(f'! {container_exists % c.old_cname} || {" ".join(c.stop_cmd(old_cname=True))} \n')
-        f.write(f'! {container_exists % c.cname} || {" ".join(c.stop_cmd())} \n')
-
+        add_stop_actions(f)
         os.fchmod(f.fileno(), 0o600)
         os.rename(data_dir + '/unit.stop.new',
                   data_dir + '/unit.stop')
@@ -3886,7 +3892,7 @@ ExecStopPost=-/bin/bash {data_dir}/{fsid}/%i/unit.poststop
 KillMode=none
 Restart=on-failure
 RestartSec=10s
-TimeoutStartSec=120
+TimeoutStartSec=200
 TimeoutStopSec=120
 StartLimitInterval=30min
 StartLimitBurst=5
