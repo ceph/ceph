@@ -607,9 +607,10 @@ seastar::future<CollectionRef> SeaStore::open_collection(const coll_t& cid)
 {
   LOG_PREFIX(SeaStore::open_collection);
   DEBUG("{}", cid);
-  return list_collections().then([cid, this] (auto colls) {
-    if (auto found = std::find(colls.begin(), colls.end(), cid);
-	found != colls.end()) {
+  return list_collections().then([cid, this] (auto colls_cores) {
+    if (auto found = std::find(colls_cores.begin(), colls_cores.end(),
+        std::make_pair(cid, NULL_CORE));
+      found != colls_cores.end()) {
       return seastar::make_ready_future<CollectionRef>(_get_collection(cid));
     } else {
       return seastar::make_ready_future<CollectionRef>();
@@ -617,10 +618,10 @@ seastar::future<CollectionRef> SeaStore::open_collection(const coll_t& cid)
   });
 }
 
-seastar::future<std::vector<coll_t>> SeaStore::list_collections()
+seastar::future<std::vector<coll_core_t>> SeaStore::list_collections()
 {
   return seastar::do_with(
-    std::vector<coll_t>(),
+    std::vector<coll_core_t>(),
     [this](auto &ret) {
       return repeat_eagain([this, &ret] {
         return transaction_manager->with_transaction_intr(
@@ -635,11 +636,11 @@ seastar::future<std::vector<coll_t>> SeaStore::list_collections()
             ret.resize(colls.size());
             std::transform(
               colls.begin(), colls.end(), ret.begin(),
-              [](auto p) { return p.first; });
+              [](auto p) { return std::make_pair(p.first, NULL_CORE); });
           });
         });
       }).safe_then([&ret] {
-        return seastar::make_ready_future<std::vector<coll_t>>(ret);
+        return seastar::make_ready_future<std::vector<coll_core_t>>(ret);
       });
     }
   ).handle_error(
