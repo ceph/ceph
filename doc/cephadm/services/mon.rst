@@ -170,6 +170,64 @@ network ``10.1.2.0/24``, run the following commands:
 
     ceph orch apply mon --placement="newhost1,newhost2,newhost3" 
 
+
+Setting Crush Locations for Monitors
+------------------------------------
+
+Cephadm supports setting CRUSH locations for mon daemons
+using the mon service spec. The CRUSH locations are set
+by hostname. When cephadm deploys a mon on a host that matches
+a hostname specified in the CRUSH locations, it will add
+``--set-crush-location <CRUSH-location>`` where the CRUSH location
+is the first entry in the list of CRUSH locations for that
+host. If multiple CRUSH locations are set for one host, cephadm
+will attempt to set the additional locations using the
+"ceph mon set_location" command.
+
+.. note::
+
+   Setting the CRUSH location in the spec is the recommended way of
+   replacing tiebreaker mon daemons, as they require having a location
+   set when they are added.
+
+ .. note::
+
+   Tiebreaker mon daemons are a part of stretch mode clusters. For more
+   info on stretch mode clusters see :ref:`stretch_mode`
+
+Example syntax for setting the CRUSH locations:
+
+.. code-block:: yaml
+
+    service_type: mon
+    service_name: mon
+    placement:
+      count: 5
+    spec:
+      crush_locations:
+        host1:
+        - datacenter=a
+        host2:
+        - datacenter=b
+        - rack=2
+        host3:
+        - datacenter=a
+
+.. note::
+
+   Sometimes, based on the timing of mon daemons being admitted to the mon
+   quorum, cephadm may fail to set the CRUSH location for some mon daemons
+   when multiple locations are specified. In this case, the recommended
+   action is to re-apply the same mon spec to retrigger the service action.
+
+.. note::
+
+   Mon daemons will only get the ``--set-crush-location`` flag set when cephadm
+   actually deploys them. This means if a spec is applied that includes a CRUSH
+   location for a mon that is already deployed, the flag may not be set until
+   a redeploy command is issued for that mon daemon.
+
+
 Further Reading
 ===============
 
