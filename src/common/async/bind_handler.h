@@ -18,6 +18,7 @@
 #include <tuple>
 #include <boost/asio/associated_allocator.hpp>
 #include <boost/asio/associated_executor.hpp>
+#include <boost/asio/associated_cancellation_slot.hpp>
 
 namespace ceph::async {
 
@@ -56,6 +57,11 @@ struct CompletionHandler {
   using allocator_type = boost::asio::associated_allocator_t<Handler>;
   allocator_type get_allocator() const noexcept {
     return boost::asio::get_associated_allocator(handler);
+  }
+
+  using cancellation_slot_type = boost::asio::associated_cancellation_slot_t<Handler>;
+  cancellation_slot_type get_cancellation_slot() const noexcept {
+    return boost::asio::get_associated_cancellation_slot(handler);
   }
 };
 
