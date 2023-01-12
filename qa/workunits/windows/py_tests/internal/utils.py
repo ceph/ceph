@@ -8,6 +8,7 @@
 import collections
 import functools
 import logging
+import math
 import subprocess
 import time
 import typing
@@ -95,3 +96,24 @@ def ps_execute(*args, **kwargs):
     return execute(
         "powershell.exe", "-NonInteractive",
         "-Command", prefix, *args, **kwargs)
+
+
+def array_stats(array: list):
+    mean = sum(array) / len(array) if len(array) else 0
+    variance = (sum((i - mean) ** 2 for i in array) / len(array)
+                if len(array) else 0)
+    std_dev = math.sqrt(variance)
+    sorted_array = sorted(array)
+
+    return {
+        'min': min(array) if len(array) else 0,
+        'max': max(array) if len(array) else 0,
+        'sum': sum(array) if len(array) else 0,
+        'mean': mean,
+        'median': sorted_array[len(array) // 2] if len(array) else 0,
+        'max_90': sorted_array[int(len(array) * 0.9)] if len(array) else 0,
+        'min_90': sorted_array[int(len(array) * 0.1)] if len(array) else 0,
+        'variance': variance,
+        'std_dev': std_dev,
+        'count': len(array)
+    }

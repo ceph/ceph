@@ -26,3 +26,17 @@ safe_exec python.exe -m py_tests.rbd_wnbd.stress_test --test-name RbdFsFioTest -
 safe_exec python.exe -m py_tests.rbd_wnbd.stress_test --test-name RbdFsStampTest --iterations 4
 
 safe_exec python.exe -m py_tests.rbd_wnbd.stress_test --test-name RbdResizeFioTest --image-size-mb 64
+
+safe_exec python.exe -m py_tests.rbd_wnbd.service_restart_test `
+    --test-name=RbdTest --iterations=3 --image-count=50 --concurrency=8
+safe_exec python.exe -m py_tests.rbd_wnbd.service_restart_test `
+    --test-name=RbdFioTest --iterations=3 --image-count=50 --concurrency=8
+safe_exec python.exe -m py_tests.rbd_wnbd.service_restart_test `
+    --test-name=RbdStampTest --iterations=3 --image-count=50 --concurrency=8
+
+safe_exec python.exe -m py_tests.rbd_wnbd.service_restart_test `
+    --test-name=RbdFsTest --iterations=3 --image-count=8 --concurrency=8 --image-size-mb=64
+safe_exec python.exe -m py_tests.rbd_wnbd.service_restart_test `
+    --test-name=RbdFsFioTest --iterations=3 --image-count=8 --concurrency=8 --image-size-mb=64
+safe_exec python.exe -m py_tests.rbd_wnbd.service_restart_test `
+    --test-name=RbdFsStampTest --iterations=3 --image-count=8 --concurrency=8 --image-size-mb=64

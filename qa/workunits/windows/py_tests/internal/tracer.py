@@ -31,7 +31,7 @@ class Tracer:
             try:
                 return func(*args, **kwargs)
             except Exception as exc:
-                exc_str = str(exc)
+                exc_str = "%r: %s" % (exc, exc)
                 raise
             finally:
                 tend = time.time()
