@@ -1,0 +1,62 @@
+roles:
+- - host.a
+  - osd.0
+  - mon.a
+  - mgr.a
+- - host.b
+  - osd.1
+  - mon.b
+  - mgr.b
+- - host.c
+  - osd.2
+  - mon.c
+tasks:
+- install:
+- cephadm:
+- cephadm.apply:
+    specs:
+      - service_type: mon
+        service_id: foo
+        placement:
+          count: 3
+        spec:
+          crush_locations:
+            host.a:
+              - datacenter=a
+            host.b:
+              - datacenter=b
+              - rack=2
+            host.c:
+              - datacenter=a
+              - rack=3
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+        # since we don't know the real hostnames before the test, the next
+        # bit is in order to replace the fake hostnames "host.a/b/c" with
+        # the actual names cephadm knows the host by within the mon spec
+        ceph orch host ls --format json | jq -r '.[] | .hostname' > realnames
+        echo $'host.a\nhost.b\nhost.c' > fakenames
+        echo $'a\nb\nc' > mon_ids
+        echo $'{datacenter=a}\n{datacenter=b,rack=2}\n{datacenter=a,rack=3}' > crush_locs
+        ceph orch ls --service-name mon --export > mon.yaml
+        MONSPEC=`cat mon.yaml`
+        echo "$MONSPEC"
+        while read realname <&3 && read fakename <&4; do
+          MONSPEC="${MONSPEC//$fakename/$realname}"
+        done 3<realnames 4<fakenames
+        echo "$MONSPEC" > mon.yaml
+        cat mon.yaml
+        # now the spec should have the real hostnames, so let's re-apply
+        ceph orch apply -i mon.yaml
+        sleep 90
+        ceph orch ps --refresh
+        ceph orch ls --service-name mon --export > mon.yaml; ceph orch apply -i mon.yaml
+        sleep 90
+        ceph mon dump
+        ceph mon dump --format json
+        # verify all the crush locations got set from "ceph mon dump" output
+        while read monid <&3 && read crushloc <&4; do
+          ceph mon dump --format json | jq --arg monid "$monid" --arg crushloc "$crushloc" -e '.mons | .[] | select(.name == $monid) | .crush_location == $crushloc'
+        done 3<mon_ids 4<crush_locs
