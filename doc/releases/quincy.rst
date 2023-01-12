@@ -866,10 +866,12 @@ Upgrading non-cephadm clusters
 
 #. Upgrade all CephFS MDS daemons. For each CephFS file system,
 
-   #. Disable standby_replay:
+   #. Disable standby_replay.  Before executing, note the current value
+      so that it may be re-enabled after the upgrade (if currently enabled):
          
       .. prompt:: bash #
 
+	 ceph fs get <fs_name> | grep allow_standby_replay
 	 ceph fs set <fs_name> allow_standby_replay false
 
    #. Reduce the number of ranks to 1.  (Make note of the original
@@ -877,7 +879,7 @@ Upgrading non-cephadm clusters
       
       .. prompt:: bash #
 
-	 ceph status
+	 ceph fs status
 	 ceph fs set <fs_name> max_mds 1
 
    #. Wait for the cluster to deactivate any non-zero ranks by
@@ -885,7 +887,7 @@ Upgrading non-cephadm clusters
       
       .. prompt:: bash #
 
-	 ceph status
+	 ceph fs status
 
    #. Take all standby MDS daemons offline on the appropriate hosts with:
 
@@ -897,7 +899,7 @@ Upgrading non-cephadm clusters
 
       .. prompt:: bash #
 
-	 ceph status
+	 ceph fs status
 
    #. Upgrade the last remaining MDS daemon by installing the new
       packages and restarting the daemon:
@@ -917,6 +919,13 @@ Upgrading non-cephadm clusters
       .. prompt:: bash #
 
 	 ceph fs set <fs_name> max_mds <original_max_mds>
+
+    #. Restore the original value of ``allow_standby_replay`` for the volume if
+       it was ``true``:
+
+      .. prompt:: bash #
+
+	 ceph fs set <fs_name> allow_standby_replay true
 
 #. Upgrade all radosgw daemons by upgrading packages and restarting
    daemons on all hosts:
