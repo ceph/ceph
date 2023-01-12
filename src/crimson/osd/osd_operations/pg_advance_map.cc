@@ -63,39 +63,45 @@ seastar::future<> PGAdvanceMap::start()
     pg->peering_request_pg_pipeline.process
   ).then([this] {
     from = pg->get_osdmap_epoch();
+    auto fut = seastar::now();
     if (do_init) {
-      pg->handle_initialize(rctx);
-      pg->handle_activate_map(rctx);
-    }
-    return seastar::do_for_each(
-      boost::make_counting_iterator(*from + 1),
-      boost::make_counting_iterator(to + 1),
-      [this](epoch_t next_epoch) {
-        return shard_services.get_map(next_epoch).then(
-          [this] (cached_map_t&& next_map) {
-            logger().debug("{}: advancing map to {}",
-                           *this, next_map->get_epoch());
-            pg->handle_advance_map(next_map, rctx);
-          });
-      }).then([this] {
-        pg->handle_activate_map(rctx);
-        logger().debug("{}: map activated", *this);
-        if (do_init) {
-          shard_services.pg_created(pg->get_pgid(), pg);
-          logger().info("PGAdvanceMap::start new pg {}", *pg);
-        }
-        return seastar::when_all_succeed(
-          pg->get_need_up_thru()
-	  ? shard_services.send_alive(
-	    pg->get_same_interval_since())
-	  : seastar::now(),
-          shard_services.dispatch_context(
-            pg->get_collection_ref(),
-            std::move(rctx)));
-      }).then_unpack([this] {
-        logger().debug("{}: sending pg temp", *this);
-        return shard_services.send_pg_temp();
+      fut = pg->handle_initialize(rctx
+      ).then([this] {
+	return pg->handle_activate_map(rctx);
       });
+    }
+    return fut.then([this] {
+      return seastar::do_for_each(
+	boost::make_counting_iterator(*from + 1),
+	boost::make_counting_iterator(to + 1),
+	[this](epoch_t next_epoch) {
+	  return shard_services.get_map(next_epoch).then(
+	    [this] (cached_map_t&& next_map) {
+	      logger().debug("{}: advancing map to {}",
+			     *this, next_map->get_epoch());
+	      return pg->handle_advance_map(next_map, rctx);
+	    });
+	}).then([this] {
+	  return pg->handle_activate_map(rctx).then([this] {
+	    logger().debug("{}: map activated", *this);
+	    if (do_init) {
+	      shard_services.pg_created(pg->get_pgid(), pg);
+	      logger().info("PGAdvanceMap::start new pg {}", *pg);
+	    }
+	    return seastar::when_all_succeed(
+	      pg->get_need_up_thru()
+	      ? shard_services.send_alive(
+		pg->get_same_interval_since())
+	      : seastar::now(),
+	      shard_services.dispatch_context(
+		pg->get_collection_ref(),
+		std::move(rctx)));
+	  });
+	}).then_unpack([this] {
+	  logger().debug("{}: sending pg temp", *this);
+	  return shard_services.send_pg_temp();
+	});
+    });
   }).then([this, ref=std::move(ref)] {
     logger().debug("{}: complete", *this);
   });

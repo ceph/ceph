@@ -943,6 +943,13 @@ public:
 					ObjectStore::CollectionHandle& ch,
 					const pg_info_t &info);
 
+#ifdef WITH_SEASTAR
+  seastar::future<> rebuild_missing_set_with_deletes_crimson(
+    crimson::os::FuturizedStore &store,
+    crimson::os::CollectionRef ch,
+    const pg_info_t &info);
+#endif
+
 protected:
   static void split_by_object(
     mempool::osd_pglog::list<pg_log_entry_t> &entries,
