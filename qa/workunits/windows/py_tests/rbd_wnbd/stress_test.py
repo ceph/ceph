@@ -393,8 +393,8 @@ class RbdStampTest(RbdTest):
             # we aren't writing to the wrong disk.
             time.sleep(self._rand_float(0, 5))
 
-            stamp = self._read_stamp()
-            assert self._previous_stamp == stamp
+            r_stamp = self._read_stamp()
+            assert self._previous_stamp == r_stamp
 
         w_stamp = self._get_stamp()
         self._write_stamp(w_stamp)
@@ -413,7 +413,7 @@ class RbdFsStampTest(RbdFsTestMixin, RbdStampTest):
         return self.get_subpath("test-stamp")
 
 
-class TestRunner(object):
+class StressTestRunner(object):
     def __init__(self,
                  test_cls: typing.Type[RbdTest],
                  test_params: dict = {},
@@ -521,7 +521,7 @@ if __name__ == '__main__':
         raise exception.CephTestException(
             "Unknown test: {}".format(args.test_name))
 
-    runner = TestRunner(
+    runner = StressTestRunner(
         test_cls,
         test_params=test_params,
         iterations=args.iterations,
