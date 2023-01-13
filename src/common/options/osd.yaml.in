@@ -48,6 +48,18 @@ options:
   level: dev
   default: true
   with_legacy: true
+- name: osd_max_pg_deletes
+  type: uint
+  level: advanced
+  desc: Maximum number of concurrent pg deletes per OSD
+  long_desc: There can be osd_max_pg_deletes pg delete reservations per OSD.
+    So a value of 1 lets this OSD participate as 1 PG in deleting.
+  fmt_desc: Maximum number of concurrent pg deletes per OSD
+    Note that this is applied separately for read and write operations.
+  default: 1
+  flags:
+  - runtime
+  with_legacy: true
 - name: osd_max_backfills
   type: uint
   level: advanced

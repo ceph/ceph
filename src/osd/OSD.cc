@@ -285,6 +285,8 @@ OSDService::OSDService(OSD *osd, ceph::async::io_context_pool& poolctx) :
 		 cct->_conf->osd_min_recovery_priority),
   remote_reserver(cct, &reserver_finisher, cct->_conf->osd_max_backfills,
 		  cct->_conf->osd_min_recovery_priority),
+  pg_delete_reserver(cct, &reserver_finisher,
+                     cct->_conf->osd_max_pg_deletes),
   snap_reserver(cct, &reserver_finisher,
 		cct->_conf->osd_max_trimming_pgs),
   recovery_ops_active(0),
@@ -2748,6 +2750,10 @@ will start to track new ops received afterwards.";
     service.remote_reserver.dump(f);
     f->close_section();
     f->close_section();
+  } else if (prefix == "dump_pg_delete_reservations") {
+    f->open_object_section("pg_delete_reservations");
+    service.pg_delete_reserver.dump(f);
+    f->close_section();
   } else if (prefix == "dump_scrub_reservations") {
     f->open_object_section("scrub_reservations");
     service.get_scrub_services().dump_scrub_reservations(f);
@@ -3960,6 +3966,10 @@ void OSD::final_init()
   r = admin_socket->register_command("dump_recovery_reservations",
 				     asok_hook,
 				     "show recovery reservations");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("dump_pg_delete_reservations",
+				     asok_hook,
+				     "show pg delete reservations");
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump_scrub_reservations",
 				     asok_hook,
@@ -9586,6 +9596,7 @@ void OSD::dequeue_delete(
 const char** OSD::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
+    "osd_max_pg_deletes",
     "osd_max_backfills",
     "osd_min_recovery_priority",
     "osd_max_trimming_pgs",
@@ -9655,6 +9666,11 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
     }
   }
+
+  if (changed.count("osd_max_pg_deletes")) {
+    service.pg_delete_reserver.set_max(cct->_conf->osd_max_pg_deletes);
+  }
+
   if (changed.count("osd_delete_sleep") ||
       changed.count("osd_delete_sleep_hdd") ||
       changed.count("osd_delete_sleep_ssd") ||

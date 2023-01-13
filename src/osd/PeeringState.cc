@@ -6607,7 +6607,7 @@ void PeeringState::ToDelete::exit()
   // do_delete_work().
   pl->get_perf_logger().dec(l_osd_pg_removing);
 
-  pl->cancel_local_background_io_reservation();
+  pl->cancel_pg_delete_background_io_reservation();
 }
 
 /*----WaitDeleteReserved----*/
@@ -6620,8 +6620,8 @@ PeeringState::WaitDeleteReserved::WaitDeleteReserved(my_context ctx)
   DECLARE_LOCALS;
   context< ToDelete >().priority = ps->get_delete_priority();
 
-  pl->cancel_local_background_io_reservation();
-  pl->request_local_background_io_reservation(
+  pl->cancel_pg_delete_background_io_reservation();
+  pl->request_pg_delete_background_io_reservation(
     context<ToDelete>().priority,
     std::make_unique<PGPeeringEvent>(
       ps->get_osdmap_epoch(),
@@ -6689,7 +6689,7 @@ void PeeringState::Deleting::exit()
   context< PeeringMachine >().log_exit(state_name, enter_time);
   DECLARE_LOCALS;
   ps->deleting = false;
-  pl->cancel_local_background_io_reservation();
+  pl->cancel_pg_delete_background_io_reservation();
 }
 
 /*--------GetInfo---------*/

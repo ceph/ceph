@@ -328,6 +328,20 @@ public:
     /// Notification that all outstanding flushes for interval have completed
     virtual void on_flushed() = 0;
 
+    //============= Delete ====================
+    /**
+     * request_pg_delete_background_io_reservation
+     *
+     * Request reservation at priority with on_grant queued on grant
+     * and on_preempt on preempt
+     */
+    virtual void request_pg_delete_background_io_reservation(
+      unsigned priority,
+      PGPeeringEventURef on_grant,
+      PGPeeringEventURef on_preempt) = 0;
+    /// Cancel pending pg delete background reservation request
+    virtual void cancel_pg_delete_background_io_reservation() = 0;
+
     //============= Recovery ====================
     /// Arrange for even to be queued after delay
     virtual void schedule_event_after(

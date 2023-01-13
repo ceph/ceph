@@ -598,6 +598,12 @@ public:
   OstreamTemp get_clog_info() override;
   OstreamTemp get_clog_debug() override;
 
+  void request_pg_delete_background_io_reservation(
+    unsigned priority,
+    PGPeeringEventURef on_grant,
+    PGPeeringEventURef on_preempt) override;
+  void cancel_pg_delete_background_io_reservation() override;
+
   void schedule_event_after(
     PGPeeringEventRef event,
     float delay) override;

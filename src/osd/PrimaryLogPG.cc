@@ -12927,12 +12927,14 @@ void PrimaryLogPG::on_shutdown(bool is_deleting)
   clear_async_reads();
 
   osd->remote_reserver.cancel_reservation(info.pgid);
+  osd->local_reserver.cancel_reservation(info.pgid);
 
-  // PG Deleting need to request local_reserver
+  // PG Deleting need to request pg_delete_reserver
   // and limit the stray PG concurrent deleting,
-  // it will be cancel by Deleting::exit(), not here
+  // it will be cancel by Deleting::exit(),
+  // not here
   if (!is_deleting)
-    osd->local_reserver.cancel_reservation(info.pgid);
+    osd->pg_delete_reserver.cancel_reservation(info.pgid);
 
   clear_primary_state();
   cancel_recovery();
