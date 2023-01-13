@@ -1088,13 +1088,17 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
 	  ceph_assert(num);
 	  --num;
 	  o->clear_cached();
+	  dout(20) << __func__ << " " << this << " " << o->oid << " removed"
+                   << dendl;
           // remove will also decrement nref
           o->c->onode_space._remove(o->oid);
         }
       } else if (o->exists) {
         // move onode within LRU
-        _rm(o);
-        _add(o, 1);
+        lru.erase(lru.iterator_to(*o));
+        lru.push_front(*o);
+        dout(20) << __func__ << " " << this << " " << o->oid << " touched"
+                 << dendl;
       }
     }
     ocs->lock.unlock();
