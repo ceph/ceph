@@ -156,7 +156,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
     if (max_num < 0) {
       max_num = USER_POLICIES_MAX_NUM;
     }
-    if (policies.size() > max_num) {
+    if (std::cmp_greater(policies.size(), max_num)) {
       ldpp_dout(this, 4) << "IAM user policies has reached the num config: "
                          << max_num << ", cant add another" << dendl;
       op_ret = -ERR_INVALID_REQUEST;
