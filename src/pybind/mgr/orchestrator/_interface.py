@@ -1256,7 +1256,8 @@ class ServiceDescription(object):
     def get_port_summary(self) -> str:
         if not self.ports:
             return ''
-        return f"{(self.virtual_ip or '?').split('/')[0]}:{','.join(map(str, self.ports or []))}"
+        ports = sorted([int(x) for x in self.ports])
+        return f"{(self.virtual_ip or '?').split('/')[0]}:{','.join(map(str, ports or []))}"
 
     def to_json(self) -> OrderedDict:
         out = self.spec.to_json()
