@@ -971,7 +971,7 @@ start_osd() {
         bottom_cpu=$(( osd * crimson_smp ))
         top_cpu=$(( bottom_cpu + crimson_smp - 1 ))
 	    # set a single CPU nodes for each osd
-	    extra_seastar_args="--smp $crimson_smp --cpuset $bottom_cpu-$top_cpu"
+	    extra_seastar_args="--cpuset $bottom_cpu-$top_cpu"
 	    if [ "$debug" -ne 0 ]; then
 		extra_seastar_args+=" --debug"
 	    fi
@@ -1492,6 +1492,10 @@ EOF
         public_network=$(ip route list | grep -w "$IP" | awk '{print $1}')
         ceph_adm config set mon public_network $public_network
     fi
+fi
+
+if [ "$crimson" -eq 1 ]; then
+    $CEPH_BIN/ceph -c $conf_fn config set osd crimson_seastar_smp $crimson_smp
 fi
 
 if [ $CEPH_NUM_MGR -gt 0 ]; then
