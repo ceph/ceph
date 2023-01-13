@@ -50,7 +50,8 @@ from . import utils
 from . import ssh
 from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmService, CephfsMirrorService, CephadmAgent
+    RbdMirrorService, CrashService, CephadmService, CephfsMirrorService, CephadmAgent, \
+    CephExporterService
 from .services.ingress import IngressService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
@@ -577,8 +578,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
             PrometheusService, NodeExporterService, LokiService, PromtailService, CrashService, IscsiService,
             IngressService, CustomContainerService, CephfsMirrorService,
-            CephadmAgent, SNMPGatewayService, ElasticSearchService, JaegerQueryService, JaegerAgentService,
-            JaegerCollectorService
+            CephadmAgent, CephExporterService, SNMPGatewayService, ElasticSearchService,
+            JaegerQueryService, JaegerAgentService, JaegerCollectorService
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -731,7 +732,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Generate a unique random service name
         """
         suffix = daemon_type not in [
-            'mon', 'crash',
+            'mon', 'crash', 'ceph-exporter',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
             'container', 'agent', 'snmp-gateway', 'loki', 'promtail',
             'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query'
@@ -2496,6 +2497,8 @@ Then run the following:
             # whenever the number of daemons for those service-type changes from 0 to greater
             # than zero and vice versa.
             deps += [s for s in ['node-exporter', 'alertmanager', 'ingress'] if self.cache.get_daemons_by_service(s)]
+            # add dependency on ceph-exporter daemons
+            deps += [d.name() for d in self.cache.get_daemons_by_service('ceph-exporter')]
         else:
             need = {
                 'grafana': ['prometheus', 'loki'],
@@ -2787,6 +2790,7 @@ Then run the following:
                 'alertmanager': PlacementSpec(count=1),
                 'prometheus': PlacementSpec(count=1),
                 'node-exporter': PlacementSpec(host_pattern='*'),
+                'ceph-exporter': PlacementSpec(host_pattern='*'),
                 'loki': PlacementSpec(count=1),
                 'promtail': PlacementSpec(host_pattern='*'),
                 'crash': PlacementSpec(host_pattern='*'),
@@ -2899,6 +2903,10 @@ Then run the following:
 
     @handle_orch_error
     def apply_node_exporter(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_ceph_exporter(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error
