@@ -553,3 +553,35 @@ the branch in your local working copy, run this command from within the
 .. prompt:: bash $
 
    git config --global push.autoSetupRemote true
+
+Deleting a Branch Locally
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To delete the branch named ``localBranchName`` from the local working copy, run
+a command of this form:
+
+.. prompt:: bash $
+
+   git branch -d localBranchName
+
+Deleting a Branch Remotely
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To delete the branch named ``remoteBranchName`` from the remote upstream branch
+(which is also your fork of ``ceph/ceph``, as described in :ref:`forking`), run
+a command of this form:
+
+.. prompt:: bash $
+
+   git push origin --delete remoteBranchName
+
+Searching a File Longitudinally for a String
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To search for the commit that introduced a given string (in this example, that
+string is ``foo``) into a given file (in this example, that file is
+``file.rst``), run a command of this form:
+
+.. prompt:: bash $
+
+   git log -S 'foo' file.rst
