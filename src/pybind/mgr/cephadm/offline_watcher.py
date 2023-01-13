@@ -38,7 +38,7 @@ class OfflineHostWatcher(threading.Thread):
     def check_host(self, host: str) -> None:
         if host not in self.mgr.offline_hosts:
             try:
-                self.mgr.ssh.check_execute_command(host, ['true'])
+                self.mgr.ssh.check_execute_command(host, ['true'], log_command=self.mgr.log_refresh_metadata)
             except Exception:
                 logger.debug(f'OfflineHostDetector: detected {host} to be offline')
                 # kick serve loop in case corrective action must be taken for offline host

@@ -70,7 +70,7 @@ class TunedProfileUtils():
         if host in self.mgr.offline_hosts:
             return
         cmd = ['ls', SYSCTL_DIR]
-        found_files = self.mgr.ssh.check_execute_command(host, cmd).split('\n')
+        found_files = self.mgr.ssh.check_execute_command(host, cmd, log_command=self.mgr.log_refresh_metadata).split('\n')
         found_files = [s.strip() for s in found_files]
         profile_names: List[str] = sum([[*p] for p in profiles], [])  # extract all profiles names
         profile_names = list(set(profile_names))  # remove duplicates

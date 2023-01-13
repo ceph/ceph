@@ -56,6 +56,7 @@ class FakeMgr:
         self.tuned_profiles.profiles = profiles
         self.ssh = SSHManager(self)
         self.offline_hosts = []
+        self.log_refresh_metadata = False
 
     def set_store(self, what: str, value: str):
         raise SaveError(f'{what}: {value}')
@@ -138,7 +139,7 @@ class TestTunedProfiles:
         tp = TunedProfileUtils(mgr)
         tp._remove_stray_tuned_profiles('a', self.profiles_to_calls(tp, [self.tspec1, self.tspec2]))
         calls = [
-            mock.call('a', ['ls', SYSCTL_DIR]),
+            mock.call('a', ['ls', SYSCTL_DIR], log_command=False),
             mock.call('a', ['rm', '-f', f'{SYSCTL_DIR}/p3-cephadm-tuned-profile.conf']),
             mock.call('a', ['rm', '-f', f'{SYSCTL_DIR}/who-cephadm-tuned-profile.conf']),
             mock.call('a', ['sysctl', '--system'])
