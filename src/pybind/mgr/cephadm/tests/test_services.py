@@ -18,7 +18,7 @@ from cephadm.services.monitoring import GrafanaService, AlertmanagerService, Pro
     NodeExporterService, LokiService, PromtailService
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import IscsiServiceSpec, MonitoringSpec, AlertManagerSpec, \
-    ServiceSpec, RGWSpec, GrafanaSpec, SNMPGatewaySpec, IngressSpec, PlacementSpec, TracingSpec, PrometheusSpec
+    ServiceSpec, RGWSpec, GrafanaSpec, SNMPGatewaySpec, IngressSpec, PlacementSpec, TracingSpec, PrometheusSpec, CephExporterSpec
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
 
 from orchestrator import OrchestratorError
@@ -398,6 +398,7 @@ class TestMonitoring:
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, MonitoringSpec('node-exporter')) as _, \
+                    with_service(cephadm_module, CephExporterSpec('ceph-exporter')) as _, \
                     with_service(cephadm_module, PrometheusSpec('prometheus')) as _:
 
                 y = dedent("""
@@ -423,6 +424,13 @@ class TestMonitoring:
                       tls_config:
                         ca_file: root_cert.pem
 
+
+                  - job_name: 'ceph-exporter'
+                    honor_labels: true
+                    http_sd_configs:
+                    - url: https://[::1]:8765/sd/prometheus/sd-config?service=ceph-exporter
+                      tls_config:
+                        ca_file: root_cert.pem
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(
