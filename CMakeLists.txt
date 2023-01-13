@@ -639,6 +639,26 @@ endif()
 
 set(Boost_USE_MULTITHREADED ON)
 
+# TO THE NEXT PERSON WHO UPDATES THE BOOST VERSION:
+#
+# There is a bug in Boost.Phoenix in v1.81. The various `uarg`
+# definitions violate the C++ One Definition Rule. To get around this,
+# I have made a copy of the relevant file with the definitions
+# qualified as `inline` and set the `src/replacement` directory
+# holding it to come before Boost's includes.
+#
+# Hopefully this will be fixed by the time Boost 1.82 comes out. If
+# so, please remove this message, the hack (it is annotated) and the
+# `src/replacement/phoenix/stl/tuple.hpp` file.
+#
+# If not, please update the version check appropriately. The error
+# occurs when compiling `MonCap.cc`.
+#
+# RATIONALE: Patching the file wouldn't work with system boost and
+# nobody (especially me) wants me to try rewriting a chunk of the
+# monitor that I don't know.
+#
+# -- aemerson@redhat.com
 CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
   "NOT WITH_SYSTEM_BOOST" OFF)
 # require minimally the bundled version
@@ -651,7 +671,7 @@ if(WITH_SYSTEM_BOOST)
   if(BOOST_ROOT AND CMAKE_LIBRARY_ARCHITECTURE)
     set(BOOST_LIBRARYDIR "${BOOST_ROOT}/lib/${CMAKE_LIBRARY_ARCHITECTURE}")
   endif()
-  find_package(Boost 1.79 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+  find_package(Boost 1.81 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
   if(NOT ENABLE_SHARED)
     set_property(TARGET Boost::iostreams APPEND PROPERTY
       INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
@@ -665,10 +685,15 @@ else()
   set(BOOST_J ${DEFAULT_BOOST_J} CACHE STRING "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
-  build_boost(1.79
+  build_boost(1.81
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
+# Hack to get around bug in Boost.Phoenix on v1.81
+if(Boost_VERSION VERSION_EQUAL 1.81)
+  message("Prepending replacement directory for boost version ${Boost_VERSION}")
+  include_directories(BEFORE SYSTEM ${CMAKE_SOURCE_DIR}/src/replacement)
+endif()
 
 # dashboard angular2 frontend
 option(WITH_MGR_DASHBOARD_FRONTEND "Build the mgr/dashboard frontend using `npm`" ON)

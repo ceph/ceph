@@ -143,7 +143,7 @@ function install_pkg_on_ubuntu {
 
 function install_boost_on_ubuntu {
     in_jenkins && echo "CI_DEBUG: Running install_boost_on_ubuntu() in install-deps.sh"
-    local ver=1.79
+    local ver=1.81
     local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
