@@ -1155,13 +1155,22 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
 	  ceph_assert(num);
 	  --num;
 	  o->clear_cached();
+	  dout(20) << __func__ << " " << this << " " << o->oid << " removed"
+                   << dendl;
           // remove will also decrement nref
           o->c->onode_space._remove(o->oid);
         }
       } else if (o->exists) {
         // move onode within LRU
-        _rm(o);
-        _add(o, 1);
+        lru.erase(lru.iterator_to(*o));
+        lru.push_front(*o);
+        if (o->cache_age_bin != age_bins.front()) {
+          *(o->cache_age_bin) -= 1;
+          o->cache_age_bin = age_bins.front();
+          *(o->cache_age_bin) += 1;
+        }
+        dout(20) << __func__ << " " << this << " " << o->oid << " touched"
+                 << dendl;
       }
     }
     ocs->lock.unlock();
