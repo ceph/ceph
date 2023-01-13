@@ -327,7 +327,7 @@ class CephadmServe:
             addr = self.mgr.inventory.get_addr(host) if host in self.mgr.inventory else host
             out, err, code = self.mgr.wait_async(self._run_cephadm(
                 host, cephadmNoImage, 'check-host', [],
-                error_ok=True, no_fsid=True))
+                error_ok=True, no_fsid=True, log_output=self.mgr.log_refresh_metadata))
             self.mgr.cache.update_last_host_check(host)
             self.mgr.cache.save_host(host)
             if code:
@@ -343,7 +343,8 @@ class CephadmServe:
 
     def _refresh_host_daemons(self, host: str) -> Optional[str]:
         try:
-            ls = self.mgr.wait_async(self._run_cephadm_json(host, 'mon', 'ls', [], no_fsid=True))
+            ls = self.mgr.wait_async(self._run_cephadm_json(host, 'mon', 'ls', [],
+                                                            no_fsid=True, log_output=self.mgr.log_refresh_metadata))
         except OrchestratorError as e:
             return str(e)
         self.mgr._process_ls_output(host, ls)
@@ -352,7 +353,7 @@ class CephadmServe:
     def _refresh_facts(self, host: str) -> Optional[str]:
         try:
             val = self.mgr.wait_async(self._run_cephadm_json(
-                host, cephadmNoImage, 'gather-facts', [], no_fsid=True))
+                host, cephadmNoImage, 'gather-facts', [], no_fsid=True, log_output=self.mgr.log_refresh_metadata))
         except OrchestratorError as e:
             return str(e)
 
@@ -371,13 +372,13 @@ class CephadmServe:
         try:
             try:
                 devices = self.mgr.wait_async(self._run_cephadm_json(host, 'osd', 'ceph-volume',
-                                                                     inventory_args))
+                                                                     inventory_args, log_output=self.mgr.log_refresh_metadata))
             except OrchestratorError as e:
                 if 'unrecognized arguments: --filter-for-batch' in str(e):
                     rerun_args = inventory_args.copy()
                     rerun_args.remove('--filter-for-batch')
                     devices = self.mgr.wait_async(self._run_cephadm_json(host, 'osd', 'ceph-volume',
-                                                                         rerun_args))
+                                                                         rerun_args, log_output=self.mgr.log_refresh_metadata))
                 else:
                     raise
 
@@ -395,7 +396,7 @@ class CephadmServe:
     def _refresh_host_networks(self, host: str) -> Optional[str]:
         try:
             networks = self.mgr.wait_async(self._run_cephadm_json(
-                host, 'mon', 'list-networks', [], no_fsid=True))
+                host, 'mon', 'list-networks', [], no_fsid=True, log_output=self.mgr.log_refresh_metadata))
         except OrchestratorError as e:
             return str(e)
 
@@ -1335,10 +1336,11 @@ class CephadmServe:
                                 args: List[str],
                                 no_fsid: Optional[bool] = False,
                                 image: Optional[str] = "",
+                                log_output: Optional[bool] = True,
                                 ) -> Any:
         try:
             out, err, code = await self._run_cephadm(
-                host, entity, command, args, no_fsid=no_fsid, image=image)
+                host, entity, command, args, no_fsid=no_fsid, image=image, log_output=log_output)
             if code:
                 raise OrchestratorError(f'host {host} `cephadm {command}` returned {code}: {err}')
         except Exception as e:
@@ -1361,6 +1363,7 @@ class CephadmServe:
                            error_ok: Optional[bool] = False,
                            image: Optional[str] = "",
                            env_vars: Optional[List[str]] = None,
+                           log_output: Optional[bool] = True,
                            ) -> Tuple[List[str], List[str], int]:
         """
         Run cephadm on the remote host with the given command + args
@@ -1425,7 +1428,8 @@ class CephadmServe:
                     host, cmd, stdin=stdin, addr=addr)
                 if code == 2:
                     ls_cmd = ['ls', self.mgr.cephadm_binary_path]
-                    out_ls, err_ls, code_ls = await self.mgr.ssh._execute_command(host, ls_cmd, addr=addr)
+                    out_ls, err_ls, code_ls = await self.mgr.ssh._execute_command(host, ls_cmd, addr=addr,
+                                                                                  log_command=log_output)
                     if code_ls == 2:
                         await self._deploy_cephadm_binary(host, addr)
                         out, err, code = await self.mgr.ssh._execute_command(
@@ -1455,11 +1459,12 @@ class CephadmServe:
         else:
             assert False, 'unsupported mode'
 
-        self.log.debug(f'code: {code}')
-        if out:
-            self.log.debug(f'out: {out}')
-        if err:
-            self.log.debug(f'err: {err}')
+        if log_output:
+            self.log.debug(f'code: {code}')
+            if out:
+                self.log.debug(f'out: {out}')
+            if err:
+                self.log.debug(f'err: {err}')
         if code and not error_ok:
             raise OrchestratorError(
                 f'cephadm exited with an error code: {code}, stderr: {err}')
