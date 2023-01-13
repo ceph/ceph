@@ -56,7 +56,7 @@ MEMO = None
 REMOVE = False
 POOL = None
 NEXT_SNAP = None
-CONF = os.environ['CEPH_CONF']
+CONF = os.environ.get('CEPH_CONF')
 REPAIR_NOSNAP = None
 
 CEPH_NOSNAP = 0xfffffffe # int32 -2
