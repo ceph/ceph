@@ -9975,10 +9975,11 @@ next:
       if (specified_shard_id) {
         ret = datalog_svc->list_entries(dpp(), shard_id, max_entries - count,
 					entries, marker,
-					&marker, &truncated);
+					&marker, &truncated,
+					null_yield);
       } else {
         ret = datalog_svc->list_entries(dpp(), max_entries - count, entries,
-					log_marker, &truncated);
+					log_marker, &truncated, null_yield);
       }
       if (ret < 0) {
         cerr << "ERROR: datalog_svc->list_entries(): " << cpp_strerror(-ret) << std::endl;
@@ -10009,7 +10010,8 @@ next:
       list<cls_log_entry> entries;
 
       RGWDataChangesLogInfo info;
-      static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados->get_info(dpp(), i, &info);
+      static_cast<rgw::sal::RadosStore*>(driver)->svc()->
+	datalog_rados->get_info(dpp(), i, &info, null_yield);
 
       ::encode_json("info", info, formatter.get());
 
@@ -10072,7 +10074,7 @@ next:
     }
 
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
-    ret = datalog->trim_entries(dpp(), shard_id, marker);
+    ret = datalog->trim_entries(dpp(), shard_id, marker, null_yield);
 
     if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
@@ -10096,7 +10098,7 @@ next:
   if (opt_cmd == OPT::DATALOG_PRUNE) {
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
     std::optional<uint64_t> through;
-    ret = datalog->trim_generations(dpp(), through);
+    ret = datalog->trim_generations(dpp(), through, null_yield);
 
     if (ret < 0) {
       cerr << "ERROR: trim_generations(): " << cpp_strerror(-ret) << std::endl;

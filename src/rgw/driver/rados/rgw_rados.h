@@ -959,13 +959,18 @@ public:
                    const std::string& etag, const std::string& content_type,
                    const std::string& storage_class,
                    bufferlist *acl_bl, RGWObjCategory category,
-		   std::list<rgw_obj_index_key> *remove_objs, const std::string *user_data = nullptr, bool appendable = false);
+		   std::list<rgw_obj_index_key> *remove_objs,
+		   optional_yield y,
+		   const std::string *user_data = nullptr,
+		   bool appendable = false);
       int complete_del(const DoutPrefixProvider *dpp,
                        int64_t poolid, uint64_t epoch,
                        ceph::real_time& removed_mtime, /* mtime of removed object */
-                       std::list<rgw_obj_index_key> *remove_objs);
+                       std::list<rgw_obj_index_key> *remove_objs,
+		       optional_yield y);
       int cancel(const DoutPrefixProvider *dpp,
-                 std::list<rgw_obj_index_key> *remove_objs);
+                 std::list<rgw_obj_index_key> *remove_objs,
+		 optional_yield y);
 
       const std::string *get_optag() { return &optag; }
 
@@ -1232,7 +1237,8 @@ public:
   int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj);
 
   /** Remove an object from the bucket index */
-  int delete_obj_index(const rgw_obj& obj, ceph::real_time mtime, const DoutPrefixProvider *dpp);
+  int delete_obj_index(const rgw_obj& obj, ceph::real_time mtime,
+		       const DoutPrefixProvider *dpp, optional_yield y);
 
   /**
    * Set an attr on an object.
@@ -1302,6 +1308,7 @@ public:
                             const std::string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch,
                             ceph::real_time unmod_since, bool high_precision_time,
+			    optional_yield y,
                             rgw_zone_set *zones_trace = nullptr,
                             bool log_data_change = false);
   int bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
