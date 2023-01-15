@@ -47,7 +47,7 @@ distributions, execute the following:
 
 .. prompt:: bash $
 
-   sudo apt-get install librados-dev
+   sudo apt-get install librados-dev libradospp-dev
 
 To install ``librados`` development support files for C/C++ on RHEL/CentOS
 distributions, execute the following:
