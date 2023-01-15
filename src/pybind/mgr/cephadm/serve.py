@@ -866,6 +866,12 @@ class CephadmServe:
             assert dd.hostname is not None
             assert dd.daemon_type is not None
             assert dd.daemon_id is not None
+
+            # any action we can try will fail for a daemon on an offline host,
+            # including removing the daemon
+            if dd.hostname in self.mgr.offline_hosts:
+                continue
+
             if not spec and dd.daemon_type not in ['mon', 'mgr', 'osd']:
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
