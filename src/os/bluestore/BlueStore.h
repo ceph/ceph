@@ -401,7 +401,8 @@ public:
     void _rm_buffer(BufferCacheShard* cache, Buffer *b) {
       _rm_buffer(cache, buffer_map.find(b->offset));
     }
-    void _rm_buffer(BufferCacheShard* cache,
+    std::map<uint32_t, std::unique_ptr<Buffer>>::iterator
+    _rm_buffer(BufferCacheShard* cache,
 		    std::map<uint32_t, std::unique_ptr<Buffer>>::iterator p) {
       ceph_assert(p != buffer_map.end());
       cache->_audit("_rm_buffer start");
@@ -410,8 +411,24 @@ public:
       } else {
 	cache->_rm(p->second.get());
       }
-      buffer_map.erase(p);
+      p = buffer_map.erase(p);
       cache->_audit("_rm_buffer end");
+      return p;
+    }
+    Buffer*
+    _extract_buffer(BufferCacheShard* cache,
+	    std::map<uint32_t, std::unique_ptr<Buffer>>::iterator& p) {
+      ceph_assert(p != buffer_map.end());
+      cache->_audit("_rm_buffer start");
+      if (p->second->is_writing()) {
+        writing.erase(writing.iterator_to(*p->second));
+      } else {
+	cache->_rm(p->second.get());
+      }
+      Buffer* buf = p->second.release();
+      p = buffer_map.erase(p);
+      cache->_audit("_rm_buffer end");
+      return buf;
     }
 
     std::map<uint32_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
@@ -673,6 +690,8 @@ public:
 #endif
       return blob;
     }
+    /// clear buffers from unused sections
+    void sanitize_buffers(CephContext* cct, BufferCacheShard* cache);
 
     /// discard buffers for unallocated regions
     void discard_unallocated(Collection *coll);
