@@ -441,7 +441,9 @@ void bluestore_blob_use_tracker_t::get(
     total_bytes += length;
   } else {
     auto end = offset + length;
-
+    if (end / au_size >= num_au) {
+      add_tail(end, au_size);
+    }
     while (offset < end) {
       auto phase = offset % au_size;
       bytes_per_au[offset / au_size] += 
@@ -534,6 +536,19 @@ void bluestore_blob_use_tracker_t::split(
     total_bytes = tmp;
   } else {
     num_au = new_num_au;
+  }
+}
+
+void bluestore_blob_use_tracker_t::dup(const bluestore_blob_use_tracker_t& from,
+				       uint32_t start, uint32_t len)
+{
+  uint32_t end = start + len;
+  ceph_assert(from.total_bytes >= end);
+  init(end, from.au_size);
+  uint32_t* array = dirty_au_array();
+  const uint32_t* afrom = from.get_au_array();
+  for (uint32_t i = start / au_size, pos = start; pos < end; i++, pos += au_size) {
+    array[i] = afrom[i];
   }
 }
 
@@ -667,6 +682,29 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
   }
 
   return s;
+}
+
+void bluestore_blob_t::adjust_to(const bluestore_blob_t& other, uint32_t target_length)
+{
+  // there is no way to expand compressed
+  ceph_assert(!is_compressed());
+  // never import data from other compressed
+  ceph_assert(!other.is_compressed());
+  // unused is wanky, as it is based on logical_length size
+  // it could be cleared here, but it feels better to force caller
+  // to be aware that unused is inacceptable
+  ceph_assert(!has_unused());
+  ceph_assert(logical_length == 0); // not initialized yet
+  ceph_assert(target_length <= other.logical_length);
+
+  logical_length = target_length;
+  ceph_assert(!has_csum());
+  if (other.has_csum()) {
+    init_csum(other.csum_type, other.csum_chunk_order, logical_length);
+    ceph_assert(csum_data.length() <= other.csum_data.length());
+    memcpy(csum_data.c_str(), other.csum_data.c_str(), csum_data.length());
+  }
+  compressed_length = 0;
 }
 
 size_t bluestore_blob_t::get_csum_value_size() const 
@@ -1056,6 +1094,23 @@ void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
     old.swap(csum_data);
     rb.csum_data = bufferptr(old.c_str() + pos, old.length() - pos);
     csum_data = bufferptr(old.c_str(), pos);
+  }
+}
+
+void bluestore_blob_t::dup(const bluestore_blob_t& from)
+{
+  extents = from.extents;
+  logical_length = from.logical_length;
+  compressed_length = from.compressed_length;
+  flags = from.flags;
+  unused = from.unused;
+  csum_type = from.csum_type;
+  csum_chunk_order = from.csum_chunk_order;
+  if (from.csum_data.length()) {
+    csum_data = ceph::buffer::ptr(from.csum_data.c_str(), from.csum_data.length());
+    csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+  } else {
+    csum_data = ceph::buffer::ptr();
   }
 }
 

@@ -2444,6 +2444,7 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
     }
 
     if (new_blen > blen) {
+      ceph_assert(dirty_blob().is_mutable());
       dirty_blob().add_tail(new_blen);
       used_in_blob.add_tail(new_blen,
                             get_blob().get_release_size(min_alloc_size));
@@ -2451,6 +2452,225 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
   }
   return true;
 }
+
+void BlueStore::Blob::dup(const Blob& from, bool copy_used_in_blob)
+{
+  shared_blob = from.shared_blob;
+  blob.dup(from.blob);
+  if (copy_used_in_blob) {
+    used_in_blob = from.used_in_blob;
+  } else {
+    ceph_assert(from.blob.is_compressed());
+    ceph_assert(from.used_in_blob.num_au <= 1);
+    used_in_blob.init(from.used_in_blob.au_size, from.used_in_blob.au_size);
+  }
+  for (auto p : blob.get_extents()) {
+    if (p.is_valid()) {
+      shared_blob->get_ref(p.offset, p.length);
+    }
+  }
+}
+
+// copies part of a Blob
+// it is used to create a consistent blob out of parts of other blobs
+void BlueStore::Blob::copy_from(
+  CephContext* cct, const Blob& from, uint32_t min_release_size, uint32_t start, uint32_t len)
+{
+  dout(20) << __func__ << " to=" << *this << " from=" << from
+	   << " [" << std::hex << start << "~" << len
+	   << "] min_release=" << min_release_size << std::dec << dendl;
+
+  auto& bto = blob;
+  auto& bfrom = from.blob;
+  ceph_assert(!bfrom.is_compressed()); // not suitable for compressed (immutable) blobs
+  ceph_assert(!bfrom.has_unused());
+  // below to asserts are not required to make function work
+  // they check if it is run in desired context
+  ceph_assert(bfrom.is_shared());
+  ceph_assert(shared_blob);
+  ceph_assert(shared_blob == from.shared_blob);
+
+  // split len to pre_len, main_len, post_len
+  uint32_t start_aligned = p2align(start, min_release_size);
+  uint32_t start_roundup = p2roundup(start, min_release_size);
+  uint32_t end_aligned = p2align(start + len, min_release_size);
+  uint32_t end_roundup = p2roundup(start + len, min_release_size);
+  dout(25) << __func__ << " extent split:"
+	   << std::hex << start_aligned << "~" << start_roundup << "~"
+	   << end_aligned << "~" << end_roundup << std::dec << dendl;
+
+  if (bto.get_logical_length() == 0) {
+    // this is initialization
+    bto.adjust_to(from.blob, end_roundup);
+    ceph_assert(min_release_size == from.used_in_blob.au_size);
+    used_in_blob.init(end_roundup, min_release_size);
+  } else if (bto.get_logical_length() < end_roundup) {
+    ceph_assert(!bto.is_compressed());
+    bto.add_tail(end_roundup);
+    used_in_blob.add_tail(end_roundup, used_in_blob.au_size);
+  }
+
+  if (end_aligned >= start_roundup) {
+    copy_extents(cct, from, start_aligned,
+		 start_roundup - start_aligned,/*pre_len*/
+		 end_aligned - start_roundup,/*main_len*/
+		 end_roundup - end_aligned/*post_len*/);
+  } else {
+    // it is uncommon case that <start, start + len) in single allocation unit
+    copy_extents(cct, from, start_aligned,
+		 start_roundup - start_aligned,/*pre_len*/
+		 0 /*main_len*/, 0/*post_len*/);
+  }
+  // copy relevant csum items
+  if (bto.has_csum()) {
+    size_t csd_value_size = bto.get_csum_value_size();
+    size_t csd_item_start = p2align(start, uint32_t(1 << bto.csum_chunk_order)) >> bto.csum_chunk_order;
+    size_t csd_item_end = p2roundup(start + len, uint32_t(1 << bto.csum_chunk_order)) >> bto.csum_chunk_order;
+    ceph_assert(bto.  csum_data.length() >= csd_item_end * csd_value_size);
+    ceph_assert(bfrom.csum_data.length() >= csd_item_end * csd_value_size);
+    memcpy(bto.  csum_data.c_str() + csd_item_start * csd_value_size,
+	   bfrom.csum_data.c_str() + csd_item_start * csd_value_size,
+	   (csd_item_end - csd_item_start) * csd_value_size);
+  }
+  used_in_blob.get(start, len);
+  dout(20) << __func__ << " result=" << *this << dendl;
+}
+
+void BlueStore::Blob::copy_extents(
+  CephContext* cct, const Blob& from, uint32_t start,
+  uint32_t pre_len, uint32_t main_len, uint32_t post_len)
+{
+  constexpr uint64_t invalid = bluestore_pextent_t::INVALID_OFFSET;
+  auto at = [&](const PExtentVector& e, uint32_t pos, uint32_t len) -> uint64_t {
+    auto it = e.begin();
+    while (it != e.end() && pos >= it->length) {
+      pos -= it->length;
+      ++it;
+    }
+    if (it == e.end()) {
+      return invalid;
+    }
+    if (!it->is_valid()) {
+      return invalid;
+    }
+    ceph_assert(pos + len <= it->length); // post_len should be single au, and we do not split
+    return it->offset + pos;
+  };
+  const PExtentVector& exfrom = from.blob.get_extents();
+  PExtentVector& exto = blob.dirty_extents();
+  dout(20) << __func__ << " 0x" << std::hex << start << " "
+	   << pre_len << "/" << main_len << "/" << post_len << std::dec << dendl;
+
+  // the extents that cover same area must be the same
+  if (pre_len > 0) {
+    uint64_t au_from = at(exfrom, start, pre_len);
+    ceph_assert(au_from != bluestore_pextent_t::INVALID_OFFSET);
+    uint64_t au_to = at(exto, start, pre_len);
+    if (au_to == bluestore_pextent_t::INVALID_OFFSET) {
+      main_len += pre_len; // also copy pre_len
+    } else {
+      ceph_assert(au_from == au_to);
+      start += pre_len; // skip, already there
+    }
+  }
+  if (post_len > 0) {
+    uint64_t au_from = at(exfrom, start + main_len, post_len);
+    ceph_assert(au_from != bluestore_pextent_t::INVALID_OFFSET);
+    uint64_t au_to = at(exto, start + main_len, post_len);
+    if (au_to == bluestore_pextent_t::INVALID_OFFSET) {
+      main_len += post_len; // also copy post_len
+    } else {
+      ceph_assert(au_from == au_to);
+      // skip, already there
+    }
+  }
+  // it is possible that here is nothing to copy
+  if (main_len > 0) {
+    copy_extents_over_empty(cct, from, start, main_len);
+  }
+}
+
+// assumes that target (this->extents) has hole in relevant location
+void BlueStore::Blob::copy_extents_over_empty(
+  CephContext* cct, const Blob& from, uint32_t start, uint32_t len)
+{
+  dout(20) << __func__ << " to=" << *this << " from=" << from
+	   << "[0x" << std::hex << start << "~" << len << std::dec << "]" << dendl;
+  uint32_t padding;
+  auto& exto = blob.dirty_extents();
+  auto ito = exto.begin();
+  PExtentVector::iterator prev = exto.end();
+  uint32_t sto = start;
+
+  auto try_append = [&](PExtentVector::iterator& it, uint64_t disk_offset, uint32_t disk_len) {
+    if (prev != exto.end()) {
+      if (prev->is_valid()) {
+	if (prev->offset + prev->length == disk_offset) {
+	  shared_blob->get_ref(prev->offset + prev->length, disk_len);
+	  prev->length += disk_len;
+	  return;
+	}
+      }
+    }
+    it = exto.insert(it, bluestore_pextent_t(disk_offset, disk_len));
+    prev = it;
+    ++it;
+    shared_blob->get_ref(disk_offset, disk_len);
+  };
+
+  while (ito != exto.end() && sto >= ito->length) {
+    sto -= ito->length;
+    prev = ito;
+    ++ito;
+  }
+  if (ito == exto.end()) {
+    // putting data after end, just expand / push back
+    if (sto > 0) {
+      exto.emplace_back(bluestore_pextent_t::INVALID_OFFSET, sto);
+      ito = exto.end();
+      prev = ito;
+    }
+    padding = 0;
+  } else {
+    ceph_assert(!ito->is_valid()); // there can be no collision
+    ceph_assert(ito->length >= sto + len); // for at least len, starting with remainder sto
+    padding = ito->length - (sto + len); // add this much after copying
+    ito = exto.erase(ito); // cut a hole
+    if (sto > 0) {
+      ito = exto.insert(ito, bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, sto));
+      prev = ito;
+      ++ito;
+    }
+  }
+
+  const auto& exfrom = from.blob.get_extents();
+  auto itf = exfrom.begin();
+  uint32_t sf = start;
+  while (itf != exfrom.end() && sf >= itf->length) {
+    sf -= itf->length;
+    ++itf;
+  }
+
+  uint32_t skip_on_first = sf;
+  while (itf != exfrom.end() && len > 0) {
+    ceph_assert(itf->is_valid());
+    uint32_t to_copy = std::min<uint32_t>(itf->length - skip_on_first, len);
+    try_append(ito, itf->offset + skip_on_first, to_copy);
+    len -= to_copy;
+    skip_on_first = 0;
+    ++itf;
+  }
+  ceph_assert(len == 0);
+
+  if (padding > 0) {
+    exto.insert(ito, bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, padding));
+  }
+  dout(20) << __func__ << " result=" << *this << dendl;
+}
+
+
+#undef dout_context
+#define dout_context coll->store->cct
 
 #ifdef WITH_ESB
 void BlueStore::Blob::finish_write(uint64_t seq)
