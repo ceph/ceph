@@ -735,6 +735,8 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 	<< " -> 0x"
 	<< o.get_compressed_payload_length()
 	<< std::dec;
+  } else {
+    out << " llen=0x" << std::hex << o.get_logical_length() << std::dec;
   }
   if (o.flags) {
     out << " " << o.get_flags_string();
