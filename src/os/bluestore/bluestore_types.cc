@@ -441,7 +441,9 @@ void bluestore_blob_use_tracker_t::get(
     total_bytes += length;
   } else {
     auto end = offset + length;
-
+    if (end / au_size >= num_au) {
+      add_tail(end, au_size);
+    }
     while (offset < end) {
       auto phase = offset % au_size;
       bytes_per_au[offset / au_size] += 
