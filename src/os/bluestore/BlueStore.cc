@@ -1955,6 +1955,23 @@ void BlueStore::BufferSpace::split(BufferCacheShard* cache, size_t pos, BlueStor
   cache->_trim();
 }
 
+// lists content of BufferSpace
+// BufferSpace must be under exclusive access
+std::ostream& operator<<(std::ostream& out, const BlueStore::BufferSpace& bc)
+{
+  for (auto& [i, j] : bc.buffer_map) {
+    out << " [0x" << std::hex << i << "]=" << *j << std::dec;
+  }
+  if (!bc.writing.empty()) {
+    out << " writing:";
+    for (auto i = bc.writing.begin(); i != bc.writing.end(); ++i) {
+      out << " " << *i;
+    }
+  }
+  return out;
+}
+
+
 // OnodeSpace
 
 #undef dout_prefix
