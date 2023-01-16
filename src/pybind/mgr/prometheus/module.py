@@ -1065,6 +1065,8 @@ class Module(MgrModule):
 
         for pool in pg_summary['by_pool']:
             num_by_state: DefaultDict[str, int] = defaultdict(int)
+            for state in PG_STATES:
+                num_by_state[state] = 0
 
             for state_name, count in pg_summary['by_pool'][pool].items():
                 for state in state_name.split('+'):
