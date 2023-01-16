@@ -395,7 +395,8 @@ struct bluestore_blob_use_tracker_t {
   void split(
     uint32_t blob_offset,
     bluestore_blob_use_tracker_t* r);
-
+  void dup(const bluestore_blob_use_tracker_t& from,
+	   uint32_t start, uint32_t len);
   bool equal(
     const bluestore_blob_use_tracker_t& other) const;
     
@@ -482,6 +483,8 @@ public:
   ceph::buffer::ptr csum_data;                ///< opaque std::vector of csum data
 
   bluestore_blob_t(uint32_t f = 0) : flags(f) {}
+
+  void dup(const bluestore_blob_t& from);
 
   const PExtentVector& get_extents() const {
     return extents;

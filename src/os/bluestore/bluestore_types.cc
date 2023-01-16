@@ -537,6 +537,19 @@ void bluestore_blob_use_tracker_t::split(
   }
 }
 
+void bluestore_blob_use_tracker_t::dup(const bluestore_blob_use_tracker_t& from,
+				       uint32_t start, uint32_t len)
+{
+  uint32_t end = start + len;
+  ceph_assert(from.total_bytes >= end);
+  init(end, from.au_size);
+  uint32_t* array = dirty_au_array();
+  const uint32_t* afrom = from.get_au_array();
+  for (uint32_t i = start / au_size, pos = start; pos < end; i++, pos += au_size) {
+    array[i] = afrom[i];
+  }
+}
+
 bool bluestore_blob_use_tracker_t::equal(
   const bluestore_blob_use_tracker_t& other) const
 {
@@ -1053,6 +1066,23 @@ void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
     old.swap(csum_data);
     rb.csum_data = bufferptr(old.c_str() + pos, old.length() - pos);
     csum_data = bufferptr(old.c_str(), pos);
+  }
+}
+
+void bluestore_blob_t::dup(const bluestore_blob_t& from)
+{
+  if (!from.is_compressed()) {
+    ceph_assert(from.compressed_length == 0);
+  }
+  extents = from.extents;
+  logical_length = from.logical_length;
+  compressed_length = from.compressed_length;
+  flags = from.flags;
+  unused = from.unused;
+  csum_type = from.csum_type;
+  csum_chunk_order = from.csum_chunk_order;
+  if (from.csum_data.length()) {
+    csum_data = ceph::buffer::ptr(from.csum_data.c_str(), from.csum_data.length());
   }
 }
 
