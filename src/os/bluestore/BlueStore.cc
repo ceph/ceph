@@ -2828,35 +2828,34 @@ void BlueStore::Blob::copy_extents_over_empty(
 }
 
 // Merges 2 blobs together. Move extents, csum, tracker from src to dst.
-void BlueStore::Blob::merge_blob(Blob* src)
+uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
 {
   Blob* dst = this;
+  Blob* src = blob_to_dissolve;
   const bluestore_blob_t& src_blob = src->get_blob();
   bluestore_blob_t& dst_blob = dst->dirty_blob();
+  dout(20) << __func__ << " to=" << *dst << " from" << *src << dendl;
 
-  ceph_assert(src_blob.has_csum() == dst_blob.has_csum());
-  ceph_assert(!src_blob.has_csum() || src_blob.csum_type == dst_blob.csum_type);
-  ceph_assert(src_blob.csum_chunk_order == dst_blob.csum_chunk_order);
-
+  // drop unused, do not recalc it, unlikely those chunks could be used in future
+  dst_blob.clear_flag(bluestore_blob_t::FLAG_HAS_UNUSED);
+  if (dst_blob.get_logical_length() < src_blob.get_logical_length()) {
+    // expand to accomodate
+    ceph_assert(!dst_blob.is_compressed());
+    dst_blob.add_tail(src_blob.get_logical_length());
+    used_in_blob.add_tail(src_blob.get_logical_length(), used_in_blob.au_size);
+  }
   const PExtentVector& src_extents = src_blob.get_extents();
   const PExtentVector& dst_extents = dst_blob.get_extents();
   PExtentVector tmp_extents;
   tmp_extents.reserve(src_extents.size() + dst_extents.size());
   constexpr uint32_t end_pos = std::numeric_limits<uint32_t>::max();
 
-  // drop unused, do not recalc it, unlikely those chunks could be used in future
-  dst_blob.clear_flag(bluestore_blob_t::FLAG_HAS_UNUSED);
   uint32_t csum_chunk_order = src_blob.csum_chunk_order;
   uint32_t csum_value_size;
   const char* src_csum_ptr;
   char* dst_csum_ptr;
   if (src_blob.has_csum()) {
     csum_value_size = src_blob.get_csum_value_size();
-    if (src_blob.csum_data.length() > dst_blob.csum_data.length()) {
-      buffer::ptr t(src_blob.csum_data.length());
-      memcpy(t.c_str(), dst_blob.csum_data.c_str(), dst_blob.csum_data.length());
-      std::swap(t, dst_blob.csum_data);
-    }
     src_csum_ptr = src_blob.csum_data.c_str();
     dst_csum_ptr = dst_blob.csum_data.c_str();
   }
@@ -2864,9 +2863,6 @@ void BlueStore::Blob::merge_blob(Blob* src)
   bluestore_blob_use_tracker_t& dst_tracker = dst->dirty_blob_use_tracker();
   ceph_assert(src_tracker.au_size == dst_tracker.au_size);
   uint32_t tracker_au_size = src_tracker.au_size;
-  if (src_tracker.get_num_au() > dst_tracker.get_num_au()) {
-    dst_tracker.add_tail(src_tracker.get_num_au() * dst_tracker.au_size, dst_tracker.au_size);
-  }
   const uint32_t* src_tracker_aus = src_tracker.get_au_array();
   uint32_t* dst_tracker_aus = dst_tracker.dirty_au_array();
 
@@ -2924,8 +2920,6 @@ void BlueStore::Blob::merge_blob(Blob* src)
 	uint32_t m = std::min(src_pos - pos, dst_pos - pos);
 	// emit empty
 	tmp_extents.emplace_back(bluestore_pextent_t::INVALID_OFFSET, m);
-	//src_pos -= m;
-	//dst_pos -= m;
 	pos += m;
       } else {
 	// copy from dst, src must not have conflicting extent
@@ -2950,6 +2944,11 @@ void BlueStore::Blob::merge_blob(Blob* src)
       skip_empty(src_extents, src_it, src_pos);
     }
   }
+  if (pos < dst_blob.logical_length) {
+    // this is a candidate for improvement;
+    // instead of artifically add extents, trim blob
+    tmp_extents.emplace_back(bluestore_pextent_t::INVALID_OFFSET, dst_blob.logical_length - pos);
+  }
   // now apply freshly merged tmp_extents into dst blob
   dst_blob.dirty_extents().swap(tmp_extents);
 
@@ -2971,6 +2970,8 @@ void BlueStore::Blob::merge_blob(Blob* src)
     }
     dst->bc.writing.insert(wrt_dst_it, buf);
   }
+  dout(20) << __func__ << " result=" << *dst << dendl;
+  return dst_blob.logical_length;
 }
 
 #undef dout_context
