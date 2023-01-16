@@ -7,19 +7,21 @@
 #include "common/config_obs.h"
 #include "common/config_obs_mgr.h"
 #include "common/ceph_mutex.h"
+#include "common/config_proxy.h"
 
-// @c ConfigProxy is a facade of multiple config related classes. it exposes
-// the legacy settings with arrow operator, and the new-style config with its
-// member methods.
-namespace ceph::common {
-class ConfigProxy {
+// @c ImageConfigProxy is a different version of ConfigProxy specialised 
+// for per image configuration in order to skip unneeded copies of md_config_t(~2.5x slower).
+namespace librbd {
+class ImageConfigProxy {
   /**
    * The current values of all settings described by the schema
    */
   ConfigValues values;
-  using md_config_obs_t = ceph::md_config_obs_impl<ConfigProxy>;
+  using md_config_obs_t = ceph::md_config_obs_impl<ImageConfigProxy>;
   ObserverMgr<md_config_obs_t> obs_mgr;
-  md_config_t config;
+  // Reference to the daemon configuration as it includes the schema of daemon related
+  // configurations and per image configuration which will be overriden by "ConfigValues"
+  md_config_t &config; // FIXME: use shared_ptr in case of dangling reference
   /** A lock that protects the md_config_t internals. It is
    * recursive, for simplicity.
    * It is best if this lock comes first in the lock hierarchy. We will
@@ -27,98 +29,20 @@ class ConfigProxy {
   mutable ceph::recursive_mutex lock =
     ceph::make_recursive_mutex("ConfigProxy::lock");
 
-  class CallGate {
-  private:
-    uint32_t call_count = 0;
-    ceph::mutex lock;
-    ceph::condition_variable cond;
-  public:
-    CallGate()
-      : lock(ceph::make_mutex("call::gate::lock")) {
-    }
 
-    void enter() {
-      std::lock_guard<ceph::mutex> locker(lock);
-      ++call_count;
-    }
-    void leave() {
-      std::lock_guard<ceph::mutex> locker(lock);
-      ceph_assert(call_count > 0);
-      if (--call_count == 0) {
-        cond.notify_all();
-      }
-    }
-    void close() {
-      std::unique_lock<ceph::mutex> locker(lock);
-      while (call_count != 0) {
-        cond.wait(locker);
-      }
-    }
-  };
-
-  void call_gate_enter(md_config_obs_t *obs) {
-    auto p = obs_call_gate.find(obs);
-    ceph_assert(p != obs_call_gate.end());
-    p->second->enter();
-  }
-  void call_gate_leave(md_config_obs_t *obs) {
-    auto p = obs_call_gate.find(obs);
-    ceph_assert(p != obs_call_gate.end());
-    p->second->leave();
-  }
-  void call_gate_close(md_config_obs_t *obs) {
-    auto p = obs_call_gate.find(obs);
-    ceph_assert(p != obs_call_gate.end());
-    p->second->close();
-  }
-
-  using rev_obs_map_t = ObserverMgr<md_config_obs_t>::rev_obs_map;
-  typedef std::unique_ptr<CallGate> CallGateRef;
-
-  std::map<md_config_obs_t*, CallGateRef> obs_call_gate;
-
-  void call_observers(std::unique_lock<ceph::recursive_mutex>& locker,
-                      rev_obs_map_t& rev_obs) {
-    // observers are notified outside of lock
-    locker.unlock();
-    for (auto& [obs, keys] : rev_obs) {
-      obs->handle_conf_change(*this, keys);
-    }
-    locker.lock();
-
-    for (auto& rev_ob : rev_obs) {
-      call_gate_leave(rev_ob.first);
-    }
-  }
-
-  void map_observer_changes(md_config_obs_t *obs, const std::string &key,
-                            rev_obs_map_t *rev_obs) {
-    ceph_assert(ceph_mutex_is_locked(lock));
-
-    auto [it, new_entry] = rev_obs->emplace(obs, std::set<std::string>{});
-    it->second.emplace(key);
-    if (new_entry) {
-      // this needs to be done under lock as once this lock is
-      // dropped (before calling observers) a remove_observer()
-      // can sneak in and cause havoc.
-      call_gate_enter(obs);
-    }
-  }
 
 public:
-  explicit ConfigProxy(bool is_daemon)
-    : config{values, obs_mgr, is_daemon}
+  explicit ImageConfigProxy(bool is_daemon, md_config_t &config)
+    : config(config)
   {}
-  ConfigProxy(const ConfigProxy &config_proxy)
+  ImageConfigProxy(ImageConfigProxy &config_proxy)
     : values(config_proxy.get_config_values()),
-      config{values, obs_mgr, config_proxy.config.is_daemon}
+      config(config_proxy.get_config())
   {}
-  const ConfigValues* operator->() const noexcept {
-    return &values;
-  }
-  ConfigValues* operator->() noexcept {
-    return &values;
-  }
+  ImageConfigProxy(ConfigProxy &config_proxy)
+    : values(config_proxy.get_config_values()),
+      config(config_proxy.get_config())
+  {}
   ConfigValues get_config_values() const {
     std::lock_guard l{lock};
     return values;
@@ -196,37 +120,6 @@ public:
     std::lock_guard l{lock};
     return config.early_expand_meta(values, val, oss);
   }
-  // for those want to reexpand special meta, e.g, $pid
-  void finalize_reexpand_meta() {
-    std::unique_lock locker(lock);
-    rev_obs_map_t rev_obs;
-    if (config.finalize_reexpand_meta(values, obs_mgr)) {
-      _gather_changes(values.changed, &rev_obs, nullptr);
-    }
-
-    call_observers(locker, rev_obs);
-  }
-  void add_observer(md_config_obs_t* obs) {
-    std::lock_guard l(lock);
-    obs_mgr.add_observer(obs);
-    obs_call_gate.emplace(obs, std::make_unique<CallGate>());
-  }
-  void remove_observer(md_config_obs_t* obs) {
-    std::lock_guard l(lock);
-    call_gate_close(obs);
-    obs_call_gate.erase(obs);
-    obs_mgr.remove_observer(obs);
-  }
-  void call_all_observers() {
-    std::unique_lock locker(lock);
-    rev_obs_map_t rev_obs;
-    obs_mgr.for_each_observer(
-      [this, &rev_obs](md_config_obs_t *obs, const std::string &key) {
-        map_observer_changes(obs, key, &rev_obs);
-      });
-
-    call_observers(locker, rev_obs);
-  }
   void set_safe_to_start_threads() {
     config.set_safe_to_start_threads();
   }
@@ -249,28 +142,6 @@ public:
     std::lock_guard l{lock};
     return config.rm_val(values, key);
   }
-  // Expand all metavariables. Make any pending observer callbacks.
-  void apply_changes(std::ostream* oss) {
-    std::unique_lock locker(lock);
-    rev_obs_map_t rev_obs;
-
-    // apply changes until the cluster name is assigned
-    if (!values.cluster.empty()) {
-      // meta expands could have modified anything.  Copy it all out again.
-      _gather_changes(values.changed, &rev_obs, oss);
-    }
-
-    call_observers(locker, rev_obs);
-  }
-  void _gather_changes(std::set<std::string> &changes,
-                       rev_obs_map_t *rev_obs, std::ostream* oss) {
-    obs_mgr.for_each_change(
-      changes, *this,
-      [this, rev_obs](md_config_obs_t *obs, const std::string &key) {
-        map_observer_changes(obs, key, rev_obs);
-      }, oss);
-      changes.clear();
-  }
   int set_val(const std::string_view key, const std::string& s,
               std::stringstream* err_ss=nullptr) {
     std::lock_guard l{lock};
@@ -283,28 +154,6 @@ public:
   void set_val_or_die(const std::string_view key, const std::string& val) {
     std::lock_guard l{lock};
     config.set_val_or_die(values, obs_mgr, key, val);
-  }
-  int set_mon_vals(CephContext *cct,
-		   const std::map<std::string,std::string,std::less<>>& kv,
-		   md_config_t::config_callback config_cb) {
-    std::unique_lock locker(lock);
-    int ret = config.set_mon_vals(cct, values, obs_mgr, kv, config_cb);
-
-    rev_obs_map_t rev_obs;
-    _gather_changes(values.changed, &rev_obs, nullptr);
-
-    call_observers(locker, rev_obs);
-    return ret;
-  }
-  int injectargs(const std::string &s, std::ostream *oss) {
-    std::unique_lock locker(lock);
-    int ret = config.injectargs(values, obs_mgr, s, oss);
-
-    rev_obs_map_t rev_obs;
-    _gather_changes(values.changed, &rev_obs, oss);
-
-    call_observers(locker, rev_obs);
-    return ret;
   }
   void parse_env(unsigned entity_type,
 		 const char *env_var = "CEPH_ARGS") {
