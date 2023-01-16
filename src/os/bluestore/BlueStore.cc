@@ -3171,6 +3171,7 @@ void BlueStore::ExtentMap::reblob_extents(uint32_t blob_start, uint32_t blob_end
 	  prev->blob_offset + prev->length == e.blob_offset &&
 	  prev->logical_offset + prev->length == e.logical_offset) {
 	prev->length += e.length;
+	e.blob = nullptr;	
 	ep = extent_map.erase(ep);
 	// prev still the same
 	continue;
