@@ -13435,6 +13435,12 @@ bool MDCache::dump_inode(Formatter *f, uint64_t number) {
   return true;
 }
 
+void MDCache::dump_dir(Formatter *f, CDir *dir, bool dentry_dump) {
+  f->open_object_section("dir");
+  dir->dump(f, dentry_dump ? CDir::DUMP_ALL : CDir::DUMP_DEFAULT);
+  f->close_section();
+}
+
 void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
   const mds_rank_t max_mds = mdsmap.get_max_mds();
 

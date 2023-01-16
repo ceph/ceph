@@ -445,6 +445,12 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "dump inode by inode number");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("dump dir "
+				     "name=path,type=CephString,req=true "
+				     "name=dentry_dump,type=CephBool,req=false",
+				     asok_hook,
+				     "dump directory by path");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("exit",
 				     asok_hook,
 				     "Terminate this MDS");
