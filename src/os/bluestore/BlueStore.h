@@ -469,6 +469,7 @@ public:
       }
       f->close_section();
     }
+    friend std::ostream& operator<<(std::ostream& out, const BufferSpace& bc);
   };
 
   struct SharedBlobSet;
