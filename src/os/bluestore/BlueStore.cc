@@ -2957,7 +2957,9 @@ void BlueStore::Blob::merge_blob(Blob* src)
   while(!src->bc.buffer_map.empty()) {
     auto buf = src->bc.buffer_map.extract(src->bc.buffer_map.cbegin());
     buf.mapped()->space = &dst->bc;
-    dst->bc.buffer_map.insert(std::move(buf));
+    if (dst->bc.buffer_map.count(buf.key()) == 0) {
+      dst->bc.buffer_map[buf.key()] = std::move(buf.mapped());
+    }
   }
   // move BufferSpace writing
   auto wrt_dst_it = dst->bc.writing.begin();
