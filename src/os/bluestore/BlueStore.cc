@@ -3208,13 +3208,14 @@ void BlueStore::ExtentMap::make_range_shared(
     if (e.logical_offset >= end) {
       break;
     }
-    dout(20) << __func__ << " src " << e << dendl;
+    dout(20) << __func__ << " src " << e
+	     << " bc=" << e.blob->bc << dendl;
     const bluestore_blob_t& blob = e.blob->get_blob();
     // make sure it is shared
     if (!blob.is_shared()) {
       if (!src_dirty) {
 	src_dirty = true;
-	dirty_range_begin = e.logical_offset;
+	dirty_range_begin = e.blob_start();
       }
 
       // first try to find a shared blob nearby
@@ -3230,20 +3231,19 @@ void BlueStore::ExtentMap::make_range_shared(
 	dout(20) << __func__ << " merging to: " << *b << " bc=" << b->bc << dendl;
 	e.blob->sanitize_buffers(store->cct, oldo->c->cache);
 	b->sanitize_buffers(store->cct, oldo->c->cache);
-	b->merge_blob(e.blob.get());
+	uint32_t b_logical_length = b->merge_blob(store->cct, e.blob.get());
 	for (auto p : blob.get_extents()) {
 	  if (p.is_valid()) {
 	    b->shared_blob->get_ref(p.offset, p.length);
 	  }
 	}
-	
 	for (auto& i : extent_map) {
 	  dout(20) << " pre " << i << dendl;
 	}
 	// reblob extents might erase e
 	// uint32_t blob_start = e.blob_start();
 	uint32_t logical_offset = e.logical_offset;
-	dirty_range_end = e.blob_start() + blob_width;
+	dirty_range_end = e.blob_start() + b_logical_length;
 	reblob_extents(e.blob_start(), e.blob_start() + blob_width,
 		       e.blob, b);
 	for (auto& i : extent_map) {
