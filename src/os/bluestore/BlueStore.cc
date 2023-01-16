@@ -2416,6 +2416,112 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
   return true;
 }
 
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.blob(" << this << ") "
+#undef dout_context
+#define dout_context cct
+
+// Cut Buffers that are not covered by extents.
+// It happens when we punch hole in Blob.
+// Normally it is not a problem (other then wasted memory),
+// but when 2 Blobs are merged Buffers might collide.
+// Todo: in future cut Buffers when we delete extents from Blobs,
+//       and get rid of this function.
+void BlueStore::Blob::sanitize_buffers(CephContext* cct, BufferCacheShard* cache)
+{
+  dout(25) << __func__ << " input " << *this << " bc=" << bc << dendl;
+  const PExtentVector& extents = get_blob().get_extents();
+  uint32_t epos = 0;
+  auto e = extents.begin();
+  auto b = bc.buffer_map.begin();
+
+  // start, end are offsets in blob
+  auto trim_buffer = [&](Buffer* buf, uint32_t start, uint32_t end) {
+    if (!buf->is_empty()) {
+      ceph::buffer::list new_data;
+      ceph_assert(start >= buf->offset);
+      ceph_assert(buf->data.length() >= end - buf->offset);
+      new_data.substr_of(buf->data, start - buf->offset, end - start);
+      buf->data.swap(new_data);
+    }
+    buf->length = end - start;
+    buf->offset = start;
+  };
+  // buffers are ordered, so are extents
+  while(e != extents.end() && b != bc.buffer_map.end())
+  {
+    if (b->second->is_empty()) {
+      // get rid of warm out buffers, its easier than handle them
+      ceph_assert(!b->second->is_writing());
+      b = bc._rm_buffer(cache, b);
+      continue;
+    }
+    if (epos + e->length <= b->first) {
+      //  extextext     bufbufbuf
+      //  ^ epos   ^    ^b.first
+      //           ^epos+e->length
+      epos += e->length;
+      ++e;
+      continue;
+    }
+    if (b->second->end() <= epos) {
+      // bufbuf        extextext
+      //       ^b.end  ^ epos
+      ++b;
+      continue;
+    }
+    if (e->is_valid()) {
+      // defined, cannot be a problem
+      epos += e->length;
+      ++e;
+      continue;
+    }
+    ceph_assert(!e->is_valid() && epos + e->length > b->first);
+    if (epos <= b->first) {
+      if (b->second->end() <= epos + e->length) {
+	//   bufbuf
+	// extextextext
+	b = bc._rm_buffer(cache, b);
+      } else {
+	//   bufbuf
+	// extext
+	// ========
+	//       uf
+	Buffer* buf = bc._extract_buffer(cache, b);
+	trim_buffer(buf, epos + e->length, buf->end());
+	bc._add_buffer(cache, buf, 0, nullptr);
+      }
+    } else {
+      if (epos + e->length < b->first + b->second->length) {
+	//     bufbufbufbuf
+	//       extext
+	// =================
+	//     bu      fbuf
+	Buffer* buf = bc._extract_buffer(cache, b);
+	ceph::buffer::list right_data;
+	ceph_assert(!buf->is_empty());
+	// 'right' copies state of original buf
+	// seq is same as original, which is necessary if buf is_writing()
+	Buffer* right = new Buffer(buf->space, buf->state, buf->seq,
+				   epos + e->length, right_data, buf->flags);
+	bc._add_buffer(cache, right, 0, nullptr);
+
+	trim_buffer(buf, buf->offset, epos);
+	bc._add_buffer(cache, buf, 0, nullptr);
+      } else {
+	// bufbuf
+	//   extext
+	// ========
+	// bu
+	Buffer* buf = bc._extract_buffer(cache, b);
+	trim_buffer(buf, buf->offset, epos);
+	bc._add_buffer(cache, buf, 0, nullptr);
+      }
+    }
+  }
+  dout(25) << __func__ << " output bc=" << bc << dendl;
+}
+
 // Checks if two Blobs can be joined together.
 // The important (unchecked) condition is that both Blobs belong to the same object.
 // Verifies if 'other' Blob can be deleted but its content moved to 'this' Blob.
@@ -2640,6 +2746,9 @@ void BlueStore::Blob::merge_blob(Blob* src)
     dst->bc.writing.insert(wrt_dst_it, buf);
   }
 }
+
+#undef dout_context
+#define dout_context coll->store->cct
 
 void BlueStore::Blob::finish_write(uint64_t seq)
 {
@@ -2890,7 +2999,9 @@ void BlueStore::ExtentMap::make_range_shared(
       Blob* b = blob.is_compressed() ? nullptr :
 	find_mergable_companion(e.blob.get(), e.blob_start(), blob_width, candidates);
       if (b) {
-	dout(20) << __func__ << " merging to: " << *b << dendl;
+	dout(20) << __func__ << " merging to: " << *b << " bc=" << b->bc << dendl;
+	e.blob->sanitize_buffers(store->cct, oldo->c->cache);
+	b->sanitize_buffers(store->cct, oldo->c->cache);
 	b->merge_blob(e.blob.get());
 	for (auto p : blob.get_extents()) {
 	  if (p.is_valid()) {
