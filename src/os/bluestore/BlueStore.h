@@ -661,7 +661,7 @@ public:
     }
 
     bool can_merge_blob(const Blob* other, uint32_t& blob_end) const;
-    void merge_blob(Blob* other);
+    uint32_t merge_blob(CephContext* cct, Blob* blob_to_dissolve);
 
     bool can_split_at(uint32_t blob_offset) const {
       return used_in_blob.can_split_at(blob_offset) &&
