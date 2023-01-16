@@ -170,11 +170,41 @@
       </li>
     </cd-card>
 
-    <cd-card title="Capacity utilization"
+    <cd-card title="Cluster utilization"
              i18n-title
              class="col-sm-6 px-3">
       <div class="ms-4 me-4">
-        Text
+        <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
+        </cd-dashboard-time-selector>
+        <ng-container *ngIf="capacity">
+          <cd-dashboard-area-chart chartTitle="Used Capacity"
+                                   [maxValue]="capacity.total_bytes"
+                                   dataUnits="bytes"
+                                   label="Used Capacity"
+                                   [data]="queriesResults.USEDCAPACITY">
+          </cd-dashboard-area-chart>
+        </ng-container>
+        <cd-dashboard-area-chart chartTitle="IOPS"
+                                 dataUnits="none"
+                                 label="IPS"
+                                 label2="OPS"
+                                 [data]="queriesResults.IPS"
+                                 [data2]="queriesResults.OPS">
+        </cd-dashboard-area-chart>
+        <cd-dashboard-area-chart chartTitle="Latency"
+                                 dataUnits="ms"
+                                 label="Read"
+                                 label2="Write"
+                                 [data]="queriesResults.READLATENCY"
+                                 [data2]="queriesResults.WRITELATENCY">
+        </cd-dashboard-area-chart>
+        <cd-dashboard-area-chart chartTitle="Client Throughput"
+                                 dataUnits="bytesPerSecond"
+                                 label="Read"
+                                 label2="Write"
+                                 [data]="queriesResults.READCLIENTTHROUGHPUT"
+                                 [data2]="queriesResults.WRITECLIENTTHROUGHPUT">
+        </cd-dashboard-area-chart>
       </div>
     </cd-card>
 
