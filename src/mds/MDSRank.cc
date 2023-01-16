@@ -2905,6 +2905,8 @@ void MDSRankDispatcher::handle_asok_command(
     command_openfiles_ls(f);
   } else if (command == "dump inode") {
     command_dump_inode(f, cmdmap, *css);
+  } else if (command == "dump dir") {
+    command_dump_dir(f, cmdmap, *css);
   } else if (command == "damage ls") {
     std::lock_guard l(mds_lock);
     damage_table.dump(f);
@@ -3343,6 +3345,36 @@ void MDSRank::command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostr
   if (!success) {
     ss << "dump inode failed, wrong inode number or the inode is not cached";
   }
+}
+
+void MDSRank::command_dump_dir(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss)
+{
+  std::lock_guard l(mds_lock);
+  std::string path;
+  bool got = cmd_getval(cmdmap, "path", path);
+  if (!got) {
+    ss << "missing path argument";
+    return;
+  }
+
+  bool dentry_dump = false;
+  cmd_getval(cmdmap, "dentry_dump", dentry_dump);
+
+  CInode *in = mdcache->cache_traverse(filepath(path.c_str()));
+  if (!in) {
+    ss << "directory inode not in cache";
+    return;
+  }
+
+  f->open_array_section("dirs");
+  frag_vec_t leaves;
+  in->dirfragtree.get_leaves_under(frag_t(), leaves);
+  for (const auto& leaf : leaves) {
+    CDir *dir = in->get_dirfrag(leaf);
+    if (dir)
+      mdcache->dump_dir(f, dir, dentry_dump);
+  }
+  f->close_section();
 }
 
 void MDSRank::dump_status(Formatter *f) const
