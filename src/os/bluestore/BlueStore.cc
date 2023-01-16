@@ -3310,31 +3310,38 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
     if (e.blob->last_encoded_id >= 0) {
       cb = id_to_blob[e.blob->last_encoded_id];
       blob_duped = false;
-    } else { 
+    } else {
       // dup the blob
       const bluestore_blob_t& blob = e.blob->get_blob();
       ceph_assert(blob.is_shared());
       ceph_assert(e.blob->shared_blob->is_loaded());
+      ceph_assert(!blob.has_unused());
       cb = new Blob();
       e.blob->last_encoded_id = n;
       id_to_blob[n] = cb;
-      e.blob->dup(*cb);
+      ceph_assert(ep->blob_start() < end);
+      // dup entire blob or dup parts only
+      if (blob.is_compressed()) {
+	// copy whole blob, but without used_in_blob
+	cb->dup(*e.blob, false);
+      } else if (e.blob_start() >= srcoff && e.blob_end() <= end) {
+	// copy whole blob, including used_in_blob
+	cb->dup(*e.blob, true);
+      } else {
+	// we must copy source blob diligently region-by-region
+	// initialize shared_blob
+	cb->shared_blob = e.blob->shared_blob;
+      }
       // By default do not copy buffers to clones, and let them read data by themselves.
       // The exception are 'writing' buffers, which are not yet stable on device.
       bool some_copied = e.blob->bc._dup_writing(cb->shared_blob->get_cache(), &cb->bc);
       if (some_copied) {
 	// Pretend we just wrote those buffers;
 	// we need to get _finish_write called, so we can clear then from writing list.
-	// Otherwise it will be stuck until someone does write-op on clone.
+	// Otherwise it will be stuck until someone does write-op on the clone.
 	txc->blobs_written.insert(cb);
       }
 
-      // bump the extent refs on the copied blob's extents
-      for (auto p : blob.get_extents()) {
-        if (p.is_valid()) {
-          e.blob->shared_blob->get_ref(p.offset, p.length);
-        }
-      }
       txc->write_shared_blob(e.blob->shared_blob);
       dout(20) << __func__ << "    new " << *cb << dendl;
     }
@@ -3354,7 +3361,19 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
     Extent* ne = new Extent(e.logical_offset + skip_front + dstoff - srcoff,
       e.blob_offset + skip_front, e.length - skip_front - skip_back, cb);
     newo->extent_map.extent_map.insert(*ne);
-    ne->blob->get_ref(c.get(), ne->blob_offset, ne->length);
+    if (e.blob->get_blob().is_compressed()) {
+      // blob itself was copied, but used_in_blob was not
+      cb->get_ref(c.get(), e.blob_offset + skip_front, e.length - skip_front - skip_back);
+    } else
+      if (e.blob_start() >= srcoff && e.blob_end() <= end) {
+      // blob already copied
+    } else {
+      // copy part
+      uint32_t min_release_size = e.blob->get_blob().get_release_size(c->store->min_alloc_size);
+      cb->copy_from(b->cct, *e.blob, min_release_size,
+		    e.blob_offset + skip_front, e.length - skip_front - skip_back);
+    }
+
     // fixme: we may leave parts of new blob unreferenced that could
     // be freed (relative to the shared_blob).
     txc->statfs_delta.stored() += ne->length;
@@ -4172,7 +4191,7 @@ void BlueStore::ExtentMap::dirty_range(
   uint32_t offset,
   uint32_t length)
 {
-  dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
+  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   if (shards.empty()) {
     dout(20) << __func__ << " mark inline shard dirty" << dendl;
