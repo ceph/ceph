@@ -2529,7 +2529,7 @@ void BlueStore::Blob::sanitize_buffers(CephContext* cct, BufferCacheShard* cache
 // 1) checksums: same type and size
 // 2) tracker: same au size
 // 3) extents: must be disjointed
-// 4) unused: must not be present
+// 4) unused: ignored, will be cleared
 //
 // Returns:
 // false - Blobs are incompatible
@@ -2554,7 +2554,7 @@ bool BlueStore::Blob::can_merge_blob(const Blob* other, uint32_t& blob_width) co
   const bluestore_blob_use_tracker_t& ytr = y->get_blob_use_tracker();
   if (xtr.au_size != ytr.au_size) return false;
   // unused
-  if (xb.has_unused() || yb.has_unused()) return false;
+  // ignore unused, we will clear it up anyway
   // extents
   // the success is when there is no offset that is used by both blobs
   auto skip_empty = [&](const PExtentVector& list, PExtentVector::const_iterator& it, uint32_t& pos) {
@@ -2844,6 +2844,8 @@ void BlueStore::Blob::merge_blob(Blob* src)
   tmp_extents.reserve(src_extents.size() + dst_extents.size());
   constexpr uint32_t end_pos = std::numeric_limits<uint32_t>::max();
 
+  // drop unused, do not recalc it, unlikely those chunks could be used in future
+  dst_blob.clear_flag(bluestore_blob_t::FLAG_HAS_UNUSED);
   uint32_t csum_chunk_order = src_blob.csum_chunk_order;
   uint32_t csum_value_size;
   const char* src_csum_ptr;
@@ -4830,7 +4832,8 @@ void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
   // update blob
   bluestore_blob_t& blob = b->dirty_blob();
   blob.set_flag(bluestore_blob_t::FLAG_SHARED);
-
+  // drop any unused parts, unlikely we could use them in future
+  blob.clear_flag(bluestore_blob_t::FLAG_HAS_UNUSED);
   // update shared blob
   b->shared_blob->loaded = true;
   b->shared_blob->persistent = new bluestore_shared_blob_t(sbid);
