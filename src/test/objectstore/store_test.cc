@@ -4571,6 +4571,7 @@ public:
 
     if (srcoff > srcdata.length() - 1) {
       srcoff = srcdata.length() - 1;
+      dstoff = srcoff;
     }
     if (srcoff + len > srcdata.length()) {
       len = srcdata.length() - srcoff;
