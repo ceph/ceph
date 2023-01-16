@@ -662,6 +662,12 @@ public:
       o.blob_bl = blob_bl;
 #endif
     }
+    void dup(const Blob& from, bool copy_used_in_blob);
+    void copy_from(CephContext* cct, const Blob& from,
+		   uint32_t min_release_size, uint32_t start, uint32_t len);
+    void copy_extents(CephContext* cct, const Blob& from, uint32_t start,
+		      uint32_t pre_len, uint32_t main_len, uint32_t post_len);
+    void copy_extents_over_empty(CephContext* cct, const Blob& from, uint32_t start, uint32_t len);
 
     inline const bluestore_blob_t& get_blob() const {
       return blob;
