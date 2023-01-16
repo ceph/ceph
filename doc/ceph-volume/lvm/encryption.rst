@@ -11,7 +11,6 @@ robust.
 
 In this case, ``ceph-volume lvm`` follows these constraints:
 
-* only LUKS (version 1) is used
 * Logical Volumes are encrypted, while their underlying PVs (physical volumes)
   aren't
 * Non-LVM devices like partitions are also encrypted with the same OSD key
@@ -20,9 +19,7 @@ In this case, ``ceph-volume lvm`` follows these constraints:
 LUKS
 ----
 There are currently two versions of LUKS, 1 and 2. Version 2 is a bit easier
-to implement but not widely available in all distros Ceph supports. LUKS 1 is
-not going to be deprecated in favor of LUKS 2, so in order to have as wide
-support as possible, ``ceph-volume`` uses LUKS version 1.
+to implement but not widely available in all distros Ceph supports. 
 
 .. note:: Version 1 of LUKS is just referenced as "LUKS" whereas version 2 is
           referred to as LUKS2
