@@ -355,6 +355,7 @@ public:
     paddr_t existing_paddr,
     extent_len_t length) {
     LOG_PREFIX(TransactionManager::map_existing_extent);
+    // FIXME: existing_paddr can be absolute and pending
     ceph_assert(existing_paddr.is_absolute());
     assert(t.is_retired(existing_paddr, length));
 
