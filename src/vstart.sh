@@ -1162,6 +1162,22 @@ EOF
 	fi
         ceph_adm config-key set mgr/cephadm/ssh_identity_key -i ~/.ssh/id_rsa
         ceph_adm config-key set mgr/cephadm/ssh_identity_pub -i ~/.ssh/id_rsa.pub
+        local retry_flag=0
+        while [ $retry_flag -lt 7 ]
+        do
+            if [ `ceph_adm mgr stat | jq '.available'` = "true" ]; then
+                ceph_adm mgr module enable cephadm
+                break
+            else
+                retry_flag=$(($retry_flag + 1))
+                if [ $retry_flag -eq 7 ]; then
+                    debug echo "mgr is not available, exit."
+                    exit
+                fi
+                debug echo "mgr is not available, retry after 10 seconds ($retry_flag /6)"
+                sleep 10
+            fi
+        done
         ceph_adm mgr module enable cephadm
         ceph_adm orch set backend cephadm
         ceph_adm orch host add "$(hostname)"
