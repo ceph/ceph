@@ -80,14 +80,6 @@ export class RgwConfigModalComponent implements OnInit {
       ssl_cert: [null, CdValidators.sslCert()],
       client_cert: [null, CdValidators.pemCert()],
       client_key: [null, CdValidators.sslPrivKey()],
-      role: [
-        null,
-        [
-          CdValidators.requiredIf({
-            auth_method: 'agent'
-          })
-        ]
-      ],
       kmsEnabled: [{ value: false }],
       s3Enabled: [{ value: false }]
     });
