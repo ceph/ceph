@@ -1925,9 +1925,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   std::optional<std::string> obj_name;
   std::string input_file;
   bool with_reference = false;
+  bool with_qos = false;
 
   Rados rados;
   IoCtx io_ctx;
+  rados_qos_profile_t qos_profile;
 
   i = opts.find("create");
   if (i != opts.end()) {
@@ -2162,6 +2164,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     input_file = i->second;
   }
+  i = opts.find("with-qos");
+  if (i != opts.end()) {
+    with_qos = true;
+  }
 
   // open rados
   ret = rados.init_with_context(g_ceph_context);
@@ -2206,6 +2212,20 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
            << (pool_name ? pool_name : std::string("with id ") + std::to_string(pgid->pool())) << ": "
 	   << cpp_strerror(ret) << std::endl;
       return 1;
+    }
+
+    // If requested, create and associate a QoS profile with the io context
+    if (with_qos) {
+      // Get config params related to res, wgt and lim for the client
+      auto cct = reinterpret_cast<CephContext*>(rados.cct());
+      uint64_t res = cct->_conf.get_val<uint64_t>("dmclock_client_res");
+      uint64_t wgt = cct->_conf.get_val<uint64_t>("dmclock_client_wgt");
+      uint64_t lim = cct->_conf.get_val<uint64_t>("dmclock_client_lim");
+      cout << "client QoS:  [res:" << res
+           << " wgt:" << wgt
+           << " lim:" << lim << "]" << std::endl;
+      qos_profile = rados.qos_profile_create(res, wgt, lim);
+      io_ctx.set_qos_profile(qos_profile);
     }
 
    // align op_size
@@ -4267,6 +4287,8 @@ int main(int argc, const char **argv)
       opts["pgid"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--input-file", (char*)NULL)) {
       opts["input_file"] = val;
+    } else if (ceph_argparse_flag(args, i, "-q", "--with-qos", (char*)NULL)) {
+      opts["with-qos"] = "true";
     } else {
       if (val[0] == '-')
         usage_exit();
