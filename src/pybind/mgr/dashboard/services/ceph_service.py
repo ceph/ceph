@@ -211,13 +211,11 @@ class CephService(object):
             kms_vault_token: str = CephService.send_command('mon', 'config get',
                                                             who=name_to_config_section(full_daemon_name),  # noqa E501 #pylint: disable=line-too-long
                                                             key='rgw_crypt_vault_token_file')  # noqa E501 #pylint: disable=line-too-long
-            if (
-                kms_vault_auth.strip() != ""
-                and kms_vault_engine.strip() != ""
-                and kms_vault_address.strip() != ""
-                and kms_vault_token.strip() != ""
-            ):
-                kms_vault_configured = True
+            if (kms_vault_auth.strip() != "" and kms_vault_engine.strip() != "" and kms_vault_address.strip() != ""):  # noqa E501 #pylint: disable=line-too-long
+                if(kms_vault_auth == 'token' and kms_vault_token.strip() == ""):
+                    kms_vault_configured = False
+                else:
+                    kms_vault_configured = True
 
         if sse_s3_backend.strip() == 'vault':
             s3_vault_auth: str = CephService.send_command('mon', 'config get',
@@ -233,13 +231,12 @@ class CephService(object):
             s3_vault_token: str = CephService.send_command('mon', 'config get',
                                                            who=name_to_config_section(full_daemon_name),  # noqa E501 #pylint: disable=line-too-long
                                                            key='rgw_crypt_sse_s3_vault_token_file')  # noqa E501 #pylint: disable=line-too-long
-            if (
-                s3_vault_auth.strip() != ""
-                and s3_vault_engine.strip() != ""
-                and s3_vault_address.strip() != ""
-                and s3_vault_token.strip() != ""
-            ):
-                s3_vault_configured = True
+
+            if (s3_vault_auth.strip() != "" and s3_vault_engine.strip() != "" and s3_vault_address.strip() != ""):  # noqa E501 #pylint: disable=line-too-long
+                if(s3_vault_auth == 'token' and s3_vault_token.strip() == ""):
+                    s3_vault_configured = False
+                else:
+                    s3_vault_configured = True
 
         vault_stats.append(kms_vault_configured)
         vault_stats.append(s3_vault_configured)
