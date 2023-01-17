@@ -2758,7 +2758,8 @@ void OSDMap::_apply_primary_affinity(ps_t seed,
 			seed, o) >> 16) >= a) {
       // we chose not to use this primary.  note it anyway as a
       // fallback in case we don't pick anyone else, but keep looking.
-      if (pos < 0)
+      // don't use it if affinity is 0, though.
+      if (pos < 0 && a > 0)
 	pos = i;
     } else {
       pos = i;
