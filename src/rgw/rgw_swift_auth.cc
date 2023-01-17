@@ -98,7 +98,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
     rgw_user uid(s->account_name);
     if (uid.tenant.empty()) {
       rgw_user tenanted_uid(uid.id, uid.id);
-      user = store->get_user(tenanted_uid);
+      user = driver->get_user(tenanted_uid);
       if (user->load_user(dpp, s->yield) >= 0) {
 	/* Succeeded */
 	found = true;
@@ -106,7 +106,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
     }
 
     if (!found) {
-      user = store->get_user(uid);
+      user = driver->get_user(uid);
       if (user->load_user(dpp, s->yield) < 0) {
 	throw -EPERM;
       }
@@ -119,7 +119,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   b.tenant = std::move(bucket_tenant);
   b.name = std::move(bucket_name);
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = store->get_bucket(dpp, nullptr, b, &bucket, s->yield);
+  int ret = driver->get_bucket(dpp, nullptr, b, &bucket, s->yield);
   if (ret < 0) {
     throw ret;
   }
@@ -128,7 +128,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
                  << dendl;
 
   std::unique_ptr<rgw::sal::User> user;
-  user = store->get_user(bucket->get_info().owner);
+  user = driver->get_user(bucket->get_info().owner);
   if (user->load_user(dpp, s->yield) < 0) {
     throw -EPERM;
   }
@@ -459,7 +459,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   ldpp_dout(dpp, 10) << "swift user=" << swift_user << dendl;
 
   std::unique_ptr<rgw::sal::User> user;
-  ret = store->get_user_by_swift(dpp, swift_user, s->yield, &user);
+  ret = driver->get_user_by_swift(dpp, swift_user, s->yield, &user);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user" << dendl;
     throw ret;
@@ -580,7 +580,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   }
 
   std::unique_ptr<rgw::sal::User> user;
-  ret = store->get_user_by_swift(dpp, swift_user, s->yield, &user);
+  ret = driver->get_user_by_swift(dpp, swift_user, s->yield, &user);
   if (ret < 0) {
     throw ret;
   }
@@ -697,7 +697,7 @@ void RGW_SWIFT_Auth_Get::execute(optional_yield y)
 
   user_str = user_name;
 
-  ret = store->get_user_by_swift(s, user_str, s->yield, &user);
+  ret = driver->get_user_by_swift(s, user_str, s->yield, &user);
   if (ret < 0) {
     ret = -EACCES;
     goto done;
@@ -751,14 +751,14 @@ done:
   end_header(s);
 }
 
-int RGWHandler_SWIFT_Auth::init(rgw::sal::Store* store, req_state *state,
+int RGWHandler_SWIFT_Auth::init(rgw::sal::Driver* driver, req_state *state,
 				rgw::io::BasicClient *cio)
 {
   state->dialect = "swift-auth";
   state->formatter = new JSONFormatter;
   state->format = RGWFormat::JSON;
 
-  return RGWHandler::init(store, state, cio);
+  return RGWHandler::init(driver, state, cio);
 }
 
 int RGWHandler_SWIFT_Auth::authorize(const DoutPrefixProvider *dpp, optional_yield)

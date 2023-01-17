@@ -14,7 +14,7 @@ except ImportError:
     # fallback to normal sort
     natsorted = sorted  # type: ignore
 
-from ceph.deployment.inventory import Device
+from ceph.deployment.inventory import Device  # noqa: F401; pylint: disable=unused-variable
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, OSDMethod
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spec_allow_invalid_from_json, TracingSpec
 from ceph.deployment.hostspec import SpecValidationError
@@ -54,6 +54,7 @@ class ServiceType(enum.Enum):
     alertmanager = 'alertmanager'
     grafana = 'grafana'
     node_exporter = 'node-exporter'
+    ceph_exporter = 'ceph-exporter'
     prometheus = 'prometheus'
     loki = 'loki'
     promtail = 'promtail'
@@ -227,8 +228,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(OrchestratorCli, self).__init__(*args, **kwargs)
-        self.ident = set()  # type: Set[str]
-        self.fault = set()  # type: Set[str]
+        self.ident: Set[str] = set()
+        self.fault: Set[str] = set()
         self._load()
         self._refresh_health()
 
@@ -510,7 +511,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 "On": "On",
                 "Off": "Off",
                 True: "Yes",
-                False: "",
+                False: "No",
             }
 
             out = []
@@ -1156,6 +1157,7 @@ Usage:
                    placement: Optional[str] = None,
                    _end_positional_: int = 0,
                    realm: Optional[str] = None,
+                   zonegroup: Optional[str] = None,
                    zone: Optional[str] = None,
                    port: Optional[int] = None,
                    ssl: bool = False,
@@ -1178,6 +1180,7 @@ Usage:
         spec = RGWSpec(
             service_id=svc_id,
             rgw_realm=realm,
+            rgw_zonegroup=zonegroup,
             rgw_zone=zone,
             rgw_frontend_port=port,
             ssl=ssl,
@@ -1555,7 +1558,7 @@ Usage:
 
     @_cli_write_command('orch upgrade status')
     def _upgrade_status(self) -> HandleCommandResult:
-        """Check service versions vs available and target containers"""
+        """Check the status of any potential ongoing upgrade operation"""
         completion = self.upgrade_status()
         status = raise_if_exception(completion)
         r = {

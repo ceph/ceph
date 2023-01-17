@@ -32,10 +32,6 @@
 #include "rgw_lc_tier.h"
 #include "rgw_notify.h"
 
-// this seems safe to use, at least for now--arguably, we should
-// prefer header-only fmt, in general
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include "fmt/format.h"
 
 #include "services/svc_sys_obj.h"
@@ -247,10 +243,10 @@ void *RGWLC::LCWorker::entry() {
   return NULL;
 }
 
-void RGWLC::initialize(CephContext *_cct, rgw::sal::Store* _store) {
+void RGWLC::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
   cct = _cct;
-  store = _store;
-  sal_lc = store->get_lifecycle();
+  driver = _driver;
+  sal_lc = driver->get_lifecycle();
   max_objs = cct->_conf->rgw_lc_max_objs;
   if (max_objs > HASH_PRIME)
     max_objs = HASH_PRIME;
@@ -317,7 +313,7 @@ static bool obj_has_expired(const DoutPrefixProvider *dpp, CephContext *cct, cep
   return (timediff >= cmp);
 }
 
-static bool pass_object_lock_check(rgw::sal::Store* store, rgw::sal::Object* obj, const DoutPrefixProvider *dpp)
+static bool pass_object_lock_check(rgw::sal::Driver* driver, rgw::sal::Object* obj, const DoutPrefixProvider *dpp)
 {
   if (!obj->get_bucket()->get_info().obj_lock_enabled()) {
     return true;
@@ -365,7 +361,7 @@ static bool pass_object_lock_check(rgw::sal::Store* store, rgw::sal::Object* obj
 }
 
 class LCObjsLister {
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   rgw::sal::Bucket* bucket;
   rgw::sal::Bucket::ListParams list_params;
   rgw::sal::Bucket::ListResults list_results;
@@ -375,11 +371,11 @@ class LCObjsLister {
   int64_t delay_ms;
 
 public:
-  LCObjsLister(rgw::sal::Store* _store, rgw::sal::Bucket* _bucket) :
-      store(_store), bucket(_bucket) {
+  LCObjsLister(rgw::sal::Driver* _driver, rgw::sal::Bucket* _bucket) :
+      driver(_driver), bucket(_bucket) {
     list_params.list_versions = bucket->versioned();
     list_params.allow_unordered = true;
-    delay_ms = store->ctx()->_conf.get_val<int64_t>("rgw_lc_thread_delay");
+    delay_ms = driver->ctx()->_conf.get_val<int64_t>("rgw_lc_thread_delay");
   }
 
   void set_prefix(const string& p) {
@@ -457,14 +453,14 @@ struct op_env {
   using LCWorker = RGWLC::LCWorker;
 
   lc_op op;
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   LCWorker* worker;
   rgw::sal::Bucket* bucket;
   LCObjsLister& ol;
 
-  op_env(lc_op& _op, rgw::sal::Store* _store, LCWorker* _worker,
+  op_env(lc_op& _op, rgw::sal::Driver* _driver, LCWorker* _worker,
 	 rgw::sal::Bucket* _bucket, LCObjsLister& _ol)
-    : op(_op), store(_store), worker(_worker), bucket(_bucket),
+    : op(_op), driver(_driver), worker(_worker), bucket(_bucket),
       ol(_ol) {}
 }; /* op_env */
 
@@ -478,7 +474,7 @@ struct lc_op_ctx {
   boost::optional<std::string> next_key_name;
   ceph::real_time effective_mtime;
 
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   rgw::sal::Bucket* bucket;
   lc_op& op; // ok--refers to expanded env.op
   LCObjsLister& ol;
@@ -494,10 +490,10 @@ struct lc_op_ctx {
 	    boost::optional<std::string> next_key_name,
 	    ceph::real_time effective_mtime,
 	    const DoutPrefixProvider *dpp, WorkQ* wq)
-    : cct(env.store->ctx()), env(env), o(o), next_key_name(next_key_name),
+    : cct(env.driver->ctx()), env(env), o(o), next_key_name(next_key_name),
       effective_mtime(effective_mtime),
-      store(env.store), bucket(env.bucket), op(env.op), ol(env.ol),
-      rctx(env.store), dpp(dpp), wq(wq)
+      driver(env.driver), bucket(env.bucket), op(env.op), ol(env.ol),
+      rctx(env.driver), dpp(dpp), wq(wq)
     {
       obj = bucket->get_object(o.key);
     }
@@ -517,7 +513,7 @@ static int remove_expired_obj(
   const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool remove_indeed,
   rgw::notify::EventType event_type)
 {
-  auto& store = oc.store;
+  auto& driver = oc.driver;
   auto& bucket_info = oc.bucket->get_info();
   auto& o = oc.o;
   auto obj_key = o.key;
@@ -535,7 +531,7 @@ static int remove_expired_obj(
   std::unique_ptr<rgw::sal::Bucket> bucket;
   std::unique_ptr<rgw::sal::Object> obj;
 
-  ret = store->get_bucket(nullptr, bucket_info, &bucket);
+  ret = driver->get_bucket(nullptr, bucket_info, &bucket);
   if (ret < 0) {
     return ret;
   }
@@ -544,7 +540,7 @@ static int remove_expired_obj(
   std::unique_ptr<rgw::sal::User> user;
   if (! bucket->get_owner()) {
     auto& bucket_info = bucket->get_info();
-    user = store->get_user(bucket_info.owner);
+    user = driver->get_user(bucket_info.owner);
     // forgive me, lord
     if (user) {
       bucket->set_owner(user.get());
@@ -562,8 +558,8 @@ static int remove_expired_obj(
   del_op->params.unmod_since = meta.mtime;
   del_op->params.marker_version_id = version_id;
 
-  // notification supported only for RADOS store for now
-  notify = store->get_notification(dpp, obj.get(), nullptr, event_type,
+  // notification supported only for RADOS driver for now
+  notify = driver->get_notification(dpp, obj.get(), nullptr, event_type,
 				   bucket.get(), lc_id,
 				   const_cast<std::string&>(oc.bucket->get_tenant()),
 				   lc_req_id, null_yield);
@@ -885,7 +881,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
       if (ret < 0) {
           if (ret == (-ENOENT))
             return 0;
-          ldpp_dout(this, 0) << "ERROR: store->list_objects():" <<dendl;
+          ldpp_dout(this, 0) << "ERROR: driver->list_objects():" <<dendl;
           return ret;
       }
 
@@ -1135,7 +1131,7 @@ public:
 		      << oc.wq->thr_name() << dendl;
 
     return is_expired &&
-      pass_object_lock_check(oc.store, oc.obj.get(), dpp);
+      pass_object_lock_check(oc.driver, oc.obj.get(), dpp);
   }
 
   int process(lc_op_ctx& oc) {
@@ -1307,7 +1303,7 @@ public:
     }
 
     std::string tier_type = ""; 
-    rgw::sal::ZoneGroup& zonegroup = oc.store->get_zone()->get_zonegroup();
+    rgw::sal::ZoneGroup& zonegroup = oc.driver->get_zone()->get_zonegroup();
 
     rgw_placement_rule target_placement;
     target_placement.inherit_from(oc.bucket->get_placement_rule());
@@ -1318,7 +1314,7 @@ public:
     if (!r && oc.tier->get_tier_type() == "cloud-s3") {
       ldpp_dout(oc.dpp, 30) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
       if (!oc.o.is_current() &&
-          !pass_object_lock_check(oc.store, oc.obj.get(), oc.dpp)) {
+          !pass_object_lock_check(oc.driver, oc.obj.get(), oc.dpp)) {
         /* Skip objects which has object lock enabled. */
         ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is locked. Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
         return 0;
@@ -1331,7 +1327,7 @@ public:
         return r;
       }
     } else {
-      if (!oc.store->valid_placement(target_placement)) {
+      if (!oc.driver->valid_placement(target_placement)) {
         ldpp_dout(oc.dpp, 0) << "ERROR: non existent dest placement: "
 	  		     << target_placement
                              << " bucket="<< oc.bucket
@@ -1521,7 +1517,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     return 0;
   }
 
-  int ret = store->get_bucket(this, nullptr, bucket_tenant, bucket_name, &bucket, null_yield);
+  int ret = driver->get_bucket(this, nullptr, bucket_tenant, bucket_name, &bucket, null_yield);
   if (ret < 0) {
     ldpp_dout(this, 0) << "LC:get_bucket for " << bucket_name
 		       << " failed" << dendl;
@@ -1569,7 +1565,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     }
 
   /* fetch information for zone checks */
-  rgw::sal::Zone* zone = store->get_zone();
+  rgw::sal::Zone* zone = driver->get_zone();
 
   auto pf = [](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {
     auto wt =
@@ -1620,7 +1616,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       pre_marker = next_marker;
     }
 
-    LCObjsLister ol(store, bucket.get());
+    LCObjsLister ol(driver, bucket.get());
     ol.set_prefix(prefix_iter->first);
 
     if (! zone_check(op, zone)) {
@@ -1633,11 +1629,11 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     if (ret < 0) {
       if (ret == (-ENOENT))
         return 0;
-      ldpp_dout(this, 0) << "ERROR: store->list_objects():" << dendl;
+      ldpp_dout(this, 0) << "ERROR: driver->list_objects():" << dendl;
       return ret;
     }
 
-    op_env oenv(op, store, worker, bucket.get(), ol);
+    op_env oenv(op, driver, worker, bucket.get(), ol);
     LCOpRule orule(oenv);
     orule.build(); // why can't ctor do it?
     rgw_bucket_dir_entry* o{nullptr};
@@ -1828,7 +1824,7 @@ int RGWLC::process(LCWorker* worker,
      * do need the entry {pro,epi}logue which update the state entry
      * for this bucket) */
     auto bucket_lc_key = get_bucket_lc_key(optional_bucket->get_key());
-    auto index = get_lc_index(store->ctx(), bucket_lc_key);
+    auto index = get_lc_index(driver->ctx(), bucket_lc_key);
     ret = process_bucket(index, max_secs, worker, bucket_lc_key, once);
     return ret;
   } else {
@@ -2381,11 +2377,11 @@ void RGWLifecycleConfiguration::generate_test_instances(
 
 template<typename F>
 static int guard_lc_modify(const DoutPrefixProvider *dpp,
-                           rgw::sal::Store* store,
+                           rgw::sal::Driver* driver,
 			   rgw::sal::Lifecycle* sal_lc,
 			   const rgw_bucket& bucket, const string& cookie,
 			   const F& f) {
-  CephContext *cct = store->ctx();
+  CephContext *cct = driver->ctx();
 
   auto bucket_lc_key = get_bucket_lc_key(bucket);
   string oid; 
@@ -2455,7 +2451,7 @@ int RGWLC::set_bucket_config(rgw::sal::Bucket* bucket,
   rgw_bucket& b = bucket->get_key();
 
 
-  ret = guard_lc_modify(this, store, sal_lc.get(), b, cookie,
+  ret = guard_lc_modify(this, driver, sal_lc.get(), b, cookie,
 			[&](rgw::sal::Lifecycle* sal_lc, const string& oid,
 			    rgw::sal::Lifecycle::LCEntry& entry) {
     return sal_lc->set_entry(oid, entry);
@@ -2483,7 +2479,7 @@ int RGWLC::remove_bucket_config(rgw::sal::Bucket* bucket,
     }
   }
 
-  ret = guard_lc_modify(this, store, sal_lc.get(), b, cookie,
+  ret = guard_lc_modify(this, driver, sal_lc.get(), b, cookie,
 			[&](rgw::sal::Lifecycle* sal_lc, const string& oid,
 			    rgw::sal::Lifecycle::LCEntry& entry) {
     return sal_lc->rm_entry(oid, entry);
@@ -2501,7 +2497,7 @@ RGWLC::~RGWLC()
 namespace rgw::lc {
 
 int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
-                       rgw::sal::Store* store,
+                       rgw::sal::Driver* driver,
 		       rgw::sal::Lifecycle* sal_lc,
 		       rgw::sal::Bucket* bucket)
 {
@@ -2512,7 +2508,7 @@ int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
 
   auto bucket_lc_key = get_bucket_lc_key(bucket->get_key());
   std::string lc_oid;
-  get_lc_oid(store->ctx(), bucket_lc_key, &lc_oid);
+  get_lc_oid(driver->ctx(), bucket_lc_key, &lc_oid);
 
   std::unique_ptr<rgw::sal::Lifecycle::LCEntry> entry;
   // There are multiple cases we need to encounter here
@@ -2531,11 +2527,11 @@ int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
 			   << " creating " << dendl;
     // TODO: we have too many ppl making cookies like this!
     char cookie_buf[COOKIE_LEN + 1];
-    gen_rand_alphanumeric(store->ctx(), cookie_buf, sizeof(cookie_buf) - 1);
+    gen_rand_alphanumeric(driver->ctx(), cookie_buf, sizeof(cookie_buf) - 1);
     std::string cookie = cookie_buf;
 
     ret = guard_lc_modify(dpp,
-      store, sal_lc, bucket->get_key(), cookie,
+      driver, sal_lc, bucket->get_key(), cookie,
       [&lc_oid](rgw::sal::Lifecycle* slc,
 			      const string& oid,
 			      rgw::sal::Lifecycle::LCEntry& entry) {

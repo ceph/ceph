@@ -128,8 +128,6 @@ bool Beacon::ms_dispatch2(const ref_t<Message>& m)
 
 /**
  * Update lagginess state based on response from remote MDSMonitor
- *
- * This function puts the passed message before returning
  */
 void Beacon::handle_mds_beacon(const cref_t<MMDSBeacon> &m)
 {

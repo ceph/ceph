@@ -157,6 +157,10 @@ public:
       delayed_temp_offset += ref->get_length();
       delayed_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
       fresh_block_stats.increment(ref->get_length());
+    } else if (ref->get_paddr().is_absolute()) {
+      assert(ref->is_logical());
+      pre_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
+      fresh_block_stats.increment(ref->get_length());
     } else {
       assert(ref->get_paddr() == make_record_relative_paddr(0));
       ref->set_paddr(make_record_relative_paddr(offset));
@@ -175,19 +179,32 @@ public:
 
   void mark_delayed_extent_inline(LogicalCachedExtentRef& ref) {
     write_set.erase(*ref);
-    ref->set_paddr(make_record_relative_paddr(offset));
+    assert(ref->get_paddr().is_delayed());
+    ref->set_paddr(make_record_relative_paddr(offset),
+                   /* need_update_mapping: */ true);
     offset += ref->get_length();
     inline_block_list.push_back(ref);
     write_set.insert(*ref);
   }
 
-  void mark_delayed_extent_ool(LogicalCachedExtentRef& ref, paddr_t final_addr) {
+  void mark_delayed_extent_ool(LogicalCachedExtentRef& ref) {
+    written_ool_block_list.push_back(ref);
+  }
+
+  void update_delayed_ool_extent_addr(LogicalCachedExtentRef& ref,
+                                      paddr_t final_addr) {
     write_set.erase(*ref);
-    ref->set_paddr(final_addr);
+    assert(ref->get_paddr().is_delayed());
+    ref->set_paddr(final_addr, /* need_update_mapping: */ true);
     assert(!ref->get_paddr().is_null());
     assert(!ref->is_inline());
-    ool_block_list.push_back(ref);
     write_set.insert(*ref);
+  }
+
+  void mark_allocated_extent_ool(LogicalCachedExtentRef& ref) {
+    assert(ref->get_paddr().is_absolute());
+    assert(!ref->is_inline());
+    written_ool_block_list.push_back(ref);
   }
 
   void add_mutated_extent(CachedExtentRef ref) {
@@ -240,6 +257,23 @@ public:
     return ret;
   }
 
+  auto get_valid_pre_alloc_list() {
+    std::list<LogicalCachedExtentRef> ret;
+    assert(num_allocated_invalid_extents == 0);
+    for (auto& extent : pre_alloc_list) {
+      if (extent->is_valid()) {
+	ret.push_back(extent);
+      } else {
+	++num_allocated_invalid_extents;
+      }
+    }
+    return ret;
+  }
+
+  const auto &get_inline_block_list() {
+    return inline_block_list;
+  }
+
   const auto &get_mutated_block_list() {
     return mutated_block_list;
   }
@@ -270,18 +304,12 @@ public:
 
   template <typename F>
   auto for_each_fresh_block(F &&f) const {
-    std::for_each(ool_block_list.begin(), ool_block_list.end(), f);
+    std::for_each(written_ool_block_list.begin(), written_ool_block_list.end(), f);
     std::for_each(inline_block_list.begin(), inline_block_list.end(), f);
   }
 
   const io_stat_t& get_fresh_block_stats() const {
     return fresh_block_stats;
-  }
-
-  size_t get_allocation_size() const {
-    size_t ret = 0;
-    for_each_fresh_block([&ret](auto &e) { ret += e->get_length(); });
-    return ret;
   }
 
   using src_t = transaction_type_t;
@@ -342,9 +370,11 @@ public:
     mutated_block_list.clear();
     fresh_block_stats = {};
     num_delayed_invalid_extents = 0;
+    num_allocated_invalid_extents = 0;
     delayed_alloc_list.clear();
     inline_block_list.clear();
-    ool_block_list.clear();
+    written_ool_block_list.clear();
+    pre_alloc_list.clear();
     retired_set.clear();
     existing_block_list.clear();
     existing_block_stats = {};
@@ -471,7 +501,8 @@ private:
    * Contains a reference (without a refcount) to every extent mutated
    * as part of *this.  No contained extent may be referenced outside
    * of *this.  Every contained extent will be in one of inline_block_list,
-   * ool_block_list, mutated_block_list, or delayed_alloc_list.
+   * written_ool_block_list or/and pre_alloc_list, mutated_block_list,
+   * or delayed_alloc_list.
    */
   ExtentIndex write_set;
 
@@ -480,12 +511,17 @@ private:
    */
   io_stat_t fresh_block_stats;
   uint64_t num_delayed_invalid_extents = 0;
+  uint64_t num_allocated_invalid_extents = 0;
   /// blocks that will be committed with journal record inline
   std::list<CachedExtentRef> inline_block_list;
   /// blocks that will be committed with out-of-line record
-  std::list<CachedExtentRef> ool_block_list;
+  std::list<CachedExtentRef> written_ool_block_list;
   /// blocks with delayed allocation, may become inline or ool above
   std::list<LogicalCachedExtentRef> delayed_alloc_list;
+
+  /// Extents with pre-allocated addresses,
+  /// will be added to written_ool_block_list after write
+  std::list<LogicalCachedExtentRef> pre_alloc_list;
 
   /// list of mutated blocks, holds refcounts, subset of write_set
   std::list<CachedExtentRef> mutated_block_list;
@@ -590,3 +626,7 @@ template <typename T>
 using with_trans_ertr = typename T::base_ertr::template extend<crimson::ct_error::eagain>;
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::io_stat_t> : fmt::ostream_formatter {};
+#endif

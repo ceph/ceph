@@ -53,7 +53,7 @@
                   class="bold">Features</td>
               <td>
                 <span *ngFor="let feature of selection.features_name">
-                  <span class="badge badge-dark mr-2">{{ feature }}</span>
+                  <span class="badge badge-dark me-2">{{ feature }}</span>
                 </span>
               </td>
             </tr>
@@ -132,6 +132,7 @@
         <cd-rbd-snapshot-list [snapshots]="selection.snapshots"
                               [featuresName]="selection.features_name"
                               [poolName]="selection.pool_name"
+                              [primary]="selection.primary"
                               [namespace]="selection.namespace"
                               [mirroring]="selection.mirror_mode"
                               [rbdName]="selection.name"></cd-rbd-snapshot-list>

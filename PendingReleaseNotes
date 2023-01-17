@@ -1,5 +1,9 @@
 >=18.0.0
 
+* The RGW policy parser now rejects unknown principals by default. If you are
+  mirroring policies between RGW and AWS, you may wish to set
+  "rgw policy reject invalid principals" to "false". This affects only newly set
+  policies, not policies that are already in place.
 * RGW's default backend for `rgw_enable_ops_log` changed from RADOS to file.
   The default value of `rgw_ops_log_rados` is now false, and `rgw_ops_log_file_path`
   defaults to "/var/log/ceph/ops-log-$cluster-$name.log".
@@ -68,6 +72,31 @@
   If that is the case, in OSD logs the "You can be hit by THE DUPS BUG" warning
   will be visible.
   Relevant tracker: https://tracker.ceph.com/issues/53729
+* RBD: `rbd device unmap` command gained `--namespace` option.  Support for
+  namespaces was added to RBD in Nautilus 14.2.0 and it has been possible to
+  map and unmap images in namespaces using the `image-spec` syntax since then
+  but the corresponding option available in most other commands was missing.
+* RGW: Compression is now supported for objects uploaded with Server-Side Encryption.
+  When both are enabled, compression is applied before encryption.
+* RGW: the "pubsub" functionality for storing bucket notifications inside Ceph
+  is removed. Together with it, the "pubsub" zone should not be used anymore.
+  The REST operations, as well as radosgw-admin commands for manipulating
+  subscriptions, as well as fetching and acking the notifications are removed 
+  as well.
+  In case that the endpoint to which the notifications are sent maybe down or 
+  disconnected, it is recommended to use persistent notifications to guarantee 
+  the delivery of the notifications. In case the system that consumes the 
+  notifications needs to pull them (instead of the notifications be pushed 
+  to it), an external message bus (e.g. rabbitmq, Kafka) should be used for 
+  that purpose.
+* RBD: Trailing newline in passphrase files (`<passphrase-file>` argument in
+  `rbd encryption format` command and `--encryption-passphrase-file` option
+  in other commands) is no longer stripped.
+* RBD: Support for layered client-side encryption is added.  Cloned images
+  can now be encrypted each with its own encryption format and passphrase,
+  potentially different from that of the parent image.  The efficient
+  copy-on-write semantics intrinsic to unformatted (regular) cloned images
+  are retained.
 
 >=17.2.1
 

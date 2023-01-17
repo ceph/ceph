@@ -47,7 +47,7 @@ describe('FormLoadingDirective', () => {
   });
 
   it('should create an instance', () => {
-    const directive = new FormLoadingDirective(null, null, null);
+    const directive = new FormLoadingDirective(null, null);
     expect(directive).toBeTruthy();
   });
 

@@ -338,7 +338,6 @@ static seastar::future<> run(
           if (client.is_active()) {
             client.msgr = crimson::net::Messenger::create(entity_name_t::OSD(client.sid), client.lname, client.sid);
             client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
-            client.msgr->set_require_authorizer(false);
             client.msgr->set_auth_client(&client.dummy_auth);
             client.msgr->set_auth_server(&client.dummy_auth);
             return client.msgr->start({&client});

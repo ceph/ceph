@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <fmt/chrono.h>
 #include <seastar/core/metrics.hh>
 
 #include "crimson/os/seastore/logging.h"
@@ -26,12 +27,12 @@ namespace crimson::os::seastore {
 
 void segment_info_t::set_open(
     segment_seq_t _seq, segment_type_t _type,
-    data_category_t _category, reclaim_gen_t _generation)
+    data_category_t _category, rewrite_gen_t _generation)
 {
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
   ceph_assert(_category != data_category_t::NUM);
-  ceph_assert(_generation < RECLAIM_GENERATIONS);
+  ceph_assert(is_rewrite_generation(_generation));
   state = Segment::segment_state_t::OPEN;
   seq = _seq;
   type = _type;
@@ -60,13 +61,13 @@ void segment_info_t::set_closed()
 
 void segment_info_t::init_closed(
     segment_seq_t _seq, segment_type_t _type,
-    data_category_t _category, reclaim_gen_t _generation,
+    data_category_t _category, rewrite_gen_t _generation,
     segment_off_t seg_size)
 {
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
   ceph_assert(_category != data_category_t::NUM);
-  ceph_assert(_generation < RECLAIM_GENERATIONS);
+  ceph_assert(is_rewrite_generation(_generation));
   state = Segment::segment_state_t::CLOSED;
   seq = _seq;
   type = _type;
@@ -86,7 +87,7 @@ std::ostream& operator<<(std::ostream &out, const segment_info_t &info)
     out << " " << info.type
         << " " << segment_seq_printer_t{info.seq}
         << " " << info.category
-        << " " << reclaim_gen_printer_t{info.generation}
+        << " " << rewrite_gen_printer_t{info.generation}
         << ", modify_time=" << sea_time_point_printer_t{info.modify_time}
         << ", num_extents=" << info.num_extents
         << ", written_to=" << info.written_to;
@@ -155,14 +156,14 @@ void segments_info_t::add_segment_manager(
 
 void segments_info_t::init_closed(
     segment_id_t segment, segment_seq_t seq, segment_type_t type,
-    data_category_t category, reclaim_gen_t generation)
+    data_category_t category, rewrite_gen_t generation)
 {
   LOG_PREFIX(segments_info_t::init_closed);
   auto& segment_info = segments[segment];
   DEBUG("initiating {} {} {} {} {}, {}, "
         "num_segments(empty={}, opened={}, closed={})",
         segment, type, segment_seq_printer_t{seq},
-        category, reclaim_gen_printer_t{generation},
+        category, rewrite_gen_printer_t{generation},
         segment_info, num_empty, num_open, num_closed);
   ceph_assert(segment_info.is_empty());
   ceph_assert(num_empty > 0);
@@ -189,14 +190,14 @@ void segments_info_t::init_closed(
 
 void segments_info_t::mark_open(
     segment_id_t segment, segment_seq_t seq, segment_type_t type,
-    data_category_t category, reclaim_gen_t generation)
+    data_category_t category, rewrite_gen_t generation)
 {
   LOG_PREFIX(segments_info_t::mark_open);
   auto& segment_info = segments[segment];
   INFO("opening {} {} {} {} {}, {}, "
        "num_segments(empty={}, opened={}, closed={})",
        segment, type, segment_seq_printer_t{seq},
-       category, reclaim_gen_printer_t{generation},
+       category, rewrite_gen_printer_t{generation},
        segment_info, num_empty, num_open, num_closed);
   ceph_assert(segment_info.is_empty());
   ceph_assert(num_empty > 0);
@@ -410,7 +411,8 @@ JournalTrimmerImpl::JournalTrimmerImpl(
     config(config),
     journal_type(type),
     roll_start(roll_start),
-    roll_size(roll_size)
+    roll_size(roll_size),
+    reserved_usage(0)
 {
   config.validate();
   ceph_assert(roll_start >= 0);
@@ -550,6 +552,35 @@ std::size_t JournalTrimmerImpl::get_alloc_journal_size() const
   return static_cast<std::size_t>(ret);
 }
 
+seastar::future<> JournalTrimmerImpl::trim() {
+  return seastar::when_all(
+    [this] {
+      if (should_trim_alloc()) {
+        return trim_alloc(
+        ).handle_error(
+          crimson::ct_error::assert_all{
+            "encountered invalid error in trim_alloc"
+          }
+        );
+      } else {
+        return seastar::now();
+      }
+    },
+    [this] {
+      if (should_trim_dirty()) {
+        return trim_dirty(
+        ).handle_error(
+          crimson::ct_error::assert_all{
+            "encountered invalid error in trim_dirty"
+          }
+        );
+      } else {
+        return seastar::now();
+      }
+    }
+  ).discard_result();
+}
+
 JournalTrimmerImpl::trim_ertr::future<>
 JournalTrimmerImpl::trim_alloc()
 {
@@ -612,7 +643,7 @@ JournalTrimmerImpl::trim_dirty()
             dirty_list,
             [this, &t](auto &e) {
             return extent_callback->rewrite_extent(
-                t, e, DIRTY_GENERATION, NULL_TIME);
+                t, e, INIT_GENERATION, NULL_TIME);
           });
         });
       }).si_then([this, &t] {
@@ -923,7 +954,7 @@ segment_id_t SegmentCleaner::allocate_segment(
     segment_seq_t seq,
     segment_type_t type,
     data_category_t category,
-    reclaim_gen_t generation)
+    rewrite_gen_t generation)
 {
   LOG_PREFIX(SegmentCleaner::allocate_segment);
   assert(seq != NULL_SEG_SEQ);
@@ -946,7 +977,7 @@ segment_id_t SegmentCleaner::allocate_segment(
   }
   ERROR("out of space with {} {} {} {}",
         type, segment_seq_printer_t{seq}, category,
-        reclaim_gen_printer_t{generation});
+        rewrite_gen_printer_t{generation});
   ceph_abort();
   return NULL_SEG_ID;
 }
@@ -1120,7 +1151,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
   reclaim_state->advance(config.reclaim_bytes_per_cycle);
 
   DEBUG("reclaiming {} {}~{}",
-        reclaim_gen_printer_t{reclaim_state->generation},
+        rewrite_gen_printer_t{reclaim_state->generation},
         reclaim_state->start_pos,
         reclaim_state->end_pos);
   double pavail_ratio = get_projected_available_ratio();
@@ -1503,12 +1534,18 @@ segment_id_t SegmentCleaner::get_next_reclaim_segment() const
   }
 }
 
-void SegmentCleaner::reserve_projected_usage(std::size_t projected_usage)
+bool SegmentCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 {
   assert(background_callback->is_ready());
   stats.projected_used_bytes += projected_usage;
-  ++stats.projected_count;
-  stats.projected_used_bytes_sum += stats.projected_used_bytes;
+  if (should_block_io_on_clean()) {
+    stats.projected_used_bytes -= projected_usage;
+    return false;
+  } else {
+    ++stats.projected_count;
+    stats.projected_used_bytes_sum += stats.projected_used_bytes;
+    return true;
+  }
 }
 
 void SegmentCleaner::release_projected_usage(std::size_t projected_usage)
@@ -1540,6 +1577,187 @@ void SegmentCleaner::print(std::ostream &os, bool is_detailed) const
        << ", " << segments;
   }
   os << ")";
+}
+
+RBMCleaner::RBMCleaner(
+  RBMDeviceGroupRef&& rb_group,
+  BackrefManager &backref_manager,
+  bool detailed)
+  : detailed(detailed),
+    rb_group(std::move(rb_group)),
+    backref_manager(backref_manager)
+{}
+
+void RBMCleaner::print(std::ostream &os, bool is_detailed) const
+{
+  // TODO
+  return;
+}
+
+void RBMCleaner::mark_space_used(
+  paddr_t addr,
+  extent_len_t len)
+{
+  LOG_PREFIX(RBMCleaner::mark_space_used);
+  assert(addr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+  auto rbms = rb_group->get_rb_managers();
+  for (auto rbm : rbms) {
+    if (addr.get_device_id() == rbm->get_device_id()) {
+      if (rbm->get_start() <= addr) {
+	INFO("allocate addr: {} len: {}", addr, len);
+	rbm->mark_space_used(addr, len);
+      }
+      return;
+    }
+  }
+}
+
+void RBMCleaner::mark_space_free(
+  paddr_t addr,
+  extent_len_t len)
+{
+  LOG_PREFIX(RBMCleaner::mark_space_free);
+  assert(addr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+  auto rbms = rb_group->get_rb_managers();
+  for (auto rbm : rbms) {
+    if (addr.get_device_id() == rbm->get_device_id()) {
+      if (rbm->get_start() <= addr) {
+	INFO("free addr: {} len: {}", addr, len);
+	rbm->mark_space_free(addr, len);
+      }
+      return;
+    }
+  }
+}
+
+void RBMCleaner::commit_space_used(paddr_t addr, extent_len_t len) 
+{
+  auto rbms = rb_group->get_rb_managers();
+  for (auto rbm : rbms) {
+    if (addr.get_device_id() == rbm->get_device_id()) {
+      if (rbm->get_start() <= addr) {
+	rbm->complete_allocation(addr, len);
+      }
+      return;
+    }
+  }
+}
+
+bool RBMCleaner::try_reserve_projected_usage(std::size_t projected_usage)
+{
+  assert(background_callback->is_ready());
+  stats.projected_used_bytes += projected_usage;
+  return true;
+}
+
+void RBMCleaner::release_projected_usage(std::size_t projected_usage)
+{
+  assert(background_callback->is_ready());
+  ceph_assert(stats.projected_used_bytes >= projected_usage);
+  stats.projected_used_bytes -= projected_usage;
+  background_callback->maybe_wake_blocked_io();
+}
+
+RBMCleaner::clean_space_ret RBMCleaner::clean_space()
+{
+  // TODO 
+  return clean_space_ertr::now();
+}
+
+RBMCleaner::mount_ret RBMCleaner::mount()
+{
+  stats = {};
+  return seastar::do_with(
+    rb_group->get_rb_managers(),
+    [](auto &rbs) {
+    return crimson::do_for_each(
+      rbs.begin(),
+      rbs.end(),
+      [](auto& it) {
+      return it->open(
+      ).handle_error(
+	crimson::ct_error::input_output_error::pass_further(),
+	crimson::ct_error::assert_all{
+	"Invalid error when opening RBM"}
+      );
+    });
+  });
+}
+
+bool RBMCleaner::check_usage()
+{
+  assert(detailed);
+  const auto& rbms = rb_group->get_rb_managers();
+  RBMSpaceTracker tracker(rbms);
+  extent_callback->with_transaction_weak(
+      "check_usage",
+      [this, &tracker, &rbms](auto &t) {
+    return backref_manager.scan_mapped_space(
+      t,
+      [&tracker, &rbms](
+        paddr_t paddr,
+        extent_len_t len,
+        extent_types_t type,
+        laddr_t laddr)
+    {
+      for (auto rbm : rbms) {
+	if (rbm->get_device_id() == paddr.get_device_id()) {
+	  if (is_backref_node(type)) {
+	    assert(laddr == L_ADDR_NULL);
+	    tracker.allocate(
+	      paddr,
+	      len);
+	  } else if (laddr == L_ADDR_NULL) {
+	    tracker.release(
+	      paddr,
+	      len);
+	  } else {
+	    tracker.allocate(
+	      paddr,
+	      len);
+	  }
+	}
+      }
+    });
+  }).unsafe_get0();
+  return equals(tracker);
+}
+
+bool RBMCleaner::equals(const RBMSpaceTracker &_other) const
+{
+  LOG_PREFIX(RBMSpaceTracker::equals);
+  const auto &other = static_cast<const RBMSpaceTracker&>(_other);
+  auto rbs = rb_group->get_rb_managers();
+  //TODO: multiple rbm allocator
+  auto rbm = rbs[0];
+  assert(rbm);
+
+  if (rbm->get_device()->get_available_size() / rbm->get_block_size()
+      != other.block_usage.size()) {
+    assert(0 == "block counts should match");
+    return false;
+  }
+  bool all_match = true;
+  for (auto i = other.block_usage.begin();
+       i != other.block_usage.end(); ++i) {
+    if (i->first < rbm->get_start().as_blk_paddr().get_device_off()) {
+      continue;
+    }
+    auto addr = i->first;
+    auto state = rbm->get_extent_state(
+      convert_abs_addr_to_paddr(addr, rbm->get_device_id()),
+      rbm->get_block_size());
+    if ((i->second.used && state == rbm_extent_state_t::ALLOCATED) ||
+	(!i->second.used && (state == rbm_extent_state_t::FREE ||
+                         state == rbm_extent_state_t::RESERVED))) {
+      // pass
+    } else {
+      all_match = false;
+      ERROR("block addr {} mismatch other used: {}",
+	    addr, i->second.used);
+    }
+  }
+  return all_match;
 }
 
 }

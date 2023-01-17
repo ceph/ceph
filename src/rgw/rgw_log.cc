@@ -94,7 +94,7 @@ string render_log_object_name(const string& format,
 /* usage logger */
 class UsageLogger : public DoutPrefixProvider {
   CephContext *cct;
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   map<rgw_user_bucket, RGWUsageBatch> usage_map;
   ceph::mutex lock = ceph::make_mutex("UsageLogger");
   int32_t num_entries;
@@ -117,7 +117,7 @@ class UsageLogger : public DoutPrefixProvider {
   }
 public:
 
-  UsageLogger(CephContext *_cct, rgw::sal::Store* _store) : cct(_cct), store(_store), num_entries(0), timer(cct, timer_lock) {
+  UsageLogger(CephContext *_cct, rgw::sal::Driver* _driver) : cct(_cct), driver(_driver), num_entries(0), timer(cct, timer_lock) {
     timer.init();
     std::lock_guard l{timer_lock};
     set_timer();
@@ -171,7 +171,7 @@ public:
     num_entries = 0;
     lock.unlock();
 
-    store->log_usage(this, old_map);
+    driver->log_usage(this, old_map);
   }
 
   CephContext *get_cct() const override { return cct; }
@@ -181,9 +181,9 @@ public:
 
 static UsageLogger *usage_logger = NULL;
 
-void rgw_log_usage_init(CephContext *cct, rgw::sal::Store* store)
+void rgw_log_usage_init(CephContext *cct, rgw::sal::Driver* driver)
 {
-  usage_logger = new UsageLogger(cct, store);
+  usage_logger = new UsageLogger(cct, driver);
 }
 
 void rgw_log_usage_finalize()
@@ -515,7 +515,7 @@ int OpsLogSocket::log_json(req_state* s, bufferlist& bl)
   return 0;
 }
 
-OpsLogRados::OpsLogRados(rgw::sal::Store* const& store): store(store)
+OpsLogRados::OpsLogRados(rgw::sal::Driver* const& driver): driver(driver)
 {
 }
 
@@ -535,7 +535,7 @@ int OpsLogRados::log(req_state* s, struct rgw_log_entry& entry)
     localtime_r(&t, &bdt);
   string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
                                       entry.bucket_id, entry.bucket);
-  if (store->log_op(s, oid, bl) < 0) {
+  if (driver->log_op(s, oid, bl) < 0) {
     ldpp_dout(s, 0) << "ERROR: failed to log RADOS RGW ops log entry for txn: " << s->trans_id << dendl;
     return -1;
   }

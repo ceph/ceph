@@ -8,6 +8,7 @@
 #include <boost/iterator/counting_iterator.hpp>
 #include <boost/range/join.hpp>
 #include <fmt/format.h>
+#include <fmt/os.h>
 #include <fmt/ostream.h>
 #include <seastar/core/timer.hh>
 
@@ -378,7 +379,7 @@ seastar::future<> OSD::start()
     );
   }).then([this](OSDSuperblock&& sb) {
     superblock = std::move(sb);
-    pg_shard_manager.set_superblock(sb);
+    pg_shard_manager.set_superblock(superblock);
     return pg_shard_manager.get_local_map(superblock.current_epoch);
   }).then([this](OSDMapService::local_cached_map_t&& map) {
     osdmap = make_local_shared_foreign(OSDMapService::local_cached_map_t(map));
@@ -444,11 +445,8 @@ seastar::future<> OSD::start()
         replace_unknown_addrs(cluster_msgr->get_myaddrs(),
                               public_msgr->get_myaddrs()); changed) {
       logger().debug("replacing unkwnown addrs of cluster messenger");
-      return cluster_msgr->set_myaddrs(addrs);
-    } else {
-      return seastar::now();
+      cluster_msgr->set_myaddrs(addrs);
     }
-  }).then([this] {
     return heartbeat->start(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
                             pick_addresses(CEPH_PICK_ADDRESS_CLUSTER));
   }).then([this] {
@@ -1228,7 +1226,6 @@ seastar::future<> OSD::handle_peering_op(
 
 seastar::future<> OSD::check_osdmap_features()
 {
-  heartbeat->set_require_authorizer(true);
   return store.write_meta("require_osd_release",
                           stringify((int)osdmap->require_osd_release));
 }

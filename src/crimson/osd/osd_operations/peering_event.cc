@@ -89,9 +89,11 @@ seastar::future<> PeeringEvent<T>::with_pg(
       return this->template enter_stage<interruptor>(
 	BackfillRecovery::bp(*pg).process);
     }).then_interruptible([this, pg, &shard_services] {
-      pg->do_peering_event(evt, ctx);
-      that()->get_handle().exit();
-      return complete_rctx(shard_services, pg);
+      return pg->do_peering_event(evt, ctx
+      ).then_interruptible([this, pg, &shard_services] {
+	that()->get_handle().exit();
+	return complete_rctx(shard_services, pg);
+      });
     }).then_interruptible([pg, &shard_services]()
 			  -> typename T::template interruptible_future<> {
       if (!pg->get_need_up_thru()) {

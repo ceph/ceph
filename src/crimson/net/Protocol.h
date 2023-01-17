@@ -16,12 +16,6 @@ namespace crimson::net {
 
 class Protocol {
  public:
-  enum class proto_t {
-    none,
-    v1,
-    v2
-  };
-
   Protocol(Protocol&&) = delete;
   virtual ~Protocol();
 
@@ -40,7 +34,8 @@ class Protocol {
     // seastar::parallel_for_each(). otherwise, we could erase a connection in
     // the container when seastar::parallel_for_each() is still iterating in
     // it. that'd lead to a segfault.
-    return seastar::yield().then([this, dispatch_reset] {
+    return seastar::yield(
+    ).then([this, dispatch_reset, conn_ref = conn.shared_from_this()] {
       close(dispatch_reset);
       // it can happen if close_clean() is called inside Dispatcher::ms_handle_reset()
       // which will otherwise result in deadlock
@@ -57,8 +52,7 @@ class Protocol {
 
   virtual void print(std::ostream&) const = 0;
  protected:
-  Protocol(proto_t type,
-           ChainedDispatchers& dispatchers,
+  Protocol(ChainedDispatchers& dispatchers,
            SocketConnection& conn);
 
   virtual void trigger_close() = 0;
@@ -82,14 +76,11 @@ class Protocol {
       bool require_ack); 
 
  public:
-  const proto_t proto_type;
   SocketRef socket;
 
  protected:
   ChainedDispatchers& dispatchers;
   SocketConnection &conn;
-
-  AuthConnectionMetaRef auth_meta;
 
  private:
   bool closed = false;
@@ -112,16 +103,7 @@ class Protocol {
     drop
   };
 
-  static const char* get_state_name(write_state_t state) {
-    uint8_t index = static_cast<uint8_t>(state);
-    static const char *const state_names[] = {"none",
-                                              "delay",
-                                              "open",
-                                              "drop"};
-    assert(index < std::size(state_names));
-    return state_names[index];
-  }
-
+  friend class fmt::formatter<write_state_t>;
   void set_write_state(const write_state_t& state) {
     if (write_state == write_state_t::open &&
         state != write_state_t::open &&
@@ -186,3 +168,32 @@ inline std::ostream& operator<<(std::ostream& out, const Protocol& proto) {
 
 
 } // namespace crimson::net
+
+template <>
+struct fmt::formatter<crimson::net::Protocol::write_state_t>
+  : fmt::formatter<std::string_view> {
+  template <typename FormatContext>
+  auto format(crimson::net::Protocol::write_state_t state, FormatContext& ctx) {
+    using enum crimson::net::Protocol::write_state_t;
+    std::string_view name;
+    switch (state) {
+    case none:
+      name = "none";
+      break;
+    case delay:
+      name = "delay";
+      break;
+    case open:
+      name = "open";
+      break;
+    case drop:
+      name = "drop";
+      break;
+    }
+    return formatter<string_view>::format(name, ctx);
+  }
+};
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::net::Protocol> : fmt::ostream_formatter {};
+#endif

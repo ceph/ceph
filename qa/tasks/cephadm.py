@@ -179,14 +179,15 @@ def _fetch_cephadm_from_github(ctx, config, ref):
     else:
         ctx.cluster.run(
             args=[
-                'git', 'archive',
-                '--remote=' + git_url,
-                ref,
-                'src/cephadm/cephadm',
-                run.Raw('|'),
-                'tar', '-xO', 'src/cephadm/cephadm',
+                'git', 'clone', git_url, 'testrepo',
+                run.Raw('&&'),
+                'cd', 'testrepo',
+                run.Raw('&&'),
+                'git', 'show', f'{ref}:src/cephadm/cephadm',
                 run.Raw('>'),
                 ctx.cephadm,
+                run.Raw('&&'),
+                'ls', '-l', ctx.cephadm,
             ],
         )
     # sanity-check the resulting file and set executable bit

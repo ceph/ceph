@@ -94,6 +94,10 @@ export class RbdMirroringService {
     return this.http.get(`api/block/mirroring/pool/${poolName}/peer/${peerUUID}`);
   }
 
+  getPeerForPool(poolName: string) {
+    return this.http.get(`api/block/mirroring/pool/${poolName}/peer`);
+  }
+
   addPeer(poolName: string, request: any) {
     return this.http.post(`api/block/mirroring/pool/${poolName}/peer`, request, {
       observe: 'response'

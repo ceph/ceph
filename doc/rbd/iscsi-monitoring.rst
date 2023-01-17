@@ -21,37 +21,37 @@ metrics.
 #. As ``root``, install the ``ceph-iscsi-tools`` package on each iSCSI
    gateway node:
 
-   ::
+   .. prompt:: bash #
 
-       # yum install ceph-iscsi-tools
+      yum install ceph-iscsi-tools
 
 #. As ``root``, install the performance co-pilot package on each iSCSI
    gateway node:
 
-   ::
+   .. prompt:: bash #
 
-       # yum install pcp
+      yum install pcp
 
 #. As ``root``, install the LIO PMDA package on each iSCSI gateway node:
 
-   ::
+   .. prompt:: bash #
 
-       # yum install pcp-pmda-lio
+      yum install pcp-pmda-lio
 
 #. As ``root``, enable and start the performance co-pilot service on
    each iSCSI gateway node:
 
-   ::
+   .. prompt:: bash #
 
-       # systemctl enable pmcd
-       # systemctl start pmcd
+      systemctl enable pmcd
+      systemctl start pmcd
 
 #. As ``root``, register the ``pcp-pmda-lio`` agent:
 
-   ::
+   .. prompt:: bash #
 
-       cd /var/lib/pcp/pmdas/lio
-       ./Install
+      cd /var/lib/pcp/pmdas/lio
+      ./Install
 
 By default, ``gwtop`` assumes the iSCSI gateway configuration object is
 stored in a RADOS object called ``gateway.conf`` in the ``rbd`` pool.

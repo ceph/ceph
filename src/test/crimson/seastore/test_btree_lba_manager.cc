@@ -61,6 +61,14 @@ struct btree_test_base :
 
   void update_journal_tails(journal_seq_t, journal_seq_t) final {}
 
+  bool try_reserve_inline_usage(std::size_t) final { return true; }
+
+  void release_inline_usage(std::size_t) final {}
+
+  std::size_t get_trim_size_per_cycle() const final {
+    return 0;
+  }
+
   /*
    * SegmentProvider interfaces
    */
@@ -75,7 +83,7 @@ struct btree_test_base :
     segment_seq_t seq,
     segment_type_t type,
     data_category_t,
-    reclaim_gen_t
+    rewrite_gen_t
   ) final {
     auto ret = next;
     next = segment_id_t{

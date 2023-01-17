@@ -41,11 +41,6 @@ SocketConnection::SocketConnection(SocketMessenger& messenger,
 
 SocketConnection::~SocketConnection() {}
 
-crimson::net::Messenger*
-SocketConnection::get_messenger() const {
-  return &messenger;
-}
-
 bool SocketConnection::is_connected() const
 {
   assert(seastar::this_shard_id() == shard_id());
@@ -143,6 +138,7 @@ seastar::socket_address SocketConnection::get_local_address() const {
 }
 
 void SocketConnection::print(ostream& out) const {
+    out << (void*)this << " ";
     messenger.print(out);
     if (!protocol->socket) {
       out << " >> " << get_peer_name() << " " << peer_addr;

@@ -93,7 +93,7 @@ static NTSTATUS do_open_file(
   if (fd < 0) {
     dout(2) << __func__ << " " << path
             << ": ceph_open failed. Error: " << fd << dendl;
-    return cephfs_errno_to_ntsatus(fd);
+    return cephfs_errno_to_ntstatus_map(fd);
   }
 
   fdc->fd = fd;
@@ -115,7 +115,7 @@ static NTSTATUS WinCephCreateDirectory(
   if (ret < 0) {
     dout(2) << __func__ << " " << path
             << ": ceph_mkdir failed. Error: " << ret << dendl;
-    return cephfs_errno_to_ntsatus(ret);
+    return cephfs_errno_to_ntstatus_map(ret);
   }
   return 0;
 }
@@ -335,7 +335,7 @@ static NTSTATUS WinCephReadFile(
     if (fd_new < 0) {
       dout(2) << __func__ << " " << path
               << ": ceph_open failed. Error: " << fd_new << dendl;
-      return cephfs_errno_to_ntsatus(fd_new);
+      return cephfs_errno_to_ntstatus_map(fd_new);
     }
 
     int ret = ceph_read(cmount, fd_new, (char*) Buffer, BufferLength, Offset);
@@ -345,7 +345,7 @@ static NTSTATUS WinCephReadFile(
               << ". Offset: " << Offset
               << "Buffer length: " << BufferLength << dendl;
       ceph_close(cmount, fd_new);
-      return cephfs_errno_to_ntsatus(ret);
+      return cephfs_errno_to_ntstatus_map(ret);
     }
     *ReadLength = ret;
     ceph_close(cmount, fd_new);
@@ -357,7 +357,7 @@ static NTSTATUS WinCephReadFile(
               << ": ceph_read failed. Error: " << ret
               << ". Offset: " << Offset
               << "Buffer length: " << BufferLength << dendl;
-      return cephfs_errno_to_ntsatus(ret);
+      return cephfs_errno_to_ntstatus_map(ret);
     }
     *ReadLength = ret;
     return 0;
@@ -386,7 +386,7 @@ static NTSTATUS WinCephWriteFile(
       if (ret) {
         dout(2) << __func__ << " " << path
                 << ": ceph_statx failed. Error: " << ret << dendl;
-        return cephfs_errno_to_ntsatus(ret);
+        return cephfs_errno_to_ntstatus_map(ret);
       }
 
       Offset = stbuf.stx_size;
@@ -422,7 +422,7 @@ static NTSTATUS WinCephWriteFile(
     if (fd_new < 0) {
       dout(2) << __func__ << " " << path
               << ": ceph_open failed. Error: " << fd_new << dendl;
-      return cephfs_errno_to_ntsatus(fd_new);
+      return cephfs_errno_to_ntstatus_map(fd_new);
     }
 
     int ret = ceph_write(cmount, fd_new, (char*) Buffer,
@@ -433,7 +433,7 @@ static NTSTATUS WinCephWriteFile(
               << ". Offset: " << Offset
               << "Buffer length: " << NumberOfBytesToWrite << dendl;
       ceph_close(cmount, fd_new);
-      return cephfs_errno_to_ntsatus(ret);
+      return cephfs_errno_to_ntstatus_map(ret);
     }
     *NumberOfBytesWritten = ret;
     ceph_close(cmount, fd_new);
@@ -446,7 +446,7 @@ static NTSTATUS WinCephWriteFile(
               << ": ceph_write failed. Error: " << ret
               << ". Offset: " << Offset
               << "Buffer length: " << NumberOfBytesToWrite << dendl;
-      return cephfs_errno_to_ntsatus(ret);
+      return cephfs_errno_to_ntstatus_map(ret);
     }
     *NumberOfBytesWritten = ret;
     return 0;
@@ -467,7 +467,7 @@ static NTSTATUS WinCephFlushFileBuffers(
   if (ret) {
     dout(2) << __func__ << " " << get_path(FileName)
             << ": ceph_sync failed. Error: " << ret << dendl;
-    return cephfs_errno_to_ntsatus(ret);
+    return cephfs_errno_to_ntstatus_map(ret);
   }
   return 0;
 }
@@ -490,14 +490,14 @@ static NTSTATUS WinCephGetFileInformation(
     if (ret) {
       dout(2) << __func__ << " " << path
               << ": ceph_statx failed. Error: " << ret << dendl;
-      return cephfs_errno_to_ntsatus(ret);
+      return cephfs_errno_to_ntstatus_map(ret);
     }
   } else {
     int ret = ceph_fstatx(cmount, fdc->fd, &stbuf, requested_attrs, 0);
     if (ret) {
       dout(2) << __func__ << " " << path
               << ": ceph_fstatx failed. Error: " << ret << dendl;
-      return cephfs_errno_to_ntsatus(ret);
+      return cephfs_errno_to_ntstatus_map(ret);
     }
   }
 
@@ -534,7 +534,7 @@ static NTSTATUS WinCephFindFiles(
   if (ret != 0) {
     dout(2) << __func__ << " " << path
             << ": ceph_mkdir failed. Error: " << ret << dendl;
-    return cephfs_errno_to_ntsatus(ret);
+    return cephfs_errno_to_ntstatus_map(ret);
   }
 
   WIN32_FIND_DATAW findData;
@@ -554,7 +554,7 @@ static NTSTATUS WinCephFindFiles(
     if (ret < 0) {
       dout(2) << __func__ << " " << path
               << ": ceph_readdirplus_r failed. Error: " << ret << dendl;
-      return cephfs_errno_to_ntsatus(ret);
+      return cephfs_errno_to_ntstatus_map(ret);
     }
 
     to_wstring(result.d_name).copy(findData.cFileName, MAX_PATH);
@@ -617,7 +617,7 @@ static NTSTATUS WinCephDeleteDirectory(
   if (ret != 0) {
     dout(2) << __func__ << " " << path
             << ": ceph_opendir failed. Error: " << ret << dendl;
-    return cephfs_errno_to_ntsatus(ret);
+    return cephfs_errno_to_ntstatus_map(ret);
   }
 
   WIN32_FIND_DATAW findData;
@@ -654,7 +654,7 @@ static NTSTATUS WinCephMoveFile(
             << ": ceph_rename failed. Error: " << ret << dendl;
   }
 
-  return cephfs_errno_to_ntsatus(ret);
+  return cephfs_errno_to_ntstatus_map(ret);
 }
 
 static NTSTATUS WinCephSetEndOfFile(
@@ -673,7 +673,7 @@ static NTSTATUS WinCephSetEndOfFile(
     dout(2) << __func__ << " " << get_path(FileName)
             << ": ceph_ftruncate failed. Error: " << ret
             << " Offset: " << ByteOffset << dendl;
-    return cephfs_errno_to_ntsatus(ret);
+    return cephfs_errno_to_ntstatus_map(ret);
   }
 
   return 0;
@@ -696,7 +696,7 @@ static NTSTATUS WinCephSetAllocationSize(
   if (ret) {
     dout(2) << __func__ << " " << get_path(FileName)
             << ": ceph_fstatx failed. Error: " << ret << dendl;
-    return cephfs_errno_to_ntsatus(ret);
+    return cephfs_errno_to_ntstatus_map(ret);
   }
 
   if ((unsigned long long) AllocSize < stbuf.stx_size) {
@@ -704,7 +704,7 @@ static NTSTATUS WinCephSetAllocationSize(
     if (ret) {
       dout(2) << __func__ << " " << get_path(FileName)
               << ": ceph_ftruncate failed. Error: " << ret << dendl;
-      return cephfs_errno_to_ntsatus(ret);
+      return cephfs_errno_to_ntstatus_map(ret);
     }
     return 0;
   }
@@ -756,7 +756,7 @@ static NTSTATUS WinCephSetFileTime(
   if (ret) {
     dout(2) << __func__ << " " << path
             << ": ceph_setattrx failed. Error: " << ret << dendl;
-    return cephfs_errno_to_ntsatus(ret);
+    return cephfs_errno_to_ntstatus_map(ret);
   }
   return 0;
 }
@@ -789,7 +789,8 @@ static NTSTATUS WinCephGetVolumeInformation(
   g_cfg->win_vol_name.copy(VolumeNameBuffer, VolumeNameSize);
   *VolumeSerialNumber = g_cfg->win_vol_serial;
 
-  *MaximumComponentLength = 256;
+  *MaximumComponentLength = g_cfg->max_path_len;
+
   *FileSystemFlags = FILE_CASE_SENSITIVE_SEARCH |
             FILE_CASE_PRESERVED_NAMES |
             FILE_SUPPORTS_REMOTE_STORAGE |
@@ -810,7 +811,7 @@ static NTSTATUS WinCephGetDiskFreeSpace(
   int ret = ceph_statfs(cmount, "/", &vfsbuf);
   if (ret) {
     derr << "ceph_statfs failed. Error: " << ret << dendl;
-    return cephfs_errno_to_ntsatus(ret);;
+    return cephfs_errno_to_ntstatus_map(ret);;
   }
 
   *FreeBytesAvailable   = vfsbuf.f_bsize * vfsbuf.f_bfree;
@@ -874,7 +875,7 @@ NTSTATUS get_volume_serial(PDWORD serial) {
                           fsid_str, sizeof(fsid_str));
   if (ret < 0) {
     dout(2) << "Coudln't retrieve the cluster fsid. Error: " << ret << dendl;
-    return cephfs_errno_to_ntsatus(ret);
+    return cephfs_errno_to_ntstatus_map(ret);
   }
 
   uuid_d fsid;
@@ -931,7 +932,7 @@ int do_map() {
   r = ceph_mount(cmount, g_cfg->root_path.c_str());
   if (r) {
     derr << "ceph_mount failed. Error: " << r << dendl;
-    return cephfs_errno_to_ntsatus(r);
+    return cephfs_errno_to_ntstatus_map(r);
   }
 
   if (g_cfg->win_vol_name.empty()) {
@@ -949,9 +950,20 @@ int do_map() {
     }
   }
 
+  if (g_cfg->max_path_len > 260) {
+    dout(0) << "maximum path length set to " << g_cfg->max_path_len 
+            << ". Some Windows utilities may not be able to handle "
+            << "paths that exceed MAX_PATH (260) characters. "
+            << "CreateDirectoryW, used by Powershell, has also been "
+            << "observed to fail when paths exceed 16384 characters."
+            << dendl;
+  }
+
   atexit(unmount_atexit);
   dout(0) << "Mounted cephfs directory: " << g_cfg->root_path.c_str()
           <<". Mountpoint: " << to_string(g_cfg->mountpoint) << dendl;
+
+  DokanInit();
 
   DWORD status = DokanMain(dokan_options, dokan_operations);
   switch (static_cast<int>(status)) {
@@ -980,6 +992,8 @@ int do_map() {
     derr << "Unknown Dokan error: " << status << dendl;
     break;
   }
+
+  DokanShutdown();
 
   free(dokan_options);
   free(dokan_operations);

@@ -2021,7 +2021,9 @@ private:
 
   int get_recovery_max_active();
   void maybe_override_max_osd_capacity_for_qos();
-  bool maybe_override_options_for_qos();
+  void maybe_override_sleep_options_for_qos();
+  bool maybe_override_options_for_qos(
+    const std::set<std::string> *changed = nullptr);
   int run_osd_bench_test(int64_t count,
                          int64_t bsize,
                          int64_t osize,

@@ -1,3 +1,4 @@
+import { HttpParams } from '@angular/common/http';
 import {
   AfterViewInit,
   ChangeDetectorRef,
@@ -287,15 +288,17 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     });
   }
   getServices(context: CdTableFetchDataContext) {
-    this.serviceSub = this.cephServiceService.list(this.serviceName).subscribe(
-      (services: CephServiceSpec[]) => {
-        this.services = services;
-      },
-      () => {
-        this.services = [];
-        context.error();
-      }
-    );
+    this.serviceSub = this.cephServiceService
+      .list(new HttpParams({ fromObject: { limit: -1, offset: 0 } }), this.serviceName)
+      .observable.subscribe(
+        (services: CephServiceSpec[]) => {
+          this.services = services;
+        },
+        () => {
+          this.services = [];
+          context.error();
+        }
+      );
   }
 
   trackByFn(_index: any, item: any) {

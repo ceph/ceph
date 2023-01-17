@@ -220,17 +220,17 @@ options:
 	-g, --gssapi: enable Kerberos/GSSApi authentication
 	-G: disable Kerberos/GSSApi authentication
 	--hitset <pool> <hit_set_type>: enable hitset tracking
-	-e: create an erasure pool
-	-o <config>: add extra config parameters to all sections
-	--rgw_port: specify ceph rgw http listen port
-	--rgw_frontend: specify the rgw frontend configuration
-	--rgw_compression: specify the rgw compression plugin
-	--seastore: use seastore as crimson osd backend
-	-b, --bluestore: use bluestore as the osd objectstore backend (default)
-	-f, --filestore: use filestore as the osd objectstore backend
-	-K, --kstore: use kstore as the osd objectstore backend
-	--cyanstore: use cyanstore as the osd objectstore backend
-	--memstore: use memstore as the osd objectstore backend
+	-e : create an erasure pool
+	-o config add extra config parameters to all sections
+	--rgw_port specify ceph rgw http listen port
+	--rgw_frontend specify the rgw frontend configuration
+	--rgw_compression specify the rgw compression plugin
+	--seastore use seastore as crimson osd backend
+	-b, --bluestore use bluestore as the osd objectstore backend (default)
+	-f, --filestore use filestore as the osd objectstore backend
+	-K, --kstore use kstore as the osd objectstore backend
+	--cyanstore use cyanstore as the osd objectstore backend
+	--memstore use memstore as the osd objectstore backend
 	--cache <pool>: enable cache tiering on pool
 	--short: short object names only; necessary for ext4 dev
 	--nolockdep: disable lockdep
@@ -969,9 +969,9 @@ start_osd() {
 	local extra_seastar_args
 	if [ "$ceph_osd" == "crimson-osd" ]; then
         bottom_cpu=$(( osd * crimson_smp ))
-        top_cpu=$(( bottom_cpu + crimson_smp ))
+        top_cpu=$(( bottom_cpu + crimson_smp - 1 ))
 	    # set a single CPU nodes for each osd
-	    extra_seastar_args="--smp $crimson_smp --cpuset $bottom_cpu-$top_cpu"
+	    extra_seastar_args="--cpuset $bottom_cpu-$top_cpu"
 	    if [ "$debug" -ne 0 ]; then
 		extra_seastar_args+=" --debug"
 	    fi
@@ -1162,6 +1162,22 @@ EOF
 	fi
         ceph_adm config-key set mgr/cephadm/ssh_identity_key -i ~/.ssh/id_rsa
         ceph_adm config-key set mgr/cephadm/ssh_identity_pub -i ~/.ssh/id_rsa.pub
+        local retry_flag=0
+        while [ $retry_flag -lt 7 ]
+        do
+            if [ `ceph_adm mgr stat | jq '.available'` = "true" ]; then
+                ceph_adm mgr module enable cephadm
+                break
+            else
+                retry_flag=$(($retry_flag + 1))
+                if [ $retry_flag -eq 7 ]; then
+                    debug echo "mgr is not available, exit."
+                    exit
+                fi
+                debug echo "mgr is not available, retry after 10 seconds ($retry_flag /6)"
+                sleep 10
+            fi
+        done
         ceph_adm mgr module enable cephadm
         ceph_adm orch set backend cephadm
         ceph_adm orch host add "$(hostname)"
@@ -1333,6 +1349,7 @@ if [ "$debug" -eq 0 ]; then
 else
     debug echo "** going verbose **"
     CMONDEBUG='
+        debug osd = 20
         debug mon = 20
         debug paxos = 20
         debug auth = 20
@@ -1491,6 +1508,10 @@ EOF
         public_network=$(ip route list | grep -w "$IP" | awk '{print $1}')
         ceph_adm config set mon public_network $public_network
     fi
+fi
+
+if [ "$crimson" -eq 1 ]; then
+    $CEPH_BIN/ceph -c $conf_fn config set osd crimson_seastar_smp $crimson_smp
 fi
 
 if [ $CEPH_NUM_MGR -gt 0 ]; then

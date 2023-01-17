@@ -700,6 +700,8 @@ void Cache::add_extent(
     const Transaction::src_t* p_src=nullptr)
 {
   assert(ref->is_valid());
+  assert(ref->user_hint == PLACEMENT_HINT_NULL);
+  assert(ref->rewrite_generation == NULL_GENERATION);
   extents.insert(*ref);
   if (ref->is_dirty()) {
     add_to_dirty(ref);
@@ -865,6 +867,10 @@ void Cache::mark_transaction_conflicted(
     }
     efforts.mutate_delta_bytes += delta_stat.bytes;
 
+    for (auto &i: t.pre_alloc_list) {
+      epm.mark_space_free(i->get_paddr(), i->get_length());
+    }
+
     auto& ool_stats = t.get_ool_write_stats();
     efforts.fresh_ool_written.increment_stat(ool_stats.extents);
     efforts.num_ool_records += ool_stats.num_records;
@@ -944,12 +950,12 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
   extent_types_t type,   ///< [in] type tag
   extent_len_t length,   ///< [in] length
   placement_hint_t hint, ///< [in] user hint
-  reclaim_gen_t gen      ///< [in] reclaim generation
+  rewrite_gen_t gen      ///< [in] rewrite generation
 )
 {
   LOG_PREFIX(Cache::alloc_new_extent_by_type);
   SUBDEBUGT(seastore_cache, "allocate {} {}B, hint={}, gen={}",
-            t, type, length, hint, reclaim_gen_printer_t{gen});
+            t, type, length, hint, rewrite_gen_printer_t{gen});
   switch (type) {
   case extent_types_t::ROOT:
     ceph_assert(0 == "ROOT is never directly alloc'd");
@@ -1003,6 +1009,8 @@ CachedExtentRef Cache::duplicate_for_write(
 
   auto ret = i->duplicate_for_write();
   ret->prior_instance = i;
+  // duplicate_for_write won't occur after ool write finished
+  assert(!i->prior_poffset);
   t.add_mutated_extent(ret);
   if (ret->get_type() == extent_types_t::ROOT) {
     t.root = ret->cast<RootBlock>();
@@ -1012,7 +1020,6 @@ CachedExtentRef Cache::duplicate_for_write(
 
   ret->version++;
   ret->state = CachedExtent::extent_state_t::MUTATION_PENDING;
-  ret->set_reclaim_generation(DIRTY_GENERATION);
   DEBUGT("{} -> {}", t, *i, *ret);
   return ret;
 }
@@ -1215,7 +1222,7 @@ record_t Cache::prepare_record(
     }
   }
 
-  for (auto &i: t.ool_block_list) {
+  for (auto &i: t.written_ool_block_list) {
     TRACET("fresh ool extent -- {}", t, *i);
     ceph_assert(i->is_valid());
     assert(!i->is_inline());
@@ -1296,11 +1303,12 @@ record_t Cache::prepare_record(
 
   ceph_assert(t.get_fresh_block_stats().num ==
               t.inline_block_list.size() +
-              t.ool_block_list.size() +
-              t.num_delayed_invalid_extents);
+              t.written_ool_block_list.size() +
+              t.num_delayed_invalid_extents +
+	      t.num_allocated_invalid_extents);
 
   auto& ool_stats = t.get_ool_write_stats();
-  ceph_assert(ool_stats.extents.num == t.ool_block_list.size());
+  ceph_assert(ool_stats.extents.num == t.written_ool_block_list.size());
 
   if (record.is_empty()) {
     SUBINFOT(seastore_t,
@@ -1440,8 +1448,9 @@ void Cache::complete_commit(
     DEBUGT("add extent as fresh, inline={} -- {}",
 	   t, is_inline, *i);
     const auto t_src = t.get_src();
+    i->invalidate_hints();
     add_extent(i, &t_src);
-    epm.mark_space_used(i->get_paddr(), i->get_length());
+    epm.commit_space_used(i->get_paddr(), i->get_length());
     if (is_backref_mapped_extent_node(i)) {
       DEBUGT("backref_list new {} len {}",
 	     t,
@@ -1556,6 +1565,12 @@ void Cache::complete_commit(
   }
   if (!backref_list.empty()) {
     backref_batch_update(std::move(backref_list), start_seq);
+  }
+
+  for (auto &i: t.pre_alloc_list) {
+    if (!i->is_valid()) {
+      epm.mark_space_free(i->get_paddr(), i->get_length());
+    }
   }
 }
 
@@ -1760,17 +1775,7 @@ Cache::replay_delta(
       DEBUG("replay extent delta at {} {} ... -- {}, prv_extent={}",
             journal_seq, record_base, delta, *extent);
 
-      if (extent->last_committed_crc != delta.prev_crc) {
-        // FIXME: we can't rely on crc to detect whether is delta is
-        // out-of-date.
-        ERROR("identified delta crc {} doesn't match the extent at {} {}, "
-              "probably is out-dated -- {}",
-              delta, journal_seq, record_base, *extent);
-        ceph_assert(epm.get_journal_type() == journal_type_t::RANDOM_BLOCK);
-        remove_extent(extent);
-        return replay_delta_ertr::make_ready_future<bool>(false);
-      }
-
+      assert(extent->last_committed_crc == delta.prev_crc);
       assert(extent->version == delta.pversion);
       extent->apply_delta_and_adjust_crc(record_base, delta.bl);
       extent->set_modify_time(modify_time);

@@ -1,3 +1,5 @@
+.. _rados-cephx-config-ref:
+
 ========================
  Cephx Config Reference
 ========================
@@ -166,9 +168,11 @@ specify a ``keyring`` entry in your Ceph configuration file.
 We recommend copying the Ceph Storage Cluster's keyring file to nodes where you
 will run administrative commands, because it contains the ``client.admin`` key.
 
-To perform this step manually, execute the following::
+To perform this step manually, execute the following:
 
-	sudo scp {user}@{ceph-cluster-host}:/etc/ceph/ceph.client.admin.keyring /etc/ceph/ceph.client.admin.keyring
+.. prompt:: bash $
+
+   sudo scp {user}@{ceph-cluster-host}:/etc/ceph/ceph.client.admin.keyring /etc/ceph/ceph.client.admin.keyring
 
 .. tip:: Ensure the ``ceph.keyring`` file has appropriate permissions set
    (e.g., ``chmod 644``) on your client machine.

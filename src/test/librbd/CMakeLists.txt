@@ -147,6 +147,7 @@ endif()
 
 if(LINUX AND HAVE_LIBCRYPTSETUP)
   list(APPEND unittest_librbd_srcs
+          crypto/luks/test_mock_FlattenRequest.cc
           crypto/luks/test_mock_FormatRequest.cc
           crypto/luks/test_mock_LoadRequest.cc)
 endif()

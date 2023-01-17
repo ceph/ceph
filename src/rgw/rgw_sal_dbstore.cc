@@ -321,13 +321,11 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::chown(const DoutPrefixProvider *dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker)
+  int DBBucket::chown(const DoutPrefixProvider *dpp, User& new_user, optional_yield y)
   {
     int ret;
 
-    ret = store->getDB()->update_bucket(dpp, "owner", info, false, &(new_user->get_id()), nullptr, nullptr, nullptr);
-
-    /* XXX: Update policies of all the bucket->objects with new user */
+    ret = store->getDB()->update_bucket(dpp, "owner", info, false, &(new_user.get_id()), nullptr, nullptr, nullptr);
     return ret;
   }
 
@@ -720,6 +718,11 @@ namespace rgw::sal {
     DB::Object op_target(store->getDB(),
         get_bucket()->get_info(), get_obj());
     return op_target.obj_omap_set_val_by_key(dpp, key, val, must_exist);
+  }
+
+  int DBObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+  {
+    return 0;
   }
 
   std::unique_ptr<MPSerializer> DBObject::get_serializer(const DoutPrefixProvider *dpp,
@@ -1239,12 +1242,12 @@ namespace rgw::sal {
 	    	    optional_yield y,
                 MultipartUpload* upload,
 		        std::unique_ptr<rgw::sal::Object> _head_obj,
-		        DBStore* _store,
+		        DBStore* _driver,
     		    const rgw_user& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
                 uint64_t _part_num, const std::string& _part_num_str):
 			StoreWriter(dpp, y),
-	    		store(_store),
+			store(_driver),
                 owner(_owner),
                 ptail_placement_rule(_ptail_placement_rule),
                 head_obj(std::move(_head_obj)),
@@ -1253,7 +1256,7 @@ namespace rgw::sal {
                 oid(head_obj->get_name() + "." + upload_id +
                     "." + std::to_string(part_num)),
                 meta_obj(((DBMultipartUpload*)upload)->get_meta_obj()),
-                op_target(_store->getDB(), head_obj->get_bucket()->get_info(), head_obj->get_obj(), upload_id),
+                op_target(_driver->getDB(), head_obj->get_bucket()->get_info(), head_obj->get_obj(), upload_id),
                 parent_op(&op_target),
                 part_num_str(_part_num_str) {}
 
@@ -1388,19 +1391,19 @@ namespace rgw::sal {
   DBAtomicWriter::DBAtomicWriter(const DoutPrefixProvider *dpp,
 	    	    optional_yield y,
 		        std::unique_ptr<rgw::sal::Object> _head_obj,
-		        DBStore* _store,
+		        DBStore* _driver,
     		    const rgw_user& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
 		        uint64_t _olh_epoch,
 		        const std::string& _unique_tag) :
 			StoreWriter(dpp, y),
-	    		store(_store),
+			store(_driver),
                 owner(_owner),
                 ptail_placement_rule(_ptail_placement_rule),
                 olh_epoch(_olh_epoch),
                 unique_tag(_unique_tag),
-                obj(_store, _head_obj->get_key(), _head_obj->get_bucket()),
-                op_target(_store->getDB(), obj.get_bucket()->get_info(), obj.get_obj()),
+                obj(_driver, _head_obj->get_key(), _head_obj->get_bucket()),
+                op_target(_driver->getDB(), obj.get_bucket()->get_info(), obj.get_obj()),
                 parent_op(&op_target) {}
 
   int DBAtomicWriter::prepare(optional_yield y)
@@ -1826,7 +1829,8 @@ namespace rgw::sal {
 
   std::unique_ptr<Notification> DBStore::get_notification(
     rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s,
-    rgw::notify::EventType event_type, const std::string* object_name)
+    rgw::notify::EventType event_type, optional_yield y,
+    const std::string* object_name)
   {
     return std::make_unique<DBNotification>(obj, src_obj, event_type);
   }
@@ -2024,22 +2028,22 @@ extern "C" {
 
   void *newDBStore(CephContext *cct)
   {
-    rgw::sal::DBStore *store = new rgw::sal::DBStore();
+    rgw::sal::DBStore *driver = new rgw::sal::DBStore();
     DBStoreManager *dbsm = new DBStoreManager(cct);
 
     DB *db = dbsm->getDB();
     if (!db) {
       delete dbsm;
-      delete store;
+      delete driver;
       return nullptr;
     }
 
-    store->setDBStoreManager(dbsm);
-    store->setDB(db);
-    db->set_store((rgw::sal::Store*)store);
+    driver->setDBStoreManager(dbsm);
+    driver->setDB(db);
+    db->set_driver((rgw::sal::Driver*)driver);
     db->set_context(cct);
 
-    return store;
+    return driver;
   }
 
 }

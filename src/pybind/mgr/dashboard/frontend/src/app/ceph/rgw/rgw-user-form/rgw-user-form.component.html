@@ -116,7 +116,7 @@
                  for="max_buckets_mode"
                  i18n>Max. buckets</label>
           <div class="cd-col-form-input">
-            <select class="form-control"
+            <select class="form-select"
                     formControlName="max_buckets_mode"
                     name="max_buckets_mode"
                     id="max_buckets_mode"
@@ -194,14 +194,12 @@
                        class="form-control"
                        type="password"
                        formControlName="access_key">
-                <span class="input-group-append">
-                  <button type="button"
-                          class="btn btn-light"
-                          cdPasswordButton="access_key">
-                  </button>
-                  <cd-copy-2-clipboard-button source="access_key">
-                  </cd-copy-2-clipboard-button>
-                </span>
+                <button type="button"
+                        class="btn btn-light"
+                        cdPasswordButton="access_key">
+                </button>
+                <cd-copy-2-clipboard-button source="access_key">
+                </cd-copy-2-clipboard-button>
               </div>
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('access_key', frm, 'required')"
@@ -221,14 +219,12 @@
                        class="form-control"
                        type="password"
                        formControlName="secret_key">
-                <span class="input-group-append">
-                  <button type="button"
-                          class="btn btn-light"
-                          cdPasswordButton="secret_key">
-                  </button>
-                  <cd-copy-2-clipboard-button source="secret_key">
-                  </cd-copy-2-clipboard-button>
-                </span>
+                <button type="button"
+                        class="btn btn-light"
+                        cdPasswordButton="secret_key">
+                </button>
+                <cd-copy-2-clipboard-button source="secret_key">
+                </cd-copy-2-clipboard-button>
               </div>
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('secret_key', frm, 'required')"
@@ -250,48 +246,42 @@
 
               <span *ngFor="let subuser of subusers; let i=index;">
                 <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">
-                      <i class="{{ icons.user }}"></i>
-                    </span>
-                  </div>
+                  <span class="input-group-text">
+                    <i class="{{ icons.user }}"></i>
+                  </span>
                   <input type="text"
                          class="cd-form-control"
                          value="{{ subuser.id }}"
                          readonly>
-                  <div class="input-group-prepend border-left-0 border-right-0">
-                    <span class="input-group-text">
-                      <i class="{{ icons.share }}"></i>
-                    </span>
-                  </div>
+                  <span class="input-group-text">
+                    <i class="{{ icons.share }}"></i>
+                  </span>
                   <input type="text"
                          class="cd-form-control"
                          value="{{ ('full-control' === subuser.permissions) ? 'full' : subuser.permissions }}"
                          readonly>
-                  <span class="input-group-append">
-                    <button type="button"
-                            class="btn btn-light tc_showSubuserButton"
-                            i18n-ngbTooltip
-                            ngbTooltip="Edit"
-                            (click)="showSubuserModal(i)">
-                      <i [ngClass]="[icons.edit]"></i>
-                    </button>
-                    <button type="button"
-                            class="btn btn-light tc_deleteSubuserButton"
-                            i18n-ngbTooltip
-                            ngbTooltip="Delete"
-                            (click)="deleteSubuser(i)">
-                      <i [ngClass]="[icons.destroy]"></i>
-                    </button>
-                  </span>
+                  <button type="button"
+                          class="btn btn-light tc_showSubuserButton"
+                          i18n-ngbTooltip
+                          ngbTooltip="Edit"
+                          (click)="showSubuserModal(i)">
+                    <i [ngClass]="[icons.edit]"></i>
+                  </button>
+                  <button type="button"
+                          class="btn btn-light tc_deleteSubuserButton"
+                          i18n-ngbTooltip
+                          ngbTooltip="Delete"
+                          (click)="deleteSubuser(i)">
+                    <i [ngClass]="[icons.destroy]"></i>
+                  </button>
                 </div>
                 <span class="form-text text-muted"></span>
               </span>
 
-              <div class="row">
+              <div class="row my-2">
                 <div class="col-12">
                   <button type="button"
-                          class="btn btn-light float-right tc_addSubuserButton"
+                          class="btn btn-light float-end tc_addSubuserButton"
                           (click)="showSubuserModal()">
                     <i [ngClass]="[icons.add]"></i>
                     <ng-container i18n>{{ actionLabels.CREATE | titlecase }}
@@ -321,39 +311,35 @@
 
               <span *ngFor="let key of s3Keys; let i=index;">
                 <div class="input-group">
-                  <div class="input-group-prepend">
-                    <div class="input-group-text">
-                      <i class="{{ icons.key }}"></i>
-                    </div>
+                  <div class="input-group-text">
+                    <i class="{{ icons.key }}"></i>
                   </div>
                   <input type="text"
                          class="cd-form-control"
                          value="{{ key.user }}"
                          readonly>
-                  <span class="input-group-append">
-                    <button type="button"
-                            class="btn btn-light tc_showS3KeyButton"
-                            i18n-ngbTooltip
-                            ngbTooltip="Show"
-                            (click)="showS3KeyModal(i)">
-                      <i [ngClass]="[icons.show]"></i>
-                    </button>
-                    <button type="button"
-                            class="btn btn-light tc_deleteS3KeyButton"
-                            i18n-ngbTooltip
-                            ngbTooltip="Delete"
-                            (click)="deleteS3Key(i)">
-                      <i [ngClass]="[icons.destroy]"></i>
-                    </button>
-                  </span>
+                  <button type="button"
+                          class="btn btn-light tc_showS3KeyButton"
+                          i18n-ngbTooltip
+                          ngbTooltip="Show"
+                          (click)="showS3KeyModal(i)">
+                    <i [ngClass]="[icons.show]"></i>
+                  </button>
+                  <button type="button"
+                          class="btn btn-light tc_deleteS3KeyButton"
+                          i18n-ngbTooltip
+                          ngbTooltip="Delete"
+                          (click)="deleteS3Key(i)">
+                    <i [ngClass]="[icons.destroy]"></i>
+                  </button>
                 </div>
                 <span class="form-text text-muted"></span>
               </span>
 
-              <div class="row">
+              <div class="row my-2">
                 <div class="col-12">
                   <button type="button"
-                          class="btn btn-light float-right tc_addS3KeyButton"
+                          class="btn btn-light float-end tc_addS3KeyButton"
                           (click)="showS3KeyModal()">
                     <i [ngClass]="[icons.add]"></i>
                     <ng-container i18n>{{ actionLabels.CREATE | titlecase }}
@@ -382,24 +368,20 @@
 
               <span *ngFor="let key of swiftKeys; let i=index;">
                 <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">
-                      <i class="{{ icons.key }}"></i>
-                    </span>
-                  </div>
+                  <span class="input-group-text">
+                    <i class="{{ icons.key }}"></i>
+                  </span>
                   <input type="text"
                          class="cd-form-control"
                          value="{{ key.user }}"
                          readonly>
-                  <span class="input-group-append">
-                    <button type="button"
-                            class="btn btn-light tc_showSwiftKeyButton"
-                            i18n-ngbTooltip
-                            ngbTooltip="Show"
-                            (click)="showSwiftKeyModal(i)">
-                      <i [ngClass]="[icons.show]"></i>
-                    </button>
-                  </span>
+                  <button type="button"
+                          class="btn btn-light tc_showSwiftKeyButton"
+                          i18n-ngbTooltip
+                          ngbTooltip="Show"
+                          (click)="showSwiftKeyModal(i)">
+                    <i [ngClass]="[icons.show]"></i>
+                  </button>
                 </div>
                 <span class="form-text text-muted"></span>
               </span>
@@ -421,39 +403,35 @@
 
               <span *ngFor="let cap of capabilities; let i=index;">
                 <div class="input-group">
-                  <span class="input-group-prepend">
-                    <div class="input-group-text">
-                      <i class="{{ icons.share }}"></i>
-                    </div>
-                  </span>
+                  <div class="input-group-text">
+                    <i class="{{ icons.share }}"></i>
+                  </div>
                   <input type="text"
                          class="cd-form-control"
                          value="{{ cap.type }}:{{ cap.perm }}"
                          readonly>
-                  <span class="input-group-append">
-                    <button type="button"
-                            class="btn btn-light tc_editCapButton"
-                            i18n-ngbTooltip
-                            ngbTooltip="Edit"
-                            (click)="showCapabilityModal(i)">
-                      <i [ngClass]="[icons.edit]"></i>
-                    </button>
-                    <button type="button"
-                            class="btn btn-light tc_deleteCapButton"
-                            i18n-ngbTooltip
-                            ngbTooltip="Delete"
-                            (click)="deleteCapability(i)">
-                      <i [ngClass]="[icons.destroy]"></i>
-                    </button>
-                  </span>
+                  <button type="button"
+                          class="btn btn-light tc_editCapButton"
+                          i18n-ngbTooltip
+                          ngbTooltip="Edit"
+                          (click)="showCapabilityModal(i)">
+                    <i [ngClass]="[icons.edit]"></i>
+                  </button>
+                  <button type="button"
+                          class="btn btn-light tc_deleteCapButton"
+                          i18n-ngbTooltip
+                          ngbTooltip="Delete"
+                          (click)="deleteCapability(i)">
+                    <i [ngClass]="[icons.destroy]"></i>
+                  </button>
                 </div>
                 <span class="form-text text-muted"></span>
               </span>
 
-              <div class="row">
+              <div class="row my-2">
                 <div class="col-12">
                   <button type="button"
-                          class="btn btn-light float-right tc_addCapButton"
+                          class="btn btn-light float-end tc_addCapButton"
                           [disabled]="capabilities | pipeFunction:hasAllCapabilities"
                           i18n-ngbTooltip
                           ngbTooltip="All capabilities are already added."

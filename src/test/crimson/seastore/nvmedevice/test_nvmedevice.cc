@@ -55,7 +55,7 @@ WRITE_CLASS_DENC_BOUNDED(
 TEST_F(nvdev_test_t, write_and_verify_test)
 {
   run_async([this] {
-    device = RBMDevice::create<NVMeBlockDevice>();
+    device.reset(new random_block_device::nvme::NVMeBlockDevice(""));
     device->open(dev_path, seastar::open_flags::rw).unsafe_get();
     nvdev_test_block_t original_data;
     std::minstd_rand0 generator;

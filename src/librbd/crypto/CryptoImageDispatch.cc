@@ -10,18 +10,39 @@ CryptoImageDispatch::CryptoImageDispatch(
         uint64_t data_offset) : m_data_offset(data_offset) {
 }
 
-
-void CryptoImageDispatch::remap_extents(
-        io::Extents& image_extents, io::ImageExtentsMapType type) {
-  if (type == io::IMAGE_EXTENTS_MAP_TYPE_LOGICAL_TO_PHYSICAL) {
-    for (auto& extent: image_extents) {
-      extent.first += m_data_offset;
+void CryptoImageDispatch::remap_to_physical(io::Extents& image_extents,
+                                            io::ImageArea area) {
+  switch (area) {
+  case io::ImageArea::DATA:
+    for (auto& [off, _] : image_extents) {
+      off += m_data_offset;
     }
-  } else if (type == io::IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL) {
-    for (auto& extent: image_extents) {
-      extent.first -= m_data_offset;
+    break;
+  case io::ImageArea::CRYPTO_HEADER:
+    // direct mapping
+    break;
+  default:
+    ceph_abort();
+  }
+}
+
+io::ImageArea CryptoImageDispatch::remap_to_logical(
+    io::Extents& image_extents) {
+  bool saw_data = false;
+  bool saw_crypto_header = false;
+  for (auto& [off, _] : image_extents) {
+    if (off >= m_data_offset) {
+      off -= m_data_offset;
+      saw_data = true;
+    } else {
+      saw_crypto_header = true;
     }
   }
+  if (saw_crypto_header) {
+    ceph_assert(!saw_data);
+    return io::ImageArea::CRYPTO_HEADER;
+  }
+  return io::ImageArea::DATA;
 }
 
 } // namespace crypto

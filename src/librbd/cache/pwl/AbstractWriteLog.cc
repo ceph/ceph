@@ -1307,7 +1307,6 @@ void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
 {
   GenericLogEntries dirty_entries;
   int published_reserves = 0;
-  bool need_update_state = false;
   ldout(m_image_ctx.cct, 20) << __func__ << ": completing" << dendl;
   for (auto &op : ops) {
     utime_t now = ceph_clock_now();
@@ -1327,11 +1326,6 @@ void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
       std::lock_guard locker(m_lock);
       m_unpublished_reserves -= published_reserves;
       m_dirty_log_entries.splice(m_dirty_log_entries.end(), dirty_entries);
-      if (m_cache_state->clean && !this->m_dirty_log_entries.empty()) {
-        m_cache_state->clean = false;
-        update_image_cache_state();
-        need_update_state = true;
-      }
     }
     op->complete(result);
     m_perfcounter->tinc(l_librbd_pwl_log_op_dis_to_app_t,
@@ -1345,10 +1339,6 @@ void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
     m_perfcounter->hinc(l_librbd_pwl_log_op_app_to_appc_t_hist, app_lat.to_nsec(),
                       log_entry->ram_entry.write_bytes);
     m_perfcounter->tinc(l_librbd_pwl_log_op_app_to_cmp_t, now - op->log_append_start_time);
-  }
-  if (need_update_state) {
-    std::unique_lock locker(m_lock);
-    write_image_cache_state(locker);
   }
   // New entries may be flushable
   {
@@ -1539,7 +1529,7 @@ bool AbstractWriteLog<I>::check_allocation(
   }
 
   if (alloc_succeeds) {
-    std::lock_guard locker(m_lock);
+    std::unique_lock locker(m_lock);
     /* We need one free log entry per extent (each is a separate entry), and
      * one free "lane" for remote replication. */
     if ((m_free_lanes >= num_lanes) &&
@@ -1551,6 +1541,11 @@ bool AbstractWriteLog<I>::check_allocation(
       m_bytes_allocated += bytes_allocated;
       m_bytes_cached += bytes_cached;
       m_bytes_dirty += bytes_dirtied;
+      if (m_cache_state->clean && bytes_dirtied > 0) {
+        m_cache_state->clean = false;
+        update_image_cache_state();
+        write_image_cache_state(locker);
+      }
     } else {
       alloc_succeeds = false;
     }

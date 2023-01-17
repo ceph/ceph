@@ -3626,6 +3626,7 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
 	mop->tids[offset] = tid;
 
 	if (!ctx->obc->is_blocked()) {
+          dout(15) << fmt::format("{}: blocking object on rc: tid:{}", __func__, tid) << dendl;
 	  ctx->obc->start_block();
 	}
 	need_inc_ref = true;
@@ -7434,6 +7435,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  p.second.set_flag(chunk_info_t::FLAG_MISSING);
 	  // punch hole
 	  t->zero(soid, p.first, p.second.length);
+	  interval_set<uint64_t> ch;
+	  ch.insert(p.first, p.second.length);
+	  ctx->modified_ranges.union_of(ch);
+	  ctx->clean_regions.mark_data_region_dirty(p.first, p.second.length);
 	}
 	oi.clear_data_digest();
 	ctx->delta_stats.num_wr++;
@@ -9387,6 +9392,7 @@ void PrimaryLogPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 			   mirror_snapset, src_obj_fadvise_flags,
 			   dest_obj_fadvise_flags));
   copy_ops[dest] = cop;
+  dout(20) << fmt::format("{}: blocking {}", __func__, dest) << dendl;
   obc->start_block();
 
   if (!obc->obs.oi.has_manifest()) {
@@ -10837,8 +10843,10 @@ int PrimaryLogPG::start_flush(
     }
   }
 
-  if (blocking)
+  if (blocking) {
+    dout(20) << fmt::format("{}: blocking {}", __func__, soid) << dendl;
     obc->start_block();
+  }
 
   map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(soid);
   if (p != flush_ops.end()) {

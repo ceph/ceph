@@ -378,18 +378,10 @@ class Schedules:
         self.level_specs: Dict[str, LevelSpec] = {}
         self.schedules: Dict[str, Schedule] = {}
 
-    def __len__(self) -> int:
-        return len(self.schedules)
-
-    def load(self,
-             namespace_validator: Optional[Callable] = None,
-             image_validator: Optional[Callable] = None) -> None:
-
-        schedule_cfg = self.handler.module.get_module_option(
-            self.handler.MODULE_OPTION_NAME, '')
-
         # Previous versions incorrectly stored the global config in
         # the localized module option. Check the config is here and fix it.
+        schedule_cfg = self.handler.module.get_module_option(
+            self.handler.MODULE_OPTION_NAME, '')
         if not schedule_cfg:
             schedule_cfg = self.handler.module.get_localized_module_option(
                 self.handler.MODULE_OPTION_NAME, '')
@@ -399,6 +391,17 @@ class Schedules:
         self.handler.module.set_localized_module_option(
             self.handler.MODULE_OPTION_NAME, None)
 
+    def __len__(self) -> int:
+        return len(self.schedules)
+
+    def load(self,
+             namespace_validator: Optional[Callable] = None,
+             image_validator: Optional[Callable] = None) -> None:
+        self.level_specs = {}
+        self.schedules = {}
+
+        schedule_cfg = self.handler.module.get_module_option(
+            self.handler.MODULE_OPTION_NAME, '')
         if schedule_cfg:
             try:
                 level_spec = LevelSpec.make_global()
@@ -424,7 +427,6 @@ class Schedules:
                        ioctx: rados.Ioctx,
                        namespace_validator: Optional[Callable],
                        image_validator: Optional[Callable]) -> None:
-        pool_id = ioctx.get_pool_id()
         pool_name = ioctx.get_pool_name()
         stale_keys = []
         start_after = ''
@@ -569,7 +571,7 @@ class Schedules:
             ls = self.level_specs[level_spec_id]
             if ls == parent or ls == level_spec or ls.is_child_of(level_spec):
                 result[level_spec_id] = {
-                    'name' : schedule.name,
-                    'schedule' : schedule.to_list(),
+                    'name': schedule.name,
+                    'schedule': schedule.to_list(),
                 }
         return result

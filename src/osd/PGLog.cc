@@ -1146,37 +1146,41 @@ namespace {
       on_disk_can_rollback_to = info.last_update;
       missing.may_include_deletes = false;
 
-      return seastar::repeat([ch=std::move(ch),
-                              pgmeta_oid=std::move(pgmeta_oid),
-                              start=std::make_optional<std::string>(),
-                              this]() mutable {
-        return store.omap_get_values(
-          ch, pgmeta_oid, start
-        ).safe_then([this, &start](const auto& ret) mutable {
-          const auto& [done, kvs] = ret;
-          for (const auto& [key, value] : kvs) {
-            process_entry(key, value);
-            // I trust the compiler will optimize this out
-            start = key;
-          }
-          return seastar::make_ready_future<seastar::stop_iteration>(
-            done ? seastar::stop_iteration::yes : seastar::stop_iteration::no
-          );
-        }, crimson::os::FuturizedStore::read_errorator::assert_all{});
-      }).then([this] {
-        if (info.pgid.is_no_shard()) {
-          // replicated pool pg does not persist this key
-          assert(on_disk_rollback_info_trimmed_to == eversion_t());
-          on_disk_rollback_info_trimmed_to = info.last_update;
-        }
-        log = PGLog::IndexedLog(
-             info.last_update,
-             info.log_tail,
-             on_disk_can_rollback_to,
-             on_disk_rollback_info_trimmed_to,
-             std::move(entries),
-             std::move(dups));
-      });
+      return seastar::do_with(
+        std::move(ch),
+        std::move(pgmeta_oid),
+        std::make_optional<std::string>(),
+        [this](crimson::os::CollectionRef &ch,
+               ghobject_t &pgmeta_oid,
+               std::optional<std::string> &start) {
+          return seastar::repeat([this, &ch, &pgmeta_oid, &start]() {
+            return store.omap_get_values(
+              ch, pgmeta_oid, start
+            ).safe_then([this, &start](const auto& ret) {
+              const auto& [done, kvs] = ret;
+              for (const auto& [key, value] : kvs) {
+                process_entry(key, value);
+                start = key;
+              }
+              return seastar::make_ready_future<seastar::stop_iteration>(
+                done ? seastar::stop_iteration::yes : seastar::stop_iteration::no
+              );
+            }, crimson::os::FuturizedStore::read_errorator::assert_all{});
+          }).then([this] {
+            if (info.pgid.is_no_shard()) {
+              // replicated pool pg does not persist this key
+              assert(on_disk_rollback_info_trimmed_to == eversion_t());
+              on_disk_rollback_info_trimmed_to = info.last_update;
+            }
+            log = PGLog::IndexedLog(
+                 info.last_update,
+                 info.log_tail,
+                 on_disk_can_rollback_to,
+                 on_disk_rollback_info_trimmed_to,
+                 std::move(entries),
+                 std::move(dups));
+          });
+        });
     }
   };
 }
@@ -1202,4 +1206,85 @@ seastar::future<> PGLog::read_log_and_missing_crimson(
   });
 }
 
+seastar::future<> PGLog::rebuild_missing_set_with_deletes_crimson(
+  crimson::os::FuturizedStore &store,
+  crimson::os::CollectionRef ch,
+  const pg_info_t &info)
+{
+  // save entries not generated from the current log (e.g. added due
+  // to repair, EIO handling, or divergent_priors).
+  map<hobject_t, pg_missing_item> extra_missing;
+  for (const auto& p : missing.get_items()) {
+    if (!log.logged_object(p.first)) {
+      ldpp_dout(this, 20) << __func__ << " extra missing entry: " << p.first
+	       << " " << p.second << dendl;
+      extra_missing[p.first] = p.second;
+    }
+  }
+  missing.clear();
+
+  // go through the log and add items that are not present or older
+  // versions on disk, just as if we were reading the log + metadata
+  // off disk originally
+  return seastar::do_with(
+    set<hobject_t>(),
+    log.log.rbegin(),
+    [this, &store, ch, &info](auto &did, auto &it) {
+    return seastar::repeat([this, &store, ch, &info, &it, &did] {
+      if (it == log.log.rend()) {
+	return seastar::make_ready_future<seastar::stop_iteration>(
+	  seastar::stop_iteration::yes);
+      }
+      auto &log_entry = *it;
+      it++;
+      if (log_entry.version <= info.last_complete)
+	return seastar::make_ready_future<seastar::stop_iteration>(
+	  seastar::stop_iteration::yes);
+      if (log_entry.soid > info.last_backfill ||
+	  log_entry.is_error() ||
+	  did.find(log_entry.soid) != did.end())
+	return seastar::make_ready_future<seastar::stop_iteration>(
+	  seastar::stop_iteration::no);
+      did.insert(log_entry.soid);
+      return store.get_attr(
+	ch,
+	ghobject_t(log_entry.soid, ghobject_t::NO_GEN, info.pgid.shard),
+	OI_ATTR
+      ).safe_then([this, &log_entry](auto bv) {
+	object_info_t oi(bv);
+	ldpp_dout(this, 20)
+	  << "rebuild_missing_set_with_deletes_crimson found obj "
+	  << log_entry.soid
+	  << " version = " << oi.version << dendl;
+	if (oi.version < log_entry.version) {
+	  ldpp_dout(this, 20)
+	    << "rebuild_missing_set_with_deletes_crimson missing obj "
+	    << log_entry.soid
+	    << " for version = " << log_entry.version << dendl;
+	  missing.add(
+	    log_entry.soid,
+	    log_entry.version,
+	    oi.version,
+	    log_entry.is_delete());
+	}
+      },
+      crimson::ct_error::enoent::handle([this, &log_entry] {
+	ldpp_dout(this, 20)
+	  << "rebuild_missing_set_with_deletes_crimson missing object "
+	  << log_entry.soid << dendl;
+	missing.add(
+	  log_entry.soid,
+	  log_entry.version,
+	  eversion_t(),
+	  log_entry.is_delete());
+      }),
+      crimson::ct_error::enodata::handle([] { ceph_abort("unexpected enodata"); })
+      ).then([] {
+	return seastar::stop_iteration::no;
+      });
+    });
+  }).then([this] {
+    set_missing_may_contain_deletes();
+  });
+}
 #endif

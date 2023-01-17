@@ -11,8 +11,8 @@
  * Foundation. See file COPYING.
  *
  */
-#include "rgw/rgw_rados.h"
-#include "rgw/rgw_http_client.h"
+#include "rgw_rados.h"
+#include "rgw_http_client.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include <unistd.h>

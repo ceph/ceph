@@ -21,6 +21,7 @@
 #include "rgw_compression.h"
 
 #include "rgw_auth.h"
+#include "rgw_auth_registry.h"
 #include "rgw_swift_auth.h"
 
 #include "rgw_request.h"
@@ -587,7 +588,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 }
 
 static int get_swift_container_settings(req_state * const s,
-                                        rgw::sal::Store*  const store,
+                                        rgw::sal::Driver*  const driver,
                                         RGWAccessControlPolicy * const policy,
                                         bool * const has_policy,
                                         uint32_t * rw_mask,
@@ -601,7 +602,7 @@ static int get_swift_container_settings(req_state * const s,
 
   if (read_list || write_list) {
     RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-    const auto r = swift_policy.create(s, store,
+    const auto r = swift_policy.create(s, driver,
                                        s->user->get_id(),
                                        s->user->get_display_name(),
                                        read_list,
@@ -704,7 +705,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
   bool has_policy;
   uint32_t policy_rw_mask = 0;
 
-  int r = get_swift_container_settings(s, store, &policy, &has_policy,
+  int r = get_swift_container_settings(s, driver, &policy, &has_policy,
 				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
     return r;
@@ -714,7 +715,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
     policy.create_default(s->user->get_id(), s->user->get_display_name());
   }
 
-  location_constraint = store->get_zone()->get_zonegroup().get_api_name();
+  location_constraint = driver->get_zone()->get_zonegroup().get_api_name();
   get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX,
                            CONT_REMOVE_ATTR_PREFIX, rmattr_names);
   placement_rule.init(s->info.env->get("HTTP_X_STORAGE_POLICY", ""), s->info.storage_class);
@@ -850,7 +851,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
   if (bucket_name.compare(s->bucket->get_name()) != 0) {
-    r = store->get_bucket(s, s->user.get(), s->user->get_id().tenant, bucket_name, &bucket, s->yield);
+    r = driver->get_bucket(s, s->user.get(), s->user->get_id().tenant, bucket_name, &bucket, s->yield);
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
 			 << bucket_name << dendl;
@@ -1044,7 +1045,7 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
 }
 
 static int get_swift_account_settings(req_state * const s,
-                                      rgw::sal::Store*  const store,
+                                      rgw::sal::Driver*  const driver,
                                       RGWAccessControlPolicy_SWIFTAcct*  const policy,
                                       bool * const has_policy)
 {
@@ -1053,7 +1054,7 @@ static int get_swift_account_settings(req_state * const s,
   const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
   if (acl_attr) {
     RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
-    const bool r = swift_acct_policy.create(s, store,
+    const bool r = swift_acct_policy.create(s, driver,
                                      s->user->get_id(),
                                      s->user->get_display_name(),
                                      string(acl_attr));
@@ -1075,7 +1076,7 @@ int RGWPutMetadataAccount_ObjStore_SWIFT::get_params(optional_yield y)
   }
 
   int ret = get_swift_account_settings(s,
-                                       store,
+                                       driver,
                                        // FIXME: we need to carry unique_ptr in generic class
                                        // and allocate appropriate ACL class in the ctor
                                        static_cast<RGWAccessControlPolicy_SWIFTAcct *>(&policy),
@@ -1112,7 +1113,7 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params(optional_yield y)
     return -EINVAL;
   }
 
-  int r = get_swift_container_settings(s, store, &policy, &has_policy,
+  int r = get_swift_container_settings(s, driver, &policy, &has_policy,
 				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
     return r;
@@ -1850,7 +1851,7 @@ void RGWInfo_ObjStore_SWIFT::execute(optional_yield y)
       s->formatter->close_section();
     }
     else {
-      pair.second.list_data(*(s->formatter), s->cct->_conf, store);
+      pair.second.list_data(*(s->formatter), s->cct->_conf, driver);
     }
   }
 
@@ -1870,7 +1871,7 @@ void RGWInfo_ObjStore_SWIFT::send_response()
 
 void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
                                               const ConfigProxy& config,
-                                              rgw::sal::Store* store)
+                                              rgw::sal::Driver* driver)
 {
   formatter.open_object_section("swift");
   formatter.dump_int("max_file_size", config->rgw_max_put_size);
@@ -1899,7 +1900,7 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   }
 
   formatter.open_array_section("policies");
-  const rgw::sal::ZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
+  const rgw::sal::ZoneGroup& zonegroup = driver->get_zone()->get_zonegroup();
 
   std::set<std::string> targets;
   if (zonegroup.get_placement_target_names(targets)) {
@@ -1921,7 +1922,7 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
 
 void RGWInfo_ObjStore_SWIFT::list_tempauth_data(Formatter& formatter,
                                                  const ConfigProxy& config,
-                                                 rgw::sal::Store* store)
+                                                 rgw::sal::Driver* driver)
 {
   formatter.open_object_section("tempauth");
   formatter.dump_bool("account_acls", true);
@@ -1929,7 +1930,7 @@ void RGWInfo_ObjStore_SWIFT::list_tempauth_data(Formatter& formatter,
 }
 void RGWInfo_ObjStore_SWIFT::list_tempurl_data(Formatter& formatter,
                                                 const ConfigProxy& config,
-                                                rgw::sal::Store* store)
+                                                rgw::sal::Driver* driver)
 {
   formatter.open_object_section("tempurl");
   formatter.open_array_section("methods");
@@ -1944,7 +1945,7 @@ void RGWInfo_ObjStore_SWIFT::list_tempurl_data(Formatter& formatter,
 
 void RGWInfo_ObjStore_SWIFT::list_slo_data(Formatter& formatter,
                                             const ConfigProxy& config,
-                                            rgw::sal::Store* store)
+                                            rgw::sal::Driver* driver)
 {
   formatter.open_object_section("slo");
   formatter.dump_int("max_manifest_segments", config->rgw_max_slo_entries);
@@ -1971,14 +1972,14 @@ bool RGWInfo_ObjStore_SWIFT::is_expired(const std::string& expires, const DoutPr
 }
 
 
-void RGWFormPost::init(rgw::sal::Store* const store,
+void RGWFormPost::init(rgw::sal::Driver* const driver,
                        req_state* const s,
                        RGWHandler* const dialect_handler)
 {
   prefix = std::move(s->object->get_name());
   s->object->set_key(rgw_obj_key());
 
-  return RGWPostObj_ObjStore::init(store, s, dialect_handler);
+  return RGWPostObj_ObjStore::init(driver, s, dialect_handler);
 }
 
 std::size_t RGWFormPost::get_max_file_size() /*const*/
@@ -2086,7 +2087,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
     const rgw_user uid(s->account_name);
     if (uid.tenant.empty()) {
       const rgw_user tenanted_uid(uid.id, uid.id);
-      user = store->get_user(tenanted_uid);
+      user = driver->get_user(tenanted_uid);
 
       if (user->load_user(s, s->yield) >= 0) {
         /* Succeeded. */
@@ -2095,7 +2096,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
     }
 
     if (!found) {
-      user = store->get_user(uid);
+      user = driver->get_user(uid);
       if (user->load_user(s, s->yield) < 0) {
 	throw -EPERM;
       }
@@ -2104,7 +2105,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
 
   /* Need to get user info of bucket owner. */
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = store->get_bucket(s, user.get(), user->get_tenant(), bucket_name, &bucket, s->yield);
+  int ret = driver->get_bucket(s, user.get(), user->get_tenant(), bucket_name, &bucket, s->yield);
   if (ret < 0) {
     throw ret;
   }
@@ -2112,7 +2113,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
   ldpp_dout(this, 20) << "temp url user (bucket owner): " << bucket->get_info().owner
                  << dendl;
 
-  user = store->get_user(bucket->get_info().owner);
+  user = driver->get_user(bucket->get_info().owner);
   if (user->load_user(s, s->yield) < 0) {
     throw -EPERM;
   }
@@ -2172,7 +2173,7 @@ int RGWFormPost::get_params(optional_yield y)
        * only. They will be picked up by ::get_data(). */
       break;
     } else {
-      /* Control part ahead. Receive, parse and store for later usage. */
+      /* Control part ahead. Receive, parse and driver for later usage. */
       bool boundary;
       ret = read_data(part.data, s->cct->_conf->rgw_max_chunk_size,
                       boundary, stream_done);
@@ -2349,13 +2350,13 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
 
   class RGWGetErrorPage : public RGWGetObj_ObjStore_SWIFT {
   public:
-    RGWGetErrorPage(rgw::sal::Store* const store,
+    RGWGetErrorPage(rgw::sal::Driver* const driver,
                     RGWHandler_REST* const handler,
                     req_state* const s,
                     const int http_ret) {
       /* Calling a virtual from the base class is safe as the subobject should
        * be properly initialized and we haven't overridden the init method. */
-      init(store, s, handler);
+      init(driver, s, handler);
       set_get_data(true);
       set_custom_http_response(http_ret);
     }
@@ -2367,7 +2368,7 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
        * fault situation by sending the original message. */
       return 0;
     }
-  } get_errpage_op(store, handler, s, http_ret);
+  } get_errpage_op(driver, handler, s, http_ret);
 
   /* This is okay.  It's an error, so nothing will run after this, and it can be
    * called by abort_early(), which can be called before s->object or s->bucket
@@ -2375,12 +2376,12 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
   if (!rgw::sal::Bucket::empty(s->bucket.get())) {
     s->object = s->bucket->get_object(rgw_obj_key(std::to_string(http_ret) + error_doc));
   } else {
-    s->object = store->get_object(rgw_obj_key(std::to_string(http_ret) + error_doc));
+    s->object = driver->get_object(rgw_obj_key(std::to_string(http_ret) + error_doc));
   }
 
   RGWOp* newop = &get_errpage_op;
   RGWRequest req(0);
-  return rgw_process_authenticated(handler, newop, &req, s, y, store, true);
+  return rgw_process_authenticated(handler, newop, &req, s, y, driver, true);
 }
 
 int RGWSwiftWebsiteHandler::error_handler(const int err_no,
@@ -2631,7 +2632,7 @@ int RGWSwiftWebsiteHandler::retarget_bucket(RGWOp* op, RGWOp** new_op)
 
   if (op_override) {
     handler->put_op(op);
-    op_override->init(store, s, handler);
+    op_override->init(driver, s, handler);
 
     *new_op = op_override;
   } else {
@@ -2670,7 +2671,7 @@ int RGWSwiftWebsiteHandler::retarget_object(RGWOp* op, RGWOp** new_op)
 
   if (op_override) {
     handler->put_op(op);
-    op_override->init(store, s, handler);
+    op_override->init(driver, s, handler);
 
     *new_op = op_override;
   } else {
@@ -2815,7 +2816,7 @@ int RGWHandler_REST_SWIFT::postauth_init(optional_yield y)
 
   if (!s->object) {
     /* Need an object, even an empty one */
-    s->object = store->get_object(rgw_obj_key());
+    s->object = driver->get_object(rgw_obj_key());
   }
 
   ldpp_dout(s, 10) << "s->object=" <<
@@ -2908,7 +2909,7 @@ static void next_tok(string& str, string& tok, char delim)
   }
 }
 
-int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Store* store,
+int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Driver* driver,
 					    req_state* const s,
                                             const std::string& frontend_prefix)
 {
@@ -3026,7 +3027,7 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Store* store,
   s->init_state.url_bucket = first;
 
   if (req.size()) {
-    s->object = store->get_object(
+    s->object = driver->get_object(
       rgw_obj_key(req, s->info.env->get("HTTP_X_OBJECT_VERSION_ID", ""))); /* rgw swift extension */
     s->info.effective_uri.append("/" + s->object->get_name());
   }
@@ -3034,7 +3035,7 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Store* store,
   return 0;
 }
 
-int RGWHandler_REST_SWIFT::init(rgw::sal::Store* store, req_state* s,
+int RGWHandler_REST_SWIFT::init(rgw::sal::Driver* driver, req_state* s,
 				rgw::io::BasicClient *cio)
 {
   struct req_init_state *t = &s->init_state;
@@ -3047,7 +3048,7 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::Store* store, req_state* s,
     bool result = RGWCopyObj::parse_copy_location(copy_source, t->src_bucket, key, s);
     if (!result)
       return -ERR_BAD_URL;
-    s->src_object = store->get_object(key);
+    s->src_object = driver->get_object(key);
     if (!s->src_object)
       return -ERR_BAD_URL;
   }
@@ -3077,16 +3078,16 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::Store* store, req_state* s,
 
   s->info.storage_class = s->info.env->get("HTTP_X_OBJECT_STORAGE_CLASS", "");
 
-  return RGWHandler_REST::init(store, s, cio);
+  return RGWHandler_REST::init(driver, s, cio);
 }
 
 RGWHandler_REST*
-RGWRESTMgr_SWIFT::get_handler(rgw::sal::Store* store,
+RGWRESTMgr_SWIFT::get_handler(rgw::sal::Driver* driver,
 			      req_state* const s,
                               const rgw::auth::StrategyRegistry& auth_registry,
                               const std::string& frontend_prefix)
 {
-  int ret = RGWHandler_REST_SWIFT::init_from_header(store, s, frontend_prefix);
+  int ret = RGWHandler_REST_SWIFT::init_from_header(driver, s, frontend_prefix);
   if (ret < 0) {
     ldpp_dout(s, 10) << "init_from_header returned err=" << ret <<  dendl;
     return nullptr;
@@ -3106,7 +3107,7 @@ RGWRESTMgr_SWIFT::get_handler(rgw::sal::Store* store,
 }
 
 RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(
-  rgw::sal::Store* store,
+  rgw::sal::Driver* driver,
   req_state* const s,
   const rgw::auth::StrategyRegistry& auth_registry,
   const std::string& frontend_prefix)

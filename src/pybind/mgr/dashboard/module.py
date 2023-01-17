@@ -119,6 +119,7 @@ class CherryPyConfig(object):
 
         # Initialize custom handlers.
         cherrypy.tools.authenticate = AuthManagerTool()
+        self.configure_cors()
         cherrypy.tools.plugin_hooks_filter_request = cherrypy.Tool(
             'before_handler',
             lambda: PLUGIN_MANAGER.hook.filter_request_before_handler(request=cherrypy.request),
@@ -221,6 +222,70 @@ class CherryPyConfig(object):
                 self.log.info("Configured CherryPy, starting engine...")  # type: ignore
                 return uri
 
+    def configure_cors(self):
+        """
+        Allow CORS requests if the cross_origin_url option is set.
+        """
+        cross_origin_url = mgr.get_localized_module_option('cross_origin_url', '')
+        if cross_origin_url:
+            cherrypy.tools.CORS = cherrypy.Tool('before_handler', self.cors_tool)
+            config = {
+                'tools.CORS.on': True,
+            }
+            self.update_cherrypy_config(config)
+
+    def cors_tool(self):
+        '''
+        Handle both simple and complex CORS requests
+
+        Add CORS headers to each response. If the request is a CORS preflight
+        request swap out the default handler with a simple, single-purpose handler
+        that verifies the request and provides a valid CORS response.
+        '''
+        req_head = cherrypy.request.headers
+        resp_head = cherrypy.response.headers
+
+        # Always set response headers necessary for 'simple' CORS.
+        req_header_cross_origin_url = req_head.get('Access-Control-Allow-Origin')
+        cross_origin_urls = mgr.get_localized_module_option('cross_origin_url', '')
+        cross_origin_url_list = [url.strip() for url in cross_origin_urls.split(',')]
+        if req_header_cross_origin_url in cross_origin_url_list:
+            resp_head['Access-Control-Allow-Origin'] = req_header_cross_origin_url
+        resp_head['Access-Control-Expose-Headers'] = 'GET, POST'
+        resp_head['Access-Control-Allow-Credentials'] = 'true'
+
+        # Non-simple CORS preflight request; short-circuit the normal handler.
+        if cherrypy.request.method == 'OPTIONS':
+            req_header_origin_url = req_head.get('Origin')
+            if req_header_origin_url in cross_origin_url_list:
+                resp_head['Access-Control-Allow-Origin'] = req_header_origin_url
+            ac_method = req_head.get('Access-Control-Request-Method', None)
+
+            allowed_methods = ['GET', 'POST']
+            allowed_headers = [
+                'Content-Type',
+                'Authorization',
+                'Accept',
+                'Access-Control-Allow-Origin'
+            ]
+
+            if ac_method and ac_method in allowed_methods:
+                resp_head['Access-Control-Allow-Methods'] = ', '.join(allowed_methods)
+                resp_head['Access-Control-Allow-Headers'] = ', '.join(allowed_headers)
+
+                resp_head['Connection'] = 'keep-alive'
+                resp_head['Access-Control-Max-Age'] = '3600'
+
+            # CORS requests should short-circuit the other tools.
+            cherrypy.response.body = ''.encode('utf8')
+            cherrypy.response.status = 200
+            cherrypy.serving.request.handler = None
+
+            # Needed to avoid the auth_tool check.
+            if cherrypy.request.config.get('tools.sessions.on', False):
+                cherrypy.session['token'] = True
+            return True
+
 
 if TYPE_CHECKING:
     SslConfigKey = Literal['crt', 'key']
@@ -271,7 +336,8 @@ class Module(MgrModule, CherryPyConfig):
                enum_allowed=['redirect', 'error']),
         Option(name='standby_error_status_code', type='int', default=500,
                min=400, max=599),
-        Option(name='redirect_resolve_ip_addr', type='bool', default=False)
+        Option(name='redirect_resolve_ip_addr', type='bool', default=False),
+        Option(name='cross_origin_url', type='str', default=''),
     ]
     MODULE_OPTIONS.extend(options_schema_list())
     for options in PLUGIN_MANAGER.hook.get_options() or []:

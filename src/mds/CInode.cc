@@ -2212,7 +2212,6 @@ void CInode::decode_lock_state(int type, const bufferlist& bl)
   auto p = bl.cbegin();
 
   DECODE_START(1, p);
-  utime_t tm;
 
   snapid_t newfirst;
   using ceph::decode;
@@ -2543,7 +2542,8 @@ void CInode::finish_scatter_gather_update(int type, MutationRef& mut)
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
       if (touched_chattr)
-	pi->change_attr = pi->dirstat.change_attr;
+	pi->change_attr++;
+
       dout(20) << " final dirstat " << pi->dirstat << dendl;
 
       if (dirstat_valid && !dirstat.same_sums(pi->dirstat)) {
@@ -3799,7 +3799,9 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   dout(20) << " pfile " << pfile << " pauth " << pauth
 	   << " plink " << plink << " pxattr " << pxattr
 	   << " plocal " << plocal
+	   << " mtime " << any_i->mtime
 	   << " ctime " << any_i->ctime
+	   << " change_attr " << any_i->change_attr
 	   << " valid=" << valid << dendl;
 
   // file
@@ -4147,7 +4149,7 @@ void CInode::encode_cap_message(const ref_t<MClientCaps> &m, Capability *cap)
 
   dout(20) << __func__ << " pfile " << pfile
 	   << " pauth " << pauth << " plink " << plink << " pxattr " << pxattr
-	   << " ctime " << i->ctime << dendl;
+	   << " mtime " << i->mtime << " ctime " << i->ctime << " change_attr " << i->change_attr << dendl;
 
   i = pfile ? pi:oi;
   m->set_layout(i->layout);
@@ -4714,6 +4716,10 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         results->backtrace.error_str << "failed to read off disk; see retval";
         // we probably have a new unwritten file!
         // so skip the backtrace scrub for this entry and say that all's well
+        if (in->is_mdsdir()){
+          dout(20) << "forcing backtrace as passed since mdsdir actually doesn't have backtrace" << dendl;
+          results->backtrace.passed = true;
+        }
         if (in->is_dirty_parent()) {
           dout(20) << "forcing backtrace as passed since inode is dirty parent" << dendl;
           results->backtrace.passed = true;

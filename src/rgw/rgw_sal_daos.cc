@@ -517,10 +517,8 @@ int DaosBucket::check_bucket_shards(const DoutPrefixProvider* dpp) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosBucket::chown(const DoutPrefixProvider* dpp, User* new_user,
-                      User* old_user, optional_yield y,
-                      const std::string* marker) {
-  /* XXX: Update policies of all the bucket->objects with new user */
+int DaosBucket::chown(const DoutPrefixProvider* dpp, User& new_user,
+                      optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
@@ -662,7 +660,7 @@ int DaosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max,
   uint32_t ncp = common_prefixes.size();
 
   char daos_marker[DS3_MAX_KEY_BUFF];
-  std::strncpy(daos_marker, params.marker.to_str().c_str(), sizeof(daos_marker));
+  std::strncpy(daos_marker, params.marker.get_oid().c_str(), sizeof(daos_marker));
 
   ret = ds3_bucket_list_obj(&nobj, object_infos.data(), &ncp,
                             common_prefixes.data(), params.prefix.c_str(),
@@ -1044,6 +1042,10 @@ int DaosObject::omap_set_val_by_key(const DoutPrefixProvider* dpp,
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
+int DaosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y) {
+  return 0;
+}
+
 std::unique_ptr<MPSerializer> DaosObject::get_serializer(
     const DoutPrefixProvider* dpp, const std::string& lock_name) {
   return std::make_unique<MPDaosSerializer>(dpp, store, this, lock_name);
@@ -1204,7 +1206,7 @@ DaosObject::DaosDeleteOp::DaosDeleteOp(DaosObject* _source) : source(_source) {}
 int DaosObject::DaosDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
                                          optional_yield y) {
   ldpp_dout(dpp, 20) << "DaosDeleteOp::delete_obj "
-                     << source->get_key().to_str() << " from "
+                     << source->get_key().get_oid() << " from "
                      << source->get_bucket()->get_name() << dendl;
   if (source->get_instance() == "null") {
     source->clear_instance();
@@ -1212,7 +1214,7 @@ int DaosObject::DaosDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 
   // Open bucket
   int ret = 0;
-  std::string key = source->get_key().to_str();
+  std::string key = source->get_key().get_oid();
   DaosBucket* daos_bucket = source->get_daos_bucket();
   ret = daos_bucket->open(dpp);
   if (ret != 0) {
@@ -1289,15 +1291,15 @@ int DaosObject::lookup(const DoutPrefixProvider* dpp) {
     return ret;
   }
 
-  ret = ds3_obj_open(get_key().to_str().c_str(), &ds3o, daos_bucket->ds3b);
+  ret = ds3_obj_open(get_key().get_oid().c_str(), &ds3o, daos_bucket->ds3b);
 
   if (ret == -ENOENT) {
     ldpp_dout(dpp, 20) << "DEBUG: daos object (" << get_bucket()->get_name()
-                       << ", " << get_key().to_str()
+                       << ", " << get_key().get_oid()
                        << ") does not exist: ret=" << ret << dendl;
   } else if (ret != 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to open daos object ("
-                      << get_bucket()->get_name() << ", " << get_key().to_str()
+                      << get_bucket()->get_name() << ", " << get_key().get_oid()
                       << "): ret=" << ret << dendl;
   }
   return ret;
@@ -1320,11 +1322,11 @@ int DaosObject::create(const DoutPrefixProvider* dpp) {
     return ret;
   }
 
-  ret = ds3_obj_create(get_key().to_str().c_str(), &ds3o, daos_bucket->ds3b);
+  ret = ds3_obj_create(get_key().get_oid().c_str(), &ds3o, daos_bucket->ds3b);
 
   if (ret != 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to create daos object ("
-                      << get_bucket()->get_name() << ", " << get_key().to_str()
+                      << get_bucket()->get_name() << ", " << get_key().get_oid()
                       << "): ret=" << ret << dendl;
   }
   return ret;
@@ -1350,7 +1352,7 @@ int DaosObject::write(const DoutPrefixProvider* dpp, bufferlist&& data,
                           ds3o, nullptr);
   if (ret != 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to write into daos object ("
-                      << get_bucket()->get_name() << ", " << get_key().to_str()
+                      << get_bucket()->get_name() << ", " << get_key().get_oid()
                       << "): ret=" << ret << dendl;
   }
   return ret;
@@ -1363,7 +1365,7 @@ int DaosObject::read(const DoutPrefixProvider* dpp, bufferlist& data,
                          get_daos_bucket()->ds3b, ds3o, nullptr);
   if (ret != 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to read from daos object ("
-                      << get_bucket()->get_name() << ", " << get_key().to_str()
+                      << get_bucket()->get_name() << ", " << get_key().get_oid()
                       << "): ret=" << ret << dendl;
   }
   return ret;
@@ -1382,7 +1384,7 @@ int DaosObject::get_dir_entry_attrs(const DoutPrefixProvider* dpp,
     struct ds3_multipart_upload_info ui = {.encoded = value.data(),
                                            .encoded_length = size};
     ret = ds3_upload_get_info(&ui, bucket->get_name().c_str(),
-                              get_key().to_str().c_str(), store->ds3);
+                              get_key().get_oid().c_str(), store->ds3);
   } else {
     ret = lookup(dpp);
     if (ret != 0) {
@@ -1398,7 +1400,7 @@ int DaosObject::get_dir_entry_attrs(const DoutPrefixProvider* dpp,
 
   if (ret != 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to get info of daos object ("
-                      << get_bucket()->get_name() << ", " << get_key().to_str()
+                      << get_bucket()->get_name() << ", " << get_key().get_oid()
                       << "): ret=" << ret << dendl;
     return ret;
   }
@@ -1451,7 +1453,7 @@ int DaosObject::set_dir_entry_attrs(const DoutPrefixProvider* dpp,
   ret = ds3_obj_set_info(object_info.get(), get_daos_bucket()->ds3b, ds3o);
   if (ret != 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to set info of daos object ("
-                      << get_bucket()->get_name() << ", " << get_key().to_str()
+                      << get_bucket()->get_name() << ", " << get_key().get_oid()
                       << "): ret=" << ret << dendl;
   }
   return ret;
@@ -1467,9 +1469,9 @@ int DaosObject::mark_as_latest(const DoutPrefixProvider* dpp,
   std::unique_ptr<DaosObject> latest_object = std::make_unique<DaosObject>(
       store, rgw_obj_key(get_name(), DS3_LATEST_INSTANCE), get_bucket());
 
-  ldpp_dout(dpp, 20) << __func__ << ": key=" << get_key().to_str()
+  ldpp_dout(dpp, 20) << __func__ << ": key=" << get_key().get_oid()
                      << " latest_object_key= "
-                     << latest_object->get_key().to_str() << dendl;
+                     << latest_object->get_key().get_oid() << dendl;
 
   int ret = latest_object->lookup(dpp);
   if (ret == 0) {
@@ -1493,7 +1495,7 @@ int DaosObject::mark_as_latest(const DoutPrefixProvider* dpp,
   // Get or create the link [latest], make it link to the current latest
   // version.
   ret =
-      ds3_obj_mark_latest(get_key().to_str().c_str(), get_daos_bucket()->ds3b);
+      ds3_obj_mark_latest(get_key().get_oid().c_str(), get_daos_bucket()->ds3b);
   ldpp_dout(dpp, 20) << "DEBUG: ds3_obj_mark_latest ret=" << ret << dendl;
   return ret;
 }
@@ -1574,7 +1576,7 @@ int DaosAtomicWriter::complete(
   if (is_versioned)
     ent.flags =
         rgw_bucket_dir_entry::FLAG_VER | rgw_bucket_dir_entry::FLAG_CURRENT;
-  ldpp_dout(dpp, 20) << __func__ << ": key=" << obj.get_key().to_str()
+  ldpp_dout(dpp, 20) << __func__ << ": key=" << obj.get_key().get_oid()
                      << " etag: " << etag << dendl;
   if (user_data) ent.meta.user_data = *user_data;
 

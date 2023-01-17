@@ -67,10 +67,6 @@ public:
   extent_types_t get_type() const final {
     return TYPE;
   }
-
-  bool may_conflict() const final {
-    return false;
-  }
 };
 using BackrefInternalNodeRef = BackrefInternalNode::Ref;
 
@@ -90,10 +86,6 @@ public:
 
   extent_types_t get_type() const final  {
     return TYPE;
-  }
-
-  bool may_conflict() const final {
-    return false;
   }
 
   const_iterator insert(
@@ -133,3 +125,9 @@ public:
 using BackrefLeafNodeRef = BackrefLeafNode::Ref;
 
 } // namespace crimson::os::seastore::backref
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::backref::backref_map_val_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefInternalNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefLeafNode> : fmt::ostream_formatter {};
+#endif

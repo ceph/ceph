@@ -46,7 +46,6 @@
 %endif
 %endif
 %bcond_without selinux
-%bcond_without cephfs_java
 %bcond_without amqp_endpoint
 %bcond_without kafka_endpoint
 %bcond_without lttng
@@ -57,7 +56,11 @@
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
+%ifarch s390x
+%bcond_with system_pmdk
+%else
 %bcond_without system_pmdk
+%endif
 %bcond_with amqp_endpoint
 %bcond_with cephfs_java
 %bcond_with kafka_endpoint
@@ -658,6 +661,7 @@ Requires:       python%{python3_pkgversion}-pecan
 Requires:       python%{python3_pkgversion}-pyOpenSSL
 Requires:       python%{python3_pkgversion}-requests
 Requires:       python%{python3_pkgversion}-dateutil
+Requires:       python%{python3_pkgversion}-setuptools
 %if 0%{?fedora} || 0%{?rhel} >= 8
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-pyyaml
@@ -2125,7 +2129,9 @@ fi
 %{_bindir}/rgw-gap-list
 %{_bindir}/rgw-gap-list-comparator
 %{_bindir}/rgw-orphan-list
+%{_bindir}/rgw-policy-check
 %{_mandir}/man8/radosgw.8*
+%{_mandir}/man8/rgw-policy-check.8*
 %dir %{_localstatedir}/lib/ceph/radosgw
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-radosgw.target

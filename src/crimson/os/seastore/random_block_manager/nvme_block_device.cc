@@ -12,11 +12,119 @@
 #include "include/buffer.h"
 #include "rbm_device.h"
 #include "nvme_block_device.h"
+#include "block_rb_manager.h"
 
 namespace {
   seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_seastore_tm);
   }
+}
+
+namespace crimson::os::seastore::random_block_device {
+#include "crimson/os/seastore/logging.h"
+SET_SUBSYS(seastore_device);
+
+RBMDevice::mkfs_ret RBMDevice::mkfs(device_config_t config) {
+  LOG_PREFIX(RBMDevice::mkfs);
+  return stat_device(
+  ).handle_error(
+    mkfs_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+    "Invalid error stat_device in RBMDevice::mkfs"}
+  ).safe_then([this, FNAME, config=std::move(config)](auto st) {
+    super.block_size = st.block_size;
+    super.size = st.size;
+
+    super.feature |= RBM_BITMAP_BLOCK_CRC;
+    super.config = std::move(config);
+    DEBUG("super {} ", super);
+    // write super block
+    return write_rbm_header(
+    ).safe_then([] {
+      return mkfs_ertr::now();
+    }).handle_error(
+      mkfs_ertr::pass_further{},
+      crimson::ct_error::assert_all{
+      "Invalid error write_rbm_header in RBMDevice::mkfs"
+    });
+  });
+}
+
+write_ertr::future<> RBMDevice::write_rbm_header()
+{
+  bufferlist meta_b_header;
+  super.crc = 0;
+  encode(super, meta_b_header);
+  // If NVMeDevice supports data protection, CRC for checksum is not required
+  // NVMeDevice is expected to generate and store checksum internally.
+  // CPU overhead for CRC might be saved.
+  if (is_data_protection_enabled()) {
+    super.crc = -1;
+  } else {
+    super.crc = meta_b_header.crc32c(-1);
+  }
+
+  bufferlist bl;
+  encode(super, bl);
+  auto iter = bl.begin();
+  auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
+  assert(bl.length() < super.block_size);
+  iter.copy(bl.length(), bp.c_str());
+
+  return write(RBM_START_ADDRESS, bp);
+}
+
+read_ertr::future<rbm_metadata_header_t> RBMDevice::read_rbm_header(
+  rbm_abs_addr addr)
+{
+  LOG_PREFIX(RBMDevice::read_rbm_header);
+  bufferptr bptr =
+    bufferptr(ceph::buffer::create_page_aligned(RBM_SUPERBLOCK_SIZE));
+  bptr.zero();
+  return read(
+    addr,
+    bptr
+  ).safe_then([length=bptr.length(), this, bptr, FNAME]()
+    -> read_ertr::future<rbm_metadata_header_t> {
+    bufferlist bl;
+    bl.append(bptr);
+    auto p = bl.cbegin();
+    rbm_metadata_header_t super_block;
+    try {
+      decode(super_block, p);
+    }
+    catch (ceph::buffer::error& e) {
+      DEBUG("read_rbm_header: unable to decode rbm super block {}",
+	    e.what());
+      return crimson::ct_error::enoent::make();
+    }
+    checksum_t crc = super_block.crc;
+    bufferlist meta_b_header;
+    super_block.crc = 0;
+    encode(super_block, meta_b_header);
+    assert(ceph::encoded_sizeof<rbm_metadata_header_t>(super_block) <
+	super_block.block_size);
+
+    // Do CRC verification only if data protection is not supported.
+    if (is_data_protection_enabled() == false) {
+      if (meta_b_header.crc32c(-1) != crc) {
+	DEBUG("bad crc on super block, expected {} != actual {} ",
+	      meta_b_header.crc32c(-1), crc);
+	return crimson::ct_error::input_output_error::make();
+      }
+    } else {
+      ceph_assert_always(crc == (checksum_t)-1);
+    }
+    super_block.crc = crc;
+    super = super_block;
+    DEBUG("got {} ", super);
+    return read_ertr::future<rbm_metadata_header_t>(
+      read_ertr::ready_future_marker{},
+      super_block
+    );
+  });
+}
+
 }
 
 namespace crimson::os::seastore::random_block_device::nvme {
@@ -26,7 +134,8 @@ open_ertr::future<> NVMeBlockDevice::open(
   seastar::open_flags mode) {
   return seastar::do_with(in_path, [this, mode](auto& in_path) {
     return seastar::file_stat(in_path).then([this, mode, in_path](auto stat) {
-      size = stat.size;
+      super.size = stat.size;
+      super.block_size = stat.block_size;
       return seastar::open_file_dma(in_path, mode).then([=, this](auto file) {
         device = file;
         logger().debug("open");
@@ -43,14 +152,14 @@ open_ertr::future<> NVMeBlockDevice::open(
             auto id_namespace_data) {
             // LBA format provides LBA size which is power of 2. LBA is the
             // minimum size of read and write.
-            block_size = (1 << id_namespace_data.lbaf0.lbads);
-            atomic_write_unit = awupf * block_size;
+            super.block_size = (1 << id_namespace_data.lbaf0.lbads);
+            atomic_write_unit = awupf * super.block_size;
             data_protection_type = id_namespace_data.dps.protection_type;
             data_protection_enabled = (data_protection_type > 0);
             if (id_namespace_data.nsfeat.opterf == 1){
               // NPWG and NPWA is 0'based value
-              write_granularity = block_size * (id_namespace_data.npwg + 1);
-              write_alignment = block_size * (id_namespace_data.npwa + 1);
+              write_granularity = super.block_size * (id_namespace_data.npwg + 1);
+              write_alignment = super.block_size * (id_namespace_data.npwa + 1);
             }
             return open_for_io(in_path, mode);
           });
@@ -91,7 +200,7 @@ write_ertr::future<> NVMeBlockDevice::write(
       bptr.length());
   auto length = bptr.length();
 
-  assert((length % block_size) == 0);
+  assert((length % super.block_size) == 0);
   uint16_t supported_stream = stream;
   if (stream >= stream_id_count) {
     supported_stream = WRITE_LIFE_NOT_SET;
@@ -119,7 +228,7 @@ read_ertr::future<> NVMeBlockDevice::read(
       bptr.length());
   auto length = bptr.length();
 
-  assert((length % block_size) == 0);
+  assert((length % super.block_size) == 0);
 
   return device.dma_read(offset, bptr.c_str(), length).handle_exception(
     [](auto e) -> read_ertr::future<size_t> {
@@ -147,7 +256,7 @@ write_ertr::future<> NVMeBlockDevice::writev(
   if (stream >= stream_id_count) {
     supported_stream = WRITE_LIFE_NOT_SET;
   }
-  bl.rebuild_aligned(block_size);
+  bl.rebuild_aligned(super.block_size);
 
   return seastar::do_with(
     bl.prepare_iovs(),
@@ -254,7 +363,14 @@ nvme_command_ertr::future<int> NVMeBlockDevice::pass_through_io(
 
 namespace crimson::os::seastore::random_block_device {
 
-open_ertr::future<> TestMemory::open(
+EphemeralRBMDeviceRef create_test_ephemeral(uint64_t journal_size, uint64_t data_size) {
+  return EphemeralRBMDeviceRef(
+    new EphemeralRBMDevice(journal_size + data_size + 
+	random_block_device::RBMDevice::get_journal_start(),
+	EphemeralRBMDevice::TEST_BLOCK_SIZE));
+}
+
+open_ertr::future<> EphemeralRBMDevice::open(
   const std::string &in_path,
    seastar::open_flags mode) {
   if (buf) {
@@ -278,13 +394,13 @@ open_ertr::future<> TestMemory::open(
   return open_ertr::now();
 }
 
-write_ertr::future<> TestMemory::write(
+write_ertr::future<> EphemeralRBMDevice::write(
   uint64_t offset,
   bufferptr &bptr,
   uint16_t stream) {
   ceph_assert(buf);
   logger().debug(
-    "TestMemory: write offset {} len {}",
+    "EphemeralRBMDevice: write offset {} len {}",
     offset,
     bptr.length());
 
@@ -293,12 +409,12 @@ write_ertr::future<> TestMemory::write(
   return write_ertr::now();
 }
 
-read_ertr::future<> TestMemory::read(
+read_ertr::future<> EphemeralRBMDevice::read(
   uint64_t offset,
   bufferptr &bptr) {
   ceph_assert(buf);
   logger().debug(
-    "TestMemory: read offset {} len {}",
+    "EphemeralRBMDevice: read offset {} len {}",
     offset,
     bptr.length());
 
@@ -306,18 +422,18 @@ read_ertr::future<> TestMemory::read(
   return read_ertr::now();
 }
 
-Device::close_ertr::future<> TestMemory::close() {
+Device::close_ertr::future<> EphemeralRBMDevice::close() {
   logger().debug(" close ");
   return close_ertr::now();
 }
 
-write_ertr::future<> TestMemory::writev(
+write_ertr::future<> EphemeralRBMDevice::writev(
   uint64_t offset,
   ceph::bufferlist bl,
   uint16_t stream) {
   ceph_assert(buf);
   logger().debug(
-    "TestMemory: write offset {} len {}",
+    "EphemeralRBMDevice: write offset {} len {}",
     offset,
     bl.length());
 
