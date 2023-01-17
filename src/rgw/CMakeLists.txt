@@ -3,6 +3,10 @@ if(NOT GPERF)
   message(FATAL_ERROR "Can't find gperf")
 endif()
 
+if(WITH_RADOSGW_BACKTRACE_LOGGING)
+  add_definitions(-D_BACKTRACE_LOGGING)
+endif(WITH_RADOSGW_BACKTRACE_LOGGING)
+
 if(WITH_RADOSGW_SELECT_PARQUET)
   set(ARROW_LIBRARIES Arrow::Arrow Arrow::Parquet)
   add_definitions(-D_ARROW_EXIST)
