@@ -1202,6 +1202,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         db.execute('PRAGMA JOURNAL_MODE = PERSIST')
         db.execute('PRAGMA PAGE_SIZE = 65536')
         db.execute('PRAGMA CACHE_SIZE = 64')
+        db.execute('PRAGMA TEMP_STORE = memory')
         db.row_factory = sqlite3.Row
         self.load_schema(db)
 
@@ -2281,6 +2282,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param int query_id: query ID
         """
         return self._ceph_get_mds_perf_counters(query_id)
+
+    def get_daemon_health_metrics(self) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get the list of health metrics per daemon. This includes SLOW_OPS health metrics
+        in MON and OSD daemons, and PENDING_CREATING_PGS health metrics for OSDs.
+        """
+        return self._ceph_get_daemon_health_metrics()
 
     def is_authorized(self, arguments: Dict[str, str]) -> bool:
         """

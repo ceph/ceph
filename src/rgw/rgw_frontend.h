@@ -12,6 +12,7 @@
 
 #include "rgw_request.h"
 #include "rgw_process.h"
+#include "rgw_process_env.h"
 #include "rgw_realm_reloader.h"
 
 #include "rgw_auth_registry.h"
@@ -83,8 +84,7 @@ public:
   virtual void join() = 0;
 
   virtual void pause_for_new_config() = 0;
-  virtual void unpause_with_new_config(rgw::sal::Store* store,
-                                       rgw_auth_registry_ptr_t auth_registry) = 0;
+  virtual void unpause_with_new_config() = 0;
 };
 
 
@@ -92,7 +92,7 @@ class RGWProcessFrontend : public RGWFrontend {
 protected:
   RGWFrontendConfig* conf;
   RGWProcess* pprocess;
-  RGWProcessEnv env;
+  RGWProcessEnv& env;
   RGWProcessControlThread* thread;
 
 public:
@@ -122,11 +122,8 @@ public:
     pprocess->pause();
   }
 
-  void unpause_with_new_config(rgw::sal::Store* const store,
-                               rgw_auth_registry_ptr_t auth_registry) override {
-    env.store = store;
-    env.auth_registry = auth_registry;
-    pprocess->unpause_with_new_config(store, std::move(auth_registry));
+  void unpause_with_new_config() override {
+    pprocess->unpause_with_new_config();
   }
 }; /* RGWProcessFrontend */
 
@@ -136,7 +133,7 @@ public:
     : RGWProcessFrontend(pe, _conf) {}
 
   CephContext *get_cct() const { 
-    return env.store->ctx(); 
+    return env.driver->ctx();
   }
 
   unsigned get_subsys() const
@@ -152,8 +149,11 @@ public:
   int init() override {
     int num_threads;
     conf->get_val("num_threads", g_conf()->rgw_thread_pool_size, &num_threads);
-    RGWLoadGenProcess *pp = new RGWLoadGenProcess(g_ceph_context, &env,
-						  num_threads, conf);
+    std::string uri_prefix;
+    conf->get_val("prefix", "", &uri_prefix);
+
+    RGWLoadGenProcess *pp = new RGWLoadGenProcess(
+        g_ceph_context, env, num_threads, std::move(uri_prefix), conf);
 
     pprocess = pp;
 
@@ -166,7 +166,7 @@ public:
     }
 
     rgw_user uid(uid_str);
-    std::unique_ptr<rgw::sal::User> user = env.store->get_user(uid);
+    std::unique_ptr<rgw::sal::User> user = env.driver->get_user(uid);
 
     int ret = user->load_user(this, null_yield);
     if (ret < 0) {
@@ -191,16 +191,11 @@ public:
 class RGWFrontendPauser : public RGWRealmReloader::Pauser {
   std::vector<RGWFrontend*> &frontends;
   RGWRealmReloader::Pauser* pauser;
-  rgw::auth::ImplicitTenants& implicit_tenants;
 
  public:
   RGWFrontendPauser(std::vector<RGWFrontend*> &frontends,
-                    rgw::auth::ImplicitTenants& implicit_tenants,
                     RGWRealmReloader::Pauser* pauser = nullptr)
-    : frontends(frontends),
-      pauser(pauser),
-      implicit_tenants(implicit_tenants) {
-  }
+    : frontends(frontends), pauser(pauser) {}
 
   void pause() override {
     for (auto frontend : frontends)
@@ -208,16 +203,11 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
     if (pauser)
       pauser->pause();
   }
-  void resume(rgw::sal::Store* store) override {
-    /* Initialize the registry of auth strategies which will coordinate
-     * the dynamic reconfiguration. */
-    auto auth_registry = \
-      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store);
-
+  void resume(rgw::sal::Driver* driver) override {
     for (auto frontend : frontends)
-      frontend->unpause_with_new_config(store, auth_registry);
+      frontend->unpause_with_new_config();
     if (pauser)
-      pauser->resume(store);
+      pauser->resume(driver);
   }
 };
 

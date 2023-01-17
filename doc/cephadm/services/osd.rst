@@ -310,6 +310,7 @@ Expected output::
 
 This resets the initial state of the OSD and takes it off the removal queue.
 
+.. _cephadm-replacing-an-osd:
 
 Replacing an OSD
 ----------------

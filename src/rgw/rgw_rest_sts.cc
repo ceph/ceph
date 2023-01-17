@@ -101,7 +101,7 @@ WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_a
   }
   auto provider_arn = rgw::ARN(idp_url, "oidc-provider", tenant);
   string p_arn = provider_arn.to_string();
-  std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = store->get_oidc_provider();
+  std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = driver->get_oidc_provider();
   provider->set_arn(p_arn);
   provider->set_tenant(tenant);
   auto ret = provider->get(dpp);
@@ -490,7 +490,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
       string role_arn = s->info.args.get("RoleArn");
       string role_tenant = get_role_tenant(role_arn);
       string role_name = get_role_name(role_arn);
-      std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name, role_tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, role_tenant);
       int ret = role->get(dpp, y);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "Role not found: name:" << role_name << " tenant: " << role_tenant << dendl;
@@ -511,7 +511,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
 
 int RGWREST_STS::verify_permission(optional_yield y)
 {
-  STS::STSService _sts(s->cct, store, s->user->get_id(), s->auth.identity.get());
+  STS::STSService _sts(s->cct, driver, s->user->get_id(), s->auth.identity.get());
   sts = std::move(_sts);
 
   string rArn = s->info.args.get("RoleArn");
@@ -526,7 +526,7 @@ int RGWREST_STS::verify_permission(optional_yield y)
   //Parse the policy
   //TODO - This step should be part of Role Creation
   try {
-    const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
+    const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl, false);
     if (!s->principal_tags.empty()) {
       auto res = p.eval(s->env, *s->auth.identity, rgw::IAM::stsTagSession, boost::none);
       if (res != rgw::IAM::Effect::Allow) {
@@ -608,7 +608,7 @@ void RGWSTSGetSessionToken::execute(optional_yield y)
     return;
   }
 
-  STS::STSService sts(s->cct, store, s->user->get_id(), s->auth.identity.get());
+  STS::STSService sts(s->cct, driver, s->user->get_id(), s->auth.identity.get());
 
   STS::GetSessionTokenRequest req(duration, serialNumber, tokenCode);
   const auto& [ret, creds] = sts.getSessionToken(this, req);
@@ -644,10 +644,13 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
   if (! policy.empty()) {
     bufferlist bl = bufferlist::static_from_string(policy);
     try {
-      const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
+      const rgw::IAM::Policy p(
+	s->cct, s->user->get_tenant(), bl,
+	s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     }
     catch (rgw::IAM::PolicyParseException& e) {
-      ldpp_dout(this, 20) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
+      ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
+      s->err.message = e.what();
       return -ERR_MALFORMED_DOC;
     }
   }
@@ -703,10 +706,13 @@ int RGWSTSAssumeRole::get_params()
   if (! policy.empty()) {
     bufferlist bl = bufferlist::static_from_string(policy);
     try {
-      const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
+      const rgw::IAM::Policy p(
+	s->cct, s->user->get_tenant(), bl,
+	s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     }
     catch (rgw::IAM::PolicyParseException& e) {
       ldpp_dout(this, 0) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
+      s->err.message = e.what();
       return -ERR_MALFORMED_DOC;
     }
   }
@@ -741,7 +747,7 @@ void RGWSTSAssumeRole::execute(optional_yield y)
 }
 
 int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
-                            rgw::sal::Store* store,
+                            rgw::sal::Driver* driver,
                             const rgw::auth::StrategyRegistry& auth_registry,
                             req_state *s, optional_yield y)
 {
@@ -787,7 +793,7 @@ RGWOp *RGWHandler_REST_STS::op_post()
   return nullptr;
 }
 
-int RGWHandler_REST_STS::init(rgw::sal::Store* store,
+int RGWHandler_REST_STS::init(rgw::sal::Driver* driver,
                               req_state *s,
                               rgw::io::BasicClient *cio)
 {
@@ -798,15 +804,15 @@ int RGWHandler_REST_STS::init(rgw::sal::Store* store,
     return ret;
   }
 
-  return RGWHandler_REST::init(store, s, cio);
+  return RGWHandler_REST::init(driver, s, cio);
 }
 
 int RGWHandler_REST_STS::authorize(const DoutPrefixProvider* dpp, optional_yield y)
 {
   if (s->info.args.exists("Action") && s->info.args.get("Action") == "AssumeRoleWithWebIdentity") {
-    return RGW_Auth_STS::authorize(dpp, store, auth_registry, s, y);
+    return RGW_Auth_STS::authorize(dpp, driver, auth_registry, s, y);
   }
-  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
+  return RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
 }
 
 int RGWHandler_REST_STS::init_from_header(req_state* s,
@@ -852,7 +858,7 @@ int RGWHandler_REST_STS::init_from_header(req_state* s,
 }
 
 RGWHandler_REST*
-RGWRESTMgr_STS::get_handler(rgw::sal::Store* store,
+RGWRESTMgr_STS::get_handler(rgw::sal::Driver* driver,
 			    req_state* const s,
 			    const rgw::auth::StrategyRegistry& auth_registry,
 			    const std::string& frontend_prefix)

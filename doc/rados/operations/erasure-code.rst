@@ -67,6 +67,16 @@ profile can be displayed with this command:
    crush-failure-domain=host
    technique=reed_sol_van
 
+.. note::
+   The default erasure-coded pool, the profile of which is displayed here, is
+   not the same as the simplest erasure-coded pool. 
+   
+   The default erasure-coded pool has two data chunks (k) and two coding chunks
+   (m). The profile of the default erasure-coded pool is "k=2 m=2".
+
+   The simplest erasure-coded pool has two data chunks (k) and one coding chunk
+   (m). The profile of the simplest erasure-coded pool is "k=2 m=1".
+
 Choosing the right profile is important because the profile cannot be modified
 after the pool is created. If you find that you need an erasure-coded pool with
 a profile different than the one you have created, you must create a new pool

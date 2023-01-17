@@ -54,6 +54,7 @@ class ServiceType(enum.Enum):
     alertmanager = 'alertmanager'
     grafana = 'grafana'
     node_exporter = 'node-exporter'
+    ceph_exporter = 'ceph-exporter'
     prometheus = 'prometheus'
     loki = 'loki'
     promtail = 'promtail'
@@ -510,7 +511,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 "On": "On",
                 "Off": "Off",
                 True: "Yes",
-                False: "",
+                False: "No",
             }
 
             out = []
@@ -1156,6 +1157,7 @@ Usage:
                    placement: Optional[str] = None,
                    _end_positional_: int = 0,
                    realm: Optional[str] = None,
+                   zonegroup: Optional[str] = None,
                    zone: Optional[str] = None,
                    port: Optional[int] = None,
                    ssl: bool = False,
@@ -1178,6 +1180,7 @@ Usage:
         spec = RGWSpec(
             service_id=svc_id,
             rgw_realm=realm,
+            rgw_zonegroup=zonegroup,
             rgw_zone=zone,
             rgw_frontend_port=port,
             ssl=ssl,
@@ -1555,7 +1558,7 @@ Usage:
 
     @_cli_write_command('orch upgrade status')
     def _upgrade_status(self) -> HandleCommandResult:
-        """Check service versions vs available and target containers"""
+        """Check the status of any potential ongoing upgrade operation"""
         completion = self.upgrade_status()
         status = raise_if_exception(completion)
         r = {

@@ -26,10 +26,11 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 LoadRequest<I>::LoadRequest(
-        I* image_ctx, std::string_view passphrase,
+        I* image_ctx, encryption_format_t format, std::string_view passphrase,
         std::unique_ptr<CryptoInterface>* result_crypto,
         std::string* detected_format_name,
         Context* on_finish) : m_image_ctx(image_ctx),
+                              m_format(format),
                               m_passphrase(passphrase),
                               m_on_finish(on_finish),
                               m_result_crypto(result_crypto),
@@ -59,7 +60,7 @@ void LoadRequest<I>::read(uint64_t end_offset, Context* on_finish) {
   ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_read(
           *m_image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-          {{m_offset, length}}, io::ReadResult{&m_bl},
+          {{m_offset, length}}, io::ImageArea::DATA, io::ReadResult{&m_bl},
           m_image_ctx->get_data_io_context(), 0, 0, trace);
   req->send();
 }
@@ -140,19 +141,32 @@ void LoadRequest<I>::handle_read_header(int r) {
     return;
   }
 
-  // parse header via libcryptsetup
-  r = m_header.load(CRYPT_LUKS);
-  if (r != 0) {
-    m_image_ctx->image_lock.lock_shared();
-    auto image_size = m_image_ctx->get_image_size(m_image_ctx->snap_id);
-    m_image_ctx->image_lock.unlock_shared();
+  const char* type;
+  switch (m_format) {
+  case RBD_ENCRYPTION_FORMAT_LUKS:
+    type = CRYPT_LUKS;
+    break;
+  case RBD_ENCRYPTION_FORMAT_LUKS1:
+    type = CRYPT_LUKS1;
+    break;
+  case RBD_ENCRYPTION_FORMAT_LUKS2:
+    type = CRYPT_LUKS2;
+    break;
+  default:
+    lderr(m_image_ctx->cct) << "unsupported format type: " << m_format
+                            << dendl;
+    finish(-EINVAL);
+    return;
+  }
 
-    auto max_header_size = std::min(MAXIMUM_HEADER_SIZE, image_size);
-    if (m_offset < max_header_size) {
+  // parse header via libcryptsetup
+  r = m_header.load(type);
+  if (r != 0) {
+    if (m_offset < MAXIMUM_HEADER_SIZE) {
       // perhaps we did not feed the entire header to libcryptsetup, retry
       auto ctx = create_context_callback<
               LoadRequest<I>, &LoadRequest<I>::handle_read_header>(this);
-      read(max_header_size, ctx);
+      read(MAXIMUM_HEADER_SIZE, ctx);
       return;
     }
 
@@ -176,6 +190,25 @@ void LoadRequest<I>::handle_read_header(int r) {
     lderr(m_image_ctx->cct) << "unsupported cipher mode: " << cipher_mode
                             << dendl;
     finish(-ENOTSUP);
+    return;
+  }
+
+  m_image_ctx->image_lock.lock_shared();
+  uint64_t image_size = m_image_ctx->get_image_size(CEPH_NOSNAP);
+  m_image_ctx->image_lock.unlock_shared();
+
+  if (m_header.get_data_offset() > image_size) {
+    lderr(m_image_ctx->cct) << "image is too small, data offset "
+                            << m_header.get_data_offset() << dendl;
+    finish(-EINVAL);
+    return;
+  }
+
+  uint64_t stripe_period = m_image_ctx->get_stripe_period();
+  if (m_header.get_data_offset() % stripe_period != 0) {
+    lderr(m_image_ctx->cct) << "incompatible stripe pattern, data offset "
+                            << m_header.get_data_offset() << dendl;
+    finish(-EINVAL);
     return;
   }
 

@@ -261,7 +261,7 @@ TEST(LibRGW, SETUP_HIER1)
 		    << std::endl;
 	}
 	RGWPutObjRequest req(cct,
-			     g_rgwlib->get_store()->get_user(fs_private->get_user()->user_id),
+			     g_rgwlib->get_driver()->get_user(fs_private->get_user()->user_id),
 			     bucket_name, obj_name, bl);
 	int rc = g_rgwlib->get_fe()->execute_req(&req);
 	int rc2 = req.get_ret();

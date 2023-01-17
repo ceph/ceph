@@ -18,7 +18,7 @@
 
 namespace rgw { namespace sal {
 
-  class Store;
+  class Driver;
   class User;
   class Bucket;
   class BucketList;

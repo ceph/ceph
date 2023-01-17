@@ -247,7 +247,12 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   }
 
   if (same_pool) {
-    head_max_size = max_head_chunk_size;
+    RGWZonePlacementInfo placement_info;
+    if (!store->svc()->zone->get_zone_params().get_placement(head_obj->get_bucket()->get_placement_rule().name, &placement_info) || placement_info.inline_data) {
+      head_max_size = max_head_chunk_size;
+    } else {
+      head_max_size = 0;
+    }
     chunk_size = max_head_chunk_size;
   }
 

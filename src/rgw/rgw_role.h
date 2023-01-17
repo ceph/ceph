@@ -151,13 +151,13 @@ public:
 
 class RGWRoleMetadataObject: public RGWMetadataObject {
   RGWRoleInfo info;
-  Store* store;
+  Driver* driver;
 public:
   RGWRoleMetadataObject() = default;
   RGWRoleMetadataObject(RGWRoleInfo& info,
 			const obj_version& v,
 			real_time m,
-      Store* store) : RGWMetadataObject(v,m), info(info), store(store) {}
+      Driver* driver) : RGWMetadataObject(v,m), info(info), driver(driver) {}
 
   void dump(Formatter *f) const override {
     info.dump(f);
@@ -167,15 +167,15 @@ public:
     return info;
   }
 
-  Store* get_store() {
-    return store;
+  Driver* get_driver() {
+    return driver;
   }
 };
 
 class RGWRoleMetadataHandler: public RGWMetadataHandler_GenericMetaBE
 {
 public:
-  RGWRoleMetadataHandler(Store* store, RGWSI_Role_RADOS *role_svc);
+  RGWRoleMetadataHandler(Driver* driver, RGWSI_Role_RADOS *role_svc);
 
   std::string get_type() final { return "roles";  }
 
@@ -205,7 +205,7 @@ public:
        bool from_remote_zone) override;
 
 private:
-  Store* store;
+  Driver* driver;
 };
 } } // namespace rgw::sal
 

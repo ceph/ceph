@@ -7,7 +7,8 @@
 #include "rgw_lua.h"
 #include "rgw_common.h"
 #include "rgw_log.h"
-#include "rgw_process.h"
+#include "rgw_op.h"
+#include "rgw_process_env.h"
 #include "rgw_zone.h"
 #include "rgw_acl.h"
 #include "rgw_sal_rados.h"
@@ -846,7 +847,7 @@ void create_top_metatable(lua_State* L, req_state* s, const char* op_name) {
 }
 
 int execute(
-    rgw::sal::Store* store,
+    rgw::sal::Driver* driver,
     RGWREST* rest,
     OpsLogSink* olog,
     req_state* s, 
@@ -858,9 +859,7 @@ int execute(
   lua_state_guard lguard(L);
 
   open_standard_libs(L);
-  set_package_path(L, store ?
-      store->get_luarocks_path() : 
-      "");
+  set_package_path(L, s->penv.lua.luarocks_path);
 
   create_debug_action(L, s->cct);  
   
@@ -878,8 +877,8 @@ int execute(
   lua_pushcclosure(L, RequestLog, FOUR_UPVALS);
   lua_rawset(L, -3);
   
-  if (s->lua_background) {
-    s->lua_background->create_background_metatable(L);
+  if (s->penv.lua.background) {
+    s->penv.lua.background->create_background_metatable(L);
     lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
     ceph_assert(lua_istable(L, -1));
   }

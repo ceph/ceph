@@ -1,9 +1,9 @@
 #!/bin/bash -ex
 
 # Set up ident details for cluster
-ceph config set mgr mgr/telemetry/contact 'ceph-org'
-ceph config set mgr mgr/telemetry/description 'upgrade test cluster'
 ceph config set mgr mgr/telemetry/channel_ident true
+ceph config set mgr mgr/telemetry/organization 'ceph-qa'
+ceph config set mgr mgr/telemetry/description 'upgrade test cluster'
 
 # Opt-in
 ceph telemetry on --license sharing-1-0

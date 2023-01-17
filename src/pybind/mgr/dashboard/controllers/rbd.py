@@ -16,9 +16,9 @@ from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
 from ..services.rbd import MIRROR_IMAGE_MODE, RbdConfiguration, \
-    RbdMirroringService, RbdService, RbdSnapshotService, format_bitmask, \
-    format_features, get_image_spec, parse_image_spec, rbd_call, \
-    rbd_image_call
+    RbdImageMetadataService, RbdMirroringService, RbdService, \
+    RbdSnapshotService, format_bitmask, format_features, get_image_spec, \
+    parse_image_spec, rbd_call, rbd_image_call
 from ..tools import ViewCache, str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     DeletePermission, Endpoint, EndpointDoc, ReadPermission, RESTController, \
@@ -99,6 +99,10 @@ class Rbd(RESTController):
 
             images[i]['configuration'] = RbdConfiguration(
                 pool, image['namespace'], image['name']).list()
+            images[i]['metadata'] = rbd_image_call(
+                pool, image['namespace'], image['name'],
+                lambda ioctx, image: RbdImageMetadataService(image).list())
+
         return list(pool_result.values())
 
     @handle_rbd_error()
@@ -125,7 +129,8 @@ class Rbd(RESTController):
              {'pool_name': '{pool_name}', 'namespace': '{namespace}', 'image_name': '{name}'}, 2.0)
     def create(self, name, pool_name, size, namespace=None, schedule_interval='',
                obj_size=None, features=None, stripe_unit=None, stripe_count=None,
-               data_pool=None, configuration=None, mirror_mode=None):
+               data_pool=None, configuration=None, metadata=None,
+               mirror_mode=None):
 
         size = int(size)
 
@@ -145,8 +150,12 @@ class Rbd(RESTController):
                             stripe_count=stripe_count, data_pool=data_pool)
             RbdConfiguration(pool_ioctx=ioctx, namespace=namespace,
                              image_name=name).set_configuration(configuration)
+            if metadata:
+                with rbd.Image(ioctx, name) as image:
+                    RbdImageMetadataService(image).set_metadata(metadata)
 
         rbd_call(pool_name, namespace, _create)
+
         if mirror_mode:
             RbdMirroringService.enable_image(name, pool_name, namespace,
                                              MIRROR_IMAGE_MODE[mirror_mode])
@@ -169,7 +178,7 @@ class Rbd(RESTController):
 
     @RbdTask('edit', ['{image_spec}', '{name}'], 4.0)
     def set(self, image_spec, name=None, size=None, features=None,
-            configuration=None, enable_mirror=None, primary=None,
+            configuration=None, metadata=None, enable_mirror=None, primary=None,
             resync=False, mirror_mode=None, schedule_interval='',
             remove_scheduling=False):
 
@@ -184,6 +193,16 @@ class Rbd(RESTController):
             # check resize
             if size and size != image.size():
                 image.resize(size)
+
+            mirror_image_info = image.mirror_image_get_info()
+            if enable_mirror and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_DISABLED:
+                RbdMirroringService.enable_image(
+                    image_name, pool_name, namespace,
+                    MIRROR_IMAGE_MODE[mirror_mode])
+            elif (enable_mirror is False
+                  and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED):
+                RbdMirroringService.disable_image(
+                    image_name, pool_name, namespace)
 
             # check enable/disable features
             if features is not None:
@@ -207,16 +226,8 @@ class Rbd(RESTController):
 
             RbdConfiguration(pool_ioctx=ioctx, image_name=image_name).set_configuration(
                 configuration)
-
-            mirror_image_info = image.mirror_image_get_info()
-            if enable_mirror and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_DISABLED:
-                RbdMirroringService.enable_image(
-                    image_name, pool_name, namespace,
-                    MIRROR_IMAGE_MODE[mirror_mode])
-            elif (enable_mirror is False
-                  and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED):
-                RbdMirroringService.disable_image(
-                    image_name, pool_name, namespace)
+            if metadata:
+                RbdImageMetadataService(image).set_metadata(metadata)
 
             if primary and not mirror_image_info['primary']:
                 RbdMirroringService.promote_image(
@@ -245,7 +256,8 @@ class Rbd(RESTController):
     @allow_empty_body
     def copy(self, image_spec, dest_pool_name, dest_namespace, dest_image_name,
              snapshot_name=None, obj_size=None, features=None,
-             stripe_unit=None, stripe_count=None, data_pool=None, configuration=None):
+             stripe_unit=None, stripe_count=None, data_pool=None,
+             configuration=None, metadata=None):
         pool_name, namespace, image_name = parse_image_spec(image_spec)
 
         def _src_copy(s_ioctx, s_img):
@@ -265,6 +277,9 @@ class Rbd(RESTController):
                            stripe_unit, stripe_count, data_pool)
                 RbdConfiguration(pool_ioctx=d_ioctx, image_name=dest_image_name).set_configuration(
                     configuration)
+                if metadata:
+                    with rbd.Image(d_ioctx, dest_image_name) as image:
+                        RbdImageMetadataService(image).set_metadata(metadata)
 
             return rbd_call(dest_pool_name, dest_namespace, _copy)
 
@@ -396,7 +411,8 @@ class RbdSnapshot(RESTController):
     @allow_empty_body
     def clone(self, image_spec, snapshot_name, child_pool_name,
               child_image_name, child_namespace=None, obj_size=None, features=None,
-              stripe_unit=None, stripe_count=None, data_pool=None, configuration=None):
+              stripe_unit=None, stripe_count=None, data_pool=None,
+              configuration=None, metadata=None):
         """
         Clones a snapshot to an image
         """
@@ -420,6 +436,9 @@ class RbdSnapshot(RESTController):
 
                 RbdConfiguration(pool_ioctx=ioctx, image_name=child_image_name).set_configuration(
                     configuration)
+                if metadata:
+                    with rbd.Image(ioctx, child_image_name) as image:
+                        RbdImageMetadataService(image).set_metadata(metadata)
 
             return rbd_call(child_pool_name, child_namespace, _clone)
 

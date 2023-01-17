@@ -233,3 +233,8 @@ using ExtendedValue  = TestValue<
   value_magic_t::TEST_EXTENDED, 256, 2048, 1200, 8192, 16384, true>;
 
 }
+
+#if FMT_VERSION >= 90000
+template<>
+struct fmt::formatter<crimson::os::seastore::onode::test_item_t> : fmt::ostream_formatter {};
+#endif

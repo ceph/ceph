@@ -272,8 +272,9 @@ class RbdService(object):
     def _rbd_image(cls, ioctx, pool_name, namespace, image_name):  # pylint: disable=R0912
         with rbd.Image(ioctx, image_name) as img:
             stat = img.stat()
+            mirror_info = img.mirror_image_get_info()
             mirror_mode = img.mirror_image_get_mode()
-            if mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL:
+            if mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL and mirror_info['state'] != rbd.RBD_MIRROR_IMAGE_DISABLED:  # noqa E501 #pylint: disable=line-too-long
                 stat['mirror_mode'] = 'journal'
             elif mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
                 stat['mirror_mode'] = 'snapshot'
@@ -283,11 +284,10 @@ class RbdService(object):
                     if scheduled_image['image'] == get_image_spec(pool_name, namespace, image_name):
                         stat['schedule_info'] = scheduled_image
             else:
-                stat['mirror_mode'] = 'unknown'
+                stat['mirror_mode'] = 'Disabled'
 
             stat['name'] = image_name
 
-            mirror_info = img.mirror_image_get_info()
             stat['primary'] = None
             if mirror_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED:
                 stat['primary'] = mirror_info['primary']
@@ -377,6 +377,8 @@ class RbdService(object):
 
             stat['configuration'] = RbdConfiguration(
                 pool_ioctx=ioctx, image_name=image_name, image_ioctx=img).list()
+
+            stat['metadata'] = RbdImageMetadataService(img).list()
 
             return stat
 
@@ -550,3 +552,32 @@ class RbdMirroringService:
     @classmethod
     def snapshot_schedule_remove(cls, image_spec: str):
         _rbd_support_remote('mirror_snapshot_schedule_remove', image_spec)
+
+
+class RbdImageMetadataService(object):
+    def __init__(self, image):
+        self._image = image
+
+    def list(self):
+        result = self._image.metadata_list()
+        # filter out configuration metadata
+        return {v[0]: v[1] for v in result if not v[0].startswith('conf_')}
+
+    def get(self, name):
+        return self._image.metadata_get(name)
+
+    def set(self, name, value):
+        self._image.metadata_set(name, value)
+
+    def remove(self, name):
+        try:
+            self._image.metadata_remove(name)
+        except KeyError:
+            pass
+
+    def set_metadata(self, metadata):
+        for name, value in metadata.items():
+            if value is not None:
+                self.set(name, value)
+            else:
+                self.remove(name)

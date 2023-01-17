@@ -14,20 +14,15 @@ class ImageCtx;
 
 namespace crypto {
 
-template <typename> class EncryptionFormat;
-
 template <typename I>
 class ShutDownCryptoRequest {
 public:
-    using EncryptionFormat = decltype(I::encryption_format);
-
-    static ShutDownCryptoRequest* create(
-            I* image_ctx, EncryptionFormat* format, Context* on_finish) {
-      return new ShutDownCryptoRequest(image_ctx, format, on_finish);
+    static ShutDownCryptoRequest* create(I* image_ctx, Context* on_finish) {
+      return new ShutDownCryptoRequest(image_ctx, on_finish);
     }
 
-    ShutDownCryptoRequest(
-            I* image_ctx, EncryptionFormat* format, Context* on_finish);
+    ShutDownCryptoRequest(I* image_ctx, Context* on_finish);
+
     void send();
     void shut_down_object_dispatch();
     void handle_shut_down_object_dispatch(int r);
@@ -37,7 +32,6 @@ public:
 
 private:
     I* m_image_ctx;
-    EncryptionFormat* m_format;
     Context* m_on_finish;
 };
 

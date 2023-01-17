@@ -63,7 +63,7 @@ using crimson::common::local_conf;
     auto coid = resolve_oid(head->get_ro_ss(), oid);
     if (!coid) {
       logger().error("with_clone_obc_only: {} clone not found",
-                     coid);
+                     oid);
       return load_obc_iertr::future<>{
         crimson::ct_error::enoent::make()
       };

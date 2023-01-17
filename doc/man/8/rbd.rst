@@ -606,7 +606,7 @@ Commands
   Initialize pool for use by RBD. Newly created pools must initialized
   prior to use.
 
-:command:`resize` (-s | --size *size-in-M/G/T*) [--allow-shrink] *image-spec*
+:command:`resize` (-s | --size *size-in-M/G/T*) [--allow-shrink] [--encryption-format *encryption-format* --encryption-passphrase-file *passphrase-file*]... *image-spec*
   Resize rbd image. The size parameter also needs to be specified.
   The --allow-shrink option lets the size be reduced.
   

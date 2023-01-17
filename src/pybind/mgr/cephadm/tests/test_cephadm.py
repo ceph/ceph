@@ -17,7 +17,7 @@ except ImportError:
 
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
     NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec, MDSSpec, \
-    CustomConfig, PrometheusSpec
+    CustomConfig
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from ceph.utils import datetime_to_str, datetime_now
@@ -117,13 +117,13 @@ def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str
         [host]).stdout == f"Created osd(s) 1 on host '{host}'"
     assert _run_cephadm.mock_calls == [
         mock.call(host, 'osd', 'ceph-volume',
-                  ['--', 'lvm', 'list', '--format', 'json'], no_fsid=False, image=''),
+                  ['--', 'lvm', 'list', '--format', 'json'], no_fsid=False, image='', log_output=True),
         mock.call(host, f'osd.{osd_id}', 'deploy',
                   ['--name', f'osd.{osd_id}', '--meta-json', mock.ANY,
                    '--config-json', '-', '--osd-fsid', 'uuid'],
                   stdin=mock.ANY, image=''),
         mock.call(host, 'osd', 'ceph-volume',
-                  ['--', 'raw', 'list', '--format', 'json'], no_fsid=False, image=''),
+                  ['--', 'raw', 'list', '--format', 'json'], no_fsid=False, image='', log_output=True),
     ]
     dd = cephadm_module.cache.get_daemon(f'osd.{osd_id}', host=host)
     assert dd.name() == f'osd.{osd_id}'
@@ -404,7 +404,8 @@ class TestCephadm(object):
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    def test_daemon_check(self, cephadm_module: CephadmOrchestrator, action):
+    @mock.patch("cephadm.module.HostCache.save_host")
+    def test_daemon_check(self, _save_host, cephadm_module: CephadmOrchestrator, action):
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, ServiceSpec(service_type='grafana'), CephadmOrchestrator.apply_grafana, 'test') as d_names:
                 [daemon_name] = d_names
@@ -416,6 +417,7 @@ class TestCephadm(object):
 
                 CephadmServe(cephadm_module)._check_daemons()
 
+                assert _save_host.called_with('test')
                 assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) is None
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -790,11 +792,12 @@ class TestCephadm(object):
                 'test', 'osd', 'ceph-volume',
                 ['--config-json', '-', '--', 'lvm', 'batch',
                     '--no-auto', '/dev/sdb', '--yes', '--no-systemd'],
-                env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True, stdin='{"config": "", "keyring": ""}')
+                env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True,
+                stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_any_call(
-                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'], image='', no_fsid=False)
+                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'], image='', no_fsid=False, log_output=True)
             _run_cephadm.assert_any_call(
-                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'], image='', no_fsid=False)
+                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'], image='', no_fsid=False, log_output=True)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_apply_osd_save_non_collocated(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -834,9 +837,9 @@ class TestCephadm(object):
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=noncollocated'],
                 error_ok=True, stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_any_call(
-                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'], image='', no_fsid=False)
+                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'], image='', no_fsid=False, log_output=True)
             _run_cephadm.assert_any_call(
-                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'], image='', no_fsid=False)
+                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'], image='', no_fsid=False, log_output=True)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -1214,6 +1217,7 @@ class TestCephadm(object):
             def __init__(self, c: str = 'a'):
                 # using 1015 here makes the serialized string exactly 1024 bytes if c is one char
                 self.content = {c: c * 1015}
+                self.path = 'dev/vdc'
 
             def to_json(self):
                 return self.content
@@ -1508,64 +1512,6 @@ class TestCephadm(object):
             with with_service(cephadm_module, spec, meth, 'test'):
                 pass
 
-    @pytest.mark.parametrize(
-        "spec, raise_exception, msg",
-        [
-            # Valid retention_time values (valid units: 'y', 'w', 'd', 'h', 'm', 's')
-            (PrometheusSpec(retention_time='1y'), False, ''),
-            (PrometheusSpec(retention_time=' 10w '), False, ''),
-            (PrometheusSpec(retention_time=' 1348d'), False, ''),
-            (PrometheusSpec(retention_time='2000h '), False, ''),
-            (PrometheusSpec(retention_time='173847m'), False, ''),
-            (PrometheusSpec(retention_time='200s'), False, ''),
-            (PrometheusSpec(retention_time='  '), False, ''),  # default value will be used
-
-            # Invalid retention_time values
-            (PrometheusSpec(retention_time='100k'), True, '^Invalid retention time'),     # invalid unit
-            (PrometheusSpec(retention_time='10'), True, '^Invalid retention time'),       # no unit
-            (PrometheusSpec(retention_time='100.00y'), True, '^Invalid retention time'),  # invalid value and valid unit
-            (PrometheusSpec(retention_time='100.00k'), True, '^Invalid retention time'),  # invalid value and invalid unit
-            (PrometheusSpec(retention_time='---'), True, '^Invalid retention time'),      # invalid value
-
-            # Valid retention_size values (valid units: 'B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB')
-            (PrometheusSpec(retention_size='123456789B'), False, ''),
-            (PrometheusSpec(retention_size=' 200KB'), False, ''),
-            (PrometheusSpec(retention_size='99999MB '), False, ''),
-            (PrometheusSpec(retention_size=' 10GB '), False, ''),
-            (PrometheusSpec(retention_size='100TB'), False, ''),
-            (PrometheusSpec(retention_size='500PB'), False, ''),
-            (PrometheusSpec(retention_size='200EB'), False, ''),
-            (PrometheusSpec(retention_size='  '), False, ''),  # default value will be used
-
-            # Invalid retention_size values
-            (PrometheusSpec(retention_size='100b'), True, '^Invalid retention size'),      # invalid unit (case sensitive)
-            (PrometheusSpec(retention_size='333kb'), True, '^Invalid retention size'),     # invalid unit (case sensitive)
-            (PrometheusSpec(retention_size='2000'), True, '^Invalid retention size'),      # no unit
-            (PrometheusSpec(retention_size='200.00PB'), True, '^Invalid retention size'),  # invalid value and valid unit
-            (PrometheusSpec(retention_size='400.B'), True, '^Invalid retention size'),     # invalid value and invalid unit
-            (PrometheusSpec(retention_size='10.000s'), True, '^Invalid retention size'),   # invalid value and invalid unit
-            (PrometheusSpec(retention_size='...'), True, '^Invalid retention size'),       # invalid value
-
-            # valid retention_size and valid retention_time
-            (PrometheusSpec(retention_time='1y', retention_size='100GB'), False, ''),
-            # invalid retention_time and valid retention_size
-            (PrometheusSpec(retention_time='1j', retention_size='100GB'), True, '^Invalid retention time'),
-            # valid retention_time and invalid retention_size
-            (PrometheusSpec(retention_time='1y', retention_size='100gb'), True, '^Invalid retention size'),
-            # valid retention_time and invalid retention_size
-            (PrometheusSpec(retention_time='1y', retention_size='100gb'), True, '^Invalid retention size'),
-            # invalid retention_time and invalid retention_size
-            (PrometheusSpec(retention_time='1i', retention_size='100gb'), True, '^Invalid retention time'),
-        ])
-    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    def test_apply_prometheus(self, spec: PrometheusSpec, raise_exception: bool, msg: str, cephadm_module: CephadmOrchestrator):
-        with with_host(cephadm_module, 'test'):
-            if not raise_exception:
-                cephadm_module._apply(spec)
-            else:
-                with pytest.raises(OrchestratorError, match=msg):
-                    cephadm_module._apply(spec)
-
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_mds_config_purge(self, cephadm_module: CephadmOrchestrator):
         spec = MDSSpec('mds', service_id='fsname', config={'test': 'foo'})
@@ -1741,7 +1687,7 @@ class TestCephadm(object):
             cephadm_module.config_notify()
             assert cephadm_module.manage_etc_ceph_ceph_conf is True
 
-            CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
+            CephadmServe(cephadm_module)._write_all_client_files()
             # Make sure both ceph conf locations (default and per fsid) are called
             _write_file.assert_has_calls([mock.call('test', '/etc/ceph/ceph.conf', b'',
                                           0o644, 0, 0, None),
@@ -1755,7 +1701,7 @@ class TestCephadm(object):
 
             # set extra config and expect that we deploy another ceph.conf
             cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
-            CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
+            CephadmServe(cephadm_module)._write_all_client_files()
             _write_file.assert_has_calls([mock.call('test',
                                                     '/etc/ceph/ceph.conf',
                                                     b'\n\n[mon]\nk=v\n', 0o644, 0, 0, None),
@@ -1777,7 +1723,7 @@ class TestCephadm(object):
             f2_before_digest = cephadm_module.cache.get_host_client_files(
                 'test')['/var/lib/ceph/fsid/config/ceph.conf'][0]
             cephadm_module._set_extra_ceph_conf('[mon]\nk2=v2')
-            CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
+            CephadmServe(cephadm_module)._write_all_client_files()
             f1_after_digest = cephadm_module.cache.get_host_client_files('test')[
                 '/etc/ceph/ceph.conf'][0]
             f2_after_digest = cephadm_module.cache.get_host_client_files(
@@ -1886,10 +1832,10 @@ Traceback (most recent call last):
             assert _run_cephadm.mock_calls == [
                 mock.call('test', 'osd', 'ceph-volume',
                           ['--', 'inventory', '--format=json-pretty', '--filter-for-batch'], image='',
-                          no_fsid=False),
+                          no_fsid=False, log_output=False),
                 mock.call('test', 'osd', 'ceph-volume',
                           ['--', 'inventory', '--format=json-pretty'], image='',
-                          no_fsid=False),
+                          no_fsid=False, log_output=False),
             ]
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")

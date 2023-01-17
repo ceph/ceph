@@ -180,19 +180,24 @@ public:
   void mark_delayed_extent_inline(LogicalCachedExtentRef& ref) {
     write_set.erase(*ref);
     assert(ref->get_paddr().is_delayed());
-    ref->set_paddr(make_record_relative_paddr(offset));
+    ref->set_paddr(make_record_relative_paddr(offset),
+                   /* need_update_mapping: */ true);
     offset += ref->get_length();
     inline_block_list.push_back(ref);
     write_set.insert(*ref);
   }
 
-  void mark_delayed_extent_ool(LogicalCachedExtentRef& ref, paddr_t final_addr) {
+  void mark_delayed_extent_ool(LogicalCachedExtentRef& ref) {
+    written_ool_block_list.push_back(ref);
+  }
+
+  void update_delayed_ool_extent_addr(LogicalCachedExtentRef& ref,
+                                      paddr_t final_addr) {
     write_set.erase(*ref);
     assert(ref->get_paddr().is_delayed());
-    ref->set_paddr(final_addr);
+    ref->set_paddr(final_addr, /* need_update_mapping: */ true);
     assert(!ref->get_paddr().is_null());
     assert(!ref->is_inline());
-    written_ool_block_list.push_back(ref);
     write_set.insert(*ref);
   }
 
@@ -265,6 +270,10 @@ public:
     return ret;
   }
 
+  const auto &get_inline_block_list() {
+    return inline_block_list;
+  }
+
   const auto &get_mutated_block_list() {
     return mutated_block_list;
   }
@@ -301,12 +310,6 @@ public:
 
   const io_stat_t& get_fresh_block_stats() const {
     return fresh_block_stats;
-  }
-
-  size_t get_allocation_size() const {
-    size_t ret = 0;
-    for_each_fresh_block([&ret](auto &e) { ret += e->get_length(); });
-    return ret;
   }
 
   using src_t = transaction_type_t;

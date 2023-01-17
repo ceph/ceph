@@ -108,7 +108,7 @@ choose which to use when mounting.
 
 If you have created more than one file system, and a client does not
 specify a file system when mounting, you can control which file system
-they will see by using the `ceph fs set-default` command.
+they will see by using the ``ceph fs set-default`` command.
 
 Adding a Data Pool to the File System 
 -------------------------------------

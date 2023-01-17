@@ -12,6 +12,7 @@
 
 #include "os/Transaction.h"
 #include "crimson/common/smp_helpers.h"
+#include "crimson/common/smp_helpers.h"
 #include "crimson/osd/exceptions.h"
 #include "include/buffer_fwd.h"
 #include "include/uuid.h"
@@ -106,7 +107,8 @@ public:
 
   virtual seastar::future<CollectionRef> create_new_collection(const coll_t& cid) = 0;
   virtual seastar::future<CollectionRef> open_collection(const coll_t& cid) = 0;
-  virtual seastar::future<std::vector<coll_t>> list_collections() = 0;
+  using coll_core_t = std::pair<coll_t, core_id_t>;
+  virtual seastar::future<std::vector<coll_core_t>> list_collections() = 0;
 
 protected:
   virtual seastar::future<> do_transaction_no_callbacks(
@@ -298,7 +300,7 @@ public:
   seastar::future<CollectionRef> open_collection(const coll_t &cid) final {
     return proxy(&T::open_collection, cid);
   }
-  seastar::future<std::vector<coll_t>> list_collections() final {
+  seastar::future<std::vector<coll_core_t>> list_collections() final {
     return proxy(&T::list_collections);
   }
   seastar::future<> do_transaction_no_callbacks(

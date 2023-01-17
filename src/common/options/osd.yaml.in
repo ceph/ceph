@@ -484,6 +484,32 @@ options:
     stats (inc. scrub/block duration) every this many seconds.
   default: 120
   with_legacy: false
+# when replicas are slow to respond to scrub resource reservations
+# Note: disable by using a very large value
+- name: osd_scrub_slow_reservation_response
+  type: millisecs
+  level: advanced
+  desc: Duration before issuing a cluster-log warning
+  long_desc: Waiting too long for a replica to respond (after at least half of the
+    replicas have responded).
+  default: 2200
+  min: 500
+  see_also:
+  - osd_scrub_reservation_timeout
+  with_legacy: false
+# when a replica does not respond to scrub resource request
+# Note: disable by using a very large value
+- name: osd_scrub_reservation_timeout
+  type: millisecs
+  level: advanced
+  desc: Duration before aborting the scrub session
+  long_desc: Waiting too long for some replicas to respond to
+    scrub reservation requests.
+  default: 5000
+  min: 2000
+  see_also:
+  - osd_scrub_slow_reservation_response
+  with_legacy: false
 # where rados plugins are stored
 - name: osd_class_dir
   type: str
@@ -1010,7 +1036,7 @@ options:
     cost factor in QoS calculations. Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: Cost per IO in microseconds to consider per OSD (for rotational
     media)
-  default: 25000
+  default: 11400
   flags:
   - runtime
 - name: osd_mclock_cost_per_io_usec_ssd
@@ -1049,7 +1075,7 @@ options:
     = mclock_scheduler
   fmt_desc: Cost per byte in microseconds to consider per OSD (for rotational
     media)
-  default: 5.2
+  default: 2.6
   flags:
   - runtime
 - name: osd_mclock_cost_per_byte_usec_ssd
@@ -1142,6 +1168,53 @@ options:
   - high_recovery_ops
   - high_client_ops
   - custom
+  flags:
+  - runtime
+- name: osd_mclock_override_recovery_settings
+  type: bool
+  level: advanced
+  desc: Setting this option enables the override of recovery/backfill limits
+    for the mClock scheduler.
+  long_desc: This option when set enables the override of the max recovery
+    active and the max backfills limits with mClock scheduler active. These
+    options are not modifiable when mClock scheduler is active. Any attempt
+    to modify these values without setting this option will reset the
+    recovery or backfill option back to its default value.
+  fmt_desc: Setting this option will enable the override of the
+    recovery/backfill limits for the mClock scheduler as defined by the
+    ``osd_recovery_max_active_hdd``, ``osd_recovery_max_active_ssd`` and
+    ``osd_max_backfills`` options.
+  default: false
+  see_also:
+  - osd_recovery_max_active_hdd
+  - osd_recovery_max_active_ssd
+  - osd_max_backfills
+  flags:
+  - runtime
+- name: osd_mclock_iops_capacity_threshold_hdd
+  type: float
+  level: basic
+  desc: The threshold IOPs capacity (at 4KiB block size) beyond which to ignore
+    the OSD bench results for an OSD (for rotational media)
+  long_desc: This option specifies the threshold IOPS capacity for an OSD under
+    which the OSD bench results can be considered for QoS calculations. Only
+    considered for osd_op_queue = mclock_scheduler
+  fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
+    ignore OSD bench results for an OSD (for rotational media)
+  default: 500
+  flags:
+  - runtime
+- name: osd_mclock_iops_capacity_threshold_ssd
+  type: float
+  level: basic
+  desc: The threshold IOPs capacity (at 4KiB block size) beyond which to ignore
+    the OSD bench results for an OSD (for solid state media)
+  long_desc: This option specifies the threshold IOPS capacity for an OSD under
+    which the OSD bench results can be considered for QoS calculations. Only
+    considered for osd_op_queue = mclock_scheduler
+  fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
+    ignore OSD bench results for an OSD (for solid state media)
+  default: 80000
   flags:
   - runtime
 # Set to true for testing.  Users should NOT set this.

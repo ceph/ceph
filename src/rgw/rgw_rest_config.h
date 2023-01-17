@@ -30,7 +30,7 @@ public:
   int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
-  void execute(optional_yield) override {} /* store already has the info we need, just need to send response */
+  void execute(optional_yield) override {} /* driver already has the info we need, just need to send response */
   void send_response() override ;
   const char* name() const override {
     return "get_zone_config";
@@ -55,7 +55,7 @@ public:
   RGWRESTMgr_Config() = default;
   ~RGWRESTMgr_Config() override = default;
 
-  RGWHandler_REST* get_handler(rgw::sal::Store* ,
+  RGWHandler_REST* get_handler(rgw::sal::Driver* ,
 			       req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {

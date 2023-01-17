@@ -177,8 +177,7 @@ public:
   using update_mappings_ret = update_mapping_ret;
   update_mappings_ret update_mappings(
     Transaction& t,
-    const std::list<LogicalCachedExtentRef>& extents,
-    const std::vector<paddr_t>& original_paddrs);
+    const std::list<LogicalCachedExtentRef>& extents);
 
   /**
    * get_physical_extent_if_live

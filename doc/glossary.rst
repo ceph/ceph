@@ -19,12 +19,12 @@
                 distributed metadata management and POSIX semantics.
 
 	Ceph Block Device
-                A software instrument that orchestrates the storage of
-                block-based data in Ceph. Ceph Block Device (also called "RBD",
-                or "RADOS block device") splits block-based application data
+                Also called "RADOS Block Device" and :term:`RBD`. A software
+                instrument that orchestrates the storage of block-based data in
+                Ceph. Ceph Block Device splits block-based application data
                 into "chunks". RADOS stores these chunks as objects. Ceph Block
                 Device orchestrates the storage of those objects across the
-                storage cluster. See also :term:`RBD`.
+                storage cluster. 
 
 	Ceph Block Storage
                 One of the three kinds of storage supported by Ceph (the other
@@ -61,13 +61,13 @@
                 See :term:`CephFS`
 
 	:ref:`CephFS<ceph-file-system>`
-                The Ceph File System, or CephFS, is a POSIX-compliant file
-                system built on top of Ceph’s distributed object store, RADOS.
-                See :ref:`CephFS Architecture <arch-cephfs>` for more details.
+                The **Ceph F**\ile **S**\ystem, or CephFS, is a
+                POSIX-compliant file system built on top of Ceph’s distributed
+                object store, RADOS.  See :ref:`CephFS Architecture
+                <arch-cephfs>` for more details.
 
 	Ceph Interim Release
-                A version of Ceph that has not yet been put through quality
-                assurance testing. May contain new features.
+                See :term:`Releases`.
 
 	Ceph Kernel Modules
                 The collection of kernel modules that can be used to interact
@@ -77,8 +77,8 @@
                 The Ceph manager daemon (ceph-mgr) is a daemon that runs
                 alongside monitor daemons to provide monitoring and interfacing
                 to external monitoring and management systems. Since the
-                Luminous release (12.x), the ceph-mgr daemon is required in
-                order for the Ceph cluster to function properly.
+                Luminous release (12.x), no Ceph cluster functions properly
+                unless it contains a running ceph-mgr daemon. 
 
 	Ceph Manager Dashboard
                 See :term:`Ceph Dashboard`.
@@ -89,10 +89,10 @@
 	Ceph Monitor
                 A daemon that maintains a map of the state of the cluster. This
                 "cluster state" includes the monitor map, the manager map, the
-                OSD map, and the CRUSH map. A minimum of three monitors is
-                required in order for the Ceph cluster to be both redundant and
-                highly-available. Ceph monitors and the nodes on which they run
-                are often referred to as "mon"s. See :ref:`Monitor Config
+                OSD map, and the CRUSH map. A Ceph cluster must contain a
+                minimum of three running monitors in order to be both redundant
+                and highly-available. Ceph monitors and the nodes on which they
+                run are often referred to as "mon"s. See :ref:`Monitor Config
                 Reference <monitor-config-reference>`.
 
 	Ceph Node
@@ -112,9 +112,7 @@
                 and Ceph storage clusters.
 
 	Ceph Object Storage
-                The object storage "product", service or capabilities, which
-                consists essentially of a Ceph Storage Cluster and a Ceph Object
-                Gateway.
+                See :term:`Ceph Object Store`.
 
 	Ceph Object Store
                 A Ceph Object Store consists of a :term:`Ceph Storage Cluster`
@@ -143,24 +141,20 @@
                 `https://github.com/ceph`_.
 
 	Ceph Point Release
-                Any ad hoc release that includes only bug fixes and security
-                fixes.
+                See :term:`Releases`.
 
 	Ceph Project
                 The aggregate term for the people, software, mission and
                 infrastructure of Ceph.
 
 	Ceph Release
-		Any distinct numbered version of Ceph.
+                See :term:`Releases`.
 
 	Ceph Release Candidate
-                A major version of Ceph that has undergone initial quality
-                assurance testing and is ready for beta testers.
+                See :term:`Releases`.
 
 	Ceph Stable Release
-                A major version of Ceph where all features from the preceding
-                interim releases have been put through quality assurance
-                testing successfully.
+                See :term:`Releases`.
 
 	Ceph Stack
 		A collection of two or more components of Ceph.
@@ -172,9 +166,10 @@
                 applications, Ceph Users, and :term:`Ceph Client`\s. Ceph
                 Storage Clusters receive data from :term:`Ceph Client`\s.
 
-	cephx
-                The Ceph authentication protocol. Cephx operates like Kerberos,
-                but it has no single point of failure.
+	CephX
+                The Ceph authentication protocol. CephX operates like Kerberos,
+                but it has no single point of failure. See the :ref:`CephX
+                Configuration Reference<rados-cephx-config-ref>`.
 
 	Cloud Platforms
 	Cloud Stacks
@@ -188,12 +183,18 @@
                 Architecture document<architecture_cluster_map>` for details.
 
 	CRUSH
-                Controlled Replication Under Scalable Hashing. It is the
-                algorithm Ceph uses to compute object storage locations.
+                **C**\ontrolled **R**\eplication **U**\nder **S**\calable
+                **H**\ashing. The algorithm that Ceph uses to compute object
+                storage locations.
 
 	CRUSH rule
                 The CRUSH data placement rule that applies to a particular
-                pool(s).
+                pool or pools.
+
+        DAS
+                **D**\irect-\ **A**\ttached **S**\torage. Storage that is
+                attached directly to the computer accessing it, without passing
+                through a network.  Contrast with NAS and SAN.
 
 	:ref:`Dashboard<mgr-dashboard>`
                 A built-in web-based Ceph management and monitoring application
@@ -209,19 +210,32 @@
                 A back end for OSD daemons, where a Journal is needed and files
                 are written to the filesystem.
 
+        FQDN
+                **F**\ully **Q**\ualified **D**\omain **N**\ame. A domain name
+                that is applied to a node in a network and that specifies the
+                node's exact location in the tree hierarchy of the DNS.
+
+                In the context of Ceph cluster administration, FQDNs are often
+                applied to hosts. In this documentation, the term "FQDN" is
+                used mostly to distinguish between FQDNs and relatively simpler
+                hostnames, which do not specify the exact location of the host
+                in the tree hierarchy of the DNS but merely name the host.
+
 	Host
                 Any single machine or server in a Ceph Cluster. See :term:`Ceph
                 Node`.
 
 	LVM tags
-                Extensible metadata for LVM volumes and groups. It is used to
-                store Ceph-specific information about devices and its
-                relationship with OSDs.
+                **L**\ogical **V**\olume **M**\anager tags. Extensible metadata
+                for LVM volumes and groups. They are used to store
+                Ceph-specific information about devices and its relationship
+                with OSDs.
 
 	:ref:`MDS<cephfs_add_remote_mds>`
-                The Ceph metadata server daemon. Also referred to as
-                "ceph-mds". The Ceph metadata server daemon is required to run
-                the CephFS file system. The MDS stores all filesystem metadata. 
+                The Ceph **M**\eta\ **D**\ata **S**\erver daemon. Also referred
+                to as "ceph-mds". The Ceph metadata server daemon must be
+                running in any Ceph cluster that runs the CephFS file system.
+                The MDS stores all filesystem metadata. 
 
 	MGR
                 The Ceph manager software, which collects all the state from
@@ -237,30 +251,28 @@
                 See :term:`OSD`.
 
 	OSD
-                Probably :term:`Ceph Object Storage Daemon<Ceph OSD>`, but not
-                necessarily. Sometimes (especially in older correspondence, and
-                especially in documentation that is not specifically written
-                for Ceph), "OSD" means "**O**\bject **S**\torage **D**\evice",
-                which refers to a physical or logical storage unit (for
-                example: LUN). The Ceph community has always used the term
-                "OSD" to refer to :term:`Ceph OSD Daemon` despite an industry
-                push in the mid-2010s to insist that "OSD" should refer to
-                "Object Storage Device", so it is important to know which
-                meaning is intended. 
+                Probably :term:`Ceph OSD`, but not necessarily. Sometimes
+                (especially in older correspondence, and especially in
+                documentation that is not written specifically for Ceph), "OSD"
+                means "**O**\bject **S**\torage **D**\evice", which refers to a
+                physical or logical storage unit (for example: LUN). The Ceph
+                community has always used the term "OSD" to refer to
+                :term:`Ceph OSD Daemon` despite an industry push in the
+                mid-2010s to insist that "OSD" should refer to "Object Storage
+                Device", so it is important to know which meaning is intended. 
 
 	OSD fsid
-                This is a unique identifier used to further improve the
-                uniqueness of an OSD and it is found in the OSD path in a file
-                called ``osd_fsid``. This ``fsid`` term is used interchangeably
-                with ``uuid``
+                This is a unique identifier used to identify an OSD. It is
+                found in the OSD path in a file called ``osd_fsid``. The
+                term ``fsid`` is used interchangeably with ``uuid``
 
 	OSD id
                 The integer that defines an OSD. It is generated by the
-                monitors as part of the creation of a new OSD.
+                monitors during the creation of each OSD.
 
 	OSD uuid
-                Just like the OSD fsid, this is the OSD unique identifier and
-                is used interchangeably with ``fsid``
+                This is the unique identifier of an OSD. This term is used
+                interchangeably with ``fsid``
 
 	:ref:`Pool<rados_pools>`
 		A pool is a logical partition used to store objects.
@@ -289,21 +301,51 @@
                 See :term:`RGW`.
 
 	RBD
-		The block storage component of Ceph.
+                **R**\ADOS **B**\lock **D**\evice. See :term:`Ceph Block
+                Device`.
+
+        Releases
+
+	        Ceph Interim Release
+                        A version of Ceph that has not yet been put through
+                        quality assurance testing. May contain new features.
+
+                Ceph Point Release
+                        Any ad hoc release that includes only bug fixes and
+                        security fixes.
+
+                Ceph Release
+                        Any distinct numbered version of Ceph.
+
+                Ceph Release Candidate
+                        A major version of Ceph that has undergone initial
+                        quality assurance testing and is ready for beta
+                        testers.
+
+                Ceph Stable Release
+                        A major version of Ceph where all features from the
+                        preceding interim releases have been put through
+                        quality assurance testing successfully.
 
 	Reliable Autonomic Distributed Object Store
                 The core set of storage software which stores the user's data
                 (MON+OSD). See also :term:`RADOS`.
 
 	:ref:`RGW<object-gateway>`
-                **R**\ADOS **G**\ate **W**\ay.
+                **R**\ADOS **G**\ate\ **w**\ay.
 
-                The component of Ceph that provides a gateway to both the
-                Amazon S3 RESTful API and the OpenStack Swift API. Also called
-                "RADOS Gateway" and "Ceph Object Gateway".
+                Also called "Ceph Object Gateway". The component of Ceph that
+                provides a gateway to both the Amazon S3 RESTful API and the
+                OpenStack Swift API. 
+
+        secrets
+                Secrets are credentials used to perform digital authentication
+                whenever privileged users must access systems that require
+                authentication. Secrets can be passwords, API keys, tokens, SSH
+                keys, private certificates, or encryption keys.
 
         SDS
-                Software-defined storage.
+                **S**\oftware-**d**\efined **S**\torage.
 
 	systemd oneshot
                 A systemd ``type`` where a command is defined in ``ExecStart``

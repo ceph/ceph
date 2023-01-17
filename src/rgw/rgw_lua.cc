@@ -97,7 +97,7 @@ int delete_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const
 
 namespace bp = boost::process;
 
-int add_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, const std::string& package_name, bool allow_compilation)
+int add_package(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y, const std::string& package_name, bool allow_compilation)
 {
   // verify that luarocks can load this package
   const auto p = bp::search_path("luarocks");
@@ -128,36 +128,37 @@ int add_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_
 
   //replace previous versions of the package
   const std::string package_name_no_version = package_name.substr(0, package_name.find(" "));
-  ret = remove_package(dpp, store, y, package_name_no_version);
+  ret = remove_package(dpp, driver, y, package_name_no_version);
   if (ret < 0) {
     return ret;
   }
 
-  auto lua_mgr = store->get_lua_manager();
+  auto lua_mgr = driver->get_lua_manager();
 
   return lua_mgr->add_package(dpp, y, package_name);
 }
 
-int remove_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, const std::string& package_name)
+int remove_package(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y, const std::string& package_name)
 {
-  auto lua_mgr = store->get_lua_manager();
+  auto lua_mgr = driver->get_lua_manager();
 
   return lua_mgr->remove_package(dpp, y, package_name);
 }
 
 namespace bp = boost::process;
 
-int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, packages_t& packages)
+int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y, packages_t& packages)
 {
-  auto lua_mgr = store->get_lua_manager();
+  auto lua_mgr = driver->get_lua_manager();
 
   return lua_mgr->list_packages(dpp, y, packages);
 }
 
-int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, packages_t& failed_packages, std::string& output) {
+int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
+                     optional_yield y, const std::string& luarocks_path,
+                     packages_t& failed_packages, std::string& output) {
   // luarocks directory cleanup
   std::error_code ec;
-  const auto& luarocks_path = store->get_luarocks_path();
   if (std::filesystem::remove_all(luarocks_path, ec)
       == static_cast<std::uintmax_t>(-1) &&
       ec != std::errc::no_such_file_or_directory) {
@@ -168,7 +169,7 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, opti
   }
 
   packages_t packages;
-  auto ret = list_packages(dpp, store, y, packages);
+  auto ret = list_packages(dpp, driver, y, packages);
   if (ret == -ENOENT) {
     // allowlist is empty 
     return 0;

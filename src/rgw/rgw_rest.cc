@@ -209,10 +209,14 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
   for (const struct rgw_http_status_code *h = http_codes; h->code; h++) {
     http_status_names[h->code] = h->name;
   }
-  std::list<std::string> names;
 
+  std::list<std::string> rgw_dns_names;
+  std::string rgw_dns_names_str = cct->_conf->rgw_dns_name;
+  get_str_list(rgw_dns_names_str, ", ", rgw_dns_names);
+  hostnames_set.insert(rgw_dns_names.begin(), rgw_dns_names.end());
+
+  std::list<std::string> names;
   zone_group.get_hostnames(names);
-  hostnames_set.insert(cct->_conf->rgw_dns_name);
   hostnames_set.insert(names.begin(), names.end());
   hostnames_set.erase(""); // filter out empty hostnames
   ldout(cct, 20) << "RGW hostnames: " << hostnames_set << dendl;
@@ -1701,7 +1705,7 @@ RGWOp* RGWHandler_REST::get_op(void)
   }
 
   if (op) {
-    op->init(store, s, this);
+    op->init(driver, s, this);
   }
   return op;
 } /* get_op */
@@ -1881,7 +1885,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
         ldpp_dout(op, -1) << "Error reading IAM User Policy: " << e.what() << dendl;
       }
     }
-    rgw_build_iam_environment(store, s);
+    rgw_build_iam_environment(driver, s);
     return 0;
   }
 
@@ -2291,7 +2295,7 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
 }
 
 RGWHandler_REST* RGWREST::get_handler(
-  rgw::sal::Store*  const store,
+  rgw::sal::Driver*  const driver,
   req_state* const s,
   const rgw::auth::StrategyRegistry& auth_registry,
   const std::string& frontend_prefix,
@@ -2315,12 +2319,12 @@ RGWHandler_REST* RGWREST::get_handler(
     *pmgr = m;
   }
 
-  RGWHandler_REST* handler = m->get_handler(store, s, auth_registry, frontend_prefix);
+  RGWHandler_REST* handler = m->get_handler(driver, s, auth_registry, frontend_prefix);
   if (! handler) {
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;
   }
-  *init_error = handler->init(store, s, rio);
+  *init_error = handler->init(driver, s, rio);
   if (*init_error < 0) {
     m->put_handler(handler);
     return nullptr;

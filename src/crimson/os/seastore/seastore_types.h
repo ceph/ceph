@@ -871,7 +871,7 @@ constexpr auto PLACEMENT_HINT_NULL = placement_hint_t::NUM_HINTS;
 
 std::ostream& operator<<(std::ostream& out, placement_hint_t h);
 
-enum class alignas(4) device_type_t : uint_fast8_t {
+enum class device_type_t : uint8_t {
   NONE = 0,
   HDD,
   SSD,
@@ -2106,78 +2106,6 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_blk_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_delta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_tail_t)
-
-template<>
-struct denc_traits<crimson::os::seastore::device_type_t> {
-  static constexpr bool supported = true;
-  static constexpr bool featured = false;
-  static constexpr bool bounded = true;
-  static constexpr bool need_contiguous = false;
-
-  static void bound_encode(
-    const crimson::os::seastore::device_type_t &o,
-    size_t& p,
-    uint64_t f=0) {
-    p += sizeof(crimson::os::seastore::device_type_t);
-  }
-  template<class It>
-  requires (!is_const_iterator<It>)
-  static void encode(
-    const crimson::os::seastore::device_type_t &o,
-    It& p,
-    uint64_t f=0) {
-    get_pos_add<crimson::os::seastore::device_type_t>(p) = o;
-  }
-  template<is_const_iterator It>
-  static void decode(
-    crimson::os::seastore::device_type_t& o,
-    It& p,
-    uint64_t f=0) {
-    o = get_pos_add<crimson::os::seastore::device_type_t>(p);
-  }
-  static void decode(
-    crimson::os::seastore::device_type_t& o,
-    ceph::buffer::list::const_iterator &p) {
-    p.copy(sizeof(crimson::os::seastore::device_type_t),
-           reinterpret_cast<char*>(&o));
-  }
-};
-
-template<>
-struct denc_traits<crimson::os::seastore::segment_type_t> {
-  static constexpr bool supported = true;
-  static constexpr bool featured = false;
-  static constexpr bool bounded = true;
-  static constexpr bool need_contiguous = false;
-
-  static void bound_encode(
-    const crimson::os::seastore::segment_type_t &o,
-    size_t& p,
-    uint64_t f=0) {
-    p += sizeof(crimson::os::seastore::segment_type_t);
-  }
-  template<class It>
-  requires (!is_const_iterator<It>)
-  static void encode(
-    const crimson::os::seastore::segment_type_t &o,
-    It& p,
-    uint64_t f=0) {
-    get_pos_add<crimson::os::seastore::segment_type_t>(p) = o;
-  }
-  template<is_const_iterator It>
-  static void decode(
-    crimson::os::seastore::segment_type_t& o,
-    It& p,
-    uint64_t f=0) {
-    o = get_pos_add<crimson::os::seastore::segment_type_t>(p);
-  }
-  static void decode(
-    crimson::os::seastore::segment_type_t& o,
-    ceph::buffer::list::const_iterator &p) {
-    p.copy(sizeof(crimson::os::seastore::segment_type_t),
-           reinterpret_cast<char*>(&o));
-  }
-};
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::data_category_t> : fmt::ostream_formatter {};

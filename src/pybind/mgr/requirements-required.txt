@@ -1,4 +1,4 @@
--e../../python-common
+-e ../../python-common
 asyncmock
 cherrypy
 cryptography
@@ -12,5 +12,6 @@ pytest-cov==2.7.1
 pyyaml
 requests-mock
 scipy
+setuptools
 werkzeug
 natsort

@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
   main.init_http_clients();
 
   main.init_storage();
-  if (! main.get_store()) {
+  if (! main.get_driver()) {
     mutex.lock();
     init_timer.cancel_all_events();
     init_timer.shutdown();
