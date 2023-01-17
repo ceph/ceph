@@ -20,6 +20,13 @@ namespace rgw::sal {
   class LuaManager;
 }
 
+#ifdef WITH_ARROW_FLIGHT
+namespace rgw::flight {
+  class FlightServer;
+  class FlightStore;
+}
+#endif
+
 struct RGWLuaProcessEnv {
   std::string luarocks_path;
   rgw::lua::Background* background = nullptr;
@@ -33,4 +40,11 @@ struct RGWProcessEnv {
   OpsLogSink *olog = nullptr;
   std::unique_ptr<rgw::auth::StrategyRegistry> auth_registry;
   ActiveRateLimiter* ratelimiting = nullptr;
+
+#ifdef WITH_ARROW_FLIGHT
+  // managed by rgw:flight::FlightFrontend in rgw_flight_frontend.cc
+  rgw::flight::FlightServer* flight_server;
+  rgw::flight::FlightStore* flight_store;
+#endif
 };
+ 

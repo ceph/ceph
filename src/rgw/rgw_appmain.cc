@@ -62,6 +62,9 @@
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 #include "rgw_kafka.h"
 #endif
+#ifdef WITH_ARROW_FLIGHT
+#include "rgw_flight_frontend.h"
+#endif
 #include "rgw_asio_frontend.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_lua.h"
@@ -432,6 +435,16 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       if (rgwlib) {
         rgwlib->set_fe(static_cast<RGWLibFrontend*>(fe));
       }
+    }
+    else if (framework == "arrow_flight") {
+#ifdef WITH_ARROW_FLIGHT
+      int port;
+      config->get_val("port", 8077, &port);
+      fe = new rgw::flight::FlightFrontend(env, config, port);
+#else
+      derr << "WARNING: arrow_flight frontend requested, but not included in build; skipping" << dendl;
+      continue;
+#endif
     }
 
     service_map_meta["frontend_type#" + stringify(fe_count)] = framework;
