@@ -21,8 +21,65 @@
 #include "rgw_role.h"
 //#include "rgw_s3_proxy.h"
 #include "common/dout.h" 
+#include "rgw_rest_client.h"
 
 namespace rgw { namespace sal {
+
+vector<string> get_xml_data(string &text, string tag)
+{
+  vector<string> collection;
+  unsigned int pos = 0, start;
+  while (true){
+      start = text.find( "<" + tag, pos ); if ( start >= text.length() ) return collection;
+      start = text.find( ">" , start );
+      start++;
+
+      pos = text.find( "</" + tag, start );   if ( pos >= text.length() ) return collection;
+      collection.push_back(text.substr( start, pos - start ) );
+  }
+}
+
+class RGWGetBucketCB : public RGWHTTPStreamRWRequest::ReceiveCB {
+public:
+  vector<string> *remote_bucket_list;
+
+  RGWGetBucketCB(vector<string> *_remote_bucket_list): remote_bucket_list(_remote_bucket_list) {
+  }
+
+  int handle_data(bufferlist& bl, bool *pause) override {
+	//ldout(cct, 20) << " AMIN: " << __func__ << __LINE__ << " bufferlist is: " << in_data << dendl;
+	string in_data = bl.c_str();
+    //while(true){
+      //vector<string> all;
+      vector<string> all = get_xml_data(in_data, "Name");
+      //vector<string> all_prefix = get_xml_data(in_data, "Prefix");
+      //vector<string> sizes = get_xml_data(in_data, "Size");
+      //vector<string> etags = get_xml_data(in_data, "ETag");
+      //vector<string> modified = get_xml_data(in_data, "LastModified");
+
+      if(all.size() == 0)
+        return -1;
+      int ind = 0;
+      for (vector<string>::iterator t=all.begin(); t!=all.end(); ++t)
+      {
+        remote_bucket_list->push_back(*t);
+        ind = ind + 1;
+      }
+	  /*
+      vector<string> all_marker = get_xml_data(in_data, "NextMarker");
+      if (all_marker.size() == 0)
+        break;
+      string tmp = all_marker.front();
+      unsigned first = tmp.find(prefix);
+      unsigned last = tmp.find("/", first + prefix.size() + 1);
+      marker =  tmp.substr(first,last-first) +"/";
+	  */
+      //ldout(cct, 20) << __func__ <<" remote_bucket_size" <<  remote_bucket_list.size() << dendl;
+    //}
+
+    return 0;
+  }
+};
 
 class S3FilterStore : public FilterStore {
   private:
@@ -94,6 +151,7 @@ class S3FilterBucket : public FilterBucket {
   */
   private:
     S3FilterStore* filter;
+	ceph::real_time mtime;
 
   public:
     S3FilterBucket(std::unique_ptr<Bucket> _next, User* _user, S3FilterStore* _filter) :
@@ -110,6 +168,7 @@ class S3FilterBucket : public FilterBucket {
    
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
 	//virtual RGWBucketInfo& get_info() override;
+	virtual ceph::real_time& get_modification_time() override { mtime = real_clock::now(); return mtime; }
 };
 
 

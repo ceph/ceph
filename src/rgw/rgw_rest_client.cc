@@ -1085,8 +1085,11 @@ int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
 {
   size_t orig_len = len;
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << __LINE__ << " ptr data is: " << (const char *)ptr << dendl;
+
   if (cb) {
     in_data.append((const char *)ptr, len);
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << __LINE__ << " in_data is: " << in_data << dendl;
 
     size_t orig_in_data_len = in_data.length();
 
@@ -1107,6 +1110,7 @@ int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
     }
   }
   ofs += len;
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << __LINE__ << " orig_len is: " << orig_len << " ofs is: " << ofs << dendl;
   return orig_len;
 }
 
