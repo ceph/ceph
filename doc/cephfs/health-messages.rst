@@ -123,7 +123,9 @@ other daemons, please see :ref:`health-checks`.
     from properly cleaning up resources used by client requests.  This message
     appears if a client appears to have more than ``max_completed_requests``
     (default 100000) requests that are complete on the MDS side but haven't
-    yet been accounted for in the client's *oldest tid* value.
+    yet been accounted for in the client's *oldest tid* value. The last tid
+    used by the MDS to trim completed client requests (or flush) is included
+    as part of `session ls` (or `client ls`) command as a debug aid.
 * ``MDS_DAMAGE``
 
   Message
