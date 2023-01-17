@@ -2307,7 +2307,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
     if (ret == -EEXIST) {
        /* we need to reread the info and return it, caller will have a use for it */
       RGWBucketInfo orig_info;
-      r = get_bucket_info(&svc, bucket.tenant, bucket.name, orig_info, NULL, null_yield, NULL);
+      r = get_bucket_info(&svc, bucket.tenant, bucket.name, orig_info, NULL, y, NULL);
       if (r < 0) {
         if (r == -ENOENT) {
           continue;
@@ -2322,7 +2322,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
 	if (r < 0) {
 	  ldpp_dout(dpp, 0) << "WARNING: could not remove bucket index (r=" << r << ")" << dendl;
 	}
-        r = ctl.bucket->remove_bucket_instance_info(info.bucket, info, null_yield, dpp);
+        r = ctl.bucket->remove_bucket_instance_info(info.bucket, info, y, dpp);
         if (r < 0) {
           ldpp_dout(dpp, 0) << "WARNING: " << __func__ << "(): failed to remove bucket instance info: bucket instance=" << info.bucket.get_key() << ": r=" << r << dendl;
           /* continue anyway */
@@ -2833,7 +2833,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
 
   RGWBucketInfo dest_bucket_info;
 
-  r = get_bucket_info(&svc, bucket->get_tenant(), bucket->get_info().swift_ver_location, dest_bucket_info, NULL, null_yield, NULL);
+  r = get_bucket_info(&svc, bucket->get_tenant(), bucket->get_info().swift_ver_location, dest_bucket_info, NULL, y, NULL);
   if (r < 0) {
     ldpp_dout(dpp, 10) << "failed to read dest bucket info: r=" << r << dendl;
     if (r == -ENOENT) {
@@ -2885,7 +2885,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                NULL, /* void (*progress_cb)(off_t, void *) */
                NULL, /* void *progress_data */
                dpp,
-               null_yield);
+               y);
   if (r == -ECANCELED || r == -ENOENT) {
     /* Has already been overwritten, meaning another rgw process already
      * copied it out */
@@ -3185,7 +3185,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   auto& ioctx = ref.pool.ioctx();
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
-  r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, null_yield);
+  r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, y);
   tracepoint(rgw_rados, operate_exit, req_id.c_str());
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
                 or -ENOENT if was removed, or -EEXIST if it did not exist
@@ -4561,12 +4561,10 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
-  // do not change the null_yield in the initialization of this AtomicObjectProcessor
-  // it causes crashes in the ragweed tests
   AtomicObjectProcessor processor(&aio, this->driver, &dest_placement,
                                   bucket->get_info().owner, obj_ctx,
                                   dest_obj->clone(), olh_epoch, tag,
-				  dpp, null_yield);
+				  dpp, y);
   int ret = processor.prepare(y);
   if (ret < 0)
     return ret;
@@ -4746,7 +4744,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
     RGWBucketEntryPoint ep;
     r = ctl.bucket->read_bucket_entrypoint_info(bucket_info.bucket,
                                                 &ep,
-						null_yield,
+						y,
                                                 dpp,
                                                 RGWBucketCtl::Bucket::GetParams()
                                                 .set_objv_tracker(&objv_tracker));
@@ -4766,7 +4764,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
   }
  
   if (remove_ep) {
-    r = ctl.bucket->remove_bucket_entrypoint_info(bucket_info.bucket, null_yield, dpp,
+    r = ctl.bucket->remove_bucket_entrypoint_info(bucket_info.bucket, y, dpp,
                                                   RGWBucketCtl::Bucket::RemoveParams()
                                                   .set_objv_tracker(&objv_tracker));
     if (r < 0)
@@ -4776,7 +4774,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
   /* if the bucket is not synced we can remove the meta file */
   if (!svc.zone->is_syncing_bucket_meta(bucket)) {
     RGWObjVersionTracker objv_tracker;
-    r = ctl.bucket->remove_bucket_instance_info(bucket, bucket_info, null_yield, dpp);
+    r = ctl.bucket->remove_bucket_instance_info(bucket, bucket_info, y, dpp);
     if (r < 0) {
       return r;
     }
@@ -5990,7 +5988,7 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, RGWBucketInfo&
   struct timespec mtime_ts = real_clock::to_timespec(mtime);
   op.mtime2(&mtime_ts);
   auto& ioctx = ref.pool.ioctx();
-  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, null_yield);
+  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, y);
   if (state) {
     if (r >= 0) {
       bufferlist acl_bl = attrs[RGW_ATTR_ACL];
@@ -8999,7 +8997,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
     cls_rgw_bucket_list_op(op, marker, prefix, empty_delimiter,
 			   num_entries,
                            list_versions, &result);
-    r = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, null_yield);
+    r = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	": error in rgw_rados_operate (bucket list op), r=" << r << dendl;
