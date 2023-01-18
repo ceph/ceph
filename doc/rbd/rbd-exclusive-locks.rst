@@ -21,10 +21,6 @@ can be overridden via the ``rbd_default_features`` configuration option or the
    exclusive locking. Disabling the ``exclusive-lock`` feature will negatively
    affect the performance of some operations.
 
-In order to ensure proper exclusive locking operations, any client using an RBD
-image whose ``exclusive-lock`` feature is enabled must have a CephX identity
-whose capabilities include ``profile rbd``.
-
 Exclusive locking is mostly transparent to the user.
 
 #. Whenever any ``librbd`` client process or kernel RBD client
@@ -78,9 +74,10 @@ Ceph Monitor.
 
 Blocklisting is thus a form of storage-level resource `fencing`_.
 
-In order for blocklisting to work, the client must have the ``osd
-blocklist`` capability. This capability is included in the ``profile
-rbd`` capability profile, which should be set generally on all Ceph
-:ref:`client identities <user-management>` using RBD.
+.. note::
+   In order for blocklisting to work, the client must have the ``osd
+   blocklist`` capability. This capability is included in the ``profile
+   rbd`` capability profile, which should be set generally on all Ceph
+   :ref:`client identities <user-management>` using RBD.
 
 .. _fencing: https://en.wikipedia.org/wiki/Fencing_(computing)
