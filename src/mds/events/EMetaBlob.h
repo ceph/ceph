@@ -417,6 +417,7 @@ private:
   }
   void add_null_dentry(dirlump& lump, CDentry *dn, bool dirty) {
     // add the dir
+    dn->check_corruption(false);
     lump.nnull++;
     lump.add_dnull(dn->get_name(), dn->first, dn->last,
 		   dn->get_projected_version(), dirty);
@@ -430,6 +431,7 @@ private:
   }
   void add_remote_dentry(dirlump& lump, CDentry *dn, bool dirty, 
 			 inodeno_t rino=0, unsigned char rdt=0) {
+    dn->check_corruption(false);
     if (!rino) {
       rino = dn->get_projected_linkage()->get_remote_ino();
       rdt = dn->get_projected_linkage()->get_remote_d_type();
@@ -451,6 +453,8 @@ private:
     add_primary_dentry(add_dir(dn->get_dir(), false), dn, in, state);
   }
   void add_primary_dentry(dirlump& lump, CDentry *dn, CInode *in, __u8 state) {
+    dn->check_corruption(false);
+
     if (!in) 
       in = dn->get_projected_linkage()->get_inode();
 
