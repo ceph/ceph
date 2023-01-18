@@ -415,7 +415,7 @@ RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::Driver* driver,
     return nullptr;
   }
 
-  if (!s->object->empty()) {
+  if (s->object == nullptr || s->object->empty()) {
     return nullptr;
   }
 
