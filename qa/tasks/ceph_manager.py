@@ -1564,19 +1564,28 @@ class CephManager:
         elif isinstance(kwargs['args'], tuple):
             kwargs['args'] = list(kwargs['args'])
 
+        prefixcmd = []
+        timeoutcmd = kwargs.pop('timeoutcmd', None)
+        if timeoutcmd is not None:
+            prefixcmd += ['timeout', str(timeoutcmd)]
+
         if self.cephadm:
+            prefixcmd += ['ceph']
+            cmd = prefixcmd + list(kwargs['args'])
             return shell(self.ctx, self.cluster, self.controller,
-                         args=['ceph'] + list(kwargs['args']),
+                         args=cmd,
                          stdout=StringIO(),
                          check_status=kwargs.get('check_status', True))
-        if self.rook:
+        elif self.rook:
+            prefixcmd += ['ceph']
+            cmd = prefixcmd + list(kwargs['args'])
             return toolbox(self.ctx, self.cluster,
-                           args=['ceph'] + list(kwargs['args']),
+                           args=cmd,
                            stdout=StringIO(),
                            check_status=kwargs.get('check_status', True))
-
-        kwargs['args'] = self.CEPH_CMD + kwargs['args']
-        return self.controller.run(**kwargs)
+        else:
+            kwargs['args'] = prefixcmd + self.CEPH_CMD + kwargs['args']
+            return self.controller.run(**kwargs)
 
     def raw_cluster_cmd(self, *args, **kwargs) -> str:
         """
