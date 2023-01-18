@@ -8684,6 +8684,10 @@ std::vector<Option> get_mds_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("mds_abort_on_newly_corrupt_dentry", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("MDS will abort if dentry is detected newly corrupted."),
+
     Option("mds_kill_mdstable_at", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),

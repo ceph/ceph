@@ -58,6 +58,10 @@ public:
 
   void handle_mds_failure(mds_rank_t mds);
 
+  bool is_server_ready(void) const {
+    return server_ready;
+  }
+
   // child must implement
   virtual void resend_queries() = 0;
   virtual void handle_query_result(const cref_t<MMDSTableRequest> &m) = 0;
