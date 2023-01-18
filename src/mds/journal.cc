@@ -1362,6 +1362,17 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	in->state_clear(CInode::STATE_AUTH);
       ceph_assert(g_conf()->mds_kill_journal_replay_at != 2);
 
+      {
+        auto do_corruption = mds->get_inject_journal_corrupt_dentry_first();
+        if (unlikely(do_corruption > 0.0)) {
+          auto r = ceph::util::generate_random_number(0.0, 1.0);
+          if (r < do_corruption) {
+            dout(0) << "corrupting dn: " << *dn << dendl;
+            dn->first = -10;
+          }
+        }
+      }
+
       if (!(++count % mds->heartbeat_reset_grace()))
         mds->heartbeat_reset();
     }
