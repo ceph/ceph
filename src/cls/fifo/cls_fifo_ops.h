@@ -149,17 +149,18 @@ WRITE_CLASS_ENCODER(update_meta)
 
 struct init_part
 {
-  std::string tag;
   data_params params;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
+    std::string tag;
     encode(tag, bl);
     encode(params, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
+    std::string tag;
     decode(tag, bl);
     decode(params, bl);
     DECODE_FINISH(bl);
@@ -169,12 +170,12 @@ WRITE_CLASS_ENCODER(init_part)
 
 struct push_part
 {
-  std::string tag;
   std::deque<ceph::buffer::list> data_bufs;
   std::uint64_t total_len{0};
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
+    std::string tag;
     encode(tag, bl);
     encode(data_bufs, bl);
     encode(total_len, bl);
@@ -182,6 +183,7 @@ struct push_part
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
+    std::string tag;
     decode(tag, bl);
     decode(data_bufs, bl);
     decode(total_len, bl);
@@ -192,12 +194,12 @@ WRITE_CLASS_ENCODER(push_part)
 
 struct trim_part
 {
-  std::optional<std::string> tag;
   std::uint64_t ofs{0};
   bool exclusive = false;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
+    std::optional<std::string> tag;
     encode(tag, bl);
     encode(ofs, bl);
     encode(exclusive, bl);
@@ -205,6 +207,7 @@ struct trim_part
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
+    std::optional<std::string> tag;
     decode(tag, bl);
     decode(ofs, bl);
     decode(exclusive, bl);
@@ -215,12 +218,12 @@ WRITE_CLASS_ENCODER(trim_part)
 
 struct list_part
 {
-  std::optional<std::string> tag;
   std::uint64_t ofs{0};
   int max_entries{100};
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
+    std::optional<std::string> tag;
     encode(tag, bl);
     encode(ofs, bl);
     encode(max_entries, bl);
@@ -228,6 +231,7 @@ struct list_part
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
+    std::optional<std::string> tag;
     decode(tag, bl);
     decode(ofs, bl);
     decode(max_entries, bl);
@@ -239,7 +243,6 @@ inline constexpr int MAX_LIST_ENTRIES = 512;
 
 struct list_part_reply
 {
-  std::string tag;
   std::vector<part_list_entry> entries;
   bool more{false};
   bool full_part{false}; /* whether part is full or still can be written to.
@@ -247,6 +250,7 @@ struct list_part_reply
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
+    std::string tag;
     encode(tag, bl);
     encode(entries, bl);
     encode(more, bl);
@@ -255,6 +259,7 @@ struct list_part_reply
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
+    std::string tag;
     decode(tag, bl);
     decode(entries, bl);
     decode(more, bl);
