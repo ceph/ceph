@@ -1564,23 +1564,33 @@ class CephManager:
 
         Accepts arguments same as that of teuthology.orchestra.run.run()
         """
+
+        prefixcmd = []
+        timeoutcmd = kwargs.pop('timeoutcmd', None)
+        if timeoutcmd is not None:
+            prefixcmd += ['timeout', str(timeoutcmd)]
+
         if self.cephadm:
+            prefixcmd += ['ceph']
+            cmd = prefixcmd + list(kwargs['args'])
             return shell(self.ctx, self.cluster, self.controller,
-                         args=['ceph'] + list(kwargs['args']),
+                         args=cmd,
                          stdout=StringIO(),
                          check_status=kwargs.get('check_status', True))
-        if self.rook:
+        elif self.rook:
+            prefixcmd += ['ceph']
+            cmd = prefixcmd + list(kwargs['args'])
             return toolbox(self.ctx, self.cluster,
-                           args=['ceph'] + list(kwargs['args']),
+                           args=cmd,
                            stdout=StringIO(),
                            check_status=kwargs.get('check_status', True))
-
-        testdir = teuthology.get_testdir(self.ctx)
-        prefix = ['sudo', 'adjust-ulimits', 'ceph-coverage',
-                  f'{testdir}/archive/coverage', 'timeout', '120', 'ceph',
-                  '--cluster', self.cluster]
-        kwargs['args'] = prefix + list(kwargs['args'])
-        return self.controller.run(**kwargs)
+        else:
+            testdir = teuthology.get_testdir(self.ctx)
+            prefix = prefixcmd + ['sudo', 'adjust-ulimits', 'ceph-coverage',
+                     f'{testdir}/archive/coverage', 'timeout', '120', 'ceph',
+                     '--cluster', self.cluster]
+            kwargs['args'] = prefix + list(kwargs['args'])
+            return self.controller.run(**kwargs)
 
     def raw_cluster_cmd(self, *args, **kwargs) -> str:
         """
