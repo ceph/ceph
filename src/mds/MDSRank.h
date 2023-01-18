@@ -373,6 +373,10 @@ class MDSRank {
 		      const std::string& option, const std::string& value,
 		      std::ostream& ss);
 
+    double get_inject_journal_corrupt_dentry_first() const {
+      return inject_journal_corrupt_dentry_first;
+    }
+
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
     // a separate lock here in future potentially.
@@ -613,6 +617,7 @@ class MDSRank {
     Context *suicide_hook;
 
     bool standby_replaying = false;  // true if current replay pass is in standby-replay mode
+    double inject_journal_corrupt_dentry_first = 0.0;
 private:
     bool send_status = true;
 

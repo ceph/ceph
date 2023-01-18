@@ -514,6 +514,7 @@ MDSRank::MDSRank(
     messenger(msgr), monc(monc_), mgrc(mgrc),
     respawn_hook(respawn_hook_),
     suicide_hook(suicide_hook_),
+    inject_journal_corrupt_dentry_first(g_conf().get_val<double>("mds_inject_journal_corrupt_dentry_first")),
     starttime(mono_clock::now()),
     ioc(ioc)
 {
@@ -3765,6 +3766,8 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_alternate_name_max",
     "mds_dir_max_entries",
     "mds_symlink_recovery",
+    "mds_inject_rename_corrupt_dentry_first",
+    "mds_inject_journal_corrupt_dentry_first",
     NULL
   };
   return KEYS;
@@ -3799,6 +3802,9 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
       changed.count("host") ||
       changed.count("fsid")) {
     update_log_config();
+  }
+  if (changed.count("mds_inject_journal_corrupt_dentry_first")) {
+    inject_journal_corrupt_dentry_first = g_conf().get_val<double>("mds_inject_journal_corrupt_dentry_first");
   }
 
   finisher->queue(new LambdaContext([this, changed](int) {
