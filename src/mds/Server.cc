@@ -252,6 +252,7 @@ void Server::create_logger()
 Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   mds(m), 
   mdcache(mds->mdcache), mdlog(mds->mdlog),
+  inject_rename_corrupt_dentry_first(g_conf().get_val<double>("mds_inject_rename_corrupt_dentry_first")),
   recall_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate")),
   metrics_handler(metrics_handler)
 {
@@ -1295,6 +1296,9 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
     dir_max_entries = g_conf().get_val<uint64_t>("mds_dir_max_entries");
     dout(20) << __func__ << " max entries per directory changed to "
             << dir_max_entries << dendl;
+  }
+  if (changed.count("mds_inject_rename_corrupt_dentry_first")) {
+    inject_rename_corrupt_dentry_first = g_conf().get_val<double>("mds_inject_rename_corrupt_dentry_first");
   }
 }
 
@@ -9375,6 +9379,16 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
 
     destdn->first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
+    {
+      auto do_corruption = inject_rename_corrupt_dentry_first;
+      if (unlikely(do_corruption > 0.0)) {
+        auto r = ceph::util::generate_random_number(0.0, 1.0);
+        if (r < do_corruption) {
+          dout(0) << "corrupting dn: " << *destdn << dendl;
+          destdn->first = -10;
+        }
+      }
+    }
 
     if (destdn->is_auth())
       metablob->add_primary_dentry(destdn, srci, true, true);
