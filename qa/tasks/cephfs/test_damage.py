@@ -3,6 +3,7 @@ import json
 import logging
 import errno
 import re
+import time
 from teuthology.contextutil import MaxWhileTries
 from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra.run import wait
@@ -562,3 +563,99 @@ class TestDamage(CephFSTestCase):
             self.fs.mon_manager.raw_cluster_cmd(
                 'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
                 "damage", "rm", str(entry['id']))
+
+    def test_dentry_first_existing(self):
+        """
+        That the MDS won't abort when the dentry is already known to be damaged.
+        """
+
+        def verify_corrupt():
+            info = self.fs.read_cache("/a", 0)
+            log.debug('%s', info)
+            self.assertEqual(len(info), 1)
+            dirfrags = info[0]['dirfrags']
+            self.assertEqual(len(dirfrags), 1)
+            dentries = dirfrags[0]['dentries']
+            self.assertEqual([dn['path'] for dn in dentries if dn['is_primary']], ['a/c'])
+            self.assertEqual(dentries[0]['snap_first'], 18446744073709551606) # SNAP_HEAD
+
+        self.mount_a.run_shell_payload("mkdir -p a/b")
+        self.fs.flush()
+        self.config_set("mds", "mds_abort_on_newly_corrupt_dentry", False)
+        self.config_set("mds", "mds_inject_rename_corrupt_dentry_first", "1.0")
+        time.sleep(5) # for conf to percolate
+        self.mount_a.run_shell_payload("mv a/b a/c; sync .")
+        self.mount_a.umount()
+        verify_corrupt()
+        self.fs.fail()
+        self.config_rm("mds", "mds_inject_rename_corrupt_dentry_first")
+        self.config_set("mds", "mds_abort_on_newly_corrupt_dentry", False)
+        self.fs.set_joinable()
+        status = self.fs.status()
+        self.fs.flush()
+        self.assertFalse(self.fs.status().hadfailover(status))
+        verify_corrupt()
+
+    def test_dentry_first_preflush(self):
+        """
+        That the MDS won't write a dentry with new damage to CDentry::first
+        to the journal.
+        """
+
+        rank0 = self.fs.get_rank()
+        self.fs.rank_freeze(True, rank=0)
+        self.mount_a.run_shell_payload("mkdir -p a/{b,c}/d")
+        self.fs.flush()
+        self.config_set("mds", "mds_inject_rename_corrupt_dentry_first", "1.0")
+        time.sleep(5) # for conf to percolate
+        p = self.mount_a.run_shell_payload("timeout 60 mv a/b a/z", wait=False)
+        self.wait_until_true(lambda: "laggy_since" in self.fs.get_rank(), timeout=self.fs.beacon_timeout)
+        self.config_rm("mds", "mds_inject_rename_corrupt_dentry_first")
+        self.fs.rank_freeze(False, rank=0)
+        self.delete_mds_coredump(rank0['name'])
+        self.fs.mds_restart(rank0['name'])
+        self.fs.wait_for_daemons()
+        p.wait()
+        self.mount_a.run_shell_payload("stat a/ && find a/")
+        self.fs.flush()
+
+    def test_dentry_first_precommit(self):
+        """
+        That the MDS won't write a dentry with new damage to CDentry::first
+        to the directory object.
+        """
+
+        fscid = self.fs.id
+        self.mount_a.run_shell_payload("mkdir -p a/{b,c}/d; sync .")
+        self.mount_a.umount() # allow immediate scatter write back
+        self.fs.flush()
+        # now just twiddle some inode metadata on a regular file
+        self.mount_a.mount_wait()
+        self.mount_a.run_shell_payload("chmod 711 a/b/d; sync .")
+        self.mount_a.umount() # avoid journaling session related things
+        # okay, now cause the dentry to get damaged after loading from the journal
+        self.fs.fail()
+        self.config_set("mds", "mds_inject_journal_corrupt_dentry_first", "1.0")
+        time.sleep(5) # for conf to percolate
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+        rank0 = self.fs.get_rank()
+        self.fs.rank_freeze(True, rank=0)
+        # so now we want to trigger commit but this will crash, so:
+        c = ['--connect-timeout=60', 'tell', f"mds.{fscid}:0", "flush", "journal"]
+        p = self.ceph_cluster.mon_manager.run_cluster_cmd(args=c, wait=False, timeoutcmd=30)
+        self.wait_until_true(lambda: "laggy_since" in self.fs.get_rank(), timeout=self.fs.beacon_timeout)
+        self.config_rm("mds", "mds_inject_journal_corrupt_dentry_first")
+        self.fs.rank_freeze(False, rank=0)
+        self.delete_mds_coredump(rank0['name'])
+        self.fs.mds_restart(rank0['name'])
+        self.fs.wait_for_daemons()
+        try:
+            p.wait()
+        except CommandFailedError as e:
+            print(e)
+        else:
+            self.fail("flush journal should fail!")
+        self.mount_a.mount_wait()
+        self.mount_a.run_shell_payload("stat a/ && find a/")
+        self.fs.flush()

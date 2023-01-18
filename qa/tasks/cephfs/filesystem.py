@@ -1648,6 +1648,9 @@ class Filesystem(MDSCluster):
     def get_scrub_status(self, rank=0):
         return self.run_scrub(["status"], rank)
 
+    def flush(self, rank=0):
+        return self.rank_tell(["flush", "journal"], rank=rank)
+
     def wait_until_scrub_complete(self, result=None, tag=None, rank=0, sleep=30,
                                   timeout=300, reverse=False):
         # time out after "timeout" seconds and assume as done
