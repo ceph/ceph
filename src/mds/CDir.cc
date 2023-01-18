@@ -29,8 +29,10 @@
 #include "MDLog.h"
 #include "LogSegment.h"
 #include "MDBalancer.h"
+#include "SnapClient.h"
 
 #include "common/bloom_filter.hpp"
+#include "common/likely.h"
 #include "include/Context.h"
 #include "common/Clock.h"
 
@@ -349,15 +351,15 @@ CDentry* CDir::add_null_dentry(std::string_view dname,
    
   // create dentry
   CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), "", first, last);
+  dn->dir = this;
+  dn->version = get_projected_version();
+  dn->check_corruption(true);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
 
   mdcache->bottom_lru.lru_insert_mid(dn);
   dn->state_set(CDentry::STATE_BOTTOMLRU);
 
-  dn->dir = this;
-  dn->version = get_projected_version();
-  
   // add to dir
   ceph_assert(items.count(dn->key()) == 0);
   //assert(null_items.count(dn->get_name()) == 0);
@@ -393,6 +395,9 @@ CDentry* CDir::add_primary_dentry(std::string_view dname, CInode *in,
   
   // create dentry
   CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), std::move(alternate_name), first, last);
+  dn->dir = this;
+  dn->version = get_projected_version();
+  dn->check_corruption(true);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   if (is_auth() || !inode->is_stray()) {
@@ -402,9 +407,6 @@ CDentry* CDir::add_primary_dentry(std::string_view dname, CInode *in,
     dn->state_set(CDentry::STATE_BOTTOMLRU);
   }
 
-  dn->dir = this;
-  dn->version = get_projected_version();
-  
   // add to dir
   ceph_assert(items.count(dn->key()) == 0);
   //assert(null_items.count(dn->get_name()) == 0);
@@ -443,12 +445,12 @@ CDentry* CDir::add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned
 
   // create dentry
   CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), std::move(alternate_name), ino, d_type, first, last);
+  dn->dir = this;
+  dn->version = get_projected_version();
+  dn->check_corruption(true);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   mdcache->lru.lru_insert_mid(dn);
-
-  dn->dir = this;
-  dn->version = get_projected_version();
   
   // add to dir
   ceph_assert(items.count(dn->key()) == 0);
@@ -1758,11 +1760,6 @@ CDentry *CDir::_load_dentry(
            << " [" << first << "," << last << "]"
            << dendl;
 
-  if (first > last) {
-    go_bad_dentry(last, dname);
-    /* try to continue */
-  }
-
   bool stale = false;
   if (snaps && last != CEPH_NOSNAP) {
     set<snapid_t>::const_iterator p = snaps->lower_bound(first);
@@ -2430,6 +2427,10 @@ void CDir::_omap_commit(int op_prio)
   auto write_one = [&](CDentry *dn) {
     string key;
     dn->key().encode(key);
+
+    if (!dn->corrupt_first_loaded) {
+      dn->check_corruption(false);
+    }
 
     if (snaps && try_trim_snap_dentry(dn, *snaps)) {
       dout(10) << " rm " << key << dendl;
