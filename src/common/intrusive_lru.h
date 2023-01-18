@@ -43,6 +43,12 @@ class intrusive_lru_base {
   intrusive_lru<Config> *lru = nullptr;
 
 public:
+  bool is_referenced() const {
+    return static_cast<bool>(lru);
+  }
+  bool is_unreferenced() const {
+    return !is_referenced();
+  }
   boost::intrusive::set_member_hook<> set_hook;
   boost::intrusive::list_member_hook<> list_hook;
 
@@ -96,7 +102,7 @@ class intrusive_lru {
     while (!unreferenced_list.empty() &&
 	   lru_set.size() > lru_target_size) {
       auto &b = unreferenced_list.front();
-      assert(!b.lru);
+      assert(b.is_unreferenced());
       unreferenced_list.pop_front();
       lru_set.erase_and_dispose(
 	lru_set.iterator_to(b),
@@ -106,21 +112,21 @@ class intrusive_lru {
   }
 
   void access(base_t &b) {
-    if (b.lru)
+    if (b.is_referenced())
       return;
     unreferenced_list.erase(lru_list_t::s_iterator_to(b));
     b.lru = this;
   }
 
   void insert(base_t &b) {
-    assert(!b.lru);
+    assert(b.is_unreferenced());
     lru_set.insert(b);
     b.lru = this;
     evict();
   }
 
-  void unreferenced(base_t &b) {
-    assert(b.lru);
+  void mark_as_unreferenced(base_t &b) {
+    assert(b.is_referenced());
     unreferenced_list.push_back(b);
     b.lru = nullptr;
     evict();
@@ -187,7 +193,7 @@ void intrusive_ptr_release(intrusive_lru_base<Config> *p) {
   assert(p->use_count > 0);
   --p->use_count;
   if (p->use_count == 0) {
-    p->lru->unreferenced(*p);
+    p->lru->mark_as_unreferenced(*p);
   }
 }
 
