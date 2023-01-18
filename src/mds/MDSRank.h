@@ -375,6 +375,10 @@ class MDSRank {
 		      std::ostream& ss);
     void schedule_inmemory_logger();
 
+    double get_inject_journal_corrupt_dentry_first() const {
+      return inject_journal_corrupt_dentry_first;
+    }
+
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
     // a separate lock here in future potentially.
@@ -619,6 +623,7 @@ class MDSRank {
 
     bool standby_replaying = false;  // true if current replay pass is in standby-replay mode
     uint64_t extraordinary_events_dump_interval = 0;
+    double inject_journal_corrupt_dentry_first = 0.0;
 private:
     bool send_status = true;
 
