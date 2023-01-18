@@ -44,6 +44,8 @@
   },
   "private": true,
   "dependencies": {
+    "@ajsf/bootstrap4": "0.7.0",
+    "@ajsf/core": "0.7.0",
     "@angular/animations": "13.3.11",
     "@angular/common": "13.3.11",
     "@angular/compiler": "13.3.11",

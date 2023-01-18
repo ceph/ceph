@@ -37,6 +37,7 @@ import { LoginLayoutComponent } from './core/layouts/login-layout/login-layout.c
 import { WorkbenchLayoutComponent } from './core/layouts/workbench-layout/workbench-layout.component';
 import { ApiDocsComponent } from './core/navigation/api-docs/api-docs.component';
 import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
+import { CrudFormComponent } from './shared/datatable/crud-table/crud-form/crud-form.component';
 import { CRUDTableComponent } from './shared/datatable/crud-table/crud-table.component';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
@@ -119,6 +120,14 @@ const routes: Routes = [
       {
         path: 'ceph-users',
         component: CRUDTableComponent,
+        data: {
+          breadcrumbs: 'Cluster/Users',
+          resource: 'api.cluster.user@1.0'
+        }
+      },
+      {
+        path: 'cluster/user/create',
+        component: CrudFormComponent,
         data: {
           breadcrumbs: 'Cluster/Users',
           resource: 'api.cluster.user@1.0'

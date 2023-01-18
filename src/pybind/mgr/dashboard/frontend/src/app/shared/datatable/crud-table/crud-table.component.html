@@ -1,10 +1,19 @@
 <ng-container *ngIf="meta">
   <cd-table
-    [data]="data$ | async"
-    [columns]="meta.table.columns"
-    [columnMode]="meta.table.columnMode"
-    [toolHeader]="meta.table.toolHeader"
-  ></cd-table>
+      [data]="data$ | async"
+      [columns]="meta.table.columns"
+      [columnMode]="meta.table.columnMode"
+      [toolHeader]="meta.table.toolHeader">
+    <div class="table-actions btn-toolbar">
+      <cd-table-actions [permission]="permission"
+                        [selection]="selection"
+                        class="btn-group"
+                        id="crud-table-actions"
+                        [tableActions]="meta.actions">
+      </cd-table-actions>
+    </div>
+
+  </cd-table>
 </ng-container>
 
 <ng-template #badgeDictTpl
