@@ -18,6 +18,7 @@ overrides:
       - Metadata damage detected
       - MDS_READ_ONLY
       - force file system read-only
+      - with standby daemon mds
 tasks:
   - cephfs_test_runner:
       modules:
