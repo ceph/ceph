@@ -194,6 +194,10 @@ inline std::ostream& operator<<(std::ostream& out, const LogEntry& e)
              << e.channel << " " << e.prio << " " << e.msg;
 }
 
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<clog_type> : fmt::ostream_formatter {};
+#endif
+
 template <> struct fmt::formatter<EntityName> : fmt::formatter<std::string_view> {
   template <typename FormatContext>
   auto format(const EntityName& e, FormatContext& ctx) {
