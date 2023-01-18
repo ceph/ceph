@@ -160,6 +160,8 @@ public:
     return dentry_key_t(last, name.c_str(), hash);
   }
 
+  bool check_corruption(bool load);
+
   const CDir *get_dir() const { return dir; }
   CDir *get_dir() { return dir; }
   std::string_view get_name() const { return std::string_view(name); }
@@ -367,6 +369,7 @@ public:
 
   __u32 hash;
   snapid_t first, last;
+  bool corrupt_first_loaded = false; /* for Postgres corruption detection */
 
   elist<CDentry*>::item item_dirty, item_dir_dirty;
   elist<CDentry*>::item item_stray;
