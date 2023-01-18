@@ -968,6 +968,24 @@ options:
   services:
   - mds
   fmt_desc: MDS will abort if dentry is detected newly corrupted.
+- name: mds_inject_rename_corrupt_dentry_first
+  type: float
+  level: dev
+  default: 0.0
+  services:
+  - mds
+  fmt_desc: probabilistically inject corrupt CDentry::first at rename
+  flags:
+  - runtime
+- name: mds_inject_journal_corrupt_dentry_first
+  type: float
+  level: dev
+  default: 0.0
+  services:
+  - mds
+  fmt_desc: probabilistically inject corrupt CDentry::first at journal load
+  flags:
+  - runtime
 - name: mds_kill_mdstable_at
   type: int
   level: dev
