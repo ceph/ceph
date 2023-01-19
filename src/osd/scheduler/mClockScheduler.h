@@ -326,6 +326,9 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
       clear_timer = nullptr;
     }
 
+    // Formatted output of the client registry
+    void dump(ceph::Formatter *f) const;
+
   } client_registry;
 
   using mclock_queue_t = crimson::dmclock::PullPriorityQueue<
