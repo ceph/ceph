@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import re
 from typing import Dict
 
 from util import (
@@ -23,10 +24,9 @@ def remove_loop_img() -> None:
     if os.path.exists(loop_image):
         os.remove(loop_image)
 
-def create_loopback_devices(osds: int) -> None:
-
+def create_loopback_devices(osds: int) -> Dict[int, Dict[str, str]]:
     assert osds
-    cleanup()
+    cleanup_osds()
     osd_devs = dict()
 
     for i in range(osds):
@@ -84,7 +84,7 @@ def deploy_osd(data: str, hostname: str) -> bool:
     return 'Created osd(s)' in out
 
 
-def cleanup() -> None:
+def cleanup_osds() -> None:
     loop_img_dir = Config.get('loop_img_dir')
     osd_devs = load_osd_devices()
     for osd in osd_devs.values():
@@ -125,8 +125,9 @@ class Osd(Target):
     - deploy: Deploy an osd given a block device
     - create_loop: Create needed loopback devices and block devices in logical volumes
     for a number of osds.
+    - destroy: Remove all osds and the underlying loopback devices.
     """
-    actions = ['deploy', 'create_loop']
+    actions = ['deploy', 'create_loop', 'destroy']
 
     def set_args(self):
         self.parser.add_argument('action', choices=Osd.actions)
@@ -150,3 +151,7 @@ class Osd(Target):
         osds = Config.get('osds')
         create_loopback_devices(int(osds))
         print('Successfully created loopback devices')
+
+    @ensure_outside_container
+    def destroy(self):
+        cleanup_osds()
