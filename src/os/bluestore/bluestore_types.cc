@@ -765,7 +765,8 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   }
   if (o.has_csum()) {
     out << " " << Checksummer::get_csum_type_string(o.csum_type)
-	<< "/0x" << std::hex << (1ull << o.csum_chunk_order) << std::dec;
+	<< "/0x" << std::hex << (1ull << o.csum_chunk_order) << std::dec
+	<< "/" << o.csum_data.length();
   }
   if (o.has_unused())
     out << " unused=0x" << std::hex << o.unused << std::dec;
