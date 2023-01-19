@@ -3235,7 +3235,6 @@ void BlueStore::ExtentMap::make_range_shared(
 	  dout(20) << " pre " << i << dendl;
 	}
 	// reblob extents might erase e
-	// uint32_t blob_start = e.blob_start();
 	uint32_t logical_offset = e.logical_offset;
 	dirty_range_end = e.blob_start() + b_logical_length;
 	reblob_extents(e.blob_start(), e.blob_start() + blob_width,
@@ -3253,17 +3252,6 @@ void BlueStore::ExtentMap::make_range_shared(
 	dirty_range_end = e.logical_end() - 1;
 	++ep;
       }
-#if 0
-      if (!src_dirty) {
-	src_dirty = true;
-	dirty_range_begin = e.logical_offset;
-      }
-#endif
-#if 0
-      ceph_assert(e.logical_end() > 0);
-      // -1 to exclude next potential shard
-      dirty_range_end = e.logical_end() - 1;
-#endif
     } else {
       c->load_shared_blob(e.blob->shared_blob);
       ++ep;
@@ -3324,6 +3312,7 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
       } else {
 	// we must copy source blob diligently region-by-region
 	// initialize shared_blob
+	cb->dirty_blob().set_flag(bluestore_blob_t::FLAG_SHARED);
 	cb->shared_blob = e.blob->shared_blob;
       }
       // By default do not copy buffers to clones, and let them read data by themselves.
