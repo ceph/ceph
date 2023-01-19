@@ -1012,8 +1012,8 @@ options:
   type: str
   level: advanced
   desc: Compression algorithm to use in Messenger when communicating with OSD
-  long_desc: Compression algorithm for connections with OSD in order of preference
-  default: snappy zlib zstd lz4
+  long_desc: Compression algorithm has been set to snappy as the default algorithm. However, there is flexibility to set the algorithm manually.
+  default: snappy
   services:
   - osd
   see_also:
