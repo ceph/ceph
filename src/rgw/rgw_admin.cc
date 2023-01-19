@@ -2367,26 +2367,21 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
     }
   }
 
-  int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
-  int total_recovering = recovering_shards.size();
-  if (total_behind == 0 && total_recovering == 0) {
-    push_ss(ss, status, tab) << "data is caught up with source";
-  } else if (total_behind > 0) {
-    push_ss(ss, status, tab) << "data is behind on " << total_behind << " shards";
-
-    push_ss(ss, status, tab) << "behind shards: " << "[" << shards_behind_set << "]" ;
-
+  std::optional<std::pair<int, ceph::real_time>> oldest;
+  if (!shards_behind.empty()) {
     map<int, rgw_datalog_shard_data> master_pos;
     ret = sync.read_source_log_shards_next(dpp(), shards_behind, &master_pos);
+
     if (ret < 0) {
       derr << "ERROR: failed to fetch next positions (" << cpp_strerror(-ret) << ")" << dendl;
     } else {
-      std::optional<std::pair<int, ceph::real_time>> oldest;
-
       for (auto iter : master_pos) {
         rgw_datalog_shard_data& shard_data = iter.second;
-
-        if (!shard_data.entries.empty()) {
+        if (shard_data.entries.empty()) {
+          // there aren't any entries in this shard, so we're not really behind
+          shards_behind.erase(iter.first);
+          shards_behind_set.erase(iter.first);
+        } else {
           rgw_datalog_entry& entry = shard_data.entries.front();
           if (!oldest) {
             oldest.emplace(iter.first, entry.timestamp);
@@ -2395,11 +2390,20 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
           }
         }
       }
+    }
+  }
 
-      if (oldest) {
-        push_ss(ss, status, tab) << "oldest incremental change not applied: "
-            << oldest->second << " [" << oldest->first << ']';
-      }
+  int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
+  int total_recovering = recovering_shards.size();
+
+  if (total_behind == 0 && total_recovering == 0) {
+    push_ss(ss, status, tab) << "data is caught up with source";
+  } else if (total_behind > 0) {
+    push_ss(ss, status, tab) << "data is behind on " << total_behind << " shards";
+    push_ss(ss, status, tab) << "behind shards: " << "[" << shards_behind_set << "]" ;
+    if (oldest) {
+      push_ss(ss, status, tab) << "oldest incremental change not applied: "
+          << oldest->second << " [" << oldest->first << ']';
     }
   }
 
