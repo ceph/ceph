@@ -270,3 +270,21 @@ class TestMoveFiles:
                 assert c.args[1:] == (0, 0)
         assert dst.is_file()
         assert not file1.exists()
+
+
+def test_recursive_chown(tmp_path):
+    d1 = tmp_path / "dir1"
+    d2 = d1 / "dir2"
+    f1 = d2 / "file1.txt"
+    d2.mkdir(parents=True)
+
+    with f1.open("w") as fh:
+        fh.write("low down\n")
+
+    with mock.patch("os.chown") as _chown:
+        _chown.return_value = None
+        _cephadm.recursive_chown(str(d1), uid=500, gid=500)
+    assert len(_chown.mock_calls) == 3
+    assert _chown.mock_calls[0].args == (str(d1), 500, 500)
+    assert _chown.mock_calls[1].args == (str(d2), 500, 500)
+    assert _chown.mock_calls[2].args == (str(f1), 500, 500)
