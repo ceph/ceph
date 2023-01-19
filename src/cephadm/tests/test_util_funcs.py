@@ -186,3 +186,87 @@ class TestCopyFiles:
             for c in _chown.mock_calls:
                 assert c.args[1:] == (0, 0)
         assert (dst / "f1.txt").exists()
+
+
+class TestMoveFiles:
+    def _move_files(self, *args, **kwargs):
+        with with_cephadm_ctx([]) as ctx:
+            with mock.patch("cephadm.extract_uid_gid") as eug:
+                eug.return_value = (os.getuid(), os.getgid())
+                _cephadm.move_files(ctx, *args, **kwargs)
+
+    def test_one_file(self, tmp_path):
+        """Move a named file to test dest path."""
+        file1 = tmp_path / "f1.txt"
+        dst = tmp_path / "dst"
+
+        with file1.open("w") as fh:
+            fh.write("lets moove\n")
+
+        assert not dst.exists()
+        assert file1.is_file()
+
+        self._move_files([file1], dst)
+        assert dst.is_file()
+        assert not file1.exists()
+
+    def test_one_file_destdir(self, tmp_path):
+        """Move a file into an existing dest dir."""
+        file1 = tmp_path / "f1.txt"
+        dst = tmp_path / "dst"
+        dst.mkdir(parents=True)
+
+        with file1.open("w") as fh:
+            fh.write("lets moove\n")
+
+        assert not (dst / "f1.txt").exists()
+        assert file1.is_file()
+
+        self._move_files([file1], dst)
+        assert (dst / "f1.txt").is_file()
+        assert not file1.exists()
+
+    def test_one_file_one_link(self, tmp_path):
+        """Move a file and a symlink to that file to a dest dir."""
+        file1 = tmp_path / "f1.txt"
+        link1 = tmp_path / "lnk"
+        dst = tmp_path / "dst"
+        dst.mkdir(parents=True)
+
+        with file1.open("w") as fh:
+            fh.write("lets moove\n")
+        os.symlink("f1.txt", link1)
+
+        assert not (dst / "f1.txt").exists()
+        assert file1.is_file()
+        assert link1.exists()
+
+        self._move_files([file1, link1], dst)
+        assert (dst / "f1.txt").is_file()
+        assert (dst / "lnk").is_symlink()
+        assert not file1.exists()
+        assert not link1.exists()
+        assert (dst / "f1.txt").open("r").read() == "lets moove\n"
+        assert (dst / "lnk").open("r").read() == "lets moove\n"
+
+    def test_one_file_set_uid(self, tmp_path):
+        """Explicity pass uid/gid values and assert these are passed to chown."""
+        # Because this test will often be run by non-root users it is necessary
+        # to mock os.chown or we too easily run into perms issues.
+        file1 = tmp_path / "f1.txt"
+        dst = tmp_path / "dst"
+
+        with file1.open("w") as fh:
+            fh.write("lets moove\n")
+
+        assert not dst.exists()
+        assert file1.is_file()
+
+        with mock.patch("os.chown") as _chown:
+            _chown.return_value = None
+            self._move_files([file1], dst, uid=0, gid=0)
+            assert len(_chown.mock_calls) >= 1
+            for c in _chown.mock_calls:
+                assert c.args[1:] == (0, 0)
+        assert dst.is_file()
+        assert not file1.exists()
