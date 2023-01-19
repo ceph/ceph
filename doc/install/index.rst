@@ -10,8 +10,9 @@ method that best suits your needs.
 Recommended methods
 ~~~~~~~~~~~~~~~~~~~
 
-:ref:`Cephadm <cephadm>` installs and manages a Ceph cluster using containers and
-systemd, with tight integration with the CLI and dashboard GUI.
+:ref:`Cephadm <cephadm_deploying_new_cluster>` installs and manages a Ceph
+cluster using containers and systemd, with tight integration with the CLI and
+dashboard GUI.
 
 * cephadm only supports Octopus and newer releases.
 * cephadm is fully integrated with the new orchestration API and
