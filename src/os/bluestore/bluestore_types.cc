@@ -684,6 +684,28 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
   return s;
 }
 
+void bluestore_blob_t::adjust_to(const bluestore_blob_t& other, uint32_t target_length)
+{
+  // there is no way to expand compressed
+  ceph_assert(!is_compressed());
+  // never import data from other compressed
+  ceph_assert(!other.is_compressed());
+  // unused is wanky, as it is based on logical_length size
+  // it could be cleared here, but it feels better to force caller
+  // to be aware that unused is inacceptable
+  ceph_assert(!has_unused());
+  ceph_assert(logical_length == 0); // not initialized yet
+  ceph_assert(target_length <= other.logical_length);
+
+  logical_length = target_length;
+  ceph_assert(!has_csum());
+  if (other.has_csum()) {
+    init_csum(other.csum_type, other.csum_chunk_order, logical_length);
+    memcpy(csum_data.c_str(), other.csum_data.c_str(), csum_data.length());
+  }
+  compressed_length = 0;
+}
+
 size_t bluestore_blob_t::get_csum_value_size() const 
 {
   return Checksummer::get_csum_value_size(csum_type);
