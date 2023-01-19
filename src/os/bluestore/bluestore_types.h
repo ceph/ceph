@@ -486,6 +486,9 @@ public:
 
   void dup(const bluestore_blob_t& from);
 
+  // initialize blob to accomodate data from other blob, but do not copy yet
+  void adjust_to(const bluestore_blob_t& other, uint32_t new_logical_length);
+
   const PExtentVector& get_extents() const {
     return extents;
   }

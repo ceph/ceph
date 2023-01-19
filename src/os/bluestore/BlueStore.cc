@@ -2625,35 +2625,24 @@ void BlueStore::Blob::dup(const Blob& from, bool copy_used_in_blob)
   }
 }
 
+// copies part of a Blob
+// it is used to create a consistent blob out of parts of other blobs
 void BlueStore::Blob::copy_from(
   CephContext* cct, const Blob& from, uint32_t min_release_size, uint32_t start, uint32_t len)
 {
   dout(20) << __func__ << " to=" << *this << " from=" << from
 	   << " [" << std::hex << start << "~" << len
 	   << "] min_release=" << min_release_size << std::dec << dendl;
-  if (!shared_blob) {
-    shared_blob = from.shared_blob;
-  }
-  ceph_assert(shared_blob == from.shared_blob);
 
   auto& bto = blob;
   auto& bfrom = from.blob;
   ceph_assert(!bfrom.is_compressed()); // not suitable for compressed (immutable) blobs
   ceph_assert(!bfrom.has_unused());
-  if (bto.logical_length == 0) {
-    // first time, initialize
-    bto.flags = bfrom.flags;
-    bto.csum_type = bfrom.csum_type;
-    bto.csum_chunk_order = bfrom.csum_chunk_order;
-    bto.compressed_length = 0;
-    uint32_t used_size = p2roundup(start + len, from.used_in_blob.au_size);
-    used_in_blob.init(used_size, from.used_in_blob.au_size);
-  } else {
-    ceph_assert(bto.flags == bfrom.flags);
-    ceph_assert(bto.csum_type == bfrom.csum_type);
-    ceph_assert(bto.csum_chunk_order == bfrom.csum_chunk_order);
-  }
-  // merge extents
+  // below to asserts are not required to make function work
+  // they check if it is run in desired context
+  ceph_assert(bfrom.is_shared());
+  ceph_assert(shared_blob);
+
   // split len to pre_len, main_len, post_len
   uint32_t start_aligned = p2align(start, min_release_size);
   uint32_t start_roundup = p2roundup(start, min_release_size);
@@ -2662,6 +2651,20 @@ void BlueStore::Blob::copy_from(
   dout(25) << __func__ << " extent split:"
 	   << std::hex << start_aligned << "~" << start_roundup << "~"
 	   << end_aligned << "~" << end_roundup << std::dec << dendl;
+
+  if (bto.get_logical_length() == 0) {
+    // this is initialization
+    bto.adjust_to(from.blob, end_roundup);
+    uint32_t used_size = p2roundup(start + len, from.used_in_blob.au_size);
+    used_in_blob.init(used_size, from.used_in_blob.au_size);
+  }
+  if (bto.get_logical_length() < end_roundup) {
+    ceph_assert(!bto.is_compressed());
+    bto.add_tail(end_roundup);
+    used_in_blob.add_tail(end_roundup, used_in_blob.au_size);
+  }
+  ceph_assert(shared_blob == from.shared_blob);
+
   if (end_aligned >= start_roundup) {
     copy_extents(cct, from, start_aligned,
 		 start_roundup - start_aligned,/*pre_len*/
@@ -2673,22 +2676,8 @@ void BlueStore::Blob::copy_from(
 		 start_roundup - start_aligned,/*pre_len*/
 		 0 /*main_len*/, 0/*post_len*/);
   }
-  // match logical length to end of extents
-  if (bto.logical_length < end_roundup) {
-    bto.logical_length = end_roundup;
-  }
-  // fix csum_data
-  if (bto.csum_data.length() == 0) {
-    if (bfrom.csum_data.length() > 0)
-      bto.csum_data = ceph::buffer::ptr(bfrom.csum_data.c_str(),
-					bfrom.csum_data.length());
-  } else {
-    if (bfrom.csum_data.length() > bto.csum_data.length()) {
-      // expand
-      auto csd = ceph::buffer::ptr(bfrom.csum_data.length());
-      memcpy(csd.c_str(), bto.csum_data.c_str(), bto.csum_data.length());
-      bto.csum_data = csd;
-    }
+  // copy relevant csum items
+  if (bto.has_csum()) {
     size_t csd_value_size = bto.get_csum_value_size();
     size_t csd_item_start = p2align(start, uint32_t(1 << bto.csum_chunk_order)) >> bto.csum_chunk_order;
     size_t csd_item_end = p2roundup(start + len, uint32_t(1 << bto.csum_chunk_order)) >> bto.csum_chunk_order;
@@ -2696,7 +2685,6 @@ void BlueStore::Blob::copy_from(
 	   bfrom.csum_data.c_str() + csd_item_start * csd_value_size,
 	   (csd_item_end - csd_item_start) * csd_value_size);
   }
-  //todo check if needs expand used_in_blob
   used_in_blob.get(start, len);
   dout(20) << __func__ << " result=" << *this << dendl;
 }
