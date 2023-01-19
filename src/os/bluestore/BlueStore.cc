@@ -2786,9 +2786,14 @@ void BlueStore::Blob::copy_extents_over_empty(
     padding = 0;
   } else {
     ceph_assert(!ito->is_valid()); // there can be no collision
-    ceph_assert(ito->length >= len); // for at least len
-    padding = len - ito->length; // add this much after copying
+    ceph_assert(ito->length >= sto + len); // for at least len, starting with remainder sto
+    padding = ito->length - (sto + len); // add this much after copying
     ito = exto.erase(ito); // cut a hole
+    if (sto > 0) {
+      ito = exto.insert(ito, bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, sto));
+      prev = ito;
+      ++ito;
+    }
   }
 
   auto& exfrom = from.blob.extents;
