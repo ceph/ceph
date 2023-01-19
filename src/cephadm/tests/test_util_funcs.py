@@ -93,3 +93,96 @@ class TestCopyTree:
             for c in _chown.mock_calls:
                 assert c.args[1:] == (0, 0)
         assert (dst / "foo.txt").exists()
+
+
+class TestCopyFiles:
+    def _copy_files(self, *args, **kwargs):
+        with with_cephadm_ctx([]) as ctx:
+            with mock.patch("cephadm.extract_uid_gid") as eug:
+                eug.return_value = (os.getuid(), os.getgid())
+                _cephadm.copy_files(ctx, *args, **kwargs)
+
+    def test_one_file(self, tmp_path):
+        """Copy one file into the dest dir."""
+        file1 = tmp_path / "f1.txt"
+        dst = tmp_path / "dst"
+        dst.mkdir(parents=True)
+
+        with file1.open("w") as fh:
+            fh.write("its test time\n")
+
+        self._copy_files([file1], dst)
+        assert (dst / "f1.txt").exists()
+
+    def test_one_file_nodest(self, tmp_path):
+        """Copy one file to the given destination path."""
+        file1 = tmp_path / "f1.txt"
+        dst = tmp_path / "dst"
+
+        with file1.open("w") as fh:
+            fh.write("its test time\n")
+
+        self._copy_files([file1], dst)
+        assert not dst.is_dir()
+        assert dst.is_file()
+        assert dst.open("r").read() == "its test time\n"
+
+    def test_three_files(self, tmp_path):
+        """Copy one file into the dest dir."""
+        file1 = tmp_path / "f1.txt"
+        file2 = tmp_path / "f2.txt"
+        file3 = tmp_path / "f3.txt"
+        dst = tmp_path / "dst"
+        dst.mkdir(parents=True)
+
+        with file1.open("w") as fh:
+            fh.write("its test time\n")
+        with file2.open("w") as fh:
+            fh.write("f2\n")
+        with file3.open("w") as fh:
+            fh.write("f3\n")
+
+        self._copy_files([file1, file2, file3], dst)
+        assert (dst / "f1.txt").exists()
+        assert (dst / "f2.txt").exists()
+        assert (dst / "f3.txt").exists()
+
+    def test_three_files_nodest(self, tmp_path):
+        """Copy files to dest path (not a dir). This is not a useful operation."""
+        file1 = tmp_path / "f1.txt"
+        file2 = tmp_path / "f2.txt"
+        file3 = tmp_path / "f3.txt"
+        dst = tmp_path / "dst"
+
+        with file1.open("w") as fh:
+            fh.write("its test time\n")
+        with file2.open("w") as fh:
+            fh.write("f2\n")
+        with file3.open("w") as fh:
+            fh.write("f3\n")
+
+        self._copy_files([file1, file2, file3], dst)
+        assert not dst.is_dir()
+        assert dst.is_file()
+        assert dst.open("r").read() == "f3\n"
+
+    def test_one_file_set_uid(self, tmp_path):
+        """Explicity pass uid/gid values and assert these are passed to chown."""
+        # Because this test will often be run by non-root users it is necessary
+        # to mock os.chown or we too easily run into perms issues.
+        file1 = tmp_path / "f1.txt"
+        dst = tmp_path / "dst"
+        dst.mkdir(parents=True)
+
+        with file1.open("w") as fh:
+            fh.write("its test time\n")
+
+        assert not (dst / "f1.txt").exists()
+
+        with mock.patch("os.chown") as _chown:
+            _chown.return_value = None
+            self._copy_files([file1], dst, uid=0, gid=0)
+            assert len(_chown.mock_calls) >= 1
+            for c in _chown.mock_calls:
+                assert c.args[1:] == (0, 0)
+        assert (dst / "f1.txt").exists()
