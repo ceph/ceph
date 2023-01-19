@@ -888,7 +888,6 @@ public:
     }
   }
   void add_tail(uint32_t new_len) {
-    ceph_assert(is_mutable());
     ceph_assert(!has_unused());
     ceph_assert(new_len > logical_length);
     extents.emplace_back(
