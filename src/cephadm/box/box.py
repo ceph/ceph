@@ -52,7 +52,7 @@ def remove_ceph_image_tar():
 
 
 def cleanup_box() -> None:
-    osd.cleanup()
+    osd.cleanup_osds()
     remove_ceph_image_tar()
 
 
@@ -118,7 +118,7 @@ def dashboard_setup():
 
 class Cluster(Target):
     _help = 'Manage docker cephadm boxes'
-    actions = ['bootstrap', 'start', 'down', 'list', 'sh', 'setup', 'cleanup']
+    actions = ['bootstrap', 'start', 'down', 'list', 'bash', 'setup', 'cleanup']
 
     def set_args(self):
         self.parser.add_argument(
@@ -366,11 +366,12 @@ class Cluster(Target):
             print(f'{name} \t{ip} \t{hostname}')
 
     @ensure_outside_container
-    def sh(self):
+    def bash(self):
         # we need verbose to see the prompt after running shell command
         Config.set('verbose', True)
         print('Seed bash')
-        run_shell_command(f'{engine_compose()} -f {Config.get("docker_yaml")} exec {get_seed_name()} bash')
+        engine = get_container_engine()
+        engine.run(f'exec -it {engine.seed_name} bash')
 
 
 targets = {
