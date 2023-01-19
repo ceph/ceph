@@ -7,6 +7,7 @@
  * Foundation.  See file COPYING.
  *
 */
+#include <regex>
 
 #include "include/compat.h"
 #include "include/cephfs/libcephfs.h"
@@ -41,6 +42,8 @@ Map options:
   --win-vol-name arg          The Windows volume name. Default: Ceph - <fs_name>.
   --win-vol-serial arg        The Windows volume serial number. Default: <fs_id>.
   --max-path-len              The value of the maximum path length. Default: 256.
+  --file-mode                 The access mode to be used when creating files.
+  --dir-mode                  The access mode to be used when creating directories.
 
 Unmap options:
   -l [ --mountpoint ] arg     mountpoint (path or drive letter) (e.g -l x).
@@ -87,6 +90,8 @@ int parse_args(
   std::string win_vol_name;
   std::string win_vol_serial;
   std::string max_path_len;
+  std::string file_mode;
+  std::string dir_mode;
 
   int thread_count;
 
@@ -134,6 +139,22 @@ int parse_args(
       }
 
       cfg->max_path_len = max_path_length;
+    } else if (ceph_argparse_witharg(args, i, &file_mode, "--file-mode", (char *)NULL)) {
+      mode_t mode = strtol(file_mode.c_str(), NULL, 8);
+      if (!std::regex_match(file_mode, std::regex("^[0-7]{3}$"))
+          || mode < 01 || mode > 0777) {
+        *err_msg << "ceph-dokan: invalid file access mode";
+        return -EINVAL;
+      }
+      cfg->file_mode = mode;
+    } else if (ceph_argparse_witharg(args, i, &dir_mode, "--dir-mode", (char *)NULL)) {
+      mode_t mode = strtol(dir_mode.c_str(), NULL, 8);
+      if (!std::regex_match(dir_mode, std::regex("^[0-7]{3}$"))
+          || mode < 01 || mode > 0777) {
+        *err_msg << "ceph-dokan: invalid directory access mode";
+        return -EINVAL;
+      }
+      cfg->dir_mode = mode;
     } else if (ceph_argparse_flag(args, i, "--current-session-only", (char *)NULL)) {
       cfg->current_session_only = true;
     } else if (ceph_argparse_witharg(args, i, &thread_count,
