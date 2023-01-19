@@ -406,6 +406,32 @@ void mClockScheduler::ClientRegistry::do_clean()
   clear_timer->add_event_after(clear_period, new Clear_Registry(this));
 }
 
+void mClockScheduler::ClientRegistry::dump(ceph::Formatter *f) const
+{
+  // Display external client registry info
+  std::lock_guard rl(reg_lock);
+  f->open_object_section("client_registry");
+  f->dump_unsigned("size", external_client_infos.size());
+  f->dump_float("clear_age", clear_age);
+  f->dump_float("clear_period", clear_period);
+  f->open_array_section("client_infos_top");
+  // Dump the top 5 external client info entries
+  for (int client_count = 5; auto const& [key, val] : external_client_infos) {
+    f->open_object_section("client");
+    f->dump_unsigned("client_id", key.client_id);
+    f->dump_unsigned("profile_id", key.profile_id);
+    f->dump_float("res", val.reservation);
+    f->dump_float("wgt", val.weight);
+    f->dump_float("lim", val.limit);
+    f->close_section();
+    if (!client_count--) {
+      break;
+    }
+  }
+  f->close_section();
+  f->close_section();
+}
+
 void mClockScheduler::set_osd_capacity_params_from_config()
 {
   uint64_t osd_bandwidth_capacity;
@@ -630,6 +656,9 @@ void mClockScheduler::dump(ceph::Formatter &f) const
     f.dump_int("queue_size", it->second.size());
   }
   f.close_section();
+
+  // Dump client registry info
+  client_registry.dump(&f);
 }
 
 void mClockScheduler::enqueue(OpSchedulerItem&& item)
