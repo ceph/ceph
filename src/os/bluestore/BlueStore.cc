@@ -2408,6 +2408,7 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
     }
 
     if (new_blen > blen) {
+      ceph_assert(dirty_blob().is_mutable());
       dirty_blob().add_tail(new_blen);
       used_in_blob.add_tail(new_blen,
                             get_blob().get_release_size(min_alloc_size));
