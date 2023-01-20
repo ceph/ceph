@@ -1249,12 +1249,12 @@ class Filesystem(MDSCluster):
             out.append((rank, f(perf)))
         return out
 
-    def read_cache(self, path, depth=None):
+    def read_cache(self, path, depth=None, rank=None):
         cmd = ["dump", "tree", path]
         if depth is not None:
             cmd.append(depth.__str__())
-        result = self.mds_asok(cmd)
-        if len(result) == 0:
+        result = self.rank_asok(cmd, rank=rank)
+        if result is None or len(result) == 0:
             raise RuntimeError("Path not found in cache: {0}".format(path))
 
         return result
