@@ -59,6 +59,7 @@
 #include "services/svc_zone_utils.h"
 #include "services/svc_role_rados.h"
 #include "services/svc_user.h"
+#include "services/svc_sys_obj_cache.h"
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "rgw_pubsub.h"
@@ -1033,13 +1034,22 @@ std::string RadosBucket::topics_oid() const {
 int RadosBucket::read_topics(rgw_pubsub_bucket_topics& notifications, 
     RGWObjVersionTracker* objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) 
 {
+  // read from cache
+  auto cache = store->getRados()->get_topic_cache();
+  const std::string key = store->svc()->zone->get_zone_params().log_pool.to_str() + topics_oid();
+  if (auto e = cache->find(key)) {
+    notifications = e->info;
+    return 0;
+  }
+
   bufferlist bl;
+  rgw_cache_entry_info cache_info;
   const int ret = rgw_get_system_obj(store->svc()->sysobj,
                                store->svc()->zone->get_zone_params().log_pool,
                                topics_oid(),
                                bl,
-                               objv_tracker,
-                               nullptr, y, dpp, nullptr);
+                               objv_tracker, nullptr,
+                               y, dpp, nullptr, &cache_info);
   if (ret < 0) {
     return ret;
   }
@@ -1053,6 +1063,11 @@ int RadosBucket::read_topics(rgw_pubsub_bucket_topics& notifications,
     return -EIO;
   }
 
+  pubsub_bucket_topics_entry e;
+  e.info = notifications;
+  if (!cache->put(dpp, store->getRados()->svc.cache, key, &e, { &cache_info })) {
+    ldpp_dout(dpp, 10) << "couldn't put bucket topics cache entry" << dendl;
+  }
   return 0;
 }
 
