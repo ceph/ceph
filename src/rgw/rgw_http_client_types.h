@@ -56,7 +56,7 @@ class RGWIOProvider
 
 public:
   RGWIOProvider() {}
-  virtual ~RGWIOProvider() = default; 
+  virtual ~RGWIOProvider() = default;
 
   void assign_io(RGWIOIDProvider& io_id_provider, int io_type = -1);
   rgw_io_id get_io_id(int io_type) {

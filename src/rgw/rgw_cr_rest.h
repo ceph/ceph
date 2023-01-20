@@ -440,7 +440,7 @@ public:
   virtual int send() = 0;
   virtual int write(bufferlist& data, bool *need_retry) = 0; /* reentrant */
   virtual int drain_writes(bool *need_retry) = 0; /* reentrant */
-  
+
   virtual ~RGWStreamWriteResourceCRF() = default;
 };
 
