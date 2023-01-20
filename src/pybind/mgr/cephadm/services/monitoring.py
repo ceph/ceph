@@ -13,6 +13,7 @@ from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceS
     SNMPGatewaySpec, PrometheusSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert, build_url, get_cert_issuer_info
+from ceph.deployment.utils import wrap_ipv6
 
 logger = logging.getLogger(__name__)
 
@@ -339,18 +340,10 @@ class PrometheusService(CephadmService):
             # default to disabled
             retention_size = '0'
 
-        t = self.mgr.get('mgr_map').get('services', {}).get('prometheus', None)
-        sd_port = self.mgr.service_discovery_port
-        srv_end_point = ''
-        if t:
-            p_result = urlparse(t)
-            # urlparse .hostname removes '[]' from the hostname in case
-            # of ipv6 addresses so if this is the case then we just
-            # append the brackets when building the final scrape endpoint
-            if '[' in p_result.netloc and ']' in p_result.netloc:
-                srv_end_point = f'https://[{p_result.hostname}]:{sd_port}/sd/prometheus/sd-config?'
-            else:
-                srv_end_point = f'https://{p_result.hostname}:{sd_port}/sd/prometheus/sd-config?'
+        # build service discovery end-point
+        port = self.mgr.service_discovery_port
+        mgr_addr = wrap_ipv6(self.mgr.get_mgr_ip())
+        srv_end_point = f'https://{mgr_addr}:{port}/sd/prometheus/sd-config?'
 
         node_exporter_cnt = len(self.mgr.cache.get_daemons_by_service('node-exporter'))
         alertmgr_cnt = len(self.mgr.cache.get_daemons_by_service('alertmanager'))
