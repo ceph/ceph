@@ -496,6 +496,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.osd_service: OSDService = cast(OSDService, self.cephadm_services['osd'])
         self.iscsi_service: IscsiService = cast(IscsiService, self.cephadm_services['iscsi'])
 
+        self.scheduled_async_actions: List[Callable] = []
+
         self.template = TemplateMgr(self)
 
         self.requires_post_actions: Set[str] = set()
