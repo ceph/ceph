@@ -1051,6 +1051,7 @@ void RGWRados::finalize()
 
   delete binfo_cache;
   delete obj_tombstone_cache;
+  delete topic_cache;
   if (d3n_data_cache)
     delete d3n_data_cache;
 
@@ -1280,6 +1281,9 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp)
 
   binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
   binfo_cache->init(svc.cache);
+
+  topic_cache = new RGWChainedCacheImpl<pubsub_bucket_topics_entry>;
+  topic_cache->init(svc.cache);
 
   lc = new RGWLC();
   lc->initialize(cct, this->driver);

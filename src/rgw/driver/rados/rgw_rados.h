@@ -39,6 +39,7 @@
 #include "common/ceph_mutex.h"
 #include "rgw_cache.h"
 #include "rgw_sal_fwd.h"
+#include "rgw_pubsub.h"
 
 struct D3nDataCache;
 
@@ -319,6 +320,12 @@ struct bucket_info_entry {
   std::map<std::string, bufferlist> attrs;
 };
 
+struct pubsub_bucket_topics_entry {
+  rgw_pubsub_bucket_topics info;
+  RGWObjVersionTracker objv_tracker;
+  real_time mtime;
+};
+
 struct tombstone_entry;
 
 template <class K, class V>
@@ -425,6 +432,9 @@ protected:
   RGWChainedCacheImpl_bucket_info_entry* binfo_cache{nullptr};
 
   tombstone_cache_t* obj_tombstone_cache{nullptr};
+
+  using RGWChainedCacheImpl_bucket_topics_entry = RGWChainedCacheImpl<pubsub_bucket_topics_entry>;
+  RGWChainedCacheImpl_bucket_topics_entry* topic_cache{nullptr};
 
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
   librados::IoCtx lc_pool_ctx;        // .rgw.lc
@@ -1364,6 +1374,8 @@ public:
 		      RGWBucketInfo& info,
 		      ceph::real_time *pmtime, optional_yield y,
                       const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *pattrs = NULL);
+
+  RGWChainedCacheImpl_bucket_topics_entry *get_topic_cache() { return topic_cache; }
 
   // Returns 0 on successful refresh. Returns error code if there was
   // an error or the version stored on the OSD is the same as that
