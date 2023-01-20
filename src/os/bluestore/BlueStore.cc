@@ -3267,7 +3267,14 @@ void BlueStore::ExtentMap::make_range_shared(
 void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
   CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
   uint64_t& length, uint64_t& dstoff) {
-
+  OnodeCacheShard* ocs = c->get_onode_cache();
+  ocs->lock.lock();
+  // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
+  while (ocs != c->get_onode_cache()) {
+    ocs->lock.unlock();
+    ocs = c->get_onode_cache();
+    ocs->lock.lock();
+  }
   make_range_shared(b, txc, c, oldo, srcoff, length);
   vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
   for (auto& e : oldo->extent_map.extent_map) {
@@ -3381,6 +3388,7 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
     newo->onode.size = dstoff + length;
   }
   newo->extent_map.dirty_range(dstoff, length);
+  ocs->lock.unlock();
 }
 void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
                                   bool force)
