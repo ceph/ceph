@@ -3466,7 +3466,7 @@ paths:
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.1+json:
+            application/vnd.ceph.api.v1.2+json:
               schema:
                 properties:
                   addr:
@@ -3482,6 +3482,21 @@ paths:
                     description: Labels related to the host
                     items:
                       type: string
+                    type: array
+                  service_instances:
+                    description: Service instances related to the host
+                    items:
+                      properties:
+                        count:
+                          description: Number of instances of the service
+                          type: integer
+                        type:
+                          description: type of service
+                          type: string
+                      required:
+                      - type
+                      - count
+                      type: object
                     type: array
                   service_type:
                     description: ''
@@ -3520,6 +3535,7 @@ paths:
                 required:
                 - hostname
                 - services
+                - service_instances
                 - ceph_version
                 - addr
                 - labels
