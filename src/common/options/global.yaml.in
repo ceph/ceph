@@ -1012,7 +1012,8 @@ options:
   type: str
   level: advanced
   desc: Compression algorithm to use in Messenger when communicating with OSD
-  long_desc: Compression algorithm has been set to snappy as the default algorithm. However, there is flexibility to set the algorithm manually.
+  long_desc: Compression algorithm has been set to snappy as the default 
+    algorithm. However, there is flexibility to set the algorithm manually.
   default: snappy
   services:
   - osd
