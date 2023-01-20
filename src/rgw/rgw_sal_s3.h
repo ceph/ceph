@@ -39,46 +39,18 @@ vector<string> get_xml_data(string &text, string tag)
   }
 }
 
+
+class S3FilterBucket;
+
 class RGWGetBucketCB : public RGWHTTPStreamRWRequest::ReceiveCB {
 public:
+  S3FilterBucket *bucket;
   vector<string> *remote_bucket_list;
+  vector<rgw_bucket_dir_entry> *remote_bucket;
 
-  RGWGetBucketCB(vector<string> *_remote_bucket_list): remote_bucket_list(_remote_bucket_list) {
-  }
+  RGWGetBucketCB(S3FilterBucket *_bucket, vector<string> *_remote_bucket_list, vector<rgw_bucket_dir_entry> *_remote_bucket): bucket(_bucket), remote_bucket_list(_remote_bucket_list), remote_bucket(_remote_bucket) {}
 
-  int handle_data(bufferlist& bl, bool *pause) override {
-	//ldout(cct, 20) << " AMIN: " << __func__ << __LINE__ << " bufferlist is: " << in_data << dendl;
-	string in_data = bl.c_str();
-    //while(true){
-      //vector<string> all;
-      vector<string> all = get_xml_data(in_data, "Name");
-      //vector<string> all_prefix = get_xml_data(in_data, "Prefix");
-      //vector<string> sizes = get_xml_data(in_data, "Size");
-      //vector<string> etags = get_xml_data(in_data, "ETag");
-      //vector<string> modified = get_xml_data(in_data, "LastModified");
-
-      if(all.size() == 0)
-        return -1;
-      int ind = 0;
-      for (vector<string>::iterator t=all.begin(); t!=all.end(); ++t)
-      {
-        remote_bucket_list->push_back(*t);
-        ind = ind + 1;
-      }
-	  /*
-      vector<string> all_marker = get_xml_data(in_data, "NextMarker");
-      if (all_marker.size() == 0)
-        break;
-      string tmp = all_marker.front();
-      unsigned first = tmp.find(prefix);
-      unsigned last = tmp.find("/", first + prefix.size() + 1);
-      marker =  tmp.substr(first,last-first) +"/";
-	  */
-      //ldout(cct, 20) << __func__ <<" remote_bucket_size" <<  remote_bucket_list.size() << dendl;
-    //}
-
-    return 0;
-  }
+  int handle_data(bufferlist& bl, bool *pause) override;
 };
 
 class S3FilterStore : public FilterStore {
@@ -145,30 +117,48 @@ class S3FilterUser : public FilterUser {
 };
 
 class S3FilterBucket : public FilterBucket {
-  /*protected:
+  protected:
     RGWBucketEnt ent;
     RGWBucketInfo info;
-  */
+  
   private:
     S3FilterStore* filter;
 	ceph::real_time mtime;
+	Attrs attrs;
 
   public:
     S3FilterBucket(std::unique_ptr<Bucket> _next, User* _user, S3FilterStore* _filter) :
       FilterBucket(std::move(_next), _user), 
       filter(_filter) {}
-	/*
-    S3FilterBucket(const rgw_bucket& _b, User* _user, S3FilterStore* _filter):
+	
+    S3FilterBucket(std::unique_ptr<Bucket> _next, const rgw_bucket& _b, User* _user, S3FilterStore* _filter):
 	  FilterBucket(std::move(_next), _user), 
       filter(_filter) 
 	 { ent.bucket = _b; info.bucket = _b; }
-	 */
+	 
 
     virtual ~S3FilterBucket() = default;
    
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
 	//virtual RGWBucketInfo& get_info() override;
 	virtual ceph::real_time& get_modification_time() override { mtime = real_clock::now(); return mtime; }
+	virtual Attrs& get_attrs(void) override { return attrs; }
+	virtual int set_attrs(string field, bufferlist bl) { attrs[field] = bl; return 0;}
+	virtual int set_attrs(Attrs attrVal) override { attrs = attrVal; return 0;}
+	virtual rgw_bucket& get_key() override { return ent.bucket; }
+    virtual RGWBucketInfo& get_info() override { return info; }
+    virtual void set_info(RGWBucketInfo _info) { this->info = _info; }
+    virtual rgw_placement_rule& get_placement_rule() override { return info.placement_rule; }
+    virtual void print(std::ostream& out) const override { out << info.bucket; }
+    virtual bool empty() const override { return info.bucket.name.empty(); }
+    virtual const std::string& get_name() const override { return info.bucket.name; }
+    virtual const std::string& get_tenant() const override { return info.bucket.tenant; }
+    virtual const std::string& get_marker() const override { return info.bucket.marker; }
+    virtual const std::string& get_bucket_id() const override { return info.bucket.bucket_id; }
+    virtual size_t get_size() const override { return ent.size; }
+    virtual size_t get_size_rounded() const override { return ent.size_rounded; }
+    virtual uint64_t get_count() const override { return ent.count; }
+
 };
 
 

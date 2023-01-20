@@ -46,6 +46,73 @@ static inline User* nextUser(User* t)
   return dynamic_cast<FilterUser*>(t)->get_next();
 }
 
+int RGWGetBucketCB::handle_data(bufferlist& bl, bool *pause){
+	//ldout(cct, 20) << " AMIN: " << __func__ << __LINE__ << " bufferlist is: " << in_data << dendl;
+	string in_data = bl.c_str();
+    //while(true){
+//2023-01-18T14:53:39.508-0500 7f3273e20700 20 http_client[GET/http://localhost:8000/TEST1BUCKET101] AMIN: receive_data1088 ptr data is: <?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>TEST1BUCKET101</Name><Prefix></Prefix><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>test.img</Key><LastModified>2023-01-13T18:52:56.577Z</LastModified><ETag>&quot;b82b4ab87e44976024abc14a1670dac0&quot;</ETag><Size>9437184</Size><StorageClass>STANDARD</StorageClass><Owner><ID>amin5</ID><DisplayName>amin5</DisplayName></Owner><RgwxTag>9f98304c-1eac-46fe-a181-5038ed96051e.204111.1547067637262722144</RgwxTag><Type>Normal</Type></Contents><Marker></Marker></ListBucketResult>
+      vector<string> all;
+      vector<string> all_keys = get_xml_data(in_data, "Key");
+      vector<string> name = get_xml_data(in_data, "Name");
+      vector<string> all_prefix = get_xml_data(in_data, "Prefix");
+      vector<string> sizes = get_xml_data(in_data, "Size");
+      vector<string> etags = get_xml_data(in_data, "ETag");
+      vector<string> owners = get_xml_data(in_data, "ID");
+      vector<string> modified = get_xml_data(in_data, "LastModified");
+      vector<string> storageClass = get_xml_data(in_data, "StorageClass");
+      //vector<string> marker = get_xml_data(in_data, "Marker");
+      if(all_keys.size() == 0)
+        return -2;
+      else if (all_keys.size() >= 1){
+          all = all_keys;
+      }
+      else{
+        all = all_prefix;
+      }
+      int ind = 0;
+	  //RGWBucketInfo info = this->bucket->get_info();
+      for (vector<string>::iterator t=all.begin(); t!=all.end(); ++t)
+      {
+        rgw_bucket_dir_entry entry;
+        rgw_obj_index_key index_key(*t);
+        entry.key = index_key;
+        entry.exists =true;
+        if(all_keys.size() >= 1){
+          string s = "&quot;";
+          etags[ind].erase (0,s.length());
+          etags[ind].erase(etags[ind].length()-s.length(),etags[ind].length());
+          entry.meta.etag =  etags[ind];
+          entry.meta.owner = owners[ind];
+          //ldout(cct, 20) << __func__ << ind << " " << *t << " entry.meta.etag  " << entry.meta.etag << dendl;
+          entry.meta.size = stoull(sizes[ind]);
+          entry.meta.accounted_size = stoull(sizes[ind]);
+          //entry.meta.mtime = stoull(modified[ind]); AMIN: FIXME
+          //ldout(cct, 20) << __func__ <<  " entry.meta.size " <<  entry.meta.size << dendl;;
+        }
+        remote_bucket->push_back(entry);
+        remote_bucket_list->push_back(*t);
+		if (ind == 0){ //AMIN: FIXME
+		  this->bucket->set_attrs(RGW_ATTR_ETAG, bufferlist::static_from_string(etags[0]));
+		  this->bucket->set_attrs(RGW_ATTR_STORAGE_CLASS, bufferlist::static_from_string(storageClass[0]));
+		}
+		//info.storage_class = StorageClass[ind];
+        ind = ind + 1;
+      }
+	  //this->bucket->set_info(info);
+	  /* AMIN
+      vector<string> all_marker = get_xml_data(in_data, "NextMarker");
+      if (all_marker.size() == 0)
+        break;
+      string tmp = all_marker.front();
+      unsigned first = tmp.find(prefix);
+      unsigned last = tmp.find("/", first + prefix.size() + 1);
+      marker =  tmp.substr(first,last-first) +"/";
+      ldout(cct, 20) << __func__ <<" remote_bucket_size" <<  remote_bucket_list.size() << dendl;
+	  */
+
+    return 0;
+}
+
 
 
 int S3FilterStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
@@ -312,24 +379,23 @@ std::unique_ptr<Object::DeleteOp> S3FilterObject::get_delete_op()
 
 int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket_out, optional_yield y)
 {
-  /*
+ 
   std::unique_ptr<Bucket> nb;
   int ret;
   User* nu = nextUser(u);
 
   ret = next->get_bucket(dpp, nu, b, &nb, y);
-  ret = next->get_bucket(dpp, u, b, &nb, y);
+  //ret = next->get_bucket(dpp, u, b, &nb, y);
   ldpp_dout(dpp, 20) << "AMIN S3 Filter: " << __func__ << " return is: " << ret << dendl;
-  if (ret != 0)
-    return ret;
-
+  if (ret == 0)
+    return ret; //we have it local
+  /*
   Bucket* fb = new S3FilterBucket(std::move(nb), u, this);
-  bucket->reset(fb);
+  bucket_out->reset(fb);
   return 0;
   */
   
-  //User* nu = nextUser(u);
-  int ret;
+  //int ret;
 
   ldpp_dout(dpp, 20) << "AMIN S3 Filter: " << __func__ << " ,user ID is: " << u->get_id() << dendl;
   ldpp_dout(dpp, 20) << "AMIN S3 Filter: " << __func__ << " ,user ID is: " << u->get_id().tenant << dendl;
@@ -346,8 +412,15 @@ int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_
   //string etag;
 
   HostStyle host_style = PathStyle;
-  vector<string> bucket_list;
-  RGWGetBucketCB cb(&bucket_list);
+  vector<rgw_bucket_dir_entry> remote_bucket;
+  vector<string> remote_bucket_list;
+  //std::unique_ptr<Bucket> nb;
+  //User* nu = nextUser(u);
+  rgw_bucket bucket;
+  //S3FilterBucket* fb = new S3FilterBucket(nullptr, bucket, u, this);
+  S3FilterBucket* fb = new S3FilterBucket(std::move(nb), bucket, nu, this);
+
+  RGWGetBucketCB cb(fb, &remote_bucket_list, &remote_bucket);
 
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   //RGWHTTPStreamRWRequest *bucket_rd = new RGWHTTPStreamRWRequest(this->_cct, "GET", url, NULL, NULL);
@@ -377,11 +450,6 @@ int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_
     return ret;
   }
 
-
-
-
-
-  string etag; 
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   ret = bucket_rd->complete_request(null_yield);
   //ret = bucket_wr->complete_request();
@@ -390,20 +458,31 @@ int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_
 	delete bucket_rd;
 	return -1;
   }
+
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
-  std::unique_ptr<Bucket> nb;
-  rgw_bucket bucket;;
-  for (auto em: bucket_list){
-	ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "buckets are: "<< em << dendl;
-	bucket.name = em;
-    next->get_bucket(dpp, u, bucket, &nb, y);
-    Bucket* fb = new FilterBucket(std::move(nb), u);
-    bucket_out->reset(fb);
+  for (auto em: remote_bucket)
+  {
+	ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "bucket objects are: "<< em.key.name << dendl;
+	//bucket.name = em;
+	/*
+    ret = next->get_bucket(dpp, nu, b, &nb, y);
+	ldpp_dout(dpp, 20) << "AMIN S3 Filter: " << __func__ << " return is: " << ret << dendl;
+	if (ret != 0)
+	  return ret;
+	*/
+    //Bucket* fb = new S3FilterBucket(std::move(nb), bucket, u, this);
+	//ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "bucket_cb attrs are: " << bucket_cb.attrs << dendl;
+	//fb->set_attrs(bucket_cb.attrs);
+	ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "fb attrs are: " << fb->get_attrs()[RGW_ATTR_ETAG] << dendl;
+	//Bucket* fb = new S3FilterBucket(std::move(nb), u, this);
 	break;
   }
 
+  bucket_out->reset(fb);
+
   return 0;
+
 }
 
 std::unique_ptr<Writer> S3FilterStore::get_atomic_writer(const DoutPrefixProvider *dpp,
