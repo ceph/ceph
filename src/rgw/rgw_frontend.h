@@ -131,7 +131,7 @@ public:
   RGWLoadGenFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf)
     : RGWProcessFrontend(pe, _conf) {}
 
-  CephContext *get_cct() const { 
+  CephContext *get_cct() const {
     return env.driver->ctx();
   }
 

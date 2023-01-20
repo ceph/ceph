@@ -868,7 +868,7 @@ namespace rgw {
 
     RGWFileHandle::FHCache fh_cache;
     RGWFileHandle::FhLRU fh_lru;
-    
+
     std::string uid; // should match user.user_id, iiuc
 
     std::unique_ptr<rgw::sal::User> user;
@@ -1043,7 +1043,7 @@ namespace rgw {
 			     const uint32_t flags = RGWFileHandle::FLAG_NONE) {
       using std::get;
 
-      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang 
+      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang
       // the cast transfers a lvalue into a rvalue  in the ctor
       // check the commit message for the full details
       LookupFHResult fhr { nullptr, uint32_t(RGWFileHandle::FLAG_NONE) };
@@ -1086,7 +1086,7 @@ namespace rgw {
 			     const uint32_t flags = RGWFileHandle::FLAG_NONE) {
       using std::get;
 
-      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang 
+      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang
       // the cast transfers a lvalue into a rvalue  in the ctor
       // check the commit message for the full details
       LookupFHResult fhr { nullptr, uint32_t(RGWFileHandle::FLAG_NONE) };
@@ -1236,8 +1236,8 @@ namespace rgw {
 
     MkObjResult create(RGWFileHandle* parent, const char *name, struct stat *st,
 		      uint32_t mask, uint32_t flags);
-    
-    MkObjResult symlink(RGWFileHandle* parent, const char *name, 
+
+    MkObjResult symlink(RGWFileHandle* parent, const char *name,
                const char *link_path, struct stat *st, uint32_t mask, uint32_t flags);
 
     MkObjResult mkdir(RGWFileHandle* parent, const char *name, struct stat *st,

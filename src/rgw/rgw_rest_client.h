@@ -181,7 +181,7 @@ class RGWRESTStreamRWRequest : public RGWHTTPStreamRWRequest {
   std::optional<RGWRESTGenerateHTTPHeaders> headers_gen;
   RGWEnv new_env;
   req_info new_info;
-  
+
 protected:
   std::optional<std::string> api_name;
   HostStyle host_style;

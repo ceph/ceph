@@ -145,13 +145,13 @@ public:
 class RGWGetBucketTags_ObjStore : public RGWGetBucketTags {
 public:
   RGWGetBucketTags_ObjStore() = default;
-  virtual ~RGWGetBucketTags_ObjStore() = default; 
+  virtual ~RGWGetBucketTags_ObjStore() = default;
 };
 
 class RGWPutBucketTags_ObjStore: public RGWPutBucketTags {
 public:
   RGWPutBucketTags_ObjStore() = default;
-  virtual ~RGWPutBucketTags_ObjStore() = default; 
+  virtual ~RGWPutBucketTags_ObjStore() = default;
 };
 
 class RGWGetBucketReplication_ObjStore : public RGWGetBucketReplication {
@@ -163,13 +163,13 @@ public:
 class RGWPutBucketReplication_ObjStore: public RGWPutBucketReplication {
 public:
   RGWPutBucketReplication_ObjStore() = default;
-  virtual ~RGWPutBucketReplication_ObjStore() = default; 
+  virtual ~RGWPutBucketReplication_ObjStore() = default;
 };
 
 class RGWDeleteBucketReplication_ObjStore: public RGWDeleteBucketReplication {
 public:
   RGWDeleteBucketReplication_ObjStore() = default;
-  virtual ~RGWDeleteBucketReplication_ObjStore() = default; 
+  virtual ~RGWDeleteBucketReplication_ObjStore() = default;
 };
 
 class RGWListBuckets_ObjStore : public RGWListBuckets {
