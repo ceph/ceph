@@ -13,16 +13,16 @@
         <h4 class="text-center"
             i18n>Please expand your cluster first</h4>
         <div class="text-center">
-          <button class="btn btn-accent m-2"
-                  name="expand-cluster"
-                  (click)="createCluster()"
-                  aria-label="Expand Cluster"
-                  i18n>Expand Cluster</button>
-          <button class="btn btn-light"
+          <button class="btn btn-light m-2"
                   name="skip-cluster-creation"
                   aria-label="Skip"
                   (click)="skipClusterCreation()"
                   i18n>Skip</button>
+          <button class="btn btn-accent"
+                  name="expand-cluster"
+                  (click)="createCluster()"
+                  aria-label="Expand Cluster"
+                  i18n>Expand Cluster</button>
         </div>
       </div>
     </div>
