@@ -55,7 +55,7 @@ export class DashboardPieComponent implements OnChanges, OnInit {
           generateLabels: (chart: any) => {
             const labels = { 0: {}, 1: {}, 2: {} };
             labels[0] = {
-              text: $localize`Capacity: ${chart.data.datasets[1].data[2]}`,
+              text: $localize`Used: ${chart.data.datasets[1].data[2]}`,
               fillStyle: chart.data.datasets[1].backgroundColor[0],
               strokeStyle: chart.data.datasets[1].backgroundColor[0]
             };

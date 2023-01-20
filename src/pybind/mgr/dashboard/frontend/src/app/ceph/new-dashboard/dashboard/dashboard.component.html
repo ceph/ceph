@@ -3,12 +3,13 @@
   <div class="row mx-0">
     <cd-card title="Details"
              i18n-title
-             class="col-sm-3 px-3">
+             class="col-sm-3 px-3"
+             [ngClass]="{'d-flex': flexHeight}">
       <dl class="ms-4 me-4">
         <dt>FSID</dt>
         <dd>{{ detailsCardData.fsid }}</dd>
-        <dt>Orchestror</dt>
-        <dd>{{ detailsCardData.orchestrator }}</dd>
+        <dt>Orchestrator</dt>
+        <dd i18n>{{ detailsCardData.orchestrator || 'Orchestrator is not available' }}</dd>
         <dt>Ceph version</dt>
         <dd>{{ detailsCardData.cephVersion }}</dd>
       </dl>
@@ -16,13 +17,13 @@
 
     <cd-card title="Status"
              i18n-title
-             class="col-sm-6 px-3">
-      <div class="d-flex ms-4 me-4 mb-5">
+             class="col-sm-6 px-3 d-flex">
+      <div class="d-flex ms-4 me-4 mb-5 center-content">
         <i *ngIf="healthData.health?.status"
-           [ngClass]="[healthData.health.status | healthIcon, icons.large]"
+           [ngClass]="[healthData.health.status | healthIcon, icons.large2x]"
            [ngStyle]="healthData.health.status | healthColor"
            [title]="healthData.health.status"></i>
-        <span class="ms-2 mt-n1"
+        <span class="ms-2 mt-n1 lead"
               i18n>Cluster</span>
       </div>
       <section class="border-top mt-5"
@@ -58,7 +59,7 @@
                     data-toggle="collapse"
                     aria-label="toggle alert window"
                     [attr.aria-expanded]="showAlerts"
-                    (click)="toggleAlertsWindow('danger')"></button>
+                    (click)="toggleAlertsWindow('danger', 'true')"></button>
 
           </div>
         </div>
@@ -76,7 +77,8 @@
 
     <cd-card title="Capacity"
              i18n-title
-             class="col-sm-3 px-3">
+             class="col-sm-3 px-3"
+             [ngClass]="{'d-flex': flexHeight}">
       <ng-container class="ms-4 me-4"
                     *ngIf="capacity && osdSettings">
         <cd-dashboard-pie [data]="{max: capacity.total_bytes, current: capacity.total_used_raw_bytes}"
@@ -86,11 +88,12 @@
       </ng-container>
     </cd-card>
   </div>
-  <!-- Inventory Card -->
+  <!-- Second row -->
   <div class="row mx-0">
+    <!-- Inventory Card -->
     <cd-card title="Inventory"
              i18n-title
-             class="col-sm-3 px-3">
+             class="col-sm-3 px-3 d-flex">
       <!-- Hosts -->
       <li class="border-top list-group-item">
         <cd-card-row [data]="healthData.hosts"
@@ -146,7 +149,7 @@
                      link="/rgw/daemon"
                      title="Object Gateway"
                      summaryType="simplified"
-                     *ngIf="healthData.rgw"></cd-card-row>
+                     *ngIf="healthData.rgw || healthData.rgw === 0 "></cd-card-row>
       </li>
 
       <!-- Metadata Servers -->
@@ -172,8 +175,8 @@
 
     <cd-card title="Cluster utilization"
              i18n-title
-             class="col-sm-6 px-3">
-      <div class="ms-4 me-4">
+             class="col-sm-9 px-3 d-flex">
+      <div class="ms-4 me-4 mt-0">
         <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
         </cd-dashboard-time-selector>
         <ng-container *ngIf="capacity">
@@ -188,8 +191,8 @@
                                  dataUnits="none"
                                  label="IPS"
                                  label2="OPS"
-                                 [data]="queriesResults.IPS"
-                                 [data2]="queriesResults.OPS">
+                                 [data]="queriesResults.OPS"
+                                 [data2]="queriesResults.IPS">
         </cd-dashboard-area-chart>
         <cd-dashboard-area-chart chartTitle="Latency"
                                  dataUnits="ms"
@@ -205,14 +208,6 @@
                                  [data]="queriesResults.READCLIENTTHROUGHPUT"
                                  [data2]="queriesResults.WRITECLIENTTHROUGHPUT">
         </cd-dashboard-area-chart>
-      </div>
-    </cd-card>
-
-    <cd-card title="Events"
-             i18n-title
-             class="col-sm-3 px-3">
-      <div class="ms-4 me-4">
-        Text
       </div>
     </cd-card>
   </div>
