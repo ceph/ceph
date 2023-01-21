@@ -13,8 +13,7 @@
  *
  */
 
-#ifndef CEPH_RGW_QUOTA_H
-#define CEPH_RGW_QUOTA_H
+#pragma once
 
 #include "include/utime.h"
 #include "common/config_fwd.h"
@@ -48,5 +47,3 @@ public:
 // apply default quotas from configuration
 void rgw_apply_default_bucket_quota(RGWQuotaInfo& quota, const ConfigProxy& conf);
 void rgw_apply_default_user_quota(RGWQuotaInfo& quota, const ConfigProxy& conf);
-
-#endif

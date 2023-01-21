@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_DATALOG_H
-#define CEPH_RGW_DATALOG_H
+#pragma once
 
 #include <cstdint>
 #include <list>
@@ -379,6 +378,3 @@ public:
   // 1 on empty, 0 on non-empty, negative on error.
   virtual int is_empty(const DoutPrefixProvider *dpp) = 0;
 };
-
-
-#endif

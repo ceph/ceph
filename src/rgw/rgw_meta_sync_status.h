@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_META_SYNC_STATUS_H
-#define RGW_META_SYNC_STATUS_H
+#pragma once
 
 #include <string>
 
@@ -120,5 +119,3 @@ struct rgw_meta_sync_status {
   static void generate_test_instances(std::list<rgw_meta_sync_status*>& ls);
 };
 WRITE_CLASS_ENCODER(rgw_meta_sync_status)
-
-#endif

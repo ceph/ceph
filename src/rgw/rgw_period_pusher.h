@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_PERIOD_PUSHER_H
-#define RGW_PERIOD_PUSHER_H
+#pragma once
 
 #include <memory>
 #include <mutex>
@@ -53,5 +52,3 @@ class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
   class CRThread; //< contains thread, coroutine manager, http manager
   std::unique_ptr<CRThread> cr_thread; //< thread to run the push coroutines
 };
-
-#endif // RGW_PERIOD_PUSHER_H

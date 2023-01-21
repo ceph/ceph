@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef SQLITE_DB_H
-#define SQLITE_DB_H
+#pragma once
 
 #include <errno.h>
 #include <stdlib.h>
@@ -550,5 +549,3 @@ class SQLGetLCHead : public SQLiteDB, public GetLCHeadOp {
     int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
     int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
-
-#endif

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_ACL_SWIFT_H
-#define CEPH_RGW_ACL_SWIFT_H
+#pragma once
 
 #include <map>
 #include <vector>
@@ -57,4 +56,3 @@ public:
               const std::string& acl_str);
   boost::optional<std::string> to_str() const;
 };
-#endif
