@@ -65,7 +65,7 @@ int RGWMetadataLog::get_shard_id(const string& hash_key, int *shard_id)
   return 0;
 }
 
-int RGWMetadataLog::store_entries_in_shard(const DoutPrefixProvider *dpp, list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
+int RGWMetadataLog::store_entries_in_shard(const DoutPrefixProvider *dpp, vector<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
 {
   string oid;
 
@@ -96,7 +96,7 @@ void RGWMetadataLog::complete_list_entries(void *handle) {
 
 int RGWMetadataLog::list_entries(const DoutPrefixProvider *dpp, void *handle,
 				 int max_entries,
-				 list<cls_log_entry>& entries,
+				 vector<cls_log_entry>& entries,
 				 string *last_marker,
 				 bool *truncated,
 				 optional_yield y) {
