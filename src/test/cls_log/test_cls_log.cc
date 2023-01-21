@@ -114,7 +114,7 @@ void check_entry(cls_log_entry& entry, utime_t& start_time, int i, bool modified
 static int log_list(librados::IoCtx& ioctx, const std::string& oid,
                     utime_t& from, utime_t& to,
                     const string& in_marker, int max_entries,
-                    list<cls_log_entry>& entries,
+                    vector<cls_log_entry>& entries,
                     string *out_marker, bool *truncated)
 {
   librados::ObjectReadOperation rop;
@@ -126,7 +126,7 @@ static int log_list(librados::IoCtx& ioctx, const std::string& oid,
 
 static int log_list(librados::IoCtx& ioctx, const std::string& oid,
                     utime_t& from, utime_t& to, int max_entries,
-                    list<cls_log_entry>& entries, bool *truncated)
+                    vector<cls_log_entry>& entries, bool *truncated)
 {
   std::string marker;
   return log_list(ioctx, oid, from, to, marker, max_entries,
@@ -134,7 +134,7 @@ static int log_list(librados::IoCtx& ioctx, const std::string& oid,
 }
 
 static int log_list(librados::IoCtx& ioctx, const std::string& oid,
-                    list<cls_log_entry>& entries)
+                    vector<cls_log_entry>& entries)
 {
   utime_t from, to;
   bool truncated{false};
@@ -154,7 +154,7 @@ TEST_F(cls_log, test_log_add_same_time)
   utime_t to_time = get_time(start_time, 1, true);
   generate_log(ioctx, oid, 10, start_time, false);
 
-  list<cls_log_entry> entries;
+  vector<cls_log_entry> entries;
   bool truncated;
 
   /* check list */
@@ -164,7 +164,7 @@ TEST_F(cls_log, test_log_add_same_time)
     ASSERT_EQ(10, (int)entries.size());
     ASSERT_EQ(0, (int)truncated);
   }
-  list<cls_log_entry>::iterator iter;
+  vector<cls_log_entry>::iterator iter;
 
   /* need to sort returned entries, all were using the same time as key */
   map<int, cls_log_entry> check_ents;
@@ -214,7 +214,7 @@ TEST_F(cls_log, test_log_add_different_time)
   utime_t start_time = ceph_clock_now();
   generate_log(ioctx, oid, 10, start_time, true);
 
-  list<cls_log_entry> entries;
+  vector<cls_log_entry> entries;
   bool truncated;
 
   utime_t to_time = utime_t(start_time.sec() + 10, start_time.nsec());
@@ -227,7 +227,7 @@ TEST_F(cls_log, test_log_add_different_time)
     ASSERT_EQ(0, (int)truncated);
   }
 
-  list<cls_log_entry>::iterator iter;
+  vector<cls_log_entry>::iterator iter;
 
   /* returned entries should be sorted by time */
   map<int, cls_log_entry> check_ents;
@@ -299,7 +299,7 @@ TEST_F(cls_log, trim_by_time)
   utime_t start_time = ceph_clock_now();
   generate_log(ioctx, oid, 10, start_time, true);
 
-  list<cls_log_entry> entries;
+  vector<cls_log_entry> entries;
   bool truncated;
 
   /* check list */
@@ -333,7 +333,7 @@ TEST_F(cls_log, trim_by_marker)
   utime_t zero_time;
   std::vector<cls_log_entry> log1;
   {
-    list<cls_log_entry> entries;
+    vector<cls_log_entry> entries;
     ASSERT_EQ(0, log_list(ioctx, oid, entries));
     ASSERT_EQ(10u, entries.size());
 
@@ -345,7 +345,7 @@ TEST_F(cls_log, trim_by_marker)
     const std::string from = "";
     const std::string to = log1[0].id;
     ASSERT_EQ(0, do_log_trim(ioctx, oid, from, to));
-    list<cls_log_entry> entries;
+    vector<cls_log_entry> entries;
     ASSERT_EQ(0, log_list(ioctx, oid, entries));
     ASSERT_EQ(9u, entries.size());
     EXPECT_EQ(log1[1].id, entries.begin()->id);
@@ -356,7 +356,7 @@ TEST_F(cls_log, trim_by_marker)
     const std::string from = log1[8].id;
     const std::string to = "9";
     ASSERT_EQ(0, do_log_trim(ioctx, oid, from, to));
-    list<cls_log_entry> entries;
+    vector<cls_log_entry> entries;
     ASSERT_EQ(0, log_list(ioctx, oid, entries));
     ASSERT_EQ(8u, entries.size());
     EXPECT_EQ(log1[8].id, entries.rbegin()->id);
@@ -367,7 +367,7 @@ TEST_F(cls_log, trim_by_marker)
     const std::string from = log1[3].id;
     const std::string to = log1[4].id;
     ASSERT_EQ(0, do_log_trim(ioctx, oid, from, to));
-    list<cls_log_entry> entries;
+    vector<cls_log_entry> entries;
     ASSERT_EQ(0, log_list(ioctx, oid, entries));
     ASSERT_EQ(7u, entries.size());
     ASSERT_EQ(-ENODATA, do_log_trim(ioctx, oid, from, to));
@@ -377,7 +377,7 @@ TEST_F(cls_log, trim_by_marker)
     const std::string from = "";
     const std::string to = "9";
     ASSERT_EQ(0, do_log_trim(ioctx, oid, from, to));
-    list<cls_log_entry> entries;
+    vector<cls_log_entry> entries;
     ASSERT_EQ(0, log_list(ioctx, oid, entries));
     ASSERT_EQ(0u, entries.size());
     ASSERT_EQ(-ENODATA, do_log_trim(ioctx, oid, from, to));

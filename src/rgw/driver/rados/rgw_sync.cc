@@ -398,7 +398,7 @@ protected:
   }
 public:
   string marker;
-  list<cls_log_entry> entries;
+  vector<cls_log_entry> entries;
   bool truncated;
 
   RGWAsyncReadMDLogEntries(const DoutPrefixProvider *dpp, RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
@@ -415,7 +415,7 @@ class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
   string marker;
   string *pmarker;
   int max_entries;
-  list<cls_log_entry> *entries;
+  vector<cls_log_entry> *entries;
   bool *truncated;
 
   RGWAsyncReadMDLogEntries *req{nullptr};
@@ -423,7 +423,7 @@ class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
 public:
   RGWReadMDLogEntriesCR(RGWMetaSyncEnv *_sync_env, RGWMetadataLog* mdlog,
                         int _shard_id, string*_marker, int _max_entries,
-                        list<cls_log_entry> *_entries, bool *_truncated)
+                        vector<cls_log_entry> *_entries, bool *_truncated)
     : RGWSimpleCoroutine(_sync_env->cct), sync_env(_sync_env), mdlog(mdlog),
       shard_id(_shard_id), pmarker(_marker), max_entries(_max_entries),
       entries(_entries), truncated(_truncated) {}
@@ -1415,8 +1415,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   RGWMetaSyncShardMarkerTrack *marker_tracker = nullptr;
 
-  list<cls_log_entry> log_entries;
-  list<cls_log_entry>::iterator log_iter;
+  vector<cls_log_entry> log_entries;
+  decltype(log_entries)::iterator log_iter;
   bool truncated = false;
 
   string mdlog_marker;
@@ -2528,7 +2528,7 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
 
 int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
 {
-  list<cls_log_entry> dest_entries;
+  vector<cls_log_entry> dest_entries;
 
   vector<rgw_mdlog_entry>::iterator iter;
   for (iter = data.entries.begin(); iter != data.entries.end(); ++iter) {

@@ -94,7 +94,7 @@ protected:
       std::string to_marker;
       {
 	lr::ObjectReadOperation op;
-	std::list<cls_log_entry> entries;
+	std::vector<cls_log_entry> entries;
 	bool truncated = false;
 	cls_log_list(op, {}, {}, {}, 1, entries, &to_marker, &truncated);
 	auto r = rgw_rados_operate(&dp, ioctx, oid, &op, nullptr, null_yield);
@@ -109,7 +109,7 @@ protected:
       }
       {
 	lr::ObjectReadOperation op;
-	std::list<cls_log_entry> entries;
+	std::vector<cls_log_entry> entries;
 	bool truncated = false;
 	cls_log_list(op, {}, {}, {}, 1, entries, &to_marker, &truncated);
 	auto r = rgw_rados_operate(&dp, ioctx, oid, &op, nullptr, null_yield);
