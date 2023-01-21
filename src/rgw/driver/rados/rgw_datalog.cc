@@ -98,7 +98,7 @@ void rgw_data_notify_entry::decode_json(JSONObj *obj) {
 }
 
 class RGWDataChangesOmap final : public RGWDataChangesBE {
-  using centries = std::list<cls_log_entry>;
+  using centries = std::vector<cls_log_entry>;
   std::vector<std::string> oids;
 
 public:
@@ -154,7 +154,7 @@ public:
 	   std::optional<std::string_view> marker,
 	   std::string* out_marker, bool* truncated,
 	   optional_yield y) override {
-    std::list<cls_log_entry> log_entries;
+    std::vector<cls_log_entry> log_entries;
     lr::ObjectReadOperation op;
     cls_log_list(op, {}, {}, std::string(marker.value_or("")),
 		 max_entries, log_entries, out_marker, truncated);
@@ -235,7 +235,7 @@ public:
   }
   int is_empty(const DoutPrefixProvider *dpp, optional_yield y) override {
     for (auto shard = 0u; shard < oids.size(); ++shard) {
-      std::list<cls_log_entry> log_entries;
+      std::vector<cls_log_entry> log_entries;
       lr::ObjectReadOperation op;
       std::string out_marker;
       bool truncated;
