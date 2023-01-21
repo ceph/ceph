@@ -94,7 +94,7 @@ public:
             optional_yield y);
     int add(const DoutPrefixProvider *dpp, 
             const std::string& oid,
-            std::list<cls_log_entry>& entries,
+            std::vector<cls_log_entry>& entries,
             librados::AioCompletion *completion,
             bool monotonic_inc,
             optional_yield y);
@@ -102,7 +102,7 @@ public:
              const std::string& oid,
              const real_time& start_time,
              const real_time& end_time,
-             int max_entries, std::list<cls_log_entry>& entries,
+             int max_entries, std::vector<cls_log_entry>& entries,
              const std::string& marker,
              std::string *out_marker,
              bool *truncated,

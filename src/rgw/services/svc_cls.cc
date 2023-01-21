@@ -280,9 +280,9 @@ int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp,
   return obj.operate(dpp, &op, y);
 }
 
-int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp, 
+int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp,
                             const string& oid,
-                            std::list<cls_log_entry>& entries,
+                            std::vector<cls_log_entry>& entries,
                             librados::AioCompletion *completion,
                             bool monotonic_inc,
                             optional_yield y)
@@ -309,7 +309,7 @@ int RGWSI_Cls::TimeLog::list(const DoutPrefixProvider *dpp,
                              const string& oid,
                              const real_time& start_time,
                              const real_time& end_time,
-                             int max_entries, std::list<cls_log_entry>& entries,
+                             int max_entries, std::vector<cls_log_entry>& entries,
                              const string& marker,
                              string *out_marker,
                              bool *truncated,
