@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGWRADOS_H
-#define CEPH_RGWRADOS_H
+#pragma once
 
 #include <iostream>
 #include <functional>
@@ -1631,6 +1630,3 @@ struct get_obj_data {
     return flush(std::move(c));
   }
 };
-
-
-#endif

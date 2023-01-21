@@ -14,8 +14,7 @@
  * Foundation.  See file COPYING.
  */
 
-#ifndef RGW_SYNC_LOG_TRIM_H
-#define RGW_SYNC_LOG_TRIM_H
+#pragma once
 
 #include <memory>
 #include <string_view>
@@ -120,5 +119,3 @@ WRITE_CLASS_ENCODER(rgw::BucketTrimStatus);
 int bilog_trim(const DoutPrefixProvider* p, rgw::sal::RadosStore* store,
 	       RGWBucketInfo& bucket_info, uint64_t gen, int shard_id,
 	       std::string_view start_marker, std::string_view end_marker);
-
-#endif // RGW_SYNC_LOG_TRIM_H

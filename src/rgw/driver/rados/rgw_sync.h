@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_SYNC_H
-#define CEPH_RGW_SYNC_H
+#pragma once
 
 #include <atomic>
 
@@ -546,4 +545,3 @@ RGWCoroutine* create_list_remote_mdlog_shard_cr(RGWMetaSyncEnv *env,
                                                 uint32_t max_entries,
                                                 rgw_mdlog_shard_data *result);
 
-#endif

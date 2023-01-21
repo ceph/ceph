@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_SWIFT_AUTH_H
-#define CEPH_RGW_SWIFT_AUTH_H
+#pragma once
 
 #include "rgw_common.h"
 #include "rgw_user.h"
@@ -353,6 +352,3 @@ public:
     return new RGWHandler_SWIFT_Auth;
   }
 };
-
-
-#endif

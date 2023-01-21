@@ -84,31 +84,24 @@ set(librgw_common_srcs
   rgw_multipart_meta_filter.cc
   rgw_obj_manifest.cc
   rgw_period.cc
-  rgw_pubsub.cc
   rgw_realm.cc
   rgw_sync.cc
   rgw_sync_policy.cc
-  rgw_pubsub_push.cc
   rgw_notify_event_type.cc
   rgw_period_history.cc
   rgw_period_puller.cc
-  rgw_reshard.cc
   rgw_coroutine.cc
   rgw_cr_rest.cc
   rgw_op.cc
   rgw_policy_s3.cc
   rgw_public_access.cc
   rgw_putobj.cc
-  rgw_putobj_processor.cc
   rgw_quota.cc
-  rgw_rados.cc
   rgw_resolve.cc
   rgw_rest.cc
-  rgw_rest_bucket.cc
   rgw_rest_client.cc
   rgw_rest_config.cc
   rgw_rest_conn.cc
-  rgw_rest_log.cc
   rgw_rest_metadata.cc
   rgw_rest_ratelimit.cc
   rgw_rest_role.cc
@@ -168,6 +161,13 @@ set(librgw_common_srcs
   driver/rados/rgw_object_expirer_core.cc
   driver/rados/rgw_otp.cc
   driver/rados/rgw_period.cc
+  driver/rados/rgw_pubsub.cc
+  driver/rados/rgw_pubsub_push.cc
+  driver/rados/rgw_putobj_processor.cc
+  driver/rados/rgw_rados.cc
+  driver/rados/rgw_reshard.cc
+  driver/rados/rgw_rest_bucket.cc
+  driver/rados/rgw_rest_log.cc
   driver/rados/rgw_rest_pubsub.cc
   driver/rados/rgw_rest_realm.cc
   driver/rados/rgw_rest_user.cc
@@ -345,20 +345,20 @@ set(rgw_a_srcs
   rgw_process.cc
   rgw_realm_reloader.cc
   rgw_realm_watcher.cc
-  rgw_rest_bucket.cc
   rgw_rest_config.cc
   rgw_rest_info.cc
-  rgw_rest_log.cc
   rgw_rest_metadata.cc
   rgw_rest_ratelimit.cc
-  driver/rados/rgw_rest_realm.cc
   rgw_rest_sts.cc
   rgw_rest_swift.cc
   rgw_rest_usage.cc
   rgw_signal.cc
   rgw_swift_auth.cc
   rgw_usage.cc
-  rgw_sts.cc)
+  rgw_sts.cc
+  driver/rados/rgw_rest_bucket.cc
+  driver/rados/rgw_rest_log.cc
+  driver/rados/rgw_rest_realm.cc)
 
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
   rgw_iam_policy_keywords.frag.cc)

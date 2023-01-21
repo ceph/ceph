@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_CR_TOOLS_H
-#define CEPH_RGW_CR_TOOLS_H
+#pragma once
 
 #include "rgw_cr_rados.h"
 #include "rgw_tools.h"
@@ -84,4 +83,3 @@ struct rgw_bucket_get_sync_policy_result {
 
 using RGWBucketGetSyncPolicyHandlerCR = RGWSimpleAsyncCR<rgw_bucket_get_sync_policy_params, rgw_bucket_get_sync_policy_result>;
 
-#endif

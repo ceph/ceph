@@ -5,8 +5,7 @@
  * Crypto filters for Put/Post/Get operations.
  */
 
-#ifndef CEPH_RGW_CRYPT_H
-#define CEPH_RGW_CRYPT_H
+#pragma once
 
 #include <string_view>
 
@@ -171,5 +170,3 @@ static inline std::string get_str_attribute(std::map<std::string, bufferlist>& a
 }
 
 int rgw_remove_sse_s3_bucket_key(req_state *s);
-
-#endif

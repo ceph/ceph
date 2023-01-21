@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_KMIP_CLIENT_H
-#define CEPH_RGW_KMIP_CLIENT_H
+#pragma once
 
 class RGWKMIPManager;
 
@@ -64,4 +63,3 @@ public:
 
 void rgw_kmip_client_init(RGWKMIPManager &);
 void rgw_kmip_client_cleanup();
-#endif
