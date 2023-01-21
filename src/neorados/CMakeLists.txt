@@ -15,3 +15,4 @@ target_link_libraries(libneorados PRIVATE
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
 
 add_library(neorados_cls_version STATIC cls/version.cc)
+add_library(neorados_cls_log STATIC cls/log.cc)
