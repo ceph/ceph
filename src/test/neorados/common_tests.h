@@ -72,6 +72,12 @@ std::string get_temp_pool_name(std::string_view prefix = {});
 /// \param token Boost.Asio completion token
 ///
 /// \return The ID of the newly created pool
+
+// Asio's co_compse generates spurious warnings when compiled with
+// -O0. the 'mismatched' `operator new` calls directly into the
+// matching `operator new`, returning its result.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
 template<boost::asio::completion_token_for<
 	   void(boost::system::error_code, int64_t)> CompletionToken>
 auto create_pool(neorados::RADOS& r,
@@ -95,6 +101,7 @@ auto create_pool(neorados::RADOS& r,
      }, r.get_executor()),
      token, std::ref(r), std::move(pname));
 }
+#pragma GCC diagnostic push
 
 /// \brief Create a new, empty RADOS object
 ///
