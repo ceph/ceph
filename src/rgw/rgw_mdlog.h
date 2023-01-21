@@ -105,7 +105,7 @@ public:
 
   int add_entry(const DoutPrefixProvider *dpp, const std::string& hash_key, const std::string& section, const std::string& key, bufferlist& bl, optional_yield y);
   int get_shard_id(const std::string& hash_key, int *shard_id);
-  int store_entries_in_shard(const DoutPrefixProvider *dpp, std::list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
+  int store_entries_in_shard(const DoutPrefixProvider *dpp, std::vector<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
 
   struct LogListCtx {
     int cur_shard;
@@ -127,7 +127,7 @@ public:
   int list_entries(const DoutPrefixProvider *dpp,
                    void *handle,
                    int max_entries,
-                   std::list<cls_log_entry>& entries,
+                   std::vector<cls_log_entry>& entries,
 		   std::string *out_marker,
 		   bool *truncated,
 		   optional_yield y);
