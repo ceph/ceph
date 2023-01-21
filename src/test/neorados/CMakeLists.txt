@@ -21,7 +21,7 @@ target_link_libraries(ceph_test_neorados_op_speed
 
 add_library(neoradostest-support STATIC common_tests.cc)
 target_link_libraries(neoradostest-support
-  libneorados ${FMT_LIB})
+  libneorados ${FMT_LIB} GTest::GTest)
 
 add_executable(ceph_test_neorados_list_pool list_pool.cc)
 target_link_libraries(ceph_test_neorados_list_pool
