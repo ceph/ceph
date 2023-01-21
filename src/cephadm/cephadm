@@ -2695,6 +2695,18 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
         data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
         mounts.update(cc.get_container_mounts(data_dir))
 
+    # Modifications podman makes to /etc/hosts causes issues with
+    # certain daemons (specifically referencing "host.containers.internal" entry
+    # being added to /etc/hosts in this case). To avoid that, but still
+    # allow users to use /etc/hosts for hostname resolution, we can
+    # mount the host's /etc/hosts file.
+    # https://tracker.ceph.com/issues/58532
+    # https://tracker.ceph.com/issues/57018
+    if isinstance(ctx.container_engine, Podman):
+        if os.path.exists('/etc/hosts'):
+            if '/etc/hosts' not in mounts:
+                mounts['/etc/hosts'] = '/etc/hosts:ro'
+
     return mounts
 
 
@@ -2837,6 +2849,14 @@ def get_container(ctx: CephadmContext,
         ])
         if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION:
             container_args.append('--cgroups=split')
+        # if /etc/hosts doesn't exist, we can be confident
+        # users aren't using it for host name resolution
+        # and adding --no-hosts avoids bugs created in certain daemons
+        # by modifications podman makes to /etc/hosts
+        # https://tracker.ceph.com/issues/58532
+        # https://tracker.ceph.com/issues/57018
+        if not os.path.exists('/etc/hosts'):
+            container_args.extend(['--no-hosts'])
 
     return CephContainer.for_daemon(
         ctx,
