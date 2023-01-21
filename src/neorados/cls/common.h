@@ -102,6 +102,12 @@ auto maybecat(boost::system::error_code ec,
 /// token. See Boost.Asio documentation. The signature is
 /// void(error_code, T) if f returns a non-tuple, and
 /// void(error_code, Ts...) if f returns a tuple.
+
+// Asio's co_compse generates spurious warnings when compiled with
+// -O0. the 'mismatched' `operator new` calls directly into the
+// matching `operator new`, returning its result.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
 template<std::default_initializable Rep, typename Req,
 	 std::invocable<Rep&&> F,
 	 std::default_initializable Ret = std::invoke_result_t<F&&, Rep&&>,
@@ -152,4 +158,5 @@ auto exec(
      token, std::ref(r), std::move(oid), std::move(ioc), std::move(cls),
      std::move(method), std::move(in), std::forward<F>(f));
 }
+#pragma GCC diagnostic pop
 } // namespace neorados::cls
