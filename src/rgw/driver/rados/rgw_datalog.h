@@ -357,7 +357,7 @@ protected:
     return datalog.get_oid(gen_id, shard_id);
   }
 public:
-  using entries = std::variant<std::list<cls_log_entry>,
+  using entries = std::variant<std::vector<cls_log_entry>,
 			       std::vector<ceph::buffer::list>>;
 
   const uint64_t gen_id;
