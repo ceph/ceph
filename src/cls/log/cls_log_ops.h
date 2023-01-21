@@ -7,7 +7,7 @@
 #include "cls_log_types.h"
 
 struct cls_log_add_op {
-  std::list<cls_log_entry> entries;
+  std::vector<cls_log_entry> entries;
   bool monotonic_inc;
 
   cls_log_add_op() : monotonic_inc(true) {}
@@ -77,7 +77,7 @@ struct cls_log_list_op {
 WRITE_CLASS_ENCODER(cls_log_list_op)
 
 struct cls_log_list_ret {
-  std::list<cls_log_entry> entries;
+  std::vector<cls_log_entry> entries;
   std::string marker;
   bool truncated;
 
