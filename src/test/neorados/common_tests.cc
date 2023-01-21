@@ -12,7 +12,6 @@
  * Foundation.  See file COPYING.
  */
 
-#include <cstring>
 #include <string>
 #include <string_view>
 
@@ -23,12 +22,11 @@
 #include "common_tests.h"
 #include "include/neorados/RADOS.hpp"
 
-namespace ba = boost::asio;
-namespace R = neorados;
+namespace asio = boost::asio;
 
 std::string get_temp_pool_name(std::string_view prefix)
 {
-  static auto hostname = ba::ip::host_name();
+  static auto hostname = asio::ip::host_name();
   static auto num = 1ull;
   return fmt::format("{}{}-{}-{}", prefix, hostname, getpid(), num++);
 }
