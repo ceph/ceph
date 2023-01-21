@@ -7,7 +7,7 @@
 #include "include/compat.h"
 
 
-using std::list;
+using std::vector;
 using std::string;
 
 using ceph::bufferlist;
@@ -16,7 +16,7 @@ using namespace librados;
 
 
 
-void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entries, bool monotonic_inc)
+void cls_log_add(librados::ObjectWriteOperation& op, vector<cls_log_entry>& entries, bool monotonic_inc)
 {
   bufferlist in;
   cls_log_add_op call;
@@ -88,11 +88,11 @@ int cls_log_trim(librados::IoCtx& io_ctx, const string& oid, const utime_t& from
 }
 
 class LogListCtx : public ObjectOperationCompletion {
-  list<cls_log_entry> *entries;
+  vector<cls_log_entry> *entries;
   string *marker;
   bool *truncated;
 public:
-  LogListCtx(list<cls_log_entry> *_entries, string *_marker, bool *_truncated) :
+  LogListCtx(vector<cls_log_entry> *_entries, string *_marker, bool *_truncated) :
                                       entries(_entries), marker(_marker), truncated(_truncated) {}
   void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
@@ -115,7 +115,7 @@ public:
 
 void cls_log_list(librados::ObjectReadOperation& op, const utime_t& from,
 		  const utime_t& to, const string& in_marker, int max_entries,
-		  list<cls_log_entry>& entries,
+		  vector<cls_log_entry>& entries,
                   string *out_marker, bool *truncated)
 {
   bufferlist inbl;
