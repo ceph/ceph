@@ -211,8 +211,7 @@ def create_users(ctx, config):
 @contextlib.contextmanager
 def configure(ctx, config):
     """
-    Configure the s3-tests.  This includes the running of the
-    bootstrap code and the updating of local conf files.
+    Create the config files for s3tests an boto.
     """
     assert isinstance(config, dict)
     log.info('Configuring s3-tests...')
@@ -315,14 +314,6 @@ def configure(ctx, config):
                     s3tests_conf['s3 cloud']['target_storage_class'] = cloud_target_storage_class
 
         (remote,) = ctx.cluster.only(client).remotes.keys()
-        remote.run(
-            args=[
-                'cd',
-                '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
-                run.Raw('&&'),
-                './bootstrap',
-                ],
-            )
         conf_fp = BytesIO()
         s3tests_conf.write(conf_fp)
         remote.write_file(
@@ -354,6 +345,13 @@ def configure(ctx, config):
                     ],
                 )
 
+def get_toxvenv_dir(ctx):
+    return ctx.tox.venv_path
+
+def toxvenv_sh(ctx, remote, args, **kwargs):
+    activate = get_toxvenv_dir(ctx) + '/bin/activate'
+    return remote.sh(['source', activate, run.Raw('&&')] + args, **kwargs)
+
 @contextlib.contextmanager
 def run_tests(ctx, config):
     """
@@ -368,6 +366,7 @@ def run_tests(ctx, config):
         client_config = client_config or {}
         (remote,) = ctx.cluster.only(client).remotes.keys()
         args = [
+            'cd', '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client), run.Raw('&&'),
             'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
             'BOTO_CONFIG={tdir}/boto-{client}.cfg'.format(tdir=testdir, client=client)
             ]
@@ -379,29 +378,19 @@ def run_tests(ctx, config):
         else:
             args += ['REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt']
         # civetweb > 1.8 && beast parsers are strict on rfc2616
-        attrs = ["!fails_on_rgw", "!lifecycle_expiration", "!fails_strict_rfc2616","!test_of_sts","!webidentity_test"]
+        attrs = ["not fails_on_rgw", "not lifecycle_expiration", "not test_of_sts", "not webidentity_test"]
         if client_config.get('calling-format') != 'ordinary':
-            attrs += ['!fails_with_subdomain']
+            attrs += ['not fails_with_subdomain']
         if not client_config.get('with-sse-s3'):
-            attrs += ['!sse-s3']
+            attrs += ['not sse_s3']
        
         if 'extra_attrs' in client_config:
             attrs = client_config.get('extra_attrs') 
-        args += [
-            '{tdir}/s3-tests-{client}/virtualenv/bin/python'.format(tdir=testdir, client=client),
-            '-m', 'nose',
-            '-w',
-            '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
-            '-v',
-            '-a', ','.join(attrs),
-            ]
+        args += ['tox', '--', '-v', '-m', ' and '.join(attrs)]
         if 'extra_args' in client_config:
             args.append(client_config['extra_args'])
 
-        remote.run(
-            args=args,
-            label="s3 tests against rgw"
-            )
+        toxvenv_sh(ctx, remote, args, label="s3 tests against rgw")
     yield
 
 @contextlib.contextmanager
@@ -477,7 +466,7 @@ def task(ctx, config):
               rgw_server: client.1
               idle_timeout: 600
 
-    To pass extra arguments to nose (e.g. to run a certain test)::
+    To pass extra arguments to pytest (e.g. to run a certain test)::
 
         tasks:
         - ceph:
@@ -510,6 +499,7 @@ def task(ctx, config):
 
     """
     assert hasattr(ctx, 'rgw'), 's3tests must run after the rgw task'
+    assert hasattr(ctx, 'tox'), 's3tests must run after the tox task'
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
         "task s3tests only supports a list or dictionary for configuration"
