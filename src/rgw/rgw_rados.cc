@@ -4058,6 +4058,12 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   //erase the append attr
   cb.get_attrs().erase(RGW_ATTR_APPEND_PART_NUM);
 
+  { // add x-amz-replication-status=REPLICA
+    auto& bl = cb.get_attrs()[RGW_ATTR_OBJ_REPLICATION_STATUS];
+    bl.clear(); // overwrite source's status
+    bl.append("REPLICA");
+  }
+
   if (source_zone.empty()) {
     set_copy_attrs(cb.get_attrs(), attrs, attrs_mod);
   } else {
