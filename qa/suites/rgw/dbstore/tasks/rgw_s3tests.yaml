@@ -2,6 +2,7 @@ tasks:
 - install:
 - ceph:
 - rgw: [client.0]
+- tox: [client.0]
 - exec:
     client.0:
       - sudo chmod 0777 /var/lib/ceph
