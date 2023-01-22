@@ -289,7 +289,7 @@ log_to_file = False"""
                     'deploy',
                     [
                         '--name', f'iscsi.{iscsi_daemon_id}',
-                        '--meta-json', f'{"{"}"service_name": "iscsi.{pool}", "ports": [{api_port}], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null{"}"}',
+                        '--meta-json', f'{"{"}"service_name": "iscsi.{pool}", "ports": [{api_port}], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null{"}"}',
                         '--config-json', '-', '--tcp-ports', '3456'
                     ],
                     stdin=json.dumps({"config": "", "keyring": f"[client.iscsi.{iscsi_daemon_id}]\nkey = None\n", "files": {"iscsi-gateway.cfg": iscsi_gateway_conf}}),
@@ -380,7 +380,8 @@ class TestMonitoring:
                         "--name",
                         "alertmanager.test",
                         "--meta-json",
-                        '{"service_name": "alertmanager", "ports": [9093, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "alertmanager", "ports": [9093, 9094], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         "--config-json",
                         "-",
                         "--tcp-ports",
@@ -440,7 +441,8 @@ class TestMonitoring:
                     [
                         '--name', 'prometheus.test',
                         '--meta-json',
-                        '{"service_name": "prometheus", "ports": [9095], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "prometheus", "ports": [9095], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9095'
                     ],
@@ -494,7 +496,8 @@ class TestMonitoring:
                     [
                         '--name', 'loki.test',
                         '--meta-json',
-                        '{"service_name": "loki", "ports": [3100], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "loki", "ports": [3100], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '3100'
                     ],
@@ -535,7 +538,8 @@ class TestMonitoring:
                     [
                         '--name', 'promtail.test',
                         '--meta-json',
-                        '{"service_name": "promtail", "ports": [9080], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "promtail", "ports": [9080], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9080'
                     ],
@@ -619,7 +623,8 @@ class TestMonitoring:
                     [
                         '--name', 'grafana.test',
                         '--meta-json',
-                        '{"service_name": "grafana", "ports": [3000], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "grafana", "ports": [3000], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-', '--tcp-ports', '3000'],
                     stdin=json.dumps({"files": files}),
                     image='')
@@ -699,7 +704,8 @@ spec:
                     _run_cephadm.assert_called_with(
                         'test', 'alertmanager.test', 'deploy', [
                             '--name', 'alertmanager.test',
-                            '--meta-json', '{"service_name": "alertmanager", "ports": [4200, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                            '--meta-json', ('{"service_name": "alertmanager", "ports": [4200, 9094], "ip": null, "deployed_by": [], "rank": null, '
+                                            '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                             '--config-json', '-',
                             '--tcp-ports', '4200 9094',
                             '--reconfig'
@@ -770,7 +776,8 @@ class TestSNMPGateway:
                     [
                         '--name', 'snmp-gateway.test',
                         '--meta-json',
-                        '{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9464'
                     ],
@@ -805,7 +812,8 @@ class TestSNMPGateway:
                     [
                         '--name', 'snmp-gateway.test',
                         '--meta-json',
-                        '{"service_name": "snmp-gateway", "ports": [9465], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "snmp-gateway", "ports": [9465], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9465'
                     ],
@@ -844,7 +852,8 @@ class TestSNMPGateway:
                     [
                         '--name', 'snmp-gateway.test',
                         '--meta-json',
-                        '{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9464'
                     ],
@@ -888,7 +897,8 @@ class TestSNMPGateway:
                     [
                         '--name', 'snmp-gateway.test',
                         '--meta-json',
-                        '{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9464'
                     ],
@@ -1303,7 +1313,8 @@ class TestJaeger:
                     [
                         '--name', 'jaeger-query.test',
                         '--meta-json',
-                        '{"service_name": "jaeger-query", "ports": [16686], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "jaeger-query", "ports": [16686], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '16686'
 
@@ -1331,7 +1342,8 @@ class TestJaeger:
                     [
                         '--name', 'elasticsearch.test',
                         '--meta-json',
-                        '{"service_name": "elasticsearch", "ports": [9200], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "elasticsearch", "ports": [9200], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9200'
 
@@ -1347,7 +1359,8 @@ class TestJaeger:
                         [
                             '--name', 'jaeger-collector.test',
                             '--meta-json',
-                            '{"service_name": "jaeger-collector", "ports": [14250], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                            ('{"service_name": "jaeger-collector", "ports": [14250], "ip": null, "deployed_by": [], "rank": null, '
+                             '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                             '--config-json', '-',
                             '--tcp-ports', '14250'
 
@@ -1375,7 +1388,8 @@ class TestJaeger:
                     [
                         '--name', 'jaeger-collector.test',
                         '--meta-json',
-                        '{"service_name": "jaeger-collector", "ports": [14250], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "jaeger-collector", "ports": [14250], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '14250'
 
@@ -1391,7 +1405,8 @@ class TestJaeger:
                         [
                             '--name', 'jaeger-agent.test',
                             '--meta-json',
-                            '{"service_name": "jaeger-agent", "ports": [6799], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                            ('{"service_name": "jaeger-agent", "ports": [6799], "ip": null, "deployed_by": [], "rank": null, '
+                             '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                             '--config-json', '-',
                             '--tcp-ports', '6799'
 
