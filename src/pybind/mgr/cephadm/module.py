@@ -2508,7 +2508,9 @@ Then run the following:
             # an explicit dependency is added for each service-type to force a reconfig
             # whenever the number of daemons for those service-type changes from 0 to greater
             # than zero and vice versa.
-            deps += [s for s in ['node-exporter', 'alertmanager', 'ingress'] if self.cache.get_daemons_by_service(s)]
+            deps += [s for s in ['node-exporter', 'alertmanager'] if self.cache.get_daemons_by_service(s)]
+            if len(self.cache.get_daemons_by_type('ingress')) > 0:
+                deps.append('ingress')
             # add dependency on ceph-exporter daemons
             deps += [d.name() for d in self.cache.get_daemons_by_service('ceph-exporter')]
         else:
