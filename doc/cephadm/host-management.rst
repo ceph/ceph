@@ -11,9 +11,9 @@ Run a command of this form to list hosts associated with the cluster:
 
 .. prompt:: bash #
 
-   ceph orch host ls [--format yaml] [--host-pattern <name>] [--label <label>] [--host-status <status>]
+   ceph orch host ls [--format yaml] [--host-pattern <name>] [--label <label>] [--host-status <status>] [--detail]
 
-In commands of this form, the arguments "host-pattern", "label" and
+In commands of this form, the arguments "host-pattern", "label", and
 "host-status" are optional and are used for filtering. 
 
 - "host-pattern" is a regex that matches against hostnames and returns only
@@ -24,6 +24,16 @@ In commands of this form, the arguments "host-pattern", "label" and
 - Any combination of these filtering flags is valid. It is possible to filter
   against name, label and status simultaneously, or to filter against any
   proper subset of name, label and status.
+
+The "detail" parameter provides more host related information for cephadm based
+clusters. For example:
+
+.. prompt:: bash #
+
+   # ceph orch host ls --detail 
+   HOSTNAME     ADDRESS         LABELS  STATUS  VENDOR/MODEL                           CPU    HDD      SSD  NIC  
+   ceph-master  192.168.122.73  _admin          QEMU (Standard PC (Q35 + ICH9, 2009))  4C/4T  4/1.6TB  -    1    
+   1 hosts in cluster
 
 .. _cephadm-adding-hosts:    
     
