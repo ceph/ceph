@@ -1629,14 +1629,14 @@ do_rgw_create_users()
         --access-key NOPQRSTUVWXYZABCDEFG \
         --secret nopqrstuvwxyzabcdefghijklmnabcdefghijklm \
         --display-name john.doe \
-        --email john.doe@example.com -c $conf_fn > /dev/null
+        --email john.doe@example.com --caps="user-policy=*" -c $conf_fn > /dev/null
     $CEPH_BIN/radosgw-admin user create \
 	--tenant testx \
         --uid 9876543210abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
         --access-key HIJKLMNOPQRSTUVWXYZA \
         --secret opqrstuvwxyzabcdefghijklmnopqrstuvwxyzab \
         --display-name tenanteduser \
-        --email tenanteduser@example.com -c $conf_fn > /dev/null
+        --email tenanteduser@example.com --caps="user-policy=*" -c $conf_fn > /dev/null
 
     # Create Swift user
     debug echo "setting up user tester"
