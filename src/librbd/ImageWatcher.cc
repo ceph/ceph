@@ -748,8 +748,13 @@ void ImageWatcher<I>::schedule_async_request_timed_out(const AsyncRequestId &id)
 
 template <typename I>
 void ImageWatcher<I>::async_request_timed_out(const AsyncRequestId &id) {
-  Context *on_complete = remove_async_request(id);
-  if (on_complete != nullptr) {
+  std::unique_lock async_request_locker{m_async_request_lock};
+  auto it = m_async_requests.find(id);
+  if (it != m_async_requests.end()) {
+    Context *on_complete = it->second.first;
+    if (on_complete == nullptr) {
+      return;
+    }
     ldout(m_image_ctx.cct, 5) << "async request timed out: " << id << dendl;
     m_image_ctx.op_work_queue->queue(on_complete, -ETIMEDOUT);
   }
