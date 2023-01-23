@@ -13,8 +13,7 @@
  *
  */
 
-#ifndef CEPH_RGW_CLS_FIFO_LEGACY_H
-#define CEPH_RGW_CLS_FIFO_LEGACY_H
+#pragma once
 
 #include <cstdint>
 #include <deque>
@@ -333,5 +332,3 @@ public:
 };
 
 }
-
-#endif // CEPH_RGW_CLS_FIFO_LEGACY_H

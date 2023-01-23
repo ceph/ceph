@@ -14,8 +14,8 @@
  *
  */
 
-#ifndef RGW_DMCLOCK_H
-#define RGW_DMCLOCK_H
+#pragma once
+
 #include "dmclock/src/dmclock_server.h"
 
 namespace rgw::dmclock {
@@ -50,5 +50,3 @@ inline scheduler_t get_scheduler_t(CephContext* const cct)
 }
 
 } // namespace rgw::dmclock
-
-#endif /* RGW_DMCLOCK_H */

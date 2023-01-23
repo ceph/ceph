@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_PUBSUB_H
-#define CEPH_RGW_PUBSUB_H
+#pragma once
 
 #include "services/svc_sys_obj.h"
 #include "rgw_tools.h"
@@ -712,5 +711,3 @@ int RGWPubSub::write(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, cons
   return rgw_put_system_obj(dpp, svc_sysobj, obj.pool, obj.oid,
                             bl, false, objv_tracker, real_time(), y);
 }
-
-#endif

@@ -12,8 +12,8 @@
  * same algorithm used at the source cluster i.e. MD5 sum of the individual ETag
  * on the MPU parts.
  */
-#ifndef CEPH_RGW_ETAG_VERIFIER_H
-#define CEPH_RGW_ETAG_VERIFIER_H
+
+#pragma once
 
 #include "rgw_putobj.h"
 #include "rgw_op.h"
@@ -88,5 +88,3 @@ int create_etag_verifier(const DoutPrefixProvider *dpp,
                          etag_verifier_ptr& verifier);
 
 } // namespace rgw::putobj
-
-#endif /* CEPH_RGW_ETAG_VERIFIER_H */

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_TOOLS_H
-#define CEPH_RGW_TOOLS_H
+#pragma once
 
 #include <string>
 
@@ -274,4 +273,3 @@ void rgw_complete_aio_completion(librados::AioCompletion* c, int r);
 // (Currently providing nullptr will wipe all attributes.)
 
 std::map<std::string, ceph::buffer::list>* no_change_attrs();
-#endif

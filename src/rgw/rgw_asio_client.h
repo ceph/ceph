@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_ASIO_CLIENT_H
-#define RGW_ASIO_CLIENT_H
+#pragma once
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/beast/core.hpp>
@@ -61,5 +60,3 @@ class ClientIO : public io::RestfulClient,
 
 } // namespace asio
 } // namespace rgw
-
-#endif // RGW_ASIO_CLIENT_H

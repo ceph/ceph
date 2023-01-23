@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_TORRENT_H
-#define CEPH_RGW_TORRENT_H
+#pragma once
 
 #include <string>
 #include <list>
@@ -138,4 +137,3 @@ private:
   void sha1(SHA1 *h, bufferlist &bl, off_t bl_len);
   int save_torrent_file(optional_yield y);
 };
-#endif /* CEPH_RGW_TORRENT_H */

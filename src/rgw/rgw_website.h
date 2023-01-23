@@ -14,8 +14,7 @@
  * 
  */
 
-#ifndef RGW_WEBSITE_H
-#define RGW_WEBSITE_H
+#pragma once
 
 #include <list>
 #include <string>
@@ -242,5 +241,3 @@ struct RGWBucketWebsiteConf
   }
 };
 WRITE_CLASS_ENCODER(RGWBucketWebsiteConf)
-
-#endif
