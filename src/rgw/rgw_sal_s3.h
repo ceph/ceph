@@ -118,37 +118,39 @@ class S3FilterUser : public FilterUser {
 
 class S3FilterBucket : public FilterBucket {
   protected:
-    RGWBucketEnt ent;
-    RGWBucketInfo info;
+    //RGWBucketEnt ent;
+    //RGWBucketInfo info;
   
   private:
     S3FilterStore* filter;
-	ceph::real_time mtime;
-	Attrs attrs;
+	//ceph::real_time mtime;
+	//Attrs attrs;
 
   public:
     S3FilterBucket(std::unique_ptr<Bucket> _next, User* _user, S3FilterStore* _filter) :
       FilterBucket(std::move(_next), _user), 
       filter(_filter) {}
-	
+	/*
     S3FilterBucket(std::unique_ptr<Bucket> _next, const rgw_bucket& _b, User* _user, S3FilterStore* _filter):
 	  FilterBucket(std::move(_next), _user), 
       filter(_filter) 
 	 { ent.bucket = _b; info.bucket = _b; }
-	 
+	*/	 
 
     virtual ~S3FilterBucket() = default;
    
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
 	//virtual RGWBucketInfo& get_info() override;
-	virtual ceph::real_time& get_modification_time() override { mtime = real_clock::now(); return mtime; }
-	virtual Attrs& get_attrs(void) override { return attrs; }
-	virtual int set_attrs(string field, bufferlist bl) { attrs[field] = bl; return 0;}
-	virtual int set_attrs(Attrs attrVal) override { attrs = attrVal; return 0;}
+	//virtual ceph::real_time& get_modification_time() override { mtime = real_clock::now(); return mtime; }
+	virtual void set_owner(rgw::sal::User* _owner) override { next->set_owner(_owner); }
+	//virtual Attrs& get_attrs(void) override { return attrs; }
+	//virtual int set_attrs(string field, bufferlist bl) { attrs[field] = bl; return 0;}
+	virtual int set_attrs(Attrs attrVal) override { return next->set_attrs(attrVal);}
+	/*
 	virtual rgw_bucket& get_key() override { return ent.bucket; }
     virtual RGWBucketInfo& get_info() override { return info; }
     virtual void set_info(RGWBucketInfo _info) { this->info = _info; }
-    virtual rgw_placement_rule& get_placement_rule() override { return info.placement_rule; }
+	virtual rgw_placement_rule& get_placement_rule() override { return info.placement_rule; }
     virtual void print(std::ostream& out) const override { out << info.bucket; }
     virtual bool empty() const override { return info.bucket.name.empty(); }
     virtual const std::string& get_name() const override { return info.bucket.name; }
@@ -158,6 +160,7 @@ class S3FilterBucket : public FilterBucket {
     virtual size_t get_size() const override { return ent.size; }
     virtual size_t get_size_rounded() const override { return ent.size_rounded; }
     virtual uint64_t get_count() const override { return ent.count; }
+	*/
 
 };
 
