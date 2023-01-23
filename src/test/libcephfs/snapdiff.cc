@@ -16,6 +16,7 @@
 #include "include/stat.h"
 #include "include/ceph_assert.h"
 #include "include/object.h"
+#include "include/stringify.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -49,6 +50,10 @@ public:
     }
     ceph_rmdir(cmount, dir_path);
     ceph_shutdown(cmount);
+  }
+
+  int conf_get(const char *option, char *buf, size_t len) {
+    return ceph_conf_get(cmount, option, buf, len);
   }
 
   string make_file_path(const char* relpath) {
@@ -143,7 +148,7 @@ public:
   }
 
   int for_each_readdir(const char* relpath,
-    std::function<bool(const dirent* dire)> fn)
+    std::function<bool(const dirent*, const struct ceph_statx*)> fn)
   {
     auto subdir_path = make_file_path(relpath);
     struct ceph_dir_result* ls_dir;
@@ -151,13 +156,28 @@ public:
     if (r != 0) {
       return r;
     }
-    struct dirent* result;
-    while( nullptr != (result = ceph_readdir(cmount, ls_dir))) {
-      if (strcmp(result->d_name, ".") == 0 ||
-          strcmp(result->d_name, "..") == 0) {
+
+    while (1) {
+      struct dirent result;
+      struct ceph_statx stx;
+
+      r = ceph_readdirplus_r(
+        cmount, ls_dir, &result, &stx, CEPH_STATX_BASIC_STATS,
+        0,
+        NULL);
+      if (!r)
+        break;
+      if (r < 0) {
+        std::cerr << "ceph_readdirplus_r failed, error: "
+                  << r << std::endl;
+        return r;
+      }
+
+      if (strcmp(result.d_name, ".") == 0 ||
+          strcmp(result.d_name, "..") == 0) {
         continue;
       }
-      if (!fn(result)) {
+      if (!fn(&result, &stx)) {
         r = -EINTR;
         break;
       }
@@ -171,7 +191,7 @@ public:
     vector<string> expected(expected0);
     auto end = expected.end();
     int r = for_each_readdir(relpath,
-      [&](const dirent* dire) {
+      [&](const dirent* dire, const struct ceph_statx* stx) {
 
         std::string name(dire->d_name);
         auto it = std::find(expected.begin(), end, name);
@@ -276,13 +296,13 @@ public:
   {
     int r =
       for_each_readdir(relpath0,
-        [&] (const dirent* dire) {
+        [&](const dirent* dire, const struct ceph_statx* stx) {
           string relpath = concat_path(relpath0, dire->d_name);
-          if (dire->d_type == DT_REG) {
-            unlink(relpath.c_str());
-          } else if (dire->d_type == DT_DIR) {
+	  if (S_ISDIR(stx->stx_mode)) {
             purge_dir(relpath.c_str());
             rmdir(relpath.c_str());
+          } else {
+            unlink(relpath.c_str());
           }
           return true;
         });
@@ -314,6 +334,11 @@ public:
   void prepareSnapDiffLib1Cases();
   void prepareSnapDiffLib2Cases();
   void prepareSnapDiffLib3Cases();
+  void prepareHugeSnapDiff(const std::string& name_prefix_start,
+                           const std::string& name_prefix_bulk,
+                           const std::string& name_prefix_end,
+                           size_t file_count,
+                           bool bulk_diff);
 };
 
 // Helper function to verify readdir_snapdiff returns expected results
@@ -607,6 +632,72 @@ void TestMount::prepareSnapDiffLib2Cases()
   ASSERT_EQ(0, purge_dir("dirA"));
   ASSERT_EQ(0, purge_dir("dirB"));
   ASSERT_EQ(0, mksnap("snap3"));
+}
+
+/* The following method creates a folder with tons of file
+   updated between two snapshots
+   We're to test SnapDiff readdir API against that structure.
+
+* where:
+  - xN denotes file 'x' version N.
+  - X denotes folder name
+  - * denotes no/removed file/folder
+
+#    snap1         snap2
+* aaaaA1     | aaaaA1    |
+* aaaaB1     |    *      |
+* *          | aaaaC2    |
+* aaaaD1     | aaaaD2    |
+# file<NNN>1 | file<NNN>2|
+* fileZ1     | fileA1    |
+* zzzzA1     | zzzzA1    |
+* zzzzB1     |    *      |
+* *          | zzzzC2    |
+* zzzzD1     | zzzzD2    |
+*/
+
+void TestMount::prepareHugeSnapDiff(const std::string& name_prefix_start,
+                                    const std::string& name_prefix_bulk,
+                                    const std::string& name_prefix_end,
+                                    size_t file_count,
+                                    bool bulk_diff)
+{
+  //************ snap1 *************
+  std::string startA = name_prefix_start + "A";
+  std::string startB = name_prefix_start + "B";
+  std::string startC = name_prefix_start + "C";
+  std::string startD = name_prefix_start + "D";
+  std::string endA = name_prefix_end + "A";
+  std::string endB = name_prefix_end + "B";
+  std::string endC = name_prefix_end + "C";
+  std::string endD = name_prefix_end + "D";
+
+  ASSERT_LE(0, write_full(startA.c_str(), "hello world"));
+  ASSERT_LE(0, write_full(startB.c_str(), "hello world"));
+  ASSERT_LE(0, write_full(startD.c_str(), "hello world"));
+  for(size_t i = 0; i < file_count; i++) {
+    auto s = name_prefix_bulk + stringify(i);
+    ASSERT_LE(0, write_full(s.c_str(), "hello world"));
+  }
+  ASSERT_LE(0, write_full(endA.c_str(), "hello world"));
+  ASSERT_LE(0, write_full(endB.c_str(), "hello world"));
+  ASSERT_LE(0, write_full(endD.c_str(), "hello world"));
+
+  ASSERT_EQ(0, mksnap("snap1"));
+
+  ASSERT_LE(0, unlink(startB.c_str()));
+  ASSERT_LE(0, write_full(startC.c_str(), "hello world2"));
+  ASSERT_LE(0, write_full(startD.c_str(), "hello world2"));
+  if (bulk_diff) {
+    for(size_t i = 0; i < file_count; i++) {
+      auto s = std::string(name_prefix_bulk) + stringify(i);
+      ASSERT_LE(0, write_full(s.c_str(), "hello world2"));
+    }
+  }
+  ASSERT_LE(0, unlink(endB.c_str()));
+  ASSERT_LE(0, write_full(endC.c_str(), "hello world2"));
+  ASSERT_LE(0, write_full(endD.c_str(), "hello world2"));
+  ASSERT_EQ(0, mksnap("snap2"));
 }
 
 /*
@@ -1468,4 +1559,126 @@ TEST(LibCephFS, SnapDiffCases1_3)
   test_mount.rmsnap("snap1");
   test_mount.rmsnap("snap2");
   test_mount.rmsnap("snap3");
+}
+
+/*
+* SnapDiff readdir API testing for huge dir
+* when delta is minor.
+*/
+TEST(LibCephFS, HugeSnapDiffSmallDelta)
+{
+  TestMount test_mount;
+
+  long int file_count = 10000;
+  printf("Seeding %ld files...\n", file_count);
+
+  // Create simple directory tree with a couple of snapshots
+  // to test against.
+  string name_prefix_start = "aaaa";
+  string name_prefix_bulk = "file";
+  string name_prefix_end = "zzzz";
+  test_mount.prepareHugeSnapDiff(name_prefix_start,
+                                 name_prefix_bulk,
+                                 name_prefix_end,
+                                 file_count,
+                                 false);
+
+  uint64_t snapid1;
+  uint64_t snapid2;
+
+  // learn snapshot ids and do basic verification
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+  ASSERT_GT(snapid1, 0);
+  ASSERT_GT(snapid2, 0);
+  ASSERT_GT(snapid2, snapid1);
+  std::cout << snapid1 << " vs. " << snapid2 << std::endl;
+
+  //
+  // Make sure snap1 vs. snap2 delta for the root is as expected
+  //
+  {
+    vector<pair<string, uint64_t>> expected;
+    expected.emplace_back(name_prefix_start + "B", snapid1);
+    expected.emplace_back(name_prefix_start + "C", snapid2);
+    expected.emplace_back(name_prefix_start + "D", snapid2);
+
+    expected.emplace_back(name_prefix_end + "B", snapid1);
+    expected.emplace_back(name_prefix_end + "C", snapid2);
+    expected.emplace_back(name_prefix_end + "D", snapid2);
+    test_mount.verify_snap_diff(expected, "", "snap1", "snap2");
+  }
+
+  std::cout << "------------- closing -------------" << std::endl;
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+/*
+* SnapDiff readdir API testing for huge dir
+* when delta is large
+*/
+TEST(LibCephFS, HugeSnapDiffLargeDelta)
+{
+  TestMount test_mount;
+
+  // Calculate amount of files required to have multiple directory fragments
+  // using relevant config parameters.
+  // file_count = mds_bal_spli_size * mds_bal_fragment_fast_factor + 100
+  char buf[256];
+  int r = test_mount.conf_get("mds_bal_split_size", buf, sizeof(buf));
+  ASSERT_TRUE(r >= 0);
+  long int file_count = strtol(buf, nullptr, 10);
+  r = test_mount.conf_get("mds_bal_fragment_fast_factor ", buf, sizeof(buf));
+  ASSERT_TRUE(r >= 0);
+  double factor = strtod(buf, nullptr);
+  file_count *= factor;
+  file_count += 100;
+  printf("Seeding %ld files...\n", file_count);
+
+  // Create simple directory tree with a couple of snapshots
+  // to test against.
+
+  string name_prefix_start = "aaaa";
+  string name_prefix_bulk = "file";
+  string name_prefix_end = "zzzz";
+
+  test_mount.prepareHugeSnapDiff(name_prefix_start,
+                                 name_prefix_bulk,
+                                 name_prefix_end,
+                                 file_count,
+                                 true);
+  uint64_t snapid1;
+  uint64_t snapid2;
+
+  // learn snapshot ids and do basic verification
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+  ASSERT_GT(snapid1, 0);
+  ASSERT_GT(snapid2, 0);
+  ASSERT_GT(snapid2, snapid1);
+  std::cout << snapid1 << " vs. " << snapid2 << std::endl;
+
+  //
+  // Make sure snap1 vs. snap2 delta for the root is as expected
+  //
+  {
+    vector<pair<string, uint64_t>> expected;
+    expected.emplace_back(name_prefix_start + "B", snapid1);
+    expected.emplace_back(name_prefix_start + "C", snapid2);
+    expected.emplace_back(name_prefix_start + "D", snapid2);
+    for (size_t i = 0; i < (size_t)file_count; i++) {
+      expected.emplace_back(name_prefix_bulk + stringify(i), snapid2);
+    }
+    expected.emplace_back(name_prefix_end + "B", snapid1);
+    expected.emplace_back(name_prefix_end + "C", snapid2);
+    expected.emplace_back(name_prefix_end + "D", snapid2);
+    test_mount.verify_snap_diff(expected, "", "snap1", "snap2");
+  }
+
+  std::cout << "------------- closing -------------" << std::endl;
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
 }
