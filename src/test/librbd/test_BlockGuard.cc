@@ -70,26 +70,93 @@ TEST_F(TestIOBlockGuard, NonDetainedOps) {
 TEST_F(TestIOBlockGuard, DetainedOps) {
   OpBlockGuard op_block_guard(m_cct);
 
-  Operation op1;
-  BlockGuardCell *cell1;
-  ASSERT_EQ(0, op_block_guard.detain({1, 3}, &op1, &cell1));
+  {
+    Operation op1;
+    BlockGuardCell *cell1;
+    ASSERT_EQ(0, op_block_guard.detain({1, 3}, &op1, &cell1));
 
-  Operation op2;
-  BlockGuardCell *cell2;
-  ASSERT_EQ(1, op_block_guard.detain({2, 6}, &op2, &cell2));
-  ASSERT_EQ(nullptr, cell2);
+    Operation op2;
+    BlockGuardCell *cell2;
+    ASSERT_EQ(1, op_block_guard.detain({2, 6}, &op2, &cell2));
+    ASSERT_EQ(nullptr, cell2);
 
-  Operation op3;
-  BlockGuardCell *cell3;
-  ASSERT_EQ(2, op_block_guard.detain({0, 2}, &op3, &cell3));
-  ASSERT_EQ(nullptr, cell3);
+    Operation op3;
+    BlockGuardCell *cell3;
+    ASSERT_EQ(2, op_block_guard.detain({0, 2}, &op3, &cell3));
+    ASSERT_EQ(nullptr, cell3);
 
-  Operations expected_ops;
-  expected_ops.push_back(std::move(op2));
-  expected_ops.push_back(std::move(op3));
-  Operations released_ops;
-  op_block_guard.release(cell1, &released_ops);
-  ASSERT_EQ(expected_ops, released_ops);
+    Operations expected_ops;
+    expected_ops.push_back(std::move(op2));
+    expected_ops.push_back(std::move(op3));
+    Operations released_ops;
+    op_block_guard.release(cell1, &released_ops);
+  }
+
+  {
+    Operation op1;
+    BlockGuardCell *cell1;
+    ASSERT_EQ(0, op_block_guard.detain({3, 5}, &op1, &cell1));
+
+    Operation op2;
+    BlockGuardCell *cell2;
+    ASSERT_EQ(1, op_block_guard.detain({4, 9}, &op2, &cell2));
+    ASSERT_EQ(nullptr, cell2);
+
+    Operation op3;
+    BlockGuardCell *cell3;
+    ASSERT_EQ(2, op_block_guard.detain({8, 11}, &op3, &cell3));
+    ASSERT_EQ(nullptr, cell3);
+
+    Operations expected_ops;
+    expected_ops.push_back(std::move(op2));
+    expected_ops.push_back(std::move(op3));
+    Operations released_ops;
+    op_block_guard.release(cell1, &released_ops);
+    ASSERT_EQ(expected_ops, released_ops);
+  }
+
+  {
+    Operation op1;
+    BlockGuardCell *cell1;
+    ASSERT_EQ(0, op_block_guard.detain({3, 5}, &op1, &cell1));
+
+    Operation op2;
+    BlockGuardCell *cell2;
+    ASSERT_EQ(1, op_block_guard.detain({4, 9}, &op2, &cell2));
+    ASSERT_EQ(nullptr, cell2);
+
+    Operation op3;
+    BlockGuardCell *cell3;
+    ASSERT_EQ(2, op_block_guard.detain({8, 11}, &op3, &cell3));
+    ASSERT_EQ(nullptr, cell3);
+
+    Operations expected_ops;
+    expected_ops.push_back(std::move(op2));
+    expected_ops.push_back(std::move(op3));
+    Operations released_ops;
+    op_block_guard.release(cell1, &released_ops);
+    ASSERT_EQ(expected_ops, released_ops);
+  }
+  {
+    Operation op1;
+    BlockGuardCell *cell1;
+    ASSERT_EQ(0, op_block_guard.detain({3, 5}, &op1, &cell1));
+
+    Operation op2;
+    BlockGuardCell *cell2;
+    ASSERT_EQ(0, op_block_guard.detain({8, 11}, &op2, &cell2));
+
+    Operation op3;
+    BlockGuardCell *cell3;
+    ASSERT_EQ(1, op_block_guard.detain({4, 9}, &op3, &cell3));
+    ASSERT_EQ(nullptr, cell3);
+
+    Operations expected_ops;
+    expected_ops.push_back(std::move(op3));
+    Operations released_ops;
+    op_block_guard.release(cell1, &released_ops);
+    ASSERT_EQ(expected_ops, released_ops);
+  }
 }
 
 uint32_t TestIOBlockGuard::s_index = 0;
