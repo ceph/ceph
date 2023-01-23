@@ -868,12 +868,6 @@ struct RGWObjVersionTracker {
   void generate_new_write_ver(CephContext* cct);
 };
 
-inline std::ostream& operator<<(std::ostream& out, const obj_version &v)
-{
-  out << v.tag << ":" << v.ver;
-  return out;
-}
-
 inline std::ostream& operator<<(std::ostream& out, const RGWObjVersionTracker &ot)
 {
   out << "{r=" << ot.read_version << ",w=" << ot.write_version << "}";
