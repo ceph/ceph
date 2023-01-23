@@ -1567,6 +1567,21 @@ class Module(MgrModule):
             self.metrics[path].set(stats['stat_sum']['num_objects_repaired'],
                                    labelvalues=(stats['poolid'],))
 
+    def get_all_daemon_health_metrics(self) -> None:
+        daemon_metrics = self.get_daemon_health_metrics()
+        self.log.debug('metrics jeje %s' % (daemon_metrics))
+        for daemon_name, health_metrics in daemon_metrics.items():
+            for health_metric in health_metrics:
+                path = f'daemon_health_metrics{daemon_name}{health_metric["type"]}'
+                self.metrics[path] = Metric(
+                    'counter',
+                    'daemon_health_metrics',
+                    'Health metrics for Ceph daemons',
+                    ('type', 'ceph_daemon',)
+                )
+                self.metrics[path].set(health_metric['value'], labelvalues=(
+                    health_metric['type'], daemon_name,))
+
     @profile_method(True)
     def collect(self) -> str:
         # Clear the metrics before scraping
@@ -1584,6 +1599,7 @@ class Module(MgrModule):
         self.get_pg_status()
         self.get_pg_repaired_objects()
         self.get_num_objects()
+        self.get_all_daemon_health_metrics()
 
         for daemon, counters in self.get_all_perf_counters().items():
             for path, counter_info in counters.items():
