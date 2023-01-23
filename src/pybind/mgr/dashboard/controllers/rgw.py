@@ -2,6 +2,7 @@
 
 import json
 import logging
+from typing import Any, Dict, List, NamedTuple, Optional, Union
 
 import cherrypy
 
@@ -12,14 +13,11 @@ from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import NoRgwDaemonsException, RgwClient
 from ..tools import json_str_to_object, str_to_bool
-from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, UIRouter, allow_empty_body
+from . import APIDoc, APIRouter, BaseController, CRUDCollectionMethod, \
+    CRUDEndpoint, Endpoint, EndpointDoc, ReadPermission, RESTController, \
+    UIRouter, allow_empty_body
+from ._crud import CRUDMeta
 from ._version import APIVersion
-
-try:
-    from typing import Any, Dict, List, Optional, Union
-except ImportError:  # pragma: no cover
-    pass  # Just for type checking
 
 logger = logging.getLogger("controllers.rgw")
 
@@ -607,3 +605,37 @@ class RgwUser(RgwRESTController):
             'subuser': subuser,
             'purge-keys': purge_keys
         }, json_response=False)
+
+
+class RGWRoleEndpoints:
+    @staticmethod
+    def role_list(_):
+        rgw_client = RgwClient.admin_instance()
+        roles = rgw_client.list_roles()
+        return roles
+
+
+@CRUDEndpoint(
+    router=APIRouter('/rgw/user/roles', Scope.RGW),
+    doc=APIDoc("List of RGW roles", "RGW"),
+    actions=[],
+    permissions=[Scope.CONFIG_OPT],
+    get_all=CRUDCollectionMethod(
+        func=RGWRoleEndpoints.role_list,
+        doc=EndpointDoc("List RGW roles")
+    ),
+    set_column={
+        "CreateDate": {'cellTemplate': 'date'},
+        "MaxSessionDuration": {'cellTemplate': 'duration'},
+        "AssumeRolePolicyDocument": {'isHidden': True}
+    },
+    meta=CRUDMeta()
+)
+class RgwUserRole(NamedTuple):
+    RoleId: int
+    RoleName: str
+    Path: str
+    Arn: str
+    CreateDate: str
+    MaxSessionDuration: int
+    AssumeRolePolicyDocument: str
