@@ -12,8 +12,7 @@
  *
  */
 
-#ifndef RGW_DMCLOCK_ASYNC_SCHEDULER_H
-#define RGW_DMCLOCK_ASYNC_SCHEDULER_H
+#pragma once
 
 #include "common/async/completion.h"
 
@@ -216,4 +215,3 @@ private:
 };
 
 } // namespace rgw::dmclock
-#endif /* RGW_DMCLOCK_ASYNC_SCHEDULER_H */

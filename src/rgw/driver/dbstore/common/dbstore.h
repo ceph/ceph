@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef DB_STORE_H
-#define DB_STORE_H
+#pragma once
 
 #include <errno.h>
 #include <stdlib.h>
@@ -2016,5 +2015,3 @@ struct db_get_obj_data {
 };
 
 } } // namespace rgw::store
-
-#endif

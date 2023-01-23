@@ -20,6 +20,7 @@
 
 #include "svc_meta_be.h"
 #include "svc_user.h"
+#include "rgw_bucket.h"
 
 class RGWSI_RADOS;
 class RGWSI_Zone;
@@ -30,8 +31,6 @@ class RGWSI_SyncModules;
 class RGWSI_MetaBackend_Handler;
 
 struct rgw_cache_entry_info;
-
-class RGWUserBuckets;
 
 class RGWGetUserHeader_CB;
 class RGWGetUserStats_CB;

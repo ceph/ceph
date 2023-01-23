@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_CLIENT_IO_DECOIMPL_H
-#define CEPH_RGW_CLIENT_IO_DECOIMPL_H
+#pragma once
 
 #include <type_traits>
 
@@ -453,4 +452,3 @@ ReorderingFilter<T> add_reordering(T&& t) {
 
 } /* namespace io */
 } /* namespace rgw */
-#endif /* CEPH_RGW_CLIENT_IO_DECOIMPL_H */

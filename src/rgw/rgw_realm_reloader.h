@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_REALM_RELOADER_H
-#define RGW_REALM_RELOADER_H
+#pragma once
 
 #include "rgw_realm_watcher.h"
 #include "common/Cond.h"
@@ -63,5 +62,3 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
   ceph::condition_variable cond; //< to signal reload() after an invalid realm config
   C_Reload* reload_scheduled; //< reload() context if scheduled
 };
-
-#endif // RGW_REALM_RELOADER_H

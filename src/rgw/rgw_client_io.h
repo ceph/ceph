@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_CLIENT_IO_H
-#define CEPH_RGW_CLIENT_IO_H
+#pragma once
 
 #include <exception>
 #include <string>
@@ -434,5 +433,3 @@ public:
       std::istream(static_cast<RGWClientIOStreamBuf *>(this)) {
   }
 };
-
-#endif /* CEPH_RGW_CLIENT_IO_H */

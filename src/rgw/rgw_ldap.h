@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_LDAP_H
-#define RGW_LDAP_H
+#pragma once
 
 #include "acconfig.h"
 
@@ -137,5 +136,3 @@ namespace rgw {
 #include "include/ceph_assert.h"
 
 std::string parse_rgw_ldap_bindpw(CephContext* ctx);
-
-#endif /* RGW_LDAP_H */

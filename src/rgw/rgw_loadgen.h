@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_LOADGEN_H
-#define CEPH_RGW_LOADGEN_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -71,5 +70,3 @@ public:
 
   size_t complete_request() override;
 };
-
-#endif

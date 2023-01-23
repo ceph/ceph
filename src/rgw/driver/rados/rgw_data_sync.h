@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_DATA_SYNC_H
-#define CEPH_RGW_DATA_SYNC_H
+#pragma once
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -867,5 +866,3 @@ public:
   bool supports_data_export() override { return false; }
   int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
 };
-
-#endif

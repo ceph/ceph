@@ -10,8 +10,7 @@
  * to provide additional virtual methods such as send_response or get_params.
  */
 
-#ifndef CEPH_RGW_OP_H
-#define CEPH_RGW_OP_H
+#pragma once
 
 #include <limits.h>
 
@@ -2669,5 +2668,3 @@ int rgw_policy_from_attrset(const DoutPrefixProvider *dpp,
                             CephContext *cct,
                             std::map<std::string, bufferlist>& attrset,
                             RGWAccessControlPolicy *policy);
-
-#endif /* CEPH_RGW_OP_H */
