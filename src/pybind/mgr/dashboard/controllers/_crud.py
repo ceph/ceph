@@ -18,9 +18,21 @@ def isnamedtuple(o):
     return isinstance(o, tuple) and hasattr(o, '_asdict') and hasattr(o, '_fields')
 
 
+class SerializableClass:
+    def __iter__(self):
+        for attr in self.__dict__:
+            if not attr.startswith("__"):
+                yield attr, getattr(self, attr)
+
+    def __contains__(self, value):
+        return value in self.__dict__
+
+    def __len__(self):
+        return len(self.__dict__)
+
+
 def serialize(o, expected_type=None):
     # pylint: disable=R1705,W1116
-    print(o, expected_type)
     if isnamedtuple(o):
         hints = get_type_hints(o)
         return {k: serialize(v, hints[k]) for k, v in zip(o._fields, o)}
@@ -30,6 +42,8 @@ def serialize(o, expected_type=None):
         # NOTE: we could add a metadata value in a list to indentify tuples and,
         # sets if we wanted but for now let's go for lists.
         return [serialize(i) for i in o]
+    elif isinstance(o, SerializableClass):
+        return {serialize(k): serialize(v) for k, v in o}
     elif isinstance(o, (Iterator, Generator)):
         return [serialize(i) for i in o]
     elif expected_type and isclass(expected_type) and issubclass(expected_type, SecretStr):
@@ -43,6 +57,7 @@ class TableColumn(NamedTuple):
     cellTemplate: str = ''
     isHidden: bool = False
     filterable: bool = True
+    flexGrow: int = 1
 
 
 class TableAction(NamedTuple):
@@ -52,10 +67,11 @@ class TableAction(NamedTuple):
     routerLink: str  # redirect to...
 
 
-class TableComponent(NamedTuple):
-    columns: List[TableColumn] = []
-    columnMode: str = 'flex'
-    toolHeader: bool = True
+class TableComponent(SerializableClass):
+    def __init__(self) -> None:
+        self.columns: List[TableColumn] = []
+        self.columnMode: str = 'flex'
+        self.toolHeader: bool = True
 
 
 class Icon(Enum):
@@ -269,11 +285,12 @@ class Form:
         return container_schema
 
 
-class CRUDMeta(NamedTuple):
-    table: TableComponent = TableComponent()
-    permissions: List[str] = []
-    actions: List[Dict[str, Any]] = []
-    forms: List[Dict[str, Any]] = []
+class CRUDMeta(SerializableClass):
+    def __init__(self):
+        self.table = TableComponent()
+        self.permissions = []
+        self.actions = []
+        self.forms = []
 
 
 class CRUDCollectionMethod(NamedTuple):
@@ -286,23 +303,39 @@ class CRUDResourceMethod(NamedTuple):
     doc: EndpointDoc
 
 
-class CRUDEndpoint(NamedTuple):
-    router: APIRouter
-    doc: APIDoc
-    set_column: Optional[Dict[str, Dict[str, str]]] = None
-    actions: List[TableAction] = []
-    permissions: List[str] = []
-    forms: List[Form] = []
-    meta: CRUDMeta = CRUDMeta()
-    get_all: Optional[CRUDCollectionMethod] = None
-    create: Optional[CRUDCollectionMethod] = None
-
+class CRUDEndpoint:
     # for testing purposes
     CRUDClass: Optional[RESTController] = None
     CRUDClassMetadata: Optional[RESTController] = None
-    # ---------------------
 
-    def __call__(self, cls: NamedTuple):
+    # pylint: disable=R0902
+    def __init__(self, router: APIRouter, doc: APIDoc,
+                 set_column: Optional[Dict[str, Dict[str, str]]] = None,
+                 actions: Optional[List[TableAction]] = None,
+                 permissions: Optional[List[str]] = None, forms: Optional[List[Form]] = None,
+                 meta: CRUDMeta = CRUDMeta(), get_all: Optional[CRUDCollectionMethod] = None,
+                 create: Optional[CRUDCollectionMethod] = None):
+        self.router = router
+        self.doc = doc
+        self.set_column = set_column
+        if actions:
+            self.actions = actions
+        else:
+            self.actions = []
+
+        if forms:
+            self.forms = forms
+        else:
+            self.forms = []
+        self.meta = meta
+        self.get_all = get_all
+        self.create = create
+        if permissions:
+            self.permissions = permissions
+        else:
+            self.permissions = []
+
+    def __call__(self, cls: Any):
         self.create_crud_class(cls)
 
         self.meta.table.columns.extend(TableColumn(prop=field) for field in cls._fields)
@@ -334,42 +367,55 @@ class CRUDEndpoint(NamedTuple):
         cls.CRUDClass = CRUDClass
 
     def create_meta_class(self, cls):
-        outer_self: CRUDEndpoint = self
+        def _list(self):
+            self.update_columns()
+            self.generate_actions()
+            self.generate_forms()
+            self.set_permissions()
+            return serialize(self.__class__.outer_self.meta)
 
-        @UIRouter(self.router.path, self.router.security_scope)
-        class CRUDClassMetadata(RESTController):
-            def list(self):
-                self.update_columns()
-                self.generate_actions()
-                self.generate_forms()
-                self.set_permissions()
-                return serialize(outer_self.meta)
+        def update_columns(self):
+            if self.__class__.outer_self.set_column:
+                for i, column in enumerate(self.__class__.outer_self.meta.table.columns):
+                    if column.prop in dict(self.__class__.outer_self.set_column):
+                        prop = self.__class__.outer_self.set_column[column.prop]
+                        new_template = ""
+                        if "cellTemplate" in prop:
+                            new_template = prop["cellTemplate"]
+                        hidden = prop['isHidden'] if 'isHidden' in prop else False
+                        flex_grow = prop['flexGrow'] if 'flexGrow' in prop else column.flexGrow
+                        new_column = TableColumn(column.prop,
+                                                 new_template,
+                                                 hidden,
+                                                 column.filterable,
+                                                 flex_grow)
+                        self.__class__.outer_self.meta.table.columns[i] = new_column
 
-            def update_columns(self):
-                if outer_self.set_column:
-                    for i, column in enumerate(outer_self.meta.table.columns):
-                        if column.prop in dict(outer_self.set_column):
-                            new_template = outer_self.set_column[column.prop]["cellTemplate"]
-                            new_column = TableColumn(column.prop,
-                                                     new_template,
-                                                     column.isHidden,
-                                                     column.filterable)
-                            outer_self.meta.table.columns[i] = new_column
+        def generate_actions(self):
+            self.__class__.outer_self.meta.actions.clear()
 
-            def generate_actions(self):
-                outer_self.meta.actions.clear()
+            for action in self.__class__.outer_self.actions:
+                self.__class__.outer_self.meta.actions.append(action._asdict())
 
-                for action in outer_self.actions:
-                    outer_self.meta.actions.append(action._asdict())
+        def generate_forms(self):
+            self.__class__.outer_self.meta.forms.clear()
 
-            def generate_forms(self):
-                outer_self.meta.forms.clear()
+            for form in self.__class__.outer_self.forms:
+                self.__class__.outer_self.meta.forms.append(form.to_dict())
 
-                for form in outer_self.forms:
-                    outer_self.meta.forms.append(form.to_dict())
-
-            def set_permissions(self):
-                if outer_self.permissions:
-                    outer_self.meta.permissions.extend(outer_self.permissions)
-
-        cls.CRUDClassMetadata = CRUDClassMetadata
+        def set_permissions(self):
+            if self.__class__.outer_self.permissions:
+                self.outer_self.meta.permissions.extend(self.__class__.outer_self.permissions)
+        class_name = self.router.path.replace('/', '')
+        meta_class = type(f'{class_name}_CRUDClassMetadata',
+                          (RESTController,),
+                          {
+                              'list': _list,
+                              'update_columns': update_columns,
+                              'generate_actions': generate_actions,
+                              'generate_forms': generate_forms,
+                              'set_permissions': set_permissions,
+                              'outer_self': self,
+                          })
+        UIRouter(self.router.path, self.router.security_scope)(meta_class)
+        cls.CRUDClassMetadata = meta_class
