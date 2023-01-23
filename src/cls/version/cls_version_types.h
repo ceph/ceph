@@ -17,10 +17,12 @@ class JSONObj;
 
 
 struct obj_version {
-  uint64_t ver;
+  uint64_t ver = 0;
   std::string tag;
 
-  obj_version() : ver(0) {}
+  obj_version() = default;
+  obj_version(uint64_t ver, std::string tag)
+    : ver(ver), tag(std::move(tag)) {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
