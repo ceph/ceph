@@ -35,7 +35,7 @@ class RGWAMEnvMgr:
         pass
 
     @abstractmethod
-    def apply_rgw(self, svc_id, realm_name, zone_name, port=None):
+    def apply_rgw(self, spec):
         pass
 
     @abstractmethod
