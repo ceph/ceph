@@ -561,33 +561,35 @@ testing purposes, and are not recommended for use by operators.
 Runtime Changes
 ===============
 
-In most cases, Ceph allows you to make changes to the configuration of
-a daemon at runtime. This capability is quite useful for
-increasing/decreasing logging output, enabling/disabling debug
-settings, and even for runtime optimization.
+In most cases, Ceph permits changes to the configuration of a daemon at
+runtime. This can be used for increasing or decreasing the amount of logging
+output, for enabling or disabling debug settings, and for runtime optimization.
 
-Generally speaking, configuration options can be updated in the usual
-way via the ``ceph config set`` command.  For example, do enable the debug log level on a specific OSD:
+Configuration options can be updated via the ``ceph config set`` command.  For
+example, to enable the debug log level on a specific OSD, run a command of this form:
 
 .. prompt:: bash $
 
    ceph config set osd.123 debug_ms 20
 
-Note that if the same option is also customized in a local
-configuration file, the monitor setting will be ignored (it has a
-lower priority than the local config file).
+.. note:: If an option has been customized in a local configuration file, the
+   `central config
+   <https://ceph.io/en/news/blog/2018/new-mimic-centralized-configuration-management/>`_
+   setting will be ignored (it has a lower priority than the local
+   configuration file).
 
 Override values
 ---------------
 
-You can also temporarily set an option using the `tell` or `daemon`
-interfaces on the Ceph CLI.  These *override* values are ephemeral in
-that they only affect the running process and are discarded/lost if
-the daemon or process restarts.
+Options can be set temporarily by using the `tell` or `daemon` interfaces on
+the Ceph CLI. These *override* values are ephemeral, which means that they
+affect only the current instance of the daemon and revert to persistently
+configured values when the daemon restarts.
 
 Override values can be set in two ways:
 
-#. From any host, we can send a message to a daemon over the network with:
+#. From any host, send a message to a daemon with a command of the following
+   form:
    
    .. prompt:: bash $
 
@@ -599,16 +601,16 @@ Override values can be set in two ways:
 
       ceph tell osd.123 config set debug_osd 20
 
-   The `tell` command can also accept a wildcard for the daemon
-   identifier.  For example, to adjust the debug level on all OSD
-   daemons:
+   The ``tell`` command can also accept a wildcard as the daemon identifier.
+   For example, to adjust the debug level on all OSD daemons, run a command of
+   this form:
    
    .. prompt:: bash $
 
       ceph tell osd.* config set debug_osd 20
 
-#. From the host the process is running on, we can connect directly to
-   the process via a socket in ``/var/run/ceph`` with:
+#. On the host where the daemon is running, connect to the daemon via a socket
+   in ``/var/run/ceph`` by running a command of this form:
 
    .. prompt:: bash $
 
@@ -620,8 +622,8 @@ Override values can be set in two ways:
 
       ceph daemon osd.4 config set debug_osd 20
 
-Note that in the ``ceph config show`` command output these temporary
-values will be shown with a source of ``override``.
+.. note:: In the output of the ``ceph config show`` command, these temporary
+   values are shown with a source of ``override``.
 
 
 Viewing runtime settings
