@@ -11,18 +11,18 @@
  * log objclass
  */
 
-void cls_log_add_prepare_entry(cls_log_entry& entry, ceph::real_time timestamp,
+void cls_log_add_prepare_entry(cls::log::entry& entry, ceph::real_time timestamp,
 			       const std::string& section,
 			       const std::string& name, ceph::buffer::list& bl);
 
-void cls_log_add(librados::ObjectWriteOperation& op, std::vector<cls_log_entry>& entries, bool monotonic_inc);
-void cls_log_add(librados::ObjectWriteOperation& op, cls_log_entry& entry);
+void cls_log_add(librados::ObjectWriteOperation& op, std::vector<cls::log::entry>& entries, bool monotonic_inc);
+void cls_log_add(librados::ObjectWriteOperation& op, cls::log::entry& entry);
 void cls_log_add(librados::ObjectWriteOperation& op, ceph::real_time timestamp,
                  const std::string& section, const std::string& name, ceph::buffer::list& bl);
 
 void cls_log_list(librados::ObjectReadOperation& op, ceph::real_time from,
 		  ceph::real_time to, const std::string& in_marker,
-		  int max_entries, std::vector<cls_log_entry>& entries,
+		  int max_entries, std::vector<cls::log::entry>& entries,
                   std::string *out_marker, bool *truncated);
 
 void cls_log_trim(librados::ObjectWriteOperation& op, ceph::real_time from_time,
@@ -37,6 +37,6 @@ int cls_log_trim(librados::IoCtx& io_ctx, const std::string& oid,
                  const std::string& from_marker, const std::string& to_marker);
 #endif
 
-void cls_log_info(librados::ObjectReadOperation& op, cls_log_header *header);
+void cls_log_info(librados::ObjectReadOperation& op, cls::log::header* header);
 
 #endif
