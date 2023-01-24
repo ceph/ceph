@@ -189,24 +189,24 @@ class CompletionImpl final : public Completion<void(Args...), T> {
 
   void destroy_defer(std::tuple<Args...>&& args) override {
     auto w = std::move(work);
-    auto f = bind_and_forward(std::move(handler), std::move(args));
     RebindAlloc2 alloc2 = boost::asio::get_associated_allocator(handler);
+    auto f = bind_and_forward(std::move(handler), std::move(args));
     RebindTraits2::destroy(alloc2, this);
     RebindTraits2::deallocate(alloc2, this, 1);
     w.second.get_executor().defer(std::move(f), alloc2);
   }
   void destroy_dispatch(std::tuple<Args...>&& args) override {
     auto w = std::move(work);
-    auto f = bind_and_forward(std::move(handler), std::move(args));
     RebindAlloc2 alloc2 = boost::asio::get_associated_allocator(handler);
+    auto f = bind_and_forward(std::move(handler), std::move(args));
     RebindTraits2::destroy(alloc2, this);
     RebindTraits2::deallocate(alloc2, this, 1);
     w.second.get_executor().dispatch(std::move(f), alloc2);
   }
   void destroy_post(std::tuple<Args...>&& args) override {
     auto w = std::move(work);
-    auto f = bind_and_forward(std::move(handler), std::move(args));
     RebindAlloc2 alloc2 = boost::asio::get_associated_allocator(handler);
+    auto f = bind_and_forward(std::move(handler), std::move(args));
     RebindTraits2::destroy(alloc2, this);
     RebindTraits2::deallocate(alloc2, this, 1);
     w.second.get_executor().post(std::move(f), alloc2);
