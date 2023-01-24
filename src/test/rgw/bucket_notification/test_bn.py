@@ -654,7 +654,7 @@ def test_ps_s3_topic_admin_on_master():
     # get topic 3 via commandline
     result = admin(['topic', 'get', '--topic', topic_name+'_3', '--tenant', tenant])  
     parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['topic']['arn'], topic_arn3)
+    assert_equal(parsed_result['arn'], topic_arn3)
 
     # delete topic 3
     _, result = admin(['topic', 'rm', '--topic', topic_name+'_3', '--tenant', tenant])  
@@ -662,6 +662,7 @@ def test_ps_s3_topic_admin_on_master():
 
     # try to get a deleted topic
     _, result = admin(['topic', 'get', '--topic', topic_name+'_3', '--tenant', tenant])  
+    print('"topic not found" error is expected')
     assert_equal(result, 2)
 
     # get the remaining 2 topics
@@ -1452,6 +1453,8 @@ def test_ps_s3_notification_push_kafka_on_master():
         if topic_conf2 is not None:
             topic_conf2.del_config()
         # delete the bucket
+        for key in bucket.list():
+            key.delete()
         conn.delete_bucket(bucket_name)
         if receiver is not None:
             stop_kafka_receiver(receiver, task)

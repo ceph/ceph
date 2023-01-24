@@ -10325,8 +10325,8 @@ next:
         return -ret;
       }
 
-      auto b = ps.get_bucket(bucket->get_key());
-      ret = b->get_topics(&result);
+      const RGWPubSub::Bucket b(ps, bucket->get_key());
+      ret = b.get_topics(&result);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -10352,7 +10352,7 @@ next:
 
     RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(driver), tenant);
 
-    rgw_pubsub_topic_subs topic;
+    rgw_pubsub_topic topic;
     ret = ps.get_topic(topic_name, &topic);
     if (ret < 0) {
       cerr << "ERROR: could not get topic: " << cpp_strerror(-ret) << std::endl;
