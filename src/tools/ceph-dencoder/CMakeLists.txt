@@ -99,7 +99,7 @@ target_compile_definitions(ceph-dencoder PRIVATE
 
 target_link_libraries(ceph-dencoder
   StdFilesystem::filesystem
-  ceph-common
+  global
   ${DENCODER_EXTRALIBS}
   cls_log_client
   cls_version_client
