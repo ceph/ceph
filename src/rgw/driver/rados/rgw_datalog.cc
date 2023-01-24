@@ -122,7 +122,7 @@ public:
     }
 
     cls_log_entry e;
-    cls_log_add_prepare_entry(e, utime_t(ut), {}, key, entry);
+    cls_log_add_prepare_entry(e, ut, {}, key, entry);
     std::get<centries>(out).push_back(std::move(e));
   }
   int push(const DoutPrefixProvider *dpp, int index, entries&& items, optional_yield y) override {
@@ -140,7 +140,7 @@ public:
 	   const std::string& key, ceph::buffer::list&& bl,
 	   optional_yield y) override {
     lr::ObjectWriteOperation op;
-    cls_log_add(op, utime_t(now), {}, key, bl);
+    cls_log_add(op, now, {}, key, bl);
     auto r = rgw_rados_operate(dpp, ioctx, oids[index], &op, y);
     if (r < 0) {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
@@ -172,7 +172,7 @@ public:
     for (auto iter = log_entries.begin(); iter != log_entries.end(); ++iter) {
       rgw_data_change_log_entry log_entry;
       log_entry.log_id = iter->id;
-      auto rt = iter->timestamp.to_real_time();
+      auto rt = iter->timestamp;
       log_entry.log_timestamp = rt;
       auto liter = iter->data.cbegin();
       try {
@@ -200,7 +200,7 @@ public:
 		 << cpp_strerror(-r) << dendl;
     } else {
       info->marker = header.max_marker;
-      info->last_update = header.max_time.to_real_time();
+      info->last_update = header.max_time;
     }
     return r;
   }
