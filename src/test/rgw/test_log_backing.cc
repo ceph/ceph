@@ -73,8 +73,9 @@ protected:
       lr::ObjectWriteOperation op;
       cb::list bl;
       encode(i, bl);
-      cls_log_add(op, ceph_clock_now(), {}, "meow", bl);
-      auto r = rgw_rados_operate(&dp, ioctx, get_oid(0, i), std::move(op), null_yield);
+      cls_log_add(op, ceph::real_clock::now(), {}, "meow", bl);
+      auto r = rgw_rados_operate(&dp, ioctx, get_oid(0, i), std::move(op),
+				 null_yield);
       ASSERT_GE(r, 0);
     }
   }
@@ -84,7 +85,7 @@ protected:
     lr::ObjectWriteOperation op;
     cb::list bl;
     encode(i, bl);
-    cls_log_add(op, ceph_clock_now(), {}, "meow", bl);
+    cls_log_add(op, ceph::real_clock::now(), {}, "meow", bl);
     auto r = rgw_rados_operate(&dp, ioctx, get_oid(0, i), std::move(op), null_yield);
     ASSERT_GE(r, 0);
   }
