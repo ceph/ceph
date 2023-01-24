@@ -13,17 +13,18 @@
 
 class JSONObj;
 
-struct cls_log_entry {
+namespace cls::log {
+struct entry {
   std::string id;
   std::string section;
   std::string name;
   ceph::real_time timestamp;
   ceph::buffer::list data;
 
-  cls_log_entry() = default;
+  entry() = default;
 
-  cls_log_entry(ceph::real_time timestamp, std::string section,
-		std::string name, ceph::buffer::list&& data)
+  entry(ceph::real_time timestamp, std::string section,
+	std::string name, ceph::buffer::list&& data)
     : section(std::move(section)), name(std::move(name)),
       timestamp(timestamp), data(std::move(data)) {}
 
@@ -48,9 +49,9 @@ struct cls_log_entry {
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_log_entry)
+WRITE_CLASS_ENCODER(entry)
 
-struct cls_log_header {
+struct header {
   std::string max_marker;
   ceph::real_time max_time;
 
@@ -67,15 +68,10 @@ struct cls_log_header {
     decode(max_time, bl);
     DECODE_FINISH(bl);
   }
-};
-inline bool operator ==(const cls_log_header& lhs, const cls_log_header& rhs) {
-  return (lhs.max_marker == rhs.max_marker &&
-	  lhs.max_time == rhs.max_time);
-}
-inline bool operator !=(const cls_log_header& lhs, const cls_log_header& rhs) {
-  return !(lhs == rhs);
-}
-WRITE_CLASS_ENCODER(cls_log_header)
 
+  friend auto operator <=>(const header&, const header&) = default;
+};
+WRITE_CLASS_ENCODER(header)
+} // namespace cls::log
 
 #endif
