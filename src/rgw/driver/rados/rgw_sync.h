@@ -40,7 +40,7 @@ struct rgw_mdlog_entry {
 
   void decode_json(JSONObj *obj);
 
-  bool convert_from(cls_log_entry& le) {
+  bool convert_from(cls::log::entry& le) {
     id = le.id;
     section = le.section;
     name = le.name;
