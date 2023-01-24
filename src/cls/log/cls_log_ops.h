@@ -35,13 +35,14 @@ struct cls_log_add_op {
   }
 
   static void generate_test_instances(std::list<cls_log_add_op *>& l) {
+    using namespace std::literals;
     l.push_back(new cls_log_add_op);
     l.push_back(new cls_log_add_op);
     l.back()->entries.push_back(cls_log_entry());
     l.back()->entries.push_back(cls_log_entry());
     l.back()->entries.back().section = "section";
     l.back()->entries.back().name = "name";
-    l.back()->entries.back().timestamp = utime_t(1, 2);
+    l.back()->entries.back().timestamp = ceph::real_time{1s + 2ns};
     l.back()->entries.back().data.append("data");
     l.back()->entries.back().id = "id";
   }
@@ -49,9 +50,9 @@ struct cls_log_add_op {
 WRITE_CLASS_ENCODER(cls_log_add_op)
 
 struct cls_log_list_op {
-  utime_t from_time;
+  ceph::real_time from_time;
   std::string marker; /* if not empty, overrides from_time */
-  utime_t to_time; /* not inclusive */
+  ceph::real_time to_time; /* not inclusive */
   int max_entries; /* upperbound to returned num of entries
                       might return less than that and still be truncated */
 
@@ -82,11 +83,12 @@ struct cls_log_list_op {
     f->dump_int("max_entries", max_entries);
   }
   static void generate_test_instances(std::list<cls_log_list_op*>& ls) {
+    using namespace std::literals;
     ls.push_back(new cls_log_list_op);
     ls.push_back(new cls_log_list_op);
-    ls.back()->from_time = utime_t(1, 2);
+    ls.back()->from_time = ceph::real_time{1s + 2ns};
     ls.back()->marker = "marker";
-    ls.back()->to_time = utime_t(3, 4);
+    ls.back()->to_time = ceph::real_time{3s + 4ns};
     ls.back()->max_entries = 5;
   }
 };
@@ -121,13 +123,14 @@ struct cls_log_list_ret {
     f->dump_bool("truncated", truncated);
   }
   static void generate_test_instances(std::list<cls_log_list_ret*>& ls) {
+    using namespace std::literals;
     ls.push_back(new cls_log_list_ret);
     ls.push_back(new cls_log_list_ret);
     ls.back()->entries.push_back(cls_log_entry());
     ls.back()->entries.push_back(cls_log_entry());
     ls.back()->entries.back().section = "section";
     ls.back()->entries.back().name = "name";
-    ls.back()->entries.back().timestamp = utime_t(1, 2);
+    ls.back()->entries.back().timestamp = ceph::real_time{1s + 2ns};
     ls.back()->entries.back().data.append("data");
     ls.back()->entries.back().id = "id";
     ls.back()->marker = "marker";
@@ -142,8 +145,8 @@ WRITE_CLASS_ENCODER(cls_log_list_ret)
  * -ENODATA when done, so caller needs to repeat sending request until that.
  */
 struct cls_log_trim_op {
-  utime_t from_time;
-  utime_t to_time; /* inclusive */
+  ceph::real_time from_time;
+  ceph::real_time to_time; /* inclusive */
   std::string from_marker;
   std::string to_marker;
 
@@ -175,10 +178,11 @@ struct cls_log_trim_op {
     f->dump_string("to_marker", to_marker);
   }
   static void generate_test_instances(std::list<cls_log_trim_op*>& ls) {
+    using namespace std::literals;
     ls.push_back(new cls_log_trim_op);
     ls.push_back(new cls_log_trim_op);
-    ls.back()->from_time = utime_t(1, 2);
-    ls.back()->to_time = utime_t(3, 4);
+    ls.back()->from_time = ceph::real_time{1s + 2ns};
+    ls.back()->to_time = ceph::real_time(3s + 4ns);
     ls.back()->from_marker = "from_marker";
     ls.back()->to_marker = "to_marker";
   }
