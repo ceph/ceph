@@ -470,8 +470,8 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
 
   // if bucket has notification definitions associated with it
   // they should be removed (note that any pending notifications on the bucket are still going to be sent)
-  RGWPubSub ps(store, info.owner.tenant);
-  RGWPubSub::Bucket ps_bucket(&ps, info.bucket);
+  const RGWPubSub ps(store, info.owner.tenant);
+  const RGWPubSub::Bucket ps_bucket(ps, info.bucket);
   const auto ps_ret = ps_bucket.remove_notifications(dpp, y);
   if (ps_ret < 0 && ps_ret != -ENOENT) {
     ldpp_dout(dpp, -1) << "ERROR: unable to remove notifications from bucket. ret=" << ps_ret << dendl;
