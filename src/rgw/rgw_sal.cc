@@ -53,6 +53,9 @@ extern rgw::sal::Driver* newMotrStore(CephContext *cct);
 #ifdef WITH_RADOSGW_DAOS
 extern rgw::sal::Driver* newDaosStore(CephContext *cct);
 #endif
+#ifdef WITH_RADOSGW_POSIX
+extern rgw::sal::Driver* newPOSIXDriver(rgw::sal::Driver* next);
+#endif
 extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
 
 }
@@ -223,6 +226,18 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
       return nullptr;
     }
   }
+#ifdef WITH_RADOSGW_POSIX
+  else if (cfg.filter_name.compare("posix") == 0) {
+    rgw::sal::Driver* next = driver;
+    driver = newPOSIXDriver(next);
+
+    if (driver->initialize(cct, dpp) < 0) {
+      delete driver;
+      delete next;
+      return nullptr;
+    }
+  }
+#endif
 
   return driver;
 }

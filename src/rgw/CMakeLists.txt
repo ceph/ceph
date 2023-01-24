@@ -221,6 +221,10 @@ endif()
 if(WITH_RADOSGW_DAOS)
   list(APPEND librgw_common_srcs rgw_sal_daos.cc)
 endif()
+if(WITH_RADOSGW_POSIX)
+  #add_subdirectory(driver/posix)
+  list(APPEND librgw_common_srcs driver/posix/rgw_sal_posix.cc)
+endif()
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
 endif()
@@ -325,6 +329,10 @@ if(WITH_RADOSGW_DAOS)
   target_include_directories(rgw_common PRIVATE ${PC_DAOS_INCLUDEDIR} )
   link_directories( ${PC_DAOS_LIBRARY_DIRS} )
 endif()
+
+#if(WITH_RADOSGW_POSIX)
+  #target_link_libraries(rgw_common PRIVATE global dbstore)
+#endif()
 
 set(rgw_a_srcs
   rgw_appmain.cc
