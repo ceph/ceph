@@ -3355,7 +3355,7 @@ void RGWCreateBucket::execute(optional_yield y)
     }
   }
 
-  s->bucket_owner.set_id(s->user->get_id()); /* XXX dang use s->bucket->owner */
+  s->bucket_owner.set_id(s->user->get_id());
   s->bucket_owner.set_name(s->user->get_display_name());
 
   string zonegroup_id;
@@ -4639,7 +4639,7 @@ void RGWPostObj::execute(optional_yield y)
       cs_info.compression_type = plugin->get_type_name();
       cs_info.orig_size = s->obj_size;
       cs_info.compressor_message = compressor->get_compressor_message();
-      cs_info.blocks = move(compressor->get_compression_blocks());
+      cs_info.blocks = std::move(compressor->get_compression_blocks());
       encode(cs_info, tmp);
       emplace_attr(RGW_ATTR_COMPRESSION, std::move(tmp));
     }
@@ -4896,7 +4896,6 @@ void RGWPutMetadataObject::pre_exec()
 
 void RGWPutMetadataObject::execute(optional_yield y)
 {
-  rgw_obj target_obj;
   rgw::sal::Attrs attrs, rmattrs;
 
   s->object->set_atomic();
@@ -4912,7 +4911,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
   }
 
   /* check if obj exists, read orig attrs */
-  op_ret = s->object->get_obj_attrs(s->yield, s, &target_obj);
+  op_ret = s->object->get_obj_attrs(s->yield, s);
   if (op_ret < 0) {
     return;
   }

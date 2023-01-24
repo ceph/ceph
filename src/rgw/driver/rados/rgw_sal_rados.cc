@@ -774,12 +774,6 @@ int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::r
   return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, y);
 }
 
-/* Make sure to call get_bucket_info() if you need it first */
-bool RadosBucket::is_owner(User* user)
-{
-  return (info.owner.compare(user->get_id()) == 0);
-}
-
 int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 {
   return store->getRados()->check_bucket_empty(dpp, info, y);
