@@ -47,7 +47,7 @@ class WebTokenEngine : public rgw::auth::Engine {
   std::string get_role_name(const string& role_arn) const;
 
   std::string get_cert_url(const std::string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
-  
+
   std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
 
@@ -223,7 +223,7 @@ class RGWRESTMgr_STS : public RGWRESTMgr {
 public:
   RGWRESTMgr_STS() = default;
   ~RGWRESTMgr_STS() override = default;
-  
+
   RGWRESTMgr *get_resource_mgr(req_state* const s,
                                const std::string& uri,
                                std::string* const out_uri) override {

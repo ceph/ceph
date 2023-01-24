@@ -291,7 +291,7 @@ struct rgw_sync_pipe_source_params {
 };
 WRITE_CLASS_ENCODER(rgw_sync_pipe_source_params)
 
-struct rgw_sync_pipe_dest_params { 
+struct rgw_sync_pipe_dest_params {
   std::optional<rgw_sync_pipe_acl_translation> acl_translation;
   std::optional<std::string> storage_class;
 

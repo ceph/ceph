@@ -43,7 +43,7 @@ public:
   void bencode_end(bufferlist& bl) { bl.append('e'); }
 
   //single values
-  void bencode(int value, bufferlist& bl) 
+  void bencode(int value, bufferlist& bl)
   {
     bl.append('i');
     char info[100] = { 0 };
@@ -53,33 +53,33 @@ public:
   }
 
   //single values
-  void bencode(const std::string& str, bufferlist& bl) 
+  void bencode(const std::string& str, bufferlist& bl)
   {
     bencode_key(str, bl);
   }
 
   //dictionary elements
-  void bencode(const std::string& key, int value, bufferlist& bl) 
+  void bencode(const std::string& key, int value, bufferlist& bl)
   {
     bencode_key(key, bl);
     bencode(value, bl);
   }
 
   //dictionary elements
-  void bencode(const std::string& key, const std::string& value, bufferlist& bl) 
+  void bencode(const std::string& key, const std::string& value, bufferlist& bl)
   {
     bencode_key(key, bl);
     bencode(value, bl);
   }
 
   //key len
-  void bencode_key(const std::string& key, bufferlist& bl) 
+  void bencode_key(const std::string& key, bufferlist& bl)
   {
     int len = key.length();
-    char info[100] = { 0 }; 
+    char info[100] = { 0 };
     sprintf(info, "%d:", len);
     bl.append(info, strlen(info));
-    bl.append(key.c_str(), len); 
+    bl.append(key.c_str(), len);
   }
 };
 
@@ -120,7 +120,7 @@ public:
                        uint64_t &total_len,
                        ceph::bufferlist &bl_data,
                        rgw_obj &obj);
-  
+
   off_t get_data_len();
   bool get_flag();
 

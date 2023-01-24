@@ -88,7 +88,7 @@ public:
 	     ceph::make_timespan(g_conf()->rgw_op_thread_suicide_timeout),
 	     &m_tp) {
   }
-  
+
   virtual ~RGWProcess() = default;
 
   const RGWProcessEnv& get_env() const { return env; }

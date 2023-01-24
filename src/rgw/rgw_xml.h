@@ -121,7 +121,7 @@ private:
 protected:
   // if objects are created while parsing, this should be implemented in the derived class
   // and be a factory for creating the classes derived from XMLObj
-  // note that not all sub-tags has to be constructed here, any such tag which is not 
+  // note that not all sub-tags has to be constructed here, any such tag which is not
   // constructed will be lazily created when decode_xml() is invoked on it
   //
   // note that in case of different tags sharing the same name at different levels
