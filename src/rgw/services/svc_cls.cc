@@ -250,7 +250,7 @@ void RGWSI_Cls::TimeLog::prepare_entry(cls_log_entry& entry,
                                        const string& key,
                                        bufferlist& bl)
 {
-  cls_log_add_prepare_entry(entry, utime_t(ut), section, key, bl);
+  cls_log_add_prepare_entry(entry, ut, section, key, bl);
 }
 
 int RGWSI_Cls::TimeLog::init_obj(const DoutPrefixProvider *dpp, const string& oid, rgw_rados_ref& obj)
@@ -274,8 +274,7 @@ int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp,
   }
 
   librados::ObjectWriteOperation op;
-  utime_t t(ut);
-  cls_log_add(op, t, section, key, bl);
+  cls_log_add(op, ut, section, key, bl);
 
   return obj.operate(dpp, &op, y);
 }
@@ -324,10 +323,7 @@ int RGWSI_Cls::TimeLog::list(const DoutPrefixProvider *dpp,
 
   librados::ObjectReadOperation op;
 
-  utime_t st(start_time);
-  utime_t et(end_time);
-
-  cls_log_list(op, st, et, marker, max_entries, entries,
+  cls_log_list(op, start_time, end_time, marker, max_entries, entries,
 	       out_marker, truncated);
 
   bufferlist obl;
@@ -402,11 +398,8 @@ int RGWSI_Cls::TimeLog::trim(const DoutPrefixProvider *dpp,
     return r;
   }
 
-  utime_t st(start_time);
-  utime_t et(end_time);
-
   librados::ObjectWriteOperation op;
-  cls_log_trim(op, st, et, from_marker, to_marker);
+  cls_log_trim(op, start_time, end_time, from_marker, to_marker);
 
   if (!completion) {
     r = obj.operate(dpp, &op, y);
