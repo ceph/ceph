@@ -512,6 +512,8 @@ def ceph_bootstrap(ctx, config):
             '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             '--output-pub-ssh-key', '{}/{}.pub'.format(testdir, cluster_name),
         ]
+        if config.get("no_cgroups_split") is True:
+            cmd.insert(cmd.index("bootstrap"), "--no-cgroups-split")
 
         if config.get('registry-login'):
             registry = config['registry-login']
