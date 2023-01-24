@@ -31,9 +31,9 @@ struct cls_log_add_op {
 WRITE_CLASS_ENCODER(cls_log_add_op)
 
 struct cls_log_list_op {
-  utime_t from_time;
+  ceph::real_time from_time;
   std::string marker; /* if not empty, overrides from_time */
-  utime_t to_time; /* not inclusive */
+  ceph::real_time to_time; /* not inclusive */
   int max_entries; /* upperbound to returned num of entries
                       might return less than that and still be truncated */
 
@@ -90,8 +90,8 @@ WRITE_CLASS_ENCODER(cls_log_list_ret)
  * -ENODATA when done, so caller needs to repeat sending request until that.
  */
 struct cls_log_trim_op {
-  utime_t from_time;
-  utime_t to_time; /* inclusive */
+  ceph::real_time from_time;
+  ceph::real_time to_time; /* inclusive */
   std::string from_marker;
   std::string to_marker;
 
