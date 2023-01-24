@@ -762,7 +762,7 @@ bool PrimaryLogPG::maybe_await_blocked_head(
 
 void PrimaryLogPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef op)
 {
-  dout(10) << __func__ << " " << soid << " " << op << dendl;
+  dout(10) << __func__ << " " << soid << " " << *op->get_req() << dendl;
   waiting_for_blocked_object[soid].push_back(op);
   op->mark_delayed("waiting for blocked object");
 }
@@ -1878,7 +1878,7 @@ void PrimaryLogPG::do_request(
   }
 
   if (recovery_state.needs_flush()) {
-    dout(20) << "waiting for flush on " << op << dendl;
+    dout(20) << "waiting for flush on " << *op->get_req() << dendl;
     waiting_for_flush.push_back(op);
     op->mark_delayed("waiting for flush");
     return;
@@ -1892,7 +1892,8 @@ void PrimaryLogPG::do_request(
   case CEPH_MSG_OSD_OP:
   case CEPH_MSG_OSD_BACKOFF:
     if (!is_active()) {
-      dout(20) << " peered, not active, waiting for active on " << op << dendl;
+      dout(20) << " peered, not active, waiting for active on "
+               << *op->get_req() << dendl;
       waiting_for_active.push_back(op);
       op->mark_delayed("waiting for active");
       return;
@@ -2914,7 +2915,7 @@ void PrimaryLogPG::do_cache_redirect(OpRequestRef op)
   request_redirect_t redir(m->get_object_locator(), pool.info.tier_of);
   reply->set_redirect(redir);
   dout(10) << "sending redirect to pool " << pool.info.tier_of << " for op "
-	   << op << dendl;
+	   << *op->get_req() << dendl;
   m->get_connection()->send_message(reply);
   return;
 }
@@ -11739,7 +11740,7 @@ void PrimaryLogPG::populate_obc_watchers(ObjectContextRef obc)
 void PrimaryLogPG::handle_watch_timeout(WatchRef watch)
 {
   ObjectContextRef obc = watch->get_obc(); // handle_watch_timeout owns this ref
-  dout(10) << "handle_watch_timeout obc " << obc << dendl;
+  dout(10) << "handle_watch_timeout obc " << *obc << dendl;
 
   if (!is_active()) {
     dout(10) << "handle_watch_timeout not active, no-op" << dendl;
@@ -11838,7 +11839,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
   osd->logger->inc(l_osd_object_ctx_cache_total);
   if (obc) {
     osd->logger->inc(l_osd_object_ctx_cache_hit);
-    dout(10) << __func__ << ": found obc in cache: " << obc
+    dout(10) << __func__ << ": found obc in cache: " << *obc
 	     << dendl;
   } else {
     dout(10) << __func__ << ": obc NOT found in cache: " << soid << dendl;
@@ -11867,11 +11868,9 @@ ObjectContextRef PrimaryLogPG::get_object_context(
 	  soid, true, 0, false);
         ceph_assert(ssc);
 	obc = create_object_context(oi, ssc);
-	dout(10) << __func__ << ": " << obc << " " << soid
-		 << " " << obc->rwstate
+	dout(10) << __func__ << ": " << *obc
 		 << " oi: " << obc->obs.oi
-		 << " ssc: " << obc->ssc
-		 << " snapset: " << obc->ssc->snapset << dendl;
+		 << " " << *obc->ssc << dendl;
 	return obc;
       }
     }
@@ -11910,7 +11909,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
       }
     }
 
-    dout(10) << __func__ << ": creating obc from disk: " << obc
+    dout(10) << __func__ << ": creating obc from disk: " << *obc
 	     << dendl;
   }
 
@@ -11920,12 +11919,10 @@ ObjectContextRef PrimaryLogPG::get_object_context(
     return ObjectContextRef();   // -ENOENT!
   }
 
-  dout(10) << __func__ << ": " << obc << " " << soid
-	   << " " << obc->rwstate
+  dout(10) << __func__ << ": " << *obc
 	   << " oi: " << obc->obs.oi
 	   << " exists: " << (int)obc->obs.exists
-	   << " ssc: " << obc->ssc
-	   << " snapset: " << obc->ssc->snapset << dendl;
+	   << " " << *obc->ssc << dendl;
   return obc;
 }
 
