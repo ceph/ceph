@@ -205,6 +205,11 @@
                                  [data]="queriesResults.READCLIENTTHROUGHPUT"
                                  [data2]="queriesResults.WRITECLIENTTHROUGHPUT">
         </cd-dashboard-area-chart>
+        <cd-dashboard-area-chart chartTitle="Recovery Throughput"
+                                 dataUnits="bytesPerSecond"
+                                 label="Recovery Throughput"
+                                 [data]="queriesResults.RECOVERYBYTES">
+        </cd-dashboard-area-chart>
       </div>
     </cd-card>
 
