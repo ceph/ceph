@@ -8850,7 +8850,7 @@ next:
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
       void *handle;
-      vector<cls_log_entry> entries;
+      vector<cls::log::entry> entries;
 
       meta_log->init_list_entries(i, {}, {}, marker, &handle);
       bool truncated;
@@ -8862,7 +8862,7 @@ next:
         }
 
         for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
-          cls_log_entry& entry = *iter;
+          cls::log::entry& entry = *iter;
           static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->dump_log_entry(entry, formatter.get());
         }
         formatter->flush(cout);
@@ -9464,7 +9464,7 @@ next:
       string oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX, shard_id);
 
       do {
-        vector<cls_log_entry> entries;
+        vector<cls::log::entry> entries;
         ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->timelog.list(dpp(), oid, {}, {}, max_entries - count, entries, marker, &marker, &truncated,
 					      null_yield);
 	if (ret == -ENOENT) {
@@ -10031,7 +10031,7 @@ next:
 
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_data_log_num_shards; i++) {
-      vector<cls_log_entry> entries;
+      vector<cls::log::entry> entries;
 
       RGWDataChangesLogInfo info;
       static_cast<rgw::sal::RadosStore*>(driver)->svc()->
