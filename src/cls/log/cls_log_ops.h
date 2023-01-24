@@ -4,14 +4,20 @@
 #ifndef CEPH_CLS_LOG_OPS_H
 #define CEPH_CLS_LOG_OPS_H
 
+#include <string>
+#include <vector>
+
 #include "common/ceph_json.h"
+#include "common/ceph_time.h"
+
 #include "cls_log_types.h"
 
-struct cls_log_add_op {
-  std::vector<cls_log_entry> entries;
-  bool monotonic_inc;
+namespace cls::log::ops {
+struct add_op {
+  std::vector<entry> entries;
+  bool monotonic_inc = true;
 
-  cls_log_add_op() : monotonic_inc(true) {}
+  add_op() = default;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 1, bl);
@@ -34,12 +40,12 @@ struct cls_log_add_op {
     encode_json("monotonic_inc", monotonic_inc, f);
   }
 
-  static void generate_test_instances(std::list<cls_log_add_op *>& l) {
+  static void generate_test_instances(std::list<add_op *>& l) {
     using namespace std::literals;
-    l.push_back(new cls_log_add_op);
-    l.push_back(new cls_log_add_op);
-    l.back()->entries.push_back(cls_log_entry());
-    l.back()->entries.push_back(cls_log_entry());
+    l.push_back(new add_op);
+    l.push_back(new add_op);
+    l.back()->entries.push_back(entry{});
+    l.back()->entries.push_back(entry{});
     l.back()->entries.back().section = "section";
     l.back()->entries.back().name = "name";
     l.back()->entries.back().timestamp = ceph::real_time{1s + 2ns};
@@ -47,16 +53,16 @@ struct cls_log_add_op {
     l.back()->entries.back().id = "id";
   }
 };
-WRITE_CLASS_ENCODER(cls_log_add_op)
+WRITE_CLASS_ENCODER(add_op)
 
-struct cls_log_list_op {
+struct list_op {
   ceph::real_time from_time;
   std::string marker; /* if not empty, overrides from_time */
   ceph::real_time to_time; /* not inclusive */
-  int max_entries; /* upperbound to returned num of entries
-                      might return less than that and still be truncated */
+  int max_entries = 0; /* upperbound to returned num of entries
+			  might return less than that and still be truncated */
 
-  cls_log_list_op() : max_entries(0) {}
+  list_op() = default;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
@@ -82,24 +88,24 @@ struct cls_log_list_op {
     f->dump_stream("to_time") << to_time;
     f->dump_int("max_entries", max_entries);
   }
-  static void generate_test_instances(std::list<cls_log_list_op*>& ls) {
+  static void generate_test_instances(std::list<list_op*>& ls) {
     using namespace std::literals;
-    ls.push_back(new cls_log_list_op);
-    ls.push_back(new cls_log_list_op);
+    ls.push_back(new list_op);
+    ls.push_back(new list_op);
     ls.back()->from_time = ceph::real_time{1s + 2ns};
     ls.back()->marker = "marker";
     ls.back()->to_time = ceph::real_time{3s + 4ns};
     ls.back()->max_entries = 5;
   }
 };
-WRITE_CLASS_ENCODER(cls_log_list_op)
+WRITE_CLASS_ENCODER(list_op)
 
-struct cls_log_list_ret {
-  std::vector<cls_log_entry> entries;
+struct list_ret {
+  std::vector<entry> entries;
   std::string marker;
   bool truncated;
 
-  cls_log_list_ret() : truncated(false) {}
+  list_ret() : truncated(false) {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
@@ -122,12 +128,12 @@ struct cls_log_list_ret {
     f->dump_string("marker", marker);
     f->dump_bool("truncated", truncated);
   }
-  static void generate_test_instances(std::list<cls_log_list_ret*>& ls) {
+  static void generate_test_instances(std::list<list_ret*>& ls) {
     using namespace std::literals;
-    ls.push_back(new cls_log_list_ret);
-    ls.push_back(new cls_log_list_ret);
-    ls.back()->entries.push_back(cls_log_entry());
-    ls.back()->entries.push_back(cls_log_entry());
+    ls.push_back(new list_ret);
+    ls.push_back(new list_ret);
+    ls.back()->entries.push_back(entry{});
+    ls.back()->entries.push_back(entry{});
     ls.back()->entries.back().section = "section";
     ls.back()->entries.back().name = "name";
     ls.back()->entries.back().timestamp = ceph::real_time{1s + 2ns};
@@ -137,20 +143,19 @@ struct cls_log_list_ret {
     ls.back()->truncated = true;
   }
 };
-WRITE_CLASS_ENCODER(cls_log_list_ret)
-
+WRITE_CLASS_ENCODER(list_ret)
 
 /*
  * operation will return 0 when successfully removed but not done. Will return
  * -ENODATA when done, so caller needs to repeat sending request until that.
  */
-struct cls_log_trim_op {
+struct trim_op {
   ceph::real_time from_time;
   ceph::real_time to_time; /* inclusive */
   std::string from_marker;
   std::string to_marker;
 
-  cls_log_trim_op() {}
+  trim_op() = default;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 1, bl);
@@ -177,20 +182,20 @@ struct cls_log_trim_op {
     f->dump_string("from_marker", from_marker);
     f->dump_string("to_marker", to_marker);
   }
-  static void generate_test_instances(std::list<cls_log_trim_op*>& ls) {
+  static void generate_test_instances(std::list<trim_op*>& ls) {
     using namespace std::literals;
-    ls.push_back(new cls_log_trim_op);
-    ls.push_back(new cls_log_trim_op);
+    ls.push_back(new trim_op);
+    ls.push_back(new trim_op);
     ls.back()->from_time = ceph::real_time{1s + 2ns};
     ls.back()->to_time = ceph::real_time(3s + 4ns);
     ls.back()->from_marker = "from_marker";
     ls.back()->to_marker = "to_marker";
   }
 };
-WRITE_CLASS_ENCODER(cls_log_trim_op)
+WRITE_CLASS_ENCODER(trim_op)
 
-struct cls_log_info_op {
-  cls_log_info_op() {}
+struct info_op {
+  info_op() = default;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
@@ -207,27 +212,28 @@ struct cls_log_info_op {
   void dump(ceph::Formatter* f) const {
   }
 
-  static void generate_test_instances(std::list<cls_log_info_op*>& ls) {
-    ls.push_back(new cls_log_info_op);
+  static void generate_test_instances(std::list<info_op*>& ls) {
+    ls.push_back(new info_op);
   }
 };
-WRITE_CLASS_ENCODER(cls_log_info_op)
+WRITE_CLASS_ENCODER(info_op)
 
-struct cls_log_info_ret {
-  cls_log_header header;
+struct info_ret {
+  cls::log::header header;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(header, bl);
+    encode(this->header, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(header, bl);
+    decode(this->header, bl);
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_log_info_ret)
+WRITE_CLASS_ENCODER(info_ret)
+} // namespace cls::log::ops
 
 #endif
