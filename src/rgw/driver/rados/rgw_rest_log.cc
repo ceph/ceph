@@ -111,7 +111,7 @@ void RGWOp_MDLog_List::send_response() {
     s->formatter->open_array_section("entries");
     for (auto iter = entries.begin();
 	 iter != entries.end(); ++iter) {
-      cls_log_entry& entry = *iter;
+      auto& entry = *iter;
       static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->dump_log_entry(entry, s->formatter);
       flusher.flush();
     }

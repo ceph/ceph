@@ -33,10 +33,10 @@ TYPE(RGWCacheNotifyInfo)
 TYPE(RGWLifecycleConfiguration)
 
 #include "cls/log/cls_log_types.h"
-TYPE(cls_log_entry)
+TYPE(cls::log::entry)
 
 #include "cls/log/cls_log_ops.h"
-TYPE(cls_log_add_op)
+TYPE(cls::log::ops::add_op)
 
 #include "cls/rgw/cls_rgw_types.h"
 TYPE(rgw_bucket_pending_info)
