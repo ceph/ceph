@@ -9437,7 +9437,7 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch)
   const uint64_t owner = op->get_req()->get_source().num();
   const int type = op->get_req()->get_type();
 
-  dout(15) << "enqueue_op " << op << " prio " << priority
+  dout(15) << "enqueue_op " << *op->get_req() << " prio " << priority
            << " type " << type
 	   << " cost " << cost
 	   << " latency " << latency
@@ -9501,7 +9501,8 @@ void OSD::dequeue_op(
   op->set_dequeued_time(now);
 
   utime_t latency = now - m->get_recv_stamp();
-  dout(10) << "dequeue_op " << op << " prio " << m->get_priority()
+  dout(10) << "dequeue_op " << *op->get_req()
+           << " prio " << m->get_priority()
 	   << " cost " << m->get_cost()
 	   << " latency " << latency
 	   << " " << *m
@@ -9522,7 +9523,7 @@ void OSD::dequeue_op(
   pg->do_request(op, handle);
 
   // finish
-  dout(10) << "dequeue_op " << op << " finish" << dendl;
+  dout(10) << "dequeue_op " << *op->get_req() << " finish" << dendl;
   OID_EVENT_TRACE_WITH_MSG(m, "DEQUEUE_OP_END", false);
 }
 
