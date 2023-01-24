@@ -148,12 +148,14 @@ class CephTestCase(unittest.TestCase):
 
         return ContextManager()
 
-    def wait_for_health(self, pattern, timeout):
+    def wait_for_health(self, pattern, timeout, check_in_detail=None):
         """
         Wait until 'ceph health' contains messages matching the pattern
+        Also check if @check_in_detail matches detailed health messages
+        only when @pattern is a code string.
         """
         def seen_health_warning():
-            health = self.ceph_cluster.mon_manager.get_mon_health()
+            health = self.ceph_cluster.mon_manager.get_mon_health(debug=False, detail=bool(check_in_detail))
             codes = [s for s in health['checks']]
             summary_strings = [s[1]['summary']['message'] for s in health['checks'].items()]
             if len(summary_strings) == 0:
@@ -164,7 +166,16 @@ class CephTestCase(unittest.TestCase):
                     if pattern in ss:
                          return True
                 if pattern in codes:
-                    return True
+                    if not check_in_detail:
+                        return True
+                    # check if the string is in detail list if asked
+                    detail_strings = [ss['message'] for ss in \
+                                      [s for s in health['checks'][pattern]['detail']]]
+                    log.debug(f'detail_strings: {detail_strings}')
+                    for ds in detail_strings:
+                        if check_in_detail in ds:
+                            return True
+                    log.debug(f'detail string "{check_in_detail}" not found')
 
             log.debug("Not found expected summary strings yet ({0})".format(summary_strings))
             return False
