@@ -47,4 +47,4 @@ struct RGWProcessEnv {
   rgw::flight::FlightStore* flight_store;
 #endif
 };
- 
+

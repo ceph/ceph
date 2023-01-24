@@ -34,7 +34,7 @@ class RGWPauser : public RGWRealmReloader::Pauser {
 
 public:
   ~RGWPauser() override = default;
-  
+
   void add_pauser(Pauser* pauser) {
     pausers.push_back(pauser);
   }

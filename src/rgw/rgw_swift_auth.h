@@ -46,7 +46,7 @@ class TempURLEngine : public rgw::auth::Engine {
   const TempURLApplier::Factory* const apl_factory;
 
   /* Helper methods. */
-  void get_owner_info(const DoutPrefixProvider* dpp, 
+  void get_owner_info(const DoutPrefixProvider* dpp,
                       const req_state* s,
                       RGWUserInfo& owner_info,
 		      optional_yield y) const;
