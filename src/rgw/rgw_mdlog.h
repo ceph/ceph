@@ -38,9 +38,9 @@ class RGWCompletionManager;
 
 class RGWMetadataLogInfoCompletion : public RefCountedObject {
  public:
-  using info_callback_t = std::function<void(int, const cls_log_header&)>;
+  using info_callback_t = std::function<void(int, const cls::log::header&)>;
  private:
-  cls_log_header header;
+  cls::log::header header;
   rgw_rados_ref io_obj;
   librados::AioCompletion *completion;
   std::mutex mutex; //< protects callback between cancel/complete
@@ -50,7 +50,7 @@ class RGWMetadataLogInfoCompletion : public RefCountedObject {
   ~RGWMetadataLogInfoCompletion() override;
 
   rgw_rados_ref& get_io_obj() { return io_obj; }
-  cls_log_header& get_header() { return header; }
+  cls::log::header& get_header() { return header; }
   librados::AioCompletion* get_completion() { return completion; }
 
   void finish(librados::completion_t cb) {
@@ -105,7 +105,7 @@ public:
 
   int add_entry(const DoutPrefixProvider *dpp, const std::string& hash_key, const std::string& section, const std::string& key, bufferlist& bl, optional_yield y);
   int get_shard_id(const std::string& hash_key, int *shard_id);
-  int store_entries_in_shard(const DoutPrefixProvider *dpp, std::vector<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
+  int store_entries_in_shard(const DoutPrefixProvider *dpp, std::vector<cls::log::entry>& entries, int shard_id, librados::AioCompletion *completion);
 
   struct LogListCtx {
     int cur_shard;
@@ -127,7 +127,7 @@ public:
   int list_entries(const DoutPrefixProvider *dpp,
                    void *handle,
                    int max_entries,
-                   std::vector<cls_log_entry>& entries,
+                   std::vector<cls::log::entry>& entries,
 		   std::string *out_marker,
 		   bool *truncated,
 		   optional_yield y);
