@@ -44,7 +44,7 @@ struct rgw_mdlog_entry {
     id = le.id;
     section = le.section;
     name = le.name;
-    timestamp = le.timestamp.to_real_time();
+    timestamp = le.timestamp;
     try {
       auto iter = le.data.cbegin();
       decode(log_data, iter);
