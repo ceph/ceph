@@ -81,6 +81,15 @@ system name:
 
     ceph orch ps --daemon_type osd --daemon_id 0
 
+.. note::
+   The output of the command ``ceph orch ps`` may not reflect the current status of the daemons. By default,
+   the status is updated every 10 minutes. This interval can be shortened by modifying the ``mgr/cephadm/daemon_cache_timeout``
+   configuration variable (in seconds) e.g: ``ceph config set mgr mgr/cephadm/daemon_cache_timeout 60`` would reduce the refresh
+   interval to one minute. The information is updated every ``daemon_cache_timeout`` seconds unless the ``--refresh`` option
+   is used. This option would trigger a request to refresh the information, which may take some time depending on the size of
+   the cluster. In general ``REFRESHED`` value indicates how recent the information displayed by ``ceph orch ps`` and similar
+   commands is.
+
 .. _orchestrator-cli-service-spec:
 
 Service Specification
