@@ -39,7 +39,7 @@ string RGWSyncErrorLogger::get_shard_oid(const string& oid_prefix, int shard_id)
 }
 
 RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const DoutPrefixProvider *dpp, const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message) {
-  cls_log_entry entry;
+  cls::log::entry entry;
 
   rgw_sync_error_info info(source_zone, error_code, message);
   bufferlist bl;
@@ -399,7 +399,7 @@ protected:
   }
 public:
   string marker;
-  vector<cls_log_entry> entries;
+  vector<cls::log::entry> entries;
   bool truncated;
 
   RGWAsyncReadMDLogEntries(const DoutPrefixProvider *dpp, RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
@@ -416,7 +416,7 @@ class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
   string marker;
   string *pmarker;
   int max_entries;
-  vector<cls_log_entry> *entries;
+  vector<cls::log::entry> *entries;
   bool *truncated;
 
   RGWAsyncReadMDLogEntries *req{nullptr};
@@ -424,7 +424,7 @@ class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
 public:
   RGWReadMDLogEntriesCR(RGWMetaSyncEnv *_sync_env, RGWMetadataLog* mdlog,
                         int _shard_id, string*_marker, int _max_entries,
-                        vector<cls_log_entry> *_entries, bool *_truncated)
+                        vector<cls::log::entry> *_entries, bool *_truncated)
     : RGWSimpleCoroutine(_sync_env->cct), sync_env(_sync_env), mdlog(mdlog),
       shard_id(_shard_id), pmarker(_marker), max_entries(_max_entries),
       entries(_entries), truncated(_truncated) {}
@@ -1449,7 +1449,7 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   RGWMetaSyncShardMarkerTrack *marker_tracker = nullptr;
 
-  vector<cls_log_entry> log_entries;
+  vector<cls::log::entry> log_entries;
   decltype(log_entries)::iterator log_iter;
   bool truncated = false;
 
@@ -2472,7 +2472,7 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status()
   const bool add_ref = false; // default constructs with refs=1
 
   completion.reset(new RGWMetadataLogInfoCompletion(
-    [this](int ret, const cls_log_header& header) {
+    [this](int ret, const cls::log::header& header) {
       if (ret < 0) {
         if (ret != -ENOENT) {
           ldpp_dout(sync_env->dpp, 1) << "ERROR: failed to read mdlog info with "
@@ -2579,14 +2579,14 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
 
 int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
 {
-  vector<cls_log_entry> dest_entries;
+  vector<cls::log::entry> dest_entries;
 
   vector<rgw_mdlog_entry>::iterator iter;
   for (iter = data.entries.begin(); iter != data.entries.end(); ++iter) {
     rgw_mdlog_entry& entry = *iter;
     ldpp_dout(sync_env->dpp, 20) << "entry: name=" << entry.name << dendl;
 
-    cls_log_entry dest_entry;
+    cls::log::entry dest_entry;
     dest_entry.id = entry.id;
     dest_entry.section = entry.section;
     dest_entry.name = entry.name;

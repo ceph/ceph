@@ -33,7 +33,6 @@
 #include "common/RefCountedObj.h"
 
 #include "cls/log/cls_log_types.h"
-
 #include "rgw_basic_types.h"
 #include "rgw_log_backing.h"
 #include "rgw_sync_policy.h"
@@ -357,7 +356,7 @@ protected:
     return datalog.get_oid(gen_id, shard_id);
   }
 public:
-  using entries = std::variant<std::vector<cls_log_entry>,
+  using entries = std::variant<std::vector<cls::log::entry>,
 			       std::vector<ceph::buffer::list>>;
 
   const uint64_t gen_id;

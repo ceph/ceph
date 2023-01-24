@@ -17,17 +17,18 @@
 class JSONObj;
 class JSONDecoder;
 
-struct cls_log_entry {
+namespace cls::log {
+struct entry {
   std::string id;
   std::string section;
   std::string name;
   ceph::real_time timestamp;
   ceph::buffer::list data;
 
-  cls_log_entry() = default;
+  entry() = default;
 
-  cls_log_entry(ceph::real_time timestamp, std::string section,
-		std::string name, ceph::buffer::list&& data)
+  entry(ceph::real_time timestamp, std::string section,
+	std::string name, ceph::buffer::list&& data)
     : section(std::move(section)), name(std::move(name)),
       timestamp(timestamp), data(std::move(data)) {}
 
@@ -68,9 +69,9 @@ struct cls_log_entry {
     JSONDecoder::decode_json("id", id, obj);
   }
 
-  static void generate_test_instances(std::list<cls_log_entry *>& l) {
-    l.push_back(new cls_log_entry{});
-    l.push_back(new cls_log_entry);
+  static void generate_test_instances(std::list<cls::log::entry *>& l) {
+    l.push_back(new cls::log::entry{});
+    l.push_back(new cls::log::entry);
     l.back()->id = "test_id";
     l.back()->section = "test_section";
     l.back()->name = "test_name";
@@ -80,9 +81,9 @@ struct cls_log_entry {
     l.back()->data = bl;
   }
 };
-WRITE_CLASS_ENCODER(cls_log_entry)
+WRITE_CLASS_ENCODER(entry)
 
-struct cls_log_header {
+struct header {
   std::string max_marker;
   ceph::real_time max_time;
 
@@ -99,25 +100,20 @@ struct cls_log_header {
     decode(max_time, bl);
     DECODE_FINISH(bl);
   }
+
   void dump(ceph::Formatter* f) const {
     f->dump_string("max_marker", max_marker);
     f->dump_stream("max_time") << max_time;
   }
-  static void generate_test_instances(std::list<cls_log_header*>& o) {
-    o.push_back(new cls_log_header);
-    o.push_back(new cls_log_header);
+  static void generate_test_instances(std::list<header*>& o) {
+    o.push_back(new header);
+    o.push_back(new header);
     o.back()->max_marker = "test_marker";
     o.back()->max_time = ceph::real_clock::zero();
   }
+  friend auto operator <=>(const header&, const header&) = default;
 };
-inline bool operator ==(const cls_log_header& lhs, const cls_log_header& rhs) {
-  return (lhs.max_marker == rhs.max_marker &&
-	  lhs.max_time == rhs.max_time);
-}
-inline bool operator !=(const cls_log_header& lhs, const cls_log_header& rhs) {
-  return !(lhs == rhs);
-}
-WRITE_CLASS_ENCODER(cls_log_header)
-
+WRITE_CLASS_ENCODER(header)
+} // namespace cls::log
 
 #endif
