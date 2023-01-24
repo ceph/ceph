@@ -670,7 +670,8 @@ void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
   f->dump_string("id", entry.id);
   f->dump_string("section", entry.section);
   f->dump_string("name", entry.name);
-  entry.timestamp.gmtime_nsec(f->dump_stream("timestamp"));
+  utime_t ts(entry.timestamp);
+  ts.gmtime_nsec(f->dump_stream("timestamp"));
 
   try {
     RGWMetadataLogData log_data;
