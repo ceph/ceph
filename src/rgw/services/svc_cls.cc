@@ -256,7 +256,7 @@ int RGWSI_Cls::MFA::list_mfa(const DoutPrefixProvider *dpp, const string& oid, l
   return 0;
 }
 
-void RGWSI_Cls::TimeLog::prepare_entry(cls_log_entry& entry,
+void RGWSI_Cls::TimeLog::prepare_entry(cls::log::entry& entry,
                                        const real_time& ut,
                                        const string& section,
                                        const string& key,
@@ -295,7 +295,7 @@ int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp,
 
 int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp,
                             const string& oid,
-                            std::vector<cls_log_entry>& entries,
+                            std::vector<cls::log::entry>& entries,
                             librados::AioCompletion *completion,
                             bool monotonic_inc,
                             optional_yield y)
@@ -322,7 +322,7 @@ int RGWSI_Cls::TimeLog::list(const DoutPrefixProvider *dpp,
                              const string& oid,
                              const real_time& start_time,
                              const real_time& end_time,
-                             int max_entries, std::vector<cls_log_entry>& entries,
+                             int max_entries, std::vector<cls::log::entry>& entries,
                              const string& marker,
                              string *out_marker,
                              bool *truncated,
@@ -351,7 +351,7 @@ int RGWSI_Cls::TimeLog::list(const DoutPrefixProvider *dpp,
 
 int RGWSI_Cls::TimeLog::info(const DoutPrefixProvider *dpp, 
                              const string& oid,
-                             cls_log_header *header,
+                             cls::log::header *header,
                              optional_yield y)
 {
   RGWSI_RADOS::Obj obj;
@@ -377,7 +377,7 @@ int RGWSI_Cls::TimeLog::info(const DoutPrefixProvider *dpp,
 int RGWSI_Cls::TimeLog::info_async(const DoutPrefixProvider *dpp,
                                    RGWSI_RADOS::Obj& obj,
                                    const string& oid,
-                                   cls_log_header *header,
+                                   cls::log::header *header,
                                    librados::AioCompletion *completion)
 {
   int r = init_obj(dpp, oid, obj);
