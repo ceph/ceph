@@ -98,7 +98,7 @@ void rgw_data_notify_entry::decode_json(JSONObj *obj) {
 }
 
 class RGWDataChangesOmap final : public RGWDataChangesBE {
-  using centries = std::vector<cls_log_entry>;
+  using centries = std::vector<cls::log::entry>;
   std::vector<std::string> oids;
 
 public:
@@ -121,7 +121,7 @@ public:
       out = centries();
     }
 
-    cls_log_entry e;
+    cls::log::entry e;
     cls_log_add_prepare_entry(e, ut, {}, key, entry);
     std::get<centries>(out).push_back(std::move(e));
   }
@@ -154,7 +154,7 @@ public:
 	   std::optional<std::string_view> marker,
 	   std::string* out_marker, bool* truncated,
 	   optional_yield y) override {
-    std::vector<cls_log_entry> log_entries;
+    std::vector<cls::log::entry> log_entries;
     lr::ObjectReadOperation op;
     cls_log_list(op, {}, {}, std::string(marker.value_or("")),
 		 max_entries, log_entries, out_marker, truncated);
@@ -189,7 +189,7 @@ public:
   }
   int get_info(const DoutPrefixProvider *dpp, int index,
 	       RGWDataChangesLogInfo *info, optional_yield y) override {
-    cls_log_header header;
+    cls::log::header header;
     lr::ObjectReadOperation op;
     cls_log_info(op, &header);
     auto r = rgw_rados_operate(dpp, ioctx, oids[index], &op, nullptr, y);
@@ -235,7 +235,7 @@ public:
   }
   int is_empty(const DoutPrefixProvider *dpp, optional_yield y) override {
     for (auto shard = 0u; shard < oids.size(); ++shard) {
-      std::vector<cls_log_entry> log_entries;
+      std::vector<cls::log::entry> log_entries;
       lr::ObjectReadOperation op;
       std::string out_marker;
       bool truncated;
@@ -539,7 +539,7 @@ int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
   if (!zone->log_data)
     return 0;
 
-  /* we can't keep the bucket name as part of the cls_log_entry, and we need
+  /* we can't keep the bucket name as part of the cls::log::entry, and we need
    * it later, so we keep two lists under the map */
   bc::flat_map<int, std::pair<std::vector<BucketGen>,
 			      RGWDataChangesBE::entries>> m;
