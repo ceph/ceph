@@ -3692,3 +3692,14 @@ options:
   default: tank
   services:
   - rgw
+- name: backend_url
+  type: str
+  level: advanced
+  desc: datalake url
+  default: "localhost:8000"
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+
