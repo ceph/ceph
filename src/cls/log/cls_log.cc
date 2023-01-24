@@ -2,7 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
-#include "include/utime.h"
+
+#include "common/ceph_time.h"
+
 #include "objclass/objclass.h"
 
 #include "cls_log_types.h"
@@ -15,6 +17,7 @@ using std::map;
 using std::string;
 
 using ceph::bufferlist;
+using namespace std::literals;
 
 CLS_VER(1,0)
 CLS_NAME(log)
@@ -34,10 +37,11 @@ static int write_log_entry(cls_method_context_t hctx, string& index, cls_log_ent
   return 0;
 }
 
-static void get_index_time_prefix(utime_t& ts, string& index)
+static void get_index_time_prefix(ceph::real_time ts, string& index)
 {
+  auto tv = ceph::real_clock::to_timeval(ts);
   char buf[32];
-  snprintf(buf, sizeof(buf), "%010ld.%06ld_", (long)ts.sec(), (long)ts.usec());
+  snprintf(buf, sizeof(buf), "%010ld.%06ld_", (long)tv.tv_sec, (long)tv.tv_usec);
 
   index = log_index_prefix + buf;
 }
@@ -77,7 +81,7 @@ static int write_header(cls_method_context_t hctx, cls_log_header& header)
   return 0;
 }
 
-static void get_index(cls_method_context_t hctx, utime_t& ts, string& index)
+static void get_index(cls_method_context_t hctx, ceph::real_time ts, string& index)
 {
   get_index_time_prefix(ts, index);
 
@@ -111,7 +115,7 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
 
     string index;
 
-    utime_t timestamp = entry.timestamp;
+    auto timestamp = entry.timestamp;
     if (op.monotonic_inc && timestamp < header.max_time)
       timestamp = header.max_time;
     else if (timestamp > header.max_time)
@@ -164,12 +168,12 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   } else {
     from_index = op.marker;
   }
-  bool use_time_boundary = (!op.from_time.is_zero() && (op.to_time >= op.from_time));
+  bool use_time_boundary = (!ceph::real_clock::is_zero(op.from_time) && (op.to_time >= op.from_time));
 
   if (use_time_boundary)
     get_index_time_prefix(op.to_time, to_index);
 
-#define MAX_ENTRIES 1000
+  static constexpr auto MAX_ENTRIES = 1000u;
   size_t max_entries = op.max_entries;
   if (!max_entries || max_entries > MAX_ENTRIES)
     max_entries = MAX_ENTRIES;
@@ -236,8 +240,7 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   // cls_cxx_map_remove_range() expects one-past-end
   if (op.to_marker.empty()) {
     auto t = op.to_time;
-    t.nsec_ref() += 1000; // equivalent to usec() += 1
-    t.normalize();
+    t += 1000us; // equivalent to usec() += 1
     get_index_time_prefix(t, to_index);
   } else {
     to_index = op.to_marker;
