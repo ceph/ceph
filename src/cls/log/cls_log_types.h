@@ -8,10 +8,11 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/types.h"
-#include "include/utime.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
+
+#include "common/ceph_time.h"
 
 class JSONObj;
 class JSONDecoder;
@@ -20,7 +21,7 @@ struct cls_log_entry {
   std::string id;
   std::string section;
   std::string name;
-  utime_t timestamp;
+  ceph::real_time timestamp;
   ceph::buffer::list data;
 
   cls_log_entry() = default;
@@ -28,12 +29,7 @@ struct cls_log_entry {
   cls_log_entry(ceph::real_time timestamp, std::string section,
 		std::string name, ceph::buffer::list&& data)
     : section(std::move(section)), name(std::move(name)),
-      timestamp(utime_t(timestamp)), data(std::move(data)) {}
-
-  cls_log_entry(utime_t timestamp, std::string section,
-		std::string name, ceph::buffer::list&& data)
-    : section(std::move(section)), name(std::move(name)), timestamp(timestamp),
-      data(std::move(data)) {}
+      timestamp(timestamp), data(std::move(data)) {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 1, bl);
@@ -78,7 +74,7 @@ struct cls_log_entry {
     l.back()->id = "test_id";
     l.back()->section = "test_section";
     l.back()->name = "test_name";
-    l.back()->timestamp = utime_t();
+    l.back()->timestamp = ceph::real_time{};
     ceph::buffer::list bl;
     ceph::encode(std::string("Test"), bl, 0);
     l.back()->data = bl;
@@ -88,7 +84,7 @@ WRITE_CLASS_ENCODER(cls_log_entry)
 
 struct cls_log_header {
   std::string max_marker;
-  utime_t max_time;
+  ceph::real_time max_time;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
@@ -111,7 +107,7 @@ struct cls_log_header {
     o.push_back(new cls_log_header);
     o.push_back(new cls_log_header);
     o.back()->max_marker = "test_marker";
-    o.back()->max_time = utime_t();
+    o.back()->max_time = ceph::real_clock::zero();
   }
 };
 inline bool operator ==(const cls_log_header& lhs, const cls_log_header& rhs) {

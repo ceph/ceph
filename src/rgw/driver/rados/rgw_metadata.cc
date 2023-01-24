@@ -137,7 +137,7 @@ int RGWMetadataLog::get_info(const DoutPrefixProvider *dpp, int shard_id, RGWMet
     return ret;
 
   info->marker = header.max_marker;
-  info->last_update = header.max_time.to_real_time();
+  info->last_update = header.max_time;
 
   return 0;
 }

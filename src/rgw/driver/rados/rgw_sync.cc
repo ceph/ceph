@@ -1874,7 +1874,7 @@ public:
               continue;
             }
             tn->log(20, SSTR("log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp));
-            if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp.to_real_time())) {
+            if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp)) {
               ldpp_dout(sync_env->dpp, 0) << "ERROR: cannot start syncing " << log_iter->id << ". Duplicate entry?" << dendl;
             } else {
               raw_key = log_iter->section + ":" + log_iter->name;
@@ -2480,7 +2480,7 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status()
         }
       } else {
         shard_info.marker = header.max_marker;
-        shard_info.last_update = header.max_time.to_real_time();
+        shard_info.last_update = header.max_time;
       }
       // wake up parent stack
       io_complete();
@@ -2590,7 +2590,7 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
     dest_entry.id = entry.id;
     dest_entry.section = entry.section;
     dest_entry.name = entry.name;
-    dest_entry.timestamp = utime_t(entry.timestamp);
+    dest_entry.timestamp = entry.timestamp;
   
     encode(entry.log_data, dest_entry.data);
 
