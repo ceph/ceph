@@ -2850,9 +2850,9 @@ uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
   constexpr uint32_t end_pos = std::numeric_limits<uint32_t>::max();
 
   uint32_t csum_chunk_order = src_blob.csum_chunk_order;
-  uint32_t csum_value_size;
-  const char* src_csum_ptr;
-  char* dst_csum_ptr;
+  uint32_t csum_value_size = 0;
+  const char* src_csum_ptr = nullptr;
+  char* dst_csum_ptr = nullptr;
   if (src_blob.has_csum()) {
     csum_value_size = src_blob.get_csum_value_size();
     src_csum_ptr = src_blob.csum_data.c_str();
@@ -3272,13 +3272,12 @@ void BlueStore::ExtentMap::make_range_shared(
 void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
   CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
   uint64_t& length, uint64_t& dstoff) {
-  OnodeCacheShard* ocs = c->get_onode_cache();
-  ocs->lock.lock();
-  // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
-  while (ocs != c->get_onode_cache()) {
-    ocs->lock.unlock();
-    ocs = c->get_onode_cache();
-    ocs->lock.lock();
+  BufferCacheShard* bcs = c->cache;
+  bcs->lock.lock();
+  while(bcs != c->cache) {
+    bcs->lock.unlock();
+    bcs = c->cache;
+    bcs->lock.lock();
   }
   make_range_shared(b, txc, c, oldo, srcoff, length);
   vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
@@ -3393,7 +3392,7 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
     newo->onode.size = dstoff + length;
   }
   newo->extent_map.dirty_range(dstoff, length);
-  ocs->lock.unlock();
+  bcs->lock.unlock();
 }
 void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
                                   bool force)
