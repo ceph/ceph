@@ -80,7 +80,7 @@ public:
   public:
     TimeLog(CephContext *cct): ClsSubService(cct) {}
 
-    void prepare_entry(cls_log_entry& entry,
+    void prepare_entry(cls::log::entry& entry,
                        const real_time& ut,
                        const std::string& section,
                        const std::string& key,
@@ -94,7 +94,7 @@ public:
             optional_yield y);
     int add(const DoutPrefixProvider *dpp, 
             const std::string& oid,
-            std::vector<cls_log_entry>& entries,
+            std::vector<cls::log::entry>& entries,
             librados::AioCompletion *completion,
             bool monotonic_inc,
             optional_yield y);
@@ -102,19 +102,19 @@ public:
              const std::string& oid,
              const real_time& start_time,
              const real_time& end_time,
-             int max_entries, std::vector<cls_log_entry>& entries,
+             int max_entries, std::vector<cls::log::entry>& entries,
              const std::string& marker,
              std::string *out_marker,
              bool *truncated,
              optional_yield y);
     int info(const DoutPrefixProvider *dpp, 
              const std::string& oid,
-             cls_log_header *header,
+             cls::log::header *header,
              optional_yield y);
     int info_async(const DoutPrefixProvider *dpp,
                    rgw_rados_ref& obj,
                    const std::string& oid,
-                   cls_log_header *header,
+                   cls::log::header *header,
                    librados::AioCompletion *completion);
     int trim(const DoutPrefixProvider *dpp, 
              const std::string& oid,
