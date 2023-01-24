@@ -3,9 +3,11 @@
 #ifndef CEPH_CLS_LOG_TYPES_H
 #define CEPH_CLS_LOG_TYPES_H
 
+#include <string>
+
+#include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/types.h"
-
 #include "include/utime.h"
 
 #include "common/ceph_json.h"
@@ -14,7 +16,6 @@
 class JSONObj;
 class JSONDecoder;
 
-
 struct cls_log_entry {
   std::string id;
   std::string section;
@@ -22,7 +23,17 @@ struct cls_log_entry {
   utime_t timestamp;
   ceph::buffer::list data;
 
-  cls_log_entry() {}
+  cls_log_entry() = default;
+
+  cls_log_entry(ceph::real_time timestamp, std::string section,
+		std::string name, ceph::buffer::list&& data)
+    : section(std::move(section)), name(std::move(name)),
+      timestamp(utime_t(timestamp)), data(std::move(data)) {}
+
+  cls_log_entry(utime_t timestamp, std::string section,
+		std::string name, ceph::buffer::list&& data)
+    : section(std::move(section)), name(std::move(name)), timestamp(timestamp),
+      data(std::move(data)) {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 1, bl);
