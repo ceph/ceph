@@ -16,6 +16,12 @@
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/slist.hpp>
 
+#ifdef __CEPH__
+# include "include/ceph_assert.h"
+#else
+# include <assert.h>
+#endif
+
 #include "common/likely.h"
 
 #ifndef CACHE_LINE_SIZE

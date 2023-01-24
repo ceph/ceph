@@ -204,7 +204,6 @@ protected:
       virtual int check_bucket_shards(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual int chown(const DoutPrefixProvider *dpp, User& new_user, optional_yield y) override;
       virtual int put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time mtime, optional_yield y) override;
-      virtual bool is_owner(User* user) override;
       virtual int check_empty(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
       virtual int merge_and_store_attrs(const DoutPrefixProvider *dpp, Attrs& attrs, optional_yield y) override;
@@ -318,7 +317,10 @@ protected:
     public:
       DBZone(DBStore* _store) : store(_store) {
 	realm = new RGWRealm();
-        zonegroup = new DBZoneGroup(store, std::make_unique<RGWZoneGroup>());
+	std::unique_ptr<RGWZoneGroup> rzg = std::make_unique<RGWZoneGroup>("default", "default");
+	rzg->api_name = "default";
+	rzg->is_master = true;
+        zonegroup = new DBZoneGroup(store, std::move(rzg));
         zone_public_config = new RGWZone();
         zone_params = new RGWZoneParams();
         current_period = new RGWPeriod();

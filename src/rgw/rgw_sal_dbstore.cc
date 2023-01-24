@@ -339,12 +339,6 @@ namespace rgw::sal {
 
   }
 
-  /* Make sure to call get_bucket_info() if you need it first */
-  bool DBBucket::is_owner(User* user)
-  {
-    return (info.owner.compare(user->get_id()) == 0);
-  }
-
   int DBBucket::check_empty(const DoutPrefixProvider *dpp, optional_yield y)
   {
     /* XXX: Check if bucket contains any objects */
@@ -572,6 +566,9 @@ namespace rgw::sal {
 
   bool DBZone::has_zonegroup_api(const std::string& api) const
   {
+    if (api == "default")
+      return true;
+
     return false;
   }
 
@@ -1721,7 +1718,11 @@ namespace rgw::sal {
   int DBStore::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zg)
   {
     /* XXX: for now only one zonegroup supported */
-    ZoneGroup* group = new DBZoneGroup(this, std::make_unique<RGWZoneGroup>());
+    std::unique_ptr<RGWZoneGroup> rzg =
+        std::make_unique<RGWZoneGroup>("default", "default");
+    rzg->api_name = "default";
+    rzg->is_master = true;
+    ZoneGroup* group = new DBZoneGroup(this, std::move(rzg));
     if (!group)
       return -ENOMEM;
 
