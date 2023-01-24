@@ -318,7 +318,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     .addTemplate(
       $.addTemplateSchema('ceph_hosts',
                           '$datasource',
-                          'label_values({%(clusterMatcher)s}, instance)' % $.matchers(),
+                          if $._config.showMultiCluster then ('label_values({%(clusterMatcher)s}, instance)' % $.matchers()) else 'label_values(instance)',
                           1,
                           false,
                           3,
