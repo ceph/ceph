@@ -14,6 +14,7 @@ function usage {
 
 
 function create {
+  ceph config set mds mds_bal_fragment_dirs 0
   mkdir dir
   DIR_INODE=$(stat -c '%i' dir)
   touch dir/a
@@ -35,6 +36,11 @@ function create {
   touch dir/a
   # unlink then create, HEAD not snapped
   ls dir/.snap/*/
+  mkdir big
+  BIG_DIR_INODE=$(stat -c '%i' big)
+  for i in `seq 1 15000`; do
+    touch $(printf 'big/%08d' $i)
+  done
 }
 
 function flush {
@@ -61,6 +67,12 @@ function damage {
   rados --pool="$METADATA_POOL" getomapval "$IS" a_head "$T"
   printf '\xfe\xff\xff\xff' | dd of="$T" count=4 bs=1 conv=notrunc,nocreat
   rados --pool="$METADATA_POOL" setomapval "$IS" a_head --input-file="$T"
+
+  # screw up HEAD on what dentry in big
+  IS=$(printf '%llx.%08llx' "$BIG_DIR_INODE" 0)
+  rados --pool="$METADATA_POOL" getomapval "$IS" 00009999_head "$T"
+  printf '\xfe\xff\xff\xff' | dd of="$T" count=4 bs=1 conv=notrunc,nocreat
+  rados --pool="$METADATA_POOL" setomapval "$IS" 00009999_head --input-file="$T"
 
   rm -f "$T"
 }
