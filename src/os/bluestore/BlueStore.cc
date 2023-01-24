@@ -18714,7 +18714,7 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
   BlueFS::FileReader *p_temp_handle = nullptr;
   int ret = bluefs->open_for_read(allocator_dir, allocator_file, &p_temp_handle, false);
   if (ret != 0) {
-    derr << "Failed open_for_read with error-code " << ret << dendl;
+    dout(1) << "Failed open_for_read with error-code " << ret << dendl;
     return -1;
   }
   unique_ptr<BlueFS::FileReader> p_handle(p_temp_handle);
@@ -18724,7 +18724,7 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
 
   // make sure we were able to store a valid copy
   if (file_size == 0) {
-    derr << "No Valid allocation info on disk (empty file)" << dendl;
+    dout(1) << "No Valid allocation info on disk (empty file)" << dendl;
     return -1;
   }
 
@@ -18817,7 +18817,7 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
 
   }
 
-  // finally, read teh trailer and verify it is in good shape and that we got all the extents
+  // finally, read the trailer and verify it is in good shape and that we got all the extents
   {
     bufferlist trailer_bl,temp_bl;
     int        read_bytes = bluefs->read(p_handle.get(), offset, trailer_size, &temp_bl, nullptr);
