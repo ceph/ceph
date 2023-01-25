@@ -4356,6 +4356,12 @@ int OSD::shutdown()
     cct->_conf.apply_changes(nullptr);
   }
 
+  // stop MgrClient earlier as it's more like an internal consumer of OSD
+  // 
+  // should occur before unmounting the database in fast-shutdown to avoid
+  // a race condition (see https://tracker.ceph.com/issues/56101)
+  mgrc.shutdown();
+
   if (cct->_conf->osd_fast_shutdown) {
     // first, stop new task from being taken from op_shardedwq
     // and clear all pending tasks
@@ -4394,9 +4400,6 @@ int OSD::shutdown()
     // now it is safe to exit
     _exit(0);
   }
-
-  // stop MgrClient earlier as it's more like an internal consumer of OSD
-  mgrc.shutdown();
 
   service.start_shutdown();
 
