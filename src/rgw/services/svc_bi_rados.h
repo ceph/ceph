@@ -134,7 +134,8 @@ public:
                          std::list<cls_rgw_bucket_instance_entry> *status);
 
   int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,
-                       const RGWBucketInfo& orig_info) override;
+                       const RGWBucketInfo& orig_info,
+		       optional_yield y) override;
 
   int open_bucket_index_shard(const DoutPrefixProvider *dpp,
                               const RGWBucketInfo& bucket_info,
