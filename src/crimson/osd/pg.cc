@@ -136,7 +136,7 @@ PG::PG(
       this),
     obc_loader{
       shard_services,
-      backend.get()},
+      *backend.get()},
     wait_for_active_blocker(this)
 {
   peering_state.set_backend_predicates(

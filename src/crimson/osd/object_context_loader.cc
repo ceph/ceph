@@ -101,7 +101,7 @@ using crimson::common::local_conf;
   ObjectContextLoader::load_obc_iertr::future<ObjectContextRef>
   ObjectContextLoader::load_obc(ObjectContextRef obc)
   {
-    return backend->load_metadata(obc->get_oid())
+    return backend.load_metadata(obc->get_oid())
     .safe_then_interruptible(
       [obc=std::move(obc)](auto md)
       -> load_obc_ertr::future<ObjectContextRef> {
@@ -152,7 +152,7 @@ using crimson::common::local_conf;
   ObjectContextLoader::reload_obc(ObjectContext& obc) const
   {
     assert(obc.is_head());
-    return backend->load_metadata(obc.get_oid())
+    return backend.load_metadata(obc.get_oid())
     .safe_then_interruptible<false>(
       [&obc](auto md)-> load_obc_ertr::future<> {
       logger().debug(
