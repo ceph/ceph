@@ -162,7 +162,10 @@ using crimson::common::local_conf;
 
   void ObjectContextLoader::notify_on_change(bool is_primary)
   {
+    LOG_PREFIX(ObjectContextLoader::notify_on_change);
+    DEBUGDPP("is_primary: {}", dpp, is_primary);
     for (auto& obc : obc_set_accessing) {
+      DEBUGDPP("interrupting obc: {}", dpp, obc.get_oid());
       obc.interrupt(::crimson::common::actingset_changed(is_primary));
     }
   }
