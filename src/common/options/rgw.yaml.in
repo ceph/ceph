@@ -3,41 +3,41 @@
 
 options:
 # According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html),
-# An ACL can have up to 100 grants.
+# An ACL may have up to 100 grants.
 - name: rgw_acl_grants_max_num
   type: int
   level: advanced
-  desc: Max number of ACL grants in a single request
+  desc: The maximum number of ACL grants in a single request.
   default: 100
   services:
   - rgw
   with_legacy: true
-# An user can have up to 100 IAM user policies.
+# A user may have up to 100 IAM user policies.
 - name: rgw_user_policies_max_num
   type: int
   level: advanced
-  desc: Max number of IAM user policies on a single user
+  desc: The maximum number of IAM user policies for a single user.
   default: 100
   services:
   - rgw
   with_legacy: true
-# According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html),
-# An cors can have up to 100 rules.
+# According to AWS S3 (http://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html),
+# A CORS request may have up to 100 rules.
 - name: rgw_cors_rules_max_num
   type: int
   level: advanced
-  desc: Max number of cors rules in a single request
+  desc: The maximum number of CORS rules in a single request.
   default: 100
   services:
   - rgw
   with_legacy: true
-# According to AWS S3(https://docs.aws.amazon.com/AmazonS3/latest/dev/DeletingObjects.html),
+# According to AWS S3 (https://docs.aws.amazon.com/AmazonS3/latest/dev/DeletingObjects.html),
 # Amazon S3 also provides the Multi-Object Delete API that you can use to delete up to 1000
 # objects in a single HTTP request.
 - name: rgw_delete_multi_obj_max_num
   type: int
   level: advanced
-  desc: Max number of objects in a single multi-object delete request
+  desc: The maximum number of objects in a single multi-object delete request.
   default: 1000
   services:
   - rgw
@@ -46,7 +46,7 @@ options:
 - name: rgw_website_routing_rules_max_num
   type: int
   level: advanced
-  desc: Max number of website routing rules in a single request
+  desc: The maximum number of website routing rules in a single request.
   default: 50
   services:
   - rgw
@@ -54,21 +54,21 @@ options:
 - name: rgw_rados_tracing
   type: bool
   level: advanced
-  desc: true if LTTng-UST tracepoints should be enabled
+  desc: Enables LTTng-UST tracepoints.
   default: false
   services:
   - rgw
 - name: rgw_op_tracing
   type: bool
   level: advanced
-  desc: true if LTTng-UST tracepoints should be enabled
+  desc: Enables LTTng-UST operator tracepoints.
   default: false
   services:
   - rgw
 - name: rgw_max_chunk_size
   type: size
   level: advanced
-  desc: Set RGW max chunk size
+  desc: The maximum RGW chunk size.
   long_desc: The chunk size is the size of RADOS I/O requests that RGW sends when
     accessing data objects. RGW read and write operations will never request more than
     this amount in a single request. This also defines the RGW head object size, as
@@ -111,7 +111,7 @@ options:
 - name: rgw_max_put_size
   type: size
   level: advanced
-  desc: Max size (in bytes) of regular (non multi-part) object upload.
+  desc: The maximum size (in bytes) of regular (non multi-part) object upload.
   long_desc: Plain object upload is capped at this amount of data. In order to upload
     larger objects, a special upload mechanism is required. The S3 API provides the
     multi-part upload, and Swift provides DLO and SLO.
