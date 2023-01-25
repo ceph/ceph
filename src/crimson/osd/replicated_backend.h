@@ -21,7 +21,8 @@ class ReplicatedBackend : public PGBackend
 public:
   ReplicatedBackend(pg_t pgid, pg_shard_t whoami,
 		    CollectionRef coll,
-		    crimson::osd::ShardServices& shard_services);
+		    crimson::osd::ShardServices& shard_services,
+		    DoutPrefixProvider &dpp);
   void got_rep_op_reply(const MOSDRepOpReply& reply) final;
   seastar::future<> stop() final;
   void on_actingset_changed(peering_info_t pi) final;

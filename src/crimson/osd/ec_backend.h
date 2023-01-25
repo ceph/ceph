@@ -16,7 +16,8 @@ public:
 	    CollectionRef coll,
 	    crimson::osd::ShardServices& shard_services,
 	    const ec_profile_t& ec_profile,
-	    uint64_t stripe_width);
+	    uint64_t stripe_width,
+	    DoutPrefixProvider &dpp);
   seastar::future<> stop() final {
     return seastar::now();
   }

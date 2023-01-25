@@ -64,14 +64,16 @@ public:
     std::tuple<interruptible_future<>,
 	       interruptible_future<crimson::osd::acked_peers_t>>;
   PGBackend(shard_id_t shard, CollectionRef coll,
-            crimson::osd::ShardServices &shard_services);
+            crimson::osd::ShardServices &shard_services,
+            DoutPrefixProvider &dpp);
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> create(pg_t pgid,
 					   const pg_shard_t pg_shard,
 					   const pg_pool_t& pool,
 					   crimson::os::CollectionRef coll,
 					   crimson::osd::ShardServices& shard_services,
-					   const ec_profile_t& ec_profile);
+					   const ec_profile_t& ec_profile,
+					   DoutPrefixProvider &dpp);
   using attrs_t =
     std::map<std::string, ceph::bufferptr, std::less<>>;
   using read_errorator = ll_read_errorator::extend<
@@ -390,6 +392,7 @@ protected:
   const shard_id_t shard;
   CollectionRef coll;
   crimson::osd::ShardServices &shard_services;
+  DoutPrefixProvider &dpp; ///< provides log prefix context
   crimson::os::FuturizedStore* store;
   bool stopping = false;
   std::optional<peering_info_t> peering;
