@@ -89,6 +89,11 @@ click on `New issue`_.
 .. _`jump to the Ceph project`: http://tracker.ceph.com/projects/ceph
 .. _`New issue`: http://tracker.ceph.com/projects/ceph/issues/new
 
+Slack
+-----
+
+Ceph's Slack is https://ceph-storage.slack.com/.
+
 .. _mailing-list:
 
 Mailing lists
