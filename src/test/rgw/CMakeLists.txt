@@ -185,9 +185,16 @@ add_executable(unittest_rgw_putobj test_rgw_putobj.cc)
 add_ceph_unittest(unittest_rgw_putobj)
 target_link_libraries(unittest_rgw_putobj ${rgw_libs} ${UNITTEST_LIBS})
 
+
 add_executable(unittest_rgw_throttle test_rgw_throttle.cc)
 add_ceph_unittest(unittest_rgw_throttle)
 target_link_libraries(unittest_rgw_throttle ${rgw_libs} ${UNITTEST_LIBS})
+
+add_executable(unittest_rgw_sync_lease test_rgw_sync_lease.cc)
+target_include_directories(unittest_rgw_sync_lease
+  PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+add_ceph_unittest(unittest_rgw_sync_lease)
+target_link_libraries(unittest_rgw_sync_lease ceph-common ${UNITTEST_LIBS})
 
 add_executable(unittest_rgw_iam_policy test_rgw_iam_policy.cc)
 add_ceph_unittest(unittest_rgw_iam_policy)
