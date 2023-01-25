@@ -105,8 +105,13 @@
 # distros that do _not_ ship cmd2/colorama
 %bcond_with cephfs_shell
 %endif
+%if 0%{?fedora} || 0%{?rhel} >= 9
+%bcond_without system_arrow
+%else
+# for centos 8, utf8proc-devel comes from the subversion-devel module which isn't available in EPEL8
+# this is tracked in https://bugzilla.redhat.com/2152265
 %bcond_with system_arrow
-%bcond_with system_utf8proc
+%endif
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8
 %global weak_deps 1
 %endif
@@ -322,10 +327,8 @@ BuildRequires:  libpmem-devel
 BuildRequires:  libpmemobj-devel >= 1.8
 %endif
 %if 0%{with system_arrow}
-BuildRequires:  arrow-devel
-BuildRequires:  parquet-devel
-%endif
-%if 0%{with system_utf8proc}
+BuildRequires:  libarrow-devel
+BuildRequires:  parquet-libs-devel
 BuildRequires:  utf8proc-devel
 %endif
 %if 0%{with seastar}
@@ -1420,8 +1423,6 @@ cmake .. \
 %endif
 %if 0%{with system_arrow}
     -DWITH_SYSTEM_ARROW:BOOL=ON \
-%endif
-%if 0%{with system_utf8proc}
     -DWITH_SYSTEM_UTF8PROC:BOOL=ON \
 %endif
 %if 0%{with seastar}
