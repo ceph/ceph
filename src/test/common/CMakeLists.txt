@@ -384,6 +384,10 @@ add_executable(unittest_async_spawn_throttle test_async_spawn_throttle.cc)
 add_ceph_unittest(unittest_async_spawn_throttle)
 target_link_libraries(unittest_async_spawn_throttle ceph-common Boost::system Boost::context)
 
+add_executable(unittest_async_lease test_async_lease.cc)
+add_ceph_unittest(unittest_async_lease)
+target_link_libraries(unittest_async_lease ceph-common Boost::system Boost::context)
+
 add_executable(unittest_async_yield_waiter test_async_yield_waiter.cc)
 add_ceph_unittest(unittest_async_yield_waiter)
 target_link_libraries(unittest_async_yield_waiter ceph-common Boost::system Boost::context)
