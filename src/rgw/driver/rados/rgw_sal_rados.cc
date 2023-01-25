@@ -511,7 +511,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
 
   string bucket_ver, master_ver;
 
-  ret = load_bucket(dpp, null_yield);
+  ret = load_bucket(dpp, y);
   if (ret < 0)
     return ret;
 
@@ -537,7 +537,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   results.is_truncated = true;
 
   while (results.is_truncated) {
-    ret = list(dpp, params, listing_max_entries, results, null_yield);
+    ret = list(dpp, params, listing_max_entries, results, y);
     if (ret < 0)
       return ret;
 
@@ -589,7 +589,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
           }
         } // for all shadow objs
 
-	ret = head_obj->delete_obj_aio(dpp, astate, handles.get(), keep_index_consistent, null_yield);
+	ret = head_obj->delete_obj_aio(dpp, astate, handles.get(), keep_index_consistent, y);
         if (ret < 0) {
           ldpp_dout(dpp, -1) << "ERROR: delete obj aio failed with " << ret << dendl;
           return ret;
@@ -768,7 +768,7 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_y
 int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime)
 {
   mtime = _mtime;
-  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp);
+  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, null_yield);
 }
 
 /* Make sure to call get_bucket_info() if you need it first */
@@ -1924,7 +1924,7 @@ int RadosObject::transition_to_cloud(Bucket* bucket,
     std::unique_ptr<rgw::sal::Object::ReadOp> read_op(get_read_op());
     read_op->params.lastmod = &read_mtime;
 
-    ret = read_op->prepare(null_yield, dpp);
+    ret = read_op->prepare(y, dpp);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: Updating tier object(" << o.key << ") failed ret=" << ret << dendl;
       return ret;
@@ -1940,7 +1940,7 @@ int RadosObject::transition_to_cloud(Bucket* bucket,
     target_placement.inherit_from(tier_ctx.bucket_info.placement_rule);
     target_placement.storage_class = tier->get_storage_class();
 
-    ret = write_cloud_tier(dpp, null_yield, tier_ctx.o.versioned_epoch,
+    ret = write_cloud_tier(dpp, y, tier_ctx.o.versioned_epoch,
 			   tier, tier_ctx.is_multipart_upload,
 			   target_placement, tier_ctx.obj);
 
@@ -3438,7 +3438,7 @@ int RadosRole::read_id(const DoutPrefixProvider *dpp, const std::string& role_na
   std::string oid = info.tenant + get_names_oid_prefix() + role_name;
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(sysobj, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp);
+  int ret = rgw_get_system_obj(sysobj, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -3462,7 +3462,7 @@ int RadosRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
   std::string oid = info.tenant + get_names_oid_prefix() + info.name;
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(sysobj, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp);
+  int ret = rgw_get_system_obj(sysobj, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, y, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role name from Role pool: " << info.name <<
       ": " << cpp_strerror(-ret) << dendl;
