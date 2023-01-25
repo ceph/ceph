@@ -327,7 +327,6 @@ void PG::on_activate_complete()
       PeeringState::AllReplicasRecovered{});
   }
   publish_stats_to_osd();
-  backend->on_activate_complete();
 }
 
 void PG::prepare_write(pg_info_t &info,
@@ -1203,7 +1202,7 @@ void PG::on_change(ceph::os::Transaction &t) {
   logger().debug("{} {}:", *this, __func__);
   obc_loader.notify_on_change(is_primary());
   recovery_backend->on_peering_interval_change(t);
-  backend->on_actingset_changed({ is_primary() });
+  backend->on_actingset_changed(is_primary());
   wait_for_active_blocker.unblock();
   if (is_primary()) {
     logger().debug("{} {}: requeueing", *this, __func__);

@@ -25,7 +25,7 @@ public:
 		    DoutPrefixProvider &dpp);
   void got_rep_op_reply(const MOSDRepOpReply& reply) final;
   seastar::future<> stop() final;
-  void on_actingset_changed(peering_info_t pi) final;
+  void on_actingset_changed(bool same_primary) final;
 private:
   ll_read_ierrorator::future<ceph::bufferlist>
     _read(const hobject_t& hoid, uint64_t off,

@@ -21,7 +21,7 @@ public:
   seastar::future<> stop() final {
     return seastar::now();
   }
-  void on_actingset_changed(peering_info_t pi) final {}
+  void on_actingset_changed(bool same_primary) final {}
 private:
   ll_read_ierrorator::future<ceph::bufferlist>
   _read(const hobject_t& hoid, uint64_t off, uint64_t len, uint32_t flags) override;

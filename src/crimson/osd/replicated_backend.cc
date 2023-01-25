@@ -29,9 +29,6 @@ ReplicatedBackend::_read(const hobject_t& hoid,
                          const uint64_t len,
                          const uint32_t flags)
 {
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
   return store->read(coll, ghobject_t{hoid}, off, len, flags);
 }
 
@@ -44,12 +41,6 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
 				       std::vector<pg_log_entry_t>&& log_entries)
 {
   LOG_PREFIX(ReplicatedBackend::_submit_transaction);
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
-  if (__builtin_expect((bool)peering, false)) {
-    throw crimson::common::actingset_changed(peering->is_primary);
-  }
 
   const ceph_tid_t tid = shard_services.get_tid();
   auto pending_txn =
@@ -59,13 +50,14 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
 
   DEBUGDPP("object {}", dpp, hoid);
   auto all_completed = interruptor::make_interruptible(
-      shard_services.get_store().do_transaction(coll, std::move(txn)))
-  .then_interruptible([this, peers=pending_txn->second.weak_from_this()] {
+    shard_services.get_store().do_transaction(coll, std::move(txn))
+  ).then_interruptible([FNAME, this,
+			peers=pending_txn->second.weak_from_this()] {
     if (!peers) {
       // for now, only actingset_changed can cause peers
       // to be nullptr
-      assert(peering);
-      throw crimson::common::actingset_changed(peering->is_primary);
+      ERRORDPP("peers is null, this should be impossible", dpp);
+      assert(0 == "impossible");
     }
     if (--peers->pending == 0) {
       peers->all_committed.set_value();
@@ -108,10 +100,9 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
   return {std::move(sends_complete), std::move(all_completed)};
 }
 
-void ReplicatedBackend::on_actingset_changed(peering_info_t pi)
+void ReplicatedBackend::on_actingset_changed(bool same_primary)
 {
-  peering.emplace(pi);
-  crimson::common::actingset_changed e_actingset_changed{peering->is_primary};
+  crimson::common::actingset_changed e_actingset_changed{same_primary};
   for (auto& [tid, pending_txn] : pending_trans) {
     pending_txn.all_committed.set_exception(e_actingset_changed);
   }
@@ -143,7 +134,6 @@ seastar::future<> ReplicatedBackend::stop()
 {
   LOG_PREFIX(ReplicatedBackend::stop);
   INFODPP("cid {}", coll->get_cid());
-  stopping = true;
   for (auto& [tid, pending_on] : pending_trans) {
     pending_on.all_committed.set_exception(
 	crimson::common::system_shutdown_exception());
