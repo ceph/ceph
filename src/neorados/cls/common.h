@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <string>
 #include <type_traits>
+#include <tuple>
 
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -46,6 +47,38 @@
 /// Ideally, these functions will help.
 
 namespace neorados::cls {
+namespace detail {
+template<typename...>
+struct return_sig;
+
+template<typename T>
+struct return_sig<T> {
+using type = void(boost::system::error_code, T);
+};
+template<typename ...Ts>
+struct return_sig<std::tuple<Ts...>> {
+  using type = void(boost::system::error_code, Ts...);
+};
+
+template<typename... Ts>
+using return_sig_t = typename return_sig<Ts...>::type;
+
+template<typename T>
+auto maybecat(boost::system::error_code ec,
+	      T&& t)
+{
+  return std::make_tuple(ec, std::forward<T>(t));
+}
+
+template<typename ...Ts>
+auto maybecat(boost::system::error_code ec,
+	      std::tuple<Ts...>&& ts)
+{
+  return std::tuple_cat(std::tuple(ec),
+			std::move(ts));
+}
+} // namespace detail
+
 /// \brief Perform a CLS read operation and return the result
 ///
 /// Asynchronously call into the OSD, decode its response and
@@ -66,13 +99,14 @@ namespace neorados::cls {
 /// \param token Boost.Asio CompletionToken
 ///
 /// \return The relevant data in a way appropriate to the completion
-/// token. See Boost.Asio documentation. The signature is the return
-/// type of `f`.
+/// token. See Boost.Asio documentation. The signature is
+/// void(error_code, T) if f returns a non-tuple, and
+/// void(error_code, Ts...) if f returns a tuple.
 template<std::default_initializable Rep, typename Req,
 	 std::invocable<Rep&&> F,
 	 std::default_initializable Ret = std::invoke_result_t<F&&, Rep&&>,
 	 boost::asio::completion_token_for<
-	   void(boost::system::error_code, Ret)> CompletionToken>
+	   detail::return_sig_t<Ret>> CompletionToken>
 auto exec(
   RADOS& r,
   Object oid,
@@ -97,9 +131,8 @@ auto exec(
 // result.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmismatched-new-delete"
-  return asio::async_initiate<CompletionToken,
-			      void(error_code, Ret)>
-    (asio::experimental::co_composed<void(error_code, Ret)>
+  return asio::async_initiate<CompletionToken, detail::return_sig_t<Ret>>
+    (asio::experimental::co_composed<detail::return_sig_t<Ret>>
      ([](auto state, RADOS& r, Object oid, IOContext ioc, std::string cls,
 	 std::string method, buffer::list in, F&& f) -> void {
        try {
@@ -110,14 +143,15 @@ auto exec(
 	 co_await r.execute(std::move(oid), std::move(ioc), std::move(op),
 			    nullptr, asio::deferred);
 	 if (ec) {
-	   co_return {ec, Ret{}};
+	   co_return detail::maybecat(ec, Ret{});
 	 }
 	 Rep rep;
 	 decode(rep, out);
-	 co_return {error_code{},
-	            std::invoke(std::forward<F>(f), std::move(rep))};
+	 co_return detail::maybecat(error_code{},
+				    std::invoke(std::forward<F>(f),
+						std::move(rep)));
        } catch (const system_error& e) {
-	 co_return {e.code(), Ret{}};
+	 co_return detail::maybecat(e.code(), Ret{});
        }
      }, r.get_executor()),
      token, std::ref(r), std::move(oid), std::move(ioc), std::move(cls),
