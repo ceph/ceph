@@ -383,19 +383,13 @@ public:
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
   virtual seastar::future<> stop() = 0;
-  struct peering_info_t {
-    bool is_primary;
-  };
-  virtual void on_actingset_changed(peering_info_t pi) = 0;
-  virtual void on_activate_complete();
+  virtual void on_actingset_changed(bool same_primary) = 0;
 protected:
   const shard_id_t shard;
   CollectionRef coll;
   crimson::osd::ShardServices &shard_services;
   DoutPrefixProvider &dpp; ///< provides log prefix context
   crimson::os::FuturizedStore* store;
-  bool stopping = false;
-  std::optional<peering_info_t> peering;
   virtual seastar::future<> request_committed(
     const osd_reqid_t& reqid,
     const eversion_t& at_version) = 0;
