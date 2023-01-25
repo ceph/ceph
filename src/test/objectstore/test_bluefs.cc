@@ -10,13 +10,14 @@
 #include <random>
 #include <thread>
 #include <stack>
+#include <gtest/gtest.h>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "include/stringify.h"
 #include "include/scope_guard.h"
 #include "common/errno.h"
-#include <gtest/gtest.h>
 
+#include "os/bluestore/Allocator.h"
 #include "os/bluestore/BlueFS.h"
 
 using namespace std;
@@ -234,7 +235,7 @@ TEST(BlueFS, very_large_write) {
     delete h;
     ASSERT_EQ(0, fs.open_for_read("dir", "bigfile", &h));
     ASSERT_EQ(h->file->fnode.size, total_written);
-    unique_ptr<char> huge_buf(new char[h->file->fnode.size]);
+    auto huge_buf = std::make_unique<char[]>(h->file->fnode.size);
     auto l = h->file->fnode.size;
     int64_t r = fs.read(h, 0, l, NULL, huge_buf.get());
     ASSERT_EQ(r, l);
@@ -1109,6 +1110,225 @@ TEST(BlueFS, truncate_fsync) {
       fs.umount();
     }
   }
+}
+
+TEST(BlueFS, test_shared_alloc) {
+  uint64_t size = 1048576 * 128;
+  TempBdev bdev_slow{size};
+  uint64_t size_db = 1048576 * 8;
+  TempBdev bdev_db{size_db};
+
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_shared_alloc_size", "1048576");
+
+  bluefs_shared_alloc_context_t shared_alloc;
+  uint64_t shared_alloc_unit = 4096;
+  shared_alloc.set(
+    Allocator::create(g_ceph_context, g_ceph_context->_conf->bluefs_allocator,
+                      size, shared_alloc_unit, 0, 0, "test shared allocator"),
+    shared_alloc_unit);
+  shared_alloc.a->init_add_free(0, size);
+
+  BlueFS fs(g_ceph_context);
+  // DB device is fully utilized
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false, size_db - 0x1000));
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false, 0,
+                                   &shared_alloc));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  {
+    for (int i=0; i<10; i++) {
+       string dir = "dir.";
+       dir.append(to_string(i));
+       ASSERT_EQ(0, fs.mkdir(dir));
+       for (int j=0; j<10; j++) {
+          string file = "file.";
+	  file.append(to_string(j));
+          BlueFS::FileWriter *h;
+          ASSERT_EQ(0, fs.open_for_write(dir, file, &h, false));
+          ASSERT_NE(nullptr, h);
+          auto sg = make_scope_guard([&fs, h] { fs.close_writer(h); });
+          bufferlist bl;
+          std::unique_ptr<char[]> buf = gen_buffer(4096);
+	  bufferptr bp = buffer::claim_char(4096, buf.get());
+	  bl.push_back(bp);
+          h->append(bl.c_str(), bl.length());
+          fs.fsync(h);
+       }
+    }
+  }
+  {
+    for (int i=0; i<10; i+=2) {
+       string dir = "dir.";
+       dir.append(to_string(i));
+       for (int j=0; j<10; j++) {
+          string file = "file.";
+	  file.append(to_string(j));
+          fs.unlink(dir, file);
+	  fs.sync_metadata(false);
+       }
+       ASSERT_EQ(0, fs.rmdir(dir));
+       fs.sync_metadata(false);
+    }
+  }
+  fs.compact_log();
+  auto *logger = fs.get_perf_counters();
+  ASSERT_NE(logger->get(l_bluefs_alloc_shared_dev_fallbacks), 0);
+  auto num_files = logger->get(l_bluefs_num_files);
+  fs.umount();
+  fs.mount();
+  ASSERT_EQ(num_files, logger->get(l_bluefs_num_files));
+  fs.umount();
+}
+
+TEST(BlueFS, test_shared_alloc_sparse) {
+  uint64_t size = 1048576 * 128 * 2;
+  uint64_t main_unit = 4096;
+  uint64_t bluefs_alloc_unit = 1048576;
+  TempBdev bdev_slow{size};
+
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_shared_alloc_size",
+    stringify(bluefs_alloc_unit).c_str());
+
+  bluefs_shared_alloc_context_t shared_alloc;
+  shared_alloc.set(
+    Allocator::create(g_ceph_context, g_ceph_context->_conf->bluefs_allocator,
+                      size, main_unit, 0, 0, "test shared allocator"),
+    main_unit);
+  // prepare sparse free space but let's have a continuous chunk at
+  // the beginning to fit initial log's fnode into superblock,
+  // we don't have any tricks to deal with sparse allocations
+  // (and hence long fnode) at mkfs
+  shared_alloc.a->init_add_free(bluefs_alloc_unit, 4 * bluefs_alloc_unit);
+  for(uint64_t i = 5 * bluefs_alloc_unit; i < size; i += 2 * main_unit) {
+    shared_alloc.a->init_add_free(i, main_unit);
+  }
+
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_slow.path, false, 0,
+                                   &shared_alloc));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  {
+    for (int i=0; i<10; i++) {
+       string dir = "dir.";
+       dir.append(to_string(i));
+       ASSERT_EQ(0, fs.mkdir(dir));
+       for (int j=0; j<10; j++) {
+          string file = "file.";
+	  file.append(to_string(j));
+          BlueFS::FileWriter *h;
+          ASSERT_EQ(0, fs.open_for_write(dir, file, &h, false));
+          ASSERT_NE(nullptr, h);
+          auto sg = make_scope_guard([&fs, h] { fs.close_writer(h); });
+          bufferlist bl;
+          std::unique_ptr<char[]> buf = gen_buffer(4096);
+	  bufferptr bp = buffer::claim_char(4096, buf.get());
+	  bl.push_back(bp);
+          h->append(bl.c_str(), bl.length());
+          fs.fsync(h);
+       }
+    }
+  }
+  {
+    for (int i=0; i<10; i+=2) {
+       string dir = "dir.";
+       dir.append(to_string(i));
+       for (int j=0; j<10; j++) {
+          string file = "file.";
+	  file.append(to_string(j));
+          fs.unlink(dir, file);
+	  fs.sync_metadata(false);
+       }
+       ASSERT_EQ(0, fs.rmdir(dir));
+       fs.sync_metadata(false);
+    }
+  }
+  fs.compact_log();
+  auto *logger = fs.get_perf_counters();
+  ASSERT_NE(logger->get(l_bluefs_alloc_shared_size_fallbacks), 0);
+  auto num_files = logger->get(l_bluefs_num_files);
+  fs.umount();
+
+  fs.mount();
+  ASSERT_EQ(num_files, logger->get(l_bluefs_num_files));
+  fs.umount();
+}
+
+TEST(BlueFS, test_4k_shared_alloc) {
+  uint64_t size = 1048576 * 128 * 2;
+  uint64_t main_unit = 4096;
+  uint64_t bluefs_alloc_unit = main_unit;
+  TempBdev bdev_slow{size};
+
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_shared_alloc_size",
+    stringify(bluefs_alloc_unit).c_str());
+
+  bluefs_shared_alloc_context_t shared_alloc;
+  shared_alloc.set(
+    Allocator::create(g_ceph_context, g_ceph_context->_conf->bluefs_allocator,
+                      size, main_unit, 0, 0, "test shared allocator"),
+    main_unit);
+  shared_alloc.a->init_add_free(bluefs_alloc_unit, size - bluefs_alloc_unit);
+
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_slow.path, false, 0,
+                                   &shared_alloc));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  {
+    for (int i=0; i<10; i++) {
+       string dir = "dir.";
+       dir.append(to_string(i));
+       ASSERT_EQ(0, fs.mkdir(dir));
+       for (int j=0; j<10; j++) {
+          string file = "file.";
+	  file.append(to_string(j));
+          BlueFS::FileWriter *h;
+          ASSERT_EQ(0, fs.open_for_write(dir, file, &h, false));
+          ASSERT_NE(nullptr, h);
+          auto sg = make_scope_guard([&fs, h] { fs.close_writer(h); });
+          bufferlist bl;
+          std::unique_ptr<char[]> buf = gen_buffer(4096);
+	  bufferptr bp = buffer::claim_char(4096, buf.get());
+	  bl.push_back(bp);
+          h->append(bl.c_str(), bl.length());
+          fs.fsync(h);
+       }
+    }
+  }
+  {
+    for (int i=0; i<10; i+=2) {
+       string dir = "dir.";
+       dir.append(to_string(i));
+       for (int j=0; j<10; j++) {
+          string file = "file.";
+	  file.append(to_string(j));
+          fs.unlink(dir, file);
+	  fs.sync_metadata(false);
+       }
+       ASSERT_EQ(0, fs.rmdir(dir));
+       fs.sync_metadata(false);
+    }
+  }
+  fs.compact_log();
+  auto *logger = fs.get_perf_counters();
+  ASSERT_EQ(logger->get(l_bluefs_alloc_shared_dev_fallbacks), 0);
+  ASSERT_EQ(logger->get(l_bluefs_alloc_shared_size_fallbacks), 0);
+  auto num_files = logger->get(l_bluefs_num_files);
+  fs.umount();
+
+  fs.mount();
+  ASSERT_EQ(num_files, logger->get(l_bluefs_num_files));
+  fs.umount();
 }
 
 int main(int argc, char **argv) {

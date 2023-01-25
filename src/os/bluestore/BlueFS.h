@@ -61,9 +61,12 @@ enum {
   l_bluefs_read_disk_bytes_slow,
   l_bluefs_read_prefetch_count,
   l_bluefs_read_prefetch_bytes,
+  l_bluefs_compaction_lat,
+  l_bluefs_compaction_lock_lat,
+  l_bluefs_alloc_shared_dev_fallbacks,
+  l_bluefs_alloc_shared_size_fallbacks,
   l_bluefs_read_zeros_candidate,
   l_bluefs_read_zeros_errors,
-
   l_bluefs_last,
 };
 
@@ -92,16 +95,19 @@ public:
 struct bluefs_shared_alloc_context_t {
   bool need_init = false;
   Allocator* a = nullptr;
+  uint64_t alloc_unit = 0;
 
   std::atomic<uint64_t> bluefs_used = 0;
 
-  void set(Allocator* _a) {
+  void set(Allocator* _a, uint64_t _au) {
     a = _a;
+    alloc_unit = _au;
     need_init = true;
     bluefs_used = 0;
   }
   void reset() {
     a = nullptr;
+    alloc_unit = 0;
   }
 };
 
@@ -331,6 +337,8 @@ private:
     l_bluefs_max_bytes_wal,
     l_bluefs_max_bytes_db,
     l_bluefs_max_bytes_slow,
+    l_bluefs_max_bytes_wal,
+    l_bluefs_max_bytes_db,
   };
 
   // cache
@@ -391,6 +399,7 @@ private:
   inline bool is_shared_alloc(unsigned id) const {
     return id == shared_alloc_id;
   }
+  std::atomic<int64_t> cooldown_deadline = 0;
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;
@@ -404,7 +413,8 @@ private:
   void _init_alloc();
   void _stop_alloc();
 
-  void _pad_bl(ceph::buffer::list& bl);  ///< pad ceph::buffer::list to block size w/ zeros
+  ///< pad ceph::buffer::list to max(block size, pad_size) w/ zeros
+  void _pad_bl(ceph::buffer::list& bl, uint64_t pad_size = 0);
 
   uint64_t _get_used(unsigned id) const;
   uint64_t _get_total(unsigned id) const;
@@ -418,9 +428,10 @@ private:
   }
   const char* get_device_name(unsigned id);
   int _allocate(uint8_t bdev, uint64_t len,
-		bluefs_fnode_t* node);
-  int _allocate_without_fallback(uint8_t id, uint64_t len,
-				 PExtentVector* extents);
+                uint64_t alloc_unit,
+		bluefs_fnode_t* node,
+                size_t alloc_attempts = 0,
+                bool permit_dev_fallback = true);
 
   /* signal replay log to include h->file in nearest log flush */
   int _signal_dirty_to_log_D(FileWriter *h);
@@ -447,6 +458,11 @@ private:
 			       int64_t available_runway);
   int _flush_and_sync_log_LD(uint64_t want_seq = 0);
 
+  uint64_t _estimate_transaction_size(bluefs_transaction_t* t);
+  uint64_t _make_initial_transaction(uint64_t start_seq,
+                                     bluefs_fnode_t& fnode,
+                                     uint64_t expected_final_size,
+                                     bufferlist* out);
   uint64_t _estimate_log_size_N();
   bool _should_start_compact_log_L_N();
 
@@ -456,15 +472,15 @@ private:
     RENAME_SLOW2DB = 4,
     RENAME_DB2SLOW = 8,
   };
-  void _compact_log_dump_metadata_NF(bluefs_transaction_t *t,
-				 int flags);
-  void _compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
-					   uint64_t capture_before_seq);
+  void _compact_log_dump_metadata_NF(uint64_t start_seq,
+                                     bluefs_transaction_t *t,
+				     int flags,
+				     uint64_t capture_before_seq);
 
   void _compact_log_sync_LNF_LD();
   void _compact_log_async_LD_LNF_D();
 
-  void _rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
+  void _rewrite_log_and_layout_sync_LNF_LD(bool permit_dev_fallback,
 				    int super_dev,
 				    int log_dev,
 				    int new_log_dev,
@@ -473,7 +489,7 @@ private:
 
   //void _aio_finish(void *priv);
 
-  void _flush_bdev(FileWriter *h);
+  void _flush_bdev(FileWriter *h, bool check_mutex_locked = true);
   void _flush_bdev();  // this is safe to call without a lock
   void _flush_bdev(std::array<bool, MAX_BDEV>& dirty_bdevs);  // this is safe to call without a lock
 
@@ -500,6 +516,7 @@ private:
     const char* op_name);
   int _verify_alloc_granularity(
     __u8 id, uint64_t offset, uint64_t length,
+    uint64_t alloc_unit,
     const char *op);
   int _replay(bool noop, bool to_stdout = false); ///< replay journal
 

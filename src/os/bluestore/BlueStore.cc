@@ -5841,12 +5841,12 @@ int BlueStore::_create_alloc()
       delete alloc;
       return -EINVAL;
     }
-    shared_alloc.set(a);
+    shared_alloc.set(a, alloc_size);
   } else
 #endif
   {
     // BlueFS will share the same allocator
-    shared_alloc.set(alloc);
+    shared_alloc.set(alloc, alloc_size);
   }
 
   return 0;
