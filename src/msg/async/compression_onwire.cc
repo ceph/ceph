@@ -12,15 +12,17 @@ namespace ceph::compression::onwire {
 rxtx_t rxtx_t::create_handler_pair(
     CephContext* ctx,
     const CompConnectionMeta& comp_meta,
-    std::uint64_t compress_min_size)
+    std::uint64_t compress_min_size,
+    PerfCounters* logger)
 {
   if (comp_meta.is_compress()) {
      CompressorRef compressor = Compressor::create(ctx, comp_meta.get_method());
     if (compressor) {
-      return {std::make_unique<RxHandler>(ctx, compressor),
+      return {std::make_unique<RxHandler>(ctx, compressor, logger),
 	      std::make_unique<TxHandler>(ctx, compressor,
 					  comp_meta.get_mode(),
-					  compress_min_size)};
+					  compress_min_size,
+					  logger)};
     }
   }
   return {};
@@ -52,6 +54,8 @@ std::optional<ceph::bufferlist> TxHandler::compress(const ceph::bufferlist &inpu
   } else {
     ldout(m_cct, 20) << __func__ << " uncompressed.length()=" << input.length()
                      << " compressed.length()=" << out.length() << dendl;
+    ceph_assert(m_logger != nullptr);
+    m_logger->inc(l_msgr_compressed_bytes, out.length());
     m_onwire_size += out.length();
     return out;
   }
@@ -74,6 +78,8 @@ std::optional<ceph::bufferlist> RxHandler::decompress(const ceph::bufferlist &in
   } else {
     ldout(m_cct, 20) << __func__ << " compressed.length()=" << input.length()
                      << " uncompressed.length()=" << out.length() << dendl;
+    ceph_assert(m_logger != nullptr);
+    m_logger->inc(l_msgr_decompressed_bytes, out.length());
     return out;
   }
 }

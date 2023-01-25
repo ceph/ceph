@@ -205,10 +205,10 @@ protected:
       comp_meta.con_mode = Compressor::COMP_FORCE;
       comp_meta.con_method = Compressor::COMP_ALG_SNAPPY;
       m_tx_comp = ceph::compression::onwire::rxtx_t::create_handler_pair(
-        g_ceph_context, comp_meta, /*min_compress_size=*/COMP_THRESHOLD
+        g_ceph_context, comp_meta, /*min_compress_size=*/COMP_THRESHOLD, NULL
       );
       m_rx_comp = ceph::compression::onwire::rxtx_t::create_handler_pair(
-        g_ceph_context, comp_meta, /*min_compress_size=*/COMP_THRESHOLD
+        g_ceph_context, comp_meta, /*min_compress_size=*/COMP_THRESHOLD, NULL
       );
     }
   }

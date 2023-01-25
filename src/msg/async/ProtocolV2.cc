@@ -2167,7 +2167,7 @@ CtPtr ProtocolV2::handle_compression_done(ceph::bufferlist &payload) {
     comp_meta.con_mode = Compressor::COMP_NONE;
   }
   session_compression_handlers = ceph::compression::onwire::rxtx_t::create_handler_pair(
-    cct, comp_meta, messenger->comp_registry.get_min_compression_size(connection->get_peer_type()));
+    cct, comp_meta, messenger->comp_registry.get_min_compression_size(connection->get_peer_type()), connection->logger);
 
   return start_session_connect();
 }
@@ -3023,7 +3023,7 @@ CtPtr ProtocolV2::finish_compression() {
   // allow reusing finish_compression().
   
   session_compression_handlers = ceph::compression::onwire::rxtx_t::create_handler_pair(
-    cct, comp_meta, messenger->comp_registry.get_min_compression_size(connection->get_peer_type()));
+    cct, comp_meta, messenger->comp_registry.get_min_compression_size(connection->get_peer_type()), connection->logger);
 
   state = SESSION_ACCEPTING;
   return CONTINUE(read_frame);

@@ -211,6 +211,9 @@ enum {
   l_msgr_recv_encrypted_bytes,
   l_msgr_send_encrypted_bytes,
 
+  l_msgr_decompressed_bytes,
+  l_msgr_compressed_bytes,
+
   l_msgr_last,
 };
 
@@ -256,6 +259,9 @@ class Worker {
 
     plb.add_u64_counter(l_msgr_recv_encrypted_bytes, "msgr_recv_encrypted_bytes", "Network received encrypted bytes", NULL, 0, unit_t(UNIT_BYTES));
     plb.add_u64_counter(l_msgr_send_encrypted_bytes, "msgr_send_encrypted_bytes", "Network sent encrypted bytes", NULL, 0, unit_t(UNIT_BYTES));
+
+    plb.add_u64_counter(l_msgr_decompressed_bytes, "msgr_decompressed_bytes", "Network decompressed bytes", NULL, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_compressed_bytes, "msgr_compressed_bytes", "Network compressed bytes", NULL, 0, unit_t(UNIT_BYTES));
 
     perf_logger = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_logger);

@@ -8,6 +8,8 @@
 
 #include "compressor/Compressor.h"
 #include "include/buffer.h"
+#include "common/perf_counters.h"
+#include "Stack.h"
 
 class CompConnectionMeta;
 
@@ -17,18 +19,19 @@ namespace ceph::compression::onwire {
 
   class Handler {
   public:
-    Handler(CephContext* const cct, CompressorRef compressor)
-      : m_cct(cct), m_compressor(compressor) {}
+    Handler(CephContext* const cct, CompressorRef compressor, PerfCounters* logger)
+      : m_cct(cct), m_compressor(compressor), m_logger(logger) {}
 
   protected:
     CephContext* const m_cct;
     CompressorRef m_compressor;
+    PerfCounters *m_logger;
   };
 
   class RxHandler final : private Handler {
   public:
-    RxHandler(CephContext* const cct, CompressorRef compressor)
-      : Handler(cct, compressor) {}
+    RxHandler(CephContext* const cct, CompressorRef compressor, PerfCounters* logger)
+      : Handler(cct, compressor, logger) {}
     ~RxHandler() {};
 
     /**
@@ -44,8 +47,8 @@ namespace ceph::compression::onwire {
 
   class TxHandler final : private Handler {
   public:
-    TxHandler(CephContext* const cct, CompressorRef compressor, int mode, std::uint64_t min_size)
-      : Handler(cct, compressor),
+    TxHandler(CephContext* const cct, CompressorRef compressor, int mode, std::uint64_t min_size, PerfCounters* logger)
+      : Handler(cct, compressor, logger),
 	m_min_size(min_size),
 	m_mode(static_cast<Compressor::CompressionMode>(mode))
     {}
@@ -97,7 +100,8 @@ namespace ceph::compression::onwire {
     static rxtx_t create_handler_pair(
       CephContext* ctx,
       const CompConnectionMeta& comp_meta,
-      std::uint64_t compress_min_size);
+      std::uint64_t compress_min_size,
+      PerfCounters* logger);
   };
 }
 
