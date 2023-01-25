@@ -45,6 +45,7 @@ tasks:
         # cloud-user creds to be created on cloud-client
         #cloud_secret: "foobar"
         #cloud_access_key: "87654321"
+- tox: [client.0]
 - s3tests:
     client.0:
       rgw_server: client.0
