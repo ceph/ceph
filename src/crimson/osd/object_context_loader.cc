@@ -1,10 +1,6 @@
 #include "crimson/osd/object_context_loader.h"
 
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_osd);
-  }
-}
+SET_SUBSYS(osd);
 
 namespace crimson::osd {
 
@@ -16,7 +12,8 @@ using crimson::common::local_conf;
                                      bool existed,
                                      with_obc_func_t&& func)
   {
-    logger().debug("{} {}", __func__, obc->get_oid());
+    LOG_PREFIX(ObjectContextLoader::with_head_obc);
+    DEBUGDPP("object {}", dpp, obc->get_oid());
     assert(obc->is_head());
     obc->append_to(obc_set_accessing);
     return obc->with_lock<State, IOInterruptCondition>(
@@ -26,8 +23,8 @@ using crimson::common::local_conf;
         [func = std::move(func)](auto obc) {
         return std::move(func)(std::move(obc));
       });
-    }).finally([this, obc=std::move(obc)] {
-      logger().debug("with_head_obc: released {}", obc->get_oid());
+    }).finally([FNAME, this, obc=std::move(obc)] {
+      DEBUGDPP("released object {}", dpp, obc->get_oid());
       obc->remove_from(obc_set_accessing);
     });
   }
@@ -37,13 +34,14 @@ using crimson::common::local_conf;
   ObjectContextLoader::with_clone_obc(hobject_t oid,
                                       with_obc_func_t&& func)
   {
+    LOG_PREFIX(ObjectContextLoader::with_clone_obc);
     assert(!oid.is_head());
-    return with_obc<RWState::RWREAD>(oid.get_head(),
-      [oid, func=std::move(func), this](auto head) mutable
+    return with_obc<RWState::RWREAD>(
+      oid.get_head(),
+      [FNAME, oid, func=std::move(func), this](auto head) mutable
       -> load_obc_iertr::future<> {
       if (!head->obs.exists) {
-        logger().error("with_clone_obc: {} head doesn't exist",
-                       head->obs.oi.soid);
+	ERRORDPP("head doesn't exist for object {}", dpp, head->obs.oi.soid);
         return load_obc_iertr::future<>{
           crimson::ct_error::enoent::make()
         };
@@ -60,10 +58,10 @@ using crimson::common::local_conf;
                                            hobject_t oid,
                                            with_obc_func_t&& func)
   {
+    LOG_PREFIX(ObjectContextLoader::with_clone_obc_only);
     auto coid = resolve_oid(head->get_ro_ss(), oid);
     if (!coid) {
-      logger().error("with_clone_obc_only: {} clone not found",
-                     oid);
+      ERRORDPP("clone {} not found", dpp, oid);
       return load_obc_iertr::future<>{
         crimson::ct_error::enoent::make()
       };
@@ -101,17 +99,16 @@ using crimson::common::local_conf;
   ObjectContextLoader::load_obc_iertr::future<ObjectContextRef>
   ObjectContextLoader::load_obc(ObjectContextRef obc)
   {
+    LOG_PREFIX(ObjectContextLoader::load_obc);
     return backend.load_metadata(obc->get_oid())
     .safe_then_interruptible(
-      [obc=std::move(obc)](auto md)
+      [FNAME, this, obc=std::move(obc)](auto md)
       -> load_obc_ertr::future<ObjectContextRef> {
       const hobject_t& oid = md->os.oi.soid;
-      logger().debug(
-        "load_obc: loaded obs {} for {}", md->os.oi, oid);
+      DEBUGDPP("loaded obs {} for {}", dpp, md->os.oi, oid);
       if (oid.is_head()) {
         if (!md->ssc) {
-          logger().error(
-            "load_obc: oid {} missing snapsetcontext", oid);
+	  ERRORDPP("oid {} missing snapsetcontext", dpp, oid);
           return crimson::ct_error::object_corrupted::make();
         }
         obc->set_head_state(std::move(md->os),
@@ -119,9 +116,7 @@ using crimson::common::local_conf;
       } else {
         obc->set_clone_state(std::move(md->os));
       }
-      logger().debug(
-        "load_obc: returning obc {} for {}",
-        obc->obs.oi, obc->obs.oi.soid);
+      DEBUGDPP("returning obc {} for {}", dpp, obc->obs.oi, obc->obs.oi.soid);
       return load_obc_ertr::make_ready_future<ObjectContextRef>(obc);
     });
   }
@@ -131,14 +126,13 @@ using crimson::common::local_conf;
   ObjectContextLoader::get_or_load_obc(ObjectContextRef obc,
                                        bool existed)
   {
+    LOG_PREFIX(ObjectContextLoader::get_or_load_obc);
     auto loaded =
       load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
     if (existed) {
-      logger().debug("{}: found {} in cache",
-                     __func__, obc->get_oid());
+      DEBUGDPP("cache hit on {}", dpp, obc->get_oid());
     } else {
-      logger().debug("{}: cache miss on {}",
-                     __func__, obc->get_oid());
+      DEBUGDPP("cache miss on {}", dpp, obc->get_oid());
       loaded =
         obc->template with_promoted_lock<State, IOInterruptCondition>(
         [obc, this] {
@@ -151,20 +145,14 @@ using crimson::common::local_conf;
   ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::reload_obc(ObjectContext& obc) const
   {
+    LOG_PREFIX(ObjectContextLoader::reload_obc);
     assert(obc.is_head());
     return backend.load_metadata(obc.get_oid())
     .safe_then_interruptible<false>(
-      [&obc](auto md)-> load_obc_ertr::future<> {
-      logger().debug(
-        "{}: reloaded obs {} for {}",
-        __func__,
-        md->os.oi,
-        obc.get_oid());
+      [FNAME, this, &obc](auto md)-> load_obc_ertr::future<> {
+      DEBUGDPP("reloaded obs {} for {}", dpp, md->os.oi, obc.get_oid());
       if (!md->ssc) {
-        logger().error(
-          "{}: oid {} missing snapsetcontext",
-          __func__,
-          obc.get_oid());
+	ERRORDPP("oid {} missing snapsetcontext", dpp, obc.get_oid());
         return crimson::ct_error::object_corrupted::make();
       }
       obc.set_head_state(std::move(md->os), std::move(md->ssc));

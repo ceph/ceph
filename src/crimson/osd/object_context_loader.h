@@ -15,9 +15,11 @@ public:
 
   ObjectContextLoader(
     ShardServices& _shard_services,
-    PGBackend& _backend)
+    PGBackend& _backend,
+    DoutPrefixProvider& dpp)
     : shard_services{_shard_services},
-      backend{_backend}
+      backend{_backend},
+      dpp{dpp}
     {}
 
   using load_obc_ertr = crimson::errorator<
@@ -67,6 +69,7 @@ public:
 private:
   ShardServices &shard_services;
   PGBackend& backend;
+  DoutPrefixProvider& dpp;
   obc_accessing_list_t obc_set_accessing;
 };
 }
