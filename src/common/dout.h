@@ -52,6 +52,14 @@ public:
   virtual ~DoutPrefixProvider() {}
 };
 
+inline std::ostream &operator<<(
+  std::ostream &lhs, const DoutPrefixProvider &dpp) {
+  return dpp.gen_prefix(lhs);
+}
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<DoutPrefixProvider> : fmt::ostream_formatter {};
+#endif
+
 // a prefix provider with empty prefix
 class NoDoutPrefix : public DoutPrefixProvider {
   CephContext *const cct;
