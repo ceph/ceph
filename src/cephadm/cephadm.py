@@ -2031,6 +2031,11 @@ def get_hostname():
     return socket.gethostname()
 
 
+def get_short_hostname():
+    # type: () -> str
+    return get_hostname().split('.', 1)[0]
+
+
 def get_fqdn():
     # type: () -> str
     return socket.getfqdn() or socket.gethostname()
@@ -2043,8 +2048,8 @@ def get_arch():
 
 def generate_service_id():
     # type: () -> str
-    return get_hostname() + '.' + ''.join(random.choice(string.ascii_lowercase)
-                                          for _ in range(6))
+    return get_short_hostname() + '.' + ''.join(random.choice(string.ascii_lowercase)
+                                                for _ in range(6))
 
 
 def generate_password():
@@ -5725,7 +5730,7 @@ def command_bootstrap(ctx):
     hostname = get_hostname()
     if '.' in hostname and not ctx.allow_fqdn_hostname:
         raise Error('hostname is a fully qualified domain name (%s); either fix (e.g., "sudo hostname %s" or similar) or pass --allow-fqdn-hostname' % (hostname, hostname.split('.')[0]))
-    mon_id = ctx.mon_id or hostname
+    mon_id = ctx.mon_id or get_short_hostname()
     mgr_id = ctx.mgr_id or generate_service_id()
 
     lock = FileLock(ctx, fsid)
