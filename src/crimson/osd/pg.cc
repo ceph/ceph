@@ -115,7 +115,8 @@ PG::PG(
 	pool,
 	coll_ref,
 	shard_services,
-	profile)),
+	profile,
+	*this)),
     recovery_backend(
       std::make_unique<ReplicatedRecoveryBackend>(
 	*this, shard_services, coll_ref, backend.get())),

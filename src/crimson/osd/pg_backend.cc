@@ -45,16 +45,19 @@ PGBackend::create(pg_t pgid,
 		  const pg_pool_t& pool,
 		  crimson::os::CollectionRef coll,
 		  crimson::osd::ShardServices& shard_services,
-		  const ec_profile_t& ec_profile)
+		  const ec_profile_t& ec_profile,
+		  DoutPrefixProvider &dpp)
 {
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED:
     return std::make_unique<ReplicatedBackend>(pgid, pg_shard,
-					       coll, shard_services);
+					       coll, shard_services,
+					       dpp);
   case pg_pool_t::TYPE_ERASURE:
     return std::make_unique<ECBackend>(pg_shard.shard, coll, shard_services,
                                        std::move(ec_profile),
-                                       pool.stripe_width);
+                                       pool.stripe_width,
+				       dpp);
   default:
     throw runtime_error(seastar::format("unsupported pool type '{}'",
                                         pool.type));
@@ -63,10 +66,12 @@ PGBackend::create(pg_t pgid,
 
 PGBackend::PGBackend(shard_id_t shard,
                      CollectionRef coll,
-                     crimson::osd::ShardServices &shard_services)
+                     crimson::osd::ShardServices &shard_services,
+		     DoutPrefixProvider &dpp)
   : shard{shard},
     coll{coll},
     shard_services{shard_services},
+    dpp{dpp},
     store{&shard_services.get_store()}
 {}
 
