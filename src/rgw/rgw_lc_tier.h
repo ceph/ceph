@@ -50,6 +50,6 @@ struct RGWLCCloudTierCtx {
 };
 
 /* Transition object to cloud endpoint */
-int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx);
+int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<std::string>& cloud_targets);
 
 #endif

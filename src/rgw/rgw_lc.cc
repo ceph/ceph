@@ -1454,25 +1454,16 @@ public:
     tier_ctx.multipart_sync_threshold = oc.tier.t.s3.multipart_sync_threshold;
     tier_ctx.storage_class = oc.tier.storage_class;
 
-    // check if target_path is already created
     std::set<std::string>& cloud_targets = oc.env.worker->get_cloud_targets();
-    std::pair<std::set<std::string>::iterator, bool> it;
-
-    it = cloud_targets.insert(bucket_name);
-    tier_ctx.target_bucket_created = !(it.second);
 
     ldpp_dout(oc.dpp, 0) << "Transitioning object(" << oc.o.key << ") to the cloud endpoint(" << endpoint << ")" << dendl;
 
     /* Transition object to cloud end point */
-    int ret = rgw_cloud_tier_transfer_object(tier_ctx);
+    int ret = rgw_cloud_tier_transfer_object(tier_ctx, cloud_targets);
 
     if (ret < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: failed to transfer object(" << oc.o.key << ") to the cloud endpoint(" << endpoint << ") ret=" << ret << dendl;
       return ret;
-
-      if (!tier_ctx.target_bucket_created) {
-        cloud_targets.erase(it.first);
-      }
     }
 
     if (delete_object) {

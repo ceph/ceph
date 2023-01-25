@@ -326,17 +326,17 @@ class RGWLCStreamRead
   rgw::sal::Object *obj;
   const real_time &mtime;
 
-  bool multipart;
-  uint64_t m_part_size;
-  off_t m_part_off;
-  off_t m_part_end;
+  bool multipart{false};
+  uint64_t m_part_size{0};
+  off_t m_part_off{0};
+  off_t m_part_end{0};
 
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op;
-  off_t ofs;
-  off_t end;
+  off_t ofs{0};
+  off_t end{0};
   rgw_rest_obj rest_obj;
 
-  int retcode;
+  int retcode{0};
 
   public:
   RGWLCStreamRead(CephContext *_cct, const DoutPrefixProvider *_dpp,
@@ -1246,8 +1246,7 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
                                     out_bl, &bl, nullptr, null_yield);
 
   if (ret < 0 ) {
-    ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to create target bucket: " << tier_ctx.target_bucket_name << ", ret:" << ret << dendl;
-    return ret;
+    ldpp_dout(tier_ctx.dpp, 0) << "create target bucket : " << tier_ctx.target_bucket_name << " returned ret:" << ret << dendl;
   }
   if (out_bl.length() > 0) {
     RGWXMLDecoder::XMLParser parser;
@@ -1270,7 +1269,7 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
       return -EIO;
     }
 
-    if (result.code != "BucketAlreadyOwnedByYou") {
+    if (result.code != "BucketAlreadyOwnedByYou" && result.code != "BucketAlreadyExists") {
       ldpp_dout(tier_ctx.dpp, 0) << "ERROR: Creating target bucket failed with error: " << result.code << dendl;
       return -EIO;
     }
@@ -1279,8 +1278,14 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
   return 0;
 }
 
-int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx) {
+int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<std::string>& cloud_targets) {
   int ret = 0;
+
+  // check if target_path is already created
+  std::set<std::string>::iterator it;
+
+  it = cloud_targets.find(tier_ctx.target_bucket_name);
+  tier_ctx.target_bucket_created = (it != cloud_targets.end());
 
   /* If run first time attempt to create the target bucket */
   if (!tier_ctx.target_bucket_created) {
@@ -1291,6 +1296,7 @@ int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx) {
       return ret;
     }
     tier_ctx.target_bucket_created = true;
+    cloud_targets.insert(tier_ctx.target_bucket_name);
   }
 
   /* Since multiple zones may try to transition the same object to the cloud,
