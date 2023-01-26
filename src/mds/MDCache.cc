@@ -2653,7 +2653,7 @@ void MDCache::dump_resolve_status(Formatter *f) const
 {
   f->open_object_section("resolve_status");
   f->dump_stream("resolve_gather") << resolve_gather;
-  f->dump_stream("resolve_ack_gather") << resolve_gather;
+  f->dump_stream("resolve_ack_gather") << resolve_ack_gather;
   f->close_section();
 }
 
