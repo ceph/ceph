@@ -217,8 +217,7 @@ double Allocator::get_fragmentation_score()
   };
   foreach(iterated_allocation);
 
-
   double ideal = get_score(sum);
-  double terrible = sum * get_score(1);
+  double terrible = (sum / block_size) * get_score(block_size);
   return (ideal - score_sum) / (ideal - terrible);
 }
