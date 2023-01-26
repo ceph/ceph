@@ -164,7 +164,7 @@ TEST(TestRGWLua, EmptyScript)
   uint64_t id = 0;
   req_state s(cct, &e, id); 
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -179,7 +179,7 @@ TEST(TestRGWLua, SyntaxError)
 
   DEFINE_REQ_STATE;
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, -1);
 }
 
@@ -191,7 +191,7 @@ TEST(TestRGWLua, Hello)
 
   DEFINE_REQ_STATE;
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -203,7 +203,7 @@ TEST(TestRGWLua, RGWDebugLogNumber)
 
   DEFINE_REQ_STATE;
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -215,7 +215,7 @@ TEST(TestRGWLua, RGWDebugNil)
 
   DEFINE_REQ_STATE;
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, -1);
 }
 
@@ -229,7 +229,7 @@ TEST(TestRGWLua, URI)
   DEFINE_REQ_STATE;
   s.decoded_uri = "http://hello.world/";
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -248,7 +248,7 @@ TEST(TestRGWLua, Response)
   s.err.err_code = "Bad Request";
   s.err.message = "This is a bad request";
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -263,7 +263,7 @@ TEST(TestRGWLua, SetResponse)
   DEFINE_REQ_STATE;
   s.err.message = "this is a bad request";
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -277,7 +277,7 @@ TEST(TestRGWLua, SetRGWId)
   DEFINE_REQ_STATE;
   s.host_id = "foo";
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_NE(rc, 0);
 }
 
@@ -290,7 +290,7 @@ TEST(TestRGWLua, InvalidField)
   DEFINE_REQ_STATE;
   s.host_id = "foo";
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "kaboom", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, -1);
 }
 
@@ -302,7 +302,7 @@ TEST(TestRGWLua, InvalidSubField)
 
   DEFINE_REQ_STATE;
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "kaboom", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, -1);
 }
 
@@ -336,7 +336,7 @@ TEST(TestRGWLua, Bucket)
   b.bucket_id = "myid"; 
   s.bucket.reset(new sal::RadosBucket(nullptr, b));
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -359,7 +359,7 @@ TEST(TestRGWLua, GenericAttributes)
   s.generic_attrs["goodbye"] = "cruel world";
   s.generic_attrs["ka"] = "boom";
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -381,7 +381,7 @@ TEST(TestRGWLua, Environment)
   s.env.emplace("goodbye", "cruel world");
   s.env.emplace("ka", "boom");
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -402,7 +402,7 @@ TEST(TestRGWLua, Tags)
   s.tagset.add_tag("goodbye", "cruel world");
   s.tagset.add_tag("ka", "boom");
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -415,7 +415,7 @@ TEST(TestRGWLua, TagsNotWriteable)
   DEFINE_REQ_STATE;
   s.tagset.add_tag("hello", "world");
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_NE(rc, 0);
 }
 
@@ -441,7 +441,7 @@ TEST(TestRGWLua, Metadata)
   s.info.x_meta_map["foo"] = "bar";
   s.info.x_meta_map["ka"] = "boom";
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -492,7 +492,7 @@ TEST(TestRGWLua, Acl)
   s.user_acl->get_acl().add_grant(&grant3);
   s.user_acl->get_acl().add_grant(&grant4);
   s.user_acl->get_acl().add_grant(&grant5);
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -511,7 +511,7 @@ TEST(TestRGWLua, User)
   u.id = "myid";
   s.user.reset(new sal::RadosUser(nullptr, u));
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -556,7 +556,7 @@ TEST(TestRGWLua, UseFunction)
   s.object_acl->get_owner().set_name("user five");
   s.object_acl->get_owner().set_id(rgw_user("tenant5", "user5"));
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -577,7 +577,7 @@ TEST(TestRGWLua, WithLib)
   b.name = "my-bucket-name-is-fish";
   s.bucket.reset(new sal::RadosBucket(nullptr, b));
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
@@ -590,7 +590,7 @@ TEST(TestRGWLua, NotAllowedInLib)
 
   DEFINE_REQ_STATE;
 
-  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_NE(rc, 0);
 }
 #include <sys/socket.h>
@@ -669,11 +669,11 @@ TEST(TestRGWLua, OpsLog)
   s.auth.identity = std::unique_ptr<rgw::auth::Identity>(
                         new FakeIdentity());
 
-  auto rc = lua::request::execute(store.get(), nullptr, olog.get(), &s, "put_obj", script);
+  auto rc = lua::request::execute(store.get(), nullptr, olog.get(), &s, nullptr, script);
   EXPECT_EQ(rc, 0);
  
 	s.err.http_ret = 400;
-  rc = lua::request::execute(store.get(), nullptr, olog.get(), &s, "put_obj", script);
+  rc = lua::request::execute(store.get(), nullptr, olog.get(), &s, nullptr, script);
   EXPECT_EQ(rc, 0);
 
 	// give the socket client time to read
