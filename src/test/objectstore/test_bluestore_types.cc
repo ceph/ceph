@@ -56,13 +56,12 @@ TEST(bluestore, sizeof) {
 void dump_mempools()
 {
   ostringstream ostr;
-  Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
+  auto f = Formatter::create_unique("json-pretty", "json-pretty", "json-pretty");
   ostr << "Mempools: ";
   f->open_object_section("mempools");
-  mempool::dump(f);
+  mempool::dump(f.get());
   f->close_section();
   f->flush(ostr);
-  delete f;
   cout << ostr.str() << std::endl;
 }
 /*void get_mempool_stats(uint64_t* total_bytes, uint64_t* total_items)

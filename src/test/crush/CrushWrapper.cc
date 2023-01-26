@@ -901,13 +901,12 @@ TEST_F(CrushWrapperTest, dump_rules) {
 
   // no rule by default
   {
-    Formatter *f = Formatter::create("json-pretty");
+    auto f = Formatter::create_unique("json-pretty");
     f->open_array_section("rules");
-    c->dump_rules(f);
+    c->dump_rules(f.get());
     f->close_section();
     stringstream ss;
     f->flush(ss);
-    delete f;
     EXPECT_EQ("[]\n", ss.str());
   }
 
@@ -917,20 +916,18 @@ TEST_F(CrushWrapperTest, dump_rules) {
   EXPECT_EQ(0, rule);
 
   {
-    Formatter *f = Formatter::create("xml");
-    c->dump_rules(f);
+    auto f = Formatter::create_unique("xml");
+    c->dump_rules(f.get());
     stringstream ss;
     f->flush(ss);
-    delete f;
     EXPECT_EQ((unsigned)0, ss.str().find("<rule><rule_id>0</rule_id><rule_name>NAME</rule_name>"));
   }
 
   {
-    Formatter *f = Formatter::create("xml");
-    c->dump_rule(rule, f);
+    auto f = Formatter::create_unique("xml");
+    c->dump_rule(rule, f.get());
     stringstream ss;
     f->flush(ss);
-    delete f;
     EXPECT_EQ((unsigned)0, ss.str().find("<rule><rule_id>0</rule_id><rule_name>NAME</rule_name>"));
     EXPECT_NE(string::npos,
 	      ss.str().find("<item_name>default</item_name></step>"));
