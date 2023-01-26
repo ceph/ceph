@@ -2460,7 +2460,7 @@ def find_executable(executable: str, path: Optional[str] = None) -> Optional[str
     """
     _, ext = os.path.splitext(executable)
     if (sys.platform == 'win32') and (ext != '.exe'):
-        executable = executable + '.exe'
+        executable = executable + '.exe'  # pragma: no cover
 
     if os.path.isfile(executable):
         return executable
