@@ -336,3 +336,81 @@ def test_find_program():
 
     with pytest.raises(ValueError):
         _cephadm.find_program("foo_bar-baz.noway")
+
+
+def _mk_fake_call(enabled, active):
+    def _fake_call(ctx, cmd, **kwargs):
+        if "is-enabled" in cmd:
+            if isinstance(enabled, Exception):
+                raise enabled
+            return enabled
+        if "is-active" in cmd:
+            if isinstance(active, Exception):
+                raise active
+            return active
+        raise ValueError("should not get here")
+
+    return _fake_call
+
+
+@pytest.mark.parametrize(
+    "enabled_out, active_out, expected",
+    [
+        (
+            # ok, all is well
+            ("", "", 0),
+            ("active", "", 0),
+            (True, "running", True),
+        ),
+        (
+            # disabled, unknown if active
+            ("disabled", "", 1),
+            ("", "", 0),
+            (False, "unknown", True),
+        ),
+        (
+            # is-enabled error (not disabled, unknown if active
+            ("bleh", "", 1),
+            ("", "", 0),
+            (False, "unknown", False),
+        ),
+        (
+            # is-enabled ok, inactive is stopped
+            ("", "", 0),
+            ("inactive", "", 0),
+            (True, "stopped", True),
+        ),
+        (
+            # is-enabled ok, failed is error
+            ("", "", 0),
+            ("failed", "", 0),
+            (True, "error", True),
+        ),
+        (
+            # is-enabled ok, auto-restart is error
+            ("", "", 0),
+            ("auto-restart", "", 0),
+            (True, "error", True),
+        ),
+        (
+            # error exec'ing is-enabled cmd
+            ValueError("bonk"),
+            ("active", "", 0),
+            (False, "running", False),
+        ),
+        (
+            # error exec'ing is-enabled cmd
+            ("", "", 0),
+            ValueError("blat"),
+            (True, "unknown", True),
+        ),
+    ],
+)
+def test_check_unit(enabled_out, active_out, expected):
+    with with_cephadm_ctx([]) as ctx:
+        _cephadm.call.side_effect = _mk_fake_call(
+            enabled=enabled_out,
+            active=active_out,
+        )
+        enabled, state, installed = _cephadm.check_unit(ctx, "foobar")
+    assert (enabled, state, installed) == expected
