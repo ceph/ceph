@@ -328,3 +328,11 @@ class TestFindExecutable:
     def test_no_such_exe(self):
         exe = _cephadm.find_executable("foo_bar-baz.noway")
         assert exe is None
+
+
+def test_find_program():
+    exe = _cephadm.find_program("true")
+    assert exe.endswith("true")
+
+    with pytest.raises(ValueError):
+        _cephadm.find_program("foo_bar-baz.noway")
