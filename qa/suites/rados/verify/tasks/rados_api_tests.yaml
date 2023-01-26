@@ -23,6 +23,7 @@ overrides:
       osd:
         osd class load list: "*"
         osd class default list: "*"
+        osd client watch timeout: 120
 tasks:
 - workunit:
     timeout: 6h
