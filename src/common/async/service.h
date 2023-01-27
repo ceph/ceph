@@ -18,7 +18,7 @@
 #include <boost/asio/execution_context.hpp>
 #include <boost/intrusive/list.hpp>
 
-namespace ceph::async::detail {
+namespace ceph::async {
 
 struct service_tag {};
 using service_list_base_hook = boost::intrusive::list_base_hook<
@@ -72,4 +72,4 @@ class service : public boost::asio::execution_context::service {
   }
 };
 
-} // namespace ceph::async::detail
+} // namespace ceph::async
