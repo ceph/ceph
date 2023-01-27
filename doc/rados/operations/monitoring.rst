@@ -60,7 +60,7 @@ In interactive mode, type ``status`` and press **Enter**:
 .. prompt:: ceph>
     :prompts: ceph>
    
-    ceph> status
+    status
 
 Ceph will print the cluster status. For example, a tiny Ceph demonstration
 cluster with one of each service may print the following:
