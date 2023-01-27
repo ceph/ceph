@@ -3003,7 +3003,7 @@ void MDSRank::command_tag_path(Formatter *f,
   C_SaferCond scond;
   {
     std::lock_guard l(mds_lock);
-    mdcache->enqueue_scrub(path, tag, true, true, false, f, &scond);
+    mdcache->enqueue_scrub(path, tag, true, true, false, false, f, &scond);
   }
   scond.wait();
 }
