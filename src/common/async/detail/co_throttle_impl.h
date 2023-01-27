@@ -23,7 +23,7 @@
 #include <boost/intrusive/list.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include "common/async/cancel_on_error.h"
-#include "common/async/detail/service.h"
+#include "common/async/service.h"
 #include "include/ceph_assert.h"
 
 namespace ceph::async::detail {
