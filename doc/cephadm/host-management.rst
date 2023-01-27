@@ -30,10 +30,13 @@ clusters. For example:
 
 .. prompt:: bash #
 
-   # ceph orch host ls --detail 
-   HOSTNAME     ADDRESS         LABELS  STATUS  VENDOR/MODEL                           CPU    HDD      SSD  NIC  
-   ceph-master  192.168.122.73  _admin          QEMU (Standard PC (Q35 + ICH9, 2009))  4C/4T  4/1.6TB  -    1    
-   1 hosts in cluster
+   ceph orch host ls --detail
+
+::
+
+    HOSTNAME     ADDRESS         LABELS  STATUS  VENDOR/MODEL                           CPU    HDD      SSD  NIC
+    ceph-master  192.168.122.73  _admin          QEMU (Standard PC (Q35 + ICH9, 2009))  4C/4T  4/1.6TB  -    1
+    1 hosts in cluster
 
 .. _cephadm-adding-hosts:    
     
@@ -68,8 +71,8 @@ To add each new host to the cluster, perform two steps:
 
    .. prompt:: bash #
 
-     ceph orch host add host2 10.10.0.102
-     ceph orch host add host3 10.10.0.103
+      ceph orch host add host2 10.10.0.102
+      ceph orch host add host3 10.10.0.103
 
    It is best to explicitly provide the host IP address.  If an IP is
    not provided, then the host name will be immediately resolved via
