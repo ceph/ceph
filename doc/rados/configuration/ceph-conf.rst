@@ -76,19 +76,19 @@ include the following:
 .. confval:: mon_host_override
 
 - :confval:`mon_dns_srv_name`
-- :confval:`mon_data`, :confval:`osd_data`, :confval:`mds_data`, 
+- :confval:`mon_data`, :confval:`osd_data`, :confval:`mds_data`,
   :confval:`mgr_data`, and similar options that define which local directory
   the daemon stores its data in.
-- :confval:`keyring`, :confval:`keyfile`, and/or :confval:`key`, which can be 
+- :confval:`keyring`, :confval:`keyfile`, and/or :confval:`key`, which can be
   used to specify the authentication credential to use to authenticate with the
   monitor. Note that in most cases the default keyring location is in the data
   directory specified above.
 
 In most cases, there is no reason to modify the default values of these
 options. However, there is one exception to this: the :confval:`mon_host`
-option that identifies the addresses of the cluster's monitors. But when DNS is
-used to identify monitors, a local Ceph configuration file can be avoided
-entirely.
+option that identifies the addresses of the cluster's monitors. But when
+:ref:`DNS is used to identify monitors<mon-dns-lookup>`, a local Ceph
+configuration file can be avoided entirely.
 
 
 Skipping monitor config
@@ -178,7 +178,7 @@ If multiple values of the same configuration option are specified in the same
 section, the last value specified takes precedence.
 
 Note that values from the local configuration file always take precedence over
-values from the monitor configuration database, regardless of the section in 
+values from the monitor configuration database, regardless of the section in
 which they appear.
 
 .. _ceph-metavariables:
@@ -191,7 +191,7 @@ metavariable is set in a configuration value, Ceph expands the metavariable at
 the time the configuration value is used. In this way, Ceph metavariables
 behave similarly to the way that variable expansion works in the Bash shell.
 
-Ceph supports the following metavariables: 
+Ceph supports the following metavariables:
 
 .. describe:: $cluster
 
@@ -273,7 +273,7 @@ surrounded by square brackets. For example:
 
     [global]
     debug_ms = 0
-    
+
     [osd]
     debug_ms = 1
 
@@ -427,7 +427,8 @@ stored in this database.
 Some settings might need to be stored in local configuration files because they
 affect the ability of the process to connect to the monitors, to authenticate,
 and to fetch configuration information. In most cases this applies only to the
-``mon_host`` option. This issue can be avoided by using DNS SRV records.
+``mon_host`` option. This issue can be avoided by using :ref:`DNS SRV
+records<mon-dns-lookup>`.
 
 Sections and masks
 ------------------
@@ -476,13 +477,13 @@ The following CLI commands are used to configure the cluster:
 * ``ceph config set <who> <option> <value>`` specifies a configuration
   option in the monitor configuration database.
 
-* ``ceph config show <who>`` shows the configuration for a running daemon. 
+* ``ceph config show <who>`` shows the configuration for a running daemon.
   These settings might differ from those stored by the monitors if there are
   also local configuration files in use or if options have been overridden on
   the command line or at run time. The source of the values of the options is
   displayed in the output.
 
-* ``ceph config assimilate-conf -i <input file> -o <output file>`` ingests a 
+* ``ceph config assimilate-conf -i <input file> -o <output file>`` ingests a
   configuration file from *input file* and moves any valid options into the
   monitor configuration database. Any settings that are unrecognized, are
   invalid, or cannot be controlled by the monitor will be returned in an
@@ -511,7 +512,7 @@ For example:
 
    ceph config help log_file
 
-:: 
+::
 
    log_file - path to log file
     (std::string, basic)
@@ -598,13 +599,13 @@ Override values can be set in two ways:
 
 #. From any host, send a message to a daemon with a command of the following
    form:
-   
+
    .. prompt:: bash $
 
       ceph tell <name> config set <option> <value>
 
    For example:
-   
+
    .. prompt:: bash $
 
       ceph tell osd.123 config set debug_osd 20
@@ -612,7 +613,7 @@ Override values can be set in two ways:
    The ``tell`` command can also accept a wildcard as the daemon identifier.
    For example, to adjust the debug level on all OSD daemons, run a command of
    the following form:
-   
+
    .. prompt:: bash $
 
       ceph tell osd.* config set debug_osd 20
@@ -625,7 +626,7 @@ Override values can be set in two ways:
       ceph daemon <name> config set <option> <value>
 
    For example:
-   
+
    .. prompt:: bash $
 
       ceph daemon osd.4 config set debug_osd 20
@@ -709,5 +710,5 @@ These changes are as follows:
   all options would be set as though they were within the :confsec:`global`
   section. This approach is discouraged. Since Octopus, any configuration
   file that has no section name must contain only a single option.
-  
+
 .. |---|   unicode:: U+2014 .. EM DASH :trim:
