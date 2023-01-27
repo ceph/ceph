@@ -1634,6 +1634,7 @@ public:
     dout(10) << __func__ << " " << when << " start" << dendl;
     uint64_t s = 0;
     for (auto i = hot.begin(); i != hot.end(); ++i) {
+      ceph_assert(i->cache_private == BUFFER_HOT);
       s += i->length;
     }
 
@@ -1647,6 +1648,7 @@ public:
     }
 
     for (auto i = warm_in.begin(); i != warm_in.end(); ++i) {
+      ceph_assert(i->cache_private == BUFFER_WARM_IN);
       s += i->length;
     }
 
@@ -1665,6 +1667,10 @@ public:
       ceph_assert(s == buffer_bytes);
     }
 
+    for (auto i = warm_out.begin(); i != warm_out.end(); ++i) {
+      ceph_assert(i->cache_private == BUFFER_WARM_OUT);
+      ceph_assert(i->is_empty());
+    }
     dout(20) << __func__ << " " << when << " buffer_bytes " << buffer_bytes
              << " ok" << dendl;
   }
