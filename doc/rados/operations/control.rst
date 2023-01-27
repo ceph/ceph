@@ -584,11 +584,11 @@ output::
 
 A dump of the monitor state:
 
-       .. prompt:: bash $
+.. prompt:: bash $
 
-	ceph mon dump
+   ceph mon dump
 
-  ::
+::
 
 	dumped monmap epoch 2
 	epoch 2
