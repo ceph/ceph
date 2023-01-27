@@ -655,6 +655,11 @@ void ScrubStack::scrub_status(Formatter *f) {
     have_more = false;
     auto& header = p.second;
 
+    if (mdcache->get_inode(header->get_origin())->is_mdsdir() 
+    && header->get_scrub_mdsdir() && header->get_tag().empty()) {
+      continue;
+    }
+
     std::string tag(header->get_tag());
     f->open_object_section(tag.c_str()); // scrub id
 
@@ -682,6 +687,12 @@ void ScrubStack::scrub_status(Formatter *f) {
         *optcss << ",";
       }
       *optcss << "force";
+    }
+    if (header->get_scrub_mdsdir()) {
+      if (have_more) {
+        *optcss << ",";
+      }
+      *optcss << "scrub_mdsdir";
     }
 
     f->dump_string("options", optcss->strv());
