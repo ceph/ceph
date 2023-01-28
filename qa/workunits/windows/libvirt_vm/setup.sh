@@ -7,7 +7,7 @@ VIRTIO_WIN_ISO_URL=${VIRTIO_WIN_ISO_URL:-"https://fedorapeople.org/groups/virt/v
 DIR="$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)"
 
 # Use build_utils.sh from ceph-build
-curl --retry-max-time 30 --retry 10 -L -o ${DIR}/build_utils.sh https://raw.githubusercontent.com/ceph/ceph-build/master/scripts/build_utils.sh
+curl --retry-max-time 30 --retry 10 -L -o ${DIR}/build_utils.sh https://raw.githubusercontent.com/ceph/ceph-build/main/scripts/build_utils.sh
 source ${DIR}/build_utils.sh
 
 # Helper function to restart the Windows VM
@@ -117,7 +117,7 @@ SSH_TIMEOUT=1h ssh_exec /setup.ps1
 cd $DIR
 
 # Get the helper script to download Chacra builds
-retrycmd_if_failure 10 5 1m curl -L -o ./get-chacra-bin.py https://raw.githubusercontent.com/ceph/ceph-win32-tests/master/get-bin.py
+retrycmd_if_failure 10 5 1m curl -L -o ./get-chacra-bin.py https://raw.githubusercontent.com/ceph/ceph-win32-tests/main/get-bin.py
 chmod +x ./get-chacra-bin.py
 
 # Download latest WNBD build from Chacra

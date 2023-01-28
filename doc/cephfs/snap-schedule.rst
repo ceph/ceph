@@ -38,6 +38,13 @@ below). By default
 the start time is last midnight. So when a snapshot schedule with repeat
 interval `1h` is added at 13:50
 with the default start time, the first snapshot will be taken at 14:00.
+The time zone is assumed to be UTC if none is explicitly included in the string.
+An explicit time zone will be mapped to UTC at execution.
+The start time must be in ISO8601 format. Examples below:
+
+UTC: 2022-08-08T05:30:00 i.e. 5:30 AM UTC, without explicit time zone offset
+IDT: 2022-08-08T09:00:00+03:00 i.e. 6:00 AM UTC
+EDT: 2022-08-08T05:30:00-04:00 i.e. 9:30 AM UTC
 
 Retention specifications are identified by path and the retention spec itself. A
 retention spec consists of either a number and a time period separated by a

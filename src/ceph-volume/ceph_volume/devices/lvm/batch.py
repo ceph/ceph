@@ -73,7 +73,8 @@ def get_physical_osds(devices, args):
                                      abs_size,
                                      args.osds_per_device,
                                      osd_id,
-                                     'dmcrypt' if args.dmcrypt else None))
+                                     'dmcrypt' if args.dmcrypt else None,
+                                     dev.symlink))
     return ret
 
 
@@ -119,14 +120,10 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
                 continue
             # any LV present is considered a taken slot
             occupied_slots = len(dev.lvs)
-            # prior to v15.2.8, db/wal deployments were grouping multiple fast devices into single VGs - we need to
-            # multiply requested_slots (per device) by the number of devices in the VG in order to ensure that
-            # abs_size is calculated correctly from vg_size
-            slots_for_vg = len(vg_devices) * requested_slots
             dev_size = dev.vg_size[0]
             # this only looks at the first vg on device, unsure if there is a better
             # way
-            abs_size = disk.Size(b=int(dev_size / slots_for_vg))
+            abs_size = disk.Size(b=int(dev_size / requested_slots))
             free_size = dev.vg_free[0]
             relative_size = int(abs_size) / dev_size
             if requested_size:
@@ -572,7 +569,8 @@ class Batch(object):
                      abs_size,
                      slots,
                      id_,
-                     encryption):
+                     encryption,
+                     symlink=None):
             self.id_ = id_
             self.data = self.VolSpec(path=data_path,
                                 rel_size=rel_size,
@@ -582,6 +580,7 @@ class Batch(object):
             self.fast = None
             self.very_fast = None
             self.encryption = encryption
+            self.symlink = symlink
 
         def add_fast_device(self, path, rel_size, abs_size, slots, type_):
             self.fast = self.VolSpec(path=path,
@@ -633,9 +632,12 @@ class Batch(object):
             if self.encryption:
                 report += templates.osd_encryption.format(
                     enc=self.encryption)
+            path = self.data.path
+            if self.symlink:
+                path = f'{self.symlink} -> {self.data.path}'
             report += templates.osd_component.format(
                 _type=self.data.type_,
-                path=self.data.path,
+                path=path,
                 size=self.data.abs_size,
                 percent=self.data.rel_size)
             if self.fast:

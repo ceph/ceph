@@ -209,10 +209,14 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
   for (const struct rgw_http_status_code *h = http_codes; h->code; h++) {
     http_status_names[h->code] = h->name;
   }
-  std::list<std::string> names;
 
+  std::list<std::string> rgw_dns_names;
+  std::string rgw_dns_names_str = cct->_conf->rgw_dns_name;
+  get_str_list(rgw_dns_names_str, ", ", rgw_dns_names);
+  hostnames_set.insert(rgw_dns_names.begin(), rgw_dns_names.end());
+
+  std::list<std::string> names;
   zone_group.get_hostnames(names);
-  hostnames_set.insert(cct->_conf->rgw_dns_name);
   hostnames_set.insert(names.begin(), names.end());
   hostnames_set.erase(""); // filter out empty hostnames
   ldout(cct, 20) << "RGW hostnames: " << hostnames_set << dendl;
@@ -591,20 +595,7 @@ void end_header(req_state* s, RGWOp* op, const char *content_type,
      and the content type was not set by the user */
   if (force_content_type ||
       (!content_type &&  s->formatter->get_len()  != 0) || s->is_err()){
-    switch (s->format) {
-    case RGW_FORMAT_XML:
-      ctype = "application/xml";
-      break;
-    case RGW_FORMAT_JSON:
-      ctype = "application/json";
-      break;
-    case RGW_FORMAT_HTML:
-      ctype = "text/html";
-      break;
-    default:
-      ctype = "text/plain";
-      break;
-    }
+    ctype = to_mime_type(s->format);
     if (s->prot_flags & RGW_REST_SWIFT)
       ctype.append("; charset=utf-8");
     content_type = ctype.c_str();
@@ -660,7 +651,7 @@ void abort_early(req_state *s, RGWOp* op, int err_no,
   string error_content("");
   if (!s->formatter) {
     s->formatter = new JSONFormatter;
-    s->format = RGW_FORMAT_JSON;
+    s->format = RGWFormat::JSON;
   }
 
   // op->error_handler is responsible for calling it's handler error_handler
@@ -1714,7 +1705,7 @@ RGWOp* RGWHandler_REST::get_op(void)
   }
 
   if (op) {
-    op->init(store, s, this);
+    op->init(driver, s, this);
   }
   return op;
 } /* get_op */
@@ -1725,19 +1716,19 @@ void RGWHandler_REST::put_op(RGWOp* op)
 } /* put_op */
 
 int RGWHandler_REST::allocate_formatter(req_state *s,
-					int default_type,
+					RGWFormat default_type,
 					bool configurable)
 {
-  s->format = -1; // set to invalid value to allocation happens anyway 
+  s->format = RGWFormat::BAD_FORMAT; // set to invalid value to allocation happens anyway
   auto type = default_type;
   if (configurable) {
     string format_str = s->info.args.get("format");
     if (format_str.compare("xml") == 0) {
-      type = RGW_FORMAT_XML;
+      type = RGWFormat::XML;
     } else if (format_str.compare("json") == 0) {
-      type = RGW_FORMAT_JSON;
+      type = RGWFormat::JSON;
     } else if (format_str.compare("html") == 0) {
-      type = RGW_FORMAT_HTML;
+      type = RGWFormat::HTML;
     } else {
       const char *accept = s->info.env->get("HTTP_ACCEPT");
       if (accept) {
@@ -1748,11 +1739,11 @@ int RGWHandler_REST::allocate_formatter(req_state *s,
         }
         format_buf[i] = 0;
         if ((strcmp(format_buf, "text/xml") == 0) || (strcmp(format_buf, "application/xml") == 0)) {
-          type = RGW_FORMAT_XML;
+          type = RGWFormat::XML;
         } else if (strcmp(format_buf, "application/json") == 0) {
-          type = RGW_FORMAT_JSON;
+          type = RGWFormat::JSON;
         } else if (strcmp(format_buf, "text/html") == 0) {
-          type = RGW_FORMAT_HTML;
+          type = RGWFormat::HTML;
         }
       }
     }
@@ -1760,7 +1751,7 @@ int RGWHandler_REST::allocate_formatter(req_state *s,
   return RGWHandler_REST::reallocate_formatter(s, type);
 }
 
-int RGWHandler_REST::reallocate_formatter(req_state *s, int type)
+int RGWHandler_REST::reallocate_formatter(req_state *s, const RGWFormat type)
 {
   if (s->format == type) {
     // do nothing, just reset
@@ -1778,14 +1769,14 @@ int RGWHandler_REST::reallocate_formatter(req_state *s, int type)
   const bool swift_bulkupload = s->prot_flags & RGW_REST_SWIFT &&
                                 s->info.args.exists("extract-archive");
   switch (s->format) {
-    case RGW_FORMAT_PLAIN:
+    case RGWFormat::PLAIN:
       {
         const bool use_kv_syntax = s->info.args.exists("bulk-delete") ||
                                    multipart_delete || swift_bulkupload;
         s->formatter = new RGWFormatter_Plain(use_kv_syntax);
         break;
       }
-    case RGW_FORMAT_XML:
+    case RGWFormat::XML:
       {
         const bool lowercase_underscore = s->info.args.exists("bulk-delete") ||
                                           multipart_delete || swift_bulkupload;
@@ -1793,10 +1784,10 @@ int RGWHandler_REST::reallocate_formatter(req_state *s, int type)
         s->formatter = new XMLFormatter(false, lowercase_underscore);
         break;
       }
-    case RGW_FORMAT_JSON:
+    case RGWFormat::JSON:
       s->formatter = new JSONFormatter(false);
       break;
-    case RGW_FORMAT_HTML:
+    case RGWFormat::HTML:
       s->formatter = new HTMLFormatter(s->prot_flags & RGW_REST_WEBSITE);
       break;
     default:
@@ -1894,7 +1885,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
         ldpp_dout(op, -1) << "Error reading IAM User Policy: " << e.what() << dendl;
       }
     }
-    rgw_build_iam_environment(store, s);
+    rgw_build_iam_environment(driver, s);
     return 0;
   }
 
@@ -2304,7 +2295,7 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
 }
 
 RGWHandler_REST* RGWREST::get_handler(
-  rgw::sal::Store*  const store,
+  rgw::sal::Driver*  const driver,
   req_state* const s,
   const rgw::auth::StrategyRegistry& auth_registry,
   const std::string& frontend_prefix,
@@ -2328,12 +2319,12 @@ RGWHandler_REST* RGWREST::get_handler(
     *pmgr = m;
   }
 
-  RGWHandler_REST* handler = m->get_handler(store, s, auth_registry, frontend_prefix);
+  RGWHandler_REST* handler = m->get_handler(driver, s, auth_registry, frontend_prefix);
   if (! handler) {
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;
   }
-  *init_error = handler->init(store, s, rio);
+  *init_error = handler->init(driver, s, rio);
   if (*init_error < 0) {
     m->put_handler(handler);
     return nullptr;

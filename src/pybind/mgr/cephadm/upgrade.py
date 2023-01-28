@@ -2,7 +2,7 @@ import json
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any
+from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any, cast
 
 import orchestrator
 from cephadm.registry import Registry
@@ -10,6 +10,7 @@ from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, \
     MONITORING_STACK_TYPES, CEPH_TYPES, GATEWAY_TYPES
+from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
 
 if TYPE_CHECKING:
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 # from ceph_fs.h
 CEPH_MDSMAP_ALLOW_STANDBY_REPLAY = (1 << 5)
+CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
 
 
 def normalize_image_digest(digest: str, default_registry: str) -> str:
@@ -58,6 +60,7 @@ class UpgradeState:
                  target_version: Optional[str] = None,
                  error: Optional[str] = None,
                  paused: Optional[bool] = None,
+                 fail_fs: bool = False,
                  fs_original_max_mds: Optional[Dict[str, int]] = None,
                  fs_original_allow_standby_replay: Optional[Dict[str, bool]] = None,
                  daemon_types: Optional[List[str]] = None,
@@ -76,6 +79,7 @@ class UpgradeState:
         self.fs_original_max_mds: Optional[Dict[str, int]] = fs_original_max_mds
         self.fs_original_allow_standby_replay: Optional[Dict[str,
                                                              bool]] = fs_original_allow_standby_replay
+        self.fail_fs = fail_fs
         self.daemon_types = daemon_types
         self.hosts = hosts
         self.services = services
@@ -89,6 +93,7 @@ class UpgradeState:
             'target_id': self.target_id,
             'target_digests': self.target_digests,
             'target_version': self.target_version,
+            'fail_fs': self.fail_fs,
             'fs_original_max_mds': self.fs_original_max_mds,
             'fs_original_allow_standby_replay': self.fs_original_allow_standby_replay,
             'error': self.error,
@@ -118,7 +123,8 @@ class CephadmUpgrade:
         'UPGRADE_FAILED_PULL',
         'UPGRADE_REDEPLOY_DAEMON',
         'UPGRADE_BAD_TARGET_VERSION',
-        'UPGRADE_EXCEPTION'
+        'UPGRADE_EXCEPTION',
+        'UPGRADE_OFFLINE_HOST'
     ]
 
     def __init__(self, mgr: "CephadmOrchestrator"):
@@ -299,6 +305,8 @@ class CephadmUpgrade:
 
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None,
                       hosts: Optional[List[str]] = None, services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
+        fail_fs_value = cast(bool, self.mgr.get_module_option_ex(
+            'orchestrator', 'fail_fs', False))
         if self.mgr.mode != 'root':
             raise OrchestratorError('upgrade is not supported in %s mode' % (
                 self.mgr.mode))
@@ -336,6 +344,7 @@ class CephadmUpgrade:
         self.upgrade_state = UpgradeState(
             target_name=target_name,
             progress_id=str(uuid.uuid4()),
+            fail_fs=fail_fs_value,
             daemon_types=daemon_types,
             hosts=hosts,
             services=services,
@@ -456,9 +465,12 @@ class CephadmUpgrade:
         if not self.upgrade_state.paused:
             return 'Upgrade to %s not paused' % self.target_image
         self.upgrade_state.paused = False
+        self.upgrade_state.error = ''
         self.mgr.log.info('Upgrade: Resumed upgrade to %s' % self.target_image)
         self._save_upgrade_state()
         self.mgr.event.set()
+        for alert_id in self.UPGRADE_ERRORS:
+            self.mgr.remove_health_warning(alert_id)
         return 'Resumed upgrade to %s' % self.target_image
 
     def upgrade_stop(self) -> str:
@@ -483,6 +495,14 @@ class CephadmUpgrade:
         if self.upgrade_state and not self.upgrade_state.paused:
             try:
                 self._do_upgrade()
+            except HostConnectionError as e:
+                self._fail_upgrade('UPGRADE_OFFLINE_HOST', {
+                    'severity': 'error',
+                    'summary': f'Upgrade: Failed to connect to host {e.hostname} at addr ({e.addr})',
+                    'count': 1,
+                    'detail': [f'SSH connection failed to {e.hostname} at addr ({e.addr}): {str(e)}'],
+                })
+                return False
             except Exception as e:
                 self._fail_upgrade('UPGRADE_EXCEPTION', {
                     'severity': 'error',
@@ -611,27 +631,43 @@ class CephadmUpgrade:
 
             # scale down this filesystem?
             if mdsmap["max_mds"] > 1:
-                self.mgr.log.info('Upgrade: Scaling down filesystem %s' % (
-                    fs_name
-                ))
-                if fscid not in self.upgrade_state.fs_original_max_mds:
-                    self.upgrade_state.fs_original_max_mds[fscid] = mdsmap['max_mds']
-                    self._save_upgrade_state()
-                ret, out, err = self.mgr.check_mon_command({
-                    'prefix': 'fs set',
-                    'fs_name': fs_name,
-                    'var': 'max_mds',
-                    'val': '1',
-                })
-                continue_upgrade = False
-                continue
+                if self.upgrade_state.fail_fs:
+                    if not (mdsmap['flags'] & CEPH_MDSMAP_NOT_JOINABLE) and \
+                            len(mdsmap['up']) > 0:
+                        self.mgr.log.info(f'Upgrade: failing fs {fs_name} for '
+                                          f'rapid multi-rank mds upgrade')
+                        ret, out, err = self.mgr.check_mon_command({
+                            'prefix': 'fs fail',
+                            'fs_name': fs_name
+                        })
+                        if ret != 0:
+                            continue_upgrade = False
+                    continue
+                else:
+                    self.mgr.log.info('Upgrade: Scaling down filesystem %s' % (
+                        fs_name
+                    ))
+                    if fscid not in self.upgrade_state.fs_original_max_mds:
+                        self.upgrade_state.fs_original_max_mds[fscid] = \
+                            mdsmap['max_mds']
+                        self._save_upgrade_state()
+                    ret, out, err = self.mgr.check_mon_command({
+                        'prefix': 'fs set',
+                        'fs_name': fs_name,
+                        'var': 'max_mds',
+                        'val': '1',
+                    })
+                    continue_upgrade = False
+                    continue
 
-            if not (mdsmap['in'] == [0] and len(mdsmap['up']) <= 1):
-                self.mgr.log.info(
-                    'Upgrade: Waiting for fs %s to scale down to reach 1 MDS' % (fs_name))
-                time.sleep(10)
-                continue_upgrade = False
-                continue
+            if not self.upgrade_state.fail_fs:
+                if not (mdsmap['in'] == [0] and len(mdsmap['up']) <= 1):
+                    self.mgr.log.info(
+                        'Upgrade: Waiting for fs %s to scale down to reach 1 MDS' % (
+                            fs_name))
+                    time.sleep(10)
+                    continue_upgrade = False
+                    continue
 
             if len(mdsmap['up']) == 0:
                 self.mgr.log.warning(
@@ -775,7 +811,15 @@ class CephadmUpgrade:
                     return False, to_upgrade
 
             if d.daemon_type == 'mds' and self._enough_mds_for_ok_to_stop(d):
-                if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
+                # when fail_fs is set to true, all MDS daemons will be moved to
+                # up:standby state, so Cephadm won't be able to upgrade due to
+                # this check and and will warn with "It is NOT safe to stop
+                # mds.<daemon_name> at this time: one or more filesystems is
+                # currently degraded", therefore we bypass this check for that
+                # case.
+                assert self.upgrade_state is not None
+                if not self.upgrade_state.fail_fs \
+                        and not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                     return False, to_upgrade
 
             to_upgrade.append(d_entry)
@@ -921,7 +965,25 @@ class CephadmUpgrade:
 
     def _complete_mds_upgrade(self) -> None:
         assert self.upgrade_state is not None
-        if self.upgrade_state.fs_original_max_mds:
+        if self.upgrade_state.fail_fs:
+            for fs in self.mgr.get("fs_map")['filesystems']:
+                fs_name = fs['mdsmap']['fs_name']
+                self.mgr.log.info('Upgrade: Setting filesystem '
+                                  f'{fs_name} Joinable')
+                try:
+                    ret, _, err = self.mgr.check_mon_command({
+                        'prefix': 'fs set',
+                        'fs_name': fs_name,
+                        'var': 'joinable',
+                        'val': 'true',
+                    })
+                except Exception as e:
+                    logger.error("Failed to set fs joinable "
+                                 f"true due to {e}")
+                    raise OrchestratorError("Failed to set"
+                                            "fs joinable true"
+                                            f"due to {e}")
+        elif self.upgrade_state.fs_original_max_mds:
             for fs in self.mgr.get("fs_map")['filesystems']:
                 fscid = fs["id"]
                 fs_name = fs['mdsmap']['fs_name']
@@ -974,6 +1036,18 @@ class CephadmUpgrade:
         if not self.upgrade_state:
             logger.debug('_do_upgrade no state, exiting')
             return
+
+        if self.mgr.offline_hosts:
+            # offline host(s), on top of potential connection errors when trying to upgrade a daemon
+            # or pull an image, can cause issues where daemons are never ok to stop. Since evaluating
+            # whether or not that risk is present for any given offline hosts is a difficult problem,
+            # it's best to just fail upgrade cleanly so user can address the offline host(s)
+
+            # the HostConnectionError expects a hostname and addr, so let's just take
+            # one at random. It doesn't really matter which host we say we couldn't reach here.
+            hostname: str = list(self.mgr.offline_hosts)[0]
+            addr: str = self.mgr.inventory.get_addr(hostname)
+            raise HostConnectionError(f'Host(s) were marked offline: {self.mgr.offline_hosts}', hostname, addr)
 
         target_image = self.target_image
         target_id = self.upgrade_state.target_id
@@ -1106,7 +1180,7 @@ class CephadmUpgrade:
                     # no point in trying to redeploy with new version if active mgr is not on the new version
                     need_upgrade_deployer = []
 
-            if not need_upgrade_self:
+            if any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
                 # only after the mgr itself is upgraded can we expect daemons to have
                 # deployed_by == target_digests
                 need_upgrade += need_upgrade_deployer

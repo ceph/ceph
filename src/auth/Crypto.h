@@ -112,6 +112,10 @@ public:
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
 
+  void clear() {
+    *this = CryptoKey();
+  }
+
   int get_type() const { return type; }
   utime_t get_created() const { return created; }
   void print(std::ostream& out) const;

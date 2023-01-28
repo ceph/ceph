@@ -129,7 +129,7 @@ void MonmapMonitor::create_pending()
   pending_map = *mon.monmap;
   pending_map.epoch++;
   pending_map.last_changed = ceph_clock_now();
-  dout(10) << __func__ << " monmap epoch " << pending_map.epoch << dendl;
+  pending_map.removed_ranks.clear();
 }
 
 void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
@@ -755,8 +755,6 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     pending_map.remove(name);
     pending_map.disallowed_leaders.erase(name);
     pending_map.last_changed = ceph_clock_now();
-    ss << "removing mon." << name << " at " << addrs
-       << ", there will be " << pending_map.size() << " monitors" ;
     propose = true;
     err = 0;
 

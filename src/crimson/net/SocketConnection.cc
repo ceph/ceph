@@ -27,7 +27,8 @@ using crimson::common::local_conf;
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
                                    ChainedDispatchers& dispatchers)
-  : messenger(messenger),
+  : core(messenger.shard_id()),
+    messenger(messenger),
     protocol(std::make_unique<ProtocolV2>(dispatchers, *this, messenger))
 {
 #ifdef UNIT_TESTS_BUILT
@@ -39,11 +40,6 @@ SocketConnection::SocketConnection(SocketMessenger& messenger,
 }
 
 SocketConnection::~SocketConnection() {}
-
-crimson::net::Messenger*
-SocketConnection::get_messenger() const {
-  return &messenger;
-}
 
 bool SocketConnection::is_connected() const
 {
@@ -72,14 +68,20 @@ bool SocketConnection::peer_wins() const
 
 seastar::future<> SocketConnection::send(MessageURef msg)
 {
-  assert(seastar::this_shard_id() == shard_id());
-  return protocol->send(std::move(msg));
+  return seastar::smp::submit_to(
+    shard_id(),
+    [this, msg=std::move(msg)]() mutable {
+      return protocol->send(std::move(msg));
+    });
 }
 
 seastar::future<> SocketConnection::keepalive()
 {
-  assert(seastar::this_shard_id() == shard_id());
-  return protocol->keepalive();
+  return seastar::smp::submit_to(
+    shard_id(),
+    [this] {
+      return protocol->keepalive();
+    });
 }
 
 void SocketConnection::mark_down()
@@ -128,7 +130,7 @@ SocketConnection::close_clean(bool dispatch_reset)
 }
 
 seastar::shard_id SocketConnection::shard_id() const {
-  return messenger.shard_id();
+  return core;
 }
 
 seastar::socket_address SocketConnection::get_local_address() const {
@@ -136,6 +138,7 @@ seastar::socket_address SocketConnection::get_local_address() const {
 }
 
 void SocketConnection::print(ostream& out) const {
+    out << (void*)this << " ";
     messenger.print(out);
     if (!protocol->socket) {
       out << " >> " << get_peer_name() << " " << peer_addr;

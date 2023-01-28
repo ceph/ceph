@@ -1823,6 +1823,10 @@ CEPH_RADOS_API void rados_omap_get_end(rados_omap_iter_t iter);
  */
 CEPH_RADOS_API int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize,
                               time_t *pmtime);
+
+CEPH_RADOS_API int rados_stat2(rados_ioctx_t io, const char *o, uint64_t *psize,
+                              struct timespec *pmtime);
+
 /**
  * Execute an OSD class method on an object
  *
@@ -2207,6 +2211,10 @@ CEPH_RADOS_API int rados_aio_flush_async(rados_ioctx_t io,
 CEPH_RADOS_API int rados_aio_stat(rados_ioctx_t io, const char *o,
 		                  rados_completion_t completion,
 		                  uint64_t *psize, time_t *pmtime);
+
+CEPH_RADOS_API int rados_aio_stat2(rados_ioctx_t io, const char *o,
+		                  rados_completion_t completion,
+		                  uint64_t *psize, struct timespec *pmtime);
 
 /**
  * Asynchronously compare an on-disk object range with a buffer
@@ -3365,6 +3373,10 @@ CEPH_RADOS_API void rados_read_op_stat(rados_read_op_t read_op,
 			               time_t *pmtime,
 			               int *prval);
 
+CEPH_RADOS_API void rados_read_op_stat2(rados_read_op_t read_op,
+			               uint64_t *psize,
+			               struct timespec *pmtime,
+			               int *prval);
 /**
  * Read bytes from offset into buffer.
  *

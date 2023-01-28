@@ -17,6 +17,13 @@
 
 SET_SUBSYS(seastore_onode);
 
+namespace fmt {
+template <typename T>
+const void* ptr(const ::boost::intrusive_ptr<T>& p) {
+  return p.get();
+}
+}
+
 namespace crimson::os::seastore::onode {
 /*
  * tree_cursor_t
@@ -77,7 +84,7 @@ void tree_cursor_t::assert_next_to(
   } else if (is_tracked()) {
     auto key = get_key_view(magic);
     auto prv_key = prv.get_key_view(magic);
-    assert(key.compare_to(prv_key) == MatchKindCMP::GT);
+    assert(key > prv_key);
     if (ref_leaf_node == prv.ref_leaf_node) {
       position.assert_next_to(prv.position);
     } else {
@@ -103,32 +110,32 @@ tree_cursor_t::erase<true>(context_t, bool);
 template eagain_ifuture<Ref<tree_cursor_t>>
 tree_cursor_t::erase<false>(context_t, bool);
 
-MatchKindCMP tree_cursor_t::compare_to(
+std::strong_ordering tree_cursor_t::compare_to(
     const tree_cursor_t& o, value_magic_t magic) const
 {
   if (!is_tracked() && !o.is_tracked()) {
-    return MatchKindCMP::EQ;
+    return std::strong_ordering::equal;
   } else if (!is_tracked()) {
-    return MatchKindCMP::GT;
+    return std::strong_ordering::greater;
   } else if (!o.is_tracked()) {
-    return MatchKindCMP::LT;
+    return std::strong_ordering::less;
   }
 
   assert(is_tracked() && o.is_tracked());
   // all tracked cursors are singletons
   if (this == &o) {
-    return MatchKindCMP::EQ;
+    return std::strong_ordering::equal;
   }
 
-  MatchKindCMP ret;
+  std::strong_ordering ret = std::strong_ordering::equal;
   if (ref_leaf_node == o.ref_leaf_node) {
-    ret = position.compare_to(o.position);
+    ret = position <=> o.position;
   } else {
     auto key = get_key_view(magic);
     auto o_key = o.get_key_view(magic);
-    ret = key.compare_to(o_key);
+    ret = key <=> o_key;
   }
-  assert(ret != MatchKindCMP::EQ);
+  assert(ret != 0);
   return ret;
 }
 
@@ -259,7 +266,7 @@ void tree_cursor_t::Cache::validate_is_latest(const search_position_t& pos) cons
 
   auto [_key_view, _p_value_header] = ref_leaf_node->get_kv(pos);
   assert(p_node_base == ref_leaf_node->read());
-  assert(key_view->compare_to(_key_view) == MatchKindCMP::EQ);
+  assert(key_view ==_key_view);
   assert(p_value_header == _p_value_header);
 #endif
 }
@@ -717,13 +724,13 @@ eagain_ifuture<Ref<Node>> Node::load(
     if (!field_type) {
       ERRORT("load addr={:x}, is_level_tail={} error, "
              "got invalid header -- {}",
-             c.t, addr, expect_is_level_tail, extent);
+             c.t, addr, expect_is_level_tail, fmt::ptr(extent));
       ceph_abort("fatal error");
     }
     if (header.get_is_level_tail() != expect_is_level_tail) {
       ERRORT("load addr={:x}, is_level_tail={} error, "
              "is_level_tail mismatch -- {}",
-             c.t, addr, expect_is_level_tail, extent);
+             c.t, addr, expect_is_level_tail, fmt::ptr(extent));
       ceph_abort("fatal error");
     }
 
@@ -732,22 +739,24 @@ eagain_ifuture<Ref<Node>> Node::load(
       if (extent->get_length() != c.vb.get_leaf_node_size()) {
         ERRORT("load addr={:x}, is_level_tail={} error, "
                "leaf length mismatch -- {}",
-               c.t, addr, expect_is_level_tail, extent);
+               c.t, addr, expect_is_level_tail, fmt::ptr(extent));
         ceph_abort("fatal error");
       }
       auto impl = LeafNodeImpl::load(extent, *field_type);
+      auto *derived_ptr = impl.get();
       return eagain_iertr::make_ready_future<Ref<Node>>(
-	new LeafNode(impl.get(), std::move(impl)));
+	new LeafNode(derived_ptr, std::move(impl)));
     } else if (node_type == node_type_t::INTERNAL) {
       if (extent->get_length() != c.vb.get_internal_node_size()) {
         ERRORT("load addr={:x}, is_level_tail={} error, "
                "internal length mismatch -- {}",
-               c.t, addr, expect_is_level_tail, extent);
+               c.t, addr, expect_is_level_tail, fmt::ptr(extent));
         ceph_abort("fatal error");
       }
       auto impl = InternalNodeImpl::load(extent, *field_type);
+      auto *derived_ptr = impl.get();
       return eagain_iertr::make_ready_future<Ref<Node>>(
-	new InternalNode(impl.get(), std::move(impl)));
+	new InternalNode(derived_ptr, std::move(impl)));
     } else {
       ceph_abort("impossible path");
     }
@@ -1465,7 +1474,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
   // XXX: check the insert_child is unlinked from this node
 #ifndef NDEBUG
   auto _insert_key = *insert_child->impl->get_pivot_index();
-  assert(insert_key.compare_to(_insert_key) == MatchKindCMP::EQ);
+  assert(insert_key == _insert_key);
 #endif
   auto insert_value = insert_child->impl->laddr();
   auto insert_pos = pos;
@@ -1730,7 +1739,7 @@ void InternalNode::validate_child(const Node& child) const
     key_view_t index_key;
     const laddr_packed_t* p_child_addr;
     impl->get_slot(child_pos, &index_key, &p_child_addr);
-    assert(index_key.compare_to(*child.impl->get_pivot_index()) == MatchKindCMP::EQ);
+    assert(index_key == *child.impl->get_pivot_index());
     assert(p_child_addr->value == child.impl->laddr());
   }
   // XXX(multi-type)
@@ -1752,7 +1761,7 @@ void InternalNode::validate_child_inconsistent(const Node& child) const
   const laddr_packed_t* p_value;
   impl->get_slot(child_pos, &current_key, &p_value);
   key_view_t new_key = *child.impl->get_pivot_index();
-  assert(current_key.compare_to(new_key) != MatchKindCMP::EQ);
+  assert(current_key != new_key);
   assert(p_value->value == child.impl->laddr());
 #endif
 }
@@ -1762,8 +1771,9 @@ eagain_ifuture<InternalNode::fresh_node_t> InternalNode::allocate(
 {
   return InternalNodeImpl::allocate(c, hint, field_type, is_level_tail, level
   ).si_then([](auto&& fresh_impl) {
+    auto *derived_ptr = fresh_impl.impl.get();
     auto node = Ref<InternalNode>(new InternalNode(
-          fresh_impl.impl.get(), std::move(fresh_impl.impl)));
+          derived_ptr, std::move(fresh_impl.impl)));
     return fresh_node_t{node, fresh_impl.mut};
   });
 }
@@ -2184,7 +2194,7 @@ void LeafNode::validate_cursor(const tree_cursor_t& cursor) const
   // behaviors.
   auto [key, p_value_header] = get_kv(cursor.get_position());
   auto magic = p_value_header->magic;
-  assert(key.compare_to(cursor.get_key_view(magic)) == MatchKindCMP::EQ);
+  assert(key == cursor.get_key_view(magic));
   assert(p_value_header == cursor.read_value_header(magic));
 #endif
 }
@@ -2262,8 +2272,9 @@ eagain_ifuture<LeafNode::fresh_node_t> LeafNode::allocate(
 {
   return LeafNodeImpl::allocate(c, hint, field_type, is_level_tail
   ).si_then([](auto&& fresh_impl) {
+    auto *derived_ptr = fresh_impl.impl.get();
     auto node = Ref<LeafNode>(new LeafNode(
-          fresh_impl.impl.get(), std::move(fresh_impl.impl)));
+          derived_ptr, std::move(fresh_impl.impl)));
     return fresh_node_t{node, fresh_impl.mut};
   });
 }

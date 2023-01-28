@@ -1,5 +1,4 @@
 import { Component } from '@angular/core';
-import { Router } from '@angular/router';
 
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 
@@ -9,5 +8,5 @@ import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.s
   styleUrls: ['./prometheus-tabs.component.scss']
 })
 export class PrometheusTabsComponent {
-  constructor(public router: Router, public prometheusAlertService: PrometheusAlertService) {}
+  constructor(public prometheusAlertService: PrometheusAlertService) {}
 }

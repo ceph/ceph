@@ -25,7 +25,7 @@ BINARIES="${BINARIES_TO_RUN}hello_radosstriper_cpp
 # parse output like "octopus (dev)"
 case $(librados-config --release | grep -Po ' \(\K[^\)]+') in
     dev)
-        BRANCH=master;;
+        BRANCH=main;;
     rc|stable)
         BRANCH=$(librados-config --release | cut -d' ' -f1);;
     *)
@@ -44,7 +44,7 @@ function cleanup () {
 
 function get_sources () {
     for s in $SOURCES ; do
-        curl --progress-bar --output $s ${DL_PREFIX}$s
+        curl --progress-bar --output $s -L ${DL_PREFIX}$s
     done
 }
 
@@ -71,7 +71,10 @@ pushd $DESTDIR
 case $(distro_id) in
     centos|fedora|rhel|opensuse*|suse|sles)
         install gcc-c++ make libradospp-devel librados-devel;;
-    ubuntu|debian|devuan|softiron)
+    ubuntu)
+        install gcc-11 g++-11 make libradospp-dev librados-dev
+        export CXX_FLAGS="-std=c++20";;
+    debian|devuan|softiron)
         install g++ make libradospp-dev librados-dev;;
     *)
         echo "$(distro_id) is unknown, $@ will have to be installed manually."

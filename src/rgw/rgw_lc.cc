@@ -17,6 +17,7 @@
 #include "include/function2.hpp"
 #include "common/Formatter.h"
 #include "common/containers.h"
+#include "common/split.h"
 #include <common/errno.h>
 #include "include/random.h"
 #include "cls/lock/cls_lock_client.h"
@@ -31,10 +32,6 @@
 #include "rgw_lc_tier.h"
 #include "rgw_notify.h"
 
-// this seems safe to use, at least for now--arguably, we should
-// prefer header-only fmt, in general
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include "fmt/format.h"
 
 #include "services/svc_sys_obj.h"
@@ -141,7 +138,8 @@ bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
     transition_action action;
     action.days = elem.second.get_days();
     action.date = ceph::from_iso_8601(elem.second.get_date());
-    action.storage_class = elem.first;
+    action.storage_class
+      = rgw_placement_rule::get_canonical_storage_class(elem.first);
     op.noncur_transitions.emplace(elem.first, std::move(action));
   }
   std::string prefix;
@@ -150,10 +148,10 @@ bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
   } else {
     prefix = rule.get_prefix();
   }
-
   if (rule.get_filter().has_tags()){
     op.obj_tags = rule.get_filter().get_tags();
   }
+  op.rule_flags = rule.get_filter().get_flags();
   prefix_map.emplace(std::move(prefix), std::move(op));
   return true;
 }
@@ -245,10 +243,10 @@ void *RGWLC::LCWorker::entry() {
   return NULL;
 }
 
-void RGWLC::initialize(CephContext *_cct, rgw::sal::Store* _store) {
+void RGWLC::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
   cct = _cct;
-  store = _store;
-  sal_lc = store->get_lifecycle();
+  driver = _driver;
+  sal_lc = driver->get_lifecycle();
   max_objs = cct->_conf->rgw_lc_max_objs;
   if (max_objs > HASH_PRIME)
     max_objs = HASH_PRIME;
@@ -315,7 +313,7 @@ static bool obj_has_expired(const DoutPrefixProvider *dpp, CephContext *cct, cep
   return (timediff >= cmp);
 }
 
-static bool pass_object_lock_check(rgw::sal::Store* store, rgw::sal::Object* obj, const DoutPrefixProvider *dpp)
+static bool pass_object_lock_check(rgw::sal::Driver* driver, rgw::sal::Object* obj, const DoutPrefixProvider *dpp)
 {
   if (!obj->get_bucket()->get_info().obj_lock_enabled()) {
     return true;
@@ -363,7 +361,7 @@ static bool pass_object_lock_check(rgw::sal::Store* store, rgw::sal::Object* obj
 }
 
 class LCObjsLister {
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   rgw::sal::Bucket* bucket;
   rgw::sal::Bucket::ListParams list_params;
   rgw::sal::Bucket::ListResults list_results;
@@ -373,11 +371,11 @@ class LCObjsLister {
   int64_t delay_ms;
 
 public:
-  LCObjsLister(rgw::sal::Store* _store, rgw::sal::Bucket* _bucket) :
-      store(_store), bucket(_bucket) {
+  LCObjsLister(rgw::sal::Driver* _driver, rgw::sal::Bucket* _bucket) :
+      driver(_driver), bucket(_bucket) {
     list_params.list_versions = bucket->versioned();
     list_params.allow_unordered = true;
-    delay_ms = store->ctx()->_conf.get_val<int64_t>("rgw_lc_thread_delay");
+    delay_ms = driver->ctx()->_conf.get_val<int64_t>("rgw_lc_thread_delay");
   }
 
   void set_prefix(const string& p) {
@@ -455,14 +453,14 @@ struct op_env {
   using LCWorker = RGWLC::LCWorker;
 
   lc_op op;
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   LCWorker* worker;
   rgw::sal::Bucket* bucket;
   LCObjsLister& ol;
 
-  op_env(lc_op& _op, rgw::sal::Store* _store, LCWorker* _worker,
+  op_env(lc_op& _op, rgw::sal::Driver* _driver, LCWorker* _worker,
 	 rgw::sal::Bucket* _bucket, LCObjsLister& _ol)
-    : op(_op), store(_store), worker(_worker), bucket(_bucket),
+    : op(_op), driver(_driver), worker(_worker), bucket(_bucket),
       ol(_ol) {}
 }; /* op_env */
 
@@ -476,7 +474,7 @@ struct lc_op_ctx {
   boost::optional<std::string> next_key_name;
   ceph::real_time effective_mtime;
 
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   rgw::sal::Bucket* bucket;
   lc_op& op; // ok--refers to expanded env.op
   LCObjsLister& ol;
@@ -492,10 +490,10 @@ struct lc_op_ctx {
 	    boost::optional<std::string> next_key_name,
 	    ceph::real_time effective_mtime,
 	    const DoutPrefixProvider *dpp, WorkQ* wq)
-    : cct(env.store->ctx()), env(env), o(o), next_key_name(next_key_name),
+    : cct(env.driver->ctx()), env(env), o(o), next_key_name(next_key_name),
       effective_mtime(effective_mtime),
-      store(env.store), bucket(env.bucket), op(env.op), ol(env.ol),
-      rctx(env.store), dpp(dpp), wq(wq)
+      driver(env.driver), bucket(env.bucket), op(env.op), ol(env.ol),
+      rctx(env.driver), dpp(dpp), wq(wq)
     {
       obj = bucket->get_object(o.key);
     }
@@ -515,7 +513,7 @@ static int remove_expired_obj(
   const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool remove_indeed,
   rgw::notify::EventType event_type)
 {
-  auto& store = oc.store;
+  auto& driver = oc.driver;
   auto& bucket_info = oc.bucket->get_info();
   auto& o = oc.o;
   auto obj_key = o.key;
@@ -533,7 +531,7 @@ static int remove_expired_obj(
   std::unique_ptr<rgw::sal::Bucket> bucket;
   std::unique_ptr<rgw::sal::Object> obj;
 
-  ret = store->get_bucket(nullptr, bucket_info, &bucket);
+  ret = driver->get_bucket(nullptr, bucket_info, &bucket);
   if (ret < 0) {
     return ret;
   }
@@ -542,7 +540,7 @@ static int remove_expired_obj(
   std::unique_ptr<rgw::sal::User> user;
   if (! bucket->get_owner()) {
     auto& bucket_info = bucket->get_info();
-    user = store->get_user(bucket_info.owner);
+    user = driver->get_user(bucket_info.owner);
     // forgive me, lord
     if (user) {
       bucket->set_owner(user.get());
@@ -560,38 +558,30 @@ static int remove_expired_obj(
   del_op->params.unmod_since = meta.mtime;
   del_op->params.marker_version_id = version_id;
 
-  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(oc.store);
-  if (rados) {
-    // notification supported only for RADOS store for now
-    notify
-      = store->get_notification(dpp, obj.get(), nullptr, event_type,
-			      bucket.get(), lc_id,
-			      const_cast<std::string&>(oc.bucket->get_tenant()),
-			      lc_req_id, null_yield);
+  // notification supported only for RADOS driver for now
+  notify = driver->get_notification(dpp, obj.get(), nullptr, event_type,
+				   bucket.get(), lc_id,
+				   const_cast<std::string&>(oc.bucket->get_tenant()),
+				   lc_req_id, null_yield);
 
-    /* can eliminate cast when reservation is lifted into Notification */
-    auto notify_res = static_cast<rgw::sal::RadosNotification*>(notify.get())->get_reservation();
-
-    ret = rgw::notify::publish_reserve(dpp, event_type, notify_res, nullptr);
-    if ( ret < 0) {
-      ldpp_dout(dpp, 1)
-        << "ERROR: notify reservation failed, deferring delete of object k="
-        << o.key
-        << dendl;
-      return ret;
-    }
+  ret = notify->publish_reserve(dpp, nullptr);
+  if ( ret < 0) {
+    ldpp_dout(dpp, 1)
+      << "ERROR: notify reservation failed, deferring delete of object k="
+      << o.key
+      << dendl;
+    return ret;
   }
   ret =  del_op->delete_obj(dpp, null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, 1) <<
       "ERROR: publishing notification failed, with error: " << ret << dendl;
-  } else if (rados) {
+  } else {
     // send request to notification manager
-    auto notify_res = static_cast<rgw::sal::RadosNotification*>(notify.get())->get_reservation();
-    (void) rgw::notify::publish_commit(
-      obj.get(), obj->get_obj_size(), ceph::real_clock::now(),
-      obj->get_attrs()[RGW_ATTR_ETAG].to_str(), version_id, event_type,
-      notify_res, dpp);
+    (void) notify->publish_commit(dpp, obj->get_obj_size(),
+				  ceph::real_clock::now(),
+				  obj->get_attrs()[RGW_ATTR_ETAG].to_str(),
+				  version_id);
   }
 
   return ret;
@@ -891,7 +881,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
       if (ret < 0) {
           if (ret == (-ENOENT))
             return 0;
-          ldpp_dout(this, 0) << "ERROR: store->list_objects():" <<dendl;
+          ldpp_dout(this, 0) << "ERROR: driver->list_objects():" <<dendl;
           return ret;
       }
 
@@ -910,7 +900,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
   worker->workpool->drain();
   return 0;
-}
+} /* RGWLC::handle_multipart_expiration */
 
 static int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, bufferlist& tags_bl)
 {
@@ -928,6 +918,16 @@ static bool is_valid_op(const lc_op& op)
                || op.dm_expiration
                || !op.transitions.empty()
                || !op.noncur_transitions.empty()));
+}
+
+static bool zone_check(const lc_op& op, rgw::sal::Zone* zone)
+{
+
+  if (zone->get_tier_type() == "archive") {
+    return (op.rule_flags & uint32_t(LCFlagType::ArchiveZone));
+  } else {
+    return (! (op.rule_flags & uint32_t(LCFlagType::ArchiveZone)));
+  }
 }
 
 static inline bool has_all_tags(const lc_op& rule_action,
@@ -1131,7 +1131,7 @@ public:
 		      << oc.wq->thr_name() << dendl;
 
     return is_expired &&
-      pass_object_lock_check(oc.store, oc.obj.get(), dpp);
+      pass_object_lock_check(oc.driver, oc.obj.get(), dpp);
   }
 
   int process(lc_op_ctx& oc) {
@@ -1303,7 +1303,7 @@ public:
     }
 
     std::string tier_type = ""; 
-    rgw::sal::ZoneGroup& zonegroup = oc.store->get_zone()->get_zonegroup();
+    rgw::sal::ZoneGroup& zonegroup = oc.driver->get_zone()->get_zonegroup();
 
     rgw_placement_rule target_placement;
     target_placement.inherit_from(oc.bucket->get_placement_rule());
@@ -1314,18 +1314,10 @@ public:
     if (!r && oc.tier->get_tier_type() == "cloud-s3") {
       ldpp_dout(oc.dpp, 30) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
       if (!oc.o.is_current() &&
-          !pass_object_lock_check(oc.store, oc.obj.get(), oc.dpp)) {
+          !pass_object_lock_check(oc.driver, oc.obj.get(), oc.dpp)) {
         /* Skip objects which has object lock enabled. */
         ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is locked. Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
         return 0;
-      }
-
-      /* Allow transition for only RadosStore */
-      rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(oc.store);
-
-      if (!rados) {
-        ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is not on RadosStore. Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
-        return -1;
       }
 
       r = transition_obj_to_cloud(oc);
@@ -1335,7 +1327,7 @@ public:
         return r;
       }
     } else {
-      if (!oc.store->valid_placement(target_placement)) {
+      if (!oc.driver->valid_placement(target_placement)) {
         ldpp_dout(oc.dpp, 0) << "ERROR: non existent dest placement: "
 	  		     << target_placement
                              << " bucket="<< oc.bucket
@@ -1525,7 +1517,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     return 0;
   }
 
-  int ret = store->get_bucket(this, nullptr, bucket_tenant, bucket_name, &bucket, null_yield);
+  int ret = driver->get_bucket(this, nullptr, bucket_tenant, bucket_name, &bucket, null_yield);
   if (ret < 0) {
     ldpp_dout(this, 0) << "LC:get_bucket for " << bucket_name
 		       << " failed" << dendl;
@@ -1571,6 +1563,9 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 			 << dendl;
       return -1;
     }
+
+  /* fetch information for zone checks */
+  rgw::sal::Zone* zone = driver->get_zone();
 
   auto pf = [](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {
     auto wt =
@@ -1621,18 +1616,24 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       pre_marker = next_marker;
     }
 
-    LCObjsLister ol(store, bucket.get());
+    LCObjsLister ol(driver, bucket.get());
     ol.set_prefix(prefix_iter->first);
+
+    if (! zone_check(op, zone)) {
+      ldpp_dout(this, 7) << "LC rule not executable in " << zone->get_tier_type()
+			 << " zone, skipping" << dendl;
+      continue;
+    }
 
     ret = ol.init(this);
     if (ret < 0) {
       if (ret == (-ENOENT))
         return 0;
-      ldpp_dout(this, 0) << "ERROR: store->list_objects():" <<dendl;
+      ldpp_dout(this, 0) << "ERROR: driver->list_objects():" << dendl;
       return ret;
     }
 
-    op_env oenv(op, store, worker, bucket.get(), ol);
+    op_env oenv(op, driver, worker, bucket.get(), ol);
     LCOpRule orule(oenv);
     orule.build(); // why can't ctor do it?
     rgw_bucket_dir_entry* o{nullptr};
@@ -1675,9 +1676,7 @@ public:
       if (r) {
 	return r;
       }
-      std::this_thread::sleep_for(sleep_ms);
-      sleep_ms = std::chrono::milliseconds(sleep_ms*2*retries);
-      ++retries;
+      std::this_thread::sleep_for(sleep_ms * 2 * retries++);
     }
     return false;
   }
@@ -1689,9 +1688,8 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
 {
   utime_t lock_duration(cct->_conf->rgw_lc_lock_max_time, 0);
 
-  rgw::sal::LCSerializer* lock = sal_lc->get_serializer(lc_index_lock_name,
-							obj_names[index],
-							cookie);
+  std::unique_ptr<rgw::sal::LCSerializer> lock =
+    sal_lc->get_serializer(lc_index_lock_name, obj_names[index], cookie);
 
   ldpp_dout(this, 5) << "RGWLC::bucket_lc_post(): POST " << entry
 	  << " index: " << index << " worker ix: " << worker->ix
@@ -1735,7 +1733,6 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
     }
 clean:
     lock->unlock();
-    delete lock;
     ldpp_dout(this, 20) << "RGWLC::bucket_lc_post() unlock "
 			<< obj_names[index] << dendl;
     return 0;
@@ -1782,7 +1779,7 @@ static inline vector<int> random_sequence(uint32_t n)
     });
   std::random_device rd;
   std::default_random_engine rng{rd()};
-  std::shuffle(v.begin(), v.end(), rd);
+  std::shuffle(v.begin(), v.end(), rng);
   return v;
 }
 
@@ -1827,7 +1824,7 @@ int RGWLC::process(LCWorker* worker,
      * do need the entry {pro,epi}logue which update the state entry
      * for this bucket) */
     auto bucket_lc_key = get_bucket_lc_key(optional_bucket->get_key());
-    auto index = get_lc_index(store->ctx(), bucket_lc_key);
+    auto index = get_lc_index(driver->ctx(), bucket_lc_key);
     ret = process_bucket(index, max_secs, worker, bucket_lc_key, once);
     return ret;
   } else {
@@ -1884,10 +1881,9 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 	  << dendl;
 
   int ret = 0;
-  std::unique_ptr<rgw::sal::LCSerializer> serializer(
+  std::unique_ptr<rgw::sal::LCSerializer> serializer =
     sal_lc->get_serializer(lc_index_lock_name, obj_names[index],
-			   std::string()));
-
+			   worker->thr_name());
   std::unique_ptr<rgw::sal::Lifecycle::LCEntry> entry;
   if (max_lock_secs <= 0) {
     return -EAGAIN;
@@ -2037,8 +2033,8 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	  << "index: " << index << " worker ix: " << worker->ix
 	  << dendl;
 
-  rgw::sal::LCSerializer* lock =
-    sal_lc->get_serializer(lc_index_lock_name, lc_shard, std::string());
+  std::unique_ptr<rgw::sal::LCSerializer> lock =
+    sal_lc->get_serializer(lc_index_lock_name, lc_shard, worker->thr_name());
 
   utime_t lock_for_s(max_lock_secs, 0);
   const auto& lock_lambda = [&]() {
@@ -2058,7 +2054,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     ldpp_dout(this, 0) << "RGWLC::process(): failed to aquire lock on "
 		       << lc_shard << " after " << shard_lock.get_retries()
 		       << dendl;
-    goto notlocked;
+    return 0;
   }
 
   do {
@@ -2126,7 +2122,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	  if (advance_head(lc_shard, *head.get(), *entry.get(), now) < 0) {
 	    goto exit;
 	  }
-	      /* done with this shard */
+	  /* done with this shard */
 	  if (head->get_marker().empty()) {
 	    ldpp_dout(this, 5) <<
 	      "RGWLC::process() cycle finished lc_shard="
@@ -2217,7 +2213,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       ldpp_dout(this, 0) << "RGWLC::process(): failed to aquire lock on "
 			 << lc_shard << " after " << shard_lock.get_retries()
 			 << dendl;
-      goto notlocked;
+      return 0;
     }
 
     if (ret == -ENOENT) {
@@ -2231,17 +2227,20 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 			   << dendl;
 	/* not fatal, could result from a race */
       }
-    } else if (ret < 0) {
-      entry->set_status(lc_failed);
     } else {
-      entry->set_status(lc_complete);
-    }
-    ret = sal_lc->set_entry(lc_shard,  *entry);
-    if (ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on "
-          << lc_shard << dendl;
-      /* fatal, locked */
-      goto exit;
+      if (ret < 0) {
+        entry->set_status(lc_failed);
+      } else {
+        entry->set_status(lc_complete);
+      }
+      ret = sal_lc->set_entry(lc_shard, *entry);
+      if (ret < 0) {
+        ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on "
+                           << lc_shard
+                           << dendl;
+        /* fatal, locked */
+        goto exit;
+      }
     }
 
     /* done with this shard */
@@ -2261,13 +2260,8 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     }
   } while(1 && !once && !going_down());
 
-notlocked:
-  delete lock;
-  return 0;
-
 exit:
   lock->unlock();
-  delete lock;
   return 0;
 }
 
@@ -2383,11 +2377,11 @@ void RGWLifecycleConfiguration::generate_test_instances(
 
 template<typename F>
 static int guard_lc_modify(const DoutPrefixProvider *dpp,
-                           rgw::sal::Store* store,
+                           rgw::sal::Driver* driver,
 			   rgw::sal::Lifecycle* sal_lc,
 			   const rgw_bucket& bucket, const string& cookie,
 			   const F& f) {
-  CephContext *cct = store->ctx();
+  CephContext *cct = driver->ctx();
 
   auto bucket_lc_key = get_bucket_lc_key(bucket);
   string oid; 
@@ -2399,20 +2393,24 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
   entry->set_status(lc_uninitial);
   int max_lock_secs = cct->_conf->rgw_lc_lock_max_time;
 
-  rgw::sal::LCSerializer* lock = sal_lc->get_serializer(lc_index_lock_name,
-							oid,
-							cookie);
+  std::unique_ptr<rgw::sal::LCSerializer> lock =
+    sal_lc->get_serializer(lc_index_lock_name, oid, cookie);
   utime_t time(max_lock_secs, 0);
 
   int ret;
+  uint16_t retries{0};
 
+  // due to reports of starvation trying to save lifecycle policy, try hard
   do {
     ret = lock->try_lock(dpp, time, null_yield);
     if (ret == -EBUSY || ret == -EEXIST) {
       ldpp_dout(dpp, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
-          << oid << ", sleep 5, try again" << dendl;
-      sleep(5); // XXX: return retryable error
-      continue;
+			<< oid << ", retry in 100ms, ret=" << ret << dendl;
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      // the typical S3 client will time out in 60s
+      if(retries++ < 500) {
+	continue;
+      }
     }
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
@@ -2427,7 +2425,6 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
     break;
   } while(true);
   lock->unlock();
-  delete lock;
   return ret;
 }
 
@@ -2435,21 +2432,26 @@ int RGWLC::set_bucket_config(rgw::sal::Bucket* bucket,
                          const rgw::sal::Attrs& bucket_attrs,
                          RGWLifecycleConfiguration *config)
 {
+  int ret{0};
   rgw::sal::Attrs attrs = bucket_attrs;
-  bufferlist lc_bl;
-  config->encode(lc_bl);
+  if (config) {
+    /* if no RGWLifecycleconfiguration provided, it means
+     * RGW_ATTR_LC is already valid and present */
+    bufferlist lc_bl;
+    config->encode(lc_bl);
+    attrs[RGW_ATTR_LC] = std::move(lc_bl);
 
-  attrs[RGW_ATTR_LC] = std::move(lc_bl);
-
-  int ret =
-    bucket->merge_and_store_attrs(this, attrs, null_yield);
-  if (ret < 0)
-    return ret;
+    ret =
+      bucket->merge_and_store_attrs(this, attrs, null_yield);
+    if (ret < 0) {
+      return ret;
+    }
+  }
 
   rgw_bucket& b = bucket->get_key();
 
 
-  ret = guard_lc_modify(this, store, sal_lc.get(), b, cookie,
+  ret = guard_lc_modify(this, driver, sal_lc.get(), b, cookie,
 			[&](rgw::sal::Lifecycle* sal_lc, const string& oid,
 			    rgw::sal::Lifecycle::LCEntry& entry) {
     return sal_lc->set_entry(oid, entry);
@@ -2459,22 +2461,25 @@ int RGWLC::set_bucket_config(rgw::sal::Bucket* bucket,
 }
 
 int RGWLC::remove_bucket_config(rgw::sal::Bucket* bucket,
-                                const rgw::sal::Attrs& bucket_attrs)
+                                const rgw::sal::Attrs& bucket_attrs,
+				bool merge_attrs)
 {
   rgw::sal::Attrs attrs = bucket_attrs;
-  attrs.erase(RGW_ATTR_LC);
-  int ret = bucket->merge_and_store_attrs(this, attrs, null_yield);
-
   rgw_bucket& b = bucket->get_key();
+  int ret{0};
 
-  if (ret < 0) {
-    ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
-        << b.name << " returned err=" << ret << dendl;
-    return ret;
+  if (merge_attrs) {
+    attrs.erase(RGW_ATTR_LC);
+    ret = bucket->merge_and_store_attrs(this, attrs, null_yield);
+
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
+			 << b.name << " returned err=" << ret << dendl;
+      return ret;
+    }
   }
 
-
-  ret = guard_lc_modify(this, store, sal_lc.get(), b, cookie,
+  ret = guard_lc_modify(this, driver, sal_lc.get(), b, cookie,
 			[&](rgw::sal::Lifecycle* sal_lc, const string& oid,
 			    rgw::sal::Lifecycle::LCEntry& entry) {
     return sal_lc->rm_entry(oid, entry);
@@ -2492,7 +2497,7 @@ RGWLC::~RGWLC()
 namespace rgw::lc {
 
 int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
-                       rgw::sal::Store* store,
+                       rgw::sal::Driver* driver,
 		       rgw::sal::Lifecycle* sal_lc,
 		       rgw::sal::Bucket* bucket)
 {
@@ -2503,7 +2508,7 @@ int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
 
   auto bucket_lc_key = get_bucket_lc_key(bucket->get_key());
   std::string lc_oid;
-  get_lc_oid(store->ctx(), bucket_lc_key, &lc_oid);
+  get_lc_oid(driver->ctx(), bucket_lc_key, &lc_oid);
 
   std::unique_ptr<rgw::sal::Lifecycle::LCEntry> entry;
   // There are multiple cases we need to encounter here
@@ -2522,11 +2527,11 @@ int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
 			   << " creating " << dendl;
     // TODO: we have too many ppl making cookies like this!
     char cookie_buf[COOKIE_LEN + 1];
-    gen_rand_alphanumeric(store->ctx(), cookie_buf, sizeof(cookie_buf) - 1);
+    gen_rand_alphanumeric(driver->ctx(), cookie_buf, sizeof(cookie_buf) - 1);
     std::string cookie = cookie_buf;
 
     ret = guard_lc_modify(dpp,
-      store, sal_lc, bucket->get_key(), cookie,
+      driver, sal_lc, bucket->get_key(), cookie,
       [&lc_oid](rgw::sal::Lifecycle* slc,
 			      const string& oid,
 			      rgw::sal::Lifecycle::LCEntry& entry) {
@@ -2782,6 +2787,9 @@ void LCFilter::dump(Formatter *f) const
 {
   f->dump_string("prefix", prefix);
   f->dump_object("obj_tags", obj_tags);
+  if (have_flag(LCFlagType::ArchiveZone)) {
+    f->dump_string("archivezone", "");
+  }
 }
 
 void LCExpiration::dump(Formatter *f) const

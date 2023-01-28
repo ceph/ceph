@@ -6,8 +6,8 @@
 #include "include/rados/librados.hpp"
 #include "common/errno.h"
 #include "osd/osd_types.h"
-#include "rgw/rgw_tools.h"
-#include "rgw/rgw_cr_rados.h"
+#include "rgw_tools.h"
+#include "rgw_cr_rados.h"
 
 #include "auth/AuthRegistry.h"
 
@@ -41,6 +41,14 @@ int RGWSI_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)
 }
 
 void RGWSI_RADOS::shutdown()
+{
+  if (async_processor) {
+    async_processor->stop();
+  }
+  rados.shutdown();
+}
+
+void RGWSI_RADOS::stop_processor()
 {
   if (async_processor) {
     async_processor->stop();

@@ -17,18 +17,18 @@
 
 #pragma once
 
-#include "rgw/rgw_service.h"
+#include "rgw_service.h"
 
 #include "svc_meta_be.h"
 #include "svc_bucket_types.h"
 #include "svc_bucket.h"
+#include "svc_bucket_sync.h"
 
 class RGWSI_Zone;
 class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
 class RGWSI_Meta;
 class RGWSI_SyncModules;
-class RGWSI_Bucket_Sync;
 
 struct rgw_cache_entry_info;
 

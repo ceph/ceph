@@ -4,6 +4,8 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
 import { Observable, Subscriber } from 'rxjs';
 
+import { PrometheusListHelper } from '~/app/ceph/cluster/prometheus/prometheus-list-helper';
+import { SilenceFormComponent } from '~/app/ceph/cluster/prometheus/silence-form/silence-form.component';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n, SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -15,17 +17,21 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
+import { PrometheusRule } from '~/app/shared/models/prometheus-alerts';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheus-silence-matcher.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { PrometheusListHelper } from '../prometheus-list-helper';
 
 const BASE_URL = 'monitoring/silences';
 
 @Component({
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  providers: [
+    { provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) },
+    SilenceFormComponent
+  ],
   selector: 'cd-silences-list',
   templateUrl: './silence-list.component.html',
   styleUrls: ['./silence-list.component.scss']
@@ -43,6 +49,8 @@ export class SilenceListComponent extends PrometheusListHelper {
     'badge badge-default': 'expired'
   };
   sorts: SortPropDir[] = [{ prop: 'endsAt', dir: SortDirection.desc }];
+  rules: PrometheusRule[];
+  visited: boolean;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -52,6 +60,8 @@ export class SilenceListComponent extends PrometheusListHelper {
     private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
     private succeededLabels: SucceededActionLabelsI18n,
+    private silenceFormComponent: SilenceFormComponent,
+    private silenceMatcher: PrometheusSilenceMatcherService,
     @Inject(PrometheusService) prometheusService: PrometheusService
   ) {
     super(prometheusService);
@@ -112,6 +122,12 @@ export class SilenceListComponent extends PrometheusListHelper {
         flexGrow: 3
       },
       {
+        name: $localize`Alerts Silenced`,
+        prop: 'silencedAlerts',
+        flexGrow: 3,
+        cellTransformation: CellTemplate.badge
+      },
+      {
         name: $localize`Created by`,
         prop: 'createdBy',
         flexGrow: 2
@@ -144,6 +160,10 @@ export class SilenceListComponent extends PrometheusListHelper {
       this.prometheusService.getSilences().subscribe(
         (silences) => {
           this.silences = silences;
+          const activeSilences = silences.filter(
+            (silence: AlertmanagerSilence) => silence.status.state !== 'expired'
+          );
+          this.getAlerts(activeSilences);
         },
         () => {
           this.prometheusService.disableAlertmanagerConfig();
@@ -154,6 +174,20 @@ export class SilenceListComponent extends PrometheusListHelper {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  getAlerts(silences: any) {
+    const rules = this.silenceFormComponent.getRules();
+    silences.forEach((silence: any) => {
+      silence.matchers.forEach((matcher: any) => {
+        this.rules = this.silenceMatcher.getMatchedRules(matcher, rules);
+        const alertNames: string[] = [];
+        for (const rule of this.rules) {
+          alertNames.push(rule.name);
+        }
+        silence.silencedAlerts = alertNames;
+      });
+    });
   }
 
   expireSilence() {

@@ -177,9 +177,9 @@ protected:
   template <class OpT>
   friend class crimson::os::seastore::OperationProxyT;
 
-  // OSD::start_pg_operation needs access to enter_stage, we can make this
+  // PGShardManager::start_pg_operation needs access to enter_stage, we can make this
   // more sophisticated later on
-  friend class OSD;
+  friend class PGShardManager;
 };
 
 /**
@@ -194,7 +194,6 @@ struct OSDOperationRegistry : OperationRegistryT<
 
   void put_historic(const class ClientRequest& op);
 
-  size_t dump_client_requests(ceph::Formatter* f) const;
   size_t dump_historic_client_requests(ceph::Formatter* f) const;
   size_t dump_slowest_historic_client_requests(ceph::Formatter* f) const;
 

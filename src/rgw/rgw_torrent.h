@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_TORRENT_H
-#define CEPH_RGW_TORRENT_H
+#pragma once
 
 #include <string>
 #include <list>
@@ -44,7 +43,7 @@ public:
   void bencode_end(bufferlist& bl) { bl.append('e'); }
 
   //single values
-  void bencode(int value, bufferlist& bl) 
+  void bencode(int value, bufferlist& bl)
   {
     bl.append('i');
     char info[100] = { 0 };
@@ -54,33 +53,33 @@ public:
   }
 
   //single values
-  void bencode(const std::string& str, bufferlist& bl) 
+  void bencode(const std::string& str, bufferlist& bl)
   {
     bencode_key(str, bl);
   }
 
   //dictionary elements
-  void bencode(const std::string& key, int value, bufferlist& bl) 
+  void bencode(const std::string& key, int value, bufferlist& bl)
   {
     bencode_key(key, bl);
     bencode(value, bl);
   }
 
   //dictionary elements
-  void bencode(const std::string& key, const std::string& value, bufferlist& bl) 
+  void bencode(const std::string& key, const std::string& value, bufferlist& bl)
   {
     bencode_key(key, bl);
     bencode(value, bl);
   }
 
   //key len
-  void bencode_key(const std::string& key, bufferlist& bl) 
+  void bencode_key(const std::string& key, bufferlist& bl)
   {
     int len = key.length();
-    char info[100] = { 0 }; 
+    char info[100] = { 0 };
     sprintf(info, "%d:", len);
     bl.append(info, strlen(info));
-    bl.append(key.c_str(), len); 
+    bl.append(key.c_str(), len);
   }
 };
 
@@ -107,7 +106,7 @@ private:
   bufferlist bl;  // bufflist ready to send
 
   req_state *s{nullptr};
-  rgw::sal::Store* store{nullptr};
+  rgw::sal::Driver* driver{nullptr};
   SHA1 h;
 
   TorrentBencode dencode;
@@ -116,12 +115,12 @@ public:
   ~seed();
 
   int get_params();
-  void init(req_state *p_req, rgw::sal::Store* p_store);
+  void init(req_state *p_req, rgw::sal::Driver* _driver);
   int get_torrent_file(rgw::sal::Object* object,
                        uint64_t &total_len,
                        ceph::bufferlist &bl_data,
                        rgw_obj &obj);
-  
+
   off_t get_data_len();
   bool get_flag();
 
@@ -138,4 +137,3 @@ private:
   void sha1(SHA1 *h, bufferlist &bl, off_t bl_len);
   int save_torrent_file(optional_yield y);
 };
-#endif /* CEPH_RGW_TORRENT_H */

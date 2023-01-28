@@ -63,8 +63,6 @@ function(do_build_boost root_dir version)
   else()
     list(APPEND boost_features "address-model=32")
   endif()
-  set(BOOST_CXXFLAGS "-fPIC -w") # check on arm, etc <---XXX
-  list(APPEND boost_features "cxxflags=${BOOST_CXXFLAGS}")
 
   set(boost_with_libs)
   foreach(c ${Boost_BUILD_COMPONENTS})
@@ -110,6 +108,7 @@ function(do_build_boost root_dir version)
     "using ${toolset}"
     " : "
     " : ${CMAKE_CXX_COMPILER}"
+    " : <compileflags>-fPIC <compileflags>-w <compileflags>-Wno-everything"
     " ;\n")
   if(with_python_version)
     find_package(Python3 ${with_python_version} QUIET REQUIRED
@@ -147,18 +146,17 @@ function(do_build_boost root_dir version)
     check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
     set(source_dir
       SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
-  elseif(version VERSION_GREATER 1.75)
+  elseif(version VERSION_GREATER 1.79)
     message(FATAL_ERROR "Unknown BOOST_REQUESTED_VERSION: ${version}")
   else()
     message(STATUS "boost will be downloaded...")
     # NOTE: If you change this version number make sure the package is available
     # at the three URLs below (may involve uploading to download.ceph.com)
-    set(boost_version 1.75.0)
-    set(boost_sha256 953db31e016db7bb207f11432bef7df100516eeb746843fa0486a222e3fd49cb)
+    set(boost_version 1.79.0)
+    set(boost_sha256 475d589d51a7f8b3ba2ba4eda022b170e562ca3b760ee922c146b6c65856ef39)
     string(REPLACE "." "_" boost_version_underscore ${boost_version} )
     string(JOIN " " boost_url
       https://boostorg.jfrog.io/artifactory/main/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2
-      https://downloads.sourceforge.net/project/boost/boost/${boost_version}/boost_${boost_version_underscore}.tar.bz2
       https://download.ceph.com/qa/boost_${boost_version_underscore}.tar.bz2)
     set(source_dir
       URL ${boost_url}

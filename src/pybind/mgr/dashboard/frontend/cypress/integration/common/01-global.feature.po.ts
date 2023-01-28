@@ -158,7 +158,7 @@ And('I should see row {string} does not have {string}', (row: string, options: s
 
 And('I go to the {string} tab', (names: string) => {
   for (const name of names.split(', ')) {
-    cy.contains('.nav.nav-tabs li', name).click();
+    cy.contains('.nav.nav-tabs a', name).click();
   }
 });
 

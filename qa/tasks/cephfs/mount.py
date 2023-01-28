@@ -28,7 +28,8 @@ UMOUNT_TIMEOUT = 300
 class CephFSMount(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None):
+                 cephfs_name=None, cephfs_mntpt=None, brxnet=None,
+                 client_config=None):
         """
         :param test_dir: Global teuthology test dir
         :param client_id: Client ID, the 'foo' in client.foo
@@ -41,7 +42,6 @@ class CephFSMount(object):
         :param cephfs_mntpt: Path to directory inside Ceph FS that will be
                              mounted as root
         """
-        self.mounted = False
         self.ctx = ctx
         self.test_dir = test_dir
 
@@ -50,20 +50,33 @@ class CephFSMount(object):
                            hostfs_mntpt=hostfs_mntpt, cephfs_name=cephfs_name,
                            cephfs_mntpt=cephfs_mntpt)
 
+        if client_config is None:
+            client_config = {}
+        self.client_config = client_config
+
+        self.cephfs_name = cephfs_name
         self.client_id = client_id
         self.client_keyring_path = client_keyring_path
         self.client_remote = client_remote
-        if hostfs_mntpt:
+        self.cluster_name = 'ceph' # TODO: use config['cluster']
+        self.fs = None
+
+        if cephfs_mntpt is None and client_config.get("mount_path"):
+            self.cephfs_mntpt = client_config.get("mount_path")
+            log.info(f"using client_config[\"cephfs_mntpt\"] = {self.cephfs_mntpt}")
+        else:
+            self.cephfs_mntpt = cephfs_mntpt
+        log.info(f"cephfs_mntpt = {self.cephfs_mntpt}")
+
+        if hostfs_mntpt is None and client_config.get("mountpoint"):
+            self.hostfs_mntpt = client_config.get("mountpoint")
+            log.info(f"using client_config[\"hostfs_mntpt\"] = {self.hostfs_mntpt}")
+        elif hostfs_mntpt is not None:
             self.hostfs_mntpt = hostfs_mntpt
-            self.hostfs_mntpt_dirname = os.path.basename(self.hostfs_mntpt)
         else:
             self.hostfs_mntpt = os.path.join(self.test_dir, f'mnt.{self.client_id}')
-        self.cephfs_name = cephfs_name
-        self.cephfs_mntpt = cephfs_mntpt
-
-        self.cluster_name = 'ceph' # TODO: use config['cluster']
-
-        self.fs = None
+        self.hostfs_mntpt_dirname = os.path.basename(self.hostfs_mntpt)
+        log.info(f"hostfs_mntpt = {self.hostfs_mntpt}")
 
         self._netns_name = None
         self.nsid = -1
@@ -109,7 +122,7 @@ class CephFSMount(object):
 
     @property
     def mountpoint(self):
-        if self.hostfs_mntpt == None:
+        if self.hostfs_mntpt is None:
             self.hostfs_mntpt = os.path.join(self.test_dir,
                                              self.hostfs_mntpt_dirname)
         return self.hostfs_mntpt
@@ -148,6 +161,9 @@ class CephFSMount(object):
         """
         if not self.client_id or not self.client_remote or \
            not self.hostfs_mntpt:
+            log.error(f"self.client_id = {self.client_id}")
+            log.error(f"self.client_remote = {self.client_remote}")
+            log.error(f"self.hostfs_mntpt = {self.hostfs_mntpt}")
             errmsg = ('Mounting CephFS requires that at least following '
                       'details to be provided -\n'
                       '1. the client ID,\n2. the mountpoint and\n'
@@ -169,8 +185,44 @@ class CephFSMount(object):
                      get_file(self.client_remote, self.client_keyring_path,
                               sudo=True).decode())
 
+    def is_blocked(self):
+        self.fs = Filesystem(self.ctx, name=self.cephfs_name)
+
+        try:
+            output = self.fs.mon_manager.raw_cluster_cmd(args='osd blocklist ls')
+        except CommandFailedError:
+            # Fallback for older Ceph cluster
+            output = self.fs.mon_manager.raw_cluster_cmd(args='osd blacklist ls')
+
+        return self.addr in output
+
+    def is_stuck(self):
+        """
+        Check if mount is stuck/in a hanged state.
+        """
+        if not self.is_mounted():
+            return False
+
+        retval = self.client_remote.run(args=f'sudo stat {self.hostfs_mntpt}',
+                                        omit_sudo=False, wait=False).returncode
+        if retval == 0:
+            return False
+
+        time.sleep(10)
+        proc = self.client_remote.run(args='ps -ef', stdout=StringIO())
+        # if proc was running even after 10 seconds, it has to be stuck.
+        if f'stat {self.hostfs_mntpt}' in proc.stdout.getvalue():
+            log.critical('client mounted at self.hostfs_mntpt is stuck!')
+            return True
+        return False
+
     def is_mounted(self):
-        return self.mounted
+        file = self.client_remote.read_file('/proc/self/mounts',stdout=StringIO())
+        if self.hostfs_mntpt in file:
+            return True
+        else:
+            log.debug(f"not mounted; /proc/self/mounts is:\n{file}")
+            return False
 
     def setupfs(self, name=None):
         if name is None and self.fs is not None:
@@ -453,6 +505,19 @@ class CephFSMount(object):
         self.mount(**kwargs)
         self.wait_until_mounted()
 
+    def _run_umount_lf(self):
+        log.debug(f'Force/lazy unmounting on client.{self.client_id}')
+
+        try:
+            proc = self.client_remote.run(
+                args=f'sudo umount --lazy --force {self.hostfs_mntpt}',
+                timeout=UMOUNT_TIMEOUT, omit_sudo=False)
+        except CommandFailedError:
+            if self.is_mounted():
+                raise
+
+        return proc
+
     def umount(self):
         raise NotImplementedError()
 
@@ -518,7 +583,7 @@ class CephFSMount(object):
         exception: wait accepted too which can be True or False.
         """
         self.umount_wait()
-        assert not self.mounted
+        assert not self.is_mounted()
 
         mntopts = kwargs.pop('mntopts', [])
         check_status = kwargs.pop('check_status', True)
@@ -753,44 +818,66 @@ class CephFSMount(object):
         kwargs['user'] = 'root'
         return self.run_as_user(**kwargs)
 
-    def _verify(self, proc, retval=None, errmsg=None):
-        if retval:
-            msg = ('expected return value: {}\nreceived return value: '
-                   '{}\n'.format(retval, proc.returncode))
-            assert proc.returncode == retval, msg
+    def assert_retval(self, proc_retval, exp_retval):
+        msg = (f'expected return value: {exp_retval}\n'
+               f'received return value: {proc_retval}\n')
+        assert proc_retval == exp_retval, msg
 
-        if errmsg:
-            stderr = proc.stderr.getvalue().lower()
-            msg = ('didn\'t find given string in stderr -\nexpected string: '
-                   '{}\nreceived error message: {}\nnote: received error '
-                   'message is converted to lowercase'.format(errmsg, stderr))
-            assert errmsg in stderr, msg
+    def _verify(self, proc, exp_retval=None, exp_errmsgs=None):
+        if exp_retval is None and exp_errmsgs is None:
+            raise RuntimeError('Method didn\'t get enough parameters. Pass '
+                               'return value or error message expected from '
+                               'the command/process.')
 
-    def negtestcmd(self, args, retval=None, errmsg=None, stdin=None,
+        if exp_retval is not None:
+            self.assert_retval(proc.returncode, exp_retval)
+        if exp_errmsgs is None:
+            return
+
+        if isinstance(exp_errmsgs, str):
+            exp_errmsgs = (exp_errmsgs, )
+
+        proc_stderr = proc.stderr.getvalue().lower()
+        msg = ('didn\'t find any of the expected string in stderr.\n'
+               f'expected string: {exp_errmsgs}\n'
+               f'received error message: {proc_stderr}\n'
+               'note: received error message is converted to lowercase')
+        for e in exp_errmsgs:
+            if e in proc_stderr:
+                break
+        # this else is meant for for loop.
+        else:
+            assert False, msg
+
+    def negtestcmd(self, args, retval=None, errmsgs=None, stdin=None,
                    cwd=None, wait=True):
         """
         Conduct a negative test for the given command.
 
-        retval and errmsg are parameters to confirm the cause of command
+        retval and errmsgs are parameters to confirm the cause of command
         failure.
+
+        Note: errmsgs is expected to be a tuple, but in case there's only
+        error message, it can also be a string. This method will handle
+        that internally.
         """
         proc = self.run_shell(args=args, wait=wait, stdin=stdin, cwd=cwd,
                               check_status=False)
-        self._verify(proc, retval, errmsg)
+        self._verify(proc, retval, errmsgs)
         return proc
 
-    def negtestcmd_as_user(self, args, user, retval=None, errmsg=None,
+    def negtestcmd_as_user(self, args, user, retval=None, errmsgs=None,
                            stdin=None, cwd=None, wait=True):
         proc = self.run_as_user(args=args, user=user, wait=wait, stdin=stdin,
                                 cwd=cwd, check_status=False)
-        self._verify(proc, retval, errmsg)
+        self._verify(proc, retval, errmsgs)
         return proc
 
-    def negtestcmd_as_root(self, args, retval=None, errmsg=None, stdin=None,
+    def negtestcmd_as_root(self, args, retval=None, errmsgs=None, stdin=None,
                            cwd=None, wait=True):
         proc = self.run_as_root(args=args, wait=wait, stdin=stdin, cwd=cwd,
                                 check_status=False)
-        self._verify(proc, retval, errmsg)
+        self._verify(proc, retval, errmsgs)
         return proc
 
     def open_no_data(self, basename):

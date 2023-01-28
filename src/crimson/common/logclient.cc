@@ -1,4 +1,5 @@
 #include "crimson/common/logclient.h"
+#include <fmt/ranges.h>
 #include "include/str_map.h"
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"

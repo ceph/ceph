@@ -233,8 +233,6 @@ private:
   void arm_periodic_stats();
 
   void pwl_init(Context *on_finish, pwl::DeferredContexts &later);
-  void update_image_cache_state(Context *on_finish);
-  void handle_update_image_cache_state(int r);
   void check_image_cache_state_clean();
 
   void flush_dirty_entries(Context *on_finish);
@@ -399,6 +397,8 @@ protected:
     return 0;
   }
   void update_image_cache_state(void);
+  void write_image_cache_state(std::unique_lock<ceph::mutex>& locker);
+  void handle_write_image_cache_state(int r);
 };
 
 } // namespace pwl

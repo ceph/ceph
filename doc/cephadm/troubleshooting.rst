@@ -179,7 +179,7 @@ container execution command.
 
 .. _cephadm-ssh-errors:
 
-ssh errors
+SSH errors
 ----------
 
 Error message::
@@ -208,7 +208,7 @@ Things users can do:
 
      [root@mon1 ~]# cat ~/cephadm_private_key | cephadm shell -- ceph cephadm set-ssk-key -i -
 
-2. Ensure that the ssh config is correct::
+2. Ensure that the SSH config is correct::
 
      [root@mon1 ~]# cephadm shell -- ceph cephadm get-ssh-config > config
 

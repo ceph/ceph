@@ -32,7 +32,14 @@
 #include <liboath/oath.h>
 
 
+#pragma GCC diagnostic push
+#pragma clang diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated"
+#pragma clang diagnostic ignored "-Wdeprecated"
 #include <s3select/include/s3select.h>
+#pragma GCC diagnostic pop
+#pragma clang diagnostic pop
+
 #include "rgw_rest_s3.h"
 #include "rgw_s3select.h"
 

@@ -5,6 +5,7 @@ PyJWT
 pyopenssl
 requests
 Routes
+pkg-resources
 prettytable
 pytest
 pyyaml

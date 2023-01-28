@@ -128,7 +128,7 @@ BtreeLBAManager::get_mapping(
 	c, offset
       ).si_then([FNAME, offset, c](auto iter) -> get_mapping_ret {
 	if (iter.is_end() || iter.get_key() != offset) {
-	  DEBUGT("{} doesn't exist", c.trans, offset);
+	  ERRORT("laddr={} doesn't exist", c.trans, offset);
 	  return crimson::ct_error::enoent::make();
 	} else {
 	  TRACET("{} got {}, {}",
@@ -435,7 +435,7 @@ BtreeLBAManager::get_physical_extent_if_live(
   extent_types_t type,
   paddr_t addr,
   laddr_t laddr,
-  seastore_off_t len)
+  extent_len_t len)
 {
   LOG_PREFIX(BtreeLBAManager::get_physical_extent_if_live);
   DEBUGT("{}, laddr={}, paddr={}, length={}",
@@ -526,7 +526,7 @@ BtreeLBAManager::_update_mapping_ret BtreeLBAManager::_update_mapping(
 		-> _update_mapping_ret {
 	if (iter.is_end() || iter.get_key() != addr) {
 	  LOG_PREFIX(BtreeLBAManager::_update_mapping);
-	  DEBUGT("laddr={} doesn't exist", c.trans, addr);
+	  ERRORT("laddr={} doesn't exist", c.trans, addr);
 	  return crimson::ct_error::enoent::make();
 	}
 

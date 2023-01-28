@@ -1,4 +1,6 @@
-#!/bin/sh -ex
+#!/usr/bin/env bash
+
+set -ex
 
 #
 # rbd_consistency_groups.sh - test consistency groups cli commands
@@ -111,11 +113,31 @@ create_snapshot()
     rbd group snap create $group_name@$snap_name
 }
 
+create_snapshots()
+{
+    local group_name=$1
+    local snap_name=$2
+    local snap_count=$3
+    for i in `seq 1 $snap_count`; do
+        rbd group snap create $group_name@$snap_name$i
+    done
+}
+
 remove_snapshot()
 {
     local group_name=$1
     local snap_name=$2
     rbd group snap remove $group_name@$snap_name
+}
+
+remove_snapshots()
+{
+    local group_name=$1
+    local snap_name=$2
+    local snap_count=$3
+    for i in `seq 1 $snap_count`; do
+        rbd group snap remove $group_name@$snap_name$i
+    done
 }
 
 rename_snapshot()
@@ -144,6 +166,16 @@ check_snapshot_in_group()
     local group_name=$1
     local snap_name=$2
     list_snapshots $group_name | grep $snap_name
+}
+
+check_snapshots_count_in_group()
+{
+    local group_name=$1
+    local snap_name=$2
+    local expected_count=$3
+    local actual_count
+    actual_count=$(list_snapshots $group_name | grep -c $snap_name)
+    (( actual_count == expected_count ))
 }
 
 check_snapshot_not_in_group()
@@ -202,6 +234,23 @@ remove_snapshot $group $new_snap
 check_snapshot_not_in_group $group $new_snap
 remove_snapshot $group $sec_snap
 check_snapshot_not_in_group $group $sec_snap
+remove_group $group
+remove_image $image
+echo "PASSED"
+
+echo "TEST: list snapshots of consistency group"
+image="test_image"
+group="test_consistency_group"
+snap="group_snap"
+create_image $image
+create_group $group
+add_image_to_group $image $group
+create_snapshots $group $snap 10
+check_snapshots_count_in_group $group $snap 10
+remove_snapshots $group $snap 10
+create_snapshots $group $snap 100
+check_snapshots_count_in_group $group $snap 100
+remove_snapshots $group $snap 100
 remove_group $group
 remove_image $image
 echo "PASSED"

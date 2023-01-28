@@ -13,6 +13,9 @@ struct LogEntry;
 
 namespace ceph::logging {
 
+class Entry;
+class SubsystemMap;
+
 #ifdef WITH_SYSTEMD
 
 namespace detail {
@@ -36,9 +39,6 @@ class JournaldClient {
   int open_mem_file();
 };
 }
-
-class Entry;
-class SubsystemMap;
 
 /**
  * Logger to send local logs to journald

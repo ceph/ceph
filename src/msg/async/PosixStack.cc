@@ -206,6 +206,9 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   void close() override {
     compat_closesocket(_fd);
   }
+  void set_priority(int sd, int prio, int domain) override {
+    handler.set_priority(sd, prio, domain);
+  }
   int fd() const override {
     return _fd;
   }

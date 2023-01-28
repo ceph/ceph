@@ -13,30 +13,31 @@
   <cd-doc section="grafana"></cd-doc> on how to add dashboards to Grafana.</cd-alert-panel>
 
 <ng-container *ngIf="grafanaExist && dashboardExist">
-  <div class="row">
-    <div class="col">
-      <div class="form-inline timepicker">
+  <div class="row mb-3">
+    <div class="col-lg-4 d-flex">
+      <div class="col-md-3 timepicker">
         <label for="timepicker"
-               class="ml-1 my-1"
-               i18n>Grafana Time Picker</label>
-
+               class="mt-2"
+               i18n>Grafana Time Picker</label></div>
+        <div class="col-md-4">
         <select id="timepicker"
                 name="timepicker"
-                class="custom-select my-1 mx-3"
+                class="form-select"
                 [(ngModel)]="time"
                 (ngModelChange)="onTimepickerChange($event)">
           <option *ngFor="let key of grafanaTimes"
                   [ngValue]="key.value">{{ key.name }}
           </option>
-        </select>
+        </select></div>
+        <div class="col-md-3">
 
-        <button class="btn btn-light my-1"
+        <button class="btn btn-light ms-3"
                 i18n-title
                 title="Reset Settings"
                 (click)="reset()">
           <i [ngClass]="[icons.undo]"></i>
         </button>
-        <button class="btn btn-light my-1 ml-3"
+        <button class="btn btn-light ms-3"
                 i18n-title
                 title="Show hidden information"
                 (click)="showMessage = !showMessage">
@@ -47,7 +48,7 @@
   </div>
 
   <div class="row">
-    <div class="col my-3"
+    <div class="col my-2"
          *ngIf="showMessage">
       <cd-alert-panel type="info"
                       class="mb-3"
@@ -70,7 +71,9 @@
                 class="grafana"
                 [ngClass]="panelStyle"
                 frameborder="0"
-                scrolling="no">
+                scrolling="no"
+                [title]="title"
+                i18n-title>
         </iframe>
       </div>
     </div>

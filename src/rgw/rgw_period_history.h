@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_PERIOD_HISTORY_H
-#define RGW_PERIOD_HISTORY_H
+#pragma once
 
 #include <deque>
 #include <mutex>
@@ -113,5 +112,3 @@ class RGWPeriodHistory final {
   /// the current_history
   Cursor lookup(epoch_t realm_epoch);
 };
-
-#endif // RGW_PERIOD_HISTORY_H

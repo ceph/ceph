@@ -1,19 +1,24 @@
 import ipaddress
 import logging
-import json
 import re
 import socket
-from typing import cast, Dict, List, Any, Union, Optional, TYPE_CHECKING, Tuple
+from typing import cast, Dict, List, Any, Union, Optional, TYPE_CHECKING
 
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
+from object_format import ErrorResponse
 
 import orchestrator
 
 from .exception import NFSInvalidOperation, ClusterNotFound
-from .utils import (available_clusters, restart_nfs_service, conf_obj_name,
-                    user_conf_obj_name)
-from .export import NFSRados, exception_handler
+from .utils import (
+    ManualRestartRequired,
+    NonFatalError,
+    available_clusters,
+    conf_obj_name,
+    restart_nfs_service,
+    user_conf_obj_name)
+from .export import NFSRados
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -105,8 +110,7 @@ class NFSCluster:
             virtual_ip: Optional[str],
             ingress: Optional[bool] = None,
             port: Optional[int] = None,
-    ) -> Tuple[int, str, str]:
-
+    ) -> None:
         try:
             if virtual_ip:
                 # validate virtual_ip value: ip_address throws a ValueError
@@ -128,12 +132,13 @@ class NFSCluster:
 
             if cluster_id not in available_clusters(self.mgr):
                 self._call_orch_apply_nfs(cluster_id, placement, virtual_ip, port)
-                return 0, "", ""
-            return 0, "", f"{cluster_id} cluster already exists"
+                return
+            raise NonFatalError(f"{cluster_id} cluster already exists")
         except Exception as e:
-            return exception_handler(e, f"NFS Cluster {cluster_id} could not be created")
+            log.exception(f"NFS Cluster {cluster_id} could not be created")
+            raise ErrorResponse.wrap(e)
 
-    def delete_nfs_cluster(self, cluster_id: str) -> Tuple[int, str, str]:
+    def delete_nfs_cluster(self, cluster_id: str) -> None:
         try:
             cluster_list = available_clusters(self.mgr)
             if cluster_id in cluster_list:
@@ -143,16 +148,18 @@ class NFSCluster:
                 completion = self.mgr.remove_service('nfs.' + cluster_id)
                 orchestrator.raise_if_exception(completion)
                 self.delete_config_obj(cluster_id)
-                return 0, "", ""
-            return 0, "", "Cluster does not exist"
+                return
+            raise NonFatalError("Cluster does not exist")
         except Exception as e:
-            return exception_handler(e, f"Failed to delete NFS Cluster {cluster_id}")
+            log.exception(f"Failed to delete NFS Cluster {cluster_id}")
+            raise ErrorResponse.wrap(e)
 
-    def list_nfs_cluster(self) -> Tuple[int, str, str]:
+    def list_nfs_cluster(self) -> List[str]:
         try:
-            return 0, '\n'.join(available_clusters(self.mgr)), ""
+            return available_clusters(self.mgr)
         except Exception as e:
-            return exception_handler(e, "Failed to list NFS Cluster")
+            log.exception("Failed to list NFS Cluster")
+            raise ErrorResponse.wrap(e)
 
     def _show_nfs_cluster_info(self, cluster_id: str) -> Dict[str, Any]:
         completion = self.mgr.list_daemons(daemon_type='nfs')
@@ -201,8 +208,10 @@ class NFSCluster:
         log.debug("Successfully fetched %s info: %s", cluster_id, r)
         return r
 
-    def show_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Tuple[int, str, str]:
+    def show_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Dict[str, Any]:
         try:
+            if cluster_id and cluster_id not in available_clusters(self.mgr):
+                raise ClusterNotFound()
             info_res = {}
             if cluster_id:
                 cluster_ls = [cluster_id]
@@ -213,54 +222,56 @@ class NFSCluster:
                 res = self._show_nfs_cluster_info(cluster_id)
                 if res:
                     info_res[cluster_id] = res
-            return (0, json.dumps(info_res, indent=4), '')
+            return info_res
         except Exception as e:
-            return exception_handler(e, "Failed to show info for cluster")
+            log.exception("Failed to show info for cluster")
+            raise ErrorResponse.wrap(e)
 
-    def get_nfs_cluster_config(self, cluster_id: str) -> Tuple[int, str, str]:
+    def get_nfs_cluster_config(self, cluster_id: str) -> str:
         try:
             if cluster_id in available_clusters(self.mgr):
                 rados_obj = self._rados(cluster_id)
                 conf = rados_obj.read_obj(user_conf_obj_name(cluster_id))
-                return 0, conf or "", ""
+                return conf or ""
             raise ClusterNotFound()
         except Exception as e:
-            return exception_handler(e, f"Fetching NFS-Ganesha Config failed for {cluster_id}")
+            log.exception(f"Fetching NFS-Ganesha Config failed for {cluster_id}")
+            raise ErrorResponse.wrap(e)
 
-    def set_nfs_cluster_config(self, cluster_id: str, nfs_config: str) -> Tuple[int, str, str]:
+    def set_nfs_cluster_config(self, cluster_id: str, nfs_config: str) -> None:
         try:
             if cluster_id in available_clusters(self.mgr):
                 rados_obj = self._rados(cluster_id)
                 if rados_obj.check_user_config():
-                    return 0, "", "NFS-Ganesha User Config already exists"
+                    raise NonFatalError("NFS-Ganesha User Config already exists")
                 rados_obj.write_obj(nfs_config, user_conf_obj_name(cluster_id),
                                     conf_obj_name(cluster_id))
                 log.debug("Successfully saved %s's user config: \n %s", cluster_id, nfs_config)
                 restart_nfs_service(self.mgr, cluster_id)
-                return 0, "NFS-Ganesha Config Set Successfully", ""
+                return
             raise ClusterNotFound()
         except NotImplementedError:
-            return 0, "NFS-Ganesha Config Added Successfully "\
-                "(Manual Restart of NFS PODS required)", ""
+            raise ManualRestartRequired("NFS-Ganesha Config Added Successfully")
         except Exception as e:
-            return exception_handler(e, f"Setting NFS-Ganesha Config failed for {cluster_id}")
+            log.exception(f"Setting NFS-Ganesha Config failed for {cluster_id}")
+            raise ErrorResponse.wrap(e)
 
-    def reset_nfs_cluster_config(self, cluster_id: str) -> Tuple[int, str, str]:
+    def reset_nfs_cluster_config(self, cluster_id: str) -> None:
         try:
             if cluster_id in available_clusters(self.mgr):
                 rados_obj = self._rados(cluster_id)
                 if not rados_obj.check_user_config():
-                    return 0, "", "NFS-Ganesha User Config does not exist"
+                    raise NonFatalError("NFS-Ganesha User Config does not exist")
                 rados_obj.remove_obj(user_conf_obj_name(cluster_id),
                                      conf_obj_name(cluster_id))
                 restart_nfs_service(self.mgr, cluster_id)
-                return 0, "NFS-Ganesha Config Reset Successfully", ""
+                return
             raise ClusterNotFound()
         except NotImplementedError:
-            return 0, "NFS-Ganesha Config Removed Successfully "\
-                "(Manual Restart of NFS PODS required)", ""
+            raise ManualRestartRequired("NFS-Ganesha Config Removed Successfully")
         except Exception as e:
-            return exception_handler(e, f"Resetting NFS-Ganesha Config failed for {cluster_id}")
+            log.exception(f"Resetting NFS-Ganesha Config failed for {cluster_id}")
+            raise ErrorResponse.wrap(e)
 
     def _rados(self, cluster_id: str) -> NFSRados:
         """Return a new NFSRados object for the given cluster id."""

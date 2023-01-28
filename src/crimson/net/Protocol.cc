@@ -20,13 +20,10 @@ namespace {
 
 namespace crimson::net {
 
-Protocol::Protocol(proto_t type,
-                   ChainedDispatchers& dispatchers,
+Protocol::Protocol(ChainedDispatchers& dispatchers,
                    SocketConnection& conn)
-  : proto_type(type),
-    dispatchers(dispatchers),
-    conn(conn),
-    auth_meta{seastar::make_lw_shared<AuthConnectionMeta>()}
+  : dispatchers(dispatchers),
+    conn(conn)
 {}
 
 Protocol::~Protocol()
@@ -222,7 +219,7 @@ seastar::future<stop_t> Protocol::try_exit_sweep() {
         exit_open = std::nullopt;
         logger().info("{} write_event: nothing queued at {},"
                       " set exit_open",
-                      conn, get_state_name(write_state));
+                      conn, write_state);
       }
       return seastar::make_ready_future<stop_t>(stop_t::yes);
     } else {
@@ -292,17 +289,17 @@ seastar::future<> Protocol::do_write_dispatch_sweep()
         e.code() != std::errc::connection_reset &&
         e.code() != error::negotiation_failure) {
       logger().error("{} write_event(): unexpected error at {} -- {}",
-                     conn, get_state_name(write_state), e);
+                     conn, write_state, e);
       ceph_abort();
     }
     socket->shutdown();
     if (write_state == write_state_t::open) {
       logger().info("{} write_event(): fault at {}, going to delay -- {}",
-                    conn, get_state_name(write_state), e);
+                    conn, write_state, e);
       write_state = write_state_t::delay;
     } else {
       logger().info("{} write_event(): fault at {} -- {}",
-                    conn, get_state_name(write_state), e);
+                    conn, write_state, e);
     }
     return do_write_dispatch_sweep();
   });

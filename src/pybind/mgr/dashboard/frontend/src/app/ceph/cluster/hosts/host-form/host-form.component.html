@@ -80,7 +80,8 @@
           </div>
 
           <!-- Maintenance Mode -->
-          <div class="form-group row">
+          <div class="form-group row"
+               *ngIf="!hideMaintenance">
             <div class="cd-col-form-offset">
               <div class="custom-control custom-checkbox">
                 <input class="custom-control-input"

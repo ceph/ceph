@@ -17,7 +17,6 @@
 
 namespace crimson::os::seastore {
 
-class ool_record_t;
 class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
@@ -118,11 +117,12 @@ public:
   void init(extent_state_t _state,
             paddr_t paddr,
             placement_hint_t hint,
-            reclaim_gen_t gen) {
+            rewrite_gen_t gen) {
+    assert(gen == NULL_GENERATION || is_rewrite_generation(gen));
     state = _state;
     set_paddr(paddr);
     user_hint = hint;
-    reclaim_generation = gen;
+    rewrite_generation = gen;
   }
 
   void set_modify_time(sea_time_point t) {
@@ -202,18 +202,22 @@ public:
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
   virtual std::ostream &print_detail(std::ostream &out) const { return out; }
   std::ostream &print(std::ostream &out) const {
+    std::string prior_poffset_str = prior_poffset
+      ? fmt::format("{}", *prior_poffset)
+      : "nullopt";
     out << "CachedExtent(addr=" << this
 	<< ", type=" << get_type()
 	<< ", version=" << version
 	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
 	<< ", modify_time=" << sea_time_point_printer_t{modify_time}
 	<< ", paddr=" << get_paddr()
+	<< ", prior_paddr=" << prior_poffset_str
 	<< ", length=" << get_length()
 	<< ", state=" << state
 	<< ", last_committed_crc=" << last_committed_crc
 	<< ", refcount=" << use_count()
 	<< ", user_hint=" << user_hint
-	<< ", reclaim_gen=" << reclaim_generation;
+	<< ", rewrite_gen=" << rewrite_gen_printer_t{rewrite_generation};
     if (state != extent_state_t::INVALID &&
         state != extent_state_t::CLEAN_PENDING) {
       print_detail(out);
@@ -394,24 +398,34 @@ public:
     return user_hint;
   }
 
-  reclaim_gen_t get_reclaim_generation() const {
-    return reclaim_generation;
+  rewrite_gen_t get_rewrite_generation() const {
+    return rewrite_generation;
   }
 
   void invalidate_hints() {
-    user_hint = placement_hint_t::NUM_HINTS;
-    reclaim_generation = NULL_GENERATION;
+    user_hint = PLACEMENT_HINT_NULL;
+    rewrite_generation = NULL_GENERATION;
   }
 
-  void set_reclaim_generation(reclaim_gen_t gen) {
-    assert(gen < RECLAIM_GENERATIONS);
+  /// assign the target rewrite generation for the followup rewrite
+  void set_target_rewrite_generation(rewrite_gen_t gen) {
+    assert(is_target_rewrite_generation(gen));
+
     user_hint = placement_hint_t::REWRITE;
-    reclaim_generation = gen;
+    rewrite_generation = gen;
   }
 
   bool is_inline() const {
     return poffset.is_relative();
   }
+
+  paddr_t get_prior_paddr_and_reset() {
+    assert(prior_poffset);
+    auto ret = *prior_poffset;
+    prior_poffset.reset();
+    return ret;
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -464,6 +478,9 @@ private:
   /// address of original block -- relative iff is_pending() and is_clean()
   paddr_t poffset;
 
+  /// relative address before ool write, used to update mapping
+  std::optional<paddr_t> prior_poffset = std::nullopt;
+
   /// used to wait while in-progress commit completes
   std::optional<seastar::shared_promise<>> io_wait_promise;
   void set_io_wait() {
@@ -486,10 +503,11 @@ private:
 
   read_set_item_t<Transaction>::list transactions;
 
-  placement_hint_t user_hint;
+  placement_hint_t user_hint = PLACEMENT_HINT_NULL;
 
-  /// > 0 and not null means the extent is under reclaimming
-  reclaim_gen_t reclaim_generation;
+  // the target rewrite generation for the followup rewrite
+  // or the rewrite generation for the fresh write
+  rewrite_gen_t rewrite_generation = NULL_GENERATION;
 
 protected:
   CachedExtent(CachedExtent &&other) = delete;
@@ -528,7 +546,13 @@ protected:
     last_committed_crc = crc;
   }
 
-  void set_paddr(paddr_t offset) { poffset = offset; }
+  void set_paddr(paddr_t offset, bool need_update_mapping = false) {
+    if (need_update_mapping) {
+      assert(!prior_poffset);
+      prior_poffset = poffset;
+    }
+    poffset = offset;
+  }
 
   /**
    * maybe_generate_relative
@@ -550,14 +574,13 @@ protected:
    */
   paddr_t maybe_generate_relative(paddr_t addr) {
     if (is_initial_pending() && addr.is_record_relative()) {
-      return addr - get_paddr();
+      return addr.block_relative_to(get_paddr());
     } else {
       ceph_assert(!addr.is_record_relative() || is_mutation_pending());
       return addr;
     }
   }
 
-  friend class crimson::os::seastore::ool_record_t;
   friend class crimson::os::seastore::SegmentedAllocator;
   friend class crimson::os::seastore::TransactionManager;
   friend class crimson::os::seastore::ExtentPlacementManager;
@@ -621,7 +644,7 @@ class ExtentIndex {
   friend class Cache;
   CachedExtent::index extent_index;
 public:
-  auto get_overlap(paddr_t addr, seastore_off_t len) {
+  auto get_overlap(paddr_t addr, extent_len_t len) {
     auto bottom = extent_index.upper_bound(addr, paddr_cmp());
     if (bottom != extent_index.begin())
       --bottom;
@@ -931,3 +954,10 @@ using lextent_list_t = addr_extent_list_base_t<
   laddr_t, TCachedExtentRef<T>>;
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::lba_pin_list_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::LBAPin> : fmt::ostream_formatter {};
+#endif

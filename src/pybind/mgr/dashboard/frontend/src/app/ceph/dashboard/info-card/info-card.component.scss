@@ -25,6 +25,10 @@ $card-font-max-size: 21px;
       position: absolute;
       top: -0.3rem;
     }
+
+    .card-title > a {
+      color: vv.$primary;
+    }
   }
 }
 

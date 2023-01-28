@@ -50,12 +50,12 @@ public:
    *
    * Assume all segment managers share the same following information.
    */
-  seastore_off_t get_block_size() const {
+  extent_len_t get_block_size() const {
     assert(device_ids.size());
     return segment_managers[*device_ids.begin()]->get_block_size();
   }
 
-  seastore_off_t get_segment_size() const {
+  segment_off_t get_segment_size() const {
     assert(device_ids.size());
     return segment_managers[*device_ids.begin()]->get_segment_size();
   }
@@ -92,7 +92,7 @@ public:
   read_segment_tail_ret  read_segment_tail(segment_id_t segment);
 
   using read_ertr = SegmentManager::read_ertr;
-  using scan_valid_records_ertr = read_ertr::extend<crimson::ct_error::enodata>;
+  using scan_valid_records_ertr = read_ertr;
   using scan_valid_records_ret = scan_valid_records_ertr::future<
     size_t>;
   using found_record_handler_t = std::function<

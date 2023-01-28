@@ -64,7 +64,9 @@ echo ``HEALTH OK`` in a few expected circumstances:
 
 An important aspect of monitoring OSDs is to ensure that when the cluster
 is up and running that all OSDs that are ``in`` the cluster are ``up`` and
-running, too. To see if all OSDs are running, execute:: 
+running, too. To see if all OSDs are running, execute:
+
+.. prompt:: bash $
 
 	ceph osd stat
 
@@ -75,7 +77,9 @@ how many are ``up`` (y), how many are ``in`` (z) and the map epoch (eNNNN). ::
 
 If the number of OSDs that are ``in`` the cluster is more than the number of
 OSDs that are ``up``, execute the following command to identify the ``ceph-osd``
-daemons that are not running:: 
+daemons that are not running:
+
+.. prompt:: bash $
 
 	ceph osd tree
 
@@ -91,7 +95,9 @@ daemons that are not running::
 .. tip:: The ability to search through a well-designed CRUSH hierarchy may help
    you troubleshoot your cluster by identifying the physical locations faster.
 
-If an OSD is ``down``, start it:: 
+If an OSD is ``down``, start it:
+
+.. prompt:: bash $
 
 	sudo systemctl start ceph-osd@1
 
@@ -133,18 +139,22 @@ it may indicate that Ceph is migrating the PG (it's remapped), an OSD is
 recovering, or that there is a problem (i.e., Ceph usually echoes a "HEALTH
 WARN" state with a "stuck stale" message in such scenarios).
 
-To retrieve a list of placement groups, execute:: 
+To retrieve a list of placement groups, execute:
+
+.. prompt:: bash $
 
 	ceph pg dump
 	
 To view which OSDs are within the Acting Set or the Up Set for a given placement
-group, execute:: 
+group, execute:
+
+.. prompt:: bash $
 
 	ceph pg map {pg-num}
 
 The result should tell you the osdmap epoch (eNNN), the placement group number
 ({pg-num}), the OSDs in the Up Set (up[]), and the OSDs in the acting set
-(acting[]). ::
+(acting[])::
 
 	osdmap eNNN pg {raw-pg-num} ({pg-num}) -> up [0,1,2] acting [0,1,2]
 
@@ -209,7 +219,9 @@ panic. In many cases, the cluster will recover on its own. In some cases, you
 may need to take action. An important aspect of monitoring placement groups is
 to ensure that when the cluster is up and running that all placement groups are
 ``active``, and preferably in the ``clean`` state. To see the status of all
-placement groups, execute:: 
+placement groups, execute:
+
+.. prompt:: bash $
 
 	ceph pg stat
 
@@ -247,15 +259,21 @@ few cases:
 	1.1f
    
 
-To retrieve a list of placement groups, execute the following:: 
+To retrieve a list of placement groups, execute the following:
+
+.. prompt:: bash $
 
 	ceph pg dump
 	
-You can also format the output in JSON format and save it to a file:: 
+You can also format the output in JSON format and save it to a file:
+
+.. prompt:: bash $
 
 	ceph pg dump -o {filename} --format=json
 
-To query a particular placement group, execute the following:: 
+To query a particular placement group, execute the following:
+
+.. prompt:: bash $
 
 	ceph pg {poolnum}.{pg-id} query
 	
@@ -455,7 +473,9 @@ include:
   host them have not reported to the monitor cluster in a while (configured 
   by ``mon_osd_report_timeout``).
 
-To identify stuck placement groups, execute the following:: 
+To identify stuck placement groups, execute the following:
+
+.. prompt:: bash $
 
 	ceph pg dump_stuck [unclean|inactive|stale|undersized|degraded]
 
@@ -474,36 +494,47 @@ To store object data in the Ceph Object Store, a Ceph client must:
 The Ceph client retrieves the latest cluster map and the CRUSH algorithm
 calculates how to map the object to a `placement group`_, and then calculates
 how to assign the placement group to an OSD dynamically. To find the object
-location, all you need is the object name and the pool name. For example:: 
+location, all you need is the object name and the pool name. For example:
+
+.. prompt:: bash $
 
 	ceph osd map {poolname} {object-name} [namespace]
 
 .. topic:: Exercise: Locate an Object
 
-	As an exercise, lets create an object. Specify an object name, a path to a
-	test file containing some object data and a pool name using the 
-	``rados put`` command on the command line. For example::
+        As an exercise, let's create an object. Specify an object name, a path
+        to a test file containing some object data and a pool name using the
+        ``rados put`` command on the command line. For example:
+
+        .. prompt:: bash $
    
 		rados put {object-name} {file-path} --pool=data
 		rados put test-object-1 testfile.txt --pool=data
    
-	To verify that the Ceph Object Store stored the object, execute the following::
+        To verify that the Ceph Object Store stored the object, execute the
+        following:
    
-		rados -p data ls
-   
-	Now, identify the object location::	
+        .. prompt:: bash $
 
-		ceph osd map {pool-name} {object-name}
-		ceph osd map data test-object-1
+           rados -p data ls
+   
+	Now, identify the object location:
+
+        .. prompt:: bash $
+
+           ceph osd map {pool-name} {object-name}
+           ceph osd map data test-object-1
    
 	Ceph should output the object's location. For example:: 
    
 		osdmap e537 pool 'data' (1) object 'test-object-1' -> pg 1.d1743484 (1.4) -> up ([0,1], p0) acting ([0,1], p0)
    
-	To remove the test object, simply delete it using the ``rados rm`` command.
-	For example:: 
+        To remove the test object, simply delete it using the ``rados rm``
+        command.  For example:
+
+        .. prompt:: bash $
    
-		rados rm test-object-1 --pool=data
+           rados rm test-object-1 --pool=data
    
 
 As the cluster evolves, the object location may change dynamically. One benefit

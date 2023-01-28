@@ -19,10 +19,10 @@
 
 namespace rgw { namespace sal {
 
-class StoreStore : public Store {
+class StoreDriver : public Driver {
   public:
-    StoreStore() {}
-    virtual ~StoreStore() = default;
+    StoreDriver() {}
+    virtual ~StoreDriver() = default;
 
     virtual uint64_t get_new_req_id() override {
       return ceph::util::generate_random_number<uint64_t>();
@@ -55,7 +55,7 @@ class StoreUser : public User {
     virtual RGWObjVersionTracker& get_version_tracker() override { return objv_tracker; }
     virtual Attrs& get_attrs() override { return attrs; }
     virtual void set_attrs(Attrs& _attrs) override { attrs = _attrs; }
-    virtual bool empty() override { return info.user_id.id.empty(); }
+    virtual bool empty() const override { return info.user_id.id.empty(); }
     virtual RGWUserInfo& get_info() override { return info; }
     virtual void print(std::ostream& out) const override { out << info.user_id; }
 
@@ -233,6 +233,18 @@ class StoreObject : public Object {
     virtual const std::string &get_instance() const override { return state.obj.key.instance; }
     virtual bool have_instance(void) override { return state.obj.key.have_instance(); }
     virtual void clear_instance() override { state.obj.key.instance.clear(); }
+    virtual int transition_to_cloud(Bucket* bucket,
+			   rgw::sal::PlacementTier* tier,
+			   rgw_bucket_dir_entry& o,
+			   std::set<std::string>& cloud_targets,
+			   CephContext* cct,
+			   bool update_object,
+			   const DoutPrefixProvider* dpp,
+			   optional_yield y) override {
+      /* Return failure here, so stores which don't transition to cloud will
+       * work with lifecycle */
+      return -1;
+    }
 
     virtual void print(std::ostream& out) const override {
       if (bucket)
@@ -404,9 +416,9 @@ class StoreZone : public Zone {
     virtual ~StoreZone() = default;
 };
 
-class StoreLuaScriptManager : public LuaScriptManager {
+class StoreLuaManager : public LuaManager {
 public:
-  virtual ~StoreLuaScriptManager() = default;
+  virtual ~StoreLuaManager() = default;
 };
 
 } } // namespace rgw::sal

@@ -18,6 +18,7 @@ std::vector<Option> get_immutable_object_cache_options();
 std::vector<Option> get_mds_options();
 std::vector<Option> get_mds_client_options();
 std::vector<Option> get_cephfs_mirror_options();
+std::vector<Option> get_ceph_exporter_options();
 
 std::vector<Option> build_options()
 {
@@ -46,6 +47,7 @@ std::vector<Option> build_options()
   ingest(get_mds_options(), "mds");
   ingest(get_mds_client_options(), "mds_client");
   ingest(get_cephfs_mirror_options(), "cephfs-mirror");
+  ingest(get_ceph_exporter_options(), "ceph-exporter");
 
   return result;
 }

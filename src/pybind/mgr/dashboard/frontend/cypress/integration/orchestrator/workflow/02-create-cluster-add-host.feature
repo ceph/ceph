@@ -14,8 +14,9 @@ Feature: Cluster expansion host addition
         When I click on "Add" button
         And enter "hostname" "<hostname>"
         And select options "<labels>"
-        And I click on submit button
-        Then I should see a row with "<hostname>"
+        And I click on "Add Host" button
+        Then I should not see the modal
+        And I should see a row with "<hostname>"
         And I should see row "<hostname>" have "<labels>"
 
         Examples:
@@ -43,8 +44,9 @@ Feature: Cluster expansion host addition
         Given I am on the "Add Hosts" section
         When I click on "Add" button
         And enter "hostname" "ceph-node-[01-02]"
-        And I click on submit button
-        Then I should see rows with following entries
+        And I click on "Add Host" button
+        Then I should not see the modal
+        And I should see rows with following entries
             | hostname |
             | ceph-node-01 |
             | ceph-node-02 |
@@ -61,12 +63,12 @@ Feature: Cluster expansion host addition
         When I select a row "<hostname>"
         And I click on "Edit" button from the table actions
         And "add" option "<labels>"
-        And I click on submit button
+        And I click on "Edit Host" button
         Then I should see row "<hostname>" have "<labels>"
         When I select a row "<hostname>"
         And I click on "Edit" button from the table actions
         And "remove" option "<labels>"
-        And I click on submit button
+        And I click on "Edit Host" button
         Then I should see row "<hostname>" does not have "<labels>"
 
         Examples:

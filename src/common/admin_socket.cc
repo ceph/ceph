@@ -552,7 +552,7 @@ AdminSocket::find_matched_hook(std::string& prefix,
   // make sure one of the registered commands with this prefix validates.
   stringstream errss;
   for (auto hook = hooks_begin; hook != hooks_end; ++hook) {
-    if (validate_cmd(m_cct, hook->second.desc, cmdmap, errss)) {
+    if (validate_cmd(hook->second.desc, cmdmap, errss)) {
       in_hook = true;
       return {0, hook->second.hook};
     }
@@ -623,6 +623,7 @@ void AdminSocket::unregister_commands(const AdminSocketHook *hook)
 class VersionHook : public AdminSocketHook {
 public:
   int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist&,
 	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
@@ -649,6 +650,7 @@ class HelpHook : public AdminSocketHook {
 public:
   explicit HelpHook(AdminSocket *as) : m_as(as) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist&,
 	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
@@ -667,6 +669,7 @@ class GetdescsHook : public AdminSocketHook {
 public:
   explicit GetdescsHook(AdminSocket *as) : m_as(as) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist&,
 	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {

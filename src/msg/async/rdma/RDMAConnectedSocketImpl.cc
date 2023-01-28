@@ -573,6 +573,11 @@ void RDMAConnectedSocketImpl::close()
   active = false;
 }
 
+void RDMAConnectedSocketImpl::set_priority(int sd, int prio, int domain) {
+    ceph::NetHandler net(cct);
+    net.set_priority(sd, prio, domain);
+}
+
 void RDMAConnectedSocketImpl::fault()
 {
   ldout(cct, 1) << __func__ << " tcp fd " << tcp_fd << dendl;

@@ -129,6 +129,7 @@ public:
   }
 
   int call(std::string_view command, const cmdmap_t& cmdmap,
+           const bufferlist&,
            Formatter *f, std::ostream &errss, bufferlist &out) override {
     auto p = commands.at(std::string(command));
     return p->call(f);

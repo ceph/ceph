@@ -4,7 +4,7 @@
 
 #include "svc_meta.h"
 
-#include "rgw/rgw_metadata.h"
+#include "rgw_metadata.h"
 
 #define dout_subsys ceph_subsys_rgw
 

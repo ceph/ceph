@@ -8,38 +8,50 @@
 Monitor Commands
 ================
 
-Monitor commands are issued using the ``ceph`` utility::
+Monitor commands are issued using the ``ceph`` utility:
 
-	ceph [-m monhost] {command}
+.. prompt:: bash $
 
-The command is usually (though not always) of the form::
+   ceph [-m monhost] {command}
 
-	ceph {subsystem} {command}
+The command is usually (though not always) of the form:
+
+.. prompt:: bash $
+
+   ceph {subsystem} {command}
 
 
 System Commands
 ===============
 
-Execute the following to display the current cluster status.  ::
+Execute the following to display the current cluster status.  :
 
-	ceph -s
-	ceph status
+.. prompt:: bash $
+
+   ceph -s
+   ceph status
 
 Execute the following to display a running summary of cluster status
-and major events. ::
+and major events. :
 
-	ceph -w
+.. prompt:: bash $
+
+   ceph -w
 
 Execute the following to show the monitor quorum, including which monitors are
-participating and which one is the leader. ::
+participating and which one is the leader. :
 
-	ceph mon stat
-	ceph quorum_status
+.. prompt:: bash $
+
+   ceph mon stat
+   ceph quorum_status
 
 Execute the following to query the status of a single monitor, including whether
-or not it is in the quorum. ::
+or not it is in the quorum. :
 
-	ceph tell mon.[id] mon_status
+.. prompt:: bash $
+
+   ceph tell mon.[id] mon_status
 
 where the value of ``[id]`` can be determined, e.g., from ``ceph -s``.
 
@@ -47,21 +59,27 @@ where the value of ``[id]`` can be determined, e.g., from ``ceph -s``.
 Authentication Subsystem
 ========================
 
-To add a keyring for an OSD, execute the following::
+To add a keyring for an OSD, execute the following:
 
-	ceph auth add {osd} {--in-file|-i} {path-to-osd-keyring}
+.. prompt:: bash $
 
-To list the cluster's keys and their capabilities, execute the following::
+   ceph auth add {osd} {--in-file|-i} {path-to-osd-keyring}
 
-	ceph auth ls
+To list the cluster's keys and their capabilities, execute the following:
+
+.. prompt:: bash $
+
+   ceph auth ls
 
 
 Placement Group Subsystem
 =========================
 
-To display the statistics for all placement groups (PGs), execute the following:: 
+To display the statistics for all placement groups (PGs), execute the following: 
 
-	ceph pg dump [--format {format}]
+.. prompt:: bash $
+
+   ceph pg dump [--format {format}]
 
 The valid formats are ``plain`` (default), ``json`` ``json-pretty``, ``xml``, and ``xml-pretty``.
 When implementing monitoring and other tools, it is best to use ``json`` format.
@@ -70,9 +88,11 @@ less variable from release to release.  The ``jq`` utility can be invaluable whe
 data from JSON output.
 
 To display the statistics for all placement groups stuck in a specified state, 
-execute the following:: 
+execute the following: 
 
-	ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format {format}] [-t|--threshold {seconds}]
+.. prompt:: bash $
+
+   ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format {format}] [-t|--threshold {seconds}]
 
 
 ``--format`` may be ``plain`` (default), ``json``, ``json-pretty``, ``xml``, or ``xml-pretty``.
@@ -90,9 +110,11 @@ reported to the monitor cluster in a while (configured by
 ``mon_osd_report_timeout``).
 
 Delete "lost" objects or revert them to their prior state, either a previous version
-or delete them if they were just created. ::
+or delete them if they were just created. :
 
-	ceph pg {pgid} mark_unfound_lost revert|delete
+.. prompt:: bash $
+
+   ceph pg {pgid} mark_unfound_lost revert|delete
 
 
 .. _osd-subsystem:
@@ -100,105 +122,149 @@ or delete them if they were just created. ::
 OSD Subsystem
 =============
 
-Query OSD subsystem status. ::
+Query OSD subsystem status. :
 
-	ceph osd stat
+.. prompt:: bash $
+
+   ceph osd stat
 
 Write a copy of the most recent OSD map to a file. See
-:ref:`osdmaptool <osdmaptool>`. ::
+:ref:`osdmaptool <osdmaptool>`. :
 
-	ceph osd getmap -o file
+.. prompt:: bash $
+
+   ceph osd getmap -o file
 
 Write a copy of the crush map from the most recent OSD map to
-file. ::
+file. :
 
-	ceph osd getcrushmap -o file
+.. prompt:: bash $
 
-The foregoing is functionally equivalent to ::
+   ceph osd getcrushmap -o file
 
-	ceph osd getmap -o /tmp/osdmap
-	osdmaptool /tmp/osdmap --export-crush file
+The foregoing is functionally equivalent to :
+
+.. prompt:: bash $
+
+   ceph osd getmap -o /tmp/osdmap
+   osdmaptool /tmp/osdmap --export-crush file
 
 Dump the OSD map. Valid formats for ``-f`` are ``plain``, ``json``, ``json-pretty``,
 ``xml``, and ``xml-pretty``. If no ``--format`` option is given, the OSD map is 
-dumped as plain text.  As above, JSON format is best for tools, scripting, and other automation. ::
+dumped as plain text.  As above, JSON format is best for tools, scripting, and other automation. :
 
-	ceph osd dump [--format {format}]
+.. prompt:: bash $
+
+   ceph osd dump [--format {format}]
 
 Dump the OSD map as a tree with one line per OSD containing weight
-and state. ::
+and state. :
 
-	ceph osd tree [--format {format}]
+.. prompt:: bash $
 
-Find out where a specific object is or would be stored in the system::
+   ceph osd tree [--format {format}]
 
-	ceph osd map <pool-name> <object-name>
+Find out where a specific object is or would be stored in the system:
+
+.. prompt:: bash $
+
+   ceph osd map <pool-name> <object-name>
 
 Add or move a new item (OSD) with the given id/name/weight at the specified
-location. ::
+location. :
 
-	ceph osd crush set {id} {weight} [{loc1} [{loc2} ...]]
+.. prompt:: bash $
 
-Remove an existing item (OSD) from the CRUSH map. ::
+   ceph osd crush set {id} {weight} [{loc1} [{loc2} ...]]
 
-	ceph osd crush remove {name}
+Remove an existing item (OSD) from the CRUSH map. :
 
-Remove an existing bucket from the CRUSH map. ::
+.. prompt:: bash $
 
-	ceph osd crush remove {bucket-name}
+   ceph osd crush remove {name}
 
-Move an existing bucket from one position in the hierarchy to another.  ::
+Remove an existing bucket from the CRUSH map. :
 
-	ceph osd crush move {id} {loc1} [{loc2} ...]
+.. prompt:: bash $
 
-Set the weight of the item given by ``{name}`` to ``{weight}``. ::
+   ceph osd crush remove {bucket-name}
 
-	ceph osd crush reweight {name} {weight}
+Move an existing bucket from one position in the hierarchy to another.  :
 
-Mark an OSD as ``lost``. This may result in permanent data loss. Use with caution. ::
+.. prompt:: bash $
 
-	ceph osd lost {id} [--yes-i-really-mean-it]
+   ceph osd crush move {id} {loc1} [{loc2} ...]
+
+Set the weight of the item given by ``{name}`` to ``{weight}``. :
+
+.. prompt:: bash $
+
+   ceph osd crush reweight {name} {weight}
+
+Mark an OSD as ``lost``. This may result in permanent data loss. Use with caution. :
+
+.. prompt:: bash $
+
+   ceph osd lost {id} [--yes-i-really-mean-it]
 
 Create a new OSD. If no UUID is given, it will be set automatically when the OSD
-starts up. ::
+starts up. :
 
-	ceph osd create [{uuid}]
+.. prompt:: bash $
 
-Remove the given OSD(s). ::
+   ceph osd create [{uuid}]
 
-	ceph osd rm [{id}...]
+Remove the given OSD(s). :
 
-Query the current ``max_osd`` parameter in the OSD map. ::
+.. prompt:: bash $
 
-	ceph osd getmaxosd
+   ceph osd rm [{id}...]
 
-Import the given crush map. ::
+Query the current ``max_osd`` parameter in the OSD map. :
 
-	ceph osd setcrushmap -i file
+.. prompt:: bash $
+
+   ceph osd getmaxosd
+
+Import the given crush map. :
+
+.. prompt:: bash $
+
+   ceph osd setcrushmap -i file
 
 Set the ``max_osd`` parameter in the OSD map. This defaults to 10000 now so
-most admins will never need to adjust this. ::
+most admins will never need to adjust this. :
 
-	ceph osd setmaxosd
+.. prompt:: bash $
 
-Mark OSD ``{osd-num}`` down. ::
+   ceph osd setmaxosd
 
-	ceph osd down {osd-num}
+Mark OSD ``{osd-num}`` down. :
 
-Mark OSD ``{osd-num}`` out of the distribution (i.e. allocated no data). ::
+.. prompt:: bash $
 
-	ceph osd out {osd-num}
+   ceph osd down {osd-num}
 
-Mark ``{osd-num}`` in the distribution (i.e. allocated data). ::
+Mark OSD ``{osd-num}`` out of the distribution (i.e. allocated no data). :
 
-	ceph osd in {osd-num}
+.. prompt:: bash $
+
+   ceph osd out {osd-num}
+
+Mark ``{osd-num}`` in the distribution (i.e. allocated data). :
+
+.. prompt:: bash $
+
+   ceph osd in {osd-num}
 
 Set or clear the pause flags in the OSD map. If set, no IO requests
 will be sent to any OSD. Clearing the flags via unpause results in
-resending pending requests. ::
+resending pending requests. :
 
-	ceph osd pause
-	ceph osd unpause
+.. prompt:: bash $
+
+   ceph osd pause
+   ceph osd unpause
 
 Set the override weight (reweight) of ``{osd-num}`` to ``{weight}``. Two OSDs with the
 same weight will receive roughly the same number of I/O requests and
@@ -209,9 +275,11 @@ otherwise live on this drive. It does not change weights assigned
 to the buckets above the OSD in the crush map, and is a corrective
 measure in case the normal CRUSH distribution is not working out quite
 right. For instance, if one of your OSDs is at 90% and the others are
-at 50%, you could reduce this weight to compensate. ::
+at 50%, you could reduce this weight to compensate. :
 
-	ceph osd reweight {osd-num} {weight}
+.. prompt:: bash $
+
+   ceph osd reweight {osd-num} {weight}
 
 Balance OSD fullness by reducing the override weight of OSDs which are
 overly utilized.  Note that these override aka ``reweight`` values
@@ -219,9 +287,11 @@ default to 1.00000 and are relative only to each other; they not absolute.
 It is crucial to distinguish them from CRUSH weights, which reflect the
 absolute capacity of a bucket in TiB.  By default this command adjusts
 override weight on OSDs which have + or - 20% of the average utilization,
-but if you include a ``threshold`` that percentage will be used instead. ::
+but if you include a ``threshold`` that percentage will be used instead. :
 
-	ceph osd reweight-by-utilization [threshold [max_change [max_osds]]] [--no-increasing]
+.. prompt:: bash $
+
+   ceph osd reweight-by-utilization [threshold [max_change [max_osds]]] [--no-increasing]
 
 To limit the step by which any OSD's reweight will be changed, specify
 ``max_change`` which defaults to 0.05.  To limit the number of OSDs that will
@@ -230,9 +300,11 @@ parameters can speed leveling of OSD utilization, at the potential cost of
 greater impact on client operations due to more data moving at once.
 
 To determine which and how many PGs and OSDs will be affected by a given invocation
-you can test before executing. ::
+you can test before executing. :
 
-	ceph osd test-reweight-by-utilization [threshold [max_change max_osds]] [--no-increasing]
+.. prompt:: bash $
+
+   ceph osd test-reweight-by-utilization [threshold [max_change max_osds]] [--no-increasing]
 
 Adding ``--no-increasing`` to either command prevents increasing any
 override weights that are currently < 1.00000.  This can be useful when
@@ -256,25 +328,33 @@ including the ``range`` keyword.
 
 These commands are mostly only useful for failure testing, as
 blocklists are normally maintained automatically and shouldn't need
-manual intervention. ::
+manual intervention. :
 
-	ceph osd blocklist ["range"] add ADDRESS[:source_port][/netmask_bits] [TIME]
-	ceph osd blocklist ["range"] rm ADDRESS[:source_port][/netmask_bits]
+.. prompt:: bash $
 
-Creates/deletes a snapshot of a pool. ::
+   ceph osd blocklist ["range"] add ADDRESS[:source_port][/netmask_bits] [TIME]
+   ceph osd blocklist ["range"] rm ADDRESS[:source_port][/netmask_bits]
 
-	ceph osd pool mksnap {pool-name} {snap-name}
-	ceph osd pool rmsnap {pool-name} {snap-name}
+Creates/deletes a snapshot of a pool. :
 
-Creates/deletes/renames a storage pool. ::
+.. prompt:: bash $
 
-	ceph osd pool create {pool-name} [pg_num [pgp_num]]
-	ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
-	ceph osd pool rename {old-name} {new-name}
+   ceph osd pool mksnap {pool-name} {snap-name}
+   ceph osd pool rmsnap {pool-name} {snap-name}
 
-Changes a pool setting. :: 
+Creates/deletes/renames a storage pool. :
 
-	ceph osd pool set {pool-name} {field} {value}
+.. prompt:: bash $
+
+   ceph osd pool create {pool-name} [pg_num [pgp_num]]
+   ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
+   ceph osd pool rename {old-name} {new-name}
+
+Changes a pool setting. : 
+
+.. prompt:: bash $
+
+   ceph osd pool set {pool-name} {field} {value}
 
 Valid fields are:
 
@@ -283,9 +363,11 @@ Valid fields are:
 	* ``pgp_num``: Effective number when calculating pg placement.
 	* ``crush_rule``: rule number for mapping placement.
 
-Get the value of a pool setting. ::
+Get the value of a pool setting. :
 
-	ceph osd pool get {pool-name} {field}
+.. prompt:: bash $
+
+   ceph osd pool get {pool-name} {field}
 
 Valid fields are:
 
@@ -293,49 +375,67 @@ Valid fields are:
 	* ``pgp_num``: Effective number of placement groups when calculating placement.
 
 
-Sends a scrub command to OSD ``{osd-num}``. To send the command to all OSDs, use ``*``. ::
+Sends a scrub command to OSD ``{osd-num}``. To send the command to all OSDs, use ``*``. :
 
-	ceph osd scrub {osd-num}
+.. prompt:: bash $
 
-Sends a repair command to OSD.N. To send the command to all OSDs, use ``*``. ::
+   ceph osd scrub {osd-num}
 
-	ceph osd repair N
+Sends a repair command to OSD.N. To send the command to all OSDs, use ``*``. :
+
+.. prompt:: bash $
+
+   ceph osd repair N
 
 Runs a simple throughput benchmark against OSD.N, writing ``TOTAL_DATA_BYTES``
 in write requests of ``BYTES_PER_WRITE`` each. By default, the test
 writes 1 GB in total in 4-MB increments.
 The benchmark is non-destructive and will not overwrite existing live
 OSD data, but might temporarily affect the performance of clients
-concurrently accessing the OSD. ::
+concurrently accessing the OSD. :
 
-	ceph tell osd.N bench [TOTAL_DATA_BYTES] [BYTES_PER_WRITE]
+.. prompt:: bash $
 
-To clear an OSD's caches between benchmark runs, use the 'cache drop' command ::
+   ceph tell osd.N bench [TOTAL_DATA_BYTES] [BYTES_PER_WRITE]
 
-	ceph tell osd.N cache drop
+To clear an OSD's caches between benchmark runs, use the 'cache drop' command :
 
-To get the cache statistics of an OSD, use the 'cache status' command ::
+.. prompt:: bash $
 
-	ceph tell osd.N cache status
+   ceph tell osd.N cache drop
+
+To get the cache statistics of an OSD, use the 'cache status' command :
+
+.. prompt:: bash $
+
+   ceph tell osd.N cache status
 
 MDS Subsystem
 =============
 
-Change configuration parameters on a running mds. ::
+Change configuration parameters on a running mds. :
 
-	ceph tell mds.{mds-id} config set {setting} {value}
+.. prompt:: bash $
 
-Example::
+   ceph tell mds.{mds-id} config set {setting} {value}
 
-	ceph tell mds.0 config set debug_ms 1
+Example:
 
-Enables debug messages. ::
+.. prompt:: bash $
 
-	ceph mds stat
+   ceph tell mds.0 config set debug_ms 1
 
-Displays the status of all metadata servers. ::
+Enables debug messages. :
 
-	ceph mds fail 0
+.. prompt:: bash $
+
+   ceph mds stat
+
+Displays the status of all metadata servers. :
+
+.. prompt:: bash $
+
+   ceph mds fail 0
 
 Marks the active MDS as failed, triggering failover to a standby if present.
 
@@ -345,18 +445,24 @@ Marks the active MDS as failed, triggering failover to a standby if present.
 Mon Subsystem
 =============
 
-Show monitor stats::
+Show monitor stats:
 
-	ceph mon stat
+.. prompt:: bash $
+
+   ceph mon stat
+
+::
 
 	e2: 3 mons at {a=127.0.0.1:40000/0,b=127.0.0.1:40001/0,c=127.0.0.1:40002/0}, election epoch 6, quorum 0,1,2 a,b,c
 
 
 The ``quorum`` list at the end lists monitor nodes that are part of the current quorum.
 
-This is also available more directly::
+This is also available more directly:
 
-	ceph quorum_status -f json-pretty
+.. prompt:: bash $
+
+   ceph quorum_status -f json-pretty
 	
 .. code-block:: javascript	
 
@@ -410,9 +516,11 @@ This is also available more directly::
 
 The above will block until a quorum is reached.
 
-For a status of just a single monitor::
+For a status of just a single monitor:
 
-	ceph tell mon.[name] mon_status
+.. prompt:: bash $
+
+   ceph tell mon.[name] mon_status
 	
 where the value of ``[name]`` can be taken from ``ceph quorum_status``. Sample
 output::
@@ -474,9 +582,13 @@ output::
 	    }
 	}
 
-A dump of the monitor state::
+A dump of the monitor state:
 
-	ceph mon dump
+.. prompt:: bash $
+
+   ceph mon dump
+
+::
 
 	dumped monmap epoch 2
 	epoch 2

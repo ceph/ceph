@@ -220,8 +220,9 @@ bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
 
     if (header_time) {
       struct tm t;
-      if (!parse_rfc2616(req_date, &t)) {
-        ldpp_dout(dpp, 0) << "NOTICE: failed to parse date for auth header" << dendl;
+      uint32_t ns = 0;
+      if (!parse_rfc2616(req_date, &t) && !parse_iso8601(req_date, &t, &ns, false)) {
+        ldpp_dout(dpp, 0) << "NOTICE: failed to parse date <" << req_date << "> for auth header" << dendl;
         return false;
       }
       if (t.tm_year < 70) {
@@ -459,7 +460,7 @@ bool is_non_s3_op(RGWOpType op_type)
       op_type == RGW_OP_CREATE_ROLE ||
       op_type == RGW_OP_DELETE_ROLE ||
       op_type == RGW_OP_GET_ROLE ||
-      op_type == RGW_OP_MODIFY_ROLE ||
+      op_type == RGW_OP_MODIFY_ROLE_TRUST_POLICY ||
       op_type == RGW_OP_LIST_ROLES ||
       op_type == RGW_OP_PUT_ROLE_POLICY ||
       op_type == RGW_OP_GET_ROLE_POLICY ||
@@ -479,7 +480,8 @@ bool is_non_s3_op(RGWOpType op_type)
       op_type == RGW_OP_PUBSUB_TOPIC_DELETE ||
       op_type == RGW_OP_TAG_ROLE ||
       op_type == RGW_OP_LIST_ROLE_TAGS ||
-      op_type == RGW_OP_UNTAG_ROLE) {
+      op_type == RGW_OP_UNTAG_ROLE ||
+      op_type == RGW_OP_UPDATE_ROLE) {
     return true;
   }
   return false;

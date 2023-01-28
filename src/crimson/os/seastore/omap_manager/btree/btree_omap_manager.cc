@@ -187,26 +187,76 @@ BtreeOMapManager::omap_rm_key(
 
 }
 
+BtreeOMapManager::omap_rm_key_range_ret
+BtreeOMapManager::omap_rm_key_range(
+  omap_root_t &omap_root,
+  Transaction &t,
+  const std::string &first,
+  const std::string &last,
+  omap_list_config_t config)
+{
+  LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
+  DEBUGT("{} ~ {}", t, first, last);
+  assert(first <= last);
+  return seastar::do_with(
+    std::make_optional<std::string>(first),
+    std::make_optional<std::string>(last),
+    [this, &omap_root, &t, config](auto &first, auto &last) {
+    return omap_list(
+      omap_root,
+      t,
+      first,
+      last,
+      config);
+  }).si_then([this, &omap_root, &t](auto results) {
+    LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
+    auto &[complete, kvs] = results;
+    std::vector<std::string> keys;
+    for (const auto& [k, _] : kvs) {
+      keys.push_back(k);
+    }
+    DEBUGT("total {} keys to remove", t, keys.size());
+    return seastar::do_with(
+      std::move(keys),
+      [this, &omap_root, &t](auto& keys) {
+      return trans_intr::do_for_each(
+	keys.begin(),
+	keys.end(),
+	[this, &omap_root, &t](auto& key) {
+	return omap_rm_key(omap_root, t, key);
+      });
+    });
+  });
+}
+
 BtreeOMapManager::omap_list_ret
 BtreeOMapManager::omap_list(
   const omap_root_t &omap_root,
   Transaction &t,
-  const std::optional<std::string> &start,
+  const std::optional<std::string> &first,
+  const std::optional<std::string> &last,
   omap_list_config_t config)
 {
   LOG_PREFIX(BtreeOMapManager::omap_list);
-  if (start) {
-    DEBUGT("{}, start: {}", t, omap_root, *start);
+  if (first && last) {
+    DEBUGT("{}, first: {}, last: {}", t, omap_root, *first, *last);
+    assert(last >= first);
+  } else if (first) {
+    DEBUGT("{}, first: {}", t, omap_root, *first);
+  } else if (last) {
+    DEBUGT("{}, last: {}", t, omap_root, *last);
   } else {
     DEBUGT("{}", t, omap_root);
   }
+
   return get_omap_root(
     get_omap_context(t, omap_root.hint),
     omap_root
-  ).si_then([this, config, &t, &start, &omap_root](auto extent) {
+  ).si_then([this, config, &t, &first, &last, &omap_root](auto extent) {
     return extent->list(
       get_omap_context(t, omap_root.hint),
-      start,
+      first,
+      last,
       config);
   });
 }

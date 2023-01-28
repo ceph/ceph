@@ -118,8 +118,11 @@ struct RGWTable : EmptyMetaTable {
          }
          break;
       case LUA_TSTRING:
-        value = lua_tolstring(L, 3, &len);
+      {
+        const auto str = lua_tolstring(L, 3, &len);
+        value = std::string{str, len};
         break;
+      }
       default:
         l.unlock();
         return luaL_error(L, "unsupported value type for RGW table");
@@ -186,7 +189,7 @@ private:
   bool paused = false;
   int execute_interval;
   const DoutPrefix dp;
-  rgw::sal::Store* store;
+  std::unique_ptr<rgw::sal::LuaManager> lua_manager; 
   CephContext* const cct;
   const std::string luarocks_path;
   std::thread runner;
@@ -203,7 +206,7 @@ protected:
   virtual int read_script();
 
 public:
-  Background(rgw::sal::Store* store,
+  Background(rgw::sal::Driver* driver,
       CephContext* cct,
       const std::string& luarocks_path,
       int execute_interval = INIT_EXECUTE_INTERVAL);
@@ -220,8 +223,8 @@ public:
     }
     
     void pause() override;
-    void resume(rgw::sal::Store* _store) override;
+    void resume(rgw::sal::Driver* _driver) override;
 };
 
-} //namepsace lua
+} //namepsace rgw::lua
 

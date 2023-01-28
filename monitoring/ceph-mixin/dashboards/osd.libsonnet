@@ -211,7 +211,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       )
       .addTarget(
         $.addTargetSchema(
-          'absent(ceph_bluefs_wal_total_bytes{%(matchers)s)} * count(ceph_osd_metadata{%(matchers)s})' % $.matchers(), 'filestore', 'time_series', 2
+          'absent(ceph_bluefs_wal_total_bytes{%(matchers)s}) * count(ceph_osd_metadata{%(matchers)s})' % $.matchers(), 'filestore', 'time_series', 2
         )
       ) + { gridPos: { x: 4, y: 8, w: 4, h: 8 } },
       $.simplePieChart(
@@ -300,6 +300,31 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addTargets([$.addTargetSchema(
         'round(sum(rate(ceph_pool_wr{%(matchers)s}[$__rate_interval])))' % $.matchers(), 'Writes'
       )]),
+      $.addTableSchema(
+        '$datasource',
+        'This table shows the 10 OSDs with the highest number of slow ops',
+        { col: 2, desc: true },
+        [
+          $.overviewStyle('OSD ID', 'ceph_daemon', 'string', 'short'),
+          $.overviewStyle('Slow Ops', 'Value', 'number', 'none'),
+          $.overviewStyle('', '/.*/', 'hidden', 'short'),
+        ],
+        'Top Slow Ops',
+        'table'
+      )
+      .addTarget(
+        $.addTargetSchema(
+          |||
+            topk(10,
+              (ceph_daemon_health_metrics{type="SLOW_OPS", ceph_daemon=~"osd.*"})
+            )
+          ||| % $.matchers(),
+          '',
+          'table',
+          1,
+          true
+        )
+      ) + { gridPos: { x: 0, y: 20, w: 4, h: 8 } },
     ]),
   'osd-device-details.json':
     local OsdDeviceDetailsPanel(title,

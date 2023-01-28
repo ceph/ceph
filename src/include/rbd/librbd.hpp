@@ -217,6 +217,7 @@ namespace librbd {
   typedef rbd_encryption_format_t encryption_format_t;
   typedef rbd_encryption_algorithm_t encryption_algorithm_t;
   typedef rbd_encryption_options_t encryption_options_t;
+  typedef rbd_encryption_spec_t encryption_spec_t;
 
   typedef struct {
     encryption_algorithm_t alg;
@@ -227,6 +228,10 @@ namespace librbd {
     encryption_algorithm_t alg;
     std::string passphrase;
   } encryption_luks2_format_options_t;
+
+  typedef struct {
+    std::string passphrase;
+  } encryption_luks_format_options_t;
 
 class CEPH_RBD_API RBD
 {
@@ -595,6 +600,7 @@ public:
                         size_t opts_size);
   int encryption_load(encryption_format_t format, encryption_options_t opts,
                       size_t opts_size);
+  int encryption_load2(const encryption_spec_t *specs, size_t spec_count);
 
   /* striping */
   uint64_t get_stripe_unit() const;
@@ -710,6 +716,27 @@ public:
   ssize_t writesame(uint64_t ofs, size_t len, ceph::bufferlist &bl, int op_flags);
   ssize_t write_zeroes(uint64_t ofs, size_t len, int zero_flags, int op_flags);
 
+  /**
+   * compare and write from/to image
+   *
+   * Compare data in compare bufferlist to data at offset in image.
+   * len bytes of the compare bufferlist are compared, i.e. the compare
+   * bufferlist has to be at least len bytes long.
+   * If the compare is successful len bytes from the write bufferlist
+   * are written to the image, i.e. the write bufferlist also has to be
+   * at least len bytes long.
+   * If the compare is unsuccessful no data is written and the
+   * offset in the bufferlist where the compare first differed
+   * is returned through mismatch_off.
+   *
+   * @param off offset in image
+   * @param len length of compare, length of write
+   * @param cmp_bl bufferlist to compare from
+   * @param bl bufferlist to write to image if compare succeeds
+   * @param c aio completion to notify when compare and write is complete
+   * @param mismatch_off (out) offset in bufferlist where compare first differed
+   * @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG
+   */
   ssize_t compare_and_write(uint64_t ofs, size_t len, ceph::bufferlist &cmp_bl,
                             ceph::bufferlist& bl, uint64_t *mismatch_off, int op_flags);
 

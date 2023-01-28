@@ -93,3 +93,6 @@ struct BackfillInterval {
 
 std::ostream &operator<<(std::ostream &out, const BackfillInterval &bi);
 
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<BackfillInterval> : fmt::ostream_formatter {};
+#endif

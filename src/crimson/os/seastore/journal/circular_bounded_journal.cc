@@ -5,6 +5,7 @@
 
 #include "crimson/common/errorator-loop.h"
 #include "include/intarith.h"
+#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
 #include "crimson/os/seastore/logging.h"
 
@@ -15,66 +16,17 @@ namespace crimson::os::seastore::journal {
 std::ostream &operator<<(std::ostream &out,
     const CircularBoundedJournal::cbj_header_t &header)
 {
-  return out << "cbj_header_t(magic=" << header.magic
-	     << ", uuid=" << header.uuid
-	     << ", block_size=" << header.block_size
-	     << ", size=" << header.size
-	     << ", journal_tail=" << header.journal_tail
-	     << ", "<< device_id_printer_t{header.device_id}
+  return out << "cbj_header_t(" 
+	     << ", dirty_tail=" << header.dirty_tail
+	     << ", alloc_tail=" << header.alloc_tail
              << ")";
 }
 
-CircularBoundedJournal::CircularBoundedJournal(NVMeBlockDevice* device,
+CircularBoundedJournal::CircularBoundedJournal(
+    JournalTrimmer &trimmer,
+    RBMDevice* device,
     const std::string &path)
-  : device(device), path(path) {}
-
-CircularBoundedJournal::mkfs_ret
-CircularBoundedJournal::mkfs(const mkfs_config_t& config)
-{
-  LOG_PREFIX(CircularBoundedJournal::mkfs);
-  return _open_device(path
-  ).safe_then([this, config, FNAME]() mutable -> mkfs_ret {
-    assert(static_cast<seastore_off_t>(config.block_size) ==
-      device->get_block_size());
-    ceph::bufferlist bl;
-    CircularBoundedJournal::cbj_header_t head;
-    head.block_size = config.block_size;
-    head.size = config.total_size - device->get_block_size();
-    head.journal_tail = device->get_block_size();
-    head.device_id = config.device_id;
-    encode(head, bl);
-    header = head;
-    set_written_to(head.journal_tail);
-    DEBUG(
-      "initialize header block in CircularBoundedJournal, length {}",
-      bl.length());
-    return write_header(
-    ).handle_error(
-      mkfs_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-        "Invalid error in CircularBoundedJournal::mkfs"
-      }
-    );
-  }).safe_then([this]() -> mkfs_ret {
-    if (device) {
-      return device->close();
-    }
-    return mkfs_ertr::now();
-  });
-}
-
-CircularBoundedJournal::open_for_write_ertr::future<>
-CircularBoundedJournal::_open_device(const std::string &path)
-{
-  ceph_assert(device);
-  return device->open(path, seastar::open_flags::rw
-  ).handle_error(
-    open_for_write_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error device->open"
-    }
-  );
-}
+  : trimmer(trimmer), device(device), path(path) {}
 
 ceph::bufferlist CircularBoundedJournal::encode_header()
 {
@@ -93,21 +45,48 @@ ceph::bufferlist CircularBoundedJournal::encode_header()
   return bl;
 }
 
-CircularBoundedJournal::open_for_write_ret CircularBoundedJournal::open_for_write()
+CircularBoundedJournal::open_for_mkfs_ret
+CircularBoundedJournal::open_for_mkfs()
+{
+  LOG_PREFIX(CircularBoundedJournal::open_for_mkfs);
+  assert(device);
+  ceph::bufferlist bl;
+  CircularBoundedJournal::cbj_header_t head;
+  assert(device->get_journal_size());
+  head.dirty_tail =
+    journal_seq_t{0,
+      convert_abs_addr_to_paddr(
+	get_records_start(),
+	device->get_device_id())};
+  head.alloc_tail = head.dirty_tail;
+  encode(head, bl);
+  header = head;
+  set_written_to(head.dirty_tail);
+  initialized = true;
+  DEBUG(
+    "initialize header block in CircularBoundedJournal, length {}",
+    bl.length());
+  return write_header(
+  ).safe_then([this]() {
+    return open_for_mount();
+  }).handle_error(
+    open_for_mkfs_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error write_header"
+    }
+  );
+}
+
+CircularBoundedJournal::open_for_mount_ret
+CircularBoundedJournal::open_for_mount()
 {
   ceph_assert(initialized);
-  paddr_t paddr = convert_abs_addr_to_paddr(
-    get_written_to(),
-    header.device_id);
-  if (circulation_seq == NULL_SEG_SEQ) {
-    circulation_seq = 0;
+  if (written_to.segment_seq == NULL_SEG_SEQ) {
+    written_to.segment_seq = 0;
   }
-  return open_for_write_ret(
-    open_for_write_ertr::ready_future_marker{},
-    journal_seq_t{
-      circulation_seq,
-      paddr
-  });
+  return open_for_mount_ret(
+    open_for_mount_ertr::ready_future_marker{},
+    get_written_to());
 }
 
 CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()
@@ -115,47 +94,13 @@ CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()
   return write_header(
   ).safe_then([this]() -> close_ertr::future<> {
     initialized = false;
-    return device->close();
+    return close_ertr::now();
   }).handle_error(
-    open_for_write_ertr::pass_further{},
+    open_for_mount_ertr::pass_further{},
     crimson::ct_error::assert_all{
       "Invalid error write_header"
     }
   );
-}
-
-CircularBoundedJournal::open_for_write_ret
-CircularBoundedJournal::open_device_read_header()
-{
-  LOG_PREFIX(CircularBoundedJournal::open_device_read_header);
-  ceph_assert(!initialized);
-  return _open_device(path
-  ).safe_then([this, FNAME]() {
-    return read_header(
-    ).handle_error(
-      open_for_write_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-	"Invalid error read_header"
-    }).safe_then([this, FNAME](auto p) mutable {
-      auto &[head, bl] = *p;
-      header = head;
-      DEBUG("header : {}", header);
-      paddr_t paddr = convert_abs_addr_to_paddr(
-	get_written_to(),
-	header.device_id);
-      initialized = true;
-      return open_for_write_ret(
-	open_for_write_ertr::ready_future_marker{},
-	journal_seq_t{
-	  circulation_seq,
-	  paddr
-	});
-    });
-  }).handle_error(
-    open_for_write_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error _open_device"
-  });
 }
 
 CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
@@ -164,49 +109,55 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
 {
   LOG_PREFIX(CircularBoundedJournal::submit_record);
   assert(write_pipeline);
-  assert(circulation_seq != NULL_SEG_SEQ);
+  assert(written_to.segment_seq != NULL_SEG_SEQ);
   auto r_size = record_group_size_t(record.size, get_block_size());
   auto encoded_size = r_size.get_encoded_length();
-  if (encoded_size > get_available_size()) {
+  if (encoded_size > get_records_available_size()) {
     ERROR("record size {}, but available size {}",
-          encoded_size, get_available_size());
+          encoded_size, get_records_available_size());
     return crimson::ct_error::erange::make();
   }
-  if (encoded_size + get_written_to() > get_journal_end()) {
+  if (encoded_size + get_rbm_addr(get_written_to()) > get_journal_end()) {
     DEBUG("roll");
-    set_written_to(get_start_addr());
-    ++circulation_seq;
-    if (encoded_size > get_available_size()) {
+    paddr_t paddr = convert_abs_addr_to_paddr(
+      get_records_start(),
+      get_device_id());
+    set_written_to(
+      journal_seq_t{++written_to.segment_seq, paddr});
+    if (encoded_size > get_records_available_size()) {
       ERROR("rolled, record size {}, but available size {}",
-            encoded_size, get_available_size());
+            encoded_size, get_records_available_size());
       return crimson::ct_error::erange::make();
     }
   }
 
-  journal_seq_t j_seq {
-    circulation_seq,
-    convert_abs_addr_to_paddr(
-      get_written_to(),
-      header.device_id)};
+  journal_seq_t j_seq = get_written_to();
   ceph::bufferlist to_write = encode_record(
     std::move(record), device->get_block_size(),
     j_seq, 0);
   assert(to_write.length() == encoded_size);
-  auto target = get_written_to();
+  auto target = get_rbm_addr(get_written_to());
   auto new_written_to = target + encoded_size;
   if (new_written_to >= get_journal_end()) {
     assert(new_written_to == get_journal_end());
     DEBUG("roll");
-    set_written_to(get_start_addr());
-    ++circulation_seq;
+    paddr_t paddr = convert_abs_addr_to_paddr(
+      get_records_start(),
+      get_device_id());
+    set_written_to(
+      journal_seq_t{++written_to.segment_seq, paddr});
   } else {
-    set_written_to(new_written_to);
+    paddr_t paddr = convert_abs_addr_to_paddr(
+      new_written_to,
+      get_device_id());
+    set_written_to(
+      journal_seq_t{written_to.segment_seq, paddr});
   }
   DEBUG("{}, target {}", r_size, target);
 
   auto write_result = write_result_t{
     j_seq,
-    (seastore_off_t)encoded_size
+    encoded_size
   };
   auto write_fut = device_write_bl(target, to_write);
   return handle.enter(write_pipeline->device_submission
@@ -220,15 +171,16 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
     r_size,
     FNAME] {
     DEBUG("commit target {} used_size {} written length {}",
-          target, get_used_size(), length);
+          target, get_records_used_size(), length);
 
     paddr_t paddr = convert_abs_addr_to_paddr(
       target + r_size.get_mdlength(),
-      header.device_id);
+      get_device_id());
     auto submit_result = record_locator_t{
       paddr,
       write_result
     };
+    trimmer.set_journal_head(write_result.start_seq);
     return submit_result;
   });
 }
@@ -256,10 +208,11 @@ CircularBoundedJournal::read_header_ret
 CircularBoundedJournal::read_header()
 {
   LOG_PREFIX(CircularBoundedJournal::read_header);
+  assert(device);
   auto bptr = bufferptr(ceph::buffer::create_page_aligned(
 			device->get_block_size()));
-  DEBUG("reading {}", CBJOURNAL_START_ADDRESS);
-  return device->read(CBJOURNAL_START_ADDRESS, bptr
+  DEBUG("reading {}", device->get_journal_start());
+  return device->read(device->get_journal_start(), bptr
   ).safe_then([bptr, FNAME]() mutable
     -> read_header_ret {
     bufferlist bl;
@@ -292,6 +245,110 @@ CircularBoundedJournal::read_header()
   });
 }
 
+Journal::replay_ret CircularBoundedJournal::scan_valid_record_delta(
+   cbj_delta_handler_t &&delta_handler, journal_seq_t tail)
+{
+  LOG_PREFIX(CircularBoundedJournal::scan_valid_record_delta);
+  return seastar::do_with(
+    bool(false),
+    rbm_abs_addr(get_rbm_addr(tail)),
+    std::move(delta_handler),
+    segment_seq_t(NULL_SEG_SEQ),
+    [this, FNAME](auto &is_rolled, auto &cursor_addr, auto &d_handler, auto &expected_seq) {
+    return crimson::repeat(
+      [this, &is_rolled, &cursor_addr, &d_handler, &expected_seq, FNAME]() mutable
+      -> replay_ertr::future<seastar::stop_iteration> {
+      paddr_t record_paddr = convert_abs_addr_to_paddr(
+	cursor_addr,
+	get_device_id());
+      return read_record(record_paddr, expected_seq
+      ).safe_then([this, &is_rolled, &cursor_addr, &d_handler, &expected_seq, FNAME](auto ret)
+	  -> replay_ertr::future<seastar::stop_iteration> {
+	if (!ret.has_value()) {
+	  if (expected_seq == NULL_SEG_SEQ || is_rolled) {
+	    DEBUG("no more records, stop replaying");
+	    return replay_ertr::make_ready_future<
+	      seastar::stop_iteration>(seastar::stop_iteration::yes);
+	  } else {
+	    cursor_addr = get_records_start();
+	    ++expected_seq;
+	    is_rolled = true;
+	    return replay_ertr::make_ready_future<
+	      seastar::stop_iteration>(seastar::stop_iteration::no);
+	  }
+	}
+	auto [r_header, bl] = *ret;
+	bufferlist mdbuf;
+	mdbuf.substr_of(bl, 0, r_header.mdlength);
+	paddr_t record_block_base = paddr_t::make_blk_paddr(
+	  get_device_id(), cursor_addr + r_header.mdlength);
+	auto maybe_record_deltas_list = try_decode_deltas(
+	  r_header, mdbuf, record_block_base);
+	if (!maybe_record_deltas_list) {
+	  // This should be impossible, we did check the crc on the mdbuf
+	  ERROR("unable to decode deltas for record {} at {}",
+		r_header, record_block_base);
+	  return crimson::ct_error::input_output_error::make();
+	}
+	DEBUG("{} at {}", r_header, cursor_addr);
+	auto write_result = write_result_t{
+	  r_header.committed_to,
+	  bl.length()
+	};
+	if (expected_seq == NULL_SEG_SEQ) {
+	  expected_seq = r_header.committed_to.segment_seq;
+	} else {
+	  assert(expected_seq == r_header.committed_to.segment_seq);
+	}
+	cursor_addr += bl.length();
+	if (cursor_addr >= get_journal_end()) {
+	  assert(cursor_addr == get_journal_end());
+	  cursor_addr = get_records_start();
+	  ++expected_seq;
+	  is_rolled = true;
+	}
+	paddr_t addr = convert_abs_addr_to_paddr(
+	  cursor_addr,
+	  get_device_id());
+	set_written_to(
+	  journal_seq_t{expected_seq, addr});
+	return seastar::do_with(
+	  std::move(*maybe_record_deltas_list),
+	  [write_result,
+	  &d_handler,
+	  FNAME](auto& record_deltas_list) {
+	  return crimson::do_for_each(
+	    record_deltas_list,
+	    [write_result,
+	    &d_handler, FNAME](record_deltas_t& record_deltas) {
+	    auto locator = record_locator_t{
+	      record_deltas.record_block_base,
+	      write_result
+	    };
+	    DEBUG("processing {} deltas at block_base {}",
+		record_deltas.deltas.size(),
+		locator);
+	    return crimson::do_for_each(
+	      record_deltas.deltas,
+	      [locator,
+	      &d_handler](auto& p) {
+	      auto& modify_time = p.first;
+	      auto& delta = p.second;
+	      return d_handler(
+		locator,
+		delta,
+		modify_time).discard_result();
+	    });
+	  }).safe_then([]() {
+	    return replay_ertr::make_ready_future<
+	      seastar::stop_iteration>(seastar::stop_iteration::no);
+	  });
+	});
+      });
+    });
+  });
+}
+
 Journal::replay_ret CircularBoundedJournal::replay(
     delta_handler_t &&delta_handler)
 {
@@ -299,104 +356,69 @@ Journal::replay_ret CircularBoundedJournal::replay(
    * read records from last applied record prior to written_to, and replay
    */
   LOG_PREFIX(CircularBoundedJournal::replay);
-  return open_device_read_header(
-  ).safe_then([this, FNAME, delta_handler=std::move(delta_handler)] (auto) {
-    circulation_seq = NULL_SEG_SEQ;
-    set_written_to(get_journal_tail());
+  return read_header(
+  ).handle_error(
+    open_for_mount_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error read_header"
+  }).safe_then([this, FNAME, delta_handler=std::move(delta_handler)](auto p)
+    mutable {
+    auto &[head, bl] = *p;
+    header = head;
+    DEBUG("header : {}", header);
+    initialized = true;
     return seastar::do_with(
-      bool(false),
-      rbm_abs_addr(get_journal_tail()),
       std::move(delta_handler),
-      segment_seq_t(NULL_SEG_SEQ),
-      [this, FNAME](auto &is_rolled, auto &cursor_addr, auto &d_handler, auto &expected_seq) {
-      return crimson::repeat(
-	[this, &is_rolled, &cursor_addr, &d_handler, &expected_seq, FNAME]() mutable
-	-> replay_ertr::future<seastar::stop_iteration> {
-	paddr_t record_paddr = convert_abs_addr_to_paddr(
-	  cursor_addr,
-	  header.device_id);
-	return read_record(record_paddr, expected_seq
-	).safe_then([this, &is_rolled, &cursor_addr, &d_handler, &expected_seq, FNAME](auto ret)
-	    -> replay_ertr::future<seastar::stop_iteration> {
-	  if (!ret.has_value()) {
-	    if (expected_seq == NULL_SEG_SEQ || is_rolled) {
-	      DEBUG("no more records, stop replaying");
-	      return replay_ertr::make_ready_future<
-	        seastar::stop_iteration>(seastar::stop_iteration::yes);
-	    } else {
-	      cursor_addr = get_start_addr();
-	      ++expected_seq;
-	      is_rolled = true;
-	      return replay_ertr::make_ready_future<
-	        seastar::stop_iteration>(seastar::stop_iteration::no);
+      std::map<paddr_t, journal_seq_t>(),
+      [this](auto &d_handler, auto &map) {
+      auto build_paddr_seq_map = [&map](
+        const auto &offsets,
+        const auto &e,
+	sea_time_point modify_time)
+      {
+	if (e.type == extent_types_t::ALLOC_INFO) {
+	  alloc_delta_t alloc_delta;
+	  decode(alloc_delta, e.bl);
+	  if (alloc_delta.op == alloc_delta_t::op_types_t::CLEAR) {
+	    for (auto &alloc_blk : alloc_delta.alloc_blk_ranges) {
+	      map[alloc_blk.paddr] = offsets.write_result.start_seq;
 	    }
 	  }
-	  auto [r_header, bl] = *ret;
-	  bufferlist mdbuf;
-	  mdbuf.substr_of(bl, 0, r_header.mdlength);
-	  paddr_t record_block_base = paddr_t::make_blk_paddr(
-	    header.device_id, cursor_addr + r_header.mdlength);
-	  auto maybe_record_deltas_list = try_decode_deltas(
-	    r_header, mdbuf, record_block_base);
-	  if (!maybe_record_deltas_list) {
-	    // This should be impossible, we did check the crc on the mdbuf
-	    ERROR("unable to decode deltas for record {} at {}",
-	          r_header, record_block_base);
-	    return crimson::ct_error::input_output_error::make();
+	}
+	return replay_ertr::make_ready_future<bool>(true);
+      };
+      written_to.segment_seq = NULL_SEG_SEQ;
+      auto tail = get_dirty_tail() <= get_alloc_tail() ?
+	get_dirty_tail() : get_alloc_tail();
+      set_written_to(tail);
+      // The first pass to build the paddr->journal_seq_t map 
+      // from extent allocations
+      return scan_valid_record_delta(std::move(build_paddr_seq_map), tail
+      ).safe_then([this, &map, &d_handler, tail]() {
+	auto call_d_handler_if_valid = [this, &map, &d_handler](
+	  const auto &offsets,
+	  const auto &e,
+	  sea_time_point modify_time)
+	{
+	  if (map.find(e.paddr) == map.end() ||
+	      map[e.paddr] <= offsets.write_result.start_seq) {
+	    return d_handler(
+	      offsets,
+	      e,
+	      header.dirty_tail,
+	      header.alloc_tail,
+	      modify_time
+	    );
 	  }
-	  DEBUG("{} at {}", r_header, cursor_addr);
-	  auto write_result = write_result_t{
-	    r_header.committed_to,
-	    (seastore_off_t)bl.length()
-	  };
-	  if (expected_seq == NULL_SEG_SEQ) {
-	    expected_seq = r_header.committed_to.segment_seq;
-	  } else {
-	    assert(expected_seq == r_header.committed_to.segment_seq);
-	  }
-	  cursor_addr += bl.length();
-	  if (cursor_addr >= get_journal_end()) {
-	    assert(cursor_addr == get_journal_end());
-	    cursor_addr = get_start_addr();
-	    ++expected_seq;
-	    is_rolled = true;
-	  }
-	  set_written_to(cursor_addr);
-	  circulation_seq = expected_seq;
-	  return seastar::do_with(
-	    std::move(*maybe_record_deltas_list),
-	    [write_result,
-	    &d_handler,
-	    FNAME](auto& record_deltas_list) {
-	    return crimson::do_for_each(
-	      record_deltas_list,
-	      [write_result,
-	      &d_handler, FNAME](record_deltas_t& record_deltas) {
-	      auto locator = record_locator_t{
-		record_deltas.record_block_base,
-		write_result
-	      };
-	      DEBUG("processing {} deltas at block_base {}",
-		  record_deltas.deltas.size(),
-		  locator);
-	      return crimson::do_for_each(
-		record_deltas.deltas,
-		[locator,
-		&d_handler](auto& p) {
-		auto& modify_time = p.first;
-		auto& delta = p.second;
-		return d_handler(locator,
-		  delta,
-		  locator.write_result.start_seq,
-		  modify_time);
-	      });
-	    }).safe_then([]() {
-	      return replay_ertr::make_ready_future<
-		seastar::stop_iteration>(seastar::stop_iteration::no);
-	    });
-	  });
-	});
+	  return replay_ertr::make_ready_future<bool>(true);
+	};
+	// The second pass to replay deltas
+	return scan_valid_record_delta(std::move(call_d_handler_if_valid), tail);
       });
+    }).safe_then([this]() {
+      trimmer.update_journal_tails(
+	header.dirty_tail,
+	header.alloc_tail);
     });
   });
 }
@@ -491,7 +513,17 @@ CircularBoundedJournal::write_header()
   DEBUG(
     "sync header of CircularBoundedJournal, length {}",
     bl.length());
-  return device_write_bl(CBJOURNAL_START_ADDRESS, bl);
+  assert(device);
+  return device_write_bl(device->get_journal_start(), bl);
 }
+seastar::future<> CircularBoundedJournal::finish_commit(transaction_type_t type) {
+  if (is_trim_transaction(type)) {
+    return update_journal_tail(
+      trimmer.get_dirty_tail(),
+      trimmer.get_alloc_tail());
+  }
+  return seastar::now();
+}
+
 
 }

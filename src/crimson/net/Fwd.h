@@ -26,10 +26,7 @@
 
 #include "crimson/common/errorator.h"
 
-using auth_proto_t = int;
-
 class AuthConnectionMeta;
-using AuthConnectionMetaRef = seastar::lw_shared_ptr<AuthConnectionMeta>;
 
 namespace crimson::net {
 
@@ -38,6 +35,7 @@ using stop_t = seastar::stop_iteration;
 
 class Connection;
 using ConnectionRef = seastar::shared_ptr<Connection>;
+using ConnectionFRef = seastar::foreign_ptr<ConnectionRef>;
 
 class Dispatcher;
 class ChainedDispatchers;

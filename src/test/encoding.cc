@@ -1,6 +1,7 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
 
+#include <fmt/format.h>
 #include "gtest/gtest.h"
 
 using namespace std;
@@ -319,26 +320,27 @@ TEST(EncodingRoundTrip, Integers) {
   }
 }
 
-const char* expected_what[] = {
-  "void lame_decoder(int) no longer understand old encoding version 100 < 200: Malformed input",
-  "void lame_decoder(int) decode past end of struct encoding: Malformed input"
-};
-
-void lame_decoder(int which) {
-  switch (which) {
-  case 0:
-    throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, 100, 200));
-  case 1:
-    throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__));
-  }
-}
-
 TEST(EncodingException, Macros) {
-  for (unsigned i = 0; i < sizeof(expected_what)/sizeof(expected_what[0]); i++) {
+  const struct {
+    buffer::malformed_input exc;
+    std::string expected_what;
+  } tests[] = {
+    {
+      DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, 100, 200),
+      fmt::format("{} no longer understand old encoding version 100 < 200: Malformed input",
+                  __PRETTY_FUNCTION__)
+    },
+    {
+      DECODE_ERR_PAST(__PRETTY_FUNCTION__),
+      fmt::format("{} decode past end of struct encoding: Malformed input",
+                  __PRETTY_FUNCTION__)
+    }
+  };
+  for (auto& [exec, expected_what] : tests) {
     try {
-      lame_decoder(i);
+      throw exec;
     } catch (const exception& e) {
-      ASSERT_EQ(string(expected_what[i]), string(e.what()));
+      ASSERT_NE(string(e.what()).find(expected_what), string::npos);
     }
   }
 }

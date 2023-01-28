@@ -444,6 +444,17 @@ int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key)
 int cls_cxx_list_watchers(cls_method_context_t hctx,
                           obj_list_watch_response_t *watchers)
 {
+  OSDOp op{CEPH_OSD_OP_LIST_WATCHERS};
+  if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
+    return ret;
+  }
+
+  try {
+    auto iter = op.outdata.cbegin();
+    decode(*watchers, iter);
+  } catch (buffer::error&) {
+    return -EIO;
+  }
   return 0;
 }
 
@@ -509,6 +520,14 @@ const object_info_t& cls_get_object_info(cls_method_context_t hctx)
 
 int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq)
 {
+  auto* ox = reinterpret_cast<crimson::osd::OpsExecuter*>(hctx);
+  auto obc = ox->get_obc();
+  if (!obc->obs.exists ||
+      (obc->obs.oi.is_whiteout() &&
+       obc->ssc->snapset.clones.empty())) {
+    return -ENOENT;
+  }
+  *snap_seq = obc->ssc->snapset.seq;
   return 0;
 }
 

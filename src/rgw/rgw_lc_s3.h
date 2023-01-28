@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_LC_S3_H
-#define CEPH_RGW_LC_S3_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -13,6 +12,7 @@
 #include "rgw_lc.h"
 #include "rgw_xml.h"
 #include "rgw_tag_s3.h"
+
 
 class LCFilter_S3 : public LCFilter
 {
@@ -98,5 +98,3 @@ public:
   int rebuild(RGWLifecycleConfiguration& dest);
   void dump_xml(Formatter *f) const;
 };
-
-#endif

@@ -9,7 +9,7 @@ describe('Create cluster create services page', () => {
   const createCluster = new CreateClusterWizardHelper();
   const createClusterServicePage = new CreateClusterServicePageHelper();
 
-  const createService = (serviceType: string, serviceName: string, count = '1') => {
+  const createService = (serviceType: string, serviceName: string, count = 1) => {
     cy.get('[aria-label=Create]').first().click();
     createClusterServicePage.addService(serviceType, false, count);
     createClusterServicePage.checkExist(serviceName, true);
@@ -31,7 +31,7 @@ describe('Create cluster create services page', () => {
     const serviceName = 'mds.test';
 
     it('should create an mds service', () => {
-      createService('mds', serviceName, '1');
+      createService('mds', serviceName);
     });
 
     it('should edit a service', () => {

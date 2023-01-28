@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #include "gtest/gtest.h"
 
-#include "rgw/rgw_torrent.h"
+#include "rgw_torrent.h"
 
 using namespace std;
 

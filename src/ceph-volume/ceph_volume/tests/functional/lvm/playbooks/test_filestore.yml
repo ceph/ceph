@@ -87,11 +87,21 @@
       environment:
         CEPH_VOLUME_DEBUG: 1
 
-    # osd.0 journal device (zap without --destroy that removes the LV)
+    # osd.0 journal device
     - name: zap /dev/vdc1
-      command: "ceph-volume --cluster {{ cluster }} lvm zap /dev/vdc1"
+      command: "ceph-volume --cluster {{ cluster }} lvm zap --destroy /dev/vdc1"
       environment:
         CEPH_VOLUME_DEBUG: 1
+
+    - name: re-create partition /dev/vdc1
+      parted:
+        device: /dev/vdc
+        number: 1
+        part_start: 0%
+        part_end: 50%
+        unit: '%'
+        state: present
+        label: gpt
 
     - name: prepare osd.0 again using test_group/data-lv1
       command: "ceph-volume --cluster {{ cluster }} lvm prepare --filestore --data test_group/data-lv1 --journal /dev/vdc1 --osd-id 0"

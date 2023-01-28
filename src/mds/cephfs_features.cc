@@ -5,6 +5,10 @@
 #include "cephfs_features.h"
 #include "mdstypes.h"
 
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include <fmt/format.h>
+
 static const std::array feature_names
 {
   "reserved",
@@ -24,6 +28,7 @@ static const std::array feature_names
   "metric_collect",
   "alternate_name",
   "notify_session_state",
+  "op_getvxattr",
 };
 static_assert(feature_names.size() == CEPHFS_FEATURE_MAX + 1);
 
@@ -68,9 +73,7 @@ void cephfs_dump_features(ceph::Formatter *f, const feature_bitset_t& features)
   for (size_t i = 0; i < feature_names.size(); ++i) {
     if (!features.test(i))
       continue;
-    char s[18];
-    snprintf(s, sizeof(s), "feature_%zu", i);
-    f->dump_string(s, cephfs_feature_name(i));
+    f->dump_string(fmt::format("feature_{}", i),
+		   cephfs_feature_name(i));
   }
 }
-

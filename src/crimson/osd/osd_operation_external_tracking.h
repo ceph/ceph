@@ -7,7 +7,6 @@
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
 #include "crimson/osd/osd_operations/client_request.h"
-#include "crimson/osd/osd_operations/compound_peering_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
@@ -118,23 +117,6 @@ struct LttngBackend
               const Operation&) override {}
 };
 
-struct LttngBackendCompoundPeering
-  : CompoundPeeringRequest::StartEvent::Backend,
-    CompoundPeeringRequest::SubOpBlocker::BlockingEvent::Backend,
-    CompoundPeeringRequest::CompletionEvent::Backend
-{
-  void handle(CompoundPeeringRequest::StartEvent&,
-              const Operation&) override {}
-
-  void handle(CompoundPeeringRequest::SubOpBlocker::BlockingEvent& ev,
-              const Operation& op,
-              const CompoundPeeringRequest::SubOpBlocker& blocker) override {
-  }
-
-  void handle(CompoundPeeringRequest::CompletionEvent&,
-              const Operation&) override {}
-};
-
 struct HistoricBackend
   : ClientRequest::StartEvent::Backend,
     ConnectionPipeline::AwaitActive::BlockingEvent::Backend,
@@ -241,8 +223,7 @@ struct HistoricBackend
 
   void handle(ClientRequest::CompletionEvent&, const Operation& op) override {
     if (crimson::common::local_conf()->osd_op_history_size) {
-      const auto& client_op = to_client_request(op);
-      client_op.osd.get_shard_services().registry.put_historic(client_op);
+      to_client_request(op).put_historic();
     }
   }
 };
@@ -298,13 +279,6 @@ template <>
 struct EventBackendRegistry<osd::RecoverySubRequest> {
   static std::tuple<> get_backends() {
     return {/* no extenral backends */};
-  }
-};
-
-template <>
-struct EventBackendRegistry<osd::CompoundPeeringRequest> {
-  static std::tuple<osd::LttngBackendCompoundPeering> get_backends() {
-    return { {} };
   }
 };
 

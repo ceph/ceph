@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_LOG_H
-#define CEPH_RGW_LOG_H
+#pragma once
 
 #include <boost/container/flat_map.hpp>
 #include "rgw_common.h"
@@ -11,7 +10,65 @@
 #include <fstream>
 #include "rgw_sal_fwd.h"
 
-#define dout_subsys ceph_subsys_rgw
+class RGWOp;
+
+struct delete_multi_obj_entry {
+  std::string key;
+  std::string version_id;
+  std::string error_message;
+  std::string marker_version_id;
+  uint32_t http_status = 0;
+  bool error = false;
+  bool delete_marker = false;
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(key, bl);
+    encode(version_id, bl);
+    encode(error_message, bl);
+    encode(marker_version_id, bl);
+    encode(http_status, bl);
+    encode(error, bl);
+    encode(delete_marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &p) {
+    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
+    decode(key, p);
+    decode(version_id, p);
+    decode(error_message, p);
+    decode(marker_version_id, p);
+    decode(http_status, p);
+    decode(error, p);
+    decode(delete_marker, p);
+    DECODE_FINISH(p);
+  }
+};
+WRITE_CLASS_ENCODER(delete_multi_obj_entry)
+
+struct delete_multi_obj_op_meta {
+  uint32_t num_ok = 0;
+  uint32_t num_err = 0;
+  std::vector<delete_multi_obj_entry> objects;
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(num_ok, bl);
+    encode(num_err, bl);
+    encode(objects, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &p) {
+    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
+    decode(num_ok, p);
+    decode(num_err, p);
+    decode(objects, p);
+    DECODE_FINISH(p);
+  }
+};
+WRITE_CLASS_ENCODER(delete_multi_obj_op_meta)
 
 struct rgw_log_entry {
 
@@ -39,13 +96,14 @@ struct rgw_log_entry {
   headers_map x_headers;
   std::string trans_id;
   std::vector<std::string> token_claims;
-  uint32_t identity_type;
+  uint32_t identity_type = TYPE_NONE;
   std::string access_key_id;
   std::string subuser;
   bool temp_url {false};
+  delete_multi_obj_op_meta delete_multi_obj_meta;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(13, 5, bl);
+    ENCODE_START(14, 5, bl);
     encode(object_owner.id, bl);
     encode(bucket_owner.id, bl);
     encode(bucket, bl);
@@ -74,10 +132,11 @@ struct rgw_log_entry {
     encode(access_key_id, bl);
     encode(subuser, bl);
     encode(temp_url, bl);
+    encode(delete_multi_obj_meta, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(13, 5, 5, p);
+    DECODE_START_LEGACY_COMPAT_LEN(14, 5, 5, p);
     decode(object_owner.id, p);
     if (struct_v > 3)
       decode(bucket_owner.id, p);
@@ -136,6 +195,9 @@ struct rgw_log_entry {
       decode(access_key_id, p);
       decode(subuser, p);
       decode(temp_url, p);
+    }
+    if (struct_v >= 14) {
+      decode(delete_multi_obj_meta, p);
     }
     DECODE_FINISH(p);
   }
@@ -209,22 +271,19 @@ public:
 };
 
 class OpsLogRados : public OpsLogSink {
-  // main()'s Store pointer as a reference, possibly modified by RGWRealmReloader
-  rgw::sal::Store* const& store;
+  // main()'s driver pointer as a reference, possibly modified by RGWRealmReloader
+  rgw::sal::Driver* const& driver;
 
 public:
-  OpsLogRados(rgw::sal::Store* const& store);
+  OpsLogRados(rgw::sal::Driver* const& driver);
   int log(req_state* s, struct rgw_log_entry& entry) override;
 };
 
 class RGWREST;
 
-int rgw_log_op(RGWREST* const rest, req_state* s,
-	       const std::string& op_name, OpsLogSink* olog);
-void rgw_log_usage_init(CephContext* cct, rgw::sal::Store* store);
+int rgw_log_op(RGWREST* const rest, struct req_state* s,
+	             const RGWOp* op, OpsLogSink* olog);
+void rgw_log_usage_init(CephContext* cct, rgw::sal::Driver* driver);
 void rgw_log_usage_finalize();
 void rgw_format_ops_log_entry(struct rgw_log_entry& entry,
 			      ceph::Formatter *formatter);
-
-#endif /* CEPH_RGW_LOG_H */
-

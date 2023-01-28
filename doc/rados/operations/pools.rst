@@ -1,38 +1,38 @@
+.. _rados_pools:
+
 =======
  Pools
 =======
-Pools are logical partitions for storing objects.
+Pools are logical partitions that are used to store objects.
 
-When you first deploy a cluster without creating a pool, Ceph uses the default
-pools for storing data. A pool provides you with:
+Pools provide:
 
-- **Resilience**: You can set how many OSD are allowed to fail without losing data.
-  For replicated pools, it is the desired number of copies/replicas of an object.
-  A typical configuration stores an object and two additional copies
-  (i.e., ``size = 3``), but you can configure the number of copies/replicas at
-  pool granularity.
-  For `erasure coded pools <../erasure-code>`_, it is the number of coding chunks
-  (i.e. ``m=2`` in the **erasure code profile**)
+- **Resilience**: It is possible to set the number of OSDs that are allowed to
+  fail without any data being lost. If your cluster uses replicated pools, the
+  number of OSDs that can fail without data loss is the number of replicas.
+  For example: a typical configuration stores an object and two additional
+  copies (that is: ``size = 3``), but you can configure the number of replicas
+  on a per-pool basis. For `erasure coded pools <../erasure-code>`_, resilience
+  is defined as the number of coding chunks (for example, ``m = 2`` in the
+  **erasure code profile**).
 
-- **Placement Groups**: You can set the number of placement groups for the pool.
-  A typical configuration targets approximately 100 placement groups per OSD to
-  provide optimal balancing without using up too many computing resources. When
-  setting up multiple pools, be careful to set a reasonable number of
-  placement groups for each pool and for the cluster as a whole.  Note that each PG
-  belongs to a specific pool, so when multiple pools use the same OSDs, you must
-  take care that the **sum** of PG replicas per OSD is in the desired PG per OSD
-  target range.
+- **Placement Groups**: You can set the number of placement groups for the
+  pool. A typical configuration targets approximately 100 placement groups per
+  OSD, providing optimal balancing without consuming many computing resources.
+  When setting up multiple pools, be careful to set a reasonable number of
+  placement groups for each pool and for the cluster as a whole. Note that each
+  PG belongs to a specific pool: when multiple pools use the same OSDs, make
+  sure that the **sum** of PG replicas per OSD is in the desired PG per OSD
+  target range. Use the `pgcalc`_ tool to calculate the number of placement
+  groups to set for your pool.
 
-- **CRUSH Rules**: When you store data in a pool, placement of the object
-  and its replicas (or chunks for erasure coded pools) in your cluster is governed
-  by CRUSH rules. You can create a custom CRUSH rule for your pool if the default
-  rule is not appropriate for your use case.
+- **CRUSH Rules**: When data is stored in a pool, the placement of the object
+  and its replicas (or chunks, in the case of erasure-coded pools) in your
+  cluster is governed by CRUSH rules. Custom CRUSH rules can be created for a
+  pool if the default rule does not fit your use case.
 
-- **Snapshots**: When you create snapshots with ``ceph osd pool mksnap``,
-  you effectively take a snapshot of a particular pool.
-
-To organize data into pools, you can list, create, and remove pools.
-You can also view the utilization statistics for each pool.
+- **Snapshots**: The command ``ceph osd pool mksnap`` creates a snapshot of a
+  pool. 
 
 Pool Names
 ==========
@@ -41,14 +41,14 @@ Pool names beginning with ``.`` are reserved for use by Ceph's internal
 operations. Please do not create or manipulate pools with these names.
 
 
-
 List Pools
 ==========
 
-To list your cluster's pools, execute::
+To list your cluster's pools, execute:
 
-	ceph osd lspools
+.. prompt:: bash $
 
+   ceph osd lspools
 
 .. _createpool:
 
@@ -64,12 +64,16 @@ For details on placement group numbers refer to `setting the number of placement
    application using the pool. See `Associate Pool to Application`_ below for
    more information.
 
-For example::
+For example:
+
+.. prompt:: bash $
 
 	osd_pool_default_pg_num = 128
 	osd_pool_default_pgp_num = 128
 
-To create a pool, execute::
+To create a pool, execute:
+
+.. prompt:: bash $
 
 	ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]] [replicated] \
              [crush-rule-name] [expected-num-objects]
@@ -179,9 +183,11 @@ initialized using the ``rbd`` tool (see `Block Device Commands`_ for more
 information).
 
 For other cases, you can manually associate a free-form application name to
-a pool.::
+a pool.:
 
-        ceph osd pool application enable {pool-name} {application-name}
+.. prompt:: bash $
+
+   ceph osd pool application enable {pool-name} {application-name}
 
 .. note:: CephFS uses the application name ``cephfs``, RBD uses the
    application name ``rbd``, and RGW uses the application name ``rgw``.
@@ -190,13 +196,17 @@ Set Pool Quotas
 ===============
 
 You can set pool quotas for the maximum number of bytes and/or the maximum
-number of objects per pool. ::
+number of objects per pool:
 
-	ceph osd pool set-quota {pool-name} [max_objects {obj-count}] [max_bytes {bytes}]
+.. prompt:: bash $
 
-For example::
+   ceph osd pool set-quota {pool-name} [max_objects {obj-count}] [max_bytes {bytes}]
 
-	ceph osd pool set-quota data max_objects 10000
+For example:
+
+.. prompt:: bash $
+
+   ceph osd pool set-quota data max_objects 10000
 
 To remove a quota, set its value to ``0``.
 
@@ -204,9 +214,11 @@ To remove a quota, set its value to ``0``.
 Delete a Pool
 =============
 
-To delete a pool, execute::
+To delete a pool, execute:
 
-	ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
+.. prompt:: bash $
+
+   ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
 
 
 To remove a pool the mon_allow_pool_delete flag must be set to true in the Monitor's
@@ -217,11 +229,15 @@ See `Monitor Configuration`_ for more information.
 .. _Monitor Configuration: ../../configuration/mon-config-ref
 
 If you created your own rules for a pool you created, you should consider
-removing them when you no longer need your pool::
+removing them when you no longer need your pool:
 
-	ceph osd pool get {pool-name} crush_rule
+.. prompt:: bash $
 
-If the rule was "123", for example, you can check the other pools like so::
+   ceph osd pool get {pool-name} crush_rule
+
+If the rule was "123", for example, you can check the other pools like so:
+
+.. prompt:: bash $
 
 	ceph osd dump | grep "^pool" | grep "crush_rule 123"
 
@@ -229,7 +245,10 @@ If no other pools use that custom rule, then it's safe to delete that
 rule from the cluster.
 
 If you created users with permissions strictly for a pool that no longer
-exists, you should consider deleting those users too::
+exists, you should consider deleting those users too:
+
+
+.. prompt:: bash $
 
 	ceph auth ls | grep -C 5 {pool-name}
 	ceph auth del {user}
@@ -238,9 +257,11 @@ exists, you should consider deleting those users too::
 Rename a Pool
 =============
 
-To rename a pool, execute::
+To rename a pool, execute:
 
-	ceph osd pool rename {current-pool-name} {new-pool-name}
+.. prompt:: bash $
+
+   ceph osd pool rename {current-pool-name} {new-pool-name}
 
 If you rename a pool and you have per-pool capabilities for an authenticated
 user, you must update the user's capabilities (i.e., caps) with the new pool
@@ -249,28 +270,36 @@ name.
 Show Pool Statistics
 ====================
 
-To show a pool's utilization statistics, execute::
+To show a pool's utilization statistics, execute:
 
-	rados df
+.. prompt:: bash $
 
-Additionally, to obtain I/O information for a specific pool or all, execute::
+   rados df
 
-        ceph osd pool stats [{pool-name}]
+Additionally, to obtain I/O information for a specific pool or all, execute:
+
+.. prompt:: bash $
+
+   ceph osd pool stats [{pool-name}]
 
 
 Make a Snapshot of a Pool
 =========================
 
-To make a snapshot of a pool, execute::
+To make a snapshot of a pool, execute:
 
-	ceph osd pool mksnap {pool-name} {snap-name}
+.. prompt:: bash $
+
+   ceph osd pool mksnap {pool-name} {snap-name}
 
 Remove a Snapshot of a Pool
 ===========================
 
-To remove a snapshot of a pool, execute::
+To remove a snapshot of a pool, execute:
 
-	ceph osd pool rmsnap {pool-name} {snap-name}
+.. prompt:: bash $
+
+   ceph osd pool rmsnap {pool-name} {snap-name}
 
 .. _setpoolvalues:
 
@@ -278,9 +307,11 @@ To remove a snapshot of a pool, execute::
 Set Pool Values
 ===============
 
-To set a value to a pool, execute the following::
+To set a value to a pool, execute the following:
 
-	ceph osd pool set {pool-name} {key} {value}
+.. prompt:: bash $
+
+   ceph osd pool set {pool-name} {key} {value}
 
 You may set values for the following keys:
 
@@ -662,9 +693,11 @@ You may set values for the following keys:
 Get Pool Values
 ===============
 
-To get a value from a pool, execute the following::
+To get a value from a pool, execute the following:
 
-	ceph osd pool get {pool-name} {key}
+.. prompt:: bash $
+
+   ceph osd pool get {pool-name} {key}
 
 You may get values for the following keys:
 
@@ -830,24 +863,30 @@ You may get values for the following keys:
 Set the Number of Object Replicas
 =================================
 
-To set the number of object replicas on a replicated pool, execute the following::
+To set the number of object replicas on a replicated pool, execute the following:
 
-	ceph osd pool set {poolname} size {num-replicas}
+.. prompt:: bash $
+
+   ceph osd pool set {poolname} size {num-replicas}
 
 .. important:: The ``{num-replicas}`` includes the object itself.
    If you want the object and two copies of the object for a total of
    three instances of the object, specify ``3``.
 
-For example::
+For example:
 
-	ceph osd pool set data size 3
+.. prompt:: bash $
+
+   ceph osd pool set data size 3
 
 You may execute this command for each pool. **Note:** An object might accept
 I/Os in degraded mode with fewer than ``pool size`` replicas.  To set a minimum
 number of required replicas for I/O, you should use the ``min_size`` setting.
-For example::
+For example:
 
-  ceph osd pool set data min_size 2
+.. prompt:: bash $
+
+   ceph osd pool set data min_size 2
 
 This ensures that no object in the data pool will receive I/O with fewer than
 ``min_size`` replicas.
@@ -856,16 +895,18 @@ This ensures that no object in the data pool will receive I/O with fewer than
 Get the Number of Object Replicas
 =================================
 
-To get the number of object replicas, execute the following::
+To get the number of object replicas, execute the following:
 
-	ceph osd dump | grep 'replicated size'
+.. prompt:: bash $
+
+   ceph osd dump | grep 'replicated size'
 
 Ceph will list the pools, with the ``replicated size`` attribute highlighted.
 By default, ceph creates two replicas of an object (a total of three copies, or
 a size of 3).
 
 
-
+.. _pgcalc: https://old.ceph.com/pgcalc/
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
 .. _Bloom Filter: https://en.wikipedia.org/wiki/Bloom_filter
 .. _setting the number of placement groups: ../placement-groups#set-the-number-of-placement-groups

@@ -136,6 +136,11 @@ public:
   uint64_t append_write_event(uint64_t offset, size_t length,
                               const bufferlist &bl,
                               bool flush_entry);
+  uint64_t append_compare_and_write_event(uint64_t offset,
+                                          size_t length,
+                                          const bufferlist &cmp_bl,
+                                          const bufferlist &write_bl,
+                                          bool flush_entry);
   uint64_t append_io_event(journal::EventEntry &&event_entry,
                            uint64_t offset, size_t length,
                            bool flush_entry, int filter_ret_val);

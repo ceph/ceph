@@ -731,10 +731,10 @@ void FileStore::collect_metadata(map<string,string> *pm)
       (*pm)["backend_filestore_dev_node"] = string(dev_node);
       devname = dev_node;
     }
-    if (rc == 0 && vdo_fd >= 0) {
-      (*pm)["vdo"] = "true";
-      (*pm)["vdo_physical_size"] =
-	stringify(4096 * get_vdo_stat(vdo_fd, "physical_blocks"));
+    // if compression device detected, collect meta data for device
+    // VDO specific meta data has moved into VDO plugin
+    if (rc == 0 && ebd_impl) {
+      ebd_impl->collect_metadata("", pm);
     }
     if (journal) {
       journal->collect_metadata(pm);
@@ -778,12 +778,19 @@ int FileStore::statfs(struct store_statfs_t *buf0, osd_alert_list_t* alerts)
     buf0->omap_allocated += object_map->get_db()->get_estimated_size(kv_usage);
   }
 
-  uint64_t thin_total, thin_avail;
-  if (get_vdo_utilization(vdo_fd, &thin_total, &thin_avail)) {
-    buf0->total = thin_total;
-    bfree = std::min(bfree, thin_avail);
-    buf0->allocated = thin_total - thin_avail;
-    buf0->data_stored = bfree;
+  if (ebd_impl) {
+    ExtBlkDevState state;
+    int rc = ebd_impl->get_state(state);
+    if (rc == 0){
+      buf0->total = state.get_physical_total();
+      bfree = std::min(bfree, state.get_physical_avail());
+      buf0->allocated = state.get_physical_total() - state.get_physical_avail();
+      buf0->data_stored = bfree;
+    } else {
+      buf0->total = buf.f_blocks * buf.f_bsize;
+      buf0->allocated = bfree;
+      buf0->data_stored = bfree;
+    }
   } else {
     buf0->total = buf.f_blocks * buf.f_bsize;
     buf0->allocated = bfree;
@@ -1287,16 +1294,11 @@ int FileStore::_detect_fs()
     return r;
   }
 
-  // vdo
-  {
-    char dev_node[PATH_MAX];
-    if (int rc = BlkDev{fsid_fd}.wholedisk(dev_node, PATH_MAX); rc == 0) {
-      vdo_fd = get_vdo_stats_handle(dev_node, &vdo_name);
-      if (vdo_fd >= 0) {
-	dout(0) << __func__ << " VDO volume " << vdo_name << " for " << dev_node
-		<< dendl;
-      }
-    }
+  // check if any extended block device plugin recognizes this device
+  // detect_vdo has moved into the VDO plugin
+  int rc = extblkdev::detect_device(cct, devname, ebd_impl);
+  if (rc != 0) {
+    dout(20) << __func__ << " no plugin volume maps to " << devname << dendl;
   }
 
   // test xattrs
@@ -2092,10 +2094,7 @@ int FileStore::umount()
     (*it)->stop();
   }
 
-  if (vdo_fd >= 0) {
-    VOID_TEMP_FAILURE_RETRY(::close(vdo_fd));
-    vdo_fd = -1;
-  }
+  extblkdev::release_device(ebd_impl);
   if (fsid_fd >= 0) {
     VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
     fsid_fd = -1;

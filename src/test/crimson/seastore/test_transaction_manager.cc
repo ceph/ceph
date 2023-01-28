@@ -8,7 +8,6 @@
 #include "test/crimson/gtest_seastar.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
 
-#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
@@ -46,10 +45,14 @@ struct test_extent_record_t {
   }
 };
 
-std::ostream &operator<<(std::ostream &lhs, const test_extent_record_t &rhs) {
-  return lhs << "test_extent_record_t(" << rhs.desc
-	     << ", refcount=" << rhs.refcount << ")";
-}
+template<>
+struct fmt::formatter<test_extent_record_t> : fmt::formatter<std::string_view> {
+  template <typename FormatContext>
+  auto format(const test_extent_record_t& r, FormatContext& ctx) const {
+    return fmt::format_to(ctx.out(), "test_extent_record_t({}, refcount={})",
+			  r.desc, r.refcount);
+  }
+};
 
 struct transaction_manager_test_t :
   public seastar_test_suite_t,
@@ -75,9 +78,9 @@ struct transaction_manager_test_t :
   seastar::future<> set_up_fut() final {
     std::string j_type = GetParam();
     if (j_type == "segmented") {
-      return tm_setup(tm_make_config_t::get_test_segmented_journal());
+      return tm_setup(journal_type_t::SEGMENTED);
     } else if (j_type == "circularbounded") {
-      return tm_setup(tm_make_config_t::get_test_cb_journal());
+      return tm_setup(journal_type_t::RANDOM_BLOCK);
     } else {
       ceph_assert(0 == "no support");
     }
@@ -89,6 +92,7 @@ struct transaction_manager_test_t :
 
   struct test_extents_t : std::map<laddr_t, test_extent_record_t> {
     using delta_t = std::map<laddr_t, std::optional<test_extent_record_t>>;
+    std::map<laddr_t, uint64_t> laddr_write_seq;
 
     struct delta_overlay_t {
       const test_extents_t &extents;
@@ -339,10 +343,14 @@ struct transaction_manager_test_t :
       }
     }
 
-    void consume(const delta_t &delta) {
+    void consume(const delta_t &delta, const uint64_t write_seq = 0) {
       for (const auto &i : delta) {
 	if (i.second) {
-	  (*this)[i.first] = *i.second;
+	  if (laddr_write_seq.find(i.first) == laddr_write_seq.end() ||
+	      laddr_write_seq[i.first] <= write_seq) {
+	    (*this)[i.first] = *i.second;
+	    laddr_write_seq[i.first] = write_seq;
+	  }
 	} else {
 	  erase(i.first);
 	}
@@ -395,50 +403,12 @@ struct transaction_manager_test_t :
   }
 
   bool check_usage() {
-    auto t = create_weak_test_transaction();
-    SpaceTrackerIRef tracker(async_cleaner->get_empty_space_tracker());
-    with_trans_intr(
-      *t.t,
-      [this, &tracker](auto &t) {
-	return backref_manager->scan_mapped_space(
-	  t,
-	  [&tracker](auto offset, auto len, depth_t, extent_types_t) {
-	    if (offset.get_addr_type() == addr_types_t::SEGMENT) {
-	      logger().debug("check_usage: tracker alloc {}~{}",
-		offset, len);
-	      tracker->allocate(
-		offset.as_seg_paddr().get_segment_id(),
-		offset.as_seg_paddr().get_segment_off(),
-		len);
-	    }
-	  }).si_then([&tracker, this] {
-	    auto &backrefs = backref_manager->get_cached_backrefs();
-	    for (auto &backref : backrefs) {
-	      if (backref.paddr.get_addr_type() == addr_types_t::SEGMENT) {
-		if (backref.laddr == L_ADDR_NULL) {
-		  tracker->release(
-		    backref.paddr.as_seg_paddr().get_segment_id(),
-		    backref.paddr.as_seg_paddr().get_segment_off(),
-		    backref.len);
-		} else {
-		  tracker->allocate(
-		    backref.paddr.as_seg_paddr().get_segment_id(),
-		    backref.paddr.as_seg_paddr().get_segment_off(),
-		    backref.len);
-		}
-	      }
-	    }
-	    return seastar::now();
-	  });
-      }).unsafe_get0();
-    return async_cleaner->debug_check_space(*tracker);
+    return epm->check_usage();
   }
 
   void replay() {
-    logger().info("{}: begin", __func__);
     EXPECT_TRUE(check_usage());
     restart();
-    logger().info("{}: end", __func__);
   }
 
   void check() {
@@ -596,8 +566,10 @@ struct transaction_manager_test_t :
   bool try_submit_transaction(test_transaction_t t) {
     using ertr = with_trans_ertr<TransactionManager::submit_transaction_iertr>;
     using ret = ertr::future<bool>;
-    bool success = submit_transaction_fut(*t.t
-    ).safe_then([]() -> ret {
+    uint64_t write_seq = 0;
+    bool success = submit_transaction_fut_with_seq(*t.t
+    ).safe_then([&write_seq](auto seq) -> ret {
+      write_seq = seq;
       return ertr::make_ready_future<bool>(true);
     }).handle_error(
       [](const crimson::ct_error::eagain &e) {
@@ -607,11 +579,12 @@ struct transaction_manager_test_t :
 	"try_submit_transaction hit invalid error"
       }
     ).then([this](auto ret) {
-      return async_cleaner->run_until_halt().then([ret] { return ret; });
+      return epm->run_background_work_until_halt(
+      ).then([ret] { return ret; });
     }).get0();
 
     if (success) {
-      test_mappings.consume(t.mapping_delta);
+      test_mappings.consume(t.mapping_delta, write_seq);
     }
 
     return success;
@@ -657,7 +630,7 @@ struct transaction_manager_test_t :
 	    });
 	});
     }).safe_then([this]() {
-      return async_cleaner->run_until_halt();
+      return epm->run_background_work_until_halt();
     }).handle_error(
       crimson::ct_error::assert_all{
 	"Invalid error in SeaStore::list_collections"
@@ -1300,7 +1273,6 @@ INSTANTIATE_TEST_SUITE_P(
   transaction_manager_test,
   tm_multi_device_test_t,
   ::testing::Values (
-    "segmented",
-    "circularbounded"
+    "segmented"
   )
 );
