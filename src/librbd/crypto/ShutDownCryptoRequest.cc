@@ -5,10 +5,10 @@
 
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/crypto/CryptoImageDispatch.h"
 #include "librbd/crypto/CryptoObjectDispatch.h"
+#include "librbd/crypto/EncryptionFormat.h"
 #include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
 
@@ -23,10 +23,9 @@ namespace crypto {
 using librbd::util::create_context_callback;
 
 template <typename I>
-ShutDownCryptoRequest<I>::ShutDownCryptoRequest(
-        I* image_ctx, Context* on_finish) : m_image_ctx(image_ctx),
-                                            m_on_finish(on_finish) {
-}
+ShutDownCryptoRequest<I>::ShutDownCryptoRequest(I* image_ctx,
+                                                Context* on_finish)
+    : m_image_ctx(image_ctx), m_on_finish(on_finish) {}
 
 template <typename I>
 void ShutDownCryptoRequest<I>::send() {
@@ -51,6 +50,8 @@ void ShutDownCryptoRequest<I>::shut_down_object_dispatch() {
 
 template <typename I>
 void ShutDownCryptoRequest<I>::handle_shut_down_object_dispatch(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r < 0) {
     lderr(m_image_ctx->cct) << "failed to shut down object dispatch: "
                             << cpp_strerror(r) << dendl;
@@ -78,6 +79,8 @@ void ShutDownCryptoRequest<I>::shut_down_image_dispatch() {
 
 template <typename I>
 void ShutDownCryptoRequest<I>::handle_shut_down_image_dispatch(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r < 0) {
     lderr(m_image_ctx->cct) << "failed to shut down image dispatch: "
                             << cpp_strerror(r) << dendl;
@@ -87,9 +90,20 @@ void ShutDownCryptoRequest<I>::handle_shut_down_image_dispatch(int r) {
 
 template <typename I>
 void ShutDownCryptoRequest<I>::finish(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r == 0) {
-    std::unique_lock image_locker{m_image_ctx->image_lock};
-    m_image_ctx->crypto = nullptr;
+    {
+      std::unique_lock image_locker{m_image_ctx->image_lock};
+      m_image_ctx->encryption_format.reset();
+    }
+    
+    if (m_image_ctx->parent != nullptr) {
+      // move to shutting down parent crypto
+      m_image_ctx = m_image_ctx->parent;
+      shut_down_object_dispatch();
+      return;
+    }
   }
 
   m_on_finish->complete(r);

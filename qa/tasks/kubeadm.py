@@ -404,7 +404,7 @@ def pod_network(ctx, config):
 
     elif pnet == 'calico':
         _kubectl(ctx, config, [
-            'apply', '-f',
+            'create', '-f',
             'https://docs.projectcalico.org/manifests/tigera-operator.yaml'
         ])
         cr = {

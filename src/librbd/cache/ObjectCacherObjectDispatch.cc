@@ -389,17 +389,36 @@ bool ObjectCacherObjectDispatch<I>::compare_and_write(
   // pass-through the compare-and-write request since it's not a supported
   // operation of the ObjectCacher
 
+  ObjectExtents object_extents;
+  object_extents.emplace_back(data_object_name(m_image_ctx, object_no),
+                              object_no, object_off, cmp_data.length(), 0);
+
+  // if compare succeeds, discard the cache state after changes are
+  // committed to disk
+  auto ctx = *on_finish;
+  *on_finish = new LambdaContext(
+    [this, object_extents, ctx](int r) {
+      // ObjectCacher doesn't provide a way to reliably invalidate
+      // extents: in case of a racing read (if the bh is in RX state),
+      // release_set() just returns while discard_set() populates the
+      // extent with zeroes.  Neither is OK but the latter is better
+      // because it is at least deterministic...
+      if (r == 0) {
+        m_cache_lock.lock();
+        m_object_cacher->discard_set(m_object_set, object_extents);
+        m_cache_lock.unlock();
+      }
+
+      ctx->complete(r);
+    });
+
   // ensure we aren't holding the cache lock post-flush
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
                                                       on_dispatched);
 
-  // flush any pending writes from the cache
+  // flush any pending writes from the cache before compare
   ZTracer::Trace trace(parent_trace);
   *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-
-  ObjectExtents object_extents;
-  object_extents.emplace_back(data_object_name(m_image_ctx, object_no),
-                              object_no, object_off, cmp_data.length(), 0);
 
   std::lock_guard cache_locker{m_cache_lock};
   m_object_cacher->flush_set(m_object_set, object_extents, &trace,

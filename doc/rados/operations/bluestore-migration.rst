@@ -41,50 +41,70 @@ more data migration than should be necessary, so it is not optimal.
      ID=<osd-id-number>
      DEVICE=<disk-device>
 
-   You can tell whether a given OSD is FileStore or BlueStore with::
+   You can tell whether a given OSD is FileStore or BlueStore with:
 
-     ceph osd metadata $ID | grep osd_objectstore
+   .. prompt:: bash $
 
-   You can get a current count of filestore vs bluestore with::
+      ceph osd metadata $ID | grep osd_objectstore
 
-     ceph osd count-metadata osd_objectstore
+   You can get a current count of filestore vs bluestore with:
 
-#. Mark the filestore OSD out::
+   .. prompt:: bash $
 
-     ceph osd out $ID
+      ceph osd count-metadata osd_objectstore
 
-#. Wait for the data to migrate off the OSD in question::
+#. Mark the filestore OSD out:
 
-     while ! ceph osd safe-to-destroy $ID ; do sleep 60 ; done
+   .. prompt:: bash $
 
-#. Stop the OSD::
+      ceph osd out $ID
 
-     systemctl kill ceph-osd@$ID
+#. Wait for the data to migrate off the OSD in question:
 
-#. Make note of which device this OSD is using::
+   .. prompt:: bash $
 
-     mount | grep /var/lib/ceph/osd/ceph-$ID
+      while ! ceph osd safe-to-destroy $ID ; do sleep 60 ; done
 
-#. Unmount the OSD::
+#. Stop the OSD:
 
-     umount /var/lib/ceph/osd/ceph-$ID
+   .. prompt:: bash $
+
+      systemctl kill ceph-osd@$ID
+
+#. Make note of which device this OSD is using:
+
+   .. prompt:: bash $
+
+      mount | grep /var/lib/ceph/osd/ceph-$ID
+
+#. Unmount the OSD:
+
+   .. prompt:: bash $
+
+      umount /var/lib/ceph/osd/ceph-$ID
 
 #. Destroy the OSD data. Be *EXTREMELY CAREFUL* as this will destroy
    the contents of the device; be certain the data on the device is
-   not needed (i.e., that the cluster is healthy) before proceeding. ::
+   not needed (i.e., that the cluster is healthy) before proceeding:
 
-     ceph-volume lvm zap $DEVICE
+   .. prompt:: bash $
+
+      ceph-volume lvm zap $DEVICE
 
 #. Tell the cluster the OSD has been destroyed (and a new OSD can be
-   reprovisioned with the same ID)::
+   reprovisioned with the same ID):
 
-     ceph osd destroy $ID --yes-i-really-mean-it
+   .. prompt:: bash $
+
+      ceph osd destroy $ID --yes-i-really-mean-it
 
 #. Reprovision a BlueStore OSD in its place with the same OSD ID.
    This requires you do identify which device to wipe based on what you saw
-   mounted above. BE CAREFUL! ::
+   mounted above. BE CAREFUL! :
 
-     ceph-volume lvm create --bluestore --data $DEVICE --osd-id $ID
+   .. prompt:: bash $
+
+      ceph-volume lvm create --bluestore --data $DEVICE --osd-id $ID
 
 #. Repeat.
 
@@ -127,9 +147,11 @@ doesn't strictly matter). ::
 
   NEWHOST=<empty-host-name>
 
-Add the host to the CRUSH hierarchy, but do not attach it to the root::
+Add the host to the CRUSH hierarchy, but do not attach it to the root:
 
-  ceph osd crush add-bucket $NEWHOST host
+.. prompt:: bash $
+
+   ceph osd crush add-bucket $NEWHOST host
 
 Make sure the ceph packages are installed.
 
@@ -142,14 +164,22 @@ space on that host so that all of its data can be migrated off,
 then you can instead do::
 
   OLDHOST=<existing-cluster-host-to-offload>
-  ceph osd crush unlink $OLDHOST default
+
+.. prompt:: bash $ 
+   
+   ceph osd crush unlink $OLDHOST default
 
 where "default" is the immediate ancestor in the CRUSH map. (For
 smaller clusters with unmodified configurations this will normally
 be "default", but it might also be a rack name.)  You should now
-see the host at the top of the OSD tree output with no parent::
+see the host at the top of the OSD tree output with no parent:
 
-  $ bin/ceph osd tree
+.. prompt:: bash $
+
+   bin/ceph osd tree
+
+::
+
   ID CLASS WEIGHT  TYPE NAME     STATUS REWEIGHT PRI-AFF
   -5             0 host oldhost
   10   ssd 1.00000     osd.10        up  1.00000 1.00000
@@ -172,13 +202,17 @@ Migration process
 If you're using a new host, start at step #1.  For an existing host,
 jump to step #5 below.
 
-#. Provision new BlueStore OSDs for all devices::
+#. Provision new BlueStore OSDs for all devices:
 
-     ceph-volume lvm create --bluestore --data /dev/$DEVICE
+   .. prompt:: bash $
 
-#. Verify OSDs join the cluster with::
+      ceph-volume lvm create --bluestore --data /dev/$DEVICE
 
-     ceph osd tree
+#. Verify OSDs join the cluster with:
+
+   .. prompt:: bash $
+
+      ceph osd tree
 
    You should see the new host ``$NEWHOST`` with all of the OSDs beneath
    it, but the host should *not* be nested beneath any other node in
@@ -198,13 +232,17 @@ jump to step #5 below.
       2   ssd 1.00000         osd.2     up  1.00000 1.00000
      ...
 
-#. Identify the first target host to convert ::
+#. Identify the first target host to convert :
 
-     OLDHOST=<existing-cluster-host-to-convert>
+   .. prompt:: bash $
 
-#. Swap the new host into the old host's position in the cluster::
+      OLDHOST=<existing-cluster-host-to-convert>
 
-     ceph osd crush swap-bucket $NEWHOST $OLDHOST
+#. Swap the new host into the old host's position in the cluster:
+
+   .. prompt:: bash $
+
+      ceph osd crush swap-bucket $NEWHOST $OLDHOST
 
    At this point all data on ``$OLDHOST`` will start migrating to OSDs
    on ``$NEWHOST``.  If there is a difference in the total capacity of
@@ -212,26 +250,34 @@ jump to step #5 below.
    other nodes in the cluster, but as long as the hosts are similarly
    sized this will be a relatively small amount of data.
 
-#. Wait for data migration to complete::
+#. Wait for data migration to complete:
 
-     while ! ceph osd safe-to-destroy $(ceph osd ls-tree $OLDHOST); do sleep 60 ; done
+   .. prompt:: bash $
 
-#. Stop all old OSDs on the now-empty ``$OLDHOST``::
+      while ! ceph osd safe-to-destroy $(ceph osd ls-tree $OLDHOST); do sleep 60 ; done
 
-     ssh $OLDHOST
+#. Stop all old OSDs on the now-empty ``$OLDHOST``:
+
+   .. prompt:: bash $
+
+      ssh $OLDHOST
      systemctl kill ceph-osd.target
      umount /var/lib/ceph/osd/ceph-*
 
-#. Destroy and purge the old OSDs::
+#. Destroy and purge the old OSDs:
 
-     for osd in `ceph osd ls-tree $OLDHOST`; do
+   .. prompt:: bash $
+
+      for osd in `ceph osd ls-tree $OLDHOST`; do
          ceph osd purge $osd --yes-i-really-mean-it
      done
 
 #. Wipe the old OSD devices. This requires you do identify which
-   devices are to be wiped manually (BE CAREFUL!). For each device,::
+   devices are to be wiped manually (BE CAREFUL!). For each device:
 
-     ceph-volume lvm zap $DEVICE
+   .. prompt:: bash $
+
+      ceph-volume lvm zap $DEVICE
 
 #. Use the now-empty host as the new host, and repeat::
 

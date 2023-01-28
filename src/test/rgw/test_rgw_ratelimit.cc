@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <gtest/gtest.h>
-#include "rgw/rgw_ratelimit.h"
+#include "rgw_ratelimit.h"
 
 
 using namespace std::chrono_literals;

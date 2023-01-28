@@ -1,3 +1,5 @@
+.. _monitor-config-reference:
+
 ==========================
  Monitor Config Reference
 ==========================

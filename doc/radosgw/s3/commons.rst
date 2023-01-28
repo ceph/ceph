@@ -22,6 +22,8 @@ To configure virtual hosted buckets, you can either set ``rgw_dns_name = cname.d
 
 .. tip:: We prefer the first method, because the second method requires expensive domain certification and DNS wild cards.
 
+.. tip:: You can define multiple hostname directly with the :confval:`rgw_dns_name` parameter.
+
 Common Request Headers
 ----------------------
 

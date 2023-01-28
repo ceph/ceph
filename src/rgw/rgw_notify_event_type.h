@@ -39,8 +39,6 @@ namespace rgw::notify {
 
   std::string to_string(EventType t);
 
-  std::string to_ceph_string(EventType t);
-
   std::string to_event_string(EventType t);
 
   EventType from_string(const std::string& s);

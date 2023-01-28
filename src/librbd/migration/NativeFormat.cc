@@ -298,8 +298,8 @@ void NativeFormat<I>::list_snaps(io::Extents&& image_extents,
     on_finish, util::get_image_ctx(m_image_ctx), io::AIO_TYPE_GENERIC);
   auto req = io::ImageDispatchSpec::create_list_snaps(
     *m_image_ctx, io::IMAGE_DISPATCH_LAYER_MIGRATION, aio_comp,
-    std::move(image_extents), std::move(snap_ids), list_snaps_flags,
-    snapshot_delta, {});
+    std::move(image_extents), io::ImageArea::DATA, std::move(snap_ids),
+    list_snaps_flags, snapshot_delta, {});
   req->send();
 }
 

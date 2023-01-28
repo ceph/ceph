@@ -110,6 +110,8 @@ const char *ceph_release_name(int r)
 		return "pacific";
 	case CEPH_RELEASE_QUINCY:
 		return "quincy";
+	case CEPH_RELEASE_REEF:
+		return "reef";
 	default:
 		if (r < 0)
 			return "unspecified";
@@ -277,6 +279,7 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_LOOKUPINO:  return "lookupino";
 	case CEPH_MDS_OP_LOOKUPNAME:  return "lookupname";
 	case CEPH_MDS_OP_GETATTR:  return "getattr";
+	case CEPH_MDS_OP_DUMMY:  return "dummy";
 	case CEPH_MDS_OP_SETXATTR: return "setxattr";
 	case CEPH_MDS_OP_SETATTR: return "setattr";
 	case CEPH_MDS_OP_RMXATTR: return "rmxattr";

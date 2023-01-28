@@ -30,13 +30,14 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class CopyupRequest {
 public:
   static CopyupRequest* create(ImageCtxT *ictx, uint64_t objectno,
-                               Extents &&image_extents,
+                               Extents &&image_extents, ImageArea area,
                                const ZTracer::Trace &parent_trace) {
-    return new CopyupRequest(ictx, objectno, std::move(image_extents),
+    return new CopyupRequest(ictx, objectno, std::move(image_extents), area,
                              parent_trace);
   }
 
-  CopyupRequest(ImageCtxT *ictx, uint64_t objectno, Extents &&image_extents,
+  CopyupRequest(ImageCtxT *ictx, uint64_t objectno,
+                Extents &&image_extents, ImageArea area,
                 const ZTracer::Trace &parent_trace);
   ~CopyupRequest();
 
@@ -83,6 +84,7 @@ private:
   ImageCtxT *m_image_ctx;
   uint64_t m_object_no;
   Extents m_image_extents;
+  ImageArea m_image_area;
   ZTracer::Trace m_trace;
 
   bool m_flatten = false;

@@ -22,6 +22,9 @@ the real work. To mount a Ceph file system use::
 
   mount.ceph name@07fe3187-00d9-42a3-814b-72a4d5e7d5be.fs_name=/ /mnt/mycephfs -o mon_addr=1.2.3.4
 
+where "name" is the RADOS client name (referred to hereafter as "RADOS user",
+and meaning any individual or system actor such as an application). 
+
 Mount helper can fill in the cluster FSID by reading the ceph configuration file.
 Its recommended to call the mount helper via mount(8) as per::
 
@@ -112,6 +115,12 @@ Basic
       After reconnect, file locks become stale because the MDS loses track of
       them. If an inode contains any stale file locks, read/write on the inode
       is not allowed until applications release all stale file locks.
+
+:command: `fs=<fs-name>`
+    Specify the non-default file system to be mounted, when using the old syntax.
+
+:command: `mds_namespace=<fs-name>`
+    A synonym of "fs=" (Deprecated).
 
 Advanced
 --------
@@ -225,6 +234,10 @@ history::
 If authentication is disabled on Ceph cluster, omit the credential related option::
 
     mount.ceph fs_user@.mycephfs2=/ /mnt/mycephfs
+
+To mount using the old syntax::
+
+    mount -t ceph 192.168.0.1:/ /mnt/mycephfs
 
 Availability
 ============

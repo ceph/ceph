@@ -566,7 +566,7 @@ bool DaemonServer::handle_update(const ref_t<MMgrUpdate>& m)
       dout(20) << "updating existing DaemonState for " << key << dendl;
 
       daemon = daemon_state.get(key);
-      if (m->need_metadata_update == true &&
+      if (m->need_metadata_update &&
           !m->daemon_metadata.empty()) {
         daemon_state.update_metadata(daemon, m->daemon_metadata);
       }
@@ -646,9 +646,8 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
 
     DaemonStatePtr daemon;
     // Look up the DaemonState
-    if (daemon_state.exists(key)) {
+    if (daemon = daemon_state.get(key); daemon != nullptr) {
       dout(20) << "updating existing DaemonState for " << key << dendl;
-      daemon = daemon_state.get(key);
     } else {
       locker.unlock();
 
@@ -2623,8 +2622,6 @@ void DaemonServer::send_report()
 		 << std::dec << dendl;
             continue;
           }
-	  dout(20) << " + " << state->key << " "
-		   << metric << dendl;
           tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
               std::move(collector));
         }

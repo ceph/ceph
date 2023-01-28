@@ -7,7 +7,8 @@
 #include "rgw_lua.h"
 #include "rgw_common.h"
 #include "rgw_log.h"
-#include "rgw_process.h"
+#include "rgw_op.h"
+#include "rgw_process_env.h"
 #include "rgw_zone.h"
 #include "rgw_acl.h"
 #include "rgw_sal_rados.h"
@@ -29,9 +30,9 @@ int RequestLog(lua_State* L)
   const auto rest = reinterpret_cast<RGWREST*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
   const auto olog = reinterpret_cast<OpsLogSink*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
   const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(THIRD_UPVAL)));
-  const std::string op_name(reinterpret_cast<const char*>(lua_touserdata(L, lua_upvalueindex(FOURTH_UPVAL))));
+  const auto op(reinterpret_cast<RGWOp*>(lua_touserdata(L, lua_upvalueindex(FOURTH_UPVAL))));
   if (s) {
-    const auto rc = rgw_log_op(rest, s, op_name, olog);
+    const auto rc = rgw_log_op(rest, s, op, olog);
     lua_pushinteger(L, rc);
   } else {
     ldpp_dout(s, 1) << "Lua ERROR: missing request state, cannot use ops log"  << dendl;
@@ -839,23 +840,26 @@ struct RequestMetaTable : public EmptyMetaTable {
   }
 };
 
+void create_top_metatable(lua_State* L, req_state* s, const char* op_name) {
+  create_metatable<RequestMetaTable>(L, true, s, const_cast<char*>(op_name));
+  lua_getglobal(L, RequestMetaTable::TableName().c_str());
+  ceph_assert(lua_istable(L, -1));
+}
+
 int execute(
-    rgw::sal::Store* store,
+    rgw::sal::Driver* driver,
     RGWREST* rest,
     OpsLogSink* olog,
     req_state* s, 
-    const char* op_name,
-    const std::string& script,
-    rgw::lua::Background* background)
-
+    RGWOp* op,
+    const std::string& script)
 {
   auto L = luaL_newstate();
+  const char* op_name = op ? op->name() : "Unknown";
   lua_state_guard lguard(L);
 
   open_standard_libs(L);
-  set_package_path(L, store ?
-      store->get_luarocks_path() : 
-      "");
+  set_package_path(L, s->penv.lua.luarocks_path);
 
   create_debug_action(L, s->cct);  
   
@@ -869,12 +873,12 @@ int execute(
   lua_pushlightuserdata(L, rest);
   lua_pushlightuserdata(L, olog);
   lua_pushlightuserdata(L, s);
-  lua_pushlightuserdata(L, const_cast<char*>(op_name));
+  lua_pushlightuserdata(L, op);
   lua_pushcclosure(L, RequestLog, FOUR_UPVALS);
   lua_rawset(L, -3);
   
-  if (background) {
-    background->create_background_metatable(L);
+  if (s->penv.lua.background) {
+    s->penv.lua.background->create_background_metatable(L);
     lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
     ceph_assert(lua_istable(L, -1));
   }
@@ -898,4 +902,5 @@ int execute(
   return rc;
 }
 
-}
+} // namespace rgw::lua::request
+

@@ -1054,6 +1054,12 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_inject_health_dummy
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
 #  percentage of MDS modify replies to skip sending the client a trace on [0-1]
 - name: mds_inject_traceless_reply_probability
   type: float
@@ -1454,6 +1460,20 @@ options:
   desc: Stores symlink target on the first data object of symlink file.
     Allows recover of symlink using recovery tools.
   default: true
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_extraordinary_events_dump_interval
+  type: secs
+  level: advanced
+  desc: Interval in seconds for dumping the recent in-memory logs when there is an extra-ordinary event.
+  long_desc: Interval in seconds for dumping the recent in-memory logs when there is an extra-ordinary
+    event. The default is ``0`` (disabled). The log level should be ``< 10`` and the gather level
+    should be ``>=10`` in debug_mds for enabling this option.
+  default: 0
+  min: 0
+  max: 60
   services:
   - mds
   flags:

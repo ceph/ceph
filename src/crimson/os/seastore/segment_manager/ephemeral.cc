@@ -34,7 +34,7 @@ device_config_t get_ephemeral_device_config(
 {
   assert(num_devices > index);
   magic_t magic = 0xabcd;
-  auto type = device_type_t::SEGMENTED;
+  auto type = device_type_t::SEGMENTED_EPHEMERAL;
   bool is_major_device;
   secondary_device_set_t secondary_devices;
   if (index == 0) {
@@ -63,7 +63,7 @@ EphemeralSegment::EphemeralSegment(
   EphemeralSegmentManager &manager, segment_id_t id)
   : manager(manager), id(id) {}
 
-seastore_off_t EphemeralSegment::get_write_capacity() const
+segment_off_t EphemeralSegment::get_write_capacity() const
 {
   return manager.get_segment_size();
 }
@@ -76,7 +76,7 @@ Segment::close_ertr::future<> EphemeralSegment::close()
 }
 
 Segment::write_ertr::future<> EphemeralSegment::write(
-  seastore_off_t offset, ceph::bufferlist bl)
+  segment_off_t offset, ceph::bufferlist bl)
 {
   if (offset < write_pointer || offset % manager.config.block_size != 0)
     return crimson::ct_error::invarg::make();
@@ -85,6 +85,12 @@ Segment::write_ertr::future<> EphemeralSegment::write(
     return crimson::ct_error::enospc::make();
 
   return manager.segment_write(paddr_t::make_seg_paddr(id, offset), bl);
+}
+
+Segment::write_ertr::future<> EphemeralSegment::advance_wp(
+  segment_off_t offset)
+{
+  return write_ertr::now();
 }
 
 Segment::close_ertr::future<> EphemeralSegmentManager::segment_close(segment_id_t id)

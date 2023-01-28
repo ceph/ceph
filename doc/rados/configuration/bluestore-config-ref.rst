@@ -42,13 +42,17 @@ it will fit).  This means that if a DB device is specified but an explicit
 WAL device is not, the WAL will be implicitly colocated with the DB on the faster
 device.
 
-A single-device (colocated) BlueStore OSD can be provisioned with::
+A single-device (colocated) BlueStore OSD can be provisioned with:
 
-  ceph-volume lvm prepare --bluestore --data <device>
+.. prompt:: bash $
 
-To specify a WAL device and/or DB device, ::
+   ceph-volume lvm prepare --bluestore --data <device>
 
-  ceph-volume lvm prepare --bluestore --data <device> --block.wal <wal-device> --block.db <db-device>
+To specify a WAL device and/or DB device:
+   
+.. prompt:: bash $
+
+   ceph-volume lvm prepare --bluestore --data <device> --block.wal <wal-device> --block.db <db-device>
 
 .. note:: ``--data`` can be a Logical Volume using  *vg/lv* notation. Other
           devices can be existing logical volumes or GPT partitions.
@@ -66,15 +70,19 @@ the deployment strategy:
 If all devices are the same type, for example all rotational drives, and
 there are no fast devices to use for metadata, it makes sense to specify the
 block device only and to not separate ``block.db`` or ``block.wal``. The
-:ref:`ceph-volume-lvm` command for a single ``/dev/sda`` device looks like::
+:ref:`ceph-volume-lvm` command for a single ``/dev/sda`` device looks like:
 
-    ceph-volume lvm create --bluestore --data /dev/sda
+.. prompt:: bash $
+
+   ceph-volume lvm create --bluestore --data /dev/sda
 
 If logical volumes have already been created for each device, (a single LV
 using 100% of the device), then the :ref:`ceph-volume-lvm` call for an LV named
-``ceph-vg/block-lv`` would look like::
+``ceph-vg/block-lv`` would look like:
 
-    ceph-volume lvm create --bluestore --data ceph-vg/block-lv
+.. prompt:: bash $
+
+   ceph-volume lvm create --bluestore --data ceph-vg/block-lv
 
 .. _bluestore-mixed-device-config:
 
@@ -88,35 +96,43 @@ You must create these volume groups and logical volumes manually as
 the ``ceph-volume`` tool is currently not able to do so automatically.
 
 For the below example, let us assume four rotational (``sda``, ``sdb``, ``sdc``, and ``sdd``)
-and one (fast) solid state drive (``sdx``). First create the volume groups::
+and one (fast) solid state drive (``sdx``). First create the volume groups:
 
-    $ vgcreate ceph-block-0 /dev/sda
-    $ vgcreate ceph-block-1 /dev/sdb
-    $ vgcreate ceph-block-2 /dev/sdc
-    $ vgcreate ceph-block-3 /dev/sdd
+.. prompt:: bash $
 
-Now create the logical volumes for ``block``::
+   vgcreate ceph-block-0 /dev/sda
+   vgcreate ceph-block-1 /dev/sdb
+   vgcreate ceph-block-2 /dev/sdc
+   vgcreate ceph-block-3 /dev/sdd
 
-    $ lvcreate -l 100%FREE -n block-0 ceph-block-0
-    $ lvcreate -l 100%FREE -n block-1 ceph-block-1
-    $ lvcreate -l 100%FREE -n block-2 ceph-block-2
-    $ lvcreate -l 100%FREE -n block-3 ceph-block-3
+Now create the logical volumes for ``block``:
+
+.. prompt:: bash $
+
+   lvcreate -l 100%FREE -n block-0 ceph-block-0
+   lvcreate -l 100%FREE -n block-1 ceph-block-1
+   lvcreate -l 100%FREE -n block-2 ceph-block-2
+   lvcreate -l 100%FREE -n block-3 ceph-block-3
 
 We are creating 4 OSDs for the four slow spinning devices, so assuming a 200GB
-SSD in ``/dev/sdx`` we will create 4 logical volumes, each of 50GB::
+SSD in ``/dev/sdx`` we will create 4 logical volumes, each of 50GB:
 
-    $ vgcreate ceph-db-0 /dev/sdx
-    $ lvcreate -L 50GB -n db-0 ceph-db-0
-    $ lvcreate -L 50GB -n db-1 ceph-db-0
-    $ lvcreate -L 50GB -n db-2 ceph-db-0
-    $ lvcreate -L 50GB -n db-3 ceph-db-0
+.. prompt:: bash $
 
-Finally, create the 4 OSDs with ``ceph-volume``::
+   vgcreate ceph-db-0 /dev/sdx
+   lvcreate -L 50GB -n db-0 ceph-db-0
+   lvcreate -L 50GB -n db-1 ceph-db-0
+   lvcreate -L 50GB -n db-2 ceph-db-0
+   lvcreate -L 50GB -n db-3 ceph-db-0
 
-    $ ceph-volume lvm create --bluestore --data ceph-block-0/block-0 --block.db ceph-db-0/db-0
-    $ ceph-volume lvm create --bluestore --data ceph-block-1/block-1 --block.db ceph-db-0/db-1
-    $ ceph-volume lvm create --bluestore --data ceph-block-2/block-2 --block.db ceph-db-0/db-2
-    $ ceph-volume lvm create --bluestore --data ceph-block-3/block-3 --block.db ceph-db-0/db-3
+Finally, create the 4 OSDs with ``ceph-volume``:
+
+.. prompt:: bash $
+
+   ceph-volume lvm create --bluestore --data ceph-block-0/block-0 --block.db ceph-db-0/db-0
+   ceph-volume lvm create --bluestore --data ceph-block-1/block-1 --block.db ceph-db-0/db-1
+   ceph-volume lvm create --bluestore --data ceph-block-2/block-2 --block.db ceph-db-0/db-2
+   ceph-volume lvm create --bluestore --data ceph-block-3/block-3 --block.db ceph-db-0/db-3
 
 These operations should end up creating four OSDs, with ``block`` on the slower
 rotational drives with a 50 GB logical volume (DB) for each on the solid state
@@ -239,9 +255,11 @@ The smaller checksum values can be used by selecting `crc32c_16` or
 `crc32c_8` as the checksum algorithm.
 
 The *checksum algorithm* can be set either via a per-pool
-``csum_type`` property or the global config option.  For example, ::
+``csum_type`` property or the global config option.  For example:
 
-  ceph osd pool set <pool-name> csum_type <algorithm>
+.. prompt:: bash $
+
+   ceph osd pool set <pool-name> csum_type <algorithm>
 
 .. confval:: bluestore_csum_type
 
@@ -275,13 +293,15 @@ must be 70% of the size of the original (or smaller).
 The *compression mode*, *compression algorithm*, *compression required
 ratio*, *min blob size*, and *max blob size* can be set either via a
 per-pool property or a global config option.  Pool properties can be
-set with::
+set with:
 
-  ceph osd pool set <pool-name> compression_algorithm <algorithm>
-  ceph osd pool set <pool-name> compression_mode <mode>
-  ceph osd pool set <pool-name> compression_required_ratio <ratio>
-  ceph osd pool set <pool-name> compression_min_blob_size <size>
-  ceph osd pool set <pool-name> compression_max_blob_size <size>
+.. prompt:: bash $
+
+   ceph osd pool set <pool-name> compression_algorithm <algorithm>
+   ceph osd pool set <pool-name> compression_mode <mode>
+   ceph osd pool set <pool-name> compression_required_ratio <ratio>
+   ceph osd pool set <pool-name> compression_min_blob_size <size>
+   ceph osd pool set <pool-name> compression_max_blob_size <size>
 
 .. confval:: bluestore_compression_algorithm
 .. confval:: bluestore_compression_mode
@@ -342,16 +362,20 @@ Refer to `SPDK document`__ for more details.
 .. __: http://www.spdk.io/doc/getting_started.html#getting_started_examples
 
 SPDK offers a script to configure the device automatically. Users can run the
-script as root::
+script as root:
 
-  $ sudo src/spdk/scripts/setup.sh
+.. prompt:: bash $
+
+   sudo src/spdk/scripts/setup.sh
 
 You will need to specify the subject NVMe device's device selector with
 the "spdk:" prefix for ``bluestore_block_path``.
 
-For example, you can find the device selector of an Intel PCIe SSD with::
+For example, you can find the device selector of an Intel PCIe SSD with:
 
-  $ lspci -mm -n -D -d 8086:0953
+.. prompt:: bash $
+
+   lspci -mm -n -D -d 8086:0953
 
 The device selector always has the form of ``DDDD:BB:DD.FF`` or ``DDDD.BB.DD.FF``.
 
@@ -455,9 +479,9 @@ of ``/sys/block/<drive>/queue/optimal_io_size``.
 
 You may also inspect a given OSD:
 
-    .. prompt:: bash #
+.. prompt:: bash #
 
-      ceph osd metadata osd.1701 | grep rotational
+   ceph osd metadata osd.1701 | grep rotational
 
 This space amplification may manifest as an unusually high ratio of raw to
 stored data reported by ``ceph df``.  ``ceph osd df`` may also report
@@ -489,9 +513,11 @@ read/write operations on Persist memory in Bluestore. You need to install
 .. _idxd-config: https://github.com/intel/idxd-config
 
 After installing the DML software, you need to configure the shared
-work queues (WQs) with the following WQ configuration example via accel-config tool::
+work queues (WQs) with the following WQ configuration example via accel-config tool:
 
-$ accel-config config-wq --group-id=1 --mode=shared --wq-size=16 --threshold=15 --type=user --name="MyApp1" --priority=10 --block-on-fault=1 dsa0/wq0.1
-$ accel-config config-engine dsa0/engine0.1 --group-id=1
-$ accel-config enable-device dsa0
-$ accel-config enable-wq dsa0/wq0.1
+.. prompt:: bash $
+
+   accel-config config-wq --group-id=1 --mode=shared --wq-size=16 --threshold=15 --type=user --name="MyApp1" --priority=10 --block-on-fault=1 dsa0/wq0.1
+   accel-config config-engine dsa0/engine0.1 --group-id=1
+   accel-config enable-device dsa0
+   accel-config enable-wq dsa0/wq0.1

@@ -224,32 +224,31 @@ mark the file system failed:
 
     ceph fs fail <fs_name>
 
+.. note::
+
+   <fs_name> here and below indicates the original, damaged file system.
+
 Next, create a recovery file system in which we will populate a new metadata pool
 backed by the original data pool.
 
 ::
 
-    ceph fs flag set enable_multiple true --yes-i-really-mean-it
     ceph osd pool create cephfs_recovery_meta
-    ceph fs new cephfs_recovery recovery <data_pool> --allow-dangerous-metadata-overlay
+    ceph fs new cephfs_recovery cephfs_recovery_meta <data_pool> --recover --allow-dangerous-metadata-overlay
 
+.. note::
 
-The recovery file system starts with an MDS rank that will initialize the new
-metadata pool with some metadata. This is necessary to bootstrap recovery.
-However, now we will take the MDS down as we do not want it interacting with
-the metadata pool further.
+   You may rename the recovery metadata pool and file system at a future time.
+   The ``--recover`` flag prevents any MDS from joining the new file system.
 
-::
-
-    ceph fs fail cephfs_recovery
-
-Next, we will reset the initial metadata the MDS created:
+Next, we will create the intial metadata for the fs:
 
 ::
 
-    cephfs-table-tool cephfs_recovery:all reset session
-    cephfs-table-tool cephfs_recovery:all reset snap
-    cephfs-table-tool cephfs_recovery:all reset inode
+    cephfs-table-tool cephfs_recovery:0 reset session
+    cephfs-table-tool cephfs_recovery:0 reset snap
+    cephfs-table-tool cephfs_recovery:0 reset inode
+    cephfs-journal-tool --rank cephfs_recovery:0 journal reset --force
 
 Now perform the recovery of the metadata pool from the data pool:
 
@@ -272,7 +271,6 @@ with:
 ::
 
     cephfs-journal-tool --rank=<fs_name>:0 event recover_dentries list --alternate-pool cephfs_recovery_meta
-    cephfs-journal-tool --rank cephfs_recovery:0 journal reset --force
 
 After recovery, some recovered directories will have incorrect statistics.
 Ensure the parameters ``mds_verify_scatter`` and ``mds_debug_scatterstat`` are
@@ -283,26 +281,27 @@ set to false (the default) to prevent the MDS from checking the statistics:
     ceph config rm mds mds_verify_scatter
     ceph config rm mds mds_debug_scatterstat
 
-(Note, the config may also have been set globally or via a ceph.conf file.)
+.. note::
+
+    Also verify the config has not been set globally or with a local ceph.conf file.
+
 Now, allow an MDS to join the recovery file system:
 
 ::
 
     ceph fs set cephfs_recovery joinable true
 
-Finally, run a forward :doc:`scrub </cephfs/scrub>` to repair the statistics.
+Finally, run a forward :doc:`scrub </cephfs/scrub>` to repair recursive statistics.
 Ensure you have an MDS running and issue:
 
 ::
 
-    ceph fs status # get active MDS
-    ceph tell mds.<id> scrub start / recursive repair
+    ceph tell mds.cephfs_recovery:0 scrub start / recursive,repair,force
 
 .. note::
 
-   Symbolic links are recovered as empty regular files. `Symbolic link recovery
-   <https://tracker.ceph.com/issues/46166>`_ is scheduled to be supported in
-   Pacific.
+   The `Symbolic link recovery <https://tracker.ceph.com/issues/46166>`_ is supported from Quincy.
+   Symbolic links were recovered as empty regular files before.
 
 It is recommended to migrate any data from the recovery file system as soon as
 possible. Do not restore the old file system while the recovery file system is

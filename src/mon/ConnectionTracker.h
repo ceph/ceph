@@ -121,6 +121,13 @@ class ConnectionTracker {
   void get_total_connection_score(int peer_rank, double *rating,
 				  int *live_count) const;
   /**
+  * Check if our ranks are clean and make
+  * sure there are no extra peer_report lingering.
+  * In the future we also want to check the reports
+  * current and history of each peer_report.
+  */
+  bool is_clean(int mon_rank, int monmap_size);
+  /**
    * Encode this ConnectionTracker. Useful both for storing on disk
    * and for sending off to peers for decoding and import
    * with receive_peer_report() above.
@@ -143,6 +150,7 @@ class ConnectionTracker {
   int rank;
   int persist_interval;
   bufferlist encoding;
+  CephContext *cct;
   int get_my_rank() const { return rank; }
   ConnectionReport *reports(int p);
   const ConnectionReport *reports(int p) const;
@@ -151,6 +159,7 @@ class ConnectionTracker {
     encoding.clear();
     peer_reports.clear();
     my_reports = ConnectionReport();
+    my_reports.rank = rank;
   }
 
  public:
@@ -158,14 +167,14 @@ class ConnectionTracker {
 			owner(NULL), rank(-1), persist_interval(10) {
   }
   ConnectionTracker(RankProvider *o, int rank, double hl,
-		    int persist_i) :
+		    int persist_i, CephContext *c) :
     epoch(0), version(0),
-    half_life(hl), owner(o), rank(rank), persist_interval(persist_i) {
+    half_life(hl), owner(o), rank(rank), persist_interval(persist_i), cct(c) {
     my_reports.rank = rank;
   }
-  ConnectionTracker(const bufferlist& bl) :
+  ConnectionTracker(const bufferlist& bl, CephContext *c) :
     epoch(0), version(0),
-    half_life(0), owner(NULL), rank(-1)
+    half_life(0), owner(NULL), rank(-1), persist_interval(10), cct(c)
   {
     auto bi = bl.cbegin();
     decode(bi);
@@ -173,21 +182,19 @@ class ConnectionTracker {
   ConnectionTracker(const ConnectionTracker& o) :
     epoch(o.epoch), version(o.version),
     half_life(o.half_life), owner(o.owner), rank(o.rank),
-    persist_interval(o.persist_interval)
+    persist_interval(o.persist_interval), cct(o.cct)
   {
     peer_reports = o.peer_reports;
     my_reports = o.my_reports;
   }
   void notify_reset() { clear_peer_reports(); }
-  void notify_rank_changed(int new_rank) {
-    if (new_rank == rank) return;
-    peer_reports.erase(rank);
-    peer_reports.erase(new_rank);
-    my_reports.rank = new_rank;
+  void set_rank(int new_rank) {
     rank = new_rank;
-    encoding.clear();
+    my_reports.rank = rank;
   }
-  void notify_rank_removed(int rank_removed);
+
+  void notify_rank_changed(int new_rank);
+  void notify_rank_removed(int rank_removed, int new_rank);
   friend std::ostream& operator<<(std::ostream& o, const ConnectionTracker& c);
   friend ConnectionReport *get_connection_reports(ConnectionTracker& ct);
   friend std::map<int,ConnectionReport> *get_peer_reports(ConnectionTracker& ct);

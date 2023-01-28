@@ -12,17 +12,23 @@ syntax to specify the expiration time: `Ns|m|h|d|w` for seconds, minutes,
 hours, days and weeks. If the MOTD should expire after 2 hours, use `2h`
 or `5w` for 5 weeks. Use `0` to configure a MOTD that does not expire.
 
-To configure a MOTD, run the following command::
+To configure a MOTD, run the following command:
 
-  $ ceph dashboard motd set <severity:info|warning|danger> <expires> <message>
+.. prompt:: bash $
 
-To show the configured MOTD::
+   ceph dashboard motd set <severity:info|warning|danger> <expires> <message>
 
-  $ ceph dashboard motd get
+To show the configured MOTD:
 
-To clear the configured MOTD run::
+.. prompt:: bash $
 
-  $ ceph dashboard motd clear
+   ceph dashboard motd get
+
+To clear the configured MOTD run:
+
+.. prompt:: bash $
+
+   ceph dashboard motd clear
 
 A MOTD with a `info` or `warning` severity can be closed by the user. The
 `info` MOTD is not displayed anymore until the local storage cookies are

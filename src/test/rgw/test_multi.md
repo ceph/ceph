@@ -31,7 +31,6 @@ The configuration file for the run has 3 sections:
 This section holds the following parameters:
  - `num_zonegroups`: number of zone groups (integer, default 1)
  - `num_zones`: number of regular zones in each group (integer, default 3)
- - `num_ps_zones`: number of pubsub zones in each group (integer, default 0)         
  - `num_az_zones`: number of archive zones (integer, default 0, max value 1)
  - `gateways_per_zone`: number of RADOS gateways per zone (integer, default 2)
  - `no_bootstrap`: whether to assume that the cluster is already up and does not need to be setup again. If set to "false", it will try to re-run the cluster, so, `mstop.sh` must be called beforehand. Should be set to false, anytime the configuration is changed. Otherwise, and assuming the cluster is already up, it should be set to "true" to save on execution time (boolean, default false)
@@ -50,8 +49,6 @@ This section holds the following parameters:
 ### Elasticsearch
 *TODO*
 ### Cloud
-*TODO*
-### PubSub
 *TODO*
 ## Writing Tests
 New tests should be added into the `/path/to/ceph/src/test/rgw/rgw_multi` subdirectory.

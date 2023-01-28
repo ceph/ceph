@@ -90,7 +90,7 @@ describe('NfsDetailsComponent', () => {
   });
 
   it('should have 1 client', () => {
-    expect(elem('ul.nav-tabs li:nth-of-type(2) a').nativeElement.textContent).toBe('Clients (1)');
+    expect(elem('nav.nav-tabs a:nth-of-type(2)').nativeElement.textContent).toBe('Clients (1)');
     expect(component.clients).toEqual([
       {
         access_type: 'RW',

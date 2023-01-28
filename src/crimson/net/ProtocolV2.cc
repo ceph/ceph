@@ -5,8 +5,10 @@
 
 #include <seastar/core/lowres_clock.hh>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include "include/msgr.h"
 #include "include/random.h"
+#include "msg/msg_fmt.h"
 
 #include "crimson/auth/AuthClient.h"
 #include "crimson/auth/AuthServer.h"
@@ -100,6 +102,13 @@ inline uint64_t generate_client_cookie() {
 
 } // namespace anonymous
 
+namespace fmt {
+
+template <typename T> auto ptr(const ::seastar::shared_ptr<T>& p) -> const void* {
+  return p.get();
+}
+
+}
 namespace crimson::net {
 
 #ifdef UNIT_TESTS_BUILT
@@ -151,8 +160,9 @@ seastar::future<> ProtocolV2::Timer::backoff(double seconds)
 ProtocolV2::ProtocolV2(ChainedDispatchers& dispatchers,
                        SocketConnection& conn,
                        SocketMessenger& messenger)
-  : Protocol(proto_t::v2, dispatchers, conn),
+  : Protocol(dispatchers, conn),
     messenger{messenger},
+    auth_meta{seastar::make_lw_shared<AuthConnectionMeta>()},
     protocol_timer{conn}
 {}
 
@@ -453,39 +463,36 @@ ProtocolV2::banner_exchange(bool is_connect)
     }).then([this, is_connect] (bufferlist bl) {
       // 4. process peer banner_payload and send HelloFrame
       auto p = bl.cbegin();
-      uint64_t peer_supported_features;
-      uint64_t peer_required_features;
+      uint64_t _peer_supported_features;
+      uint64_t _peer_required_features;
       try {
-        decode(peer_supported_features, p);
-        decode(peer_required_features, p);
+        decode(_peer_supported_features, p);
+        decode(_peer_required_features, p);
       } catch (const buffer::error &e) {
         logger().warn("{} decode banner payload failed", conn);
         abort_in_fault();
       }
       logger().debug("{} RECV({}) banner features: supported={} required={}",
                      conn, bl.length(),
-                     peer_supported_features, peer_required_features);
+                     _peer_supported_features, _peer_required_features);
 
       // Check feature bit compatibility
       uint64_t supported_features = CRIMSON_MSGR2_SUPPORTED_FEATURES;
       uint64_t required_features = CEPH_MSGR2_REQUIRED_FEATURES;
-      if ((required_features & peer_supported_features) != required_features) {
+      if ((required_features & _peer_supported_features) != required_features) {
         logger().error("{} peer does not support all required features"
                        " required={} peer_supported={}",
-                       conn, required_features, peer_supported_features);
+                       conn, required_features, _peer_supported_features);
         abort_in_close(*this, is_connect);
       }
-      if ((supported_features & peer_required_features) != peer_required_features) {
+      if ((supported_features & _peer_required_features) != _peer_required_features) {
         logger().error("{} we do not support all peer required features"
                        " peer_required={} supported={}",
-                       conn, peer_required_features, supported_features);
+                       conn, _peer_required_features, supported_features);
         abort_in_close(*this, is_connect);
       }
-      this->peer_required_features = peer_required_features;
-      if (this->peer_required_features == 0) {
-        this->connection_features = msgr2_required;
-      }
-      const bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
+      peer_supported_features = _peer_supported_features;
+      bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
       tx_frame_asm.set_is_rev1(is_rev1);
       rx_frame_asm.set_is_rev1(is_rev1);
 
@@ -529,7 +536,7 @@ seastar::future<> ProtocolV2::handle_auth_reply()
                         bad_method.allowed_methods(), bad_method.allowed_modes());
           ceph_assert(messenger.get_auth_client());
           int r = messenger.get_auth_client()->handle_auth_bad_method(
-              conn.shared_from_this(), auth_meta,
+              conn, *auth_meta,
               bad_method.method(), bad_method.result(),
               bad_method.allowed_methods(), bad_method.allowed_modes());
           if (r < 0) {
@@ -548,7 +555,7 @@ seastar::future<> ProtocolV2::handle_auth_reply()
           ceph_assert(messenger.get_auth_client());
           // let execute_connecting() take care of the thrown exception
           auto reply = messenger.get_auth_client()->handle_auth_reply_more(
-            conn.shared_from_this(), auth_meta, auth_more.auth_payload());
+            conn, *auth_meta, auth_more.auth_payload());
           auto more_reply = AuthRequestMoreFrame::Encode(reply);
           logger().debug("{} WRITE AuthRequestMoreFrame: payload_len={}",
                          conn, reply.length());
@@ -566,7 +573,8 @@ seastar::future<> ProtocolV2::handle_auth_reply()
                          auth_done.auth_payload().length());
           ceph_assert(messenger.get_auth_client());
           int r = messenger.get_auth_client()->handle_auth_done(
-              conn.shared_from_this(), auth_meta,
+              conn,
+              *auth_meta,
               auth_done.global_id(),
               auth_done.con_mode(),
               auth_done.auth_payload());
@@ -575,8 +583,9 @@ seastar::future<> ProtocolV2::handle_auth_reply()
             abort_in_fault();
           }
           auth_meta->con_mode = auth_done.con_mode();
+          bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
           session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
-              nullptr, *auth_meta, tx_frame_asm.get_is_rev1(), false);
+              nullptr, *auth_meta, is_rev1, false);
           return finish_auth();
         });
       default: {
@@ -594,7 +603,7 @@ seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods
 
   try {
     auto [auth_method, preferred_modes, bl] =
-      messenger.get_auth_client()->get_auth_request(conn.shared_from_this(), auth_meta);
+      messenger.get_auth_client()->get_auth_request(conn, *auth_meta);
     auth_meta->auth_method = auth_method;
     auto frame = AuthRequestFrame::Encode(auth_method, preferred_modes, bl);
     logger().debug("{} WRITE AuthRequestFrame: method={},"
@@ -604,7 +613,7 @@ seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods
       return handle_auth_reply();
     });
   } catch (const crimson::auth::error& e) {
-    logger().error("{} get_initial_auth_request returned {}", conn, e);
+    logger().error("{} get_initial_auth_request returned {}", conn, e.what());
     abort_in_close(*this, true);
     return seastar::now();
   }
@@ -708,6 +717,7 @@ ProtocolV2::client_connect()
           conn.set_peer_id(server_ident.gid());
           conn.set_features(server_ident.supported_features() &
                             conn.policy.features_supported);
+          logger().debug("{} UPDATE: features={}", conn, conn.get_features());
           peer_global_seq = server_ident.global_seq();
 
           bool lossy = server_ident.flags() & CEPH_MSG_CONNECT_LOSSY;
@@ -757,11 +767,9 @@ ProtocolV2::client_reconnect()
           auto retry = RetryGlobalFrame::Decode(rx_segments_data.back());
           logger().warn("{} GOT RetryGlobalFrame: gs={}",
                         conn, retry.global_seq());
-          return messenger.get_global_seq(retry.global_seq()).then([this] (auto gs) {
-            global_seq = gs;
-            logger().warn("{} UPDATE: gs={} for retry global", conn, global_seq);
-            return client_reconnect();
-          });
+          global_seq = messenger.get_global_seq(retry.global_seq());
+          logger().warn("{} UPDATE: gs={} for retry global", conn, global_seq);
+          return client_reconnect();
         });
       case Tag::SESSION_RETRY:
         return read_frame_payload().then([this] {
@@ -802,26 +810,23 @@ ProtocolV2::client_reconnect()
 
 void ProtocolV2::execute_connecting()
 {
-  trigger_state(state_t::CONNECTING, write_state_t::delay, true);
+  trigger_state(state_t::CONNECTING, write_state_t::delay, false);
   if (socket) {
     socket->shutdown();
   }
   gated_execute("execute_connecting", [this] {
-      return messenger.get_global_seq().then([this] (auto gs) {
-          global_seq = gs;
-          assert(client_cookie != 0);
-          if (!conn.policy.lossy && server_cookie != 0) {
-            ++connect_seq;
-            logger().debug("{} UPDATE: gs={}, cs={} for reconnect",
-                           conn, global_seq, connect_seq);
-          } else { // conn.policy.lossy || server_cookie == 0
-            assert(connect_seq == 0);
-            assert(server_cookie == 0);
-            logger().debug("{} UPDATE: gs={} for connect", conn, global_seq);
-          }
-
-          return wait_write_exit();
-        }).then([this] {
+      global_seq = messenger.get_global_seq();
+      assert(client_cookie != 0);
+      if (!conn.policy.lossy && server_cookie != 0) {
+        ++connect_seq;
+        logger().debug("{} UPDATE: gs={}, cs={} for reconnect",
+                       conn, global_seq, connect_seq);
+      } else { // conn.policy.lossy || server_cookie == 0
+        assert(connect_seq == 0);
+        assert(server_cookie == 0);
+        logger().debug("{} UPDATE: gs={} for connect", conn, global_seq);
+      }
+      return wait_write_exit().then([this] {
           if (unlikely(state != state_t::CONNECTING)) {
             logger().debug("{} triggered {} before Socket::connect()",
                            conn, get_state_name(state));
@@ -872,8 +877,7 @@ void ProtocolV2::execute_connecting()
                 make_error_code(crimson::net::error::bad_peer_address));
           }
           _my_addr_from_peer.set_type(entity_addr_t::TYPE_MSGR2);
-          return messenger.learned_addr(_my_addr_from_peer, conn);
-        }).then([this] {
+          messenger.learned_addr(_my_addr_from_peer, conn);
           return client_auth();
         }).then([this] {
           if (server_cookie == 0) {
@@ -959,8 +963,12 @@ seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, boo
   ceph_assert(messenger.get_auth_server());
   bufferlist reply;
   int r = messenger.get_auth_server()->handle_auth_request(
-      conn.shared_from_this(), auth_meta,
-      more, auth_meta->auth_method, auth_payload,
+      conn,
+      *auth_meta,
+      more,
+      auth_meta->auth_method,
+      auth_payload,
+      &conn.peer_global_id,
       &reply);
   switch (r) {
    // successful
@@ -972,8 +980,9 @@ seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, boo
                    ceph_con_mode_name(auth_meta->con_mode), reply.length());
     return write_frame(auth_done).then([this] {
       ceph_assert(auth_meta);
+      bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
       session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
-          nullptr, *auth_meta, tx_frame_asm.get_is_rev1(), true);
+          nullptr, *auth_meta, is_rev1, true);
       return finish_auth();
     });
    }
@@ -1068,9 +1077,8 @@ ProtocolV2::reuse_connection(
                                     peer_global_seq,
                                     client_cookie,
                                     conn.get_peer_name(),
-                                    connection_features,
-                                    tx_frame_asm.get_is_rev1(),
-                                    rx_frame_asm.get_is_rev1(),
+                                    conn.get_features(),
+                                    peer_supported_features,
                                     conn_seq,
                                     msg_seq);
 #ifdef UNIT_TESTS_BUILT
@@ -1096,7 +1104,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
                  " found existing {}(state={}, gs={}, pgs={}, cs={}, cc={}, sc={})",
                  conn, global_seq, peer_global_seq, connect_seq,
                  client_cookie, server_cookie,
-                 existing_conn, get_state_name(existing_proto->state),
+                 fmt::ptr(existing_conn), get_state_name(existing_proto->state),
                  existing_proto->global_seq,
                  existing_proto->peer_global_seq,
                  existing_proto->connect_seq,
@@ -1105,7 +1113,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
 
   if (!validate_peer_name(existing_conn->get_peer_name())) {
     logger().error("{} server_connect: my peer_name doesn't match"
-                   " the existing connection {}, abort", conn, existing_conn);
+                   " the existing connection {}, abort", conn, fmt::ptr(existing_conn));
     abort_in_fault();
   }
 
@@ -1131,7 +1139,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
     logger().warn("{} server_connect:"
                   " existing connection {} is a lossy channel. Close existing in favor of"
                   " this connection", conn, *existing_conn);
-    execute_establishing(existing_conn, true);
+    execute_establishing(existing_conn);
     return seastar::make_ready_future<next_step_t>(next_step_t::ready);
   }
 
@@ -1240,11 +1248,17 @@ ProtocolV2::server_connect()
         return next_step_t::wait;
       });
     }
-    connection_features =
-        client_ident.supported_features() & conn.policy.features_supported;
-    logger().debug("{} UPDATE: connection_features={}", conn, connection_features);
+    conn.set_features(client_ident.supported_features() &
+                      conn.policy.features_supported);
+    logger().debug("{} UPDATE: features={}", conn, conn.get_features());
 
     peer_global_seq = client_ident.global_seq();
+
+    bool lossy = client_ident.flags() & CEPH_MSG_CONNECT_LOSSY;
+    if (lossy != conn.policy.lossy) {
+      logger().warn("{} my lossy policy {} doesn't match client {}, ignore",
+                    conn, conn.policy.lossy, lossy);
+    }
 
     // Looks good so far, let's check if there is already an existing connection
     // to this peer.
@@ -1252,19 +1266,9 @@ ProtocolV2::server_connect()
     SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
 
     if (existing_conn) {
-      if (existing_conn->protocol->proto_type != proto_t::v2) {
-        logger().warn("{} existing connection {} proto version is {}, close existing",
-                      conn, *existing_conn,
-                      static_cast<int>(existing_conn->protocol->proto_type));
-        // should unregister the existing from msgr atomically
-        // NOTE: this is following async messenger logic, but we may miss the reset event.
-        execute_establishing(existing_conn, false);
-        return seastar::make_ready_future<next_step_t>(next_step_t::ready);
-      } else {
-        return handle_existing_connection(existing_conn);
-      }
+      return handle_existing_connection(existing_conn);
     } else {
-      execute_establishing(nullptr, true);
+      execute_establishing(nullptr);
       return seastar::make_ready_future<next_step_t>(next_step_t::ready);
     }
   });
@@ -1358,16 +1362,6 @@ ProtocolV2::server_reconnect()
       return send_reset(true);
     }
 
-    if (existing_conn->protocol->proto_type != proto_t::v2) {
-      logger().warn("{} server_reconnect: existing connection {} proto version is {},"
-                    "close existing and reset client.",
-                    conn, *existing_conn,
-                    static_cast<int>(existing_conn->protocol->proto_type));
-      // NOTE: this is following async messenger logic, but we may miss the reset event.
-      existing_conn->mark_down();
-      return send_reset(true);
-    }
-
     ProtocolV2 *existing_proto = dynamic_cast<ProtocolV2*>(
         existing_conn->protocol.get());
     ceph_assert(existing_proto);
@@ -1375,7 +1369,7 @@ ProtocolV2::server_reconnect()
                    " found existing {}(state={}, gs={}, pgs={}, cs={}, cc={}, sc={})",
                    conn, global_seq, peer_global_seq, reconnect.connect_seq(),
                    reconnect.client_cookie(), reconnect.server_cookie(),
-                   existing_conn,
+                   fmt::ptr(existing_conn),
                    get_state_name(existing_proto->state),
                    existing_proto->global_seq,
                    existing_proto->peer_global_seq,
@@ -1385,7 +1379,7 @@ ProtocolV2::server_reconnect()
 
     if (!validate_peer_name(existing_conn->get_peer_name())) {
       logger().error("{} server_reconnect: my peer_name doesn't match"
-                     " the existing connection {}, abort", conn, existing_conn);
+                     " the existing connection {}, abort", conn, fmt::ptr(existing_conn));
       abort_in_fault();
     }
 
@@ -1490,8 +1484,7 @@ void ProtocolV2::execute_accepting()
             throw std::system_error(
                 make_error_code(crimson::net::error::bad_peer_address));
           }
-          return messenger.learned_addr(_my_addr_from_peer, conn);
-        }).then([this] {
+          messenger.learned_addr(_my_addr_from_peer, conn);
           return server_auth();
         }).then([this] {
           return read_main_preamble();
@@ -1568,8 +1561,7 @@ seastar::future<> ProtocolV2::finish_auth()
 
 // ESTABLISHING
 
-void ProtocolV2::execute_establishing(
-    SocketConnectionRef existing_conn, bool dispatch_reset) {
+void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
   if (unlikely(state != state_t::ACCEPTING)) {
     logger().debug("{} triggered {} before execute_establishing()",
                    conn, get_state_name(state));
@@ -1587,7 +1579,8 @@ void ProtocolV2::execute_establishing(
 
   trigger_state(state_t::ESTABLISHING, write_state_t::delay, false);
   if (existing_conn) {
-    existing_conn->protocol->close(dispatch_reset, std::move(accept_me));
+    existing_conn->protocol->close(
+        true /* dispatch_reset */, std::move(accept_me));
     if (unlikely(state != state_t::ESTABLISHING)) {
       logger().warn("{} triggered {} during execute_establishing(), "
                     "the accept event will not be delivered!",
@@ -1637,43 +1630,40 @@ ProtocolV2::send_server_ident()
   // send_server_ident() logic
 
   // refered to async-conn v2: not assign gs to global_seq
-  return messenger.get_global_seq().then([this] (auto gs) {
-    logger().debug("{} UPDATE: gs={} for server ident", conn, global_seq);
+  global_seq = messenger.get_global_seq();
+  logger().debug("{} UPDATE: gs={} for server ident", conn, global_seq);
 
-    // this is required for the case when this connection is being replaced
-    requeue_up_to(0);
-    conn.in_seq = 0;
+  // this is required for the case when this connection is being replaced
+  requeue_up_to(0);
+  conn.in_seq = 0;
 
-    if (!conn.policy.lossy) {
-      server_cookie = ceph::util::generate_random_number<uint64_t>(1, -1ll);
-    }
+  if (!conn.policy.lossy) {
+    server_cookie = ceph::util::generate_random_number<uint64_t>(1, -1ll);
+  }
 
-    uint64_t flags = 0;
-    if (conn.policy.lossy) {
-      flags = flags | CEPH_MSG_CONNECT_LOSSY;
-    }
+  uint64_t flags = 0;
+  if (conn.policy.lossy) {
+    flags = flags | CEPH_MSG_CONNECT_LOSSY;
+  }
 
-    auto server_ident = ServerIdentFrame::Encode(
-            messenger.get_myaddrs(),
-            messenger.get_myname().num(),
-            gs,
-            conn.policy.features_supported,
-            conn.policy.features_required | msgr2_required,
-            flags,
-            server_cookie);
+  auto server_ident = ServerIdentFrame::Encode(
+          messenger.get_myaddrs(),
+          messenger.get_myname().num(),
+          global_seq,
+          conn.policy.features_supported,
+          conn.policy.features_required | msgr2_required,
+          flags,
+          server_cookie);
 
-    logger().debug("{} WRITE ServerIdentFrame: addrs={}, gid={},"
-                   " gs={}, features_supported={}, features_required={},"
-                   " flags={}, cookie={}",
-                   conn, messenger.get_myaddrs(), messenger.get_myname().num(),
-                   gs, conn.policy.features_supported,
-                   conn.policy.features_required | msgr2_required,
-                   flags, server_cookie);
+  logger().debug("{} WRITE ServerIdentFrame: addrs={}, gid={},"
+                 " gs={}, features_supported={}, features_required={},"
+                 " flags={}, cookie={}",
+                 conn, messenger.get_myaddrs(), messenger.get_myname().num(),
+                 global_seq, conn.policy.features_supported,
+                 conn.policy.features_required | msgr2_required,
+                 flags, server_cookie);
 
-    conn.set_features(connection_features);
-
-    return write_frame(server_ident);
-  });
+  return write_frame(server_ident);
 }
 
 // REPLACING state
@@ -1687,8 +1677,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                                    uint64_t new_client_cookie,
                                    entity_name_t new_peer_name,
                                    uint64_t new_conn_features,
-                                   bool tx_is_rev1,
-                                   bool rx_is_rev1,
+                                   uint64_t new_peer_supported_features,
                                    uint64_t new_connect_seq,
                                    uint64_t new_msg_seq)
 {
@@ -1705,9 +1694,9 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                   new_socket = std::move(new_socket),
                   new_auth_meta = std::move(new_auth_meta),
                   new_rxtx = std::move(new_rxtx),
-                  tx_is_rev1, rx_is_rev1,
                   new_client_cookie, new_peer_name,
-                  new_conn_features, new_peer_global_seq,
+                  new_conn_features, new_peer_supported_features,
+                  new_peer_global_seq,
                   new_connect_seq, new_msg_seq] () mutable {
     return wait_write_exit().then([this, do_reset] {
       if (do_reset) {
@@ -1720,9 +1709,9 @@ void ProtocolV2::trigger_replacing(bool reconnect,
              new_socket = std::move(new_socket),
              new_auth_meta = std::move(new_auth_meta),
              new_rxtx = std::move(new_rxtx),
-             tx_is_rev1, rx_is_rev1,
              new_client_cookie, new_peer_name,
-             new_conn_features, new_peer_global_seq,
+             new_conn_features, new_peer_supported_features,
+             new_peer_global_seq,
              new_connect_seq, new_msg_seq] () mutable {
       if (unlikely(state != state_t::REPLACING)) {
         return new_socket->close().then([sock = std::move(new_socket)] {
@@ -1755,9 +1744,11 @@ void ProtocolV2::trigger_replacing(bool reconnect,
         if (conn.get_peer_id() == entity_name_t::NEW) {
           conn.set_peer_id(new_peer_name.num());
         }
-        connection_features = new_conn_features;
-        tx_frame_asm.set_is_rev1(tx_is_rev1);
-        rx_frame_asm.set_is_rev1(rx_is_rev1);
+        conn.set_features(new_conn_features);
+        peer_supported_features = new_peer_supported_features;
+        bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
+        tx_frame_asm.set_is_rev1(is_rev1);
+        rx_frame_asm.set_is_rev1(is_rev1);
         return send_server_ident();
       }
     }).then([this, reconnect] {
@@ -2029,7 +2020,7 @@ void ProtocolV2::execute_ready(bool dispatch_connect)
 
 void ProtocolV2::execute_standby()
 {
-  trigger_state(state_t::STANDBY, write_state_t::delay, true);
+  trigger_state(state_t::STANDBY, write_state_t::delay, false);
   if (socket) {
     socket->shutdown();
   }
@@ -2048,7 +2039,7 @@ void ProtocolV2::notify_write()
 
 void ProtocolV2::execute_wait(bool max_backoff)
 {
-  trigger_state(state_t::WAIT, write_state_t::delay, true);
+  trigger_state(state_t::WAIT, write_state_t::delay, false);
   if (socket) {
     socket->shutdown();
   }
@@ -2082,7 +2073,7 @@ void ProtocolV2::execute_wait(bool max_backoff)
 
 void ProtocolV2::execute_server_wait()
 {
-  trigger_state(state_t::SERVER_WAIT, write_state_t::delay, false);
+  trigger_state(state_t::SERVER_WAIT, write_state_t::none, false);
   gated_execute("execute_server_wait", [this] {
     return read_exactly(1).then([this] (auto bl) {
       logger().warn("{} SERVER_WAIT got read, abort", conn);

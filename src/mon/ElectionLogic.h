@@ -90,7 +90,7 @@ public:
    * by making a paxos commit, but not by injecting values while
    * an election is ongoing.)
    */
-  virtual int paxos_size() const = 0;
+  virtual unsigned paxos_size() const = 0;
   /**
    * Retrieve a set of ranks which are not allowed to become the leader.
    * Like paxos_size(), This set can change between elections, but not

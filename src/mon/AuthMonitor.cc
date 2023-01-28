@@ -25,6 +25,7 @@
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 #include "messages/MMonGlobalID.h"
+#include "messages/MMonUsedPendingKeys.h"
 #include "msg/Messenger.h"
 
 #include "auth/AuthServiceHandler.h"
@@ -91,6 +92,38 @@ bool AuthMonitor::check_rotate()
   return false;
 }
 
+void AuthMonitor::process_used_pending_keys(
+  const std::map<EntityName,CryptoKey>& used_pending_keys)
+{
+  for (auto& [name, used_key] : used_pending_keys) {
+    dout(10) << __func__ << " used pending_key for " << name << dendl;
+    KeyServerData::Incremental inc;
+    inc.op = KeyServerData::AUTH_INC_ADD;
+    inc.name = name;
+
+    mon.key_server.get_auth(name, inc.auth);
+    for (auto& p : pending_auth) {
+      if (p.inc_type == AUTH_DATA) {
+	KeyServerData::Incremental auth_inc;
+	auto q = p.auth_data.cbegin();
+	decode(auth_inc, q);
+	if (auth_inc.op == KeyServerData::AUTH_INC_ADD &&
+	    auth_inc.name == name) {
+	  dout(10) << __func__ << "  starting with pending uncommitted" << dendl;
+	  inc.auth = auth_inc.auth;
+	}
+      }
+    }
+    if (stringify(inc.auth.pending_key) == stringify(used_key)) {
+      dout(10) << __func__ << " committing pending_key -> key for "
+	       << name << dendl;
+      inc.auth.key = inc.auth.pending_key;
+      inc.auth.pending_key.clear();
+      push_cephx_inc(inc);
+    }
+  }
+}
+
 /*
  Tick function to update the map based on performance every N seconds
 */
@@ -114,10 +147,25 @@ void AuthMonitor::tick()
       propose = true;
     } else {
       dout(10) << __func__ << "requesting more ids from leader" << dendl;
-      int leader = mon.get_leader();
       MMonGlobalID *req = new MMonGlobalID();
       req->old_max_id = max_global_id;
-      mon.send_mon_message(req, leader);
+      mon.send_mon_message(req, mon.get_leader());
+    }
+  }
+
+  if (mon.monmap->min_mon_release >= ceph_release_t::quincy) {
+    auto used_pending_keys = mon.key_server.get_used_pending_keys();
+    if (!used_pending_keys.empty()) {
+      dout(10) << __func__ << " " << used_pending_keys.size() << " used pending_keys"
+	       << dendl;
+      if (mon.is_leader()) {
+	process_used_pending_keys(used_pending_keys);
+	propose = true;
+      } else {
+	MMonUsedPendingKeys *req = new MMonUsedPendingKeys();
+	req->used_pending_keys = used_pending_keys;
+	mon.send_mon_message(req, mon.get_leader());
+      }
     }
   }
 
@@ -142,6 +190,7 @@ void AuthMonitor::on_active()
     return;
 
   mon.key_server.start_server();
+  mon.key_server.clear_used_pending_keys();
 
   if (is_writeable()) {
     bool propose = false;
@@ -523,6 +572,9 @@ bool AuthMonitor::preprocess_query(MonOpRequestRef op)
   case MSG_MON_GLOBAL_ID:
     return false;
 
+  case MSG_MON_USED_PENDING_KEYS:
+    return false;
+
   default:
     ceph_abort();
     return true;
@@ -544,6 +596,8 @@ bool AuthMonitor::prepare_update(MonOpRequestRef op)
     }
   case MSG_MON_GLOBAL_ID:
     return prepare_global_id(op);
+  case MSG_MON_USED_PENDING_KEYS:
+    return prepare_used_pending_keys(op);
   case CEPH_MSG_AUTH:
     return prep_auth(op, true);
   default:
@@ -819,6 +873,9 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
       prefix == "auth rm" ||
       prefix == "auth get-or-create" ||
       prefix == "auth get-or-create-key" ||
+      prefix == "auth get-or-create-pending" ||
+      prefix == "auth clear-pending" ||
+      prefix == "auth commit-pending" ||
       prefix == "fs authorize" ||
       prefix == "auth import" ||
       prefix == "auth caps") {
@@ -856,7 +913,6 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
 	  kr.encode_formatted("auth", f.get(), rdata);
 	else
 	  kr.encode_plaintext(rdata);
-	ss << "export " << eauth;
 	r = 0;
       } else {
 	ss << "no key for " << eauth;
@@ -867,14 +923,12 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
 	keyring.encode_formatted("auth", f.get(), rdata);
       else
 	keyring.encode_plaintext(rdata);
-
-      ss << "exported master keyring";
       r = 0;
     }
   } else if (prefix == "auth get" && !entity_name.empty()) {
     KeyRing keyring;
     EntityAuth entity_auth;
-    if(!mon.key_server.get_auth(entity, entity_auth)) {
+    if (!mon.key_server.get_auth(entity, entity_auth)) {
       ss << "failed to find " << entity_name << " in keyring";
       r = -ENOENT;
     } else {
@@ -883,7 +937,6 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
 	keyring.encode_formatted("auth", f.get(), rdata);
       else
 	keyring.encode_plaintext(rdata);
-      ss << "exported keyring for " << entity_name;
       r = 0;
     }
   } else if (prefix == "auth print-key" ||
@@ -907,10 +960,6 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
       mon.key_server.encode_formatted("auth", f.get(), rdata);
     } else {
       mon.key_server.encode_plaintext(rdata);
-      if (rdata.length() > 0)
-        ss << "installed auth entries:" << std::endl;
-      else
-        ss << "no installed auth entries!" << std::endl;
     }
     r = 0;
     goto done;
@@ -1404,8 +1453,6 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       mon.reply_command(op, -EINVAL, rs, get_last_committed());
       return true;
     }
-    ss << "imported keyring";
-    getline(ss, rs);
     err = 0;
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
@@ -1506,6 +1553,90 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						   get_last_committed() + 1));
     return true;
+  } else if ((prefix == "auth get-or-create-pending" ||
+	      prefix == "auth clear-pending" ||
+	      prefix == "auth commit-pending")) {
+    if (mon.monmap->min_mon_release < ceph_release_t::quincy) {
+      err = -EPERM;
+      ss << "pending_keys are not available until after upgrading to quincy";
+      goto done;
+    }
+
+    EntityAuth entity_auth;
+    if (!mon.key_server.get_auth(entity, entity_auth)) {
+      ss << "entity " << entity << " does not exist";
+      err = -ENOENT;
+      goto done;
+    }
+
+    // is there an uncommitted pending_key? (or any change for this entity)
+    for (auto& p : pending_auth) {
+      if (p.inc_type == AUTH_DATA) {
+	KeyServerData::Incremental auth_inc;
+	auto q = p.auth_data.cbegin();
+	decode(auth_inc, q);
+	if (auth_inc.op == KeyServerData::AUTH_INC_ADD &&
+	    auth_inc.name == entity) {
+	  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+						get_last_committed() + 1));
+	  return true;
+	}
+      }
+    }
+
+    if (prefix == "auth get-or-create-pending") {
+      KeyRing kr;
+      bool exists = false;
+      if (!entity_auth.pending_key.empty()) {
+	kr.add(entity, entity_auth.key, entity_auth.pending_key);
+	err = 0;
+	exists = true;
+      } else {
+	KeyServerData::Incremental auth_inc;
+	auth_inc.op = KeyServerData::AUTH_INC_ADD;
+	auth_inc.name = entity;
+	auth_inc.auth = entity_auth;
+	auth_inc.auth.pending_key.create(g_ceph_context, CEPH_CRYPTO_AES);
+	push_cephx_inc(auth_inc);
+	kr.add(entity, auth_inc.auth.key, auth_inc.auth.pending_key);
+        push_cephx_inc(auth_inc);
+      }
+      if (f) {
+	kr.encode_formatted("auth", f.get(), rdata);
+      } else {
+	kr.encode_plaintext(rdata);
+      }
+      if (exists) {
+	goto done;
+      }
+    } else if (prefix == "auth clear-pending") {
+      if (entity_auth.pending_key.empty()) {
+	err = 0;
+	goto done;
+      }
+      KeyServerData::Incremental auth_inc;
+      auth_inc.op = KeyServerData::AUTH_INC_ADD;
+      auth_inc.name = entity;
+      auth_inc.auth = entity_auth;
+      auth_inc.auth.pending_key.clear();
+      push_cephx_inc(auth_inc);
+    } else if (prefix == "auth commit-pending") {
+      if (entity_auth.pending_key.empty()) {
+	err = 0;
+	ss << "no pending key";
+	goto done;
+      }
+      KeyServerData::Incremental auth_inc;
+      auth_inc.op = KeyServerData::AUTH_INC_ADD;
+      auth_inc.name = entity;
+      auth_inc.auth = entity_auth;
+      auth_inc.auth.key = auth_inc.auth.pending_key;
+      auth_inc.auth.pending_key.clear();
+      push_cephx_inc(auth_inc);
+    }
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
+					      get_last_committed() + 1));
+    return true;
   } else if ((prefix == "auth get-or-create-key" ||
 	      prefix == "auth get-or-create") &&
 	     !entity_name.empty()) {
@@ -1548,7 +1679,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
         }
       } else {
 	KeyRing kr;
-	kr.add(entity, entity_auth.key);
+	kr.add(entity, entity_auth.key, entity_auth.pending_key);
         if (f) {
           kr.set_caps(entity, entity_auth.caps);
           kr.encode_formatted("auth", f.get(), rdata);
@@ -1781,15 +1912,12 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     KeyServerData::Incremental auth_inc;
     auth_inc.name = entity;
     if (!mon.key_server.contains(auth_inc.name)) {
-      ss << "entity " << entity << " does not exist";
       err = 0;
       goto done;
     }
     auth_inc.op = KeyServerData::AUTH_INC_DEL;
     push_cephx_inc(auth_inc);
 
-    ss << "updated";
-    getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
@@ -1805,7 +1933,14 @@ bool AuthMonitor::prepare_global_id(MonOpRequestRef op)
 {
   dout(10) << "AuthMonitor::prepare_global_id" << dendl;
   increase_max_global_id();
+  return true;
+}
 
+bool AuthMonitor::prepare_used_pending_keys(MonOpRequestRef op)
+{
+  dout(10) << __func__ << " " << op << dendl;
+  auto m = op->get_req<MMonUsedPendingKeys>();
+  process_used_pending_keys(m->used_pending_keys);
   return true;
 }
 

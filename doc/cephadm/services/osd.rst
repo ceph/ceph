@@ -144,6 +144,18 @@ There are a few ways to create new OSDs:
 
     ceph orch daemon add osd host1:data_devices=/dev/sda,/dev/sdb,db_devices=/dev/sdc,osds_per_device=2
 
+* Create an OSD on a specific LVM logical volume on a specific host:
+
+  .. prompt:: bash #
+
+    ceph orch daemon add osd *<host>*:*<lvm-path>*
+
+  For example:
+
+  .. prompt:: bash #
+
+    ceph orch daemon add osd host1:/dev/vg_osd/lvm_osd1701
+
 * You can use :ref:`drivegroups` to categorize device(s) based on their
   properties. This might be useful in forming a clearer picture of which
   devices are available to consume. Properties include device type (SSD or
@@ -195,9 +207,6 @@ After running the above command:
   create new OSDs.
 * If you remove an OSD and clean the LVM physical volume, a new OSD will be
   created automatically.
-
-To disable the automatic creation of OSD on available devices, use the
-``unmanaged`` parameter:
 
 If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter:
 
@@ -301,6 +310,7 @@ Expected output::
 
 This resets the initial state of the OSD and takes it off the removal queue.
 
+.. _cephadm-replacing-an-osd:
 
 Replacing an OSD
 ----------------

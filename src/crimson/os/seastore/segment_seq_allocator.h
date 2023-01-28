@@ -26,9 +26,9 @@ public:
 private:
   void set_next_segment_seq(segment_seq_t seq) {
     LOG_PREFIX(SegmentSeqAllocator::set_next_segment_seq);
-    SUBINFO(
+    SUBDEBUG(
       seastore_journal,
-      "type {}, next_segment_seq={}, cur_segment_seq={}",
+      "{}, next={}, cur={}",
       type,
       segment_seq_printer_t{seq},
       segment_seq_printer_t{next_segment_seq});
@@ -41,7 +41,7 @@ private:
   segment_seq_t next_segment_seq = 0;
   segment_type_t type = segment_type_t::NULL_SEG;
   friend class journal::SegmentedJournal;
-  friend class AsyncCleaner;
+  friend class SegmentCleaner;
 };
 
 using SegmentSeqAllocatorRef =

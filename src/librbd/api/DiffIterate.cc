@@ -73,7 +73,7 @@ public:
     }
     auto req = io::ImageDispatchSpec::create_list_snaps(
       m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
-      aio_comp, {{m_image_offset, m_image_length}},
+      aio_comp, {{m_image_offset, m_image_length}}, io::ImageArea::DATA,
       {m_diff_context.from_snap_id, m_diff_context.end_snap_id},
       list_snaps_flags, &m_snapshot_delta, {});
     req->send();
@@ -198,7 +198,7 @@ int DiffIterate<I>::diff_iterate(I *ictx,
   }
 
   ictx->image_lock.lock_shared();
-  r = clip_io(ictx, off, &len);
+  r = clip_io(ictx, off, &len, io::ImageArea::DATA);
   ictx->image_lock.unlock_shared();
   if (r < 0) {
     return r;
@@ -263,12 +263,14 @@ int DiffIterate<I>::execute() {
       // check parent overlap only if we are comparing to the beginning of time
       if (m_include_parent && from_snap_id == 0) {
         std::shared_lock image_locker{m_image_ctx.image_lock};
-        uint64_t overlap = 0;
-        m_image_ctx.get_parent_overlap(m_image_ctx.snap_id, &overlap);
-        if (m_image_ctx.parent && overlap > 0) {
+        uint64_t raw_overlap = 0;
+        m_image_ctx.get_parent_overlap(m_image_ctx.snap_id, &raw_overlap);
+        auto overlap = m_image_ctx.reduce_parent_overlap(raw_overlap, false);
+        if (overlap.first > 0 && overlap.second == io::ImageArea::DATA) {
           ldout(cct, 10) << " first getting parent diff" << dendl;
-          DiffIterate diff_parent(*m_image_ctx.parent, {}, nullptr, 0, overlap,
-                                  true, true, &simple_diff_cb, &parent_diff);
+          DiffIterate diff_parent(*m_image_ctx.parent, {}, nullptr, 0,
+                                  overlap.first, true, true, &simple_diff_cb,
+                                  &parent_diff);
           r = diff_parent.execute();
           if (r < 0) {
             return r;

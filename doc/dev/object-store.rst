@@ -4,11 +4,7 @@
 
 .. graphviz::
 
-  /*
-   * Rough outline of object store module dependencies
-   */
-
-  digraph object_store {
+   digraph object_store {
     size="7,7";
     node [color=lightblue2, style=filled, fontname="Serif"];
 
@@ -68,3 +64,4 @@
 
 
 .. todo:: write more here
+

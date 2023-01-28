@@ -53,6 +53,17 @@ To create a CephFS snapshot, create a subdirectory under
 ``.snap`` with a name of your choice. For example, to create a snapshot on
 directory "/1/2/3/", invoke ``mkdir /1/2/3/.snap/my-snapshot-name`` .
 
+.. note::
+   Snapshot names can not start with an underscore ('_'), as these names are
+   reserved for internal usage.
+
+.. note::
+   Snapshot names can not exceed 240 characters.  This is because the MDS makes
+   use of long snapshot names internally, which follow the format:
+   `_<SNAPSHOT-NAME>_<INODE-NUMBER>`.  Since filenames in general can't have
+   more than 255 characters, and `<node-id>` takes 13 characters, the long
+   snapshot names can take as much as 255 - 1 - 1 - 13 = 240.
+
 This is transmitted to the MDS Server as a
 CEPH_MDS_OP_MKSNAP-tagged `MClientRequest`, and initially handled in
 Server::handle_client_mksnap(). It allocates a `snapid` from the `SnapServer`,

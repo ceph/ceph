@@ -1,5 +1,11 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  discardPeriodicTasks,
+  fakeAsync,
+  TestBed,
+  tick
+} from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -26,6 +32,10 @@ import { NotificationsSidebarComponent } from './notifications-sidebar.component
 describe('NotificationsSidebarComponent', () => {
   let component: NotificationsSidebarComponent;
   let fixture: ComponentFixture<NotificationsSidebarComponent>;
+  let prometheusUpdatePermission: string;
+  let prometheusReadPermission: string;
+  let prometheusCreatePermission: string;
+  let configOptReadPermission: string;
 
   configureTestBed({
     imports: [
@@ -43,6 +53,21 @@ describe('NotificationsSidebarComponent', () => {
   });
 
   beforeEach(() => {
+    prometheusReadPermission = 'read';
+    prometheusUpdatePermission = 'update';
+    prometheusCreatePermission = 'create';
+    configOptReadPermission = 'read';
+    spyOn(TestBed.inject(AuthStorageService), 'getPermissions').and.callFake(
+      () =>
+        new Permissions({
+          prometheus: [
+            prometheusReadPermission,
+            prometheusUpdatePermission,
+            prometheusCreatePermission
+          ],
+          'config-opt': [configOptReadPermission]
+        })
+    );
     fixture = TestBed.createComponent(NotificationsSidebarComponent);
     component = fixture.componentInstance;
   });
@@ -55,8 +80,6 @@ describe('NotificationsSidebarComponent', () => {
   describe('prometheus alert handling', () => {
     let prometheusAlertService: PrometheusAlertService;
     let prometheusNotificationService: PrometheusNotificationService;
-    let prometheusReadPermission: string;
-    let configOptReadPermission: string;
 
     const expectPrometheusServicesToBeCalledTimes = (n: number) => {
       expect(prometheusNotificationService.refresh).toHaveBeenCalledTimes(n);
@@ -64,16 +87,6 @@ describe('NotificationsSidebarComponent', () => {
     };
 
     beforeEach(() => {
-      prometheusReadPermission = 'read';
-      configOptReadPermission = 'read';
-      spyOn(TestBed.inject(AuthStorageService), 'getPermissions').and.callFake(
-        () =>
-          new Permissions({
-            prometheus: [prometheusReadPermission],
-            'config-opt': [configOptReadPermission]
-          })
-      );
-
       spyOn(TestBed.inject(PrometheusService), 'ifAlertmanagerConfigured').and.callFake((fn) =>
         fn()
       );
@@ -152,6 +165,7 @@ describe('NotificationsSidebarComponent', () => {
       tick(6000);
       expect(component.notifications.length).toBe(1);
       expect(component.notifications[0].title).toBe('Sample title');
+      discardPeriodicTasks();
     }));
   });
 

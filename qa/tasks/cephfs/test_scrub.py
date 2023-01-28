@@ -176,3 +176,12 @@ class TestScrub(CephFSTestCase):
 
     def test_scrub_dup_inode(self):
         self._scrub(DupInodeWorkload(self, self.fs, self.mount_a))
+
+    def test_mdsdir_scrub_backtrace(self):
+        damage_count = self._get_damage_count()
+        self.assertNotIn("MDS_DAMAGE", self.mds_cluster.mon_manager.get_mon_health()['checks'])
+
+        out_json = self.fs.run_scrub(["start", "~mdsdir", "recursive"])
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+        self.assertEqual(self._get_damage_count(), damage_count)
+        self.assertNotIn("MDS_DAMAGE", self.mds_cluster.mon_manager.get_mon_health()['checks'])

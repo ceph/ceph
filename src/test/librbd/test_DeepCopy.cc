@@ -9,6 +9,7 @@
 #include "librbd/api/Snapshot.h"
 #include "librbd/internal.h"
 #include "librbd/io/ReadResult.h"
+#include "test/librados/crimson_utils.h"
 
 void register_test_deep_copy() {
 }
@@ -512,6 +513,7 @@ TEST_F(TestDeepCopy, Stress)
 
 TEST_F(TestDeepCopy, NoSnaps_LargerDstObjSize)
 {
+  SKIP_IF_CRIMSON();
   uint64_t order = m_src_ictx->order + 1;
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_ORDER, order));
 
@@ -520,6 +522,7 @@ TEST_F(TestDeepCopy, NoSnaps_LargerDstObjSize)
 
 TEST_F(TestDeepCopy, Snaps_LargerDstObjSize)
 {
+  SKIP_IF_CRIMSON();
   uint64_t order = m_src_ictx->order + 1;
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_ORDER, order));
 
@@ -550,6 +553,7 @@ TEST_F(TestDeepCopy, CloneFlatten_LargerDstObjSize)
 
 TEST_F(TestDeepCopy, Stress_LargerDstObjSize)
 {
+  SKIP_IF_CRIMSON();
   uint64_t order = m_src_ictx->order + 1 + rand() % 2;
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_ORDER, order));
 

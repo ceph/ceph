@@ -1,4 +1,2 @@
-try:
-    from .module import Module
-except ImportError:
-    pass
+# flake8: noqa
+from .module import Module

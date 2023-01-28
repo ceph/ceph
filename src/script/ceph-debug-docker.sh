@@ -55,10 +55,10 @@ function main {
     done
 
     if [ -z "$1" ]; then
-        printf "specify the branch [default \"master:latest\"]: "
+        printf "specify the branch [default \"main:latest\"]: "
         read branch
         if [ -z "$branch" ]; then
-            branch=master:latest
+            branch=main:latest
         fi
     else
         branch="$1"
@@ -117,6 +117,7 @@ RUN apt-get update --yes --quiet && \
 COPY cephdev.asc cephdev.asc
 RUN apt-key add cephdev.asc && \
     curl -L $repo_url | tee /etc/apt/sources.list.d/ceph_dev.list && \
+    cat /etc/apt/sources.list.d/ceph_dev.list|sed -e 's/^deb/deb-src/' >>/etc/apt/sources.list.d/ceph_dev.list && \
     apt-get update --yes && \
     DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt-get --assume-yes -q --no-install-recommends install -o Dpkg::Options::=--force-confnew --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-common-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg python3-cephfs python3-rados
 EOF
@@ -134,6 +135,7 @@ EOF
                 base_debuginfo="glibc-debuginfo"
                 ceph_debuginfo="ceph-base-debuginfo"
                 debuginfo=/etc/yum.repos.d/CentOS-Linux-Debuginfo.repo
+                base_url="s|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g"
                 ;;
             centos:stream)
                 python_bindings="python3-rados python3-cephfs"
@@ -149,7 +151,8 @@ EOF
 FROM ${env}
 
 WORKDIR /root
-RUN yum update -y && \
+RUN sed -i '${base_url}' /etc/yum.repos.d/CentOS-* && \
+    yum update -y && \
     sed -i 's/enabled=0/enabled=1/' ${debuginfo} && \
     yum update -y && \
     yum install -y tmux epel-release wget psmisc ca-certificates gdb

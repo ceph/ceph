@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_ACL_H
-#define CEPH_RGW_ACL_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -14,102 +13,7 @@
 
 #include "common/debug.h"
 
-#include "rgw_basic_types.h"
-
-#define RGW_PERM_NONE            0x00
-#define RGW_PERM_READ            0x01
-#define RGW_PERM_WRITE           0x02
-#define RGW_PERM_READ_ACP        0x04
-#define RGW_PERM_WRITE_ACP       0x08
-#define RGW_PERM_READ_OBJS       0x10
-#define RGW_PERM_WRITE_OBJS      0x20
-#define RGW_PERM_FULL_CONTROL    ( RGW_PERM_READ | RGW_PERM_WRITE | \
-                                  RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP )
-#define RGW_PERM_ALL_S3          RGW_PERM_FULL_CONTROL
-#define RGW_PERM_INVALID         0xFF00
-
-static constexpr char RGW_REFERER_WILDCARD[] = "*";
-
-enum ACLGranteeTypeEnum {
-/* numbers are encoded, should not change */
-  ACL_TYPE_CANON_USER = 0,
-  ACL_TYPE_EMAIL_USER = 1,
-  ACL_TYPE_GROUP      = 2,
-  ACL_TYPE_UNKNOWN    = 3,
-  ACL_TYPE_REFERER    = 4,
-};
-
-enum ACLGroupTypeEnum {
-/* numbers are encoded should not change */
-  ACL_GROUP_NONE                = 0,
-  ACL_GROUP_ALL_USERS           = 1,
-  ACL_GROUP_AUTHENTICATED_USERS = 2,
-};
-
-class ACLPermission
-{
-protected:
-  int flags;
-public:
-  ACLPermission() : flags(0) {}
-  ~ACLPermission() {}
-  uint32_t get_permissions() const { return flags; }
-  void set_permissions(uint32_t perm) { flags = perm; }
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
-    encode(flags, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-    decode(flags, bl);
-    DECODE_FINISH(bl);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<ACLPermission*>& o);
-
-  friend bool operator==(const ACLPermission& lhs, const ACLPermission& rhs);
-  friend bool operator!=(const ACLPermission& lhs, const ACLPermission& rhs);
-};
-WRITE_CLASS_ENCODER(ACLPermission)
-
-class ACLGranteeType
-{
-protected:
-  __u32 type;
-public:
-  ACLGranteeType() : type(ACL_TYPE_UNKNOWN) {}
-  virtual ~ACLGranteeType() {}
-//  virtual const char *to_string() = 0;
-  ACLGranteeTypeEnum get_type() const { return (ACLGranteeTypeEnum)type; }
-  void set(ACLGranteeTypeEnum t) { type = t; }
-//  virtual void set(const char *s) = 0;
-  void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
-    encode(type, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-    decode(type, bl);
-    DECODE_FINISH(bl);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<ACLGranteeType*>& o);
-
-  friend bool operator==(const ACLGranteeType& lhs, const ACLGranteeType& rhs);
-  friend bool operator!=(const ACLGranteeType& lhs, const ACLGranteeType& rhs);
-};
-WRITE_CLASS_ENCODER(ACLGranteeType)
-
-class ACLGrantee
-{
-public:
-  ACLGrantee() {}
-  ~ACLGrantee() {}
-};
-
+#include "rgw_basic_types.h" //includes rgw_acl_types.h
 
 class ACLGrant
 {
@@ -508,5 +412,3 @@ public:
   friend bool operator!=(const RGWAccessControlPolicy& lhs, const RGWAccessControlPolicy& rhs);
 };
 WRITE_CLASS_ENCODER(RGWAccessControlPolicy)
-
-#endif

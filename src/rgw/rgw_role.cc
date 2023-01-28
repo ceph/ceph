@@ -179,6 +179,16 @@ void RGWRole::decode_json(JSONObj *obj)
   info.decode_json(obj);
 }
 
+bool RGWRole::validate_max_session_duration(const DoutPrefixProvider* dpp)
+{
+  if (info.max_session_duration < SESSION_DURATION_MIN ||
+          info.max_session_duration > SESSION_DURATION_MAX) {
+    ldpp_dout(dpp, 0) << "ERROR: Invalid session duration, should be between 3600 and 43200 seconds " << dendl;
+    return false;
+  }
+  return true;
+}
+
 bool RGWRole::validate_input(const DoutPrefixProvider* dpp)
 {
   if (info.name.length() > MAX_ROLE_NAME_LEN) {
@@ -203,9 +213,7 @@ bool RGWRole::validate_input(const DoutPrefixProvider* dpp)
     return false;
   }
 
-  if (info.max_session_duration < SESSION_DURATION_MIN ||
-          info.max_session_duration > SESSION_DURATION_MAX) {
-    ldpp_dout(dpp, 0) << "ERROR: Invalid session duration, should be between 3600 and 43200 seconds " << dendl;
+  if (!validate_max_session_duration(dpp)) {
     return false;
   }
   return true;
@@ -303,6 +311,15 @@ void RGWRole::erase_tags(const vector<string>& tagKeys)
   }
 }
 
+void RGWRole::update_max_session_duration(const std::string& max_session_duration_str)
+{
+  if (max_session_duration_str.empty()) {
+    info.max_session_duration = SESSION_DURATION_MIN;
+  } else {
+    info.max_session_duration = std::stoull(max_session_duration_str);
+  }
+}
+
 const string& RGWRole::get_names_oid_prefix()
 {
   return role_name_oid_prefix;
@@ -318,10 +335,10 @@ const string& RGWRole::get_path_oid_prefix()
   return role_path_oid_prefix;
 }
 
-RGWRoleMetadataHandler::RGWRoleMetadataHandler(Store* store,
+RGWRoleMetadataHandler::RGWRoleMetadataHandler(Driver* driver,
                                               RGWSI_Role_RADOS *role_svc)
 {
-  this->store = store;
+  this->driver = driver;
   base_init(role_svc->ctx(), role_svc->get_be_handler());
 }
 
@@ -337,7 +354,7 @@ RGWMetadataObject *RGWRoleMetadataHandler::get_meta_obj(JSONObj *jo,
     return nullptr;
   }
 
-  return new RGWRoleMetadataObject(info, objv, mtime, store);
+  return new RGWRoleMetadataObject(info, objv, mtime, driver);
 }
 
 int RGWRoleMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
@@ -346,7 +363,7 @@ int RGWRoleMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
                                    optional_yield y,
                                    const DoutPrefixProvider *dpp)
 {
-  std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(entry);
+  std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(entry);
   int ret = role->read_info(dpp, y);
   if (ret < 0) {
     return ret;
@@ -357,7 +374,7 @@ int RGWRoleMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
 
   RGWRoleInfo info = role->get_info();
   RGWRoleMetadataObject *rdo = new RGWRoleMetadataObject(info, objv_tracker.read_version,
-                                                         mtime, store);
+                                                         mtime, driver);
   *obj = rdo;
 
   return 0;
@@ -369,7 +386,7 @@ int RGWRoleMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
                                       optional_yield y,
                                       const DoutPrefixProvider *dpp)
 {
-  std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(entry);
+  std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(entry);
   int ret = role->read_info(dpp, y);
   if (ret < 0) {
     return ret == -ENOENT? 0 : ret;
@@ -399,9 +416,9 @@ public:
   int put_checked(const DoutPrefixProvider *dpp) override {
     auto& info = mdo->get_role_info();
     auto mtime = mdo->get_mtime();
-    auto* store = mdo->get_store();
+    auto* driver = mdo->get_driver();
     info.mtime = mtime;
-    std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(info);
+    std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(info);
     int ret = role->create(dpp, true, info.id, y);
     if (ret == -EEXIST) {
       ret = role->update(dpp, y);

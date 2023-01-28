@@ -111,7 +111,6 @@ class FailoverSuitePeer : public Dispatcher {
     peer_msgr->set_default_policy(policy);
     peer_msgr->set_auth_client(&dummy_auth);
     peer_msgr->set_auth_server(&dummy_auth);
-    peer_msgr->set_require_authorizer(false);
     peer_msgr->bind(test_peer_addr);
     peer_msgr->add_dispatcher_head(this);
     peer_msgr->start();
@@ -368,7 +367,6 @@ class FailoverTestPeer : public Dispatcher {
     cmd_msgr->set_default_policy(Messenger::Policy::stateless_server(0));
     cmd_msgr->set_auth_client(&dummy_auth);
     cmd_msgr->set_auth_server(&dummy_auth);
-    cmd_msgr->set_require_authorizer(false);
     cmd_msgr->bind(cmd_peer_addr);
     cmd_msgr->add_dispatcher_head(this);
     cmd_msgr->start();
@@ -431,6 +429,7 @@ int main(int argc, char** argv)
   auto addr = vm["addr"].as<std::string>();
   entity_addr_t cmd_peer_addr;
   cmd_peer_addr.parse(addr.c_str(), nullptr);
+  ceph_assert_always(cmd_peer_addr.is_msgr2());
   auto nonstop = vm["nonstop"].as<bool>();
 
   std::vector<const char*> args(argv, argv + argc);
@@ -439,8 +438,6 @@ int main(int argc, char** argv)
                          CODE_ENVIRONMENT_UTILITY,
                          CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(cct.get());
-  cct->_conf.set_val("ms_crc_header", "false");
-  cct->_conf.set_val("ms_crc_data", "false");
 
   auto test_peer = FailoverTestPeer::create(cct.get(), cmd_peer_addr, nonstop);
   test_peer->wait();

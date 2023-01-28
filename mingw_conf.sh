@@ -3,8 +3,8 @@
 # and directories must be determined (or defined) prior to building.
 
 # This script expects the following variables:
-# * OS - currently ubuntu or suse. In the future we may attempt to detect the
-#        platform.
+# * OS - currently ubuntu, rhel, or suse. In the future we may attempt to
+#   detect the platform.
 # * MINGW_CMAKE_FILE - if set, a cmake toolchain file will be created
 # * MINGW_POSIX_FLAGS - if set, Mingw Posix compatibility mode will be
 #                       enabled by defining the according flags.
@@ -27,6 +27,15 @@ case "$OS" in
         mingwLibpthreadDir="/usr/${MINGW_BASE}/lib"
         PTW32Include=/usr/share/mingw-w64/include
         PTW32Lib=/usr/x86_64-w64-mingw32/lib
+       ;;
+    rhel)
+        mingwPosix=""
+        mingwLibDir="/usr/lib64/gcc"
+        mingwVersion="$(${MINGW_CPP}${mingwPosix} -dumpversion)"
+        mingwTargetLibDir="/usr/${MINGW_BASE}/sys-root/mingw/bin"
+        mingwLibpthreadDir="$mingwTargetLibDir"
+        PTW32Include=/usr/x86_64-w64-mingw32/sys-root/mingw/include
+        PTW32Lib=/usr/x86_64-w64-mingw32/sys-root/mingw/lib
        ;;
     suse)
         mingwPosix=""

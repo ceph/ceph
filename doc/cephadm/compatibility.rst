@@ -8,11 +8,10 @@ Compatibility and Stability
 Compatibility with Podman Versions
 ----------------------------------
 
-Podman and Ceph have different end-of-life strategies that
-might make it challenging to find compatible Podman and Ceph 
-versions
+Podman and Ceph have different end-of-life strategies. This means that care
+must be taken in finding a version of Podman that is compatible with Ceph.
 
-Those versions are expected to work:
+These versions are expected to work:
 
 
 +-----------+---------------------------------------+
@@ -28,7 +27,13 @@ Those versions are expected to work:
 +-----------+-------+-------+-------+-------+-------+
 
 .. warning:: 
-  Only podman versions that are 2.0.0 and higher work with Ceph Pacific, with the exception of podman version 2.2.1, which does not work with Ceph Pacific. kubic stable is known to work with Ceph Pacific, but it must be run with a newer kernel.
+
+   To use Podman with Ceph Pacific, you must use **a version of Podman that
+   is 2.0.0 or higher**. However, **Podman version 2.2.1 does not work with
+   Ceph Pacific**.
+   
+   "Kubic stable" is known to work with Ceph Pacific, but it must be run
+   with a newer kernel.
 
 
 .. _cephadm-stability:
@@ -36,19 +41,18 @@ Those versions are expected to work:
 Stability
 ---------
 
-Cephadm is actively in development. Please be aware that some
-functionality is still rough around the edges. Especially the 
-following components are working with cephadm, but the
-documentation is not as complete as we would like, and there may be some
-changes in the near future:
+Cephadm is under development. Some functionality is incomplete. Be aware
+that some of the components of Ceph may not work perfectly with cephadm.
+These include:
 
 - RGW
 
-Cephadm support for the following features is still under development and may see breaking
-changes in future releases:
+Cephadm support remains under development for the following features:
 
 - Ingress
 - Cephadm exporter daemon
 - cephfs-mirror
 
-In case you encounter issues, see also :ref:`cephadm-pause`.
+If a cephadm command fails or a service stops running properly, see
+:ref:`cephadm-pause` for instructions on how to pause the Ceph cluster's
+background activity and how to disable cephadm.

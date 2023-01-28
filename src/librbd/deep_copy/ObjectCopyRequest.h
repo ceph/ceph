@@ -116,6 +116,7 @@ private:
   std::string m_dst_oid;
 
   io::Extents m_image_extents;
+  io::ImageArea m_image_area = io::ImageArea::DATA;
 
   io::SnapshotDelta m_snapshot_delta;
 

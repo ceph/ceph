@@ -1,19 +1,19 @@
 <div class="container-fluid">
   <div class="row">
-    <div class="col d-flex justify-content-end">
-      <form class="form-inline">
+    <form>
+      <div class="col-sm-1 d-flex float-end">
         <label for="refreshInterval"
-               class="col-form-label my-0 mx-2"
+               class="col-form-label my-0 mx-2 float-end"
                i18n>Refresh</label>
         <select id="refreshInterval"
                 name="refreshInterval"
-                class="form-control"
+                class="form-select float-end"
                 (change)="changeRefreshInterval($event.target.value)"
                 [(ngModel)]="selectedInterval">
           <option *ngFor="let key of intervalKeys"
                   [value]="intervalList[key]">{{ key }}</option>
         </select>
-      </form>
-    </div>
+      </div>
+    </form>
   </div>
 </div>

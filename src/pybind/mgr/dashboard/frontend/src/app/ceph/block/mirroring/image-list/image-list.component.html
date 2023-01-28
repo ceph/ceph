@@ -1,8 +1,8 @@
-<ul ngbNav
-    #nav="ngbNav"
-    class="nav-tabs"
-    cdStatefulTab="image-list">
-  <li ngbNavItem="issues">
+<nav ngbNav
+     #nav="ngbNav"
+     class="nav-tabs"
+     cdStatefulTab="image-list">
+  <ng-container ngbNavItem="issues">
     <a ngbNavLink
        i18n>Issues ({{ image_error.data.length }})</a>
     <ng-template ngbNavContent>
@@ -14,8 +14,8 @@
                 [status]="tableStatus">
       </cd-table>
     </ng-template>
-  </li>
-  <li ngbNavItem="syncing">
+  </ng-container>
+  <ng-container ngbNavItem="syncing">
     <a ngbNavLink
        i18n>Syncing ({{ image_syncing.data.length }})</a>
     <ng-template ngbNavContent>
@@ -27,8 +27,8 @@
                 [status]="tableStatus">
       </cd-table>
     </ng-template>
-  </li>
-  <li ngbNavItem="ready">
+  </ng-container>
+  <ng-container ngbNavItem="ready">
     <a ngbNavLink
        i18n>Ready ({{ image_ready.data.length }})</a>
     <ng-template ngbNavContent>
@@ -40,8 +40,8 @@
                 [status]="tableStatus">
       </cd-table>
     </ng-template>
-  </li>
-</ul>
+  </ng-container>
+</nav>
 
 <div [ngbNavOutlet]="nav"></div>
 

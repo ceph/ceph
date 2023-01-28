@@ -45,6 +45,7 @@ public:
 
     void dump_detail(Formatter *f) const final;
   };
+  using Blocker = OSDMapBlocker;
 
 private:
   // order the promises in ascending order of the waited osdmap epoch,
@@ -55,19 +56,23 @@ private:
   const char *blocker_type;
   waiting_peering_t waiting_peering;
   epoch_t current = 0;
-  std::optional<std::reference_wrapper<ShardServices>> shard_services;
   bool stopping = false;
 public:
-  OSDMapGate(
-    const char *blocker_type,
-    std::optional<std::reference_wrapper<ShardServices>> shard_services)
-    : blocker_type(blocker_type), shard_services(shard_services) {}
+  OSDMapGate(const char *blocker_type)
+    : blocker_type(blocker_type) {}
 
-  // wait for an osdmap whose epoch is greater or equal to given epoch
-  // TODO: define me!
+  /**
+   * wait_for_map
+   *
+   * Wait for an osdmap whose epoch is greater or equal to given epoch.
+   * If shard_services is non-null, request map if not present.
+   */
   seastar::future<epoch_t>
-  wait_for_map(typename OSDMapBlocker::BlockingEvent::TriggerI&& trigger,
-	       epoch_t epoch);
+  wait_for_map(
+    typename OSDMapBlocker::BlockingEvent::TriggerI&& trigger,
+    epoch_t epoch,
+    ShardServices *shard_services=nullptr
+  );
   void got_map(epoch_t epoch);
   seastar::future<> stop();
 };

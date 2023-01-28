@@ -296,9 +296,10 @@ def start_clone_sm(fs_client, volspec, volname, index, groupname, subvolname, st
                                                                                          current_state, next_state))
                 set_clone_state(fs_client, volspec, volname, groupname, subvolname, next_state)
                 current_state = next_state
-    except VolumeException as ve:
-        log.error("clone failed for ({0}, {1}, {2}) (current_state: {3}, reason: {4})".format(volname, groupname,\
-                                                                                             subvolname, current_state, ve))
+    except (MetadataMgrException, VolumeException) as e:
+        log.error(f"clone failed for ({volname}, {groupname}, {subvolname}) "
+                  f"(current_state: {current_state}, reason: {e} {os.strerror(-e.args[0])})")
+        raise
 
 def clone(fs_client, volspec, volname, index, clone_path, state_table, should_cancel, snapshot_clone_delay):
     log.info("cloning to subvolume path: {0}".format(clone_path))
@@ -312,8 +313,8 @@ def clone(fs_client, volspec, volname, index, clone_path, state_table, should_ca
         log.info("starting clone: ({0}, {1}, {2})".format(volname, groupname, subvolname))
         start_clone_sm(fs_client, volspec, volname, index, groupname, subvolname, state_table, should_cancel, snapshot_clone_delay)
         log.info("finished clone: ({0}, {1}, {2})".format(volname, groupname, subvolname))
-    except VolumeException as ve:
-        log.error("clone failed for ({0}, {1}, {2}), reason: {3}".format(volname, groupname, subvolname, ve))
+    except (MetadataMgrException, VolumeException) as e:
+        log.error(f"clone failed for ({volname}, {groupname}, {subvolname}), reason: {e} {os.strerror(-e.args[0])}")
 
 class Cloner(AsyncJobs):
     """

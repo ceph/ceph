@@ -23,48 +23,7 @@ TEST(intarith, cbits) {
   ASSERT_EQ(64u, cbits(0xffffffffffffffff));
 }
 
-TEST(intarith, clz) {
-  ASSERT_EQ(32u, clz(UINT32_C(0)));
-  ASSERT_EQ(31u, clz(UINT32_C(1)));
-  ASSERT_EQ(30u, clz(UINT32_C(2)));
-  ASSERT_EQ(30u, clz(UINT32_C(3)));
-  ASSERT_EQ(29u, clz(UINT32_C(4)));
-  ASSERT_EQ(64u, clz(UINT64_C(0)));
-  ASSERT_EQ(63u, clz(UINT64_C(1)));
-  ASSERT_EQ(62u, clz(UINT64_C(2)));
-  ASSERT_EQ(62u, clz(UINT64_C(3)));
-  ASSERT_EQ(61u, clz(UINT64_C(4)));
-  ASSERT_EQ(23u, clz(UINT32_C(0x100)));
-  ASSERT_EQ(55u, clz(UINT64_C(0x100)));
-  ASSERT_EQ(0u, clz(0xffffffff));
-  ASSERT_EQ(32u, clz(UINT64_C(0xffffffff)));
-  ASSERT_EQ(0u, clz(UINT64_C(0xffffffffffffffff)));
-}
-
-TEST(intarith, ctz) {
-  ASSERT_EQ(32u, ctz(0));
-  ASSERT_EQ(0u, ctz(1));
-  ASSERT_EQ(1u, ctz(2));
-  ASSERT_EQ(0u, ctz(3));
-  ASSERT_EQ(2u, ctz(4));
-  ASSERT_EQ(64u, ctz(UINT64_C(0)));
-  ASSERT_EQ(0u, ctz(UINT64_C(1)));
-  ASSERT_EQ(1u, ctz(UINT64_C(2)));
-  ASSERT_EQ(0u, ctz(UINT64_C(3)));
-  ASSERT_EQ(2u, ctz(UINT64_C(4)));
-  ASSERT_EQ(8u, ctz(0x100));
-  ASSERT_EQ(8u, ctz(UINT64_C(0x100)));
-  ASSERT_EQ(0u, ctz(0xffffffff));
-  ASSERT_EQ(0u, ctz(UINT32_C(0xffffffff)));
-  ASSERT_EQ(0u, ctz(UINT64_C(0xffffffff)));
-  ASSERT_EQ(20u, ctz(UINT64_C(0xffffffff00000)));
-  ASSERT_EQ(48u, ctz(UINT64_C(0xff000000000000)));
-}
-
 TEST(intarith, p2family) {
-  ASSERT_TRUE(isp2(0x100));
-  ASSERT_FALSE(isp2(0x1234));
-
   ASSERT_EQ(1024, p2align(1200, 1024));
   ASSERT_EQ(1024, p2align(1024, 1024));
   ASSERT_EQ(0x1200, p2align(0x1234, 0x100));
@@ -78,23 +37,4 @@ TEST(intarith, p2family) {
 
   ASSERT_EQ(0x1300, p2roundup(0x1234, 0x100));
   ASSERT_EQ(0x5600, p2roundup(0x5600, 0x100));
-}
-
-TEST(intarith, popcount) {
-  // char, unsigned char
-  EXPECT_EQ(0, popcount((char)(0)));
-  EXPECT_EQ(1, popcount((unsigned char)(1)));
-  // short, unsigned short
-  EXPECT_EQ(1, popcount((short)0b10));
-  EXPECT_EQ(2, popcount((unsigned char)(0b11U)));
-  // int, unsigned int
-  EXPECT_EQ(sizeof(int) * CHAR_BIT, popcount(-1));
-  EXPECT_EQ(0, popcount(0));
-  EXPECT_EQ(1, popcount(0b10U));
-  // long, unsigned long
-  EXPECT_EQ(1, popcount(0b1000'0000'0000'0000L));
-  EXPECT_EQ(3, popcount(0b1100'1000'0000'0000UL));
-  // long long, unsigned long long
-  EXPECT_EQ(4, popcount(0x1111'0000LL));
-  EXPECT_EQ(1, popcount(0x1000'0000ULL));
 }

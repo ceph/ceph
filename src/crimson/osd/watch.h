@@ -34,7 +34,7 @@ class Watch : public seastar::enable_shared_from_this<Watch> {
   struct private_ctag_t{};
 
   std::set<NotifyRef, std::less<>> in_progress_notifies;
-  crimson::net::ConnectionRef conn;
+  crimson::net::ConnectionFRef conn;
   crimson::osd::ObjectContextRef obc;
 
   watch_info_t winfo;
@@ -67,7 +67,7 @@ public:
   }
   ~Watch();
 
-  seastar::future<> connect(crimson::net::ConnectionRef, bool);
+  seastar::future<> connect(crimson::net::ConnectionFRef, bool);
   bool is_alive() const {
     return true;
   }
@@ -118,7 +118,7 @@ std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs);
 class Notify : public seastar::enable_shared_from_this<Notify> {
   std::set<WatchRef> watchers;
   const notify_info_t ninfo;
-  crimson::net::ConnectionRef conn;
+  crimson::net::ConnectionFRef conn;
   const uint64_t client_gid;
   const uint64_t user_version;
   bool complete{false};
@@ -139,14 +139,14 @@ class Notify : public seastar::enable_shared_from_this<Notify> {
   /// Called on Notify timeout
   void do_notify_timeout();
 
-  Notify(crimson::net::ConnectionRef conn,
+  Notify(crimson::net::ConnectionFRef conn,
          const notify_info_t& ninfo,
          const uint64_t client_gid,
          const uint64_t user_version);
   template <class WatchIteratorT>
   Notify(WatchIteratorT begin,
          WatchIteratorT end,
-         crimson::net::ConnectionRef conn,
+         crimson::net::ConnectionFRef conn,
          const notify_info_t& ninfo,
          const uint64_t client_gid,
          const uint64_t user_version);
@@ -192,7 +192,7 @@ public:
 template <class WatchIteratorT>
 Notify::Notify(WatchIteratorT begin,
                WatchIteratorT end,
-               crimson::net::ConnectionRef conn,
+               crimson::net::ConnectionFRef conn,
                const notify_info_t& ninfo,
                const uint64_t client_gid,
                const uint64_t user_version)
@@ -235,3 +235,7 @@ seastar::future<> Notify::create_n_propagate(
 } // namespace crimson::osd
 
 WRITE_CLASS_DENC(crimson::osd::notify_reply_t)
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::notify_reply_t> : fmt::ostream_formatter {};
+#endif

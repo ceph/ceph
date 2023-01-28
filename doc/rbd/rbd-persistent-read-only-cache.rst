@@ -50,29 +50,30 @@ Introduction and Generic Settings
 ---------------------------------
 
 The ``ceph-immutable-object-cache`` daemon is responsible for caching parent
-image content within its local caching directory. For better performance it's
-recommended to use SSDs as the underlying storage.
+image content within its local caching directory. Using SSDs as the underlying
+storage is recommended because doing so provides better performance. 
 
 The key components of the daemon are:
 
-#. **Domain socket based IPC:** The daemon will listen on a local domain
-   socket on start up and wait for connections from librbd clients.
+#. **Domain socket based IPC:** The daemon listens on a local domain socket at 
+   startup and waits for connections from librbd clients.
 
-#. **LRU based promotion/demotion policy:** The daemon will maintain
-   in-memory statistics of cache-hits on each cache file. It will demote the
-   cold cache if capacity reaches to the configured threshold.
+#. **LRU based promotion/demotion policy:** The daemon maintains in-memory
+   statistics of cache hits for each cache file. It demotes the cold cache
+   if capacity reaches the configured threshold.
 
-#. **File-based caching store:** The daemon will maintain a simple file
-   based cache store. On promotion the RADOS objects will be fetched from
-   RADOS cluster and stored in the local caching directory.
+#. **File-based caching store:** The daemon maintains a simple file-based cache
+   store. On promotion, the RADOS objects are fetched from RADOS cluster and
+   stored in the local caching directory.
 
-On opening each cloned rbd image, ``librbd`` will try to connect to the
-cache daemon through its Unix domain socket. Once successfully connected,
-``librbd`` will coordinate with the daemon on the subsequent reads.
-If there's a read that's not cached, the daemon will promote the RADOS object
-to local caching directory, so the next read on that object will be serviced
-from cache. The daemon also maintains simple LRU statistics so that under
-capacity pressure it will evict cold cache files as needed.
+When each cloned RBD image is opened, ``librbd`` tries to connect to the cache
+daemon through its Unix domain socket. After ``librbd`` is successfully
+connected, it coordinates with the daemon upon every subsequent read. In the
+case of an uncached read, the daemon promotes the RADOS object to the local
+caching directory and the next read of the object is serviced from the cache.
+The daemon maintains simple LRU statistics, which are used to evict cold cache
+files when required (for example, when the cache is at capacity and under
+pressure). 
 
 Here are some important cache configuration settings:
 

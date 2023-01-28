@@ -16,7 +16,6 @@
 #include "rgw_sal_rados.h"
 
 #include "services/svc_zone.h"
-#include "services/svc_sys_obj.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -1171,9 +1170,7 @@ int RGWRadosList::process_bucket(
     ", entries_filter.size=" << entries_filter.size() << dendl;
 
   RGWBucketInfo bucket_info;
-  RGWSysObjectCtx sys_obj_ctx = store->svc()->sysobj->init_obj_ctx();
-  int ret = store->getRados()->get_bucket_instance_info(sys_obj_ctx,
-							bucket_instance_id,
+  int ret = store->getRados()->get_bucket_instance_info(bucket_instance_id,
 							bucket_info,
 							nullptr,
 							nullptr,

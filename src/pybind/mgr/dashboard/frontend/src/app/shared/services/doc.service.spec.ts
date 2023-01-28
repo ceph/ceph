@@ -26,8 +26,8 @@ describe('DocService', () => {
     );
   });
 
-  it('should return latest version URL for master', () => {
-    expect(service.urlGenerator('orch', 'master')).toBe(
+  it('should return latest version URL for main', () => {
+    expect(service.urlGenerator('orch', 'main')).toBe(
       'https://docs.ceph.com/en/latest/mgr/orchestrator'
     );
   });

@@ -20,8 +20,9 @@
 
 #include "include/rados/librgw.h"
 #include "include/rados/rgw_file.h"
-#include "rgw/rgw_file.h"
-#include "rgw/rgw_lib_frontend.h" // direct requests
+#include "rgw_file.h"
+#include "rgw_lib.h"
+#include "rgw_lib_frontend.h" // direct requests
 
 #include "gtest/gtest.h"
 #include "common/ceph_argparse.h"
@@ -31,6 +32,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
+using namespace rgw; // g_rgwlib
 
 namespace {
 
@@ -259,9 +261,9 @@ TEST(LibRGW, SETUP_HIER1)
 		    << std::endl;
 	}
 	RGWPutObjRequest req(cct,
-			     rgwlib.get_store()->get_user(fs_private->get_user()->user_id),
+			     g_rgwlib->get_driver()->get_user(fs_private->get_user()->user_id),
 			     bucket_name, obj_name, bl);
-	int rc = rgwlib.get_fe()->execute_req(&req);
+	int rc = g_rgwlib->get_fe()->execute_req(&req);
 	int rc2 = req.get_ret();
 	ASSERT_EQ(rc, 0);
 	ASSERT_EQ(rc2, 0);
@@ -871,7 +873,7 @@ TEST(LibRGW, RELEASE_DIRS1) {
 }
 
 extern "C" {
-  static bool r1_cb(const char* name, void *arg, uint64_t offset,
+  static int r1_cb(const char* name, void *arg, uint64_t offset,
 		    struct stat* st, uint32_t st_mask,
 		    uint32_t flags) {
     struct rgw_file_handle* parent_fh
@@ -1029,7 +1031,7 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
 }
 
 extern "C" {
-  static bool r2_cb(const char* name, void *arg, uint64_t offset,
+  static int r2_cb(const char* name, void *arg, uint64_t offset,
 		    struct stat* st, uint32_t st_mask,
 		    uint32_t flags) {
     dirent_vec& dvec =

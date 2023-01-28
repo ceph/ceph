@@ -22,11 +22,11 @@
             </div>
 
             <p class="card-text text-muted">
-              <small class="date float-left">
+              <small class="date float-start">
                 {{ executingTask.begin_time | cdDate }}
               </small>
 
-              <span class="float-right">
+              <span class="float-end">
                 {{ executingTask.progress || 0 }} %
               </span>
             </p>
@@ -65,12 +65,27 @@
           </div>
           <div class="col-md-10">
             <div class="card-body p-1">
-              <button class="btn btn-link float-right mt-0 pt-0"
+              <button class="btn btn-link float-end mt-0 pt-0"
                       title="Remove notification"
                       i18n-title
                       (click)="remove(i); $event.stopPropagation()">
                 <i [ngClass]="[icons.trash]"></i>
               </button>
+              <button *ngIf="notification.application === 'Prometheus' && notification.type !== 2 && !notification.alertSilenced"
+                      class="btn btn-link float-end text-muted mute m-0 p-0"
+                      title="Silence Alert"
+                      i18n-title
+                      (click)="silence(notification)">
+                <i [ngClass]="[icons.mute]"></i>
+              </button>
+              <button *ngIf="notification.application === 'Prometheus' && notification.type !== 2 && notification.alertSilenced"
+                      class="btn btn-link float-end text-muted mute m-0 p-0"
+                      title="Expire Silence"
+                      i18n-title
+                      (click)="expire(notification)">
+                <i [ngClass]="[icons.bell]"></i>
+              </button>
+
 
               <h6 class="card-title bold">{{ notification.title }}</h6>
               <p class="card-text"
@@ -84,7 +99,7 @@
                 </ng-container>
                 <small class="date"
                        [title]="notification.timestamp | cdDate">{{ notification.timestamp | relativeDate }}</small>
-                <i class="float-right custom-icon"
+                <i class="float-end custom-icon"
                    [ngClass]="[notification.applicationClass]"
                    [title]="notification.application"></i>
               </p>
@@ -111,13 +126,11 @@
   <div class="card-header">
     <ng-container i18n>Tasks and Notifications</ng-container>
 
-    <button class="close float-right"
+    <button class="btn-close float-end"
             tabindex="-1"
             type="button"
+            title="close"
             (click)="closeSidebar()">
-      <span>
-        <i [ngClass]="icons.close"></i>
-      </span>
     </button>
   </div>
 

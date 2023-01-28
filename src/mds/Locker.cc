@@ -1925,8 +1925,13 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
       }
 
       if (!lock->is_stable() && (lock->get_state() != LOCK_XLOCKDONE ||
-				 lock->get_xlock_by_client() != client ||
-				 lock->is_waiter_for(SimpleLock::WAIT_STABLE)))
+                                lock->get_xlock_by_client() != client ||
+                                lock->is_waiter_for(SimpleLock::WAIT_STABLE)))
+	break;
+      // Avoid unstable XLOCKDONE state reset,
+      // see: https://tracker.ceph.com/issues/49132
+      if (lock->get_state() == LOCK_XLOCKDONE &&
+          lock->get_type() == CEPH_LOCK_IFILE)
 	break;
 
       if (lock->get_state() == LOCK_LOCK || lock->get_state() == LOCK_XLOCKDONE) {

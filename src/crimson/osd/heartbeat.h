@@ -29,8 +29,8 @@ public:
   Heartbeat(osd_id_t whoami,
             const crimson::osd::ShardServices& service,
 	    crimson::mon::Client& monc,
-	    crimson::net::MessengerRef front_msgr,
-	    crimson::net::MessengerRef back_msgr);
+	    crimson::net::Messenger &front_msgr,
+	    crimson::net::Messenger &back_msgr);
 
   seastar::future<> start(entity_addrvec_t front,
 			  entity_addrvec_t back);
@@ -45,9 +45,8 @@ public:
   const entity_addrvec_t& get_front_addrs() const;
   const entity_addrvec_t& get_back_addrs() const;
 
-  crimson::net::MessengerRef get_front_msgr() const;
-  crimson::net::MessengerRef get_back_msgr() const;
-  void set_require_authorizer(bool);
+  crimson::net::Messenger &get_front_msgr() const;
+  crimson::net::Messenger &get_back_msgr() const;
 
   // Dispatcher methods
   std::optional<seastar::future<>> ms_dispatch(
@@ -78,8 +77,8 @@ private:
   const osd_id_t whoami;
   const crimson::osd::ShardServices& service;
   crimson::mon::Client& monc;
-  crimson::net::MessengerRef front_msgr;
-  crimson::net::MessengerRef back_msgr;
+  crimson::net::Messenger &front_msgr;
+  crimson::net::Messenger &back_msgr;
 
   seastar::timer<seastar::lowres_clock> timer;
   // use real_clock so it can be converted to utime_t
@@ -246,6 +245,10 @@ class Heartbeat::Connection {
    }
  }
 };
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<Heartbeat::Connection> : fmt::ostream_formatter {};
+#endif
 
 /*
  * Track the ping history and ping reply (the pong) from the same session, clean up
@@ -455,3 +458,7 @@ class Heartbeat::Peer final : private Heartbeat::ConnectionListener {
   Connection con_front;
   Connection con_back;
 };
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<Heartbeat> : fmt::ostream_formatter {};
+#endif

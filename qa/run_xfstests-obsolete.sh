@@ -33,7 +33,7 @@ PROGNAME=$(basename $0)
 
 # xfstests is downloaded from this git repository and then built.
 # XFSTESTS_REPO="git://oss.sgi.com/xfs/cmds/xfstests.git"
-XFSTESTS_REPO="git://git.ceph.com/xfstests.git"
+XFSTESTS_REPO="git://git.kernel.org/pub/scm/fs/xfs/xfstests-dev.git"
 
 # Default command line option values
 COUNT="1"
@@ -277,7 +277,7 @@ function install_xfstests() {
 
 	git clone "${XFSTESTS_REPO}"
 
-	cd xfstests
+	cd xfstests-dev
 
 	# FIXME: use an older version before the tests were rearranged!
 	git reset --hard e5f1a13792f20cfac097fef98007610b422f2cac
@@ -296,7 +296,7 @@ function install_xfstests() {
 function remove_xfstests() {
 	arg_count 0 $#
 
-	rm -rf "${TESTDIR}/xfstests"
+	rm -rf "${TESTDIR}/xfstests-dev"
 	rm -rf "${XFSTESTS_DIR}"
 }
 

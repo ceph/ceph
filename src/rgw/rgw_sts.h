@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_STS_H
-#define CEPH_RGW_STS_H
+#pragma once
 
 #include "rgw_role.h"
 #include "rgw_auth.h"
@@ -115,7 +114,7 @@ class AssumedRoleUser {
   std::string assumeRoleId;
 public:
   int generateAssumedRoleUser( CephContext* cct,
-                                rgw::sal::Store* store,
+                                rgw::sal::Driver* driver,
                                 const std::string& roleId,
                                 const rgw::ARN& roleArn,
                                 const std::string& roleSessionName);
@@ -235,20 +234,19 @@ using AssumeRoleWithWebIdentityResponse = struct AssumeRoleWithWebIdentityRespon
 
 class STSService {
   CephContext* cct;
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   rgw_user user_id;
   std::unique_ptr<rgw::sal::RGWRole> role;
   rgw::auth::Identity* identity;
   int storeARN(const DoutPrefixProvider *dpp, std::string& arn, optional_yield y);
 public:
   STSService() = default;
-  STSService(CephContext* cct, rgw::sal::Store* store, rgw_user user_id,
+  STSService(CephContext* cct, rgw::sal::Driver* driver, rgw_user user_id,
 	     rgw::auth::Identity* identity)
-    : cct(cct), store(store), user_id(user_id), identity(identity) {}
+    : cct(cct), driver(driver), user_id(user_id), identity(identity) {}
   std::tuple<int, rgw::sal::RGWRole*> getRoleInfo(const DoutPrefixProvider *dpp, const std::string& arn, optional_yield y);
   AssumeRoleResponse assumeRole(const DoutPrefixProvider *dpp, AssumeRoleRequest& req, optional_yield y);
   GetSessionTokenResponse getSessionToken(const DoutPrefixProvider *dpp, GetSessionTokenRequest& req);
   AssumeRoleWithWebIdentityResponse assumeRoleWithWebIdentity(const DoutPrefixProvider *dpp, AssumeRoleWithWebIdentityRequest& req);
 };
 }
-#endif /* CEPH_RGW_STS_H */

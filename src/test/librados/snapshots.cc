@@ -1,6 +1,7 @@
 #include "include/rados.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
+#include "crimson_utils.h"
 
 #include <algorithm>
 #include <errno.h>
@@ -17,6 +18,7 @@ typedef RadosTestEC LibRadosSnapshotsSelfManagedEC;
 const int bufsize = 128;
 
 TEST_F(LibRadosSnapshots, SnapList) {
+  SKIP_IF_CRIMSON();
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -31,6 +33,7 @@ TEST_F(LibRadosSnapshots, SnapList) {
 }
 
 TEST_F(LibRadosSnapshots, SnapRemove) {
+  SKIP_IF_CRIMSON();
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -43,6 +46,7 @@ TEST_F(LibRadosSnapshots, SnapRemove) {
 }
 
 TEST_F(LibRadosSnapshots, Rollback) {
+  SKIP_IF_CRIMSON();
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -58,6 +62,7 @@ TEST_F(LibRadosSnapshots, Rollback) {
 }
 
 TEST_F(LibRadosSnapshots, SnapGetName) {
+  SKIP_IF_CRIMSON();
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -75,6 +80,7 @@ TEST_F(LibRadosSnapshots, SnapGetName) {
 }
 
 TEST_F(LibRadosSnapshotsSelfManaged, Snap) {
+  SKIP_IF_CRIMSON();
   std::vector<uint64_t> my_snaps;
   my_snaps.push_back(-2);
   ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
@@ -121,6 +127,7 @@ TEST_F(LibRadosSnapshotsSelfManaged, Snap) {
 }
 
 TEST_F(LibRadosSnapshotsSelfManaged, Rollback) {
+  SKIP_IF_CRIMSON();
   std::vector<uint64_t> my_snaps;
   my_snaps.push_back(-2);
   ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
@@ -155,6 +162,7 @@ TEST_F(LibRadosSnapshotsSelfManaged, Rollback) {
 
 // EC testing
 TEST_F(LibRadosSnapshotsEC, SnapList) {
+  SKIP_IF_CRIMSON();
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -169,6 +177,7 @@ TEST_F(LibRadosSnapshotsEC, SnapList) {
 }
 
 TEST_F(LibRadosSnapshotsEC, SnapRemove) {
+  SKIP_IF_CRIMSON();
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -181,6 +190,7 @@ TEST_F(LibRadosSnapshotsEC, SnapRemove) {
 }
 
 TEST_F(LibRadosSnapshotsEC, Rollback) {
+  SKIP_IF_CRIMSON();
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -196,6 +206,7 @@ TEST_F(LibRadosSnapshotsEC, Rollback) {
 }
 
 TEST_F(LibRadosSnapshotsEC, SnapGetName) {
+  SKIP_IF_CRIMSON();
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -213,6 +224,7 @@ TEST_F(LibRadosSnapshotsEC, SnapGetName) {
 }
 
 TEST_F(LibRadosSnapshotsSelfManagedEC, Snap) {
+  SKIP_IF_CRIMSON();
   std::vector<uint64_t> my_snaps;
   my_snaps.push_back(-2);
   ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
@@ -263,6 +275,7 @@ TEST_F(LibRadosSnapshotsSelfManagedEC, Snap) {
 }
 
 TEST_F(LibRadosSnapshotsSelfManagedEC, Rollback) {
+  SKIP_IF_CRIMSON();
   std::vector<uint64_t> my_snaps;
   my_snaps.push_back(-2);
   ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));

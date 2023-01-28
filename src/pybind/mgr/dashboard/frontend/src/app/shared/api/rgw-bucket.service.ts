@@ -50,7 +50,10 @@ export class RgwBucketService extends ApiClient {
     placementTarget: string,
     lockEnabled: boolean,
     lock_mode: 'GOVERNANCE' | 'COMPLIANCE',
-    lock_retention_period_days: string
+    lock_retention_period_days: string,
+    encryption_state: boolean,
+    encryption_type: string,
+    key_id: string
   ) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       return this.http.post(this.url, null, {
@@ -63,6 +66,9 @@ export class RgwBucketService extends ApiClient {
             lock_enabled: String(lockEnabled),
             lock_mode,
             lock_retention_period_days,
+            encryption_state: String(encryption_state),
+            encryption_type,
+            key_id,
             daemon_name: params.get('daemon_name')
           }
         })
@@ -75,6 +81,9 @@ export class RgwBucketService extends ApiClient {
     bucketId: string,
     uid: string,
     versioningState: string,
+    encryptionState: boolean,
+    encryptionType: string,
+    keyId: string,
     mfaDelete: string,
     mfaTokenSerial: string,
     mfaTokenPin: string,
@@ -82,14 +91,19 @@ export class RgwBucketService extends ApiClient {
     lockRetentionPeriodDays: string
   ) {
     return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.append('bucket_id', bucketId);
-      params = params.append('uid', uid);
-      params = params.append('versioning_state', versioningState);
-      params = params.append('mfa_delete', mfaDelete);
-      params = params.append('mfa_token_serial', mfaTokenSerial);
-      params = params.append('mfa_token_pin', mfaTokenPin);
-      params = params.append('lock_mode', lockMode);
-      params = params.append('lock_retention_period_days', lockRetentionPeriodDays);
+      params = params.appendAll({
+        bucket_id: bucketId,
+        uid: uid,
+        versioning_state: versioningState,
+        encryption_state: String(encryptionState),
+        encryption_type: encryptionType,
+        key_id: keyId,
+        mfa_delete: mfaDelete,
+        mfa_token_serial: mfaTokenSerial,
+        mfa_token_pin: mfaTokenPin,
+        lock_mode: lockMode,
+        lock_retention_period_days: lockRetentionPeriodDays
+      });
       return this.http.put(`${this.url}/${bucket}`, null, { params: params });
     });
   }
@@ -124,5 +138,56 @@ export class RgwBucketService extends ApiClient {
     }
 
     return bucketData['lock_retention_period_days'] || 0;
+  }
+
+  setEncryptionConfig(
+    encryption_type: string,
+    kms_provider: string,
+    auth_method: string,
+    secret_engine: string,
+    secret_path: string,
+    namespace: string,
+    address: string,
+    token: string,
+    owner: string,
+    ssl_cert: string,
+    client_cert: string,
+    client_key: string
+  ) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        encryption_type: encryption_type,
+        kms_provider: kms_provider,
+        auth_method: auth_method,
+        secret_engine: secret_engine,
+        secret_path: secret_path,
+        namespace: namespace,
+        address: address,
+        token: token,
+        owner: owner,
+        ssl_cert: ssl_cert,
+        client_cert: client_cert,
+        client_key: client_key
+      });
+      return this.http.put(`${this.url}/setEncryptionConfig`, null, { params: params });
+    });
+  }
+
+  getEncryption(bucket: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`${this.url}/${bucket}/getEncryption`, { params: params });
+    });
+  }
+
+  deleteEncryption(bucket: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`${this.url}/${bucket}/deleteEncryption`, { params: params });
+    });
+  }
+
+  getEncryptionConfig() {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`${this.url}/getEncryptionConfig`, { params: params });
+    });
   }
 }

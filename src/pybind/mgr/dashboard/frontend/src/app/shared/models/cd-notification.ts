@@ -29,6 +29,8 @@ export class CdNotification extends CdNotificationConfig {
   iconClass: string;
   duration: number;
   borderClass: string;
+  alertSilenced = false;
+  silenceId?: string;
 
   private textClasses = ['text-danger', 'text-info', 'text-success'];
   private iconClasses = [Icons.warning, Icons.info, Icons.check];

@@ -11,9 +11,9 @@
 #include "svc_meta_be_sobj.h"
 #include "svc_sync_modules.h"
 
-#include "rgw/rgw_bucket.h"
-#include "rgw/rgw_tools.h"
-#include "rgw/rgw_zone.h"
+#include "rgw_bucket.h"
+#include "rgw_tools.h"
+#include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -527,7 +527,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   }
 
   if (orig_info && *orig_info && !exclusive) {
-    int r = svc.bi->handle_overwrite(dpp, info, *(orig_info.value()));
+    int r = svc.bi->handle_overwrite(dpp, info, *(orig_info.value()), y);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): svc.bi->handle_overwrite() of key=" << key << " returned r=" << r << dendl;
       return r;

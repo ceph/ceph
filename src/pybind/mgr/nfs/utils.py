@@ -1,5 +1,6 @@
-from typing import List, TYPE_CHECKING
+from typing import List, Tuple, TYPE_CHECKING
 
+from object_format import ErrorResponseBase
 import orchestrator
 
 if TYPE_CHECKING:
@@ -8,6 +9,30 @@ if TYPE_CHECKING:
 EXPORT_PREFIX: str = "export-"
 CONF_PREFIX: str = "conf-nfs."
 USER_CONF_PREFIX: str = "userconf-nfs."
+
+
+class NonFatalError(ErrorResponseBase):
+    """Raise this exception when you want to interrupt the flow of a function
+    and return an informative message to the user. In certain situations the
+    NFS MGR module wants to indicate an action was or was not taken but still
+    return a success code so that non-interactive scripts continue as if the
+    overall action was completed.
+    """
+    def __init__(self, msg: str) -> None:
+        super().__init__(msg)
+        self.msg = msg
+
+    def format_response(self) -> Tuple[int, str, str]:
+        return 0, "", self.msg
+
+
+class ManualRestartRequired(NonFatalError):
+    """Raise this exception type if all other changes were successful but
+    user needs to manually restart nfs services.
+    """
+
+    def __init__(self, msg: str) -> None:
+        super().__init__(" ".join((msg, "(Manual Restart of NFS Pods required)")))
 
 
 def export_obj_name(export_id: int) -> str:

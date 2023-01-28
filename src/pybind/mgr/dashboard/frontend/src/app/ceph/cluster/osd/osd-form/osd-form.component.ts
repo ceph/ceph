@@ -219,6 +219,7 @@ export class OsdFormComponent extends CdForm implements OnInit {
 
   onDevicesCleared(event: DevicesSelectionClearEvent) {
     if (event.type === 'data') {
+      this.hostname = '';
       this.availDevices = [...this.allDevices];
       this.walDeviceSelectionGroups.devices = [];
       this.dbDeviceSelectionGroups.devices = [];

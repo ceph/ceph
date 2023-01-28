@@ -74,7 +74,8 @@ public:
   virtual const char *get_op_type() const = 0;
 
 protected:
-  bool compute_parent_extents(Extents *parent_extents, bool read_request);
+  bool compute_parent_extents(Extents *parent_extents, ImageArea *area,
+                              bool read_request);
 
   ImageCtxT *m_ictx;
   uint64_t m_object_no;
@@ -236,6 +237,7 @@ private:
    */
 
   Extents m_parent_extents;
+  ImageArea m_image_area = ImageArea::DATA;
   bool m_object_may_exist = false;
   bool m_copyup_in_progress = false;
   bool m_guarding_migration_write = false;
@@ -476,6 +478,7 @@ private:
   neorados::SnapSet m_snap_set;
   boost::system::error_code m_ec;
 
+  ImageArea m_image_area = ImageArea::DATA;
   SnapshotDelta m_parent_snapshot_delta;
 
   void list_snaps();

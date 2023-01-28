@@ -166,11 +166,7 @@ def task(ctx, config):
     for info in mounted_by_me.values():
         config = info["config"]
         mount_x = info['mount']
-        if config.get("mount_path"):
-            mount_x.cephfs_mntpt = config.get("mount_path")
-        if config.get("mountpoint"):
-            mount_x.hostfs_mntpt = config.get("mountpoint")
-        mount_x.mount()
+        mount_x.mount(mntopts=config.get('mntopts', []), mntargs=config.get('mntargs', []))
 
     for info in mounted_by_me.values():
         info["mount"].wait_until_mounted()

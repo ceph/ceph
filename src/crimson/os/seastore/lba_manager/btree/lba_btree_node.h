@@ -44,13 +44,8 @@ struct lba_map_val_t {
     uint32_t refcount,
     uint32_t checksum)
     : len(len), paddr(paddr), refcount(refcount), checksum(checksum) {}
+  bool operator==(const lba_map_val_t&) const = default;
 };
-WRITE_EQ_OPERATORS_4(
-  lba_map_val_t,
-  len,
-  paddr,
-  refcount,
-  checksum);
 
 std::ostream& operator<<(std::ostream& out, const lba_map_val_t&);
 
@@ -206,7 +201,7 @@ struct LBALeafNode
 	if (val.paddr.is_relative()) {
 	  auto val = i->get_val();
 	  assert(val.paddr.is_record_relative());
-	  val.paddr = val.paddr - get_paddr();
+	  val.paddr = val.paddr.block_relative_to(get_paddr());
 	  i->set_val(val);
 	}
       }
@@ -222,3 +217,9 @@ struct LBALeafNode
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::lba_map_val_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::LBAInternalNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::LBALeafNode> : fmt::ostream_formatter {};
+#endif

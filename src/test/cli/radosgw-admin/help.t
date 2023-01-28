@@ -157,18 +157,19 @@
     role delete                remove a role
     role get                   get a role
     role list                  list roles with specified path prefix
-    role modify                modify the assume role policy of an existing role
+    role-trust-policy modify   modify the assume role policy of an existing role
     role-policy put            add/update permission policy to role
     role-policy list           list policies attached to a role
     role-policy get            get the specified inline policy document embedded with the given role
     role-policy delete         remove policy attached to a role
+    role update                update max_session_duration of a role
     reshard add                schedule a resharding of a bucket
     reshard list               list all bucket resharding or scheduled to be resharded
     reshard status             read bucket resharding status
     reshard process            process of scheduled reshard jobs
     reshard cancel             cancel resharding a bucket
     reshard stale-instances list list stale-instances from bucket resharding
-    reshard stale-instances rm   cleanup stale-instances from bucket resharding
+    reshard stale-instances delete   cleanup stale-instances from bucket resharding
     sync error list            list sync error
     sync error trim            trim sync error
     mfa create                 create a new MFA TOTP token
@@ -177,13 +178,9 @@
     mfa remove                 delete MFA TOTP token
     mfa check                  check MFA TOTP token
     mfa resync                 re-sync MFA TOTP token
-    topic list                 list bucket notifications/pubsub topics
-    topic get                  get a bucket notifications/pubsub topic
-    topic rm                   remove a bucket notifications/pubsub topic
-    subscription get           get a pubsub subscription definition
-    subscription rm            remove a pubsub subscription
-    subscription pull          show events in a pubsub subscription
-    subscription ack           ack (remove) an events in a pubsub subscription
+    topic list                 list bucket notifications topics
+    topic get                  get a bucket notifications topic
+    topic rm                   remove a bucket notifications topic
     script put                 upload a lua script to a context
     script get                 get the lua script of a context
     script rm                  remove the lua scripts of a context
@@ -265,6 +262,9 @@
      --data-extra-pool=<pool>  placement target data extra (non-ec) pool
      --placement-index-type=<type>
                                placement target index type (normal, indexless, or #id)
+     --placement-inline-data=<true>
+                               set whether the placement target is configured to store a data
+                               chunk inline in head objects
      --compression=<type>      placement target compression type (plugin name or empty/none)
      --tier-type=<type>        zone tier type
      --tier-config=<k>=<v>[,...]
@@ -356,13 +356,11 @@
      --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token
      --totp-pin                the valid value of a TOTP token at a certain time
   
-  Bucket notifications/pubsub options:
-     --topic                   bucket notifications/pubsub topic name
-     --subscription            pubsub subscription name
-     --event-id                event id in a pubsub subscription
+  Bucket notifications options:
+     --topic                   bucket notifications topic name
   
   Script options:
-     --context                 context in which the script runs. one of: preRequest, postRequest, background
+     --context                 context in which the script runs. one of: prerequest, postrequest, background, getdata, putdata
      --package                 name of the lua package that should be added/removed to/from the allowlist
      --allow-compilation       package is allowed to compile C code as part of its installation
   

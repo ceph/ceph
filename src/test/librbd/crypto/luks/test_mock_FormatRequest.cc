@@ -38,7 +38,7 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
   Context *on_finish = &finished_cond;
   io::AioCompletion* aio_comp;
   ceph::bufferlist header_bl;
-  ceph::ref_t<CryptoInterface> crypto;
+  std::unique_ptr<CryptoInterface> crypto;
 
   void SetUp() override {
     TestMockFixture::SetUp();
@@ -46,20 +46,15 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
     librbd::ImageCtx *ictx;
     ASSERT_EQ(0, open_image(m_image_name, &ictx));
     mock_image_ctx = new MockImageCtx(*ictx);
-    crypto = nullptr;
   }
 
   void TearDown() override {
-    if (crypto != nullptr) {
-      crypto->put();
-      crypto = nullptr;
-    }
     delete mock_image_ctx;
     TestMockFixture::TearDown();
   }
 
-  void expect_get_object_size() {
-    EXPECT_CALL(*mock_image_ctx, get_object_size()).WillOnce(Return(
+  void expect_get_stripe_period() {
+    EXPECT_CALL(*mock_image_ctx, get_stripe_period()).WillOnce(Return(
             OBJECT_SIZE));
   }
 
@@ -96,10 +91,18 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
   }
 
   void verify_header(const char* expected_format, size_t expected_key_length,
-                     uint64_t expected_sector_size) {
+                     uint64_t expected_sector_size, bool magic_switched) {
     Header header(mock_image_ctx->cct);
 
     ASSERT_EQ(0, header.init());
+
+    if (magic_switched) {
+      Header non_switched_header(mock_image_ctx->cct);
+      ASSERT_EQ(0, non_switched_header.init());
+      ASSERT_EQ(0, non_switched_header.write(header_bl));
+      ASSERT_EQ(-EINVAL, non_switched_header.load(expected_format));
+      ASSERT_EQ(0, Magic::replace_magic(mock_image_ctx->cct, header_bl));
+    }
     ASSERT_EQ(0, header.write(header_bl));
     ASSERT_EQ(0, header.load(expected_format));
 
@@ -125,14 +128,14 @@ TEST_F(TestMockCryptoLuksFormatRequest, LUKS1) {
           mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS1,
           RBD_ENCRYPTION_ALGORITHM_AES128, std::move(passphrase), &crypto,
           on_finish, true);
-  expect_get_object_size();
+  expect_get_stripe_period();
   expect_get_image_size(IMAGE_SIZE);
   expect_image_write();
   mock_format_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   complete_aio(0);
   ASSERT_EQ(0, finished_cond.wait());
-  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS1, 32, 512));
+  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS1, 32, 512, false));
 }
 
 TEST_F(TestMockCryptoLuksFormatRequest, AES128) {
@@ -140,14 +143,14 @@ TEST_F(TestMockCryptoLuksFormatRequest, AES128) {
           mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2,
           RBD_ENCRYPTION_ALGORITHM_AES128, std::move(passphrase), &crypto,
           on_finish, true);
-  expect_get_object_size();
+  expect_get_stripe_period();
   expect_get_image_size(IMAGE_SIZE);
   expect_image_write();
   mock_format_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   complete_aio(0);
   ASSERT_EQ(0, finished_cond.wait());
-  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS2, 32, 4096));
+  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS2, 32, 4096, false));
 }
 
 TEST_F(TestMockCryptoLuksFormatRequest, AES256) {
@@ -155,14 +158,46 @@ TEST_F(TestMockCryptoLuksFormatRequest, AES256) {
           mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2,
           RBD_ENCRYPTION_ALGORITHM_AES256, std::move(passphrase), &crypto,
           on_finish, true);
-  expect_get_object_size();
+  expect_get_stripe_period();
   expect_get_image_size(IMAGE_SIZE);
   expect_image_write();
   mock_format_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   complete_aio(0);
   ASSERT_EQ(0, finished_cond.wait());
-  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS2, 64, 4096));
+  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS2, 64, 4096, false));
+}
+
+TEST_F(TestMockCryptoLuksFormatRequest, LUKS1OnCloned) {
+  mock_image_ctx->parent = mock_image_ctx;
+  auto mock_format_request = MockFormatRequest::create(
+          mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS1,
+          RBD_ENCRYPTION_ALGORITHM_AES256, std::move(passphrase), &crypto,
+          on_finish, true);
+  expect_get_stripe_period();
+  expect_get_image_size(IMAGE_SIZE);
+  expect_image_write();
+  mock_format_request->send();
+  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
+  complete_aio(0);
+  ASSERT_EQ(0, finished_cond.wait());
+  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS1, 64, 512, true));
+}
+
+TEST_F(TestMockCryptoLuksFormatRequest, LUKS2OnCloned) {
+  mock_image_ctx->parent = mock_image_ctx;
+  auto mock_format_request = MockFormatRequest::create(
+          mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2,
+          RBD_ENCRYPTION_ALGORITHM_AES256, std::move(passphrase), &crypto,
+          on_finish, true);
+  expect_get_stripe_period();
+  expect_get_image_size(IMAGE_SIZE);
+  expect_image_write();
+  mock_format_request->send();
+  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
+  complete_aio(0);
+  ASSERT_EQ(0, finished_cond.wait());
+  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS2, 64, 4096, true));
 }
 
 TEST_F(TestMockCryptoLuksFormatRequest, ImageTooSmall) {
@@ -170,7 +205,7 @@ TEST_F(TestMockCryptoLuksFormatRequest, ImageTooSmall) {
           mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2,
           RBD_ENCRYPTION_ALGORITHM_AES256, std::move(passphrase), &crypto,
           on_finish, true);
-  expect_get_object_size();
+  expect_get_stripe_period();
   expect_get_image_size(1024*1024);
   mock_format_request->send();
   ASSERT_EQ(-ENOSPC, finished_cond.wait());
@@ -181,7 +216,7 @@ TEST_F(TestMockCryptoLuksFormatRequest, WriteFail) {
           mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2,
           RBD_ENCRYPTION_ALGORITHM_AES256, std::move(passphrase), &crypto,
           on_finish, true);
-  expect_get_object_size();
+  expect_get_stripe_period();
   expect_get_image_size(IMAGE_SIZE);
   expect_image_write();
   mock_format_request->send();

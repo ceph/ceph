@@ -2,17 +2,19 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/buffer.h"
-#include "crimson/os/seastore/random_block_manager/nvmedevice.h"
+#include "crimson/os/seastore/random_block_manager/rbm_device.h"
+#include "crimson/os/seastore/random_block_manager/nvme_block_device.h"
 #include "test/crimson/gtest_seastar.h"
 #include "include/stringify.h"
 
 using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
-using namespace nvme_device;
+using namespace random_block_device;
+using namespace random_block_device::nvme;
 
 struct nvdev_test_t : seastar_test_suite_t {
-  std::unique_ptr<NVMeBlockDevice> device;
+  std::unique_ptr<RBMDevice> device;
   std::string dev_path;
 
   static const uint64_t DEV_SIZE = 1024 * 1024 * 1024;
@@ -53,7 +55,7 @@ WRITE_CLASS_DENC_BOUNDED(
 TEST_F(nvdev_test_t, write_and_verify_test)
 {
   run_async([this] {
-    device = NVMeBlockDevice::create<PosixNVMeDevice>();
+    device.reset(new random_block_device::nvme::NVMeBlockDevice(""));
     device->open(dev_path, seastar::open_flags::rw).unsafe_get();
     nvdev_test_block_t original_data;
     std::minstd_rand0 generator;

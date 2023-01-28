@@ -5,13 +5,13 @@
 #include "include/Context.h"
 #include "common/errno.h"
 
-#include "rgw/rgw_cache.h"
+#include "rgw_cache.h"
 #include "svc_notify.h"
 #include "svc_finisher.h"
 #include "svc_zone.h"
 #include "svc_rados.h"
 
-#include "rgw/rgw_zone.h"
+#include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 

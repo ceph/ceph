@@ -371,7 +371,7 @@ class Osd(RESTController):
                     option]['encrypted'] = data[0]['encrypted']
                 orch.osds.create([DriveGroupSpec.from_json(
                     predefined_drive_groups[option])])
-            except (ValueError, TypeError, DriveGroupValidationError) as e:
+            except (ValueError, TypeError, KeyError, DriveGroupValidationError) as e:
                 raise DashboardException(e, component='osd')
 
     def _create_bare(self, data):
@@ -486,8 +486,18 @@ class Osd(RESTController):
 
     @RESTController.Resource('GET')
     def devices(self, svc_id):
-        # (str) -> dict
-        return CephService.send_command('mon', 'device ls-by-daemon', who='osd.{}'.format(svc_id))
+        # type: (str) -> Union[list, str]
+        devices: Union[list, str] = CephService.send_command(
+            'mon', 'device ls-by-daemon', who='osd.{}'.format(svc_id))
+        mgr_map = mgr.get('mgr_map')
+        available_modules = [m['name'] for m in mgr_map['available_modules']]
+
+        life_expectancy_enabled = any(
+            item.startswith('diskprediction_') for item in available_modules)
+        for device in devices:
+            device['life_expectancy_enabled'] = life_expectancy_enabled
+
+        return devices
 
 
 @UIRouter('/osd', Scope.OSD)
@@ -509,16 +519,17 @@ class OsdUi(Osd):
                 if device.available:
                     if device.human_readable_type == 'hdd':
                         hdds += 1
+                    # SSDs and NVMe are both counted as 'ssd'
+                    # so differentiating nvme using its path
+                    elif '/dev/nvme' in device.path:
+                        nvmes += 1
                     else:
                         ssds += 1
-                        # we still don't know how to infer nvmes
-                        # Tracker: https://tracker.ceph.com/issues/55728
-                        nvmes += 1
 
         if hdds:
             res.options[OsdDeploymentOptions.COST_CAPACITY].available = True
             res.recommended_option = OsdDeploymentOptions.COST_CAPACITY
-        if ssds:
+        if hdds and ssds:
             res.options[OsdDeploymentOptions.THROUGHPUT].available = True
             res.recommended_option = OsdDeploymentOptions.THROUGHPUT
         if nvmes:

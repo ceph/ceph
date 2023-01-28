@@ -11,6 +11,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/Types.h"
 #include "librbd/io/ObjectRequest.h"
+#include "librbd/io/Utils.h"
 #include "osdc/Striper.h"
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>
@@ -143,13 +144,17 @@ public:
         return 1;
       }
 
-      uint64_t overlap_objects = 0;
-      uint64_t overlap;
-      int r = image_ctx.get_parent_overlap(CEPH_NOSNAP, &overlap);
-      if (r == 0 && overlap > 0) {
-        overlap_objects = Striper::get_num_objects(image_ctx.layout, overlap);
+      uint64_t raw_overlap = 0;
+      uint64_t object_overlap = 0;
+      int r = image_ctx.get_parent_overlap(CEPH_NOSNAP, &raw_overlap);
+      ceph_assert(r == 0);
+      if (raw_overlap > 0) {
+        auto [parent_extents, area] = io::util::object_to_area_extents(
+            &image_ctx, m_object_no, {{0, image_ctx.layout.object_size}});
+        object_overlap = image_ctx.prune_parent_extents(parent_extents, area,
+                                                        raw_overlap, false);
       }
-      m_remove_empty = (m_object_no >= overlap_objects);
+      m_remove_empty = object_overlap == 0;
     }
 
     send_sparsify();

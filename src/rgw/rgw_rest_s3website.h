@@ -8,13 +8,13 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #pragma once
- 
+
 #include "rgw_rest_s3.h"
 
 class RGWHandler_REST_S3Website : public RGWHandler_REST_S3 {
@@ -40,7 +40,7 @@ public:
   using RGWHandler_REST_S3::RGWHandler_REST_S3;
   ~RGWHandler_REST_S3Website() override = default;
 
-  int init(rgw::sal::Store* store, req_state *s, rgw::io::BasicClient* cio) override;
+  int init(rgw::sal::Driver* driver, req_state *s, rgw::io::BasicClient* cio) override;
   int error_handler(int err_no, std::string *error_content, optional_yield y) override;
 };
 

@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "rgw/rgw_service.h"
+#include "rgw_service.h"
 
 class RGWBucketInfo;
 struct RGWBucketEnt;
@@ -39,6 +39,6 @@ public:
 
   virtual int handle_overwrite(const DoutPrefixProvider *dpp,
                                const RGWBucketInfo& info,
-                               const RGWBucketInfo& orig_info) = 0;
+                               const RGWBucketInfo& orig_info,
+                               optional_yield y) = 0;
 };
-

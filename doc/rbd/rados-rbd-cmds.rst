@@ -16,206 +16,308 @@ details.
 Create a Block Device Pool
 ==========================
 
-#. On the admin node, use the ``ceph`` tool to `create a pool`_.
+#. Use the ``ceph`` tool to `create a pool`_.
 
-#. On the admin node, use the ``rbd`` tool to initialize the pool for use by RBD::
+#. Use the ``rbd`` tool to initialize the pool for use by RBD:
 
-        rbd pool init <pool-name>
+   .. prompt:: bash $
 
-.. note:: The ``rbd`` tool assumes a default pool name of 'rbd' when not
-   provided.
+      rbd pool init <pool-name>
+
+   .. note:: The ``rbd`` tool assumes a default pool name of 'rbd' if no pool
+      name is specified in the command.
+
 
 Create a Block Device User
 ==========================
 
-Unless specified, the ``rbd`` command will access the Ceph cluster using the ID
-``admin``. This ID allows full administrative access to the cluster. It is
-recommended that you utilize a more restricted user wherever possible.
+Unless otherwise specified, the ``rbd`` command uses the Ceph user ID ``admin``
+to access the Ceph cluster. The ``admin`` Ceph user ID allows full
+administrative access to the cluster. We recommend that you acess the Ceph
+cluster with a Ceph user ID that has fewer permissions than the ``admin`` Ceph
+user ID does. We call this non-``admin`` Ceph user ID a "block device user" or
+"Ceph user".
 
-To `create a Ceph user`_, with ``ceph`` specify the ``auth get-or-create``
-command, user name, monitor caps, and OSD caps::
+To `create a Ceph user`_, use the ``ceph auth get-or-create`` command to
+specify the Ceph user ID name, monitor caps (capabilities), and OSD caps
+(capabilities):
 
-        ceph auth get-or-create client.{ID} mon 'profile rbd' osd 'profile {profile name} [pool={pool-name}][, profile ...]' mgr 'profile rbd [pool={pool-name}]'
+.. prompt:: bash $
 
-For example, to create a user ID named ``qemu`` with read-write access to the
-pool ``vms`` and read-only access to the pool ``images``, execute the
-following::
+   ceph auth get-or-create client.{ID} mon 'profile rbd' osd 'profile {profile name} [pool={pool-name}][, profile ...]' mgr 'profile rbd [pool={pool-name}]'
 
-	ceph auth get-or-create client.qemu mon 'profile rbd' osd 'profile rbd pool=vms, profile rbd-read-only pool=images' mgr 'profile rbd pool=images'
+For example: to create a Ceph user ID named ``qemu`` that has read-write access
+to the pool ``vms`` and read-only access to the pool ``images``, run the
+following command:
 
-The output from the ``ceph auth get-or-create`` command will be the keyring for
-the specified user, which can be written to ``/etc/ceph/ceph.client.{ID}.keyring``.
+.. prompt:: bash $
 
-.. note:: The user ID can be specified when using the ``rbd`` command by
-        providing the ``--id {id}`` optional argument.
+   ceph auth get-or-create client.qemu mon 'profile rbd' osd 'profile rbd pool=vms, profile rbd-read-only pool=images' mgr 'profile rbd pool=images'
+
+The output from the ``ceph auth get-or-create`` command is the keyring for the
+specified Ceph user ID, which can be written to
+``/etc/ceph/ceph.client.{ID}.keyring``.
+
+.. note:: Specify the Ceph user ID by providing the ``--id {id} argument when
+   using the ``rbd`` command. This argument is optional. 
 
 Creating a Block Device Image
 =============================
 
 Before you can add a block device to a node, you must create an image for it in
-the :term:`Ceph Storage Cluster` first. To create a block device image, execute
-the  following::
+the :term:`Ceph Storage Cluster`. To create a block device image, run a command of this form: 
 
-	rbd create --size {megabytes} {pool-name}/{image-name}
+.. prompt:: bash $
+
+   rbd create --size {megabytes} {pool-name}/{image-name}
 
 For example, to create a 1GB image named ``bar`` that stores information in a
-pool named ``swimmingpool``, execute the following::
+pool named ``swimmingpool``, run this command:
 
-	rbd create --size 1024 swimmingpool/bar
+.. prompt:: bash $
 
-If you don't specify pool when creating an image, it will be stored in the
-default pool ``rbd``. For example, to create a 1GB image named ``foo`` stored in
-the default pool ``rbd``, execute the following::
+   rbd create --size 1024 swimmingpool/bar
 
-	rbd create --size 1024 foo
+If you don't specify a pool when you create an image, then the image will be
+stored in the default pool ``rbd``. For example, if you ran this command, you
+would create a 1GB image named ``foo`` that is stored in the default pool
+``rbd``:
 
-.. note:: You must create a pool first before you can specify it as a 
-   source. See `Storage Pools`_ for details.
+.. prompt:: bash $
+
+   rbd create --size 1024 foo
+
+.. note:: You must create a pool before you can specify it as a source. See
+   `Storage Pools`_ for details.
 
 Listing Block Device Images
 ===========================
 
-To list block devices in the ``rbd`` pool, execute the following
-(i.e., ``rbd`` is the default pool name):: 
+To list block devices in the ``rbd`` pool, run the following command:
 
-	rbd ls
+.. prompt:: bash $
 
-To list block devices in a particular pool, execute the following,
-but replace ``{poolname}`` with the name of the pool:: 
+   rbd ls
 
-	rbd ls {poolname}
+.. note:: ``rbd`` is the default pool name, and ``rbd ls`` lists the commands
+   in the default pool.
+
+To list block devices in a particular pool, run the following command, but
+replace ``{poolname}`` with the name of the pool: 
+
+.. prompt:: bash $
+
+   rbd ls {poolname}
 	
-For example::
+For example:
 
-	rbd ls swimmingpool
+.. prompt:: bash $
 
-To list deferred delete block devices in the ``rbd`` pool, execute the 
-following:: 
+   rbd ls swimmingpool
 
-        rbd trash ls
+To list "deferred delete" block devices in the ``rbd`` pool, run the
+following command:
 
-To list deferred delete block devices in a particular pool, execute the 
-following, but replace ``{poolname}`` with the name of the pool:: 
+.. prompt:: bash $
 
-        rbd trash ls {poolname}
+   rbd trash ls
 
-For example::
+To list "deferred delete" block devices in a particular pool, run the 
+following command, but replace ``{poolname}`` with the name of the pool:
 
-        rbd trash ls swimmingpool
+.. prompt:: bash $
+
+   rbd trash ls {poolname}
+
+For example:
+
+.. prompt:: bash $
+
+   rbd trash ls swimmingpool
 
 Retrieving Image Information
 ============================
 
-To retrieve information from a particular image, execute the following,
-but replace ``{image-name}`` with the name for the image:: 
+To retrieve information from a particular image, run the following command, but
+replace ``{image-name}`` with the name for the image:
 
-	rbd info {image-name}
+.. prompt:: bash $
+
+   rbd info {image-name}
 	
-For example::
+For example:
 
-	rbd info foo
+.. prompt:: bash $
+
+   rbd info foo
 	
-To retrieve information from an image within a pool, execute the following,
-but replace ``{image-name}`` with the name of the image and replace ``{pool-name}``
-with the name of the pool:: 
+To retrieve information from an image within a pool, run the following command,
+but replace ``{image-name}`` with the name of the image and replace
+``{pool-name}`` with the name of the pool:
 
-	rbd info {pool-name}/{image-name}
+.. prompt:: bash $
 
-For example:: 
+   rbd info {pool-name}/{image-name}
 
-	rbd info swimmingpool/bar
+For example:
+
+.. prompt:: bash $
+
+   rbd info swimmingpool/bar
+
+.. note:: Other naming conventions are possible, and might conflict with the
+   naming convention described here. For example, ``userid/<uuid>`` is a
+   possible name for an RBD image, and such a name might (at the least) be
+   confusing. 
 
 Resizing a Block Device Image
 =============================
 
 :term:`Ceph Block Device` images are thin provisioned. They don't actually use
-any physical storage  until you begin saving data to them. However, they do have
-a maximum capacity  that you set with the ``--size`` option. If you want to
-increase (or decrease) the maximum size of a Ceph Block Device image, execute
-the following:: 
+any physical storage until you begin saving data to them. However, they do have
+a maximum capacity that you set with the ``--size`` option. If you want to
+increase (or decrease) the maximum size of a Ceph Block Device image, run one
+of the following commands:
 
-	rbd resize --size 2048 foo (to increase)
-	rbd resize --size 2048 foo --allow-shrink (to decrease)
+Increasing the Size of a Block Device Image
+-------------------------------------------
+
+.. prompt:: bash $
+
+   rbd resize --size 2048 foo
+
+Decreasing the Size of a Block Device Image
+-------------------------------------------
+
+.. prompt:: bash $
+
+   rbd resize --size 2048 foo --allow-shrink
 
 
 Removing a Block Device Image
 =============================
 
-To remove a block device, execute the following, but replace ``{image-name}``
-with the name of the image you want to remove:: 
+To remove a block device, run the following command, but replace
+``{image-name}`` with the name of the image you want to remove:
 
-	rbd rm {image-name}
+.. prompt:: bash $
 
-For example:: 
+   rbd rm {image-name}
 
-	rbd rm foo
- 
-To remove a block device from a pool, execute the following, but replace 
-``{image-name}`` with the name of the image to remove and replace 
-``{pool-name}`` with the name of the pool:: 
+For example:
 
-	rbd rm {pool-name}/{image-name}
+.. prompt:: bash $
 
-For example:: 
+   rbd rm foo
 
-	rbd rm swimmingpool/bar
+Removing a Block Device from a Pool
+-----------------------------------
 
-To defer delete a block device from a pool, execute the following, but 
-replace ``{image-name}`` with the name of the image to move and replace 
-``{pool-name}`` with the name of the pool:: 
+To remove a block device from a pool, run the following command but replace
+``{image-name}`` with the name of the image to be removed, and replace
+``{pool-name}`` with the name of the pool from which the image is to be
+removed:
 
-        rbd trash mv {pool-name}/{image-name}
+.. prompt:: bash $
 
-For example:: 
+   rbd rm {pool-name}/{image-name}
 
-        rbd trash mv swimmingpool/bar
+For example:
 
-To remove a deferred block device from a pool, execute the following, but 
-replace ``{image-id}`` with the id of the image to remove and replace 
-``{pool-name}`` with the name of the pool:: 
+.. prompt:: bash $
 
-        rbd trash rm {pool-name}/{image-id}
+   rbd rm swimmingpool/bar
 
-For example:: 
+"Defer Deleting" a Block Device from a Pool
+-------------------------------------------
 
-        rbd trash rm swimmingpool/2bf4474b0dc51
+To defer delete a block device from a pool (which entails moving it to the
+"trash" and deleting it later), run the following command but replace
+``{image-name}`` with the name of the image to be moved to the trash and
+replace ``{pool-name}`` with the name of the pool:
+
+.. prompt:: bash $
+
+   rbd trash mv {pool-name}/{image-name}
+
+For example:
+
+.. prompt:: bash $
+
+   rbd trash mv swimmingpool/bar
+
+Removing a Deferred Block Device from a Pool
+--------------------------------------------
+
+To remove a deferred block device from a pool, run the following command but
+replace ``{image-}`` with the ID of the image to be removed, and replace
+``{pool-name}`` with the name of the pool from which the image is to be
+removed:
+
+.. prompt:: bash $
+
+   rbd trash rm {pool-name}/{image-}
+
+For example:
+
+.. prompt:: bash $
+   
+   rbd trash rm swimmingpool/2bf4474b0dc51
 
 .. note::
 
-  * You can move an image to the trash even it has snapshot(s) or actively 
-    in-use by clones, but can not be removed from trash.
+  * You can move an image to the trash even if it has snapshot(s) or is
+    actively in use by clones. However, you cannot remove it from the trash
+    under those conditions.
 
-  * You can use *--expires-at* to set the defer time (default is ``now``), 
-    and if its deferment time has not expired, it can not be removed unless 
-    you use *--force*.
+  * You can use ``--expires-at`` to set the deferment time (default is
+    ``now``). If the deferment time has not yet arrived, you cannot remove the
+    image unless you use ``--force``.
 
 Restoring a Block Device Image
 ==============================
 
-To restore a deferred delete block device in the rbd pool, execute the 
-following, but replace ``{image-id}`` with the id of the image::
+To restore a deferred delete block device in the rbd pool, run the 
+following command but replace ``{image-id}`` with the ID of the image:
 
-        rbd trash restore {image-id}
+.. prompt:: bash $
 
-For example:: 
+   rbd trash restore {image-id}
 
-        rbd trash restore 2bf4474b0dc51
+For example:
 
-To restore a deferred delete block device in a particular pool, execute 
-the following, but replace ``{image-id}`` with the id of the image and 
-replace ``{pool-name}`` with the name of the pool::
+.. prompt:: bash $
 
-        rbd trash restore {pool-name}/{image-id}
+   rbd trash restore 2bf4474b0dc51
 
-For example:: 
+Restoring a Block Device Image in a Specific Pool
+-------------------------------------------------
 
-        rbd trash restore swimmingpool/2bf4474b0dc51
+To restore a deferred delete block device in a particular pool, run the
+following command but replace ``{image-id}`` with the ID of the image and
+replace ``{pool-name}`` with the name of the pool:
+
+.. prompt:: bash $
+
+  rbd trash restore {pool-name}/{image-id}
+
+For example:
+
+.. prompt:: bash $
+
+   rbd trash restore swimmingpool/2bf4474b0dc51
+
+
+Renaming an Image While Restoring It
+------------------------------------
 
 You can also use ``--image`` to rename the image while restoring it. 
 
-For example::
+For example:
 
-        rbd trash restore swimmingpool/2bf4474b0dc51 --image new-name
+.. prompt:: bash $
+   
+   rbd trash restore swimmingpool/2bf4474b0dc51 --image new-name
 
 
 .. _create a pool: ../../rados/operations/pools/#create-a-pool

@@ -12,7 +12,7 @@ SCRIPT="run_xfstests-obsolete.sh"
 
 cd "${TESTDIR}"
 
-wget -O "${SCRIPT}" "${URL_BASE}/${SCRIPT}"
+curl -O "${URL_BASE}/${SCRIPT}"
 # mark executable only if the file isn't empty since ./"${SCRIPT}"
 # on an empty file would succeed
 if [[ -s "${SCRIPT}" ]]; then

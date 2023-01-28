@@ -1,0 +1,11 @@
+<span *ngIf="!key; else key_value"
+      class="badge badge-{{value}}"
+      ngClass="{{value | colorClassFromText}}">
+  {{ value }}
+</span>
+
+<ng-template #key_value>
+  <span class="badge badge-background-primary badge-{{key}}-{{value}}">
+        {{ key }}: {{ value }}
+  </span>
+</ng-template>

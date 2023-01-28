@@ -8,17 +8,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Assign labels based on modified files
-        uses: actions/labeler@9794b1493b6f1fa7b006c5f8635a19c76c98be95
+        # https://github.com/marketplace/actions/labeler?version=v4.0.2
+        uses: actions/labeler@5c7539237e04b714afd8ad9b4aed733815b9fab4
         with:
           sync-labels: ''
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Assign to Dashboard project
-        uses: srggrs/assign-one-project-github-action@65a8ddab497df42ef268001e67bbf976f8fd39e1
-        if: contains(github.event.pull_request.labels.*.name, 'dashboard')
+        # https://github.com/marketplace/actions/add-to-github-projects?version=v0.3.0
+        uses: actions/add-to-project@a9f041ddd462ed185893ea1024cec954f50dbe42
         with:
-          project: https://github.com/ceph/ceph/projects/6          
+          project-url: https://github.com/orgs/ceph/projects/2
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          labeled: dashboard
       - name: Assign milestone based on target brach name
-        uses: iyu/actions-milestone@dbf7e5348844c9ddc6b803a5721b85fa70fe3bb9
+        # https://github.com/marketplace/actions/pull-request-milestone?version=v1.3.0
+        uses: iyu/actions-milestone@e93115c90ff7bcddee71086e9253f1b6a5f4b48a
         with:
           configuration-path: .github/milestone.yml
           repo-token: "${{ secrets.GITHUB_TOKEN }}"

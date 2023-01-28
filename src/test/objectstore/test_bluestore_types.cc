@@ -56,15 +56,30 @@ TEST(bluestore, sizeof) {
 void dump_mempools()
 {
   ostringstream ostr;
-  Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
+  auto f = Formatter::create_unique("json-pretty", "json-pretty", "json-pretty");
   ostr << "Mempools: ";
   f->open_object_section("mempools");
-  mempool::dump(f);
+  mempool::dump(f.get());
   f->close_section();
   f->flush(ostr);
-  delete f;
   cout << ostr.str() << std::endl;
 }
+/*void get_mempool_stats(uint64_t* total_bytes, uint64_t* total_items)
+{
+  uint64_t meta_allocated = mempool::bluestore_cache_meta::allocated_bytes();
+  uint64_t onode_allocated = mempool::bluestore_cache_onode::allocated_bytes();
+  uint64_t other_allocated = mempool::bluestore_cache_other::allocated_bytes();
+
+  uint64_t meta_items = mempool::bluestore_cache_meta::allocated_items();
+  uint64_t onode_items = mempool::bluestore_cache_onode::allocated_items();
+  uint64_t other_items = mempool::bluestore_cache_other::allocated_items();
+  cout << "meta(" << meta_allocated << "/" << meta_items
+       << ") onode(" << onode_allocated << "/" << onode_items
+       << ") other(" << other_allocated << "/" << other_items
+       << ")" << std::endl;
+  *total_bytes = meta_allocated + onode_allocated + other_allocated;
+  *total_items = onode_items;
+}*/
 
 TEST(sb_info_space_efficient_map_t, basic) {
   sb_info_space_efficient_map_t sb_info;
@@ -1081,17 +1096,17 @@ TEST(Blob, legacy_decode)
 
     uint64_t sbid, sbid2;
     Bres.decode(
-      coll.get(),
       p,
       1, /*struct_v*/
       &sbid,
-      true);
+      true,
+      coll.get());
     Bres2.decode(
-      coll.get(),
       p2,
       2, /*struct_v*/
       &sbid2,
-      true);
+      true,
+      coll.get());
 
     ASSERT_EQ(0xff0u + 1u, Bres.get_blob_use_tracker().get_referenced_bytes());
     ASSERT_EQ(0xff0u + 1u, Bres2.get_blob_use_tracker().get_referenced_bytes());
@@ -1109,7 +1124,8 @@ TEST(ExtentMap, seek_lextent)
 
   auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
   BlueStore::Onode onode(coll.get(), ghobject_t(), "");
-  BlueStore::ExtentMap em(&onode);
+  BlueStore::ExtentMap em(&onode,
+    g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
   BlueStore::BlobRef br(new BlueStore::Blob);
   br->shared_blob = new BlueStore::SharedBlob(coll.get());
 
@@ -1161,7 +1177,8 @@ TEST(ExtentMap, has_any_lextents)
     g_ceph_context, "lru", NULL);
   auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
   BlueStore::Onode onode(coll.get(), ghobject_t(), "");
-  BlueStore::ExtentMap em(&onode);
+  BlueStore::ExtentMap em(&onode,
+    g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
   BlueStore::BlobRef b(new BlueStore::Blob);
   b->shared_blob = new BlueStore::SharedBlob(coll.get());
 
@@ -1220,7 +1237,8 @@ TEST(ExtentMap, compress_extent_map)
   
   auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
   BlueStore::Onode onode(coll.get(), ghobject_t(), "");
-  BlueStore::ExtentMap em(&onode);
+  BlueStore::ExtentMap em(&onode,
+    g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
   BlueStore::BlobRef b1(new BlueStore::Blob);
   BlueStore::BlobRef b2(new BlueStore::Blob);
   BlueStore::BlobRef b3(new BlueStore::Blob);
@@ -1287,7 +1305,8 @@ TEST(GarbageCollector, BasicTest)
   BlueStore store(g_ceph_context, "", 4096);
   auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
   BlueStore::Onode onode(coll.get(), ghobject_t(), "");
-  BlueStore::ExtentMap em(&onode);
+  BlueStore::ExtentMap em(&onode,
+    g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
 
   BlueStore::old_extent_map_t old_extents;
 
@@ -1376,7 +1395,8 @@ TEST(GarbageCollector, BasicTest)
     BlueStore store(g_ceph_context, "", 0x10000);
     auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
     BlueStore::Onode onode(coll.get(), ghobject_t(), "");
-    BlueStore::ExtentMap em(&onode);
+    BlueStore::ExtentMap em(&onode,
+      g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
 
     BlueStore::old_extent_map_t old_extents;
     BlueStore::GarbageCollector gc(g_ceph_context);
@@ -1503,7 +1523,8 @@ TEST(GarbageCollector, BasicTest)
     BlueStore store(g_ceph_context, "", 0x10000);
     auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
     BlueStore::Onode onode(coll.get(), ghobject_t(), "");
-    BlueStore::ExtentMap em(&onode);
+    BlueStore::ExtentMap em(&onode,
+      g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
 
     BlueStore::old_extent_map_t old_extents;
     BlueStore::GarbageCollector gc(g_ceph_context);
@@ -2247,6 +2268,73 @@ TEST(shared_blob_2hash_tracker_t, basic_test)
   ASSERT_TRUE(t1.test_all_zero_range(5, 0x4500, 0x3b00));
   ASSERT_TRUE(!t1.test_all_zero_range(5, 0, 0x9000));
 }
+
+TEST(bluestore_blob_use_tracker_t, mempool_stats_test)
+{
+  using mempool::bluestore_cache_other::allocated_items;
+  using mempool::bluestore_cache_other::allocated_bytes;
+  uint64_t other_items0 = allocated_items();
+  uint64_t other_bytes0 = allocated_bytes();
+  {
+    bluestore_blob_use_tracker_t* t1 = new bluestore_blob_use_tracker_t;
+
+    t1->init(1024 * 1024, 4096);
+    ASSERT_EQ(256, allocated_items() - other_items0);  // = 1M / 4K
+    ASSERT_EQ(1024, allocated_bytes() - other_bytes0); // = 1M / 4K * 4
+
+    delete t1;
+    ASSERT_EQ(allocated_items(), other_items0);
+    ASSERT_EQ(allocated_bytes(), other_bytes0);
+  }
+  {
+    bluestore_blob_use_tracker_t* t1 = new bluestore_blob_use_tracker_t;
+
+    t1->init(1024 * 1024, 4096);
+    t1->add_tail(2048 * 1024, 4096);
+    // proper stats update after tail add
+    ASSERT_EQ(512, allocated_items() - other_items0);  // = 2M / 4K
+    ASSERT_EQ(2048, allocated_bytes() - other_bytes0); // = 2M / 4K * 4
+
+    delete t1;
+    ASSERT_EQ(allocated_items(), other_items0);
+    ASSERT_EQ(allocated_bytes(), other_bytes0);
+  }
+  {
+    bluestore_blob_use_tracker_t* t1 = new bluestore_blob_use_tracker_t;
+
+    t1->init(1024 * 1024, 4096);
+    t1->prune_tail(512 * 1024);
+    // no changes in stats after pruning
+    ASSERT_EQ(256, allocated_items() - other_items0);  // = 1M / 4K
+    ASSERT_EQ(1024, allocated_bytes() - other_bytes0); // = 1M / 4K * 4
+
+    delete t1;
+    ASSERT_EQ(allocated_items(), other_items0);
+    ASSERT_EQ(allocated_bytes(), other_bytes0);
+  }
+  {
+    bluestore_blob_use_tracker_t* t1 = new bluestore_blob_use_tracker_t;
+    bluestore_blob_use_tracker_t* t2 = new bluestore_blob_use_tracker_t;
+
+    t1->init(1024 * 1024, 4096);
+
+    // t1 keeps the same amount of entries + t2 has got half of them
+    t1->split(512 * 1024, t2);
+    ASSERT_EQ(256 + 128, allocated_items() - other_items0);  //= 1M / 4K*1.5
+    ASSERT_EQ(1024 + 512, allocated_bytes() - other_bytes0); //= 1M / 4K*4*1.5
+
+    // t1 & t2 release everything, then t2 get one less entry than t2 had had
+    // before
+    t1->split(4096, t2);
+    ASSERT_EQ(127, allocated_items() - other_items0);     // = 512K / 4K - 1
+    ASSERT_EQ(127 * 4, allocated_bytes() - other_bytes0); // = 512L / 4K * 4 - 4
+    delete t1;
+    delete t2;
+    ASSERT_EQ(allocated_items(), other_items0);
+    ASSERT_EQ(allocated_bytes(), other_bytes0);
+  }
+}
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,

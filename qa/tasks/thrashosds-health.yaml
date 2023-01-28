@@ -17,3 +17,5 @@ overrides:
       - \(REQUEST_SLOW\)
       - \(TOO_FEW_PGS\)
       - slow request
+      - timeout on replica
+      - late reservation from

@@ -4,8 +4,8 @@
 #pragma once
 
 #include "common/RWLock.h"
-#include "rgw/rgw_service.h"
-#include "rgw/rgw_cache.h"
+#include "rgw_service.h"
+#include "rgw_cache.h"
 
 #include "svc_sys_obj_core.h"
 
@@ -37,13 +37,13 @@ protected:
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
   void shutdown() override;
 
-  int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-               std::map<std::string, bufferlist> *attrs, bufferlist *first_chunk,
+  int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
+               uint64_t *psize, real_time *pmtime,
+               std::map<std::string, bufferlist> *attrs,
                RGWObjVersionTracker *objv_tracker,
                optional_yield y) override;
 
   int read(const DoutPrefixProvider *dpp,
-           RGWSysObjectCtxBase& obj_ctx,
            RGWSI_SysObj_Obj_GetObjState& read_state,
            RGWObjVersionTracker *objv_tracker,
            const rgw_raw_obj& obj,
@@ -65,7 +65,6 @@ protected:
                 bool exclusive, optional_yield y) override;
 
   int remove(const DoutPrefixProvider *dpp, 
-             RGWSysObjectCtxBase& obj_ctx,
              RGWObjVersionTracker *objv_tracker,
              const rgw_raw_obj& obj,
              optional_yield y) override;

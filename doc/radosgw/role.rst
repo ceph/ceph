@@ -140,7 +140,7 @@ Update Assume Role Policy Document of a role
 
 To modify a role's assume role policy document, execute the following::
 
-	radosgw-admin role modify --role-name={role-name} --assume-role-policy-doc={trust-policy-document}
+	radosgw-admin role-trust-policy modify --role-name={role-name} --assume-role-policy-doc={trust-policy-document}
 
 Request Parameters
 ~~~~~~~~~~~~~~~~~~
@@ -157,7 +157,7 @@ Request Parameters
 
 For example::
 
-  radosgw-admin role modify --role-name=S3Access1 --assume-role-policy-doc=\{\"Version\":\"2012-10-17\",\"Statement\":\[\{\"Effect\":\"Allow\",\"Principal\":\{\"AWS\":\[\"arn:aws:iam:::user/TESTER2\"\]\},\"Action\":\[\"sts:AssumeRole\"\]\}\]\}
+  radosgw-admin role-trust-policy modify --role-name=S3Access1 --assume-role-policy-doc=\{\"Version\":\"2012-10-17\",\"Statement\":\[\{\"Effect\":\"Allow\",\"Principal\":\{\"AWS\":\[\"arn:aws:iam:::user/TESTER2\"\]\},\"Action\":\[\"sts:AssumeRole\"\]\}\]\}
 
 .. code-block:: javascript
 
@@ -290,6 +290,32 @@ For example::
 
   radosgw-admin role-policy delete --role-name=S3Access1 --policy-name=Policy1
 
+
+Update a role
+-------------
+
+To update a role's max-session-duration, execute the following::
+
+	radosgw-admin role update --role-name={role-name} --max-session-duration={max-session-duration}
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+``role-name``
+
+:Description: Name of the role.
+:Type: String
+
+``max-session-duration``
+
+:Description: Maximum session duration for a role.
+:Type: String
+
+For example::
+
+  radosgw-admin role update --role-name=S3Access1 --max-session-duration=43200
+
+Note: This command currently can only be used to update max-session-duration.
 
 REST APIs for Manipulating a Role
 =================================
@@ -470,6 +496,23 @@ Example::
     </ResponseMetadata>
   </UntagRoleResponse>
 
+Update Role
+-----------
+
+Example::
+  POST "<hostname>?Action=UpdateRole&RoleName=S3Access&MaxSessionDuration=43200"
+
+.. code-block:: XML
+
+  <UpdateRoleResponse>
+    <UpdateRoleResult>
+      <ResponseMetadata>
+        <RequestId>tx000000000000000000007-00611f337e-1027-default</RequestId>
+      </ResponseMetadata>
+      </UpdateRoleResult>
+  </UpdateRoleResponse>
+
+Note: This API currently can only be used to update max-session-duration.
 
 Sample code for tagging, listing tags and untagging a role
 ----------------------------------------------------------

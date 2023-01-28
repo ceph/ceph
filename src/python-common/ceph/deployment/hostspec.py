@@ -13,7 +13,7 @@ def assert_valid_host(name: str) -> None:
             assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
             assert p.match(part), 'name component must include only a-z, 0-9, and -'
     except AssertionError as e:
-        raise SpecValidationError(str(e))
+        raise SpecValidationError(str(e) + f'. Got "{name}"')
 
 
 class SpecValidationError(Exception):
@@ -129,7 +129,9 @@ class HostSpec(object):
 
     def __eq__(self, other: Any) -> bool:
         # Let's omit `status` for the moment, as it is still the very same host.
+        if not isinstance(other, HostSpec):
+            return NotImplemented
         return self.hostname == other.hostname and \
-               self.addr == other.addr and \
-               sorted(self.labels) == sorted(other.labels) and \
-               self.location == other.location
+            self.addr == other.addr and \
+            sorted(self.labels) == sorted(other.labels) and \
+            self.location == other.location

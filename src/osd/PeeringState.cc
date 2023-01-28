@@ -1220,7 +1220,7 @@ void PeeringState::proc_lease_ack(int from, const pg_lease_ack_t& a)
   if (was_min) {
     auto old_ru = readable_until;
     recalc_readable_until();
-    if (now < old_ru) {
+    if (now >= old_ru) {
       pl->recheck_readable();
     }
   }
@@ -3514,6 +3514,7 @@ void PeeringState::update_calc_stats()
   info.stats.last_epoch_clean = info.history.last_epoch_clean;
 
   info.stats.log_size = pg_log.get_head().version - pg_log.get_tail().version;
+  info.stats.log_dups_size = pg_log.get_log().dups.size();
   info.stats.ondisk_log_size = info.stats.log_size;
   info.stats.log_start = pg_log.get_tail();
   info.stats.ondisk_log_start = pg_log.get_tail();

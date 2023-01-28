@@ -32,8 +32,8 @@ The ceph orch command will be extended to support maintenance.
 
 .. code-block::
 
-    ceph orch host enter-maintenance <host> [ --check ]
-    ceph orch host exit-maintenance <host> 
+    ceph orch host maintenance enter <host> [ --force ]
+    ceph orch host maintenance exit <host>
 
 .. note:: In addition, the host's status should be updated to reflect whether it
    is in maintenance or not. 

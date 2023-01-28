@@ -217,3 +217,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
 };
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::onode::SeastoreNodeExtent> : fmt::ostream_formatter {};
+#endif

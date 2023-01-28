@@ -13,7 +13,8 @@
   width: 100%;
 }
 
-.form-control {
+.form-control,
+.form-select {
   display: table-cell;
 
   &:focus {
@@ -24,10 +25,20 @@
 }
 
 .custom-checkbox {
+  @extend .form-check;
   padding-top: 7px;
+
+  .custom-control-input {
+    @extend .form-check-input;
+  }
+
+  .custom-control-label {
+    @extend .form-check-label;
+  }
 }
 
 .custom-radio {
+  @extend .form-check;
   padding-top: 5px;
 }
 
@@ -83,4 +94,12 @@ cd-modal {
 
 .invalid-feedback {
   display: block;
+}
+
+.form-group {
+  @extend .mb-3;
+}
+
+.custom-control-label {
+  @extend .form-label;
 }

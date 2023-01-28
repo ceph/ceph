@@ -60,6 +60,7 @@ public:
   virtual int call(
     std::string_view command,
     const cmdmap_t& cmdmap,
+    const ceph::buffer::list& inbl,
     ceph::Formatter *f,
     std::ostream& errss,
     ceph::buffer::list& out) = 0;
@@ -96,7 +97,7 @@ public:
     // by default, call the synchronous handler and then finish
     ceph::buffer::list out;
     std::ostringstream errss;
-    int r = call(command, cmdmap, f, errss, out);
+    int r = call(command, cmdmap, inbl, f, errss, out);
     on_finish(r, errss.str(), out);
   }
   virtual ~AdminSocketHook() {}

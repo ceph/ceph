@@ -138,8 +138,11 @@ FLTreeOnodeManager::list_onodes_ret FLTreeOnodeManager::list_onodes(
       return trans_intr::repeat(
           [this, &trans, end, &to_list, &current_cursor, &ret] ()
           -> eagain_ifuture<seastar::stop_iteration> {
-        if (current_cursor.is_end() ||
-            current_cursor.get_ghobj() >= end) {
+        if (current_cursor.is_end()) {
+          std::get<1>(ret) = ghobject_t::get_max();
+          return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes);
+        } else if (current_cursor.get_ghobj() >= end) {
           std::get<1>(ret) = end;
           return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);

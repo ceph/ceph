@@ -221,7 +221,7 @@ int rgw_unlink(struct rgw_fs *rgw_fs,
 /*
     read  directory content
 */
-typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset,
+typedef int (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset,
 			       struct stat *st, uint32_t mask,
 			       uint32_t flags);
 

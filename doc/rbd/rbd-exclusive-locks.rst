@@ -6,78 +6,99 @@
 
 .. index:: Ceph Block Device; RBD exclusive locks; exclusive-lock
 
-Exclusive locks are a mechanism designed to prevent multiple processes
-from accessing the same Rados Block Device (RBD) in an uncoordinated
-fashion. Exclusive locks are heavily used in virtualization (where
-they prevent VMs from clobbering each others' writes), and also in RBD
-mirroring (where they are a prerequisite for journaling).
+Exclusive locks are mechanisms designed to prevent multiple processes from
+accessing the same Rados Block Device (RBD) in an uncoordinated fashion.
+Exclusive locks are used heavily in virtualization (where they prevent VMs from
+clobbering each other's writes) and in `RBD mirroring`_ (where they are a
+prerequisite for journaling in journal-based mirroring and fast generation of
+incremental diffs in snapshot-based mirroring).
 
-Exclusive locks are enabled on newly created images by default, unless
-overridden via the ``rbd_default_features`` configuration option or
-the ``--image-feature`` flag for ``rbd create``.
+The ``exclusive-lock`` feature is enabled on newly created images. This default
+can be overridden via the ``rbd_default_features`` configuration option or the
+``--image-feature`` and ``--image-shared`` options for ``rbd create`` command.
 
-In order to ensure proper exclusive locking operations, any client
-using an RBD image whose ``exclusive-lock`` feature is enabled should
-be using a CephX identity whose capabilities include ``profile rbd``.
+.. note::
+   Many image features, including ``object-map`` and ``fast-diff``, depend upon
+   exclusive locking. Disabling the ``exclusive-lock`` feature will negatively
+   affect the performance of some operations.
 
-Exclusive locking is mostly transparent to the user.
+To maintain multi-client access, the ``exclusive-lock`` feature implements
+automatic cooperative lock transitions between clients. It ensures that only
+a single client can write to an RBD image at any given time and thus protects
+internal image structures such as the object map, the journal or the `PWL
+cache`_ from concurrent modification.
 
-#. Whenever any ``librbd`` client process or kernel RBD client
-   starts using an RBD image on which exclusive locking has been
-   enabled, it obtains an exclusive lock on the image before the first
-   write.
+Exclusive locking is mostly transparent to the user:
 
-#. Whenever any such client process gracefully terminates, it
-   automatically relinquishes the lock.
+* Whenever a client (a ``librbd`` process or, in case of a ``krbd`` client,
+  a client node's kernel) needs to handle a write to an RBD image on which
+  exclusive locking has been enabled, it first acquires an exclusive lock on
+  the image. If the lock is already held by some other client, that client is
+  requested to release it.
 
-#. This subsequently enables another process to acquire the lock, and
-   write to the image.
+* Whenever a client that holds an exclusive lock on an RBD image gets
+  a request to release the lock, it stops handling writes, flushes its caches
+  and releases the lock.
 
-Note that it is perfectly possible for two or more concurrently
-running processes to merely open the image, and also to read from
-it. The client acquires the exclusive lock only when attempting to
-write to the image. To disable transparent lock transitions between
-multiple clients, it needs to acquire the lock specifically with
-``RBD_LOCK_MODE_EXCLUSIVE``.
+* Whenever a client that holds an exclusive lock on an RBD image terminates
+  gracefully, the lock is also released gracefully.
+
+* A graceful release of an exclusive lock on an RBD image (whether by request
+  or due to client termination) enables another, subsequent, client to acquire
+  the lock and start handling writes.
+
+.. warning::
+   By default, the ``exclusive-lock`` feature does not prevent two or more
+   concurrently running clients from opening the same RBD image and writing to
+   it in turns (whether on the same node or not). In effect, their writes just
+   get linearized as the lock is automatically transitioned back and forth in
+   a cooperative fashion.
+
+.. note::
+   To disable automatic lock transitions between clients, the
+   ``RBD_LOCK_MODE_EXCLUSIVE`` flag may be specified when acquiring the
+   exclusive lock. This is exposed by the ``--exclusive`` option for ``rbd
+   device map`` command.
 
 
 Blocklisting
 ============
 
-Sometimes, a client process (or, in case of a krbd client, a client
-node's kernel thread) that previously held an exclusive lock on an
-image does not terminate gracefully, but dies abruptly. This may be
-due to having received a ``KILL`` or ``ABRT`` signal, for example, or
-a hard reboot or power failure of the client node. In that case, the
-exclusive lock is never gracefully released. Thus, when a new process
-starts and attempts to use the device, it needs a way to break the
-previously held exclusive lock.
+Sometimes a client that previously held an exclusive lock on an RBD image does
+not terminate gracefully, but dies abruptly. This may be because the client
+process received a ``KILL`` or ``ABRT`` signal, or because the client node
+underwent a hard reboot or suffered a power failure. In cases like this, the
+lock is never gracefully released. This means that any new client that comes up
+and attempts to write to the image must break the previously held exclusive
+lock.
 
-However, a process (or kernel thread) may also hang, or merely lose
-network connectivity to the Ceph cluster for some amount of time. In
-that case, simply breaking the lock would be potentially catastrophic:
-the hung process or connectivity issue may resolve itself, and the old
-process may then compete with one that has started in the interim,
-accessing RBD data in an uncoordinated and destructive manner.
+However, a process (or kernel thread) may hang or merely lose network
+connectivity to the Ceph cluster for some amount of time. In that case,
+breaking the lock would be potentially catastrophic: the hung process or
+connectivity issue could resolve itself and the original process might then
+compete with one that started in the interim, thus accessing RBD data in an
+uncoordinated and destructive manner.
 
-Thus, in the event that a lock cannot be acquired in the standard
-graceful manner, the overtaking process not only breaks the lock, but
-also blocklists the previous lock holder. This is negotiated between
-the new client process and the Ceph Mon: upon receiving the blocklist
-request,
+In the event that a lock cannot be acquired in the standard graceful manner,
+the overtaking process not only breaks the lock but also blocklists the
+previous lock holder. This is negotiated between the new client process and the
+Ceph Monitor. 
 
-* the Mon instructs the relevant OSDs to no longer serve requests from
-  the old client process;
-* once the associated OSD map update is complete, the Mon grants the
-  lock to the new client;
-* once the new client has acquired the lock, it can commence writing
+* Upon receiving the blocklist request, the monitor instructs the relevant OSDs
+  to no longer serve requests from the old client process;
+* after the associated OSD map update is complete, the new client can break the
+  previously held lock;
+* after the new client has acquired the lock, it can commence writing
   to the image.
 
 Blocklisting is thus a form of storage-level resource `fencing`_.
 
-In order for blocklisting to work, the client must have the ``osd
-blocklist`` capability. This capability is included in the ``profile
-rbd`` capability profile, which should generally be set on all Ceph
-:ref:`client identities <user-management>` using RBD.
+.. note::
+   In order for blocklisting to work, the client must have the ``osd
+   blocklist`` capability. This capability is included in the ``profile
+   rbd`` capability profile, which should be set generally on all Ceph
+   :ref:`client identities <user-management>` using RBD.
 
+.. _RBD mirroring: ../rbd-mirroring
+.. _PWL cache: ../rbd-persistent-write-log-cache
 .. _fencing: https://en.wikipedia.org/wiki/Fencing_(computing)

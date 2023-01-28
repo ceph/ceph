@@ -34,6 +34,7 @@ void get_arguments(po::options_description *positional,
   options->add_options()
     ("allow-shrink", po::bool_switch(), "permit shrinking");
   at::add_no_progress_option(options);
+  at::add_encryption_options(options);
 }
 
 int execute(const po::variables_map &vm,
@@ -57,6 +58,12 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
+  utils::EncryptionOptions encryption_options;
+  r = utils::get_encryption_options(vm, &encryption_options);
+  if (r < 0) {
+    return r;
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
@@ -64,6 +71,16 @@ int execute(const po::variables_map &vm,
                                  snap_name, false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
+  }
+
+  if (!encryption_options.specs.empty()) {
+    r = image.encryption_load2(encryption_options.specs.data(),
+                               encryption_options.specs.size());
+    if (r < 0) {
+      std::cerr << "rbd: encryption load failed: " << cpp_strerror(r)
+                << std::endl;
+      return r;
+    }
   }
 
   librbd::image_info_t info;

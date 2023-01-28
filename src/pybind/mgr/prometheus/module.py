@@ -1,6 +1,6 @@
 import cherrypy
 from collections import defaultdict
-from distutils.version import StrictVersion
+from pkg_resources import packaging  # type: ignore
 import json
 import math
 import os
@@ -32,10 +32,11 @@ DEFAULT_PORT = 9283
 # ipv6 isn't yet configured / supported and CherryPy throws an uncaught
 # exception.
 if cherrypy is not None:
-    v = StrictVersion(cherrypy.__version__)
+    Version = packaging.version.Version
+    v = Version(cherrypy.__version__)
     # the issue was fixed in 3.2.3. it's present in 3.2.2 (current version on
     # centos:7) and back to at least 3.0.0.
-    if StrictVersion("3.1.2") <= v < StrictVersion("3.2.3"):
+    if Version("3.1.2") <= v < Version("3.2.3"):
         # https://github.com/cherrypy/cherrypy/issues/1100
         from cherrypy.process import servers
         servers.wait_for_occupied_port = lambda host, port: None
@@ -68,6 +69,8 @@ def health_status_to_number(status: str) -> int:
 
 
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
+
+OSD_BLOCKLIST = ['osd_blocklist_count']
 
 DF_POOL = ['max_avail', 'avail_raw', 'stored', 'stored_raw', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes',
@@ -794,6 +797,13 @@ class Module(MgrModule):
                 path,
                 'DF {}'.format(state),
             )
+            path = 'cluster_by_class_{}'.format(state)
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'DF {}'.format(state),
+                ('device_class',)
+            )
         for state in DF_POOL:
             path = 'pool_{}'.format(state)
             metrics[path] = Metric(
@@ -801,6 +811,13 @@ class Module(MgrModule):
                 path,
                 'DF pool {}'.format(state),
                 ('pool_id',)
+            )
+        for state in OSD_BLOCKLIST:
+            path = 'cluster_{}'.format(state)
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'OSD Blocklist Count {}'.format(state),
             )
         for state in NUM_OBJECTS:
             path = 'num_objects_{}'.format(state)
@@ -921,6 +938,9 @@ class Module(MgrModule):
         df = self.get('df')
         for stat in DF_CLUSTER:
             self.metrics['cluster_{}'.format(stat)].set(df['stats'][stat])
+            for device_class in df['stats_by_class']:
+                self.metrics['cluster_by_class_{}'.format(stat)].set(
+                    df['stats_by_class'][device_class][stat], (device_class,))
 
         for pool in df['pools']:
             for stat in DF_POOL:
@@ -928,6 +948,17 @@ class Module(MgrModule):
                     pool['stats'][stat],
                     (pool['id'],)
                 )
+
+    @profile_method()
+    def get_osd_blocklisted_entries(self) -> None:
+        r = self.mon_command({
+            'prefix': 'osd blocklist ls',
+            'format': 'json'
+        })
+        blocklist_entries = r[2].split(' ')
+        blocklist_count = blocklist_entries[1]
+        for stat in OSD_BLOCKLIST:
+            self.metrics['cluster_{}'.format(stat)].set(int(blocklist_count))
 
     @profile_method()
     def get_fs(self) -> None:
@@ -1033,7 +1064,9 @@ class Module(MgrModule):
         pg_summary = self.get('pg_summary')
 
         for pool in pg_summary['by_pool']:
-            num_by_state = defaultdict(int)  # type: DefaultDict[str, int]
+            num_by_state: DefaultDict[str, int] = defaultdict(int)
+            for state in PG_STATES:
+                num_by_state[state] = 0
 
             for state_name, count in pg_summary['by_pool'][pool].items():
                 for state in state_name.split('+'):
@@ -1062,8 +1095,9 @@ class Module(MgrModule):
         for server in self.list_servers():
             host = cast(str, server.get('hostname', ''))
             for service in cast(List[ServiceInfoT], server.get('services', [])):
-                ret.update({(service['id'], service['type']): (
-                    host, service['ceph_version'], service.get('name', ''))})
+                ret.update({(service['id'], service['type']): (host,
+                                                               service.get('ceph_version', 'unknown'),
+                                                               service.get('name', ''))})
         return ret
 
     @profile_method()
@@ -1272,7 +1306,10 @@ class Module(MgrModule):
         # stats are collected for every namespace in the pool. The wildcard
         # '*' can be used to indicate all pools or namespaces
         pools_string = cast(str, self.get_localized_module_option('rbd_stats_pools'))
-        pool_keys = []
+        pool_keys = set()
+        osd_map = self.get('osd_map')
+        rbd_pools = [pool['pool_name'] for pool in osd_map['pools']
+                     if 'rbd' in pool.get('application_metadata', {})]
         for x in re.split(r'[\s,]+', pools_string):
             if not x:
                 continue
@@ -1285,13 +1322,11 @@ class Module(MgrModule):
 
             if pool_name == "*":
                 # collect for all pools
-                osd_map = self.get('osd_map')
-                for pool in osd_map['pools']:
-                    if 'rbd' not in pool.get('application_metadata', {}):
-                        continue
-                    pool_keys.append((pool['pool_name'], namespace_name))
+                for pool in rbd_pools:
+                    pool_keys.add((pool, namespace_name))
             else:
-                pool_keys.append((pool_name, namespace_name))
+                if pool_name in rbd_pools:
+                    pool_keys.add((pool_name, namespace_name))  # avoids adding deleted pool
 
         pools = {}  # type: Dict[str, Set[str]]
         for pool_key in pool_keys:
@@ -1553,6 +1588,35 @@ class Module(MgrModule):
                 cast(MetricCounter, sum_metric).add(duration, (method_name,))
                 cast(MetricCounter, count_metric).add(1, (method_name,))
 
+    def get_pool_repaired_objects(self) -> None:
+        dump = self.get('pg_dump')
+        for stats in dump['pool_stats']:
+            path = f'pool_objects_repaired{stats["poolid"]}'
+            self.metrics[path] = Metric(
+                'counter',
+                'pool_objects_repaired',
+                'Number of objects repaired in a pool Count',
+                ('poolid',)
+            )
+
+            self.metrics[path].set(stats['stat_sum']['num_objects_repaired'],
+                                   labelvalues=(stats['poolid'],))
+
+    def get_all_daemon_health_metrics(self) -> None:
+        daemon_metrics = self.get_daemon_health_metrics()
+        self.log.debug('metrics jeje %s' % (daemon_metrics))
+        for daemon_name, health_metrics in daemon_metrics.items():
+            for health_metric in health_metrics:
+                path = f'daemon_health_metrics{daemon_name}{health_metric["type"]}'
+                self.metrics[path] = Metric(
+                    'counter',
+                    'daemon_health_metrics',
+                    'Health metrics for Ceph daemons',
+                    ('type', 'ceph_daemon',)
+                )
+                self.metrics[path].set(health_metric['value'], labelvalues=(
+                    health_metric['type'], daemon_name,))
+
     @profile_method(True)
     def collect(self) -> str:
         # Clear the metrics before scraping
@@ -1561,6 +1625,7 @@ class Module(MgrModule):
 
         self.get_health()
         self.get_df()
+        self.get_osd_blocklisted_entries()
         self.get_pool_stats()
         self.get_fs()
         self.get_osd_stats()
@@ -1568,7 +1633,9 @@ class Module(MgrModule):
         self.get_mgr_status()
         self.get_metadata_and_osd_status()
         self.get_pg_status()
+        self.get_pool_repaired_objects()
         self.get_num_objects()
+        self.get_all_daemon_health_metrics()
 
         for daemon, counters in self.get_all_perf_counters().items():
             for path, counter_info in counters.items():

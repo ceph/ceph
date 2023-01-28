@@ -6,7 +6,7 @@
 #include "svc_meta.h"
 #include "svc_meta_be_sobj.h"
 
-#include "rgw/rgw_zone.h"
+#include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 

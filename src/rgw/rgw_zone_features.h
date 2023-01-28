@@ -1,6 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+/* N.B., this header defines fundamental serialized types.  Do not
+ * include files which can only be compiled in radosgw or OSD
+ * contexts (e.g., rgw_sal.h, rgw_common.h) */
+
 #pragma once
 
 #include <string>

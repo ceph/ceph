@@ -142,5 +142,11 @@ BackfillRecovery::BackfillRecovery(
     evt(evt.intrusive_from_this())
 {}
 
-
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::BackfillRecovery> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::osd::PglogBasedRecovery> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::osd::UrgentRecovery> : fmt::ostream_formatter {};
+template <class T> struct fmt::formatter<crimson::osd::BackgroundRecoveryT<T>> : fmt::ostream_formatter {};
+#endif

@@ -46,5 +46,12 @@ while [[ $PROMETHEUS_RUNNING_COUNT -lt 1 ]]; do
     PROMETHEUS_RUNNING_COUNT=$(kcli ssh -u root ceph-node-00 'cephadm shell "ceph orch ls --service_name=prometheus --format=json"' | jq -r '.[] | .status.running')
 done
 
+# grafana ip address is set to the fqdn by default.
+# kcli is not working with that, so setting the IP manually.
+kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-alertmanager-api-host http://192.168.100.100:9093"'
+kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-prometheus-api-host http://192.168.100.100:9095"'
+kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-grafana-api-url https://192.168.100.100:3000"'
+kcli ssh -u root ceph-node-00 'cephadm shell "ceph orch apply node-exporter --placement 'count:2'"'
+
 cypress_run ["orchestrator/workflow/*.feature, orchestrator/workflow/*-spec.ts"]
 cypress_run "orchestrator/grafana/*.feature"

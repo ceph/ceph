@@ -70,8 +70,10 @@ struct EntityName
 
   friend bool operator<(const EntityName& a, const EntityName& b);
   friend std::ostream& operator<<(std::ostream& out, const EntityName& n);
-  friend bool operator==(const EntityName& a, const EntityName& b);
-  friend bool operator!=(const EntityName& a, const EntityName& b);
+
+  bool operator==(const EntityName& rhs) const noexcept {
+    return type == rhs.type && id == rhs.id;
+  }
 
 private:
   struct str_to_entity_type_t {
@@ -86,7 +88,5 @@ private:
 };
 
 WRITE_CLASS_ENCODER(EntityName)
-
-WRITE_EQ_OPERATORS_2(EntityName, type, id)
 
 #endif

@@ -293,7 +293,7 @@ static const char *get_acl_header(const RGWEnv *env,
   return env->get(header, NULL);
 }
 
-static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::Store* store, string& grantee_str,
+static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, string& grantee_str,
         const struct s3_acl_header *perm, ACLGrant& grant)
 {
   string id_type, id_val_quoted;
@@ -308,13 +308,13 @@ static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::Store* sto
 
   if (strcasecmp(id_type.c_str(), "emailAddress") == 0) {
     std::unique_ptr<rgw::sal::User> user;
-    ret = store->get_user_by_email(dpp, id_val, null_yield, &user);
+    ret = driver->get_user_by_email(dpp, id_val, null_yield, &user);
     if (ret < 0)
       return ret;
 
     grant.set_canon(user->get_id(), user->get_display_name(), rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "id") == 0) {
-    std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(id_val));
+    std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(id_val));
     ret = user->load_user(dpp, null_yield);
     if (ret < 0)
       return ret;
@@ -333,7 +333,7 @@ static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::Store* sto
   return 0;
 }
 
-static int parse_acl_header(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+static int parse_acl_header(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 			    const RGWEnv *env, const struct s3_acl_header *perm,
 			    std::list<ACLGrant>& _grants)
 {
@@ -349,7 +349,7 @@ static int parse_acl_header(const DoutPrefixProvider *dpp, rgw::sal::Store* stor
 
   for (list<string>::iterator it = grantees.begin(); it != grantees.end(); ++it) {
     ACLGrant grant;
-    int ret = parse_grantee_str(dpp, store, *it, perm, grant);
+    int ret = parse_grantee_str(dpp, driver, *it, perm, grant);
     if (ret < 0)
       return ret;
 
@@ -455,14 +455,14 @@ static const s3_acl_header acl_header_perms[] = {
 };
 
 int RGWAccessControlPolicy_S3::create_from_headers(const DoutPrefixProvider *dpp,
-						   rgw::sal::Store* store,
+						   rgw::sal::Driver* driver,
 						   const RGWEnv *env, ACLOwner& _owner)
 {
   std::list<ACLGrant> grants;
   int r = 0;
 
   for (const struct s3_acl_header *p = acl_header_perms; p->rgw_perm; p++) {
-    r = parse_acl_header(dpp, store, env, p, grants);
+    r = parse_acl_header(dpp, driver, env, p, grants);
     if (r < 0) {
       return r;
     }
@@ -480,7 +480,7 @@ int RGWAccessControlPolicy_S3::create_from_headers(const DoutPrefixProvider *dpp
   can only be called on object that was parsed
  */
 int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
-				       rgw::sal::Store* store, ACLOwner *owner,
+				       rgw::sal::Driver* driver, ACLOwner *owner,
 				       RGWAccessControlPolicy& dest, std::string &err_msg)
 {
   if (!owner)
@@ -493,7 +493,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
       return -EPERM;
   }
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(owner->get_id());
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(owner->get_id());
   if (user->load_user(dpp, null_yield) < 0) {
     ldpp_dout(dpp, 10) << "owner info does not exist" << dendl;
     err_msg = "Invalid id";
@@ -528,7 +528,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
         }
         email = u.id;
         ldpp_dout(dpp, 10) << "grant user email=" << email << dendl;
-	if (store->get_user_by_email(dpp, email, null_yield, &user) < 0) {
+	if (driver->get_user_by_email(dpp, email, null_yield, &user) < 0) {
           ldpp_dout(dpp, 10) << "grant user email not found or other error" << dendl;
           err_msg = "The e-mail address you provided does not match any account on record.";
           return -ERR_UNRESOLVABLE_EMAIL;
@@ -547,7 +547,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
         }
     
         if (grant_user.user_id.empty()) {
-	  user = store->get_user(uid);
+	  user = driver->get_user(uid);
 	  if (user->load_user(dpp, null_yield) < 0) {
 	    ldpp_dout(dpp, 10) << "grant user does not exist:" << uid << dendl;
 	    err_msg = "Invalid id";

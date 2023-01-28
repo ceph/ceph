@@ -293,6 +293,10 @@ const std::array commands = {
 	  "remove OBJECT in POOL"sv }
 };
 
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<boost::program_options::options_description> : ostream_formatter {};
+#endif // FMT_VERSION
+
 int main(int argc, char* argv[])
 {
   const std::string_view prog(argv[0]);

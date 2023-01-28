@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_TAR_H
-#define CEPH_RGW_TAR_H
+#pragma once
 
 #include <algorithm>
 #include <array>
@@ -69,7 +68,7 @@ enum class FileType : char {
 
 class HeaderView {
 protected:
-  /* Everythng is char here (ASCII encoding), so we don't need to worry about
+  /* Everything is char here (ASCII encoding), so we don't need to worry about
    * the struct padding. */
   const struct header_t {
     char filename[100];
@@ -86,7 +85,7 @@ protected:
   static_assert(sizeof(*header) == BLOCK_SIZE,
                 "The TAR header must be exactly BLOCK_SIZE length");
 
-  /* The label is far more imporant from what the code really does. */
+  /* The label is far more important from what the code really does. */
   static size_t pos2len(const size_t pos) {
     return pos + 1;
   }
@@ -152,5 +151,3 @@ interpret_block(const StatusIndicator& status, ceph::bufferlist& bl) {
 
 } /* namespace tar */
 } /* namespace rgw */
-
-#endif /* CEPH_RGW_TAR_H */

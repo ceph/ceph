@@ -50,7 +50,7 @@ int main(int argc, char** argv)
     .then([conf_file_list] {
       return local_conf().parse_config_files(conf_file_list);
     }).then([] {
-      return seastar::do_with(std::make_unique<crimson::os::ThreadPool>(2, 128, (std::vector<uint64_t>){0}),
+      return seastar::do_with(std::make_unique<crimson::os::ThreadPool>(2, 128, seastar::resource::cpuset{0}),
                               [](auto& tp) {
         return tp->start().then([&tp] {
           return test_accumulate(*tp);

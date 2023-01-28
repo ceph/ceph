@@ -113,6 +113,20 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "telemetry",
     }
   },
+  {
+    CEPH_RELEASE_REEF, {
+      "crash",
+      "status",
+      "progress",
+      "balancer",
+      "devicehealth",
+      "orchestrator",
+      "rbd_support",
+      "volumes",
+      "pg_autoscaler",
+      "telemetry",
+    }
+  },
 };
 
 // Prefix for mon store of active mgr's command descriptions
@@ -1144,9 +1158,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
   string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
-  string prefix;
-  cmd_getval(cmdmap, "prefix", prefix);
-
+  const auto prefix = cmd_getval_or<string>(cmdmap, "prefix", string{});
   int r = 0;
 
   if (prefix == "mgr fail") {
@@ -1274,10 +1286,17 @@ out:
   getline(ss, rs);
 
   if (r >= 0) {
+    bool do_update = false;
+    if (prefix == "mgr fail" && is_writeable()) {
+      propose_pending();
+      do_update = false;
+    } else {
+      do_update = true;
+    }
     // success.. delay reply
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
 					      get_last_committed() + 1));
-    return true;
+    return do_update;
   } else {
     // reply immediately
     mon.reply_command(op, r, rs, rdata, get_last_committed());

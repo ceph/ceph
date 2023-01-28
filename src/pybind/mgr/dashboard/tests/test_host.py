@@ -499,11 +499,15 @@ class TestHosts(unittest.TestCase):
             host0 = inventories[0]
             self.assertEqual(host0['name'], 'host-0')
             self.assertEqual(host0['addr'], '1.2.3.4')
-            self.assertEqual(host0['devices'][0]['osd_ids'], [1, 2])
-            self.assertEqual(host0['devices'][1]['osd_ids'], [1])
-            self.assertEqual(host0['devices'][2]['osd_ids'], [2])
+            # devices should be sorted by path name, so
+            # /dev/sdb, /dev/sdc, nvme0n1
+            self.assertEqual(host0['devices'][0]['osd_ids'], [1])
+            self.assertEqual(host0['devices'][1]['osd_ids'], [2])
+            self.assertEqual(host0['devices'][2]['osd_ids'], [1, 2])
             host1 = inventories[1]
             self.assertEqual(host1['name'], 'host-1')
             self.assertEqual(host1['addr'], '1.2.3.5')
+            # devices should be sorted by path name, so
+            # /dev/sda, sdb
             self.assertEqual(host1['devices'][0]['osd_ids'], [])
             self.assertEqual(host1['devices'][1]['osd_ids'], [3])

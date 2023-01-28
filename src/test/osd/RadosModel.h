@@ -1051,20 +1051,31 @@ public:
 	if (int err = (*i)->get_return_value()) {
 	  std::cerr << "Error: oid " << oid << " write returned error code "
 		    << err << std::endl;
+          ceph_abort();
 	}
-	if ((*i)->get_version64() > version)
+	if ((*i)->get_version64() > version) {
+          std::cout << num << ":  oid " << oid << " updating version " << version
+                    << " to " << (*i)->get_version64() << std::endl;
 	  version = (*i)->get_version64();
+        } else {
+          std::cout << num << ":  oid " << oid << " version " << version
+                    << " is already newer than " << (*i)->get_version64() << std::endl;
+        }
 	(*i)->release();
 	waiting.erase(i++);
       }
 
       context->update_object_version(oid, version);
+      ceph_assert(rcompletion->is_complete());
+      int r = rcompletion->get_return_value();
+      assertf(r >= 0, "r = %d", r);
       if (rcompletion->get_version64() != version) {
 	std::cerr << "Error: racing read on " << oid << " returned version "
 		  << rcompletion->get_version64() << " rather than version "
 		  << version << std::endl;
 	ceph_abort_msg("racing read got wrong version");
       }
+      rcompletion->release();
 
       {
 	ObjectDesc old_value;
@@ -1076,7 +1087,6 @@ public:
 		    << old_value.most_recent() << std::endl;
       }
 
-      rcompletion->release();
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
       context->kick();
@@ -1223,16 +1233,24 @@ public:
 	if (int err = (*i)->get_return_value()) {
 	  std::cerr << "Error: oid " << oid << " writesame returned error code "
 	       << err << std::endl;
+          ceph_abort();
 	}
-	if ((*i)->get_version64() > version)
+	if ((*i)->get_version64() > version) {
+          std::cout << "oid " << oid << "updating version " << version
+                    << "to " << (*i)->get_version64() << std::endl;
 	  version = (*i)->get_version64();
+        } else {
+          std::cout << "oid " << oid << "version " << version
+                    << "is already newer than " << (*i)->get_version64() << std::endl;
+        }
 	(*i)->release();
 	waiting.erase(i++);
       }
 
       context->update_object_version(oid, version);
       ceph_assert(rcompletion->is_complete());
-      ceph_assert(rcompletion->get_return_value() == 1);
+      int r = rcompletion->get_return_value();
+      assertf(r >= 0, "r = %d", r);
       if (rcompletion->get_version64() != version) {
 	std::cerr << "Error: racing read on " << oid << " returned version "
 		  << rcompletion->get_version64() << " rather than version "

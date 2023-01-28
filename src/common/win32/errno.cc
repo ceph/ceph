@@ -638,7 +638,7 @@ static const ceph::unordered_map<int,NTSTATUS> cephfs_errno_to_ntstatus = {
   {CEPHFS_EOLDSNAPC,       STATUS_DATA_ERROR}
 };
 
-__u32 cephfs_errno_to_ntsatus(int cephfs_errno)
+__u32 cephfs_errno_to_ntstatus_map(int cephfs_errno)
 {
   cephfs_errno = abs(cephfs_errno);
 

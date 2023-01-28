@@ -4,6 +4,8 @@
 
 There are several Ceph daemons in a storage cluster:
 
+.. _rados_configuration_storage-devices_ceph_osd:
+
 * **Ceph OSDs** (Object Storage Daemons) store most of the data
   in Ceph. Usually each OSD is backed by a single storage device.
   This can be a traditional hard disk (HDD) or a solid state disk
@@ -24,18 +26,19 @@ There are several Ceph daemons in a storage cluster:
   monitoring and management systems.
 
 
-OSD Backends
-============
+OSD Back Ends
+=============
 
-There are two ways that OSDs manage the data they store. 
-As of the Luminous 12.2.z release, the default (and recommended) backend is
-*BlueStore*.  Prior to the Luminous release, the default (and only option) was
-*Filestore*.
+There are two ways that OSDs manage the data they store.  As of the Luminous
+12.2.z release, the default (and recommended) back end is *BlueStore*.  Prior
+to the Luminous release, the default (and only) back end was *Filestore*.
+
+.. _rados_config_storage_devices_bluestore:
 
 BlueStore
 ---------
 
-BlueStore is a special-purpose storage backend designed specifically for
+BlueStore is a special-purpose storage back end designed specifically for
 managing data on disk for Ceph OSD workloads.  BlueStore's design is based on
 a decade of experience of supporting and managing Filestore OSDs. 
 

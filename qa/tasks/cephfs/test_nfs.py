@@ -165,12 +165,13 @@ class TestNFS(MgrTestCase):
         it checks for expected cluster id. Otherwise checks nothing is listed.
         :param empty: If true it denotes no cluster is deployed.
         '''
+        nfs_output = self._nfs_cmd('cluster', 'ls')
+        jdata = json.loads(nfs_output)
         if empty:
-            cluster_id = ''
+            self.assertEqual(len(jdata), 0)
         else:
             cluster_id = self.cluster_id
-        nfs_output = self._nfs_cmd('cluster', 'ls')
-        self.assertEqual(cluster_id, nfs_output.strip())
+            self.assertEqual([cluster_id], jdata)
 
     def _create_export(self, export_id, create_fs=False, extra_cmd=None):
         '''
@@ -730,3 +731,16 @@ class TestNFS(MgrTestCase):
         exec_cmd_invalid('export', 'info')
         exec_cmd_invalid('export', 'info', 'clusterid')
         exec_cmd_invalid('export', 'apply')
+
+    def test_non_existent_cluster(self):
+        """
+        Test that cluster info doesn't throw junk data for non-existent cluster
+        """
+        cluster_ls = self._nfs_cmd('cluster', 'ls')
+        self.assertNotIn('foo', cluster_ls, 'cluster foo exists')
+        try:
+            self._nfs_cmd('cluster', 'info', 'foo')
+            self.fail("nfs cluster info foo returned successfully for non-existent cluster")
+        except CommandFailedError as e:
+            if e.exitstatus != errno.ENOENT:
+                raise

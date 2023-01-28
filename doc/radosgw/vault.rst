@@ -160,8 +160,8 @@ If you are using both sse-kms and sse-s3, then you should point
 each to separate containers.  You could either use separate
 vault instances, or you could use either separately mounted
 transit instances, or different branches under a common transit
-pointpoint.  If you are not using separate vault instances, you can
-Use these to point kms and sse-s3 to separate containers:
+point.  If you are not using separate vault instances, you can
+use these to point kms and sse-s3 to separate containers:
 ``rgw_crypt_vault_prefix``
 and/or
 ``rgw_crypt_sse_s3_vault_prefix``.

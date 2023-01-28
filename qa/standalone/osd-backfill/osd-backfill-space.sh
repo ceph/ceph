@@ -29,6 +29,7 @@ function run() {
     CEPH_ARGS+="--fake_statfs_for_testing=3686400 "
     CEPH_ARGS+="--osd_max_backfills=10 "
     CEPH_ARGS+="--osd_mclock_profile=high_recovery_ops "
+    CEPH_ARGS+="--osd_mclock_override_recovery_settings=true "
     export objects=600
     export poolprefix=test
 

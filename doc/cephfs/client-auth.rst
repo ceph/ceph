@@ -24,6 +24,16 @@ that directory.
 To restrict clients to only mount and work within a certain directory, use
 path-based MDS authentication capabilities.
 
+Note that this restriction *only* impacts the filesystem hierarchy -- the metadata
+tree managed by the MDS. Clients will still be able to access the underlying
+file data in RADOS directly. To segregate clients fully, you must also isolate
+untrusted clients in their own RADOS namespace. You can place a client's
+filesystem subtree in a particular namespace using `file layouts`_ and then
+restrict their RADOS access to that namespace using `OSD capabilities`_
+
+.. _file layouts: ./file-layouts
+.. _OSD capabilities: ../rados/operations/user-management/#authorization-capabilities
+
 Syntax
 ------
 

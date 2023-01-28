@@ -926,15 +926,7 @@ int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
     headers.emplace_back(kv);
   }
 
-  if (!mgr) {
-    return RGWHTTP::send(this);
-  }
-
-  int r = mgr->add_request(this);
-  if (r < 0)
-    return r;
-
-  return 0;
+  return RGWHTTPStreamRWRequest::send(mgr);
 }
 
 int RGWHTTPStreamRWRequest::complete_request(optional_yield y,
@@ -1116,4 +1108,17 @@ int RGWHTTPStreamRWRequest::send_data(void *ptr, size_t len, bool *pause)
     write_drain_cb->notify(out_len);
   }
   return send_size;
+}
+
+int RGWHTTPStreamRWRequest::send(RGWHTTPManager *mgr)
+{
+  if (!mgr) {
+    return RGWHTTP::send(this);
+  }
+
+  int r = mgr->add_request(this);
+  if (r < 0)
+    return r;
+
+  return 0;
 }

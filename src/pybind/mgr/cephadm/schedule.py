@@ -1,3 +1,4 @@
+import ipaddress
 import hashlib
 import logging
 import random
@@ -140,12 +141,13 @@ class DaemonPlacement(NamedTuple):
 class HostAssignment(object):
 
     def __init__(self,
-                 spec,  # type: ServiceSpec
+                 spec: ServiceSpec,
                  hosts: List[orchestrator.HostSpec],
                  unreachable_hosts: List[orchestrator.HostSpec],
+                 draining_hosts: List[orchestrator.HostSpec],
                  daemons: List[orchestrator.DaemonDescription],
                  networks: Dict[str, Dict[str, Dict[str, List[str]]]] = {},
-                 filter_new_host=None,  # type: Optional[Callable[[str],bool]]
+                 filter_new_host: Optional[Callable[[str], bool]] = None,
                  allow_colo: bool = False,
                  primary_daemon_type: Optional[str] = None,
                  per_host_daemon_type: Optional[str] = None,
@@ -156,6 +158,7 @@ class HostAssignment(object):
         self.primary_daemon_type = primary_daemon_type or spec.service_type
         self.hosts: List[orchestrator.HostSpec] = hosts
         self.unreachable_hosts: List[orchestrator.HostSpec] = unreachable_hosts
+        self.draining_hosts: List[orchestrator.HostSpec] = draining_hosts
         self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
         self.daemons = daemons
@@ -189,7 +192,8 @@ class HostAssignment(object):
 
         if self.spec.placement.hosts:
             explicit_hostnames = {h.hostname for h in self.spec.placement.hosts}
-            unknown_hosts = explicit_hostnames.difference(set(self.get_hostnames()))
+            known_hosts = self.get_hostnames() + [h.hostname for h in self.draining_hosts]
+            unknown_hosts = explicit_hostnames.difference(set(known_hosts))
             if unknown_hosts:
                 raise OrchestratorValidationError(
                     f'Cannot place {self.spec.one_line_str()} on {", ".join(sorted(unknown_hosts))}: Unknown hosts')
@@ -359,6 +363,13 @@ class HostAssignment(object):
     def find_ip_on_host(self, hostname: str, subnets: List[str]) -> Optional[str]:
         for subnet in subnets:
             ips: List[str] = []
+            # following is to allow loopback interfaces for both ipv4 and ipv6. Since we
+            # only have the subnet (and no IP) we assume default loopback IP address.
+            if ipaddress.ip_network(subnet).is_loopback:
+                if ipaddress.ip_network(subnet).version == 4:
+                    ips.append('127.0.0.1')
+                else:
+                    ips.append('::1')
             for iface, iface_ips in self.networks.get(hostname, {}).get(subnet, {}).items():
                 ips.extend(iface_ips)
             if ips:
@@ -371,7 +382,7 @@ class HostAssignment(object):
                 DaemonPlacement(daemon_type=self.primary_daemon_type,
                                 hostname=h.hostname, network=h.network, name=h.name,
                                 ports=self.ports_start)
-                for h in self.spec.placement.hosts
+                for h in self.spec.placement.hosts if h.hostname not in [dh.hostname for dh in self.draining_hosts]
             ]
         elif self.spec.placement.label:
             ls = [

@@ -1,3 +1,5 @@
+.. _cephfs_add_remote_mds:
+
 .. note::
    It is highly recommended to use :doc:`/cephadm/index` or another Ceph
    orchestrator for setting up the ceph cluster. Use this approach only if you

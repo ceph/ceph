@@ -18,7 +18,7 @@
 
 namespace rgw { namespace sal {
 
-  class Store;
+  class Driver;
   class User;
   class Bucket;
   class BucketList;
@@ -30,7 +30,12 @@ namespace rgw { namespace sal {
   class PlacementTier;
   class ZoneGroup;
   class Zone;
-  class LuaScriptManager;
+  class LuaManager;
   struct RGWRoleInfo;
+
+  class ConfigStore;
+  class RealmWriter;
+  class ZoneGroupWriter;
+  class ZoneWriter;
 
 } } // namespace rgw::sal

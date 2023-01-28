@@ -21,7 +21,9 @@
           <ng-container *ngTemplateOutlet="logsLink"></ng-container>
           <ul>
             <li *ngFor="let check of healthData.health.checks">
-              <span [ngStyle]="check.severity | healthColor">{{ check.type }}</span>: {{ check.summary.message }}
+              <span [ngStyle]="check.severity | healthColor"
+                    [class.health-warn-description]="check.severity === 'HEALTH_WARN'">
+              {{ check.type }}</span>: {{ check.summary.message }}
             </li>
           </ul>
         </ng-template>
@@ -29,13 +31,14 @@
              [ngStyle]="healthData.health.status | healthColor"
              [ngbPopover]="healthChecks"
              popoverClass="info-card-popover-cluster-status">
-          {{ healthData.health.status }} <i *ngIf="healthData.health?.status != 'HEALTH_OK'"
-                                            class="fa fa-exclamation-triangle"></i>
+          {{ healthData.health.status | healthLabel | uppercase }}
+          <i *ngIf="healthData.health?.status !== 'HEALTH_OK'"
+             class="fa fa-exclamation-triangle"></i>
         </div>
       </ng-container>
       <ng-container *ngIf="!healthData.health?.checks?.length">
         <div [ngStyle]="healthData.health.status | healthColor">
-          {{ healthData.health.status }}
+          {{ healthData.health.status | healthLabel | uppercase }}
         </div>
       </ng-container>
     </cd-info-card>
@@ -87,7 +90,7 @@
                   link="/rgw/daemon"
                   class="cd-status-card"
                   contentClass="content-highlight"
-                  *ngIf="enabledFeature.rgw && healthData.rgw != null">
+                  *ngIf="enabledFeature.rgw && healthData?.rgw != null">
       {{ healthData.rgw }} total
     </cd-info-card>
 
@@ -99,7 +102,7 @@
       <!-- TODO: check text-area-size-2 -->
       <span *ngFor="let result of transformedResult"
             [ngClass]="result.class"
-            [title]="result.titleText != null ? result.titleText : ''">
+            [title]="result.titleText !== null ? result.titleText : ''">
         {{ result.content }}
       </span>
     </cd-info-card>
@@ -109,7 +112,7 @@
                   link="/block/iscsi"
                   class="cd-status-card"
                   contentClass="content-highlight"
-                  *ngIf="enabledFeature.iscsi && healthData.iscsi_daemons != null">
+                  *ngIf="enabledFeature.iscsi && healthData?.iscsi_daemons != null">
       {{ healthData.iscsi_daemons.up + healthData.iscsi_daemons.down }} total
       <span class="card-text-line-break"></span>
       {{ healthData.iscsi_daemons.up }} up,

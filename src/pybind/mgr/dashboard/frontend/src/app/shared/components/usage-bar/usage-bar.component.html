@@ -17,11 +17,15 @@
   <div class="progress-bar bg-info"
        [ngClass]="{'bg-warning': usedPercentage/100 >= warningThreshold, 'bg-danger': usedPercentage/100 >= errorThreshold}"
        role="progressbar"
+       [attr.aria-label]="{ title }"
+       i18n-aria-label="The title of this usage bar is { title }"
        [style.width]="usedPercentage + '%'">
     <span>{{ usedPercentage | number: '1.0-' + decimals }}%</span>
   </div>
   <div class="progress-bar bg-freespace"
        role="progressbar"
+       [attr.aria-label]="{ title }"
+       i18n-aria-label="The title of this usage bar is { title }"
        [style.width]="freePercentage + '%'">
   </div>
 </div>

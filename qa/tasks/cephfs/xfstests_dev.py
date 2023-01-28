@@ -17,10 +17,14 @@ class XFSTestsDev(CephFSTestCase):
 
     def setUp(self):
         super(XFSTestsDev, self).setUp()
-        self.prepare_xfstests_dev()
+        self.setup_xfsprogs_devs()
+        self.prepare_xfstests_devs()
 
-    def prepare_xfstests_dev(self):
-        self.get_repo()
+    def setup_xfsprogs_devs(self):
+        self.install_xfsprogs = False
+
+    def prepare_xfstests_devs(self):
+        self.get_repos()
         self.get_test_and_scratch_dirs_ready()
         self.install_deps()
         self.create_reqd_users()
@@ -29,26 +33,39 @@ class XFSTestsDev(CephFSTestCase):
         # NOTE: On teuthology machines it's necessary to run "make" as
         # superuser since the repo is cloned somewhere in /tmp.
         self.mount_a.client_remote.run(args=['sudo', 'make'],
-                                       cwd=self.repo_path, stdout=StringIO(),
+                                       cwd=self.xfstests_repo_path, stdout=StringIO(),
                                        stderr=StringIO())
         self.mount_a.client_remote.run(args=['sudo', 'make', 'install'],
-                                       cwd=self.repo_path, omit_sudo=False,
+                                       cwd=self.xfstests_repo_path, omit_sudo=False,
                                        stdout=StringIO(), stderr=StringIO())
 
-    def get_repo(self):
-        """
-        Clone xfstests_dev repository. If already present, update it.
-        """
-        from teuthology.orchestra import run
+        if self.install_xfsprogs:
+            self.mount_a.client_remote.run(args=['sudo', 'make'],
+                                           cwd=self.xfsprogs_repo_path,
+                                           stdout=StringIO(), stderr=StringIO())
+            self.mount_a.client_remote.run(args=['sudo', 'make', 'install'],
+                                           cwd=self.xfsprogs_repo_path, omit_sudo=False,
+                                           stdout=StringIO(), stderr=StringIO())
 
+    def get_repos(self):
+        """
+        Clone xfstests_dev and xfsprogs-dev repositories. If already present,
+        update them. The xfsprogs-dev will be used to test the encrypt.
+        """
         # TODO: make sure that repo is not cloned for every test. it should
         # happen only once.
-        remoteurl = 'git://git.ceph.com/xfstests-dev.git'
-        self.repo_path = self.mount_a.client_remote.mkdtemp(suffix=
+        remoteurl = 'https://git.ceph.com/xfstests-dev.git'
+        self.xfstests_repo_path = self.mount_a.client_remote.mkdtemp(suffix=
                                                             'xfstests-dev')
-        self.mount_a.run_shell(['git', 'archive', '--remote=' + remoteurl,
-                                'HEAD', run.Raw('|'),
-                                'tar', '-C', self.repo_path, '-x', '-f', '-'])
+        self.mount_a.run_shell(['git', 'clone', remoteurl, '--depth', '1',
+                                self.xfstests_repo_path])
+
+        if self.install_xfsprogs:
+            remoteurl = 'https://git.ceph.com/xfsprogs-dev.git'
+            self.xfsprogs_repo_path = self.mount_a.client_remote.mkdtemp(suffix=
+                                                                'xfsprogs-dev')
+            self.mount_a.run_shell(['git', 'clone', remoteurl, '--depth', '1',
+                                    self.xfsprogs_repo_path])
 
     def get_admin_key(self):
         import configparser
@@ -103,6 +120,12 @@ class XFSTestsDev(CephFSTestCase):
             xfsdump xfsprogs \
             libacl-devel libattr-devel libaio-devel libuuid-devel \
             xfsprogs-devel btrfs-progs-devel python2 sqlite""".split()
+
+            if self.install_xfsprogs:
+                deps += ['inih-devel', 'userspace-rcu-devel', 'libblkid-devel',
+                         'gettext', 'libedit-devel', 'libattr-devel',
+                         'device-mapper-devel', 'libicu-devel']
+
             deps_old_distros = ['xfsprogs-qa-devel']
 
             if distro != 'fedora' and major_ver_num > 7:
@@ -114,6 +137,11 @@ class XFSTestsDev(CephFSTestCase):
             e2fsprogs automake gcc libuuid1 quota attr libattr1-dev make \
             libacl1-dev libaio-dev xfsprogs libgdbm-dev gawk fio dbench \
             uuid-runtime python sqlite3""".split()
+
+            if self.install_xfsprogs:
+                deps += ['libinih-dev', 'liburcu-dev', 'libblkid-dev',
+                         'gettext', 'libedit-dev', 'libattr1-dev',
+                         'libdevmapper-dev', 'libicu-dev', 'pkg-config']
 
             if major_ver_num >= 19:
                 deps[deps.index('python')] ='python2'
@@ -144,13 +172,13 @@ class XFSTestsDev(CephFSTestCase):
             export FSTYP=ceph
             export TEST_DEV={}
             export TEST_DIR={}
-            #export SCRATCH_DEV={}
-            #export SCRATCH_MNT={}
-            export TEST_FS_MOUNT_OPTS="-o name=admin,secret={}"
+            export SCRATCH_DEV={}
+            export SCRATCH_MNT={}
+            export CEPHFS_MOUNT_OPTIONS="-o name=admin,secret={}"
             ''').format(self.test_dev, self.test_dirs_mount_path, self.scratch_dev,
                         self.scratch_dirs_mount_path, self.get_admin_key())
 
-        self.mount_a.client_remote.write_file(join(self.repo_path, 'local.config'),
+        self.mount_a.client_remote.write_file(join(self.xfstests_repo_path, 'local.config'),
                                               xfstests_config_contents, sudo=True)
 
     def tearDown(self):
@@ -164,7 +192,12 @@ class XFSTestsDev(CephFSTestCase):
                                        omit_sudo=False, check_status=False)
 
         self.mount_a.client_remote.run(args=['sudo', 'rm', '-rf',
-                                             self.repo_path],
+                                             self.xfstests_repo_path],
                                        omit_sudo=False, check_status=False)
+
+        if self.install_xfsprogs:
+            self.mount_a.client_remote.run(args=['sudo', 'rm', '-rf',
+                                                 self.xfsprogs_repo_path],
+                                           omit_sudo=False, check_status=False)
 
         super(XFSTestsDev, self).tearDown()

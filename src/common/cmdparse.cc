@@ -32,7 +32,7 @@ using namespace std::literals;
  * Given a cmddesc like "foo baz name=bar,type=CephString",
  * return the prefix "foo baz".
  */
-namespace TOPNSPC::common {
+namespace ceph::common {
 std::string cmddesc_get_prefix(const std::string_view &cmddesc)
 {
   string tmp(cmddesc); // FIXME: stringstream ctor can't take string_view :(
@@ -571,8 +571,7 @@ bool validate_str_arg(std::string_view value,
   }
 }
 
-bool validate_bool(CephContext *cct,
-		  const cmdmap_t& cmdmap,
+bool validate_bool(const cmdmap_t& cmdmap,
 		  const arg_desc_t& desc,
 		  const std::string_view name,
 		  const std::string_view type,
@@ -600,8 +599,7 @@ template<bool is_vector,
 	 typename Value = std::conditional_t<is_vector,
 					     vector<T>,
 					     T>>
-bool validate_arg(CephContext* cct,
-		  const cmdmap_t& cmdmap,
+bool validate_arg(const cmdmap_t& cmdmap,
 		  const arg_desc_t& desc,
 		  const std::string_view name,
 		  const std::string_view type,
@@ -642,8 +640,7 @@ bool validate_arg(CephContext* cct,
 }
 } // anonymous namespace
 
-bool validate_cmd(CephContext* cct,
-		  const std::string& desc,
+bool validate_cmd(const std::string& desc,
 		  const cmdmap_t& cmdmap,
 		  std::ostream& os)
 {
@@ -658,27 +655,27 @@ bool validate_cmd(CephContext* cct,
     auto type = arg_desc["type"];
     if (arg_desc.count("n")) {
       if (type == "CephInt") {
-	return !validate_arg<true, int64_t>(cct, cmdmap, arg_desc,
+	return !validate_arg<true, int64_t>(cmdmap, arg_desc,
 					    name, type, os);
       } else if (type == "CephFloat") {
-	return !validate_arg<true, double>(cct, cmdmap, arg_desc,
+	return !validate_arg<true, double>(cmdmap, arg_desc,
 					    name, type, os);
       } else {
-	return !validate_arg<true, string>(cct, cmdmap, arg_desc,
+	return !validate_arg<true, string>(cmdmap, arg_desc,
 					   name, type, os);
       }
     } else {
       if (type == "CephInt") {
-	return !validate_arg<false, int64_t>(cct, cmdmap, arg_desc,
+	return !validate_arg<false, int64_t>(cmdmap, arg_desc,
 					    name, type, os);
       } else if (type == "CephFloat") {
-	return !validate_arg<false, double>(cct, cmdmap, arg_desc,
+	return !validate_arg<false, double>(cmdmap, arg_desc,
 					    name, type, os);
       } else if (type == "CephBool") {
-	return !validate_bool(cct, cmdmap, arg_desc,
+	return !validate_bool(cmdmap, arg_desc,
 			      name, type, os);
       } else {
-	return !validate_arg<false, string>(cct, cmdmap, arg_desc,
+	return !validate_arg<false, string>(cmdmap, arg_desc,
 					    name, type, os);
       }
     }

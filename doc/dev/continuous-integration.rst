@@ -155,14 +155,25 @@ libboost
     ``ceph-libboost-*``, and they are instead installed into ``/opt/ceph``, so
     they don't interfere with the official ``libboost`` packages shipped by
     distro. Its build scripts are hosted at https://github.com/ceph/ceph-boost.
+    See https://github.com/ceph/ceph-boost/commit/2a8ae02932b2a1fd6a68072da8ca0df2b99b805c
+    for an example of how to bump the version number. The commands used to
+    build 1.79 on a vanilla Ubuntu Focal OS are below.
 
     .. prompt:: bash $
 
-       tar xjf boost_1_76_0.tar.bz2
+       sudo apt install debhelper dctrl-tools chrpath libbz2-dev libicu-dev bison \
+         flex docbook-to-man help2man xsltproc doxygen dh-python python3-all-dev graphviz
+       wget http://download.ceph.com/qa/boost_1_79_0.tar.bz2
        git clone https://github.com/ceph/ceph-boost
-       cp -ra ceph-boost/debian boost_1_76_0/
+       tar xjf boost_1_79_0.tar.bz2
+       cp -ra ceph-boost/debian boost_1_79_0/
+       pushd boost_1_79_0
        export DEB_BUILD_OPTIONS='parallel=6 nodoc'
        dpkg-buildpackage -us -uc -b
+       popd
+       BOOST_SHA=$(git ls-remote https://github.com/ceph/ceph-boost main | awk '{ print $1 }')
+       ls *.deb | chacractl binary create \
+         libboost/master/$BOOST_SHA/ubuntu/focal/amd64/flavors/default
 
 libzbd
     packages `libzbd`_ . The upstream libzbd includes debian packaging already.

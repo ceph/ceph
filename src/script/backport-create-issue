@@ -39,8 +39,12 @@ from redminelib.exceptions import ResourceAttrError
 redmine_endpoint = "https://tracker.ceph.com"
 project_name = "Ceph"
 release_id = 16
+custom_field_tag = 'cf_3'
+tag_separator = ' '
+tag_backport_processed = 'backport_processed'
 delay_seconds = 5
 redmine_key_file="~/.redmine_key"
+redmine_key_env="REDMINE_API_KEY"
 #
 # NOTE: release_id is hard-coded because
 # http://www.redmine.org/projects/redmine/wiki/Rest_CustomFields
@@ -60,11 +64,12 @@ resolve_parent = None
 
 def usage():
     logging.error("Redmine credentials are required to perform this operation. "
-                  "Please provide either a Redmine key (via %s) "
+                  "Please provide either a Redmine key (via %s or $%s) "
                   "or a Redmine username and password (via --user and --password). "
                   "Optionally, one or more issue numbers can be given via positional "
                   "argument(s). In the absence of positional arguments, the script "
-                  "will loop through all issues in Pending Backport status." % redmine_key_file)
+                  "will loop through all issues in Pending Backport status.",
+                  redmine_key_file, redmine_key_env)
     exit(-1)
 
 def parse_arguments():
@@ -78,9 +83,14 @@ def parse_arguments():
                         action="store_true")
     parser.add_argument("--dry-run", help="Do not write anything to Redmine",
                         action="store_true")
-    parser.add_argument("--force", help="Create backport issues even if status not Pending Backport",
+    parser.add_argument("--force", help="When issue numbers provided, process "
+                        "them even if not in 'Pending Backport' status. "
+                        "Otherwise, process all issues in 'Pending Backport' "
+                        "status even if already processed "
+                        f"(tag '{tag_backport_processed}' added)",
                         action="store_true")
     return parser.parse_args()
+
 
 def set_logging_level(a):
     if a.debug:
@@ -117,6 +127,9 @@ def connect_to_redmine(a):
     elif redmine_key:
         logging.info("Redmine key was read from '%s'; using it" % redmine_key_file)
         return Redmine(redmine_endpoint, key=redmine_key)
+    elif os.getenv(redmine_key_env):
+        logging.info("Redmine key was read from '$%s'; using it", redmine_key_env)
+        return Redmine(redmine_endpoint, key=os.getenv(redmine_key_env))
     else:
         usage()
 
@@ -285,6 +298,27 @@ def maybe_resolve(issue, backports, dry_run):
     else:
         logging.debug("Some backport issues are still unresolved: leaving parent issue open")
 
+
+def mark_as_processed(r, issue):
+    """
+    This script will add a custom Tag to indicate whether the tracker was
+    already processed for backport tracker creation.
+    """
+    custom_fields = list(issue['custom_fields'].values())
+    for i, field in enumerate(custom_fields):
+        if field['name'] == 'Tags':
+            if tag_backport_processed not in field['value']:
+                if field['value']:
+                    custom_fields[i]['value'] += (tag_separator +
+                                                  tag_backport_processed)
+                else:
+                    custom_fields[i]['value'] = tag_backport_processed
+                logging.info("%s adding tag '%s'", url(issue),
+                             tag_backport_processed)
+                r.issue.update(issue.id, custom_fields=custom_fields)
+                return
+
+
 def iterate_over_backports(r, issues, dry_run=False):
     counter = 0
     for issue in issues:
@@ -303,6 +337,8 @@ def iterate_over_backports(r, issues, dry_run=False):
         if len(issue['backports']) == 0:
             logging.error(url(issue) + " the backport field is empty")
         update_relations(r, issue, dry_run)
+        if not dry_run:
+            mark_as_processed(r, issue)
     print('                                     \r', end='', flush=True)
     logging.info("Processed {} issues".format(counter))
     return None
@@ -337,10 +373,20 @@ if __name__ == '__main__':
                                           issue_id=issue_list,
                                           status_id=pending_backport_status_id)
     else:
-        if args.force:
-            logging.warn("ignoring --force option, which can only be used with an explicit issue list")
-        issues = redmine.issue.filter(project_id=ceph_project_id,
-                                      status_id=pending_backport_status_id)
+        if args.force or args.resolve_parent:
+            if args.force:
+                logging.warn("--force option was given: ignoring '%s' tag!",
+                             tag_backport_processed)
+            issues = redmine.issue.filter(project_id=ceph_project_id,
+                                          status_id=pending_backport_status_id)
+        else:
+            # https://python-redmine.com/resources/issue.html#filter
+            issues = redmine.issue.filter(project_id=ceph_project_id,
+                                          status_id=pending_backport_status_id,
+                                          **{
+                                              custom_field_tag:
+                                              '!~' +
+                                              tag_backport_processed})
     if force_create:
         logging.info("Processing {} issues regardless of status"
                      .format(len(issues)))

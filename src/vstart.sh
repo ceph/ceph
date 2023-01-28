@@ -36,13 +36,14 @@ if [ -n "$VSTART_DEST" ]; then
     SRC_PATH=`(cd $SRC_PATH; pwd)`
 
     CEPH_DIR=$SRC_PATH
-    CEPH_BIN=${PWD}/bin
-    CEPH_LIB=${PWD}/lib
+    CEPH_BIN=${CEPH_BIN:-${PWD}/bin}
+    CEPH_LIB=${CEPH_LIB:-${PWD}/lib}
 
     CEPH_CONF_PATH=$VSTART_DEST
     CEPH_DEV_DIR=$VSTART_DEST/dev
     CEPH_OUT_DIR=$VSTART_DEST/out
     CEPH_ASOK_DIR=$VSTART_DEST/asok
+    CEPH_OUT_CLIENT_DIR=${CEPH_OUT_CLIENT_DIR:-$CEPH_OUT_DIR}
 fi
 
 get_cmake_variable() {
@@ -131,6 +132,7 @@ fi
 [ -z "$CEPH_ASOK_DIR" ] && CEPH_ASOK_DIR="$CEPH_DIR/asok"
 [ -z "$CEPH_RGW_PORT" ] && CEPH_RGW_PORT=8000
 [ -z "$CEPH_CONF_PATH" ] && CEPH_CONF_PATH=$CEPH_DIR
+CEPH_OUT_CLIENT_DIR=${CEPH_OUT_CLIENT_DIR:-$CEPH_OUT_DIR}
 
 if [ $CEPH_NUM_OSD -gt 3 ]; then
     OSD_POOL_DEFAULT_SIZE=3
@@ -222,6 +224,7 @@ options:
 	-o config		 add extra config parameters to all sections
 	--rgw_port specify ceph rgw http listen port
 	--rgw_frontend specify the rgw frontend configuration
+	--rgw_arrow_flight start arrow flight frontend
 	--rgw_compression specify the rgw compression plugin
 	--seastore use seastore as crimson osd backend
 	-b, --bluestore use bluestore as the osd objectstore backend (default)
@@ -252,6 +255,7 @@ options:
 	--jaeger: use jaegertracing for tracing
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
 	--seastore-secondary-des: comma-separated list of secondary blockdevs to use for seastore
+	--crimson-smp: number of cores to use for crimson
 \n
 EOF
 
@@ -290,6 +294,7 @@ parse_secondary_devs() {
     done
 }
 
+crimson_smp=1
 while [ $# -ge 1 ]; do
 case $1 in
     -d | --debug)
@@ -411,6 +416,9 @@ case $1 in
         rgw_frontend=$2
         shift
         ;;
+    --rgw_arrow_flight)
+        rgw_flight_frontend="yes"
+        ;;
     --rgw_compression)
         rgw_compression=$2
         shift
@@ -503,6 +511,10 @@ case $1 in
         ;;
     --seastore-secondary-devs)
         parse_secondary_devs --seastore-devs "$2"
+        shift
+        ;;
+    --crimson-smp)
+        crimson_smp=$2
         shift
         ;;
     --bluestore-spdk)
@@ -618,13 +630,17 @@ do_rgw_conf() {
     # setup each rgw on a sequential port, starting at $CEPH_RGW_PORT.
     # individual rgw's ids will be their ports.
     current_port=$CEPH_RGW_PORT
+    # allow only first rgw to start arrow_flight server/port
+    local flight_conf=$rgw_flight_frontend
     for n in $(seq 1 $CEPH_NUM_RGW); do
         wconf << EOF
 [client.rgw.${current_port}]
-        rgw frontends = $rgw_frontend port=${current_port}
+        rgw frontends = $rgw_frontend port=${current_port}${flight_conf:+,arrow_flight}
         admin socket = ${CEPH_OUT_DIR}/radosgw.${current_port}.asok
+        debug rgw_flight = 20
 EOF
         current_port=$((current_port + 1))
+        unset flight_conf
 done
 
 }
@@ -767,7 +783,7 @@ EOF
     wconf <<EOF
 [client]
         keyring = $keyring_fn
-        log file = $CEPH_OUT_DIR/\$name.\$pid.log
+        log file = $CEPH_OUT_CLIENT_DIR/\$name.\$pid.log
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
 
         ; needed for s3tests
@@ -791,7 +807,7 @@ $DAEMONOPTS
         mgr disabled modules = rook
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
-        cephadm path = $CEPH_ROOT/src/cephadm/cephadm
+        cephadm path = $CEPH_BIN/cephadm
 $DAEMONOPTS
         $(format_conf "${extra_conf}")
 [osd]
@@ -960,8 +976,10 @@ start_osd() {
     do
 	local extra_seastar_args
 	if [ "$ceph_osd" == "crimson-osd" ]; then
-	    # designate a single CPU node $osd for osd.$osd
-	    extra_seastar_args="--smp 1 --cpuset $osd"
+        bottom_cpu=$(( osd * crimson_smp ))
+        top_cpu=$(( bottom_cpu + crimson_smp - 1 ))
+	    # set a single CPU nodes for each osd
+	    extra_seastar_args="--cpuset $bottom_cpu-$top_cpu"
 	    if [ "$debug" -ne 0 ]; then
 		extra_seastar_args+=" --debug"
 	    fi
@@ -1025,6 +1043,9 @@ EOF
         fi
         echo start osd.$osd
         local osd_pid
+        echo 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd \
+            $extra_seastar_args $extra_osd_args \
+            -i $osd $ARGS $COSD_ARGS
         run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd \
             $extra_seastar_args $extra_osd_args \
             -i $osd $ARGS $COSD_ARGS &
@@ -1320,6 +1341,7 @@ if [ "$debug" -eq 0 ]; then
 else
     debug echo "** going verbose **"
     CMONDEBUG='
+        debug osd = 20
         debug mon = 20
         debug paxos = 20
         debug auth = 20
@@ -1359,6 +1381,7 @@ fi
 [ -d $CEPH_ASOK_DIR ] || mkdir -p $CEPH_ASOK_DIR
 [ -d $CEPH_OUT_DIR  ] || mkdir -p $CEPH_OUT_DIR
 [ -d $CEPH_DEV_DIR  ] || mkdir -p $CEPH_DEV_DIR
+[ -d $CEPH_OUT_CLIENT_DIR ] || mkdir -p $CEPH_OUT_CLIENT_DIR
 if [ $inc_osd_num -eq 0 ]; then
     $SUDO find "$CEPH_OUT_DIR" -type f -delete
 fi
@@ -1477,6 +1500,10 @@ EOF
         public_network=$(ip route list | grep -w "$IP" | awk '{print $1}')
         ceph_adm config set mon public_network $public_network
     fi
+fi
+
+if [ "$crimson" -eq 1 ]; then
+    $CEPH_BIN/ceph -c $conf_fn config set osd crimson_seastar_smp $crimson_smp
 fi
 
 if [ $CEPH_NUM_MGR -gt 0 ]; then
@@ -1636,6 +1663,11 @@ do_rgw()
             $CEPH_BIN/radosgw-admin zone placement modify -c $conf_fn --rgw-zone=default --placement-id=default-placement --compression=$rgw_compression > /dev/null
         fi
     fi
+
+    if [ -n "$rgw_flight_frontend" ] ;then
+        debug echo "starting arrow_flight frontend on first rgw"
+    fi
+
     # Start server
     if [ "$cephadm" -gt 0 ]; then
         ceph_adm orch apply rgw rgwTest
@@ -1658,6 +1690,8 @@ do_rgw()
     [ $CEPH_RGW_PORT_NUM -lt 1024 ] && RGWSUDO=sudo
 
     current_port=$CEPH_RGW_PORT
+    # allow only first rgw to start arrow_flight server/port
+    local flight_conf=$rgw_flight_frontend
     for n in $(seq 1 $CEPH_NUM_RGW); do
         rgw_name="client.rgw.${current_port}"
 
@@ -1675,12 +1709,13 @@ do_rgw()
             --rgw_luarocks_location=${CEPH_OUT_DIR}/luarocks \
             ${RGWDEBUG} \
             -n ${rgw_name} \
-            "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
+            "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}${flight_conf:+,arrow_flight}"
 
         i=$(($i + 1))
         [ $i -eq $CEPH_NUM_RGW ] && break
 
         current_port=$((current_port+1))
+        unset flight_conf
     done
 }
 if [ "$CEPH_NUM_RGW" -gt 0 ]; then

@@ -56,7 +56,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
   defaultAccessType = { RGW: 'RO' };
   nfsAccessType: any[] = this.nfsService.nfsAccessType;
-  nfsSquash: any[] = this.nfsService.nfsSquash;
+  nfsSquash: any[] = Object.keys(this.nfsService.nfsSquash);
 
   action: string;
   resource: string;
@@ -161,12 +161,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
           Validators.pattern('^/[^><|&()]*$')
         ]
       }),
-      access_type: new FormControl('RW', {
-        validators: [Validators.required]
-      }),
-      squash: new FormControl(this.nfsSquash[0], {
-        validators: [Validators.required]
-      }),
+      access_type: new FormControl('RW'),
+      squash: new FormControl(this.nfsSquash[0]),
       transportUDP: new FormControl(true, {
         validators: [
           CdValidators.requiredIf({ transportTCP: false }, (value: boolean) => {
@@ -201,6 +197,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
     res.transportTCP = res.transports.indexOf('TCP') !== -1;
     res.transportUDP = res.transports.indexOf('UDP') !== -1;
     delete res.transports;
+
+    Object.entries(this.nfsService.nfsSquash).forEach(([key, value]) => {
+      if (value.includes(res.squash)) {
+        res.squash = key;
+      }
+    });
 
     res.clients.forEach((client: any) => {
       let addressStr = '';

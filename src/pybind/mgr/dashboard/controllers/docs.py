@@ -33,7 +33,7 @@ class Docs(BaseController):
                     list_of_ctrl.add(endpoint.ctrl)
 
         tag_map: Dict[str, str] = {}
-        for ctrl in list_of_ctrl:
+        for ctrl in sorted(list_of_ctrl, key=lambda ctrl: ctrl.__name__):
             tag_name = ctrl.__name__
             tag_descr = ""
             if hasattr(ctrl, 'doc_info'):

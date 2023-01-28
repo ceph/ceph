@@ -3,6 +3,7 @@
 
 #include "HybridAllocator.h"
 
+#include <bit>
 #include <limits>
 
 #include "common/config_proxy.h"
@@ -27,7 +28,7 @@ int64_t HybridAllocator::allocate(
                  << " max_alloc_size 0x" << max_alloc_size
                  << " hint 0x" << hint
                  << std::dec << dendl;
-  ceph_assert(isp2(unit));
+  ceph_assert(std::has_single_bit(unit));
   ceph_assert(want % unit == 0);
 
   if (max_alloc_size == 0) {

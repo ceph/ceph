@@ -52,7 +52,6 @@ public:
 protected:
   PGPeeringPipeline &pp(PG &pg);
 
-  ShardServices &shard_services;
   PeeringCtx ctx;
   pg_shard_t from;
   spg_t pgid;
@@ -71,28 +70,28 @@ protected:
     return evt;
   }
 
-  virtual void on_pg_absent();
+  virtual void on_pg_absent(ShardServices &);
 
   virtual typename PeeringEvent::template interruptible_future<>
-  complete_rctx(Ref<PG>);
+  complete_rctx(ShardServices &, Ref<PG>);
 
-  virtual seastar::future<> complete_rctx_no_pg() { return seastar::now();}
+  virtual seastar::future<> complete_rctx_no_pg(
+    ShardServices &shard_services
+  ) { return seastar::now();}
 
 public:
   template <typename... Args>
   PeeringEvent(
-    ShardServices &shard_services, const pg_shard_t &from, const spg_t &pgid,
+    const pg_shard_t &from, const spg_t &pgid,
     Args&&... args) :
-    shard_services(shard_services),
     from(from),
     pgid(pgid),
     evt(std::forward<Args>(args)...)
   {}
   template <typename... Args>
   PeeringEvent(
-    ShardServices &shard_services, const pg_shard_t &from, const spg_t &pgid,
+    const pg_shard_t &from, const spg_t &pgid,
     float delay, Args&&... args) :
-    shard_services(shard_services),
     from(from),
     pgid(pgid),
     delay(delay),
@@ -107,13 +106,17 @@ public:
 
 class RemotePeeringEvent : public PeeringEvent<RemotePeeringEvent> {
 protected:
-  crimson::net::ConnectionRef conn;
+  crimson::net::ConnectionFRef conn;
   // must be after conn due to ConnectionPipeline's life-time
   PipelineHandle handle;
 
-  void on_pg_absent() final;
-  PeeringEvent::interruptible_future<> complete_rctx(Ref<PG> pg) override;
-  seastar::future<> complete_rctx_no_pg() override;
+  void on_pg_absent(ShardServices &) final;
+  PeeringEvent::interruptible_future<> complete_rctx(
+    ShardServices &shard_services,
+    Ref<PG> pg) override;
+  seastar::future<> complete_rctx_no_pg(
+    ShardServices &shard_services
+  ) override;
 
 public:
   class OSDPipeline {
@@ -130,11 +133,6 @@ public:
     conn(conn)
   {}
 
-#if 0
-  std::tuple<
-  > tracking_events;
-#endif
-
   std::tuple<
     StartEvent,
     ConnectionPipeline::AwaitActive::BlockingEvent,
@@ -147,14 +145,6 @@ public:
     PGPeeringPipeline::Process::BlockingEvent,
     BackfillRecovery::BackfillRecoveryPipeline::Process::BlockingEvent,
     OSDPipeline::AwaitActive::BlockingEvent,
-#if 0
-    PGPipeline::WaitForActive::BlockingEvent,
-    PGActivationBlocker::BlockingEvent,
-    PGPipeline::RecoverMissing::BlockingEvent,
-    PGPipeline::GetOBC::BlockingEvent,
-    PGPipeline::WaitRepop::BlockingEvent,
-    PGPipeline::SendReply::BlockingEvent,
-#endif
     CompletionEvent
   > tracking_events;
 
@@ -191,17 +181,15 @@ public:
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
     PGPeeringPipeline::Process::BlockingEvent,
     BackfillRecovery::BackfillRecoveryPipeline::Process::BlockingEvent,
-#if 0
-    PGPipeline::WaitForActive::BlockingEvent,
-    PGActivationBlocker::BlockingEvent,
-    PGPipeline::RecoverMissing::BlockingEvent,
-    PGPipeline::GetOBC::BlockingEvent,
-    PGPipeline::WaitRepop::BlockingEvent,
-    PGPipeline::SendReply::BlockingEvent,
-#endif
     CompletionEvent
   > tracking_events;
 };
 
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::LocalPeeringEvent> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::osd::RemotePeeringEvent> : fmt::ostream_formatter {};
+template <class T> struct fmt::formatter<crimson::osd::PeeringEvent<T>> : fmt::ostream_formatter {};
+#endif

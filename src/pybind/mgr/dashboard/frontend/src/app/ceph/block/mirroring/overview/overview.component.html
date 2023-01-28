@@ -1,66 +1,68 @@
-<div class="row">
-  <div class="col-md-12">
-    <form name="rbdmirroringForm"
-          #formDir="ngForm"
-          [formGroup]="rbdmirroringForm"
-          novalidate>
+<form name="rbdmirroringForm"
+      #formDir="ngForm"
+      [formGroup]="rbdmirroringForm"
+      novalidate>
+  <div class="row mb-3">
+    <div class="col-md-auto">
+      <label class="col-form-label"
+             for="siteName"
+             i18n>Site Name</label></div>
 
-      <div class="d-flex flex-row">
-        <label class="col-form-label"
-               for="siteName"
-               i18n>Site Name</label>
-
-        <div class="col-md-4 input-group mb-3 mr-auto">
-          <input type="text"
-                 class="form-control"
-                 id="siteName"
-                 name="siteName"
-                 formControlName="siteName"
-                 [attr.disabled]="!editing ? true : null">
-          <div class="input-group-append">
-            <button class="btn btn-light"
-                    id="editSiteName"
-                    (click)="updateSiteName()">
-              <i [ngClass]="icons.edit"
-                 *ngIf="!editing"></i>
-              <i [ngClass]="icons.check"
-                 *ngIf="editing"></i>
-            </button>
-            <cd-copy-2-clipboard-button [source]="siteName"
-                                        [byId]="false">
-            </cd-copy-2-clipboard-button>
-          </div>
-        </div>
-        <cd-table-actions class="table-actions"
-                          [permission]="permission"
-                          [selection]="selection"
-                          [tableActions]="tableActions">
-        </cd-table-actions>
-      </div>
-    </form>
+    <div class="col-sm-4 d-flex">
+      <input type="text"
+             class="form-control"
+             id="siteName"
+             name="siteName"
+             formControlName="siteName"
+             [attr.disabled]="!editing ? true : null">
+      <button class="btn btn-light"
+              id="editSiteName"
+              (click)="updateSiteName()"
+              [attr.title]="editing ? 'Save' : 'Edit'">
+        <i [ngClass]="icons.edit"
+           *ngIf="!editing"></i>
+        <i [ngClass]="icons.check"
+           *ngIf="editing"></i>
+      </button>
+      <cd-copy-2-clipboard-button [source]="siteName"
+                                  [byId]="false">
+      </cd-copy-2-clipboard-button>
+    </div>
+    <div class="col">
+      <cd-table-actions class="table-actions float-end"
+                        [permission]="permission"
+                        [selection]="selection"
+                        [tableActions]="tableActions">
+      </cd-table-actions>
+    </div>
   </div>
-</div>
+</form>
 
 <div class="row">
   <div class="col-sm-6">
     <legend i18n>Daemons</legend>
-
-    <cd-mirroring-daemons>
-    </cd-mirroring-daemons>
+    <div>
+      <cd-mirroring-daemons>
+      </cd-mirroring-daemons>
+    </div>
   </div>
 
   <div class="col-sm-6">
     <legend i18n>Pools</legend>
 
-    <cd-mirroring-pools>
-    </cd-mirroring-pools>
+    <div>
+      <cd-mirroring-pools>
+      </cd-mirroring-pools>
+    </div>
   </div>
 </div>
 
 <div class="row">
   <div class="col-md-12">
     <legend i18n>Images</legend>
-    <cd-mirroring-images>
-    </cd-mirroring-images>
+    <div>
+      <cd-mirroring-images>
+      </cd-mirroring-images>
+    </div>
   </div>
 </div>

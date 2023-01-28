@@ -20,4 +20,14 @@
              let-value="value">
   <span [ngClass]="row.health_color | mirrorHealthColor">{{ value }}</span>
 </ng-template>
+<ng-template #localTmpl>
+  <span i18n
+        i18n-ngbTooltip
+        ngbTooltip="Local image count"># Local</span>
+</ng-template>
+<ng-template #remoteTmpl>
+  <span i18n
+        i18n-ngbTooltip
+        ngbTooltip="Remote image count"># Remote</span>
+</ng-template>
 <router-outlet name="modal"></router-outlet>

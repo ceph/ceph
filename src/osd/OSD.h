@@ -2021,14 +2021,16 @@ private:
 
   int get_recovery_max_active();
   void maybe_override_max_osd_capacity_for_qos();
-  bool maybe_override_options_for_qos();
+  void maybe_override_sleep_options_for_qos();
+  bool maybe_override_options_for_qos(
+    const std::set<std::string> *changed = nullptr);
   int run_osd_bench_test(int64_t count,
                          int64_t bsize,
                          int64_t osize,
                          int64_t onum,
                          double *elapsed,
                          std::ostream& ss);
-  int mon_cmd_set_config(const std::string &key, const std::string &val);
+  void mon_cmd_set_config(const std::string &key, const std::string &val);
   bool unsupported_objstore_for_qos();
 
   void scrub_purged_snaps();

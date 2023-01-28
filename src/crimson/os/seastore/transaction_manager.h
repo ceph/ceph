@@ -21,7 +21,6 @@
 #include "crimson/osd/exceptions.h"
 
 #include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/lba_manager.h"
@@ -29,54 +28,9 @@
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/device.h"
-#include "crimson/os/seastore/segment_manager_group.h"
 
 namespace crimson::os::seastore {
 class Journal;
-
-struct tm_make_config_t {
-  bool is_test;
-  journal_type_t j_type;
-  bool epm_prefer_ool;
-  reclaim_gen_t default_generation;
-
-  static tm_make_config_t get_default() {
-    return tm_make_config_t {
-      false,
-      journal_type_t::SEGMENT_JOURNAL,
-      false
-    };
-  }
-  static tm_make_config_t get_test_segmented_journal() {
-    LOG_PREFIX(get_test_segmented_journal);
-    SUBWARN(seastore_tm, "test mode enabled!");
-    return tm_make_config_t {
-      true,
-      journal_type_t::SEGMENT_JOURNAL,
-      false
-    };
-  }
-  static tm_make_config_t get_test_cb_journal() {
-    LOG_PREFIX(get_test_cb_journal);
-    SUBWARN(seastore_tm, "test mode enabled!");
-    return tm_make_config_t {
-      true,
-      journal_type_t::CIRCULARBOUNDED_JOURNAL,
-      true
-    };
-  }
-
-  tm_make_config_t(const tm_make_config_t &) = default;
-  tm_make_config_t &operator=(const tm_make_config_t &) = default;
-private:
-  tm_make_config_t(
-    bool is_test,
-    journal_type_t j_type,
-    bool epm_prefer_ool)
-    : is_test(is_test), j_type(j_type),
-      epm_prefer_ool(epm_prefer_ool)
-  {}
-};
 
 template <typename F>
 auto repeat_eagain(F &&f) {
@@ -104,13 +58,9 @@ auto repeat_eagain(F &&f) {
  * Abstraction hiding reading and writing to persistence.
  * Exposes transaction based interface with read isolation.
  */
-class TransactionManager : public AsyncCleaner::ExtentCallbackInterface {
+class TransactionManager : public ExtentCallbackInterface {
 public:
-  using base_ertr = Cache::base_ertr;
-  using base_iertr = Cache::base_iertr;
-
   TransactionManager(
-    AsyncCleanerRef async_cleaner,
     JournalRef journal,
     CacheRef cache,
     LBAManagerRef lba_manager,
@@ -128,20 +78,6 @@ public:
   /// Closes transaction_manager
   using close_ertr = base_ertr;
   close_ertr::future<> close();
-
-  /// Creates empty transaction
-  TransactionRef create_transaction(
-      Transaction::src_t src,
-      const char* name) final {
-    return cache->create_transaction(src, name, false);
-  }
-
-  /// Creates empty weak transaction
-  TransactionRef create_weak_transaction(
-      Transaction::src_t src,
-      const char* name) {
-    return cache->create_transaction(src, name, true);
-  }
 
   /// Resets transaction
   void reset_transaction_preserve_handle(Transaction &t) {
@@ -185,8 +121,7 @@ public:
    *
    * Get extent mapped at pin.
    */
-  using pin_to_extent_iertr = get_pin_iertr::extend_ertr<
-    SegmentManager::read_ertr>;
+  using pin_to_extent_iertr = base_iertr;
   template <typename T>
   using pin_to_extent_ret = pin_to_extent_iertr::future<
     TCachedExtentRef<T>>;
@@ -196,6 +131,7 @@ public:
     LBAPinRef pin) {
     LOG_PREFIX(TransactionManager::pin_to_extent);
     SUBTRACET(seastore_tm, "getting extent {}", t, *pin);
+    static_assert(is_logical_type(T::TYPE));
     using ret = pin_to_extent_ret<T>;
     auto &pref = *pin;
     return cache->get_extent<T>(
@@ -218,12 +154,48 @@ public:
   }
 
   /**
+   * pin_to_extent_by_type
+   *
+   * Get extent mapped at pin.
+   */
+  using pin_to_extent_by_type_ret = pin_to_extent_iertr::future<
+    LogicalCachedExtentRef>;
+  pin_to_extent_by_type_ret pin_to_extent_by_type(
+      Transaction &t,
+      LBAPinRef pin,
+      extent_types_t type) {
+    LOG_PREFIX(TransactionManager::pin_to_extent_by_type);
+    SUBTRACET(seastore_tm, "getting extent {} type {}", t, *pin, type);
+    assert(is_logical_type(type));
+    auto &pref = *pin;
+    return cache->get_extent_by_type(
+      t,
+      type,
+      pref.get_val(),
+      pref.get_key(),
+      pref.get_length(),
+      [this, pin=std::move(pin)](CachedExtent &extent) mutable {
+        auto &lextent = static_cast<LogicalCachedExtent&>(extent);
+        assert(!lextent.has_pin());
+        assert(!lextent.has_been_invalidated());
+        assert(!pin->has_been_invalidated());
+        lextent.set_pin(std::move(pin));
+        lba_manager->add_pin(lextent.get_pin());
+      }
+    ).si_then([FNAME, &t](auto ref) {
+      SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
+      return pin_to_extent_by_type_ret(
+	interruptible::ready_future_marker{},
+	std::move(ref->template cast<LogicalCachedExtent>()));
+    });
+  }
+
+  /**
    * read_extent
    *
    * Read extent of type T at offset~length
    */
-  using read_extent_iertr = get_pin_iertr::extend_ertr<
-    SegmentManager::read_ertr>;
+  using read_extent_iertr = get_pin_iertr;
   template <typename T>
   using read_extent_ret = read_extent_iertr::future<
     TCachedExtentRef<T>>;
@@ -343,12 +315,12 @@ public:
     LOG_PREFIX(TransactionManager::alloc_extent);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
               t, T::TYPE, len, placement_hint, laddr_hint);
-    ceph_assert(is_aligned(laddr_hint, (uint64_t)epm->get_block_size()));
+    ceph_assert(is_aligned(laddr_hint, epm->get_block_size()));
     auto ext = cache->alloc_new_extent<T>(
       t,
       len,
       placement_hint,
-      0);
+      INIT_GENERATION);
     return lba_manager->alloc_extent(
       t,
       laddr_hint,
@@ -381,10 +353,9 @@ public:
     Transaction &t,
     laddr_t laddr_hint,
     paddr_t existing_paddr,
-    extent_len_t length,
-    placement_hint_t placement_hint = placement_hint_t::HOT,
-    reclaim_gen_t gen = DIRTY_GENERATION) {
+    extent_len_t length) {
     LOG_PREFIX(TransactionManager::map_existing_extent);
+    // FIXME: existing_paddr can be absolute and pending
     ceph_assert(existing_paddr.is_absolute());
     assert(t.is_retired(existing_paddr, length));
 
@@ -399,8 +370,8 @@ public:
 
     ext->init(CachedExtent::extent_state_t::EXIST_CLEAN,
 	      existing_paddr,
-	      placement_hint,
-	      gen);
+	      PLACEMENT_HINT_NULL,
+	      NULL_GENERATION);
 
     t.add_fresh_extent(ext);
 
@@ -432,7 +403,7 @@ public:
     extent_len_t len) {
     LOG_PREFIX(TransactionManager::reserve_region);
     SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}", t, len, hint);
-    ceph_assert(is_aligned(hint, (uint64_t)epm->get_block_size()));
+    ceph_assert(is_aligned(hint, epm->get_block_size()));
     return lba_manager->alloc_extent(
       t,
       hint,
@@ -480,13 +451,6 @@ public:
   using submit_transaction_iertr = base_iertr;
   submit_transaction_iertr::future<> submit_transaction(Transaction &);
 
-  /// AsyncCleaner::ExtentCallbackInterface
-  using AsyncCleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
-  submit_transaction_direct_ret submit_transaction_direct(
-    Transaction &t,
-    std::optional<journal_seq_t> seq_to_trim = std::nullopt,
-    std::optional<std::pair<paddr_t, paddr_t>> gc_range = std::nullopt) final;
-
   /**
    * flush
    *
@@ -496,26 +460,43 @@ public:
    */
   seastar::future<> flush(OrderingHandle &handle);
 
-  using AsyncCleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
+  /*
+   * ExtentCallbackInterface
+   */
+
+  /// weak transaction should be type READ
+  TransactionRef create_transaction(
+      Transaction::src_t src,
+      const char* name,
+      bool is_weak=false) final {
+    return cache->create_transaction(src, name, is_weak);
+  }
+
+  using ExtentCallbackInterface::submit_transaction_direct_ret;
+  submit_transaction_direct_ret submit_transaction_direct(
+    Transaction &t,
+    std::optional<journal_seq_t> seq_to_trim = std::nullopt) final;
+
+  using ExtentCallbackInterface::get_next_dirty_extents_ret;
   get_next_dirty_extents_ret get_next_dirty_extents(
     Transaction &t,
     journal_seq_t seq,
     size_t max_bytes) final;
 
-  using AsyncCleaner::ExtentCallbackInterface::rewrite_extent_ret;
+  using ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent,
-    reclaim_gen_t target_generation,
+    rewrite_gen_t target_generation,
     sea_time_point modify_time) final;
 
-  using AsyncCleaner::ExtentCallbackInterface::get_extents_if_live_ret;
+  using ExtentCallbackInterface::get_extents_if_live_ret;
   get_extents_if_live_ret get_extents_if_live(
     Transaction &t,
     extent_types_t type,
-    paddr_t addr,
+    paddr_t paddr,
     laddr_t laddr,
-    seastore_off_t len) final;
+    extent_len_t len) final;
 
   /**
    * read_root_meta
@@ -637,20 +618,7 @@ public:
   }
 
   store_statfs_t store_stat() const {
-    return async_cleaner->stat();
-  }
-
-  void add_device(Device* dev, bool is_primary) {
-    LOG_PREFIX(TransactionManager::add_device);
-    SUBDEBUG(seastore_tm, "adding device {}, is_primary={}",
-             dev->get_device_id(), is_primary);
-    epm->add_device(dev, is_primary);
-
-    if (dev->get_device_type() == device_type_t::SEGMENTED) {
-      auto sm = dynamic_cast<SegmentManager*>(dev);
-      ceph_assert(sm != nullptr);
-      sm_group.add_segment_manager(sm);
-    }
+    return epm->get_stat();
   }
 
   ~TransactionManager();
@@ -658,13 +626,11 @@ public:
 private:
   friend class Transaction;
 
-  AsyncCleanerRef async_cleaner;
   CacheRef cache;
   LBAManagerRef lba_manager;
   JournalRef journal;
   ExtentPlacementManagerRef epm;
   BackrefManagerRef backref_manager;
-  SegmentManagerGroup &sm_group;
 
   WritePipeline write_pipeline;
 
@@ -672,10 +638,15 @@ private:
     Transaction& t,
     LogicalCachedExtentRef extent);
 
+  submit_transaction_direct_ret do_submit_transaction(
+    Transaction &t,
+    ExtentPlacementManager::dispatch_result_t dispatch_result,
+    std::optional<journal_seq_t> seq_to_trim = std::nullopt);
+
 public:
   // Testing interfaces
-  auto get_async_cleaner() {
-    return async_cleaner.get();
+  auto get_epm() {
+    return epm.get();
   }
 
   auto get_lba_manager() {
@@ -695,5 +666,8 @@ public:
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
-TransactionManagerRef make_transaction_manager(tm_make_config_t config);
+TransactionManagerRef make_transaction_manager(
+    Device *primary_device,
+    const std::vector<Device*> &secondary_devices,
+    bool is_test);
 }

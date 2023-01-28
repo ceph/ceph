@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_ROLE_H
-#define CEPH_RGW_ROLE_H
+#pragma once
 
 #include <string>
 
@@ -10,7 +9,7 @@
 
 #include "common/ceph_json.h"
 #include "common/ceph_context.h"
-#include "rgw/rgw_rados.h"
+#include "rgw_rados.h"
 #include "rgw_metadata.h"
 
 class RGWRados;
@@ -93,6 +92,7 @@ public:
   virtual int read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y) = 0;
   virtual int read_name(const DoutPrefixProvider *dpp, optional_yield y) = 0;
   virtual int read_info(const DoutPrefixProvider *dpp, optional_yield y) = 0;
+  bool validate_max_session_duration(const DoutPrefixProvider* dpp);
   bool validate_input(const DoutPrefixProvider* dpp);
   void extract_name_tenant(const std::string& str);
 
@@ -139,6 +139,7 @@ public:
   int set_tags(const DoutPrefixProvider* dpp, const std::multimap<std::string,std::string>& tags_map);
   boost::optional<std::multimap<std::string,std::string>> get_tags();
   void erase_tags(const std::vector<std::string>& tagKeys);
+  void update_max_session_duration(const std::string& max_session_duration_str);
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
@@ -149,13 +150,13 @@ public:
 
 class RGWRoleMetadataObject: public RGWMetadataObject {
   RGWRoleInfo info;
-  Store* store;
+  Driver* driver;
 public:
   RGWRoleMetadataObject() = default;
   RGWRoleMetadataObject(RGWRoleInfo& info,
 			const obj_version& v,
 			real_time m,
-      Store* store) : RGWMetadataObject(v,m), info(info), store(store) {}
+      Driver* driver) : RGWMetadataObject(v,m), info(info), driver(driver) {}
 
   void dump(Formatter *f) const override {
     info.dump(f);
@@ -165,15 +166,15 @@ public:
     return info;
   }
 
-  Store* get_store() {
-    return store;
+  Driver* get_driver() {
+    return driver;
   }
 };
 
 class RGWRoleMetadataHandler: public RGWMetadataHandler_GenericMetaBE
 {
 public:
-  RGWRoleMetadataHandler(Store* store, RGWSI_Role_RADOS *role_svc);
+  RGWRoleMetadataHandler(Driver* driver, RGWSI_Role_RADOS *role_svc);
 
   std::string get_type() final { return "roles";  }
 
@@ -203,8 +204,6 @@ public:
        bool from_remote_zone) override;
 
 private:
-  Store* store;
+  Driver* driver;
 };
 } } // namespace rgw::sal
-
-#endif /* CEPH_RGW_ROLE_H */

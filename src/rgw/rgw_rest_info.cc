@@ -33,8 +33,8 @@ void RGWOp_Info_Get::execute(optional_yield y) {
   formatter->open_array_section("storage_backends");
   // for now, just return the backend that is accessible
   formatter->open_object_section("dummy");
-  formatter->dump_string("name", store->get_name());
-  formatter->dump_string("cluster_id", store->get_cluster_id(this, y));
+  formatter->dump_string("name", driver->get_name());
+  formatter->dump_string("cluster_id", driver->get_cluster_id(this, y));
   formatter->close_section();
   formatter->close_section();
   formatter->close_section();

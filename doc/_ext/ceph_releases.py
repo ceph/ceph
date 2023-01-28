@@ -191,7 +191,7 @@ class ReleasesGantt(Directive):
 
 class CephTimeline(Directive):
     has_content = False
-    required_arguments = 4
+    required_arguments = 3
     optional_arguments = 0
     option_spec = {}
 
@@ -299,7 +299,7 @@ TIMELINE_TEMPLATE = '''
 {% else %}
        End of life (estimated): crit,            {{ releases[display_release].target_eol }},4d
 {% endif %}
-{% for release in releases[display_release].releases %}
+{% for release in releases[display_release].releases | sort(attribute='released', reverse=True) %}
        {{ release.version }}:   milestone, done, {{ release.released }},0d
 {% endfor %}
 {% endfor %}

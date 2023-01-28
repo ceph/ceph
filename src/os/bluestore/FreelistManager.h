@@ -56,7 +56,7 @@ public:
   void set_null_manager() {
     null_manager = true;
   }
-  bool is_null_manager() {
+  bool is_null_manager() const {
     return null_manager;
   }
 };

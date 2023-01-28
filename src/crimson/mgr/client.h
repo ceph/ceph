@@ -24,7 +24,7 @@ namespace crimson::mgr
 // implement WithStats if you want to report stats to mgr periodically
 class WithStats {
 public:
-  virtual MessageURef get_stats() const = 0;
+  virtual seastar::future<MessageURef> get_stats() const = 0;
   virtual ~WithStats() {}
 };
 
@@ -64,3 +64,7 @@ inline std::ostream& operator<<(std::ostream& out, const Client& client) {
 }
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::mgr::Client> : fmt::ostream_formatter {};
+#endif

@@ -77,7 +77,8 @@ struct OMapNode : LogicalCachedExtent {
   using list_ret = OMapManager::omap_list_ret;
   virtual list_ret list(
     omap_context_t oc,
-    const std::optional<std::string> &start,
+    const std::optional<std::string> &first,
+    const std::optional<std::string> &last,
     omap_list_config_t config) = 0;
 
   using clear_iertr = base_iertr;
@@ -101,6 +102,7 @@ struct OMapNode : LogicalCachedExtent {
   virtual bool extent_will_overflow(
     size_t ksize,
     std::optional<size_t> vsize) const = 0;
+  virtual bool can_merge(OMapNodeRef right) const = 0;
   virtual bool extent_is_below_min() const = 0;
   virtual uint32_t get_node_size() = 0;
 
@@ -114,3 +116,7 @@ omap_load_extent_iertr::future<OMapNodeRef>
 omap_load_extent(omap_context_t oc, laddr_t laddr, depth_t depth);
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::omap_manager::OMapNode> : fmt::ostream_formatter {};
+#endif

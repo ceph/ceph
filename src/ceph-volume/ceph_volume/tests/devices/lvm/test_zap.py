@@ -69,7 +69,7 @@ class TestFindAssociatedDevices(object):
         monkeypatch.setattr(process, 'call', lambda x, **kw: ('', '', 0))
 
         result = zap.find_associated_devices(osd_id='0')
-        assert result[0].abspath == '/dev/VolGroup/lv'
+        assert result[0].path == '/dev/VolGroup/lv'
 
     def test_lv_is_matched_fsid(self, monkeypatch):
         tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,' +\
@@ -82,7 +82,7 @@ class TestFindAssociatedDevices(object):
         monkeypatch.setattr(process, 'call', lambda x, **kw: ('', '', 0))
 
         result = zap.find_associated_devices(osd_fsid='asdf-lkjh')
-        assert result[0].abspath == '/dev/VolGroup/lv'
+        assert result[0].path == '/dev/VolGroup/lv'
 
     def test_lv_is_matched_id_fsid(self, monkeypatch):
         tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,' +\
@@ -95,7 +95,7 @@ class TestFindAssociatedDevices(object):
         monkeypatch.setattr(process, 'call', lambda x, **kw: ('', '', 0))
 
         result = zap.find_associated_devices(osd_id='0', osd_fsid='asdf-lkjh')
-        assert result[0].abspath == '/dev/VolGroup/lv'
+        assert result[0].path == '/dev/VolGroup/lv'
 
 
 class TestEnsureAssociatedLVs(object):

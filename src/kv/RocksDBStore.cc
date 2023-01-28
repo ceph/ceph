@@ -18,6 +18,7 @@
 #include "rocksdb/cache.h"
 #include "rocksdb/filter_policy.h"
 #include "rocksdb/utilities/convenience.h"
+#include "rocksdb/utilities/table_properties_collectors.h"
 #include "rocksdb/merge_operator.h"
 
 #include "common/perf_counters.h"
@@ -934,6 +935,14 @@ int RocksDBStore::update_column_family_options(const std::string& base_name,
       return r;
     }
   }
+
+  // Set Compact on Deletion Factory
+  if (cct->_conf->rocksdb_cf_compact_on_deletion) {
+    size_t sliding_window = cct->_conf->rocksdb_cf_compact_on_deletion_sliding_window;
+    size_t trigger = cct->_conf->rocksdb_cf_compact_on_deletion_trigger;
+    cf_opt->table_properties_collector_factories.emplace_back(
+        rocksdb::NewCompactOnDeletionCollectorFactory(sliding_window, trigger));
+  }
   return 0;
 }
 
@@ -1739,6 +1748,8 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
                                                          const string &start,
                                                          const string &end)
 {
+  ldout(db->cct, 10) << __func__ << " enter start=" << start
+		     << " end=" << end << dendl;
   auto p_iter = db->cf_handles.find(prefix);
   if (p_iter == db->cf_handles.end()) {
     uint64_t cnt = db->delete_range_threshold;
@@ -1750,6 +1761,8 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
       bat.Delete(db->default_cf, combine_strings(prefix, it->key()));
     }
     if (cnt == 0) {
+      ldout(db->cct, 10) << __func__ << " p_iter == end(), resorting to DeleteRange"
+			 << dendl;
       bat.RollbackToSavePoint();
       bat.DeleteRange(db->default_cf,
 		      rocksdb::Slice(combine_strings(prefix, start)),
@@ -1770,6 +1783,8 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
 	bat.Delete(cf, it->key());
       }
       if (cnt == 0) {
+        ldout(db->cct, 10) << __func__ << " p_iter != end(), resorting to DeleteRange"
+			   << dendl;
 	bat.RollbackToSavePoint();
 	bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
       } else {
@@ -1778,6 +1793,7 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
       delete it;
     }
   }
+  ldout(db->cct, 10) << __func__ << " end" << dendl;
 }
 
 void RocksDBStore::RocksDBTransactionImpl::merge(

@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
+#include <fmt/ranges.h>
+
 #include "common/scrub_types.h"
 #include "include/types.h"
 #include "os/ObjectStore.h"
@@ -128,7 +130,7 @@ struct requested_scrub_t {
   bool deep_scrub_on_error{false};
 
   /**
-   * If set, we should see must_deep_scrub and must_repair set, too
+   * If set, we should see must_deep_scrub & must_scrub, too
    *
    * - 'must_repair' is checked by the OSD when scheduling the scrubs.
    * - also checked & cleared at pg::queue_scrub()
@@ -149,9 +151,37 @@ struct requested_scrub_t {
    * Otherwise - PG_STATE_FAILED_REPAIR will be asserted.
    */
   bool check_repair{false};
+
+  /**
+   * Used to indicate, both in client-facing listings and internally, that
+   * the planned scrub will be a deep one.
+   */
+  bool calculated_to_deep{false};
 };
 
 std::ostream& operator<<(std::ostream& out, const requested_scrub_t& sf);
+
+template <>
+struct fmt::formatter<requested_scrub_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const requested_scrub_t& rs, FormatContext& ctx)
+  {
+    return fmt::format_to(ctx.out(),
+                          "(plnd:{}{}{}{}{}{}{}{}{}{})",
+                          rs.must_repair ? " must_repair" : "",
+                          rs.auto_repair ? " auto_repair" : "",
+                          rs.check_repair ? " check_repair" : "",
+                          rs.deep_scrub_on_error ? " deep_scrub_on_error" : "",
+                          rs.must_deep_scrub ? " must_deep_scrub" : "",
+                          rs.must_scrub ? " must_scrub" : "",
+                          rs.time_for_deep ? " time_for_deep" : "",
+                          rs.need_auto ? " need_auto" : "",
+                          rs.req_scrub ? " req_scrub" : "",
+                          rs.calculated_to_deep ? " deep" : "");
+  }
+};
 
 /**
  *  The interface used by the PG when requesting scrub-related info or services
@@ -250,7 +280,7 @@ struct ScrubPgIF {
 
   virtual void replica_scrub_op(OpRequestRef op) = 0;
 
-  virtual void set_op_parameters(requested_scrub_t&) = 0;
+  virtual void set_op_parameters(const requested_scrub_t&) = 0;
 
   virtual void scrub_clear_state() = 0;
 
@@ -315,6 +345,13 @@ struct ScrubPgIF {
   virtual bool get_store_errors(const scrub_ls_arg_t& arg,
 				scrub_ls_result_t& res_inout) const = 0;
 
+  /**
+   * force a periodic 'publish_stats_to_osd()' call, to update scrub-related
+   * counters and statistics.
+   */
+  virtual void update_scrub_stats(
+    ceph::coarse_real_clock::time_point now_is) = 0;
+
   // --------------- reservations -----------------------------------
 
   /**
@@ -349,7 +386,9 @@ struct ScrubPgIF {
    *
    * Following our status as Primary or replica.
    */
-  virtual void on_primary_change(const requested_scrub_t& request_flags) = 0;
+  virtual void on_primary_change(
+    std::string_view caller,
+    const requested_scrub_t& request_flags) = 0;
 
   /**
    * Recalculate the required scrub time.
@@ -358,9 +397,6 @@ struct ScrubPgIF {
    * i.e. the OSD "knows our name" if-f we are the Primary.
    */
   virtual void update_scrub_job(const requested_scrub_t& request_flags) = 0;
-
-  virtual void on_maybe_registration_change(
-    const requested_scrub_t& request_flags) = 0;
 
   // on the replica:
   virtual void handle_scrub_reserve_request(OpRequestRef op) = 0;

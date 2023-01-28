@@ -10,7 +10,7 @@
 
 a {
   .dot {
-    background-color: vv.$primary;
+    background-color: vv.$primary-500;
     border: 2px solid vv.$secondary;
     border-radius: 50%;
     height: 11px;
@@ -22,6 +22,6 @@ a {
 
   &:hover .dot {
     background-color: vv.$white;
-    border-color: vv.$primary;
+    border-color: vv.$primary-500;
   }
 }

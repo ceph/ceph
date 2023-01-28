@@ -4,8 +4,8 @@
 #include "svc_sync_modules.h"
 #include "svc_zone.h"
 
-#include "rgw/rgw_sync_module.h"
-#include "rgw/rgw_zone.h"
+#include "rgw_sync_module.h"
+#include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 

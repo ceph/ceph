@@ -13,8 +13,7 @@
  *
  */
 
-#ifndef RGW_TOKEN_H
-#define RGW_TOKEN_H
+#pragma once
 
 #include <stdint.h>
 #include <boost/algorithm/string.hpp>
@@ -169,5 +168,3 @@ namespace rgw {
   }
 
 } /* namespace rgw */
-
-#endif /* RGW_TOKEN_H */

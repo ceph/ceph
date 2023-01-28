@@ -36,6 +36,14 @@ Options
 
    Perform a selftest. This mode performs a sanity check of ``stats`` module.
 
+.. option:: --conffile [CONFFILE]
+
+   Path to cluster configuration file
+
+.. option:: -d [DELAY], --delay [DELAY]
+
+   Refresh interval in seconds (default: 1)
+
 Descriptions of fields
 ======================
 

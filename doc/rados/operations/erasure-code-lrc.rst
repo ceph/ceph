@@ -22,45 +22,51 @@ Reduce recovery bandwidth between hosts
 
 Although it is probably not an interesting use case when all hosts are
 connected to the same switch, reduced bandwidth usage can actually be
-observed.::
+observed.:
 
-        $ ceph osd erasure-code-profile set LRCprofile \
-             plugin=lrc \
-             k=4 m=2 l=3 \
-             crush-failure-domain=host
-        $ ceph osd pool create lrcpool erasure LRCprofile
+.. prompt:: bash $
+
+   ceph osd erasure-code-profile set LRCprofile \
+      plugin=lrc \
+      k=4 m=2 l=3 \
+      crush-failure-domain=host
+   ceph osd pool create lrcpool erasure LRCprofile
 
 
 Reduce recovery bandwidth between racks
 ---------------------------------------
 
 In Firefly the bandwidth reduction will only be observed if the primary
-OSD is in the same rack as the lost chunk.::
+OSD is in the same rack as the lost chunk.:
 
-        $ ceph osd erasure-code-profile set LRCprofile \
-             plugin=lrc \
-             k=4 m=2 l=3 \
-             crush-locality=rack \
-             crush-failure-domain=host
-        $ ceph osd pool create lrcpool erasure LRCprofile
+.. prompt:: bash $
+
+   ceph osd erasure-code-profile set LRCprofile \
+      plugin=lrc \
+      k=4 m=2 l=3 \
+      crush-locality=rack \
+      crush-failure-domain=host
+   ceph osd pool create lrcpool erasure LRCprofile
 
 
 Create an lrc profile
 =====================
 
-To create a new lrc erasure code profile::
+To create a new lrc erasure code profile:
 
-        ceph osd erasure-code-profile set {name} \
-             plugin=lrc \
-             k={data-chunks} \
-             m={coding-chunks} \
-             l={locality} \
-             [crush-root={root}] \
-             [crush-locality={bucket-type}] \
-             [crush-failure-domain={bucket-type}] \
-             [crush-device-class={device-class}] \
-             [directory={directory}] \
-             [--force]
+.. prompt:: bash $
+
+   ceph osd erasure-code-profile set {name} \
+       plugin=lrc \
+       k={data-chunks} \
+       m={coding-chunks} \
+       l={locality} \
+       [crush-root={root}] \
+       [crush-locality={bucket-type}] \
+       [crush-failure-domain={bucket-type}] \
+       [crush-device-class={device-class}] \
+       [directory={directory}] \
+       [--force]
 
 Where:
 
@@ -190,13 +196,15 @@ Minimal testing
 
 It is strictly equivalent to using a *K=2* *M=1* erasure code profile. The *DD*
 implies *K=2*, the *c* implies *M=1* and the *jerasure* plugin is used
-by default.::
+by default.:
 
-        $ ceph osd erasure-code-profile set LRCprofile \
-             plugin=lrc \
-             mapping=DD_ \
-             layers='[ [ "DDc", "" ] ]'
-        $ ceph osd pool create lrcpool erasure LRCprofile
+.. prompt:: bash $
+   
+   ceph osd erasure-code-profile set LRCprofile \
+      plugin=lrc \
+      mapping=DD_ \
+      layers='[ [ "DDc", "" ] ]'
+   ceph osd pool create lrcpool erasure LRCprofile
 
 Reduce recovery bandwidth between hosts
 ---------------------------------------
@@ -204,38 +212,43 @@ Reduce recovery bandwidth between hosts
 Although it is probably not an interesting use case when all hosts are
 connected to the same switch, reduced bandwidth usage can actually be
 observed. It is equivalent to **k=4**, **m=2** and **l=3** although
-the layout of the chunks is different::
+the layout of the chunks is different. **WARNING: PROMPTS ARE SELECTABLE**
 
-        $ ceph osd erasure-code-profile set LRCprofile \
-             plugin=lrc \
-             mapping=__DD__DD \
-             layers='[
-                       [ "_cDD_cDD", "" ],
-                       [ "cDDD____", "" ],
-                       [ "____cDDD", "" ],
-                     ]'
-        $ ceph osd pool create lrcpool erasure LRCprofile
+::
+
+   $ ceph osd erasure-code-profile set LRCprofile \
+        plugin=lrc \
+        mapping=__DD__DD \
+        layers='[
+                  [ "_cDD_cDD", "" ],
+                  [ "cDDD____", "" ],
+                  [ "____cDDD", "" ],
+                ]'
+   $ ceph osd pool create lrcpool erasure LRCprofile
 
 
 Reduce recovery bandwidth between racks
 ---------------------------------------
 
-In Firefly the reduced bandwidth will only be observed if the primary
-OSD is in the same rack as the lost chunk.::
+In Firefly the reduced bandwidth will only be observed if the primary OSD is in
+the same rack as the lost chunk. **WARNING: PROMPTS ARE SELECTABLE**
 
-        $ ceph osd erasure-code-profile set LRCprofile \
-             plugin=lrc \
-             mapping=__DD__DD \
-             layers='[
-                       [ "_cDD_cDD", "" ],
-                       [ "cDDD____", "" ],
-                       [ "____cDDD", "" ],
-                     ]' \
-             crush-steps='[
-                             [ "choose", "rack", 2 ],
-                             [ "chooseleaf", "host", 4 ],
-                            ]'
-        $ ceph osd pool create lrcpool erasure LRCprofile
+::
+
+   $ ceph osd erasure-code-profile set LRCprofile \
+       plugin=lrc \
+       mapping=__DD__DD \
+       layers='[
+                 [ "_cDD_cDD", "" ],
+                 [ "cDDD____", "" ],
+                 [ "____cDDD", "" ],
+               ]' \
+       crush-steps='[
+                       [ "choose", "rack", 2 ],
+                       [ "chooseleaf", "host", 4 ],
+                      ]'
+  
+   $ ceph osd pool create lrcpool erasure LRCprofile
 
 Testing with different Erasure Code backends
 --------------------------------------------
@@ -245,26 +258,30 @@ specify the EC backend/algorithm on a per layer basis using the low
 level configuration. The second argument in layers='[ [ "DDc", "" ] ]'
 is actually an erasure code profile to be used for this level. The
 example below specifies the ISA backend with the cauchy technique to
-be used in the lrcpool.::
+be used in the lrcpool.:
 
-        $ ceph osd erasure-code-profile set LRCprofile \
-             plugin=lrc \
-             mapping=DD_ \
-             layers='[ [ "DDc", "plugin=isa technique=cauchy" ] ]'
-        $ ceph osd pool create lrcpool erasure LRCprofile
+.. prompt:: bash $
+
+   ceph osd erasure-code-profile set LRCprofile \
+      plugin=lrc \
+      mapping=DD_ \
+      layers='[ [ "DDc", "plugin=isa technique=cauchy" ] ]'
+   ceph osd pool create lrcpool erasure LRCprofile
 
 You could also use a different erasure code profile for each
-layer.::
+layer. **WARNING: PROMPTS ARE SELECTABLE**
 
-        $ ceph osd erasure-code-profile set LRCprofile \
-             plugin=lrc \
-             mapping=__DD__DD \
-             layers='[
-                       [ "_cDD_cDD", "plugin=isa technique=cauchy" ],
-                       [ "cDDD____", "plugin=isa" ],
-                       [ "____cDDD", "plugin=jerasure" ],
-                     ]'
-        $ ceph osd pool create lrcpool erasure LRCprofile
+::
+
+   $ ceph osd erasure-code-profile set LRCprofile \
+        plugin=lrc \
+        mapping=__DD__DD \
+        layers='[
+                  [ "_cDD_cDD", "plugin=isa technique=cauchy" ],
+                  [ "cDDD____", "plugin=isa" ],
+                  [ "____cDDD", "plugin=jerasure" ],
+                ]'
+   $ ceph osd pool create lrcpool erasure LRCprofile
 
 
 

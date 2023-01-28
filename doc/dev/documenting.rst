@@ -88,6 +88,10 @@ separate file, like this::
 
   .. graphviz:: myfile.dot
 
+See the `Dot User's Manual <https://www.graphviz.org/pdf/dotguide.pdf>`_ by
+Emden R. Gansner, Eleftherios Koutsofios, and Stephen North for examples of
+digraphs. This is especially useful if this is your first time encountering
+GraphViz.
 
 Ditaa
 -----

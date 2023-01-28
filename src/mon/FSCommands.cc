@@ -424,6 +424,28 @@ public:
           fs->mds_map.set_balancer(val);
         });
       return true;
+    } else if (var == "bal_rank_mask") {
+      if (val.empty()) {
+        ss << "bal_rank_mask may not be empty";
+	return -EINVAL;
+      }
+
+      if (fs->mds_map.check_special_bal_rank_mask(val, MDSMap::BAL_RANK_MASK_TYPE_ANY) == false) {
+	std::string bin_string;
+	int r = fs->mds_map.hex2bin(val, bin_string, MAX_MDS, ss);
+	if (r != 0) {
+	  return r;
+	}
+      }
+      ss << "setting the metadata balancer rank mask to " << val;
+
+      fsmap.modify_filesystem(
+	fs->fscid,
+	[val](std::shared_ptr<Filesystem> fs)
+        {
+          fs->mds_map.set_bal_rank_mask(val);
+        });
+      return true;
     } else if (var == "max_file_size") {
       if (interr.length()) {
 	ss << var << " requires an integer value";

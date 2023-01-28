@@ -59,7 +59,7 @@ export class OverviewComponent implements OnInit, OnDestroy {
       icon: Icons.download,
       click: () => this.importBootstrapModal(),
       name: $localize`Import Bootstrap Token`,
-      disable: () => this.peersExist
+      disable: () => false
     };
     this.tableActions = [createBootstrapAction, importBootstrapAction];
   }
@@ -70,7 +70,6 @@ export class OverviewComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.rbdMirroringService.subscribeSummary((data) => {
         this.status = data.content_data.status;
-
         this.peersExist = !!data.content_data.pools.find((o: Pool) => o['peer_uuids'].length > 0);
       })
     );

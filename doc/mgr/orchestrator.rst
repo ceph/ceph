@@ -5,14 +5,18 @@
 Orchestrator CLI
 ================
 
-This module provides a command line interface (CLI) to orchestrator
-modules (``ceph-mgr`` modules which interface with external orchestration services).
+This module provides a command line interface (CLI) for orchestrator modules.
+Orchestrator modules are ``ceph-mgr`` plugins that interface with external
+orchestration services.
 
-As the orchestrator CLI unifies multiple external orchestrators, a common nomenclature
-for the orchestrator module is needed.
+Definition of Terms
+===================
+
+The orchestrator CLI unifies multiple external orchestrators, so we need a
+common nomenclature for the orchestrator module: 
 
 +--------------------------------------+---------------------------------------+
-| *host*                               | hostname (not DNS name) of the        |
+| *host*                               | hostname (not the DNS name) of the    |
 |                                      | physical host. Not the podname,       |
 |                                      | container name, or hostname inside    |
 |                                      | the container.                        |
@@ -20,7 +24,7 @@ for the orchestrator module is needed.
 | *service type*                       | The type of the service. e.g., nfs,   |
 |                                      | mds, osd, mon, rgw, mgr, iscsi        |
 +--------------------------------------+---------------------------------------+
-| *service*                            | A logical service, Typically          |
+| *service*                            | A logical service. Typically          |
 |                                      | comprised of multiple service         |
 |                                      | instances on multiple hosts for HA    |
 |                                      |                                       |
@@ -34,29 +38,28 @@ for the orchestrator module is needed.
 |                                      | like LIO or knfsd or whatever)        |
 |                                      |                                       |
 |                                      | This identifier should                |
-|                                      | uniquely identify the instance        |
+|                                      | uniquely identify the instance.       |
 +--------------------------------------+---------------------------------------+
 
-The relation between the names is the following:
+Here is how the names relate: 
 
-* A *service* has a specific *service type*
-* A *daemon* is a physical instance of a *service type*
-
+* A *service* has a specific *service type*.
+* A *daemon* is a physical instance of a *service type*.
 
 .. note::
 
-    Orchestrator modules may only implement a subset of the commands listed below.
-    Also, the implementation of the commands may differ between modules.
+    Orchestrator modules might implement only a subset of the commands listed
+    below. The implementation of the commands may differ between modules.
 
 Status
 ======
 
-::
+.. prompt:: bash $
 
-    ceph orch status [--detail]
+   ceph orch status [--detail]
 
-Show current orchestrator mode and high-level status (whether the orchestrator
-plugin is available and operational)
+This command shows the current orchestrator mode and its high-level status
+(whether the orchestrator plugin is available and operational).
 
 
 ..
@@ -92,15 +95,20 @@ plugin is available and operational)
 Stateless services (MDS/RGW/NFS/rbd-mirror/iSCSI)
 =================================================
 
-(Please note: The orchestrator will not configure the services. Please look into the corresponding
-documentation for service configuration details.)
+.. note::
 
-The ``name`` parameter is an identifier of the group of instances:
+   The orchestrator will not configure the services. See the relevant
+   documentation for details about how to configure particular services. 
 
-* a CephFS file system for a group of MDS daemons,
-* a zone name for a group of RGWs
+The ``name`` parameter identifies the kind of the group of instances. The
+following short list explains the meaning of the ``name`` parameter:
 
-Creating/growing/shrinking/removing services::
+* A CephFS file system identifies a group of MDS daemons.
+* A zone name identifies a group of RGWs.
+
+Creating/growing/shrinking/removing services:
+
+.. prompt:: bash $
 
     ceph orch apply mds <fs_name> [--placement=<placement>] [--dry-run]
     ceph orch apply rgw <name> [--realm=<realm>] [--zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>] [--dry-run]
@@ -111,11 +119,13 @@ where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
 
 e.g., ``ceph orch apply mds myfs --placement="3 host1 host2 host3"``
 
-Service Commands::
+Service Commands:
+
+.. prompt:: bash $
 
     ceph orch <start|stop|restart|redeploy|reconfig> <service_name>
 
-   .. note:: these commands applies to cephadm containerized daemons only.
+.. note:: These commands apply only to cephadm containerized daemons.
 
 Options
 =======
@@ -148,24 +158,34 @@ Options
 Configuring the Orchestrator CLI
 ================================
 
-To enable the orchestrator, select the orchestrator module to use
-with the ``set backend`` command::
+Enable the orchestrator by using the ``set backend`` command to select the orchestrator module that will be used:
+
+.. prompt:: bash $
 
     ceph orch set backend <module>
 
-For example, to enable the Rook orchestrator module and use it with the CLI::
+Example - Configuring the Orchestrator CLI
+------------------------------------------
+
+For example, to enable the Rook orchestrator module and use it with the CLI:
+
+.. prompt:: bash $
 
     ceph mgr module enable rook
     ceph orch set backend rook
 
-Check the backend is properly configured::
+Confirm that the backend is properly configured:
+
+.. prompt:: bash $
 
     ceph orch status
 
 Disable the Orchestrator
 ------------------------
 
-To disable the orchestrator, use the empty string ``""``::
+To disable the orchestrator, use the empty string ``""``:
+
+.. prompt:: bash $
 
     ceph orch set backend ""
     ceph mgr module disable rook

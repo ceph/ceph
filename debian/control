@@ -24,6 +24,7 @@ Build-Depends: automake,
                hostname <pkg.ceph.check>,
                javahelper,
                jq <pkg.ceph.check>,
+               jsonnet <pkg.ceph.check>,
                junit4,
                libarrow-dev <pkg.ceph.arrow>,
                libparquet-dev <pkg.ceph.arrow>,
@@ -35,6 +36,7 @@ Build-Depends: automake,
                libcrypto++-dev <pkg.ceph.crimson>,
                libcryptsetup-dev,
                libcap-ng-dev,
+               libcap-dev,
                libcunit1-dev,
                libcurl4-openssl-dev,
                libevent-dev,
@@ -230,6 +232,8 @@ Package: ceph-mgr
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          ceph-mgr-modules-core (= ${binary:Version}),
+         libsqlite3-mod-ceph (= ${binary:Version}),
+         librados2 (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
@@ -741,7 +745,8 @@ Description: RADOS distributed object store client C++ library (development file
 Package: libsqlite3-mod-ceph
 Architecture: any
 Section: libs
-Depends: ${misc:Depends},
+Depends: librados2 (= ${binary:Version}),
+         ${misc:Depends},
          ${shlibs:Depends},
 Description: SQLite3 VFS for Ceph
  A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS

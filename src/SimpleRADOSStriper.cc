@@ -488,7 +488,10 @@ ssize_t SimpleRADOSStriper::read(void* data, size_t len, uint64_t off)
   }
 
   size_t r = 0;
-  std::vector<std::pair<bufferlist, aiocompletionptr>> reads;
+  // Don't use std::vector to store bufferlists (e.g for parallelizing aio_reads),
+  // as they are being moved whenever the vector resizes
+  // and will cause invalidated references.
+  std::deque<std::pair<bufferlist, aiocompletionptr>> reads;
   while ((len-r) > 0) {
     auto ext = get_next_extent(off+r, len-r);
     auto& [bl, aiocp] = reads.emplace_back();

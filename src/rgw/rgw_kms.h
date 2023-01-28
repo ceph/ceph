@@ -5,8 +5,7 @@
  * Server-side encryption integrations with Key Management Systems (SSE-KMS)
  */
 
-#ifndef CEPH_RGW_KMS_H
-#define CEPH_RGW_KMS_H
+#pragma once
 
 #include <string>
 
@@ -63,4 +62,3 @@ public:
   virtual int get_key(const DoutPrefixProvider *dpp, std::string_view key_id, std::string& actual_key) = 0;
   virtual ~SecretEngine(){};
 };
-#endif

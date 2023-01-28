@@ -6,8 +6,13 @@ CEPHADM_SRC_DIR=${SCRIPT_DIR}/../../../src/cephadm
 CORPUS_COMMIT=9cd9ad020d93b0b420924fec55da307aff8bd422
 
 [ -z "$SUDO" ] && SUDO=sudo
+
+[ -d "$TMPDIR" ] || TMPDIR=$(mktemp -d tmp.$SCRIPT_NAME.XXXXXX)
+trap "$SUDO rm -rf $TMPDIR" EXIT
+
 if [ -z "$CEPHADM" ]; then
-    CEPHADM=${CEPHADM_SRC_DIR}/cephadm
+    CEPHADM=`mktemp -p $TMPDIR tmp.cephadm.XXXXXX`
+    ${CEPHADM_SRC_DIR}/build.sh "$CEPHADM"
 fi
 
 # at this point, we need $CEPHADM set
@@ -16,48 +21,17 @@ if ! [ -x "$CEPHADM" ]; then
     exit 1
 fi
 
-# respawn ourselves with a shebang
-if [ -z "$PYTHON_KLUDGE" ]; then
-    # see which pythons we should test with
-    PYTHONS=""
-    which python3 && PYTHONS="$PYTHONS python3"
-    echo "PYTHONS $PYTHONS"
-    if [ -z "$PYTHONS" ]; then
-	echo "No PYTHONS found!"
-	exit 1
-    fi
-
-    TMPBINDIR=$(mktemp -d)
-    trap "rm -rf $TMPBINDIR" EXIT
-    ORIG_CEPHADM="$CEPHADM"
-    CEPHADM="$TMPBINDIR/cephadm"
-    for p in $PYTHONS; do
-	echo "=== re-running with $p ==="
-	ln -s `which $p` $TMPBINDIR/python
-	echo "#!$TMPBINDIR/python" > $CEPHADM
-	cat $ORIG_CEPHADM >> $CEPHADM
-	chmod 700 $CEPHADM
-	$TMPBINDIR/python --version
-	PYTHON_KLUDGE=1 CEPHADM=$CEPHADM $0
-	rm $TMPBINDIR/python
-    done
-    rm -rf $TMPBINDIR
-    echo "PASS with all of: $PYTHONS"
-    exit 0
-fi
-
 # combine into a single var
 CEPHADM_BIN="$CEPHADM"
 CEPHADM="$SUDO $CEPHADM_BIN"
 
 ## adopt
 CORPUS_GIT_SUBMOD="cephadm-adoption-corpus"
-TMPDIR=$(mktemp -d)
-git clone https://github.com/ceph/$CORPUS_GIT_SUBMOD $TMPDIR
-trap "$SUDO rm -rf $TMPDIR" EXIT
+GIT_CLONE_DIR=${TMPDIR}/${CORPUS_GIT_SUBMOD}
+git clone https://github.com/ceph/$CORPUS_GIT_SUBMOD $GIT_CLONE_DIR
 
-git -C $TMPDIR checkout $CORPUS_COMMIT
-CORPUS_DIR=${TMPDIR}/archive
+git -C $GIT_CLONE_DIR checkout $CORPUS_COMMIT
+CORPUS_DIR=${GIT_CLONE_DIR}/archive
 
 for subdir in `ls ${CORPUS_DIR}`; do
     for tarfile in `ls ${CORPUS_DIR}/${subdir} | grep .tgz`; do

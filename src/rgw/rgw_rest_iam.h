@@ -14,7 +14,7 @@ class RGWHandler_REST_IAM : public RGWHandler_REST {
   void rgw_iam_parse_input();
 public:
 
-  static int init_from_header(req_state *s, int default_formatter, bool configurable_format);
+  static int init_from_header(req_state *s, RGWFormat default_formatter, bool configurable_format);
 
   RGWHandler_REST_IAM(const rgw::auth::StrategyRegistry& auth_registry,
 		      bufferlist& bl_post_body)
@@ -23,7 +23,7 @@ public:
       bl_post_body(bl_post_body) {}
   ~RGWHandler_REST_IAM() override = default;
 
-  int init(rgw::sal::Store* store,
+  int init(rgw::sal::Driver* driver,
            req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider* dpp, optional_yield y) override;
@@ -41,7 +41,7 @@ public:
     return this;
   }
 
-  RGWHandler_REST* get_handler(rgw::sal::Store* store,
+  RGWHandler_REST* get_handler(rgw::sal::Driver* driver,
 			       req_state*,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override;

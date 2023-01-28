@@ -97,8 +97,11 @@ public:
     return false;
   }
 
-  void remap_extents(io::Extents& image_extents,
-                     io::ImageExtentsMapType type) override;
+  // called directly by ImageDispatcher
+  // TODO: hoist these out and remove CryptoImageDispatch since it's
+  // just a placeholder
+  void remap_to_physical(io::Extents& image_extents, io::ImageArea area);
+  io::ImageArea remap_to_logical(io::Extents& image_extents);
 
 private:
   uint64_t m_data_offset;

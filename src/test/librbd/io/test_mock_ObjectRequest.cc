@@ -46,7 +46,8 @@ struct CopyupRequest<librbd::MockTestImageCtx> : public CopyupRequest<librbd::Mo
   static CopyupRequest* s_instance;
   static CopyupRequest* create(librbd::MockTestImageCtx *ictx,
                                uint64_t objectno, Extents &&image_extents,
-                               const ZTracer::Trace &parent_trace) {
+                               ImageArea area,
+                               const ZTracer::Trace& parent_trace) {
     return s_instance;
   }
 
@@ -70,8 +71,9 @@ struct ImageListSnapsRequest<librbd::MockTestImageCtx> {
   }
   ImageListSnapsRequest(
       librbd::MockImageCtx& image_ctx, AioCompletion* aio_comp,
-      Extents&& image_extents, SnapIds&& snap_ids, int list_snaps_flags,
-      SnapshotDelta* snapshot_delta, const ZTracer::Trace& parent_trace) {
+      Extents&& image_extents, ImageArea area, SnapIds&& snap_ids,
+      int list_snaps_flags, SnapshotDelta* snapshot_delta,
+      const ZTracer::Trace& parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_comp = aio_comp;
     s_instance->image_extents = image_extents;
@@ -90,20 +92,25 @@ ImageListSnapsRequest<librbd::MockTestImageCtx>* ImageListSnapsRequest<librbd::M
 
 namespace util {
 
-template <> void file_to_extents(
-        MockTestImageCtx* image_ctx, uint64_t offset, uint64_t length,
-        uint64_t buffer_offset,
-        striper::LightweightObjectExtents* object_extents) {
+template <>
+void area_to_object_extents(MockTestImageCtx* image_ctx, uint64_t offset,
+                            uint64_t length, ImageArea area,
+                            uint64_t buffer_offset,
+                            striper::LightweightObjectExtents* object_extents) {
   Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, offset, length,
                            0, buffer_offset, object_extents);
 }
 
-template <> void extent_to_file(
-        MockTestImageCtx* image_ctx, uint64_t object_no, uint64_t offset,
-        uint64_t length,
-        std::vector<std::pair<uint64_t, uint64_t> >& extents) {
-  Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no,
-                          offset, length, extents);
+template <>
+std::pair<Extents, ImageArea> object_to_area_extents(
+    MockTestImageCtx* image_ctx, uint64_t object_no,
+    const Extents& object_extents) {
+  Extents extents;
+  for (auto [off, len] : object_extents) {
+    Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no, off,
+                            len, extents);
+  }
+  return {std::move(extents), ImageArea::DATA};
 }
 
 namespace {
@@ -189,7 +196,7 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   void expect_prune_parent_extents(MockTestImageCtx &mock_image_ctx,
                                    const Extents& extents,
                                    uint64_t overlap, uint64_t object_overlap) {
-    EXPECT_CALL(mock_image_ctx, prune_parent_extents(_, overlap))
+    EXPECT_CALL(mock_image_ctx, prune_parent_extents(_, _, overlap, _))
       .WillOnce(WithArg<0>(Invoke([extents, object_overlap](Extents& e) {
                              e = extents;
                              return object_overlap;

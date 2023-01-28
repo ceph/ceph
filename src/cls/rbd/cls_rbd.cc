@@ -6957,6 +6957,9 @@ int snap_list(cls_method_context_t hctx, cls::rbd::GroupSnapshot start_after,
       group_snaps->push_back(snap);
     }
 
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    }
   } while (more && (group_snaps->size() < max_return));
 
   return 0;

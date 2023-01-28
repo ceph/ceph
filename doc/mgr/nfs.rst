@@ -262,7 +262,7 @@ Create CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export create cephfs --cluster-id <cluster_id> --pseudo-path <pseudo_path> --fsname <fsname> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>]
+    $ ceph nfs export create cephfs --cluster-id <cluster_id> --pseudo-path <pseudo_path> --fsname <fsname> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>] [--sectype <value>...]
 
 This creates export RADOS objects containing the export block, where
 
@@ -289,6 +289,18 @@ for permissible values.
 value is `no_root_squash`. See the `NFS-Ganesha Export Sample`_ for
 permissible values.
 
+``<sectype>`` specifies which authentication methods will be used when
+connecting to the export. Valid values include "krb5p", "krb5i", "krb5", "sys",
+and "none". More than one value can be supplied. The flag may be specified
+multiple times (example: ``--sectype=krb5p --sectype=krb5i``) or multiple
+values may be separated by a comma (example: ``--sectype krb5p,krb5i``). The
+server will negotatiate a supported security type with the client preferring
+the supplied methods left-to-right.
+
+.. note:: Specifying values for sectype that require Kerberos will only function on servers
+          that are configured to support Kerberos. Setting up NFS-Ganesha to support Kerberos
+          is outside the scope of this document.
+
 .. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
 
 Create RGW Export
@@ -308,7 +320,7 @@ To export a *bucket*:
 
 .. code::
 
-   $ ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --bucket <bucket_name> [--user-id <user-id>] [--readonly] [--client_addr <value>...] [--squash <value>]
+   $ ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --bucket <bucket_name> [--user-id <user-id>] [--readonly] [--client_addr <value>...] [--squash <value>] [--sectype <value>...]
 
 For example, to export *mybucket* via NFS cluster *mynfs* at the pseudo-path */bucketdata* to any host in the ``192.168.10.0/24`` network
 
@@ -338,6 +350,18 @@ for permissible values.
 ``<squash>`` defines the kind of user id squashing to be performed. The default
 value is `no_root_squash`. See the `NFS-Ganesha Export Sample`_ for
 permissible values.
+
+``<sectype>`` specifies which authentication methods will be used when
+connecting to the export. Valid values include "krb5p", "krb5i", "krb5", "sys",
+and "none". More than one value can be supplied. The flag may be specified
+multiple times (example: ``--sectype=krb5p --sectype=krb5i``) or multiple
+values may be separated by a comma (example: ``--sectype krb5p,krb5i``). The
+server will negotatiate a supported security type with the client preferring
+the supplied methods left-to-right.
+
+.. note:: Specifying values for sectype that require Kerberos will only function on servers
+          that are configured to support Kerberos. Setting up NFS-Ganesha to support Kerberos
+          is outside the scope of this document.
 
 RGW user export
 ^^^^^^^^^^^^^^^

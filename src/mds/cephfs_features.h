@@ -27,7 +27,7 @@ namespace ceph {
 // and update Server::update_required_client_features(). This feature bit
 // is used to indicate that operator only wants clients from that release or
 // later to mount CephFS.
-#define CEPHFS_CURRENT_RELEASE  CEPH_RELEASE_QUINCY
+#define CEPHFS_CURRENT_RELEASE  CEPH_RELEASE_REEF
 
 // The first 5 bits are reserved for old ceph releases.
 #define CEPHFS_FEATURE_JEWEL                5
@@ -44,7 +44,8 @@ namespace ceph {
 #define CEPHFS_FEATURE_METRIC_COLLECT       14
 #define CEPHFS_FEATURE_ALTERNATE_NAME       15
 #define CEPHFS_FEATURE_NOTIFY_SESSION_STATE 16
-#define CEPHFS_FEATURE_MAX                  16
+#define CEPHFS_FEATURE_OP_GETVXATTR         17
+#define CEPHFS_FEATURE_MAX                  17
 
 #define CEPHFS_FEATURES_ALL {		\
   0, 1, 2, 3, 4,			\
@@ -62,6 +63,7 @@ namespace ceph {
   CEPHFS_FEATURE_METRIC_COLLECT,        \
   CEPHFS_FEATURE_ALTERNATE_NAME,        \
   CEPHFS_FEATURE_NOTIFY_SESSION_STATE,  \
+  CEPHFS_FEATURE_OP_GETVXATTR,          \
 }
 
 #define CEPHFS_METRIC_FEATURES_ALL {		\

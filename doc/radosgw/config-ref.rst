@@ -43,6 +43,7 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_curl_wait_timeout_ms
 .. confval:: rgw_copy_obj_progress
 .. confval:: rgw_copy_obj_progress_every_bytes
+.. confval:: rgw_max_copy_obj_concurrent_io
 .. confval:: rgw_admin_entry
 .. confval:: rgw_content_length_compat
 .. confval:: rgw_bucket_quota_ttl
@@ -208,6 +209,9 @@ Keystone Settings
 .. confval:: rgw_keystone_accepted_roles
 .. confval:: rgw_keystone_token_cache_size
 .. confval:: rgw_keystone_verify_ssl
+.. confval:: rgw_keystone_service_token_enabled
+.. confval:: rgw_keystone_service_token_accepted_roles
+.. confval:: rgw_keystone_expired_token_cache_expiration
 
 Server-side encryption Settings
 ===============================

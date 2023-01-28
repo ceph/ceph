@@ -219,11 +219,13 @@ block_sm_superblock_t make_superblock(
   size_t tracker_off = data.block_size;
   size_t first_seg_off = tracker_size + tracker_off;
   size_t segments = (size - first_seg_off) / config_segment_size;
+  size_t available_size = segments * config_segment_size;
 
-  INFO("{} disk_size={}, segment_size={}, segments={}, block_size={}, "
-       "tracker_off={}, first_seg_off={}",
+  INFO("{} disk_size={}, available_size={}, segment_size={}, segments={}, "
+       "block_size={}, tracker_off={}, first_seg_off={}",
        device_id_printer_t{device_id},
        size,
+       available_size,
        config_segment_size,
        segments,
        data.block_size,
@@ -231,7 +233,7 @@ block_sm_superblock_t make_superblock(
        first_seg_off);
 
   return block_sm_superblock_t{
-    size,
+    available_size,
     config_segment_size,
     data.block_size,
     segments,
@@ -308,9 +310,13 @@ open_device_ret open_device(
     return seastar::open_file_dma(
       path,
       seastar::open_flags::rw | seastar::open_flags::dsync
-    ).then([=, &path](auto file) {
-      INFO("path={} successful, size={}", path, stat.size);
-      return std::make_pair(file, stat);
+    ).then([stat, &path, FNAME](auto file) mutable {
+      return file.size().then([stat, file, &path, FNAME](auto size) mutable {
+        stat.size = size;
+        INFO("path={} successful, size={}, block_size={}", 
+        path, stat.size, stat.block_size);
+        return std::make_pair(file, stat);
+      });
     });
   }).handle_exception([FNAME, &path](auto e) -> open_device_ret {
     ERROR("path={} got error -- {}", path, e);
@@ -384,7 +390,7 @@ BlockSegment::BlockSegment(
   BlockSegmentManager &manager, segment_id_t id)
   : manager(manager), id(id) {}
 
-seastore_off_t BlockSegment::get_write_capacity() const
+segment_off_t BlockSegment::get_write_capacity() const
 {
   return manager.get_segment_size();
 }
@@ -395,7 +401,7 @@ Segment::close_ertr::future<> BlockSegment::close()
 }
 
 Segment::write_ertr::future<> BlockSegment::write(
-  seastore_off_t offset, ceph::bufferlist bl)
+  segment_off_t offset, ceph::bufferlist bl)
 {
   LOG_PREFIX(BlockSegment::write);
   auto paddr = paddr_t::make_seg_paddr(id, offset);
@@ -421,8 +427,13 @@ Segment::write_ertr::future<> BlockSegment::write(
   return manager.segment_write(paddr, bl);
 }
 
+Segment::write_ertr::future<> BlockSegment::advance_wp(
+  segment_off_t offset) {
+  return write_ertr::now();
+}
+
 Segment::close_ertr::future<> BlockSegmentManager::segment_close(
-    segment_id_t id, seastore_off_t write_pointer)
+    segment_id_t id, segment_off_t write_pointer)
 {
   LOG_PREFIX(BlockSegmentManager::segment_close);
   auto s_id = id.device_segment_id();
@@ -466,11 +477,11 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
   LOG_PREFIX(BlockSegmentManager::mount);
   return open_device(
     device_path
-  ).safe_then([=](auto p) {
+  ).safe_then([=, this](auto p) {
     device = std::move(p.first);
     auto sd = p.second;
     return read_superblock(device, sd);
-  }).safe_then([=](auto sb) {
+  }).safe_then([=, this](auto sb) {
     set_device_id(sb.config.spec.id);
     INFO("{} read {}", device_id_printer_t{get_device_id()}, sb);
     sb.validate();
@@ -513,7 +524,7 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(
     seastar::stat_data{},
     block_sm_superblock_t{},
     std::unique_ptr<SegmentStateTracker>(),
-    [=](auto &device, auto &stat, auto &sb, auto &tracker)
+    [=, this](auto &device, auto &stat, auto &sb, auto &tracker)
   {
     check_create_device_ret maybe_create = check_create_device_ertr::now();
     using crimson::common::get_conf;

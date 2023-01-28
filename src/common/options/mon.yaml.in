@@ -1321,3 +1321,11 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_use_min_delay_socket
+  type: bool
+  level: advanced
+  default: false
+  desc: priority packets between mons
+  with_legacy: true
+  see_also:
+  - osd_heartbeat_use_min_delay_socket

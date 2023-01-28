@@ -250,6 +250,7 @@ class RbdTest(DashboardTestCase):
                 'source': JLeaf(int),
                 'value': JLeaf(str),
             })),
+            'metadata': JObj({}, allow_unknown=True),
             'mirror_mode': JLeaf(str),
         })
         self.assertSchema(img, schema)
@@ -362,6 +363,25 @@ class RbdTest(DashboardTestCase):
         self.assertStatus(200)
         for conf in expected:
             self.assertIn(conf, img['configuration'])
+
+        self.remove_image(pool, None, image_name)
+
+    def test_create_with_metadata(self):
+        pool = 'rbd'
+        image_name = 'image_with_meta'
+        size = 10240
+        metadata = {
+            'test1': 'test',
+            'test2': 'value',
+        }
+
+        self.create_image(pool, None, image_name, size, metadata=metadata)
+        self.assertStatus(201)
+        img = self.get_image('rbd', None, image_name)
+        self.assertStatus(200)
+        self.assertEqual(len(metadata), len(img['metadata']))
+        for meta in metadata:
+            self.assertIn(meta, img['metadata'])
 
         self.remove_image(pool, None, image_name)
 
@@ -606,6 +626,47 @@ class RbdTest(DashboardTestCase):
         self.remove_image(pool, None, image)
         self.assertStatus(204)
 
+    def test_image_change_meta(self):
+        pool = 'rbd'
+        image = 'image_with_meta'
+        initial_meta = {
+            'test1': 'test',
+            'test2': 'value',
+            'test3': None,
+        }
+        initial_expect = {
+            'test1': 'test',
+            'test2': 'value',
+        }
+        new_meta = {
+            'test1': None,
+            'test2': 'new_value',
+            'test3': 'value',
+            'test4': None,
+        }
+        new_expect = {
+            'test2': 'new_value',
+            'test3': 'value',
+        }
+
+        self.create_image(pool, None, image, 2**30, metadata=initial_meta)
+        self.assertStatus(201)
+        img = self.get_image(pool, None, image)
+        self.assertStatus(200)
+        self.assertEqual(len(initial_expect), len(img['metadata']))
+        for meta in initial_expect:
+            self.assertIn(meta, img['metadata'])
+
+        self.edit_image(pool, None, image, metadata=new_meta)
+        img = self.get_image(pool, None, image)
+        self.assertStatus(200)
+        self.assertEqual(len(new_expect), len(img['metadata']))
+        for meta in new_expect:
+            self.assertIn(meta, img['metadata'])
+
+        self.remove_image(pool, None, image)
+        self.assertStatus(204)
+
     def test_update_snapshot(self):
         self.create_snapshot('rbd', None, 'img1', 'snap5')
         self.assertStatus(201)
@@ -662,7 +723,8 @@ class RbdTest(DashboardTestCase):
         self.assertStatus(204)
 
     def test_clone(self):
-        self.create_image('rbd', None, 'cimg', 2**30, features=["layering"])
+        self.create_image('rbd', None, 'cimg', 2**30, features=["layering"],
+                          metadata={'key1': 'val1'})
         self.assertStatus(201)
         self.create_snapshot('rbd', None, 'cimg', 'snap1')
         self.assertStatus(201)
@@ -670,7 +732,8 @@ class RbdTest(DashboardTestCase):
         self.assertStatus(200)
         self.clone_image('rbd', None, 'cimg', 'snap1', 'rbd', None, 'cimg-clone',
                          features=["layering", "exclusive-lock", "fast-diff",
-                                   "object-map"])
+                                   "object-map"],
+                         metadata={'key1': None, 'key2': 'val2'})
         self.assertStatus([200, 201])
 
         img = self.get_image('rbd', None, 'cimg-clone')
@@ -679,7 +742,8 @@ class RbdTest(DashboardTestCase):
                                                  'fast-diff', 'layering',
                                                  'object-map'],
                              parent={'pool_name': 'rbd', 'pool_namespace': '',
-                                     'image_name': 'cimg', 'snap_name': 'snap1'})
+                                     'image_name': 'cimg', 'snap_name': 'snap1'},
+                             metadata={'key2': 'val2'})
 
         res = self.remove_image('rbd', None, 'cimg')
         self.assertStatus(400)
@@ -694,7 +758,8 @@ class RbdTest(DashboardTestCase):
     def test_copy(self):
         self.create_image('rbd', None, 'coimg', 2**30,
                           features=["layering", "exclusive-lock", "fast-diff",
-                                    "object-map"])
+                                    "object-map"],
+                          metadata={'key1': 'val1'})
         self.assertStatus(201)
 
         self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '5M',
@@ -702,18 +767,21 @@ class RbdTest(DashboardTestCase):
 
         self.copy_image('rbd', None, 'coimg', 'rbd_iscsi', None, 'coimg-copy',
                         features=["layering", "fast-diff", "exclusive-lock",
-                                  "object-map"])
+                                  "object-map"],
+                        metadata={'key1': None, 'key2': 'val2'})
         self.assertStatus([200, 201])
 
         img = self.get_image('rbd', None, 'coimg')
         self.assertStatus(200)
         self._validate_image(img, features_name=['layering', 'exclusive-lock',
-                                                 'fast-diff', 'object-map'])
+                                                 'fast-diff', 'object-map'],
+                             metadata={'key1': 'val1'})
 
         img_copy = self.get_image('rbd_iscsi', None, 'coimg-copy')
         self._validate_image(img_copy, features_name=['exclusive-lock',
                                                       'fast-diff', 'layering',
                                                       'object-map'],
+                             metadata={'key2': 'val2'},
                              disk_usage=img['disk_usage'])
 
         self.remove_image('rbd', None, 'coimg')

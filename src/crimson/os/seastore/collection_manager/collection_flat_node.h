@@ -180,3 +180,7 @@ struct CollectionNode
 };
 using CollectionNodeRef = CollectionNode::CollectionNodeRef;
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::collection_manager::CollectionNode> : fmt::ostream_formatter {};
+#endif

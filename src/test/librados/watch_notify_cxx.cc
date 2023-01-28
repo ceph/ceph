@@ -11,7 +11,7 @@
 #include "include/rados/rados_types.h"
 #include "test/librados/test_cxx.h"
 #include "test/librados/testcase_cxx.h"
-
+#include "crimson_utils.h"
 
 using namespace librados;
 
@@ -146,6 +146,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify) {
 }
 
 TEST_F(LibRadosWatchNotifyECPP, WatchNotify) {
+  SKIP_IF_CRIMSON();
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -194,6 +195,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeout) {
 }
 
 TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeout) {
+  SKIP_IF_CRIMSON();
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   ioctx.set_notify_timeout(1);
   uint64_t handle;

@@ -212,10 +212,12 @@ endif()
 
 if(LINUX AND HAVE_LIBCRYPTSETUP)
   list(APPEND librbd_internal_srcs
-          crypto/luks/EncryptionFormat.cc
-          crypto/luks/Header.cc
+          crypto/luks/LUKSEncryptionFormat.cc
           crypto/luks/FormatRequest.cc
-          crypto/luks/LoadRequest.cc)
+          crypto/luks/FlattenRequest.cc
+          crypto/luks/Header.cc
+          crypto/luks/LoadRequest.cc
+          crypto/luks/Magic.cc)
 endif()
 
 add_library(rbd_api STATIC librbd.cc)
@@ -344,7 +346,7 @@ endif()
 if(ENABLE_SHARED)
   set_target_properties(librbd PROPERTIES
     OUTPUT_NAME rbd
-    VERSION 1.17.0
+    VERSION 1.18.0
     SOVERSION 1
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON)

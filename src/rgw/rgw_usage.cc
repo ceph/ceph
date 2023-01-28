@@ -30,7 +30,7 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
   formatter->close_section(); // categories
 }
 
-int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 		  rgw::sal::User* user , rgw::sal::Bucket* bucket,
 		   uint64_t start_epoch, uint64_t end_epoch, bool show_log_entries,
 		   bool show_log_sum,
@@ -64,7 +64,7 @@ int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
       ret = user->read_usage(dpp, start_epoch, end_epoch, max_entries, &is_truncated,
 			     usage_iter, usage);
     } else {
-      ret = store->read_all_usage(dpp, start_epoch, end_epoch, max_entries, &is_truncated,
+      ret = driver->read_all_usage(dpp, start_epoch, end_epoch, max_entries, &is_truncated,
 				  usage_iter, usage);
     }
 
@@ -152,7 +152,7 @@ int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
   return 0;
 }
 
-int RGWUsage::trim(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+int RGWUsage::trim(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 		   rgw::sal::User* user , rgw::sal::Bucket* bucket,
 		   uint64_t start_epoch, uint64_t end_epoch)
 {
@@ -161,11 +161,11 @@ int RGWUsage::trim(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
   } else if (user) {
     return user->trim_usage(dpp, start_epoch, end_epoch);
   } else {
-    return store->trim_all_usage(dpp, start_epoch, end_epoch);
+    return driver->trim_all_usage(dpp, start_epoch, end_epoch);
   }
 }
 
-int RGWUsage::clear(const DoutPrefixProvider *dpp, rgw::sal::Store* store)
+int RGWUsage::clear(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver)
 {
-  return store->clear_usage(dpp);
+  return driver->clear_usage(dpp);
 }

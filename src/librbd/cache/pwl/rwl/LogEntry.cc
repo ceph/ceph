@@ -75,7 +75,8 @@ buffer::list& WriteLogEntry::get_cache_bl() {
 void WriteLogEntry::copy_cache_bl(bufferlist *out_bl) {
   this->get_cache_bl();
   // cache_bp is now initialized
-  buffer::ptr cloned_bp(cache_bp.clone());
+  ceph_assert(cache_bp.length() == cache_bp.raw_length());
+  buffer::ptr cloned_bp = cache_bp.begin_deep().get_ptr(cache_bp.length());
   out_bl->clear();
   this->init_bl(cloned_bp, *out_bl);
 }

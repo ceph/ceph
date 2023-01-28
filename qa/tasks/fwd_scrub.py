@@ -73,8 +73,21 @@ class ForwardScrubber(Thrasher, Greenlet):
         assert out_json['return_code'] == 0
         assert out_json['mode'] == 'asynchronous'
 
-        return self.fs.wait_until_scrub_complete(tag=tag, sleep=30,
-                                                 timeout=self.scrub_timeout)
+        done = self.fs.wait_until_scrub_complete(tag=tag, sleep=30, timeout=self.scrub_timeout)
+        if not done:
+            raise RuntimeError('scrub timeout')
+        self._check_damage()
+
+    def _check_damage(self):
+        rdmg = self.fs.get_damage()
+        types = set()
+        for rank, dmg in rdmg.items():
+            if dmg:
+                for d in dmg:
+                    types.add(d['damage_type'])
+                log.error(f"rank {rank} damaged:\n{dmg}")
+        if types:
+            raise RuntimeError(f"rank damage found: {types}")
 
 def stop_all_fwd_scrubbers(thrashers):
     for thrasher in thrashers:

@@ -8,7 +8,6 @@
 #include <fstream>
 #include <random>
 
-#include <seastar/apps/lib/stop_signal.hh>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/print.hh>
 #include <seastar/core/prometheus.hh>
@@ -27,47 +26,21 @@
 #include "crimson/common/fatal_signal.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
+#include "crimson/osd/stop_signal.h"
+#include "crimson/osd/main_config_bootstrap_helpers.h"
 #include "global/pidfile.h"
 #include "osd.h"
 
 using namespace std::literals;
 namespace bpo = boost::program_options;
+using crimson::common::local_conf;
+using crimson::common::sharded_conf;
+using crimson::common::sharded_perf_coll;
 
-seastar::logger& logger() {
+static seastar::logger& logger()
+{
   return crimson::get_logger(ceph_subsys_osd);
 }
-
-void usage(const char* prog) {
-  std::cout << "usage: " << prog << std::endl;
-  generic_server_usage();
-}
-
-auto partition_args(int argc, const char *argv[])
-{
-  auto seastar_n_early_args = [=] {
-    class DummyTracker : public ConfigTracker {
-      bool is_tracking(const std::string& name) const override {
-        return false;
-      }
-    };
-    DummyTracker dt;
-    ConfigValues config_values;
-    md_config_t config(config_values, dt, true);
-    std::vector<const char *> seastar_n_early_args{argv, argv + argc};
-    // pull off the stuff from seastar_n_early_args that we'll give to local_conf
-    config.parse_argv(config_values, dt, seastar_n_early_args, CONF_CMDLINE);
-    return seastar_n_early_args;
-  }();
-  
-  // Now that we have a filtered seastar_n_early_args, populate config_proxy_args without them
-  std::vector<const char*> config_proxy_args;
-  std::set_difference(argv, argv + argc,
-                      std::begin(seastar_n_early_args), std::end(seastar_n_early_args),
-                      std::back_inserter(config_proxy_args));
-  return make_pair(std::move(config_proxy_args), std::move(seastar_n_early_args));
-}
-
-using crimson::common::local_conf;
 
 seastar::future<> make_keyring()
 {
@@ -97,84 +70,6 @@ seastar::future<> make_keyring()
   });
 }
 
-static uint64_t get_nonce()
-{
-  if (auto pid = getpid(); pid == 1 || std::getenv("CEPH_USE_RANDOM_NONCE")) {
-    // we're running in a container; use a random number instead!
-    std::random_device rd;
-    std::default_random_engine rng{rd()};
-    return std::uniform_int_distribution<uint64_t>{}(rng);
-  } else {
-    return pid;
-  }
-}
-
-static void configure_crc_handling(crimson::net::Messenger& msgr)
-{
-  if (local_conf()->ms_crc_data) {
-    msgr.set_crc_data();
-  }
-  if (local_conf()->ms_crc_header) {
-    msgr.set_crc_header();
-  }
-}
-
-seastar::future<> fetch_config()
-{
-  // i don't have any client before joining the cluster, so no need to have
-  // a proper auth handler
-  class DummyAuthHandler : public crimson::common::AuthHandler {
-  public:
-    void handle_authentication(const EntityName& name,
-                               const AuthCapsInfo& caps)
-    {}
-  };
-  return seastar::async([] {
-    auto auth_handler = std::make_unique<DummyAuthHandler>();
-    auto msgr = crimson::net::Messenger::create(entity_name_t::CLIENT(),
-                                                "temp_mon_client",
-                                                get_nonce());
-    configure_crc_handling(*msgr);
-    crimson::mon::Client monc{*msgr, *auth_handler};
-    msgr->set_auth_client(&monc);
-    msgr->start({&monc}).get();
-    auto stop_msgr = seastar::defer([&] {
-      // stop msgr here also, in case monc fails to start.
-      msgr->stop();
-      msgr->shutdown().get();
-    });
-    monc.start().handle_exception([] (auto ep) {
-      fmt::print(std::cerr, "FATAL: unable to connect to cluster: {}\n", ep);
-      return seastar::make_exception_future<>(ep);
-    }).get();
-    auto stop_monc = seastar::defer([&] {
-      // unregister me from msgr first.
-      msgr->stop();
-      monc.stop().get();
-    });
-    monc.sub_want("config", 0, 0);
-    monc.renew_subs().get();
-    // wait for monmap and config
-    monc.wait_for_config().get();
-    local_conf().set_val("fsid", monc.get_fsid().to_string()).get();
-  });
-}
-
-static void override_seastar_opts(std::vector<const char*>& args)
-{
-  if (auto found = std::find_if(std::begin(args), std::end(args),
-                                [] (auto* arg) { return "--smp"sv == arg; });
-      found == std::end(args)) {
-    // TODO: we don't have a way to communicate the resource requirements
-    // with the deployment tools, like cephadm and rook, which don't set, for
-    // instance, aio-max-nr for us. but we should fix this, once crimson is able
-    // to run on a multi-core system, i.e., once m-to-n problem is resolved.
-    std::cout << "warn: added seastar option --smp 1" << std::endl;
-    args.emplace_back("--smp");
-    args.emplace_back("1");
-  }
-}
-
 static std::ofstream maybe_set_logger()
 {
   std::ofstream log_file_stream;
@@ -192,6 +87,17 @@ static std::ofstream maybe_set_logger()
 
 int main(int argc, const char* argv[])
 {
+  auto early_config_result = crimson::osd::get_early_config(argc, argv);
+  if (!early_config_result.has_value()) {
+    int r = early_config_result.error();
+    std::cerr << "do_early_config returned error: " << r << std::endl;
+    return r;
+  }
+  auto &early_config = early_config_result.value();
+
+  auto seastar_n_early_args = early_config.get_early_args();
+  auto config_proxy_args = early_config.get_ceph_args();
+
   seastar::app_template::config app_cfg;
   app_cfg.name = "Crimson";
   app_cfg.auto_handle_sigint_sigterm = false;
@@ -211,25 +117,11 @@ int main(int argc, const char* argv[])
     ("prometheus_prefix", bpo::value<std::string>()->default_value("osd"),
      "Prometheus metrics prefix");
 
-  auto [config_proxy_args, seastar_n_early_args] = partition_args(argc, argv);
-  if (ceph_argparse_need_usage(seastar_n_early_args)) {
-    usage(argv[0]);
-  }
-  override_seastar_opts(seastar_n_early_args);
-  std::string cluster_name{"ceph"};
-  std::string conf_file_list;
-  // ceph_argparse_early_args() could _exit(), while local_conf() won't ready
-  // until it's started. so do the boilerplate-settings parsing here.
-  auto init_params = ceph_argparse_early_args(seastar_n_early_args,
-                                              CEPH_ENTITY_TYPE_OSD,
-                                              &cluster_name,
-                                              &conf_file_list);
-  seastar::sharded<crimson::osd::OSD> osd;
-  using crimson::common::sharded_conf;
-  using crimson::common::sharded_perf_coll;
   try {
-    return app.run(seastar_n_early_args.size(), const_cast<char**>(seastar_n_early_args.data()),
-      [&, &config_proxy_args=config_proxy_args] {
+    return app.run(
+      seastar_n_early_args.size(),
+      const_cast<char**>(seastar_n_early_args.data()),
+      [&] {
       auto& config = app.configuration();
       return seastar::async([&] {
         try {
@@ -245,11 +137,13 @@ int main(int argc, const char* argv[])
               seastar::log_level::trace
             );
           }
-          sharded_conf().start(init_params.name, cluster_name).get();
+          sharded_conf().start(
+	    early_config.init_params.name, early_config.cluster_name).get();
+          local_conf().start().get();
           auto stop_conf = seastar::deferred_stop(sharded_conf());
           sharded_perf_coll().start().get();
           auto stop_perf_coll = seastar::deferred_stop(sharded_perf_coll());
-          local_conf().parse_config_files(conf_file_list).get();
+          local_conf().parse_config_files(early_config.conf_file_list).get();
           local_conf().parse_env().get();
           local_conf().parse_argv(config_proxy_args).get();
           auto log_file_stream = maybe_set_logger();
@@ -289,7 +183,7 @@ int main(int argc, const char* argv[])
           }
 
           const int whoami = std::stoi(local_conf()->name.get_id());
-          const auto nonce = get_nonce();
+          const auto nonce = crimson::osd::get_nonce();
           crimson::net::MessengerRef cluster_msgr, client_msgr;
           crimson::net::MessengerRef hb_front_msgr, hb_back_msgr;
           for (auto [msgr, name] : {make_pair(std::ref(cluster_msgr), "cluster"s),
@@ -299,25 +193,24 @@ int main(int argc, const char* argv[])
             msgr = crimson::net::Messenger::create(entity_name_t::OSD(whoami),
                                                    name,
                                                    nonce);
-            configure_crc_handling(*msgr);
           }
           auto store = crimson::os::FuturizedStore::create(
             local_conf().get_val<std::string>("osd_objectstore"),
             local_conf().get_val<std::string>("osd_data"),
             local_conf().get_config_values()).get();
 
-          osd.start_single(whoami, nonce,
-                           std::ref(*store),
-                           cluster_msgr, client_msgr,
-                           hb_front_msgr, hb_back_msgr).get();
-          auto stop_osd = seastar::deferred_stop(osd);
+          crimson::osd::OSD osd(
+            whoami, nonce, std::ref(should_stop.abort_source()),
+            std::ref(*store), cluster_msgr, client_msgr,
+	    hb_front_msgr, hb_back_msgr);
+
           if (config.count("mkkey")) {
             make_keyring().get();
           }
           if (local_conf()->no_mon_config) {
             logger().info("bypassing the config fetch due to --no-mon-config");
           } else {
-            fetch_config().get();
+            crimson::osd::populate_config_from_mon().get();
           }
           if (config.count("mkfs")) {
             auto osd_uuid = local_conf().get_val<uuid_d>("osd_uuid");
@@ -325,9 +218,9 @@ int main(int argc, const char* argv[])
               // use a random osd uuid if not specified
               osd_uuid.generate_random();
             }
-            osd.invoke_on(
-              0,
-              &crimson::osd::OSD::mkfs,
+            osd.mkfs(
+	      *store,
+	      whoami,
               osd_uuid,
               local_conf().get_val<uuid_d>("fsid"),
               config["osdspec-affinity"].as<std::string>()).get();
@@ -335,11 +228,12 @@ int main(int argc, const char* argv[])
           if (config.count("mkkey") || config.count("mkfs")) {
             return EXIT_SUCCESS;
           } else {
-            osd.invoke_on(0, &crimson::osd::OSD::start).get();
+            osd.start().get();
           }
           logger().info("crimson startup completed");
           should_stop.wait().get();
           logger().info("crimson shutting down");
+          osd.stop().get();
           // stop()s registered using defer() are called here
         } catch (...) {
           logger().error("startup failed: {}", std::current_exception());

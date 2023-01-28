@@ -8,7 +8,7 @@
              formControlName="filter"
              i18n-placeholder
              [placeholder]="messages.filter"
-             (keyup)="$event.keyCode == 13 ? selectOption() : updateFilter()"
+             (keyup)="$event.keyCode === 13 ? selectOption() : updateFilter()"
              class="form-control text-center" />
       <ng-container *ngFor="let error of Object.keys(messages.customValidations)">
         <span class="invalid-feedback text-center d-block"
@@ -60,7 +60,7 @@
   </div>
 </ng-template>
 
-<a class="select-menu-edit float-left"
+<a class="select-menu-edit float-start"
    [ngClass]="elemClass"
    [ngbPopover]="popTemplate"
    data-testid="select-menu-edit"
@@ -68,12 +68,12 @@
   <ng-content></ng-content>
 </a>
 
-<span class="form-text text-muted float-left"
+<span class="form-text text-muted float-start"
       *ngIf="data.length === 0 && !(!customBadges && options.length === 0)">
   {{ messages.empty }}
 </span>
 
-<span class="form-text text-muted  float-left"
+<span class="form-text text-muted  float-start"
       *ngIf="!customBadges && options.length === 0">
   {{ messages.noOptions }}
 </span>

@@ -16,25 +16,34 @@ $blue: #007bff !default;
 $indigo: #6610f2 !default;
 $purple: #6f42c1 !default;
 $pink: #a94442 !default;
-$red: #ef5c55 !default;
+$red: #dc3545 !default;
 $orange: #fd7e14 !default;
-$yellow: #ffc200 !default;
-$green: #0b0 !default;
+$yellow: #d48200 !default;
+$green: #008a00 !default;
 $teal: #20c997 !default;
 $cyan: #17a2b8 !default;
 $barley-white: #fcecba !default;
 
-$primary: #2b99a8 !default;
+$primary: #25828e !default;
+$primary-500: #2b99a8 !default;
 $secondary: #374249 !default;
 $success: $green !default;
 $info: $primary !default;
 $warning: $yellow !default;
 $danger: $red !default;
 $light: $gray-100 !default;
-$dark: #777 !default;
+$dark: $gray-800 !default;
+
+//badges colors
+$green-300: #6ec664;
+$cyan-300: #009596;
+$purple-300: #a18fff;
+$light-blue-300: #35caed;
+$gold-300: #f4c145;
+$light-green-300: #ace12e;
 
 // Extra theme colors.
-$accent: $red !default;
+$accent: $primary !default;
 $warning-dark: $orange !default;
 
 $fg-color-over-dark-bg: $white !default;
@@ -42,7 +51,15 @@ $fg-hover-color-over-dark-bg: $gray-500 !default;
 
 $theme-colors: (
   'accent': $accent,
-  'warning-dark': $warning-dark
+  'warning-dark': $warning-dark,
+  'primary': $accent,
+  'secondary': $secondary,
+  'success': $success,
+  'info': $info,
+  'warning': $warning,
+  'danger': $danger,
+  'light': $light,
+  'dark': $dark
 ) !default;
 
 // Body
@@ -52,18 +69,19 @@ $body-color: $gray-900 !default;
 $body-bg-alt: $gray-200 !default;
 
 // Health colors.
-$health-color-error: #f00 !default;
+$health-color-error: $red !default;
 $health-color-healthy: $green !default;
-$health-color-warning: #ffa500 !default;
+$health-color-warning: $yellow !default;
+$health-color-warning-800: #9d6d10 !default;
 
 // Chart colors.
-$chart-color-red: #c9190b !default;
+$chart-color-red: $red !default;
 $chart-color-blue: #06c !default;
 $chart-color-orange: #ef9234 !default;
 $chart-color-yellow: #f6d173 !default;
-$chart-color-green: #7cc674 !default;
+$chart-color-green: $green !default;
 $chart-color-gray: #ededed !default;
-$chart-color-cyan: #73c5c5 !default;
+$chart-color-cyan: $primary-500 !default;
 $chart-color-purple: #3c3d99 !default;
 $chart-color-center-text: #151515 !default;
 $chart-color-center-text-description: #72767b !default;
@@ -95,6 +113,7 @@ $nav-tabs-margin-bottom: 1rem !default;
 
 $tooltip-color: $white !default;
 $tooltip-bg: $body-color !default;
+$tooltip-opacity: 1 !default;
 
 // Misc
 

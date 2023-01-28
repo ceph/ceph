@@ -32,6 +32,7 @@ class ConnectedSocketImpl {
   virtual void shutdown() = 0;
   virtual void close() = 0;
   virtual int fd() const = 0;
+  virtual void set_priority(int sd, int prio, int domain) = 0;
 };
 
 class ConnectedSocket;
@@ -123,6 +124,10 @@ class ConnectedSocket {
     return _csi->fd();
   }
 
+  void set_priority(int sd, int prio, int domain) {
+    _csi->set_priority(sd, prio, domain);
+  }
+
   explicit operator bool() const {
     return _csi.get();
   }
@@ -203,6 +208,9 @@ enum {
   l_msgr_send_messages_queue_lat,
   l_msgr_handle_ack_lat,
 
+  l_msgr_recv_encrypted_bytes,
+  l_msgr_send_encrypted_bytes,
+
   l_msgr_last,
 };
 
@@ -245,6 +253,9 @@ class Worker {
 
     plb.add_time_avg(l_msgr_send_messages_queue_lat, "msgr_send_messages_queue_lat", "Network sent messages lat");
     plb.add_time_avg(l_msgr_handle_ack_lat, "msgr_handle_ack_lat", "Connection handle ack lat");
+
+    plb.add_u64_counter(l_msgr_recv_encrypted_bytes, "msgr_recv_encrypted_bytes", "Network received encrypted bytes", NULL, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_send_encrypted_bytes, "msgr_send_encrypted_bytes", "Network sent encrypted bytes", NULL, 0, unit_t(UNIT_BYTES));
 
     perf_logger = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_logger);

@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      mds:
-        mds thrash exports: 1

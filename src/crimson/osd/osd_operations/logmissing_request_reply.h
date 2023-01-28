@@ -61,10 +61,14 @@ public:
 private:
   RepRequest::PGPipeline &pp(PG &pg);
 
-  crimson::net::ConnectionRef conn;
+  crimson::net::ConnectionFRef conn;
   // must be after `conn` to ensure the ConnectionPipeline's is alive
   PipelineHandle handle;
   Ref<MOSDPGUpdateLogMissingReply> req;
 };
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::LogMissingRequestReply> : fmt::ostream_formatter {};
+#endif

@@ -13,6 +13,7 @@ if(HAVE_QATZIP AND HAVE_QATDRV)
                         qatzip::qatzip
                        )
 endif()
+add_dependencies(compressor_objs legacy-option-headers)
 
 ## compressor plugins
 

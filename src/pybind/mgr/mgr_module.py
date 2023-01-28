@@ -404,7 +404,7 @@ class CLICommand(object):
                 continue
             arg_spec[argname] = argtype
             args.append(CephArgtype.to_argdesc(
-                argtype, dict(name=arg), has_default=True, positional=False
+                argtype, dict(name=argname), has_default=True, positional=False
             ))
         return desc, arg_spec, first_default, ' '.join(args)
 
@@ -885,6 +885,9 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
             return socket.gethostname()
         return ips[0]
 
+    def get_hostname(self) -> str:
+        return socket.gethostname()
+
     def get_localized_module_option(self, key: str, default: OptionValue = None) -> OptionValue:
         r = self._ceph_get_module_option(key, self.get_mgr_id())
         if r is None:
@@ -1199,6 +1202,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         db.execute('PRAGMA JOURNAL_MODE = PERSIST')
         db.execute('PRAGMA PAGE_SIZE = 65536')
         db.execute('PRAGMA CACHE_SIZE = 64')
+        db.execute('PRAGMA TEMP_STORE = memory')
         db.row_factory = sqlite3.Row
         self.load_schema(db)
 
@@ -1564,7 +1568,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :rtype: dict, or None if no metadata found
         """
         metadata = self._ceph_get_metadata(svc_type, svc_id)
-        if metadata is None:
+        if not metadata:
             return default
         return metadata
 
@@ -1636,6 +1640,31 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         self.log.debug("osd_command: '{0}' -> {1} in {2:.3f}s".format(
             cmd_dict['prefix'], r[0], t2 - t1
+        ))
+
+        return r
+
+    def tell_command(self, daemon_type: str, daemon_id: str, cmd_dict: dict, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
+        """
+        Helper for `ceph tell` command execution.
+
+        See send_command for general case.
+
+        :param dict cmd_dict: expects a prefix i.e.:
+            cmd_dict = {
+                'prefix': 'heap',
+                'heapcmd': 'stats',
+            }
+        :return: status int, out std, err str
+        """
+        t1 = time.time()
+        result = CommandResult()
+        self.send_command(result, daemon_type, daemon_id, json.dumps(cmd_dict), "", inbuf)
+        r = result.wait()
+        t2 = time.time()
+
+        self.log.debug("tell_command on {0}.{1}: '{2}' -> {3} in {4:.5f}s".format(
+            daemon_type, daemon_id, cmd_dict['prefix'], r[0], t2 - t1
         ))
 
         return r
@@ -1779,6 +1808,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self._mgr_ips = ips[0]
         assert self._mgr_ips is not None
         return self._mgr_ips
+
+    @API.expose
+    def get_hostname(self) -> str:
+        return socket.gethostname()
 
     @API.expose
     def get_ceph_option(self, key: str) -> OptionValue:
@@ -2249,6 +2282,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param int query_id: query ID
         """
         return self._ceph_get_mds_perf_counters(query_id)
+
+    def get_daemon_health_metrics(self) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get the list of health metrics per daemon. This includes SLOW_OPS health metrics
+        in MON and OSD daemons, and PENDING_CREATING_PGS health metrics for OSDs.
+        """
+        return self._ceph_get_daemon_health_metrics()
 
     def is_authorized(self, arguments: Dict[str, str]) -> bool:
         """

@@ -116,7 +116,7 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
 
 static ACLGrant user_to_grant(const DoutPrefixProvider *dpp,
 			      CephContext* const cct,
-                              rgw::sal::Store* store,
+                              rgw::sal::Driver* driver,
                               const std::string& uid,
                               const uint32_t perm)
 {
@@ -124,7 +124,7 @@ static ACLGrant user_to_grant(const DoutPrefixProvider *dpp,
   ACLGrant grant;
   std::unique_ptr<rgw::sal::User> user;
 
-  user = store->get_user(rgw_user(uid));
+  user = driver->get_user(rgw_user(uid));
   if (user->load_user(dpp, null_yield) < 0) {
     ldpp_dout(dpp, 10) << "grant user does not exist: " << uid << dendl;
     /* skipping silently */
@@ -137,7 +137,7 @@ static ACLGrant user_to_grant(const DoutPrefixProvider *dpp,
 }
 
 int RGWAccessControlPolicy_SWIFT::add_grants(const DoutPrefixProvider *dpp,
-					     rgw::sal::Store* store,
+					     rgw::sal::Driver* driver,
                                              const std::vector<std::string>& uids,
                                              const uint32_t perm)
 {
@@ -150,7 +150,7 @@ int RGWAccessControlPolicy_SWIFT::add_grants(const DoutPrefixProvider *dpp,
     const size_t pos = uid.find(':');
     if (std::string::npos == pos) {
       /* No, it don't have -- we've got just a regular user identifier. */
-      grant = user_to_grant(dpp, cct, store, uid, perm);
+      grant = user_to_grant(dpp, cct, driver, uid, perm);
     } else {
       /* Yes, *potentially* an HTTP referral. */
       auto designator = uid.substr(0, pos);
@@ -161,7 +161,7 @@ int RGWAccessControlPolicy_SWIFT::add_grants(const DoutPrefixProvider *dpp,
       boost::algorithm::trim(designatee);
 
       if (! boost::algorithm::starts_with(designator, ".")) {
-        grant = user_to_grant(dpp, cct, store, uid, perm);
+        grant = user_to_grant(dpp, cct, driver, uid, perm);
       } else if ((perm & SWIFT_PERM_WRITE) == 0 && is_referrer(designator)) {
         /* HTTP referrer-based ACLs aren't acceptable for writes. */
         grant = referrer_to_grant(designatee, perm);
@@ -180,7 +180,7 @@ int RGWAccessControlPolicy_SWIFT::add_grants(const DoutPrefixProvider *dpp,
 
 
 int RGWAccessControlPolicy_SWIFT::create(const DoutPrefixProvider *dpp,
-					 rgw::sal::Store* store,
+					 rgw::sal::Driver* driver,
                                          const rgw_user& id,
                                          const std::string& name,
                                          const char* read_list,
@@ -201,7 +201,7 @@ int RGWAccessControlPolicy_SWIFT::create(const DoutPrefixProvider *dpp,
       return r;
     }
 
-    r = add_grants(dpp, store, uids, SWIFT_PERM_READ);
+    r = add_grants(dpp, driver, uids, SWIFT_PERM_READ);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: add_grants for read returned r="
                     << r << dendl;
@@ -218,7 +218,7 @@ int RGWAccessControlPolicy_SWIFT::create(const DoutPrefixProvider *dpp,
       return r;
     }
 
-    r = add_grants(dpp, store, uids, SWIFT_PERM_WRITE);
+    r = add_grants(dpp, driver, uids, SWIFT_PERM_WRITE);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: add_grants for write returned r="
                     << r << dendl;
@@ -305,7 +305,7 @@ void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
 }
 
 void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp,
-						  rgw::sal::Store* store,
+						  rgw::sal::Driver* driver,
                                                   const std::vector<std::string>& uids,
                                                   const uint32_t perm)
 {
@@ -316,7 +316,7 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp,
       grant.set_group(ACL_GROUP_ALL_USERS, perm);
       acl.add_grant(&grant);
     } else  {
-      std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(uid));
+      std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(uid));
 
       if (user->load_user(dpp, null_yield) < 0) {
         ldpp_dout(dpp, 10) << "grant user does not exist:" << uid << dendl;
@@ -332,7 +332,7 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp,
 }
 
 bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
-					      rgw::sal::Store* store,
+					      rgw::sal::Driver* driver,
                                               const rgw_user& id,
                                               const std::string& name,
                                               const std::string& acl_str)
@@ -354,7 +354,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
     decode_json_obj(admin, *iter);
     ldpp_dout(dpp, 0) << "admins: " << admin << dendl;
 
-    add_grants(dpp, store, admin, SWIFT_PERM_ADMIN);
+    add_grants(dpp, driver, admin, SWIFT_PERM_ADMIN);
   }
 
   iter = parser.find_first("read-write");
@@ -363,7 +363,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
     decode_json_obj(readwrite, *iter);
     ldpp_dout(dpp, 0) << "read-write: " << readwrite << dendl;
 
-    add_grants(dpp, store, readwrite, SWIFT_PERM_RWRT);
+    add_grants(dpp, driver, readwrite, SWIFT_PERM_RWRT);
   }
 
   iter = parser.find_first("read-only");
@@ -372,7 +372,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
     decode_json_obj(readonly, *iter);
     ldpp_dout(dpp, 0) << "read-only: " << readonly << dendl;
 
-    add_grants(dpp, store, readonly, SWIFT_PERM_READ);
+    add_grants(dpp, driver, readonly, SWIFT_PERM_READ);
   }
 
   return true;

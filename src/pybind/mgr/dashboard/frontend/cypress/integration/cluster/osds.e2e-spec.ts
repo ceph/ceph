@@ -39,7 +39,7 @@ describe('OSDs page', () => {
       });
 
       it('should show the correct text for the tab labels', () => {
-        cy.get('#tabset-osd-details > li > a').then(($tabs) => {
+        cy.get('#tabset-osd-details > a').then(($tabs) => {
           const tabHeadings = $tabs.map((_i, e) => e.textContent).get();
 
           expect(tabHeadings).to.eql([

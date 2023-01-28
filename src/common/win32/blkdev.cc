@@ -94,21 +94,6 @@ void get_raw_devices(const std::string& in,
 {
 }
 
-int get_vdo_stats_handle(const char *devname, std::string *vdo_name)
-{
-  return -1;
-}
-
-int64_t get_vdo_stat(int fd, const char *property)
-{
-  return 0;
-}
-
-bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
-{
-  return false;
-}
-
 std::string get_device_id(const std::string& devname,
               std::string *err)
 {

@@ -315,6 +315,20 @@ def configure_compression(ctx, clients, compression):
     yield
 
 @contextlib.contextmanager
+def disable_inline_data(ctx, clients):
+    for client in clients:
+        # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
+        # issue a 'radosgw-admin user list' command to trigger this
+        rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
+
+        rgwadmin(ctx, client,
+                cmd=['zone', 'placement', 'modify', '--rgw-zone', 'default',
+                     '--placement-id', 'default-placement',
+                     '--placement-inline-data', 'false'],
+                check_status=True)
+    yield
+
+@contextlib.contextmanager
 def configure_datacache(ctx, clients, datacache_path):
     """ create directory for rgw datacache """
     log.info('Preparing directory for rgw datacache at %s', datacache_path)
@@ -414,6 +428,7 @@ def task(ctx, config):
     ctx.rgw.cache_pools = bool(config.pop('cache-pools', False))
     ctx.rgw.frontend = config.pop('frontend', 'beast')
     ctx.rgw.compression_type = config.pop('compression type', None)
+    ctx.rgw.inline_data = config.pop('inline data', True)
     ctx.rgw.storage_classes = config.pop('storage classes', None)
     default_cert = config.pop('ssl certificate', None)
     ctx.rgw.data_pool_pg_size = config.pop('data_pool_pg_size', 64)
@@ -434,6 +449,10 @@ def task(ctx, config):
         subtasks.extend([
             lambda: configure_compression(ctx=ctx, clients=clients,
                                           compression=ctx.rgw.compression_type),
+        ])
+    if not ctx.rgw.inline_data:
+        subtasks.extend([
+            lambda: disable_inline_data(ctx=ctx, clients=clients),
         ])
     if ctx.rgw.datacache:
         subtasks.extend([

@@ -315,7 +315,7 @@ public:
       c.trans,
       node_size,
       placement_hint_t::HOT,
-      0);
+      INIT_GENERATION);
     root_leaf->set_size(0);
     fixed_kv_node_meta_t<node_key_t> meta{min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, 1};
     root_leaf->set_meta(meta);
@@ -722,7 +722,7 @@ public:
     op_context_t<node_key_t> c,
     paddr_t addr,
     node_key_t laddr,
-    seastore_off_t len)
+    extent_len_t len)
   {
     LOG_PREFIX(FixedKVBtree::get_leaf_if_live);
     return lower_bound(
@@ -760,7 +760,7 @@ public:
     op_context_t<node_key_t> c,
     paddr_t addr,
     node_key_t laddr,
-    seastore_off_t len)
+    extent_len_t len)
   {
     LOG_PREFIX(FixedKVBtree::get_internal_if_live);
     return lower_bound(
@@ -818,7 +818,8 @@ public:
         c.trans,
         fixed_kv_extent.get_length(),
         fixed_kv_extent.get_user_hint(),
-        fixed_kv_extent.get_reclaim_generation());
+        // get target rewrite generation
+        fixed_kv_extent.get_rewrite_generation());
       fixed_kv_extent.get_bptr().copy_out(
         0,
         fixed_kv_extent.get_length(),
@@ -836,7 +837,8 @@ public:
        * against the real final address.
        */
       n_fixed_kv_extent->resolve_relative_addrs(
-        make_record_relative_paddr(0) - n_fixed_kv_extent->get_paddr());
+        make_record_relative_paddr(0).block_relative_to(
+          n_fixed_kv_extent->get_paddr()));
       
       SUBTRACET(
         seastore_fixedkv_tree,
@@ -888,7 +890,7 @@ public:
 
     return lower_bound(
       c, laddr
-    ).si_then([=](auto iter) {
+    ).si_then([=, this](auto iter) {
       assert(iter.get_depth() >= depth);
       if (depth == iter.get_depth()) {
         SUBTRACET(seastore_fixedkv_tree, "update at root", c.trans);
@@ -1405,7 +1407,7 @@ private:
 
     if (split_from == iter.get_depth()) {
       auto nroot = c.cache.template alloc_new_extent<internal_node_t>(
-        c.trans, node_size, placement_hint_t::HOT, 0);
+        c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
       fixed_kv_node_meta_t<node_key_t> meta{
         min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, iter.get_depth() + 1};
       nroot->set_meta(meta);
@@ -1419,6 +1421,7 @@ private:
 
       root.set_location(nroot->get_paddr());
       root.set_depth(iter.get_depth());
+      ceph_assert(root.get_depth() <= MAX_FIXEDKVBTREE_DEPTH);
       get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
       get_tree_stats<self_type>(c.trans).extents_num_delta++;
       root_dirty = true;

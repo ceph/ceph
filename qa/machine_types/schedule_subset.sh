@@ -17,4 +17,4 @@ shift
 # rest of arguments passed directly to teuthology-suite
 
 echo "Scheduling $branch branch"
-teuthology-suite -v -c "$branch" -m "$machine" -k "$kernel" -s "$suite" --ceph-repo git://git.ceph.com/ceph.git --suite-repo git://git.ceph.com/ceph.git --subset "$((RANDOM % partitions))/$partitions" --newest 100 -e "$email" "$@"
+teuthology-suite -v -c "$branch" -m "$machine" -k "$kernel" -s "$suite" --ceph-repo https://git.ceph.com/ceph.git --suite-repo https://git.ceph.com/ceph.git --subset "$((RANDOM % partitions))/$partitions" --newest 100 -e "$email" "$@"

@@ -59,6 +59,7 @@ if(WITH_RADOSGW)
 	radosgw.rst
 	radosgw-admin.rst
 	rgw-orphan-list.rst
+	rgw-policy-check.rst
 	ceph-diff-sorted.rst)
 endif()
 

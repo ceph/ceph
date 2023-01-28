@@ -28,6 +28,11 @@ tasks:
         - libtool-bin
         - uuid-dev
         - xfslibs-dev
+        # for postgres
+        - postgresql
+        - postgresql-client
+        - postgresql-common
+        - postgresql-contrib
         rpm:
         - bison
         - flex
@@ -50,6 +55,10 @@ tasks:
         - libtool
         - libuuid-devel
         - xfsprogs-devel
+        # for postgres
+        - postgresql
+        - postgresql-server
+        - postgresql-contrib
 syslog:
   ignorelist:
     - WARNING*.*check_session_state

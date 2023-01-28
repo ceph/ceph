@@ -64,10 +64,8 @@ struct collection_manager_test_t :
   test_collection_t test_coll_mappings;
 
   void replay() {
-    logger().debug("{}: begin", __func__);
     restart();
     collection_manager = collection_manager::create_coll_manager(*tm);
-    logger().debug("{}: end", __func__);
   }
 
   auto get_root() {

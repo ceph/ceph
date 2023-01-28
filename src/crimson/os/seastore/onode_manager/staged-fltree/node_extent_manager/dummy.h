@@ -190,3 +190,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
 };
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::onode::DummyNodeExtent> : fmt::ostream_formatter {};
+#endif

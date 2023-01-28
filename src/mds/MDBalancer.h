@@ -74,7 +74,7 @@ public:
 
   void handle_mds_failure(mds_rank_t who);
 
-  int dump_loads(Formatter *f) const;
+  int dump_loads(Formatter *f, int64_t depth = -1) const;
 
 private:
   typedef struct {
@@ -102,11 +102,11 @@ private:
                    mds_rank_t ex, double& maxex,
                    mds_rank_t im, double& maxim);
 
-  double get_maxim(balance_state_t &state, mds_rank_t im) {
-    return target_load - mds_meta_load[im] - state.imported[im];
+  double get_maxim(balance_state_t &state, mds_rank_t im, double im_target_load) {
+    return im_target_load - mds_meta_load[im] - state.imported[im];
   }
-  double get_maxex(balance_state_t &state, mds_rank_t ex) {
-    return mds_meta_load[ex] - target_load - state.exported[ex];
+  double get_maxex(balance_state_t &state, mds_rank_t ex, double ex_target_load) {
+    return mds_meta_load[ex] - ex_target_load - state.exported[ex];
   }
 
   /**
@@ -117,6 +117,7 @@ private:
    * export targets message again.
    */
   void try_rebalance(balance_state_t& state);
+  bool test_rank_mask(mds_rank_t rank);
 
   bool bal_fragment_dirs;
   int64_t bal_fragment_interval;

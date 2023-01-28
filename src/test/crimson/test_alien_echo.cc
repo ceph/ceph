@@ -59,10 +59,7 @@ struct Server {
   Server(crimson::net::MessengerRef msgr)
     : byte_throttler(local_conf()->osd_client_message_size_cap),
       msgr{msgr}
-  {
-    msgr->set_crc_header();
-    msgr->set_crc_data();
-  }
+  { }
 };
 
 struct Client {
@@ -84,10 +81,7 @@ struct Client {
   Client(crimson::net::MessengerRef msgr)
     : byte_throttler(local_conf()->osd_client_message_size_cap),
       msgr{msgr}
-  {
-    msgr->set_crc_header();
-    msgr->set_crc_data();
-  }
+  { }
 };
 } // namespace seastar_pingpong
 
@@ -179,7 +173,6 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
       server.msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
       server.msgr->set_policy_throttler(entity_name_t::TYPE_OSD,
                                         &server.byte_throttler);
-      server.msgr->set_require_authorizer(false);
       server.msgr->set_auth_client(&server.dummy_auth);
       server.msgr->set_auth_server(&server.dummy_auth);
       return server.msgr->bind(entity_addrvec_t{addr}
@@ -206,7 +199,6 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
       client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
       client.msgr->set_policy_throttler(entity_name_t::TYPE_OSD,
                                         &client.byte_throttler);
-      client.msgr->set_require_authorizer(false);
       client.msgr->set_auth_client(&client.dummy_auth);
       client.msgr->set_auth_server(&client.dummy_auth);
       return client.msgr->start({&client.dispatcher}).then(

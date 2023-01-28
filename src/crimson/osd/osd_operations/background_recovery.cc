@@ -81,7 +81,7 @@ seastar::future<> BackgroundRecoveryT<T>::start()
   return maybe_delay.then([ref, this] {
     return this->template with_blocking_event<OperationThrottler::BlockingEvent>(
       [ref, this] (auto&& trigger) {
-      return ss.throttler.with_throttle_while(
+      return ss.with_throttle_while(
         std::move(trigger),
         this, get_scheduler_params(), [this] {
           return T::interruptor::with_interruption([this] {

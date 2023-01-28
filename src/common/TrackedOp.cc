@@ -88,8 +88,10 @@ void OpHistory::_insert_delayed(const utime_t& now, TrackedOpRef op)
   double opduration = op->get_duration();
   duration.insert(make_pair(opduration, op));
   arrived.insert(make_pair(op->get_initiated(), op));
-  if (opduration >= history_slow_op_threshold.load())
+  if (opduration >= history_slow_op_threshold.load()) {
     slow_op.insert(make_pair(op->get_initiated(), op));
+    logger->inc(l_osd_slow_op_count);
+  }
   cleanup(now);
 }
 
@@ -156,6 +158,7 @@ struct ShardedTrackingData {
 
 OpTracker::OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards):
   seq(0),
+  history(cct_),
   num_optracker_shards(num_shards),
   complaint_time(0), log_threshold(0),
   tracking_enabled(tracking),

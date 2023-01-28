@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
@@ -98,7 +98,7 @@ public:
   RGWRESTMgr_Metadata() = default;
   ~RGWRESTMgr_Metadata() override = default;
 
-  RGWHandler_REST* get_handler(rgw::sal::Store* store,
+  RGWHandler_REST* get_handler(rgw::sal::Driver* driver,
 			       req_state* const s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override {

@@ -95,7 +95,9 @@ without the ``mon.`` prefix (i.e., ``{mon-id}`` should be the ``a``
 on ``mon.a``).
 
 #. Create the default directory on the machine that will host your 
-   new monitor. :: 
+   new monitor:
+
+   .. prompt:: bash $
 
 	ssh {new-mon-host}
 	sudo mkdir /var/lib/ceph/mon/ceph-{mon-id}
@@ -103,36 +105,46 @@ on ``mon.a``).
 #. Create a temporary directory ``{tmp}`` to keep the files needed during 
    this process. This directory should be different from the monitor's default 
    directory created in the previous step, and can be removed after all the 
-   steps are executed. :: 
+   steps are executed:
+
+   .. prompt:: bash $
 
 	mkdir {tmp}
 
 #. Retrieve the keyring for your monitors, where ``{tmp}`` is the path to 
    the retrieved keyring, and ``{key-filename}`` is the name of the file 
-   containing the retrieved monitor key. :: 
+   containing the retrieved monitor key:
 
-	ceph auth get mon. -o {tmp}/{key-filename}
+   .. prompt:: bash $
+
+      ceph auth get mon. -o {tmp}/{key-filename}
 
 #. Retrieve the monitor map, where ``{tmp}`` is the path to 
    the retrieved monitor map, and ``{map-filename}`` is the name of the file 
-   containing the retrieved monitor map. :: 
+   containing the retrieved monitor map:
 
-	ceph mon getmap -o {tmp}/{map-filename}
+   .. prompt:: bash $
+
+      ceph mon getmap -o {tmp}/{map-filename}
 
 #. Prepare the monitor's data directory created in the first step. You must 
    specify the path to the monitor map so that you can retrieve the 
    information about a quorum of monitors and their ``fsid``. You must also 
-   specify a path to the monitor keyring:: 
+   specify a path to the monitor keyring:
+   
+   .. prompt:: bash $
 
-	sudo ceph-mon -i {mon-id} --mkfs --monmap {tmp}/{map-filename} --keyring {tmp}/{key-filename}
+      sudo ceph-mon -i {mon-id} --mkfs --monmap {tmp}/{map-filename} --keyring {tmp}/{key-filename}
 	
 
 #. Start the new monitor and it will automatically join the cluster.
    The daemon needs to know which address to bind to, via either the
    ``--public-addr {ip}`` or ``--public-network {network}`` argument.
-   For example::
+   For example:
+   
+   .. prompt:: bash $
 
-	ceph-mon -i {mon-id} --public-addr {ip:port}
+      ceph-mon -i {mon-id} --public-addr {ip:port}
 
 .. _removing-monitors:
 
@@ -154,13 +166,17 @@ procedure results in only two monitor daemons, you may add or remove another
 monitor until you have a number of ``ceph-mon`` daemons that can achieve a 
 quorum.
 
-#. Stop the monitor. ::
+#. Stop the monitor:
 
-	service ceph -a stop mon.{mon-id}
+   .. prompt:: bash $
+
+      service ceph -a stop mon.{mon-id}
 	
-#. Remove the monitor from the cluster. ::
+#. Remove the monitor from the cluster:
 
-	ceph mon remove {mon-id}
+   .. prompt:: bash $
+
+      ceph mon remove {mon-id}
 	
 #. Remove the monitor entry from ``ceph.conf``. 
 
@@ -174,38 +190,61 @@ cluster, for example a cluster where the monitors cannot form a
 quorum.
 
 
-#. Stop all ``ceph-mon`` daemons on all monitor hosts. ::
+#. Stop all ``ceph-mon`` daemons on all monitor hosts:
 
-	ssh {mon-host}
-	systemctl stop ceph-mon.target
-	# and repeat for all mons
+   .. prompt:: bash $
 
-#. Identify a surviving monitor and log in to that host. :: 
+      ssh {mon-host}
+      systemctl stop ceph-mon.target
 
-	ssh {mon-host}
+   Repeat for all monitor hosts.
 
-#. Extract a copy of the monmap file.  ::
+#. Identify a surviving monitor and log in to that host:
 
-        ceph-mon -i {mon-id} --extract-monmap {map-path}
-        # in most cases, that's
-        ceph-mon -i `hostname` --extract-monmap /tmp/monmap
+   .. prompt:: bash $
+
+      ssh {mon-host}
+
+#. Extract a copy of the monmap file:
+
+   .. prompt:: bash $
+
+      ceph-mon -i {mon-id} --extract-monmap {map-path}
+
+   In most cases, this command will be:
+
+   .. prompt:: bash $
+
+      ceph-mon -i `hostname` --extract-monmap /tmp/monmap
 
 #. Remove the non-surviving or problematic monitors.  For example, if
    you have three monitors, ``mon.a``, ``mon.b``, and ``mon.c``, where
-   only ``mon.a`` will survive, follow the example below::
+   only ``mon.a`` will survive, follow the example below:
 
-	monmaptool {map-path} --rm {mon-id}
-	# for example,
-	monmaptool /tmp/monmap --rm b
-	monmaptool /tmp/monmap --rm c
+   .. prompt:: bash $
+
+      monmaptool {map-path} --rm {mon-id}
+
+   For example,
+
+   .. prompt:: bash $
+
+      monmaptool /tmp/monmap --rm b
+      monmaptool /tmp/monmap --rm c
 	
 #. Inject the surviving map with the removed monitors into the
    surviving monitor(s).  For example, to inject a map into monitor
-   ``mon.a``, follow the example below::
+   ``mon.a``, follow the example below:
 
-	ceph-mon -i {mon-id} --inject-monmap {map-path}
-	# for example,
-	ceph-mon -i a --inject-monmap /tmp/monmap
+   .. prompt:: bash $
+
+      ceph-mon -i {mon-id} --inject-monmap {map-path}
+
+   For example:
+
+   .. prompt:: bash $
+
+      ceph-mon -i a --inject-monmap /tmp/monmap
 
 #. Start only the surviving monitors.
 
@@ -316,14 +355,20 @@ networks  are unable to communicate.  Use the following procedure:
 
 #. Retrieve the monitor map, where ``{tmp}`` is the path to 
    the retrieved monitor map, and ``{filename}`` is the name of the file 
-   containing the retrieved monitor map. :: 
+   containing the retrieved monitor map:
 
-	ceph mon getmap -o {tmp}/{filename}
+   .. prompt:: bash $
 
-#. The following example demonstrates the contents of the monmap. ::
+      ceph mon getmap -o {tmp}/{filename}
 
-	$ monmaptool --print {tmp}/{filename}
-	
+#. The following example demonstrates the contents of the monmap:
+
+   .. prompt:: bash $
+
+      monmaptool --print {tmp}/{filename}
+
+   ::	
+
 	monmaptool: monmap file {tmp}/{filename}
 	epoch 1
 	fsid 224e376d-c5fe-4504-96bb-ea6332a19e61
@@ -333,27 +378,41 @@ networks  are unable to communicate.  Use the following procedure:
 	1: 10.0.0.2:6789/0 mon.b
 	2: 10.0.0.3:6789/0 mon.c
 
-#. Remove the existing monitors. ::
+#. Remove the existing monitors:
 
-	$ monmaptool --rm a --rm b --rm c {tmp}/{filename}
+   .. prompt:: bash $
+
+      monmaptool --rm a --rm b --rm c {tmp}/{filename}
 	
+
+   ::
+
 	monmaptool: monmap file {tmp}/{filename}
 	monmaptool: removing a
 	monmaptool: removing b
 	monmaptool: removing c
 	monmaptool: writing epoch 1 to {tmp}/{filename} (0 monitors)
 
-#. Add the new monitor locations. ::
+#. Add the new monitor locations:
 
-	$ monmaptool --add a 10.1.0.1:6789 --add b 10.1.0.2:6789 --add c 10.1.0.3:6789 {tmp}/{filename}
+   .. prompt:: bash $
+
+      monmaptool --add a 10.1.0.1:6789 --add b 10.1.0.2:6789 --add c 10.1.0.3:6789 {tmp}/{filename}
+
+
+   ::
 	
-	monmaptool: monmap file {tmp}/{filename}
-	monmaptool: writing epoch 1 to {tmp}/{filename} (3 monitors)
+      monmaptool: monmap file {tmp}/{filename}
+      monmaptool: writing epoch 1 to {tmp}/{filename} (3 monitors)
 
-#. Check new contents. ::
+#. Check new contents:
 
-	$ monmaptool --print {tmp}/{filename}
+   .. prompt:: bash $
+
+       monmaptool --print {tmp}/{filename}
 	
+   ::
+
 	monmaptool: monmap file {tmp}/{filename}
 	epoch 1
 	fsid 224e376d-c5fe-4504-96bb-ea6332a19e61
@@ -370,9 +429,11 @@ monitors, and inject the modified monmap into each new monitor.
 #. First, make sure to stop all your monitors.  Injection must be done while 
    the daemon is not running.
 
-#. Inject the monmap. ::
+#. Inject the monmap: 
 
-	ceph-mon -i {mon-id} --inject-monmap {tmp}/{filename}
+   .. prompt:: bash $
+
+      ceph-mon -i {mon-id} --inject-monmap {tmp}/{filename}
 
 #. Restart the monitors.
 

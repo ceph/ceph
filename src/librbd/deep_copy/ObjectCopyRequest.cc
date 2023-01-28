@@ -72,10 +72,11 @@ void ObjectCopyRequest<I>::send() {
 template <typename I>
 void ObjectCopyRequest<I>::send_list_snaps() {
   // image extents are consistent across src and dst so compute once
-  io::util::extent_to_file(
-          m_dst_image_ctx, m_dst_object_number, 0,
-          m_dst_image_ctx->layout.object_size, m_image_extents);
-  ldout(m_cct, 20) << "image_extents=" << m_image_extents << dendl;
+  std::tie(m_image_extents, m_image_area) = io::util::object_to_area_extents(
+      m_dst_image_ctx, m_dst_object_number,
+      {{0, m_dst_image_ctx->layout.object_size}});
+  ldout(m_cct, 20) << "image_extents=" << m_image_extents
+                   << " area=" << m_image_area << dendl;
 
   auto ctx = create_async_context_callback(
     *m_src_image_ctx, create_context_callback<
@@ -104,8 +105,8 @@ void ObjectCopyRequest<I>::send_list_snaps() {
     ctx, get_image_ctx(m_src_image_ctx), io::AIO_TYPE_GENERIC);
   auto req = io::ImageDispatchSpec::create_list_snaps(
     *m_src_image_ctx, io::IMAGE_DISPATCH_LAYER_NONE, aio_comp,
-    io::Extents{m_image_extents}, std::move(snap_ids), list_snaps_flags,
-    &m_snapshot_delta, {});
+    io::Extents{m_image_extents}, m_image_area, std::move(snap_ids),
+    list_snaps_flags, &m_snapshot_delta, {});
   req->send();
 }
 
@@ -172,8 +173,8 @@ void ObjectCopyRequest<I>::send_read() {
 
   auto req = io::ImageDispatchSpec::create_read(
     *m_src_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
-    std::move(image_extents), std::move(read_result), io_context, op_flags,
-    read_flags, {});
+    std::move(image_extents), m_image_area, std::move(read_result),
+    io_context, op_flags, read_flags, {});
   req->send();
 }
 
@@ -537,26 +538,21 @@ void ObjectCopyRequest<I>::compute_read_ops() {
     WriteReadSnapIds write_read_snap_ids{src_snap_seq, src_snap_seq};
 
     // prepare to prune the extents to the maximum parent overlap
-    m_src_image_ctx->image_lock.lock_shared();
-    uint64_t src_parent_overlap = 0;
-    int r = m_src_image_ctx->get_parent_overlap(src_snap_seq,
-                                                &src_parent_overlap);
-    m_src_image_ctx->image_lock.unlock_shared();
-
+    std::shared_lock image_locker(m_src_image_ctx->image_lock);
+    uint64_t raw_overlap = 0;
+    int r = m_src_image_ctx->get_parent_overlap(src_snap_seq, &raw_overlap);
     if (r < 0) {
       ldout(m_cct, 5) << "failed getting parent overlap for snap_id: "
                       << src_snap_seq << ": " << cpp_strerror(r) << dendl;
-    } else {
-      ldout(m_cct, 20) << "parent overlap=" << src_parent_overlap << dendl;
-      for (auto& [image_offset, image_length] : dne_image_interval) {
-        auto end_image_offset = std::min(
-          image_offset + image_length, src_parent_overlap);
-        if (image_offset >= end_image_offset) {
-          // starting offset is beyond the end of the parent overlap
-          continue;
-        }
-
-        image_length = end_image_offset - image_offset;
+    } else if (raw_overlap > 0) {
+      ldout(m_cct, 20) << "raw_overlap=" << raw_overlap << dendl;
+      io::Extents parent_extents;
+      for (auto [image_offset, image_length] : dne_image_interval) {
+        parent_extents.emplace_back(image_offset, image_length);
+      }
+      m_src_image_ctx->prune_parent_extents(parent_extents, m_image_area,
+                                            raw_overlap, false);
+      for (auto [image_offset, image_length] : parent_extents) {
         ldout(m_cct, 20) << "parent read op: "
                          << "snap_ids=" << write_read_snap_ids << " "
                          << image_offset << "~" << image_length << dendl;
@@ -602,8 +598,9 @@ void ObjectCopyRequest<I>::merge_write_ops() {
     for (auto [image_offset, image_length] : read_op.image_extent_map) {
       // convert image extents back to object extents for the write op
       striper::LightweightObjectExtents object_extents;
-      io::util::file_to_extents(m_dst_image_ctx, image_offset,
-                                image_length, buffer_offset, &object_extents);
+      io::util::area_to_object_extents(m_dst_image_ctx, image_offset,
+                                       image_length, m_image_area,
+                                       buffer_offset, &object_extents);
       for (auto& object_extent : object_extents) {
         ldout(m_cct, 20) << "src_snap_seq=" << src_snap_seq << ", "
                          << "object_offset=" << object_extent.offset << ", "
@@ -670,24 +667,20 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
 
     if (hide_parent) {
       std::shared_lock image_locker{m_dst_image_ctx->image_lock};
-      uint64_t parent_overlap = 0;
-      int r = m_dst_image_ctx->get_parent_overlap(dst_snap_seq,
-                                                  &parent_overlap);
+      uint64_t raw_overlap = 0;
+      uint64_t object_overlap = 0;
+      int r = m_dst_image_ctx->get_parent_overlap(dst_snap_seq, &raw_overlap);
       if (r < 0) {
         ldout(m_cct, 5) << "failed getting parent overlap for snap_id: "
                         << dst_snap_seq << ": " << cpp_strerror(r) << dendl;
+      } else if (raw_overlap > 0) {
+        auto parent_extents = m_image_extents;
+        object_overlap = m_dst_image_ctx->prune_parent_extents(
+            parent_extents, m_image_area, raw_overlap, false);
       }
-      if (parent_overlap == 0) {
+      if (object_overlap == 0) {
         ldout(m_cct, 20) << "no parent overlap" << dendl;
         hide_parent = false;
-      } else {
-        auto image_extents = m_image_extents;
-        uint64_t overlap = m_dst_image_ctx->prune_parent_extents(
-          image_extents, parent_overlap);
-        if (overlap == 0) {
-          ldout(m_cct, 20) << "no parent overlap" << dendl;
-          hide_parent = false;
-        }
       }
     }
 
@@ -758,8 +751,9 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     for (auto z = zero_interval.begin(); z != zero_interval.end(); ++z) {
       // convert image extents back to object extents for the write op
       striper::LightweightObjectExtents object_extents;
-      io::util::file_to_extents(m_dst_image_ctx, z.get_start(), z.get_len(), 0,
-                                &object_extents);
+      io::util::area_to_object_extents(m_dst_image_ctx, z.get_start(),
+                                       z.get_len(), m_image_area, 0,
+                                       &object_extents);
       for (auto& object_extent : object_extents) {
         ceph_assert(object_extent.offset + object_extent.length <=
                       m_dst_image_ctx->layout.object_size);

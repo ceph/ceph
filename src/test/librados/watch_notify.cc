@@ -2,6 +2,7 @@
 #include "include/rados/rados_types.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
+#include "crimson_utils.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -160,6 +161,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify) {
 }
 
 TEST_F(LibRadosWatchNotifyEC, WatchNotify) {
+  SKIP_IF_CRIMSON();
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -243,7 +245,10 @@ TEST_F(LibRadosWatchNotify, AioWatchDelete) {
   }
   ASSERT_TRUE(left > 0);
   ASSERT_EQ(-ENOTCONN, notify_err);
-  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
+  int rados_watch_check_err = rados_watch_check(ioctx, handle);
+  // We may hit ENOENT due to socket failure injection and a forced reconnect
+  EXPECT_TRUE(rados_watch_check_err == -ENOTCONN || rados_watch_check_err == -ENOENT)
+    << "Where rados_watch_check_err = " << rados_watch_check_err;
   ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &comp));
   rados_aio_unwatch(ioctx, handle, comp);
   ASSERT_EQ(0, rados_aio_wait_for_complete(comp));

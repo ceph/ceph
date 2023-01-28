@@ -1411,6 +1411,12 @@ ceph_unregister_client(BaseMgrModule *self, PyObject *args)
   Py_RETURN_NONE;
 }
 
+static PyObject*
+ceph_get_daemon_health_metrics(BaseMgrModule *self, PyObject *args)
+{
+  return self->py_modules->get_daemon_health_metrics();
+}
+
 PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
    "Get a cluster object"},
@@ -1539,6 +1545,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_unregister_client", (PyCFunction)ceph_unregister_client,
     METH_VARARGS, "Unregister RADOS instance for potential blocklisting"},
+
+  {"_ceph_get_daemon_health_metrics", (PyCFunction)ceph_get_daemon_health_metrics,
+    METH_VARARGS, "Get health metrics for all daemons"},
 
   {NULL, NULL, 0, NULL}
 };

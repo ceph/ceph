@@ -34,13 +34,13 @@ seed::~seed()
   seed::info.sha1_bl.clear();
   bl.clear();
   s = NULL;
-  store = NULL;
+  driver = NULL;
 }
 
-void seed::init(req_state *p_req, rgw::sal::Store* p_store)
+void seed::init(req_state *_req, rgw::sal::Driver* _driver)
 {
-  s = p_req;
-  store = p_store;
+  s = _req;
+  driver = _driver;
 }
 
 int seed::get_torrent_file(rgw::sal::Object* object,

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_ASIO_FRONTEND_H
-#define RGW_ASIO_FRONTEND_H
+#pragma once
 
 #include <memory>
 #include "rgw_frontend.h"
@@ -12,7 +11,7 @@ class RGWAsioFrontend : public RGWFrontend {
   class Impl;
   std::unique_ptr<Impl> impl;
 public:
-  RGWAsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf,
+  RGWAsioFrontend(RGWProcessEnv& env, RGWFrontendConfig* conf,
 		  rgw::dmclock::SchedulerCtx& sched_ctx);
   ~RGWAsioFrontend() override;
 
@@ -22,8 +21,5 @@ public:
   void join() override;
 
   void pause_for_new_config() override;
-  void unpause_with_new_config(rgw::sal::Store* store,
-                               rgw_auth_registry_ptr_t auth_registry) override;
+  void unpause_with_new_config() override;
 };
-
-#endif // RGW_ASIO_FRONTEND_H

@@ -329,6 +329,18 @@ void add_snap_create_options(po::options_description *opt) {
      "ignore quiesce hook error");
 }
 
+void add_encryption_options(boost::program_options::options_description *opt) {
+  opt->add_options()
+    (ENCRYPTION_FORMAT.c_str(),
+     po::value<std::vector<EncryptionFormat>>(),
+     "encryption format (luks, luks1, luks2) [default: luks]");
+
+  opt->add_options()
+    (ENCRYPTION_PASSPHRASE_FILE.c_str(),
+     po::value<std::vector<std::string>>(),
+     "path to file containing passphrase for unlocking the image");
+}
+
 std::string get_short_features_help(bool append_suffix) {
   std::ostringstream oss;
   bool first_feature = true;
@@ -517,6 +529,21 @@ void validate(boost::any& v, const std::vector<std::string>& values,
     v = boost::any(RBD_ENCRYPTION_ALGORITHM_AES128);
   } else if (s == "aes-256") {
     v = boost::any(RBD_ENCRYPTION_ALGORITHM_AES256);
+  } else {
+    throw po::validation_error(po::validation_error::invalid_option_value);
+  }
+}
+
+void validate(boost::any& v, const std::vector<std::string>& values,
+              EncryptionFormat *target_type, int) {
+  po::validators::check_first_occurrence(v);
+  const std::string &s = po::validators::get_single_string(values);
+  if (s == "luks") {
+    v = boost::any(EncryptionFormat{RBD_ENCRYPTION_FORMAT_LUKS});
+  } else if (s == "luks1") {
+    v = boost::any(EncryptionFormat{RBD_ENCRYPTION_FORMAT_LUKS1});
+  } else if (s == "luks2") {
+    v = boost::any(EncryptionFormat{RBD_ENCRYPTION_FORMAT_LUKS2});
   } else {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }

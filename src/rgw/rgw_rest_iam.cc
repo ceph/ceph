@@ -3,11 +3,8 @@
 
 #include <boost/tokenizer.hpp>
 
-#include "rgw_rest.h"
+#include "rgw_auth_s3.h"
 #include "rgw_rest_iam.h"
-
-#include "rgw_request.h"
-#include "rgw_process.h"
 
 #include "rgw_rest_role.h"
 #include "rgw_rest_user_policy.h"
@@ -53,7 +50,7 @@ RGWOp *RGWHandler_REST_IAM::op_post()
     if (action.compare("GetRole") == 0)
       return new RGWGetRole;
     if (action.compare("UpdateAssumeRolePolicy") == 0)
-      return new RGWModifyRole(this->bl_post_body);
+      return new RGWModifyRoleTrustPolicy(this->bl_post_body);
     if (action.compare("ListRoles") == 0)
       return new RGWListRoles;
     if (action.compare("PutRolePolicy") == 0)
@@ -86,32 +83,34 @@ RGWOp *RGWHandler_REST_IAM::op_post()
       return new RGWListRoleTags;
     if (action.compare("UntagRole") == 0)
       return new RGWUntagRole(this->bl_post_body);
+    if (action.compare("UpdateRole") == 0)
+      return new RGWUpdateRole(this->bl_post_body);
   }
 
   return nullptr;
 }
 
-int RGWHandler_REST_IAM::init(rgw::sal::Store* store,
+int RGWHandler_REST_IAM::init(rgw::sal::Driver* driver,
                               req_state *s,
                               rgw::io::BasicClient *cio)
 {
   s->dialect = "iam";
 
-  if (int ret = RGWHandler_REST_IAM::init_from_header(s, RGW_FORMAT_XML, true); ret < 0) {
+  if (int ret = RGWHandler_REST_IAM::init_from_header(s, RGWFormat::XML, true); ret < 0) {
     ldpp_dout(s, 10) << "init_from_header returned err=" << ret <<  dendl;
     return ret;
   }
 
-  return RGWHandler_REST::init(store, s, cio);
+  return RGWHandler_REST::init(driver, s, cio);
 }
 
 int RGWHandler_REST_IAM::authorize(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
+  return RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
 }
 
 int RGWHandler_REST_IAM::init_from_header(req_state* s,
-                                          int default_formatter,
+                                          RGWFormat default_formatter,
                                           bool configurable_format)
 {
   string req;
@@ -153,7 +152,7 @@ int RGWHandler_REST_IAM::init_from_header(req_state* s,
 }
 
 RGWHandler_REST*
-RGWRESTMgr_IAM::get_handler(rgw::sal::Store* store,
+RGWRESTMgr_IAM::get_handler(rgw::sal::Driver* driver,
 			    req_state* const s,
 			    const rgw::auth::StrategyRegistry& auth_registry,
 			    const std::string& frontend_prefix)

@@ -145,27 +145,28 @@ class TestGetMounts(object):
         with open(proc_path, 'w') as f:
             f.write('')
         monkeypatch.setattr(system, 'PROCDIR', PROCDIR)
-        assert system.get_mounts() == {}
+        m = system.Mounts()
+        assert m.get_mounts() == {}
 
     def test_is_mounted_(self, fake_proc):
-        result = system.get_mounts()
-        assert result['/dev/sdc2'] == ['/boot']
+        m = system.Mounts()
+        assert m.get_mounts()['/dev/sdc2'] == ['/boot']
 
     def test_ignores_two_fields(self, fake_proc):
-        result = system.get_mounts()
-        assert result.get('/dev/sde4') is None
+        m = system.Mounts()
+        assert m.get_mounts().get('/dev/sde4') is None
 
     def test_tmpfs_is_reported(self, fake_proc):
-        result = system.get_mounts()
-        assert result['tmpfs'][0] == '/dev/shm'
+        m = system.Mounts()
+        assert m.get_mounts()['tmpfs'][0] == '/dev/shm'
 
     def test_non_skip_devs_arent_reported(self, fake_proc):
-        result = system.get_mounts()
-        assert result.get('cgroup') is None
+        m = system.Mounts()
+        assert m.get_mounts().get('cgroup') is None
 
     def test_multiple_mounts_are_appended(self, fake_proc):
-        result = system.get_mounts()
-        assert len(result['tmpfs']) == 7
+        m = system.Mounts()
+        assert len(m.get_mounts()['tmpfs']) == 7
 
     def test_nonexistent_devices_are_skipped(self, tmpdir, monkeypatch):
         PROCDIR = str(tmpdir)
@@ -176,19 +177,19 @@ class TestGetMounts(object):
                     /dev/sda2 /far/lib/ceph/osd/ceph-1 xfs rw,attr2,inode64,noquota 0 0"""))
         monkeypatch.setattr(system, 'PROCDIR', PROCDIR)
         monkeypatch.setattr(os.path, 'exists', lambda x: False if x == '/dev/sda1' else True)
-        result = system.get_mounts()
-        assert result.get('/dev/sda1') is None
+        m = system.Mounts()
+        assert m.get_mounts().get('/dev/sda1') is None
 
 
 class TestIsBinary(object):
 
-    def test_is_binary(self, tmpfile):
-        binary_path = tmpfile(contents='asd\n\nlkjh\x00')
-        assert system.is_binary(binary_path)
+    def test_is_binary(self, fake_filesystem):
+        binary_path = fake_filesystem.create_file('/tmp/fake-file', contents='asd\n\nlkjh\x00')
+        assert system.is_binary(binary_path.path)
 
-    def test_is_not_binary(self, tmpfile):
-        binary_path = tmpfile(contents='asd\n\nlkjh0')
-        assert system.is_binary(binary_path) is False
+    def test_is_not_binary(self, fake_filesystem):
+        binary_path = fake_filesystem.create_file('/tmp/fake-file', contents='asd\n\nlkjh0')
+        assert system.is_binary(binary_path.path) is False
 
 
 class TestGetFileContents(object):
@@ -197,21 +198,20 @@ class TestGetFileContents(object):
         filepath = os.path.join(str(tmpdir), 'doesnotexist')
         assert system.get_file_contents(filepath, 'default') == 'default'
 
-    def test_path_has_contents(self, tmpfile):
-        interesting_file = tmpfile(contents="1")
-        result = system.get_file_contents(interesting_file)
+    def test_path_has_contents(self, fake_filesystem):
+        interesting_file = fake_filesystem.create_file('/tmp/fake-file', contents="1")
+        result = system.get_file_contents(interesting_file.path)
         assert result == "1"
 
-    def test_path_has_multiline_contents(self, tmpfile):
-        interesting_file = tmpfile(contents="0\n1")
-        result = system.get_file_contents(interesting_file)
+    def test_path_has_multiline_contents(self, fake_filesystem):
+        interesting_file = fake_filesystem.create_file('/tmp/fake-file', contents="0\n1")
+        result = system.get_file_contents(interesting_file.path)
         assert result == "0\n1"
 
-    def test_exception_returns_default(self, tmpfile):
-        interesting_file = tmpfile(contents="0")
-        # remove read, causes IOError
-        os.chmod(interesting_file, 0o000)
-        result = system.get_file_contents(interesting_file)
+    def test_exception_returns_default(self):
+        with patch('builtins.open') as mocked_open:
+            mocked_open.side_effect = Exception()
+            result = system.get_file_contents('/tmp/fake-file')
         assert result == ''
 
 

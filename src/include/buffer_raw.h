@@ -92,12 +92,6 @@ public:
     unsigned get_len() const {
       return len;
     }
-    virtual raw* clone_empty() = 0;
-    ceph::unique_leakable_ptr<raw> clone() {
-      raw* const c = clone_empty();
-      memcpy(c->data, data, len);
-      return ceph::unique_leakable_ptr<raw>(c);
-    }
     bool get_crc(const std::pair<size_t, size_t> &fromto,
 		 std::pair<uint32_t, uint32_t> *crc) const {
       std::lock_guard lg(crc_spinlock);

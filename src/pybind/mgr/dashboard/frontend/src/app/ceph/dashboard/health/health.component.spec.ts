@@ -197,7 +197,7 @@ describe('HealthComponent', () => {
     );
     const clickableContent = clusterStatusCard.query(By.css('.info-card-content-clickable'));
     expect(clickableContent).toBeNull();
-    expect(clusterStatusCard.nativeElement.textContent).toEqual(` ${healthPayload.health.status} `);
+    expect(clusterStatusCard.nativeElement.textContent).toEqual(' OK ');
   });
 
   it('should render "Cluster Status" card text that is clickable (popover)', () => {
@@ -216,7 +216,7 @@ describe('HealthComponent', () => {
       By.css('cd-info-card[cardTitle="Cluster Status"]')
     );
     const clickableContent = clusterStatusCard.query(By.css('.info-card-content-clickable'));
-    expect(clickableContent.nativeElement.textContent).toEqual(` ${payload.health.status} `);
+    expect(clickableContent.nativeElement.textContent).toEqual(' WARNING ');
   });
 
   it('event binding "prepareReadWriteRatio" is called', () => {

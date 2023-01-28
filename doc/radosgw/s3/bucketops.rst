@@ -487,7 +487,7 @@ Syntax
 
 ::
 
-    PUT /<bucket name>?notification HTTP/1.1
+    PUT /{bucket}?notification HTTP/1.1
 
 
 Request Entities
@@ -598,7 +598,7 @@ Syntax
 
 ::
 
-    DELETE /bucket?notification[=<notification-id>] HTTP/1.1
+    DELETE /{bucket}?notification[=<notification-id>] HTTP/1.1
 
 
 Parameters
@@ -629,7 +629,7 @@ Syntax
 
 ::
 
-    GET /bucket?notification[=<notification-id>] HTTP/1.1 
+    GET /{bucket}?notification[=<notification-id>] HTTP/1.1 
 
 
 Parameters

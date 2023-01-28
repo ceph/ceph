@@ -55,10 +55,14 @@ public:
   > tracking_events;
 
 private:
-  crimson::net::ConnectionRef conn;
+  crimson::net::ConnectionFRef conn;
   // must be after `conn` to ensure the ConnectionPipeline's is alive
   PipelineHandle handle;
   Ref<MOSDFastDispatchOp> m;
 };
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::RecoverySubRequest> : fmt::ostream_formatter {};
+#endif

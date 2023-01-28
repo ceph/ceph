@@ -2,21 +2,44 @@
 
 set -e
 
+CLUSTERS=("1" "2")
+
+ceph() {
+    ${FULL_PATH_BUILD_DIR}/../src/mrun 1 ceph $@
+}
+
+ceph2() {
+    ${FULL_PATH_BUILD_DIR}/../src/mrun 2 ceph $@
+}
+
+ceph_all() {
+    ceph $@
+    ceph2 $@
+}
+
 start_ceph() {
     cd $FULL_PATH_BUILD_DIR
 
-    MGR=2 RGW=1 ../src/vstart.sh -n -d
-    sleep 10
+    for cluster in ${CLUSTERS[@]}; do
+        export CEPH_OUT_CLIENT_DIR=${FULL_PATH_BUILD_DIR}/run/${cluster}/out/client
+        MGR=2 RGW=1 ../src/mstart.sh $cluster -n -d
+    done
 
     set -x
 
     # Create an Object Gateway User
-    ./bin/ceph dashboard set-rgw-credentials
+    ceph_all dashboard set-rgw-credentials
 
     # Set SSL verify to False
-    ./bin/ceph dashboard set-rgw-api-ssl-verify False
+    ceph_all dashboard set-rgw-api-ssl-verify False
 
-    CYPRESS_BASE_URL=$(./bin/ceph mgr services | jq -r .dashboard)
+    CYPRESS_BASE_URL=$(ceph mgr services | jq -r .dashboard)
+    CYPRESS_CEPH2_URL=$(ceph2 mgr services | jq -r .dashboard)
+
+    # start rbd-mirror daemon in the cluster
+    KEY=$(ceph auth get client.admin --format=json | jq -r .[0].key)
+    MON_CLUSTER_1=$(grep "mon host" ${FULL_PATH_BUILD_DIR}/run/1/ceph.conf | awk '{print $4}')
+    ${FULL_PATH_BUILD_DIR}/bin/rbd-mirror --mon_host $MON_CLUSTER_1 --key $KEY -c ${FULL_PATH_BUILD_DIR}/run/1/ceph.conf &
 
     set +x
 }
@@ -24,7 +47,9 @@ start_ceph() {
 stop() {
     if [ "$REMOTE" == "false" ]; then
         cd ${FULL_PATH_BUILD_DIR}
-        ../src/stop.sh
+        for cluster in ${CLUSTERS[@]}; do
+            ../src/mstop.sh $cluster
+        done
     fi
     exit $1
 }
@@ -57,6 +82,7 @@ check_device_available() {
 }
 
 : ${CYPRESS_BASE_URL:=''}
+: ${CYPRESS_CEPH2_URL:=''}
 : ${CYPRESS_LOGIN_PWD:=''}
 : ${CYPRESS_LOGIN_USER:=''}
 : ${DEVICE:="chrome"}
@@ -83,7 +109,7 @@ FULL_PATH_BUILD_DIR=`pwd`
 
 : ${CYPRESS_CACHE_FOLDER:="${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/cypress"}
 
-export CYPRESS_BASE_URL CYPRESS_CACHE_FOLDER CYPRESS_LOGIN_USER CYPRESS_LOGIN_PWD NO_COLOR
+export CYPRESS_BASE_URL CYPRESS_CACHE_FOLDER CYPRESS_LOGIN_USER CYPRESS_LOGIN_PWD NO_COLOR CYPRESS_CEPH2_URL
 
 check_device_available
 
@@ -106,6 +132,7 @@ case "$DEVICE" in
             --env CYPRESS_BASE_URL \
             --env CYPRESS_LOGIN_USER \
             --env CYPRESS_LOGIN_PWD \
+            --env CYPRESS_CEPH2_URL \
             --name=e2e \
             --network=host \
             cypress/included:${CYPRESS_VERSION} || failed=1
