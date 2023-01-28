@@ -198,6 +198,11 @@ Operations
 .. confval:: osd_op_history_size
 .. confval:: osd_op_history_duration
 .. confval:: osd_op_log_threshold
+.. confval:: osd_op_thread_suicide_timeout
+.. note:: See https://old.ceph.com/planet/dealing-with-some-osd-timeouts/ for
+   more on ``osd_op_thread_suicide_timeout``. Be aware that this is a link to a
+   reworking of a blog post from 2017, and that its conclusion will direct you
+   back to this page "for more information".
 
 .. _dmclock-qos:
 
