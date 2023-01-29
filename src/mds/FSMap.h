@@ -253,6 +253,10 @@ public:
   }
 
 private:
+  void set_fscid(fs_cluster_id_t new_fscid) {
+    fscid = new_fscid;
+  }
+
   friend class FSMap;
 
   fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
@@ -479,6 +483,11 @@ public:
     fs.mds_map.epoch = epoch;
     fs.mds_map.modified = ceph_clock_now();
   }
+
+  /* This is method is written for the option of "ceph fs swap" commmand
+   * that intiates swap of FSCIDs.
+   */
+  void swap_fscids(fs_cluster_id_t fscid1, fs_cluster_id_t fscid2);
 
   /**
    * Apply a mutation to the mds_info_t structure for a particular
