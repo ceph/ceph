@@ -5,7 +5,7 @@ options:
 - name: osd_numa_prefer_iface
   type: bool
   level: advanced
-  desc: prefer IP on network interface on same numa node as storage
+  desc: Prefer IP on network interface on same NUMA node as storage
   default: true
   see_also:
   - osd_numa_auto_affinity
@@ -14,14 +14,14 @@ options:
 - name: osd_numa_auto_affinity
   type: bool
   level: advanced
-  desc: automatically set affinity to numa node when storage and network match
+  desc: Automatically set affinity to NUMA node when storage and network match
   default: true
   flags:
   - startup
 - name: osd_numa_node
   type: int
   level: advanced
-  desc: set affinity to a numa node (-1 for none)
+  desc: Set affinity to a NUMA node (-1 for none)
   default: -1
   see_also:
   - osd_numa_auto_affinity
@@ -30,7 +30,7 @@ options:
 - name: set_keepcaps
   type: bool
   level: advanced
-  desc: set the keepcaps flag before changing UID, preserving the permitted capability set
+  desc: Set the keepcaps flag before changing UID, preserving the permitted capability set
   long_desc: When ceph switches from root to the ceph uid, all capabilities in all sets are eraseed. If
     a component that is capability aware needs a specific capability, the keepcaps flag maintains
      the permitted capability set, allowing the capabilities in the effective set to be activated as needed.
@@ -75,7 +75,7 @@ options:
 - name: osd_backfill_retry_interval
   type: float
   level: advanced
-  desc: how frequently to retry backfill reservations after being denied (e.g., due
+  desc: How frequently to retry backfill reservations after being denied (e.g., due
     to a full OSD)
   fmt_desc: The number of seconds to wait before retrying backfill requests.
   default: 30
@@ -83,7 +83,7 @@ options:
 - name: osd_recovery_retry_interval
   type: float
   level: advanced
-  desc: how frequently to retry recovery reservations after being denied (e.g., due
+  desc: How frequently to retry recovery reservations after being denied (e.g., due
     to a full OSD)
   default: 30
   with_legacy: true
@@ -310,7 +310,7 @@ options:
   level: advanced
   desc: Ratio of scrub interval to randomly vary
   long_desc: This prevents a scrub 'stampede' by randomly varying the scrub intervals
-    so that they are soon uniformly distributed over the week
+    so that they are soon uniformly distributed over the week.
   fmt_desc: Add a random delay to ``osd_scrub_min_interval`` when scheduling
     the next scrub job for a PG. The delay is a random
     value less than ``osd_scrub_min_interval`` \*
@@ -327,7 +327,7 @@ options:
   level: dev
   desc: Backoff ratio for scheduling scrubs
   long_desc: This is the precentage of ticks that do NOT schedule scrubs, 66% means
-    that 1 out of 3 ticks will schedule scrubs
+    that 1 out of 3 ticks will schedule scrubs.
   default: 0.66
   with_legacy: true
 - name: osd_scrub_chunk_min
@@ -414,7 +414,7 @@ options:
   desc: Scrubs will randomly become deep scrubs at this rate (0.15 -> 15% of scrubs
     are deep)
   long_desc: This prevents a deep scrub 'stampede' by spreading deep scrubs so they
-    are uniformly distributed over the week
+    are uniformly distributed over the week.
   default: 0.15
   with_legacy: true
 - name: osd_deep_scrub_stride
@@ -441,7 +441,7 @@ options:
 - name: osd_deep_scrub_large_omap_object_key_threshold
   type: uint
   level: advanced
-  desc: Warn when we encounter an object with more omap keys than this
+  desc: Warn when we encounter an object with more OMAP keys than this
   default: 200000
   services:
   - osd
@@ -452,7 +452,7 @@ options:
 - name: osd_deep_scrub_large_omap_object_value_sum_threshold
   type: size
   level: advanced
-  desc: Warn when we encounter an object with more omap key bytes than this
+  desc: Warn when we encounter an object with more OMAP key bytes than this
   default: 1_G
   services:
   - osd
@@ -539,7 +539,7 @@ options:
 - name: osd_agent_max_ops
   type: int
   level: advanced
-  desc: maximum concurrent tiering operations for tiering agent
+  desc: Maximum concurrent tiering operations for tiering agent
   fmt_desc: The maximum number of simultaneous flushing ops per tiering agent
     in the high speed mode.
   default: 4
@@ -547,7 +547,7 @@ options:
 - name: osd_agent_max_low_ops
   type: int
   level: advanced
-  desc: maximum concurrent low-priority tiering operations for tiering agent
+  desc: Maximum concurrent low-priority tiering operations for tiering agent
   fmt_desc: The maximum number of simultaneous flushing ops per tiering agent
     in the low speed mode.
   default: 2
@@ -555,7 +555,7 @@ options:
 - name: osd_agent_min_evict_effort
   type: float
   level: advanced
-  desc: minimum effort to expend evicting clean objects
+  desc: Minimum effort to expend evicting clean objects
   default: 0.1
   min: 0
   max: 0.99
@@ -563,33 +563,33 @@ options:
 - name: osd_agent_quantize_effort
   type: float
   level: advanced
-  desc: size of quantize unit for eviction effort
+  desc: Size of quantize unit for eviction effort
   default: 0.1
   with_legacy: true
 - name: osd_agent_delay_time
   type: float
   level: advanced
-  desc: how long agent should sleep if it has no work to do
+  desc: How long agent should sleep if it has no work to do
   default: 5
   with_legacy: true
 # decay atime and hist histograms after how many objects go by
 - name: osd_agent_hist_halflife
   type: int
   level: advanced
-  desc: halflife of agent atime and temp histograms
+  desc: Half-life of agent atime and temp histograms
   default: 1000
   with_legacy: true
 # decay atime and hist histograms after how many objects go by
 - name: osd_agent_slop
   type: float
   level: advanced
-  desc: slop factor to avoid switching tiering flush and eviction mode
+  desc: Slop factor to avoid switching tiering flush and eviction mode
   default: 0.02
   with_legacy: true
 - name: osd_find_best_info_ignore_history_les
   type: bool
   level: dev
-  desc: ignore last_epoch_started value when peering AND PROBABLY LOSE DATA
+  desc: Ignore last_epoch_started value when peering AND PROBABLY LOSE DATA
   long_desc: THIS IS AN EXTREMELY DANGEROUS OPTION THAT SHOULD ONLY BE USED AT THE
     DIRECTION OF A DEVELOPER.  It makes peering ignore the last_epoch_started value
     when peering, which can allow the OSD to believe an OSD has an authoritative view
@@ -600,7 +600,7 @@ options:
 - name: osd_uuid
   type: uuid
   level: advanced
-  desc: uuid label for a new OSD
+  desc: UUID label for a new OSD
   fmt_desc: The universally unique identifier (UUID) for the Ceph OSD Daemon.
   note: The ``osd_uuid`` applies to a single Ceph OSD Daemon. The ``fsid``
     applies to the entire cluster.
@@ -610,7 +610,7 @@ options:
 - name: osd_data
   type: str
   level: advanced
-  desc: path to OSD data
+  desc: Path to OSD data
   fmt_desc: The path to the OSDs data. You must create the directory when
     deploying Ceph. You should mount a drive for OSD data at this
     mount point. We do not recommend changing the default.
@@ -621,7 +621,7 @@ options:
 - name: osd_journal
   type: str
   level: advanced
-  desc: path to OSD journal (when FileStore backend is in use)
+  desc: Path to OSD journal (when FileStore backend is in use)
   fmt_desc: The path to the OSD's journal. This may be a path to a file or a
     block device (such as a partition of an SSD). If it is a file,
     you must create the directory to contain it. We recommend using a
@@ -633,7 +633,7 @@ options:
 - name: osd_journal_size
   type: size
   level: advanced
-  desc: size of FileStore journal (in MiB)
+  desc: Size of FileStore journal (in MiB)
   fmt_desc: The size of the journal in megabytes.
   default: 5_K
   flags:
@@ -642,23 +642,23 @@ options:
 - name: osd_journal_flush_on_shutdown
   type: bool
   level: advanced
-  desc: flush FileStore journal contents during clean OSD shutdown
+  desc: Flush FileStore journal contents during clean OSD shutdown
   default: true
   with_legacy: true
 - name: osd_compact_on_start
   type: bool
   level: advanced
-  desc: compact OSD's object store's OMAP on start
+  desc: Compact OSD's object store's OMAP on start
   default: false
-# flags for specific control purpose during osd mount() process.
-# e.g., can be 1 to skip over replaying journal
-# or 2 to skip over mounting omap or 3 to skip over both.
+# Flags for specific control purpose during OSD mount() process.
+# E.g., can be 1 to skip over replaying journal
+# or 2 to skip over mounting OMAP or 3 to skip over both.
 # This might be helpful in case the journal is totally corrupted
-# and we still want to bring the osd daemon back normally, etc.
+# and we still want to bring the OSD daemon back normally, etc.
 - name: osd_os_flags
   type: uint
   level: dev
-  desc: flags to skip filestore omap or journal initialization
+  desc: Flags to skip filestore OMAP or journal initialization
   default: 0
 - name: osd_max_write_size
   type: size
@@ -674,7 +674,7 @@ options:
 - name: osd_max_pgls
   type: uint
   level: advanced
-  desc: maximum number of results when listing objects in a pool
+  desc: Maximum number of results when listing objects in a pool
   fmt_desc: The maximum number of placement groups to list. A client
     requesting a large number can tie up the Ceph OSD Daemon.
   default: 1_K
@@ -682,7 +682,7 @@ options:
 - name: osd_client_message_size_cap
   type: size
   level: advanced
-  desc: maximum memory to devote to in-flight client requests
+  desc: Maximum memory to devote to in-flight client requests
   long_desc: If this value is exceeded, the OSD will not read any new client data
     off of the network until memory is freed.
   fmt_desc: The largest client data message allowed in memory.
@@ -691,25 +691,25 @@ options:
 - name: osd_client_message_cap
   type: uint
   level: advanced
-  desc: maximum number of in-flight client requests
+  desc: Maximum number of in-flight client requests
   default: 256
   with_legacy: true
 - name: osd_crush_update_on_start
   type: bool
   level: advanced
-  desc: update OSD CRUSH location on startup
+  desc: Update OSD CRUSH location on startup
   default: true
   with_legacy: true
 - name: osd_class_update_on_start
   type: bool
   level: advanced
-  desc: set OSD device class on startup
+  desc: Set OSD device class on startup
   default: true
   with_legacy: true
 - name: osd_crush_initial_weight
   type: float
   level: advanced
-  desc: if >= 0, initial CRUSH weight for newly created OSDs
+  desc: If >= 0, initial CRUSH weight for newly created OSDs
   long_desc: If this value is negative, the size of the OSD in TiB is used.
   fmt_desc: The initial CRUSH weight for newly added OSDs. The default
     value of this option is ``the size of a newly added OSD in TB``. By default,
@@ -721,7 +721,7 @@ options:
 - name: osd_allow_recovery_below_min_size
   type: bool
   level: dev
-  desc: allow replicated pools to recover with < min_size active members
+  desc: Allow replicated pools to recover with < min_size active members
   default: true
   services:
   - osd
@@ -798,7 +798,7 @@ options:
 - name: osd_num_cache_shards
   type: size
   level: advanced
-  desc: The number of cache shards to use in the object store.
+  desc: The number of cache shards to use in the object store
   default: 32
   flags:
   - startup
@@ -849,7 +849,7 @@ options:
 - name: osd_op_num_shards_hdd
   type: int
   level: advanced
-  fmt_desc: the number of shards allocated for a given OSD (for rotational media).
+  fmt_desc: The number of shards allocated for a given OSD (for rotational media).
   default: 5
   see_also:
   - osd_op_num_shards
@@ -859,7 +859,7 @@ options:
 - name: osd_op_num_shards_ssd
   type: int
   level: advanced
-  fmt_desc: the number of shards allocated for a given OSD (for solid state media).
+  fmt_desc: The number of shards allocated for a given OSD (for solid state media).
   default: 8
   see_also:
   - osd_op_num_shards
@@ -882,8 +882,8 @@ options:
 - name: osd_op_queue
   type: str
   level: advanced
-  desc: which operation priority queue algorithm to use
-  long_desc: which operation priority queue algorithm to use
+  desc: Which operation priority queue algorithm to use
+  long_desc: Which operation priority queue algorithm to use.
   fmt_desc: This sets the type of queue to be used for prioritizing ops
     within each OSD. Both queues feature a strict sub-queue which is
     dequeued before the normal queue. The normal queue is different
@@ -906,10 +906,10 @@ options:
 - name: osd_op_queue_cut_off
   type: str
   level: advanced
-  desc: the threshold between high priority ops and low priority ops
-  long_desc: the threshold between high priority ops that use strict priority ordering
+  desc: The threshold between high priority ops and low priority ops
+  long_desc: The threshold between high priority ops that use strict priority ordering
     and low priority ops that use a fairness algorithm that may or may not incorporate
-    priority
+    priority.
   fmt_desc: This selects which priority ops will be sent to the strict
     queue verses the normal queue. The ``low`` setting sends all
     replication ops and higher to the strict queue, while the ``high``
@@ -931,7 +931,7 @@ options:
   type: uint
   level: advanced
   desc: IO proportion reserved for each client (default)
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
+  long_desc: Only considered for osd_op_queue = mclock_scheduler.
   fmt_desc: IO proportion reserved for each client (default).
   default: 1
   see_also:
@@ -940,7 +940,7 @@ options:
   type: uint
   level: advanced
   desc: IO share for each client (default) over reservation
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
+  long_desc: Only considered for osd_op_queue = mclock_scheduler.
   fmt_desc: IO share for each client (default) over reservation.
   default: 1
   see_also:
@@ -949,7 +949,7 @@ options:
   type: uint
   level: advanced
   desc: IO limit for each client (default) over reservation
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
+  long_desc: Only considered for osd_op_queue = mclock_scheduler.
   fmt_desc: IO limit for each client (default) over reservation.
   default: 999999
   see_also:
@@ -958,7 +958,7 @@ options:
   type: uint
   level: advanced
   desc: IO proportion reserved for background recovery (default)
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
+  long_desc: Only considered for osd_op_queue = mclock_scheduler.
   fmt_desc: IO proportion reserved for background recovery (default).
   default: 1
   see_also:
@@ -976,7 +976,7 @@ options:
   type: uint
   level: advanced
   desc: IO limit for background recovery over reservation
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
+  long_desc: Only considered for osd_op_queue = mclock_scheduler.
   fmt_desc: IO limit for background recovery over reservation.
   default: 999999
   see_also:
@@ -985,7 +985,7 @@ options:
   type: uint
   level: advanced
   desc: IO proportion reserved for background best_effort (default)
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
+  long_desc: Only considered for osd_op_queue = mclock_scheduler.
   fmt_desc: IO proportion reserved for background best_effort (default).
   default: 1
   see_also:
@@ -994,7 +994,7 @@ options:
   type: uint
   level: advanced
   desc: IO share for each background best_effort over reservation
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
+  long_desc: Only considered for osd_op_queue = mclock_scheduler.
   fmt_desc: IO share for each background best_effort over reservation.
   default: 1
   see_also:
@@ -1003,7 +1003,7 @@ options:
   type: uint
   level: advanced
   desc: IO limit for background best_effort over reservation
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
+  long_desc: Only considered for osd_op_queue = mclock_scheduler.
   fmt_desc: IO limit for background best_effort over reservation.
   default: 999999
   see_also:
@@ -1011,8 +1011,8 @@ options:
 - name: osd_mclock_scheduler_anticipation_timeout
   type: float
   level: advanced
-  desc: mclock anticipation timeout in seconds
-  long_desc: the amount of time that mclock waits until the unused resource is forfeited
+  desc: mClock anticipation timeout in seconds
+  long_desc: The amount of time that mClock waits until the unused resource is forfeited.
   default: 0
 - name: osd_mclock_cost_per_io_usec
   type: float
@@ -1020,10 +1020,10 @@ options:
   desc: Cost per IO in microseconds to consider per OSD (overrides _ssd and _hdd if
     non-zero)
   long_desc: This option specifies the cost factor to consider in usec per OSD. This
-    is considered by the mclock scheduler to set an additional cost factor in QoS
-    calculations. Only considered for osd_op_queue = mclock_scheduler
+    is considered by the mClock scheduler to set an additional cost factor in QoS
+    calculations. Only considered for osd_op_queue = mclock_scheduler.
   fmt_desc: Cost per IO in microseconds to consider per OSD (overrides _ssd
-    and _hdd if non-zero)
+    and _hdd if non-zero).
   default: 0
   flags:
   - runtime
@@ -1033,9 +1033,9 @@ options:
   desc: Cost per IO in microseconds to consider per OSD (for rotational media)
   long_desc: This option specifies the cost factor to consider in usec per OSD for
     rotational device type. This is considered by the mclock_scheduler to set an additional
-    cost factor in QoS calculations. Only considered for osd_op_queue = mclock_scheduler
+    cost factor in QoS calculations. Only considered for osd_op_queue = mclock_scheduler.
   fmt_desc: Cost per IO in microseconds to consider per OSD (for rotational
-    media)
+    media).
   default: 11400
   flags:
   - runtime
@@ -1046,9 +1046,9 @@ options:
   long_desc: This option specifies the cost factor to consider in usec per OSD for
     solid state device type. This is considered by the mclock_scheduler to set an
     additional cost factor in QoS calculations. Only considered for osd_op_queue =
-    mclock_scheduler
+    mclock_scheduler.
   fmt_desc: Cost per IO in microseconds to consider per OSD (for solid state
-    media)
+    media).
   default: 50
   flags:
   - runtime
@@ -1058,10 +1058,10 @@ options:
   desc: Cost per byte in microseconds to consider per OSD (overrides _ssd and _hdd
     if non-zero)
   long_desc: This option specifies the cost per byte to consider in microseconds per
-    OSD. This is considered by the mclock scheduler to set an additional cost factor
-    in QoS calculations. Only considered for osd_op_queue = mclock_scheduler
+    OSD. This is considered by the mClock scheduler to set an additional cost factor
+    in QoS calculations. Only considered for osd_op_queue = mclock_scheduler.
   fmt_desc: Cost per byte in microseconds to consider per OSD (overrides _ssd
-    and _hdd if non-zero)
+    and _hdd if non-zero).
   default: 0
   flags:
   - runtime
@@ -1072,9 +1072,9 @@ options:
   long_desc: This option specifies the cost per byte to consider in microseconds per
     OSD for rotational device type. This is considered by the mclock_scheduler to
     set an additional cost factor in QoS calculations. Only considered for osd_op_queue
-    = mclock_scheduler
+    = mclock_scheduler.
   fmt_desc: Cost per byte in microseconds to consider per OSD (for rotational
-    media)
+    media).
   default: 2.6
   flags:
   - runtime
@@ -1085,35 +1085,35 @@ options:
   long_desc: This option specifies the cost per byte to consider in microseconds per
     OSD for solid state device type. This is considered by the mclock_scheduler to
     set an additional cost factor in QoS calculations. Only considered for osd_op_queue
-    = mclock_scheduler
+    = mclock_scheduler.
   fmt_desc: Cost per byte in microseconds to consider per OSD (for solid state
-    media)
+    media).
   default: 0.011
   flags:
   - runtime
 - name: osd_mclock_max_capacity_iops_hdd
   type: float
   level: basic
-  desc: Max IOPs capacity (at 4KiB block size) to consider per OSD (for rotational
+  desc: Max IOPS capacity (at 4KiB block size) to consider per OSD (for rotational
     media)
-  long_desc: This option specifies the max OSD capacity in iops per OSD. Helps in
-    QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue
-    = mclock_scheduler
+  long_desc: This option specifies the max OSD capacity in IOPS per OSD. Helps in
+    QoS calculations when enabling a dmClock profile. Only considered for osd_op_queue
+    = mclock_scheduler.
   fmt_desc: Max IOPS capacity (at 4KiB block size) to consider per OSD (for
-    rotational media)
+    rotational media).
   default: 315
   flags:
   - runtime
 - name: osd_mclock_max_capacity_iops_ssd
   type: float
   level: basic
-  desc: Max IOPs capacity (at 4KiB block size) to consider per OSD (for solid state
+  desc: Max IOPS capacity (at 4KiB block size) to consider per OSD (for solid state
     media)
-  long_desc: This option specifies the max OSD capacity in iops per OSD. Helps in
-    QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue
-    = mclock_scheduler
+  long_desc: This option specifies the max OSD capacity in IOPS per OSD. Helps in
+    QoS calculations when enabling a dmClock profile. Only considered for osd_op_queue
+    = mclock_scheduler.
   fmt_desc: Max IOPS capacity (at 4KiB block size) to consider per OSD (for
-    solid state media)
+    solid state media).
   default: 21500
   flags:
   - runtime
@@ -1122,11 +1122,11 @@ options:
   level: advanced
   desc: Force run the OSD benchmark on OSD initialization/boot-up
   long_desc: This option specifies whether the OSD benchmark must be run during
-    the OSD boot-up sequence even if historical data about the OSD iops capacity
-    is available in the MON config store. Enable this to refresh the OSD iops
+    the OSD boot-up sequence even if historical data about the OSD IOPS capacity
+    is available in the MON config store. Enable this to refresh the OSD IOPS
     capacity if the underlying device's performance characteristics have changed
     significantly. Only considered for osd_op_queue = mclock_scheduler.
-  fmt_desc: Force run the OSD benchmark on OSD initialization/boot-up
+  fmt_desc: Force run the OSD benchmark on OSD initialization/boot-up.
   default: false
   see_also:
   - osd_mclock_max_capacity_iops_hdd
@@ -1139,7 +1139,7 @@ options:
   desc: Skip the OSD benchmark on OSD initialization/boot-up
   long_desc: This option specifies whether the OSD benchmark must be skipped during
     the OSD boot-up sequence. Only considered for osd_op_queue = mclock_scheduler.
-  fmt_desc: Skip the OSD benchmark on OSD initialization/boot-up
+  fmt_desc: Skip the OSD benchmark on OSD initialization/boot-up.
   default: false
   see_also:
   - osd_mclock_max_capacity_iops_hdd
@@ -1149,14 +1149,14 @@ options:
 - name: osd_mclock_profile
   type: str
   level: advanced
-  desc: Which mclock profile to use
-  long_desc: This option specifies the mclock profile to enable - one among the set
-    of built-in profiles or a custom profile. Only considered for osd_op_queue = mclock_scheduler
+  desc: Which mClock profile to use
+  long_desc: This option specifies the mClock profile to enable - one among the set
+    of built-in profiles or a custom profile. Only considered for osd_op_queue = mclock_scheduler.
   fmt_desc: |
-    This sets the type of mclock profile to use for providing QoS
+    This sets the type of mClock profile to use for providing QoS
     based on operations belonging to different classes (background
     recovery, scrub, snaptrim, client op, osd subop). Once a built-in
-    profile is enabled, the lower level mclock resource control
+    profile is enabled, the lower level mClock resource control
     parameters [*reservation, weight, limit*] and some Ceph
     configuration parameters are set transparently. Note that the
     above does not apply for the *custom* profile.
@@ -1174,7 +1174,7 @@ options:
   type: bool
   level: advanced
   desc: Setting this option enables the override of recovery/backfill limits
-    for the mClock scheduler.
+    for the mClock scheduler
   long_desc: This option when set enables the override of the max recovery
     active and the max backfills limits with mClock scheduler active. These
     options are not modifiable when mClock scheduler is active. Any attempt
@@ -1194,26 +1194,26 @@ options:
 - name: osd_mclock_iops_capacity_threshold_hdd
   type: float
   level: basic
-  desc: The threshold IOPs capacity (at 4KiB block size) beyond which to ignore
+  desc: The threshold IOPS capacity (at 4KiB block size) beyond which to ignore
     the OSD bench results for an OSD (for rotational media)
   long_desc: This option specifies the threshold IOPS capacity for an OSD under
     which the OSD bench results can be considered for QoS calculations. Only
-    considered for osd_op_queue = mclock_scheduler
+    considered for osd_op_queue = mclock_scheduler.
   fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
-    ignore OSD bench results for an OSD (for rotational media)
+    ignore OSD bench results for an OSD (for rotational media).
   default: 500
   flags:
   - runtime
 - name: osd_mclock_iops_capacity_threshold_ssd
   type: float
   level: basic
-  desc: The threshold IOPs capacity (at 4KiB block size) beyond which to ignore
+  desc: The threshold IOPS capacity (at 4KiB block size) beyond which to ignore
     the OSD bench results for an OSD (for solid state media)
   long_desc: This option specifies the threshold IOPS capacity for an OSD under
     which the OSD bench results can be considered for QoS calculations. Only
-    considered for osd_op_queue = mclock_scheduler
+    considered for osd_op_queue = mclock_scheduler.
   fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
-    ignore OSD bench results for an OSD (for solid state media)
+    ignore OSD bench results for an OSD (for solid state media).
   default: 80000
   flags:
   - runtime
@@ -1291,9 +1291,9 @@ options:
   type: size
   level: advanced
   default: 8_M
-  fmt_desc: the maximum total size of data chunks a recovery op can carry.
+  fmt_desc: The maximum total size of data chunks a recovery op can carry.
   with_legacy: true
-# max number of omap entries per chunk; 0 to disable limit
+# max number of OMAP entries per chunk; 0 to disable limit
 - name: osd_recovery_max_omap_entries_per_chunk
   type: uint
   level: advanced
@@ -1310,7 +1310,7 @@ options:
   type: size
   level: advanced
   default: 1000
-  fmt_desc: the overhead for serving a push op
+  fmt_desc: The overhead for serving a push op.
   with_legacy: true
 # max size of push message
 - name: osd_max_push_cost
@@ -1348,12 +1348,12 @@ options:
   type: int
   level: advanced
   default: 512
-  fmt_desc: The maximum number of objects per backfill scan.p
+  fmt_desc: The maximum number of objects per backfill scan.
   with_legacy: true
 - name: osd_extblkdev_plugins
   type: str
   level: advanced
-  desc: extended block device plugins to load, provide compression feedback at runtime
+  desc: Extended block device plugins to load, provide compression feedback at runtime
   default: vdo
   flags:
   - startup
@@ -1396,7 +1396,7 @@ options:
   flags:
   - runtime
 - name: osd_rocksdb_iterator_bounds_enabled
-  desc: Whether omap iterator bounds are applied to rocksdb iterator ReadOptions
+  desc: Whether OMAP iterator bounds are applied to RocksDB iterator ReadOptions
   type: bool
   level: dev
   default: true
