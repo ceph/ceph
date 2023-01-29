@@ -151,6 +151,13 @@
   See https://docs.ceph.com/en/latest/rados/operations/balancer/ for more information.
 * CephFS: Full support for subvolumes and subvolume groups is now available
   for snap_schedule Manager module.
+* CephFS: Two FS names can now be swapped, optionally along with their IDs,
+  using "ceph fs swap" command. The function of this API is to facilitate
+  file system swaps for disaster recovery. In particular, it avoids situations
+  where a named file system is temporarily missing which would prompt a higher
+  level storage operator (like Rook) to recreate the missing file system.
+  See https://docs.ceph.com/en/latest/cephfs/administration/#file-systems
+  docs for more information.
 
 >=18.0.0
 
