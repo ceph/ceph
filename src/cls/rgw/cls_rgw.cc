@@ -1759,6 +1759,11 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     if (ret < 0) {
       return ret;
     }
+
+    // if the OLH does not exist, error out
+    if (!olh_found) {
+      return -ENOENT;
+    }
     olh_read_attempt = true;
 
     // if we're deleting (i.e., adding a delete marker, and the OLH
@@ -1780,7 +1785,8 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       unmod.tv_nsec = 0;
     }
     if (mtime >= unmod) {
-      return 0; /* no need tof set error, we just return 0 and avoid
+      return 0;
+     /* no need to set error, we just return 0 and avoid
 		 * writing to the bi log */
     }
   }
