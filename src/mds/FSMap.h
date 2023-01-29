@@ -236,9 +236,41 @@ public:
     return false;
   }
 
+  const auto& get_mirror_info() const
+  {
+    return mirror_info;
+  }
+
+  auto& get_mirror_info()
+  {
+    return mirror_info;
+  }
+
+  const auto& get_mds_map() const
+  {
+    return mds_map;
+  }
+
+  auto& get_mds_map()
+  {
+    return mds_map;
+  }
+
+  auto get_fscid() const
+  {
+    return fscid;
+  }
+
   fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
   MDSMap mds_map;
   MirrorInfo mirror_info;
+
+private:
+  friend class FSMap;
+
+  void set_fscid(fs_cluster_id_t new_fscid) {
+    fscid = new_fscid;
+  }
 };
 WRITE_CLASS_ENCODER_FEATURES(Filesystem)
 
@@ -454,6 +486,11 @@ public:
     fn(fs);
     fs->mds_map.epoch = epoch;
   }
+
+  /* This is method is written for the option of "ceph fs swap" commmand
+   * that intiates swap of FSCIDs.
+   */
+  void swap_fscids(fs_cluster_id_t fscid1, fs_cluster_id_t fscid2);
 
   /**
    * Apply a mutation to the mds_info_t structure for a particular
