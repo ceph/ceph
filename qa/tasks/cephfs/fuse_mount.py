@@ -116,8 +116,8 @@ class FuseMount(CephFSMount):
 
         self.validate_subvol_options()
 
-        assert(self.cephfs_mntpt)
-        mount_cmd += ["--client_mountpoint=" + self.cephfs_mntpt]
+        if self.cephfs_mntpt:
+            mount_cmd += ["--client_mountpoint=" + self.cephfs_mntpt]
 
         if self.cephfs_name:
             mount_cmd += ["--client_fs=" + self.cephfs_name]
