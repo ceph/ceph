@@ -40,13 +40,16 @@ class KernelMount(CephFSMount):
 
         self.setup_netns()
 
+        if not self.cephfs_mntpt:
+            self.cephfs_mntpt = '/'
+        if not self.cephfs_name:
+            self.cephfs_name = 'cephfs'
+
         # TODO: don't call setupfs() from within mount(), since it's
         # absurd. The proper order should be: create FS first and then
         # call mount().
         if createfs:
             self.setupfs(name=self.cephfs_name)
-        if not self.cephfs_mntpt:
-            self.cephfs_mntpt = '/'
 
         stderr = StringIO()
         try:
