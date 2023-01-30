@@ -142,3 +142,8 @@ sharing a single pool (via namespaces), their snapshots *will* collide and
 deleting one will result in missing file data for others. (This may even be
 invisible, not throwing errors to the user.) If each FS gets its own
 pool things probably work, but this isn't tested and may not be true.
+
+.. Note:: To avoid snap id collision between mon-managed snapshots and file system
+   snapshots, pools with mon-managed snapshots are not allowed to be attached
+   to a file system. Also, mon-managed snapshots can't be created in pools
+   already attached to a file system either.
