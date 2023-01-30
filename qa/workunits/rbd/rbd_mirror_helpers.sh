@@ -95,10 +95,10 @@ CEPH_ID=${CEPH_ID:-mirror}
 RBD_IMAGE_FEATURES=${RBD_IMAGE_FEATURES:-layering,exclusive-lock,journaling}
 MIRROR_USER_ID_PREFIX=${MIRROR_USER_ID_PREFIX:-${CEPH_ID}.}
 MIRROR_POOL_MODE=${MIRROR_POOL_MODE:-pool}
-MIRROR_IMAGE_MODE=${MIRROR_IMAGE_MODE:-journal}
+RBD_MIRROR_MODE=${RBD_MIRROR_MODE:-journal}
+MIRROR_POOL_MODE=${MIRROR_POOL_MODE:-pool}
 if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
   MIRROR_POOL_MODE=image
-  MIRROR_IMAGE_MODE=snapshot
 fi
 
 export CEPH_ARGS="--id ${CEPH_ID}"
@@ -805,9 +805,9 @@ wait_for_replay_complete()
     local pool=$3
     local image=$4
 
-    if [ "${MIRROR_IMAGE_MODE}" = "journal" ]; then
+    if [ "${RBD_MIRROR_MODE}" = "journal" ]; then
         wait_for_journal_replay_complete ${local_cluster} ${cluster} ${pool} ${image}
-    elif [ "${MIRROR_IMAGE_MODE}" = "snapshot" ]; then
+    elif [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
         wait_for_snapshot_sync_complete ${local_cluster} ${cluster} ${pool} ${image}
     else
         return 1
@@ -942,7 +942,7 @@ create_image_and_enable_mirror()
     local cluster=$1 ; shift
     local pool=$1 ; shift
     local image=$1 ; shift
-    local mode=${1:-${MIRROR_IMAGE_MODE}}
+    local mode=${1:-${RBD_MIRROR_MODE}}
     if [ -n "$1" ]; then
         shift
     fi
@@ -1064,7 +1064,7 @@ clone_image_and_enable_mirror()
     local clone_image=$6
     shift 6
 
-    local mode=${1:-${MIRROR_IMAGE_MODE}}
+    local mode=${1:-${RBD_MIRROR_MODE}}
     if [ -n "$1" ]; then
         shift
     fi
@@ -1363,7 +1363,7 @@ enable_mirror()
     local cluster=$1
     local pool=$2
     local image=$3
-    local mode=${4:-${MIRROR_IMAGE_MODE}}
+    local mode=${4:-${RBD_MIRROR_MODE}}
 
     rbd --cluster=${cluster} mirror image enable ${pool}/${image} ${mode}
     # Display image info including the global image id for debugging purpose
