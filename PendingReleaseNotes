@@ -1,3 +1,11 @@
+>=17.2.7
+--------
+
+* `ceph mgr dump` command now displays the name of the mgr module that
+  registered a RADOS client in the `name` field added to elements of the
+  `active_clients` array. Previously, only the address of a module's RADOS
+  client was shown in the `active_clients` array.
+
 >=17.2.6
 --------
 
