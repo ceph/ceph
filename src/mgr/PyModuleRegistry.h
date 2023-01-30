@@ -219,12 +219,7 @@ public:
 
   auto get_clients() const
   {
-    std::scoped_lock l(lock);
-    std::vector<entity_addrvec_t> v;
-    for (const auto& p : clients) {
-      v.push_back(p.second);
-    }
-    return v;
+    return clients;
   }
 
   // <<< (end of ActivePyModules cheeky call-throughs)
