@@ -196,8 +196,15 @@ download_boost $boost_version 475d589d51a7f8b3ba2ba4eda022b170e562ca3b760ee922c1
                https://boostorg.jfrog.io/artifactory/main/release/$boost_version/source \
                https://download.ceph.com/qa
 download_liburing 0.7 2343e125d89600763ab277ef4699f1aa1d0d2076d60aba940de5737287bbc4b3 \
-                  https://github.com/axboe/liburing/archive \
-                  https://git.kernel.dk/cgit/liburing/snapshot
+                  https://github.com/axboe/liburing/archive
+
+# https://git.kernel.dk/cgit/liburing/snapshot/liburing-0.7.tar.gz is an alternate source
+# for liburing, but the top level directory name is different so it has a different
+# hash (05d0cf8493d573c76b11abfcf34aabc7153affebe17ff95f9ae88b0de062a59d) and will
+# fail the check.  It may be worth generalizing download_liburing and download_from
+# to handle this, but for now this file would need to be changed in order to change
+# the source location.
+
 pmdk_version=1.10
 download_pmdk $pmdk_version 08dafcf94db5ac13fac9139c92225d9aa5f3724ea74beee4e6ca19a01a2eb20c \
                https://github.com/pmem/pmdk/releases/download/$pmdk_version
