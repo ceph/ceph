@@ -113,6 +113,10 @@
 * `ceph mgr dump` command now outputs `last_failure_osd_epoch` and
   `active_clients` fields at the top level.  Previously, these fields were
   output under `always_on_modules` field.
+* `ceph mgr dump` command now displays the name of the mgr module that
+  registered a RADOS client in the `name` field added to elements of the
+  `active_clients` array. Previously, only the address of a module's RADOS
+  client was shown in the `active_clients` array.
 
 >=17.2.1
 
