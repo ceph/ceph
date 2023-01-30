@@ -1343,14 +1343,6 @@ options:
   default: 0
   services:
   - mds
-- name: mds_max_retries_on_remount_failure
-  type: uint
-  level: advanced
-  desc: number of consecutive failed remount attempts for invalidating kernel dcache
-    after which client would abort.
-  default: 5
-  services:
-  - mds
 - name: mds_dump_cache_threshold_formatter
   type: size
   level: dev
