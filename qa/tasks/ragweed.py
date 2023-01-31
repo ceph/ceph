@@ -176,23 +176,13 @@ def create_users(ctx, config, run_stages):
 @contextlib.contextmanager
 def configure(ctx, config, run_stages):
     """
-    Configure the ragweed.  This includes the running of the
-    bootstrap code and the updating of local conf files.
+    Configure the local config files.
     """
     assert isinstance(config, dict)
     log.info('Configuring ragweed...')
     testdir = teuthology.get_testdir(ctx)
     for client, properties in config['clients'].items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
-        remote.run(
-            args=[
-                'cd',
-                '{tdir}/ragweed'.format(tdir=testdir),
-                run.Raw('&&'),
-                './bootstrap',
-                ],
-            )
-
         preparing = 'prepare' in run_stages[client]
         if not preparing:
             # should have been prepared in a previous run
@@ -233,6 +223,13 @@ def configure(ctx, config, run_stages):
                     ],
                 )
 
+def get_toxvenv_dir(ctx):
+    return ctx.tox.venv_path
+
+def toxvenv_sh(ctx, remote, args, **kwargs):
+    activate = get_toxvenv_dir(ctx) + '/bin/activate'
+    return remote.sh(['source', activate, run.Raw('&&')] + args, **kwargs)
+
 @contextlib.contextmanager
 def run_tests(ctx, config, run_stages):
     """
@@ -243,27 +240,25 @@ def run_tests(ctx, config, run_stages):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    attrs = ["!fails_on_rgw"]
+    attrs = ["not fails_on_rgw"]
     for client, client_config in config.items():
         stages = ','.join(run_stages[client])
         args = [
+            'cd', '{tdir}/ragweed'.format(tdir=testdir), run.Raw('&&'),
             'RAGWEED_CONF={tdir}/archive/ragweed.{client}.conf'.format(tdir=testdir, client=client),
             'RAGWEED_STAGES={stages}'.format(stages=stages),
             'BOTO_CONFIG={tdir}/boto.cfg'.format(tdir=testdir),
-            '{tdir}/ragweed/virtualenv/bin/python'.format(tdir=testdir),
-            '-m', 'nose',
-            '-w',
-            '{tdir}/ragweed'.format(tdir=testdir),
+            'tox',
+            '--sitepackages',
+            '--',
             '-v',
-            '-a', ','.join(attrs),
+            '-m', ' and '.join(attrs),
             ]
         if client_config is not None and 'extra_args' in client_config:
             args.extend(client_config['extra_args'])
 
-        ctx.cluster.only(client).run(
-            args=args,
-            label="ragweed tests against rgw"
-            )
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+        toxvenv_sh(ctx, remote, args, label="ragweed tests against rgw")
     yield
 
 @contextlib.contextmanager
@@ -308,6 +303,7 @@ def task(ctx, config):
               extra_args: ['--exclude', 'test_100_continue']
     """
     assert hasattr(ctx, 'rgw'), 'ragweed must run after the rgw task'
+    assert hasattr(ctx, 'tox'), 'ragweed must run after the tox task'
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
         "task ragweed only supports a list or dictionary for configuration"
