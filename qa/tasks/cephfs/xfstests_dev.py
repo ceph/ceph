@@ -163,7 +163,9 @@ class XFSTestsDev(CephFSTestCase):
                                              '123456-fsgqa'], omit_sudo=False,
                                        check_status=False)
 
-    def write_local_config(self):
+    def write_local_config(self, options=None):
+        _options = '' if not options else ',' + options
+
         mon_sock = self.fs.mon_manager.get_msgrv1_mon_socks()[0]
         self.test_dev = mon_sock + ':/' + self.test_dirname
         self.scratch_dev = mon_sock + ':/' + self.scratch_dirname
@@ -174,9 +176,9 @@ class XFSTestsDev(CephFSTestCase):
             export TEST_DIR={}
             export SCRATCH_DEV={}
             export SCRATCH_MNT={}
-            export CEPHFS_MOUNT_OPTIONS="-o name=admin,secret={}"
+            export CEPHFS_MOUNT_OPTIONS="-o name=admin,secret={}{}"
             ''').format(self.test_dev, self.test_dirs_mount_path, self.scratch_dev,
-                        self.scratch_dirs_mount_path, self.get_admin_key())
+                        self.scratch_dirs_mount_path, self.get_admin_key(), _options)
 
         self.mount_a.client_remote.write_file(join(self.xfstests_repo_path, 'local.config'),
                                               xfstests_config_contents, sudo=True)
