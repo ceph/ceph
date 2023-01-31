@@ -1,0 +1,54 @@
+tasks:
+- exec:
+    mon.a:
+      - |
+        set -ex
+        # generate a new priv/pub key pair
+        ssh-keygen -q -t rsa -N '' -C '' -f new-key
+        # store key in unused config-key store location so other hosts can access it
+        /home/ubuntu/cephtest/cephadm shell --mount new-key -- ceph config-key set mgr/cephadm/testing_priv_key -i /mnt/new-key
+        /home/ubuntu/cephtest/cephadm shell --mount new-key.pub -- ceph config-key set mgr/cephadm/testing_pub_key -i /mnt/new-key.pub
+- exec:
+    all-hosts:
+      - |
+        set -ex
+        # set up the pub key on each host
+        /home/ubuntu/cephtest/cephadm shell -- ceph config-key get mgr/cephadm/testing_pub_key > new-key.pub
+        cat new-key.pub >> /root/.ssh/authorized_keys
+- exec:
+    mon.a:
+      - |
+        set -ex
+        NEW_SSH_PUB=$(cat new-key.pub)
+        NEW_SSH_PRIV=$(cat new-key)
+        # set the new keys to be used by cephadm for ssh
+        /home/ubuntu/cephtest/cephadm shell --mount new-key new-key.pub -- ceph cephadm set-priv-key -i /mnt/new-key
+        /home/ubuntu/cephtest/cephadm shell --mount new-key new-key.pub -- ceph cephadm set-pub-key -i /mnt/new-key.pub
+        # verify keys were properly set in config key store
+        CLUSTER_SSH_PRIV=$(/home/ubuntu/cephtest/cephadm shell -- ceph config-key get mgr/cephadm/ssh_identity_key)
+        CLUSTER_SSH_PUB=$(/home/ubuntu/cephtest/cephadm shell -- ceph config-key get mgr/cephadm/ssh_identity_pub)
+        if [ "$CLUSTER_SSH_PRIV" != "$NEW_SSH_PRIV" ]; then
+           printf "Cluster priv key\n\n$CLUSTER_SSH_PRIV\n\nis not equal to new ssh key\n\n$NEW_SSH_PRIV\n\n"
+           exit 1
+        else
+          echo "cluster private key successfully updated"
+        fi
+        if [ "$CLUSTER_SSH_PUB" != "$NEW_SSH_PUB" ]; then
+           printf "Cluster pub key\n\n$CLUSTER_SSH_PUB\n\nis not equal to new ssh key\n\n$NEW_SSH_PUB\n\n"
+           exit 1
+        else
+          echo "cluster pub key successfully updated"
+        fi
+        # verify all hosts are reachable with new ssh settings
+        HOSTNAMES=$(/home/ubuntu/cephtest/cephadm shell -- ceph orch host ls --format json | jq -r '.[] | .hostname')
+        for host in $HOSTNAMES; do
+          # cephadm puts most of the check-host output to stderr (even when no error)
+          # so redirecting stderr here. "Host looks OK" is printed at the end
+          # if no errors were found
+          /home/ubuntu/cephtest/cephadm shell -- ceph cephadm check-host ${host} 2> ${host}-ok.txt
+          HOST_OK=$(cat ${host}-ok.txt)
+          if ! grep -q "Host looks OK" <<< "$HOST_OK"; then
+            printf "Got bad host check after rotating ssh keys:\n\n$HOST_OK"
+            exit 1
+          fi
+        done
