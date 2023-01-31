@@ -335,7 +335,8 @@ public:
   iterator_fut lower_bound(
     op_context_t<node_key_t> c,
     node_key_t addr,
-    mapped_space_visitor_t *visitor=nullptr) const
+    mapped_space_visitor_t *visitor=nullptr,
+    depth_t min_depth = 1) const
   {
     LOG_PREFIX(FixedKVBtree::lower_bound);
     return lookup(
@@ -359,14 +360,17 @@ public:
           ret == leaf.end());
         return ret;
       },
+      min_depth,
       visitor
-    ).si_then([FNAME, c](auto &&ret) {
+    ).si_then([FNAME, c, min_depth](auto &&ret) {
       SUBTRACET(
         seastore_fixedkv_tree,
         "ret.leaf.pos {}",
         c.trans,
         ret.leaf.pos);
-      ret.assert_valid();
+      if (min_depth == 1) {
+        ret.assert_valid();
+      }
       return std::move(ret);
     });
   }
@@ -908,7 +912,7 @@ public:
       *nextent);
 
     return lower_bound(
-      c, laddr
+      c, laddr, nullptr, depth + 1
     ).si_then([=, this](auto iter) {
       assert(iter.get_depth() >= depth);
       if (depth == iter.get_depth()) {
@@ -1312,17 +1316,19 @@ private:
     op_context_t<node_key_t> c,
     LI &&lookup_internal,
     LL &&lookup_leaf,
+    depth_t min_depth,
     mapped_space_visitor_t *visitor
   ) const {
     LOG_PREFIX(FixedKVBtree::lookup);
+    assert(min_depth > 0);
     return seastar::do_with(
       iterator{root.get_depth()},
       std::forward<LI>(lookup_internal),
       std::forward<LL>(lookup_leaf),
-      [FNAME, this, visitor, c](auto &iter, auto &li, auto &ll) {
+      [FNAME, this, visitor, c, min_depth](auto &iter, auto &li, auto &ll) {
 	return lookup_root(
 	  c, iter, visitor
-	).si_then([FNAME, this, visitor, c, &iter, &li, &ll] {
+	).si_then([FNAME, this, visitor, c, &iter, &li, &ll, min_depth] {
 	  if (iter.get_depth() > 1) {
 	    auto &root_entry = *(iter.internal.rbegin());
 	    root_entry.pos = li(*(root_entry.node)).get_offset();
@@ -1336,12 +1342,15 @@ private:
 	    c,
 	    iter,
 	    root.get_depth() - 1,
-	    0,
+            min_depth - 1,
 	    li,
 	    ll,
 	    visitor
-	  ).si_then([c, visitor, &iter] {
-	    if (iter.at_boundary()) {
+	  ).si_then([c, visitor, &iter, min_depth] {
+            // It's only when the lookup is triggered by
+            // update_internal_mapping() that min_depth is
+            // NOT 1
+	    if (min_depth == 1 && iter.at_boundary()) {
 	      return iter.handle_boundary(c, visitor);
 	    } else {
 	      return lookup_iertr::now();
