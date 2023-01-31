@@ -345,7 +345,7 @@ public:
     // Not needed yet
   }
 
-  epoch_t max_oldest_stored_osdmap() final {
+  epoch_t cluster_osdmap_trim_lower_bound() final {
     // TODO
     return 0;
   }
