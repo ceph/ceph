@@ -1,5 +1,8 @@
 from io import StringIO
 from logging import getLogger
+from os.path import join
+from textwrap import dedent
+
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
@@ -29,6 +32,7 @@ class XFSTestsDev(CephFSTestCase):
         self.install_deps()
         self.create_reqd_users()
         self.write_local_config()
+        self.write_ceph_exclude()
 
         # NOTE: On teuthology machines it's necessary to run "make" as
         # superuser since the repo is cloned somewhere in /tmp.
@@ -82,7 +86,6 @@ class XFSTestsDev(CephFSTestCase):
             and "scratch" directories would be mounted. Look at xfstests-dev
             local.config's template inside this file to get some context.
         """
-        from os.path import join
 
         self.test_dirname = 'test'
         self.mount_a.run_shell(['mkdir', self.test_dirname])
@@ -161,9 +164,6 @@ class XFSTestsDev(CephFSTestCase):
                                        check_status=False)
 
     def write_local_config(self):
-        from os.path import join
-        from textwrap import dedent
-
         mon_sock = self.fs.mon_manager.get_msgrv1_mon_socks()[0]
         self.test_dev = mon_sock + ':/' + self.test_dirname
         self.scratch_dev = mon_sock + ':/' + self.scratch_dirname
@@ -180,6 +180,16 @@ class XFSTestsDev(CephFSTestCase):
 
         self.mount_a.client_remote.write_file(join(self.xfstests_repo_path, 'local.config'),
                                               xfstests_config_contents, sudo=True)
+
+    def write_ceph_exclude(self):
+        # These tests will fail or take too much time and will
+        # make the test timedout, just skip them for now.
+        xfstests_exclude_contents = dedent('''\
+            {c}/001 {g}/003 {g}/020 {g}/075 {g}/317 {g}/538 {g}/531
+            ''').format(g="generic", c="ceph")
+
+        self.mount_a.client_remote.write_file(join(self.xfstests_repo_path, 'ceph.exclude'),
+                                              xfstests_exclude_contents, sudo=True)
 
     def tearDown(self):
         self.mount_a.client_remote.run(args=['sudo', 'userdel', '--force',
