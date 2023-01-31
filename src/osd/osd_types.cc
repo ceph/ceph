@@ -5677,7 +5677,7 @@ void OSDSuperblock::encode(ceph::buffer::list &bl) const
   encode((uint32_t)0, bl);  // map<int64_t,epoch_t> pool_last_epoch_marked_full
   encode(purged_snaps_last, bl);
   encode(last_purged_snaps_scrub, bl);
-  encode(max_oldest_map, bl);
+  encode(cluster_osdmap_trim_lower_bound, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -5718,9 +5718,9 @@ void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
     purged_snaps_last = 0;
   }
   if (struct_v >= 10) {
-    decode(max_oldest_map, bl);
+    decode(cluster_osdmap_trim_lower_bound, bl);
   } else {
-    max_oldest_map = 0;
+    cluster_osdmap_trim_lower_bound = 0;
   }
   DECODE_FINISH(bl);
 }
@@ -5741,7 +5741,8 @@ void OSDSuperblock::dump(Formatter *f) const
   f->dump_int("last_epoch_mounted", mounted);
   f->dump_unsigned("purged_snaps_last", purged_snaps_last);
   f->dump_stream("last_purged_snaps_scrub") << last_purged_snaps_scrub;
-  f->dump_int("max_oldest_map", max_oldest_map);
+  f->dump_int("cluster_osdmap_trim_lower_bound",
+              cluster_osdmap_trim_lower_bound);
 }
 
 void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)

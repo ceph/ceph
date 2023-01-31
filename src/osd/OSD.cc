@@ -1336,7 +1336,7 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
 {
   MOSDMap *m = new MOSDMap(monc->get_fsid(),
 			   osdmap->get_encoding_features());
-  m->oldest_map = sblock.max_oldest_map;
+  m->oldest_map = sblock.cluster_osdmap_trim_lower_bound;
   m->newest_map = sblock.newest_map;
 
   int max = cct->_conf->osd_map_message_max;
@@ -1346,7 +1346,8 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
     // we don't have the next map the target wants, so start with a
     // full map.
     bufferlist bl;
-    dout(10) << __func__ << " oldest map " << sblock.max_oldest_map
+    dout(10) << __func__ << " cluster osdmap lower bound "
+             << sblock.cluster_osdmap_trim_lower_bound
              << " > since " << since << ", starting with full map"
              << dendl;
     since = m->oldest_map;
@@ -1419,7 +1420,7 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
       // just send latest full map
       MOSDMap *m = new MOSDMap(monc->get_fsid(),
 			       osdmap->get_encoding_features());
-      m->oldest_map = sblock.max_oldest_map;
+      m->oldest_map = sblock.cluster_osdmap_trim_lower_bound;
       m->newest_map = sblock.newest_map;
       get_map_bl(to, m->maps[to]);
       send_map(m, con);
@@ -3685,8 +3686,8 @@ int OSD::init()
     // do anything else
     dout(5) << "Upgrading superblock adding: " << diff << dendl;
 
-    if (!superblock.max_oldest_map) {
-      superblock.max_oldest_map = superblock.oldest_map;
+    if (!superblock.cluster_osdmap_trim_lower_bound) {
+      superblock.cluster_osdmap_trim_lower_bound = superblock.oldest_map;
     }
 
     ObjectStore::Transaction t;
@@ -8076,11 +8077,12 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (first <= superblock.newest_map)
     logger->inc(l_osd_mape_dup, superblock.newest_map - first + 1);
 
-  if (superblock.max_oldest_map < m->oldest_map) {
-    superblock.max_oldest_map = m->oldest_map;
-    dout(10) << " superblock max_oldest_map new epoch is: "
-             << superblock.max_oldest_map << dendl;
-    ceph_assert(superblock.max_oldest_map >= superblock.oldest_map);
+  if (superblock.cluster_osdmap_trim_lower_bound < m->oldest_map) {
+    superblock.cluster_osdmap_trim_lower_bound = m->oldest_map;
+    dout(10) << " superblock cluster_osdmap_trim_lower_bound new epoch is: "
+             << superblock.cluster_osdmap_trim_lower_bound << dendl;
+    ceph_assert(
+      superblock.cluster_osdmap_trim_lower_bound >= superblock.oldest_map);
   }
 
   // make sure there is something new, here, before we bother flushing
