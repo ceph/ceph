@@ -946,6 +946,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 # connection failed reset user
                 self.set_store(what, old)
                 self.ssh._reconfig_ssh()
+                # recheck the host with the old ssh settings
+                # to make sure it is marked back online (or kept
+                # offline if it's actually unreachable even with
+                # the old settings)
+                r = CephadmServe(self)._check_host(host)
                 raise OrchestratorError('ssh connection %s@%s failed' % (self.ssh_user, host))
         self.log.info(f'Set ssh {what}')
 
