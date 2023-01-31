@@ -428,14 +428,23 @@ You can make use of an existing key by directly importing it with:
 
 .. prompt:: bash #
 
-   ceph config-key set mgr/cephadm/ssh_identity_key -i <key>
-   ceph config-key set mgr/cephadm/ssh_identity_pub -i <pub>
+   ceph cephadm set-priv-key -i <key>
+   ceph cephadm set-pub-key -i <pub>
 
-You will then need to restart the mgr daemon to reload the configuration with:
+.. warning::
 
-.. prompt:: bash #
+  Any imported key must have had it's public key added to  /<ssh-user>/.ssh/authorized_keys
+  in order for cephadm to make proper use of it (where ssh-user corresponds to the output
+  of ``ceph cephadm get-user``, see the next section for how to modify this user). You can
+  check that the key is correctly set up for cephadm to connect to the cluster hosts
+  by running ``cephadm shell --no-hosts --mount <key> -- ssh -i /mnt/<key> <host>``
+  where "host" is one of the hosts in the cluster. The set-priv-key and set-pub-key command will
+  attempt a connection to one of the hosts in the cluster and refuse to set the provided
+  key if the connection fails. Setting keys can be forced by using ``ceph config-key set
+  mgr/cephadm/ssh_identity_key -i <key>`` and ``ceph config-key set mgr/cephadm/ssh_identity_pub -i <pub>``
+  followed by ``ceph mgr fail`` to make cephadm use the new keys, but this is not recommended
+  and it is possible cephadm will no longer be able to connect to any hosts in the cluster after doing so.
 
-   ceph mgr fail
 
 .. _cephadm-ssh-user:
 
