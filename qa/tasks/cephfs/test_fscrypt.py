@@ -12,7 +12,7 @@ class TestFscrypt(XFSTestsDev):
     def setup_xfsprogs_devs(self):
         self.install_xfsprogs = True
 
-    def test_fscrypt(self):
+    def test_fscrypt_encrypt(self):
         from tasks.cephfs.fuse_mount import FuseMount
         from tasks.cephfs.kernel_mount import KernelMount
 
