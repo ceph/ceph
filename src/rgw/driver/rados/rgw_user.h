@@ -298,6 +298,10 @@ struct RGWUserAdminOpState {
 
   void set_user_info(RGWUserInfo& user_info);
 
+  rgw::sal::Attrs get_attrs();
+
+  void set_attrs(rgw::sal::Attrs& attrs);
+
   void set_user_version_tracker(RGWObjVersionTracker& objv_tracker);
 
   void set_max_buckets(int32_t mb) {

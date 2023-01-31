@@ -71,21 +71,21 @@ public:
   virtual int get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
                              const std::string& email, RGWUserInfo *info,
                              RGWObjVersionTracker *objv_tracker,
-                             real_time *pmtime,
+                             real_time *pmtime, std::map<std::string, bufferlist> *pattrs,
                              optional_yield y,
                              const DoutPrefixProvider *dpp) = 0;
   virtual int get_user_info_by_swift(RGWSI_MetaBackend::Context *ctx,
                              const std::string& swift_name,
                              RGWUserInfo *info,        /* out */
                              RGWObjVersionTracker * const objv_tracker,
-                             real_time * const pmtime,
+                             real_time * const pmtime, std::map<std::string, bufferlist> *pattrs,
                              optional_yield y,
                              const DoutPrefixProvider *dpp) = 0;
   virtual int get_user_info_by_access_key(RGWSI_MetaBackend::Context *ctx,
                                   const std::string& access_key,
                                   RGWUserInfo *info,
                                   RGWObjVersionTracker* objv_tracker,
-                                  real_time *pmtime,
+                                  real_time *pmtime, std::map<std::string, bufferlist> *pattrs,
                                   optional_yield y,
                                   const DoutPrefixProvider *dpp) = 0;
 

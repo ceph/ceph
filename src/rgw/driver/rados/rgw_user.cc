@@ -290,6 +290,15 @@ void RGWUserAdminOpState::set_user_info(RGWUserInfo& user_info)
   user->get_info() = user_info;
 }
 
+void RGWUserAdminOpState::set_attrs(rgw::sal::Attrs& attrs)
+{
+  user->get_attrs() = attrs;
+}
+
+rgw::sal::Attrs RGWUserAdminOpState::get_attrs() {
+  return user->get_attrs();
+}
+
 void RGWUserAdminOpState::set_user_version_tracker(RGWObjVersionTracker& objv_tracker)
 {
   user->get_version_tracker() = objv_tracker;
@@ -1386,6 +1395,7 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   
   op_state.set_existing_user(found);
   if (found) {
+    op_state.set_attrs(user->get_attrs());
     op_state.set_user_info(user->get_info());
     op_state.set_populated();
     op_state.objv = user->get_version_tracker();
@@ -2640,6 +2650,7 @@ int RGWUserCtl::get_info_by_email(const DoutPrefixProvider *dpp,
                                             info,
                                             params.objv_tracker,
                                             params.mtime,
+                                            params.attrs,
                                             y,
                                             dpp);
   });
@@ -2656,6 +2667,7 @@ int RGWUserCtl::get_info_by_swift(const DoutPrefixProvider *dpp,
                                             info,
                                             params.objv_tracker,
                                             params.mtime,
+                                            params.attrs,
                                             y,
                                             dpp);
   });
@@ -2672,6 +2684,7 @@ int RGWUserCtl::get_info_by_access_key(const DoutPrefixProvider *dpp,
                                                  info,
                                                  params.objv_tracker,
                                                  params.mtime,
+                                                 params.attrs,
                                                  y,
                                                  dpp);
   });
