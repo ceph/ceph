@@ -936,9 +936,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _validate_and_set_ssh_val(self, what: str, new: Optional[str], old: Optional[str]) -> None:
         self.set_store(what, new)
         self.ssh._reconfig_ssh()
-        if self.cache.get_hosts():
+        unreachable_hosts = [uh.hostname for uh in self.cache.get_unreachable_hosts()]
+        reachable_hosts = [h for h in self.cache.get_hosts() if h not in unreachable_hosts]
+        if reachable_hosts:
             # Can't check anything without hosts
-            host = self.cache.get_hosts()[0]
+            host = reachable_hosts[0]
             r = CephadmServe(self)._check_host(host)
             if r is not None:
                 # connection failed reset user
