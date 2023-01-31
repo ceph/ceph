@@ -42,6 +42,9 @@ class MotrStore;
 #define RGW_MOTR_USERS_IDX_NAME       "motr.rgw.users"
 #define RGW_MOTR_BUCKET_INST_IDX_NAME "motr.rgw.bucket.instances"
 #define RGW_MOTR_BUCKET_HD_IDX_NAME   "motr.rgw.bucket.headers"
+#define RGW_IAM_MOTR_ACCESS_KEY       "motr.rgw.accesskeys"
+#define RGW_IAM_MOTR_EMAIL_KEY        "motr.rgw.emails"
+
 //#define RGW_MOTR_BUCKET_ACL_IDX_NAME  "motr.rgw.bucket.acls"
 
 // A simplified metadata cache implementation.
@@ -135,6 +138,57 @@ struct MotrUserInfo {
 };
 WRITE_CLASS_ENCODER(MotrUserInfo);
 
+struct MotrEmailInfo {
+  std::string user_id;
+  std::string email_id;
+
+  MotrEmailInfo() {}
+  MotrEmailInfo(std::string _user_id, std::string _email_id )
+    : user_id(std::move(_user_id)), email_id(std::move(_email_id)) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(2, 2, bl);
+    encode(user_id, bl);
+    encode(email_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+     DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
+     decode(user_id, bl);
+     decode(email_id, bl);
+      DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(MotrEmailInfo);
+
+struct MotrAccessKey {
+  std::string id; // AccessKey
+  std::string key; // SecretKey
+  std::string user_id; // UserID
+  
+  MotrAccessKey() {}
+  MotrAccessKey(std::string _id, std::string _key, std::string _user_id)
+    : id(std::move(_id)), key(std::move(_key)), user_id(std::move(_user_id)) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(2, 2, bl);
+    encode(id, bl);
+    encode(key, bl);
+    encode(user_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+     DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
+     decode(id, bl);
+     decode(key, bl);
+     decode(user_id, bl);
+     DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(MotrAccessKey);
+
 class MotrNotification : public StoreNotification {
   public:
     MotrNotification(Object* _obj, Object* _src_obj, rgw::notify::EventType _type) :
@@ -153,6 +207,7 @@ class MotrUser : public StoreUser {
     struct m0_idx      idx;
 
   public:
+    std::set<std::string> access_key_tracker;
     MotrUser(MotrStore *_st, const rgw_user& _u) : StoreUser(_u), store(_st) { }
     MotrUser(MotrStore *_st, const RGWUserInfo& _i) : StoreUser(_i), store(_st) { }
     MotrUser(MotrStore *_st) : store(_st) { }
@@ -199,6 +254,8 @@ class MotrUser : public StoreUser {
     virtual int verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider* dpp, optional_yield y) override;
 
     int create_user_info_idx();
+    int load_user_from_idx(const DoutPrefixProvider *dpp, MotrStore *store, RGWUserInfo& info, std::map<std::string, 
+                              bufferlist> *attrs, RGWObjVersionTracker *objv_tr);
 
     friend class MotrBucket;
 };
@@ -444,6 +501,9 @@ class MotrZone : public StoreZone {
     }
     MotrZone(MotrStore* _store, MotrZoneGroup _zg) : store(_store), zonegroup(_zg) {
       realm = new RGWRealm();
+      // TODO: fetch zonegroup params (eg. id) from provisioner config.
+      zonegroup.set_id("0956b174-fe14-4f97-8b50-bb7ec5e1cf62");
+      zonegroup.api_name = "default";
       zone_public_config = new RGWZone();
       zone_params = new RGWZoneParams();
       current_period = new RGWPeriod();
@@ -720,6 +780,7 @@ class MotrAtomicWriter : public StoreWriter {
   uint64_t olh_epoch;
   const std::string& unique_tag;
   MotrObject obj;
+  MotrObject old_obj;
   uint64_t total_data_size; // for total data being uploaded
   bufferlist acc_data;  // accumulated data
   uint64_t   acc_off; // accumulated data offset
@@ -1054,11 +1115,87 @@ class MotrStore : public StoreDriver {
     int do_idx_op_by_name(std::string idx_name, enum m0_idx_opcode opcode,
                           std::string key_str, bufferlist &bl, bool update=true);
     int check_n_create_global_indices();
+    int store_access_key(const DoutPrefixProvider *dpp, optional_yield y, MotrAccessKey access_key);
+    int delete_access_key(const DoutPrefixProvider *dpp, optional_yield y, std::string access_key);
+    int store_email_info(const DoutPrefixProvider *dpp, optional_yield y, MotrEmailInfo& email_info);
 
     int init_metadata_cache(const DoutPrefixProvider *dpp, CephContext *cct);
     MotrMetaCache* get_obj_meta_cache() {return obj_meta_cache;}
     MotrMetaCache* get_user_cache() {return user_cache;}
     MotrMetaCache* get_bucket_inst_cache() {return bucket_inst_cache;}
 };
+
+struct obj_time_weight {
+  real_time mtime;
+  uint32_t zone_short_id;
+  uint64_t pg_ver;
+  bool high_precision;
+
+  obj_time_weight() : zone_short_id(0), pg_ver(0), high_precision(false) {}
+
+  bool compare_low_precision(const obj_time_weight& rhs) {
+    struct timespec l = ceph::real_clock::to_timespec(mtime);
+    struct timespec r = ceph::real_clock::to_timespec(rhs.mtime);
+    l.tv_nsec = 0;
+    r.tv_nsec = 0;
+    if (l > r) {
+      return false;
+    }
+    if (l < r) {
+      return true;
+    }
+    if (!zone_short_id || !rhs.zone_short_id) {
+      /* don't compare zone ids, if one wasn't provided */
+      return false;
+    }
+    if (zone_short_id != rhs.zone_short_id) {
+      return (zone_short_id < rhs.zone_short_id);
+    }
+    return (pg_ver < rhs.pg_ver);
+
+  }
+
+  bool operator<(const obj_time_weight& rhs) {
+    if (!high_precision || !rhs.high_precision) {
+      return compare_low_precision(rhs);
+    }
+    if (mtime > rhs.mtime) {
+      return false;
+    }
+    if (mtime < rhs.mtime) {
+      return true;
+    }
+    if (!zone_short_id || !rhs.zone_short_id) {
+      /* don't compare zone ids, if one wasn't provided */
+      return false;
+    }
+    if (zone_short_id != rhs.zone_short_id) {
+      return (zone_short_id < rhs.zone_short_id);
+    }
+    return (pg_ver < rhs.pg_ver);
+  }
+
+  void init(const real_time& _mtime, uint32_t _short_id, uint64_t _pg_ver) {
+    mtime = _mtime;
+    zone_short_id = _short_id;
+    pg_ver = _pg_ver;
+  }
+
+  void init(RGWObjState *state) {
+    mtime = state->mtime;
+    zone_short_id = state->zone_short_id;
+    pg_ver = state->pg_ver;
+  }
+};
+
+inline std::ostream& operator<<(std::ostream& out, const obj_time_weight &o) {
+  out << o.mtime;
+
+  if (o.zone_short_id != 0 || o.pg_ver != 0) {
+    out << "[zid=" << o.zone_short_id << ", pgv=" << o.pg_ver << "]";
+  }
+
+  return out;
+}
 
 } // namespace rgw::sal
