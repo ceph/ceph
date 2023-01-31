@@ -48,8 +48,8 @@ curl-based installation
 -----------------------
 
 * Use ``curl`` to fetch the most recent version of the
-  standalone script. 
-  
+  standalone script.
+
   .. prompt:: bash #
      :substitutions:
 
@@ -150,7 +150,7 @@ Running the bootstrap command
 
 Run the ``ceph bootstrap`` command:
 
-.. prompt:: bash # 
+.. prompt:: bash #
 
    cephadm bootstrap --mon-ip *<mon-ip>*
 
@@ -169,11 +169,11 @@ This command will:
   with this label will (also) get a copy of ``/etc/ceph/ceph.conf`` and
   ``/etc/ceph/ceph.client.admin.keyring``.
 
-Further information about cephadm bootstrap 
+Further information about cephadm bootstrap
 -------------------------------------------
 
 The default bootstrap behavior will work for most users. But if you'd like
-immediately to know more about ``cephadm bootstrap``, read the list below.  
+immediately to know more about ``cephadm bootstrap``, read the list below.
 
 Also, you can run ``cephadm bootstrap -h`` to see all of ``cephadm``'s
 available options.
@@ -212,20 +212,20 @@ available options.
       EOF
       $ ./cephadm bootstrap --config initial-ceph.conf ...
 
-* The ``--ssh-user *<user>*`` option makes it possible to choose which SSH 
+* The ``--ssh-user *<user>*`` option makes it possible to choose which SSH
   user cephadm will use to connect to hosts. The associated SSH key will be
-  added to ``/home/*<user>*/.ssh/authorized_keys``. The user that you 
+  added to ``/home/*<user>*/.ssh/authorized_keys``. The user that you
   designate with this option must have passwordless sudo access.
 
 * If you are using a container on an authenticated registry that requires
   login, you may add the argument:
 
-  * ``--registry-json <path to json file>`` 
+  * ``--registry-json <path to json file>``
 
   example contents of JSON file with login info::
 
       {"url":"REGISTRY_URL", "username":"REGISTRY_USERNAME", "password":"REGISTRY_PASSWORD"}
-  
+
   Cephadm will attempt to log in to this registry so it can pull your container
   and then store the login info in its config database. Other hosts added to
   the cluster will then also be able to make use of the authenticated registry.
@@ -274,7 +274,7 @@ command.  There are several ways to do this:
 Confirm that the ``ceph`` command is accessible with:
 
 .. prompt:: bash #
- 
+
   ceph -v
 
 
@@ -294,7 +294,7 @@ By default, a ``ceph.conf`` file and a copy of the ``client.admin`` keyring
 are maintained in ``/etc/ceph`` on all hosts with the ``_admin`` label, which is initially
 applied only to the bootstrap host. We usually recommend that one or more other hosts be
 given the ``_admin`` label so that the Ceph CLI (e.g., via ``cephadm shell``) is easily
-accessible on multiple hosts.  To add the ``_admin`` label to additional host(s),
+accessible on multiple hosts. To add the ``_admin`` label to additional host(s):
 
   .. prompt:: bash #
 
@@ -312,8 +312,8 @@ Please follow :ref:`deploy_additional_monitors` to deploy additional MONs.
 Adding Storage
 ==============
 
-To add storage to the cluster, either tell Ceph to consume any
-available and unused device:
+To add storage to the cluster, you can tell Ceph to consume any
+available and unused device(s):
 
   .. prompt:: bash #
 
@@ -408,7 +408,7 @@ have access to all hosts that you plan to add to the cluster.
              insecure registry.
 
 #. Push your container image to your local registry. Here are some acceptable
-   kinds of container images: 
+   kinds of container images:
 
    * Ceph container image. See :ref:`containers`.
    * Prometheus container image
