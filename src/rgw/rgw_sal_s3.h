@@ -207,6 +207,8 @@ class S3FilterObject : public FilterObject {
     //                           optional_yield y, const DoutPrefixProvider* dpp) override;
     //virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
     //                           optional_yield y) override;
+    virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state,
+			    optional_yield y, bool follow_olh = true) override;
 
     virtual std::unique_ptr<ReadOp> get_read_op() override;
     virtual std::unique_ptr<DeleteOp> get_delete_op() override;
@@ -214,7 +216,8 @@ class S3FilterObject : public FilterObject {
 
 class S3FilterWriter : public FilterWriter {
 private:
-  S3FilterStore* filter; 
+  S3FilterStore* filter;
+  S3FilterUser *user; 
   const DoutPrefixProvider* save_dpp;
   bool atomic;
 
@@ -222,14 +225,30 @@ public:
   S3FilterWriter(std::unique_ptr<Writer> _next, S3FilterStore* _filter, std::unique_ptr<Object> _head_obj, 
 					  const DoutPrefixProvider* _dpp) : FilterWriter(std::move(_next), std::move(_head_obj)),
 					  filter(_filter),
-					  save_dpp(_dpp), atomic(false) {}
+					  save_dpp(_dpp), atomic(false) {
+
+						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : obejct is : " << _head_obj->get_name() << dendl;
+						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : bucket is : " << _head_obj->get_bucket()->get_name() << dendl;
+						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : owner is : " << _head_obj->get_bucket()->get_owner()->get_tenant() << dendl;
+						this->user = (rgw::sal::S3FilterUser*)this->head_obj->get_bucket()->get_owner();
+						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : user is : " << this->user->get_tenant() << dendl;
+					  }
+
   S3FilterWriter(std::unique_ptr<Writer> _next, S3FilterStore* _filter, std::unique_ptr<Object> _head_obj, 
 					  const DoutPrefixProvider* _dpp, bool _atomic) : FilterWriter(std::move(_next), std::move(_head_obj)),
 					  filter(_filter),
-					  save_dpp(_dpp), atomic(_atomic) {}
+					  save_dpp(_dpp), atomic(_atomic) {
+						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : obejct is : " << _head_obj->get_name() << dendl;
+						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : bucket is : " << _head_obj->get_bucket()->get_name() << dendl;
+						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : owner is : " << _head_obj->get_bucket()->get_owner()->get_tenant() << dendl;
+
+						this->user = (rgw::sal::S3FilterUser*) this->head_obj->get_bucket()->get_owner();
+						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : user is : " << this->user->get_tenant() << dendl;
+						}
 
   virtual ~S3FilterWriter() = default;
 
+  virtual int prepare(optional_yield y);
   virtual int process(bufferlist&& data, uint64_t offset) override;
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,

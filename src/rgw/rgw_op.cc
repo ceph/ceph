@@ -4022,6 +4022,10 @@ void RGWPutObj::execute(optional_yield y)
         version_id = s->object->get_instance();
       }
     }
+    ldpp_dout(this, 20) << "AMIN" << __func__ << " : object name is: " << s->object->get_name() << dendl;
+    ldpp_dout(this, 20) << "AMIN" << __func__ << " : bucket_owner is: " << s->bucket_owner.get_id() << dendl;
+    ldpp_dout(this, 20) << "AMIN" << __func__ << " : req id is: " << s->req_id << dendl;
+    ldpp_dout(this, 20) << "AMIN" << __func__ << " : placement name is: " << pdest_placement->name << dendl;
     processor = store->get_atomic_writer(this, s->yield, s->object->clone(),
 					 s->bucket_owner.get_id(),
 					 pdest_placement, olh_epoch, s->req_id);
