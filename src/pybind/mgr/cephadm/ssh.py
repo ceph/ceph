@@ -307,11 +307,7 @@ class SSHManager:
             self.mgr.tkey.write(ssh_key.encode('utf-8'))
             os.fchmod(self.mgr.tkey.fileno(), 0o600)
             self.mgr.tkey.flush()  # make visible to other processes
-            tpub = open(self.mgr.tkey.name + '.pub', 'w')
-            os.fchmod(tpub.fileno(), 0o600)
-            tpub.write(ssh_pub)
-            tpub.flush()  # make visible to other processes
-            temp_files += [self.mgr.tkey, tpub]
+            temp_files += [self.mgr.tkey]
             ssh_options += ['-i', self.mgr.tkey.name]
 
         self.mgr._temp_files = temp_files
