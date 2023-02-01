@@ -48,6 +48,7 @@ enum {
 #include "common/Thread.h"
 
 #include "LogSegment.h"
+#include "MDSMap.h"
 
 #include <list>
 #include <map>
@@ -61,10 +62,7 @@ class ESubtreeMap;
 
 class MDLog {
 public:
-  explicit MDLog(MDSRank *m) : mds(m),
-                      replay_thread(this),
-                      recovery_thread(this),
-                      submit_thread(this) {}
+  MDLog(MDSRank *m);
   ~MDLog();
 
   const std::set<LogSegment*> &get_expiring_segments() const
@@ -116,6 +114,13 @@ public:
   size_t get_num_events() const { return num_events; }
   size_t get_num_segments() const { return segments.size(); }
 
+  auto get_debug_subtrees() const {
+    return events_per_segment;
+  }
+  auto get_max_segments() const {
+    return max_segments;
+  }
+
   uint64_t get_read_pos() const;
   uint64_t get_write_pos() const;
   uint64_t get_safe_pos() const;
@@ -165,6 +170,8 @@ public:
   void replay(MDSContext *onfinish);
 
   void standby_trim_segments();
+
+  void handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map);
 
   void dump_replay_status(Formatter *f) const;
 
@@ -305,5 +312,11 @@ private:
 
   // -- events --
   LogEvent *cur_event = nullptr;
+
+  bool debug_subtrees;
+  uint64_t events_per_segment;
+  int64_t max_events;
+  uint64_t max_segments;
+  bool pause;
 };
 #endif

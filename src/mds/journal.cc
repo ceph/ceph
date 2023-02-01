@@ -2827,7 +2827,7 @@ void ESubtreeMap::replay(MDSRank *mds)
       dout(0) << "journal subtrees: " << subtrees << dendl;
       dout(0) << "journal ambig_subtrees: " << ambiguous_subtrees << dendl;
       mds->mdcache->show_subtrees();
-      ceph_assert(!g_conf()->mds_debug_subtrees || errors == 0);
+      ceph_assert(!mds->mdlog->get_debug_subtrees() || errors == 0);
     }
     return;
   }

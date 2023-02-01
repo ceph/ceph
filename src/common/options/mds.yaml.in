@@ -497,7 +497,6 @@ options:
   default: false
   services:
   - mds
-  with_legacy: true
 - name: mds_log_skip_corrupt_events
   type: bool
   level: dev
@@ -516,16 +515,14 @@ options:
   default: -1
   services:
   - mds
-  with_legacy: true
 - name: mds_log_events_per_segment
-  type: int
+  type: uint
   level: advanced
   desc: maximum number of events in an MDS journal segment
   default: 1024
   min: 1
   services:
   - mds
-  with_legacy: true
 # segment size for mds log, default to default file_layout_t
 - name: mds_log_segment_size
   type: size
@@ -545,7 +542,6 @@ options:
   min: 8
   services:
   - mds
-  with_legacy: true
 - name: mds_log_warn_factor
   type: float
   level: advanced
