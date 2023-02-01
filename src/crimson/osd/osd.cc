@@ -616,7 +616,9 @@ void OSD::print(std::ostream& out) const
 {
   out << "{osd." << superblock.whoami << " "
     << superblock.osd_fsid << " [" << superblock.oldest_map
-    << "," << superblock.newest_map << "] " << pg_map.get_pgs().size()
+    << "," << superblock.newest_map << "] "
+    << "tlb:" << superblock.cluster_osdmap_trim_lower_bound
+    << " " << pg_map.get_pgs().size()
     << " pgs}";
 }
 
