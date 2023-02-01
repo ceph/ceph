@@ -19,6 +19,7 @@
 
 enum {
   l_mdl_first = 5000,
+  l_mdl_evlrg,
   l_mdl_evadd,
   l_mdl_evex,
   l_mdl_evtrm,
@@ -287,6 +288,7 @@ private:
   void write_head(MDSContext *onfinish);
 
   bool debug_subtrees;
+  std::atomic_uint64_t event_large_threshold; // accessed by submit thread
   uint64_t events_per_segment;
   uint64_t major_segment_event_ratio;
   int64_t max_events;

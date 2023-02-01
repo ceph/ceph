@@ -497,6 +497,13 @@ options:
   default: false
   services:
   - mds
+- name: mds_log_event_large_threshold
+  type: uint
+  level: advanced
+  default: 512_K
+  min: 1_K
+  services:
+  - mds
 - name: mds_log_skip_corrupt_events
   type: bool
   level: dev
