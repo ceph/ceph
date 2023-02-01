@@ -18,6 +18,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/cache/lru.h"
 
 namespace crimson::os::seastore::backref {
 class BtreeBackrefManager;
@@ -1032,83 +1033,7 @@ private:
    *
    * holds references to recently used extents
    */
-  class LRU {
-    // max size (bytes)
-    const size_t capacity = 0;
-
-    // current size (bytes)
-    size_t contents = 0;
-
-    CachedExtent::list lru;
-
-    void trim_to_capacity() {
-      while (contents > capacity) {
-	assert(lru.size() > 0);
-	remove_from_lru(lru.front());
-      }
-    }
-
-    void add_to_lru(CachedExtent &extent) {
-      assert(extent.is_clean() && !extent.is_placeholder());
-      
-      if (!extent.primary_ref_list_hook.is_linked()) {
-	contents += extent.get_length();
-	intrusive_ptr_add_ref(&extent);
-	lru.push_back(extent);
-      }
-      trim_to_capacity();
-    }
-
-  public:
-    LRU(size_t capacity) : capacity(capacity) {}
-
-    size_t get_capacity() const {
-      return capacity;
-    }
-
-    size_t get_current_contents_bytes() const {
-      return contents;
-    }
-
-    size_t get_current_contents_extents() const {
-      return lru.size();
-    }
-
-    void remove_from_lru(CachedExtent &extent) {
-      assert(extent.is_clean() && !extent.is_placeholder());
-
-      if (extent.primary_ref_list_hook.is_linked()) {
-	lru.erase(lru.s_iterator_to(extent));
-	assert(contents >= extent.get_length());
-	contents -= extent.get_length();
-	intrusive_ptr_release(&extent);
-      }
-    }
-
-    void move_to_top(CachedExtent &extent) {
-      assert(extent.is_clean() && !extent.is_placeholder());
-
-      if (extent.primary_ref_list_hook.is_linked()) {
-	lru.erase(lru.s_iterator_to(extent));
-	intrusive_ptr_release(&extent);
-	assert(contents >= extent.get_length());
-	contents -= extent.get_length();
-      }
-      add_to_lru(extent);
-    }
-
-    void clear() {
-      LOG_PREFIX(Cache::LRU::clear);
-      for (auto iter = lru.begin(); iter != lru.end();) {
-	SUBDEBUG(seastore_cache, "clearing {}", *iter);
-	remove_from_lru(*(iter++));
-      }
-    }
-
-    ~LRU() {
-      clear();
-    }
-  } lru;
+  std::unique_ptr<CachePolicy> extents_in_memory;
 
   struct query_counters_t {
     uint64_t access = 0;
@@ -1268,7 +1193,7 @@ private:
     if (p_src && is_background_transaction(*p_src))
       return;
     if (ext.is_clean() && !ext.is_placeholder()) {
-      lru.move_to_top(ext);
+      extents_in_memory->move_to_top(ext);
     }
   }
 
