@@ -339,12 +339,6 @@ namespace rgw::sal {
 
   }
 
-  /* Make sure to call get_bucket_info() if you need it first */
-  bool DBBucket::is_owner(User* user)
-  {
-    return (info.owner.compare(user->get_id()) == 0);
-  }
-
   int DBBucket::check_empty(const DoutPrefixProvider *dpp, optional_yield y)
   {
     /* XXX: Check if bucket contains any objects */

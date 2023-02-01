@@ -220,6 +220,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     }
   }
 #endif
+  ldpp_dout(dpp, 20) << "Filter name: " << cfg.filter_name << dendl;
 
   if (cfg.filter_name.compare("base") == 0) {
     rgw::sal::Driver* next = driver;
@@ -246,6 +247,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 #ifdef WITH_RADOSGW_POSIX
   else if (cfg.filter_name.compare("posix") == 0) {
     rgw::sal::Driver* next = driver;
+    ldpp_dout(dpp, 20) << "Creating POSIX driver" << dendl;
     driver = newPOSIXDriver(next);
 
     if (driver->initialize(cct, dpp) < 0) {
@@ -380,6 +382,8 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
   const auto& config_filter = g_conf().get_val<std::string>("rgw_filter");
   if (config_filter == "base") {
     cfg.filter_name = "base";
+  } else if (config_filter == "posix") {
+    cfg.filter_name = "posix";
   }
 #ifdef WITH_RADOSGW_D4N
   else if (config_filter == "d4n") {

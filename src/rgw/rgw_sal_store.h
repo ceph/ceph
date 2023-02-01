@@ -128,6 +128,8 @@ class StoreBucket : public Bucket {
       ent.size = _size;
     }
     virtual User* get_owner(void) override { return owner; };
+    /* Make sure to call get_bucket_info() if you need it first */
+    virtual bool is_owner(User* user) override { return (info.owner.compare(user->get_id()) == 0); }
     virtual ACLOwner get_acl_owner(void) override { return ACLOwner(info.owner); };
     virtual bool empty() const override { return info.bucket.name.empty(); }
     virtual const std::string& get_name() const override { return info.bucket.name; }
@@ -176,6 +178,7 @@ class StoreBucket : public Bucket {
         optional_yield y, const DoutPrefixProvider *dpp) override {return 0;}
 
     friend class BucketList;
+
   protected:
     virtual void set_ent(RGWBucketEnt& _ent) { ent = _ent; info.bucket = ent.bucket; info.placement_rule = ent.placement_rule; }
 };

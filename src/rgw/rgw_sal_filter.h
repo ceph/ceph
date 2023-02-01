@@ -16,6 +16,7 @@
 #pragma once
 
 #include "rgw_sal.h"
+#include "rgw_sal_store.h"
 #include "rgw_oidc_provider.h"
 #include "rgw_role.h"
 
