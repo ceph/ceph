@@ -280,6 +280,10 @@ struct ScrubPgIF {
 
   virtual void set_op_parameters(const requested_scrub_t&) = 0;
 
+  /// stop any active scrubbing (on interval end) and unregister from
+  /// the OSD scrub queue
+  virtual void on_new_interval() = 0;
+
   virtual void scrub_clear_state() = 0;
 
   virtual void handle_query_state(ceph::Formatter* f) = 0;
@@ -380,13 +384,10 @@ struct ScrubPgIF {
   virtual bool reserve_local() = 0;
 
   /**
-   * Register/de-register with the OSD scrub queue
-   *
-   * Following our status as Primary or replica.
+   * if activated as a Primary - register the scrub job with the OSD
+   * scrub queue
    */
-  virtual void on_primary_change(
-    std::string_view caller,
-    const requested_scrub_t& request_flags) = 0;
+  virtual void on_pg_activate(const requested_scrub_t& request_flags) = 0;
 
   /**
    * Recalculate the required scrub time.

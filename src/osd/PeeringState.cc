@@ -711,8 +711,6 @@ void PeeringState::start_peering_interval(
     // did primary change?
     if (was_old_primary != is_primary()) {
       state_clear(PG_STATE_CLEAN);
-      // queue/dequeue the scrubber
-      pl->on_primary_status_change(was_old_primary, is_primary());
     }
 
     pl->on_role_change();

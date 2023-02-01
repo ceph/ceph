@@ -467,6 +467,27 @@ unsigned int PgScrubber::scrub_requeue_priority(
 // ///////////////////////////////////////////////////////////////////// //
 // scrub-op registration handling
 
+/* on_new_interval
+ *
+ * Responsible for restting any scrub state and releasing any resources.
+ * Any inflight events will be ignored via check_interval/should_drop_message
+ * or canceled.
+ */
+void PgScrubber::on_new_interval()
+{
+  dout(10) << fmt::format(
+		  "{}: current role:{} active?{} q/a:{}", __func__,
+		  (is_primary() ? "Primary" : "Replica/other"),
+		  is_scrub_active(), is_queued_or_active())
+	   << dendl;
+
+  m_fsm->process_event(FullReset{});
+  // we may be the primary
+  if (is_queued_or_active()) {
+    clear_pgscrub_state();
+  }
+  rm_from_osd_scrubbing();
+}
 
 bool PgScrubber::is_scrub_registered() const
 {
@@ -491,49 +512,33 @@ void PgScrubber::rm_from_osd_scrubbing()
   }
 }
 
-void PgScrubber::on_primary_change(
-  std::string_view caller,
-  const requested_scrub_t& request_flags)
+void PgScrubber::on_pg_activate(const requested_scrub_t& request_flags)
 {
+  ceph_assert(is_primary());
   if (!m_scrub_job) {
     // we won't have a chance to see more logs from this function, thus:
-    dout(10) << fmt::format(
-		  "{}: (from {}& w/{}) {}.Reg-state:{:.7}. No scrub-job",
-		  __func__, caller, request_flags,
-		  (is_primary() ? "Primary" : "Replica/other"),
-		  registration_state())
-	     << dendl;
+    dout(2) << fmt::format(
+		   "{}: flags:<{}> {}.Reg-state:{:.7}. No scrub-job", __func__,
+		   request_flags, (is_primary() ? "Primary" : "Replica/other"),
+		   registration_state())
+	    << dendl;
     return;
   }
 
+  ceph_assert(!is_queued_or_active());
   auto pre_state = m_scrub_job->state_desc();
   auto pre_reg = registration_state();
-  if (is_primary()) {
-    auto suggested = m_osds->get_scrub_services().determine_scrub_time(
+
+  auto suggested = m_osds->get_scrub_services().determine_scrub_time(
       request_flags, m_pg->info, m_pg->get_pgpool().info.opts);
-    m_osds->get_scrub_services().register_with_osd(m_scrub_job, suggested);
-  } else {
-    m_osds->get_scrub_services().remove_from_osd_queue(m_scrub_job);
-  }
+  m_osds->get_scrub_services().register_with_osd(m_scrub_job, suggested);
 
-  // is there an interval change we should respond to?
-  if (is_primary() && is_scrub_active()) {
-    if (m_interval_start < m_pg->get_same_interval_since()) {
-      dout(10) << fmt::format(
-		    "{}: interval changed ({} -> {}). Aborting active scrub.",
-		    __func__, m_interval_start, m_pg->get_same_interval_since())
-	       << dendl;
-      scrub_clear_state();
-    }
-  }
-
-  dout(10)
-    << fmt::format(
-	 "{} (from {} {}): {}. <{:.5}>&<{:.10}> --> <{:.5}>&<{:.14}>",
-	 __func__, caller, request_flags,
-	 (is_primary() ? "Primary" : "Replica/other"), pre_reg, pre_state,
-	 registration_state(), m_scrub_job->state_desc())
-    << dendl;
+  dout(10) << fmt::format(
+		  "{}: <flags:{}> {} <{:.5}>&<{:.10}> --> <{:.5}>&<{:.14}>",
+		  __func__, request_flags,
+		  (is_primary() ? "Primary" : "Replica/other"), pre_reg,
+		  pre_state, registration_state(), m_scrub_job->state_desc())
+	   << dendl;
 }
 
 /*
