@@ -47,6 +47,7 @@ MDLog::MDLog(MDSRank* m)
     submit_thread(this)
 {
   debug_subtrees = g_conf().get_val<bool>("mds_debug_subtrees");
+  event_large_threshold = g_conf().get_val<uint64_t>("mds_log_event_large_threshold");
   events_per_segment = g_conf().get_val<uint64_t>("mds_log_events_per_segment");
   pause = g_conf().get_val<bool>("mds_log_pause");
   major_segment_event_ratio = g_conf().get_val<uint64_t>("mds_log_major_segment_event_ratio");
@@ -77,6 +78,7 @@ void MDLog::create_logger()
               PerfCountersBuilder::PRIO_INTERESTING);
 
   plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+  plb.add_u64(l_mdl_evlrg, "evlrg", "Large events");
   plb.add_u64(l_mdl_evexg, "evexg", "Expiring events");
   plb.add_u64(l_mdl_evexd, "evexd", "Current expired events");
   plb.add_u64(l_mdl_segexg, "segexg", "Expiring segments");
@@ -422,6 +424,11 @@ void MDLog::_submit_thread()
       le->set_start_off(write_pos);
       if (dynamic_cast<SegmentBoundary*>(le)) {
 	ls->offset = write_pos;
+      }
+
+      if (bl.length() >= event_large_threshold.load()) {
+        dout(5) << "large event detected!" << dendl;
+        logger->inc(l_mdl_evlrg);
       }
 
       dout(5) << "_submit_thread " << write_pos << "~" << bl.length()
@@ -1529,6 +1536,9 @@ void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMa
 {
   if (changed.count("mds_debug_subtrees")) {
     debug_subtrees = g_conf().get_val<bool>("mds_debug_subtrees");
+  }
+  if (changed.count("mds_log_event_large_threshold")) {
+    event_large_threshold = g_conf().get_val<uint64_t>("mds_log_event_large_threshold");
   }
   if (changed.count("mds_log_events_per_segment")) {
     events_per_segment = g_conf().get_val<uint64_t>("mds_log_events_per_segment");
