@@ -865,7 +865,10 @@ static int bucket_stats(rgw::sal::Driver* driver,
 			const std::string& tenant_name,
 			const std::string& bucket_name,
 			Formatter *formatter,
-                        const DoutPrefixProvider *dpp)
+                        const DoutPrefixProvider *dpp,
+                        bool show_bucket_ver,
+                        bool show_bucket_master_ver,
+                        bool show_bucket_max_marker)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
@@ -906,11 +909,23 @@ static int bucket_stats(rgw::sal::Driver* driver,
   formatter->dump_string("marker", bucket->get_marker());
   formatter->dump_stream("index_type") << bucket->get_info().layout.current_index.layout.type;
   ::encode_json("owner", bucket->get_info().owner, formatter);
-  formatter->dump_string("ver", bucket_ver);
-  formatter->dump_string("master_ver", master_ver);
+  if (show_bucket_ver) {
+      formatter->dump_string("ver", bucket_ver);
+  } else {
+      formatter->dump_string("ver", NULL);
+  }
+  if (show_bucket_master_ver) {
+      formatter->dump_string("master_ver", master_ver);
+  } else {
+      formatter->dump_string("master_ver", NULL);
+  }
   ut.gmtime(formatter->dump_stream("mtime"));
   ctime_ut.gmtime(formatter->dump_stream("creation_time"));
-  formatter->dump_string("max_marker", max_marker);
+  if (show_bucket_max_marker) {
+      formatter->dump_string("max_marker", max_marker);
+  } else {
+      formatter->dump_string("max_marker", NULL);
+  }
   dump_bucket_usage(stats, formatter);
   encode_json("bucket_quota", bucket->get_info().quota, formatter);
 
@@ -1076,6 +1091,9 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
 
   const bool show_stats = op_state.will_fetch_stats();
   const rgw_user& user_id = op_state.get_user_id();
+  bool show_bucket_ver = op_state.will_show_bucket_ver();
+  bool show_bucket_master_ver = op_state.will_show_bucket_master_ver();
+  bool show_bucket_max_marker = op_state.will_show_bucket_max_marker();
   if (op_state.is_user_op()) {
     formatter->open_array_section("buckets");
 
@@ -1102,7 +1120,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
         }
 
         if (show_stats) {
-          bucket_stats(driver, user_id.tenant, obj_name, formatter, dpp);
+          bucket_stats(driver, user_id.tenant, obj_name, formatter, dpp, show_bucket_ver, show_bucket_master_ver, show_bucket_max_marker);
 	} else {
           formatter->dump_string("bucket", obj_name);
 	}
@@ -1118,7 +1136,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
 
     formatter->close_section();
   } else if (!bucket_name.empty()) {
-    ret = bucket_stats(driver, user_id.tenant, bucket_name, formatter, dpp);
+    ret = bucket_stats(driver, user_id.tenant, bucket_name, formatter, dpp, show_bucket_ver, show_bucket_master_ver, show_bucket_max_marker);
     if (ret < 0) {
       return ret;
     }
@@ -1135,7 +1153,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
 						   &truncated);
       for (auto& bucket_name : buckets) {
         if (show_stats) {
-          bucket_stats(driver, user_id.tenant, bucket_name, formatter, dpp);
+          bucket_stats(driver, user_id.tenant, bucket_name, formatter, dpp, show_bucket_ver, show_bucket_master_ver, show_bucket_max_marker);
 	} else {
           formatter->dump_string("bucket", bucket_name);
 	}

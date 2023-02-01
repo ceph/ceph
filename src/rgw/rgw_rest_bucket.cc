@@ -34,6 +34,9 @@ void RGWOp_Bucket_Info::execute(optional_yield y)
   RGWBucketAdminOpState op_state;
 
   bool fetch_stats;
+  bool show_bucket_ver;
+  bool show_bucket_master_ver;
+  bool show_bucket_max_marker;
 
   std::string bucket;
 
@@ -44,10 +47,17 @@ void RGWOp_Bucket_Info::execute(optional_yield y)
 
   RESTArgs::get_string(s, "bucket", bucket, &bucket);
   RESTArgs::get_bool(s, "stats", false, &fetch_stats);
+  RESTArgs::get_bool(s, "show_bucket_ver", false, &show_bucket_ver);
+  RESTArgs::get_bool(s, "show_bucket_master_ver", false, &show_bucket_master_ver);
+  RESTArgs::get_bool(s, "show_bucket_max_marker", false, &show_bucket_max_marker);
 
   op_state.set_user_id(uid);
   op_state.set_bucket_name(bucket);
   op_state.set_fetch_stats(fetch_stats);
+
+  op_state.set_show_bucket_master_ver(show_bucket_master_ver);
+  op_state.set_show_bucket_ver(show_bucket_ver);
+  op_state.set_show_bucket_max_marker(show_bucket_max_marker);
 
   op_ret = RGWBucketAdminOp::info(driver, op_state, flusher, y, this);
 }

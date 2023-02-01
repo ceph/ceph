@@ -442,6 +442,9 @@ void usage()
   cout << "   --min-rewrite-stripe-size min stripe size for object rewrite (default 0)\n";
   cout << "   --trim-delay-ms           time interval in msec to limit the frequency of sync error log entries trimming operations,\n";
   cout << "                             the trimming process will sleep the specified msec for every 1000 entries trimmed\n";
+  cout << "   --show-bucket-ver                When the bucket stats information is displayed, it shows bucket ver information (default false)\n";
+  cout << "   --show-bucket-master-ver         When the bucket stats information is displayed, it shows bucket master_ver information (default false)\n";
+  cout << "   --show-bucket-max-marker         When the bucket stats information is displayed, it shows bucket max_marker information (default false)\n";
   cout << "   --max-concurrent-ios      maximum concurrent ios for bucket operations (default: 32)\n";
   cout << "   --enable-feature          enable a zone/zonegroup feature\n";
   cout << "   --disable-feature         disable a zone/zonegroup feature\n";
@@ -3528,6 +3531,9 @@ int main(int argc, const char **argv)
   bool system_specified = false;
   int shard_id = -1;
   bool specified_shard_id = false;
+  int show_bucket_ver = false;
+  int show_bucket_master_ver = false;
+  int show_bucket_max_marker = false;
   string client_id;
   string op_id;
   string op_mask_str;
@@ -3756,6 +3762,12 @@ int main(int argc, const char **argv)
       max_rewrite_size = (uint64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*)NULL)) {
       min_rewrite_stripe_size = (uint64_t)atoll(val.c_str());
+    } else if (ceph_argparse_binary_flag(args, i, &show_bucket_ver, NULL, "--show-bucket-ver", (char*)NULL)) {
+        // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &show_bucket_master_ver, NULL, "--show-bucket-master-ver", (char*)NULL)) {
+        // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &show_bucket_max_marker, NULL, "--show-bucket-max-marker", (char*)NULL)) {
+        // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*)NULL)) {
       max_buckets = (int)strict_strtol(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -6565,8 +6577,12 @@ int main(int argc, const char **argv)
   bucket_op.set_delete_children(delete_child_objects);
   bucket_op.set_fix_index(fix);
   bucket_op.set_max_aio(max_concurrent_ios);
+  bucket_op.set_show_bucket_master_ver(show_bucket_master_ver);
+  bucket_op.set_show_bucket_ver(show_bucket_ver);
+  bucket_op.set_show_bucket_max_marker(show_bucket_max_marker);
 
-  // required to gather errors from operations
+
+    // required to gather errors from operations
   std::string err_msg;
 
   bool output_user_info = true;

@@ -229,6 +229,9 @@ struct RGWBucketAdminOpState {
   bool fix_index;
   bool delete_child_objects;
   bool bucket_stored;
+  bool show_bucket_ver;
+  bool show_bucket_master_ver;
+  bool show_bucket_max_marker;
   bool sync_bucket;
   int max_aio = 0;
 
@@ -241,6 +244,10 @@ struct RGWBucketAdminOpState {
   void set_check_objects(bool value) { check_objects = value; }
   void set_fix_index(bool value) { fix_index = value; }
   void set_delete_children(bool value) { delete_child_objects = value; }
+
+  void set_show_bucket_ver(bool value) {show_bucket_ver = value; }
+  void set_show_bucket_master_ver(bool value) { show_bucket_master_ver = value; }
+  void set_show_bucket_max_marker(bool value) { show_bucket_max_marker = value; }
 
   void set_max_aio(int value) { max_aio = value; }
 
@@ -286,6 +293,10 @@ struct RGWBucketAdminOpState {
     bucket_id = bi;
   }
   const std::string& get_bucket_id() { return bucket_id; }
+
+  bool will_show_bucket_ver() { return show_bucket_ver; }
+  bool will_show_bucket_master_ver() { return show_bucket_master_ver; }
+  bool will_show_bucket_max_marker() { return show_bucket_max_marker; }
 
   bool will_fetch_stats() { return stat_buckets; }
   bool will_fix_index() { return fix_index; }
