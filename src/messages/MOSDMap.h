@@ -68,13 +68,6 @@ public:
         (e == 0 || i->first > e)) e = i->first;
     return e;
   }
-  epoch_t get_oldest() {
-    return cluster_osdmap_trim_lower_bound;
-  }
-  epoch_t get_newest() {
-    return newest_map;
-  }
-
 
   MOSDMap() : Message{CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION} { }
   MOSDMap(const uuid_d &f, const uint64_t features)
