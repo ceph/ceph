@@ -53,6 +53,9 @@ public:
     friend class ClientRequest;
     friend class LttngBackend;
     friend class HistoricBackend;
+    friend class ReqRequest;
+    friend class LogMissingRequest;
+    friend class LogMissingRequestReply;
   };
 
   /**
