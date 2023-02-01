@@ -83,9 +83,9 @@ This dependency also pops up in PeeringState::check_past_interval_bounds().
 PeeringState::get_required_past_interval_bounds takes as a parameter
 oldest_epoch, which comes from OSDSuperblock::cluster_osdmap_trim_lower_bound.
 We use cluster_osdmap_trim_lower_bound rather than a specific osd's oldest_map
-because we don't necessarily trim all MOSDMap::oldest_map. In order to avoid
-doing too much work at once we limit the amount of osdmaps trimmed using
-``osd_target_transaction_size`` in OSD::trim_maps().
+because we don't necessarily trim all MOSDMap::cluster_osdmap_trim_lower_bound.
+In order to avoid doing too much work at once we limit the amount of osdmaps
+trimmed using ``osd_target_transaction_size`` in OSD::trim_maps().
 For this reason, a specific OSD's oldest_map can lag behind
 OSDSuperblock::cluster_osdmap_trim_lower_bound
 for a while.
