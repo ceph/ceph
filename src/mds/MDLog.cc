@@ -38,6 +38,20 @@
 
 using namespace std;
 
+MDLog::MDLog(MDSRank* m)
+  :
+    mds(m),
+    replay_thread(this),
+    recovery_thread(this),
+    submit_thread(this)
+{
+  debug_subtrees = g_conf().get_val<bool>("mds_debug_subtrees");
+  events_per_segment = g_conf().get_val<uint64_t>("mds_log_events_per_segment");
+  pause = g_conf().get_val<bool>("mds_log_pause");
+  max_segments = g_conf().get_val<uint64_t>("mds_log_max_segments");
+  max_events = g_conf().get_val<int64_t>("mds_log_max_events");
+}
+
 MDLog::~MDLog()
 {
   if (journaler) { delete journaler; journaler = 0; }
@@ -314,11 +328,11 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
     // disambiguate imports. Because the ESubtreeMap reflects the subtree
     // state when all EImportFinish events are replayed.
   } else if (ls->end/period != ls->offset/period ||
-	     ls->num_events >= g_conf()->mds_log_events_per_segment) {
+	     ls->num_events >= events_per_segment) {
     dout(10) << "submit_entry also starting new segment: last = "
 	     << ls->seq  << "/" << ls->offset << ", event seq = " << event_seq << dendl;
     _start_new_segment();
-  } else if (g_conf()->mds_debug_subtrees &&
+  } else if (debug_subtrees &&
 	     le->get_type() != EVENT_SUBTREEMAP_TEST) {
     // debug: journal this every time to catch subtree replay bugs.
     // use a different event id so it doesn't get interpreted as a
@@ -358,7 +372,7 @@ void MDLog::_submit_thread()
   std::unique_lock locker{submit_mutex};
 
   while (!mds->is_daemon_stopping()) {
-    if (g_conf()->mds_log_pause) {
+    if (pause) {
       submit_cond.wait(locker);
       continue;
     }
@@ -602,19 +616,18 @@ void MDLog::try_to_commit_open_file_table(uint64_t last_seq)
 
 void MDLog::trim(int m)
 {
-  unsigned max_segments = g_conf()->mds_log_max_segments;
-  int max_events = g_conf()->mds_log_max_events;
+  int max_ev = max_events;
   if (m >= 0)
-    max_events = m;
+    max_ev = m;
 
   if (mds->mdcache->is_readonly()) {
     dout(10) << "trim, ignoring read-only FS" <<  dendl;
     return;
   }
 
-  // Clamp max_events to not be smaller than events per segment
-  if (max_events > 0 && max_events <= g_conf()->mds_log_events_per_segment) {
-    max_events = g_conf()->mds_log_events_per_segment + 1;
+  // Clamp max_ev to not be smaller than events per segment
+  if (max_ev > 0 && (uint64_t)max_ev <= events_per_segment) {
+    max_ev = events_per_segment + 1;
   }
 
   submit_mutex.lock();
@@ -622,7 +635,7 @@ void MDLog::trim(int m)
   // trim!
   dout(10) << "trim " 
 	   << segments.size() << " / " << max_segments << " segments, " 
-	   << num_events << " / " << max_events << " events"
+	   << num_events << " / " << max_ev << " events"
 	   << ", " << expiring_segments.size() << " (" << expiring_events << ") expiring"
 	   << ", " << expired_segments.size() << " (" << expired_events << ") expired"
 	   << dendl;
@@ -658,7 +671,7 @@ void MDLog::trim(int m)
 
     unsigned num_remaining_segments = (segments.size() - expired_segments.size() - expiring_segments.size());
     if ((num_remaining_segments <= max_segments) &&
-	(max_events < 0 || num_events - expiring_events - expired_events <= max_events))
+	(max_ev < 0 || num_events - expiring_events - expired_events <= max_ev))
       break;
 
     // Do not trim too many segments at once for peak workload. If mds keeps creating N segments each tick,
@@ -1513,4 +1526,27 @@ void MDLog::dump_replay_status(Formatter *f) const
   f->dump_unsigned("num_events", get_num_events());
   f->dump_unsigned("num_segments", get_num_segments());
   f->close_section();
+}
+
+
+void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mdsmap)
+{
+  if (changed.count("mds_debug_subtrees")) {
+    debug_subtrees = g_conf().get_val<bool>("mds_debug_subtrees");
+  }
+  if (changed.count("mds_log_events_per_segment")) {
+    events_per_segment = g_conf().get_val<uint64_t>("mds_log_events_per_segment");
+  }
+  if (changed.count("mds_log_max_events")) {
+    max_events = g_conf().get_val<int64_t>("mds_log_max_events");
+  }
+  if (changed.count("mds_log_max_segments")) {
+    max_segments = g_conf().get_val<uint64_t>("mds_log_max_segments");
+  }
+  if (changed.count("mds_log_pause")) {
+    pause = g_conf().get_val<bool>("mds_log_pause");
+    if (!pause) {
+      kick_submitter();
+    }
+  }
 }
