@@ -466,6 +466,56 @@ unsigned int PgScrubber::scrub_requeue_priority(
 // scrub-op registration handling
 
 
+/*
+ * implementation notes:
+ * =====================
+ * If a scrub is active, it is stopped (whether performed
+ * as a Primary or as a Replica).
+ * If we were a Primary - we unregister from the OSD.
+ *
+ * But what if we are queued, but not yet active?
+ * For a primary with a queued scrub-initiation event: both
+ * initiate_regular_scrub() & initiate_scrub_after_repair() would
+ * notice an interval change and abort the scrub. No special handling
+ * here is required.
+ *
+ * As for replicas:
+ * While we would notice becoming a Primary, that would be too late.
+ * But as the token is checked also, there is no reason not to fail that
+ * test. See replica_scrub_op() for how the sequence of messages
+ * initiating a replica scrub is handled.
+ */
+void PgScrubber::stop_active_scrubs()
+{
+  dout(10) << fmt::format(
+		  "{}: current role:{} active?{} q/a:{}", __func__,
+		  (is_primary() ? "Primary" : "Replica/other"),
+		  is_scrub_active(), is_queued_or_active())
+	   << dendl;
+
+  // 'active_role' catches 'event is in the mail' cases, too (matching
+  // 'is_queued_or_active()' lifetime)
+  const auto active_role = queued_for_role();
+
+  if (m_remote_osd_resource) {
+    dout(10) << fmt::format(
+		    "{}: discarding reservation by remote primary", __func__)
+	     << dendl;
+    m_remote_osd_resource.reset();
+    // advance_token() also full-resets the FSM (if 'active replica')
+    advance_token();
+
+  } else {
+
+    // we may be the primary
+    if (active_role == QueuedForRole::primary) {
+      m_fsm->process_event(FullReset{});
+      clear_pgscrub_state();
+    }
+    rm_from_osd_scrubbing();
+  }
+}
+
 bool PgScrubber::is_scrub_registered() const
 {
   return m_scrub_job && m_scrub_job->in_queues;
@@ -489,49 +539,33 @@ void PgScrubber::rm_from_osd_scrubbing()
   }
 }
 
-void PgScrubber::on_primary_change(
-  std::string_view caller,
-  const requested_scrub_t& request_flags)
+void PgScrubber::on_pg_activate(const requested_scrub_t& request_flags)
 {
+  ceph_assert(is_primary());
   if (!m_scrub_job) {
     // we won't have a chance to see more logs from this function, thus:
-    dout(10) << fmt::format(
-		  "{}: (from {}& w/{}) {}.Reg-state:{:.7}. No scrub-job",
-		  __func__, caller, request_flags,
-		  (is_primary() ? "Primary" : "Replica/other"),
-		  registration_state())
-	     << dendl;
+    dout(2) << fmt::format(
+		   "{}: flags:<{}> {}.Reg-state:{:.7}. No scrub-job", __func__,
+		   request_flags, (is_primary() ? "Primary" : "Replica/other"),
+		   registration_state())
+	    << dendl;
     return;
   }
 
+  ceph_assert(!is_queued_or_active());
   auto pre_state = m_scrub_job->state_desc();
   auto pre_reg = registration_state();
-  if (is_primary()) {
-    auto suggested = m_osds->get_scrub_services().determine_scrub_time(
+
+  auto suggested = m_osds->get_scrub_services().determine_scrub_time(
       request_flags, m_pg->info, m_pg->get_pgpool().info.opts);
-    m_osds->get_scrub_services().register_with_osd(m_scrub_job, suggested);
-  } else {
-    m_osds->get_scrub_services().remove_from_osd_queue(m_scrub_job);
-  }
+  m_osds->get_scrub_services().register_with_osd(m_scrub_job, suggested);
 
-  // is there an interval change we should respond to?
-  if (is_primary() && is_scrub_active()) {
-    if (m_interval_start < m_pg->get_same_interval_since()) {
-      dout(10) << fmt::format(
-		    "{}: interval changed ({} -> {}). Aborting active scrub.",
-		    __func__, m_interval_start, m_pg->get_same_interval_since())
-	       << dendl;
-      scrub_clear_state();
-    }
-  }
-
-  dout(10)
-    << fmt::format(
-	 "{} (from {} {}): {}. <{:.5}>&<{:.10}> --> <{:.5}>&<{:.14}>",
-	 __func__, caller, request_flags,
-	 (is_primary() ? "Primary" : "Replica/other"), pre_reg, pre_state,
-	 registration_state(), m_scrub_job->state_desc())
-    << dendl;
+  dout(10) << fmt::format(
+		  "{}: <flags:{}> {} <{:.5}>&<{:.10}> --> <{:.5}>&<{:.14}>",
+		  __func__, request_flags,
+		  (is_primary() ? "Primary" : "Replica/other"), pre_reg,
+		  pre_state, registration_state(), m_scrub_job->state_desc())
+	   << dendl;
 }
 
 void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
@@ -2383,8 +2417,7 @@ void PgScrubber::advance_token()
   // place. We will, though, verify that. And if we are actually still handling
   // a stale request - both our internal state and the FSM state will be
   // cleared.
-  replica_handling_done();
-  m_fsm->process_event(FullReset{});
+  m_fsm->process_event(IntervalEnded{});
 }
 
 bool PgScrubber::is_token_current(Scrub::act_token_t received_token)

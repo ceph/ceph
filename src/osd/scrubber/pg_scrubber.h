@@ -407,9 +407,7 @@ class PgScrubber : public ScrubPgIF,
 
   void rm_from_osd_scrubbing() final;
 
-  void on_primary_change(
-    std::string_view caller,
-    const requested_scrub_t& request_flags) final;
+  void on_pg_activate(const requested_scrub_t& request_flags) final;
 
   void scrub_requested(scrub_level_t scrub_level,
 		       scrub_type_t scrub_type,
@@ -457,6 +455,8 @@ class PgScrubber : public ScrubPgIF,
 
   /// handle a message carrying a replica map
   void map_from_replica(OpRequestRef op) final;
+
+  void stop_active_scrubs() final;
 
   void scrub_clear_state() final;
 
