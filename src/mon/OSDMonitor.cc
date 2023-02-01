@@ -2878,7 +2878,7 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
     ceph_assert(r >= 0);
     max_bytes -= bl.length();
   }
-  reply->oldest_map = first;
+  reply->cluster_osdmap_trim_lower_bound = first;
   reply->newest_map = last;
   mon.send_reply(op, reply);
   return true;
@@ -4455,7 +4455,7 @@ MOSDMap *OSDMonitor::build_latest_full(uint64_t features)
 {
   MOSDMap *r = new MOSDMap(mon.monmap->fsid, features);
   get_version_full(osdmap.get_epoch(), features, r->maps[osdmap.get_epoch()]);
-  r->oldest_map = get_first_committed();
+  r->cluster_osdmap_trim_lower_bound = get_first_committed();
   r->newest_map = osdmap.get_epoch();
   return r;
 }
@@ -4465,7 +4465,7 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to, uint64_t featur
   dout(10) << "build_incremental [" << from << ".." << to << "] with features "
 	   << std::hex << features << std::dec << dendl;
   MOSDMap *m = new MOSDMap(mon.monmap->fsid, features);
-  m->oldest_map = get_first_committed();
+  m->cluster_osdmap_trim_lower_bound = get_first_committed();
   m->newest_map = osdmap.get_epoch();
 
   for (epoch_t e = to; e >= from && e > 0; e--) {
@@ -4543,7 +4543,7 @@ void OSDMonitor::send_incremental(epoch_t first,
 
   if (first < get_first_committed()) {
     MOSDMap *m = new MOSDMap(osdmap.get_fsid(), features);
-    m->oldest_map = get_first_committed();
+    m->cluster_osdmap_trim_lower_bound = get_first_committed();
     m->newest_map = osdmap.get_epoch();
 
     first = get_first_committed();
