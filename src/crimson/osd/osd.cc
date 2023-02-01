@@ -675,8 +675,10 @@ void OSD::print(std::ostream& out) const
 {
   out << "{osd." << superblock.whoami << " "
       << superblock.osd_fsid << " [" << superblock.oldest_map
-      << "," << superblock.newest_map << "] " << pg_shard_manager.get_num_pgs()
-      << " pgs}";
+      << "," << superblock.newest_map << "] "
+      << "tlb:" << superblock.cluster_osdmap_trim_lower_bound
+      << " pgs:" << pg_shard_manager.get_num_pgs()
+      << "}";
 }
 
 std::optional<seastar::future<>>
