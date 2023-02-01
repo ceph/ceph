@@ -6945,11 +6945,11 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
     if (!entry.resharding_in_progress()) {
       ret = fetch_new_bucket_info("get_bucket_resharding_succeeded");
       if (ret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
-	  " failed to refresh bucket info after reshard when get bucket "
-	  "resharding succeeded, error: " << cpp_strerror(-ret) << dendl;
-	return ret;
+        ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+          " failed to refresh bucket info after reshard when get bucket "
+          "resharding succeeded, error: " << cpp_strerror(-ret) << dendl;
       }
+      return ret;
     }
 
     ldpp_dout(dpp, 20) << __func__ << " NOTICE: reshard still in progress; " <<
@@ -6986,7 +6986,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
           ldpp_dout(dpp, 0) << __func__ <<
             " ERROR: failed to refresh bucket_obj for bucket " <<
             bs->bucket.name << dendl;
-          continue; // try again
+          return ret;
         }
       } else {
 	ldpp_dout(dpp, 10) << __func__ <<
