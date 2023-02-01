@@ -70,7 +70,7 @@ class LogSegment {
 
   const seq_t seq;
   uint64_t offset, end;
-  int num_events = 0;
+  uint64_t num_events = 0;
 
   // dirty items
   elist<CDir*>    dirty_dirfrags, new_dirfrags;
