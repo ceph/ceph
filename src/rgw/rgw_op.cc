@@ -186,7 +186,7 @@ static int decode_policy(const DoutPrefixProvider *dpp,
     policy->decode(iter);
   } catch (buffer::error& err) {
     ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-    return -EIO;
+    return -ENODATA;
   }
   if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldpp_dout(dpp, 15) << __func__ << " Read AccessControlPolicy";

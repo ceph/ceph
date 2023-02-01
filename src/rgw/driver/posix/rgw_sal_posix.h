@@ -16,12 +16,15 @@
 #pragma once
 
 #include "rgw_sal_filter.h"
+#include "rgw_sal_store.h"
 #include "common/dout.h"
 
 namespace rgw { namespace sal {
 
 class POSIXDriver : public FilterDriver {
 private:
+  std::string base_path;
+  int root_fd;
 
 public:
   POSIXDriver(Driver* _next) : FilterDriver(_next)
@@ -68,6 +71,9 @@ public:
 
   virtual void finalize(void) override;
   virtual void register_admin_apis(RGWRESTMgr* mgr) override;
+
+  /* Internal APIs */
+  int get_root_fd() { return root_fd; }
 };
 
 class POSIXUser : public FilterUser {
@@ -111,33 +117,86 @@ public:
   virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override;
 };
 
-class POSIXBucket : public FilterBucket {
+class POSIXBucket : public StoreBucket {
 private:
   POSIXDriver* driver;
+  int dir_fd{-1};
+  struct statx stx;
+  bool stat_done{false};
+  RGWAccessControlPolicy acls;
 
 public:
-  POSIXBucket(std::unique_ptr<Bucket> _next, User* _user,
-		    POSIXDriver* _driver) :
-    FilterBucket(std::move(_next), _user),
-    driver(_driver) {}
+  POSIXBucket(POSIXDriver *_dr, const rgw_bucket& _b, User* _u)
+    : StoreBucket(_b, _u),
+    driver(_dr),
+    acls()
+    { }
+
+  POSIXBucket(POSIXDriver *_dr, const RGWBucketEnt& _e, User* _u)
+    : StoreBucket(_e, _u),
+    driver(_dr),
+    acls()
+    { }
+
+  POSIXBucket(POSIXDriver *_dr, const RGWBucketInfo& _i, User* _u)
+    : StoreBucket(_i, _u),
+    driver(_dr),
+    acls()
+    { }
+
   virtual ~POSIXBucket() = default;
 
+  virtual void set_owner(rgw::sal::User* _owner) override {
+    StoreBucket::set_owner(_owner);
+    info.owner = owner->get_id();
+  }
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
   virtual int list(const DoutPrefixProvider* dpp, ListParams&, int,
 		   ListResults&, optional_yield y) override;
-  virtual Attrs& get_attrs(void) override { return next->get_attrs(); }
-  virtual int set_attrs(Attrs a) override { return next->set_attrs(a); }
   virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp,
 				    Attrs& new_attrs, optional_yield y) override;
   virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children,
 			    bool forward_to_master, req_info* req_info,
 			    optional_yield y) override;
+  virtual int remove_bucket_bypass_gc(int concurrent_max,
+				      bool keep_index_consistent,
+				      optional_yield y,
+				      const DoutPrefixProvider *dpp) override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
 			  bool get_stats = false) override;
+  virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
+  virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
+		      optional_yield y) override;
+  virtual int read_stats(const DoutPrefixProvider *dpp,
+			 const bucket_index_layout_generation& idx_layout,
+			 int shard_id, std::string* bucket_ver, std::string* master_ver,
+			 std::map<RGWObjCategory, RGWStorageStats>& stats,
+			 std::string* max_marker = nullptr,
+			 bool* syncstopped = nullptr) override;
+  virtual int read_stats_async(const DoutPrefixProvider *dpp,
+			       const bucket_index_layout_generation& idx_layout,
+			       int shard_id, RGWGetBucketStats_CB* ctx) override;
+  virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
+  virtual int update_container_stats(const DoutPrefixProvider* dpp) override;
+  virtual int check_bucket_shards(const DoutPrefixProvider* dpp) override;
+  virtual int chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y) override;
+  virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
+		       ceph::real_time mtime) override;
+  virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
+  virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime) override;
+  virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
+			 uint64_t end_epoch, uint32_t max_entries, bool* is_truncated,
+			 RGWUsageIter& usage_iter, std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
+  virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
+  virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) override;
+  virtual int check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
+  virtual int rebuild_index(const DoutPrefixProvider *dpp) override;
+  virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) override;
+  virtual int purge_instance(const DoutPrefixProvider* dpp) override;
 
   virtual std::unique_ptr<Bucket> clone() override {
-    std::unique_ptr<Bucket> nb = next->clone();
-    return std::make_unique<POSIXBucket>(std::move(nb), get_owner(), driver);
+    return std::make_unique<POSIXBucket>(*this);
   }
 
   virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
@@ -155,18 +214,31 @@ public:
   virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 			       CephContext* cct) override;
 
+  /* Internal APIs */
+  int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed);
+  void set_stat(struct statx _stx) { stx = _stx; stat_done = true; }
+  int get_dir_fd(const DoutPrefixProvider *dpp) { open(dpp); return dir_fd; }
+private:
+  int open(const DoutPrefixProvider *dpp);
+  int close(const DoutPrefixProvider* dpp);
+  int stat(const DoutPrefixProvider *dpp);
+  /* TODO dang Escape the bucket name for file use */
+  const std::string& get_fname() { return get_name(); }
 };
 
-class POSIXObject : public FilterObject {
+class POSIXObject : public StoreObject {
 private:
   POSIXDriver* driver;
+  RGWAccessControlPolicy acls;
+  int obj_fd{-1};
+  struct statx stx;
+  bool stat_done{false};
 
 public:
-  struct POSIXReadOp : FilterReadOp {
+  struct POSIXReadOp : StoreReadOp {
     POSIXObject* source;
 
-    POSIXReadOp(std::unique_ptr<ReadOp> _next, POSIXObject* _source) :
-      FilterReadOp(std::move(_next)),
+    POSIXReadOp(POSIXObject* _source) :
       source(_source) {}
     virtual ~POSIXReadOp() = default;
 
@@ -179,31 +251,38 @@ public:
 			 bufferlist& dest, optional_yield y) override;
   };
 
-  struct POSIXDeleteOp : FilterDeleteOp {
+  struct POSIXDeleteOp : StoreDeleteOp {
     POSIXObject* source;
 
-    POSIXDeleteOp(std::unique_ptr<DeleteOp> _next, POSIXObject* _source) :
-      FilterDeleteOp(std::move(_next)),
+    POSIXDeleteOp(POSIXObject* _source) :
       source(_source) {}
     virtual ~POSIXDeleteOp() = default;
 
     virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
   };
 
-  POSIXObject(std::unique_ptr<Object> _next, POSIXDriver* _driver) :
-    FilterObject(std::move(_next)),
-    driver(_driver) {}
-  POSIXObject(std::unique_ptr<Object> _next, Bucket* _bucket, POSIXDriver* _driver) :
-    FilterObject(std::move(_next), _bucket),
-    driver(_driver) {}
+  POSIXObject(POSIXDriver *_dr, const rgw_obj_key& _k)
+    : StoreObject(_k),
+    driver(_dr),
+    acls() {}
+
+  POSIXObject(POSIXDriver* _driver, const rgw_obj_key& _k, Bucket* _b) :
+    StoreObject(_k, _b),
+    driver(_driver),
+    acls() {}
+
   POSIXObject(POSIXObject& _o) :
-    FilterObject(_o),
+    StoreObject(_o),
     driver(_o.driver) {}
+
   virtual ~POSIXObject() = default;
 
   virtual int delete_object(const DoutPrefixProvider* dpp,
 			    optional_yield y,
 			    bool prevent_versioning = false) override;
+  virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
+			     Completions* aio, bool keep_index_consistent,
+			     optional_yield y) override;
   virtual int copy_object(User* user,
                req_info* info, const rgw_zone_id& source_zone,
                rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
@@ -219,6 +298,9 @@ public:
                std::string* version_id, std::string* tag, std::string* etag,
                void (*progress_cb)(off_t, void *), void* progress_data,
                const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
+  virtual int set_acl(const RGWAccessControlPolicy& acl) override { acls = acl; return 0; }
+  virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state, optional_yield y, bool follow_olh = true) override;
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 			    Attrs* delattrs, optional_yield y) override;
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
@@ -227,10 +309,55 @@ public:
 			       optional_yield y, const DoutPrefixProvider* dpp) override;
   virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
 			       optional_yield y) override;
-
+  virtual bool is_expired() override;
+  virtual void gen_rand_obj_instance_name() override;
+  virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp,
+						       const std::string& lock_name) override;
+  virtual int transition(Bucket* bucket,
+			 const rgw_placement_rule& placement_rule,
+			 const real_time& mtime,
+			 uint64_t olh_epoch,
+			 const DoutPrefixProvider* dpp,
+			 optional_yield y) override;
+  virtual int transition_to_cloud(Bucket* bucket,
+			 rgw::sal::PlacementTier* tier,
+			 rgw_bucket_dir_entry& o,
+			 std::set<std::string>& cloud_targets,
+			 CephContext* cct,
+			 bool update_object,
+			 const DoutPrefixProvider* dpp,
+			 optional_yield y) override;
+  virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
+  virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
+  virtual int swift_versioning_restore(bool& restored,
+				       const DoutPrefixProvider* dpp) override;
+  virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
+				    optional_yield y) override;
   virtual std::unique_ptr<ReadOp> get_read_op() override;
   virtual std::unique_ptr<DeleteOp> get_delete_op() override;
+  virtual int omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker,
+			    uint64_t count, std::map<std::string, bufferlist> *m,
+			    bool* pmore, optional_yield y) override;
+  virtual int omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string,
+			   bufferlist> *m, optional_yield y) override;
+  virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
+				    const std::set<std::string>& keys,
+				    Attrs* vals) override;
+  virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key,
+				  bufferlist& val, bool must_exist, optional_yield y) override;
+  virtual int chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual std::unique_ptr<Object> clone() override {
+    return std::unique_ptr<Object>(new POSIXObject(*this));
+  }
 
+protected:
+  int open(const DoutPrefixProvider *dpp);
+  int close(const DoutPrefixProvider* dpp);
+  int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
+private:
+  /* TODO dang Escape the object name for file use */
+  const std::string& get_fname() { return get_name(); }
+  int stat(const DoutPrefixProvider *dpp);
 };
 
 class POSIXMultipartUpload : public FilterMultipartUpload {
@@ -293,6 +420,15 @@ public:
 		       const std::string *user_data,
 		       rgw_zone_set *zones_trace, bool *canceled,
 		       optional_yield y) override;
+};
+
+class MPPOSIXSerializer : public StoreMPSerializer {
+
+public:
+  MPPOSIXSerializer(const DoutPrefixProvider *dpp, POSIXDriver* driver, POSIXObject* obj, const std::string& lock_name) {}
+
+  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override { return 0; }
+  virtual int unlock() override { return 0; }
 };
 
 } } // namespace rgw::sal

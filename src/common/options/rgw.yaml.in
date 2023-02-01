@@ -3597,7 +3597,7 @@ options:
   enum_values:
   - none
   - base
-  - trace
+  - posix
 - name: dbstore_db_dir
   type: str
   level: advanced
@@ -3683,6 +3683,15 @@ options:
   level: advanced
   desc: Set to true when Motr client debugging is needed
   default: false
+  services:
+  - rgw
+- name: rgw_posix_base_path
+  type: str
+  level: advanced
+  desc: experimental Option to set base path for POSIX Driver
+  long_desc: Base path for the POSIX driver.  All operations are relative to this path.
+    Defaults to /tmp/rgw_posix_driver
+  default: /tmp/rgw_posix_driver
   services:
   - rgw
 - name: rgw_luarocks_location
