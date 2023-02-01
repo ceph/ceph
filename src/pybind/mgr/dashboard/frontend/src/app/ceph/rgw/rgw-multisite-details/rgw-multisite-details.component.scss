@@ -1,0 +1,5 @@
+@use './src/styles/vendor/variables' as vv;
+
+.tree-container {
+  height: calc(100vh - vv.$tree-container-height);
+}

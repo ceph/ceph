@@ -1,0 +1,94 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="multisiteZonegroupForm"
+          #formDir="ngForm"
+          [formGroup]="multisiteZonegroupForm"
+          novalidate>
+    <div class="modal-body">
+      <div class="form-group row">
+        <label class="cd-col-form-label"
+               for="selectedRealm"
+               i18n>Select Realm</label>
+        <div class="cd-col-form-input">
+          <select class="form-select"
+                  id="selectedRealm"
+                  formControlName="selectedRealm"
+                  name="selectedRealm">
+          <option ngValue=""
+                  i18n>-- Select a realm --</option>
+          <option *ngFor="let realmName of realmList"
+                  [value]="realmName.name"
+                  [selected]="realmName.name === multisiteZonegroupForm.getValue('selectedRealm')">
+                {{ realmName.name }}
+          </option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zonegroupName"
+               i18n>Zonegroup Name</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="Zonegroup name..."
+                 id="zonegroupName"
+                 name="zonegroupName"
+                 formControlName="zonegroupName">
+          <span class="invalid-feedback"
+                *ngIf="multisiteZonegroupForm.showError('zonegroupName', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="multisiteZonegroupForm.showError('zonegroupName', formDir, 'uniqueName')"
+                i18n>The chosen zonegroup name is already in use.</span>
+        <div class="custom-control custom-checkbox">
+          <input class="form-check-input"
+                 id="default_zonegroup"
+                 name="default_zonegroup"
+                 formControlName="default_zonegroup"
+                 type="checkbox">
+          <label class="form-check-label"
+                 for="default_zonegroup"
+                 i18n>Default</label><br>
+          <input class="form-check-input"
+                 id="master_zonegroup"
+                 name="master_zonegroup"
+                 formControlName="master_zonegroup"
+                 type="checkbox">
+          <label class="form-check-label"
+                 for="master_zonegroup"
+                 i18n>Master</label>
+        </div>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zonegroup_endpoints"
+               i18n>Endpoints</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="e.g, http://ceph-node-00.com:80"
+                 id="zonegroup_endpoints"
+                 name="zonegroup_endpoints"
+                 formControlName="zonegroup_endpoints">
+        <span class="invalid-feedback"
+              *ngIf="multisiteZonegroupForm.showError('zonegroup_endpoints', formDir, 'required')"
+              i18n>This field is required.</span>
+        <span class="invalid-feedback"
+              *ngIf="multisiteZonegroupForm.showError('zonegroup_endpoints', formDir, 'endpoint')"
+              i18n>Please enter a valid IP address.</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <cd-form-button-panel (submitActionEvent)="submit()"
+                            [form]="multisiteZonegroupForm"
+                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+    </div>
+    </form>
+  </ng-container>
+</cd-modal>

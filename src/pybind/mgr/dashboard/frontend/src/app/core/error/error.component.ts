@@ -28,6 +28,9 @@ export class ErrorComponent implements OnDestroy, OnInit {
   buttonRoute: string;
   buttonName: string;
   buttonTitle: string;
+  secondaryButtonRoute: string;
+  secondaryButtonName: string;
+  secondaryButtonTitle: string;
   component: string;
 
   constructor(
@@ -81,6 +84,9 @@ export class ErrorComponent implements OnDestroy, OnInit {
       this.buttonRoute = history.state.button_route;
       this.buttonName = history.state.button_name;
       this.buttonTitle = history.state.button_title;
+      this.secondaryButtonRoute = history.state.secondary_button_route;
+      this.secondaryButtonName = history.state.secondary_button_name;
+      this.secondaryButtonTitle = history.state.secondary_button_title;
       this.component = history.state.component;
       this.docUrl = this.docService.urlGenerator(this.section);
     } catch (error) {
