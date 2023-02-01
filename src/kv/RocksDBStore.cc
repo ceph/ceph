@@ -3011,7 +3011,13 @@ KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix, Itera
         std::move(bounds));
     }
   } else {
-    return KeyValueDB::get_iterator(prefix, opts);
+    // use wholespace engine if no cfs are configured
+    // or use default cf otherwise as there is no
+    // matching cf for the specified prefix.
+    auto w_it = cf_handles.size() == 0 || prefix.empty() ?
+      get_wholespace_iterator(opts) :
+      get_default_cf_iterator();
+    return KeyValueDB::make_iterator(prefix, w_it);
   }
 }
 
