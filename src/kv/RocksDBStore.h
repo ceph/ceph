@@ -122,6 +122,7 @@ private:
     std::vector<rocksdb::ColumnFamilyHandle *> handles;
   };
   std::unordered_map<std::string, prefix_shards> cf_handles;
+  typedef decltype(cf_handles)::iterator cf_handles_iterator;
   std::unordered_map<uint32_t, std::string> cf_ids_to_prefix;
   std::unordered_map<std::string, rocksdb::BlockBasedTableOptions> cf_bbt_opts;
   
@@ -132,7 +133,7 @@ private:
   rocksdb::ColumnFamilyHandle *get_key_cf(const prefix_shards& shards, const char* key, const size_t keylen);
   rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& prefix, const std::string& key);
   rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& prefix, const char* key, size_t keylen);
-  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& prefix, const IteratorBounds& bounds);
+  rocksdb::ColumnFamilyHandle *check_cf_handle_bounds(const cf_handles_iterator& it, const IteratorBounds& bounds);
 
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
   int install_cf_mergeop(const std::string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
