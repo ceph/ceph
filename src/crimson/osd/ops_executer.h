@@ -474,7 +474,6 @@ OpsExecuter::flush_changes_n_do_ops_effects(
     }
     auto log_entries = prepare_transaction(ops);
     flush_clone_metadata(log_entries);
-    apply_stats();
     auto [submitted, all_completed] = std::forward<MutFunc>(mut_func)(std::move(txn),
                                                     std::move(obc),
                                                     std::move(*osd_op_params),
@@ -483,6 +482,8 @@ OpsExecuter::flush_changes_n_do_ops_effects(
 	std::move(submitted),
 	osd_op_ierrorator::future<>(std::move(all_completed)));
   }
+  apply_stats();
+
   if (__builtin_expect(op_effects.empty(), true)) {
     return maybe_mutated;
   } else {
