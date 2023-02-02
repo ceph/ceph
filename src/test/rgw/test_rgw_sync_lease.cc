@@ -417,10 +417,16 @@ TEST(with_lease, renew_after_timeout)
   ASSERT_TRUE(*result);
   try {
     std::rethrow_exception(*result);
-  } catch (const boost::system::system_error& e) {
-    EXPECT_EQ(e.code(), boost::system::errc::timed_out);
-  } catch (const std::exception& e) {
-    EXPECT_THROW(throw, boost::system::system_error);
+  } catch (const lease_aborted& e) {
+    try {
+      std::rethrow_exception(e.original_exception());
+    } catch (const boost::system::system_error& o) {
+      EXPECT_EQ(o.code(), boost::system::errc::timed_out);
+    } catch (const std::exception&) {
+      EXPECT_THROW(throw, boost::system::system_error);
+    }
+  } catch (const std::exception&) {
+    EXPECT_THROW(throw, lease_aborted);
   }
 }
 
@@ -467,10 +473,16 @@ TEST(with_lease, renew_exception_after_timeout)
   ASSERT_TRUE(*result);
   try {
     std::rethrow_exception(*result);
-  } catch (const boost::system::system_error& e) {
-    EXPECT_EQ(e.code(), boost::system::errc::timed_out);
-  } catch (const std::exception& e) {
-    EXPECT_THROW(throw, boost::system::system_error);
+  } catch (const lease_aborted& e) {
+    try {
+      std::rethrow_exception(e.original_exception());
+    } catch (const boost::system::system_error& o) {
+      EXPECT_EQ(o.code(), boost::system::errc::timed_out);
+    } catch (const std::exception&) {
+      EXPECT_THROW(throw, boost::system::system_error);
+    }
+  } catch (const std::exception&) {
+    EXPECT_THROW(throw, lease_aborted);
   }
 }
 
@@ -520,10 +532,16 @@ TEST(with_lease, renew_cancel_after_timeout)
   ASSERT_TRUE(*result);
   try {
     std::rethrow_exception(*result);
-  } catch (const boost::system::system_error& e) {
-    EXPECT_EQ(e.code(), boost::system::errc::timed_out);
-  } catch (const std::exception& e) {
-    EXPECT_THROW(throw, boost::system::system_error);
+  } catch (const lease_aborted& e) {
+    try {
+      std::rethrow_exception(e.original_exception());
+    } catch (const boost::system::system_error& o) {
+      EXPECT_EQ(o.code(), boost::system::errc::timed_out);
+    } catch (const std::exception&) {
+      EXPECT_THROW(throw, boost::system::system_error);
+    }
+  } catch (const std::exception&) {
+    EXPECT_THROW(throw, lease_aborted);
   }
 }
 
@@ -600,10 +618,16 @@ TEST(with_lease, renew_cancel)
   ASSERT_TRUE(*result); // throws on cancellation
   try {
     std::rethrow_exception(*result);
-  } catch (const boost::system::system_error& e) {
-    EXPECT_EQ(e.code(), asio::error::operation_aborted);
-  } catch (const std::exception& e) {
-    EXPECT_THROW(throw, boost::system::system_error);
+  } catch (const lease_aborted& e) {
+    try {
+      std::rethrow_exception(e.original_exception());
+    } catch (const boost::system::system_error& o) {
+      EXPECT_EQ(o.code(), asio::error::operation_aborted);
+    } catch (const std::exception&) {
+      EXPECT_THROW(throw, boost::system::system_error);
+    }
+  } catch (const std::exception&) {
+    EXPECT_THROW(throw, lease_aborted);
   }
 }
 
