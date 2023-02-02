@@ -409,9 +409,10 @@ class PgScrubber : public ScrubPgIF,
 
   void on_pg_activate(const requested_scrub_t& request_flags) final;
 
-  void scrub_requested(scrub_level_t scrub_level,
-		       scrub_type_t scrub_type,
-		       requested_scrub_t& req_flags) final;
+  void scrub_requested(
+      scrub_level_t scrub_level,
+      scrub_type_t scrub_type,
+      requested_scrub_t& req_flags) final;
 
   /**
    * Reserve local scrub resources (managed by the OSD)
@@ -494,6 +495,7 @@ class PgScrubber : public ScrubPgIF,
 		 std::string param,
 		 Formatter* f,
 		 std::stringstream& ss) override;
+
   int m_debug_blockrange{0};
 
   // --------------------------------------------------------------------------
