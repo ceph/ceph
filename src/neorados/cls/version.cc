@@ -82,16 +82,11 @@ void read(ReadOp& op, obj_version* const objv)
                  const buffer::list& bl) {
             cls_version_read_ret ret;
             if (!ec) {
-              try {
-                auto iter = bl.cbegin();
-                decode(ret, iter);
-		if (objv)
-		  *objv = std::move(ret.objv);
-              } catch (const ceph::buffer::error& err) {
-                // TODO: Currently there's no good way to propagate
-                // errors back.
-              }
-            }
+	      auto iter = bl.cbegin();
+	      decode(ret, iter);
+	      if (objv)
+		*objv = std::move(ret.objv);
+	    }
           });
 }
 } // namespace neorados::cls::version
