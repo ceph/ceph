@@ -3717,7 +3717,7 @@ int RGWPutObj::verify_permission(optional_yield y)
         auto usr_policy_res = Effect::Pass;
         rgw::ARN obj_arn(cs_object->get_obj());
         for (auto& user_policy : s->iam_user_policies) {
-          if (usr_policy_res = user_policy.eval(s->env, *s->auth.identity,
+          if (usr_policy_res = user_policy.eval(s->env, boost::none,
 			      cs_object->get_instance().empty() ?
 			      rgw::IAM::s3GetObject :
 			      rgw::IAM::s3GetObjectVersion,
