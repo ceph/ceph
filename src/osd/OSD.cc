@@ -2039,20 +2039,36 @@ void OSDService::prune_sent_ready_to_merge(const OSDMapRef& osdmap)
 // ---
 
 void OSDService::_queue_for_recovery(
-  std::pair<epoch_t, PGRef> p,
+  pg_awaiting_throttle_t p,
   uint64_t reserved_pushes)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(recovery_lock));
+
+  uint64_t cost_for_queue = [this, &reserved_pushes, &p] {
+    if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+      return p.cost_per_object * reserved_pushes;
+    } else {
+      /* We retain this legacy behavior for WeightedPriorityQueue. It seems to
+       * require very large costs for several messages in order to do any
+       * meaningful amount of throttling.  This branch should be removed after
+       * Reef.
+       */
+      return cct->_conf->osd_recovery_cost;
+    }
+  }();
+
   enqueue_back(
     OpSchedulerItem(
       unique_ptr<OpSchedulerItem::OpQueueable>(
 	new PGRecovery(
-	  p.second->get_pgid(), p.first, reserved_pushes)),
-      cct->_conf->osd_recovery_cost,
+	  p.pg->get_pgid(),
+	  p.epoch_queued,
+          reserved_pushes)),
+      cost_for_queue,
       cct->_conf->osd_recovery_priority,
       ceph_clock_now(),
       0,
-      p.first));
+      p.epoch_queued));
 }
 
 // ====================================================================
