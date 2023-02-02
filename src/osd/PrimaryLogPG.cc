@@ -523,9 +523,10 @@ void PrimaryLogPG::on_global_recover(
 }
 
 void PrimaryLogPG::schedule_recovery_work(
-  GenContext<ThreadPool::TPHandle&> *c)
+  GenContext<ThreadPool::TPHandle&> *c,
+  uint64_t cost)
 {
-  osd->queue_recovery_context(this, c);
+  osd->queue_recovery_context(this, c, cost);
 }
 
 void PrimaryLogPG::replica_clear_repop_obc(
