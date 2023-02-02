@@ -581,7 +581,6 @@ void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
     auto suggested = m_osds->get_scrub_services().determine_scrub_time(
       request_flags, m_pg->info, m_pg->get_pgpool().info.opts);
     m_osds->get_scrub_services().update_job(m_scrub_job, suggested);
-    m_pg->publish_stats_to_osd();
   }
 
   dout(15) << __func__ << ": done " << registration_state() << dendl;
@@ -2351,7 +2350,6 @@ void PgScrubber::clear_pgscrub_state()
   state_clear(PG_STATE_REPAIR);
 
   clear_scrub_reservations();
-  m_pg->publish_stats_to_osd();
 
   requeue_waiting();
 
@@ -2360,7 +2358,6 @@ void PgScrubber::clear_pgscrub_state()
 
   // type-specific state clear
   _scrub_clear_state();
-  m_pg->publish_stats_to_osd();
 }
 
 void PgScrubber::replica_handling_done()
