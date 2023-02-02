@@ -580,7 +580,8 @@ class PgScrubber : public ScrubPgIF,
 
   [[nodiscard]] bool was_epoch_changed() const final;
 
-  void set_queued_or_active() final;
+  void set_queued_or_active(Scrub::QueuedForRole role_queued) final;
+
   /// Clears `m_queued_or_active` and restarts snaptrimming
   void clear_queued_or_active() final;
 
@@ -831,7 +832,9 @@ class PgScrubber : public ScrubPgIF,
    * Compared with 'm_active', this flag is asserted earlier and remains ON for
    * longer.
    */
-  bool m_queued_or_active{false};
+  Scrub::QueuedForRole m_queued_or_active{Scrub::QueuedForRole::none};
+
+  Scrub::QueuedForRole queued_for_role() const;
 
   eversion_t m_subset_last_update{};
 

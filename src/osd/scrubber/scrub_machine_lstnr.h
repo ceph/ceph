@@ -186,9 +186,8 @@ struct ScrubMachineListener {
   virtual void clear_reserving_now() = 0;
 
   /**
-   * Manipulate the 'I am being scrubbed now' Scrubber's flag
+   * clear the 'I am being scrubbed now' Scrubber's flag
    */
-  virtual void set_queued_or_active() = 0;
   virtual void clear_queued_or_active() = 0;
 
   /**

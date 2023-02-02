@@ -1444,7 +1444,7 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
 
   replica_scrubmap_pos.reset();	 // needed? RRR
 
-  set_queued_or_active();
+  set_queued_or_active(QueuedForRole::replica);
   m_osds->queue_for_rep_scrub(m_pg,
 			      m_replica_request_priority,
 			      m_flags.priority,
@@ -1455,7 +1455,7 @@ void PgScrubber::set_op_parameters(const requested_scrub_t& request)
 {
   dout(10) << fmt::format("{}: @ input: {}", __func__, request) << dendl;
 
-  set_queued_or_active(); // we are fully committed now.
+  set_queued_or_active(QueuedForRole::primary); // we are fully committed now.
 
   // write down the epoch of starting a new scrub. Will be used
   // to discard stale messages from previous aborted scrubs.
@@ -1768,15 +1768,15 @@ void PgScrubber::clear_reserving_now()
   m_osds->get_scrub_services().clear_reserving_now();
 }
 
-void PgScrubber::set_queued_or_active()
+void PgScrubber::set_queued_or_active(Scrub::QueuedForRole role_queued)
 {
-  m_queued_or_active = true;
+  m_queued_or_active = role_queued;
 }
 
 void PgScrubber::clear_queued_or_active()
 {
-  if (m_queued_or_active) {
-    m_queued_or_active = false;
+  if (m_queued_or_active != QueuedForRole::none) {
+    m_queued_or_active = QueuedForRole::none;
     // and just in case snap trimming was blocked by the aborted scrub
     m_pg->snap_trimmer_scrub_complete();
   }
@@ -1784,7 +1784,12 @@ void PgScrubber::clear_queued_or_active()
 
 bool PgScrubber::is_queued_or_active() const
 {
-  return m_queued_or_active;
+  return m_queued_or_active != QueuedForRole::none;
+}
+
+Scrub::QueuedForRole PgScrubber::queued_for_role() const
+{
+  return PgScrubber::m_queued_or_active;
 }
 
 void PgScrubber::set_scrub_blocked(utime_t since)

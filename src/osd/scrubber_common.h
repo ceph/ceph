@@ -41,6 +41,17 @@ enum class scrub_prio_t : bool { low_priority = false, high_priority = true };
 /// see ScrubPGgIF::m_current_token
 using act_token_t = uint32_t;
 
+/**
+ * The possible values of m_queued_or_active, the flag used to prevent
+ * a second scrub being initiated on a PG before the first one has been
+ * fully initialized or fully terminated. See the description of
+ * 'm_queued_or_active' for details.
+ * It is also used to identify the role this PG is to play when queued for
+ * scrubbing (as the actual state-machine state transition, whether to a
+ * Primary or to a replica related state, might not have happened yet).
+ */
+enum class QueuedForRole { none, primary, replica };
+
 /// "environment" preconditions affecting which PGs are eligible for scrubbing
 struct ScrubPreconds {
   bool allow_requested_repair_only{false};
@@ -269,7 +280,7 @@ struct ScrubPgIF {
    *
    * clear_queued_or_active() will also restart any blocked snaptrimming.
    */
-  virtual void set_queued_or_active() = 0;
+  virtual void set_queued_or_active(Scrub::QueuedForRole role_queued) = 0;
   virtual void clear_queued_or_active() = 0;
 
   /// are we waiting for resource reservation grants form our replicas?
