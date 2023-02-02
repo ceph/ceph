@@ -1572,24 +1572,24 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
       if (preallocated_inos.size())
 	mds->inotable->replay_alloc_ids(preallocated_inos);
 
-      // [repair bad inotable updates]
+      // repair inotable updates in case inotable wasn't persist in time
       if (inotablev > mds->inotable->get_version()) {
-	mds->clog->error() << "journal replay inotablev mismatch "
-	    << mds->inotable->get_version() << " -> " << inotablev;
-	mds->inotable->force_replay_version(inotablev);
+        mds->clog->error() << "journal replay inotablev mismatch "
+            << mds->inotable->get_version() << " -> " << inotablev
+            << ", will force replay it.";
+        mds->inotable->force_replay_version(inotablev);
       }
 
       ceph_assert(inotablev == mds->inotable->get_version());
     }
   }
   if (sessionmapv) {
-    unsigned diff = (used_preallocated_ino && !preallocated_inos.empty()) ? 2 : 1;
     if (mds->sessionmap.get_version() >= sessionmapv) {
       dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
 	       << " <= table " << mds->sessionmap.get_version() << dendl;
-    } else if (mds->sessionmap.get_version() + diff == sessionmapv) {
+    } else {
       dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
-	       << " - " << diff << " == table " << mds->sessionmap.get_version()
+	       << ", table " << mds->sessionmap.get_version()
 	       << " prealloc " << preallocated_inos
 	       << " used " << used_preallocated_ino
 	       << dendl;
@@ -1609,7 +1609,6 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	  session->info.prealloc_inos.insert(preallocated_inos);
           mds->sessionmap.replay_dirty_session(session);
 	}
-
       } else {
 	dout(10) << "EMetaBlob.replay no session for " << client_name << dendl;
 	if (used_preallocated_ino)
@@ -1618,13 +1617,19 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	if (!preallocated_inos.empty())
 	  mds->sessionmap.replay_advance_version();
       }
+
+      // repair sessionmap updates in case sessionmap wasn't persist in time
+      if (sessionmapv > mds->sessionmap.get_version()) {
+        mds->clog->error() << "EMetaBlob.replay sessionmapv mismatch "
+            << sessionmapv << " -> " << mds->sessionmap.get_version()
+            << ", will force replay it.";
+        if (g_conf()->mds_wipe_sessions) {
+          mds->sessionmap.wipe();
+        }
+        // force replay sessionmap version
+        mds->sessionmap.set_version(sessionmapv);
+      }
       ceph_assert(sessionmapv == mds->sessionmap.get_version());
-    } else {
-      mds->clog->error() << "EMetaBlob.replay sessionmap v " << sessionmapv
-			 << " - " << diff << " > table " << mds->sessionmap.get_version();
-      ceph_assert(g_conf()->mds_wipe_sessions);
-      mds->sessionmap.wipe();
-      mds->sessionmap.set_version(sessionmapv);
     }
   }
 
