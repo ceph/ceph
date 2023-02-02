@@ -893,8 +893,6 @@ class PgScrubber : public ScrubPgIF,
    */
   void request_rescrubbing(requested_scrub_t& req_flags);
 
-  void unregister_from_osd();
-
   /*
    * Select a range of objects to scrub.
    *
