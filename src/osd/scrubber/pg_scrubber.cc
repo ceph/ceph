@@ -2634,8 +2634,6 @@ void ReplicaReservations::send_all_done()
 
 void ReplicaReservations::send_reject()
 {
-  // stop any pending timeout timer
-  m_no_reply.reset();
   m_scrub_job->resources_failure = true;
   m_osds->queue_for_scrub_denied(m_pg, scrub_prio_t::low_priority);
 }
@@ -2786,6 +2784,8 @@ void ReplicaReservations::handle_reserve_reject(OpRequestRef op,
     dout(10) << __func__ << ": osd." << from << " scrub reserve = fail"
 	     << dendl;
     m_had_rejections = true;  // preventing any additional notifications
+    // stop any pending timeout timer
+    m_no_reply.reset();
     send_reject();
   }
 }
