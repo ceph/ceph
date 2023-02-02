@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <exception>
 #include "include/scope_guard.h"
 #include "common/ceph_time.h"
 #include "detail/lease_state.h"
@@ -33,16 +34,35 @@ class LockClient {
 };
 
 
+/// Exception thrown by with_lease() whenever the wrapped coroutine is canceled
+/// due to a renewal failure.
+class lease_aborted : public std::runtime_error {
+  std::exception_ptr eptr;
+ public:
+  lease_aborted(std::exception_ptr eptr)
+    : runtime_error("lease aborted"), eptr(eptr)
+  {}
+
+  /// Return the original exception that triggered the cancellation.
+  std::exception_ptr original_exception() const { return eptr; };
+};
+
+
 /// \brief Call a coroutine under the protection of a continuous lease.
 ///
 /// Acquires exclusive access to a timed lock, then spawns the given coroutine
-/// \ref cr. The lock is renewed at intervals of \ref duration / 2. The
-/// coroutine is canceled if the lock is lost before its completion.
+/// \ref cr. The lock is renewed at intervals of \ref duration / 2, and released
+/// after the coroutine's completion.
 ///
-/// Exceptions thrown by release() are ignored, but exceptions from acquire()
-/// and renew() propagate back to the caller. If renew() is delayed long
-/// enough for the lock to expire, a boost::system::system_error exception is
-/// thrown with an error code matching boost::system::errc::timed_out.
+/// Exceptions from acquire() propagate directly to the caller. Exceptions from
+/// release() are ignored in favor of the result of \ref cr.
+///
+/// If renew() is delayed long enough for the timed lock to expire, a
+/// boost::system::system_error exception is thrown with an error code matching
+/// boost::system::errc::timed_out. That exception, along with any exception
+/// from renew() itself, gets wrapped in a lease_aborted exception when
+/// reported to the caller. Any failure to renew the lock will also result in
+/// the cancellation of \ref cr.
 ///
 /// Otherwise, the result of \ref cr is returned to the caller, whether by
 /// exception or return value.
@@ -91,9 +111,10 @@ auto with_lease(LockClient& lock,
     timer.expires_at(expires_at);
     timer.async_wait([state] (error_code ec) {
           if (!ec) {
-            state->abort(std::make_exception_ptr(
+            auto eptr = std::make_exception_ptr(
                 boost::system::system_error(
-                    ETIMEDOUT, boost::system::system_category())));
+                    ETIMEDOUT, boost::system::system_category()));
+            state->abort(std::make_exception_ptr(lease_aborted{eptr}));
           }
         });
 
@@ -101,7 +122,8 @@ auto with_lease(LockClient& lock,
       co_await lock.renew(duration);
       expires_at = detail::lease_clock::now() + duration;
     } catch (const std::exception&) {
-      state->abort(std::current_exception());
+      state->abort(std::make_exception_ptr(
+              lease_aborted{std::current_exception()}));
       expires_at = detail::lease_clock::zero(); // don't release below
       break;
     }
