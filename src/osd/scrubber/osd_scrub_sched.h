@@ -276,6 +276,12 @@ class ScrubQueue {
     }
 
     /**
+     * access the 'state' directly, for when a distinction between 'registered'
+     * and 'unregistering' is needed (both have in_queues() == true)
+     */
+    bool is_state_registered() const { return state == qu_state_t::registered; }
+
+    /**
      * a text description of the "scheduling intentions" of this PG:
      * are we already scheduled for a scrub/deep scrub? when?
      */

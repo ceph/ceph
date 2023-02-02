@@ -464,13 +464,6 @@ unsigned int PgScrubber::scrub_requeue_priority(
 // ///////////////////////////////////////////////////////////////////// //
 // scrub-op registration handling
 
-void PgScrubber::unregister_from_osd()
-{
-  if (m_scrub_job) {
-    dout(15) << __func__ << " prev. state: " << registration_state() << dendl;
-    m_osds->get_scrub_services().remove_from_osd_queue(m_scrub_job);
-  }
-}
 
 bool PgScrubber::is_scrub_registered() const
 {
@@ -487,8 +480,12 @@ std::string_view PgScrubber::registration_state() const
 
 void PgScrubber::rm_from_osd_scrubbing()
 {
-  // make sure the OSD won't try to scrub this one just now
-  unregister_from_osd();
+  if (m_scrub_job && m_scrub_job->is_state_registered()) {
+    dout(15) << fmt::format(
+		    "{}: prev. state: {}", __func__, registration_state())
+	     << dendl;
+    m_osds->get_scrub_services().remove_from_osd_queue(m_scrub_job);
+  }
 }
 
 void PgScrubber::on_primary_change(
