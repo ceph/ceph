@@ -3537,11 +3537,23 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   ceph_assert(op->out_bl.size() == op->out_rval.size());
   ceph_assert(op->out_bl.size() == op->out_handler.size());
   auto p = out_ops.begin();
+  // Propagates handler error to Op::completion. In the event of
+  // multiple handler errors, the most recent wins.
+  bs::error_code handler_error;
+  // Holds OSD error code, so handlers downstream of a failing op are
+  // made aware of it.
+  bs::error_code first_osd_error;
   for (unsigned i = 0;
        p != out_ops.end() && pb != op->out_bl.end();
        ++i, ++p, ++pb, ++pr, ++pe, ++ph) {
     ldout(cct, 10) << " op " << i << " rval " << p->rval
 		   << " len " << p->outdata.length() << dendl;
+    // Track when we get an OSD error and supply it to subsequent
+    // handlers so they won't attempt to operate on data that isn't
+    // there.
+    if (!first_osd_error && (p->rval < 0)) {
+      first_osd_error = bs::error_code(-p->rval, osd_category());
+    }
     if (*pb)
       **pb = p->outdata;
     // set rval before running handlers so that handlers
@@ -3552,10 +3564,35 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       **pe = p->rval < 0 ? bs::error_code(-p->rval, osd_category()) :
 	bs::error_code();
     if (*ph) {
-      std::move((*ph))(p->rval < 0 ?
-		       bs::error_code(-p->rval, osd_category()) :
-		       bs::error_code(),
-		       p->rval, p->outdata);
+      try {
+	bs::error_code e;
+	if (first_osd_error) {
+	  e = first_osd_error;
+	} else if (p->rval < 0) {
+	  e = bs::error_code(-p->rval, osd_category());
+	}
+	std::move((*ph))(e, p->rval, p->outdata);
+      } catch (const bs::system_error& e) {
+	ldout(cct, 10) << "ERROR: tid " << op->tid << ": handler function threw "
+		       << e.what() << dendl;
+	handler_error = e.code();
+	if (*pe) {
+	  **pe = e.code();
+	}
+	if (*pr) {
+	  **pr = ceph::from_error_code(e.code());
+	}
+      } catch (const std::exception& e) {
+	ldout(cct, 0) << "ERROR: tid " << op->tid << ": handler function threw "
+		      << e.what() << dendl;
+	handler_error = osdc_errc::handler_failed;
+	if (*pe) {
+	  **pe = osdc_errc::handler_failed;
+	}
+	if (*pr) {
+	  **pr = -EIO;
+	}
+      }
     }
   }
 
@@ -3587,7 +3624,11 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   // do callbacks
   if (Op::has_completion(onfinish)) {
-    Op::complete(std::move(onfinish), osdcode(rc), rc);
+    if (rc == 0 && handler_error) {
+      Op::complete(std::move(onfinish), handler_error, -EIO);
+    } else {
+      Op::complete(std::move(onfinish), osdcode(rc), rc);
+    }
   }
   if (completion_lock.mutex()) {
     completion_lock.unlock();
