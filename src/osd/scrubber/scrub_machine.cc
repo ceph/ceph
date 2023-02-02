@@ -548,6 +548,19 @@ sc::result ReplicaWaitUpdates::react(const ReplicaPushesUpd&)
   return discard_event();
 }
 
+/*
+ * Note that we reset both the state machine and the scrubber.
+ */
+sc::result ReplicaWaitUpdates::react(const IntervalEnded&)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "ReplicaWaitUpdates::react(const IntervalEnded&)"
+	      ": clearing stale replica state"
+	   << dendl;
+  scrbr->replica_handling_done();
+  return transit<NotActive>();
+}
+
 /**
  * the event poster is handling the scrubber reset
  */
@@ -591,6 +604,19 @@ sc::result ActiveReplica::react(const SchedReplica&)
   }
 
   return discard_event();
+}
+
+/*
+ * Note that we reset both the state machine and the scrubber.
+ */
+sc::result ActiveReplica::react(const IntervalEnded&)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "ActiveReplica::react(const IntervalEnded&)"
+	      ": clearing stale replica state"
+	   << dendl;
+  scrbr->replica_handling_done();
+  return transit<NotActive>();
 }
 
 /**
