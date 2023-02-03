@@ -135,7 +135,7 @@ on ``mon.a``).
    .. prompt:: bash $
 
       sudo ceph-mon -i {mon-id} --mkfs --monmap {tmp}/{map-filename} --keyring {tmp}/{key-filename}
-	
+      sudo chown -R ceph:ceph /var/lib/ceph/mon/ceph-{mon-id}
 
 #. Start the new monitor and it will automatically join the cluster.
    The daemon needs to know which address to bind to, via either the
@@ -144,7 +144,7 @@ on ``mon.a``).
    
    .. prompt:: bash $
 
-      ceph-mon -i {mon-id} --public-addr {ip:port}
+      sudo ceph-mon -i {mon-id} --public-addr {ip:port} --setuser ceph --setgroup ceph
 
 .. _removing-monitors:
 
