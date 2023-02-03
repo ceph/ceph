@@ -1246,20 +1246,21 @@ Finally, update the period.
 Zones
 -----
 
-Ceph Object Gateway supports the notion of zones. A zone defines a
-logical group consisting of one or more Ceph Object Gateway instances.
+A zone defines a logical group that consists of one or more Ceph Object Gateway
+instances. Ceph Object Gateway supports zones.
 
-Configuring zones differs from typical configuration procedures, because
-not all of the settings end up in a Ceph configuration file. You can
-list zones, get a zone configuration and set a zone configuration.
+The procedure for configuring zones differs from typical configuration
+procedures, because not all of the settings end up in a Ceph configuration
+file. Zones can be listed. You can "get" a zone configuration and "set" a zone
+configuration.
 
 Create a Zone
 ~~~~~~~~~~~~~
 
-To create a zone, specify a zone name. If it is a master zone, specify
-the ``--master`` option. Only one zone in a zone group may be a master
-zone. To add the zone to a zonegroup, specify the ``--rgw-zonegroup``
-option with the zonegroup name.
+To create a zone, specify a zone name. If you are creating a master zone,
+specify the ``--master`` flag. Only one zone in a zone group may be a master
+zone. To add the zone to a zonegroup, specify the ``--rgw-zonegroup`` option
+with the zonegroup name.
 
 .. prompt:: bash #
    
@@ -1269,7 +1270,7 @@ option with the zonegroup name.
                     [--master] [--default] \
                     --access-key $SYSTEM_ACCESS_KEY --secret $SYSTEM_SECRET_KEY
 
-Then, update the period:
+After you have created the zone, update the period:
 
 .. prompt:: bash #
    
@@ -1278,7 +1279,7 @@ Then, update the period:
 Delete a Zone
 ~~~~~~~~~~~~~
 
-To delete zone, first remove it from the zonegroup.
+To delete a zone, first remove it from the zonegroup:
 
 .. prompt:: bash #
    
@@ -1291,7 +1292,7 @@ Then, update the period:
    
    radosgw-admin period update --commit
 
-Next, delete the zone. Execute the following:
+Next, delete the zone:
 
 .. prompt:: bash #
    
@@ -1310,13 +1311,13 @@ If the pools for the deleted zone will not be used anywhere else,
 consider deleting the pools. Replace ``<del-zone>`` in the example below
 with the deleted zone’s name.
 
-.. important:: Only delete the pools with prepended zone names. Deleting the root
-               pool, such as, ``.rgw.root`` will remove all of the system’s
-               configuration.
+.. important:: Only delete the pools with prepended zone names. Deleting the
+   root pool (for example, ``.rgw.root``) will remove all of the system’s
+   configuration.
 
-.. important:: Once the pools are deleted, all of the data within them are deleted
-               in an unrecoverable manner. Only delete the pools if the pool
-               contents are no longer needed.
+.. important:: When the pools are deleted, all of the data within them are
+   deleted in an unrecoverable manner. Delete the pools only if the pool's
+   contents are no longer needed.
 
 .. prompt:: bash #
    
