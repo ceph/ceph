@@ -478,17 +478,21 @@ public:
 
 int RGWRESTStreamOutCB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   dout(20) << "RGWRESTStreamOutCB::handle_data bl.length()=" << bl.length() << " bl_ofs=" << bl_ofs << " bl_len=" << bl_len << dendl;
   if (!bl_ofs && bl_len == bl.length()) {
     req->add_send_data(bl);
     return 0;
   }
 
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   bufferptr bp(bl.c_str() + bl_ofs, bl_len);
   bufferlist new_bl;
   new_bl.push_back(bp);
 
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   req->add_send_data(new_bl);
+  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   return 0;
 }
 

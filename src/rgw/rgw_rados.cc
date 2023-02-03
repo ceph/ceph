@@ -6611,9 +6611,11 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
   const uint64_t chunk_size = cct->_conf->rgw_get_obj_max_req_size;
   const uint64_t window_size = cct->_conf->rgw_get_obj_window_size;
 
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "chunk size is: " << chunk_size << dendl;
   auto aio = rgw::make_throttle(window_size, y);
   get_obj_data data(store, cb, &*aio, ofs, y);
 
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   int r = store->iterate_obj(dpp, source->get_ctx(), source->get_bucket_info(),
 			     source->get_target(),
                              ofs, end, chunk_size, _get_obj_iterate_cb, &data, y);
@@ -6623,6 +6625,7 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
     return r;
   }
 
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   return data.drain();
 }
 

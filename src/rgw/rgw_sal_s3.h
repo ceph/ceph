@@ -177,6 +177,8 @@ class S3FilterObject : public FilterObject {
 										 source(_source) {}
       virtual ~S3FilterReadOp() = default;
 
+	  virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
+			RGWGetDataCB* cb, optional_yield y) override;
       //virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
     };
 
@@ -226,24 +228,27 @@ public:
 					  const DoutPrefixProvider* _dpp) : FilterWriter(std::move(_next), std::move(_head_obj)),
 					  filter(_filter),
 					  save_dpp(_dpp), atomic(false) {
-
+						/*
 						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : obejct is : " << _head_obj->get_name() << dendl;
 						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : bucket is : " << _head_obj->get_bucket()->get_name() << dendl;
 						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : owner is : " << _head_obj->get_bucket()->get_owner()->get_tenant() << dendl;
 						this->user = (rgw::sal::S3FilterUser*)this->head_obj->get_bucket()->get_owner();
 						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : user is : " << this->user->get_tenant() << dendl;
+						*/
 					  }
 
   S3FilterWriter(std::unique_ptr<Writer> _next, S3FilterStore* _filter, std::unique_ptr<Object> _head_obj, 
 					  const DoutPrefixProvider* _dpp, bool _atomic) : FilterWriter(std::move(_next), std::move(_head_obj)),
 					  filter(_filter),
 					  save_dpp(_dpp), atomic(_atomic) {
+						/*
 						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : obejct is : " << _head_obj->get_name() << dendl;
 						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : bucket is : " << _head_obj->get_bucket()->get_name() << dendl;
 						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : owner is : " << _head_obj->get_bucket()->get_owner()->get_tenant() << dendl;
 
 						this->user = (rgw::sal::S3FilterUser*) this->head_obj->get_bucket()->get_owner();
 						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : user is : " << this->user->get_tenant() << dendl;
+						*/
 						}
 
   virtual ~S3FilterWriter() = default;
