@@ -114,6 +114,9 @@ public:
 
   void add_to_retired_set(CachedExtentRef ref) {
     ceph_assert(!is_weak());
+    if (ref->is_pending_purge) {
+      assert(ref->is_clean());
+    }
     if (ref->is_exist_clean() ||
 	ref->is_exist_mutation_pending()) {
       existing_block_stats.dec(ref);
@@ -134,6 +137,9 @@ public:
       // If it's already in the set, insert here will be a noop,
       // which is what we want.
       retired_set.insert(ref);
+    }
+    if (ref->is_pending_purge) {
+      assert(ref->is_clean());
     }
   }
 

@@ -318,6 +318,7 @@ public:
         t->replace_placeholder(*cached, *ret);
       }
 
+      assert(!cached->is_pending_purge);
       cached->state = CachedExtent::extent_state_t::INVALID;
       extent_init_func(*ret);
       return read_extent<T>(
@@ -1028,12 +1029,50 @@ private:
 
   friend class crimson::os::seastore::backref::BtreeBackrefManager;
   friend class crimson::os::seastore::BackrefManager;
+  friend class crimson::os::seastore::LRUCachePolicy;
   /**
    * lru
    *
    * holds references to recently used extents
    */
   std::unique_ptr<CachePolicy> extents_in_memory;
+
+  struct purge_state_t {
+    Cache *cache;
+    const std::size_t capacity;
+    std::size_t contents = 0;
+    CachedExtent::list pending_list;
+
+    purge_state_t(Cache *cache, std::size_t capacity)
+      : cache(cache), capacity(capacity) {}
+
+    bool need_purge(const CachedExtent &extent) const {
+      return get_extent_category(extent.get_type()) ==
+	data_category_t::DATA;
+    }
+
+    void purge(CachedExtent &extent) {
+      ceph_assert(!extent.primary_ref_list_hook.is_linked());
+      ceph_assert(extent.is_clean());
+      if (auto id = extent.get_paddr().get_device_id();
+	  contents < capacity &&
+	  need_purge(extent) &&
+	  !cache->epm.is_hot_device(id)) {
+	extent.is_pending_purge = true;
+	pending_list.push_back(extent);
+	intrusive_ptr_add_ref(&extent);
+	contents += extent.get_length();
+      }
+    }
+    void remove(CachedExtent &extent) {
+      ceph_assert(extent.is_pending_purge);
+      ceph_assert(extent.primary_ref_list_hook.is_linked());
+      extent.is_pending_purge = false;
+      pending_list.erase(pending_list.s_iterator_to(extent));
+      contents -= extent.get_length();
+      intrusive_ptr_release(&extent);
+    }
+  } purge_state;
 
   struct query_counters_t {
     uint64_t access = 0;
@@ -1193,6 +1232,9 @@ private:
     if (p_src && is_background_transaction(*p_src))
       return;
     if (ext.is_clean() && !ext.is_placeholder()) {
+      if (ext.is_pending_purge) {
+        purge_state.remove(ext);
+      }
       extents_in_memory->move_to_top(ext);
     }
   }

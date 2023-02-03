@@ -41,8 +41,13 @@ Cache::Cache(
   ExtentPlacementManager &epm)
   : epm(epm),
     extents_in_memory(std::make_unique<LRUCachePolicy>(
+          this,
 	  crimson::common::get_conf<Option::size_t>(
-	    "seastore_cache_lru_size")))
+	    "seastore_cache_lru_size"))),
+    purge_state(purge_state_t(
+          this,
+	  crimson::common::get_conf<Option::size_t>(
+	    "seastore_cache_purge_list_size")))
 {
   LOG_PREFIX(Cache::Cache);
   INFO("created, lru_size={}", extents_in_memory->get_capacity());
@@ -719,9 +724,12 @@ void Cache::mark_dirty(CachedExtentRef ref)
 {
   if (ref->is_dirty()) {
     assert(ref->primary_ref_list_hook.is_linked());
+    ceph_assert(!ref->is_pending_purge);
     return;
   }
 
+  // TODO
+  ceph_assert(!ref->is_pending_purge);
   extents_in_memory->remove_from_cache(*ref);
   ref->state = CachedExtent::extent_state_t::DIRTY;
   add_to_dirty(ref);
@@ -731,6 +739,7 @@ void Cache::add_to_dirty(CachedExtentRef ref)
 {
   assert(ref->is_dirty());
   assert(!ref->primary_ref_list_hook.is_linked());
+  ceph_assert(!ref->is_pending_purge);
   ceph_assert(ref->get_modify_time() != NULL_TIME);
   intrusive_ptr_add_ref(&*ref);
   dirty.push_back(*ref);
@@ -739,6 +748,7 @@ void Cache::add_to_dirty(CachedExtentRef ref)
 
 void Cache::remove_from_dirty(CachedExtentRef ref)
 {
+  ceph_assert(!ref->is_pending_purge);
   if (ref->is_dirty()) {
     ceph_assert(ref->primary_ref_list_hook.is_linked());
     stats.dirty_bytes -= ref->get_length();
@@ -754,9 +764,13 @@ void Cache::remove_extent(CachedExtentRef ref)
   assert(ref->is_valid());
   if (ref->is_dirty()) {
     remove_from_dirty(ref);
+  } else if (ref->is_pending_purge) {
+    purge_state.remove(*ref);
+    assert(!ref->is_pending_purge);
   } else if (!ref->is_placeholder()) {
     extents_in_memory->remove_from_cache(*ref);
   }
+  assert(!ref->is_pending_purge);
   extents.erase(*ref);
 }
 
@@ -778,6 +792,8 @@ void Cache::commit_replace_extent(
   assert(next->is_dirty());
   assert(next->get_paddr() == prev->get_paddr());
   assert(next->version == prev->version + 1);
+  ceph_assert(!prev->is_pending_purge);
+  ceph_assert(!next->is_pending_purge);
   extents.replace(*next, *prev);
 
   if (prev->get_type() == extent_types_t::ROOT) {
@@ -809,6 +825,7 @@ void Cache::invalidate_extent(
     Transaction& t,
     CachedExtent& extent)
 {
+  assert(!extent.is_pending_purge);
   if (!extent.may_conflict()) {
     assert(extent.transactions.empty());
     extent.state = CachedExtent::extent_state_t::INVALID;
