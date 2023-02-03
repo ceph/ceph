@@ -1459,6 +1459,55 @@ test_mirror_pool_peer_bootstrap_create() {
     ceph osd pool rm rbd1 rbd1 --yes-i-really-really-mean-it
 }
 
+test_tasks_removed_pool() {
+    echo "testing removing pool under running tasks..."
+    remove_images
+
+    ceph osd pool create rbd2 8
+    rbd pool init rbd2
+
+    rbd create $RBD_CREATE_ARGS --size 1G foo
+    rbd snap create foo@snap
+    rbd snap protect foo@snap
+    rbd clone foo@snap bar
+
+    rbd create $RBD_CREATE_ARGS --size 1G rbd2/dummy
+    rbd bench --io-type write --io-pattern seq --io-size 1M --io-total 1G rbd2/dummy
+    rbd snap create rbd2/dummy@snap
+    rbd snap protect rbd2/dummy@snap
+    for i in {1..5}; do
+        rbd clone rbd2/dummy@snap rbd2/dummy$i
+    done
+
+    # queue flattens on a few dummy images and remove that pool
+    test "$(ceph rbd task list)" = "[]"
+    for i in {1..5}; do
+        ceph rbd task add flatten rbd2/dummy$i
+    done
+    ceph osd pool delete rbd2 rbd2 --yes-i-really-really-mean-it
+    test "$(ceph rbd task list)" != "[]"
+
+    # queue flatten on another image and check that it completes
+    rbd info bar | grep 'parent: '
+    expect_fail rbd snap unprotect foo@snap
+    ceph rbd task add flatten bar
+    for i in {1..12}; do
+        rbd info bar | grep 'parent: ' || break
+        sleep 10
+    done
+    rbd info bar | expect_fail grep 'parent: '
+    rbd snap unprotect foo@snap
+
+    # check that flattens disrupted by pool removal are cleaned up
+    for i in {1..12}; do
+        test "$(ceph rbd task list)" = "[]" && break
+        sleep 10
+    done
+    test "$(ceph rbd task list)" = "[]"
+
+    remove_images
+}
+
 test_pool_image_args
 test_rename
 test_ls
@@ -1483,5 +1532,6 @@ test_trash_purge_schedule
 test_mirror_snapshot_schedule
 test_perf_image_iostat
 test_mirror_pool_peer_bootstrap_create
+test_tasks_removed_pool
 
 echo OK
