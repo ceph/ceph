@@ -219,12 +219,25 @@ void Migrator::find_stale_export_freeze()
    * - freeze subtree A
    * - client request tries authpinning items in subtree A
    *   (wait because subtree A is freezing)
+   *
+   *
+   *- For state EXPORT_WARNING:
+   *- When one or more CEPH_SESSION_FLUSHMSG or MSG_MDS_EXPORTDIRNOTIFY msgs
+   *  are lost (for example, because session is reseted, underlying connection
+   *  is reconnected, or client donot send ack of CEPH_SESSION_FLUSHMSG for 
+   *  some reason), the dir will donot  export anymore, and this dir is
+   *  freezed forever.
    */
   for (map<CDir*,export_state_t>::iterator p = export_state.begin();
        p != export_state.end(); ) {
     CDir* dir = p->first;
     export_state_t& stat = p->second;
     ++p;
+    if (stat.state == EXPORT_WARNING && stat.last_cum_auth_pins_change < cutoff
+        && stat.warning_ack_waiting.size() > 0) {
+      export_try_cancel(dir);
+      continue;
+    }
     if (stat.state != EXPORT_DISCOVERING && stat.state != EXPORT_FREEZING)
       continue;
     ceph_assert(dir->freeze_tree_state);
