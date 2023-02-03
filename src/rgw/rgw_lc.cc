@@ -1260,25 +1260,81 @@ public:
     /* If bucket is versioned, create delete_marker for current version
      */
     if (oc.bucket->versioned() && oc.o.is_current() && !oc.o.is_delete_marker()) {
-      ret = remove_expired_obj(oc.dpp, oc, false, rgw::notify::ObjectExpiration);
+      ret = remove_expired_obj(oc.dpp, oc, false, rgw::notify::ObjectTransitionCurrent);
       ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") current & not delete_marker" << " versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
     } else {
-      ret = remove_expired_obj(oc.dpp, oc, true, rgw::notify::ObjectExpiration);
+      ret = remove_expired_obj(oc.dpp, oc, true, rgw::notify::ObjectTransitionNoncurrent);
       ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") not current " << "versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
     }
     return ret;
   }
 
   int transition_obj_to_cloud(lc_op_ctx& oc) {
+    int ret{0};
     /* If CurrentVersion object, remove it & create delete marker */
     bool delete_object = (!oc.tier->retain_head_object() ||
                      (oc.o.is_current() && oc.bucket->versioned()));
 
-    int ret = oc.obj->transition_to_cloud(oc.bucket, oc.tier.get(), oc.o,
-					  oc.env.worker->get_cloud_targets(), oc.cct,
-					  !delete_object, oc.dpp, null_yield);
+    /* notifications */
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    std::unique_ptr<rgw::sal::Object> obj;
+    auto& bucket_info = oc.bucket->get_info();
+    std::string version_id;
+
+    ret = oc.driver->get_bucket(nullptr, bucket_info, &bucket);
     if (ret < 0) {
       return ret;
+    }
+
+    std::unique_ptr<rgw::sal::User> user;
+    if (! bucket->get_owner()) {
+      auto& bucket_info = bucket->get_info();
+      user = oc.driver->get_user(bucket_info.owner);
+      if (user) {
+	bucket->set_owner(user.get());
+      }
+    }
+
+    auto event_type = (oc.bucket->versioned() &&
+		       oc.o.is_current() && !oc.o.is_delete_marker()) ?
+      rgw::notify::ObjectTransitionCurrent :
+      rgw::notify::ObjectTransitionNoncurrent;
+
+    std::unique_ptr<rgw::sal::Notification> notify
+      = oc.driver->get_notification(
+	oc.dpp, obj.get(), nullptr, event_type,
+	bucket.get(), lc_id,
+	const_cast<std::string&>(oc.bucket->get_tenant()),
+	lc_req_id, null_yield);
+
+    /* can eliminate cast when reservation is lifted into Notification */
+    auto notify_res =
+      static_cast<rgw::sal::RadosNotification*>(
+	notify.get())->get_reservation();
+
+    ret = rgw::notify::publish_reserve(oc.dpp, event_type, notify_res, nullptr);
+    if (ret < 0) {
+      ldpp_dout(oc.dpp, 1)
+	<< "ERROR: notify reservation failed, deferring transition of object k="
+	<< oc.o.key
+	<< dendl;
+      return ret;
+    }
+
+    obj = bucket->get_object(oc.o.key);
+
+    ret = oc.obj->transition_to_cloud(oc.bucket, oc.tier.get(), oc.o,
+				      oc.env.worker->get_cloud_targets(),
+				      oc.cct, !delete_object, oc.dpp,
+				      null_yield);
+    if (ret < 0) {
+      return ret;
+    } else {
+      // send request to notification manager
+      (void) notify->publish_commit(oc.dpp, obj->get_obj_size(),
+				    ceph::real_clock::now(),
+				    obj->get_attrs()[RGW_ATTR_ETAG].to_str(),
+				    version_id);
     }
 
     if (delete_object) {
