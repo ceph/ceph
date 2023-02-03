@@ -9714,10 +9714,17 @@ TEST_P(StoreTestSpecificAUSize, SpilloverTest) {
       const PerfCounters* logger = bstore->get_bluefs_perf_counters();
       //experimentally it was discovered that this case results in 400+MB spillover
       //using lower 300MB threshold just to be safe enough
-      std::cout << "db_used:" << logger->get(l_bluefs_db_used_bytes) << std::endl;
-      std::cout << "slow_used:" << logger->get(l_bluefs_slow_used_bytes) << std::endl;
+      std::cout << "DB used:" << logger->get(l_bluefs_db_used_bytes) << std::endl;
+      std::cout << "SLOW used:" << logger->get(l_bluefs_slow_used_bytes) << std::endl;
       ASSERT_GE(logger->get(l_bluefs_slow_used_bytes), 16 * 1024 * 1024);
 
+      struct store_statfs_t statfs;
+      osd_alert_list_t alerts;
+      int r = store->statfs(&statfs, &alerts);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(alerts.count("BLUEFS_SPILLOVER"), 1);
+      std::cout << "spillover_alert:" << alerts.find("BLUEFS_SPILLOVER")->second
+                << std::endl;
     }
   );
 }
