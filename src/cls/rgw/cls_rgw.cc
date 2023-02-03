@@ -955,11 +955,27 @@ static void unaccount_entry(rgw_bucket_dir_header& header,
 {
   if (entry.exists) {
     rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
-    stats.num_entries--;
-    stats.total_size -= entry.meta.accounted_size;
-    stats.total_size_rounded -=
-      cls_rgw_get_rounded_size(entry.meta.accounted_size);
-    stats.actual_size -= entry.meta.size;
+    if(stats.num_entries >= 1){
+        stats.num_entries--;
+    }
+    if(stats.total_size >= entry.meta.accounted_size){
+        stats.total_size -= entry.meta.accounted_size;
+    }
+    else{
+        stats.total_size = 0;
+    }
+    if(stats.total_size_rounded >= cls_rgw_get_rounded_size(entry.meta.accounted_size)){
+        stats.total_size_rounded -= cls_rgw_get_rounded_size(entry.meta.accounted_size);
+    }
+    else{
+        stats.total_size_rounded = 0;
+    }
+    if(stats.actual_size >= entry.meta.size){
+        stats.actual_size -= entry.meta.size;
+    }
+    else{
+        stats.actual_size = 0;
+    }
   }
 }
 
