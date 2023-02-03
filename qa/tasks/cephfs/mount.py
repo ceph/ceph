@@ -782,6 +782,46 @@ class CephFSMount(object):
         self._verify(proc, retval, errmsg)
         return proc
 
+    def open_for_reading(self, basename):
+        """
+        Open a file for reading only.
+        """
+        assert(self.is_mounted())
+
+        path = os.path.join(self.hostfs_mntpt, basename)
+
+        return self._run_python(dedent(
+            """
+            import os
+            mode = os.O_RDONLY
+            fd = os.open("{path}", mode)
+            os.close(fd)
+            """.format(path=path)
+        ))
+
+    def open_for_writing(self, basename, creat=True, trunc=True, excl=False):
+        """
+        Open a file for writing only.
+        """
+        assert(self.is_mounted())
+
+        path = os.path.join(self.hostfs_mntpt, basename)
+
+        return self._run_python(dedent(
+            """
+            import os
+            mode = os.O_WRONLY
+            if {creat}:
+                mode |= os.O_CREAT
+            if {trunc}:
+                mode |= os.O_TRUNC
+            if {excl}:
+                mode |= os.O_EXCL
+            fd = os.open("{path}", mode)
+            os.close(fd)
+            """.format(path=path, creat=creat, trunc=trunc, excl=excl)
+        ))
+
     def open_no_data(self, basename):
         """
         A pure metadata operation
