@@ -1590,6 +1590,16 @@ int RGWListBucket_ObjStore_S3::get_common_params()
 
   // non-standard
   s->info.args.get_bool("allow-unordered", &allow_unordered, false);
+
+  if (s->info.args.exists("shard-id")){
+      string shard_id_str = s->info.args.get("shard-id");
+      string err;
+      shard_id = strict_strtol(shard_id_str.c_str(),10, &err);
+      if(!err.empty()){
+          ldout(s->cct,5) <<"had shard id specifiied: "<< shard_id_str << dendl;
+          return -EINVAL;
+      }
+  }
   delimiter = s->info.args.get("delimiter");
   max_keys = s->info.args.get("max-keys");
   op_ret = parse_max_keys();
