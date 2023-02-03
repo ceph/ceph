@@ -12,6 +12,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
+#include <boost/crc.hpp>
 
 #include "include/scope_guard.h"
 #include "common/Clock.h"
@@ -3910,6 +3911,7 @@ void RGWPutObj::execute(optional_yield y)
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
+  checksum.reset();
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
   hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   bufferlist bl, aclbl, bs;
@@ -3958,6 +3960,21 @@ void RGWPutObj::execute(optional_yield y)
     ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
   }
 
+  op_ret = checksum.enable_supplied();
+  if (op_ret) {
+    s->err.message = "Expecting a single x-amz-checksum- header. Multiple checksum Types are not allowed.";
+    return;
+  }
+  op_ret = checksum.check_specified_algorithm();
+  if (op_ret) {
+    s->err.message = "x-amz-sdk-checksum-algorithm does not match checksum provided";
+    return;
+  }  
+  op_ret = checksum.supplied_unarmor();
+  if (op_ret) {
+    return;
+  }
+
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
     op_ret = s->bucket->check_quota(this, quota, s->content_length, y);
@@ -4003,6 +4020,13 @@ void RGWPutObj::execute(optional_yield y)
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = s->bucket->get_multipart_upload(s->object->get_name(),
 					 multipart_upload_id);
+    rgw::sal::Attrs mpattrs;
+    op_ret = upload->get_info(this, s->yield, nullptr, &mpattrs);
+    if(checksum.check_upload_header(&mpattrs)) {
+      op_ret = -EINVAL;
+      s->err.message = "Checksum required by provided upload is missing.";
+      return;
+    }
     op_ret = upload->get_info(this, s->yield, &pdest_placement);
 
     s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, multipart_upload_id);
@@ -4156,6 +4180,7 @@ void RGWPutObj::execute(optional_yield y)
     if (need_calc_md5) {
       hash.Update((const unsigned char *)data.c_str(), data.length());
     }
+    checksum.update(data);
 
     /* update torrrent */
     torrent.update(data);
@@ -4198,6 +4223,7 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   hash.Final(m);
+  checksum.final();  
 
   if (compressor && compressor->is_compressed()) {
     bufferlist tmp;
@@ -4219,6 +4245,10 @@ void RGWPutObj::execute(optional_yield y)
   etag = calc_md5;
 
   if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+    op_ret = -ERR_BAD_DIGEST;
+    return;
+  }
+  if (checksum.check()){
     op_ret = -ERR_BAD_DIGEST;
     return;
   }
@@ -4246,6 +4276,7 @@ void RGWPutObj::execute(optional_yield y)
   }
   bl.append(etag.c_str(), etag.size());
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
+  checksum.add_checksum_attr(attrs);
 
   populate_with_generic_attrs(s, attrs);
   op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs);
@@ -4430,7 +4461,21 @@ void RGWPostObj::execute(optional_yield y)
       buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
       ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
     }
-
+    
+    op_ret = checksum.enable_supplied();
+    if (op_ret) {
+      s->err.message = "Expecting a single x-amz-checksum- header. Multiple checksum Types are not allowed.";
+      return;
+    }
+    op_ret = checksum.check_specified_algorithm();
+    if (op_ret) {
+      s->err.message = "x-amz-checksum-algorithm does not match checksum provided";
+      return;
+    }  
+    op_ret = checksum.supplied_unarmor();
+    if (op_ret) {
+      return;
+    }
     std::unique_ptr<rgw::sal::Object> obj =
 		     s->bucket->get_object(rgw_obj_key(get_current_filename()));
     if (s->bucket->versioning_enabled()) {
@@ -4485,6 +4530,7 @@ void RGWPostObj::execute(optional_yield y)
       }
 
       hash.Update((const unsigned char *)data.c_str(), data.length());
+      checksum.update(data);
       op_ret = filter->process(std::move(data), ofs);
       if (op_ret < 0) {
         return;
@@ -4519,6 +4565,7 @@ void RGWPostObj::execute(optional_yield y)
     }
 
     hash.Final(m);
+    checksum.final();
     buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
     etag = calc_md5;
@@ -4527,10 +4574,15 @@ void RGWPostObj::execute(optional_yield y)
       op_ret = -ERR_BAD_DIGEST;
       return;
     }
+    if (checksum.check()){
+      op_ret = -ERR_BAD_DIGEST;
+      return;
+    }
 
     bl.append(etag.c_str(), etag.size());
     emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
+    checksum.add_checksum_attr(attrs);
     policy.encode(aclbl);
     emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 

@@ -490,6 +490,12 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   info.modified = real_clock::now();
   info.manifest = manifest;
 
+  if (attrs.find(RGW_ATTR_PREFIX RGW_ATTR_CHECKSUM_CRC32) != attrs.end()){
+    info.checksum_crc32_str = attrs[RGW_ATTR_PREFIX RGW_ATTR_CHECKSUM_CRC32].to_str();
+  }
+  if (attrs.find(RGW_ATTR_PREFIX RGW_ATTR_CHECKSUM_SHA1) != attrs.end()){
+    info.checksum_sha1_str = attrs[RGW_ATTR_PREFIX RGW_ATTR_CHECKSUM_SHA1].to_str();
+  }
   bool compressed;
   r = rgw_compression_info_from_attrset(attrs, compressed, info.cs_info);
   if (r < 0) {
