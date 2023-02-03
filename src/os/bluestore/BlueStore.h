@@ -3099,15 +3099,6 @@ private:
     failed_cmode.clear();
   }
 
-  void _set_spillover_alert(const std::string& s) {
-    std::lock_guard l(qlock);
-    spillover_alert = s;
-  }
-  void _clear_spillover_alert() {
-    std::lock_guard l(qlock);
-    spillover_alert.clear();
-  }
-
   void _check_legacy_statfs_alert();
   void _check_no_per_pg_or_pool_omap_alert();
   void _set_disk_size_mismatch_alert(const std::string& s) {
