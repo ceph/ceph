@@ -916,6 +916,10 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         metadata['path'] = diskname
         metadata['type'] = block[2]
 
+        # some facts from udevadm
+        p = udevadm_property(sysdir)
+        metadata['id_bus'] = p.get('ID_BUS', '')
+
         device_facts[diskname] = metadata
     return device_facts
 
