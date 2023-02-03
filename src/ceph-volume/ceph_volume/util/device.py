@@ -594,7 +594,7 @@ class Device(object):
 
     def _check_generic_reject_reasons(self):
         reasons = [
-            ('removable', '1', 'removable'),
+            ('id_bus', 'usb', 'id_bus'),
             ('ro', '1', 'read-only'),
         ]
         rejected = [reason for (k, v, reason) in reasons if
