@@ -227,6 +227,12 @@ void Migrator::find_stale_export_freeze()
    *  is reconnected, or client donot send ack of CEPH_SESSION_FLUSHMSG for 
    *  some reason), the dir will donot  export anymore, and this dir is
    *  freezed forever.
+   *
+   *
+   *- For state EXPORT_NOTIFYING:
+   *- When one or more MSG_MDS_EXPORTDIRNOTIFY msgs are lost (for example,
+   *  because session is reset or underlying connection is reconnected), the dir
+   *  will donot export anymore, and this dir is freezed forever.
    */
   for (map<CDir*,export_state_t>::iterator p = export_state.begin();
        p != export_state.end(); ) {
@@ -236,6 +242,25 @@ void Migrator::find_stale_export_freeze()
     if (stat.state == EXPORT_WARNING && stat.last_cum_auth_pins_change < cutoff
         && stat.warning_ack_waiting.size() > 0) {
       export_try_cancel(dir);
+      continue;
+    }
+    if (stat.state == EXPORT_NOTIFYING && stat.last_cum_auth_pins_change < cutoff
+        && stat.notify_ack_waiting.size() > 0) {
+      // send notifies; borrowed from Migrator::export_logged_finish()
+      set<CDir*> bounds;
+      mdcache->get_subtree_bounds(dir, bounds);
+      for (set<mds_rank_t>::iterator p = stat.notify_ack_waiting.begin();
+       p != stat.notify_ack_waiting.end();
+       ++p) {
+        auto notify = make_message<MExportDirNotify>(dir->dirfrag(), stat.tid, true,
+            pair<int,int>(mds->get_nodeid(), stat.peer),
+            pair<int,int>(stat.peer, CDIR_AUTH_UNKNOWN));
+
+        for (set<CDir*>::iterator i = bounds.begin(); i != bounds.end(); ++i)
+          notify->get_bounds().push_back((*i)->dirfrag());
+
+        mds->send_message_mds(notify, *p);
+      }
       continue;
     }
     if (stat.state != EXPORT_DISCOVERING && stat.state != EXPORT_FREEZING)
