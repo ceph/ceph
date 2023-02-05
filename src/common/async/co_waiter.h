@@ -34,6 +34,7 @@ class co_waiter {
 
   struct op_cancellation {
     co_waiter* self;
+    op_cancellation(co_waiter* self) : self(self) {}
     void operator()(boost::asio::cancellation_type_t type) {
       if (type != boost::asio::cancellation_type::none) {
         self->cancel();
@@ -103,6 +104,7 @@ class co_waiter<void, Executor> {
 
   struct op_cancellation {
     co_waiter* self;
+    op_cancellation(co_waiter* self) : self(self) {}
     void operator()(boost::asio::cancellation_type_t type) {
       if (type != boost::asio::cancellation_type::none) {
         self->cancel();
