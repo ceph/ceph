@@ -365,6 +365,10 @@ add_executable(unittest_async_shared_mutex test_async_shared_mutex.cc)
 add_ceph_unittest(unittest_async_shared_mutex)
 target_link_libraries(unittest_async_shared_mutex ceph-common Boost::system)
 
+add_executable(unittest_async_parallel_for_each test_async_parallel_for_each.cc)
+add_ceph_unittest(unittest_async_parallel_for_each)
+target_link_libraries(unittest_async_parallel_for_each ceph-common Boost::system)
+
 add_executable(unittest_async_spawn_group test_async_spawn_group.cc)
 add_ceph_unittest(unittest_async_spawn_group)
 target_link_libraries(unittest_async_spawn_group ceph-common Boost::system)
