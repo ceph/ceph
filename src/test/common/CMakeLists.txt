@@ -367,6 +367,10 @@ add_ceph_unittest(unittest_async_max_concurrent_for_each)
 target_link_libraries(unittest_async_max_concurrent_for_each ceph-common Boost::system Boost::context)
 
 if(NOT WIN32)
+add_executable(unittest_async_co_spawn_group test_async_co_spawn_group.cc)
+add_ceph_unittest(unittest_async_co_spawn_group)
+target_link_libraries(unittest_async_co_spawn_group ceph-common Boost::system)
+
 add_executable(unittest_async_co_throttle test_async_co_throttle.cc)
 add_ceph_unittest(unittest_async_co_throttle)
 target_link_libraries(unittest_async_co_throttle ceph-common Boost::system)
