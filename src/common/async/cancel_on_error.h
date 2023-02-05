@@ -18,7 +18,7 @@
 
 namespace ceph::async {
 
-/// Error handling strategy for co_throttle.
+/// Error handling strategy for concurrent operations.
 enum class cancel_on_error : uint8_t {
   none, //< No spawned coroutines are canceled on failure.
   after, //< Cancel coroutines spawned after the failed coroutine.
