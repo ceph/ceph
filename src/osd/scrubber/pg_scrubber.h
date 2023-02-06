@@ -473,10 +473,12 @@ class PgScrubber : public ScrubPgIF,
 
   void update_scrub_stats(ceph::coarse_real_clock::time_point now_is) final;
 
-  int asok_debug(std::string_view cmd,
-		 std::string param,
-		 Formatter* f,
-		 std::stringstream& ss) override;
+  int asok_debug(Formatter *f,
+    std::string_view prefix,
+    std::string_view cmd,
+    std::string_view param,
+    std::string_view value) override;
+
   int m_debug_blockrange{0};
 
   // --------------------------------------------------------------------------
@@ -744,6 +746,43 @@ class PgScrubber : public ScrubPgIF,
 
   void cleanup_on_finish();  // scrub_clear_state() as called for a Primary when
 			     // Active->NotActive
+
+  /// an asok/debug helper
+  int dbg_reserv_delay(
+      Formatter* f,
+      std::string_view param,
+      std::string_view value);
+
+  enum class ReservationErr {
+    no_error_injection,
+    drop_reservation,
+    pre_reservation_delay
+  };
+  struct InjectedReservationErr {
+    ReservationErr response{ReservationErr::no_error_injection};
+    std::chrono::milliseconds delay;
+  };
+
+  /**
+   *  Supports error injection for reservation requests. A decision is made
+   *  based on relevant debug configuration options, and on direct requests
+   *  made via the asok.
+   *
+   *  \returns the error injection parameters, if any
+   */
+  InjectedReservationErr should_inject_reservation_err(int num_replicas);
+  InjectedReservationErr debug_inject_reservation_err{};
+
+  Context* m_debug_reservation_cb{nullptr};
+  void cancel_debug_delayed_reservation();
+
+  void reserve_at_remote_request(
+      const Message::ConnectionFRef& conn,
+      epoch_t request_ep,
+      Scrub::act_token_t token,
+      bool not_prohibited,
+      bool was_debug_delayed,
+      ReservationErr delay_type);
 
  protected:
   PG* const m_pg;

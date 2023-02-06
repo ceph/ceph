@@ -994,7 +994,7 @@ PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter)
 // ==========================================================
 
 void PrimaryLogPG::do_command(
-  const string_view& orig_prefix,
+  string_view orig_prefix,
   const cmdmap_t& cmdmap,
   const bufferlist& idata,
   std::function<void(int,const std::string&,bufferlist&)> on_finish)
@@ -1193,23 +1193,12 @@ void PrimaryLogPG::do_command(
     outbl.append(ss.str());
   }
 
-  else if (prefix == "block" || prefix == "unblock" || prefix == "set" ||
-           prefix == "unset") {
-    string value;
-    cmd_getval(cmdmap, "value", value);
+  else if (orig_prefix.starts_with("scrubdebug")) {
+    string value = cmd_getval_or<string>(cmdmap, "value", "");
+    string arg1 = cmd_getval_or<string>(cmdmap, "arg1", "");
+    ret = do_scrub_debug(f.get(), orig_prefix, command, value, arg1);
 
-    if (is_primary()) {
-      ret = m_scrubber->asok_debug(prefix, value, f.get(), ss);
-      f->open_object_section("result");
-      f->dump_bool("success", true);
-      f->close_section();
-    } else {
-      ss << "Not primary";
-      ret = -EPERM;
-    }
-    outbl.append(ss.str());
-  }
-  else {
+  } else {
     ret = -ENOSYS;
     ss << "prefix '" << prefix << "' not implemented";
   }
@@ -1219,6 +1208,26 @@ void PrimaryLogPG::do_command(
     f->flush(outbl);
   }
   on_finish(ret, ss.str(), outbl);
+}
+
+int PrimaryLogPG::do_scrub_debug(
+    Formatter *f,
+    std::string_view prefix,
+    std::string_view cmd,
+    std::string_view val,
+    std::string_view arg1)
+{
+  dout(20) << fmt::format("do_scrub_debug: {}: {} / {} / {}", prefix, cmd, val, arg1)
+	   << dendl;
+  if (!m_scrubber) {
+    f->dump_string("error", "do_scrub_debug: no scrubber object");
+    return -ENOSYS;
+  }
+  f->open_object_section("result");
+  auto res = m_scrubber->asok_debug(f, prefix, cmd, val, arg1);
+  f->dump_bool("success", true);
+  f->close_section();
+  return res;
 }
 
 

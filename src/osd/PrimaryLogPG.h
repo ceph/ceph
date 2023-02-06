@@ -1477,7 +1477,7 @@ public:
   ~PrimaryLogPG() override;
 
   void do_command(
-    const std::string_view& prefix,
+    std::string_view prefix,
     const cmdmap_t& cmdmap,
     const ceph::buffer::list& idata,
     std::function<void(int,const std::string&,ceph::buffer::list&)> on_finish) override;
@@ -1537,7 +1537,15 @@ private:
     return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
   }
 
-public:
+  /// an aux used by do_command() to handle scrub debugging commands
+  int do_scrub_debug(
+      Formatter *f,
+      std::string_view prefix,
+      std::string_view cmd,
+      std::string_view param,
+      std::string_view val);
+
+ public:
   coll_t get_coll() {
     return coll;
   }

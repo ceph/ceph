@@ -1580,15 +1580,67 @@ void PgScrubber::map_from_replica(OpRequestRef op)
   }
 }
 
+
+// separated from handle_scrub_reserve_request() to allow testing
+// with injected delays
+void PgScrubber::reserve_at_remote_request(
+    const Message::ConnectionFRef& conn,
+    epoch_t request_ep,
+    Scrub::act_token_t token,
+    bool not_prohibited,
+    bool was_debug_delayed,
+    ReservationErr delay_type)
+{
+  dout(20) << fmt::format(
+		  "{}: {} call with ep:{} token:{}", __func__,
+		  was_debug_delayed ? "delayed" : "immediate", request_ep,
+		  token)
+	   << dendl;
+  // if delayed as part of a debug session: verify that nothing has changed
+  if (was_debug_delayed && token < m_current_token) {
+    dout(10) << fmt::format(
+		    "{}: stale delayed request with token:{}", __func__, token)
+	     << dendl;
+
+    return;
+  }
+
+  // try to reserve. All other checks already performed by the caller
+  m_remote_osd_resource.emplace(this, m_pg, m_osds, request_ep);
+
+  bool granted{false};
+  if (not_prohibited) {
+    // OSD resources allocated?
+    granted = m_remote_osd_resource->is_reserved();
+    if (!granted) {
+      // just forget it
+      m_remote_osd_resource.reset();
+      dout(20) << fmt::format(
+		      "{}: failed to reserve remotely (ep:{} token:{})",
+		      __func__, request_ep, token)
+	       << dendl;
+    }
+  }
+
+  Message* reply = new MOSDScrubReserve(
+      spg_t(m_pg->info.pgid.pgid, m_pg->get_primary().shard), request_ep,
+      granted ? MOSDScrubReserve::GRANT : MOSDScrubReserve::REJECT,
+      m_pg_whoami);
+  m_osds->send_message_osd_cluster(reply, conn);
+  dout(10) << fmt::format(
+		  "{}: reserved? {}", __func__, (granted ? "yes" : "no"))
+	   << dendl;
+}
+
+
 void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
 {
   dout(10) << __func__ << " " << *op->get_req() << dendl;
   op->mark_started();
   auto request_ep = op->get_req<MOSDScrubReserve>()->get_map_epoch();
-  dout(20) << fmt::format("{}: request_ep:{} recovery:{}",
-			  __func__,
-			  request_ep,
-			  m_osds->is_recovery_active())
+  dout(20) << fmt::format(
+		  "{}: request_ep:{} recovery:{}", __func__, request_ep,
+		  m_osds->is_recovery_active())
 	   << dendl;
 
   /*
@@ -1617,17 +1669,16 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
 
   if (request_ep < m_pg->get_same_interval_since()) {
     // will not ack stale requests
-    dout(10) << fmt::format("{}: stale reservation (request ep{} < {}) denied",
-			    __func__,
-			    request_ep,
-			    m_pg->get_same_interval_since())
+    dout(10) << fmt::format(
+		    "{}: stale reservation (request ep{} < {}) denied",
+		    __func__, request_ep, m_pg->get_same_interval_since())
 	     << dendl;
     return;
   }
 
+  InjectedReservationErr injected_dbg;	// initialized to 'none'
   bool granted{false};
   if (m_remote_osd_resource.has_value()) {
-
     dout(10) << __func__ << " already reserved. Reassigned." << dendl;
 
     /*
@@ -1640,30 +1691,70 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
      */
     advance_token();
     granted = true;
-
-  } else if (m_pg->cct->_conf->osd_scrub_during_recovery ||
-	     !m_osds->is_recovery_active()) {
-    m_remote_osd_resource.emplace(this, m_pg, m_osds, request_ep);
-    // OSD resources allocated?
-    granted = m_remote_osd_resource->is_reserved();
-    if (!granted) {
-      // just forget it
-      m_remote_osd_resource.reset();
-      dout(20) << __func__ << ": failed to reserve remotely" << dendl;
-    }
-  } else {
+  } else if (
+      m_osds->is_recovery_active() &&
+      !m_pg->cct->_conf->osd_scrub_during_recovery) {
     dout(10) << __func__ << ": recovery is active; not granting" << dendl;
+  } else {
+    // should we inject an error here? or a delay in answering?
+    injected_dbg = should_inject_reservation_err(
+	static_cast<int>(m_pg->get_actingset().size()) - 1);
+    if (injected_dbg.response == ReservationErr::drop_reservation) {
+      dout(5) << __func__ << " debug-dropping the reservation request" << dendl;
+      return;  // note: without sending a reply. Debug only!
+    }
+    granted = true;
   }
 
-  dout(10) << __func__ << " reserved? " << (granted ? "yes" : "no") << dendl;
+  switch (injected_dbg.response) {
+    case ReservationErr::drop_reservation:
+      // already handled
+      break;
+    case ReservationErr::no_error_injection:
+      // send an immediate reply
+      reserve_at_remote_request(
+	  op->get_req()->get_connection(), request_ep, m_current_token, granted,
+	  false, ReservationErr::no_error_injection);
+      break;
+    case ReservationErr::pre_reservation_delay:
+      // send a delayed reply
+      dout(1) << fmt::format(
+		     "{}: injecting {} ms delay in replica-reservation reply",
+		     __func__, injected_dbg.delay.count())
+	      << dendl;
+      m_debug_reservation_cb = new LambdaContext(
+	  [this, granted, request_ep, injected_dbg, tkn = m_current_token,
+	   conn = op->get_req()->get_connection(), pgid = m_pg_id,
+	   pg = PGRef(m_pg)]([[maybe_unused]] int r) {
+	    lgeneric_subdout(g_ceph_context, osd, 1)
+		<< fmt::format(
+		       "handle_scrub_reserve_request: pg[{}] executing the "
+		       "debug-delayed reservation ack",
+		       pgid)
+		<< dendl;
+	    pg->lock();
+	    m_debug_reservation_cb = nullptr;
+	    if (check_interval(request_ep)) {
+	      reserve_at_remote_request(
+		  conn, request_ep, tkn, granted, true, injected_dbg.response);
+	    }
+	    pg->unlock();
+	  });
 
-  Message* reply = new MOSDScrubReserve(
-    spg_t(m_pg->info.pgid.pgid, m_pg->get_primary().shard),
-    request_ep,
-    granted ? MOSDScrubReserve::GRANT : MOSDScrubReserve::REJECT,
-    m_pg_whoami);
+      std::lock_guard l(m_osds->sleep_lock);
+      m_debug_reservation_cb = m_osds->sleep_timer.add_event_after(
+	  injected_dbg.delay, m_debug_reservation_cb);
+      break;
+  }
+}
 
-  m_osds->send_message_osd_cluster(reply, op->get_req()->get_connection());
+void PgScrubber::cancel_debug_delayed_reservation()
+{
+  if (m_debug_reservation_cb) {
+    std::lock_guard l(m_osds->sleep_lock);
+    m_osds->sleep_timer.cancel_event(m_debug_reservation_cb);
+    m_debug_reservation_cb = nullptr;
+  }
 }
 
 void PgScrubber::handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from)
@@ -2222,6 +2313,7 @@ void PgScrubber::handle_query_state(ceph::Formatter* f)
 
 PgScrubber::~PgScrubber()
 {
+  cancel_debug_delayed_reservation();
   if (m_scrub_job) {
     // make sure the OSD won't try to scrub this one just now
     rm_from_osd_scrubbing();
@@ -2432,43 +2524,121 @@ ostream& PgScrubber::show(ostream& out) const
   return out << " [ " << m_pg_id << ": " << m_flags << " ] ";
 }
 
-int PgScrubber::asok_debug(std::string_view cmd,
-			   std::string param,
-			   Formatter* f,
-			   stringstream& ss)
+int PgScrubber::asok_debug(
+  Formatter* f,
+  std::string_view prefix,
+  std::string_view cmd,
+  std::string_view param,
+  std::string_view arg1)
 {
-  dout(10) << __func__ << " cmd: " << cmd << " param: " << param << dendl;
+  dout(10)
+    << fmt::format(
+	 "asok_debug: pr={} cmd={}, param={}, val={}", prefix, cmd, param, arg1)
+    << dendl;
 
-  if (cmd == "block") {
-    // 'm_debug_blockrange' causes the next 'select_range' to report a blocked
-    // object
+  const auto set_on = prefix == "scrubdebug_set";
+  int ret{0};
+
+  // (code maintainer: see PR discussions re the various formatting options)
+  if (cmd == "block" && set_on) {
+    // cause the next 'select_range' to report a blocked object
     m_debug_blockrange = 10;  // >1, so that will trigger fast state reports
+    f->dump_string("op", "blocking scrub range");
 
-  } else if (cmd == "unblock") {
-    // send an 'unblock' event, as if a blocked range was freed
+  } else if (cmd == "block" && !set_on) {
     m_debug_blockrange = 0;
     m_fsm->process_event(Unblocked{});
+    f->dump_string("op", "scrub range unblocked");
 
-  } else if ((cmd == "set") || (cmd == "unset")) {
+  } else if (cmd == "unblock") {
+    m_debug_blockrange = 0;
+    m_fsm->process_event(Unblocked{});
+    f->dump_string("op", "scrub range unblocked");
 
-    if (param == "sessions") {
-      // set/reset the inclusion of the scrub sessions counter in 'query' output
-      m_publish_sessions = (cmd == "set");
+  } else if (cmd == "sessions" && set_on) {
+    // set the inclusion of the scrub sessions counter in 'query' output
+    m_publish_sessions = true;
+    f->dump_string("op", "ok");
 
-    } else if (param == "block") {
-      if (cmd == "set") {
-	// set a flag that will cause the next 'select_range' to report a
-	// blocked object
-	m_debug_blockrange = 10;  // >1, so that will trigger fast state reports
-      } else {
-	// send an 'unblock' event, as if a blocked range was freed
-	m_debug_blockrange = 0;
-	m_fsm->process_event(Unblocked{});
-      }
+  } else if (cmd == "sessions" && !set_on) {
+    // set the inclusion of the scrub sessions counter in 'query' output
+    m_publish_sessions = false;
+    f->dump_string("op", "ok");
+
+  } else if (cmd == "repdeny") {
+    debug_inject_reservation_err.response = ReservationErr::drop_reservation;
+    f->dump_string("op", "dropping next reservation request");
+
+  } else if (cmd == "repdelay") {
+    ret = dbg_reserv_delay(f, param, arg1);
+
+  } else {
+    ret = -EINVAL;
+  }
+  return ret;
+}
+
+int PgScrubber::dbg_reserv_delay(
+    Formatter* f,
+    std::string_view param,
+    std::string_view value)
+{
+  milliseconds delay{4s};
+  if (!value.empty()) {
+    try {
+      delay = milliseconds{std::stol(std::string{value})};
+    } catch (const std::invalid_argument& e) {
+      f->dump_string("error", fmt::format("non-numeric delay parameter ('{}')", value));
+      return -EINVAL;
     }
   }
-
+  debug_inject_reservation_err.delay = delay;
+  debug_inject_reservation_err.response = ReservationErr::pre_reservation_delay;
+  f->dump_string(
+      "op",
+      fmt::format("delaying next reservation request by {} ms", delay.count()));
   return 0;
+}
+
+PgScrubber::InjectedReservationErr PgScrubber::should_inject_reservation_err(
+    int num_replicas)
+{
+  // do we already have debug flags set (by a direct asok command)?
+  if (debug_inject_reservation_err.response !=
+      ReservationErr::no_error_injection) {
+    // the debug flags are already set for this request. Clear them and return
+    auto this_run = debug_inject_reservation_err;
+    debug_inject_reservation_err = {};
+    return this_run;
+  }
+
+  // ... but there is also a second, intrinsic, configurable-controlled part:
+  const auto& conf = get_pg_cct()->_conf;
+  auto drop_probability =
+      conf.get_val<double>("osd_debug_scrub_reserve_drop_probability") /
+      num_replicas;
+  auto delay_probability =
+      conf.get_val<double>("osd_debug_scrub_reserve_delay_probability") /
+      num_replicas;
+
+  // only call the random generator if we have a chance to inject an error
+  if (drop_probability <= 0.0001f && delay_probability <= 0.0001f) {
+    return {ReservationErr::no_error_injection, 0s};
+  }
+  if (auto rnd = std::rand() % 10'000; rnd < drop_probability * 10'000) {
+    return {ReservationErr::drop_reservation, 0s};
+  } else if (rnd < delay_probability * 10'000) {
+    // we should be delaying for a random amount of time in the range
+    // osd_scrub_slow_reservation_response..osd_scrub_reservation_timeout
+    rnd /= 100;
+    auto slow_rep = conf.get_val<std::chrono::milliseconds>(
+	"osd_scrub_slow_reservation_response");
+    auto timeout = conf.get_val<std::chrono::milliseconds>(
+	"osd_scrub_reservation_timeout");
+    auto calc_delay = slow_rep + rnd * (timeout - slow_rep) / 100;
+    return {ReservationErr::pre_reservation_delay, calc_delay};
+  }
+  return {ReservationErr::no_error_injection, 0s};
 }
 
 /*

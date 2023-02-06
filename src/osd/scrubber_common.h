@@ -415,8 +415,10 @@ struct ScrubPgIF {
 
   // --------------- debugging via the asok ------------------------------
 
-  virtual int asok_debug(std::string_view cmd,
-			 std::string param,
-			 Formatter* f,
-			 std::stringstream& ss) = 0;
+  virtual int asok_debug(
+      Formatter* f,
+      std::string_view prefix,
+      std::string_view cmd,
+      std::string_view param,
+      std::string_view val) = 0;
 };
