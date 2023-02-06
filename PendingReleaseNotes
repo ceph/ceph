@@ -32,10 +32,17 @@
   in certain recovery scenarios, e.g., monitor database lost and rebuilt, and
   the restored file system is expected to have the same ID as before.
 
+>=16.2.12
+---------
+
 * CEPHFS: Rename the `mds_max_retries_on_remount_failure` option to
   `client_max_retries_on_remount_failure` and move it from mds.yaml.in to
   mds-client.yaml.in because this option was only used by MDS client from its
   birth.
+
+* `ceph mgr dump` command now outputs `last_failure_osd_epoch` and
+  `active_clients` fields at the top level.  Previously, these fields were
+  output under `always_on_modules` field.
 
 >=16.2.11
 --------
