@@ -1,3 +1,10 @@
+>=17.2.6
+--------
+
+* `ceph mgr dump` command now outputs `last_failure_osd_epoch` and
+  `active_clients` fields at the top level.  Previously, these fields were
+  output under `always_on_modules` field.
+
 >=17.2.5
 --------
 
