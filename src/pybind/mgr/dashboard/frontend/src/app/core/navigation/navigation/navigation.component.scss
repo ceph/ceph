@@ -152,7 +152,7 @@ $sidebar-width: 200px;
 .cd-navbar-primary > .active > a:hover {
   background-color: vv.$primary !important;
   border: 0 !important;
-  color: vv.$gray-200 !important;
+  color: vv.$white !important;
 }
 
 .wrapper {
@@ -190,7 +190,7 @@ $sidebar-width: 200px;
       li a {
         color: vv.$white;
         display: block;
-        font-size: 1.1em;
+        font-size: 1.3em;
         padding: 10px;
         padding-left: 27px;
 
@@ -233,7 +233,7 @@ $sidebar-width: 200px;
 
   ul ul a {
     background: lighten(vv.$secondary, 10);
-    font-size: 0.9em !important;
+    font-size: 1.1em !important;
     padding-left: 40px !important;
   }
 

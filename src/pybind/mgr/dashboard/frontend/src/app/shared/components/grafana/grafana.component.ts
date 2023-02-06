@@ -37,6 +37,8 @@ export class GrafanaComponent implements OnInit, OnChanges {
   grafanaStyle: string;
   @Input()
   uid: string;
+  @Input()
+  title: string;
 
   constructor(private sanitizer: DomSanitizer, private settingsService: SettingsService) {
     this.grafanaTimes = [

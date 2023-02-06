@@ -254,10 +254,10 @@
               <span class="form-text text-muted"
                     id="ecp-info-block"
                     *ngIf="data.erasureInfo && form.getValue('erasureProfile')">
-                <ul ngbNav
-                    #ecpInfoTabs="ngbNav"
-                    class="nav-tabs">
-                  <li ngbNavItem="ecp-info">
+                <nav ngbNav
+                     #ecpInfoTabs="ngbNav"
+                     class="nav-tabs">
+                  <ng-container ngbNavItem="ecp-info">
                     <a ngbNavLink
                        i18n>Profile</a>
                     <ng-template ngbNavContent>
@@ -267,8 +267,8 @@
                                           [autoReload]="false">
                       </cd-table-key-value>
                     </ng-template>
-                  </li>
-                  <li ngbNavItem="used-by-pools">
+                  </ng-container>
+                  <ng-container ngbNavItem="used-by-pools">
                     <a ngbNavLink
                        i18n>Used by pools</a>
                     <ng-template ngbNavContent>
@@ -281,8 +281,8 @@
                         </li>
                       </ul>
                     </ng-template>
-                  </li>
-                </ul>
+                  </ng-container>
+                </nav>
 
                 <div [ngbNavOutlet]="ecpInfoTabs"></div>
               </span>
@@ -361,10 +361,10 @@
                 <div class="form-text text-muted"
                      id="crush-info-block"
                      *ngIf="data.crushInfo && form.getValue('crushRule')">
-                  <ul ngbNav
-                      #crushInfoTabs="ngbNav"
-                      class="nav-tabs">
-                    <li ngbNavItem="crush-rule-info">
+                  <nav ngbNav
+                       #crushInfoTabs="ngbNav"
+                       class="nav-tabs">
+                    <ng-container ngbNavItem="crush-rule-info">
                       <a ngbNavLink
                          i18n>Crush rule</a>
                       <ng-template ngbNavContent>
@@ -374,8 +374,8 @@
                                             [autoReload]="false">
                         </cd-table-key-value>
                       </ng-template>
-                    </li>
-                    <li ngbNavItem="crush-rule-steps">
+                    </ng-container>
+                    <ng-container ngbNavItem="crush-rule-steps">
                       <a ngbNavLink
                          i18n>Crush steps</a>
                       <ng-template ngbNavContent>
@@ -385,8 +385,8 @@
                           </li>
                         </ol>
                       </ng-template>
-                    </li>
-                    <li ngbNavItem="used-by-pools">
+                    </ng-container>
+                    <ng-container ngbNavItem="used-by-pools">
                       <a ngbNavLink
                          i18n>Used by pools</a>
                       <ng-template ngbNavContent>
@@ -400,8 +400,8 @@
                           </li>
                         </ul>
                       </ng-template>
-                    </li>
-                  </ul>
+                    </ng-container>
+                  </nav>
 
                   <div [ngbNavOutlet]="crushInfoTabs"></div>
                 </div>

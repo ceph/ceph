@@ -4,7 +4,7 @@ import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { BrowserDynamicTestingModule } from '@angular/platform-browser-dynamic/testing';
 
-import { NgbModal, NgbNav, NgbNavItem } from '@ng-bootstrap/ng-bootstrap';
+import { NgbModal, NgbNav, NgbNavItem, NgbNavLink } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { configureTestSuite } from 'ng-bullet';
 import { of } from 'rxjs';
@@ -622,7 +622,7 @@ export class TabHelper {
 
   private static getNgbNavItemsDebugElems(fixture: ComponentFixture<any>) {
     const debugElem: DebugElement = fixture.debugElement;
-    return debugElem.queryAll(By.directive(NgbNavItem));
+    return debugElem.queryAll(By.directive(NgbNavLink));
   }
 }
 

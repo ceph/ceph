@@ -1039,8 +1039,8 @@ scenarios.
 
 For example - ``throw new DashboardNotFoundError()``.
 
-I18N
-----
+Internationalization (i18n)
+---------------------------
 
 How to extract messages from source code?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1203,6 +1203,92 @@ Keep elements that affect the sentence:
 
   <!-- recommended -->
   <span i18n>Profile <b>foo</b> will be removed.</span>
+
+
+.. _accessibility:
+
+Accessibility
+-------------
+
+Many parts of the Ceph Dashboard are modeled on `Web Content Accessibility Guidelines (WCAG) 2.1 <https://www.w3.org/TR/WCAG21/>`_  level A accessibility conformance guidelines. 
+By implementing accessibility best practices, you are improving the usability of the Ceph Dashboard for blind and visually impaired users.
+
+Summary
+~~~~~~~
+
+A few things you should check before introducing a new code change include:
+
+1) Add `ARIA labels and descriptions <https://www.w3.org/TR/wai-aria/>`_ to actionable HTML elements.
+2) Don't forget to tag ARIA labels/descriptions or any user-readable text for translation (i18n-title, i18n-aria-label...).
+3) Add `ARIA roles <https://www.w3.org/TR/wai-aria/#usage_intro>`_ to tag HTML elements that behave different from their intended behaviour (<a> tags behaving as <buttons>) or that provide extended behaviours (roles).
+4) Avoid poor `color contrast choices <https://www.w3.org/TR/WCAG21/#contrast-minimum>`_ (foreground-background) when styling a component. Here are some :ref:`tools <color-contrast-checkers>` you can use.
+5) When testing menus or dropdowns, be sure to scan them with an :ref:`accessibility checker <accessibility-checkers>` in both opened and closed states. Sometimes issues are hidden when menus are closed.
+
+.. _accessibility-checkers:
+
+Accessibility checkers
+~~~~~~~~~~~~~~~~~~~~~~
+
+During development, you can test the accessibility compliance of your features using one of the tools below:
+
+- `Accessibility insights plugin <https://accessibilityinsights.io/downloads/>`_
+- `Site Improve plugin <https://www.siteimprove.com/integrations/browser-extensions/>`_
+- `Axe devtools <https://www.deque.com/axe/devtools/>`_
+
+Testing with two or more of these tools can greatly improve the detection of accessibility violations.
+
+.. _color-contrast-checkers:
+
+Color contrast checkers
+~~~~~~~~~~~~~~~~~~~~~~~
+
+When adding new colors, making sure they are accessible is also important. Here are some tools which can help with color contrast testing:
+
+- `Accessible web color-contrast checker <https://accessibleweb.com/color-contrast-checker/>`_
+- `Colorsafe generator <https://colorsafe.co/>`_
+
+Accessibility linters
+~~~~~~~~~~~~~~~~~~~~~
+
+If you use VSCode, you may install the `axe accessibility linter <https://marketplace.visualstudio.com/items?itemName=deque-systems.vscode-axe-linter>`_,
+which can help you catch and fix potential issues during development.
+
+Accessibility testing
+~~~~~~~~~~~~~~~~~~~~~
+
+Our e2e testing suite, which is based on Cypress, supports the addition of accessibility tests using `axe-core <https://github.com/dequelabs/axe-core>`_ 
+and `cypress-axe <https://github.com/component-driven/cypress-axe>`_. A custom Cypress command, `cy.checkAccessibility`, can also be used directly. 
+This is a great way to prevent accessibility regressions on high impact components.
+
+Tests can be found under the `a11y folder <./src/pybind/mgr/dashboard/frontend/cypress/integration/a11y>`_ in the dashboard. Here is an example:
+
+.. code:: TypeScript
+
+  describe('Navigation accessibility', { retries: 0 }, () => {
+    const shared = new NavigationPageHelper();
+  
+    beforeEach(() => {
+      cy.login();
+      Cypress.Cookies.preserveOnce('token');
+      shared.navigateTo();
+    });
+  
+    it('top-nav should have no accessibility violations', () => {
+      cy.injectAxe();
+      cy.checkAccessibility('.cd-navbar-top');
+    });
+  
+    it('sidebar should have no accessibility violations', () => {
+      cy.injectAxe();
+      cy.checkAccessibility('nav[id=sidebar]');
+    });
+  
+  });
+
+Additional guidelines
+~~~~~~~~~~~~~~~~~~~~~
+
+If you're unsure about which UI pattern to follow in order to implement an accessibility fix, `patternfly <https://www.patternfly.org/v4/accessibility/accessibility-fundamentals>`_ guidelines can be used.
 
 Backend Development
 -------------------

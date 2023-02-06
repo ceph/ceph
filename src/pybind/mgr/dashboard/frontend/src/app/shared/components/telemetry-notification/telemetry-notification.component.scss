@@ -1,6 +1,7 @@
 @use './src/styles/vendor/variables' as vv;
 
 .no-margin-bottom {
+  font-size: 0.875rem;
   margin-bottom: 0;
 }
 
@@ -13,5 +14,10 @@
 
 .activate-text {
   color: vv.$gray-700;
+  font-weight: bold;
+}
+
+a {
+  color: darken(vv.$primary, 10);
   font-weight: bold;
 }
