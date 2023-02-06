@@ -195,7 +195,9 @@ SeaStore::mount_ertr::future<> SeaStore::test_mount()
 {
   init_managers();
   return transaction_manager->mount(
-  ).handle_error(
+  ).safe_then([this] {
+    transaction_manager->start_background();
+  }).handle_error(
     crimson::ct_error::assert_all{
       "Invalid error in SeaStore::test_mount"
     }
@@ -225,7 +227,10 @@ SeaStore::mount_ertr::future<> SeaStore::mount()
     });
   }).safe_then([this] {
     init_managers();
-    return transaction_manager->mount();
+    return transaction_manager->mount(
+    ).safe_then([this] {
+      transaction_manager->start_background();
+    });
   }).handle_error(
     crimson::ct_error::assert_all{
       "Invalid error in SeaStore::mount"
@@ -288,6 +293,7 @@ seastar::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
     init_managers();
     return transaction_manager->mount();
   }).safe_then([this] {
+    transaction_manager->start_background();
     return repeat_eagain([this] {
       return transaction_manager->with_transaction_intr(
 	Transaction::src_t::MUTATE,
