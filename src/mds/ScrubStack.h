@@ -38,7 +38,9 @@ public:
     clog(clog),
     finisher(finisher_),
     scrub_stack(member_offset(MDSCacheObject, item_scrub)),
-    scrub_waiting(member_offset(MDSCacheObject, item_scrub)) {}
+    scrub_waiting(member_offset(MDSCacheObject, item_scrub)) {
+      _mds_scrub_stats_review_period = g_conf().get_val<uint64_t>("mds_scrub_stats_review_period");
+    }
   ~ScrubStack() {
     ceph_assert(scrub_stack.empty());
     ceph_assert(!scrubs_in_progress);
@@ -110,6 +112,7 @@ public:
   void init_scrub_counters(std::string_view path, std::string_view tag);
   void purge_scrub_counters(std::string_view tag);
   void purge_old_scrub_counters(); // on tick
+  void handle_conf_change(const std::set<std::string>& changed);
 
 
   MDCache *mdcache;
@@ -298,6 +301,8 @@ private:
   // list of pending context completions for asynchronous scrub
   // control operations.
   std::vector<Context *> control_ctxs;
+
+  uint64_t _mds_scrub_stats_review_period = 1; // 1 day
 };
 
 #endif /* SCRUBSTACK_H_ */

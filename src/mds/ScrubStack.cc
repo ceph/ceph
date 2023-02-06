@@ -126,8 +126,7 @@ void ScrubStack::purge_scrub_counters(std::string_view tag)
 void ScrubStack::purge_old_scrub_counters()
 {
   // "mds_scrub_stats_review_period" must be in number of days
-  uint64_t mds_scrub_stats_review_period = g_conf().get_val<uint64_t>("mds_scrub_stats_review_period");
-  auto review_period = ceph::make_timespan(mds_scrub_stats_review_period * 24 * 60 * 60);
+  auto review_period = ceph::make_timespan(_mds_scrub_stats_review_period * 24 * 60 * 60);
   auto now = coarse_real_clock::now();
 
   dout(20) << __func__ << " review_period:" << review_period << dendl;
@@ -1368,4 +1367,11 @@ void ScrubStack::uninline_data(CInode *in, Context *fin)
   mdr->internal_op_finish = fin;
 
   in->mdcache->dispatch_request(mdr);
+}
+
+void ScrubStack::handle_conf_change(const std::set<std::string>& changed)
+{
+  if (changed.count("mds_scrub_stats_review_period")) {
+    _mds_scrub_stats_review_period = g_conf().get_val<uint64_t>("mds_scrub_stats_review_period");
+  }
 }
