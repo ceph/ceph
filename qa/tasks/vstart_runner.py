@@ -674,14 +674,19 @@ class LocalKernelMount(LocalCephFSMount, KernelMount):
         return self.addr
 
     def get_global_inst(self):
-        clients = self.client_remote.run(
-            args=f'{CEPH_CMD} tell mds.* session ls',
+        fs = self.client_remote.run(
+            args=f'{CEPH_CMD} fs get {self.cephfs_name}',
             stdout=StringIO()).stdout.getvalue()
-        clients = loads(clients)
-        for c in clients:
-            if c['id'] == self.id:
-                self.inst = c['inst']
-                return self.inst
+        ranks = re.match("[\S\s]*in[\t ]+(\d+(?:,\d+)*)", fs).group(1).split(',')
+
+        for rank in ranks:
+            clients = loads(self.client_remote.run(
+                args=f'{CEPH_CMD} tell mds.{rank} session ls',
+                stdout=StringIO()).stdout.getvalue())
+            for c in clients:
+                if c['id'] == self.id:
+                    self.inst = c['inst']
+                    return self.inst
 
 
 class LocalFuseMount(LocalCephFSMount, FuseMount):
