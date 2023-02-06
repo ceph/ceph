@@ -11,6 +11,7 @@
 #include "crimson/net/chained_dispatchers.h"
 #include "crimson/net/SocketMessenger.h"
 #include "msg/Message.h"
+#include "msg/msg_fmt.h"
 
 using namespace ceph::msgr::v2;
 using crimson::common::local_conf;
@@ -519,9 +520,14 @@ IOHandler::read_message(utime_t throttle_stamp, std::size_t msg_size)
 
     logger().trace("{} got {} + {} + {} byte message,"
                    " envelope type={} src={} off={} seq={}",
-                   conn, msg_frame.front_len(), msg_frame.middle_len(),
-                   msg_frame.data_len(), current_header.type, conn.get_peer_name(),
-                   current_header.data_off, current_header.seq);
+                   conn,
+                   msg_frame.front_len(),
+                   msg_frame.middle_len(),
+                   msg_frame.data_len(),
+                   current_header.type,
+                   conn.get_peer_name(),
+                   current_header.data_off,
+                   current_header.seq);
 
     ceph_msg_header header{current_header.seq,
                            current_header.tid,
