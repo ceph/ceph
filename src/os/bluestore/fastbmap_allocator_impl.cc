@@ -619,6 +619,14 @@ void AllocatorLevel01Loose::foreach_internal(
     notify(off, len);
 }
 
+const uint64_t* AllocatorLevel01Loose::get_as_bitmap_internal(
+  size_t* out_count) const
+{
+  ceph_assert(out_count);
+  *out_count = l0.size();
+  return l0.data();
+}
+
 uint64_t AllocatorLevel01Loose::_claim_free_to_left_l0(int64_t l0_pos_start)
 {
   int64_t d0 = L0_ENTRIES_PER_SLOT;

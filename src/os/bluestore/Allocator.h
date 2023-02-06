@@ -286,6 +286,7 @@ public:
   virtual void dump() = 0;
   virtual void foreach(
     std::function<void(uint64_t offset, uint64_t length)> notify) = 0;
+  virtual const uint64_t* get_as_bitmap(size_t* out_count) const { return nullptr; }
 
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
