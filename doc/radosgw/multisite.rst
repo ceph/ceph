@@ -49,44 +49,42 @@ Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/3
 Functional Changes from Infernalis
 ==================================
 
-In Kraken, you can configure each Ceph Object Gateway to
-work in an active-active zone configuration, allowing for writes to
-non-master zones.
+Beginning with Kraken, each Ceph Object Gateway can be configured to work in an
+active-active zone configuration, allowing for writes to non-master zones.
 
-The multi-site configuration is stored within a container called a
-"realm." The realm stores zone groups, zones, and a time "period" with
-multiple epochs for tracking changes to the configuration. In Kraken,
-the ``ceph-radosgw`` daemons handle the synchronization,
-eliminating the need for a separate synchronization agent. Additionally,
-the new approach to synchronization allows the Ceph Object Gateway to
-operate with an "active-active" configuration instead of
-"active-passive".
+The multi-site configuration is stored within a container called a "realm". The
+realm stores zone groups, zones, and a time "period" with multiple epochs for
+tracking changes to the configuration. Beginning with Kraken, the
+``ceph-radosgw`` daemons handle the synchronization, which eliminates the need
+for a separate synchronization agent. Additionally, the new approach to
+synchronization allows the Ceph Object Gateway to operate with an
+"active-active" configuration instead of "active-passive".
 
 Requirements and Assumptions
 ============================
 
-A multi-site configuration requires at least two Ceph storage clusters,
-preferably given a distinct cluster name. At least two Ceph object
-gateway instances, one for each Ceph storage cluster.
+A multi-site configuration requires at least two Ceph storage clusters. The
+multi-site configuration must have at least two Ceph object gateway instances
+(one for each Ceph storage cluster).
 
-This guide assumes at least two Ceph storage clusters are in geographically
-separate locations; however, the configuration can work on the same
-site. This guide also assumes two Ceph object gateway servers named
+This guide assumes that at least two Ceph storage clusters are in
+geographically separate locations; however, the configuration can work on the
+same site. This guide also assumes two Ceph object gateway servers named
 ``rgw1`` and ``rgw2``.
 
-.. important:: Running a single Ceph storage cluster is NOT recommended unless you have 
-               low latency WAN connections.
+.. important:: Running a single geographically-distributed Ceph storage cluster
+   is NOT recommended unless you have low latency WAN connections.
 
-A multi-site configuration requires a master zone group and a master
-zone. Additionally, each zone group requires a master zone. Zone groups
-may have one or more secondary or non-master zones.
+A multi-site configuration requires a master zone group and a master zone. Each
+zone group requires a master zone. Zone groups may have one or more secondary
+or non-master zones.
 
-In this guide, the ``rgw1`` host will serve as the master zone of the
-master zone group; and, the ``rgw2`` host will serve as the secondary zone
-of the master zone group.
+In this guide, the ``rgw1`` host will serve as the master zone of the master
+zone group; and, the ``rgw2`` host will serve as the secondary zone of the
+master zone group.
 
-See `Pools`_ for instructions on creating and tuning pools for Ceph
-Object Storage.
+See `Pools`_ for instructions on creating and tuning pools for Ceph Object
+Storage.
 
 See `Sync Policy Config`_ for instructions on defining fine grained bucket sync
 policy rules.
@@ -96,21 +94,21 @@ policy rules.
 Configuring a Master Zone
 =========================
 
-All gateways in a multi-site configuration will retrieve their
-configuration from a ``ceph-radosgw`` daemon on a host within the master
-zone group and master zone. To configure your gateways in a multi-site
-configuration, choose a ``ceph-radosgw`` instance to configure the
-master zone group and master zone.
+All gateways in a multi-site configuration retrieve their configurations from a
+``ceph-radosgw`` daemon that is on a host within both the master zone group and
+the master zone. To configure your gateways in a multi-site configuration,
+choose a ``ceph-radosgw`` instance to configure the master zone group and
+master zone.
 
 Create a Realm
 --------------
 
-A realm contains the multi-site configuration of zone groups and zones
-and also serves to enforce a globally unique namespace within the realm.
+A realm contains the multi-site configuration of zone groups and zones. The
+realm enforces a globally unique namespace within itself.
 
-Create a new realm for the multi-site configuration by opening a command
-line interface on a host identified to serve in the master zone group
-and zone. Then, execute the following:
+Create a new realm for the multi-site configuration by opening a command line
+interface on a host that will serve in the master zone group and zone. Then
+execute the following:
 
 .. prompt:: bash #
 
@@ -122,14 +120,13 @@ For example:
 
    radosgw-admin realm create --rgw-realm=movies --default
 
-If the cluster will have a single realm, specify the ``--default`` flag.
-If ``--default`` is specified, ``radosgw-admin`` will use this realm by
-default. If ``--default`` is not specified, adding zone-groups and zones
-requires specifying either the ``--rgw-realm`` flag or the
-``--realm-id`` flag to identify the realm when adding zone groups and
-zones.
+If you intend the cluster to have a single realm, specify the ``--default``
+flag.  If ``--default`` is specified, ``radosgw-admin`` uses this realm by
+default. If ``--default`` is not specified, you must specify either the
+``--rgw-realm`` flag or the ``--realm-id`` flag to identify the realm when
+adding zone groups and zones.
 
-After creating the realm, ``radosgw-admin`` will echo back the realm
+After the realm has been created, ``radosgw-admin`` echoesc back the realm
 configuration. For example:
 
 ::
@@ -141,8 +138,8 @@ configuration. For example:
         "epoch": 1
     }
 
-.. note:: Ceph generates a unique ID for the realm, which allows the renaming
-          of a realm if the need arises.
+.. note:: Ceph generates a unique ID for the realm, which can be used to rename
+   the realm if the need arises.
 
 Create a Master Zone Group
 --------------------------
