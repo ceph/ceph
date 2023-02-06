@@ -186,7 +186,7 @@ def main():
     # list the files in the cache dir for troubleshooting
     out = exec_cmd('ls -l %s' % (cache_dir))
     # get name of cached object and check if it exists in the cache
-    out = exec_cmd('find %s -name "*%s*"' % (cache_dir, cached_object_name))
+    out = exec_cmd('find %s -name "*%s1"' % (cache_dir, cached_object_name))
     cached_object_path = get_cmd_output(out)
     log.debug("Path of file in datacache is: %s", cached_object_path)
     out = exec_cmd('basename %s' % (cached_object_path))
