@@ -505,6 +505,7 @@ public:
   static inline ssize_t count_0s(slot_t slot_val, size_t start_pos);
   static inline ssize_t count_1s(slot_t slot_val, size_t start_pos);
   void foreach_internal(std::function<void(uint64_t offset, uint64_t length)> notify);
+  const uint64_t* get_as_bitmap_internal(size_t* out_count) const;
 };
 
 
@@ -589,6 +590,10 @@ public:
     };
     std::lock_guard l(lock);
     l1.foreach_internal(multiply_by_alloc_size);
+  }
+  const uint64_t* get_as_bitmap_internal(size_t* out_count) const
+  {
+    return l1.get_as_bitmap_internal(out_count);
   }
   double get_fragmentation_internal() {
     std::lock_guard l(lock);
