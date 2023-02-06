@@ -7234,7 +7234,7 @@ int BlueStore::_init_alloc()
       derr << __func__ << "::NCB::Please change the value of bluestore_allocation_from_file to TRUE in your ceph.conf file" << dendl;
       return -ENOTSUP; // Operation not supported
     }
-    if (restore_allocator(alloc, &num, &bytes) == 0) {
+    if (restore_allocator(alloc, nullptr, &num, &bytes) == 0) {
       dout(5) << __func__ << "::NCB::restore_allocator() completed successfully alloc=" << alloc << dendl;
     } else {
       // This must mean that we had an unplanned shutdown and didn't manage to destage the allocator
@@ -8112,9 +8112,9 @@ void BlueStore::_close_db()
     //   or it was a fast shutdown, but we already moved the main discards-queue to the allocator
     //   and only need to wait for the threads local discard_processing queues to drain
     bdev->discard_drain();
-    int ret = store_allocator(alloc);
-    if (unlikely(ret != 0)) {
-      derr << __func__ << "::NCB::store_allocator() failed (we will need to rebuild it on startup)" << dendl;
+    int ret = store_allocator(alloc, nullptr);
+    if (ret != 0) {
+      derr << __func__ << "::NCB::store_allocator() failed (continue with bitmapFreelistManager)" << dendl;
     }
   }
 
@@ -19739,11 +19739,12 @@ static uint32_t flush_extent_buffer_with_crc(BlueFS::FileWriter *p_handle, const
 const unsigned MAX_EXTENTS_IN_BUFFER = 4 * 1024; // 4K extents = 64KB of data
 // write the allocator to a flat bluefs file - 4K extents at a time
 //-----------------------------------------------------------------------------------
-int BlueStore::store_allocator(Allocator* src_allocator)
+int BlueStore::store_allocator(Allocator* src_allocator, const char* filename)
 {
+  dout(5) << __func__ << dendl;
   // when storing allocations to file we must be sure there is no background compactions
   // the easiest way to achieve it is to make sure db is closed
-  ceph_assert(db == nullptr);
+  ceph_assert(db == nullptr || src_allocator != alloc);
   utime_t  start_time = ceph_clock_now();
   int ret = 0;
 
@@ -19756,19 +19757,24 @@ int BlueStore::store_allocator(Allocator* src_allocator)
     }
   }
   bluefs->compact_log();
+  if (filename == nullptr) {
+    filename = allocator_file.c_str();
+  }
   // reuse previous file-allocation if exists
-  ret = bluefs->stat(allocator_dir, allocator_file, nullptr, nullptr);
+  ret = bluefs->stat(allocator_dir, filename, nullptr, nullptr);
   bool overwrite_file = (ret == 0);
   BlueFS::FileWriter *p_handle = nullptr;
-  ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, overwrite_file);
+  ret = bluefs->open_for_write(allocator_dir, filename, &p_handle, overwrite_file);
   if (ret != 0) {
-    derr <<  __func__ << "Failed open_for_write with error-code " << ret << dendl;
+    derr <<  __func__ << "Failed open_for_write " << allocator_dir << filename
+         << " with error-code " << ret
+         << dendl;
     return -1;
   }
 
   uint64_t file_size = p_handle->file->fnode.size;
   uint64_t allocated = p_handle->file->fnode.get_allocated();
-  dout(10) << "file_size=" << file_size << ", allocated=" << allocated << dendl;
+  dout(15) << __func__ << " old file_size=" << file_size << ", allocated=" << allocated << dendl;
 
   bluefs->sync_metadata(false);
   unique_ptr<Allocator> allocator(clone_allocator_without_bluefs(src_allocator));
@@ -19792,6 +19798,8 @@ int BlueStore::store_allocator(Allocator* src_allocator)
     encode(crc, header_bl);
     p_handle->append(header_bl);
   }
+
+  dout(15) << __func__ << " writing out" << dendl;
 
   crc = -1;					 // reset crc
   extent_t        buffer[MAX_EXTENTS_IN_BUFFER]; // 64KB
@@ -19841,6 +19849,7 @@ int BlueStore::store_allocator(Allocator* src_allocator)
     p_handle->append(trailer_bl);
   }
 
+  dout(15) << __func__ << " fsyncing" << dendl;
   bluefs->fsync(p_handle);
   bluefs->truncate(p_handle, p_handle->pos);
   bluefs->fsync(p_handle);
@@ -19899,7 +19908,8 @@ int calc_allocator_image_trailer_size()
 }
 
 //-----------------------------------------------------------------------------------
-int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes)
+int BlueStore::__restore_allocator(Allocator* allocator, const char* filename,
+  uint64_t *num, uint64_t *bytes)
 {
   if (cct->_conf->bluestore_debug_inject_allocation_from_file_failure > 0) {
      boost::mt11213b rng(time(NULL));
@@ -19909,11 +19919,17 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
       return -1;
     }
   }
+  if (filename == nullptr) {
+    filename = allocator_file.c_str();
+  }
+
   utime_t start_time = ceph_clock_now();
   BlueFS::FileReader *p_temp_handle = nullptr;
-  int ret = bluefs->open_for_read(allocator_dir, allocator_file, &p_temp_handle, false);
+  int ret = bluefs->open_for_read(allocator_dir, filename, &p_temp_handle, false);
   if (ret != 0) {
-    dout(1) << "Failed open_for_read with error-code " << ret << dendl;
+    dout(1) << "Failed open_for_read " << allocator_dir << filename
+            << " with error-code " << ret
+            << dendl;
     return -1;
   }
   unique_ptr<BlueFS::FileReader> p_handle(p_temp_handle);
@@ -20056,11 +20072,12 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
 }
 
 //-----------------------------------------------------------------------------------
-int BlueStore::restore_allocator(Allocator* dest_allocator, uint64_t *num, uint64_t *bytes)
+int BlueStore::restore_allocator(Allocator* dest_allocator, const char* filename,
+  uint64_t *num, uint64_t *bytes)
 {
   utime_t    start = ceph_clock_now();
   auto temp_allocator = unique_ptr<Allocator>(create_bitmap_allocator(bdev->get_size()));
-  int ret = __restore_allocator(temp_allocator.get(), num, bytes);
+  int ret = __restore_allocator(temp_allocator.get(), filename, num, bytes);
   if (ret != 0) {
     return ret;
   }
@@ -20555,8 +20572,7 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
 //---------------------------------------------------------
 Allocator* BlueStore::clone_allocator_without_bluefs(Allocator *src_allocator)
 {
-  uint64_t   bdev_size = bdev->get_size();
-  Allocator* allocator = create_bitmap_allocator(bdev_size);
+  Allocator* allocator = create_bitmap_allocator(src_allocator->get_capacity());
   if (allocator) {
     dout(5) << "bitmap-allocator=" << allocator << dendl;
   } else {

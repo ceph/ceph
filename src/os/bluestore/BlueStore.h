@@ -65,6 +65,7 @@ class Allocator;
 class FreelistManager;
 class BlueStoreRepairer;
 class SimpleBitmap;
+class BlueStoreTester;
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 
@@ -4091,6 +4092,7 @@ private:
       volatile_statfs* _per_pool_statfs);
   };
 
+  friend class BlueStoreTester;
   friend std::ostream& operator<<(std::ostream& out, const read_alloc_stats_t& stats) {
     out << "==========================================================" << std::endl;
     out << "NCB::onode_count             = " ;out.width(10);out << stats.onode_count << std::endl
@@ -4114,10 +4116,10 @@ private:
 				      uint64_t  *p_extent_count, const void *v_header, BlueFS::FileReader *p_handle, uint64_t offset);
 
   int  copy_allocator(Allocator* src_alloc, Allocator *dest_alloc, uint64_t* p_num_entries);
-  int  store_allocator(Allocator* allocator);
+  int  store_allocator(Allocator* allocator, const char* filename);
   int  invalidate_allocation_file_on_bluefs();
-  int  __restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
-  int  restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
+  int  __restore_allocator(Allocator* allocator, const char* filename, uint64_t *num, uint64_t *bytes);
+  int  restore_allocator(Allocator* allocator, const char* filename, uint64_t *num, uint64_t *bytes);
   int  read_allocation_from_drive_on_startup();
   int  reconstruct_allocations(SimpleBitmap *smbmp, read_alloc_stats_t &stats);
   int  read_allocation_from_onodes(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
