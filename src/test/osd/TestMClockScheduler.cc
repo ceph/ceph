@@ -218,7 +218,7 @@ TEST_F(mClockSchedulerTest, TestAllQueuesEnqueueDequeue) {
     std::this_thread::sleep_for(std::chrono::microseconds(1));
   }
 
-  // Insert ops into the immediate queue
+  // Insert Immediate ops
   for (unsigned i = 103; i < 105; ++i) {
     q.enqueue(create_item(i, client1, op_scheduler_class::immediate));
     std::this_thread::sleep_for(std::chrono::microseconds(1));
@@ -232,7 +232,7 @@ TEST_F(mClockSchedulerTest, TestAllQueuesEnqueueDequeue) {
 
   ASSERT_FALSE(q.empty());
   auto r = get_item(q.dequeue());
-  // Immediate queue should be dequeued first
+  // Ops classified as Immediate should be dequeued first
   ASSERT_EQ(103u, r.get_map_epoch());
   r = get_item(q.dequeue());
   ASSERT_EQ(104u, r.get_map_epoch());
