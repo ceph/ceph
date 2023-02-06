@@ -33,14 +33,14 @@ namespace ceph::async::detail {
 // co_spawn() completion handlers can extend the implementation's lifetime.
 // This is required for per-op cancellation because the cancellation_signals
 // must outlive their coroutine frames.
-template <boost::asio::execution::executor Executor, typename SizeType>
+template <boost::asio::execution::executor Executor>
 class co_throttle_impl :
-    public boost::intrusive_ref_counter<co_throttle_impl<Executor, SizeType>,
+    public boost::intrusive_ref_counter<co_throttle_impl<Executor>,
         boost::thread_unsafe_counter>,
     public service_list_base_hook
 {
  public:
-  using size_type = SizeType;
+  using size_type = uint16_t;
 
   using executor_type = Executor;
   executor_type get_executor() const { return ex; }
@@ -65,29 +65,19 @@ class co_throttle_impl :
     svc.remove(*this);
   }
 
-  template <typename T>
-  using awaitable = boost::asio::awaitable<T, executor_type>;
-
-  template <typename T> // where T=void or error_code
-  auto spawn(awaitable<T> cr, size_type smaller_limit)
-      -> awaitable<boost::system::error_code>
+  auto spawn(boost::asio::awaitable<void, executor_type> cr,
+             size_type smaller_limit)
+      -> boost::asio::awaitable<void, executor_type>
   {
-    if (unreported_exception) {
+    if (unreported_exception && on_error != cancel_on_error::none) {
       std::rethrow_exception(std::exchange(unreported_exception, nullptr));
-    }
-    if (unreported_error && on_error != cancel_on_error::none) {
-      co_return std::exchange(unreported_error, {});
     }
 
     const size_type current_limit = std::min(smaller_limit, limit);
     if (count >= current_limit) {
-      auto ec = co_await wait_for(current_limit - 1);
-      if (ec) {
-        unreported_error.clear();
-        co_return ec;
-      }
-      if (unreported_error && on_error != cancel_on_error::none) {
-        co_return std::exchange(unreported_error, {});
+      co_await wait_for(current_limit - 1);
+      if (unreported_exception && on_error != cancel_on_error::none) {
+        std::rethrow_exception(std::exchange(unreported_exception, nullptr));
       }
     }
 
@@ -107,31 +97,30 @@ class co_throttle_impl :
         boost::asio::bind_cancellation_slot(c.signal->slot(),
             child_completion{this, c}));
 
-    co_return std::exchange(unreported_error, {});
+    if (unreported_exception) {
+      std::rethrow_exception(std::exchange(unreported_exception, nullptr));
+    }
   }
 
-  awaitable<boost::system::error_code> wait()
+  auto wait()
+      -> boost::asio::awaitable<void, executor_type>
   {
     if (count > 0) {
-      auto ec = co_await wait_for(0);
-      if (ec) {
-        unreported_error.clear();
-        co_return ec;
-      }
+      co_await wait_for(0);
     }
-    co_return std::exchange(unreported_error, {});
+    if (unreported_exception) {
+      std::rethrow_exception(std::exchange(unreported_exception, nullptr));
+    }
   }
 
   void cancel()
   {
-    for (child& c : outstanding) {
+    while (!outstanding.empty()) {
+      child& c = outstanding.front();
+      outstanding.pop_front();
+
       c.canceled = true;
       c.signal->emit(boost::asio::cancellation_type::terminal);
-    }
-    if (waiter.waiting()) {
-      auto eptr = std::exchange(unreported_exception, nullptr);
-      auto ec = make_error_code(boost::asio::error::operation_aborted);
-      waiter.complete(eptr, ec);
     }
   }
 
@@ -149,7 +138,6 @@ class co_throttle_impl :
   size_type count = 0;
   size_type wait_for_count = 0;
 
-  boost::system::error_code unreported_error;
   std::exception_ptr unreported_exception;
 
   // track each spawned coroutine for cancellation. these are stored in an
@@ -165,58 +153,61 @@ class co_throttle_impl :
   child_list outstanding;
   child_list free;
 
-  co_waiter<boost::system::error_code, executor_type> waiter;
+  co_waiter<void, executor_type> waiter;
 
   // return an awaitable that completes once count <= target_count
   auto wait_for(size_type target_count)
-      -> awaitable<boost::system::error_code>
+      -> boost::asio::awaitable<void, executor_type>
   {
     wait_for_count = target_count;
     return waiter.get();
   }
 
-  void on_complete(child& c, std::exception_ptr eptr,
-                   boost::system::error_code ec)
+  void on_complete(child& c, std::exception_ptr eptr)
   {
     --count;
 
     if (c.canceled) {
-      // don't report cancellation errors. cancellation was either requested
-      // by the user, or triggered by another failure that is reported
-      eptr = nullptr;
-      ec = {};
-    }
+      // if the child was canceled, it was already removed from outstanding
+      ceph_assert(!c.is_linked());
+      c.canceled = false;
+      c.signal.reset();
+      free.push_back(c);
+    } else {
+      // move back to the free list
+      ceph_assert(c.is_linked());
+      auto next = outstanding.erase(outstanding.iterator_to(c));
+      c.signal.reset();
+      free.push_back(c);
 
-    if (eptr && !unreported_exception) {
-      unreported_exception = eptr;
-    }
-    if (ec && !unreported_error) {
-      unreported_error = ec;
-    }
+      if (eptr) {
+        if (eptr && !unreported_exception) {
+          unreported_exception = eptr;
+        }
 
-    // move back to the free list
-    auto next = outstanding.erase(outstanding.iterator_to(c));
-    c.signal.reset();
-    free.push_back(c);
+        // handle cancel_on_error. cancellation signals may recurse into
+        // on_complete(), so move the entries into a separate list first
+        child_list to_cancel;
+        if (on_error == cancel_on_error::after) {
+          to_cancel.splice(to_cancel.end(), outstanding,
+                           next, outstanding.end());
+        } else if (on_error == cancel_on_error::all) {
+          to_cancel = std::move(outstanding);
+        }
 
-    // handle cancel_on_error
-    if (eptr || ec) {
-      auto cancel_begin = outstanding.end();
-      if (on_error == cancel_on_error::after) {
-        cancel_begin = next;
-      } else if (on_error == cancel_on_error::all) {
-        cancel_begin = outstanding.begin();
-      }
-      for (auto i = cancel_begin; i != outstanding.end(); ++i) {
-        i->canceled = true;
-        i->signal->emit(boost::asio::cancellation_type::terminal);
+        for (auto i = to_cancel.begin(); i != to_cancel.end(); ++i) {
+          child& c = *i;
+          i = to_cancel.erase(i);
+
+          c.canceled = true;
+          c.signal->emit(boost::asio::cancellation_type::terminal);
+        }
       }
     }
 
     // maybe wake the waiter
     if (waiter.waiting() && count <= wait_for_count) {
-      auto eptr = std::exchange(unreported_exception, nullptr);
-      waiter.complete(eptr, {});
+      waiter.complete(nullptr);
     }
   }
 
@@ -224,9 +215,8 @@ class co_throttle_impl :
     boost::intrusive_ptr<co_throttle_impl> impl;
     child& c;
 
-    void operator()(std::exception_ptr eptr,
-                    boost::system::error_code ec = {}) {
-      impl->on_complete(c, eptr, ec);
+    void operator()(std::exception_ptr eptr) {
+      impl->on_complete(c, eptr);
     }
   };
 };
