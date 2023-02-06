@@ -29,6 +29,7 @@ namespace crimson::os::seastore {
 class BackrefManager;
 class SegmentProvider;
 class AsyncCleaner;
+class BackgroundListener;
 
 struct backref_entry_t {
   backref_entry_t(
@@ -919,6 +920,14 @@ public:
     }
   }
 
+  CachedExtent::list& get_to_be_purged_extents() {
+    return purge_state.pending_list;
+  }
+
+  bool should_purge() const {
+    return purge_state.should_purge();
+  }
+
   /// Dump live extents
   void dump_contents();
 
@@ -1043,6 +1052,11 @@ private:
     std::size_t contents = 0;
     CachedExtent::list pending_list;
 
+    struct {
+      uint64_t added_size = 0;
+      uint64_t remove_size = 0;
+    } stats;
+
     purge_state_t(Cache *cache, std::size_t capacity)
       : cache(cache), capacity(capacity) {}
 
@@ -1051,28 +1065,19 @@ private:
 	data_category_t::DATA;
     }
 
-    void purge(CachedExtent &extent) {
-      ceph_assert(!extent.primary_ref_list_hook.is_linked());
-      ceph_assert(extent.is_clean());
-      if (auto id = extent.get_paddr().get_device_id();
-	  contents < capacity &&
-	  need_purge(extent) &&
-	  !cache->epm.is_hot_device(id)) {
-	extent.is_pending_purge = true;
-	pending_list.push_back(extent);
-	intrusive_ptr_add_ref(&extent);
-	contents += extent.get_length();
-      }
-    }
+    void purge(CachedExtent &extent);
+
     void remove(CachedExtent &extent) {
       ceph_assert(extent.is_pending_purge);
       ceph_assert(extent.primary_ref_list_hook.is_linked());
+      stats.remove_size += extent.get_length();
       extent.is_pending_purge = false;
       pending_list.erase(pending_list.s_iterator_to(extent));
       contents -= extent.get_length();
       intrusive_ptr_release(&extent);
     }
   } purge_state;
+  BackgroundListener *listener;
 
   struct query_counters_t {
     uint64_t access = 0;
@@ -1165,6 +1170,7 @@ private:
 
     version_stat_t committed_dirty_version;
     version_stat_t committed_reclaim_version;
+    version_stat_t committed_read_cache_version;
   } stats;
 
   template <typename CounterT>
@@ -1202,6 +1208,8 @@ private:
 	     src2 == Transaction::src_t::CLEANER_COLD));
     assert(!(src1 == Transaction::src_t::TRIM_ALLOC &&
              src2 == Transaction::src_t::TRIM_ALLOC));
+    assert(!(src1 == Transaction::src_t::PURGE &&
+             src2 == Transaction::src_t::PURGE));
 
     auto src1_value = static_cast<std::size_t>(src1);
     auto src2_value = static_cast<std::size_t>(src2);

@@ -53,6 +53,7 @@ Cache::Cache(
   INFO("created, lru_size={}", extents_in_memory->get_capacity());
   register_metrics();
   segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
+  listener = epm.get_background_listener();
 }
 
 Cache::~Cache()
@@ -144,6 +145,7 @@ void Cache::register_metrics()
     {src_t::TRIM_ALLOC, sm::label_instance("src", "TRIM_ALLOC")},
     {src_t::CLEANER_MAIN, sm::label_instance("src", "CLEANER_MAIN")},
     {src_t::CLEANER_COLD, sm::label_instance("src", "CLEANER_COLD")},
+    {src_t::PURGE, sm::label_instance("src", "PURGE")},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
@@ -500,6 +502,34 @@ void Cache::register_metrics()
 	},
 	sm::description("total extents pinned by the lru")
       ),
+      sm::make_counter(
+        "in_memory_purge_size_bytes",
+        [this] {
+          return purge_state.contents;
+        },
+        sm::description("total extents pinned by the lru")
+      ),
+      sm::make_counter(
+        "in_memory_purge_size_extents",
+        [this] {
+          return purge_state.pending_list.size();
+        },
+        sm::description("total extents pinned by the lru")
+      ),
+      sm::make_counter(
+        "purge_added_size",
+        [this] {
+          return purge_state.stats.added_size;
+        },
+        sm::description("total extents pinned by the lru")
+      ),
+      sm::make_counter(
+        "purge_removed_size",
+        [this] {
+          return purge_state.stats.remove_size;
+        },
+        sm::description("total extents pinned by the lru")
+      ),
     }
   );
 
@@ -637,7 +667,9 @@ void Cache::register_metrics()
           (src1 == Transaction::src_t::CLEANER_COLD &&
            src2 == Transaction::src_t::CLEANER_COLD) ||
           (src1 == Transaction::src_t::TRIM_ALLOC &&
-           src2 == Transaction::src_t::TRIM_ALLOC)) {
+           src2 == Transaction::src_t::TRIM_ALLOC) ||
+	  (src1 == Transaction::src_t::PURGE &&
+           src2 == Transaction::src_t::PURGE)) {
         continue;
       }
       std::ostringstream oss;
@@ -700,6 +732,16 @@ void Cache::register_metrics()
         "version_sum_reclaim",
         stats.committed_reclaim_version.version,
         sm::description("sum of the version from rewrite-reclaim extents")
+      ),
+      sm::make_counter(
+        "version_count_read_cache",
+        stats.committed_read_cache_version.num,
+        sm::description("total number of read cache extents")
+      ),
+      sm::make_counter(
+        "version_sum_read_cache",
+        stats.committed_read_cache_version.version,
+        sm::description("sum of the version from read cache extents")
       ),
     }
   );
@@ -1424,6 +1466,8 @@ record_t Cache::prepare_record(
   } else if (trans_src == Transaction::src_t::CLEANER_MAIN ||
              trans_src == Transaction::src_t::CLEANER_COLD) {
     stats.committed_reclaim_version.increment_stat(rewrite_version_stats);
+  } else if (trans_src == Transaction::src_t::PURGE) {
+    stats.committed_read_cache_version.increment_stat(rewrite_version_stats);
   } else {
     assert(rewrite_version_stats.is_clear());
   }
@@ -1929,6 +1973,24 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
       return get_root_iertr::make_ready_future<RootBlockRef>(
 	root);
     });
+  }
+}
+void Cache::purge_state_t::purge(CachedExtent &extent) {
+  ceph_assert(!extent.primary_ref_list_hook.is_linked());
+  ceph_assert(extent.is_clean());
+  if (auto id = extent.get_paddr().get_device_id();
+      contents < capacity &&
+      need_purge(extent) &&
+      !cache->epm.is_hot_device(id)) {
+    extent.is_pending_purge = true;
+    pending_list.push_back(extent);
+    intrusive_ptr_add_ref(&extent);
+    contents += extent.get_length();
+    stats.added_size += extent.get_length();
+  }
+
+  if (contents >= capacity) {
+    cache->listener->maybe_wake_purge();
   }
 }
 

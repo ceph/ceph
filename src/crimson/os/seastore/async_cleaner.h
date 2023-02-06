@@ -363,6 +363,9 @@ public:
     Transaction &t,
     std::optional<journal_seq_t> seq_to_trim = std::nullopt) = 0;
 
+  virtual bool should_purge() const = 0;
+  virtual std::list<CachedExtentRef> get_to_be_purged_extents(Transaction &t) = 0;
+
 private:
   template <typename Func, bool IsWeak>
   auto do_with_transaction_intr(
@@ -398,6 +401,7 @@ struct BackgroundListener {
   virtual ~BackgroundListener() = default;
   virtual void maybe_wake_background() = 0;
   virtual void maybe_wake_blocked_io() = 0;
+  virtual void maybe_wake_purge() = 0;
   virtual state_t get_state() const = 0;
 
   bool is_ready() const {

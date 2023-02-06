@@ -498,6 +498,21 @@ public:
     laddr_t laddr,
     extent_len_t len) final;
 
+  std::list<CachedExtentRef> get_to_be_purged_extents(Transaction &t) final {
+    std::list<CachedExtentRef> res;
+    auto &extents = cache->get_to_be_purged_extents();
+    for (auto &e: extents) {
+      assert(e.is_clean());
+      t.add_to_read_set(&e);
+      res.emplace_back(&e);
+    }
+    return res;
+  }
+
+  bool should_purge() const final {
+    return cache->should_purge();
+  }
+
   /**
    * read_root_meta
    *

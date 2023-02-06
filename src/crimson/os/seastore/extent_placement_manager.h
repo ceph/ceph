@@ -368,6 +368,10 @@ public:
     return background_process.is_hot_device(id);
   }
 
+  BackgroundListener* get_background_listener() {
+    return &background_process;
+  }
+
   // Testing interfaces
 
   void test_init_no_background(Device *test_device) {
@@ -519,6 +523,7 @@ private:
     }
 
     void set_extent_callback(ExtentCallbackInterface *cb) {
+      ecb = cb;
       trimmer->set_extent_callback(cb);
       main_cleaner->set_extent_callback(cb);
       if (has_cold_tier()) {
@@ -670,6 +675,17 @@ private:
       }
     }
 
+    void maybe_wake_purge() final {
+      if (!is_ready()) {
+        return;
+      }
+
+      if (should_purge() && logical_cache && blocking_purge) {
+        blocking_purge->set_value();
+        blocking_purge = std::nullopt;
+      }
+    }
+
   private:
     // reserve helpers
     bool try_reserve_cold(std::size_t usage);
@@ -704,6 +720,13 @@ private:
       }
     }
 
+    void do_wake_purge() {
+      if (blocking_purge) {
+        blocking_purge->set_value();
+        blocking_purge = std::nullopt;
+      }
+    }
+
     // background_should_run() should be atomic with do_background_cycle()
     // to make sure the condition is consistent.
     bool background_should_run() {
@@ -720,6 +743,10 @@ private:
         (has_cold_tier() &&
          main_cleaner->can_clean_space() &&
          eviction_state.is_fast_mode());
+    }
+
+    bool should_purge() const {
+      return ecb->should_purge();
     }
 
     bool cold_cleaner_should_run() const {
@@ -855,6 +882,9 @@ private:
 
     seastar::future<> do_background_cycle();
 
+    seastar::future<> run_purge();
+    seastar::future<> do_purge();
+
     void register_metrics();
 
     struct {
@@ -864,6 +894,7 @@ private:
       uint64_t io_blocked_count_trim = 0;
       uint64_t io_blocked_count_clean = 0;
       uint64_t io_blocked_sum = 0;
+      uint64_t purged_size = 0;
     } stats;
     seastar::metrics::metric_group metrics;
 
@@ -874,11 +905,17 @@ private:
      * cold tier (optional, see has_cold_tier())
      */
     AsyncCleanerRef cold_cleaner;
+    LogicalAddressCache *logical_cache = nullptr;
     std::vector<AsyncCleaner*> cleaners_by_device_id;
+    ExtentCallbackInterface *ecb;
 
     std::optional<seastar::future<>> process_join;
     std::optional<seastar::promise<>> blocking_background;
     std::optional<seastar::promise<>> blocking_io;
+
+    std::optional<seastar::future<>> purge_process_join;
+    std::optional<seastar::promise<>> blocking_purge;
+
     bool is_running_until_halt = false;
     state_t state = state_t::STOP;
     eviction_state_t eviction_state;

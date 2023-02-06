@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab expandtab
 
 #include "crimson/os/seastore/extent_placement_manager.h"
+#include "crimson/os/seastore/transaction_manager.h"
 
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/logging.h"
@@ -414,24 +415,34 @@ void ExtentPlacementManager::BackgroundProcess::start_background()
   state = state_t::RUNNING;
   assert(is_running());
   process_join = run();
+  if (has_cold_tier()) {
+    purge_process_join = run_purge();
+  }
 }
 
 seastar::future<>
 ExtentPlacementManager::BackgroundProcess::stop_background()
 {
-  return seastar::futurize_invoke([this] {
+  return seastar::do_with(std::vector<seastar::future<>>(),
+                          [this](auto &futs) {
     if (!is_running()) {
       if (state != state_t::HALT) {
         state = state_t::STOP;
       }
       return seastar::now();
     }
-    auto ret = std::move(*process_join);
+    futs.emplace_back(std::move(*process_join));
     process_join.reset();
+    if (has_cold_tier()) {
+      futs.emplace_back(std::move(*purge_process_join));
+      purge_process_join.reset();
+    }
     state = state_t::HALT;
     assert(!is_running());
     do_wake_background();
-    return ret;
+    do_wake_purge();
+    return seastar::when_all(futs.begin(), futs.end()
+    ).discard_result();
   }).then([this] {
     LOG_PREFIX(BackgroundProcess::stop_background);
     INFO("done, {}, {}",
@@ -737,6 +748,61 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
   }
 }
 
+seastar::future<> ExtentPlacementManager::BackgroundProcess::run_purge()
+{
+  assert(is_running());
+  return seastar::repeat([this] {
+    if (!is_running()) {
+      return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::yes);
+    }
+    return seastar::futurize_invoke([this] {
+      ceph_assert(!blocking_purge);
+      blocking_purge = seastar::promise<>();
+      return blocking_purge->get_future();
+    }).then([this] {
+      auto purge_size = crimson::common::get_conf<Option::size_t>(
+	    "seastore_cache_purge_list_size");
+      if (main_cleaner->try_reserve_projected_usage(purge_size)) {
+        return do_purge(
+        ).finally([this, purge_size] {
+          main_cleaner->release_projected_usage(purge_size);
+        });
+      } else {
+        return seastar::now();
+      }
+    }).then([] {
+      return seastar::stop_iteration::no;
+    });
+  });
+}
+
+seastar::future<> ExtentPlacementManager::BackgroundProcess::do_purge() {
+  return repeat_eagain([this] {
+    return ecb->with_transaction_intr(
+      Transaction::src_t::PURGE,
+      "purge",
+      [this](auto &t) {
+        return seastar::do_with(
+          ecb->get_to_be_purged_extents(t),
+          seastar::lowres_system_clock::now(),
+          (uint64_t)0,
+          [this, &t](auto &extents, auto &mtime, auto &size) {
+            return trans_intr::do_for_each(extents, [this, &t, &mtime, &size](auto &extent) {
+              ceph_assert(extent->is_clean());
+              return ecb->rewrite_extent(t, extent, MIN_REWRITE_GENERATION, mtime);
+            }).si_then([this, &t] {
+              return ecb->submit_transaction_direct(t);
+            }).si_then([this, &size] {
+              LOG_PREFIX(BackgroundProcess::do_purge);
+              INFO("finish {} bytes", size);
+              stats.purged_size += size;
+            });
+          });
+      });
+  }).handle_error(crimson::ct_error::assert_all{"error occupied during purge"});
+}
+
 void ExtentPlacementManager::BackgroundProcess::register_metrics()
 {
   namespace sm = seastar::metrics;
@@ -750,7 +816,9 @@ void ExtentPlacementManager::BackgroundProcess::register_metrics()
     sm::make_counter("io_blocked_count_clean", stats.io_blocked_count_clean,
                      sm::description("IOs that are blocked by cleaning")),
     sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
-                     sm::description("the sum of blocking IOs"))
+                     sm::description("the sum of blocking IOs")),
+    sm::make_counter("purged_size", stats.purged_size,
+                     sm::description("purged size"))
   });
 }
 
