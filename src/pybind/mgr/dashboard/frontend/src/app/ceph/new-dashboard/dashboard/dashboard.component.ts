@@ -45,6 +45,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   isAlertmanagerConfigured = false;
   icons = Icons;
   showAlerts = false;
+  flexHeight = true;
   simplebar = {
     autoHide: false
   };
@@ -110,11 +111,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  toggleAlertsWindow(type: string) {
+  toggleAlertsWindow(type: string, isToggleButton: boolean = false) {
+    if (isToggleButton) {
+      this.showAlerts = !this.showAlerts;
+      this.flexHeight = !this.flexHeight;
+    } else if (
+      !this.showAlerts ||
+      (this.alertType === type && type !== 'danger') ||
+      (this.alertType !== 'warning' && type === 'danger')
+    ) {
+      this.showAlerts = !this.showAlerts;
+      this.flexHeight = !this.flexHeight;
+    }
+
     type === 'danger' ? (this.alertType = 'critical') : (this.alertType = type);
     this.textClass = `text-${type}`;
     this.borderClass = `border-${type}`;
-    this.showAlerts = !this.showAlerts;
   }
 
   getDetailsCardData() {
