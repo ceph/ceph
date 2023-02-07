@@ -51,7 +51,7 @@ ConnectionPipeline &RepRequest::get_connection_pipeline()
 
 ClientRequest::PGPipeline &RepRequest::pp(PG &pg)
 {
-  return pg.client_request_pg_pipeline;
+  return pg.request_pg_pipeline;
 }
 
 seastar::future<> RepRequest::with_pg(

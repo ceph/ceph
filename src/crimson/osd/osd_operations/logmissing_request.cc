@@ -51,7 +51,7 @@ ConnectionPipeline &LogMissingRequest::get_connection_pipeline()
 
 ClientRequest::PGPipeline &LogMissingRequest::pp(PG &pg)
 {
-  return pg.client_request_pg_pipeline;
+  return pg.request_pg_pipeline;
 }
 
 seastar::future<> LogMissingRequest::with_pg(
