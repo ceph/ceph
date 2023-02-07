@@ -625,6 +625,9 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     pending_description = string("reset to ") + stringify(revert_to);
     goto update;
   } else if (prefix == "config assimilate-conf") {
+    bool force = false;
+    cmd_getval(cmdmap, "force", force);
+
     ConfFile cf;
     bufferlist bl = m->get_data();
     err = cf.parse_bufferlist(&bl, &ss);
@@ -665,7 +668,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 	  const Section *s = config_map.find_section(section);
 	  if (s) {
 	    auto k = s->options.find(key);
-	    if (k != s->options.end()) {
+	    if (k != s->options.end() && !force) {
 	      if (value != k->second.raw_value) {
 		dout(20) << __func__ << " have " << key
 			 << " = " << k->second.raw_value

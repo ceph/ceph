@@ -1312,7 +1312,8 @@ COMMAND("config help "
 COMMAND("config ls",
 	"List available configuration options",
 	"config", "r")
-COMMAND("config assimilate-conf",
+COMMAND("config assimilate-conf "
+	"name=force,type=CephBool,req=false",
 	"Assimilate options from a conf, and return a new, minimal conf file",
 	"config", "rw")
 COMMAND("config log name=num,type=CephInt,req=false",
