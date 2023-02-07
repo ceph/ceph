@@ -32,7 +32,7 @@ cephadm/cephadm script into memory.)
   for mon or mgr.
 - You'll see health warnings from cephadm about stray daemons--that's because
   the vstart-launched daemons aren't controlled by cephadm.
-- The default image is ``quay.io/ceph-ci/ceph:master``, but you can change
+- The default image is ``quay.io/ceph-ci/ceph:main``, but you can change
   this by passing ``-o container_image=...`` or ``ceph config set global container_image ...``.
 
 
