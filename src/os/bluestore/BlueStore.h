@@ -690,7 +690,7 @@ public:
       return blob;
     }
     /// clear buffers from unused sections
-    void sanitize_buffers(CephContext* cct, BufferCacheShard* cache);
+    void discard_unused_buffers(CephContext* cct, BufferCacheShard* cache);
 
     /// discard buffers for unallocated regions
     void discard_unallocated(Collection *coll);
