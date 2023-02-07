@@ -405,6 +405,8 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type)
     return os << "CLEANER_COLD";
   case transaction_type_t::PURGE:
     return os << "PURGE";
+  case transaction_type_t::EVICT:
+    return os << "EVICT";
   case transaction_type_t::MAX:
     return os << "TRANS_TYPE_NULL";
   default:

@@ -146,6 +146,7 @@ void Cache::register_metrics()
     {src_t::CLEANER_MAIN, sm::label_instance("src", "CLEANER_MAIN")},
     {src_t::CLEANER_COLD, sm::label_instance("src", "CLEANER_COLD")},
     {src_t::PURGE, sm::label_instance("src", "PURGE")},
+    {src_t::EVICT, sm::label_instance("src", "EVICT")},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
@@ -669,7 +670,9 @@ void Cache::register_metrics()
           (src1 == Transaction::src_t::TRIM_ALLOC &&
            src2 == Transaction::src_t::TRIM_ALLOC) ||
 	  (src1 == Transaction::src_t::PURGE &&
-           src2 == Transaction::src_t::PURGE)) {
+           src2 == Transaction::src_t::PURGE) ||
+	  (src1 == Transaction::src_t::EVICT &&
+           src2 == Transaction::src_t::EVICT)) {
         continue;
       }
       std::ostringstream oss;
@@ -1464,7 +1467,8 @@ record_t Cache::prepare_record(
   if (trans_src == Transaction::src_t::TRIM_DIRTY) {
     stats.committed_dirty_version.increment_stat(rewrite_version_stats);
   } else if (trans_src == Transaction::src_t::CLEANER_MAIN ||
-             trans_src == Transaction::src_t::CLEANER_COLD) {
+             trans_src == Transaction::src_t::CLEANER_COLD ||
+             trans_src == Transaction::src_t::EVICT) {
     stats.committed_reclaim_version.increment_stat(rewrite_version_stats);
   } else if (trans_src == Transaction::src_t::PURGE) {
     stats.committed_read_cache_version.increment_stat(rewrite_version_stats);

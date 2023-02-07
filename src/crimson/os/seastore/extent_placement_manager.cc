@@ -707,6 +707,12 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
         proceed_clean_main = true;
       }
     }
+    bool proceed_evict = false;
+    if (has_cold_tier() && logical_cache &&
+        !eviction_state.is_stop_mode()) {
+      proceed_evict = try_reserve_cold(
+        logical_cache->get_evict_size_per_cycle());
+    }
 
     bool proceed_clean_cold = false;
     if (has_cold_tier() &&
@@ -717,7 +723,7 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
       proceed_clean_cold = true;
     }
 
-    if (!proceed_clean_main && !proceed_clean_cold) {
+    if (!proceed_clean_main && !proceed_clean_cold && !proceed_evict) {
       ceph_abort("no background process will start");
     }
     return seastar::when_all(
@@ -744,6 +750,15 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
             "do_background_cycle encountered invalid error in cold clean_space"
           }
         );
+      },
+      [this, proceed_evict] {
+        if (!proceed_evict) {
+          return seastar::now();
+        }
+        return logical_cache->evict(
+        ).finally([this] {
+          abort_cold_usage(logical_cache->get_evict_size_per_cycle(), true);
+        });
       }
     ).discard_result();
   }

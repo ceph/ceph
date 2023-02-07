@@ -257,7 +257,7 @@ public:
     assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
-    gen = adjust_generation(category, type, hint, gen);
+    gen = adjust_generation(t.get_src(), category, type, hint, gen);
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
     // according to the allocator.
@@ -399,6 +399,7 @@ public:
 
 private:
   rewrite_gen_t adjust_generation(
+      Transaction::src_t src,
       data_category_t category,
       extent_types_t type,
       placement_hint_t hint,
@@ -434,6 +435,11 @@ private:
       }
     } else if (background_process.has_cold_tier()) {
       gen = background_process.adjust_generation(gen);
+      if ((category == data_category_t::METADATA &&
+           gen >= MIN_COLD_GENERATION) ||
+          src == Transaction::src_t::PURGE) {
+        gen = MIN_COLD_GENERATION - 1;
+      }
     }
 
     if (gen > dynamic_max_rewrite_generation) {

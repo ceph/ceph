@@ -1750,6 +1750,7 @@ enum class transaction_type_t : uint8_t {
   CLEANER_MAIN,
   CLEANER_COLD,
   PURGE,
+  EVICT,
   MAX
 };
 

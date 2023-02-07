@@ -79,7 +79,7 @@ seastar::future<> LogicalAddressCache::evict()
     }
     DEBUG("{}", evict_state);
     return tm->with_transaction_intr(
-        Transaction::src_t::CLEANER_MAIN,
+        Transaction::src_t::EVICT,
 	"evict",
 	[this, FNAME](auto &t) {
       return trans_intr::repeat([this, &t, FNAME] {

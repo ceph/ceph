@@ -1211,6 +1211,8 @@ private:
              src2 == Transaction::src_t::TRIM_ALLOC));
     assert(!(src1 == Transaction::src_t::PURGE &&
              src2 == Transaction::src_t::PURGE));
+    assert(!(src1 == Transaction::src_t::EVICT &&
+             src2 == Transaction::src_t::EVICT));
 
     auto src1_value = static_cast<std::size_t>(src1);
     auto src2_value = static_cast<std::size_t>(src2);

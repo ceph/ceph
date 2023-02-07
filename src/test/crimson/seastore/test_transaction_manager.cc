@@ -855,6 +855,7 @@ struct transaction_manager_test_t :
         for (auto t : all_extent_types) {
           for (auto gen : all_generations) {
             auto epm_gen = epm->adjust_generation(
+	      Transaction::src_t::MUTATE,
               get_extent_category(t),
               t,
               placement_hint_t::HOT,
