@@ -10,7 +10,7 @@ from mgr_module import MgrModule, CLICommand, HandleCommandResult, Option
 import orchestrator
 
 from ceph.deployment.service_spec import RGWSpec, PlacementSpec, SpecValidationError
-from typing import Any, Optional, Sequence, Iterator, List, Callable, TypeVar, cast, Dict, Tuple, Union
+from typing import Any, Optional, Sequence, Iterator, List, Callable, TypeVar, cast, Dict, Tuple, Union, TYPE_CHECKING
 
 from ceph.rgw.types import RGWAMException, RGWAMEnvMgr, RealmToken
 from ceph.rgw.rgwam_core import EnvArgs, RGWAM
@@ -19,28 +19,30 @@ from orchestrator import OrchestratorClientMixin, OrchestratorError, DaemonDescr
 
 FuncT = TypeVar('FuncT', bound=Callable[..., Any])
 
-# this uses a version check as opposed to a try/except because this
-# form makes mypy happy and try/except doesn't.
-if sys.version_info >= (3, 8):
-    from typing import Protocol
+if TYPE_CHECKING:
+    # this uses a version check as opposed to a try/except because this
+    # form makes mypy happy and try/except doesn't.
+    if sys.version_info >= (3, 8):
+        from typing import Protocol
+    else:
+        from typing_extensions import Protocol
+
+    class MgrModuleProtocol(Protocol):
+        def tool_exec(self, args: List[str]) -> Tuple[int, str, str]:
+            ...
+
+        def apply_rgw(self, spec: RGWSpec) -> OrchResult[str]:
+            ...
+
+        def list_daemons(self, service_name: Optional[str] = None,
+                         daemon_type: Optional[str] = None,
+                         daemon_id: Optional[str] = None,
+                         host: Optional[str] = None,
+                         refresh: bool = False) -> OrchResult[List['DaemonDescription']]:
+            ...
 else:
-    # typing_extensions will not be available for the real mgr server
-    from typing_extensions import Protocol
-
-
-class MgrModuleProtocol(Protocol):
-    def tool_exec(self, args: List[str]) -> Tuple[int, str, str]:
-        ...
-
-    def apply_rgw(self, spec: RGWSpec) -> OrchResult[str]:
-        ...
-
-    def list_daemons(self, service_name: Optional[str] = None,
-                     daemon_type: Optional[str] = None,
-                     daemon_id: Optional[str] = None,
-                     host: Optional[str] = None,
-                     refresh: bool = False) -> OrchResult[List['DaemonDescription']]:
-        ...
+    class MgrModuleProtocol:
+        pass
 
 
 class RGWSpecParsingError(Exception):
