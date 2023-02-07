@@ -118,7 +118,7 @@ configuration option.
    the kernel reclaiming freed pages. That 20% value might be more or less than
    needed, depending on the exact configuration of the system.
 
-When using the legacy FileStore back end, the page cache is used for caching
+When using the legacy FileStore backend, the page cache is used for caching
 data, so no tuning is normally needed. When using the legacy FileStore backend,
 the OSD memory consumption is related to the number of PGs per daemon in the
 system.
