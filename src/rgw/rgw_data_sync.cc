@@ -5596,11 +5596,8 @@ public:
   }
 
   RGWCoroutine *get_pos_cr(const DoutPrefixProvider *dpp, int shard_id, rgw_bucket_index_marker_info *info, bool *disabled) override {
-    if (disabled) {
-      *disabled = false;
-    }
     rgw_bucket_shard source_bs(source_bucket, shard_id);
-    return new RGWReadRemoteBucketIndexLogInfoCR(sc, source_bs, info);
+    return new RGWReadRemoteBucketIndexLogInfoCR(sc, source_bs, info, disabled);
   }
 
   RGWCoroutine *fetch_cr(int shard_id,
