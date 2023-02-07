@@ -242,7 +242,8 @@ def lsblk(device, columns=None, abspath=False):
                        columns=columns,
                        abspath=abspath)
     if not result:
-        raise RuntimeError(f"{device} not found is lsblk report")
+        logger.debug(f"{device} not found is lsblk report")
+        return {}
 
     return result[0]
 
