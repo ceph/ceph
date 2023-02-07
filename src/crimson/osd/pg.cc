@@ -1426,6 +1426,7 @@ seastar::future<> PG::stop()
 
 void PG::on_change(ceph::os::Transaction &t) {
   logger().debug("{} {}:", *this, __func__);
+  context_registry_on_change();
   obc_loader.notify_on_change(is_primary());
   recovery_backend->on_peering_interval_change(t);
   backend->on_actingset_changed(is_primary());
@@ -1437,6 +1438,17 @@ void PG::on_change(ceph::os::Transaction &t) {
     logger().debug("{} {}: dropping requests", *this, __func__);
     client_request_orderer.clear_and_cancel();
   }
+}
+
+void PG::context_registry_on_change() {
+    obc_registry.for_each([](ObjectContextRef obc) {
+      assert(obc);
+      for (auto j = obc->watchers.begin();
+           j != obc->watchers.end();
+           j = obc->watchers.erase(j)) {
+        j->second->discard_state();
+      }
+  });
 }
 
 bool PG::can_discard_op(const MOSDOp& m) const {
