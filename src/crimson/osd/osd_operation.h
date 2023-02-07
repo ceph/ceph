@@ -146,6 +146,9 @@ protected:
       return typename InterruptorT::template futurize_t<ret_t>{std::move(ret)};
     }
   }
+
+public:
+  static constexpr bool is_trackable = true;
 };
 
 template <class T>
