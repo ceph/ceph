@@ -4028,7 +4028,6 @@ public:
   int  push_allocation_to_rocksdb();
   int  read_allocation_from_drive_for_bluestore_tool();
 #endif
-  void set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offset, uint64_t length);
 
 private:
   struct  read_alloc_stats_t {
@@ -4040,7 +4039,6 @@ private:
     uint64_t shared_blob_count      = 0;
     uint64_t compressed_blob_count   = 0;
     uint64_t spanning_blob_count     = 0;
-    uint64_t insert_count            = 0;
     uint64_t extent_count            = 0;
 
     std::map<uint64_t, volatile_statfs> actual_pool_vstatfs;
@@ -4051,6 +4049,7 @@ private:
     read_alloc_stats_t& stats;
     SimpleBitmap& sbmap;
     sb_info_space_efficient_map_t& sb_info;
+    uint64_t min_alloc_size_mask;
     uint8_t min_alloc_size_order;
     Extent extent;
     ghobject_t oid;
@@ -4081,8 +4080,10 @@ private:
                          read_alloc_stats_t& _stats,
                          SimpleBitmap& _sbmap,
                          sb_info_space_efficient_map_t& _sb_info,
+                         uint64_t _min_alloc_size_mask,
                          uint8_t _min_alloc_size_order)
       : store(_store), stats(_stats), sbmap(_sbmap), sb_info(_sb_info),
+        min_alloc_size_mask(_min_alloc_size_mask),
         min_alloc_size_order(_min_alloc_size_order)
     {}
     const ghobject_t& get_oid() const {
@@ -4101,25 +4102,27 @@ private:
 	<< "NCB::compressed_blob_count   = " ;out.width(10);out << stats.compressed_blob_count << std::endl
 	<< "NCB::spanning_blob_count     = " ;out.width(10);out << stats.spanning_blob_count << std::endl
 	<< "NCB::skipped_illegal_extent  = " ;out.width(10);out << stats.skipped_illegal_extent << std::endl
-	<< "NCB::extent_count            = " ;out.width(10);out << stats.extent_count << std::endl
-	<< "NCB::insert_count            = " ;out.width(10);out << stats.insert_count << std::endl;
+	<< "NCB::extent_count            = " ;out.width(10);out << stats.extent_count << std::endl;
 
     out << "==========================================================" << std::endl;
 
     return out;
   }
 
-  int  compare_allocators(Allocator* alloc1, Allocator* alloc2, uint64_t req_extent_count, uint64_t memory_target);
+  bool  compare_allocators(Allocator* alloc1, Allocator* alloc2);
   Allocator* create_bitmap_allocator(uint64_t bdev_size);
   int  add_existing_bluefs_allocation(Allocator* allocator, read_alloc_stats_t& stats);
   int  allocator_add_restored_entries(Allocator *allocator, const void *buff, unsigned extent_count, uint64_t *p_read_alloc_size,
 				      uint64_t  *p_extent_count, const void *v_header, BlueFS::FileReader *p_handle, uint64_t offset);
 
   int  copy_allocator(Allocator* src_alloc, Allocator *dest_alloc, uint64_t* p_num_entries);
-  int  store_allocator(Allocator* allocator, const char* filename);
+  int  __store_allocator(Allocator* allocator, const char* filename, uint32_t ver, bool exclude_bluefs);
+  int  store_allocator(Allocator* allocator);
   int  invalidate_allocation_file_on_bluefs();
-  int  __restore_allocator(Allocator* allocator, const char* filename, uint64_t *num, uint64_t *bytes);
-  int  restore_allocator(Allocator* allocator, const char* filename, uint64_t *num, uint64_t *bytes);
+  int  __restore_allocator(Allocator* alloc, const char* filename, uint64_t total_size);
+  int  restore_allocator(Allocator* alloc) {
+    return __restore_allocator(alloc, nullptr, bdev->get_size());
+  }
   int  read_allocation_from_drive_on_startup();
   int  reconstruct_allocations(SimpleBitmap *smbmp, read_alloc_stats_t &stats);
   int  read_allocation_from_onodes(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
@@ -4129,7 +4132,7 @@ private:
   int  db_cleanup(int ret);
   int  reset_fm_for_restore();
   int  verify_rocksdb_allocations(Allocator *allocator);
-  Allocator* clone_allocator_without_bluefs(Allocator *src_allocator);
+  Allocator* clone_allocator(Allocator *src_allocator, bool exclude_bluefs);
   Allocator* initialize_allocator_from_freelist(FreelistManager *real_fm);
   void copy_allocator_content_to_fm(Allocator *allocator, FreelistManager *real_fm);
 
