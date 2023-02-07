@@ -8,6 +8,7 @@ set(crimson_seastore_srcs
   transaction.cc
   cache.cc
   cache/lru.cc
+  cache/logical_addr_cache.cc
   lba_manager.cc
   async_cleaner.cc
   backref_manager.cc

@@ -87,6 +87,16 @@ options:
   level: advanced
   desc: Size in bytes of extents to keep in cache.
   default: 2_M
+- name: seastore_logical_address_cache_memory_size
+  type: size
+  level: advanced
+  desc: Size in bytes of metadata used by indexing the hot data in the hot tier
+  default: 200_M
+- name: seastore_evict_size_per_cycle
+  type: size
+  level: advanced
+  desc: Size in bytes of data evicted to the cold tier per cycle
+  default: 2_M
 - name: seastore_obj_data_write_amplification
   type: float
   level: advanced
