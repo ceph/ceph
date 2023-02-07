@@ -274,3 +274,25 @@ extent_t SimpleBitmap::get_next_clr_extent(uint64_t offset)
   ext.length = (soffset - ext.offset);
   return ext;
 }
+//----------------------------------------------------------------------------
+bool SimpleBitmap::compare(const SimpleBitmap& other) const
+{
+  uint64_t other_count = other.m_word_count;
+  const uint64_t* other_arr = other.m_arr;
+  if (other_count != m_word_count) {
+    derr << "bitmap word counts don't match: my " << m_word_count
+         << " vs. other " << other_count
+         << dendl;
+    return false;
+  }
+  for (uint64_t i = 0; i < m_word_count; i++) {
+    if(m_arr[i] != other_arr[i]) {
+      derr << "bitmaps don't match at idx=" << i << std::hex
+           << " mine=" << m_arr[i]
+           << " vs. other=" << other_arr[i]
+           << std::hex << dendl;
+      return false;
+    }
+  }
+  return true;
+}
