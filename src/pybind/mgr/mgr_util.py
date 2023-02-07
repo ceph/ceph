@@ -292,16 +292,10 @@ class CephfsConnectionPool(object):
 class CephfsClient(Generic[Module_T]):
     def __init__(self, mgr: Module_T):
         self.mgr = mgr
-        self.stopping = Event()
         self.connection_pool = CephfsConnectionPool(self.mgr)
-
-    def is_stopping(self) -> bool:
-        return self.stopping.is_set()
 
     def shutdown(self) -> None:
         logger.info("shutting down")
-        # first, note that we're shutting down
-        self.stopping.set()
         # second, delete all libcephfs handles from connection pool
         self.connection_pool.del_all_connections()
 
@@ -344,10 +338,6 @@ def open_filesystem(fsc: CephfsClient, fs_name: str) -> Generator["cephfs.LibCep
     :param fs_name: fs name
     :return: yields a fs handle (ceph filesystem handle)
     """
-    if fsc.is_stopping():
-        raise CephfsConnectionException(-errno.ESHUTDOWN,
-                                        "shutdown in progress")
-
     fs_handle = fsc.connection_pool.get_fs_handle(fs_name)
     try:
         yield fs_handle
