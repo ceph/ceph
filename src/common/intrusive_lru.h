@@ -167,6 +167,14 @@ public:
       }
   }
 
+  template <class F>
+  void for_each(F&& f) {
+    for (auto& v : lru_set) {
+      access(v);
+      f(TRef{static_cast<T*>(&v)});
+    }
+  }
+
   /**
    * Returns the TRef corresponding to k if it exists or
    * nullptr otherwise.

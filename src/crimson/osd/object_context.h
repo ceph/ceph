@@ -268,6 +268,11 @@ public:
     obc_lru.clear_range(from, to);
   }
 
+  template <class F>
+  void for_each(F&& f) {
+    obc_lru.for_each(std::forward<F>(f));
+  }
+
   const char** get_tracked_conf_keys() const final;
   void handle_conf_change(const crimson::common::ConfigProxy& conf,
                           const std::set <std::string> &changed) final;
