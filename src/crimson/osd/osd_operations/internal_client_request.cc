@@ -44,7 +44,7 @@ void InternalClientRequest::dump_detail(Formatter *f) const
 
 CommonPGPipeline& InternalClientRequest::pp()
 {
-  return pg->client_request_pg_pipeline;
+  return pg->request_pg_pipeline;
 }
 
 seastar::future<> InternalClientRequest::start()
