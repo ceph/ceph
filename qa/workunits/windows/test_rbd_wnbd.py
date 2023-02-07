@@ -649,7 +649,7 @@ class RbdFioTest(RbdTest):
                            s['median'], s['std_dev'],
                            s['max_90'], s['min_90'], 'N/A'])
 
-            s = array_stats([float(i["runtime"]) / 1000 for i in op_data])
+            s = array_stats([float(i["runtime"]) for i in op_data])
             table.add_row(["duration (s)",
                           s['min'], s['max'], s['mean'],
                           s['median'], s['std_dev'],
@@ -681,10 +681,16 @@ class RbdFioTest(RbdTest):
                 if len(op_data) else 0)
             clat_10 = array_stats([i["clat_ns_10"] for i in op_data])
             clat_90 = array_stats([i["clat_ns_90"] for i in op_data])
-            table.add_row(["completion latency (ns)",
-                           clat_min['min'], clat_max['max'], clat_mean['mean'],
-                           clat_mean['median'], clat_stddev,
-                           clat_10['mean'], clat_90['mean'], clat_mean['sum']])
+            # For convenience, we'll convert it from ns to seconds.
+            table.add_row(["completion latency (s)",
+                           clat_min['min'] / 1e+9,
+                           clat_max['max'] / 1e+9,
+                           clat_mean['mean'] / 1e+9,
+                           clat_mean['median'] / 1e+9,
+                           clat_stddev / 1e+9,
+                           clat_10['mean'] / 1e+9,
+                           clat_90['mean'] / 1e+9,
+                           clat_mean['sum'] / 1e+9])
             print(table)
 
 
