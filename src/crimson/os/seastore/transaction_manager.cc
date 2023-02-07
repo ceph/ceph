@@ -367,6 +367,10 @@ TransactionManager::do_submit_transaction(
           submit_result.record_block_base,
           start_seq);
 
+      for (auto &[laddr, pair] : tref.get_logical_cache()) {
+	update_logical_cache(laddr, pair.first, pair.second);
+      }
+
       std::vector<CachedExtentRef> lba_to_clear;
       std::vector<CachedExtentRef> backref_to_clear;
       lba_to_clear.reserve(tref.get_retired_set().size());
@@ -488,6 +492,28 @@ TransactionManager::rewrite_logical_extent(
     lextent->get_laddr(),
     lextent->get_paddr(),
     nlextent->get_paddr());
+}
+
+TransactionManager::maybe_load_onode_ret
+TransactionManager::maybe_load_onode(
+  Transaction &t,
+  laddr_t laddr,
+  extent_len_t length,
+  extent_types_t type)
+{
+  return lba_manager->get_mappings(t, laddr, length
+  ).si_then([this, laddr, length, type, &t](auto pin_list) {
+    LOG_PREFIX(TransactionManager::maybe_load_onode);
+    for (auto &pin : pin_list) {
+      TRACET("found extent: {}", t, pin->get_key());
+      if (epm->is_hot_device(pin->get_val().get_device_id())) {
+        TRACET("add onode to cache: {}", t, laddr);
+        update_logical_cache(laddr, length, type);
+        return seastar::now();
+      }
+    }
+    return seastar::now();
+  });
 }
 
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(

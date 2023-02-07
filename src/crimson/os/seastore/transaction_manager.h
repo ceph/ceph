@@ -88,6 +88,10 @@ public:
     epm->start_background();
   }
 
+  bool has_multiple_tiers() {
+    return epm->has_multiple_tiers();
+  }
+
   /**
    * get_pin
    *
@@ -631,6 +635,22 @@ public:
     croot = cache->duplicate_for_write(t, croot)->cast<RootBlock>();
     croot->get_root().collection_root.update(cmroot);
   }
+
+  void update_logical_cache(laddr_t laddr, extent_len_t length, extent_types_t type) {
+    logical_cache->move_to_top(laddr, length, type);
+  }
+
+  void maybe_update_logical_cache(laddr_t laddr, extent_len_t length, extent_types_t type) {
+    logical_cache->move_to_top_if_cached(laddr, length, type);
+  }
+
+  void remove_logical_cache(laddr_t laddr, extent_len_t length, extent_types_t type) {
+    logical_cache->remove(laddr, length, type);
+  }
+
+  using maybe_load_onode_iertr = base_iertr;
+  using maybe_load_onode_ret = maybe_load_onode_iertr::future<>;
+  maybe_load_onode_ret maybe_load_onode(Transaction&, laddr_t, extent_len_t, extent_types_t);
 
   extent_len_t get_block_size() const {
     return epm->get_block_size();

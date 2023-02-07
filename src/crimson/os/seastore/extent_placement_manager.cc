@@ -3,6 +3,7 @@
 
 #include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/transaction_manager.h"
+#include "crimson/os/seastore/object_data_handler.h"
 
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/logging.h"
@@ -790,6 +791,13 @@ seastar::future<> ExtentPlacementManager::BackgroundProcess::do_purge() {
           [this, &t](auto &extents, auto &mtime, auto &size) {
             return trans_intr::do_for_each(extents, [this, &t, &mtime, &size](auto &extent) {
               ceph_assert(extent->is_clean());
+              assert(extent->get_type() == extent_types_t::OBJECT_DATA_BLOCK);
+              auto lextent = extent->template cast<ObjectDataBlock>();
+              assert(lextent->onode_info.has_value());
+              t.update_logical_cache(lextent->onode_info->onode_base,
+                                     lextent->onode_info->onode_length,
+                                     extent_types_t::OBJECT_DATA_BLOCK);
+              size += extent->get_length();
               return ecb->rewrite_extent(t, extent, MIN_REWRITE_GENERATION, mtime);
             }).si_then([this, &t] {
               return ecb->submit_transaction_direct(t);

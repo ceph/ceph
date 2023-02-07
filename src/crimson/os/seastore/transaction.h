@@ -389,6 +389,7 @@ public:
     backref_tree_stats = {};
     ool_write_stats = {};
     rewrite_version_stats = {};
+    logical_cache.clear();
     conflicted = false;
     if (!has_reset) {
       has_reset = true;
@@ -474,6 +475,16 @@ public:
     return existing_block_stats;
   }
 
+  void update_logical_cache(laddr_t laddr, extent_len_t length, extent_types_t type) {
+    if (!logical_cache.contains(laddr)) {
+      logical_cache[laddr] = std::make_pair(length, type);
+    }
+  }
+
+  auto& get_logical_cache() {
+    return logical_cache;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -541,6 +552,8 @@ private:
    * Set of extents retired by *this.
    */
   pextent_set_t retired_set;
+
+  std::map<laddr_t, std::pair<extent_len_t, extent_types_t>> logical_cache;
 
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;

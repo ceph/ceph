@@ -161,6 +161,10 @@ public:
     const ghobject_t& end,
     uint64_t limit) final;
 
+  scan_onodes_ret scan_onodes(
+    Transaction &trans,
+    scan_onodes_func_t &&func) final;
+
   ~FLTreeOnodeManager();
 };
 using FLTreeOnodeManagerRef = std::unique_ptr<FLTreeOnodeManager>;

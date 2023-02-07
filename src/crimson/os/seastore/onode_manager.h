@@ -79,6 +79,13 @@ public:
     const ghobject_t& end,
     uint64_t limit) = 0;
 
+  using scan_onodes_iertr = base_iertr;
+  using scan_onodes_ret = scan_onodes_iertr::future<>;
+  using scan_onodes_func_t = std::function<scan_onodes_ret (Onode&&)>;
+  virtual scan_onodes_ret scan_onodes(
+    Transaction &trans,
+    scan_onodes_func_t &&func) = 0;
+
   virtual ~OnodeManager() {}
 };
 using OnodeManagerRef = std::unique_ptr<OnodeManager>;

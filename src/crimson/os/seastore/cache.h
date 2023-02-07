@@ -1060,10 +1060,11 @@ private:
     purge_state_t(Cache *cache, std::size_t capacity)
       : cache(cache), capacity(capacity) {}
 
-    bool need_purge(const CachedExtent &extent) const {
-      return get_extent_category(extent.get_type()) ==
-	data_category_t::DATA;
+    bool should_purge() const {
+      return contents >= capacity;
     }
+
+    bool need_purge(CachedExtent &extent) const;
 
     void purge(CachedExtent &extent);
 

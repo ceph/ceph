@@ -373,6 +373,10 @@ public:
     return background_process.is_hot_device(id);
   }
 
+  bool has_multiple_tiers() const {
+    return background_process.has_cold_tier();
+  }
+
   BackgroundListener* get_background_listener() {
     return &background_process;
   }

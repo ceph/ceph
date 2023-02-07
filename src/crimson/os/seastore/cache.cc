@@ -1975,6 +1975,16 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
     });
   }
 }
+
+bool Cache::purge_state_t::need_purge(CachedExtent &extent) const {
+  if (get_extent_category(extent.get_type()) ==
+      data_category_t::DATA) {
+    auto lextent = extent.cast<ObjectDataBlock>();
+    return lextent->onode_info.has_value();
+  }
+  return false;
+}
+
 void Cache::purge_state_t::purge(CachedExtent &extent) {
   ceph_assert(!extent.primary_ref_list_hook.is_linked());
   ceph_assert(extent.is_clean());

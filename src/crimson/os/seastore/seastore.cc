@@ -229,6 +229,35 @@ SeaStore::mount_ertr::future<> SeaStore::mount()
     init_managers();
     return transaction_manager->mount(
     ).safe_then([this] {
+      if (transaction_manager->has_multiple_tiers()) {
+        return transaction_manager->with_transaction_weak(
+          "scan_onode_tree",
+          [this](auto &t) {
+          return onode_manager->scan_onodes(
+            t,
+            [this, &t](auto &&onode)
+            -> TransactionManager::maybe_load_onode_ret {
+            auto object_data = onode.get_layout().object_data.get();
+            if (object_data.is_null()) {
+              return seastar::now();
+            }
+            LOG_PREFIX(SeaStore::mount);
+            TRACET("found object_data: {}", t, object_data.get_reserved_data_base());
+            return transaction_manager->maybe_load_onode(
+              t,
+              object_data.get_reserved_data_base(),
+              object_data.get_reserved_data_len(),
+              extent_types_t::OBJECT_DATA_BLOCK
+	    ).handle_error_interruptible(
+	      crimson::ct_error::assert_all{
+		"Invalid error in SeaStore::mount"
+	      }
+            );
+          });
+        });
+      }
+      return TransactionManager::base_ertr::make_ready_future();
+    }).safe_then([this] {
       transaction_manager->start_background();
     });
   }).handle_error(
@@ -1331,7 +1360,14 @@ SeaStore::tm_ret SeaStore::_remove(
 	  });
     });
   }).si_then([this, &ctx, onode]() mutable {
-    return onode_manager->erase_onode(*ctx.transaction, onode);
+    auto onode_data = onode->get_layout().object_data.get();
+    auto laddr = onode_data.get_reserved_data_base();
+    auto len = onode_data.get_reserved_data_len();
+    return onode_manager->erase_onode(*ctx.transaction, onode
+    ).si_then([this, laddr, len] {
+      transaction_manager->remove_logical_cache(
+        laddr, len, extent_types_t::OBJECT_DATA_BLOCK);
+    });
   }).handle_error_interruptible(
     crimson::ct_error::input_output_error::pass_further(),
     crimson::ct_error::assert_all(

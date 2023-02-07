@@ -17,12 +17,24 @@
 namespace crimson::os::seastore {
 
 struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
+  struct logical_bucket_t {
+    logical_bucket_t(laddr_t laddr, extent_len_t len)
+      : onode_base(laddr), onode_length(len) {}
+    laddr_t onode_base;
+    extent_len_t onode_length;
+  };
+  std::optional<logical_bucket_t> onode_info;
+
   using Ref = TCachedExtentRef<ObjectDataBlock>;
 
   ObjectDataBlock(ceph::bufferptr &&ptr)
     : LogicalCachedExtent(std::move(ptr)) {}
   ObjectDataBlock(const ObjectDataBlock &other)
     : LogicalCachedExtent(other) {}
+
+  void set_logical_cache_info(laddr_t laddr, extent_len_t len) {
+    onode_info = std::make_optional<logical_bucket_t>(laddr, len);
+  }
 
   CachedExtentRef duplicate_for_write() final {
     return CachedExtentRef(new ObjectDataBlock(*this));
