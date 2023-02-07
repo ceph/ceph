@@ -650,6 +650,7 @@ private:
   JournalRef journal;
   ExtentPlacementManagerRef epm;
   BackrefManagerRef backref_manager;
+  LogicalAddressCacheRef logical_cache;
 
   WritePipeline write_pipeline;
 

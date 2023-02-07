@@ -151,7 +151,7 @@ private:
     }
   } evict_state;
 };
-
+using LogicalAddressCacheRef = std::unique_ptr<LogicalAddressCache>;
 }
 
 #if FMT_VERSION >= 90000

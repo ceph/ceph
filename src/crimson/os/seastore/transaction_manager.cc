@@ -34,10 +34,16 @@ TransactionManager::TransactionManager(
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(_epm)),
-    backref_manager(std::move(_backref_manager))
+    backref_manager(std::move(_backref_manager)),
+    logical_cache(nullptr)
 {
   epm->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
+  if (epm->has_multiple_tiers()) {
+    logical_cache = std::make_unique<LogicalAddressCache>();
+    logical_cache->set_transaction_manager(this);
+    epm->init_logical_cache(logical_cache.get());
+  }
 }
 
 TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()

@@ -12,6 +12,7 @@
 #include "crimson/os/seastore/random_block_manager.h"
 #include "crimson/os/seastore/random_block_manager/block_rb_manager.h"
 #include "crimson/os/seastore/randomblock_manager_group.h"
+#include "crimson/os/seastore/cache/logical_addr_cache.h"
 
 class transaction_manager_test_t;
 
@@ -187,6 +188,10 @@ public:
   }
 
   void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&, AsyncCleanerRef &&);
+  void init_logical_cache(LogicalAddressCache *lc) {
+    lc->set_epm(this);
+    background_process.init_logical_cache(lc);
+  }
 
   SegmentSeqAllocator* get_ool_segment_seq_allocator() const {
     return ool_segment_seq_allocator.get();
@@ -506,6 +511,15 @@ private:
           crimson::common::get_conf<double>(
             "seastore_multiple_tiers_fast_evict_ratio"));
       }
+    }
+
+    void init_logical_cache(LogicalAddressCache *lc) {
+      logical_cache = lc;
+      lc->set_background_callback(this);
+    }
+
+    bool support_logical_cache() const {
+      return logical_cache;
     }
 
     journal_type_t get_journal_type() const {
