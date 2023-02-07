@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd_debug_scrub_reserve_drop_probability: 0.06
+        osd_debug_scrub_reserve_delay_probability: 0.0
+
