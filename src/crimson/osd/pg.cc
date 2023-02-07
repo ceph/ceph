@@ -115,7 +115,8 @@ PG::PG(
 	pool,
 	coll_ref,
 	shard_services,
-	profile)),
+	profile,
+	*this)),
     recovery_backend(
       std::make_unique<ReplicatedRecoveryBackend>(
 	*this, shard_services, coll_ref, backend.get())),
@@ -135,7 +136,8 @@ PG::PG(
       this),
     obc_loader{
       shard_services,
-      backend.get()},
+      *backend.get(),
+      *this},
     wait_for_active_blocker(this)
 {
   peering_state.set_backend_predicates(
@@ -326,7 +328,6 @@ void PG::on_activate_complete()
       PeeringState::AllReplicasRecovered{});
   }
   publish_stats_to_osd();
-  backend->on_activate_complete();
 }
 
 void PG::prepare_write(pg_info_t &info,
@@ -593,10 +594,7 @@ PG::submit_transaction(
   }
 
   epoch_t map_epoch = get_osdmap_epoch();
-
-  if (__builtin_expect(osd_op_p.at_version.epoch != map_epoch, false)) {
-    throw crimson::common::actingset_changed(is_primary());
-  }
+  ceph_assert(!has_reset_since(osd_op_p.at_version.epoch));
 
   peering_state.pre_submit_op(obc->obs.oi.soid, log_entries, osd_op_p.at_version);
   peering_state.append_log_with_trim_to_updated(std::move(log_entries), osd_op_p.at_version,
@@ -1202,7 +1200,7 @@ void PG::on_change(ceph::os::Transaction &t) {
   logger().debug("{} {}:", *this, __func__);
   obc_loader.notify_on_change(is_primary());
   recovery_backend->on_peering_interval_change(t);
-  backend->on_actingset_changed({ is_primary() });
+  backend->on_actingset_changed(is_primary());
   wait_for_active_blocker.unblock();
   if (is_primary()) {
     logger().debug("{} {}: requeueing", *this, __func__);

@@ -6,33 +6,39 @@ Multi-Site
 
 .. versionadded:: Jewel
 
-A single zone configuration typically consists of one zone group containing one
-zone and one or more `ceph-radosgw` instances where you may load-balance gateway
-client requests between the instances. In a single zone configuration, typically
-multiple gateway instances point to a single Ceph storage cluster. However, Kraken
-supports several multi-site configuration options for the Ceph Object Gateway:
+A single-zone configuration typically consists of (1) one "zone group", which
+contains one zone and (2) one or more `ceph-radosgw` instances between which
+gateway client requests are load-balanced. In a typical single-zone
+configuration, multiple gateway instances make use of a single Ceph storage
+cluster.  
 
-- **Multi-zone:** A more advanced configuration consists of one zone group and
-  multiple zones, each zone with one or more `ceph-radosgw` instances. Each zone
-  is backed by its own Ceph Storage Cluster. Multiple zones in a zone group
-  provides disaster recovery for the zone group should one of the zones experience
-  a significant failure. In Kraken, each zone is active and may receive write
-  operations. In addition to disaster recovery, multiple active zones may also
-  serve as a foundation for content delivery networks.
+Beginning with the Kraken release, Ceph supports several multi-site
+configurations for the Ceph Object Gateway:
 
-- **Multi-zone-group:** Formerly called 'regions', Ceph Object Gateway can also
-  support multiple zone groups, each zone group with one or more zones. Objects
-  stored to zones in one zone group within the same realm as another zone
-  group will share a global object namespace, ensuring unique object IDs across
-  zone groups and zones.
+- **Multi-zone:** A more advanced topology, the "multi-zone" configuration, is
+  possible. This multi-zone configuration consists of one zone group and
+  multiple zones, with each zone comprising one or more `ceph-radosgw`
+  instances. Each zone is backed by its own Ceph Storage Cluster. The presence
+  of multiple zones in a given zone group provides disaster recovery for that
+  zone group in the event that one of the zones experiences a significant
+  failure. Beginning with Kraken, each zone is active and can receive write
+  operations. A multi-zone configuration with multiple active zones enhances
+  disaster recovery and can also be used as a foundation for content delivery
+  networks. 
 
-- **Multiple Realms:** In Kraken, the Ceph Object Gateway supports the notion
-  of realms, which can be a single zone group or multiple zone groups and
-  a globally unique namespace for the realm. Multiple realms provide the ability
-  to support numerous configurations and namespaces.
+- **Multi-zone-groups:** Formerly called 'regions'. Ceph Object Gateway
+  supports multiple zone groups, with each zone group containing one or more
+  zones. Objects that are stored to zones in one zone group within the same
+  realm as another zone group share a global object namespace, which ensures
+  unique object IDs across zone groups and zones.
 
-Replicating object data between zones within a zone group looks something
-like this:
+- **Multiple Realms:** Beginning with the Kraken Ceph release, the Ceph Object
+  Gateway supports something called "realms". Realms have a globally unique
+  namespace and can be a either a single-zone group or multiple-zone groups.
+  Multiple realms provide support for multiple configurations and namespaces.
+
+The replication of object data between zones within a zone group looks
+something like this:
 
 .. image:: ../images/zone-sync2.png
    :align: center
@@ -43,44 +49,42 @@ Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/3
 Functional Changes from Infernalis
 ==================================
 
-In Kraken, you can configure each Ceph Object Gateway to
-work in an active-active zone configuration, allowing for writes to
-non-master zones.
+Beginning with Kraken, each Ceph Object Gateway can be configured to work in an
+active-active zone configuration, allowing for writes to non-master zones.
 
-The multi-site configuration is stored within a container called a
-"realm." The realm stores zone groups, zones, and a time "period" with
-multiple epochs for tracking changes to the configuration. In Kraken,
-the ``ceph-radosgw`` daemons handle the synchronization,
-eliminating the need for a separate synchronization agent. Additionally,
-the new approach to synchronization allows the Ceph Object Gateway to
-operate with an "active-active" configuration instead of
-"active-passive".
+The multi-site configuration is stored within a container called a "realm". The
+realm stores zone groups, zones, and a time "period" with multiple epochs for
+tracking changes to the configuration. Beginning with Kraken, the
+``ceph-radosgw`` daemons handle the synchronization, which eliminates the need
+for a separate synchronization agent. Additionally, the new approach to
+synchronization allows the Ceph Object Gateway to operate with an
+"active-active" configuration instead of "active-passive".
 
 Requirements and Assumptions
 ============================
 
-A multi-site configuration requires at least two Ceph storage clusters,
-preferably given a distinct cluster name. At least two Ceph object
-gateway instances, one for each Ceph storage cluster.
+A multi-site configuration requires at least two Ceph storage clusters. The
+multi-site configuration must have at least two Ceph object gateway instances
+(one for each Ceph storage cluster).
 
-This guide assumes at least two Ceph storage clusters are in geographically
-separate locations; however, the configuration can work on the same
-site. This guide also assumes two Ceph object gateway servers named
+This guide assumes that at least two Ceph storage clusters are in
+geographically separate locations; however, the configuration can work on the
+same site. This guide also assumes two Ceph object gateway servers named
 ``rgw1`` and ``rgw2``.
 
-.. important:: Running a single Ceph storage cluster is NOT recommended unless you have 
-               low latency WAN connections.
+.. important:: Running a single geographically-distributed Ceph storage cluster
+   is NOT recommended unless you have low latency WAN connections.
 
-A multi-site configuration requires a master zone group and a master
-zone. Additionally, each zone group requires a master zone. Zone groups
-may have one or more secondary or non-master zones.
+A multi-site configuration requires a master zone group and a master zone. Each
+zone group requires a master zone. Zone groups may have one or more secondary
+or non-master zones.
 
-In this guide, the ``rgw1`` host will serve as the master zone of the
-master zone group; and, the ``rgw2`` host will serve as the secondary zone
-of the master zone group.
+In this guide, the ``rgw1`` host will serve as the master zone of the master
+zone group; and, the ``rgw2`` host will serve as the secondary zone of the
+master zone group.
 
-See `Pools`_ for instructions on creating and tuning pools for Ceph
-Object Storage.
+See `Pools`_ for instructions on creating and tuning pools for Ceph Object
+Storage.
 
 See `Sync Policy Config`_ for instructions on defining fine grained bucket sync
 policy rules.
@@ -90,21 +94,21 @@ policy rules.
 Configuring a Master Zone
 =========================
 
-All gateways in a multi-site configuration will retrieve their
-configuration from a ``ceph-radosgw`` daemon on a host within the master
-zone group and master zone. To configure your gateways in a multi-site
-configuration, choose a ``ceph-radosgw`` instance to configure the
-master zone group and master zone.
+All gateways in a multi-site configuration retrieve their configurations from a
+``ceph-radosgw`` daemon that is on a host within both the master zone group and
+the master zone. To configure your gateways in a multi-site configuration,
+choose a ``ceph-radosgw`` instance to configure the master zone group and
+master zone.
 
 Create a Realm
 --------------
 
-A realm contains the multi-site configuration of zone groups and zones
-and also serves to enforce a globally unique namespace within the realm.
+A realm contains the multi-site configuration of zone groups and zones. The
+realm enforces a globally unique namespace within itself.
 
-Create a new realm for the multi-site configuration by opening a command
-line interface on a host identified to serve in the master zone group
-and zone. Then, execute the following:
+Create a new realm for the multi-site configuration by opening a command line
+interface on a host that will serve in the master zone group and zone. Then
+execute the following:
 
 .. prompt:: bash #
 
@@ -116,14 +120,13 @@ For example:
 
    radosgw-admin realm create --rgw-realm=movies --default
 
-If the cluster will have a single realm, specify the ``--default`` flag.
-If ``--default`` is specified, ``radosgw-admin`` will use this realm by
-default. If ``--default`` is not specified, adding zone-groups and zones
-requires specifying either the ``--rgw-realm`` flag or the
-``--realm-id`` flag to identify the realm when adding zone groups and
-zones.
+If you intend the cluster to have a single realm, specify the ``--default``
+flag.  If ``--default`` is specified, ``radosgw-admin`` uses this realm by
+default. If ``--default`` is not specified, you must specify either the
+``--rgw-realm`` flag or the ``--realm-id`` flag to identify the realm when
+adding zone groups and zones.
 
-After creating the realm, ``radosgw-admin`` will echo back the realm
+After the realm has been created, ``radosgw-admin`` echoesc back the realm
 configuration. For example:
 
 ::
@@ -135,8 +138,8 @@ configuration. For example:
         "epoch": 1
     }
 
-.. note:: Ceph generates a unique ID for the realm, which allows the renaming
-          of a realm if the need arises.
+.. note:: Ceph generates a unique ID for the realm, which can be used to rename
+   the realm if the need arises.
 
 Create a Master Zone Group
 --------------------------
@@ -1283,20 +1286,21 @@ Finally, update the period.
 Zones
 -----
 
-Ceph Object Gateway supports the notion of zones. A zone defines a
-logical group consisting of one or more Ceph Object Gateway instances.
+A zone defines a logical group that consists of one or more Ceph Object Gateway
+instances. Ceph Object Gateway supports zones.
 
-Configuring zones differs from typical configuration procedures, because
-not all of the settings end up in a Ceph configuration file. You can
-list zones, get a zone configuration and set a zone configuration.
+The procedure for configuring zones differs from typical configuration
+procedures, because not all of the settings end up in a Ceph configuration
+file. Zones can be listed. You can "get" a zone configuration and "set" a zone
+configuration.
 
 Create a Zone
 ~~~~~~~~~~~~~
 
-To create a zone, specify a zone name. If it is a master zone, specify
-the ``--master`` option. Only one zone in a zone group may be a master
-zone. To add the zone to a zonegroup, specify the ``--rgw-zonegroup``
-option with the zonegroup name.
+To create a zone, specify a zone name. If you are creating a master zone,
+specify the ``--master`` flag. Only one zone in a zone group may be a master
+zone. To add the zone to a zonegroup, specify the ``--rgw-zonegroup`` option
+with the zonegroup name.
 
 .. prompt:: bash #
    
@@ -1306,7 +1310,7 @@ option with the zonegroup name.
                     [--master] [--default] \
                     --access-key $SYSTEM_ACCESS_KEY --secret $SYSTEM_SECRET_KEY
 
-Then, update the period:
+After you have created the zone, update the period:
 
 .. prompt:: bash #
    
@@ -1315,7 +1319,7 @@ Then, update the period:
 Delete a Zone
 ~~~~~~~~~~~~~
 
-To delete zone, first remove it from the zonegroup.
+To delete a zone, first remove it from the zonegroup:
 
 .. prompt:: bash #
    
@@ -1328,7 +1332,7 @@ Then, update the period:
    
    radosgw-admin period update --commit
 
-Next, delete the zone. Execute the following:
+Next, delete the zone:
 
 .. prompt:: bash #
    
@@ -1347,13 +1351,13 @@ If the pools for the deleted zone will not be used anywhere else,
 consider deleting the pools. Replace ``<del-zone>`` in the example below
 with the deleted zone’s name.
 
-.. important:: Only delete the pools with prepended zone names. Deleting the root
-               pool, such as, ``.rgw.root`` will remove all of the system’s
-               configuration.
+.. important:: Only delete the pools with prepended zone names. Deleting the
+   root pool (for example, ``.rgw.root``) will remove all of the system’s
+   configuration.
 
-.. important:: Once the pools are deleted, all of the data within them are deleted
-               in an unrecoverable manner. Only delete the pools if the pool
-               contents are no longer needed.
+.. important:: When the pools are deleted, all of the data within them are
+   deleted in an unrecoverable manner. Delete the pools only if the pool's
+   contents are no longer needed.
 
 .. prompt:: bash #
    
