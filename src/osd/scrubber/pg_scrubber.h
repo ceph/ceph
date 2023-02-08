@@ -211,8 +211,7 @@ class ReservedByRemotePrimary {
     return m_reserved_by_remote_primary;
   }
 
-  /// compare the remembered reserved-at epoch to the current interval
-  [[nodiscard]] bool is_stale() const;
+  epoch_t get_reservation_epoch() const { return m_reserved_at; }
 
   std::ostream& gen_prefix(std::ostream& out) const;
 };
