@@ -26,7 +26,7 @@ describe('Dashboard-v3 Main Page', () => {
         Monitor: 'Monitors',
         OSDs: 'OSDs',
         Pool: 'Pools',
-        'Object Gateway': 'Daemons'
+        'Object Gateway': 'Gateways'
       };
 
       for (const [linkText, breadcrumbText] of Object.entries(expectationMap)) {

@@ -10,7 +10,7 @@ export class NavigationPageHelper extends PageHelper {
     {
       menu: 'Object Gateway',
       submenus: [
-        { menu: 'Daemons', component: 'cd-rgw-daemon-list' },
+        { menu: 'Gateways', component: 'cd-rgw-daemon-list' },
         { menu: 'Users', component: 'cd-rgw-user-list' },
         { menu: 'Buckets', component: 'cd-rgw-bucket-list' }
       ]

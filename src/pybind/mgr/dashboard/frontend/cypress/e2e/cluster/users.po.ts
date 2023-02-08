@@ -8,9 +8,9 @@ export class UsersPageHelper extends PageHelper {
   pages = pages;
 
   columnIndex = {
-    entity: 1,
-    capabilities: 2,
-    key: 3
+    entity: 2,
+    capabilities: 3,
+    key: 4
   };
 
   checkForUsers() {
