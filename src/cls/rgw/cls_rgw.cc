@@ -1102,12 +1102,28 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   if (op.op == CLS_RGW_OP_CANCEL) {
     log_op = false; // don't log cancelation
     if (op.tag.size()) {
-      // we removed this tag from pending_map so need to write the changes
-      bufferlist new_key_bl;
-      encode(entry, new_key_bl);
-      rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
-      if (rc < 0) {
-        return rc;
+      if (!entry.exists && entry.pending_map.empty()) {
+        // a racing delete succeeded, and we canceled the last pending op
+        CLS_LOG(20, "INFO: %s: removing map entry with key=%s",
+                __func__, escape_str(idx).c_str());
+        rc = cls_cxx_map_remove_key(hctx, idx);
+        if (rc < 0) {
+          CLS_LOG(1, "ERROR: %s: unable to remove map key, key=%s, rc=%d",
+                  __func__, escape_str(idx).c_str(), rc);
+          return rc;
+        }
+      } else {
+        // we removed this tag from pending_map so need to write the changes
+        CLS_LOG(20, "INFO: %s: setting map entry at key=%s",
+                __func__, escape_str(idx).c_str());
+        bufferlist new_key_bl;
+        encode(entry, new_key_bl);
+        rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
+        if (rc < 0) {
+          CLS_LOG(1, "ERROR: %s: unable to set map val, key=%s, rc=%d",
+                  __func__, escape_str(idx).c_str(), rc);
+          return rc;
+        }
       }
     }
   } // CLS_RGW_OP_CANCEL
