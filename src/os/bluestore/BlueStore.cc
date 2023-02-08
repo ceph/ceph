@@ -1898,7 +1898,6 @@ void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache, uint64_t seq
 */
 bool BlueStore::BufferSpace::_dup_writing(BufferCacheShard* cache, BufferSpace* to)
 {
-  std::lock_guard lk(cache->lock);
   bool copied = false;
   if (!writing.empty()) {
     copied = true;
