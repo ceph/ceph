@@ -222,6 +222,7 @@ private:
   S3FilterUser *user; 
   const DoutPrefixProvider* save_dpp;
   bool atomic;
+  RGWRESTStreamS3PutObj *obj_wr; 
 
 public:
   S3FilterWriter(std::unique_ptr<Writer> _next, S3FilterStore* _filter, std::unique_ptr<Object> _head_obj, 
@@ -253,6 +254,7 @@ public:
 
   virtual ~S3FilterWriter() = default;
 
+  //virtual int prepare(optional_yield y, uint64_t obj_size = 0);
   virtual int prepare(optional_yield y);
   virtual int process(bufferlist&& data, uint64_t offset) override;
   virtual int complete(size_t accounted_size, const std::string& etag,

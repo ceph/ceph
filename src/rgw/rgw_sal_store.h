@@ -399,6 +399,7 @@ public:
   StoreWriter(const DoutPrefixProvider *_dpp, optional_yield y) : dpp(_dpp) {}
   virtual ~StoreWriter() = default;
 
+  //virtual int prepare(optional_yield y, uint64_t obj_size = 0) {return 0;};
 };
 
 class StorePlacementTier : public PlacementTier {

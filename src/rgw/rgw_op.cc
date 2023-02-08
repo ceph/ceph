@@ -3910,6 +3910,7 @@ void RGWPutObj::execute(optional_yield y)
   if (rgw::sal::Object::empty(s->object.get())) {
     return;
   }
+  ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " <<  __LINE__ << " object size is: " << s->content_length << dendl;
 
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
@@ -4030,8 +4031,12 @@ void RGWPutObj::execute(optional_yield y)
 					 s->bucket_owner.get_id(),
 					 pdest_placement, olh_epoch, s->req_id);
   }
-
-  op_ret = processor->prepare(s->yield);
+  /* AMIN
+  if (s->content_length > 0)
+    op_ret = processor->prepare(s->yield, s->content_length);
+  else
+  */
+    op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor->prepare() returned ret=" << op_ret
 		      << dendl;
@@ -4070,8 +4075,10 @@ void RGWPutObj::execute(optional_yield y)
       return;
     }
     lst = astate->accounted_size - 1;
+	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " <<  __LINE__ << " astate size is: " << astate->accounted_size << dendl;
   } else {
     lst = copy_source_range_lst;
+	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " <<  __LINE__ << " lst size is: " << lst << dendl;
   }
   fst = copy_source_range_fst;
 
@@ -4121,6 +4128,7 @@ void RGWPutObj::execute(optional_yield y)
       break;
     if (copy_source.empty()) {
       len = get_data(data);
+	  ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " <<  __LINE__ << " len is: " << len << dendl;
     } else {
       off_t cur_lst = min<off_t>(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
       op_ret = get_data(fst, cur_lst, data);
@@ -4129,6 +4137,7 @@ void RGWPutObj::execute(optional_yield y)
       len = data.length();
       s->content_length += len;
       fst += len;
+	  ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << " len is: " << len << dendl;
     }
     if (len < 0) {
       op_ret = len;
@@ -4145,7 +4154,9 @@ void RGWPutObj::execute(optional_yield y)
     /* update torrrent */
     torrent.update(data);
 
+	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << " ofs is: " << ofs << dendl;
     op_ret = filter->process(std::move(data), ofs);
+	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "processor->process() returned ret="
           << op_ret << dendl;
@@ -4153,14 +4164,19 @@ void RGWPutObj::execute(optional_yield y)
     }
 
     ofs += len;
+	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   } while (len > 0);
+	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
 
+	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   // flush any data in filters
   op_ret = filter->process({}, ofs);
+	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (op_ret < 0) {
     return;
   }
+	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   if (!chunked_upload && ofs != s->content_length) {
     op_ret = -ERR_REQUEST_TIMEOUT;

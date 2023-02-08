@@ -551,11 +551,38 @@ std::unique_ptr<Writer> S3FilterStore::get_atomic_writer(const DoutPrefixProvide
 }
 
 //TODO
+//int S3FilterWriter::prepare(optional_yield y, uint64_t obj_size = 0)
 int S3FilterWriter::prepare(optional_yield y)
 {
   ldpp_dout(this->save_dpp, 20) << "AMIN " << __func__ << " : owner is : " << this->head_obj->get_bucket()->get_owner() << dendl;
   this->user = (rgw::sal::S3FilterUser*) this->head_obj->get_bucket()->get_owner();
+
+  string url ="http://" + this->filter->_cct->_conf->backend_url;
+  HostStyle host_style = PathStyle;
+  ldpp_dout(this->save_dpp, 20) << __func__ << " AMIN URL: " << url << dendl;
+	 
+  this->obj_wr = new RGWRESTStreamS3PutObj(this->filter->_cct, "PUT", url, NULL, NULL, "", host_style);
   ldpp_dout(this->save_dpp, 20) << "AMIN " << __func__ << " : tenant is : " << this->user->get_id() << dendl;
+
+  //map<std::string, RGWAccessKey> accessKeys =  this->user->get_info().access_keys;
+  RGWAccessKey accesskey;
+  accesskey.id="test5";
+  accesskey.key = "test5";
+  map<string, bufferlist> obj_attrs;
+ 
+
+  this->obj_wr->put_obj_init(this->save_dpp, accesskey, this->head_obj.get(), obj_attrs);
+  //this->obj_wr->set_send_length(this->head_obj->get_obj_size());
+  this->obj_wr->set_send_length(9437184);
+  //ldpp_dout(this->save_dpp, 20) << __func__ << " len is: " << this->head_obj->get_obj_size() << dendl;
+  
+  int ret = RGWHTTP::send(obj_wr);
+  if (ret < 0) {
+    delete obj_wr;
+    return ret;
+  }
+  
+
   return 0;
 }
 
@@ -563,67 +590,33 @@ int S3FilterWriter::process(bufferlist&& data, uint64_t offset)
 {
   int ret = 0; 
   bufferlist objectData = data;
-  //S3FilterObject::S3FilterReadOp read_op = this->head_obj->get_read_op().get();
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(this->head_obj->get_read_op());
+
+  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << "length is: " << objectData.length() << ", ofs is: " << offset << dendl;
+
+  if (objectData.length() == 0)
+	return 0;
+  //std::unique_ptr<rgw::sal::Object::ReadOp> read_op(this->head_obj->get_read_op());
 
   ldpp_dout(this->save_dpp, 20) << __func__ << " AMIN data is: " << objectData << dendl;
   
-  map<std::string, RGWAccessKey> accessKeys =  this->user->get_info().access_keys;
-  RGWAccessKey accesskey;
-  //RGWAccessKey& k = accessKeys[this->get_id().to_str()];
-  //accesskey.id=k.id; FIXME
-  //accesskey.key = k.key;
-  accesskey.id="test5";
-  accesskey.key = "test5";
-  
-  string url ="http://" + this->filter->_cct->_conf->backend_url;
-  ldpp_dout(this->save_dpp, 20) << __func__ << " AMIN URL: " << url << dendl;
+  //this->obj_wr->set_send_length(head_obj->get_obj_size());
+  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
-  
-  HostStyle host_style = PathStyle;
-	 
-  RGWRESTStreamS3PutObj *obj_wr = new RGWRESTStreamS3PutObj(this->filter->_cct, "PUT", url, NULL, NULL, "", host_style);
-  obj_wr->set_send_length(objectData.length());
-  map<string, bufferlist> obj_attrs;
-  //const rgw_obj_key key;
-  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  //rgw_bucket bucket(b);
-  //bucket.tenant = (string) this->user->get_id().id;
-  //Bucket* fb = new FilterBucket(std::move(nb), this);
-  //std::unique_ptr<rgw::sal::Object> dest_bucket_obj = fb->get_object(key);
-  //std::unique_ptr<rgw::sal::Object> bucket_obj;
-  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  obj_wr->put_obj_init(this->save_dpp, accesskey, this->head_obj.get(), obj_attrs);
-  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  
-	/*
-  if (ret < 0) {
-    delete bucket_wr;
-	return -1;
-  }
-	*/
-  
+  /*  
   ret = RGWHTTP::send(obj_wr);
   if (ret < 0) {
     delete obj_wr;
     return ret;
   }
+  */
+  
 
-  ret = obj_wr->get_out_cb()->handle_data(objectData, 0, objectData.length());
+  //ret = this->obj_wr->get_out_cb()->handle_data(objectData, offset, objectData.length());
+  ret = this->obj_wr->get_out_cb()->handle_data(objectData, 0, objectData.length());
   //ret = read_op->iterate(this->save_dpp, 0, objectData.length()-1, obj_wr->get_out_cb(), null_yield);
   //ret = read_op->iterate(this->save_dpp, 0, astate->size - 1, out_stream_req->get_out_cb(), null_yield);
   //FIXME: implement iterate. use RGWEADOS::Object::Read::read_op in rgw_rados.cc
-  //string etag; 
   ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  ret = obj_wr->complete_request(null_yield);
-  //ret = bucket_wr->complete_request();
-  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  if (ret < 0){
-	delete obj_wr;
-	return -1;
-  }
-  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-
   //return next->process(std::move(data), offset);
   
   return 0;
@@ -639,12 +632,24 @@ int S3FilterWriter::complete(size_t accounted_size, const std::string& etag,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y)
 {
+  int ret = 0;
+/*
+  ret = RGWHTTP::send(this->obj_wr);
+  if (ret < 0) {
+    delete obj_wr;
+    return ret;
+  }
+*/
+  this->obj_wr->set_send_length(accounted_size);
+  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  ret = this->obj_wr->complete_request(null_yield);
+  if (ret < 0){
+	delete obj_wr;
+	return -1;
+  }
+  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+
   return 0; //FIXME
-  /*
-  return next->complete(accounted_size, etag, mtime, set_mtime, attrs,
-			delete_at, if_match, if_nomatch, user_data, zones_trace,
-			canceled, y);
-  */
 }
 
 
