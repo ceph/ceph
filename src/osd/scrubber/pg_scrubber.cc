@@ -1578,28 +1578,13 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
 			  m_osds->is_recovery_active())
 	   << dendl;
 
-  /*
-   *  if we are currently holding a reservation, then:
-   *  either (1) we, the scrubber, did not yet notice an interval change. The
-   *  remembered reservation epoch is from before our interval, and we can
-   *  silently discard the reservation (no message is required).
-   *  or:
-   *
-   *  (2) the interval hasn't changed, but the same Primary that (we think)
-   *  holds the lock just sent us a new request. Note that we know it's the
-   *  same Primary, as otherwise the interval would have changed.
-   *
-   *  Ostensibly we can discard & redo the reservation. But then we
-   *  will be temporarily releasing the OSD resource - and might not be able
-   *  to grab it again. Thus, we simply treat this as a successful new request
-   *  (but mark the fact that if there is a previous request from the primary
-   *  to scrub a specific chunk - that request is now defunct).
-   */
-
-  if (m_remote_osd_resource.has_value() && m_remote_osd_resource->is_stale()) {
-    // we are holding a stale reservation from a past epoch
-    m_remote_osd_resource.reset();
-    dout(10) << __func__ << " cleared existing stale reservation" << dendl;
+  // Purely a debug check, PgScrubber::on_new_interval should have cleared this
+  if (m_remote_osd_resource.has_value()) {
+    epoch_t e = m_remote_osd_resource->get_reservation_epoch();
+    if (!check_interval(e)) {
+      derr << __func__ << ": BUG: stale remote osd resource from epoch " << e
+	   << dendl;
+    }
   }
 
   if (request_ep < m_pg->get_same_interval_since()) {
@@ -1612,24 +1597,15 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
     return;
   }
 
+  /* The primary may unilaterally restart the scrub process without notifying
+   * replicas.  Unconditionally clear any existing state prior to handling
+   * the new reservation. */
+  m_remote_osd_resource.reset();
+  advance_token();
+  
   bool granted{false};
-  if (m_remote_osd_resource.has_value()) {
-
-    dout(10) << __func__ << " already reserved. Reassigned." << dendl;
-
-    /*
-     * it might well be that we did not yet finish handling the latest scrub-op
-     * from our primary. This happens, for example, if 'noscrub' was set via a
-     * command, then reset. The primary in this scenario will remain in the
-     * same interval, but we do need to reset our internal state (otherwise -
-     * the first renewed 'give me your scrub map' from the primary will see us
-     * in active state, crashing the OSD).
-     */
-    advance_token();
-    granted = true;
-
-  } else if (m_pg->cct->_conf->osd_scrub_during_recovery ||
-	     !m_osds->is_recovery_active()) {
+  if (m_pg->cct->_conf->osd_scrub_during_recovery ||
+      !m_osds->is_recovery_active()) {
     m_remote_osd_resource.emplace(this, m_pg, m_osds, request_ep);
     // OSD resources allocated?
     granted = m_remote_osd_resource->is_reserved();
@@ -2797,11 +2773,6 @@ ReservedByRemotePrimary::ReservedByRemotePrimary(const PgScrubber* scrubber,
   dout(20) << __func__ << ": scrub resources reserved at Primary request"
 	   << dendl;
   m_reserved_by_remote_primary = true;
-}
-
-bool ReservedByRemotePrimary::is_stale() const
-{
-  return m_reserved_at < m_pg->get_same_interval_since();
 }
 
 ReservedByRemotePrimary::~ReservedByRemotePrimary()
