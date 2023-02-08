@@ -517,7 +517,6 @@ the source and the destination. This is to ensure the integrity of the objects
 fetched from a remote server over HTTP including multisite sync. This option
 can decrease the performance of your RGW as more computation is needed.
 
-
 Maintenance
 ===========
 
@@ -551,44 +550,47 @@ Information about the replication status of a zone can be queried with:
                           incremental sync: 128/128 shards
                           data is caught up with source
 
-The output can differ depending on the sync status. The shards are described
-as two different types during sync:
+The output might be different, depending on the sync status. During sync, the
+shards are of two types:
 
-- **Behind shards** are shards that need a full data sync and shards needing
-  an incremental data sync because they are not up-to-date.
+- **Behind shards** are shards that require a data sync (either a full data
+  sync or an incremental data sync) in order to be brought up to date.
 
-- **Recovery shards** are shards that encountered an error during sync and marked
-  for retry. The error mostly occurs on minor issues like acquiring a lock on
-  a bucket. This will typically resolve itself.
+- **Recovery shards** are shards that encountered an error during sync and have
+  been marked for retry. The error occurs mostly on minor issues, such as
+  acquiring a lock on a bucket. Errors of this kind typically resolve on their
+  own.
 
 Check the logs
 --------------
 
-For multi-site only, you can check out the metadata log (``mdlog``),
-the bucket index log (``bilog``) and the data log (``datalog``).
-You can list them and also trim them which is not needed in most cases as
-:confval:`rgw_sync_log_trim_interval` is set to 20 minutes as default. If it isn't manually
-set to 0, you shouldn't have to trim it at any time as it could cause side effects otherwise.
+For multi-site deployments only, you can examine the metadata log (``mdlog``),
+the bucket index log (``bilog``), and the data log (``datalog``).  You can list
+them and also trim them. Trimming is not needed in most cases because
+:confval:`rgw_sync_log_trim_interval` is set to 20 minutes by default. It
+should not be necessary to trim the logs unless
+:confval:`rgw_sync_log_trim_interval` has been manually set to 0.
 
 Changing the Metadata Master Zone
 ---------------------------------
 
-.. important:: Care must be taken when changing which zone is the metadata
-   master. If a zone has not finished syncing metadata from the current
-   master zone, it will be unable to serve any remaining entries when
-   promoted to master and those changes will be lost. For this reason,
-   waiting for a zone's ``radosgw-admin sync status`` to catch up on
-   metadata sync before promoting it to master is recommended.
+.. important:: Care must be taken when changing the metadata master zone by
+   promoting a zone to master. A zone that isn't finished syncing metadata from
+   the current master zone will be unable to serve any remaining entries if it
+   is promoted to master, and those metadata changes will be lost. For this
+   reason, we recommend waiting for a zone's ``radosgw-admin sync status`` to
+   complete the process of synchronizing the metadata before promoting the zone
+   to master.
 
-Similarly, if changes to metadata are being processed by the current master
-zone while another zone is being promoted to master, those changes are
-likely to be lost. To avoid this, shutting down any ``radosgw`` instances
-on the previous master zone is recommended. After promoting another zone,
-its new period can be fetched with ``radosgw-admin period pull`` and the
-gateway(s) can be restarted.
+Similarly, if the current master zone is processing changes to metadata at the
+same time that another zone is being promoted to master, these changes are
+likely to be lost. To avoid losing these changes, we recommend shutting down
+any ``radosgw`` instances on the previous master zone. After the new master
+zone has been promoted, the previous master zone's new period can be fetched
+with ``radosgw-admin period pull`` and the gateway(s) can be restarted.
 
-To promote a zone (for example, zone ``us-2`` in zonegroup ``us``) to metadata
-master, run the following commands on that zone:
+To promote a zone to metadata master, run the following commands on that zone
+(in this example, the zone is zone ``us-2`` in zonegroup ``us``):
 
 .. prompt:: bash $
 
@@ -596,8 +598,8 @@ master, run the following commands on that zone:
    radosgw-admin zonegroup modify --rgw-zonegroup=us --master
    radosgw-admin period update --commit
 
-This will generate a new period, and the radosgw instance(s) in zone ``us-2``
-will send this period to other zones.
+This generates a new period, and the radosgw instance(s) in zone ``us-2`` sends
+this period to other zones.
 
 Failover and Disaster Recovery
 ==============================
