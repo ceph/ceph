@@ -762,7 +762,7 @@ class FSTop(object):
         res = stats_json[GLOBAL_METRICS_KEY].get(fs_name, {})
         client_cnt = len(res)
         self.fsstats.addstr(self.tablehead_y, 0, FS_TOP_NAME_TOPL_FMT.format(
-            fs_name=fs_name, client_count=client_cnt), curses.A_BOLD | curses.A_ITALIC)
+            fs_name=fs_name, client_count=client_cnt), curses.A_BOLD)
         self.tablehead_y += 2
         metrics_dict_client = metrics_dict.get(fs_name, {})
         if len(metrics_dict) > len(fs_list):
