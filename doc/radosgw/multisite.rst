@@ -557,9 +557,9 @@ Check the logs
 For multi-site deployments only, you can examine the metadata log (``mdlog``),
 the bucket index log (``bilog``), and the data log (``datalog``).  You can list
 them and also trim them. Trimming is not needed in most cases because
-:confval:`rgw_sync_log_trim_interval` is set to 20 minutes by default. It
+``rgw_sync_log_trim_interval`` is set to 20 minutes by default. It
 should not be necessary to trim the logs unless
-:confval:`rgw_sync_log_trim_interval` has been manually set to 0.
+``rgw_sync_log_trim_interval`` has been manually set to 0.
 
 Changing the Metadata Master Zone
 ---------------------------------
