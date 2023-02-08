@@ -30,7 +30,9 @@
           <div class="col-sm-6 col-lg-6 metadata"
                *ngIf="metadata">
             <legend>{{ metadataTitle }}</legend>
-            <cd-table-key-value [data]="metadata"></cd-table-key-value>
+            <div>
+              <cd-table-key-value [data]="metadata"></cd-table-key-value>
+            </div>
           </div>
         </div>
       </div>
