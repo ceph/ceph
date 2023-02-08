@@ -72,6 +72,7 @@ class StreamIO : public rgw::asio::ClientIO {
   timeout_timer& timeout;
   yield_context yield;
   parse_buffer& buffer;
+  boost::system::error_code fatal_ec;
  public:
   StreamIO(CephContext *cct, Stream& stream, timeout_timer& timeout,
            rgw::asio::parser_type& parser, yield_context yield,
@@ -82,6 +83,8 @@ class StreamIO : public rgw::asio::ClientIO {
         cct(cct), stream(stream), timeout(timeout), yield(yield),
         buffer(buffer)
   {}
+
+  boost::system::error_code get_fatal_error_code() const { return fatal_ec; }
 
   size_t write_data(const char* buf, size_t len) override {
     boost::system::error_code ec;
@@ -94,6 +97,9 @@ class StreamIO : public rgw::asio::ClientIO {
       if (ec == boost::asio::error::broken_pipe) {
         boost::system::error_code ec_ignored;
         stream.lowest_layer().shutdown(tcp_socket::shutdown_both, ec_ignored);
+      }
+      if (!fatal_ec) {
+        fatal_ec = ec;
       }
       throw rgw::io::Exception(ec.value(), std::system_category());
     }
@@ -116,6 +122,9 @@ class StreamIO : public rgw::asio::ClientIO {
       }
       if (ec) {
         ldout(cct, 4) << "failed to read body: " << ec.message() << dendl;
+        if (!fatal_ec) {
+          fatal_ec = ec;
+        }
         throw rgw::io::Exception(ec.value(), std::system_category());
       }
     }
@@ -284,6 +293,13 @@ void handle_connection(boost::asio::io_context& context,
             << log_header{message, http::field::user_agent, "\""} << ' '
             << log_header{message, http::field::range} << " latency="
             << latency << dendl;
+      }
+
+      // process_request() can't distinguish between connection errors and
+      // http/s3 errors, so check StreamIO for fatal connection errors
+      ec = real_client.get_fatal_error_code();
+      if (ec) {
+        return;
       }
 
       if (real_client.sent_100_continue()) {
