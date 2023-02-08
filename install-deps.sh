@@ -134,7 +134,8 @@ function install_pkg_on_ubuntu {
     fi
     if test -n "$missing_pkgs"; then
         local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
-        $SUDO curl --silent --location $shaman_url --output /etc/apt/sources.list.d/$project.list
+        in_jenkins && echo -n "CI_DEBUG: Downloading $shaman_url ... "
+        $SUDO curl --silent --fail --write-out "%{http_code}" --location $shaman_url --output /etc/apt/sources.list.d/$project.list
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y $missing_pkgs
     fi
