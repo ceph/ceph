@@ -75,7 +75,6 @@ public:
       remote_d_type = d_type;
       inode = 0;
     }
-    void link_remote(CInode *in);
   };
 
 
