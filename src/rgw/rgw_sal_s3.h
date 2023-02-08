@@ -223,6 +223,7 @@ private:
   const DoutPrefixProvider* save_dpp;
   bool atomic;
   RGWRESTStreamS3PutObj *obj_wr; 
+  bufferlist send_data;
 
 public:
   S3FilterWriter(std::unique_ptr<Writer> _next, S3FilterStore* _filter, std::unique_ptr<Object> _head_obj, 

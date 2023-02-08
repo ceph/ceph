@@ -573,15 +573,16 @@ int S3FilterWriter::prepare(optional_yield y)
 
   this->obj_wr->put_obj_init(this->save_dpp, accesskey, this->head_obj.get(), obj_attrs);
   //this->obj_wr->set_send_length(this->head_obj->get_obj_size());
-  this->obj_wr->set_send_length(9437184);
+  //this->obj_wr->set_send_length(9437184);
   //ldpp_dout(this->save_dpp, 20) << __func__ << " len is: " << this->head_obj->get_obj_size() << dendl;
-  
+
+  /*  
   int ret = RGWHTTP::send(obj_wr);
   if (ret < 0) {
     delete obj_wr;
     return ret;
   }
-  
+  */
 
   return 0;
 }
@@ -590,35 +591,35 @@ int S3FilterWriter::process(bufferlist&& data, uint64_t offset)
 {
   int ret = 0; 
   bufferlist objectData = data;
+  if (objectData.length() != 0){
+	ldpp_dout(this->save_dpp, 20) << __func__ << " : "<< __LINE__  << " data is: " << send_data << dendl;
+    send_data.claim_append(objectData);
+	ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << "length is: " << send_data.length() << ", ofs is: " << offset << dendl;
+  }
+  else{
+	ldpp_dout(this->save_dpp, 20) << __func__ << " : "<< __LINE__  << " AMIN data is: " << send_data << dendl;
+	this->obj_wr->set_send_length(send_data.length());
 
-  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << "length is: " << objectData.length() << ", ofs is: " << offset << dendl;
 
-  if (objectData.length() == 0)
-	return 0;
-  //std::unique_ptr<rgw::sal::Object::ReadOp> read_op(this->head_obj->get_read_op());
+	ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << "length is: " << send_data.length() << dendl;
 
-  ldpp_dout(this->save_dpp, 20) << __func__ << " AMIN data is: " << objectData << dendl;
-  
-  //this->obj_wr->set_send_length(head_obj->get_obj_size());
-  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-
-  /*  
   ret = RGWHTTP::send(obj_wr);
   if (ret < 0) {
     delete obj_wr;
     return ret;
   }
-  */
-  
+ 
+  //if (objectData.length() == 0)
+  //	return 0;
 
+  ldpp_dout(this->save_dpp, 20) << __func__ << " : "<< __LINE__  << " AMIN data is: " << send_data << dendl;
+  
   //ret = this->obj_wr->get_out_cb()->handle_data(objectData, offset, objectData.length());
-  ret = this->obj_wr->get_out_cb()->handle_data(objectData, 0, objectData.length());
-  //ret = read_op->iterate(this->save_dpp, 0, objectData.length()-1, obj_wr->get_out_cb(), null_yield);
-  //ret = read_op->iterate(this->save_dpp, 0, astate->size - 1, out_stream_req->get_out_cb(), null_yield);
+  //ret = this->obj_wr->get_out_cb()->handle_data(objectData, 0, objectData.length());
+  ret = this->obj_wr->get_out_cb()->handle_data(send_data, 0, send_data.length());
   //FIXME: implement iterate. use RGWEADOS::Object::Read::read_op in rgw_rados.cc
   ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  //return next->process(std::move(data), offset);
-  
+  }
   return 0;
 
 }
