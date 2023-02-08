@@ -50,7 +50,7 @@ export class UsersPageHelper extends PageHelper {
 
     // Click the user and check its details table for updated content
     this.getExpandCollapseElement(name).click();
-    cy.get('.active.tab-pane')
+    cy.get('.datatable-row-detail')
       .should('contain.text', new_fullname)
       .and('contain.text', new_email)
       .and('contain.text', new_maxbuckets);

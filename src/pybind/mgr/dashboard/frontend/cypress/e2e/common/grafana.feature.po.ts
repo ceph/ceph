@@ -1,4 +1,3 @@
-import { e2e } from '@grafana/e2e';
 import { Then, When } from 'cypress-cucumber-preprocessor/steps';
 import 'cypress-iframe';
 
@@ -13,7 +12,7 @@ Then('I should see the grafana panel {string}', (panels: string) => {
       cy.get('.grafana-app')
         .wait(100)
         .within(() => {
-          e2e.components.Panels.Panel.title(panel).should('be.visible');
+          cy.get(`[aria-label="${panel} panel"]`).should('be.visible');
         });
     }
   });
@@ -25,8 +24,10 @@ When('I view the grafana panel {string}', (panels: string) => {
       cy.get('.grafana-app')
         .wait(100)
         .within(() => {
-          e2e.components.Panels.Panel.title(panel).should('be.visible').click();
-          e2e.components.Panels.Panel.headerItems('View').should('be.visible').click();
+          cy.get(`[aria-label="${panel} panel"]`).within(() => {
+            cy.get('h2').click();
+          });
+          cy.get('[aria-label="Panel header item View"]').click();
         });
     }
   });
