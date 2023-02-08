@@ -1111,12 +1111,11 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
 
   void _add(BlueStore::Onode* o, int level) override
   {
-    if (o->put_cache()) {
+    o->set_cached();
+    if (o->pin_nref == 1) {
       (level > 0) ? lru.push_front(*o) : lru.push_back(*o);
       o->cache_age_bin = age_bins.front();
       *(o->cache_age_bin) += 1;
-    } else {
-      ++num_pinned;
     }
     ++num; // we count both pinned and unpinned entries
     dout(20) << __func__ << " " << this << " " << o->oid << " added, num="
@@ -1124,86 +1123,100 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
   }
   void _rm(BlueStore::Onode* o) override
   {
-    if (o->pop_cache()) {
+    o->clear_cached();
+    if (o->lru_item.is_linked()) {
       *(o->cache_age_bin) -= 1;
       lru.erase(lru.iterator_to(*o));
-    } else {
-      ceph_assert(num_pinned);
-      --num_pinned;
     }
     ceph_assert(num);
     --num;
     dout(20) << __func__ << " " << this << " " << " " << o->oid << " removed, num=" << num << dendl;
   }
-  void _pin(BlueStore::Onode* o) override
+
+  void maybe_unpin(BlueStore::Onode* o) override
   {
-    *(o->cache_age_bin) -= 1;
-    lru.erase(lru.iterator_to(*o));
-    ++num_pinned;
-    dout(20) << __func__ << " " << this << " " << " " << " " << o->oid << " pinned" << dendl;
+    OnodeCacheShard* ocs = this;
+    ocs->lock.lock();
+    // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
+    while (ocs != o->c->get_onode_cache()) {
+      ocs->lock.unlock();
+      ocs = o->c->get_onode_cache();
+      ocs->lock.lock();
+    }
+    if (o->is_cached() && o->pin_nref == 1) {
+      if(!o->lru_item.is_linked()) {
+        if (o->exists) {
+	  lru.push_front(*o);
+	  o->cache_age_bin = age_bins.front();
+	  *(o->cache_age_bin) += 1;
+	  dout(20) << __func__ << " " << this << " " << o->oid << " unpinned"
+                   << dendl;
+        } else {
+	  ceph_assert(num);
+	  --num;
+	  o->clear_cached();
+	  dout(20) << __func__ << " " << this << " " << o->oid << " removed"
+                   << dendl;
+          // remove will also decrement nref
+          o->c->onode_space._remove(o->oid);
+        }
+      } else if (o->exists) {
+        // move onode within LRU
+        lru.erase(lru.iterator_to(*o));
+        lru.push_front(*o);
+        if (o->cache_age_bin != age_bins.front()) {
+          *(o->cache_age_bin) -= 1;
+          o->cache_age_bin = age_bins.front();
+          *(o->cache_age_bin) += 1;
+        }
+        dout(20) << __func__ << " " << this << " " << o->oid << " touched"
+                 << dendl;
+      }
+    }
+    ocs->lock.unlock();
   }
-  void _unpin(BlueStore::Onode* o) override
-  {
-    lru.push_front(*o);
-    o->cache_age_bin = age_bins.front();
-    *(o->cache_age_bin) += 1;
-    ceph_assert(num_pinned);
-    --num_pinned;
-    dout(20) << __func__ << " " << this << " " << " " << " " << o->oid << " unpinned" << dendl;
-  }
-  void _unpin_and_rm(BlueStore::Onode* o) override
-  {
-    o->pop_cache();
-    ceph_assert(num_pinned);
-    --num_pinned;
-    ceph_assert(num);
-    --num;
-  }
+
   void _trim_to(uint64_t new_size) override
   {
     if (new_size >= lru.size()) {
       return; // don't even try
     } 
-    uint64_t n = lru.size() - new_size;
-    auto p = lru.end();
-    ceph_assert(p != lru.begin());
-    --p;
-    ceph_assert(num >= n);
-    num -= n;
-    while (n-- > 0) {
-      BlueStore::Onode *o = &*p;
+    uint64_t n = num - new_size; // note: we might get empty LRU
+                                 // before n == 0 due to pinned
+                                 // entries. And hence being unable
+                                 // to reach new_size target.
+    while (n-- > 0 && lru.size() > 0) {
+      BlueStore::Onode *o = &lru.back();
+      lru.pop_back();
+
       dout(20) << __func__ << "  rm " << o->oid << " "
-               << o->nref << " " << o->cached << " " << o->pinned << dendl;
-      if (p != lru.begin()) {
-        lru.erase(p--);
-      } else {
-        ceph_assert(n == 0);
-        lru.erase(p);
-      }
+               << o->nref << " " << o->cached << dendl;
+
       *(o->cache_age_bin) -= 1;
-      auto pinned = !o->pop_cache();
-      ceph_assert(!pinned);
-      o->c->onode_map._remove(o->oid);
+      if (o->pin_nref > 1) {
+        dout(20) << __func__ << " " << this << " " << " " << " " << o->oid << dendl;
+      } else {
+	ceph_assert(num);
+        --num;
+        o->clear_cached();
+        o->c->onode_space._remove(o->oid);
+      }
     }
   }
-  void move_pinned(OnodeCacheShard *to, BlueStore::Onode *o) override
+  void _move_pinned(OnodeCacheShard *to, BlueStore::Onode *o) override
   {
     if (to == this) {
       return;
     }
-    ceph_assert(o->cached);
-    ceph_assert(o->pinned);
-    ceph_assert(num);
-    ceph_assert(num_pinned);
-    --num_pinned;
-    --num;
-    ++to->num_pinned;
-    ++to->num;
+    _rm(o);
+    ceph_assert(o->nref > 1);
+    to->_add(o, 0);
   }
   void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) override
   {
+    std::lock_guard l(lock);
     *onodes += num;
-    *pinned_onodes += num_pinned;
+    *pinned_onodes += num - lru.size();
   }
 };
 
@@ -1924,19 +1937,19 @@ void BlueStore::BufferSpace::split(BufferCacheShard* cache, size_t pos, BlueStor
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.OnodeSpace(" << this << " in " << cache << ") "
 
-BlueStore::OnodeRef BlueStore::OnodeSpace::add(const ghobject_t& oid,
+BlueStore::OnodeRef BlueStore::OnodeSpace::add_onode(const ghobject_t& oid,
   OnodeRef& o)
 {
   std::lock_guard l(cache->lock);
-  auto p = onode_map.find(oid);
-  if (p != onode_map.end()) {
+  // add entry or return existing one
+  auto p = onode_map.emplace(oid, o);
+  if (!p.second) {
     ldout(cache->cct, 30) << __func__ << " " << oid << " " << o
-			  << " raced, returning existing " << p->second
+			  << " raced, returning existing " << p.first->second
 			  << dendl;
-    return p->second;
+    return p.first->second;
   }
   ldout(cache->cct, 20) << __func__ << " " << oid << " " << o << dendl;
-  onode_map[oid] = o;
   cache->_add(o.get(), 1);
   cache->_trim();
   return o;
@@ -1957,18 +1970,16 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
     std::lock_guard l(cache->lock);
     ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
     if (p == onode_map.end()) {
-      cache->logger->inc(l_bluestore_onode_misses);
       ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
+      cache->logger->inc(l_bluestore_onode_misses);
     } else {
       ldout(cache->cct, 30) << __func__ << " " << oid << " hit " << p->second
                             << " " << p->second->nref
                             << " " << p->second->cached
-                            << " " << p->second->pinned
 			    << dendl;
       // This will pin onode and implicitly touch the cache when Onode
       // eventually will become unpinned
       o = p->second;
-      ceph_assert(!o->cached || o->pinned);
 
       cache->logger->inc(l_bluestore_onode_hits);
     }
@@ -2024,7 +2035,6 @@ void BlueStore::OnodeSpace::rename(
   // This will pin 'o' and implicitly touch cache
   // when it will eventually become unpinned
   onode_map.insert(make_pair(new_oid, o));
-  ceph_assert(o->pinned);
 
   o->oid = new_oid;
   o->key = new_okey;
@@ -2050,7 +2060,6 @@ void BlueStore::OnodeSpace::dump(CephContext *cct)
     ldout(cct, LogLevelV) << i.first << " : " << i.second
       << " " << i.second->nref
       << " " << i.second->cached
-      << " " << i.second->pinned
       << dendl;
   }
 }
@@ -2912,9 +2921,9 @@ void BlueStore::ExtentMap::reshard(
     bool was_too_many_blobs_check = false;
     auto too_many_blobs_threshold =
       g_conf()->bluestore_debug_too_many_blobs_threshold;
-    auto& dumped_onodes = onode->c->onode_map.cache->dumped_onodes;
-    decltype(onode->c->onode_map.cache->dumped_onodes)::value_type* oid_slot = nullptr;
-    decltype(onode->c->onode_map.cache->dumped_onodes)::value_type* oldest_slot = nullptr;
+    auto& dumped_onodes = onode->c->onode_space.cache->dumped_onodes;
+    decltype(onode->c->onode_space.cache->dumped_onodes)::value_type* oid_slot = nullptr;
+    decltype(onode->c->onode_space.cache->dumped_onodes)::value_type* oldest_slot = nullptr;
 
     for (auto e = extent_map.lower_bound(dummy); e != extent_map.end(); ++e) {
       if (e->logical_offset >= needs_reshard_end) {
@@ -3703,53 +3712,17 @@ void BlueStore::Onode::calc_omap_tail(
   out->push_back('~');
 }
 
-void BlueStore::Onode::get() {
-  if (++nref >= 2 && !pinned) {
-    OnodeCacheShard* ocs = c->get_onode_cache();
-    ocs->lock.lock();
-    // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
-    while (ocs != c->get_onode_cache()) {
-      ocs->lock.unlock();
-      ocs = c->get_onode_cache();
-      ocs->lock.lock();
-    }
-    bool was_pinned = pinned;
-    pinned = nref >= 2;
-    bool r = !was_pinned && pinned;
-    if (cached && r) {
-      ocs->_pin(this);
-    }
-    ocs->lock.unlock();
-  }
+void BlueStore::Onode::get()
+{
+  ++nref;
+  ++pin_nref;
 }
-void BlueStore::Onode::put() {
-  ++put_nref;
-  int n = --nref;
-  if (n == 1) {
-    OnodeCacheShard* ocs = c->get_onode_cache();
-    ocs->lock.lock();
-    // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
-    while (ocs != c->get_onode_cache()) {
-      ocs->lock.unlock();
-      ocs = c->get_onode_cache();
-      ocs->lock.lock();
-    }
-    bool need_unpin = pinned;
-    pinned = pinned && nref >= 2;
-    need_unpin = need_unpin && !pinned;
-    if (cached && need_unpin) {
-      if (exists) {
-        ocs->_unpin(this);
-      } else {
-        ocs->_unpin_and_rm(this);
-        // remove will also decrement nref
-        c->onode_map._remove(oid);
-      }
-    }
-    ocs->lock.unlock();
+void BlueStore::Onode::put()
+{
+  if (--pin_nref == 1) {
+    c->get_onode_cache()->maybe_unpin(this);
   }
-  auto pn = --put_nref;
-  if (nref == 0 && pn == 0) {
+  if (--nref == 0) {
     delete this;
   }
 }
@@ -3759,6 +3732,7 @@ void BlueStore::Onode::decode_raw(
   const bufferlist& v,
   BlueStore::ExtentMap::ExtentDecoder& edecoder)
 {
+  on->exists = true;
   auto p = v.front().begin_deep();
   on->onode.decode(p);
 
@@ -3770,28 +3744,31 @@ void BlueStore::Onode::decode_raw(
   }
 }
 
-BlueStore::Onode* BlueStore::Onode::decode(
+BlueStore::Onode* BlueStore::Onode::create_decode(
   CollectionRef c,
   const ghobject_t& oid,
   const string& key,
-  const bufferlist& v)
+  const bufferlist& v,
+  bool allow_empty)
 {
+  ceph_assert(v.length() || allow_empty);
   Onode* on = new Onode(c.get(), oid, key);
-  on->exists = true;
 
-  ExtentMap::ExtentDecoderFull edecoder(on->extent_map);
-  decode_raw(on, v, edecoder);
+  if (v.length()) {
+    ExtentMap::ExtentDecoderFull edecoder(on->extent_map);
+    decode_raw(on, v, edecoder);
 
-  for (auto& i : on->onode.attrs) {
-    i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
-  }
+    for (auto& i : on->onode.attrs) {
+      i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
+    }
 
-  // initialize extent_map
-  if (on->onode.extent_map_shards.empty()) {
-    on->extent_map.inline_bl.reassign_to_mempool(
-      mempool::mempool_bluestore_cache_data);
-  } else {
-    on->extent_map.init_shards(false, false);
+    // initialize extent_map
+    if (on->onode.extent_map_shards.empty()) {
+      on->extent_map.inline_bl.reassign_to_mempool(
+        mempool::mempool_bluestore_cache_data);
+    } else {
+      on->extent_map.init_shards(false, false);
+    }
   }
   return on;
 }
@@ -3990,7 +3967,7 @@ BlueStore::Collection::Collection(BlueStore *store_, OnodeCacheShard *oc, Buffer
     store(store_),
     cache(bc),
     exists(true),
-    onode_map(oc),
+    onode_space(oc),
     commit_queue(nullptr)
 {
 }
@@ -4110,7 +4087,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     }
   }
 
-  OnodeRef o = onode_map.lookup(oid);
+  OnodeRef o = onode_space.lookup(oid);
   if (o)
     return o;
 
@@ -4131,16 +4108,14 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     ceph_assert(r == -ENOENT);
     if (!create)
       return OnodeRef();
-
-    // new object, new onode
-    on = new Onode(this, oid, key);
   } else {
-    // loaded
     ceph_assert(r >= 0);
-    on = Onode::decode(this, oid, key, v);
   }
+
+  // new object, load onode if available
+  on = Onode::create_decode(this, oid, key, v, true);
   o.reset(on);
-  return onode_map.add(oid, o);
+  return onode_space.add_onode(oid, o);
 }
 
 void BlueStore::Collection::split_cache(
@@ -4163,8 +4138,8 @@ void BlueStore::Collection::split_cache(
   bool is_pg = dest->cid.is_pg(&destpg);
   ceph_assert(is_pg);
 
-  auto p = onode_map.onode_map.begin();
-  while (p != onode_map.onode_map.end()) {
+  auto p = onode_space.onode_map.begin();
+  while (p != onode_space.onode_map.end()) {
     OnodeRef o = p->second;
     if (!p->second->oid.match(destbits, destpg.pgid.ps())) {
       // onode does not belong to this child
@@ -4175,15 +4150,13 @@ void BlueStore::Collection::split_cache(
       ldout(store->cct, 20) << __func__ << " moving " << o << " " << o->oid
 			    << dendl;
 
-      // ensuring that nref is always >= 2 and hence onode is pinned and 
-      // physically out of cache during the transition
+      // ensuring that nref is always >= 2 and hence onode is pinned
       OnodeRef o_pin = o;
-      ceph_assert(o->pinned);
 
-      p = onode_map.onode_map.erase(p);
-      dest->onode_map.onode_map[o->oid] = o;
+      p = onode_space.onode_map.erase(p);
+      dest->onode_space.onode_map[o->oid] = o;
       if (o->cached) {
-        get_onode_cache()->move_pinned(dest->get_onode_cache(), o.get());
+        get_onode_cache()->_move_pinned(dest->get_onode_cache(), o.get());
       }
       o->c = dest;
 
@@ -4472,7 +4445,7 @@ void BlueStore::MempoolThread::_update_cache_settings()
 #define dout_prefix *_dout << "bluestore.OmapIteratorImpl(" << this << ") "
 
 BlueStore::OmapIteratorImpl::OmapIteratorImpl(
-  PerfCounters* _logger, CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
+  PerfCounters* _logger, CollectionRef c, OnodeRef& o, KeyValueDB::Iterator it)
   : logger(_logger), c(c), o(o), it(it)
 {
   logger->inc(l_bluestore_omap_iterator_count);
@@ -8104,7 +8077,7 @@ void BlueStore::_fsck_repair_shared_blobs(
 	           << dendl;
 
           OnodeRef o;
-          o.reset(Onode::decode(c, oid, it->key(), it->value()));
+          o.reset(Onode::create_decode(c, oid, it->key(), it->value()));
           o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
 
           _dump_onode<30>(cct, *o);
@@ -8243,7 +8216,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
 
   dout(10) << __func__ << "  " << oid << dendl;
   OnodeRef o;
-  o.reset(Onode::decode(c, oid, key, value));
+  o.reset(Onode::create_decode(c, oid, key, value));
   ++num_objects;
 
   num_spanning_blobs += o->extent_map.spanning_blob_map.size();
@@ -9635,7 +9608,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 		  << " obj:" << oid << dendl;
 
         OnodeRef o;
-        o.reset(Onode::decode(c, oid, it->key(), it->value()));
+        o.reset(Onode::create_decode(c, oid, it->key(), it->value()));
 	o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
 	mempool::bluestore_fsck::set<BlobRef> blobs;
 
@@ -10669,7 +10642,7 @@ void BlueStore::_reap_collections()
   while (p != removed_colls.end()) {
     CollectionRef c = *p;
     dout(10) << __func__ << " " << c << " " << c->cid << dendl;
-    if (c->onode_map.map_any([&](Onode* o) {
+    if (c->onode_space.map_any([&](Onode* o) {
 	  ceph_assert(!o->exists);
 	  if (o->flushing_count.load()) {
 	    dout(10) << __func__ << " " << c << " " << c->cid << " " << o->oid
@@ -10681,7 +10654,7 @@ void BlueStore::_reap_collections()
       ++p;
       continue;
     }
-    c->onode_map.clear();
+    c->onode_space.clear();
     p = removed_colls.erase(p);
     dout(10) << __func__ << " " << c << " " << c->cid << " done" << dendl;
   }
@@ -10876,7 +10849,7 @@ int BlueStore::read(
 }
 
 void BlueStore::_read_cache(
-  OnodeRef o,
+  OnodeRef& o,
   uint64_t offset,
   size_t length,
   int read_cache_policy,
@@ -11042,7 +11015,7 @@ int BlueStore::_prepare_read_ioc(
 }
 
 int BlueStore::_generate_read_result_bl(
-  OnodeRef o,
+  OnodeRef& o,
   uint64_t offset,
   size_t length,
   ready_regions_t& ready_regions,
@@ -11136,7 +11109,7 @@ int BlueStore::_generate_read_result_bl(
 
 int BlueStore::_do_read(
   Collection *c,
-  OnodeRef o,
+  OnodeRef& o,
   uint64_t offset,
   size_t length,
   bufferlist& bl,
@@ -11505,7 +11478,7 @@ int BlueStore::readv(
 
 int BlueStore::_do_readv(
   Collection *c,
-  OnodeRef o,
+  OnodeRef& o,
   const interval_set<uint64_t>& m,
   bufferlist& bl,
   uint32_t op_flags,
@@ -12511,7 +12484,7 @@ int BlueStore::_upgrade_super()
   return 0;
 }
 
-void BlueStore::_assign_nid(TransContext *txc, OnodeRef o)
+void BlueStore::_assign_nid(TransContext *txc, OnodeRef& o)
 {
   if (o->onode.nid) {
     ceph_assert(o->exists);
@@ -14671,7 +14644,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
 int BlueStore::_touch(TransContext *txc,
 		      CollectionRef& c,
-		      OnodeRef &o)
+		      OnodeRef& o)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
@@ -14746,7 +14719,7 @@ void BlueStore::_pad_zeros(
 void BlueStore::_do_write_small(
     TransContext *txc,
     CollectionRef &c,
-    OnodeRef o,
+    OnodeRef& o,
     uint64_t offset, uint64_t length,
     bufferlist::iterator& blp,
     WriteContext *wctx)
@@ -15225,7 +15198,7 @@ bool BlueStore::BigDeferredWriteContext::apply_defer()
 void BlueStore::_do_write_big_apply_deferred(
     TransContext* txc,
     CollectionRef& c,
-    OnodeRef o,
+    OnodeRef& o,
     BlueStore::BigDeferredWriteContext& dctx,
     bufferlist::iterator& blp,
     WriteContext* wctx)
@@ -15288,7 +15261,7 @@ void BlueStore::_do_write_big_apply_deferred(
 void BlueStore::_do_write_big(
     TransContext *txc,
     CollectionRef &c,
-    OnodeRef o,
+    OnodeRef& o,
     uint64_t offset, uint64_t length,
     bufferlist::iterator& blp,
     WriteContext *wctx)
@@ -15501,7 +15474,7 @@ void BlueStore::_do_write_big(
 int BlueStore::_do_alloc_write(
   TransContext *txc,
   CollectionRef coll,
-  OnodeRef o,
+  OnodeRef& o,
   WriteContext *wctx)
 {
   dout(20) << __func__ << " txc " << txc
@@ -15832,7 +15805,7 @@ int BlueStore::_do_alloc_write(
 void BlueStore::_wctx_finish(
   TransContext *txc,
   CollectionRef& c,
-  OnodeRef o,
+  OnodeRef& o,
   WriteContext *wctx,
   set<SharedBlob*> *maybe_unshared_blobs)
 {
@@ -15957,7 +15930,7 @@ void BlueStore::_wctx_finish(
 void BlueStore::_do_write_data(
   TransContext *txc,
   CollectionRef& c,
-  OnodeRef o,
+  OnodeRef& o,
   uint64_t offset,
   uint64_t length,
   bufferlist& bl,
@@ -15998,7 +15971,7 @@ void BlueStore::_do_write_data(
 
 void BlueStore::_choose_write_options(
    CollectionRef& c,
-   OnodeRef o,
+   OnodeRef& o,
    uint32_t fadvise_flags,
    WriteContext *wctx)
 {
@@ -16104,7 +16077,7 @@ void BlueStore::_choose_write_options(
 int BlueStore::_do_gc(
   TransContext *txc,
   CollectionRef& c,
-  OnodeRef o,
+  OnodeRef& o,
   const WriteContext& wctx,
   uint64_t *dirty_start,
   uint64_t *dirty_end)
@@ -16159,7 +16132,7 @@ int BlueStore::_do_gc(
 int BlueStore::_do_write(
   TransContext *txc,
   CollectionRef& c,
-  OnodeRef o,
+  OnodeRef& o,
   uint64_t offset,
   uint64_t length,
   bufferlist& bl,
@@ -16328,7 +16301,7 @@ int BlueStore::_do_zero(TransContext *txc,
 }
 
 void BlueStore::_do_truncate(
-  TransContext *txc, CollectionRef& c, OnodeRef o, uint64_t offset,
+  TransContext *txc, CollectionRef& c, OnodeRef& o, uint64_t offset,
   set<SharedBlob*> *maybe_unshared_blobs)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
@@ -16403,7 +16376,7 @@ int BlueStore::_truncate(TransContext *txc,
 int BlueStore::_do_remove(
   TransContext *txc,
   CollectionRef& c,
-  OnodeRef o)
+  OnodeRef& o)
 {
   set<SharedBlob*> maybe_unshared_blobs;
   bool is_gen = !o->oid.is_no_gen();
@@ -16503,7 +16476,7 @@ int BlueStore::_do_remove(
 
 int BlueStore::_remove(TransContext *txc,
 		       CollectionRef& c,
-		       OnodeRef &o)
+		       OnodeRef& o)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " onode " << o.get()
@@ -16702,7 +16675,7 @@ int BlueStore::_omap_setkeys(TransContext *txc,
 
 int BlueStore::_omap_setheader(TransContext *txc,
 			       CollectionRef& c,
-			       OnodeRef &o,
+			       OnodeRef& o,
 			       bufferlist& bl)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
@@ -17053,7 +17026,7 @@ int BlueStore::_rename(TransContext *txc,
 
   // this adjusts oldo->{oid,key}, and reset oldo to a fresh empty
   // Onode in the old slot
-  c->onode_map.rename(oldo, old_oid, new_oid, new_okey);
+  c->onode_space.rename(oldo, old_oid, new_oid, new_okey);
   r = 0;
 
   // hold a ref to new Onode in old name position, to ensure we don't drop
@@ -17137,7 +17110,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     }
     size_t nonexistent_count = 0;
     ceph_assert((*c)->exists);
-    if ((*c)->onode_map.map_any([&](Onode* o) {
+    if ((*c)->onode_space.map_any([&](Onode* o) {
       if (o->exists) {
         dout(1) << __func__ << " " << o->oid << " " << o
 	        << " exists in onode_map" << dendl;
@@ -17162,7 +17135,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
       bool exists = (!next.is_max());
       for (auto it = ls.begin(); !exists && it < ls.end(); ++it) {
         dout(10) << __func__ << " oid " << *it << dendl;
-        auto onode = (*c)->onode_map.lookup(*it);
+        auto onode = (*c)->onode_space.lookup(*it);
         exists = !onode || onode->exists;
         if (exists) {
           dout(1) << __func__ << " " << *it
@@ -17228,7 +17201,7 @@ int BlueStore::_split_collection(TransContext *txc,
   ceph_assert(is_pg);
 
   // the destination should initially be empty.
-  ceph_assert(d->onode_map.empty());
+  ceph_assert(d->onode_space.empty());
   ceph_assert(d->shared_blob_set.empty());
   ceph_assert(d->cnode.bits == bits);
 
@@ -17619,12 +17592,12 @@ void BlueStore::_shutdown_cache()
     ceph_assert(i->empty());
   }
   for (auto& p : coll_map) {
-    p.second->onode_map.clear();
+    p.second->onode_space.clear();
     if (!p.second->shared_blob_set.empty()) {
       derr << __func__ << " stray shared blobs on " << p.first << dendl;
       p.second->shared_blob_set.dump<0>(cct);
     }
-    ceph_assert(p.second->onode_map.empty());
+    ceph_assert(p.second->onode_space.empty());
     ceph_assert(p.second->shared_blob_set.empty());
   }
   coll_map.clear();
@@ -17667,7 +17640,7 @@ void BlueStore::_apply_padding(uint64_t head_pad,
   }
 }
 
-void BlueStore::_record_onode(OnodeRef &o, KeyValueDB::Transaction &txn)
+void BlueStore::_record_onode(OnodeRef& o, KeyValueDB::Transaction &txn)
 {
   // finalize extent_map shards
   o->extent_map.update(txn, false);
