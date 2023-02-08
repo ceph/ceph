@@ -806,6 +806,7 @@ std::map<std::string, std::string> Mgr::get_services() const
 int Mgr::call(
   std::string_view admin_command,
   const cmdmap_t& cmdmap,
+  const bufferlist&,
   Formatter *f,
   std::ostream& errss,
   bufferlist& out)

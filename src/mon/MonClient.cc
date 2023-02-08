@@ -517,12 +517,20 @@ int MonClient::init()
   timer.init();
   schedule_tick();
 
+  cct->get_admin_socket()->register_command(
+    "rotate-key",
+    this,
+    "rotate live authentication key");
+
   return 0;
 }
 
 void MonClient::shutdown()
 {
   ldout(cct, 10) << __func__ << dendl;
+
+  cct->get_admin_socket()->unregister_commands(this);
+  
   monc_lock.lock();
   stopping = true;
   while (!version_requests.empty()) {
@@ -601,6 +609,33 @@ int MonClient::authenticate(double timeout)
   }
 
   return authenticate_err;
+}
+
+int MonClient::call(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    const ceph::buffer::list &inbl,
+    ceph::Formatter *f,
+    std::ostream& errss,
+    ceph::buffer::list& out)
+{
+  if (command == "rotate-key") {
+    CryptoKey key;
+    try {
+      key.decode_base64(inbl.to_str());
+    } catch (buffer::error& e) {
+      errss << "error decoding key: " << e.what();
+      return -EINVAL;
+    }
+    if (keyring) {
+      ldout(cct, 1) << "rotate live key for " << entity_name << dendl;
+      keyring->add(entity_name, key);
+    } else {
+      errss << "cephx not enabled; no key to rotate";
+      return -EINVAL;
+    }
+  }
+  return 0;
 }
 
 void MonClient::handle_auth(MAuthReply *m)

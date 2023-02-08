@@ -197,6 +197,7 @@ string RGWSyncTraceManager::get_active_names()
 }
 
 int RGWSyncTraceManager::call(std::string_view command, const cmdmap_t& cmdmap,
+			      const bufferlist&,
 			      Formatter *f,
 			      std::ostream& ss,
 			      bufferlist& out) {

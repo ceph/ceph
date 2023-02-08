@@ -58,6 +58,7 @@
 #define MSG_GETPOOLSTATSREPLY      59
 
 #define MSG_MON_GLOBAL_ID          60
+#define MSG_MON_USED_PENDING_KEYS  141
 
 #define MSG_ROUTE                  47
 #define MSG_FORWARD                46

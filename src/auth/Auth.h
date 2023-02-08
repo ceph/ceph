@@ -34,14 +34,16 @@ enum {
 struct EntityAuth {
   CryptoKey key;
   std::map<std::string, ceph::buffer::list> caps;
+  CryptoKey pending_key; ///< new but uncommitted key
 
   void encode(ceph::buffer::list& bl) const {
-    __u8 struct_v = 2;
+    __u8 struct_v = 3;
     using ceph::encode;
     encode(struct_v, bl);
     encode((uint64_t)CEPH_AUTH_UID_DEFAULT, bl);
     encode(key, bl);
     encode(caps, bl);
+    encode(pending_key, bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
@@ -53,12 +55,21 @@ struct EntityAuth {
     }
     decode(key, bl);
     decode(caps, bl);
+    if (struct_v >= 3) {
+      decode(pending_key, bl);
+    }
   }
 };
 WRITE_CLASS_ENCODER(EntityAuth)
 
-inline std::ostream& operator<<(std::ostream& out, const EntityAuth& a) {
-  return out << "auth(key=" << a.key << ")";
+inline std::ostream& operator<<(std::ostream& out, const EntityAuth& a)
+{
+  out << "auth(key=" << a.key;
+  if (!a.pending_key.empty()) {
+    out << " pending_key=" << a.pending_key;
+  }
+  out << ")";
+  return out;
 }
 
 struct AuthCapsInfo {

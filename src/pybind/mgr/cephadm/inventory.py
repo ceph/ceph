@@ -1236,6 +1236,7 @@ class HostCache():
             'reconfig': 3,
             'redeploy': 4,
             'stop': 5,
+            'rotate-key': 6,
         }
         existing_action = self.scheduled_daemon_actions.get(host, {}).get(daemon_name, None)
         if existing_action and priorities[existing_action] > priorities[action]:

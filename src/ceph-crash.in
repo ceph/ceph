@@ -101,6 +101,10 @@ def main():
         log.error("directory %s does not exist; please create" % postdir)
         time.sleep(30)
 
+    log.info("pinging cluster to exercise our key")
+    pr = subprocess.Popen(args=['timeout', '30', 'ceph', '-s'])
+    pr.wait()
+
     log.info("monitoring path %s, delay %ds" % (args.path, args.delay * 60.0))
     while True:
         scrape_path(args.path)

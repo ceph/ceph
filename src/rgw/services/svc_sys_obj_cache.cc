@@ -527,6 +527,7 @@ public:
     void shutdown();
 
     int call(std::string_view command, const cmdmap_t& cmdmap,
+	     const bufferlist&,
 	     Formatter *f,
 	     std::ostream& ss,
 	     bufferlist& out) override;
@@ -554,6 +555,7 @@ void RGWSI_SysObj_Cache_ASocketHook::shutdown()
 
 int RGWSI_SysObj_Cache_ASocketHook::call(
   std::string_view command, const cmdmap_t& cmdmap,
+  const bufferlist&,
   Formatter *f,
   std::ostream& ss,
   bufferlist& out)
