@@ -356,16 +356,6 @@ void PgScrubber::send_reservation_failure(epoch_t epoch_queued)
   dout(10) << "scrubber event --<< " << __func__ << dendl;
 }
 
-void PgScrubber::send_full_reset(epoch_t epoch_queued)
-{
-  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued
-	   << dendl;
-
-  m_fsm->process_event(Scrub::FullReset{});
-
-  dout(10) << "scrubber event --<< " << __func__ << dendl;
-}
-
 void PgScrubber::send_chunk_free(epoch_t epoch_queued)
 {
   dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued

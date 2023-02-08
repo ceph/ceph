@@ -344,8 +344,6 @@ class PgScrubber : public ScrubPgIF,
    */
   void on_applied_when_primary(const eversion_t& applied_version) final;
 
-  void send_full_reset(epoch_t epoch_queued) final;
-
   void send_chunk_free(epoch_t epoch_queued) final;
 
   void send_chunk_busy(epoch_t epoch_queued) final;
