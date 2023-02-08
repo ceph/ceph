@@ -1795,7 +1795,7 @@ private:
       > reactions;
     explicit WaitScrub(my_context ctx)
       : my_base(ctx),
-	NamedState(nullptr, "Trimming/WaitScrub") {
+	NamedState(nullptr, "WaitScrub") {
       context< SnapTrimmer >().log_enter(state_name);
     }
     void exit() {
