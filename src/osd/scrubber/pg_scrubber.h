@@ -669,7 +669,7 @@ class PgScrubber : public ScrubPgIF,
    *  the current scrubbing operation is done. We should mark that fact, so that
    *  all events related to the previous operation can be discarded.
    */
-  void advance_token();
+  void reset_replica_state();
 
   bool is_token_current(Scrub::act_token_t received_token);
 
