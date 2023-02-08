@@ -223,8 +223,6 @@ struct ScrubPgIF {
   virtual void send_sched_replica(epoch_t epoch_queued,
 				  Scrub::act_token_t token) = 0;
 
-  virtual void send_full_reset(epoch_t epoch_queued) = 0;
-
   virtual void send_chunk_free(epoch_t epoch_queued) = 0;
 
   virtual void send_chunk_busy(epoch_t epoch_queued) = 0;
