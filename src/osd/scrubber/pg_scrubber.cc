@@ -1600,7 +1600,6 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
   /* The primary may unilaterally restart the scrub process without notifying
    * replicas.  Unconditionally clear any existing state prior to handling
    * the new reservation. */
-  m_remote_osd_resource.reset();
   advance_token();
   
   bool granted{false};
@@ -1663,7 +1662,6 @@ void PgScrubber::handle_scrub_reserve_release(OpRequestRef op)
    *  the old tag will be discarded.
    */
   advance_token();
-  m_remote_osd_resource.reset();
 }
 
 void PgScrubber::discard_replica_reservations()
@@ -2352,6 +2350,7 @@ void PgScrubber::advance_token()
   // place. We will, though, verify that. And if we are actually still handling
   // a stale request - both our internal state and the FSM state will be
   // cleared.
+  m_remote_osd_resource.reset();
   replica_handling_done();
   m_fsm->process_event(FullReset{});
 }
