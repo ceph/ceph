@@ -186,6 +186,13 @@ bool PaxosService::should_propose(double& delay)
   return true;
 }
 
+bool PaxosService::is_writeable()
+{
+    dout(1) << "JR" << dendl;
+    dout(1) << __func__ << dendl;
+    dout(1) << "is_active: " << is_active() << " have_pending: " << have_pending << dendl;
+    return is_active() && have_pending;
+}
 
 void PaxosService::propose_pending()
 {

@@ -541,9 +541,7 @@ public:
    *
    * @returns true if writeable; false otherwise
    */
-  bool is_writeable() const {
-    return is_active() && have_pending;
-  }
+  virtual bool is_writeable();
 
   /**
    * Wait for a proposal to finish.

@@ -6672,6 +6672,8 @@ void Monitor::try_engage_stretch_mode()
 void Monitor::do_stretch_mode_election_work()
 {
   dout(20) << __func__ << dendl;
+  dout(20) << "is_stretch_mode(): " << is_stretch_mode()
+    << " is_leader(): " << is_leader() << dendl;
   if (!is_stretch_mode() ||
       !is_leader()) return;
   dout(20) << "checking for degraded stretch mode" << dendl;
