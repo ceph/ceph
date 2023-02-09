@@ -1502,7 +1502,7 @@ EOF
     fi
 fi
 
-if [ "$crimson" -eq 1 ]; then
+if [ "$ceph_osd" == "crimson-osd" ]; then
     $CEPH_BIN/ceph -c $conf_fn config set osd crimson_seastar_smp $crimson_smp
 fi
 
