@@ -81,7 +81,7 @@ class BlockingAioThrottle final : public Aio, private Throttle {
 // functions must be called within the coroutine strand
 class YieldingAioThrottle final : public Aio, private Throttle {
   boost::asio::io_context& context;
-  yield_context yield;
+  spawn::yield_context yield;
   struct Handler;
 
   // completion callback associated with the waiter
@@ -95,7 +95,7 @@ class YieldingAioThrottle final : public Aio, private Throttle {
 
  public:
   YieldingAioThrottle(uint64_t window, boost::asio::io_context& context,
-                      yield_context yield)
+                      spawn::yield_context yield)
     : Throttle(window), context(context), yield(yield)
   {}
 

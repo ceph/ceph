@@ -584,7 +584,7 @@ int RGWBucket::check_index_olh(rgw::sal::RadosStore* const rados_store,
   const int max_aio = std::max(1, op_state.get_max_aio());
 
   for (int i=0; i<max_aio; i++) {
-    spawn::spawn(context, [&](yield_context yield) {
+    spawn::spawn(context, [&](spawn::yield_context yield) {
       while (true) {
         int shard = next_shard;
         next_shard += 1;
@@ -793,7 +793,7 @@ int RGWBucket::check_index_unlinked(rgw::sal::RadosStore* const rados_store,
   int next_shard = 0;
   boost::asio::io_context context;
   for (int i=0; i<max_aio; i++) {
-    spawn::spawn(context, [&](yield_context yield) {
+    spawn::spawn(context, [&](spawn::yield_context yield) {
       while (true) {
         int shard = next_shard;
         next_shard += 1;

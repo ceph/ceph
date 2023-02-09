@@ -122,7 +122,7 @@ namespace {
 class Waiter {
   using Signature = void(boost::system::error_code);
   using Completion = ceph::async::Completion<Signature>;
-  using CompletionInit = boost::asio::async_completion<yield_context, Signature>;
+  using CompletionInit = boost::asio::async_completion<spawn::yield_context, Signature>;
   std::unique_ptr<Completion> completion = nullptr;
   int ret;
 
