@@ -27,8 +27,11 @@ int main(int argc, char **argv) {
 
 class mClockSchedulerTest : public testing::Test {
 public:
+  int whoami;
   uint32_t num_shards;
+  int shard_id;
   bool is_rotational;
+  MonClient *monc;
   mClockScheduler q;
 
   uint64_t client1;
@@ -36,9 +39,12 @@ public:
   uint64_t client3;
 
   mClockSchedulerTest() :
+    whoami(0),
     num_shards(1),
+    shard_id(0),
     is_rotational(false),
-    q(g_ceph_context, num_shards, is_rotational),
+    monc(nullptr),
+    q(g_ceph_context, whoami, num_shards, shard_id, is_rotational, monc),
     client1(1001),
     client2(9999),
     client3(100000001)
