@@ -31,6 +31,7 @@
 #if defined(WITH_BLUESTORE)
 #include "os/bluestore/BlueStore.h"
 #include "os/bluestore/BlueFS.h"
+#include "os/bluestore/Allocator.h"
 #endif
 #include "include/Context.h"
 #include "common/buffer_instrumentation.h"
@@ -501,6 +502,28 @@ public:
 	++it;
       }
     }
+  }
+};
+
+class BlueStoreTester {
+  BlueStore* bstore;
+public:
+  BlueStoreTester(ObjectStore* _store) {
+    bstore = dynamic_cast<BlueStore*>(_store);
+    ceph_assert(bstore);
+  }
+  int __store_allocator(Allocator* a, const char* filename, uint32_t ver,
+    bool exclude_bluefs) {
+    return bstore->__store_allocator(a, filename, ver, exclude_bluefs);
+  }
+  int __restore_allocator(Allocator* a, const char* filename, uint64_t total_size) {
+    return bstore->__restore_allocator(a, filename, total_size);
+  }
+  int compare_allocators(Allocator* alloc1, Allocator* alloc2) {
+    return bstore->compare_allocators(alloc1, alloc2);
+  }
+  Allocator* create_bitmap_allocator(size_t size) {
+    return bstore->create_bitmap_allocator(size);
   }
 };
 
@@ -11923,6 +11946,88 @@ TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG) {
   }
 }
 
+void doStoreAllocatorTest(ObjectStore* store, uint32_t ver, size_t alloc_size,
+  uint64_t total_size, uint64_t num_extents)
+{
+  BlueStoreTester t(store);
+  std::unique_ptr<Allocator> a(t.create_bitmap_allocator(total_size));
+  size_t o = (1ull << 30);
+  for (size_t i = 0; i < num_extents; i++) {
+    a->init_add_free(o, alloc_size);
+    o += 2 * alloc_size;
+  }
+  auto t0 = ceph_clock_now();
+  t.__store_allocator(a.get(), "test", ver, false);
+  utime_t dur = ceph_clock_now() - t0;
+  std::cout << " Saving completed in " << dur << " seconds" << std::endl;
+
+  t0 = ceph_clock_now();
+  std::unique_ptr<Allocator> a2(t.create_bitmap_allocator(total_size));
+  int r = t.__restore_allocator(a2.get(), "test", total_size);
+  ASSERT_EQ(r, 0);
+  dur = ceph_clock_now() - t0;
+  std::cout << " Restore completed in " << dur << " seconds" << std::endl;
+
+  ASSERT_TRUE(
+    t.compare_allocators(
+      a.get(), a2.get()) == 0);
+}
+
+TEST_P(StoreTestSpecificAUSize, StoreAllocatorV1Test) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  g_conf().apply_changes(nullptr);
+
+  size_t alloc_size = 0x1000;
+
+  StartDeferred(alloc_size);
+  size_t total_size = 1ull << 42; // 4 TiB
+  size_t num_extents = 32ull * (1ull << 20); // 32 M
+  doStoreAllocatorTest(store.get(), 1, alloc_size, total_size, num_extents);
+}
+
+TEST_P(StoreTestSpecificAUSize, StoreSmallAllocmapV1Test) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  g_conf().apply_changes(nullptr);
+
+  size_t alloc_size = 0x1000;
+
+  StartDeferred(alloc_size);
+  size_t total_size = 1ull << 42; // 4 TiB
+  size_t num_extents = 20;
+  doStoreAllocmapTest(store.get(), 1, alloc_size, total_size, num_extents);
+}
+
+TEST_P(StoreTestSpecificAUSize, StoreAllocmapV2Test) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  g_conf().apply_changes(nullptr);
+
+  size_t alloc_size = 0x1000;
+
+  StartDeferred(alloc_size);
+  size_t total_size = 1ull << 42; // 4 TiB
+  size_t num_extents = 32ull * (1ull << 20); // 32 M
+  doStoreAllocatorTest(store.get(), 2, alloc_size, total_size, num_extents);
+}
+
+TEST_P(StoreTestSpecificAUSize, StoreSmallAllocmapV2Test) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  g_conf().apply_changes(nullptr);
+
+  size_t alloc_size = 0x1000;
+
+  StartDeferred(alloc_size);
+  size_t total_size = 0x2625a0000;
+  size_t num_extents = 20; // 32 M
+  doStoreAllocmapTest(store.get(), 2, alloc_size, total_size, num_extents);
+}
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {
