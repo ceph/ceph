@@ -311,6 +311,7 @@ private:
                      const FHandles &fh, bool need_data_sync, bool need_attr_sync);
   int copy_to_remote(const std::string &dir_root, const std::string &epath, const struct ceph_statx &stx,
                      const FHandles &fh);
+  int sync_perms(const std::string& path);
 };
 
 } // namespace mirror
