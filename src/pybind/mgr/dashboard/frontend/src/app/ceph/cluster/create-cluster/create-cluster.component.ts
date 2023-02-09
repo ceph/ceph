@@ -145,45 +145,6 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
             error: (error) => error.preventDefault()
           });
       });
-
-      if (this.driveGroup) {
-        const user = this.authStorageService.getUsername();
-        this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
-        this.driveGroups.push(this.driveGroup.spec);
-      }
-
-      if (this.simpleDeployment) {
-        const title = this.deploymentOption?.options[this.selectedOption['option']].title;
-        const trackingId = $localize`${title} deployment`;
-        this.taskWrapper
-          .wrapTaskAroundCall({
-            task: new FinishedTask('osd/' + URLVerbs.CREATE, {
-              tracking_id: trackingId
-            }),
-            call: this.osdService.create([this.selectedOption], trackingId, 'predefined')
-          })
-          .subscribe({
-            error: (error) => error.preventDefault(),
-            complete: () => {
-              this.submitAction.emit();
-            }
-          });
-          forkJoin(this.observables)
-            .pipe(
-              finalize(() =>
-                this.clusterService.updateStatus('POST_INSTALLED').subscribe(() => {
-                  this.notificationService.show(
-                    NotificationType.success,
-                    $localize`Cluster expansion was successful`
-                  );
-                  this.router.navigate(['/dashboard']);
-                })
-              )
-            )
-            .subscribe({
-              error: (error) => error.preventDefault()
-            });
-        });
     }
 
     if (!this.stepsToSkip['Create OSDs']) {
