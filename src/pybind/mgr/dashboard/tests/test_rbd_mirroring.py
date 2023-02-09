@@ -31,7 +31,11 @@ mock_get_metadata = {
 
 _status = {
     1: {
-        'callouts': {},
+        'callouts': {
+            'image': {
+                'level': 'warning',
+            }
+        },
         'image_local_count': 5,
         'image_remote_count': 6,
         'image_error_count': 7,
@@ -288,6 +292,7 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
         self.assertStatus(200)
 
         summary = self.json_body()['rbd_mirroring']
+        # 2 warnings: 1 for the daemon, 1 for the pool
         self.assertEqual(summary, {'errors': 0, 'warnings': 2})
 
 
