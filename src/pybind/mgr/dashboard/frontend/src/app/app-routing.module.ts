@@ -24,7 +24,7 @@ import { SilenceListComponent } from './ceph/cluster/prometheus/silence-list/sil
 import { ServiceFormComponent } from './ceph/cluster/services/service-form/service-form.component';
 import { ServicesComponent } from './ceph/cluster/services/services.component';
 import { TelemetryComponent } from './ceph/cluster/telemetry/telemetry.component';
-import { DeprecatedDashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
+import { DeprecatedDashboardComponent } from './ceph/dashboard/deprecated-dashboard/deprecated-dashboard.component';
 import { DashboardComponent } from './ceph/new-dashboard/dashboard/dashboard.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
 import { NfsListComponent } from './ceph/nfs/nfs-list/nfs-list.component';

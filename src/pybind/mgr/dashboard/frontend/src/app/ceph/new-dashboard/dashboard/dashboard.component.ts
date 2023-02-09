@@ -103,6 +103,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.interval.unsubscribe();
+    this.timerGetPrometheusDataSub.unsubscribe();
   }
 
   getHealth() {

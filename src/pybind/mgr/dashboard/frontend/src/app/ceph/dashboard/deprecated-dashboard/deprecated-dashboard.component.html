@@ -1,0 +1,56 @@
+<main aria-label="Dashboard">
+  <a href="#main"
+     class="sr-only">skip to content</a>
+
+  <div class="container-fluid">
+    <div class="row d-flex justify-content-end">
+      <div class="col-sm-1">
+        <button (click)="toggleContent()" class="btn btn-primary">
+          <ng-container *ngIf="showOldPage; else other">
+            New Page
+          </ng-container>
+          <ng-template #other>
+            Old Page
+          </ng-template>
+        </button>
+      </div>
+      <div *ngIf="showOldPage"
+          class="col-sm-1 col-wider">
+        <cd-refresh-selector></cd-refresh-selector>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="showOldPage; else newPage">
+    <ng-container *ngIf="hasGrafana">
+      <nav ngbNav
+          #nav="ngbNav"
+          class="nav-tabs">
+        <ng-container ngbNavItem>
+          <a ngbNavLink
+            i18n>Health</a>
+          <ng-template ngbNavContent>
+            <cd-health></cd-health>
+          </ng-template>
+        </ng-container>
+        <ng-container ngbNavItem>
+          <a ngbNavLink
+            i18n>Statistics</a>
+          <ng-template ngbNavContent>
+          </ng-template>
+        </ng-container>
+
+      </nav>
+
+      <div [ngbNavOutlet]="nav"></div>
+    </ng-container>
+
+    <cd-health id="main"
+    *ngIf="!hasGrafana"></cd-health>
+  </div>
+
+  <ng-template #newPage>
+    <cd-dashboard></cd-dashboard>
+  </ng-template>
+
+</main>

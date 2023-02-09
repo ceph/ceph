@@ -7,9 +7,10 @@ import { NgbNavModule, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import { ChartsModule } from 'ng2-charts';
 
 import { SharedModule } from '~/app/shared/shared.module';
+import { DashboardModule } from '../new-dashboard/new-dashboard.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { FeedbackComponent } from '../shared/feedback/feedback.component';
-import { DeprecatedDashboardComponent } from './dashboard/dashboard.component';
+import { DeprecatedDashboardComponent } from './deprecated-dashboard/deprecated-dashboard.component';
 import { HealthPieComponent } from './health-pie/health-pie.component';
 import { HealthComponent } from './health/health.component';
 import { InfoCardComponent } from './info-card/info-card.component';
@@ -29,7 +30,8 @@ import { OsdSummaryPipe } from './osd-summary.pipe';
     RouterModule,
     NgbPopoverModule,
     FormsModule,
-    ReactiveFormsModule
+    ReactiveFormsModule,
+    DashboardModule
   ],
 
   declarations: [
@@ -45,4 +47,4 @@ import { OsdSummaryPipe } from './osd-summary.pipe';
     FeedbackComponent
   ]
 })
-export class DashboardModule {}
+export class DeprecatedDashboardModule {}
