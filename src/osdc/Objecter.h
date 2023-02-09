@@ -1643,7 +1643,8 @@ public:
   boost::asio::io_context& service;
   // The guaranteed sequenced, one-at-a-time execution and apparently
   // people sometimes depend on this.
-  boost::asio::io_context::strand finish_strand{service};
+  boost::asio::strand<boost::asio::io_context::executor_type>
+      finish_strand{service.get_executor()};
   ZTracer::Endpoint trace_endpoint{"0.0.0.0", 0, "Objecter"};
 private:
   std::unique_ptr<OSDMap> osdmap{std::make_unique<OSDMap>()};
