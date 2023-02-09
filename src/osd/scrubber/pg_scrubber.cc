@@ -94,6 +94,19 @@ bool PgScrubber::check_interval(epoch_t epoch_to_verify) const
   return epoch_to_verify >= m_pg->get_same_interval_since();
 }
 
+bool PgScrubber::should_drop_message(OpRequestRef &op) const
+{
+  if (check_interval(op->sent_epoch)) {
+    return false;
+  } else {
+    dout(10) << __func__ <<  ": discarding message " << *(op->get_req())
+	     << " from prior interval, epoch " << op->sent_epoch
+	     << ".  Current history.same_interval_since: "
+             << m_pg->info.history.same_interval_since << dendl;
+    return true;
+  }
+}
+
 bool PgScrubber::is_message_relevant(epoch_t epoch_to_verify)
 {
   if (!m_active) {
@@ -1370,18 +1383,7 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
 	   << " Msg: map_epoch:" << msg->map_epoch
 	   << " min_epoch:" << msg->min_epoch << " deep?" << msg->deep << dendl;
 
-  // are we still processing a previous scrub-map request without noticing that
-  // the interval changed? won't see it here, but rather at the reservation
-  // stage.
-
-  if (msg->map_epoch < m_pg->info.history.same_interval_since) {
-    dout(10) << "replica_scrub_op discarding old replica_scrub from "
-	     << msg->map_epoch << " < "
-	     << m_pg->info.history.same_interval_since << dendl;
-
-    // is there a general sync issue? are we holding a stale reservation?
-    // not checking now - assuming we will actively react to interval change.
-
+  if (should_drop_message(op)) {
     return;
   }
 
@@ -1537,9 +1539,7 @@ void PgScrubber::map_from_replica(OpRequestRef op)
   auto m = op->get_req<MOSDRepScrubMap>();
   dout(15) << __func__ << " " << *m << dendl;
 
-  if (m->map_epoch < m_pg->info.history.same_interval_since) {
-    dout(10) << __func__ << " discarding old from " << m->map_epoch << " < "
-	     << m_pg->info.history.same_interval_since << dendl;
+  if (should_drop_message(op)) {
     return;
   }
 
@@ -1571,12 +1571,16 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
 {
   dout(10) << __func__ << " " << *op->get_req() << dendl;
   op->mark_started();
-  auto request_ep = op->get_req<MOSDScrubReserve>()->get_map_epoch();
+  auto request_ep = op->sent_epoch;
   dout(20) << fmt::format("{}: request_ep:{} recovery:{}",
 			  __func__,
 			  request_ep,
 			  m_osds->is_recovery_active())
 	   << dendl;
+
+  if (should_drop_message(op)) {
+    return;
+  }
 
   // Purely a debug check, PgScrubber::on_new_interval should have cleared this
   if (m_remote_osd_resource.has_value()) {
@@ -1585,16 +1589,6 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
       derr << __func__ << ": BUG: stale remote osd resource from epoch " << e
 	   << dendl;
     }
-  }
-
-  if (request_ep < m_pg->get_same_interval_since()) {
-    // will not ack stale requests
-    dout(10) << fmt::format("{}: stale reservation (request ep{} < {}) denied",
-			    __func__,
-			    request_ep,
-			    m_pg->get_same_interval_since())
-	     << dendl;
-    return;
   }
 
   /* The primary may unilaterally restart the scrub process without notifying

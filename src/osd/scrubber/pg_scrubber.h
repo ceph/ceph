@@ -690,6 +690,14 @@ class PgScrubber : public ScrubPgIF,
   // -----     methods used to verify the relevance of incoming events:
 
   /**
+   * should_drop_message
+   *
+   * Returns false if message was sent in the current epoch.  Otherwise,
+   * returns true and logs a debug message.
+   */
+  bool should_drop_message(OpRequestRef &op) const;
+
+  /**
    *  is the incoming event still relevant and should be forwarded to the FSM?
    *
    *  It isn't if:
