@@ -89,7 +89,7 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf)
  * PrimaryLogPG::on_change() was called when that interval ended. We can safely
  * discard the stale message.
  */
-bool PgScrubber::check_interval(epoch_t epoch_to_verify)
+bool PgScrubber::check_interval(epoch_t epoch_to_verify) const
 {
   return epoch_to_verify >= m_pg->get_same_interval_since();
 }
