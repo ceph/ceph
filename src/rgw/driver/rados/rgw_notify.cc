@@ -178,7 +178,7 @@ private:
       pending_tokens(0),
       timer(io_context) {}  
  
-    void async_wait(yield_context yield) {
+    void async_wait(spawn::yield_context yield) { 
       if (pending_tokens == 0) {
         return;
       }
@@ -201,7 +201,7 @@ private:
   // processing of a specific entry
   // return whether processing was successful (true) or not (false)
   EntryProcessingResult process_entry(const ConfigProxy& conf, persistency_tracker& entry_persistency_tracker,
-                                      const cls_queue_entry& entry, yield_context yield) {
+                                      const cls_queue_entry& entry, spawn::yield_context yield) {
     event_entry_t event_entry;
     auto iter = entry.data.cbegin();
     try {
@@ -269,7 +269,7 @@ private:
   }
 
   // clean stale reservation from queue
-  void cleanup_queue(const std::string& queue_name, yield_context yield) {
+  void cleanup_queue(const std::string& queue_name, spawn::yield_context yield) {
     while (true) {
       ldpp_dout(this, 20) << "INFO: trying to perform stale reservation cleanup for queue: " << queue_name << dendl;
       const auto now = ceph::coarse_real_time::clock::now();
@@ -305,13 +305,13 @@ private:
   }
 
   // processing of a specific queue
-  void process_queue(const std::string& queue_name, yield_context yield) {
+  void process_queue(const std::string& queue_name, spawn::yield_context yield) {
     constexpr auto max_elements = 1024;
     auto is_idle = false;
     const std::string start_marker;
 
     // start a the cleanup coroutine for the queue
-    spawn::spawn(io_context, [this, queue_name](yield_context yield) {
+    spawn::spawn(io_context, [this, queue_name](spawn::yield_context yield) {
             cleanup_queue(queue_name, yield);
             }, make_stack_allocator());
 
@@ -392,7 +392,7 @@ private:
 
         entries_persistency_tracker& notifs_persistency_tracker = topics_persistency_tracker[queue_name];
         spawn::spawn(yield, [this, &notifs_persistency_tracker, &queue_name, entry_idx, total_entries, &end_marker,
-                             &remove_entries, &has_error, &waiter, &entry, &needs_migration_vector](yield_context yield) {
+                             &remove_entries, &has_error, &waiter, &entry, &needs_migration_vector](spawn::yield_context yield) {
             const auto token = waiter.make_token();
             auto& persistency_tracker = notifs_persistency_tracker[entry.marker];
             auto result = process_entry(this->get_cct()->_conf, persistency_tracker, entry, yield);
@@ -543,7 +543,7 @@ private:
 
   // process all queues
   // find which of the queues is owned by this daemon and process it
-  void process_queues(yield_context yield) {
+  void process_queues(spawn::yield_context yield) {
     auto has_error = false;
     owned_queues_t owned_queues;
 
@@ -610,7 +610,7 @@ private:
         if (owned_queues.insert(queue_name).second) {
           ldpp_dout(this, 10) << "INFO: queue: " << queue_name << " now owned (locked) by this daemon" << dendl;
           // start processing this queue
-          spawn::spawn(io_context, [this, &queue_gc, &queue_gc_lock, queue_name](yield_context yield) {
+          spawn::spawn(io_context, [this, &queue_gc, &queue_gc_lock, queue_name](spawn::yield_context yield) {
             process_queue(queue_name, yield);
             // if queue processing ended, it means that the queue was removed or not owned anymore
             // mark it for deletion
@@ -661,7 +661,7 @@ public:
     reservations_cleanup_period_s(_reservations_cleanup_period_s),
     rados_store(*store)
     {
-      spawn::spawn(io_context, [this] (yield_context yield) {
+      spawn::spawn(io_context, [this](spawn::yield_context yield) {
             process_queues(yield);
           }, make_stack_allocator());
 
