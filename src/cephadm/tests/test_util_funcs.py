@@ -2,6 +2,7 @@
 #
 from unittest import mock
 
+import io
 import os
 
 import pytest
@@ -491,3 +492,56 @@ def test_check_time_sync(call_fn, enabler, expected):
         assert result == expected
         if enabler is not None:
             enabler.check_expected()
+
+
+@pytest.mark.parametrize(
+    "content, expected",
+    [
+        (
+            """#JUNK
+            FOO=1
+            """,
+            (None, None, None),
+        ),
+        (
+            """# A sample from a real centos system
+NAME="CentOS Stream"
+VERSION="8"
+ID="centos"
+ID_LIKE="rhel fedora"
+VERSION_ID="8"
+PLATFORM_ID="platform:el8"
+PRETTY_NAME="CentOS Stream 8"
+ANSI_COLOR="0;31"
+CPE_NAME="cpe:/o:centos:centos:8"
+HOME_URL="https://centos.org/"
+BUG_REPORT_URL="https://bugzilla.redhat.com/"
+REDHAT_SUPPORT_PRODUCT="Red Hat Enterprise Linux 8"
+REDHAT_SUPPORT_PRODUCT_VERSION="CentOS Stream"
+            """,
+            ("centos", "8", None),
+        ),
+        (
+            """# Minimal but complete, made up vals
+ID="hpec"
+VERSION_ID="33"
+VERSION_CODENAME="hpec nimda"
+            """,
+            ("hpec", "33", "hpec nimda"),
+        ),
+        (
+            """# Minimal but complete, no quotes
+ID=hpec
+VERSION_ID=33
+VERSION_CODENAME=hpec nimda
+            """,
+            ("hpec", "33", "hpec nimda"),
+        ),
+    ],
+)
+def test_get_distro(monkeypatch, content, expected):
+    def _fake_open(*args, **kwargs):
+        return io.StringIO(content)
+
+    monkeypatch.setattr("builtins.open", _fake_open)
+    assert _cephadm.get_distro() == expected
