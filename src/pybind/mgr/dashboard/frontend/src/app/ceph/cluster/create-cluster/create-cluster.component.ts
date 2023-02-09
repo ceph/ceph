@@ -130,20 +130,20 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
           }
         });
         forkJoin(this.observables)
-        .pipe(
-          finalize(() =>
-                   this.clusterService.updateStatus('POST_INSTALLED').subscribe(() => {
-                     this.notificationService.show(
-                       NotificationType.success,
-                       $localize`Cluster expansion was successful`
-                     );
-                     this.router.navigate(['/dashboard']);
-                   })
-                  )
-        )
-        .subscribe({
-          error: (error) => error.preventDefault()
-        });
+          .pipe(
+            finalize(() =>
+              this.clusterService.updateStatus('POST_INSTALLED').subscribe(() => {
+                this.notificationService.show(
+                  NotificationType.success,
+                  $localize`Cluster expansion was successful`
+                );
+                this.router.navigate(['/dashboard']);
+              })
+            )
+          )
+          .subscribe({
+            error: (error) => error.preventDefault()
+          });
       });
     }
 
