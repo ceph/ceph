@@ -5764,7 +5764,8 @@ std::ostream& operator<<(std::ostream &out, const UserPerm& perm) {
 int Client::may_setattr(Inode *in, struct ceph_statx *stx, int mask,
 			const UserPerm& perms)
 {
-  ldout(cct, 20) << __func__ << " " << *in << "; " << perms << dendl;
+  ldout(cct, 20) << __func__ << " " << *in << "; " << perms << " stx_mode: "
+      << hex << stx->stx_mode << " mask:" << mask << dec << dendl;
   int r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;
@@ -5787,7 +5788,18 @@ int Client::may_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
 
   if (mask & CEPH_SETATTR_MODE) {
-    if (perms.uid() != 0 && perms.uid() != in->uid)
+    uint32_t m = ~stx->stx_mode & in->mode; // mode bits removed
+    ldout(cct, 20) << __func__ << " " << *in << " = " << hex << m << dec <<  dendl;
+    if (perms.uid() != 0 && perms.uid() != in->uid &&
+	/*
+	 * Currently the kernel fuse and libfuse code is buggy and
+	 * won't pass the ATTR_KILL_SUID/ATTR_KILL_SGID to ceph-fuse.
+	 * But will just set the ATTR_MODE and at the same time by
+	 * clearing the suid/sgid bits.
+	 *
+	 * Only allow unprivileged users to clear S_ISUID and S_ISUID.
+	 */
+	(m & ~(S_ISUID | S_ISGID)))
       goto out;
 
     gid_t i_gid = (mask & CEPH_SETATTR_GID) ? stx->stx_gid : in->gid;
