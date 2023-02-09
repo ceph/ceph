@@ -96,7 +96,8 @@ private:
   int wait_for_osdmap();
 
 public:
-  boost::asio::io_context::strand finish_strand{poolctx.get_io_context()};
+  boost::asio::strand<boost::asio::io_context::executor_type>
+      finish_strand{poolctx.get_executor()};
 
   explicit RadosClient(CephContext *cct);
   ~RadosClient() override;
