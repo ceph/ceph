@@ -782,6 +782,7 @@ EOF
     fi
     wconf <<EOF
 [client]
+$CCLIENTDEBUG
         keyring = $keyring_fn
         log file = $CEPH_OUT_CLIENT_DIR/\$name.\$pid.log
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
@@ -798,6 +799,7 @@ EOF
 	do_rgw_conf
 	wconf << EOF
 [mds]
+$CMDSDEBUG
 $DAEMONOPTS
         mds data = $CEPH_DEV_DIR/mds.\$id
         mds root ino uid = `id -u`
@@ -1338,6 +1340,8 @@ if [ "$debug" -eq 0 ]; then
     CMONDEBUG='
         debug mon = 10
         debug ms = 1'
+    CCLIENTDEBUG=''
+    CMDSDEBUG=''
 else
     debug echo "** going verbose **"
     CMONDEBUG='
@@ -1347,6 +1351,10 @@ else
         debug auth = 20
         debug mgrc = 20
         debug ms = 1'
+    CCLIENTDEBUG='
+        debug client = 20'
+    CMDSDEBUG='
+        debug mds = 20'
 fi
 
 # Crimson doesn't support PG merge/split yet.
