@@ -7777,8 +7777,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
     kill_sguid = mask & (CEPH_SETATTR_SIZE|CEPH_SETATTR_KILL_SGUID);
-
-    mask &= ~CEPH_SETATTR_KILL_SGUID;
   } else if (mask & CEPH_SETATTR_SIZE) {
     /* If we don't have Ax, then we must ask the server to clear them on truncate */
     mask |= CEPH_SETATTR_KILL_SGUID;
@@ -7842,11 +7840,18 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     } else {
       mask &= ~CEPH_SETATTR_MODE;
     }
-  } else if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL) &&
-             kill_sguid && S_ISREG(in->mode) &&
-	     (in->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
-    /* Must squash the any setuid/setgid bits with an ownership change */
-    in->mode &= ~(S_ISUID|S_ISGID);
+  } else if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL) && S_ISREG(in->mode)) {
+    if (kill_sguid && (in->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
+      in->mode &= ~(S_ISUID|S_ISGID);
+    } else {
+      if (mask & CEPH_SETATTR_KILL_SUID) {
+        in->mode &= ~S_ISUID;
+      }
+      if (mask & CEPH_SETATTR_KILL_SGID) {
+        in->mode &= ~S_ISGID;
+      }
+    }
+    mask &= ~(CEPH_SETATTR_KILL_SGUID|CEPH_SETATTR_KILL_SUID|CEPH_SETATTR_KILL_SGID);
     in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
   }
 
@@ -14790,6 +14795,41 @@ int Client::ll_sync_inode(Inode *in, bool syncdataonly)
   return _fsync(in, syncdataonly);
 }
 
+int Client::clear_suid_sgid(Inode *in, const UserPerm& perms)
+{
+  ldout(cct, 20) << __func__ << " " << *in << "; " << perms << dendl;
+
+  if (!in->is_file()) {
+    return 0;
+  }
+
+  if (likely(!(in->mode & (S_ISUID|S_ISGID)))) {
+    return 0;
+  }
+
+  if (perms.uid() == 0 || perms.uid() == in->uid) {
+    return 0;
+  }
+
+  int mask;
+
+  // always drop the suid
+  if (unlikely(in->mode & S_ISUID)) {
+    mask = CEPH_SETATTR_KILL_SUID;
+  }
+
+  // remove the sgid if S_IXUGO is set or the inode is
+  // is not in the caller's group list.
+  if ((in->mode & S_ISGID) &&
+      ((in->mode & S_IXUGO) || !perms.gid_in_groups(in->gid))) {
+    mask |= CEPH_SETATTR_KILL_SGID;
+  }
+
+  ldout(cct, 20) << __func__ << " mask " << mask << dendl;
+  struct ceph_statx stx = { 0 };
+  return __setattrx(in, &stx, mask, perms);
+}
+
 int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
@@ -14827,6 +14867,12 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   int r = get_caps(fh, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, -1);
   if (r < 0)
     return r;
+
+  r = clear_suid_sgid(in, fh->actor_perms);
+  if (r < 0) {
+    put_cap_ref(in, CEPH_CAP_FILE_WR);
+    return r;
+  }
 
   std::unique_ptr<C_SaferCond> onuninline = nullptr;
   if (mode & FALLOC_FL_PUNCH_HOLE) {
@@ -14932,7 +14978,7 @@ int Client::fallocate(int fd, int mode, loff_t offset, loff_t length)
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
 
-  tout(cct) << __func__ << " " << " " << fd << mode << " " << offset << " " << length << std::endl;
+  tout(cct) << __func__ << " " << fd << mode << " " << offset << " " << length << std::endl;
 
   std::scoped_lock lock(client_lock);
   Fh *fh = get_filehandle(fd);
