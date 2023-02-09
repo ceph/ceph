@@ -102,13 +102,6 @@ inline uint64_t generate_client_cookie() {
 
 } // namespace anonymous
 
-namespace fmt {
-
-template <typename T> auto ptr(const ::seastar::shared_ptr<T>& p) -> const void* {
-  return p.get();
-}
-
-}
 namespace crimson::net {
 
 #ifdef UNIT_TESTS_BUILT
