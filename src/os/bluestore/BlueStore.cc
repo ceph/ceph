@@ -19684,57 +19684,6 @@ int BlueStore::invalidate_allocation_file_on_bluefs()
 }
 
 //-----------------------------------------------------------------------------------
-int BlueStore::copy_allocator(Allocator* src_alloc, Allocator* dest_alloc, uint64_t* p_num_entries)
-{
-  *p_num_entries = 0;
-  auto count_entries = [&](uint64_t extent_offset, uint64_t extent_length) {
-    (*p_num_entries)++;
-  };
-  src_alloc->foreach(count_entries);
-
-  dout(5) << "count num_entries=" << *p_num_entries << dendl;
-
-  // add 16K extra entries in case new allocation happened
-  (*p_num_entries) += 16*1024;
-  unique_ptr<extent_t[]> arr;
-  try {
-    arr = make_unique<extent_t[]>(*p_num_entries);
-  } catch (std::bad_alloc&) {
-    derr << "****Failed dynamic allocation, num_entries=" << *p_num_entries << dendl;
-    return -1;
-  }
-
-  uint64_t idx         = 0;
-  auto copy_entries = [&](uint64_t extent_offset, uint64_t extent_length) {
-    if (extent_length > 0) {
-      if (idx < *p_num_entries) {
-	arr[idx] = {extent_offset, extent_length};
-      }
-      idx++;
-    }
-    else {
-      derr << "zero length extent!!! offset=" << extent_offset << ", index=" << idx << dendl;
-    }
-  };
-  src_alloc->foreach(copy_entries);
-
-  dout(5) << "copy num_entries=" << idx << dendl;
-  if (idx > *p_num_entries) {
-    derr << "****spillover, num_entries=" << *p_num_entries << ", spillover=" << (idx - *p_num_entries) << dendl;
-    ceph_assert(idx <= *p_num_entries);
-  }
-
-  *p_num_entries = idx;
-
-  for (idx = 0; idx < *p_num_entries; idx++) {
-    const extent_t *p_extent = &arr[idx];
-    dest_alloc->init_add_free(p_extent->offset, p_extent->length);
-  }
-
-  return 0;
-}
-
-//-----------------------------------------------------------------------------------
 size_t calc_allocator_image_header_size()
 {
   uint32_t crc = -1;
@@ -20742,16 +20691,24 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
 //---------------------------------------------------------
 Allocator* BlueStore::clone_allocator(Allocator *src_allocator, bool exclude_bluefs)
 {
+  ceph_assert(src_allocator);
   Allocator* allocator = create_bitmap_allocator(src_allocator->get_capacity());
   if (allocator) {
-    dout(5) << "bitmap-allocator=" << allocator << dendl;
+    dout(25) << "bitmap-allocator=" << allocator << dendl;
   } else {
     derr << "****failed create_bitmap_allocator()" << dendl;
     return nullptr;
   }
+  ceph_assert(allocator->get_free() == 0);
 
   uint64_t num_entries = 0;
-  copy_allocator(src_allocator, allocator, &num_entries);
+  src_allocator->foreach(
+    [&](uint64_t offset, uint64_t length) {
+      allocator->init_add_free(offset, length);
+      ++num_entries;
+    });
+
+  dout(5) << "num_entries=" << num_entries << dendl;
 
   // BlueFS stores its internal allocation outside RocksDB (FM) so we should not destage them to the allcoator-file
   // we are going to hide bluefs allocation during allocator-destage as they are stored elsewhere

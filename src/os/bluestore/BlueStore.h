@@ -4115,7 +4115,6 @@ private:
   int  allocator_add_restored_entries(Allocator *allocator, const void *buff, unsigned extent_count, uint64_t *p_read_alloc_size,
 				      uint64_t  *p_extent_count, const void *v_header, BlueFS::FileReader *p_handle, uint64_t offset);
 
-  int  copy_allocator(Allocator* src_alloc, Allocator *dest_alloc, uint64_t* p_num_entries);
   int  __store_allocator(Allocator* allocator, const char* filename, uint32_t ver, bool exclude_bluefs);
   int  store_allocator(Allocator* allocator);
   int  invalidate_allocation_file_on_bluefs();
