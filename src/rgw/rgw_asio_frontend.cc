@@ -52,14 +52,8 @@ namespace ssl = boost::asio::ssl;
 
 struct Connection;
 
-// use explicit executor types instead of the type-erased boost::asio::executor
-using executor_type = boost::asio::io_context::executor_type;
-
-using tcp_socket = boost::asio::basic_stream_socket<tcp, executor_type>;
-using tcp_stream = boost::beast::basic_stream<tcp, executor_type>;
-
 using timeout_timer = rgw::basic_timeout_timer<ceph::coarse_mono_clock,
-      executor_type, Connection>;
+      boost::asio::any_io_executor, Connection>;
 
 static constexpr size_t parse_buffer_size = 65536;
 using parse_buffer = boost::beast::flat_static_buffer<parse_buffer_size>;
@@ -102,7 +96,7 @@ class StreamIO : public rgw::asio::ClientIO {
       ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
       if (ec == boost::asio::error::broken_pipe) {
         boost::system::error_code ec_ignored;
-        stream.lowest_layer().shutdown(tcp_socket::shutdown_both, ec_ignored);
+        stream.lowest_layer().shutdown(tcp::socket::shutdown_both, ec_ignored);
       }
       if (!fatal_ec) {
         fatal_ec = ec;
@@ -196,7 +190,7 @@ std::ostream& operator<<(std::ostream& out, const log_apache_time& a) {
       << std::put_time(local, " %z");
 };
 
-using SharedMutex = ceph::async::SharedMutex<boost::asio::io_context::executor_type>;
+using SharedMutex = ceph::async::SharedMutex<boost::asio::any_io_executor>;
 
 template <typename Stream>
 void handle_connection(boost::asio::io_context& context,
@@ -358,17 +352,17 @@ void handle_connection(boost::asio::io_context& context,
 struct Connection : boost::intrusive::list_base_hook<>,
                     boost::intrusive_ref_counter<Connection>
 {
-  tcp_socket socket;
+  tcp::socket socket;
   parse_buffer buffer;
 
-  explicit Connection(tcp_socket&& socket) noexcept
+  explicit Connection(tcp::socket&& socket) noexcept
       : socket(std::move(socket)) {}
 
   void close(boost::system::error_code& ec) {
     socket.close(ec);
   }
 
-  tcp_socket& get_socket() { return socket; }
+  tcp::socket& get_socket() { return socket; }
 };
 
 class ConnectionList {
@@ -427,7 +421,7 @@ class AsioFrontend {
   struct Listener {
     tcp::endpoint endpoint;
     tcp::acceptor acceptor;
-    tcp_socket socket;
+    tcp::socket socket;
     bool use_ssl = false;
     bool use_nodelay = false;
 
@@ -1033,7 +1027,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
         auto c = connections.add(*conn);
         // wrap the tcp stream in an ssl stream
-        boost::asio::ssl::stream<tcp_socket&> stream{conn->socket, *ssl_context};
+        boost::asio::ssl::stream<tcp::socket&> stream{conn->socket, *ssl_context};
         auto timeout = timeout_timer{context.get_executor(), request_timeout, conn};
         // do ssl handshake
         boost::system::error_code ec;
@@ -1068,7 +1062,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         handle_connection(context, env, conn->socket, timeout, header_limit,
                           conn->buffer, false, pause_mutex, scheduler.get(),
                           uri_prefix, ec, yield);
-        conn->socket.shutdown(tcp_socket::shutdown_both, ec);
+        conn->socket.shutdown(tcp::socket::shutdown_both, ec);
       }, make_stack_allocator());
   }
 }
