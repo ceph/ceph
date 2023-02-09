@@ -86,3 +86,10 @@ To remove a quota::
 
   setfattr -n ceph.quota.max_bytes -v 0 /some/dir
   setfattr -n ceph.quota.max_files -v 0 /some/dir
+
+.. note:: If some CephFS extended attributes are set on a CephFS directory
+   (say ``/some/dir``), running ``getfattr /some/dir -d -m -`` doesn't print
+    those CephFS extended attributes since CephFS kernel and FUSE clients hide
+    this information from listxattr(2) system call. Access a specific CephFS
+    extended attribute by running ``getfattr /some/dir -n ceph.<some-xattr>``
+    instead.
