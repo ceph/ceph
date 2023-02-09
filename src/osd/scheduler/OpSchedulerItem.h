@@ -106,7 +106,7 @@ private:
   utime_t start_time;
   uint64_t owner;  ///< global id (e.g., client.XXX)
   epoch_t map_epoch;    ///< an epoch we expect the PG to exist in
-  int qos_cost;  ///< scaled cost calculated by the mclock scheduler
+  uint32_t qos_cost;  ///< scaled cost calculated by the mclock scheduler
   bool qos_item;  ///< set to true if item is scheduled by mclock scheduler
 
 public:
@@ -183,11 +183,11 @@ public:
     return qos_item;
   }
 
-  void set_qos_cost(int scaled_cost) {
+  void set_qos_cost(uint32_t scaled_cost) {
     qos_cost = scaled_cost;
   }
 
-  int get_qos_cost() const {
+  uint32_t get_qos_cost() const {
     return qos_cost;
   }
 
