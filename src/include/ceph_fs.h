@@ -446,6 +446,8 @@ extern const char *ceph_mds_op_name(int op);
 #define CEPH_SETATTR_KILL_SGUID		(1 << 10)
 #define CEPH_SETATTR_FSCRYPT_AUTH	(1 << 11)
 #define CEPH_SETATTR_FSCRYPT_FILE	(1 << 12)
+#define CEPH_SETATTR_KILL_SUID		(1 << 13)
+#define CEPH_SETATTR_KILL_SGID		(1 << 14)
 #endif
 
 /*
