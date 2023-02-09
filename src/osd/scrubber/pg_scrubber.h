@@ -728,7 +728,7 @@ class PgScrubber : public ScrubPgIF,
    */
   [[nodiscard]] bool verify_against_abort(epoch_t epoch_to_verify);
 
-  [[nodiscard]] bool check_interval(epoch_t epoch_to_verify);
+  [[nodiscard]] bool check_interval(epoch_t epoch_to_verify) const;
 
   epoch_t m_last_aborted{};  // last time we've noticed a request to abort
 
