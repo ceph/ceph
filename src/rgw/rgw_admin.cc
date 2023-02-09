@@ -2367,26 +2367,21 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
     }
   }
 
-  int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
-  int total_recovering = recovering_shards.size();
-  if (total_behind == 0 && total_recovering == 0) {
-    push_ss(ss, status, tab) << "data is caught up with source";
-  } else if (total_behind > 0) {
-    push_ss(ss, status, tab) << "data is behind on " << total_behind << " shards";
-
-    push_ss(ss, status, tab) << "behind shards: " << "[" << shards_behind_set << "]" ;
-
+  std::optional<std::pair<int, ceph::real_time>> oldest;
+  if (!shards_behind.empty()) {
     map<int, rgw_datalog_shard_data> master_pos;
     ret = sync.read_source_log_shards_next(dpp(), shards_behind, &master_pos);
+
     if (ret < 0) {
       derr << "ERROR: failed to fetch next positions (" << cpp_strerror(-ret) << ")" << dendl;
     } else {
-      std::optional<std::pair<int, ceph::real_time>> oldest;
-
       for (auto iter : master_pos) {
         rgw_datalog_shard_data& shard_data = iter.second;
-
-        if (!shard_data.entries.empty()) {
+        if (shard_data.entries.empty()) {
+          // there aren't any entries in this shard, so we're not really behind
+          shards_behind.erase(iter.first);
+          shards_behind_set.erase(iter.first);
+        } else {
           rgw_datalog_entry& entry = shard_data.entries.front();
           if (!oldest) {
             oldest.emplace(iter.first, entry.timestamp);
@@ -2395,11 +2390,20 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
           }
         }
       }
+    }
+  }
 
-      if (oldest) {
-        push_ss(ss, status, tab) << "oldest incremental change not applied: "
-            << oldest->second << " [" << oldest->first << ']';
-      }
+  int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
+  int total_recovering = recovering_shards.size();
+
+  if (total_behind == 0 && total_recovering == 0) {
+    push_ss(ss, status, tab) << "data is caught up with source";
+  } else if (total_behind > 0) {
+    push_ss(ss, status, tab) << "data is behind on " << total_behind << " shards";
+    push_ss(ss, status, tab) << "behind shards: " << "[" << shards_behind_set << "]" ;
+    if (oldest) {
+      push_ss(ss, status, tab) << "oldest incremental change not applied: "
+          << oldest->second << " [" << oldest->first << ']';
     }
   }
 
@@ -3280,141 +3284,6 @@ public:
     return &encode_filter;
   }
 };
-
-static int search_entities_by_zone(rgw::sal::ConfigStore* cfgstore,
-                                   rgw_zone_id zone_id,
-                                   RGWRealm *prealm,
-                                   RGWZoneGroup *pzonegroup)
-{
-  std::array<std::string, 128> realm_names;
-  rgw::sal::ListResult<std::string> listing;
-
-  do {
-    int r = cfgstore->list_realm_names(dpp(), null_yield, listing.next,
-                                       realm_names, listing);
-    if (r < 0) {
-      cerr << "failed to list realms: " << cpp_strerror(-r) << std::endl;
-      return r;
-    }
-
-    for (const auto& realm_name : listing.entries) {
-      RGWRealm realm;
-      r = cfgstore->read_realm_by_name(dpp(), null_yield, realm_name,
-                                       realm, nullptr);
-      if (r < 0) {
-        cerr << "WARNING: failed to load realm " << realm_name
-            << ": " << cpp_strerror(r) << " ... skipping" << std::endl;
-        continue;
-      }
-
-      RGWPeriod period;
-      r = cfgstore->read_period(dpp(), null_yield, realm.current_period,
-                                std::nullopt, period);
-      if (r < 0) {
-        cerr << "WARNING: failed to load current period for realm "
-            << realm_name << ": " << cpp_strerror(r) << " ... skipping" << std::endl;
-        continue;
-      }
-
-      for (auto& [zid, zonegroup] : period.period_map.zonegroups) {
-        if (zonegroup.zones.count(zone_id)) {
-          *prealm = std::move(realm);
-          *pzonegroup = std::move(zonegroup);
-          return 0;
-        }
-      } // foreach zonegroup in period
-    } // foreach realm_name in listing.entries
-  } while (!listing.next.empty());
-
-  return -ENOENT;
-}
-
-static int try_to_resolve_local_zone(rgw::sal::ConfigStore* cfgstore,
-                                     string& zone_id, string& zone_name)
-{
-  /* try to read zone info */
-  RGWZoneParams zone;
-  int r = rgw::read_zone(dpp(), null_yield, cfgstore,
-                         zone_id, zone_name, zone);
-  if (r == -ENOENT) {
-    ldpp_dout(dpp(), 20) << __func__ << "(): local zone not found (id=" << zone_id << ", name= " << zone_name << ")" << dendl;
-    return r;
-  }
-
-  if (r < 0) {
-    ldpp_dout(dpp(), 0) << __func__ << "(): unable to read zone (id=" << zone_id << ", name= " << zone_name << "): " << cpp_strerror(-r) << dendl;
-
-    return r;
-  }
-
-  zone_id = zone.get_id();
-  zone_name = zone.get_name();
-
-  return 0;
-}
-
-static void check_set_consistent(const string& resolved_param,
-                                 string& param,
-                                 const string& param_name)
-{
-  if (!param.empty() && param != resolved_param) {
-    ldpp_dout(dpp(), 5) << "WARNING: " << param_name << " resolve mismatch. (param=" << param << ", resolved=" << resolved_param << ")" << dendl;
-    return;
-  }
-
-  param = resolved_param;
-  ldpp_dout(dpp(), 20) << __func__ << "(): resolved param: " << param_name << ": " << param << dendl;
-}
-
-
-static int try_to_resolve_local_entities(rgw::sal::ConfigStore* cfgstore,
-                                         string& realm_id, string& realm_name,
-                                         string& zonegroup_id, string& zonegroup_name,
-                                         string& zone_id, string& zone_name)
-{
-  /*
-   * Try to figure out realm, zonegroup, and zone entities, based on provided params and local zone.
-   *
-   * First read the local zone info (for zone id/name). Then search existing realm and period
-   *  configuration and if found, update (but don't override) passed params.
-   *
-   */
-
-  ldpp_dout(dpp(), 20) << __func__ << "(): before: realm_id=" << realm_id << " realm_name=" << realm_name << " zonegroup_id=" << zonegroup_id << " zonegroup_name=" << zonegroup_name << " zone_id=" << zone_id << " zone_name=" << zone_name << dendl;
-  int r = try_to_resolve_local_zone(cfgstore, zone_id, zone_name);
-  if (r == -ENOENT) {
-    /* this local zone doesn't exist, abort */
-    return 0;
-  }
-  if (r < 0) {
-    return r;
-  }
-
-  if (zone_id.empty()) {
-    /* not sure it's possible, but let's abort */
-    return 0;
-  }
-
-  RGWRealm realm;
-  RGWZoneGroup zonegroup;
-  r = search_entities_by_zone(cfgstore, zone_id, &realm, &zonegroup);
-  if (r == -ENOENT) {
-    return 0; // not found
-  }
-  if (r < 0) {
-    ldpp_dout(dpp(), 0) << "ERROR: error when searching for realm id (r=" << r << "), ignoring" << dendl;
-    return r;
-  }
-
-  check_set_consistent(realm.get_id(), realm_id, "realm id (--realm-id)");
-  check_set_consistent(realm.get_name(), realm_name, "realm name (--rgw-realm)");
-  check_set_consistent(zonegroup.get_id(), zonegroup_id, "zonegroup id (--zonegroup-id)");
-  check_set_consistent(zonegroup.get_name(), zonegroup_name, "zonegroup name (--rgw-zonegroup)");
-
-  ldpp_dout(dpp(), 20) << __func__ << "(): after: realm_id=" << realm_id << " realm_name=" << realm_name << " zonegroup_id=" << zonegroup_id << " zonegroup_name=" << zonegroup_name << " zone_id=" << zone_id << " zone_name=" << zone_name << dendl;
-
-  return 0;
-}
 
 void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_var, const string& conf_name)
 {
@@ -4502,11 +4371,6 @@ int main(int argc, const char **argv)
   StoreDestructor store_destructor(driver);
 
   if (raw_storage_op) {
-    try_to_resolve_local_entities(cfgstore.get(), realm_id, realm_name,
-                                  zonegroup_id, zonegroup_name,
-                                  zone_id, zone_name);
-
-
     switch (opt_cmd) {
     case OPT::PERIOD_DELETE:
       {
@@ -7139,6 +7003,10 @@ int main(int argc, const char **argv)
           cerr << "ERROR: driver->list_objects(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
+	ldpp_dout(dpp(), 20) << "INFO: " << __func__ <<
+	  ": list() returned without error; results.objs.sizie()=" <<
+	  results.objs.size() << "results.is_truncated=" << results.is_truncated << ", marker=" <<
+	  params.marker << dendl;
 
         count += results.objs.size();
 
@@ -7147,6 +7015,7 @@ int main(int argc, const char **argv)
         }
         formatter->flush(cout);
       } while (results.is_truncated && count < max_entries);
+      ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": done" << dendl;
 
       formatter->close_section();
       formatter->flush(cout);
@@ -7658,7 +7527,6 @@ next:
     }
 
     rgw_cls_bi_entry entry;
-
     ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bi_get(dpp(), bucket->get_info(), obj, bi_index_type, &entry);
     if (ret < 0) {
       cerr << "ERROR: bi_get(): " << cpp_strerror(-ret) << std::endl;
@@ -7701,25 +7569,30 @@ next:
       cerr << "ERROR: bucket name not specified" << std::endl;
       return EINVAL;
     }
+
     int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
-    list<rgw_cls_bi_entry> entries;
+    std::list<rgw_cls_bi_entry> entries;
     bool is_truncated;
+    const auto& index = bucket->get_info().layout.current_index;
+    const int max_shards = rgw::num_shards(index);
     if (max_entries < 0) {
       max_entries = 1000;
     }
 
-    const auto& index = bucket->get_info().layout.current_index;
-    const int max_shards = rgw::num_shards(index);
+    ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": max_entries=" << max_entries <<
+      ", index=" << index << ", max_shards=" << max_shards << dendl;
 
     formatter->open_array_section("entries");
 
     int i = (specified_shard_id ? shard_id : 0);
     for (; i < max_shards; i++) {
+      ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": starting shard=" << i << dendl;
+
       RGWRados::BucketShard bs(static_cast<rgw::sal::RadosStore*>(driver)->getRados());
       int ret = bs.init(dpp(), bucket->get_info(), index, i);
       marker.clear();
@@ -7737,20 +7610,26 @@ next:
           cerr << "ERROR: bi_list(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
+	ldpp_dout(dpp(), 20) << "INFO: " << __func__ <<
+	  ": bi_list() returned without error; entries.size()=" <<
+	  entries.size() << ", is_truncated=" << is_truncated <<
+	  ", marker=" << marker << dendl;
 
-        list<rgw_cls_bi_entry>::iterator iter;
-        for (iter = entries.begin(); iter != entries.end(); ++iter) {
-          rgw_cls_bi_entry& entry = *iter;
+	for (const auto& entry : entries) {
           encode_json("entry", entry, formatter.get());
           marker = entry.idx;
         }
         formatter->flush(cout);
       } while (is_truncated);
+
       formatter->flush(cout);
 
-      if (specified_shard_id)
+      if (specified_shard_id) {
         break;
+      }
     }
+    ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": done" << dendl;
+
     formatter->close_section();
     formatter->flush(cout);
   }
@@ -9956,10 +9835,11 @@ next:
       if (specified_shard_id) {
         ret = datalog_svc->list_entries(dpp(), shard_id, max_entries - count,
 					entries, marker,
-					&marker, &truncated);
+					&marker, &truncated,
+					null_yield);
       } else {
         ret = datalog_svc->list_entries(dpp(), max_entries - count, entries,
-					log_marker, &truncated);
+					log_marker, &truncated, null_yield);
       }
       if (ret < 0) {
         cerr << "ERROR: datalog_svc->list_entries(): " << cpp_strerror(-ret) << std::endl;
@@ -9990,7 +9870,8 @@ next:
       list<cls_log_entry> entries;
 
       RGWDataChangesLogInfo info;
-      static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados->get_info(dpp(), i, &info);
+      static_cast<rgw::sal::RadosStore*>(driver)->svc()->
+	datalog_rados->get_info(dpp(), i, &info, null_yield);
 
       ::encode_json("info", info, formatter.get());
 
@@ -10053,7 +9934,7 @@ next:
     }
 
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
-    ret = datalog->trim_entries(dpp(), shard_id, marker);
+    ret = datalog->trim_entries(dpp(), shard_id, marker, null_yield);
 
     if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
@@ -10077,7 +9958,7 @@ next:
   if (opt_cmd == OPT::DATALOG_PRUNE) {
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
     std::optional<uint64_t> through;
-    ret = datalog->trim_generations(dpp(), through);
+    ret = datalog->trim_generations(dpp(), through, null_yield);
 
     if (ret < 0) {
       cerr << "ERROR: trim_generations(): " << cpp_strerror(-ret) << std::endl;
@@ -10446,9 +10327,9 @@ next:
         return -ret;
       }
 
-      auto b = ps.get_bucket(bucket->get_key());
-      ret = b->get_topics(&result);
-      if (ret < 0) {
+      const RGWPubSub::Bucket b(ps, bucket->get_key());
+      ret = b.get_topics(&result);
+      if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
@@ -10456,7 +10337,7 @@ next:
     } else {
       rgw_pubsub_topics result;
       int ret = ps.get_topics(&result);
-      if (ret < 0) {
+      if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
@@ -10473,7 +10354,7 @@ next:
 
     RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(driver), tenant);
 
-    rgw_pubsub_topic_subs topic;
+    rgw_pubsub_topic topic;
     ret = ps.get_topic(topic_name, &topic);
     if (ret < 0) {
       cerr << "ERROR: could not get topic: " << cpp_strerror(-ret) << std::endl;

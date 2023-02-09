@@ -13,4 +13,4 @@ tasks:
     timeout: 1h
     clients:
       client.0:
-        - rados/test_python.sh --eval-attr 'not (wait or tier or rollback or ec or bench or stats)'
+        - rados/test_python.sh --eval-attr 'not (wait or tier or ec or bench or stats)'

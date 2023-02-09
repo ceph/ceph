@@ -198,13 +198,17 @@ BtreeOMapManager::omap_rm_key_range(
   LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
   DEBUGT("{} ~ {}", t, first, last);
   assert(first <= last);
-  return omap_list(
-    omap_root,
-    t,
-    first,
-    last,
-    config
-  ).si_then([this, &omap_root, &t](auto results) {
+  return seastar::do_with(
+    std::make_optional<std::string>(first),
+    std::make_optional<std::string>(last),
+    [this, &omap_root, &t, config](auto &first, auto &last) {
+    return omap_list(
+      omap_root,
+      t,
+      first,
+      last,
+      config);
+  }).si_then([this, &omap_root, &t](auto results) {
     LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
     auto &[complete, kvs] = results;
     std::vector<std::string> keys;

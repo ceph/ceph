@@ -773,6 +773,27 @@ Link to target with inline text::
    documentation<external_link_with_inline_text>`. If this seems inconsistent
    and confusing to you, then you're right. It is inconsistent and confusing.
 
+Escaping Bold Characters within Words
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This section explains how to make certain letters within a word bold while
+leaving the other letters in the word regular (non-bold). 
+
+The following single-line paragraph provides an example of this:
+
+**C**\eph **F**\ile **S**\ystem.
+
+In ReStructured Text, the following formula will not work:
+
+::
+
+   **C**eph **F**ile **S**ystem
+
+The bolded notation must be turned off by means of the escape character (\\), as shown here:
+
+::
+
+   **C**\eph **F**\ile **S**\ystem
 
 .. _Python Sphinx: https://www.sphinx-doc.org
 .. _restructuredText: http://docutils.sourceforge.net/rst.html

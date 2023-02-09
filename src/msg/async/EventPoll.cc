@@ -178,6 +178,12 @@ int PollDriver::event_wait(std::vector<FiredFileEvent> &fired_events,
 	if (pfds[j].revents & POLLOUT) {
 	  mask |= EVENT_WRITABLE;
 	}
+	if (pfds[j].revents & POLLHUP) {
+	  mask |= EVENT_READABLE | EVENT_WRITABLE;
+	}
+	if (pfds[j].revents & POLLERR) {
+	  mask |= EVENT_READABLE | EVENT_WRITABLE;
+	}
 	if (mask) {
 	  fe.fd = pfds[j].fd;
 	  fe.mask = mask;

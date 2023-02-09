@@ -3,4 +3,4 @@ tasks:
     clients:
       client.0:
         - windows/libvirt_vm/setup.sh
-        - windows/run-rbd-wnbd-tests.sh
+        - windows/run-tests.sh

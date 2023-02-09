@@ -20,8 +20,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
-using rgw::IAM::Policy;
 
 void RGWRestUserPolicy::dump(Formatter *f) const
 {
@@ -50,7 +48,7 @@ int RGWRestUserPolicy::verify_permission(optional_yield y)
   }
 
   uint64_t op = get_op();
-  string user_name = s->info.args.get("UserName");
+  std::string user_name = s->info.args.get("UserName");
   rgw_user user_id(user_name);
   if (! verify_user_permission(this, s, rgw::ARN(rgw::ARN(user_id.id,
                                                 "user",
@@ -141,21 +139,19 @@ void RGWPutUserPolicy::execute(optional_yield y)
   }
 
   try {
-    const Policy p(
+    const rgw::IAM::Policy p(
       s->cct, s->user->get_tenant(), bl,
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
-    map<string, string> policies;
+    std::map<std::string, std::string> policies;
     if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
       bufferlist out_bl = it->second;
       decode(policies, out_bl);
     }
     bufferlist in_bl;
     policies[policy_name] = policy;
-#define USER_POLICIES_MAX_NUM 100
-    int max_num = s->cct->_conf->rgw_user_policies_max_num;
-    if (max_num < 0) {
-      max_num = USER_POLICIES_MAX_NUM;
-    }
+    constexpr unsigned int USER_POLICIES_MAX_NUM = 100;
+    const unsigned int max_num = s->cct->_conf->rgw_user_policies_max_num < 0 ?
+      USER_POLICIES_MAX_NUM : s->cct->_conf->rgw_user_policies_max_num;
     if (policies.size() > max_num) {
       ldpp_dout(this, 4) << "IAM user policies has reached the num config: "
                          << max_num << ", cant add another" << dendl;
@@ -231,7 +227,7 @@ void RGWGetUserPolicy::execute(optional_yield y)
     s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
     s->formatter->open_object_section("GetUserPolicyResult");
-    map<string, string> policies;
+    std::map<std::string, std::string> policies;
     if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
       bufferlist bl = it->second;
       try {
@@ -295,7 +291,7 @@ void RGWListUserPolicies::execute(optional_yield y)
   }
 
   if (op_ret == 0) {
-    map<string, string> policies;
+    std::map<std::string, std::string> policies;
     if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
       s->formatter->open_object_section("ListUserPoliciesResponse");
       s->formatter->open_object_section("ResponseMetadata");
@@ -378,7 +374,7 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
     ldpp_dout(this, 0) << "ERROR: forward_request_to_master returned ret=" << op_ret << dendl;
   }
 
-  map<string, string> policies;
+  std::map<std::string, std::string> policies;
   if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
     bufferlist out_bl = it->second;
     try {

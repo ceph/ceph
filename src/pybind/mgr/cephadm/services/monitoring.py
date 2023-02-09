@@ -13,6 +13,7 @@ from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceS
     SNMPGatewaySpec, PrometheusSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert, build_url, get_cert_issuer_info
+from ceph.deployment.utils import wrap_ipv6
 
 logger = logging.getLogger(__name__)
 
@@ -339,18 +340,10 @@ class PrometheusService(CephadmService):
             # default to disabled
             retention_size = '0'
 
-        t = self.mgr.get('mgr_map').get('services', {}).get('prometheus', None)
-        sd_port = self.mgr.service_discovery_port
-        srv_end_point = ''
-        if t:
-            p_result = urlparse(t)
-            # urlparse .hostname removes '[]' from the hostname in case
-            # of ipv6 addresses so if this is the case then we just
-            # append the brackets when building the final scrape endpoint
-            if '[' in p_result.netloc and ']' in p_result.netloc:
-                srv_end_point = f'https://[{p_result.hostname}]:{sd_port}/sd/prometheus/sd-config?'
-            else:
-                srv_end_point = f'https://{p_result.hostname}:{sd_port}/sd/prometheus/sd-config?'
+        # build service discovery end-point
+        port = self.mgr.service_discovery_port
+        mgr_addr = wrap_ipv6(self.mgr.get_mgr_ip())
+        srv_end_point = f'https://{mgr_addr}:{port}/sd/prometheus/sd-config?'
 
         node_exporter_cnt = len(self.mgr.cache.get_daemons_by_service('node-exporter'))
         alertmgr_cnt = len(self.mgr.cache.get_daemons_by_service('alertmanager'))
@@ -359,6 +352,7 @@ class PrometheusService(CephadmService):
         alertmanager_sd_url = f'{srv_end_point}service=alertmanager' if alertmgr_cnt > 0 else None
         haproxy_sd_url = f'{srv_end_point}service=haproxy' if haproxy_cnt > 0 else None
         mgr_prometheus_sd_url = f'{srv_end_point}service=mgr-prometheus'  # always included
+        ceph_exporter_sd_url = f'{srv_end_point}service=ceph-exporter'  # always included
 
         # generate the prometheus configuration
         context = {
@@ -366,6 +360,7 @@ class PrometheusService(CephadmService):
             'node_exporter_sd_url': node_exporter_sd_url,
             'alertmanager_sd_url': alertmanager_sd_url,
             'haproxy_sd_url': haproxy_sd_url,
+            'ceph_exporter_sd_url': ceph_exporter_sd_url
         }
 
         r: Dict[str, Any] = {
@@ -411,8 +406,11 @@ class PrometheusService(CephadmService):
         # add an explicit dependency on the active manager. This will force to
         # re-deploy prometheus if the mgr has changed (due to a fail-over i.e).
         deps.append(self.mgr.get_active_mgr().name())
-        deps += [s for s in ['node-exporter', 'alertmanager', 'ingress']
-                 if self.mgr.cache.get_daemons_by_service(s)]
+        # add dependency on ceph-exporter daemons
+        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('ceph-exporter')]
+        deps += [s for s in ['node-exporter', 'alertmanager'] if self.mgr.cache.get_daemons_by_service(s)]
+        if len(self.mgr.cache.get_daemons_by_type('ingress')) > 0:
+            deps.append('ingress')
         return deps
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:

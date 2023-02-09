@@ -311,7 +311,7 @@ protected:
       DBStore* store;
       RGWRealm *realm{nullptr};
       DBZoneGroup *zonegroup{nullptr};
-      RGWZone *zone_public_config{nullptr}; /* external zone params, e.g., entrypoints, log flags, etc. */  
+      RGWZone *zone_public_config{nullptr}; /* external zone params, e.g., entrypoints, log flags, etc. */
       RGWZoneParams *zone_params{nullptr}; /* internal zone params, e.g., rados pools */
       RGWPeriod *current_period{nullptr};
 
@@ -403,7 +403,7 @@ protected:
    * MultipartUpload::Init - create head object of meta obj (src_obj_name + "." + upload_id)
    *                     [ Meta object stores all the parts upload info]
    * MultipartWriter::process - create all data/tail objects with obj_name same as
-   *                        meta obj (so that they can all be identified & deleted 
+   *                        meta obj (so that they can all be identified & deleted
    *                        during abort)
    * MultipartUpload::Abort - Just delete meta obj .. that will indirectly delete all the
    *                     uploads associated with that upload id / meta obj so far.
@@ -552,7 +552,7 @@ protected:
 			      int64_t end, RGWGetDataCB* cb,
 			      optional_yield y) override;
 
-	  virtual int get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y) override; 
+	  virtual int get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y) override;
       };
 
       struct DBDeleteOp : public DeleteOp {
@@ -822,7 +822,7 @@ public:
     rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
     std::string& _user_id, std::string& _user_tenant, std::string& _req_id,
     optional_yield y) override;
-    
+
       virtual RGWLC* get_rgwlc(void) override;
       virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
       virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;

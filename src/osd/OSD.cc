@@ -352,12 +352,18 @@ void OSDService::identify_splits_and_merges(
   set<pair<spg_t,epoch_t>> *split_children,
   set<pair<spg_t,epoch_t>> *merge_pgs)
 {
+  dout(20) << __func__ << " " << pgid << " e" << old_map->get_epoch()
+	   << " to e" << new_map->get_epoch() << dendl;
   if (!old_map->have_pg_pool(pgid.pool())) {
+    dout(20) << __func__ << " " << pgid << " pool " << pgid.pool()
+	     << " does not exist in old map" << dendl;
     return;
   }
   int old_pgnum = old_map->get_pg_num(pgid.pool());
   auto p = osd->pg_num_history.pg_nums.find(pgid.pool());
   if (p == osd->pg_num_history.pg_nums.end()) {
+    dout(20) << __func__ << " " << pgid << " pool " << pgid.pool()
+	     << " has no history" << dendl;
     return;
   }
   dout(20) << __func__ << " " << pgid << " e" << old_map->get_epoch()
@@ -556,6 +562,51 @@ void OSDService::activate_map()
     !osdmap->test_flag(CEPH_OSDMAP_NOTIERAGENT) &&
     osd->is_active();
   agent_cond.notify_all();
+}
+
+OSDMapRef OSDService::get_nextmap_reserved() {
+  std::lock_guard l(pre_publish_lock);
+
+  epoch_t e = next_osdmap->get_epoch();
+
+  std::map<epoch_t, unsigned>::iterator i =
+    map_reservations.insert(std::make_pair(e, 0)).first;
+  i->second++;
+  dout(20) << __func__  << " map_reservations: " << map_reservations << dendl;
+  return next_osdmap;
+}
+
+/// releases reservation on map
+void OSDService::release_map(OSDMapRef osdmap) {
+  std::lock_guard l(pre_publish_lock);
+  dout(20) << __func__  << " epoch: " << osdmap->get_epoch() << dendl;
+  std::map<epoch_t, unsigned>::iterator i =
+    map_reservations.find(osdmap->get_epoch());
+  ceph_assert(i != map_reservations.end());
+  ceph_assert(i->second > 0);
+  if (--(i->second) == 0) {
+    map_reservations.erase(i);
+  }
+  if (pre_publish_waiter) {
+    dout(20) << __func__  << " notify all." << dendl;
+    pre_publish_cond.notify_all();
+  }
+}
+
+/// blocks until there are no reserved maps prior to next_osdmap
+void OSDService::await_reserved_maps() {
+  std::unique_lock l{pre_publish_lock};
+  dout(20) << __func__  << " epoch:" << next_osdmap->get_epoch() << dendl;
+
+  ceph_assert(next_osdmap);
+  pre_publish_waiter++;
+  pre_publish_cond.wait(l, [this] {
+    auto i = map_reservations.cbegin();
+    return (i == map_reservations.cend() ||
+            i->first >= next_osdmap->get_epoch());
+  });
+  pre_publish_waiter--;
+  dout(20) << __func__  << " done " <<  pre_publish_waiter << dendl;
 }
 
 void OSDService::request_osdmap_update(epoch_t e)
@@ -1044,6 +1095,8 @@ float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
 
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)
 {
+  dout(20) << __func__ << " " << m->get_type_name() << " to osd." << peer
+	   << " from_epoch " << from_epoch << dendl;
   OSDMapRef next_map = get_nextmap_reserved();
   // service map is always newer/newest
   ceph_assert(from_epoch <= next_map->get_epoch());
@@ -1068,6 +1121,7 @@ void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epo
 
 void OSDService::send_message_osd_cluster(std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch)
 {
+  dout(20) << __func__ << " from_epoch " << from_epoch << dendl;
   OSDMapRef next_map = get_nextmap_reserved();
   // service map is always newer/newest
   ceph_assert(from_epoch <= next_map->get_epoch());
@@ -1092,6 +1146,8 @@ void OSDService::send_message_osd_cluster(std::vector<std::pair<int, Message*>>&
 }
 ConnectionRef OSDService::get_con_osd_cluster(int peer, epoch_t from_epoch)
 {
+  dout(20) << __func__ << " to osd." << peer
+	   << " from_epoch " << from_epoch << dendl;
   OSDMapRef next_map = get_nextmap_reserved();
   // service map is always newer/newest
   ceph_assert(from_epoch <= next_map->get_epoch());
@@ -1114,6 +1170,8 @@ ConnectionRef OSDService::get_con_osd_cluster(int peer, epoch_t from_epoch)
 
 pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t from_epoch)
 {
+  dout(20) << __func__ << " to osd." << peer
+	   << " from_epoch " << from_epoch << dendl;
   OSDMapRef next_map = get_nextmap_reserved();
   // service map is always newer/newest
   ceph_assert(from_epoch <= next_map->get_epoch());
@@ -1956,6 +2014,7 @@ void OSDService::prune_sent_ready_to_merge(const OSDMapRef& osdmap)
       dout(10) << __func__ << " " << *i << dendl;
       i = sent_ready_to_merge_source.erase(i);
     } else {
+      dout(20) << __func__ << " exist " << *i << dendl;
       ++i;
     }
   }
@@ -4356,6 +4415,12 @@ int OSD::shutdown()
     cct->_conf.apply_changes(nullptr);
   }
 
+  // stop MgrClient earlier as it's more like an internal consumer of OSD
+  // 
+  // should occur before unmounting the database in fast-shutdown to avoid
+  // a race condition (see https://tracker.ceph.com/issues/56101)
+  mgrc.shutdown();
+
   if (cct->_conf->osd_fast_shutdown) {
     // first, stop new task from being taken from op_shardedwq
     // and clear all pending tasks
@@ -4394,9 +4459,6 @@ int OSD::shutdown()
     // now it is safe to exit
     _exit(0);
   }
-
-  // stop MgrClient earlier as it's more like an internal consumer of OSD
-  mgrc.shutdown();
 
   service.start_shutdown();
 
@@ -8716,7 +8778,7 @@ void OSD::consume_map()
 {
   ceph_assert(ceph_mutex_is_locked(osd_lock));
   auto osdmap = get_osdmap();
-  dout(7) << "consume_map version " << osdmap->get_epoch() << dendl;
+  dout(20) << __func__ << " version " << osdmap->get_epoch() << dendl;
 
   /** make sure the cluster is speaking in SORTBITWISE, because we don't
    *  speak the older sorting version any more. Be careful not to force
@@ -8726,11 +8788,10 @@ void OSD::consume_map()
     derr << __func__ << " SORTBITWISE flag is not set" << dendl;
     ceph_abort();
   }
-
   service.pre_publish_map(osdmap);
   service.await_reserved_maps();
   service.publish_map(osdmap);
-
+  dout(20) << "consume_map " << osdmap->get_epoch() << " -- publish done" << dendl;
   // prime splits and merges
   set<pair<spg_t,epoch_t>> newly_split;  // splits, and when
   set<pair<spg_t,epoch_t>> merge_pgs;    // merge participants, and when
@@ -9437,7 +9498,7 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch)
   const uint64_t owner = op->get_req()->get_source().num();
   const int type = op->get_req()->get_type();
 
-  dout(15) << "enqueue_op " << op << " prio " << priority
+  dout(15) << "enqueue_op " << *op->get_req() << " prio " << priority
            << " type " << type
 	   << " cost " << cost
 	   << " latency " << latency
@@ -9501,7 +9562,8 @@ void OSD::dequeue_op(
   op->set_dequeued_time(now);
 
   utime_t latency = now - m->get_recv_stamp();
-  dout(10) << "dequeue_op " << op << " prio " << m->get_priority()
+  dout(10) << "dequeue_op " << *op->get_req()
+           << " prio " << m->get_priority()
 	   << " cost " << m->get_cost()
 	   << " latency " << latency
 	   << " " << *m
@@ -9522,7 +9584,7 @@ void OSD::dequeue_op(
   pg->do_request(op, handle);
 
   // finish
-  dout(10) << "dequeue_op " << op << " finish" << dendl;
+  dout(10) << "dequeue_op " << *op->get_req() << " finish" << dendl;
   OID_EVENT_TRACE_WITH_MSG(m, "DEQUEUE_OP_END", false);
 }
 
@@ -10360,8 +10422,10 @@ void OSDShard::identify_splits_and_merges(
   set<pair<spg_t,epoch_t>> *merge_pgs)
 {
   std::lock_guard l(shard_lock);
+  dout(20) << __func__ << " " << pg_slots.size() << " slots" << dendl;
   if (shard_osdmap) {
     for (auto& i : pg_slots) {
+      dout(20) << __func__ << " slot pgid:" << i.first << "slot:" << i.second.get() << dendl;
       const spg_t& pgid = i.first;
       auto *slot = i.second.get();
       if (slot->pg) {
@@ -10378,6 +10442,8 @@ void OSDShard::identify_splits_and_merges(
       }
     }
   }
+  dout(20) << __func__ << " " << split_pgs->size() << " splits, "
+	   << merge_pgs->size() << " merges" << dendl;
 }
 
 void OSDShard::prime_splits(const OSDMapRef& as_of_osdmap,
@@ -10542,7 +10608,6 @@ void OSDShard::unprime_split_children(spg_t parent, unsigned old_pg_num)
 
 void OSDShard::update_scheduler_config()
 {
-  std::lock_guard l(shard_lock);
   scheduler->update_configuration();
 }
 
@@ -10567,8 +10632,8 @@ OSDShard::OSDShard(
     shard_lock_name(shard_name + "::shard_lock"),
     shard_lock{make_mutex(shard_lock_name)},
     scheduler(ceph::osd::scheduler::make_scheduler(
-      cct, osd->num_shards, osd->store->is_rotational(),
-      osd->store->get_type())),
+      cct, osd->whoami, osd->num_shards, id, osd->store->is_rotational(),
+      osd->store->get_type(), osd->monc)),
     context_queue(sdata_wait_lock, sdata_cond)
 {
   dout(0) << "using op scheduler " << *scheduler << dendl;

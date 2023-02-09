@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_TAG_H
-#define RGW_TAG_H
+#pragma once
 
 #include <string>
 #include <include/types.h>
@@ -48,5 +47,3 @@ protected:
   tag_map_t& get_tags() {return tag_map;}
 };
 WRITE_CLASS_ENCODER(RGWObjTags)
-
-#endif /* RGW_TAG_H */

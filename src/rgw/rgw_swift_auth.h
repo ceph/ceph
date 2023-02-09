@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_SWIFT_AUTH_H
-#define CEPH_RGW_SWIFT_AUTH_H
+#pragma once
 
 #include "rgw_common.h"
 #include "rgw_user.h"
@@ -47,7 +46,7 @@ class TempURLEngine : public rgw::auth::Engine {
   const TempURLApplier::Factory* const apl_factory;
 
   /* Helper methods. */
-  void get_owner_info(const DoutPrefixProvider* dpp, 
+  void get_owner_info(const DoutPrefixProvider* dpp,
                       const req_state* s,
                       RGWUserInfo& owner_info,
 		      optional_yield y) const;
@@ -353,6 +352,3 @@ public:
     return new RGWHandler_SWIFT_Auth;
   }
 };
-
-
-#endif

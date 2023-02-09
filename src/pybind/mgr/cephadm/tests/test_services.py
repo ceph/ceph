@@ -18,7 +18,7 @@ from cephadm.services.monitoring import GrafanaService, AlertmanagerService, Pro
     NodeExporterService, LokiService, PromtailService
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import IscsiServiceSpec, MonitoringSpec, AlertManagerSpec, \
-    ServiceSpec, RGWSpec, GrafanaSpec, SNMPGatewaySpec, IngressSpec, PlacementSpec, TracingSpec, PrometheusSpec
+    ServiceSpec, RGWSpec, GrafanaSpec, SNMPGatewaySpec, IngressSpec, PlacementSpec, TracingSpec, PrometheusSpec, CephExporterSpec
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
 
 from orchestrator import OrchestratorError
@@ -289,7 +289,7 @@ log_to_file = False"""
                     'deploy',
                     [
                         '--name', f'iscsi.{iscsi_daemon_id}',
-                        '--meta-json', f'{"{"}"service_name": "iscsi.{pool}", "ports": [{api_port}], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null{"}"}',
+                        '--meta-json', f'{"{"}"service_name": "iscsi.{pool}", "ports": [{api_port}], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null{"}"}',
                         '--config-json', '-', '--tcp-ports', '3456'
                     ],
                     stdin=json.dumps({"config": "", "keyring": f"[client.iscsi.{iscsi_daemon_id}]\nkey = None\n", "files": {"iscsi-gateway.cfg": iscsi_gateway_conf}}),
@@ -380,7 +380,8 @@ class TestMonitoring:
                         "--name",
                         "alertmanager.test",
                         "--meta-json",
-                        '{"service_name": "alertmanager", "ports": [9093, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "alertmanager", "ports": [9093, 9094], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         "--config-json",
                         "-",
                         "--tcp-ports",
@@ -393,11 +394,13 @@ class TestMonitoring:
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     def test_prometheus_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, MonitoringSpec('node-exporter')) as _, \
+                    with_service(cephadm_module, CephExporterSpec('ceph-exporter')) as _, \
                     with_service(cephadm_module, PrometheusSpec('prometheus')) as _:
 
                 y = dedent("""
@@ -423,6 +426,13 @@ class TestMonitoring:
                       tls_config:
                         ca_file: root_cert.pem
 
+
+                  - job_name: 'ceph-exporter'
+                    honor_labels: true
+                    http_sd_configs:
+                    - url: https://[::1]:8765/sd/prometheus/sd-config?service=ceph-exporter
+                      tls_config:
+                        ca_file: root_cert.pem
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(
@@ -432,7 +442,8 @@ class TestMonitoring:
                     [
                         '--name', 'prometheus.test',
                         '--meta-json',
-                        '{"service_name": "prometheus", "ports": [9095], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "prometheus", "ports": [9095], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9095'
                     ],
@@ -486,7 +497,8 @@ class TestMonitoring:
                     [
                         '--name', 'loki.test',
                         '--meta-json',
-                        '{"service_name": "loki", "ports": [3100], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "loki", "ports": [3100], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '3100'
                     ],
@@ -527,7 +539,8 @@ class TestMonitoring:
                     [
                         '--name', 'promtail.test',
                         '--meta-json',
-                        '{"service_name": "promtail", "ports": [9080], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "promtail", "ports": [9080], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9080'
                     ],
@@ -611,7 +624,8 @@ class TestMonitoring:
                     [
                         '--name', 'grafana.test',
                         '--meta-json',
-                        '{"service_name": "grafana", "ports": [3000], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "grafana", "ports": [3000], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-', '--tcp-ports', '3000'],
                     stdin=json.dumps({"files": files}),
                     image='')
@@ -691,7 +705,8 @@ spec:
                     _run_cephadm.assert_called_with(
                         'test', 'alertmanager.test', 'deploy', [
                             '--name', 'alertmanager.test',
-                            '--meta-json', '{"service_name": "alertmanager", "ports": [4200, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                            '--meta-json', ('{"service_name": "alertmanager", "ports": [4200, 9094], "ip": null, "deployed_by": [], "rank": null, '
+                                            '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                             '--config-json', '-',
                             '--tcp-ports', '4200 9094',
                             '--reconfig'
@@ -762,7 +777,8 @@ class TestSNMPGateway:
                     [
                         '--name', 'snmp-gateway.test',
                         '--meta-json',
-                        '{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9464'
                     ],
@@ -797,7 +813,8 @@ class TestSNMPGateway:
                     [
                         '--name', 'snmp-gateway.test',
                         '--meta-json',
-                        '{"service_name": "snmp-gateway", "ports": [9465], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "snmp-gateway", "ports": [9465], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9465'
                     ],
@@ -836,7 +853,8 @@ class TestSNMPGateway:
                     [
                         '--name', 'snmp-gateway.test',
                         '--meta-json',
-                        '{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9464'
                     ],
@@ -880,7 +898,8 @@ class TestSNMPGateway:
                     [
                         '--name', 'snmp-gateway.test',
                         '--meta-json',
-                        '{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9464'
                     ],
@@ -895,7 +914,7 @@ class TestIngressService:
     def test_ingress_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
-        with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test', addr='1.2.3.7'):
             cephadm_module.cache.update_host_networks('test', {
                 '1.2.3.0/24': {
                     'if0': ['1.2.3.4/32']
@@ -927,7 +946,7 @@ class TestIngressService:
                             'keepalived.conf':
                                 '# This file is generated by cephadm.\n'
                                 'vrrp_script check_backend {\n    '
-                                'script "/usr/bin/curl http://localhost:8999/health"\n    '
+                                'script "/usr/bin/curl http://1.2.3.7:8999/health"\n    '
                                 'weight -20\n    '
                                 'interval 2\n    '
                                 'rise 2\n    '
@@ -942,7 +961,7 @@ class TestIngressService:
                                 'auth_type PASS\n      '
                                 'auth_pass 12345\n  '
                                 '}\n  '
-                                'unicast_src_ip 1::4\n  '
+                                'unicast_src_ip 1.2.3.7\n  '
                                 'unicast_peer {\n  '
                                 '}\n  '
                                 'virtual_ipaddress {\n    '
@@ -986,14 +1005,14 @@ class TestIngressService:
                                 'timeout connect         5s\n    '
                                 'timeout http-request    1s\n    '
                                 'timeout http-keep-alive 5s\n    '
-                                'timeout client          1s\n    '
-                                'timeout server          1s\n    '
+                                'timeout client          30s\n    '
+                                'timeout server          30s\n    '
                                 'timeout check           5s\n    '
                                 'maxconn                 8000\n'
                                 '\nfrontend stats\n    '
                                 'mode http\n    '
                                 'bind 1.2.3.4:8999\n    '
-                                'bind localhost:8999\n    '
+                                'bind 1.2.3.7:8999\n    '
                                 'stats enable\n    '
                                 'stats uri /stats\n    '
                                 'stats refresh 10s\n    '
@@ -1008,7 +1027,7 @@ class TestIngressService:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1::4:80 check weight 100\n'
+                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100\n'
                         }
                 }
 
@@ -1050,7 +1069,7 @@ class TestIngressService:
                             'keepalived.conf':
                                 '# This file is generated by cephadm.\n'
                                 'vrrp_script check_backend {\n    '
-                                'script "/usr/bin/curl http://localhost:8999/health"\n    '
+                                'script "/usr/bin/curl http://[1::4]:8999/health"\n    '
                                 'weight -20\n    '
                                 'interval 2\n    '
                                 'rise 2\n    '
@@ -1109,14 +1128,14 @@ class TestIngressService:
                                 'timeout connect         5s\n    '
                                 'timeout http-request    1s\n    '
                                 'timeout http-keep-alive 5s\n    '
-                                'timeout client          1s\n    '
-                                'timeout server          1s\n    '
+                                'timeout client          30s\n    '
+                                'timeout server          30s\n    '
                                 'timeout check           5s\n    '
                                 'maxconn                 8000\n'
                                 '\nfrontend stats\n    '
                                 'mode http\n    '
                                 'bind 1.2.3.4:8999\n    '
-                                'bind localhost:8999\n    '
+                                'bind 1::4:8999\n    '
                                 'stats enable\n    '
                                 'stats uri /stats\n    '
                                 'stats refresh 10s\n    '
@@ -1143,7 +1162,7 @@ class TestIngressService:
     def test_ingress_config_multi_vips(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
-        with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test', addr='1.2.3.7'):
             cephadm_module.cache.update_host_networks('test', {
                 '1.2.3.0/24': {
                     'if0': ['1.2.3.4/32']
@@ -1176,7 +1195,7 @@ class TestIngressService:
                             'keepalived.conf':
                                 '# This file is generated by cephadm.\n'
                                 'vrrp_script check_backend {\n    '
-                                'script "/usr/bin/curl http://localhost:8999/health"\n    '
+                                'script "/usr/bin/curl http://1.2.3.7:8999/health"\n    '
                                 'weight -20\n    '
                                 'interval 2\n    '
                                 'rise 2\n    '
@@ -1191,7 +1210,7 @@ class TestIngressService:
                                 'auth_type PASS\n      '
                                 'auth_pass 12345\n  '
                                 '}\n  '
-                                'unicast_src_ip 1::4\n  '
+                                'unicast_src_ip 1.2.3.7\n  '
                                 'unicast_peer {\n  '
                                 '}\n  '
                                 'virtual_ipaddress {\n    '
@@ -1235,14 +1254,14 @@ class TestIngressService:
                                 'timeout connect         5s\n    '
                                 'timeout http-request    1s\n    '
                                 'timeout http-keep-alive 5s\n    '
-                                'timeout client          1s\n    '
-                                'timeout server          1s\n    '
+                                'timeout client          30s\n    '
+                                'timeout server          30s\n    '
                                 'timeout check           5s\n    '
                                 'maxconn                 8000\n'
                                 '\nfrontend stats\n    '
                                 'mode http\n    '
                                 'bind *:8999\n    '
-                                'bind localhost:8999\n    '
+                                'bind 1.2.3.7:8999\n    '
                                 'stats enable\n    '
                                 'stats uri /stats\n    '
                                 'stats refresh 10s\n    '
@@ -1257,7 +1276,7 @@ class TestIngressService:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1::4:80 check weight 100\n'
+                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100\n'
                         }
                 }
 
@@ -1295,7 +1314,8 @@ class TestJaeger:
                     [
                         '--name', 'jaeger-query.test',
                         '--meta-json',
-                        '{"service_name": "jaeger-query", "ports": [16686], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "jaeger-query", "ports": [16686], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '16686'
 
@@ -1323,7 +1343,8 @@ class TestJaeger:
                     [
                         '--name', 'elasticsearch.test',
                         '--meta-json',
-                        '{"service_name": "elasticsearch", "ports": [9200], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "elasticsearch", "ports": [9200], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '9200'
 
@@ -1339,7 +1360,8 @@ class TestJaeger:
                         [
                             '--name', 'jaeger-collector.test',
                             '--meta-json',
-                            '{"service_name": "jaeger-collector", "ports": [14250], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                            ('{"service_name": "jaeger-collector", "ports": [14250], "ip": null, "deployed_by": [], "rank": null, '
+                             '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                             '--config-json', '-',
                             '--tcp-ports', '14250'
 
@@ -1367,7 +1389,8 @@ class TestJaeger:
                     [
                         '--name', 'jaeger-collector.test',
                         '--meta-json',
-                        '{"service_name": "jaeger-collector", "ports": [14250], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        ('{"service_name": "jaeger-collector", "ports": [14250], "ip": null, "deployed_by": [], "rank": null, '
+                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--tcp-ports', '14250'
 
@@ -1383,7 +1406,8 @@ class TestJaeger:
                         [
                             '--name', 'jaeger-agent.test',
                             '--meta-json',
-                            '{"service_name": "jaeger-agent", "ports": [6799], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                            ('{"service_name": "jaeger-agent", "ports": [6799], "ip": null, "deployed_by": [], "rank": null, '
+                             '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                             '--config-json', '-',
                             '--tcp-ports', '6799'
 

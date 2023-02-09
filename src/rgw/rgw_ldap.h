@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_LDAP_H
-#define RGW_LDAP_H
+#pragma once
 
 #include "acconfig.h"
 
@@ -83,10 +82,8 @@ namespace rgw {
 			      (void*) &ldap_ver);
 	if (ret == LDAP_SUCCESS) {
 	  ret = ldap_simple_bind_s(tldap, dn, pwd.c_str());
-	  if (ret == LDAP_SUCCESS) {
-	    (void) ldap_unbind(tldap);
-	  }
 	}
+	(void) ldap_unbind(tldap);
       }
       return ret; // OpenLDAP client error space
     }
@@ -139,5 +136,3 @@ namespace rgw {
 #include "include/ceph_assert.h"
 
 std::string parse_rgw_ldap_bindpw(CephContext* ctx);
-
-#endif /* RGW_LDAP_H */

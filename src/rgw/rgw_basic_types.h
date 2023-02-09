@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
@@ -18,8 +18,7 @@
  * radosgw or OSD contexts (e.g., rgw_sal.h, rgw_common.h)
  */
 
-#ifndef CEPH_RGW_BASIC_TYPES_H
-#define CEPH_RGW_BASIC_TYPES_H
+#pragma once
 
 #include <string>
 #include <fmt/format.h>
@@ -283,5 +282,3 @@ struct RGWUploadPartInfo {
   static void generate_test_instances(std::list<RGWUploadPartInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWUploadPartInfo)
-
-#endif /* CEPH_RGW_BASIC_TYPES_H */

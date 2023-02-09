@@ -36,7 +36,7 @@ describe('nfsExport page', () => {
       services.addService('nfs');
 
       services.checkExist('nfs.testnfs', true);
-      services.getExpandCollapseElement().click();
+      services.clickServiceTab('nfs.testnfs', 'Details');
       services.checkServiceStatus('nfs');
     });
 

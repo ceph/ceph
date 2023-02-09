@@ -16,6 +16,7 @@ from orchestrator import OrchResult
 
 import jsonpatch
 from urllib.parse import urljoin
+import json
 
 # Optional kubernetes imports to enable MgrModule.can_run
 # to behave cleanly.
@@ -214,6 +215,45 @@ class LSOFetcher(DefaultFetcher):
             )
         )
         return (node, device)
+
+
+class PDFetcher(DefaultFetcher):
+    """ Physical Devices Fetcher"""
+    def __init__(self, coreV1_api: 'client.CoreV1Api'):
+        self.coreV1_api = coreV1_api
+
+    def fetch(self) -> None:
+        """ Collect the devices information from k8s configmaps"""
+        self.dev_cms: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_config_map,
+                                                              namespace='rook-ceph',
+                                                              label_selector='app=rook-discover')
+
+    def devices(self) -> Dict[str, List[Device]]:
+        """ Return the list of devices found"""
+        node_devices: Dict[str, List[Device]] = {}
+        for i in self.dev_cms.items:
+            devices_list: List[Device] = []
+            for d in json.loads(i.data['devices']):
+                devices_list.append(self.device(d)[1])
+            node_devices[i.metadata.labels['rook.io/node']] = devices_list
+
+        return node_devices
+
+    def device(self, devData: Dict[str,str]) -> Tuple[str, Device]:
+        """ Build an orchestrator device """
+        if 'cephVolumeData' in devData and devData['cephVolumeData']:
+            return "", Device.from_json(json.loads(devData['cephVolumeData']))
+        else:
+            return "", Device(
+                path='/dev/' + devData['name'],
+                sys_api=dict(
+                    rotational='1' if devData['rotational'] else '0',
+                    size=devData['size']
+                ),
+                available=False,
+                rejected_reasons=['device data coming from ceph-volume not provided'],
+            )
+
 
 class KubernetesResource(Generic[T]):
     def __init__(self, api_func: Callable, **kwargs: Any) -> None:
@@ -509,9 +549,14 @@ class DefaultRemover():
         self.rook_env = rook_env
 
         self.inventory = inventory
-        self.osd_pods: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_pod, namespace='rook-ceph', label_selector='app=rook-ceph-osd')
-        self.jobs: KubernetesResource = KubernetesResource(self.batchV1_api.list_namespaced_job, namespace='rook-ceph', label_selector='app=rook-ceph-osd-prepare')
-        self.pvcs: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_persistent_volume_claim, namespace='rook-ceph')
+        self.osd_pods: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_pod,
+                                                               namespace=self.rook_env.namespace,
+                                                               label_selector='app=rook-ceph-osd')
+        self.jobs: KubernetesResource = KubernetesResource(self.batchV1_api.list_namespaced_job,
+                                                           namespace=self.rook_env.namespace,
+                                                           label_selector='app=rook-ceph-osd-prepare')
+        self.pvcs: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_persistent_volume_claim,
+                                                           namespace=self.rook_env.namespace)
 
 
     def remove_device_sets(self) -> str:
@@ -560,11 +605,9 @@ class DefaultRemover():
 
     def scale_deployments(self) -> None:
         for osd_id in self.osd_ids:
-            self.appsV1_api.patch_namespaced_deployment_scale(namespace='rook-ceph', name='rook-ceph-osd-{}'.format(osd_id), body=client.V1Scale(
-                spec=client.V1ScaleSpec(
-                    replicas=0
-                )
-            ))
+            self.appsV1_api.patch_namespaced_deployment_scale(namespace=self.rook_env.namespace,
+                                                              name='rook-ceph-osd-{}'.format(osd_id),
+                                                              body=client.V1Scale(spec=client.V1ScaleSpec(replicas=0)))
 
     def set_osds_out(self) -> None:
         out_flag_args = {
@@ -577,13 +620,18 @@ class DefaultRemover():
             
     def delete_deployments(self) -> None:
         for osd_id in self.osd_ids:
-            self.appsV1_api.delete_namespaced_deployment(namespace='rook-ceph', name='rook-ceph-osd-{}'.format(osd_id), propagation_policy='Foreground')
+            self.appsV1_api.delete_namespaced_deployment(namespace=self.rook_env.namespace,
+                                                         name='rook-ceph-osd-{}'.format(osd_id),
+                                                         propagation_policy='Foreground')
 
     def clean_up_prepare_jobs_and_pvc(self) -> None:
         for job in self.jobs.items:
             if job.metadata.labels['ceph.rook.io/pvc'] in self.pvc_to_remove:
-                self.batchV1_api.delete_namespaced_job(name=job.metadata.name, namespace='rook-ceph', propagation_policy='Foreground')
-                self.coreV1_api.delete_namespaced_persistent_volume_claim(name=job.metadata.labels['ceph.rook.io/pvc'], namespace='rook-ceph', propagation_policy='Foreground')
+                self.batchV1_api.delete_namespaced_job(name=job.metadata.name, namespace=self.rook_env.namespace,
+                                                       propagation_policy='Foreground')
+                self.coreV1_api.delete_namespaced_persistent_volume_claim(name=job.metadata.labels['ceph.rook.io/pvc'],
+                                                                          namespace=self.rook_env.namespace,
+                                                                          propagation_policy='Foreground')
 
     def purge_osds(self) -> None:
         for id in self.osd_ids:
@@ -665,11 +713,11 @@ class RookCluster(object):
         self.storage_classes : KubernetesResource = KubernetesResource(self.storageV1_api.list_storage_class)
 
         self.rook_pods: KubernetesResource[client.V1Pod] = KubernetesResource(self.coreV1_api.list_namespaced_pod,
-                                            namespace=self.rook_env.namespace,
-                                            label_selector="rook_cluster={0}".format(
-                                                self.rook_env.namespace))
+                                                                              namespace=self.rook_env.namespace,
+                                                                              label_selector="rook_cluster={0}".format(
+                                                                                  self.rook_env.namespace))
         self.nodes: KubernetesResource[client.V1Node] = KubernetesResource(self.coreV1_api.list_node)
-        
+
     def rook_url(self, path: str) -> str:
         prefix = "/apis/ceph.rook.io/%s/namespaces/%s/" % (
             self.rook_env.crd_version, self.rook_env.namespace)
@@ -710,17 +758,24 @@ class RookCluster(object):
         return matching_sc[0]
 
     def get_discovered_devices(self, nodenames: Optional[List[str]] = None) -> Dict[str, List[Device]]:
-        storage_class = self.get_storage_class()
         self.fetcher: Optional[DefaultFetcher] = None
-        if storage_class.metadata.labels and ('local.storage.openshift.io/owner-name' in storage_class.metadata.labels):
-            self.fetcher = LSOFetcher(self.storage_class, self.coreV1_api, self.customObjects_api, nodenames)
+        op_settings = self.coreV1_api.read_namespaced_config_map(name="rook-ceph-operator-config", namespace='rook-ceph').data
+        if op_settings.get('ROOK_ENABLE_DISCOVERY_DAEMON', 'false').lower() == 'true':
+            self.fetcher = PDFetcher(self.coreV1_api)
         else:
-            self.fetcher = DefaultFetcher(self.storage_class, self.coreV1_api)
+            storage_class = self.get_storage_class()
+            if storage_class.metadata.labels and ('local.storage.openshift.io/owner-name' in storage_class.metadata.labels):
+                self.fetcher = LSOFetcher(self.storage_class, self.coreV1_api, self.customObjects_api, nodenames)
+            else:
+                self.fetcher = DefaultFetcher(self.storage_class, self.coreV1_api)
+
         self.fetcher.fetch()
         return self.fetcher.devices()
-        
+
     def get_osds(self) -> List:
-        osd_pods: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_pod, namespace='rook-ceph', label_selector='app=rook-ceph-osd')
+        osd_pods: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_pod,
+                                                          namespace=self.rook_env.namespace,
+                                                          label_selector='app=rook-ceph-osd')
         return list(osd_pods.items)
         
     def get_nfs_conf_url(self, nfs_cluster: str, instance: str) -> Optional[str]:
@@ -1070,12 +1125,18 @@ class RookCluster(object):
                 _update_nfs, _create_nfs)
 
     def rm_service(self, rooktype: str, service_id: str) -> str:
-        self.customObjects_api.delete_namespaced_custom_object(group="ceph.rook.io", version="v1", namespace="rook-ceph", plural=rooktype, name=service_id)
+        self.customObjects_api.delete_namespaced_custom_object(group="ceph.rook.io", version="v1",
+                                                               namespace=self.rook_env.namespace,
+                                                               plural=rooktype, name=service_id)
         objpath = "{0}/{1}".format(rooktype, service_id)
         return f'Removed {objpath}'
 
     def get_resource(self, resource_type: str) -> Iterable:
-        custom_objects: KubernetesCustomResource = KubernetesCustomResource(self.customObjects_api.list_namespaced_custom_object, group="ceph.rook.io", version="v1", namespace="rook-ceph", plural=resource_type)
+        custom_objects: KubernetesCustomResource = KubernetesCustomResource(self.customObjects_api.list_namespaced_custom_object,
+                                                                            group="ceph.rook.io",
+                                                                            version="v1",
+                                                                            namespace=self.rook_env.namespace,
+                                                                            plural=resource_type)
         return custom_objects.items
 
     def can_create_osd(self) -> bool:
@@ -1154,7 +1215,7 @@ class RookCluster(object):
             api_version="batch/v1",
             metadata=client.V1ObjectMeta(
                 name="rook-ceph-device-zap",
-                namespace="rook-ceph"
+                namespace=self.rook_env.namespace
             ),
             spec=client.V1JobSpec(
                 template=client.V1PodTemplateSpec(
@@ -1229,7 +1290,7 @@ class RookCluster(object):
                 )
             )
         )
-        self.batchV1_api.create_namespaced_job('rook-ceph', body)
+        self.batchV1_api.create_namespaced_job(self.rook_env.namespace, body)
 
     def rbd_mirror(self, spec: ServiceSpec) -> None:
         service_id = spec.service_id or "default-rbd-mirror"

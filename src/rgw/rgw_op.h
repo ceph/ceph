@@ -10,8 +10,7 @@
  * to provide additional virtual methods such as send_response or get_params.
  */
 
-#ifndef CEPH_RGW_OP_H
-#define CEPH_RGW_OP_H
+#pragma once
 
 #include <limits.h>
 
@@ -79,7 +78,7 @@ class StrategyRegistry;
 }
 }
 
-int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp, 
+int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
                                        CephContext *cct,
 				       rgw::sal::Driver* driver,
                                        RGWBucketInfo& bucket_info,
@@ -441,8 +440,8 @@ public:
     return 0;
   }
 
-  // get lua script to run as a "get object" filter 
-  int get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter, 
+  // get lua script to run as a "get object" filter
+  int get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
       RGWGetObj_Filter* cb);
 
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
@@ -696,7 +695,7 @@ protected:
 
   boost::optional<std::pair<std::string, rgw_obj_key>>
   parse_path(const std::string_view& path);
-  
+
   std::pair<std::string, std::string>
   handle_upload_path(req_state *s);
 
@@ -902,8 +901,8 @@ public:
 class RGWListBucket : public RGWOp {
 protected:
   std::string prefix;
-  rgw_obj_key marker; 
-  rgw_obj_key next_marker; 
+  rgw_obj_key marker;
+  rgw_obj_key next_marker;
   rgw_obj_key end_marker;
   std::string max_keys;
   std::string delimiter;
@@ -1284,8 +1283,8 @@ public:
     return 0;
   }
 
-  // get lua script to run as a "put object" filter 
-  int get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, 
+  // get lua script to run as a "put object" filter
+  int get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter,
       rgw::sal::DataProcessor* cb);
 
   int get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len);
@@ -1631,7 +1630,7 @@ public:
 
 class RGWGetLC : public RGWOp {
 protected:
-    
+
 public:
   RGWGetLC() { }
   ~RGWGetLC() override { }
@@ -1659,7 +1658,7 @@ public:
   ~RGWPutLC() override {}
 
   void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *dialect_handler) override {
-#define COOKIE_LEN 16
+    static constexpr std::size_t COOKIE_LEN = 16;
     char buf[COOKIE_LEN + 1];
 
     RGWOp::init(driver, s, dialect_handler);
@@ -2032,18 +2031,18 @@ public:
 class RGWDeleteMultiObj : public RGWOp {
   /**
    * Handles the deletion of an individual object and uses
-   * set_partial_response to record the outcome. 
+   * set_partial_response to record the outcome.
    */
   void handle_individual_object(const rgw_obj_key& o,
 				optional_yield y,
                                 boost::asio::deadline_timer *formatter_flush_cond);
-  
+
   /**
    * When the request is being executed in a coroutine, performs
    * the actual formatter flushing and is responsible for the
    * termination condition (when when all partial object responses
    * have been sent). Note that the formatter flushing must be handled
-   * on the coroutine that invokes the execute method vs. the 
+   * on the coroutine that invokes the execute method vs. the
    * coroutines that are spawned to handle individual objects because
    * the flush logic uses a yield context that was captured
    * and saved on the req_state vs. one that is passed on the stack.
@@ -2237,7 +2236,7 @@ inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
 {
   if (delete_at == boost::none) {
     return;
-  } 
+  }
 
   bufferlist delatbl;
   encode(*delete_at, delatbl);
@@ -2669,5 +2668,3 @@ int rgw_policy_from_attrset(const DoutPrefixProvider *dpp,
                             CephContext *cct,
                             std::map<std::string, bufferlist>& attrset,
                             RGWAccessControlPolicy *policy);
-
-#endif /* CEPH_RGW_OP_H */

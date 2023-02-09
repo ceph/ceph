@@ -72,8 +72,11 @@ struct scheduler_id_t {
 class mClockScheduler : public OpScheduler, md_config_obs_t {
 
   CephContext *cct;
+  const int whoami;
   const uint32_t num_shards;
+  const int shard_id;
   bool is_rotational;
+  MonClient *monc;
   double max_osd_capacity;
   double osd_mclock_cost_per_io;
   double osd_mclock_cost_per_byte;
@@ -144,7 +147,8 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   }
 
 public:
-  mClockScheduler(CephContext *cct, uint32_t num_shards, bool is_rotational);
+  mClockScheduler(CephContext *cct, int whoami, uint32_t num_shards,
+    int shard_id, bool is_rotational, MonClient *monc);
   ~mClockScheduler() override;
 
   // Set the max osd capacity in iops

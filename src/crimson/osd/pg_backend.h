@@ -31,6 +31,7 @@ namespace ceph::os {
 namespace crimson::osd {
   class ShardServices;
   class PG;
+  class ObjectContextLoader;
 }
 
 class PGBackend
@@ -63,14 +64,16 @@ public:
     std::tuple<interruptible_future<>,
 	       interruptible_future<crimson::osd::acked_peers_t>>;
   PGBackend(shard_id_t shard, CollectionRef coll,
-            crimson::osd::ShardServices &shard_services);
+            crimson::osd::ShardServices &shard_services,
+            DoutPrefixProvider &dpp);
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> create(pg_t pgid,
 					   const pg_shard_t pg_shard,
 					   const pg_pool_t& pool,
 					   crimson::os::CollectionRef coll,
 					   crimson::osd::ShardServices& shard_services,
-					   const ec_profile_t& ec_profile);
+					   const ec_profile_t& ec_profile,
+					   DoutPrefixProvider &dpp);
   using attrs_t =
     std::map<std::string, ceph::bufferptr, std::less<>>;
   using read_errorator = ll_read_errorator::extend<
@@ -193,12 +196,13 @@ public:
       ::crimson::osd::IOInterruptCondition,
       rollback_ertr>;
   rollback_iertr::future<> rollback(
-    const SnapSet &ss,
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& txn,
     osd_op_params_t& osd_op_params,
-    object_stat_sum_t& delta_stats);
+    object_stat_sum_t& delta_stats,
+    crimson::osd::ObjectContextRef head,
+    crimson::osd::ObjectContextLoader& obc_loader);
   write_iertr::future<> truncate(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -379,18 +383,13 @@ public:
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
   virtual seastar::future<> stop() = 0;
-  struct peering_info_t {
-    bool is_primary;
-  };
-  virtual void on_actingset_changed(peering_info_t pi) = 0;
-  virtual void on_activate_complete();
+  virtual void on_actingset_changed(bool same_primary) = 0;
 protected:
   const shard_id_t shard;
   CollectionRef coll;
   crimson::osd::ShardServices &shard_services;
+  DoutPrefixProvider &dpp; ///< provides log prefix context
   crimson::os::FuturizedStore* store;
-  bool stopping = false;
-  std::optional<peering_info_t> peering;
   virtual seastar::future<> request_committed(
     const osd_reqid_t& reqid,
     const eversion_t& at_version) = 0;

@@ -258,6 +258,54 @@ function TEST_backfill_limit_adjustment_mclock() {
     teardown $dir || return 1
 }
 
+function TEST_profile_disallow_builtin_params_modify() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+
+    run_osd $dir 0 --osd_op_queue=mclock_scheduler || return 1
+
+    # Verify that the default mclock profile is set on the OSD
+    local mclock_profile=$(ceph config get osd.0 osd_mclock_profile)
+    test "$mclock_profile" = "high_client_ops" || return 1
+
+    declare -a options=("osd_mclock_scheduler_background_recovery_res"
+      "osd_mclock_scheduler_client_res")
+
+    for opt in "${options[@]}"
+    do
+      # Try and change a mclock config param and confirm that no change occurred
+      local opt_val_orig=$(CEPH_ARGS='' ceph --format=json daemon \
+        $(get_asok_path osd.0) config get $opt | jq .$opt | bc)
+      local opt_val_new=$(expr $opt_val_orig + 10)
+      ceph config set osd.0 $opt $opt_val_new || return 1
+      sleep 2 # Allow time for changes to take effect
+
+      # Check configuration value on Mon store (or the default) for the osd
+      local res=$(ceph config get osd.0 $opt) || return 1
+      echo "Mon db (or default): osd.0 $opt = $res"
+      test $res -ne $opt_val_new || return 1
+
+      # Check running configuration value using "config show" cmd
+      res=$(ceph config show osd.0 | grep $opt |\
+        awk '{ print $2 }' | bc ) || return 1
+      echo "Running config: osd.0 $opt = $res"
+      test $res -ne $opt_val_new || return 1
+      test $res -eq $opt_val_orig || return 1
+
+      # Check value in the in-memory 'values' map is unmodified
+      res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
+        osd.0) config get $opt | jq .$opt | bc)
+      echo "Values map: osd.0 $opt = $res"
+      test $res -ne $opt_val_new || return 1
+      test $res -eq $opt_val_orig || return 1
+    done
+
+    teardown $dir || return 1
+}
+
 main mclock-config "$@"
 
 # Local Variables:

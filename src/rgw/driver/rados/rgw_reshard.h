@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_RESHARD_H
-#define RGW_RESHARD_H
+#pragma once
 
 #include <vector>
 #include <initializer_list>
@@ -273,5 +272,3 @@ public:
   // unblock any threads waiting on reshard
   void stop();
 };
-
-#endif

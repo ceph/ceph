@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_ASIO_FRONTEND_H
-#define RGW_ASIO_FRONTEND_H
+#pragma once
 
 #include <memory>
 #include "rgw_frontend.h"
@@ -24,5 +23,3 @@ public:
   void pause_for_new_config() override;
   void unpause_with_new_config() override;
 };
-
-#endif // RGW_ASIO_FRONTEND_H

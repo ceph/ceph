@@ -226,7 +226,7 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
         return ihref.enter_stage<interruptor>(pp(*pg).get_obc, *this
 	).then_interruptible(
           [this, pg, &ihref]() mutable -> PG::load_obc_iertr::future<> {
-          logger().debug("{}: got obc lock", *this);
+          logger().debug("{}: in get_obc stage", *this);
           op_info.set_from_op(&*m, *pg->get_osdmap());
           return pg->with_locked_obc(
             m->get_hobj(), op_info,

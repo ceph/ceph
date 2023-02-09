@@ -379,7 +379,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
     if (ret = fault.check("set_target_layout");
         ret == 0) { // no fault injected, write the bucket instance metadata
       ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
-                                                        real_time(), &bucket_attrs, dpp);
+                                                        real_time(), &bucket_attrs, dpp, null_yield);
     } else if (ret == -ECANCELED) {
       fault.clear(); // clear the fault so a retry can succeed
     }
@@ -452,7 +452,7 @@ static int revert_target_layout(rgw::sal::RadosStore* store,
         ret == 0) { // no fault injected, revert the bucket instance metadata
       ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
                                                         real_time(),
-                                                        &bucket_attrs, dpp);
+                                                        &bucket_attrs, dpp, null_yield);
     } else if (ret == -ECANCELED) {
       fault.clear(); // clear the fault so a retry can succeed
     }
@@ -573,7 +573,7 @@ static int commit_target_layout(rgw::sal::RadosStore* store,
   int ret = fault.check("commit_target_layout");
   if (ret == 0) { // no fault injected, write the bucket instance metadata
     ret = store->getRados()->put_bucket_instance_info(
-        bucket_info, false, real_time(), &bucket_attrs, dpp);
+        bucket_info, false, real_time(), &bucket_attrs, dpp, null_yield);
   } else if (ret == -ECANCELED) {
     fault.clear(); // clear the fault so a retry can succeed
   }
@@ -648,7 +648,9 @@ static int commit_reshard(rgw::sal::RadosStore* store,
     // generation, and eventually transition to the next
     // TODO: use a log layout to support types other than BucketLogType::InIndex
     for (uint32_t shard_id = 0; shard_id < prev.current_index.layout.normal.num_shards; ++shard_id) {
-      ret = store->svc()->datalog_rados->add_entry(dpp, bucket_info, prev.logs.back(), shard_id);
+      // This null_yield can stay, for now, since we're in our own thread
+      ret = store->svc()->datalog_rados->add_entry(dpp, bucket_info, prev.logs.back(), shard_id,
+						   null_yield);
       if (ret < 0) {
         ldpp_dout(dpp, 1) << "WARNING: failed writing data log (bucket_info.bucket="
         << bucket_info.bucket << ", shard_id=" << shard_id << "of generation="

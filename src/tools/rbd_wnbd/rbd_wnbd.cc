@@ -902,6 +902,35 @@ exit:
     }
 };
 
+class WNBDWatchCtx : public librbd::UpdateWatchCtx
+{
+private:
+  librados::IoCtx &io_ctx;
+  WnbdHandler* handler;
+  librbd::Image &image;
+  uint64_t size;
+public:
+  WNBDWatchCtx(librados::IoCtx& io_ctx, WnbdHandler* handler,
+               librbd::Image& image, uint64_t size)
+    : io_ctx(io_ctx)
+    , handler(handler)
+    , image(image)
+    , size(size)
+  { }
+
+  ~WNBDWatchCtx() override {}
+
+  void handle_notify() override
+  {
+    uint64_t new_size;
+
+    if (image.size(&new_size) == 0 && new_size != size &&
+        handler->resize(new_size) == 0) {
+      size = new_size;
+    }
+  }
+};
+
 static void usage()
 {
   const char* usage_str =R"(
@@ -1159,9 +1188,29 @@ static int do_map(Config *cfg)
     global_init_postfork_finish(g_ceph_context);
   }
 
-  handler->wait();
-  handler->shutdown();
+  {
+    uint64_t watch_handle;
+    WNBDWatchCtx watch_ctx(io_ctx, handler, image, info.size);
+    r = image.update_watch(&watch_ctx, &watch_handle);
+    if (r < 0) {
+      derr << __func__ << ": update_watch failed with error: "
+           << cpp_strerror(r) << dendl;
 
+      handler->shutdown();
+      goto close_ret;
+    }
+
+    handler->wait();
+
+    r = image.update_unwatch(watch_handle);
+    if (r < 0)
+      derr << __func__ << ": update_unwatch failed with error: "
+           << cpp_strerror(r) << dendl;
+
+    handler->shutdown();
+  }
+
+close_ret:
   // The registry record shouldn't be removed for (already) running mappings.
   if (!cfg->persistent) {
     dout(5) << __func__ << ": cleaning up non-persistent mapping: "
@@ -1173,7 +1222,6 @@ static int do_map(Config *cfg)
     }
   }
 
-close_ret:
   std::unique_lock l{shutdown_lock};
 
   image.close();

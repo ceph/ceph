@@ -115,7 +115,8 @@ PG::PG(
 	pool,
 	coll_ref,
 	shard_services,
-	profile)),
+	profile,
+	*this)),
     recovery_backend(
       std::make_unique<ReplicatedRecoveryBackend>(
 	*this, shard_services, coll_ref, backend.get())),
@@ -135,7 +136,8 @@ PG::PG(
       this),
     obc_loader{
       shard_services,
-      backend.get()},
+      *backend.get(),
+      *this},
     wait_for_active_blocker(this)
 {
   peering_state.set_backend_predicates(
@@ -326,7 +328,6 @@ void PG::on_activate_complete()
       PeeringState::AllReplicasRecovered{});
   }
   publish_stats_to_osd();
-  backend->on_activate_complete();
 }
 
 void PG::prepare_write(pg_info_t &info,
@@ -494,49 +495,61 @@ seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
   });
 }
 
-void PG::do_peering_event(
+PG::interruptible_future<> PG::do_peering_event(
   PGPeeringEvent& evt, PeeringCtx &rctx)
 {
   if (peering_state.pg_has_reset_since(evt.get_epoch_requested()) ||
       peering_state.pg_has_reset_since(evt.get_epoch_sent())) {
     logger().debug("{} ignoring {} -- pg has reset", __func__, evt.get_desc());
+    return interruptor::now();
   } else {
     logger().debug("{} handling {} for pg: {}", __func__, evt.get_desc(), pgid);
-    peering_state.handle_event(
-      evt.get_event(),
-      &rctx);
-    peering_state.write_if_dirty(rctx.transaction);
+    // all peering event handling needs to be run in a dedicated seastar::thread,
+    // so that event processing can involve I/O reqs freely, for example: PG::on_removal,
+    // PG::on_new_interval
+    return interruptor::async([this, &evt, &rctx] {
+      peering_state.handle_event(
+        evt.get_event(),
+        &rctx);
+      peering_state.write_if_dirty(rctx.transaction);
+    });
   }
 }
 
-void PG::handle_advance_map(
+seastar::future<> PG::handle_advance_map(
   cached_map_t next_map, PeeringCtx &rctx)
 {
-  vector<int> newup, newacting;
-  int up_primary, acting_primary;
-  next_map->pg_to_up_acting_osds(
-    pgid.pgid,
-    &newup, &up_primary,
-    &newacting, &acting_primary);
-  peering_state.advance_map(
-    next_map,
-    peering_state.get_osdmap(),
-    newup,
-    up_primary,
-    newacting,
-    acting_primary,
-    rctx);
-  osdmap_gate.got_map(next_map->get_epoch());
+  return seastar::async([this, next_map=std::move(next_map), &rctx] {
+    vector<int> newup, newacting;
+    int up_primary, acting_primary;
+    next_map->pg_to_up_acting_osds(
+      pgid.pgid,
+      &newup, &up_primary,
+      &newacting, &acting_primary);
+    peering_state.advance_map(
+      next_map,
+      peering_state.get_osdmap(),
+      newup,
+      up_primary,
+      newacting,
+      acting_primary,
+      rctx);
+    osdmap_gate.got_map(next_map->get_epoch());
+  });
 }
 
-void PG::handle_activate_map(PeeringCtx &rctx)
+seastar::future<> PG::handle_activate_map(PeeringCtx &rctx)
 {
-  peering_state.activate_map(rctx);
+  return seastar::async([this, &rctx] {
+    peering_state.activate_map(rctx);
+  });
 }
 
-void PG::handle_initialize(PeeringCtx &rctx)
+seastar::future<> PG::handle_initialize(PeeringCtx &rctx)
 {
-  peering_state.handle_event(PeeringState::Initialize{}, &rctx);
+  return seastar::async([this, &rctx] {
+    peering_state.handle_event(PeeringState::Initialize{}, &rctx);
+  });
 }
 
 
@@ -581,10 +594,7 @@ PG::submit_transaction(
   }
 
   epoch_t map_epoch = get_osdmap_epoch();
-
-  if (__builtin_expect(osd_op_p.at_version.epoch != map_epoch, false)) {
-    throw crimson::common::actingset_changed(is_primary());
-  }
+  ceph_assert(!has_reset_since(osd_op_p.at_version.epoch));
 
   peering_state.pre_submit_op(obc->obs.oi.soid, log_entries, osd_op_p.at_version);
   peering_state.append_log_with_trim_to_updated(std::move(log_entries), osd_op_p.at_version,
@@ -1190,7 +1200,7 @@ void PG::on_change(ceph::os::Transaction &t) {
   logger().debug("{} {}:", *this, __func__);
   obc_loader.notify_on_change(is_primary());
   recovery_backend->on_peering_interval_change(t);
-  backend->on_actingset_changed({ is_primary() });
+  backend->on_actingset_changed(is_primary());
   wait_for_active_blocker.unblock();
   if (is_primary()) {
     logger().debug("{} {}: requeueing", *this, __func__);

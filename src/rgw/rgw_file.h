@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_FILE_H
-#define RGW_FILE_H
+#pragma once
 
 #include "include/rados/rgw_file.h"
 
@@ -869,7 +868,7 @@ namespace rgw {
 
     RGWFileHandle::FHCache fh_cache;
     RGWFileHandle::FhLRU fh_lru;
-    
+
     std::string uid; // should match user.user_id, iiuc
 
     std::unique_ptr<rgw::sal::User> user;
@@ -1044,7 +1043,7 @@ namespace rgw {
 			     const uint32_t flags = RGWFileHandle::FLAG_NONE) {
       using std::get;
 
-      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang 
+      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang
       // the cast transfers a lvalue into a rvalue  in the ctor
       // check the commit message for the full details
       LookupFHResult fhr { nullptr, uint32_t(RGWFileHandle::FLAG_NONE) };
@@ -1087,7 +1086,7 @@ namespace rgw {
 			     const uint32_t flags = RGWFileHandle::FLAG_NONE) {
       using std::get;
 
-      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang 
+      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang
       // the cast transfers a lvalue into a rvalue  in the ctor
       // check the commit message for the full details
       LookupFHResult fhr { nullptr, uint32_t(RGWFileHandle::FLAG_NONE) };
@@ -1237,8 +1236,8 @@ namespace rgw {
 
     MkObjResult create(RGWFileHandle* parent, const char *name, struct stat *st,
 		      uint32_t mask, uint32_t flags);
-    
-    MkObjResult symlink(RGWFileHandle* parent, const char *name, 
+
+    MkObjResult symlink(RGWFileHandle* parent, const char *name,
                const char *link_path, struct stat *st, uint32_t mask, uint32_t flags);
 
     MkObjResult mkdir(RGWFileHandle* parent, const char *name, struct stat *st,
@@ -2855,5 +2854,3 @@ public:
 
 
 } /* namespace rgw */
-
-#endif /* RGW_FILE_H */

@@ -415,7 +415,10 @@ public:
   }
 
   void rebuild_missing_set_with_deletes(PGLog &pglog) final {
-    ceph_assert(0 == "Impossible for crimson");
+    pglog.rebuild_missing_set_with_deletes_crimson(
+      shard_services.get_store(),
+      coll_ref,
+      peering_state.get_info()).get();
   }
 
   PerfCounters &get_peering_perf() final {
@@ -497,12 +500,12 @@ public:
 
   seastar::future<> read_state(crimson::os::FuturizedStore* store);
 
-  void do_peering_event(
+  interruptible_future<> do_peering_event(
     PGPeeringEvent& evt, PeeringCtx &rctx);
 
-  void handle_advance_map(cached_map_t next_map, PeeringCtx &rctx);
-  void handle_activate_map(PeeringCtx &rctx);
-  void handle_initialize(PeeringCtx &rctx);
+  seastar::future<> handle_advance_map(cached_map_t next_map, PeeringCtx &rctx);
+  seastar::future<> handle_activate_map(PeeringCtx &rctx);
+  seastar::future<> handle_initialize(PeeringCtx &rctx);
 
   static hobject_t get_oid(const hobject_t& hobj);
   static RWState::State get_lock_type(const OpInfo &op_info);
