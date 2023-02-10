@@ -145,7 +145,7 @@ struct ReservingReplicas;   ///< securing scrub resources from replicas' OSDs
 struct ActiveScrubbing;	    ///< the active state for a Primary. A sub-machine.
 struct ReplicaWaitUpdates;  ///< an active state for a replica. Waiting for all
 			    ///< active operations to finish.
-struct ActiveReplica;	    ///< an active state for a replica.
+struct ReplicaBuildingMap;	    ///< an active state for a replica.
 
 
 class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
@@ -311,7 +311,7 @@ struct NotActive : sc::state<NotActive, ScrubMachine>, NamedSimply {
 	      // a scrubbing that was initiated at recovery completion:
 	      sc::custom_reaction<AfterRepairScrub>,
 	      sc::transition<StartReplica, ReplicaWaitUpdates>,
-	      sc::transition<StartReplicaNoWait, ActiveReplica>>;
+	      sc::transition<StartReplicaNoWait, ReplicaBuildingMap>>;
   sc::result react(const StartScrub&);
   sc::result react(const AfterRepairScrub&);
 };
@@ -528,8 +528,8 @@ struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine>,
 };
 
 
-struct ActiveReplica : sc::state<ActiveReplica, ScrubMachine>, NamedSimply {
-  explicit ActiveReplica(my_context ctx);
+struct ReplicaBuildingMap : sc::state<ReplicaBuildingMap, ScrubMachine>, NamedSimply {
+  explicit ReplicaBuildingMap(my_context ctx);
   using reactions = mpl::list<sc::custom_reaction<SchedReplica>,
 			      sc::custom_reaction<FullReset>>;
 
