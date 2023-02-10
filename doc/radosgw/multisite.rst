@@ -316,62 +316,63 @@ service:
 
 .. _secondary-zone-label:
 
-Configure Secondary Zones
-=========================
+Configuring Secondary Zones
+===========================
 
-Zones within a zone group replicate all data to ensure that each zone
-has the same data. When creating the secondary zone, execute all of the
-following operations on a host identified to serve the secondary zone.
+Zones that are within a zone group replicate all data in order to ensure that
+every zone has the same data. When creating a secondary zone, run the following
+operations on a host identified to serve the secondary zone.
 
-.. note:: To add a third zone, follow the same procedures as for adding the
-          secondary zone. Use different zone name.
+.. note:: To add a tertiary zone, follow the same procedures used for adding a
+   secondary zone. Be sure to specify a different zone name.
 
-.. important:: You must execute metadata operations, such as user creation, on a
-               host within the master zone. The master zone and the secondary zone
-               can receive bucket operations, but the secondary zone redirects
-               bucket operations to the master zone. If the master zone is down,
-               bucket operations will fail.
+.. important:: Metadata operations (for example, user creation) must be
+   executed on a host within the master zone. Bucket operations can be received
+   by the master zone or the secondary zone, but the secondary zone will
+   redirect bucket operations to the master zone. If the master zone is down,
+   bucket operations will fail.
 
-Pull the Realm
---------------
+Pulling the Realm Configuration
+-------------------------------
 
-Using the URL path, access key and secret of the master zone in the
-master zone group, pull the realm configuration to the host. To pull a
-non-default realm, specify the realm using the ``--rgw-realm`` or
-``--realm-id`` configuration options.
+The URL path, access key, and secret of the master zone in the master zone
+group are used to pull the realm configuration to the host. When pulling the
+configuration of a non-default realm, specify the realm using the
+``--rgw-realm`` or ``--realm-id`` configuration options.
 
 .. prompt:: bash #
 
-   radosgw-admin realm pull --url={url-to-master-zone-gateway} --access-key={access-key} --secret={secret}
+   radosgw-admin realm pull --url={url-to-master-zone-gateway}
+   --access-key={access-key} --secret={secret}
 
-.. note:: Pulling the realm also retrieves the remote's current period
-          configuration, and makes it the current period on this host as well.
+.. note:: Pulling the realm configuration also retrieves the remote's current
+   period configuration, and makes it the current period on this host as well.
 
-If this realm is the default realm or the only realm, make the realm the
-default realm.
+If this realm is the only realm, run the following command to make it the
+default realm:
 
 .. prompt:: bash #
 
    radosgw-admin realm default --rgw-realm={realm-name}
 
-Create a Secondary Zone
------------------------
+Creating a Secondary Zone
+-------------------------
 
-.. important:: Zones must be created on a Ceph Object Gateway node that will be
-               within the zone.
+.. important:: When a zone is created, it must be on a Ceph Object Gateway node
+   within the zone.
 
-Create a secondary zone for the multi-site configuration by opening a
+In order to create a secondary zone for the multi-site configuration, open a
 command line interface on a host identified to serve the secondary zone.
-Specify the zone group ID, the new zone name and an endpoint for the
-zone. **DO NOT** use the ``--master`` or ``--default`` flags. In Kraken,
-all zones run in an active-active configuration by
-default; that is, a gateway client may write data to any zone and the
-zone will replicate the data to all other zones within the zone group.
-If the secondary zone should not accept write operations, specify the
-``--read-only`` flag to create an active-passive configuration between
-the master zone and the secondary zone. Additionally, provide the
-``access_key`` and ``secret_key`` of the generated system user stored in
-the master zone of the master zone group. Execute the following:
+Specify the zone group ID, the new zone name, and an endpoint for the zone.
+**DO NOT** use the ``--master`` or ``--default`` flags. Beginning in Kraken,
+all zones run in an active-active configuration by default, which means that a
+gateway client may write data to any zone and the zone will replicate the data
+to all other zones within the zone group.  If you want to prevent the secondary
+zone from accepting write operations, include the ``--read-only`` flag in the
+command in order to create an active-passive configuration between the master
+zone and the secondary zone. In any case, don't forget to provide the
+``access_key`` and ``secret_key`` of the generated system user that is stored
+in the master zone of the master zone group. Run the following command:
 
 .. prompt:: bash #
 
@@ -382,26 +383,26 @@ the master zone of the master zone group. Execute the following:
                                 [--read-only]
 
 For example:
-
+    
+    
 .. prompt:: bash #
 
    radosgw-admin zone create --rgw-zonegroup=us --rgw-zone=us-west \
                                 --access-key={system-key} --secret={secret} \
                                 --endpoints=http://rgw2:80
 
-.. important:: The following steps assume a multi-site configuration using newly
-               installed systems that aren’t storing data. **DO NOT DELETE** the
-               ``default`` zone and its pools if you are already using it to store
-               data, or the data will be lost and unrecoverable.
+.. important:: The following steps assume a multi-site configuration that uses
+   newly installed systems that have not yet begun storing data. **DO NOT
+   DELETE the ``default`` zone or its pools** if you are already using it to
+   store data, or the data will be irretrievably lost.
 
-Delete the default zone if needed.
+Delete the default zone if needed:
 
 .. prompt:: bash #
 
    radosgw-admin zone delete --rgw-zone=default
 
-Finally, delete the default pools in your Ceph storage cluster if
-needed.
+Finally, delete the default pools in your Ceph storage cluster if needed:
 
 .. prompt:: bash #
 
@@ -410,13 +411,13 @@ needed.
    ceph osd pool rm default.rgw.gc default.rgw.gc --yes-i-really-really-mean-it
    ceph osd pool rm default.rgw.log default.rgw.log --yes-i-really-really-mean-it
    ceph osd pool rm default.rgw.users.uid default.rgw.users.uid --yes-i-really-really-mean-it
+   
+Updating the Ceph Configuration File
+------------------------------------
 
-Update the Ceph Configuration File
-----------------------------------
-
-Update the Ceph configuration file on the secondary zone hosts by adding
-the ``rgw_zone`` configuration option and the name of the secondary zone
-to the instance entry.
+To update the Ceph configuration file on the secondary zone hosts, add the
+``rgw_zone`` configuration option and the name of the secondary zone to the
+instance entry.
 
 ::
 
@@ -433,42 +434,41 @@ For example:
     rgw frontends = "civetweb port=80"
     rgw_zone=us-west
 
-Update the Period
------------------
+Updating the Period
+-------------------
 
-After updating the master zone configuration, update the period.
+After updating the master zone configuration, update the period:
 
 .. prompt:: bash #
 
    radosgw-admin period update --commit
 
 .. note:: Updating the period changes the epoch, and ensures that other zones
-          will receive the updated configuration.
+   will receive the updated configuration.
+          
+Starting the Gateway
+--------------------
 
-Start the Gateway
------------------
-
-On the object gateway host, start and enable the Ceph Object Gateway
-service:
+To start the gateway, start and enable the Ceph Object Gateway service by
+running the following commands on the object gateway host:
 
 .. prompt:: bash #
 
    systemctl start ceph-radosgw@rgw.`hostname -s`
    systemctl enable ceph-radosgw@rgw.`hostname -s`
 
-Check Synchronization Status
-----------------------------
+Checking Synchronization Status
+-------------------------------
 
-Once the secondary zone is up and running, check the synchronization
-status. Synchronization copies users and buckets created in the master
-zone to the secondary zone.
+After the secondary zone is up and running, you can check the synchronization
+status. The process of synchronization will copy users and buckets that were
+created in the master zone from the master zone to the secondary zone.
 
 .. prompt:: bash #
 
    radosgw-admin sync status
 
-The output will provide the status of synchronization operations. For
-example:
+The output reports the status of synchronization operations. For example:
 
 ::
 
@@ -486,21 +486,24 @@ example:
                           data is caught up with source
 
 .. note:: Secondary zones accept bucket operations; however, secondary zones
-          redirect bucket operations to the master zone and then synchronize
-          with the master zone to receive the result of the bucket operations.
-          If the master zone is down, bucket operations executed on the
-          secondary zone will fail, but object operations should succeed.
+   redirect bucket operations to the master zone and then synchronize with the
+   master zone to receive the result of the bucket operations. If the master
+   zone is down, bucket operations executed on the secondary zone will fail,
+   but object operations should succeed.
+          
+          
+Verifying an Object
+-------------------
 
-Verification of an Object
--------------------------
+By default, after the successful synchronization of an object there is no
+subsequent verification of the object. However, you can enable verification by
+setting :confval:`rgw_sync_obj_etag_verify` to ``true``. After this value is
+set to true, an MD5 checksum is used to verify the integrity of the data that
+was transferred from the source to the destination. This ensures the integrity
+of any object that has been fetched from a remote server over HTTP (including
+multisite sync). This option may decrease the performance of your RGW because
+it requires more computation.
 
-By default, the objects are not verified again after the synchronization of an
-object was successful. To enable that, you can set :confval:`rgw_sync_obj_etag_verify`
-to ``true``. After enabling the optional objects that will be synchronized
-going forward, an additional MD5 checksum will verify that it is computed on
-the source and the destination. This is to ensure the integrity of the objects
-fetched from a remote server over HTTP including multisite sync. This option
-can decrease the performance of your RGW as more computation is needed.
 
 Maintenance
 ===========
