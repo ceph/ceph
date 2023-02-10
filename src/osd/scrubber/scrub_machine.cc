@@ -629,7 +629,7 @@ sc::result ReplicaWaitUpdates::react(const ReplicaPushesUpd&)
   if (scrbr->pending_active_pushes() == 0) {
 
     // done waiting
-    return transit<ActiveReplica>();
+    return transit<ReplicaBuildingMap>();
   }
 
   return discard_event();
@@ -644,23 +644,23 @@ sc::result ReplicaWaitUpdates::react(const FullReset&)
   return transit<NotActive>();
 }
 
-// ----------------------- ActiveReplica -----------------------------------
+// ----------------------- ReplicaBuildingMap -----------------------------------
 
-ActiveReplica::ActiveReplica(my_context ctx)
+ReplicaBuildingMap::ReplicaBuildingMap(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "ActiveReplica")
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "ReplicaBuildingMap")
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "-- state -->> ActiveReplica" << dendl;
+  dout(10) << "-- state -->> ReplicaBuildingMap" << dendl;
   // and as we might have skipped ReplicaWaitUpdates:
   scrbr->on_replica_init();
   post_event(SchedReplica{});
 }
 
-sc::result ActiveReplica::react(const SchedReplica&)
+sc::result ReplicaBuildingMap::react(const SchedReplica&)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ActiveReplica::react(const SchedReplica&). is_preemptable? "
+  dout(10) << "ReplicaBuildingMap::react(const SchedReplica&). is_preemptable? "
 	   << scrbr->get_preemptor().is_preemptable() << dendl;
 
   if (scrbr->get_preemptor().was_preempted()) {
@@ -683,9 +683,9 @@ sc::result ActiveReplica::react(const SchedReplica&)
 /**
  * the event poster is handling the scrubber reset
  */
-sc::result ActiveReplica::react(const FullReset&)
+sc::result ReplicaBuildingMap::react(const FullReset&)
 {
-  dout(10) << "ActiveReplica::react(const FullReset&)" << dendl;
+  dout(10) << "ReplicaBuildingMap::react(const FullReset&)" << dendl;
   return transit<NotActive>();
 }
 
