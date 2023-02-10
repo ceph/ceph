@@ -83,11 +83,6 @@ seastar::future<> PeeringEvent<T>::with_pg(
 	});
     }).then_interruptible([this, pg](auto) {
       return this->template enter_stage<interruptor>(pp(*pg).process);
-    }).then_interruptible([this, pg] {
-      // TODO: likely we should synchronize also with the pg log-based
-      // recovery.
-      return this->template enter_stage<interruptor>(
-	BackfillRecovery::bp(*pg).process);
     }).then_interruptible([this, pg, &shard_services] {
       return pg->do_peering_event(evt, ctx
       ).then_interruptible([this, pg, &shard_services] {

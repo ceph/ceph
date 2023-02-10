@@ -172,9 +172,9 @@ PglogBasedRecovery::do_recovery()
   });
 }
 
-BackfillRecovery::BackfillRecoveryPipeline &BackfillRecovery::bp(PG &pg)
+PGPeeringPipeline &BackfillRecovery::bp(PG &pg)
 {
-  return pg.backfill_pipeline;
+  return pg.peering_request_pg_pipeline;
 }
 
 BackfillRecovery::interruptible_future<bool>
