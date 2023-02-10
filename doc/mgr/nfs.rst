@@ -24,12 +24,14 @@ see :ref:`nfs-ganesha-config`.
 NFS Cluster management
 ======================
 
+.. _nfs-module-cluster-create:
+
 Create NFS Ganesha Cluster
 --------------------------
 
 .. code:: bash
 
-    $ ceph nfs cluster create <cluster_id> [<placement>] [--port <port>] [--ingress --virtual-ip <ip>]
+    $ nfs cluster create <cluster_id> [<placement>] [--ingress] [--virtual_ip <value>] [--ingress-mode {default|keepalive-only}] [--port <int>]
 
 This creates a common recovery pool for all NFS Ganesha daemons, new user based on
 ``cluster_id``, and a common NFS Ganesha config RADOS object.
@@ -93,6 +95,18 @@ NFS endpoint that all clients can use to mount.  Ceph will take care
 of the details of NFS redirecting traffic on the virtual IP to the
 appropriate backend NFS servers, and redeploying NFS servers when they
 fail.
+
+If a user additionally supplies ``--ingress-mode keepalive-only`` a
+partial *ingress* service will be deployed that still provides a virtual
+IP, but has nfs directly binding to that virtual IP and leaves out any
+sort of load balancing or traffic redirection. This setup will restrict
+users to deploying only 1 nfs daemon as multiple cannot bind to the same
+port on the virtual IP.
+
+Instead providing ``--ingress-mode default`` will result in the same setup
+as not providing the ``--ingress-mode`` flag. In this setup keepalived will be
+deployed to handle forming the virtual IP and haproxy will be deployed
+to handle load balancing and traffic redirection.
 
 Enabling ingress via the ``ceph nfs cluster create`` command deploys a
 simple ingress configuration with the most common configuration
