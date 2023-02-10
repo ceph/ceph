@@ -9,7 +9,7 @@
 #include <atomic>
 #include <memory>
 #include <boost/asio/io_context.hpp>
-#include <boost/asio/io_context_strand.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/asio/post.hpp>
 
 namespace librbd {
@@ -38,7 +38,8 @@ public:
 private:
   CephContext* m_cct;
   boost::asio::io_context& m_io_context;
-  std::unique_ptr<boost::asio::io_context::strand> m_strand;
+  using executor_type = boost::asio::io_context::executor_type;
+  std::unique_ptr<boost::asio::strand<executor_type>> m_strand;
 
   std::atomic<uint64_t> m_queued_ops;
 
