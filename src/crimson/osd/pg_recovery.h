@@ -11,8 +11,13 @@
 #include "crimson/osd/pg_recovery_listener.h"
 #include "crimson/osd/scheduler/scheduler.h"
 #include "crimson/osd/shard_services.h"
+#include "crimson/osd/recovery_backend.h"
 
 #include "osd/object_state.h"
+
+namespace crimson::osd {
+class UrgentRecovery;
+}
 
 class MOSDPGBackfillRemove;
 class PGBackend;
