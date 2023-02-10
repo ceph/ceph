@@ -113,6 +113,54 @@ A few notes:
     a *port* property that is not 2049 to avoid conflicting with the
     ingress service, which could be placed on the same host(s).
 
+NFS with virtual IP but no haproxy
+----------------------------------
+
+Cephadm also supports deploying nfs with keepalived but not haproxy. This
+offers a virtual ip supported by keepalived that the nfs daemon can directly bind
+to instead of having traffic go through haproxy.
+
+In this setup, you'll either want to set up the service using the nfs module
+(see :ref:`nfs-module-cluster-create`) or place the ingress service first, so
+the virtual IP is present for the nfs daemon to bind to. The ingress service
+should include the attribute ``keepalive_only`` set to true. For example
+
+.. code-block:: yaml
+
+    service_type: ingress
+    service_id: nfs.foo
+    placement:
+      count: 1
+      hosts:
+      - host1
+      - host2
+      - host3
+    spec:
+      backend_service: nfs.foo
+      monitor_port: 9049
+      virtual_ip: 192.168.122.100/24
+      keepalive_only: true
+
+Then, an nfs service could be created that specifies a ``virtual_ip`` attribute
+that will tell it to bind to that specific IP.
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: foo
+    placement:
+      count: 1
+      hosts:
+      - host1
+      - host2
+      - host3
+    spec:
+      port: 2049
+      virtual_ip: 192.168.122.100
+
+Note that in these setups, one should make sure to include ``count: 1`` in the
+nfs placement, as it's only possible for one nfs daemon to bind to the virtual IP.
+
 Further Reading
 ===============
 
