@@ -12,21 +12,21 @@ iSCSI Initiator for Linux
 
 Install the iSCSI initiator and multipath tools:
 
-   ::
+.. prompt:: bash #
 
-       # yum install iscsi-initiator-utils
-       # yum install device-mapper-multipath
+   yum install iscsi-initiator-utils
+   yum install device-mapper-multipath
 
 **Configuring:**
 
 #. Create the default ``/etc/multipath.conf`` file and enable the
    ``multipathd`` service:
 
-   ::
+   .. prompt:: bash #
 
-       # mpathconf --enable --with_multipathd y
+      mpathconf --enable --with_multipathd y
 
-#. Add the following to ``/etc/multipath.conf`` file:
+#. Add the following to the ``/etc/multipath.conf`` file:
 
    ::
 
@@ -48,15 +48,15 @@ Install the iSCSI initiator and multipath tools:
 
 #. Restart the ``multipathd`` service:
 
-   ::
+   .. prompt:: bash #
 
-       # systemctl reload multipathd
+      systemctl reload multipathd
 
 **iSCSI Discovery and Setup:**
 
 #. Enable CHAP authentication and provide the initiator CHAP username
    and password by uncommenting and setting the following options in
-   ``/etc/iscsi/iscsid.conf`` file:
+   the ``/etc/iscsi/iscsid.conf`` file:
 
    ::
 
@@ -64,7 +64,7 @@ Install the iSCSI initiator and multipath tools:
        node.session.auth.username = myusername
        node.session.auth.password = mypassword
 
-   If mutual (bidirectional) authentication is used, also provide the
+   If you intend to use mutual (bidirectional) authentication, provide the
    target CHAP username and password:
 
    ::
@@ -74,40 +74,46 @@ Install the iSCSI initiator and multipath tools:
 
 #. Discover the target portals:
 
+   .. prompt:: bash #
+
+      iscsiadm -m discovery -t st -p 192.168.56.101
+
    ::
 
-       # iscsiadm -m discovery -t st -p 192.168.56.101
        192.168.56.101:3260,1 iqn.2003-01.org.linux-iscsi.rheln1
        192.168.56.102:3260,2 iqn.2003-01.org.linux-iscsi.rheln1
 
-#. Login to target:
+#. Log in to the target:
 
-   ::
+   .. prompt:: bash #
 
-       # iscsiadm -m node -T iqn.2003-01.org.linux-iscsi.rheln1 -l
+      iscsiadm -m node -T iqn.2003-01.org.linux-iscsi.rheln1 -l
 
 **Multipath IO Setup:**
 
-The multipath daemon (``multipathd``), will set up devices automatically
-based on the ``multipath.conf`` settings. Running the ``multipath``
-command show devices setup in a failover configuration with a priority
-group for each path.
+#. The multipath daemon (``multipathd``) uses the ``multipath.conf`` settings
+   to set up devices automatically. Running the ``multipath`` command shows
+   that the devices have been set up in a failover configuration. Notice that
+   each path has been placed into its own priority group: 
 
-::
+   .. prompt:: bash #
 
-    # multipath -ll
-    mpathbt (360014059ca317516a69465c883a29603) dm-1 LIO-ORG ,IBLOCK
-    size=1.0G features='0' hwhandler='1 alua' wp=rw
-    |-+- policy='queue-length 0' prio=50 status=active
-    | `- 28:0:0:1 sde  8:64  active ready running
-    `-+- policy='queue-length 0' prio=10 status=enabled
-      `- 29:0:0:1 sdc  8:32  active ready running
-
-You should now be able to use the RBD image like you would a normal
-multipath’d iSCSI disk.
-
-4. Logout from target:
+      multipath -ll
 
    ::
 
-      # iscsiadm -m node -T iqn.2003-01.org.linux-iscsi.rheln1 -u
+       mpathbt (360014059ca317516a69465c883a29603) dm-1 LIO-ORG ,IBLOCK
+       size=1.0G features='0' hwhandler='1 alua' wp=rw
+       |-+- policy='queue-length 0' prio=50 status=active
+       | `- 28:0:0:1 sde  8:64  active ready running
+       `-+- policy='queue-length 0' prio=10 status=enabled
+         `- 29:0:0:1 sdc  8:32  active ready running
+
+   You should now be able to use the RBD image in the same way that you would
+   use a normal multipath iSCSI disk.
+
+#. Log out of the target:
+
+   .. prompt:: bash #
+
+      iscsiadm -m node -T iqn.2003-01.org.linux-iscsi.rheln1 -u

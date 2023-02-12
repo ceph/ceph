@@ -4,6 +4,7 @@
 #include "segment_allocator.h"
 
 #include <fmt/format.h>
+#include <fmt/os.h>
 
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/async_cleaner.h"
@@ -15,7 +16,7 @@ namespace crimson::os::seastore::journal {
 SegmentAllocator::SegmentAllocator(
   JournalTrimmer *trimmer,
   data_category_t category,
-  reclaim_gen_t gen,
+  rewrite_gen_t gen,
   SegmentProvider &sp,
   SegmentSeqAllocator &ssa)
   : print_name{fmt::format("{}_G{}", category, gen)},

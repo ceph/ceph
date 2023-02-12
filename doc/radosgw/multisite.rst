@@ -6,33 +6,39 @@ Multi-Site
 
 .. versionadded:: Jewel
 
-A single zone configuration typically consists of one zone group containing one
-zone and one or more `ceph-radosgw` instances where you may load-balance gateway
-client requests between the instances. In a single zone configuration, typically
-multiple gateway instances point to a single Ceph storage cluster. However, Kraken
-supports several multi-site configuration options for the Ceph Object Gateway:
+A single-zone configuration typically consists of (1) one "zone group", which
+contains one zone and (2) one or more `ceph-radosgw` instances between which
+gateway client requests are load-balanced. In a typical single-zone
+configuration, multiple gateway instances make use of a single Ceph storage
+cluster.  
 
-- **Multi-zone:** A more advanced configuration consists of one zone group and
-  multiple zones, each zone with one or more `ceph-radosgw` instances. Each zone
-  is backed by its own Ceph Storage Cluster. Multiple zones in a zone group
-  provides disaster recovery for the zone group should one of the zones experience
-  a significant failure. In Kraken, each zone is active and may receive write
-  operations. In addition to disaster recovery, multiple active zones may also
-  serve as a foundation for content delivery networks.
+Beginning with the Kraken release, Ceph supports several multi-site
+configurations for the Ceph Object Gateway:
 
-- **Multi-zone-group:** Formerly called 'regions', Ceph Object Gateway can also
-  support multiple zone groups, each zone group with one or more zones. Objects
-  stored to zones in one zone group within the same realm as another zone
-  group will share a global object namespace, ensuring unique object IDs across
-  zone groups and zones.
+- **Multi-zone:** A more advanced topology, the "multi-zone" configuration, is
+  possible. This multi-zone configuration consists of one zone group and
+  multiple zones, with each zone comprising one or more `ceph-radosgw`
+  instances. Each zone is backed by its own Ceph Storage Cluster. The presence
+  of multiple zones in a given zone group provides disaster recovery for that
+  zone group in the event that one of the zones experiences a significant
+  failure. Beginning with Kraken, each zone is active and can receive write
+  operations. A multi-zone configuration with multiple active zones enhances
+  disaster recovery and can also be used as a foundation for content delivery
+  networks. 
 
-- **Multiple Realms:** In Kraken, the Ceph Object Gateway supports the notion
-  of realms, which can be a single zone group or multiple zone groups and
-  a globally unique namespace for the realm. Multiple realms provide the ability
-  to support numerous configurations and namespaces.
+- **Multi-zone-groups:** Formerly called 'regions'. Ceph Object Gateway
+  supports multiple zone groups, with each zone group containing one or more
+  zones. Objects that are stored to zones in one zone group within the same
+  realm as another zone group share a global object namespace, which ensures
+  unique object IDs across zone groups and zones.
 
-Replicating object data between zones within a zone group looks something
-like this:
+- **Multiple Realms:** Beginning with the Kraken Ceph release, the Ceph Object
+  Gateway supports something called "realms". Realms have a globally unique
+  namespace and can be a either a single-zone group or multiple-zone groups.
+  Multiple realms provide support for multiple configurations and namespaces.
+
+The replication of object data between zones within a zone group looks
+something like this:
 
 .. image:: ../images/zone-sync2.png
    :align: center
@@ -43,46 +49,44 @@ Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/3
 Functional Changes from Infernalis
 ==================================
 
-In Kraken, you can configure each Ceph Object Gateway to
-work in an active-active zone configuration, allowing for writes to
-non-master zones.
+Beginning with Kraken, each Ceph Object Gateway can be configured to work in an
+active-active zone configuration, allowing for writes to non-master zones.
 
-The multi-site configuration is stored within a container called a
-"realm." The realm stores zone groups, zones, and a time "period" with
-multiple epochs for tracking changes to the configuration. In Kraken,
-the ``ceph-radosgw`` daemons handle the synchronization,
-eliminating the need for a separate synchronization agent. Additionally,
-the new approach to synchronization allows the Ceph Object Gateway to
-operate with an "active-active" configuration instead of
-"active-passive".
+The multi-site configuration is stored within a container called a "realm". The
+realm stores zone groups, zones, and a time "period" with multiple epochs for
+tracking changes to the configuration. Beginning with Kraken, the
+``ceph-radosgw`` daemons handle the synchronization, which eliminates the need
+for a separate synchronization agent. Additionally, the new approach to
+synchronization allows the Ceph Object Gateway to operate with an
+"active-active" configuration instead of "active-passive".
 
 Requirements and Assumptions
 ============================
 
-A multi-site configuration requires at least two Ceph storage clusters,
-preferably given a distinct cluster name. At least two Ceph object
-gateway instances, one for each Ceph storage cluster.
+A multi-site configuration requires at least two Ceph storage clusters. The
+multi-site configuration must have at least two Ceph object gateway instances
+(one for each Ceph storage cluster).
 
-This guide assumes at least two Ceph storage clusters are in geographically
-separate locations; however, the configuration can work on the same
-site. This guide also assumes two Ceph object gateway servers named
+This guide assumes that at least two Ceph storage clusters are in
+geographically separate locations; however, the configuration can work on the
+same site. This guide also assumes two Ceph object gateway servers named
 ``rgw1`` and ``rgw2``.
 
-.. important:: Running a single Ceph storage cluster is NOT recommended unless you have 
-               low latency WAN connections.
+.. important:: Running a single geographically-distributed Ceph storage cluster
+   is NOT recommended unless you have low latency WAN connections.
 
-A multi-site configuration requires a master zone group and a master
-zone. Additionally, each zone group requires a master zone. Zone groups
-may have one or more secondary or non-master zones.
+A multi-site configuration requires a master zone group and a master zone. Each
+zone group requires a master zone. Zone groups may have one or more secondary
+or non-master zones.
 
-In this guide, the ``rgw1`` host will serve as the master zone of the
-master zone group; and, the ``rgw2`` host will serve as the secondary zone
-of the master zone group.
+In this guide, the ``rgw1`` host will serve as the master zone of the master
+zone group; and, the ``rgw2`` host will serve as the secondary zone of the
+master zone group.
 
-See `Pools`_ for instructions on creating and tuning pools for Ceph
-Object Storage.
+See `Pools`_ for instructions on creating and tuning pools for Ceph Object
+Storage.
 
-See `Sync Policy Config`_ for instructions on defining fine grained bucket sync
+See `Sync Policy Config`_ for instructions on defining fine-grained bucket sync
 policy rules.
 
 .. _master-zone-label:
@@ -90,205 +94,189 @@ policy rules.
 Configuring a Master Zone
 =========================
 
-All gateways in a multi-site configuration will retrieve their
-configuration from a ``ceph-radosgw`` daemon on a host within the master
-zone group and master zone. To configure your gateways in a multi-site
-configuration, choose a ``ceph-radosgw`` instance to configure the
-master zone group and master zone.
+All gateways in a multi-site configuration retrieve their configurations from a
+``ceph-radosgw`` daemon that is on a host within both the master zone group and
+the master zone. To configure your gateways in a multi-site configuration,
+choose a ``ceph-radosgw`` instance to configure the master zone group and
+master zone.
 
 Create a Realm
 --------------
 
-A realm contains the multi-site configuration of zone groups and zones
-and also serves to enforce a globally unique namespace within the realm.
+A realm contains the multi-site configuration of zone groups and zones. The
+realm enforces a globally unique namespace within itself.
 
-Create a new realm for the multi-site configuration by opening a command
-line interface on a host identified to serve in the master zone group
-and zone. Then, execute the following:
+#. Create a new realm for the multi-site configuration by opening a command
+   line interface on a host that will serve in the master zone group and zone.
+   Then execute the following:
 
-::
+   .. prompt:: bash #
 
-    # radosgw-admin realm create --rgw-realm={realm-name} [--default]
+      radosgw-admin realm create --rgw-realm={realm-name} [--default]
 
-For example:
+   For example:
 
-::
+   .. prompt:: bash #
 
-    # radosgw-admin realm create --rgw-realm=movies --default
+      radosgw-admin realm create --rgw-realm=movies --default
 
-If the cluster will have a single realm, specify the ``--default`` flag.
-If ``--default`` is specified, ``radosgw-admin`` will use this realm by
-default. If ``--default`` is not specified, adding zone-groups and zones
-requires specifying either the ``--rgw-realm`` flag or the
-``--realm-id`` flag to identify the realm when adding zone groups and
-zones.
+   .. note:: If you intend the cluster to have a single realm, specify the ``--default`` flag.  If ``--default`` is specified, ``radosgw-admin`` uses this realm by default. If ``--default`` is not specified, you must specify either the ``--rgw-realm`` flag or the ``--realm-id`` flag to identify the realm when adding zone groups and zones.
 
-After creating the realm, ``radosgw-admin`` will echo back the realm
-configuration. For example:
+#. After the realm has been created, ``radosgw-admin`` echoes back the realm
+   configuration. For example:
 
-::
+   ::
 
-    {
-        "id": "0956b174-fe14-4f97-8b50-bb7ec5e1cf62",
-        "name": "movies",
-        "current_period": "1950b710-3e63-4c41-a19e-46a715000980",
-        "epoch": 1
-    }
+       {
+           "id": "0956b174-fe14-4f97-8b50-bb7ec5e1cf62",
+           "name": "movies",
+           "current_period": "1950b710-3e63-4c41-a19e-46a715000980",
+           "epoch": 1
+       }
 
-.. note:: Ceph generates a unique ID for the realm, which allows the renaming
-          of a realm if the need arises.
+   .. note:: Ceph generates a unique ID for the realm, which can be used to rename the realm if the need arises.
 
 Create a Master Zone Group
 --------------------------
 
-A realm must have at least one zone group, which will serve as the
-master zone group for the realm.
+A realm must have at least one zone group which serves as the master zone
+group for the realm.
 
-Create a new master zone group for the multi-site configuration by
-opening a command line interface on a host identified to serve in the
-master zone group and zone. Then, execute the following:
+#. To create a new master zone group for the multi-site configuration, open a
+   command-line interface on a host in the master zone group and zone. Then
+   execute the following:
 
-::
+   .. prompt:: bash #
 
-    # radosgw-admin zonegroup create --rgw-zonegroup={name} --endpoints={url} [--rgw-realm={realm-name}|--realm-id={realm-id}] --master --default
+      radosgw-admin zonegroup create --rgw-zonegroup={name} --endpoints={url} [--rgw-realm={realm-name}|--realm-id={realm-id}] --master --default
 
-For example:
+   For example:
 
-::
+   .. prompt:: bash #
 
-    # radosgw-admin zonegroup create --rgw-zonegroup=us --endpoints=http://rgw1:80 --rgw-realm=movies --master --default
+      radosgw-admin zonegroup create --rgw-zonegroup=us --endpoints=http://rgw1:80 --rgw-realm=movies --master --default
 
-If the realm will only have a single zone group, specify the
-``--default`` flag. If ``--default`` is specified, ``radosgw-admin``
-will use this zone group by default when adding new zones. If
-``--default`` is not specified, adding zones will require either the
-``--rgw-zonegroup`` flag or the ``--zonegroup-id`` flag to identify the
-zone group when adding or modifying zones.
+   .. note:: If the realm will have only a single zone group, specify the ``--default`` flag. If ``--default`` is specified, ``radosgw-admin`` uses this zone group by default when adding new zones. If ``--default`` is not specified, you must use either the ``--rgw-zonegroup`` flag or the ``--zonegroup-id`` flag to identify the zone group when adding or modifying zones.
 
-After creating the master zone group, ``radosgw-admin`` will echo back
-the zone group configuration. For example:
+#. After creating the master zone group, ``radosgw-admin`` echoes back the zone
+   group configuration. For example:
 
-::
-
-    {
-        "id": "f1a233f5-c354-4107-b36c-df66126475a6",
-        "name": "us",
-        "api_name": "us",
-        "is_master": "true",
-        "endpoints": [
-            "http:\/\/rgw1:80"
-        ],
-        "hostnames": [],
-        "hostnames_s3website": [],
-        "master_zone": "",
-        "zones": [],
-        "placement_targets": [],
-        "default_placement": "",
-        "realm_id": "0956b174-fe14-4f97-8b50-bb7ec5e1cf62"
-    }
+   ::
+   
+       {
+           "id": "f1a233f5-c354-4107-b36c-df66126475a6",
+           "name": "us",
+           "api_name": "us",
+           "is_master": "true",
+           "endpoints": [
+               "http:\/\/rgw1:80"
+           ],
+           "hostnames": [],
+           "hostnames_s3website": [],
+           "master_zone": "",
+           "zones": [],
+           "placement_targets": [],
+           "default_placement": "",
+           "realm_id": "0956b174-fe14-4f97-8b50-bb7ec5e1cf62"
+       }
 
 Create a Master Zone
 --------------------
 
 .. important:: Zones must be created on a Ceph Object Gateway node that will be
-               within the zone.
+   within the zone.
 
-Create a new master zone for the multi-site configuration by opening a
-command line interface on a host identified to serve in the master zone
-group and zone. Then, execute the following:
+Create a new master zone for the multi-site configuration by opening a command
+line interface on a host that serves in the master zone group and zone. Then
+execute the following:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin zone create --rgw-zonegroup={zone-group-name} \
-                                --rgw-zone={zone-name} \
-                                --master --default \
-                                --endpoints={http://fqdn}[,{http://fqdn}]
-
+   radosgw-admin zone create --rgw-zonegroup={zone-group-name} \
+                               --rgw-zone={zone-name} \
+                               --master --default \
+                               --endpoints={http://fqdn}[,{http://fqdn}]
 
 For example:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin zone create --rgw-zonegroup=us --rgw-zone=us-east \
-                                --master --default \
-                                --endpoints={http://fqdn}[,{http://fqdn}]
+   radosgw-admin zone create --rgw-zonegroup=us --rgw-zone=us-east \
+                               --master --default \
+                               --endpoints={http://fqdn}[,{http://fqdn}]
 
 
 .. note:: The ``--access-key`` and ``--secret`` aren’t specified. These
           settings will be added to the zone once the user is created in the
           next section.
 
-.. important:: The following steps assume a multi-site configuration using newly
-               installed systems that aren’t storing data yet. DO NOT DELETE the
-               ``default`` zone and its pools if you are already using it to store
-               data, or the data will be deleted and unrecoverable.
+.. important:: The following steps assume a multi-site configuration that uses
+   newly installed systems that aren’t storing data yet. DO NOT DELETE the
+   ``default`` zone and its pools if you are already using the zone to store
+   data, or the data will be deleted and unrecoverable.
 
 Delete Default Zone Group and Zone
 ----------------------------------
 
-Delete the ``default`` zone if it exists. Make sure to remove it from
-the default zone group first.
+#. Delete the ``default`` zone if it exists. Remove it from the default zone
+   group first.
 
-::
+   .. prompt:: bash #
 
-    # radosgw-admin zonegroup delete --rgw-zonegroup=default --rgw-zone=default
-    # radosgw-admin period update --commit
-    # radosgw-admin zone delete --rgw-zone=default
-    # radosgw-admin period update --commit
-    # radosgw-admin zonegroup delete --rgw-zonegroup=default
-    # radosgw-admin period update --commit
+      radosgw-admin zonegroup delete --rgw-zonegroup=default --rgw-zone=default
+      radosgw-admin period update --commit
+      radosgw-admin zone delete --rgw-zone=default
+      radosgw-admin period update --commit
+      radosgw-admin zonegroup delete --rgw-zonegroup=default
+      radosgw-admin period update --commit
 
-Finally, delete the ``default`` pools in your Ceph storage cluster if
-they exist.
+#. Delete the ``default`` pools in your Ceph storage cluster if they exist.
 
-.. important:: The following step assumes a multi-site configuration using newly
-               installed systems that aren’t currently storing data. DO NOT DELETE
-               the ``default`` zone group if you are already using it to store
-               data.
+   .. important:: The following step assumes a multi-site configuration that uses newly installed systems that aren’t currently storing data. DO NOT DELETE the ``default`` zone group if you are already using it to store data.
 
-::
-
-    # ceph osd pool rm default.rgw.control default.rgw.control --yes-i-really-really-mean-it
-    # ceph osd pool rm default.rgw.data.root default.rgw.data.root --yes-i-really-really-mean-it
-    # ceph osd pool rm default.rgw.gc default.rgw.gc --yes-i-really-really-mean-it
-    # ceph osd pool rm default.rgw.log default.rgw.log --yes-i-really-really-mean-it
-    # ceph osd pool rm default.rgw.users.uid default.rgw.users.uid --yes-i-really-really-mean-it
+   .. prompt:: bash #
+   
+      ceph osd pool rm default.rgw.control default.rgw.control --yes-i-really-really-mean-it
+      ceph osd pool rm default.rgw.data.root default.rgw.data.root --yes-i-really-really-mean-it
+      ceph osd pool rm default.rgw.gc default.rgw.gc --yes-i-really-really-mean-it
+      ceph osd pool rm default.rgw.log default.rgw.log --yes-i-really-really-mean-it
+      ceph osd pool rm default.rgw.users.uid default.rgw.users.uid --yes-i-really-really-mean-it
 
 Create a System User
 --------------------
 
-The ``ceph-radosgw`` daemons must authenticate before pulling realm and
-period information. In the master zone, create a system user to
-facilitate authentication between daemons.
+#. The ``ceph-radosgw`` daemons must authenticate before pulling realm and
+   period information. In the master zone, create a "system user" to facilitate
+   authentication between daemons.
 
-::
+   .. prompt:: bash #
 
-    # radosgw-admin user create --uid="{user-name}" --display-name="{Display Name}" --system
+      radosgw-admin user create --uid="{user-name}" --display-name="{Display Name}" --system
 
-For example:
+   For example:
 
-::
+   .. prompt:: bash #
 
-    # radosgw-admin user create --uid="synchronization-user" --display-name="Synchronization User" --system
+      radosgw-admin user create --uid="synchronization-user" --display-name="Synchronization User" --system
 
-Make a note of the ``access_key`` and ``secret_key``, as the secondary
-zones will require them to authenticate with the master zone.
+#. Make a note of the ``access_key`` and ``secret_key``. The secondary zones
+   require them to authenticate against the master zone.
 
-Finally, add the system user to the master zone.
+#. Add the system user to the master zone:
 
-::
+   .. prompt:: bash #
 
-    # radosgw-admin zone modify --rgw-zone=us-east --access-key={access-key} --secret={secret}
-    # radosgw-admin period update --commit
+      radosgw-admin zone modify --rgw-zone={zone-name} --access-key={access-key} --secret={secret}
+      radosgw-admin period update --commit
 
 Update the Period
 -----------------
 
 After updating the master zone configuration, update the period.
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin period update --commit
+   radosgw-admin period update --commit
 
 .. note:: Updating the period changes the epoch, and ensures that other zones
           will receive the updated configuration.
@@ -321,114 +309,115 @@ Start the Gateway
 On the object gateway host, start and enable the Ceph Object Gateway
 service:
 
-::
+.. prompt:: bash #
 
-    # systemctl start ceph-radosgw@rgw.`hostname -s`
-    # systemctl enable ceph-radosgw@rgw.`hostname -s`
+   systemctl start ceph-radosgw@rgw.`hostname -s`
+   systemctl enable ceph-radosgw@rgw.`hostname -s`
 
 .. _secondary-zone-label:
 
-Configure Secondary Zones
-=========================
+Configuring Secondary Zones
+===========================
 
-Zones within a zone group replicate all data to ensure that each zone
-has the same data. When creating the secondary zone, execute all of the
-following operations on a host identified to serve the secondary zone.
+Zones that are within a zone group replicate all data in order to ensure that
+every zone has the same data. When creating a secondary zone, run the following
+operations on a host identified to serve the secondary zone.
 
-.. note:: To add a third zone, follow the same procedures as for adding the
-          secondary zone. Use different zone name.
+.. note:: To add a tertiary zone, follow the same procedures used for adding a
+   secondary zone. Be sure to specify a different zone name.
 
-.. important:: You must execute metadata operations, such as user creation, on a
-               host within the master zone. The master zone and the secondary zone
-               can receive bucket operations, but the secondary zone redirects
-               bucket operations to the master zone. If the master zone is down,
-               bucket operations will fail.
+.. important:: Metadata operations (for example, user creation) must be
+   executed on a host within the master zone. Bucket operations can be received
+   by the master zone or the secondary zone, but the secondary zone will
+   redirect bucket operations to the master zone. If the master zone is down,
+   bucket operations will fail.
 
-Pull the Realm
---------------
+Pulling the Realm Configuration
+-------------------------------
 
-Using the URL path, access key and secret of the master zone in the
-master zone group, pull the realm configuration to the host. To pull a
-non-default realm, specify the realm using the ``--rgw-realm`` or
-``--realm-id`` configuration options.
+The URL path, access key, and secret of the master zone in the master zone
+group are used to pull the realm configuration to the host. When pulling the
+configuration of a non-default realm, specify the realm using the
+``--rgw-realm`` or ``--realm-id`` configuration options.
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin realm pull --url={url-to-master-zone-gateway} --access-key={access-key} --secret={secret}
+   radosgw-admin realm pull --url={url-to-master-zone-gateway}
+   --access-key={access-key} --secret={secret}
 
-.. note:: Pulling the realm also retrieves the remote's current period
-          configuration, and makes it the current period on this host as well.
+.. note:: Pulling the realm configuration also retrieves the remote's current
+   period configuration, and makes it the current period on this host as well.
 
-If this realm is the default realm or the only realm, make the realm the
-default realm.
+If this realm is the only realm, run the following command to make it the
+default realm:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin realm default --rgw-realm={realm-name}
+   radosgw-admin realm default --rgw-realm={realm-name}
 
-Create a Secondary Zone
------------------------
+Creating a Secondary Zone
+-------------------------
 
-.. important:: Zones must be created on a Ceph Object Gateway node that will be
-               within the zone.
+.. important:: When a zone is created, it must be on a Ceph Object Gateway node
+   within the zone.
 
-Create a secondary zone for the multi-site configuration by opening a
+In order to create a secondary zone for the multi-site configuration, open a
 command line interface on a host identified to serve the secondary zone.
-Specify the zone group ID, the new zone name and an endpoint for the
-zone. **DO NOT** use the ``--master`` or ``--default`` flags. In Kraken,
-all zones run in an active-active configuration by
-default; that is, a gateway client may write data to any zone and the
-zone will replicate the data to all other zones within the zone group.
-If the secondary zone should not accept write operations, specify the
-``--read-only`` flag to create an active-passive configuration between
-the master zone and the secondary zone. Additionally, provide the
-``access_key`` and ``secret_key`` of the generated system user stored in
-the master zone of the master zone group. Execute the following:
+Specify the zone group ID, the new zone name, and an endpoint for the zone.
+**DO NOT** use the ``--master`` or ``--default`` flags. Beginning in Kraken,
+all zones run in an active-active configuration by default, which means that a
+gateway client may write data to any zone and the zone will replicate the data
+to all other zones within the zone group.  If you want to prevent the secondary
+zone from accepting write operations, include the ``--read-only`` flag in the
+command in order to create an active-passive configuration between the master
+zone and the secondary zone. In any case, don't forget to provide the
+``access_key`` and ``secret_key`` of the generated system user that is stored
+in the master zone of the master zone group. Run the following command:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin zone create --rgw-zonegroup={zone-group-name} \
+   radosgw-admin zone create --rgw-zonegroup={zone-group-name} \
                                 --rgw-zone={zone-name} \
                                 --access-key={system-key} --secret={secret} \
                                 --endpoints=http://{fqdn}:80 \
                                 [--read-only]
 
 For example:
+    
+    
+.. prompt:: bash #
 
-::
-
-    # radosgw-admin zone create --rgw-zonegroup=us --rgw-zone=us-west \
+   radosgw-admin zone create --rgw-zonegroup=us --rgw-zone=us-west \
                                 --access-key={system-key} --secret={secret} \
                                 --endpoints=http://rgw2:80
 
-.. important:: The following steps assume a multi-site configuration using newly
-               installed systems that aren’t storing data. **DO NOT DELETE** the
-               ``default`` zone and its pools if you are already using it to store
-               data, or the data will be lost and unrecoverable.
+.. important:: The following steps assume a multi-site configuration that uses
+   newly installed systems that have not yet begun storing data. **DO NOT
+   DELETE the ``default`` zone or its pools** if you are already using it to
+   store data, or the data will be irretrievably lost.
 
-Delete the default zone if needed.
+Delete the default zone if needed:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin zone delete --rgw-zone=default
+   radosgw-admin zone delete --rgw-zone=default
 
-Finally, delete the default pools in your Ceph storage cluster if
-needed.
+Finally, delete the default pools in your Ceph storage cluster if needed:
 
-::
+.. prompt:: bash #
 
-    # ceph osd pool rm default.rgw.control default.rgw.control --yes-i-really-really-mean-it
-    # ceph osd pool rm default.rgw.data.root default.rgw.data.root --yes-i-really-really-mean-it
-    # ceph osd pool rm default.rgw.gc default.rgw.gc --yes-i-really-really-mean-it
-    # ceph osd pool rm default.rgw.log default.rgw.log --yes-i-really-really-mean-it
-    # ceph osd pool rm default.rgw.users.uid default.rgw.users.uid --yes-i-really-really-mean-it
+   ceph osd pool rm default.rgw.control default.rgw.control --yes-i-really-really-mean-it
+   ceph osd pool rm default.rgw.data.root default.rgw.data.root --yes-i-really-really-mean-it
+   ceph osd pool rm default.rgw.gc default.rgw.gc --yes-i-really-really-mean-it
+   ceph osd pool rm default.rgw.log default.rgw.log --yes-i-really-really-mean-it
+   ceph osd pool rm default.rgw.users.uid default.rgw.users.uid --yes-i-really-really-mean-it
+   
+Updating the Ceph Configuration File
+------------------------------------
 
-Update the Ceph Configuration File
-----------------------------------
-
-Update the Ceph configuration file on the secondary zone hosts by adding
-the ``rgw_zone`` configuration option and the name of the secondary zone
-to the instance entry.
+To update the Ceph configuration file on the secondary zone hosts, add the
+``rgw_zone`` configuration option and the name of the secondary zone to the
+instance entry.
 
 ::
 
@@ -445,42 +434,41 @@ For example:
     rgw frontends = "civetweb port=80"
     rgw_zone=us-west
 
-Update the Period
------------------
+Updating the Period
+-------------------
 
-After updating the master zone configuration, update the period.
+After updating the master zone configuration, update the period:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin period update --commit
+   radosgw-admin period update --commit
 
 .. note:: Updating the period changes the epoch, and ensures that other zones
-          will receive the updated configuration.
+   will receive the updated configuration.
+          
+Starting the Gateway
+--------------------
 
-Start the Gateway
------------------
+To start the gateway, start and enable the Ceph Object Gateway service by
+running the following commands on the object gateway host:
 
-On the object gateway host, start and enable the Ceph Object Gateway
-service:
+.. prompt:: bash #
 
-::
+   systemctl start ceph-radosgw@rgw.`hostname -s`
+   systemctl enable ceph-radosgw@rgw.`hostname -s`
 
-    # systemctl start ceph-radosgw@rgw.`hostname -s`
-    # systemctl enable ceph-radosgw@rgw.`hostname -s`
+Checking Synchronization Status
+-------------------------------
 
-Check Synchronization Status
-----------------------------
+After the secondary zone is up and running, you can check the synchronization
+status. The process of synchronization will copy users and buckets that were
+created in the master zone from the master zone to the secondary zone.
 
-Once the secondary zone is up and running, check the synchronization
-status. Synchronization copies users and buckets created in the master
-zone to the secondary zone.
+.. prompt:: bash #
 
-::
+   radosgw-admin sync status
 
-    # radosgw-admin sync status
-
-The output will provide the status of synchronization operations. For
-example:
+The output reports the status of synchronization operations. For example:
 
 ::
 
@@ -498,21 +486,23 @@ example:
                           data is caught up with source
 
 .. note:: Secondary zones accept bucket operations; however, secondary zones
-          redirect bucket operations to the master zone and then synchronize
-          with the master zone to receive the result of the bucket operations.
-          If the master zone is down, bucket operations executed on the
-          secondary zone will fail, but object operations should succeed.
+   redirect bucket operations to the master zone and then synchronize with the
+   master zone to receive the result of the bucket operations. If the master
+   zone is down, bucket operations executed on the secondary zone will fail,
+   but object operations should succeed.
+          
+          
+Verifying an Object
+-------------------
 
-Verification of an Object
--------------------------
-
-By default, the objects are not verified again after the synchronization of an
-object was successful. To enable that, you can set :confval:`rgw_sync_obj_etag_verify`
-to ``true``. After enabling the optional objects that will be synchronized
-going forward, an additional MD5 checksum will verify that it is computed on
-the source and the destination. This is to ensure the integrity of the objects
-fetched from a remote server over HTTP including multisite sync. This option
-can decrease the performance of your RGW as more computation is needed.
+By default, after the successful synchronization of an object there is no
+subsequent verification of the object. However, you can enable verification by
+setting :confval:`rgw_sync_obj_etag_verify` to ``true``. After this value is
+set to true, an MD5 checksum is used to verify the integrity of the data that
+was transferred from the source to the destination. This ensures the integrity
+of any object that has been fetched from a remote server over HTTP (including
+multisite sync). This option may decrease the performance of your RGW because
+it requires more computation.
 
 
 Maintenance
@@ -521,9 +511,14 @@ Maintenance
 Checking the Sync Status
 ------------------------
 
-Information about the replication status of a zone can be queried with::
+Information about the replication status of a zone can be queried with:
 
-    $ radosgw-admin sync status
+.. prompt:: bash $
+
+   radosgw-admin sync status
+
+::
+
             realm b3bc1c37-9c44-4b89-a03b-04c269bea5da (earth)
         zonegroup f54f9b22-b4b6-4a0e-9211-fa6ac1693f49 (us)
              zone adce11c9-b8ed-4a90-8bc5-3fc029ff0816 (us-2)
@@ -543,133 +538,144 @@ Information about the replication status of a zone can be queried with::
                           incremental sync: 128/128 shards
                           data is caught up with source
 
-The output can differ depending on the sync status. The shards are described
-as two different types during sync:
+The output might be different, depending on the sync status. During sync, the
+shards are of two types:
 
-- **Behind shards** are shards that need a full data sync and shards needing
-  an incremental data sync because they are not up-to-date.
+- **Behind shards** are shards that require a data sync (either a full data
+  sync or an incremental data sync) in order to be brought up to date.
 
-- **Recovery shards** are shards that encountered an error during sync and marked
-  for retry. The error mostly occurs on minor issues like acquiring a lock on
-  a bucket. This will typically resolve itself.
+- **Recovery shards** are shards that encountered an error during sync and have
+  been marked for retry. The error occurs mostly on minor issues, such as
+  acquiring a lock on a bucket. Errors of this kind typically resolve on their
+  own.
 
 Check the logs
 --------------
 
-For multi-site only, you can check out the metadata log (``mdlog``),
-the bucket index log (``bilog``) and the data log (``datalog``).
-You can list them and also trim them which is not needed in most cases as
-:confval:`rgw_sync_log_trim_interval` is set to 20 minutes as default. If it isn't manually
-set to 0, you shouldn't have to trim it at any time as it could cause side effects otherwise.
+For multi-site deployments only, you can examine the metadata log (``mdlog``),
+the bucket index log (``bilog``), and the data log (``datalog``).  You can list
+them and also trim them. Trimming is not needed in most cases because
+:confval:`rgw_sync_log_trim_interval` is set to 20 minutes by default. It
+should not be necessary to trim the logs unless
+:confval:`rgw_sync_log_trim_interval` has been manually set to 0.
 
 Changing the Metadata Master Zone
 ---------------------------------
 
-.. important:: Care must be taken when changing which zone is the metadata
-               master. If a zone has not finished syncing metadata from the current master
-               zone, it will be unable to serve any remaining entries when promoted to
-               master and those changes will be lost. For this reason, waiting for a
-               zone's ``radosgw-admin sync status`` to catch up on metadata sync before
-               promoting it to master is recommended.
+.. important:: Care must be taken when changing the metadata master zone by
+   promoting a zone to master. A zone that isn't finished syncing metadata from
+   the current master zone will be unable to serve any remaining entries if it
+   is promoted to master, and those metadata changes will be lost. For this
+   reason, we recommend waiting for a zone's ``radosgw-admin sync status`` to
+   complete the process of synchronizing the metadata before promoting the zone
+   to master.
 
-               Similarly, if changes to metadata are being processed by the current master
-               zone while another zone is being promoted to master, those changes are
-               likely to be lost. To avoid this, shutting down any ``radosgw`` instances
-               on the previous master zone is recommended. After promoting another zone,
-               its new period can be fetched with ``radosgw-admin period pull`` and the
-               gateway(s) can be restarted.
+Similarly, if the current master zone is processing changes to metadata at the
+same time that another zone is being promoted to master, these changes are
+likely to be lost. To avoid losing these changes, we recommend shutting down
+any ``radosgw`` instances on the previous master zone. After the new master
+zone has been promoted, the previous master zone's new period can be fetched
+with ``radosgw-admin period pull`` and the gateway(s) can be restarted.
 
-To promote a zone (for example, zone ``us-2`` in zonegroup ``us``) to metadata
-master, run the following commands on that zone::
+To promote a zone to metadata master, run the following commands on that zone
+(in this example, the zone is zone ``us-2`` in zonegroup ``us``):
 
-  $ radosgw-admin zone modify --rgw-zone=us-2 --master
-  $ radosgw-admin zonegroup modify --rgw-zonegroup=us --master
-  $ radosgw-admin period update --commit
+.. prompt:: bash $
 
-This will generate a new period, and the radosgw instance(s) in zone ``us-2``
-will send this period to other zones.
+   radosgw-admin zone modify --rgw-zone=us-2 --master
+   radosgw-admin zonegroup modify --rgw-zonegroup=us --master
+   radosgw-admin period update --commit
+
+This generates a new period, and the radosgw instance(s) in zone ``us-2`` sends
+this period to other zones.
 
 Failover and Disaster Recovery
 ==============================
 
-If the master zone should fail, failover to the secondary zone for
-disaster recovery.
+Setting Up Failover to the Secondary Zone
+-----------------------------------------
 
-1. Make the secondary zone the master and default zone. For example:
+If the master zone fails, you can fail over to the secondary zone for
+disaster recovery by following these steps:
 
-   ::
+#. Make the secondary zone the master and default zone. For example:
 
-       # radosgw-admin zone modify --rgw-zone={zone-name} --master --default
+   .. prompt:: bash #
 
-   By default, Ceph Object Gateway will run in an active-active
-   configuration. If the cluster was configured to run in an
+      radosgw-admin zone modify --rgw-zone={zone-name} --master --default
+
+   By default, Ceph Object Gateway runs in an active-active
+   configuration. However, if the cluster is configured to run in an
    active-passive configuration, the secondary zone is a read-only zone.
-   Remove the ``--read-only`` status to allow the zone to receive write
-   operations. For example:
+   To allow the secondary zone to receive write
+   operations, remove its ``--read-only`` status. For example:
 
-   ::
+   .. prompt:: bash #
 
-       # radosgw-admin zone modify --rgw-zone={zone-name} --master --default \
+      radosgw-admin zone modify --rgw-zone={zone-name} --master --default \
                                    --read-only=false
 
-2. Update the period to make the changes take effect.
+#. Update the period to make the changes take effect.
 
-   ::
+   .. prompt:: bash #
 
-       # radosgw-admin period update --commit
+      radosgw-admin period update --commit
 
-3. Finally, restart the Ceph Object Gateway.
+#. Finally, restart the Ceph Object Gateway.
 
-   ::
+   .. prompt:: bash #
 
-       # systemctl restart ceph-radosgw@rgw.`hostname -s`
+      systemctl restart ceph-radosgw@rgw.`hostname -s`
 
-If the former master zone recovers, revert the operation.
+Reverting from Failover
+-----------------------
 
-1. From the recovered zone, pull the latest realm configuration
-   from the current master zone.
+If the former master zone recovers, you can revert the failover operation by following these steps:
 
-   ::
+#. From within the recovered zone, pull the latest realm configuration
+   from the current master zone:
 
-       # radosgw-admin realm pull --url={url-to-master-zone-gateway} \
+   .. prompt:: bash #
+
+      radosgw-admin realm pull --url={url-to-master-zone-gateway} \
                                   --access-key={access-key} --secret={secret}
 
-2. Make the recovered zone the master and default zone.
+#. Make the recovered zone the master and default zone:
 
-   ::
+   .. prompt:: bash #
 
-       # radosgw-admin zone modify --rgw-zone={zone-name} --master --default
+      radosgw-admin zone modify --rgw-zone={zone-name} --master --default
 
-3. Update the period to make the changes take effect.
+#. Update the period so that the changes take effect:
 
-   ::
+   .. prompt:: bash #
 
-       # radosgw-admin period update --commit
+      radosgw-admin period update --commit
 
-4. Then, restart the Ceph Object Gateway in the recovered zone.
+#. Restart the Ceph Object Gateway in the recovered zone:
 
-   ::
+   .. prompt:: bash #
 
-       # systemctl restart ceph-radosgw@rgw.`hostname -s`
+       systemctl restart ceph-radosgw@rgw.`hostname -s`
 
-5. If the secondary zone needs to be a read-only configuration, update
-   the secondary zone.
+#. If the secondary zone needs to be a read-only configuration, update
+   the secondary zone:
 
-   ::
+   .. prompt:: bash #
 
-       # radosgw-admin zone modify --rgw-zone={zone-name} --read-only
+      radosgw-admin zone modify --rgw-zone={zone-name} --read-only
 
-6. Update the period to make the changes take effect.
+#. Update the period so that the changes take effect:
 
-   ::
+   .. prompt:: bash #
 
-       # radosgw-admin period update --commit
+      radosgw-admin period update --commit
 
-7. Finally, restart the Ceph Object Gateway in the secondary zone.
+#. Restart the Ceph Object Gateway in the secondary zone:
 
-   ::
+   .. prompt:: bash #
 
-       # systemctl restart ceph-radosgw@rgw.`hostname -s`
+      systemctl restart ceph-radosgw@rgw.`hostname -s`
 
 .. _rgw-multisite-migrate-from-single-site:
 
@@ -681,57 +687,59 @@ zone to a multi site system, use the following steps:
 
 1. Create a realm. Replace ``<name>`` with the realm name.
 
-   ::
+   .. prompt:: bash #
 
-       # radosgw-admin realm create --rgw-realm=<name> --default
+      radosgw-admin realm create --rgw-realm=<name> --default
 
 2. Rename the default zone and zonegroup. Replace ``<name>`` with the
    zonegroup or zone name.
 
-   ::
+   .. prompt:: bash #
 
-       # radosgw-admin zonegroup rename --rgw-zonegroup default --zonegroup-new-name=<name>
-       # radosgw-admin zone rename --rgw-zone default --zone-new-name us-east-1 --rgw-zonegroup=<name>
+      radosgw-admin zonegroup rename --rgw-zonegroup default --zonegroup-new-name=<name>
+      radosgw-admin zone rename --rgw-zone default --zone-new-name us-east-1 --rgw-zonegroup=<name>
 
 3. Configure the master zonegroup. Replace ``<name>`` with the realm or
    zonegroup name. Replace ``<fqdn>`` with the fully qualified domain
    name(s) in the zonegroup.
 
-   ::
+   .. prompt:: bash #
 
-       # radosgw-admin zonegroup modify --rgw-realm=<name> --rgw-zonegroup=<name> --endpoints http://<fqdn>:80 --master --default
+      radosgw-admin zonegroup modify --rgw-realm=<name> --rgw-zonegroup=<name> --endpoints http://<fqdn>:80 --master --default
 
 4. Configure the master zone. Replace ``<name>`` with the realm,
    zonegroup or zone name. Replace ``<fqdn>`` with the fully qualified
    domain name(s) in the zonegroup.
 
-   ::
+   .. prompt:: bash #
 
-       # radosgw-admin zone modify --rgw-realm=<name> --rgw-zonegroup=<name> \
-                                   --rgw-zone=<name> --endpoints http://<fqdn>:80 \
-                                   --access-key=<access-key> --secret=<secret-key> \
-                                   --master --default
+      radosgw-admin zone modify --rgw-realm=<name> --rgw-zonegroup=<name> \
+                                --rgw-zone=<name> --endpoints http://<fqdn>:80 \
+                                --access-key=<access-key> --secret=<secret-key> \
+                                --master --default
 
 5. Create a system user. Replace ``<user-id>`` with the username.
    Replace ``<display-name>`` with a display name. It may contain
    spaces.
 
-   ::
+   .. prompt:: bash #
 
-       # radosgw-admin user create --uid=<user-id> --display-name="<display-name>"\
-                                   --access-key=<access-key> --secret=<secret-key> --system
+      radosgw-admin user create --uid=<user-id> \
+      --display-name="<display-name>" \ 
+      --access-key=<access-key> \ 
+      --secret=<secret-key> --system
 
 6. Commit the updated configuration.
 
-   ::
+   .. prompt:: bash #
 
-       # radosgw-admin period update --commit
+      radosgw-admin period update --commit
 
 7. Finally, restart the Ceph Object Gateway.
 
-   ::
+   .. prompt:: bash #
 
-       # systemctl restart ceph-radosgw@rgw.`hostname -s`
+      systemctl restart ceph-radosgw@rgw.`hostname -s`
 
 After completing this procedure, proceed to `Configure a Secondary
 Zone <#configure-secondary-zones>`__ to create a secondary zone
@@ -775,15 +783,15 @@ Create a Realm
 To create a realm, execute ``realm create`` and specify the realm name.
 If the realm is the default, specify ``--default``.
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin realm create --rgw-realm={realm-name} [--default]
+   radosgw-admin realm create --rgw-realm={realm-name} [--default]
 
 For example:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin realm create --rgw-realm=movies --default
+   radosgw-admin realm create --rgw-realm=movies --default
 
 By specifying ``--default``, the realm will be called implicitly with
 each ``radosgw-admin`` call unless ``--rgw-realm`` and the realm name
@@ -797,9 +805,9 @@ be only one default realm. If there is only one realm and it wasn’t
 specified as the default realm when it was created, make it the default
 realm. Alternatively, to change which realm is the default, execute:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin realm default --rgw-realm=movies
+   radosgw-admin realm default --rgw-realm=movies
 
 .. note:: When the realm is default, the command line assumes
    ``--rgw-realm=<realm-name>`` as an argument.
@@ -809,30 +817,30 @@ Delete a Realm
 
 To delete a realm, execute ``realm rm`` and specify the realm name.
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin realm rm --rgw-realm={realm-name}
+   radosgw-admin realm rm --rgw-realm={realm-name}
 
 For example:
 
-::
-
-    # radosgw-admin realm rm --rgw-realm=movies
+.. prompt:: bash #
+   
+   radosgw-admin realm rm --rgw-realm=movies
 
 Get a Realm
 ~~~~~~~~~~~
 
 To get a realm, execute ``realm get`` and specify the realm name.
 
-::
+.. prompt:: bash #
 
-    #radosgw-admin realm get --rgw-realm=<name>
+   radosgw-admin realm get --rgw-realm=<name>
 
 For example:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin realm get --rgw-realm=movies [> filename.json]
+   radosgw-admin realm get --rgw-realm=movies [> filename.json]
 
 The CLI will echo a JSON object with the realm properties.
 
@@ -853,33 +861,33 @@ Set a Realm
 To set a realm, execute ``realm set``, specify the realm name, and
 ``--infile=`` with an input file name.
 
-::
+.. prompt:: bash #
 
-    #radosgw-admin realm set --rgw-realm=<name> --infile=<infilename>
+   radosgw-admin realm set --rgw-realm=<name> --infile=<infilename>
 
 For example:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin realm set --rgw-realm=movies --infile=filename.json
+   radosgw-admin realm set --rgw-realm=movies --infile=filename.json
 
 List Realms
 ~~~~~~~~~~~
 
 To list realms, execute ``realm list``.
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin realm list
+   radosgw-admin realm list
 
 List Realm Periods
 ~~~~~~~~~~~~~~~~~~
 
 To list realm periods, execute ``realm list-periods``.
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin realm list-periods
+   radosgw-admin realm list-periods
 
 Pull a Realm
 ~~~~~~~~~~~~
@@ -888,9 +896,9 @@ To pull a realm from the node containing the master zone group and
 master zone to a node containing a secondary zone group or zone, execute
 ``realm pull`` on the node that will receive the realm configuration.
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin realm pull --url={url-to-master-zone-gateway} --access-key={access-key} --secret={secret}
+   radosgw-admin realm pull --url={url-to-master-zone-gateway} --access-key={access-key} --secret={secret}
 
 Rename a Realm
 ~~~~~~~~~~~~~~
@@ -900,9 +908,9 @@ only applied locally, and will not get pulled with ``realm pull``. When
 renaming a realm with multiple zones, run the command on each zone. To
 rename a realm, execute the following:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin realm rename --rgw-realm=<current-name> --realm-new-name=<new-realm-name>
+   radosgw-admin realm rename --rgw-realm=<current-name> --realm-new-name=<new-realm-name>
 
 .. note:: DO NOT use ``realm set`` to change the ``name`` parameter. That
           changes the internal name only. Specifying ``--rgw-realm`` would
@@ -930,9 +938,9 @@ Creating a zone assumes it will live in the default realm unless
 default zonegroup, specify the ``--default`` flag. If the zonegroup is
 the master zonegroup, specify the ``--master`` flag. For example:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin zonegroup create --rgw-zonegroup=<name> [--rgw-realm=<name>][--master] [--default]
+   radosgw-admin zonegroup create --rgw-zonegroup=<name> [--rgw-realm=<name>][--master] [--default]
 
 
 .. note:: Use ``zonegroup modify --rgw-zonegroup=<zonegroup-name>`` to modify
@@ -947,78 +955,79 @@ and it wasn’t specified as the default zonegroup when it was created,
 make it the default zonegroup. Alternatively, to change which zonegroup
 is the default, execute:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin zonegroup default --rgw-zonegroup=comedy
+   radosgw-admin zonegroup default --rgw-zonegroup=comedy
 
 .. note:: When the zonegroup is default, the command line assumes
           ``--rgw-zonegroup=<zonegroup-name>`` as an argument.
 
 Then, update the period:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin period update --commit
+   radosgw-admin period update --commit
 
 Add a Zone to a Zone Group
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To add a zone to a zonegroup, execute the following:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin zonegroup add --rgw-zonegroup=<name> --rgw-zone=<name>
+   radosgw-admin zonegroup add --rgw-zonegroup=<name> --rgw-zone=<name>
 
 Then, update the period:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin period update --commit
+   radosgw-admin period update --commit
 
 Remove a Zone from a Zone Group
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To remove a zone from a zonegroup, execute the following:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin zonegroup remove --rgw-zonegroup=<name> --rgw-zone=<name>
+   radosgw-admin zonegroup remove --rgw-zonegroup=<name> --rgw-zone=<name>
 
 Then, update the period:
 
-::
+.. prompt:: bash #
 
-    # radosgw-admin period update --commit
+   radosgw-admin period update --commit
 
 Rename a Zone Group
 ~~~~~~~~~~~~~~~~~~~
 
 To rename a zonegroup, execute the following:
 
-::
 
-    # radosgw-admin zonegroup rename --rgw-zonegroup=<name> --zonegroup-new-name=<name>
+.. prompt:: bash #
+
+   radosgw-admin zonegroup rename --rgw-zonegroup=<name> --zonegroup-new-name=<name>
 
 Then, update the period:
 
-::
-
-    # radosgw-admin period update --commit
+.. prompt:: bash #
+   
+   radosgw-admin period update --commit
 
 Delete a Zone Group
 ~~~~~~~~~~~~~~~~~~~
 
 To delete a zonegroup, execute the following:
 
-::
-
-    # radosgw-admin zonegroup delete --rgw-zonegroup=<name>
+.. prompt:: bash #
+   
+   radosgw-admin zonegroup delete --rgw-zonegroup=<name>
 
 Then, update the period:
 
-::
-
-    # radosgw-admin period update --commit
+.. prompt:: bash #
+   
+   radosgw-admin period update --commit
 
 List Zone Groups
 ~~~~~~~~~~~~~~~~
@@ -1026,9 +1035,9 @@ List Zone Groups
 A Ceph cluster contains a list of zone groups. To list the zone groups,
 execute:
 
-::
-
-    # radosgw-admin zonegroup list
+.. prompt:: bash #
+   
+   radosgw-admin zonegroup list
 
 The ``radosgw-admin`` returns a JSON formatted list of zone groups.
 
@@ -1046,9 +1055,9 @@ Get a Zone Group Map
 
 To list the details of each zone group, execute:
 
-::
-
-    # radosgw-admin zonegroup-map get
+.. prompt:: bash #
+   
+   radosgw-admin zonegroup-map get
 
 .. note:: If you receive a ``failed to read zonegroup map`` error, run
           ``radosgw-admin zonegroup-map update`` as ``root`` first.
@@ -1058,9 +1067,9 @@ Get a Zone Group
 
 To view the configuration of a zone group, execute:
 
-::
-
-    radosgw-admin zonegroup get [--rgw-zonegroup=<zonegroup>]
+.. prompt:: bash #
+   
+   dosgw-admin zonegroup get [--rgw-zonegroup=<zonegroup>]
 
 The zone group configuration looks like this:
 
@@ -1158,9 +1167,9 @@ To set a zone group, create a JSON object consisting of the required
 fields, save the object to a file (e.g., ``zonegroup.json``); then,
 execute the following command:
 
-::
-
-    # radosgw-admin zonegroup set --infile zonegroup.json
+.. prompt:: bash #
+   
+   radosgw-admin zonegroup set --infile zonegroup.json
 
 Where ``zonegroup.json`` is the JSON file you created.
 
@@ -1172,9 +1181,9 @@ Where ``zonegroup.json`` is the JSON file you created.
 
 Finally, update the period:
 
-::
-
-    # radosgw-admin period update --commit
+.. prompt:: bash #
+   
+   radosgw-admin period update --commit
 
 Set a Zone Group Map
 ~~~~~~~~~~~~~~~~~~~~
@@ -1258,77 +1267,78 @@ zone group map.
 
 To set a zone group map, execute the following:
 
-::
-
-    # radosgw-admin zonegroup-map set --infile zonegroupmap.json
+.. prompt:: bash #
+   
+   radosgw-admin zonegroup-map set --infile zonegroupmap.json
 
 Where ``zonegroupmap.json`` is the JSON file you created. Ensure that
 you have zones created for the ones specified in the zone group map.
 Finally, update the period.
 
-::
-
-    # radosgw-admin period update --commit
+.. prompt:: bash #
+   
+   radosgw-admin period update --commit
 
 Zones
 -----
 
-Ceph Object Gateway supports the notion of zones. A zone defines a
-logical group consisting of one or more Ceph Object Gateway instances.
+A zone defines a logical group that consists of one or more Ceph Object Gateway
+instances. Ceph Object Gateway supports zones.
 
-Configuring zones differs from typical configuration procedures, because
-not all of the settings end up in a Ceph configuration file. You can
-list zones, get a zone configuration and set a zone configuration.
+The procedure for configuring zones differs from typical configuration
+procedures, because not all of the settings end up in a Ceph configuration
+file. Zones can be listed. You can "get" a zone configuration and "set" a zone
+configuration.
 
 Create a Zone
 ~~~~~~~~~~~~~
 
-To create a zone, specify a zone name. If it is a master zone, specify
-the ``--master`` option. Only one zone in a zone group may be a master
-zone. To add the zone to a zonegroup, specify the ``--rgw-zonegroup``
-option with the zonegroup name.
+To create a zone, specify a zone name. If you are creating a master zone,
+specify the ``--master`` flag. Only one zone in a zone group may be a master
+zone. To add the zone to a zonegroup, specify the ``--rgw-zonegroup`` option
+with the zonegroup name.
 
-::
-
-    # radosgw-admin zone create --rgw-zone=<name> \
+.. prompt:: bash #
+   
+   radosgw-admin zone create --rgw-zone=<name> \
                     [--zonegroup=<zonegroup-name]\
                     [--endpoints=<endpoint>[,<endpoint>] \
                     [--master] [--default] \
                     --access-key $SYSTEM_ACCESS_KEY --secret $SYSTEM_SECRET_KEY
 
-Then, update the period:
+After you have created the zone, update the period:
 
-::
-
-    # radosgw-admin period update --commit
+.. prompt:: bash #
+   
+   radosgw-admin period update --commit
 
 Delete a Zone
 ~~~~~~~~~~~~~
 
-To delete zone, first remove it from the zonegroup.
+To delete a zone, first remove it from the zonegroup:
 
-::
-
-    # radosgw-admin zonegroup remove --zonegroup=<name>\
+.. prompt:: bash #
+   
+   radosgw-admin zonegroup remove --zonegroup=<name>\
                                      --zone=<name>
 
 Then, update the period:
 
-::
+.. prompt:: bash #
+   
+   radosgw-admin period update --commit
 
-    # radosgw-admin period update --commit
+Next, delete the zone:
 
-Next, delete the zone. Execute the following:
-
-::
-
-    # radosgw-admin zone delete --rgw-zone<name>
+.. prompt:: bash #
+   
+   radosgw-admin zone delete --rgw-zone<name>
 
 Finally, update the period:
 
-::
-
-    # radosgw-admin period update --commit
+.. prompt:: bash #
+   
+   radosgw-admin period update --commit
 
 .. important:: Do not delete a zone without removing it from a zone group first.
                Otherwise, updating the period will fail.
@@ -1337,23 +1347,23 @@ If the pools for the deleted zone will not be used anywhere else,
 consider deleting the pools. Replace ``<del-zone>`` in the example below
 with the deleted zone’s name.
 
-.. important:: Only delete the pools with prepended zone names. Deleting the root
-               pool, such as, ``.rgw.root`` will remove all of the system’s
-               configuration.
+.. important:: Only delete the pools with prepended zone names. Deleting the
+   root pool (for example, ``.rgw.root``) will remove all of the system’s
+   configuration.
 
-.. important:: Once the pools are deleted, all of the data within them are deleted
-               in an unrecoverable manner. Only delete the pools if the pool
-               contents are no longer needed.
+.. important:: When the pools are deleted, all of the data within them are
+   deleted in an unrecoverable manner. Delete the pools only if the pool's
+   contents are no longer needed.
 
-::
-
-    # ceph osd pool rm <del-zone>.rgw.control <del-zone>.rgw.control --yes-i-really-really-mean-it
-    # ceph osd pool rm <del-zone>.rgw.meta <del-zone>.rgw.meta --yes-i-really-really-mean-it
-    # ceph osd pool rm <del-zone>.rgw.log <del-zone>.rgw.log --yes-i-really-really-mean-it
-    # ceph osd pool rm <del-zone>.rgw.otp <del-zone>.rgw.otp --yes-i-really-really-mean-it
-    # ceph osd pool rm <del-zone>.rgw.buckets.index <del-zone>.rgw.buckets.index --yes-i-really-really-mean-it
-    # ceph osd pool rm <del-zone>.rgw.buckets.non-ec <del-zone>.rgw.buckets.non-ec --yes-i-really-really-mean-it
-    # ceph osd pool rm <del-zone>.rgw.buckets.data <del-zone>.rgw.buckets.data --yes-i-really-really-mean-it
+.. prompt:: bash #
+   
+   ceph osd pool rm <del-zone>.rgw.control <del-zone>.rgw.control --yes-i-really-really-mean-it
+   ceph osd pool rm <del-zone>.rgw.meta <del-zone>.rgw.meta --yes-i-really-really-mean-it
+   ceph osd pool rm <del-zone>.rgw.log <del-zone>.rgw.log --yes-i-really-really-mean-it
+   ceph osd pool rm <del-zone>.rgw.otp <del-zone>.rgw.otp --yes-i-really-really-mean-it
+   ceph osd pool rm <del-zone>.rgw.buckets.index <del-zone>.rgw.buckets.index --yes-i-really-really-mean-it
+   ceph osd pool rm <del-zone>.rgw.buckets.non-ec <del-zone>.rgw.buckets.non-ec --yes-i-really-really-mean-it
+   ceph osd pool rm <del-zone>.rgw.buckets.data <del-zone>.rgw.buckets.data --yes-i-really-really-mean-it
 
 Modify a Zone
 ~~~~~~~~~~~~~
@@ -1361,9 +1371,9 @@ Modify a Zone
 To modify a zone, specify the zone name and the parameters you wish to
 modify.
 
-::
-
-    # radosgw-admin zone modify [options]
+.. prompt:: bash #
+   
+   radosgw-admin zone modify [options]
 
 Where ``[options]``:
 
@@ -1375,27 +1385,27 @@ Where ``[options]``:
 
 Then, update the period:
 
-::
-
-    # radosgw-admin period update --commit
+.. prompt:: bash #
+   
+   radosgw-admin period update --commit
 
 List Zones
 ~~~~~~~~~~
 
 As ``root``, to list the zones in a cluster, execute:
 
-::
-
-    # radosgw-admin zone list
+.. prompt:: bash #
+   
+   radosgw-admin zone list
 
 Get a Zone
 ~~~~~~~~~~
 
 As ``root``, to get the configuration of a zone, execute:
 
-::
-
-    # radosgw-admin zone get [--rgw-zone=<zone>]
+.. prompt:: bash #
+   
+   radosgw-admin zone get [--rgw-zone=<zone>]
 
 The ``default`` zone looks like this:
 
@@ -1433,32 +1443,32 @@ To set a zone, create a JSON object consisting of the pools, save the
 object to a file (e.g., ``zone.json``); then, execute the following
 command, replacing ``{zone-name}`` with the name of the zone:
 
-::
-
-    # radosgw-admin zone set --rgw-zone={zone-name} --infile zone.json
+.. prompt:: bash #
+   
+   radosgw-admin zone set --rgw-zone={zone-name} --infile zone.json
 
 Where ``zone.json`` is the JSON file you created.
 
 Then, as ``root``, update the period:
 
-::
-
-    # radosgw-admin period update --commit
+.. prompt:: bash #
+   
+   radosgw-admin period update --commit
 
 Rename a Zone
 ~~~~~~~~~~~~~
 
 To rename a zone, specify the zone name and the new zone name.
 
-::
-
-    # radosgw-admin zone rename --rgw-zone=<name> --zone-new-name=<name>
+.. prompt:: bash #
+   
+   radosgw-admin zone rename --rgw-zone=<name> --zone-new-name=<name>
 
 Then, update the period:
 
-::
-
-    # radosgw-admin period update --commit
+.. prompt:: bash #
+   
+   radosgw-admin period update --commit
 
 Zone Group and Zone Settings
 ----------------------------
@@ -1521,34 +1531,43 @@ Commands
 Add support for a zone feature
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-On the cluster that contains the given zone::
+On the cluster that contains the given zone:
 
-    $ radosgw-admin zone modify --rgw-zone={zone-name} --enable-feature={feature-name}
-    $ radosgw-admin period update --commit
+.. prompt:: bash $
+
+   radosgw-admin zone modify --rgw-zone={zone-name} --enable-feature={feature-name}
+   radosgw-admin period update --commit
+
 
 Remove support for a zone feature
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-On the cluster that contains the given zone::
+On the cluster that contains the given zone:
 
-    $ radosgw-admin zone modify --rgw-zone={zone-name} --disable-feature={feature-name}
-    $ radosgw-admin period update --commit
+.. prompt:: bash $
+
+   radosgw-admin zone modify --rgw-zone={zone-name} --disable-feature={feature-name}
+   radosgw-admin period update --commit
 
 Enable a zonegroup feature
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-On any cluster in the realm::
+On any cluster in the realm:
 
-    $ radosgw-admin zonegroup modify --rgw-zonegroup={zonegroup-name} --enable-feature={feature-name}
-    $ radosgw-admin period update --commit
+.. prompt:: bash $
+
+   radosgw-admin zonegroup modify --rgw-zonegroup={zonegroup-name} --enable-feature={feature-name}
+   radosgw-admin period update --commit
 
 Disable a zonegroup feature
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-On any cluster in the realm::
+On any cluster in the realm:
 
-    $ radosgw-admin zonegroup modify --rgw-zonegroup={zonegroup-name} --disable-feature={feature-name}
-    $ radosgw-admin period update --commit
+.. prompt:: bash $
+
+   radosgw-admin zonegroup modify --rgw-zonegroup={zonegroup-name} --disable-feature={feature-name}
+   radosgw-admin period update --commit
 
 
 .. _`Pools`: ../pools

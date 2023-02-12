@@ -18,6 +18,7 @@
 
 #include <tuple>
 #include <boost/functional/hash.hpp>
+#include <fmt/os.h>
 
 #include "auth/Auth.h"
 #include "Errors.h"
@@ -34,10 +35,10 @@ namespace crimson::net {
 SocketMessenger::SocketMessenger(const entity_name_t& myname,
                                  const std::string& logic_name,
                                  uint32_t nonce)
-  : Messenger{myname},
-    master_sid{seastar::this_shard_id()},
+  : master_sid{seastar::this_shard_id()},
     logic_name{logic_name},
-    nonce{nonce}
+    nonce{nonce},
+    my_name{myname}
 {}
 
 SocketMessenger::~SocketMessenger()
@@ -73,14 +74,13 @@ bool SocketMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
   return ret;
 }
 
-seastar::future<> SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
+void SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
 {
   assert(seastar::this_shard_id() == master_sid);
-  auto my_addrs = addrs;
+  my_addrs = addrs;
   for (auto& addr : my_addrs.v) {
     addr.nonce = nonce;
   }
-  return Messenger::set_myaddrs(my_addrs);
 }
 
 crimson::net::listen_ertr::future<>
@@ -88,7 +88,8 @@ SocketMessenger::do_listen(const entity_addrvec_t& addrs)
 {
   assert(seastar::this_shard_id() == master_sid);
   ceph_assert(addrs.front().get_family() == AF_INET);
-  return set_myaddrs(addrs).then([this] {
+  set_myaddrs(addrs);
+  return seastar::futurize_invoke([this] {
     if (!listener) {
       return FixedCPUServerSocket::create().then([this] (auto _listener) {
         listener = _listener;
@@ -301,7 +302,9 @@ static entity_addr_t choose_addr(
   }
 }
 
-seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_for_me, const SocketConnection& conn)
+void SocketMessenger::learned_addr(
+    const entity_addr_t &peer_addr_for_me,
+    const SocketConnection& conn)
 {
   assert(seastar::this_shard_id() == master_sid);
   if (!need_addr) {
@@ -314,7 +317,7 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
       throw std::system_error(
           make_error_code(crimson::net::error::bad_peer_address));
     }
-    return seastar::now();
+    return;
   }
 
   if (get_myaddr().get_type() == entity_addr_t::TYPE_NONE) {
@@ -323,10 +326,8 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
     addr.set_type(entity_addr_t::TYPE_ANY);
     addr.set_port(0);
     need_addr = false;
-    return set_myaddrs(entity_addrvec_t{addr}
-    ).then([this, &conn] {
-      logger().info("{} learned myaddr={} (unbound)", conn, get_myaddr());
-    });
+    set_myaddrs(entity_addrvec_t{addr});
+    logger().info("{} learned myaddr={} (unbound)", conn, get_myaddr());
   } else {
     // Already bound
     if (!get_myaddr().is_any() &&
@@ -347,10 +348,8 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
       addr.set_type(get_myaddr().get_type());
       addr.set_port(get_myaddr().get_port());
       need_addr = false;
-      return set_myaddrs(entity_addrvec_t{addr}
-      ).then([this, &conn] {
-        logger().info("{} learned myaddr={} (blank IP)", conn, get_myaddr());
-      });
+      set_myaddrs(entity_addrvec_t{addr});
+      logger().info("{} learned myaddr={} (blank IP)", conn, get_myaddr());
     } else if (!get_myaddr().is_same_host(peer_addr_for_me)) {
       logger().warn("{} peer_addr_for_me {} IP doesn't match myaddr {}",
                     conn, peer_addr_for_me, get_myaddr());
@@ -358,7 +357,6 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
           make_error_code(crimson::net::error::bad_peer_address));
     } else {
       need_addr = false;
-      return seastar::now();
     }
   }
 }
@@ -444,13 +442,12 @@ void SocketMessenger::closed_conn(SocketConnectionRef conn)
   }
 }
 
-seastar::future<uint32_t>
-SocketMessenger::get_global_seq(uint32_t old)
+uint32_t SocketMessenger::get_global_seq(uint32_t old)
 {
   if (old > global_seq) {
     global_seq = old;
   }
-  return seastar::make_ready_future<uint32_t>(++global_seq);
+  return ++global_seq;
 }
 
 } // namespace crimson::net

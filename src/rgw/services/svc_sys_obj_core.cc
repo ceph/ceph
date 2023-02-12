@@ -5,7 +5,7 @@
 #include "svc_rados.h"
 #include "svc_zone.h"
 
-#include "rgw/rgw_tools.h"
+#include "rgw_tools.h"
 
 #define dout_subsys ceph_subsys_rgw
 

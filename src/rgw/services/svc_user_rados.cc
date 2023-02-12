@@ -12,11 +12,11 @@
 #include "svc_meta_be_sobj.h"
 #include "svc_sync_modules.h"
 
-#include "rgw/rgw_user.h"
-#include "rgw/rgw_bucket.h"
-#include "rgw/rgw_tools.h"
-#include "rgw/rgw_zone.h"
-#include "rgw/rgw_rados.h"
+#include "rgw_user.h"
+#include "rgw_bucket.h"
+#include "rgw_tools.h"
+#include "rgw_zone.h"
+#include "rgw_rados.h"
 
 #include "cls/user/cls_user_client.h"
 
@@ -898,7 +898,7 @@ int RGWSI_User_RADOS::read_stats(const DoutPrefixProvider *dpp,
 
   RGWUserInfo info;
   real_time mtime;
-  int ret = read_user_info(ctx, user, &info, nullptr, &mtime, nullptr, nullptr, null_yield, dpp);
+  int ret = read_user_info(ctx, user, &info, nullptr, &mtime, nullptr, nullptr, y, dpp);
   if (ret < 0)
   {
     return ret;

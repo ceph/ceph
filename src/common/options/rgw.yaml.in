@@ -3,32 +3,41 @@
 
 options:
 # According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html),
-# An ACL can have up to 100 grants.
+# An ACL may have up to 100 grants.
 - name: rgw_acl_grants_max_num
   type: int
   level: advanced
-  desc: Max number of ACL grants in a single request
+  desc: The maximum number of ACL grants in a single request.
   default: 100
   services:
   - rgw
   with_legacy: true
-# According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html),
-# An cors can have up to 100 rules.
+# A user may have up to 100 IAM user policies.
+- name: rgw_user_policies_max_num
+  type: int
+  level: advanced
+  desc: The maximum number of IAM user policies for a single user.
+  default: 100
+  services:
+  - rgw
+  with_legacy: true
+# According to AWS S3 (http://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html),
+# A CORS request may have up to 100 rules.
 - name: rgw_cors_rules_max_num
   type: int
   level: advanced
-  desc: Max number of cors rules in a single request
+  desc: The maximum number of CORS rules in a single request.
   default: 100
   services:
   - rgw
   with_legacy: true
-# According to AWS S3(https://docs.aws.amazon.com/AmazonS3/latest/dev/DeletingObjects.html),
+# According to AWS S3 (https://docs.aws.amazon.com/AmazonS3/latest/dev/DeletingObjects.html),
 # Amazon S3 also provides the Multi-Object Delete API that you can use to delete up to 1000
 # objects in a single HTTP request.
 - name: rgw_delete_multi_obj_max_num
   type: int
   level: advanced
-  desc: Max number of objects in a single multi-object delete request
+  desc: The maximum number of objects in a single multi-object delete request.
   default: 1000
   services:
   - rgw
@@ -37,7 +46,7 @@ options:
 - name: rgw_website_routing_rules_max_num
   type: int
   level: advanced
-  desc: Max number of website routing rules in a single request
+  desc: The maximum number of website routing rules in a single request.
   default: 50
   services:
   - rgw
@@ -45,21 +54,21 @@ options:
 - name: rgw_rados_tracing
   type: bool
   level: advanced
-  desc: true if LTTng-UST tracepoints should be enabled
+  desc: Enables LTTng-UST tracepoints.
   default: false
   services:
   - rgw
 - name: rgw_op_tracing
   type: bool
   level: advanced
-  desc: true if LTTng-UST tracepoints should be enabled
+  desc: Enables LTTng-UST operator tracepoints.
   default: false
   services:
   - rgw
 - name: rgw_max_chunk_size
   type: size
   level: advanced
-  desc: Set RGW max chunk size
+  desc: The maximum RGW chunk size.
   long_desc: The chunk size is the size of RADOS I/O requests that RGW sends when
     accessing data objects. RGW read and write operations will never request more than
     this amount in a single request. This also defines the RGW head object size, as
@@ -102,7 +111,7 @@ options:
 - name: rgw_max_put_size
   type: size
   level: advanced
-  desc: Max size (in bytes) of regular (non multi-part) object upload.
+  desc: The maximum size (in bytes) of regular (non multi-part) object upload.
   long_desc: Plain object upload is capped at this amount of data. In order to upload
     larger objects, a special upload mechanism is required. The S3 API provides the
     multi-part upload, and Swift provides DLO and SLO.
@@ -172,6 +181,14 @@ options:
   level: advanced
   desc: Max number of concurrent RADOS requests when handling bucket shards.
   default: 128
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_multi_obj_del_max_aio
+  type: uint
+  level: advanced
+  desc: Max number of concurrent RADOS requests per multi-object delete request.
+  default: 16
   services:
   - rgw
   with_legacy: true
@@ -282,10 +299,11 @@ options:
 - name: rgw_dns_name
   type: str
   level: advanced
-  desc: The host name that RGW uses.
-  long_desc: This is Needed for virtual hosting of buckets to work properly, unless
+  desc: The host names that RGW uses.
+  long_desc: A comma separated list of DNS names.
+    This is Needed for virtual hosting of buckets to work properly, unless
     configured via zonegroup configuration.
-  fmt_desc: The DNS name of the served domain. See also the ``hostnames`` setting within regions.
+  fmt_desc: The DNS names of the served domains. See also the ``hostnames`` setting within zonegroups.
   services:
   - rgw
   with_legacy: true
@@ -669,6 +687,45 @@ options:
     OpenStack Identity API v3.
   services:
   - rgw
+  with_legacy: true
+- name: rgw_keystone_service_token_enabled
+  type: bool
+  level: advanced
+  desc: Service tokens allowing the usage of expired Keystone auth tokens
+  fmt_desc: The service token support allows the incoming request to contain
+    a X-Service-Token header with a Keystone token that if it has acceptable
+    roles allows using an expired token in the X-Auth-Token header.
+  default: false
+  see_also:
+  - rgw_keystone_service_token_accepted_roles
+  - rgw_keystone_expired_token_cache_expiration
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_service_token_accepted_roles
+  type: str
+  level: advanced
+  desc: Only users with one of these roles will be valid for service users.
+  fmt_desc: The users that created the service token given must have one of
+    these roles to be considered a valid service user.
+  default: admin
+  see_also:
+  - rgw_keystone_service_token_enabled
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_expired_token_cache_expiration
+  type: int
+  level: advanced
+  desc: The number of seconds to add to current time for expired token expiration
+  fmt_desc: The expired token that is allowed when a valid service token is given
+    need a new expiration date for the caching. This is the seconds to add to the
+    current time and then set on an expired token that is verified with a service token.
+  default: 3600
+  services:
+  - rgw
+  see_also:
+  - rgw_keystone_service_token_enabled
   with_legacy: true
 - name: rgw_keystone_barbican_user
   type: str
@@ -1825,7 +1882,7 @@ options:
   level: advanced
   desc: Bucket ACLs override object ACLs
   long_desc: If not empty, a string that selects that mode of operation. 'recurse'
-    will use bucket's ACL for the authorizaton. 'full-control' will allow users that
+    will use bucket's ACL for the authorization. 'full-control' will allow users that
     users that have full control permission on the bucket have access to the object.
   services:
   - rgw
@@ -1891,6 +1948,17 @@ options:
     be below the rgw_curl_low_speed_limit for the library to consider it too slow
     and abort. Set it zero to disable this.
   default: 5_min
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_curl_tcp_keepalive
+  type: int
+  level: advanced
+  long_desc: Enable TCP keepalive on the HTTP client sockets managed by libcurl. This does not apply to connections received by the HTTP frontend, but only to HTTP requests sent by radosgw. Examples include requests to Keystone for authentication, sync requests from multisite, and requests to key management servers for SSE.
+  enum_values:
+  - 0
+  - 1
+  default: 0
   services:
   - rgw
   with_legacy: true
@@ -3561,6 +3629,22 @@ options:
   default: 0x7200000000000001:0x0
   services:
   - rgw
+- name: motr_admin_fid
+  type: str
+  level: advanced
+  desc: Admin Tool Motr FID for admin-level access.
+  long_desc: example value 0x7200000000000001:0x2c
+  default: 0x7200000000000001:0x0
+  services:
+  - rgw
+- name: motr_admin_endpoint
+  type: str
+  level: advanced
+  desc:  experimental Option to set Admin Motr endpoint address
+  long_desc: example value 192.168.180.182@tcp:12345:4:1
+  default: 192.168.180.182@tcp:12345:4:1
+  services:
+  - rgw
 - name: motr_my_endpoint
   type: str
   level: advanced
@@ -3651,5 +3735,16 @@ options:
   level: advanced
   desc: DAOS Pool to use
   default: tank
+  services:
+  - rgw
+- name: rgw_policy_reject_invalid_principals
+  type: bool
+  level: basic
+  desc: Whether to reject policies with invalid principals
+  long_desc: If true, policies with invalid principals will be
+    rejected. We don't support Canonical User identifiers or some
+    other form of policies that Amazon does, so if you are mirroring
+    policies between RGW and AWS, you may wish to set this to false.
+  default: true
   services:
   - rgw

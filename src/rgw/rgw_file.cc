@@ -1524,7 +1524,7 @@ namespace rgw {
       return false;
 
     RGWRMdirCheck req(fs->get_context(),
-		      g_rgwlib->get_store()->get_user(fs->get_user()->user_id),
+		      g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 		      this);
     int rc = g_rgwlib->get_fe()->execute_req(&req);
     if (! rc) {
@@ -1580,7 +1580,7 @@ namespace rgw {
     }
 
     if (is_root()) {
-      RGWListBucketsRequest req(cct, g_rgwlib->get_store()->get_user(fs->get_user()->user_id),
+      RGWListBucketsRequest req(cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 				this, rcb, cb_arg, offset);
       rc = g_rgwlib->get_fe()->execute_req(&req);
       if (! rc) {
@@ -1593,7 +1593,7 @@ namespace rgw {
 	*eof = req.eof();
       }
     } else {
-      RGWReaddirRequest req(cct, g_rgwlib->get_store()->get_user(fs->get_user()->user_id),
+      RGWReaddirRequest req(cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 			    this, rcb, cb_arg, offset);
       rc = g_rgwlib->get_fe()->execute_req(&req);
       if (! rc) {
@@ -1659,11 +1659,13 @@ namespace rgw {
 	return -EIO;
       }
 
+      const RGWProcessEnv& penv = g_rgwlib->get_fe()->get_process()->get_env();
+
       /* start */
       std::string object_name = relative_object_name();
       f->write_req =
-	new RGWWriteRequest(g_rgwlib->get_store(),
-			    g_rgwlib->get_store()->get_user(fs->get_user()->user_id),
+	new RGWWriteRequest(g_rgwlib->get_driver(), penv,
+			    g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 			    this, bucket_name(), object_name);
       rc = g_rgwlib->get_fe()->start_req(f->write_req);
       if (rc < 0) {
@@ -1824,7 +1826,7 @@ namespace rgw {
     state->object->set_bucket(state->bucket.get());
 
     auto compression_type =
-      get_store()->get_compression_type(state->bucket->get_placement_rule());
+      get_driver()->get_compression_type(state->bucket->get_placement_rule());
 
     /* not obviously supportable */
     ceph_assert(! dlo_manifest);
@@ -1862,7 +1864,7 @@ namespace rgw {
         version_id = state->object->get_instance();
       }
     }
-    processor = get_store()->get_atomic_writer(this, state->yield, state->object->clone(),
+    processor = get_driver()->get_atomic_writer(this, state->yield, state->object->clone(),
 					 state->bucket_owner.get_id(),
 					 &state->dest_placement, 0, state->req_id);
 
@@ -2052,8 +2054,8 @@ void rgwfile_version(int *major, int *minor, int *extra)
 				  sec_key, "/");
   ceph_assert(new_fs);
 
-  const DoutPrefix dp(g_rgwlib->get_store()->ctx(), dout_subsys, "rgw mount: ");
-  rc = new_fs->authorize(&dp, g_rgwlib->get_store());
+  const DoutPrefix dp(g_rgwlib->get_driver()->ctx(), dout_subsys, "rgw mount: ");
+  rc = new_fs->authorize(&dp, g_rgwlib->get_driver());
   if (rc != 0) {
     delete new_fs;
     return -EINVAL;
@@ -2095,8 +2097,8 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
 
   ceph_assert(new_fs); /* should we be using ceph_assert? */
 
-  const DoutPrefix dp(g_rgwlib->get_store()->ctx(), dout_subsys, "rgw mount2: ");
-  rc = new_fs->authorize(&dp, g_rgwlib->get_store());
+  const DoutPrefix dp(g_rgwlib->get_driver()->ctx(), dout_subsys, "rgw mount2: ");
+  rc = new_fs->authorize(&dp, g_rgwlib->get_driver());
   if (rc != 0) {
     delete new_fs;
     return -EINVAL;
@@ -2148,7 +2150,7 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
   struct rados_cluster_stat_t stats;
 
   RGWGetClusterStatReq req(fs->get_context(),
-			   g_rgwlib->get_store()->get_user(fs->get_user()->user_id),
+			   g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 			   stats);
   int rc = g_rgwlib->get_fe()->execute_req(&req);
   if (rc < 0) {
@@ -2713,7 +2715,7 @@ int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
   }
 
   std::string oname = rgw_fh->relative_object_name();
-  RGWPutObjRequest req(cct, g_rgwlib->get_store()->get_user(fs->get_user()->user_id),
+  RGWPutObjRequest req(cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 		       rgw_fh->bucket_name(), oname, bl);
 
   int rc = g_rgwlib->get_fe()->execute_req(&req);

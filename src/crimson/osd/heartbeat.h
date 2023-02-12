@@ -47,7 +47,6 @@ public:
 
   crimson::net::Messenger &get_front_msgr() const;
   crimson::net::Messenger &get_back_msgr() const;
-  void set_require_authorizer(bool);
 
   // Dispatcher methods
   std::optional<seastar::future<>> ms_dispatch(
@@ -246,6 +245,10 @@ class Heartbeat::Connection {
    }
  }
 };
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<Heartbeat::Connection> : fmt::ostream_formatter {};
+#endif
 
 /*
  * Track the ping history and ping reply (the pong) from the same session, clean up
@@ -455,3 +458,7 @@ class Heartbeat::Peer final : private Heartbeat::ConnectionListener {
   Connection con_front;
   Connection con_back;
 };
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<Heartbeat> : fmt::ostream_formatter {};
+#endif

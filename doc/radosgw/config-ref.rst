@@ -209,6 +209,9 @@ Keystone Settings
 .. confval:: rgw_keystone_accepted_roles
 .. confval:: rgw_keystone_token_cache_size
 .. confval:: rgw_keystone_verify_ssl
+.. confval:: rgw_keystone_service_token_enabled
+.. confval:: rgw_keystone_service_token_accepted_roles
+.. confval:: rgw_keystone_expired_token_cache_expiration
 
 Server-side encryption Settings
 ===============================

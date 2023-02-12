@@ -63,6 +63,10 @@ void PrimaryLogScrub::submit_digest_fixes(const digests_fixes_t& fixes)
       num_digest_updates_pending--;
       continue;
     }
+    dout(15) << fmt::format(
+		  "{}: {}, pg[{}] {}/{}", __func__, num_digest_updates_pending,
+		  m_pg_id, obj, dgs)
+	     << dendl;
     if (obc->obs.oi.soid != obj) {
       m_osds->clog->error()
 	<< m_pg_id << " " << m_mode_desc << " " << obj

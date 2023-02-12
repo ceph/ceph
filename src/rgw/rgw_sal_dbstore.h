@@ -21,8 +21,8 @@
 #include "rgw_lc.h"
 #include "rgw_multi.h"
 
-#include "store/dbstore/common/dbstore.h"
-#include "store/dbstore/dbstore_mgr.h"
+#include "driver/dbstore/common/dbstore.h"
+#include "driver/dbstore/dbstore_mgr.h"
 
 namespace rgw { namespace sal {
 
@@ -202,7 +202,7 @@ protected:
       virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual int update_container_stats(const DoutPrefixProvider *dpp) override;
       virtual int check_bucket_shards(const DoutPrefixProvider *dpp) override;
-      virtual int chown(const DoutPrefixProvider *dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker = nullptr) override;
+      virtual int chown(const DoutPrefixProvider *dpp, User& new_user, optional_yield y) override;
       virtual int put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time mtime) override;
       virtual bool is_owner(User* user) override;
       virtual int check_empty(const DoutPrefixProvider *dpp, optional_yield y) override;
@@ -311,7 +311,7 @@ protected:
       DBStore* store;
       RGWRealm *realm{nullptr};
       DBZoneGroup *zonegroup{nullptr};
-      RGWZone *zone_public_config{nullptr}; /* external zone params, e.g., entrypoints, log flags, etc. */  
+      RGWZone *zone_public_config{nullptr}; /* external zone params, e.g., entrypoints, log flags, etc. */
       RGWZoneParams *zone_params{nullptr}; /* internal zone params, e.g., rados pools */
       RGWPeriod *current_period{nullptr};
 
@@ -403,7 +403,7 @@ protected:
    * MultipartUpload::Init - create head object of meta obj (src_obj_name + "." + upload_id)
    *                     [ Meta object stores all the parts upload info]
    * MultipartWriter::process - create all data/tail objects with obj_name same as
-   *                        meta obj (so that they can all be identified & deleted 
+   *                        meta obj (so that they can all be identified & deleted
    *                        during abort)
    * MultipartUpload::Abort - Just delete meta obj .. that will indirectly delete all the
    *                     uploads associated with that upload id / meta obj so far.
@@ -539,9 +539,20 @@ protected:
           DBReadOp(DBObject *_source, RGWObjectCtx *_rctx);
 
           virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
-          virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y, const DoutPrefixProvider* dpp) override;
-          virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end, RGWGetDataCB* cb, optional_yield y) override;
-          virtual int get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y) override; 
+
+	  /*
+	   * Both `read` and `iterate` read up through index `end`
+	   * *inclusive*. The number of bytes that could be returned is
+	   * `end - ofs + 1`.
+	   */
+	  virtual int read(int64_t ofs, int64_t end, bufferlist& bl,
+			   optional_yield y,
+			   const DoutPrefixProvider* dpp) override;
+	  virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs,
+			      int64_t end, RGWGetDataCB* cb,
+			      optional_yield y) override;
+
+	  virtual int get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y) override;
       };
 
       struct DBDeleteOp : public DeleteOp {
@@ -635,6 +646,7 @@ protected:
           Attrs* vals) override;
       virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
           bool must_exist, optional_yield y) override;
+      virtual int chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y) override;
     private:
       int read_attrs(const DoutPrefixProvider* dpp, DB::Object::Read &read_op, optional_yield y, rgw_obj* target_obj = nullptr);
   };
@@ -741,7 +753,7 @@ public:
                        optional_yield y) override;
   };
 
-  class DBStore : public StoreStore {
+  class DBStore : public StoreDriver {
     private:
       /* DBStoreManager is used in case multiple
        * connections are needed one for each tenant.
@@ -751,7 +763,6 @@ public:
        * multiple db handles (for eg., one for each tenant),
        * use dbsm->getDB(tenant) */
       DB *db;
-      std::string luarocks_path;
       DBZone zone;
       RGWSyncModuleInstanceRef sync_module;
       RGWLC* lc;
@@ -803,7 +814,7 @@ public:
 
   virtual std::unique_ptr<Notification> get_notification(
     rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s,
-    rgw::notify::EventType event_type, const std::string* object_name) override;
+    rgw::notify::EventType event_type, optional_yield y, const std::string* object_name) override;
 
   virtual std::unique_ptr<Notification> get_notification(
     const DoutPrefixProvider* dpp, rgw::sal::Object* obj,
@@ -811,7 +822,7 @@ public:
     rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
     std::string& _user_id, std::string& _user_tenant, std::string& _req_id,
     optional_yield y) override;
-    
+
       virtual RGWLC* get_rgwlc(void) override;
       virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
       virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;
@@ -892,13 +903,6 @@ public:
         return db->ctx();
       }
 
-      virtual const std::string& get_luarocks_path() const override {
-        return luarocks_path;
-      }
-
-      virtual void set_luarocks_path(const std::string& path) override {
-        luarocks_path = path;
-      }
       virtual void register_admin_apis(RGWRESTMgr* mgr) override { };
 
       /* Unique to DBStore */

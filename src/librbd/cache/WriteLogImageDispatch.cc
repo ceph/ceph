@@ -42,6 +42,10 @@ bool WriteLogImageDispatch<I>::read(
     std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
+  if (*image_dispatch_flags & io::IMAGE_DISPATCH_FLAG_CRYPTO_HEADER) {
+    return false;
+  }
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 
@@ -71,6 +75,10 @@ bool WriteLogImageDispatch<I>::write(
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
+  if (*image_dispatch_flags & io::IMAGE_DISPATCH_FLAG_CRYPTO_HEADER) {
+    return false;
+  }
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 
@@ -94,6 +102,10 @@ bool WriteLogImageDispatch<I>::discard(
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
+  if (*image_dispatch_flags & io::IMAGE_DISPATCH_FLAG_CRYPTO_HEADER) {
+    return false;
+  }
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 
@@ -120,6 +132,10 @@ bool WriteLogImageDispatch<I>::write_same(
     std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
+  if (*image_dispatch_flags & io::IMAGE_DISPATCH_FLAG_CRYPTO_HEADER) {
+    return false;
+  }
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 
@@ -146,6 +162,10 @@ bool WriteLogImageDispatch<I>::compare_and_write(
     std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
+  if (*image_dispatch_flags & io::IMAGE_DISPATCH_FLAG_CRYPTO_HEADER) {
+    return false;
+  }
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 

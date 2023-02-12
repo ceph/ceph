@@ -13,6 +13,11 @@
  *
  */
 
+/* N.B., this header defines fundamental serialized types.  Do not
+ * introduce changes or include files which can only be compiled in
+ * radosgw or OSD contexts (e.g., rgw_sal.h, rgw_common.h)
+ */
+
 #pragma once
 
 #include <optional>
@@ -50,8 +55,12 @@ struct bucket_index_normal_layout {
   uint32_t num_shards = 1;
 
   BucketHashType hash_type = BucketHashType::Mod;
-};
 
+  friend std::ostream& operator<<(std::ostream& out, const bucket_index_normal_layout& l) {
+    out << "num_shards=" << l.num_shards << ", hash_type=" << to_string(l.hash_type);
+    return out;
+  }
+};
 
 inline bool operator==(const bucket_index_normal_layout& l,
                        const bucket_index_normal_layout& r) {
@@ -73,6 +82,11 @@ struct bucket_index_layout {
 
   // TODO: variant of layout types?
   bucket_index_normal_layout normal;
+
+  friend std::ostream& operator<<(std::ostream& out, const bucket_index_layout& l) {
+    out << "type=" << to_string(l.type) << ", normal=" << l.normal;
+    return out;
+  }
 };
 
 inline bool operator==(const bucket_index_layout& l,
@@ -92,6 +106,11 @@ void decode_json_obj(bucket_index_layout& l, JSONObj *obj);
 struct bucket_index_layout_generation {
   uint64_t gen = 0;
   bucket_index_layout layout;
+
+  friend std::ostream& operator<<(std::ostream& out, const bucket_index_layout_generation& g) {
+    out << "gen=" << g.gen;
+    return out;
+  }
 };
 
 inline bool operator==(const bucket_index_layout_generation& l,
@@ -150,6 +169,11 @@ struct bucket_log_layout {
   BucketLogType type = BucketLogType::InIndex;
 
   bucket_index_log_layout in_index;
+
+  friend std::ostream& operator<<(std::ostream& out, const bucket_log_layout& l) {
+    out << "type=" << to_string(l.type);
+    return out;
+  }
 };
 
 void encode(const bucket_log_layout& l, bufferlist& bl, uint64_t f=0);
@@ -160,6 +184,11 @@ void decode_json_obj(bucket_log_layout& l, JSONObj *obj);
 struct bucket_log_layout_generation {
   uint64_t gen = 0;
   bucket_log_layout layout;
+
+  friend std::ostream& operator<<(std::ostream& out, const bucket_log_layout_generation& g) {
+    out << "gen=" << g.gen << ", layout=[ " << g.layout << " ]";
+    return out;
+  }
 };
 
 void encode(const bucket_log_layout_generation& l, bufferlist& bl, uint64_t f=0);
@@ -210,6 +239,20 @@ struct BucketLayout {
   // history of untrimmed bucket log layout generations, with the current
   // generation at the back()
   std::vector<bucket_log_layout_generation> logs;
+
+  friend std::ostream& operator<<(std::ostream& out, const BucketLayout& l) {
+    std::stringstream ss;
+    if (l.target_index) {
+      ss << *l.target_index;
+    } else {
+      ss << "none";
+    }
+    out << "resharding=" << to_string(l.resharding) <<
+      ", current_index=[" << l.current_index << "], target_index=[" <<
+      ss.str() << "], logs.size()=" << l.logs.size();
+
+    return out;
+  }
 };
 
 void encode(const BucketLayout& l, bufferlist& bl, uint64_t f=0);

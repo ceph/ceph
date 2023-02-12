@@ -1,51 +1,17 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include <boost/intrusive_ptr.hpp>
-#include "common/ceph_json.h"
-#include "common/errno.h"
 #include "rgw_metadata.h"
-#include "rgw_coroutine.h"
-#include "cls/version/cls_version_types.h"
 
-#include "rgw_zone.h"
-#include "rgw_tools.h"
 #include "rgw_mdlog.h"
-#include "rgw_sal.h"
 
-#include "rgw_cr_rados.h"
 
-#include "services/svc_zone.h"
 #include "services/svc_meta.h"
-#include "services/svc_meta_be.h"
 #include "services/svc_meta_be_sobj.h"
-#include "services/svc_cls.h"
-
-#include "include/ceph_assert.h"
-
-#include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
-
-const std::string RGWMetadataLogHistory::oid = "meta.history";
-
-struct obj_version;
-
-void encode_json(const char *name, const obj_version& v, Formatter *f)
-{
-  f->open_object_section(name);
-  f->dump_string("tag", v.tag);
-  f->dump_unsigned("ver", v.ver);
-  f->close_section();
-}
-
-void decode_json_obj(obj_version& v, JSONObj *obj)
-{
-  JSONDecoder::decode_json("tag", v.tag, obj);
-  JSONDecoder::decode_json("ver", v.ver, obj);
-}
 
 void LogStatusDump::dump(Formatter *f) const {
   string s;
@@ -70,6 +36,20 @@ void LogStatusDump::dump(Formatter *f) const {
       break;
   }
   encode_json("status", s, f);
+}
+
+void encode_json(const char *name, const obj_version& v, Formatter *f)
+{
+  f->open_object_section(name);
+  f->dump_string("tag", v.tag);
+  f->dump_unsigned("ver", v.ver);
+  f->close_section();
+}
+
+void decode_json_obj(obj_version& v, JSONObj *obj)
+{
+  JSONDecoder::decode_json("tag", v.tag, obj);
+  JSONDecoder::decode_json("ver", v.ver, obj);
 }
 
 void RGWMetadataLogData::encode(bufferlist& bl) const {
@@ -121,313 +101,6 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("status", status, obj);
 }
 
-void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id)
-{
-  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
-  char buf[16];
-  if (shard_id) {
-    *shard_id = val % max_shards;
-  }
-  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
-  name = prefix + buf;
-}
-
-void rgw_shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name)
-{
-  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
-  val ^= ceph_str_hash_linux(section.c_str(), section.size());
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
-  name = prefix + buf;
-}
-
-void rgw_shard_name(const string& prefix, unsigned shard_id, string& name)
-{
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%u", shard_id);
-  name = prefix + buf;
-}
-
-int RGWMetadataLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl) {
-  if (!svc.zone->need_to_log_metadata())
-    return 0;
-
-  string oid;
-  int shard_id;
-
-  rgw_shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
-  mark_modified(shard_id);
-  real_time now = real_clock::now();
-  return svc.cls->timelog.add(dpp, oid, now, section, key, bl, null_yield);
-}
-
-int RGWMetadataLog::get_shard_id(const string& hash_key, int *shard_id)
-{
-  string oid;
-
-  rgw_shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, shard_id);
-  return 0;
-}
-
-int RGWMetadataLog::store_entries_in_shard(const DoutPrefixProvider *dpp, list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
-{
-  string oid;
-
-  mark_modified(shard_id);
-  rgw_shard_name(prefix, shard_id, oid);
-  return svc.cls->timelog.add(dpp, oid, entries, completion, false, null_yield);
-}
-
-void RGWMetadataLog::init_list_entries(int shard_id, const real_time& from_time, const real_time& end_time, 
-                                       const string& marker, void **handle)
-{
-  LogListCtx *ctx = new LogListCtx();
-
-  ctx->cur_shard = shard_id;
-  ctx->from_time = from_time;
-  ctx->end_time  = end_time;
-  ctx->marker    = marker;
-
-  get_shard_oid(ctx->cur_shard, ctx->cur_oid);
-
-  *handle = (void *)ctx;
-}
-
-void RGWMetadataLog::complete_list_entries(void *handle) {
-  LogListCtx *ctx = static_cast<LogListCtx *>(handle);
-  delete ctx;
-}
-
-int RGWMetadataLog::list_entries(const DoutPrefixProvider *dpp, void *handle,
-				 int max_entries,
-				 list<cls_log_entry>& entries,
-				 string *last_marker,
-				 bool *truncated) {
-  LogListCtx *ctx = static_cast<LogListCtx *>(handle);
-
-  if (!max_entries) {
-    *truncated = false;
-    return 0;
-  }
-
-  std::string next_marker;
-  int ret = svc.cls->timelog.list(dpp, ctx->cur_oid, ctx->from_time, ctx->end_time,
-                                  max_entries, entries, ctx->marker,
-                                  &next_marker, truncated, null_yield);
-  if ((ret < 0) && (ret != -ENOENT))
-    return ret;
-
-  ctx->marker = std::move(next_marker);
-  if (last_marker) {
-    *last_marker = ctx->marker;
-  }
-
-  if (ret == -ENOENT)
-    *truncated = false;
-
-  return 0;
-}
-
-int RGWMetadataLog::get_info(const DoutPrefixProvider *dpp, int shard_id, RGWMetadataLogInfo *info)
-{
-  string oid;
-  get_shard_oid(shard_id, oid);
-
-  cls_log_header header;
-
-  int ret = svc.cls->timelog.info(dpp, oid, &header, null_yield);
-  if ((ret < 0) && (ret != -ENOENT))
-    return ret;
-
-  info->marker = header.max_marker;
-  info->last_update = header.max_time.to_real_time();
-
-  return 0;
-}
-
-static void _mdlog_info_completion(librados::completion_t cb, void *arg)
-{
-  auto infoc = static_cast<RGWMetadataLogInfoCompletion *>(arg);
-  infoc->finish(cb);
-  infoc->put(); // drop the ref from get_info_async()
-}
-
-RGWMetadataLogInfoCompletion::RGWMetadataLogInfoCompletion(info_callback_t cb)
-  : completion(librados::Rados::aio_create_completion((void *)this,
-                                                      _mdlog_info_completion)),
-    callback(cb)
-{
-}
-
-RGWMetadataLogInfoCompletion::~RGWMetadataLogInfoCompletion()
-{
-  completion->release();
-}
-
-int RGWMetadataLog::get_info_async(const DoutPrefixProvider *dpp, int shard_id, RGWMetadataLogInfoCompletion *completion)
-{
-  string oid;
-  get_shard_oid(shard_id, oid);
-
-  completion->get(); // hold a ref until the completion fires
-
-  return svc.cls->timelog.info_async(dpp, completion->get_io_obj(), oid,
-                                     &completion->get_header(),
-                                     completion->get_completion());
-}
-
-int RGWMetadataLog::trim(const DoutPrefixProvider *dpp, int shard_id, const real_time& from_time, const real_time& end_time,
-                         const string& start_marker, const string& end_marker)
-{
-  string oid;
-  get_shard_oid(shard_id, oid);
-
-  return svc.cls->timelog.trim(dpp, oid, from_time, end_time, start_marker,
-                               end_marker, nullptr, null_yield);
-}
-  
-int RGWMetadataLog::lock_exclusive(const DoutPrefixProvider *dpp, int shard_id, timespan duration, string& zone_id, string& owner_id) {
-  string oid;
-  get_shard_oid(shard_id, oid);
-
-  return svc.cls->lock.lock_exclusive(dpp, svc.zone->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
-}
-
-int RGWMetadataLog::unlock(const DoutPrefixProvider *dpp, int shard_id, string& zone_id, string& owner_id) {
-  string oid;
-  get_shard_oid(shard_id, oid);
-
-  return svc.cls->lock.unlock(dpp, svc.zone->get_zone_params().log_pool, oid, zone_id, owner_id);
-}
-
-void RGWMetadataLog::mark_modified(int shard_id)
-{
-  lock.get_read();
-  if (modified_shards.find(shard_id) != modified_shards.end()) {
-    lock.unlock();
-    return;
-  }
-  lock.unlock();
-
-  std::unique_lock wl{lock};
-  modified_shards.insert(shard_id);
-}
-
-void RGWMetadataLog::read_clear_modified(set<int> &modified)
-{
-  std::unique_lock wl{lock};
-  modified.swap(modified_shards);
-  modified_shards.clear();
-}
-
-obj_version& RGWMetadataObject::get_version()
-{
-  return objv;
-}
-
-class RGWMetadataTopHandler : public RGWMetadataHandler {
-  struct iter_data {
-    set<string> sections;
-    set<string>::iterator iter;
-  };
-
-  struct Svc {
-    RGWSI_Meta *meta{nullptr};
-  } svc;
-
-  RGWMetadataManager *mgr;
-
-public:
-  RGWMetadataTopHandler(RGWSI_Meta *meta_svc,
-                        RGWMetadataManager *_mgr) : mgr(_mgr) {
-    base_init(meta_svc->ctx());
-    svc.meta = meta_svc;
-  }
-
-  string get_type() override { return string(); }
-
-  RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) {
-    return new RGWMetadataObject;
-  }
-
-  int get(string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) override {
-    return -ENOTSUP;
-  }
-
-  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
-          optional_yield y, const DoutPrefixProvider *dpp, RGWMDLogSyncType type, bool from_remote_zone) override {
-    return -ENOTSUP;
-  }
-
-  int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) override {
-    return -ENOTSUP;
-  }
-
-  int mutate(const string& entry,
-             const ceph::real_time& mtime,
-             RGWObjVersionTracker *objv_tracker,
-             optional_yield y,
-             const DoutPrefixProvider *dpp,
-             RGWMDLogStatus op_type,
-             std::function<int()> f) {
-    return -ENOTSUP;
-  }
-
-  int list_keys_init(const DoutPrefixProvider *dpp, const string& marker, void **phandle) override {
-    iter_data *data = new iter_data;
-    list<string> sections;
-    mgr->get_sections(sections);
-    for (auto& s : sections) {
-      data->sections.insert(s);
-    }
-    data->iter = data->sections.lower_bound(marker);
-
-    *phandle = data;
-
-    return 0;
-  }
-  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, list<string>& keys, bool *truncated) override  {
-    iter_data *data = static_cast<iter_data *>(handle);
-    for (int i = 0; i < max && data->iter != data->sections.end(); ++i, ++(data->iter)) {
-      keys.push_back(*data->iter);
-    }
-
-    *truncated = (data->iter != data->sections.end());
-
-    return 0;
-  }
-  void list_keys_complete(void *handle) override {
-    iter_data *data = static_cast<iter_data *>(handle);
-
-    delete data;
-  }
-
-  virtual string get_marker(void *handle) override {
-    iter_data *data = static_cast<iter_data *>(handle);
-
-    if (data->iter != data->sections.end()) {
-      return *(data->iter);
-    }
-
-    return string();
-  }
-};
-
-RGWMetadataManager::RGWMetadataManager(RGWSI_Meta *_meta_svc)
-  : cct(_meta_svc->ctx()), meta_svc(_meta_svc)
-{
-  md_top_handler.reset(new RGWMetadataTopHandler(meta_svc, this));
-}
-
-RGWMetadataManager::~RGWMetadataManager()
-{
-}
-
-int RGWMetadataHandler::attach(RGWMetadataManager *manager)
-{
-  return manager->register_handler(this);
-}
-
 RGWMetadataHandler_GenericMetaBE::Put::Put(RGWMetadataHandler_GenericMetaBE *_handler,
 					   RGWSI_MetaBackend_Handler::Op *_op,
 					   string& _entry, RGWMetadataObject *_obj,
@@ -441,64 +114,6 @@ RGWMetadataHandler_GenericMetaBE::Put::Put(RGWMetadataHandler_GenericMetaBE *_ha
   y(_y),
   from_remote_zone(_from_remote_zone)
 {
-}
-
-RGWMetadataHandlerPut_SObj::RGWMetadataHandlerPut_SObj(RGWMetadataHandler_GenericMetaBE *handler, RGWSI_MetaBackend_Handler::Op *op,
-                                                       string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
-						       optional_yield y,
-                                                       RGWMDLogSyncType type, bool from_remote_zone) : Put(handler, op, entry, obj, objv_tracker, y, type, from_remote_zone) {
-}
-
-RGWMetadataHandlerPut_SObj::~RGWMetadataHandlerPut_SObj() {
-}
-
-int RGWMetadataHandlerPut_SObj::put_pre(const DoutPrefixProvider *dpp)
-{
-  int ret = get(&old_obj, dpp);
-  if (ret < 0 && ret != -ENOENT) {
-    return ret;
-  }
-  exists = (ret != -ENOENT);
-
-  oo.reset(old_obj);
-
-  auto old_ver = (!old_obj ? obj_version() : old_obj->get_version());
-  auto old_mtime = (!old_obj ? ceph::real_time() : old_obj->get_mtime());
-
-  // are we actually going to perform this put, or is it too old?
-  if (!handler->check_versions(exists, old_ver, old_mtime,
-                               objv_tracker.write_version, obj->get_mtime(),
-                               apply_type)) {
-    return STATUS_NO_APPLY;
-  }
-
-  objv_tracker.read_version = old_ver; /* maintain the obj version we just read */
-
-  return 0;
-}
-
-int RGWMetadataHandlerPut_SObj::put(const DoutPrefixProvider *dpp)
-{
-  int ret = put_check(dpp);
-  if (ret != 0) {
-    return ret;
-  }
-
-  return put_checked(dpp);
-}
-
-int RGWMetadataHandlerPut_SObj::put_checked(const DoutPrefixProvider *dpp)
-{
-  RGWSI_MBSObj_PutParams params(obj->get_pattrs(), obj->get_mtime());
-
-  encode_obj(&params.bl);
-
-  int ret = op->put(entry, params, &objv_tracker, y, dpp);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return 0;
 }
 
 int RGWMetadataHandler_GenericMetaBE::do_put_operate(Put *put_op, const DoutPrefixProvider *dpp)
@@ -620,6 +235,174 @@ string RGWMetadataHandler_GenericMetaBE::get_marker(void *handle)
   return marker;
 }
 
+RGWMetadataHandlerPut_SObj::RGWMetadataHandlerPut_SObj(RGWMetadataHandler_GenericMetaBE *handler,
+                                                       RGWSI_MetaBackend_Handler::Op *op,
+                                                       string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
+						       optional_yield y,
+                                                       RGWMDLogSyncType type, bool from_remote_zone) : Put(handler, op, entry, obj, objv_tracker, y, type, from_remote_zone) {
+}
+
+int RGWMetadataHandlerPut_SObj::put_pre(const DoutPrefixProvider *dpp)
+{
+  int ret = get(&old_obj, dpp);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+  exists = (ret != -ENOENT);
+
+  oo.reset(old_obj);
+
+  auto old_ver = (!old_obj ? obj_version() : old_obj->get_version());
+  auto old_mtime = (!old_obj ? ceph::real_time() : old_obj->get_mtime());
+
+  // are we actually going to perform this put, or is it too old?
+  if (!handler->check_versions(exists, old_ver, old_mtime,
+                               objv_tracker.write_version, obj->get_mtime(),
+                               apply_type)) {
+    return STATUS_NO_APPLY;
+  }
+
+  objv_tracker.read_version = old_ver; /* maintain the obj version we just read */
+
+  return 0;
+}
+
+int RGWMetadataHandlerPut_SObj::put(const DoutPrefixProvider *dpp)
+{
+  int ret = put_check(dpp);
+  if (ret != 0) {
+    return ret;
+  }
+
+  return put_checked(dpp);
+}
+
+int RGWMetadataHandlerPut_SObj::put_checked(const DoutPrefixProvider *dpp)
+{
+  RGWSI_MBSObj_PutParams params(obj->get_pattrs(), obj->get_mtime());
+
+  encode_obj(&params.bl);
+
+  int ret = op->put(entry, params, &objv_tracker, y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+
+class RGWMetadataTopHandler : public RGWMetadataHandler {
+  struct iter_data {
+    set<string> sections;
+    set<string>::iterator iter;
+  };
+
+  struct Svc {
+    RGWSI_Meta *meta{nullptr};
+  } svc;
+
+  RGWMetadataManager *mgr;
+
+public:
+  RGWMetadataTopHandler(RGWSI_Meta *meta_svc,
+                        RGWMetadataManager *_mgr) : mgr(_mgr) {
+    base_init(meta_svc->ctx());
+    svc.meta = meta_svc;
+  }
+
+  string get_type() override { return string(); }
+
+  RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) {
+    return new RGWMetadataObject;
+  }
+
+  int get(string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) override {
+    return -ENOTSUP;
+  }
+
+  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
+          optional_yield y, const DoutPrefixProvider *dpp, RGWMDLogSyncType type, bool from_remote_zone) override {
+    return -ENOTSUP;
+  }
+
+  int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) override {
+    return -ENOTSUP;
+  }
+
+  int mutate(const string& entry,
+             const ceph::real_time& mtime,
+             RGWObjVersionTracker *objv_tracker,
+             optional_yield y,
+             const DoutPrefixProvider *dpp,
+             RGWMDLogStatus op_type,
+             std::function<int()> f) {
+    return -ENOTSUP;
+  }
+
+  int list_keys_init(const DoutPrefixProvider *dpp, const string& marker, void **phandle) override {
+    iter_data *data = new iter_data;
+    list<string> sections;
+    mgr->get_sections(sections);
+    for (auto& s : sections) {
+      data->sections.insert(s);
+    }
+    data->iter = data->sections.lower_bound(marker);
+
+    *phandle = data;
+
+    return 0;
+  }
+  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, list<string>& keys, bool *truncated) override  {
+    iter_data *data = static_cast<iter_data *>(handle);
+    for (int i = 0; i < max && data->iter != data->sections.end(); ++i, ++(data->iter)) {
+      keys.push_back(*data->iter);
+    }
+
+    *truncated = (data->iter != data->sections.end());
+
+    return 0;
+  }
+  void list_keys_complete(void *handle) override {
+    iter_data *data = static_cast<iter_data *>(handle);
+
+    delete data;
+  }
+
+  virtual string get_marker(void *handle) override {
+    iter_data *data = static_cast<iter_data *>(handle);
+
+    if (data->iter != data->sections.end()) {
+      return *(data->iter);
+    }
+
+    return string();
+  }
+};
+
+RGWMetadataHandlerPut_SObj::~RGWMetadataHandlerPut_SObj() {}
+
+int RGWMetadataHandler::attach(RGWMetadataManager *manager)
+{
+  return manager->register_handler(this);
+}
+
+RGWMetadataHandler::~RGWMetadataHandler() {}
+
+obj_version& RGWMetadataObject::get_version()
+{
+  return objv;
+}
+
+RGWMetadataManager::RGWMetadataManager(RGWSI_Meta *_meta_svc)
+  : cct(_meta_svc->ctx()), meta_svc(_meta_svc)
+{
+  md_top_handler.reset(new RGWMetadataTopHandler(meta_svc, this));
+}
+
+RGWMetadataManager::~RGWMetadataManager()
+{
+}
+
 int RGWMetadataManager::register_handler(RGWMetadataHandler *handler)
 {
   string type = handler->get_type();
@@ -706,7 +489,7 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f, optional_yield y
 }
 
 int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
-			    optional_yield y,
+                            optional_yield y,
                             const DoutPrefixProvider *dpp,
                             RGWMDLogSyncType sync_type,
                             bool from_remote_zone,
@@ -743,7 +526,6 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
   if (!jo) {
     return -EINVAL;
   }
-
   RGWMetadataObject *obj = handler->get_meta_obj(jo, *objv, mtime.to_real_time());
   if (!obj) {
     return -EINVAL;
@@ -784,7 +566,7 @@ int RGWMetadataManager::remove(string& metadata_key, optional_yield y, const Dou
 int RGWMetadataManager::mutate(const string& metadata_key,
                                const ceph::real_time& mtime,
                                RGWObjVersionTracker *objv_tracker,
-			       optional_yield y,
+                               optional_yield y,
                                const DoutPrefixProvider *dpp,
                                RGWMDLogStatus op_type,
                                std::function<int()> f)
@@ -897,20 +679,5 @@ void RGWMetadataManager::get_sections(list<string>& sections)
   for (map<string, RGWMetadataHandler *>::iterator iter = handlers.begin(); iter != handlers.end(); ++iter) {
     sections.push_back(iter->first);
   }
-}
-
-void RGWMetadataLogInfo::dump(Formatter *f) const
-{
-  encode_json("marker", marker, f);
-  utime_t ut(last_update);
-  encode_json("last_update", ut, f);
-}
-
-void RGWMetadataLogInfo::decode_json(JSONObj *obj)
-{
-  JSONDecoder::decode_json("marker", marker, obj);
-  utime_t ut;
-  JSONDecoder::decode_json("last_update", ut, obj);
-  last_update = ut.to_real_time();
 }
 

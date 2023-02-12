@@ -31,7 +31,7 @@ POSIX semantics for various reasons:
   writes are not coherently propagated to other clients' caches.  That
   is, if a page is cached on host A, and then updated on host B, host
   A's page is not coherently invalidated.  (Shared writable mmap
-  appears to be quite rare--we have yet to here any complaints about this
+  appears to be quite rare--we have yet to hear any complaints about this
   behavior, and implementing cache coherency properly is complex.)
 - CephFS clients present a hidden ``.snap`` directory that is used to
   access, create, delete, and rename snapshots.  Although the virtual
@@ -67,17 +67,15 @@ as client data may not even be flushed to the server until the file is
 closed (and more generally writes will be significantly more
 time-shifted than CephFS, leading to less predictable results).
 
-However, all of there are very close to POSIX, and most of the time
-applications don't notice too much.  Many other storage systems (e.g.,
-HDFS) claim to be "POSIX-like" but diverge significantly from the
-standard by dropping support for things like in-place file
-modifications, truncate, or directory renames.
-
+Regardless, these are all similar enough to POSIX, and applications still work
+most of the time. Many other storage systems (e.g., HDFS) claim to be
+"POSIX-like" but diverge significantly from the standard by dropping support
+for things like in-place file modifications, truncate, or directory renames.
 
 Bottom line
 -----------
 
-CephFS relaxes more than local Linux kernel file systems (e.g., writes
+CephFS relaxes more than local Linux kernel file systems (for example, writes
 spanning object boundaries may be torn).  It relaxes strictly less
 than NFS when it comes to multiclient consistency, and generally less
 than NFS when it comes to write atomicity.

@@ -352,12 +352,18 @@ void OSDService::identify_splits_and_merges(
   set<pair<spg_t,epoch_t>> *split_children,
   set<pair<spg_t,epoch_t>> *merge_pgs)
 {
+  dout(20) << __func__ << " " << pgid << " e" << old_map->get_epoch()
+	   << " to e" << new_map->get_epoch() << dendl;
   if (!old_map->have_pg_pool(pgid.pool())) {
+    dout(20) << __func__ << " " << pgid << " pool " << pgid.pool()
+	     << " does not exist in old map" << dendl;
     return;
   }
   int old_pgnum = old_map->get_pg_num(pgid.pool());
   auto p = osd->pg_num_history.pg_nums.find(pgid.pool());
   if (p == osd->pg_num_history.pg_nums.end()) {
+    dout(20) << __func__ << " " << pgid << " pool " << pgid.pool()
+	     << " has no history" << dendl;
     return;
   }
   dout(20) << __func__ << " " << pgid << " e" << old_map->get_epoch()
@@ -556,6 +562,51 @@ void OSDService::activate_map()
     !osdmap->test_flag(CEPH_OSDMAP_NOTIERAGENT) &&
     osd->is_active();
   agent_cond.notify_all();
+}
+
+OSDMapRef OSDService::get_nextmap_reserved() {
+  std::lock_guard l(pre_publish_lock);
+
+  epoch_t e = next_osdmap->get_epoch();
+
+  std::map<epoch_t, unsigned>::iterator i =
+    map_reservations.insert(std::make_pair(e, 0)).first;
+  i->second++;
+  dout(20) << __func__  << " map_reservations: " << map_reservations << dendl;
+  return next_osdmap;
+}
+
+/// releases reservation on map
+void OSDService::release_map(OSDMapRef osdmap) {
+  std::lock_guard l(pre_publish_lock);
+  dout(20) << __func__  << " epoch: " << osdmap->get_epoch() << dendl;
+  std::map<epoch_t, unsigned>::iterator i =
+    map_reservations.find(osdmap->get_epoch());
+  ceph_assert(i != map_reservations.end());
+  ceph_assert(i->second > 0);
+  if (--(i->second) == 0) {
+    map_reservations.erase(i);
+  }
+  if (pre_publish_waiter) {
+    dout(20) << __func__  << " notify all." << dendl;
+    pre_publish_cond.notify_all();
+  }
+}
+
+/// blocks until there are no reserved maps prior to next_osdmap
+void OSDService::await_reserved_maps() {
+  std::unique_lock l{pre_publish_lock};
+  dout(20) << __func__  << " epoch:" << next_osdmap->get_epoch() << dendl;
+
+  ceph_assert(next_osdmap);
+  pre_publish_waiter++;
+  pre_publish_cond.wait(l, [this] {
+    auto i = map_reservations.cbegin();
+    return (i == map_reservations.cend() ||
+            i->first >= next_osdmap->get_epoch());
+  });
+  pre_publish_waiter--;
+  dout(20) << __func__  << " done " <<  pre_publish_waiter << dendl;
 }
 
 void OSDService::request_osdmap_update(epoch_t e)
@@ -1044,6 +1095,8 @@ float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
 
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)
 {
+  dout(20) << __func__ << " " << m->get_type_name() << " to osd." << peer
+	   << " from_epoch " << from_epoch << dendl;
   OSDMapRef next_map = get_nextmap_reserved();
   // service map is always newer/newest
   ceph_assert(from_epoch <= next_map->get_epoch());
@@ -1068,6 +1121,7 @@ void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epo
 
 void OSDService::send_message_osd_cluster(std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch)
 {
+  dout(20) << __func__ << " from_epoch " << from_epoch << dendl;
   OSDMapRef next_map = get_nextmap_reserved();
   // service map is always newer/newest
   ceph_assert(from_epoch <= next_map->get_epoch());
@@ -1092,6 +1146,8 @@ void OSDService::send_message_osd_cluster(std::vector<std::pair<int, Message*>>&
 }
 ConnectionRef OSDService::get_con_osd_cluster(int peer, epoch_t from_epoch)
 {
+  dout(20) << __func__ << " to osd." << peer
+	   << " from_epoch " << from_epoch << dendl;
   OSDMapRef next_map = get_nextmap_reserved();
   // service map is always newer/newest
   ceph_assert(from_epoch <= next_map->get_epoch());
@@ -1114,6 +1170,8 @@ ConnectionRef OSDService::get_con_osd_cluster(int peer, epoch_t from_epoch)
 
 pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t from_epoch)
 {
+  dout(20) << __func__ << " to osd." << peer
+	   << " from_epoch " << from_epoch << dendl;
   OSDMapRef next_map = get_nextmap_reserved();
   // service map is always newer/newest
   ceph_assert(from_epoch <= next_map->get_epoch());
@@ -1956,6 +2014,7 @@ void OSDService::prune_sent_ready_to_merge(const OSDMapRef& osdmap)
       dout(10) << __func__ << " " << *i << dendl;
       i = sent_ready_to_merge_source.erase(i);
     } else {
+      dout(20) << __func__ << " exist " << *i << dendl;
       ++i;
     }
   }
@@ -2129,6 +2188,17 @@ int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, 
     if (r < 0)
       return r;
   }
+
+  r = store->write_meta("ceph_version_when_created", pretty_version_to_str());
+  if (r < 0)
+    return r;
+
+  ostringstream created_at;
+  utime_t now = ceph_clock_now();
+  now.gmtime(created_at);
+  r = store->write_meta("created_at", created_at.str());
+  if (r < 0)
+    return r;
 
   r = store->write_meta("ready", "ready");
   if (r < 0)
@@ -3181,6 +3251,7 @@ int OSD::run_osd_bench_test(
   ostream &ss)
 {
   int ret = 0;
+  srand(time(NULL) % (unsigned long) -1);
   uint32_t duration = cct->_conf->osd_bench_duration;
 
   if (bsize > (int64_t) cct->_conf->osd_bench_max_block_size) {
@@ -3262,12 +3333,6 @@ int OSD::run_osd_bench_test(
     }
   }
 
-  bufferlist bl;
-  bufferptr bp(bsize);
-  memset(bp.c_str(), 'a', bp.length());
-  bl.push_back(std::move(bp));
-  bl.rebuild_page_aligned();
-
   {
     C_SaferCond waiter;
     if (!service.meta_ch->flush_commit(&waiter)) {
@@ -3275,10 +3340,15 @@ int OSD::run_osd_bench_test(
     }
   }
 
+  bufferlist bl;
   utime_t start = ceph_clock_now();
   for (int64_t pos = 0; pos < count; pos += bsize) {
     char nm[34];
     unsigned offset = 0;
+    bufferptr bp(bsize);
+    memset(bp.c_str(), rand() & 0xff, bp.length());
+    bl.push_back(std::move(bp));
+    bl.rebuild_page_aligned();
     if (onum && osize) {
       snprintf(nm, sizeof(nm), "disk_bw_test_%d", (int)(rand() % onum));
       offset = rand() % (osize / bsize) * bsize;
@@ -3293,6 +3363,7 @@ int OSD::run_osd_bench_test(
     if (!onum || !osize) {
       cleanupt.remove(coll_t::meta(), ghobject_t(soid));
     }
+    bl.clear();
   }
 
   {
@@ -3824,7 +3895,8 @@ int OSD::init()
     derr << "unable to obtain rotating service keys; retrying" << dendl;
     ++rotating_auth_attempts;
     if (rotating_auth_attempts > g_conf()->max_rotating_auth_attempts) {
-        derr << __func__ << " wait_auth_rotating timed out" << dendl;
+        derr << __func__ << " wait_auth_rotating timed out"
+	     <<" -- maybe I have a clock skew against the monitors?" << dendl;
 	exit(1);
     }
   }
@@ -3872,6 +3944,7 @@ int OSD::init()
   start_boot();
 
   // Override a few options if mclock scheduler is enabled.
+  maybe_override_sleep_options_for_qos();
   maybe_override_options_for_qos();
   maybe_override_max_osd_capacity_for_qos();
 
@@ -4342,6 +4415,12 @@ int OSD::shutdown()
     cct->_conf.apply_changes(nullptr);
   }
 
+  // stop MgrClient earlier as it's more like an internal consumer of OSD
+  // 
+  // should occur before unmounting the database in fast-shutdown to avoid
+  // a race condition (see https://tracker.ceph.com/issues/56101)
+  mgrc.shutdown();
+
   if (cct->_conf->osd_fast_shutdown) {
     // first, stop new task from being taken from op_shardedwq
     // and clear all pending tasks
@@ -4380,9 +4459,6 @@ int OSD::shutdown()
     // now it is safe to exit
     _exit(0);
   }
-
-  // stop MgrClient earlier as it's more like an internal consumer of OSD
-  mgrc.shutdown();
 
   service.start_shutdown();
 
@@ -6734,6 +6810,18 @@ void OSD::_collect_metadata(map<string,string> *pm)
     osdspec_affinity = "";
   }
   (*pm)["osdspec_affinity"] = osdspec_affinity;
+  string ceph_version_when_created;
+  r = store->read_meta("ceph_version_when_created", &ceph_version_when_created);
+  if (r <0 || ceph_version_when_created.empty()) {
+    ceph_version_when_created = "";
+  }
+  (*pm)["ceph_version_when_created"] = ceph_version_when_created;
+  string created_at;
+  r = store->read_meta("created_at", &created_at);
+  if (r < 0 || created_at.empty()) {
+    created_at = "";
+  }
+  (*pm)["created_at"] = created_at;
   store->collect_metadata(pm);
 
   collect_sys_info(pm, cct);
@@ -8690,7 +8778,7 @@ void OSD::consume_map()
 {
   ceph_assert(ceph_mutex_is_locked(osd_lock));
   auto osdmap = get_osdmap();
-  dout(7) << "consume_map version " << osdmap->get_epoch() << dendl;
+  dout(20) << __func__ << " version " << osdmap->get_epoch() << dendl;
 
   /** make sure the cluster is speaking in SORTBITWISE, because we don't
    *  speak the older sorting version any more. Be careful not to force
@@ -8700,11 +8788,10 @@ void OSD::consume_map()
     derr << __func__ << " SORTBITWISE flag is not set" << dendl;
     ceph_abort();
   }
-
   service.pre_publish_map(osdmap);
   service.await_reserved_maps();
   service.publish_map(osdmap);
-
+  dout(20) << "consume_map " << osdmap->get_epoch() << " -- publish done" << dendl;
   // prime splits and merges
   set<pair<spg_t,epoch_t>> newly_split;  // splits, and when
   set<pair<spg_t,epoch_t>> merge_pgs;    // merge participants, and when
@@ -8970,25 +9057,9 @@ void OSD::handle_fast_pg_create(MOSDPGCreate2 *m)
     utime_t created_stamp = p.second.second;
     auto q = m->pg_extra.find(pgid);
     if (q == m->pg_extra.end()) {
-      dout(20) << __func__ << " " << pgid << " e" << created
-	       << "@" << created_stamp
-	       << " (no history or past_intervals)" << dendl;
-      // pre-octopus ... no pg history.  this can be removed in Q release.
-      enqueue_peering_evt(
-	pgid,
-	PGPeeringEventRef(
-	  std::make_shared<PGPeeringEvent>(
-	    m->epoch,
-	    m->epoch,
-	    NullEvt(),
-	    true,
-	    new PGCreateInfo(
-	      pgid,
-	      created,
-	      pg_history_t(created, created_stamp),
-	      PastIntervals(),
-	      true)
-	    )));
+      clog->error() << __func__ << " " << pgid << " e" << created
+                    << "@" << created_stamp << " with no history or past_intervals"
+                    << ", this should be impossible after octopus.  Ignoring.";
     } else {
       dout(20) << __func__ << " " << pgid << " e" << created
 	       << "@" << created_stamp
@@ -9427,7 +9498,7 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch)
   const uint64_t owner = op->get_req()->get_source().num();
   const int type = op->get_req()->get_type();
 
-  dout(15) << "enqueue_op " << op << " prio " << priority
+  dout(15) << "enqueue_op " << *op->get_req() << " prio " << priority
            << " type " << type
 	   << " cost " << cost
 	   << " latency " << latency
@@ -9491,7 +9562,8 @@ void OSD::dequeue_op(
   op->set_dequeued_time(now);
 
   utime_t latency = now - m->get_recv_stamp();
-  dout(10) << "dequeue_op " << op << " prio " << m->get_priority()
+  dout(10) << "dequeue_op " << *op->get_req()
+           << " prio " << m->get_priority()
 	   << " cost " << m->get_cost()
 	   << " latency " << latency
 	   << " " << *m
@@ -9512,7 +9584,7 @@ void OSD::dequeue_op(
   pg->do_request(op, handle);
 
   // finish
-  dout(10) << "dequeue_op " << op << " finish" << dendl;
+  dout(10) << "dequeue_op " << *op->get_req() << " finish" << dendl;
   OID_EVENT_TRACE_WITH_MSG(m, "DEQUEUE_OP_END", false);
 }
 
@@ -9635,7 +9707,17 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
   std::lock_guard l{osd_lock};
 
   if (changed.count("osd_max_backfills") ||
-      changed.count("osd_delete_sleep") ||
+      changed.count("osd_recovery_max_active") ||
+      changed.count("osd_recovery_max_active_hdd") ||
+      changed.count("osd_recovery_max_active_ssd")) {
+    if (!maybe_override_options_for_qos(&changed) &&
+        changed.count("osd_max_backfills")) {
+      // Scheduler is not "mclock". Fallback to earlier behavior
+      service.local_reserver.set_max(cct->_conf->osd_max_backfills);
+      service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
+    }
+  }
+  if (changed.count("osd_delete_sleep") ||
       changed.count("osd_delete_sleep_hdd") ||
       changed.count("osd_delete_sleep_ssd") ||
       changed.count("osd_delete_sleep_hybrid") ||
@@ -9647,16 +9729,8 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_recovery_sleep") ||
       changed.count("osd_recovery_sleep_hdd") ||
       changed.count("osd_recovery_sleep_ssd") ||
-      changed.count("osd_recovery_sleep_hybrid") ||
-      changed.count("osd_recovery_max_active") ||
-      changed.count("osd_recovery_max_active_hdd") ||
-      changed.count("osd_recovery_max_active_ssd")) {
-    if (!maybe_override_options_for_qos() &&
-        changed.count("osd_max_backfills")) {
-      // Scheduler is not "mclock". Fallback to earlier behavior
-      service.local_reserver.set_max(cct->_conf->osd_max_backfills);
-      service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
-    }
+      changed.count("osd_recovery_sleep_hybrid")) {
+    maybe_override_sleep_options_for_qos();
   }
   if (changed.count("osd_min_recovery_priority")) {
     service.local_reserver.set_min_priority(cct->_conf->osd_min_recovery_priority);
@@ -9765,11 +9839,11 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
       max_capacity_iops_config = "osd_mclock_max_capacity_iops_ssd";
     }
 
+    double default_iops = 0.0;
+    double cur_iops = 0.0;
     if (!force_run_benchmark) {
-      double default_iops = 0.0;
-
       // Get the current osd iops capacity
-      double cur_iops = cct->_conf.get_val<double>(max_capacity_iops_config);
+      cur_iops = cct->_conf.get_val<double>(max_capacity_iops_config);
 
       // Get the default max iops capacity
       auto val = cct->_conf.get_val_default(max_capacity_iops_config);
@@ -9820,35 +9894,133 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
             << " elapsed_sec: " << elapsed
             << dendl;
 
-    // Persist the iops value to the MON store.
-    mon_cmd_set_config(max_capacity_iops_config, std::to_string(iops));
+    // Get the threshold IOPS set for the underlying hdd/ssd.
+    double threshold_iops = 0.0;
+    if (store_is_rotational) {
+      threshold_iops = cct->_conf.get_val<double>(
+        "osd_mclock_iops_capacity_threshold_hdd");
+    } else {
+      threshold_iops = cct->_conf.get_val<double>(
+        "osd_mclock_iops_capacity_threshold_ssd");
+    }
+
+    // Persist the iops value to the MON store or throw cluster warning
+    // if the measured iops exceeds the set threshold. If the iops exceed
+    // the threshold, the default value is used.
+    if (iops > threshold_iops) {
+      clog->warn() << "OSD bench result of " << std::to_string(iops)
+                   << " IOPS exceeded the threshold limit of "
+                   << std::to_string(threshold_iops) << " IOPS for osd."
+                   << std::to_string(whoami) << ". IOPS capacity is unchanged"
+                   << " at " << std::to_string(cur_iops) << " IOPS. The"
+                   << " recommendation is to establish the osd's IOPS capacity"
+                   << " using other benchmark tools (e.g. Fio) and then"
+                   << " override osd_mclock_max_capacity_iops_[hdd|ssd].";
+    } else {
+      mon_cmd_set_config(max_capacity_iops_config, std::to_string(iops));
+    }
   }
 }
 
-bool OSD::maybe_override_options_for_qos()
+bool OSD::maybe_override_options_for_qos(const std::set<std::string> *changed)
 {
-  // If the scheduler enabled is mclock, override the recovery, backfill
-  // and sleep options so that mclock can meet the QoS goals.
+  // Override options only if the scheduler enabled is mclock and the
+  // underlying objectstore is supported by mclock
   if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler" &&
       !unsupported_objstore_for_qos()) {
-    dout(1) << __func__
-            << ": Changing recovery/backfill/sleep settings for QoS" << dendl;
+    static const std::map<std::string, uint64_t> recovery_qos_defaults {
+      {"osd_recovery_max_active", 0},
+      {"osd_recovery_max_active_hdd", 10},
+      {"osd_recovery_max_active_ssd", 20},
+      {"osd_max_backfills", 10},
+    };
 
-    // Set high value for recovery max active
-    uint32_t rec_max_active = 1000;
-    cct->_conf.set_val(
-      "osd_recovery_max_active", std::to_string(rec_max_active));
-    cct->_conf.set_val(
-      "osd_recovery_max_active_hdd", std::to_string(rec_max_active));
-    cct->_conf.set_val(
-      "osd_recovery_max_active_ssd", std::to_string(rec_max_active));
+    // Check if we were called because of a configuration change
+    if (changed != nullptr) {
+      if (cct->_conf.get_val<bool>("osd_mclock_override_recovery_settings")) {
+        if (changed->count("osd_max_backfills")) {
+          dout(1) << __func__ << " Set local and remote max backfills to "
+                   << cct->_conf->osd_max_backfills << dendl;
+          service.local_reserver.set_max(cct->_conf->osd_max_backfills);
+          service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
+        }
+      } else {
+        // Recovery options change was attempted without setting
+        // the 'osd_mclock_override_recovery_settings' option.
+        // Find the key to remove from the configuration db.
+        std::string key;
+        if (changed->count("osd_max_backfills")) {
+          key = "osd_max_backfills";
+        } else if (changed->count("osd_recovery_max_active")) {
+          key = "osd_recovery_max_active";
+        } else if (changed->count("osd_recovery_max_active_hdd")) {
+          key = "osd_recovery_max_active_hdd";
+        } else if (changed->count("osd_recovery_max_active_ssd")) {
+          key = "osd_recovery_max_active_ssd";
+        } else {
+          // No key that we are interested in. Return.
+          return true;
+        }
 
-    // Set high value for osd_max_backfill
-    uint32_t max_backfills = 1000;
-    cct->_conf.set_val("osd_max_backfills", std::to_string(max_backfills));
-    service.local_reserver.set_max(max_backfills);
-    service.remote_reserver.set_max(max_backfills);
+        // Remove the current entry from the configuration if
+        // different from its default value.
+        auto val = recovery_qos_defaults.find(key);
+        if (val != recovery_qos_defaults.end() &&
+            cct->_conf.get_val<uint64_t>(key) != val->second) {
+          static const std::vector<std::string> osds = {
+            "osd",
+            "osd." + std::to_string(whoami)
+          };
 
+          for (auto osd : osds) {
+            std::string cmd =
+              "{"
+                "\"prefix\": \"config rm\", "
+                "\"who\": \"" + osd + "\", "
+                "\"name\": \"" + key + "\""
+              "}";
+            vector<std::string> vcmd{cmd};
+
+            dout(1) << __func__ << " Removing Key: " << key
+                    << " for " << osd << " from Mon db" << dendl;
+            monc->start_mon_command(vcmd, {}, nullptr, nullptr, nullptr);
+          }
+
+          // Raise a cluster warning indicating that the changes did not
+          // take effect and indicate the reason why.
+          clog->warn() << "Change to " << key << " on osd."
+                       << std::to_string(whoami) << " did not take effect."
+                       << " Enable osd_mclock_override_recovery_settings before"
+                       << " setting this option.";
+        }
+      }
+    } else { // if (changed != nullptr) (osd boot-up)
+      // Override the default recovery max active and max backfills to
+      // higher values based on the type of backing device (hdd/ssd).
+      // This section is executed only during osd boot-up.
+      for (auto opt : recovery_qos_defaults) {
+        cct->_conf.set_val_default(opt.first, std::to_string(opt.second));
+        if (opt.first == "osd_max_backfills") {
+          service.local_reserver.set_max(opt.second);
+          service.remote_reserver.set_max(opt.second);
+        }
+        dout(1) << __func__ << " Set default value for " << opt.first
+                << " to " << opt.second << dendl;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+void OSD::maybe_override_sleep_options_for_qos()
+{
+  // Override options only if the scheduler enabled is mclock and the
+  // underlying objectstore is supported by mclock
+  if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler" &&
+      !unsupported_objstore_for_qos()) {
+
+    // Override the various sleep settings
     // Disable recovery sleep
     cct->_conf.set_val("osd_recovery_sleep", std::to_string(0));
     cct->_conf.set_val("osd_recovery_sleep_hdd", std::to_string(0));
@@ -9869,9 +10041,7 @@ bool OSD::maybe_override_options_for_qos()
 
     // Disable scrub sleep
     cct->_conf.set_val("osd_scrub_sleep", std::to_string(0));
-    return true;
   }
-  return false;
 }
 
 /**
@@ -10252,8 +10422,10 @@ void OSDShard::identify_splits_and_merges(
   set<pair<spg_t,epoch_t>> *merge_pgs)
 {
   std::lock_guard l(shard_lock);
+  dout(20) << __func__ << " " << pg_slots.size() << " slots" << dendl;
   if (shard_osdmap) {
     for (auto& i : pg_slots) {
+      dout(20) << __func__ << " slot pgid:" << i.first << "slot:" << i.second.get() << dendl;
       const spg_t& pgid = i.first;
       auto *slot = i.second.get();
       if (slot->pg) {
@@ -10270,6 +10442,8 @@ void OSDShard::identify_splits_and_merges(
       }
     }
   }
+  dout(20) << __func__ << " " << split_pgs->size() << " splits, "
+	   << merge_pgs->size() << " merges" << dendl;
 }
 
 void OSDShard::prime_splits(const OSDMapRef& as_of_osdmap,
@@ -10434,7 +10608,6 @@ void OSDShard::unprime_split_children(spg_t parent, unsigned old_pg_num)
 
 void OSDShard::update_scheduler_config()
 {
-  std::lock_guard l(shard_lock);
   scheduler->update_configuration();
 }
 
@@ -10459,8 +10632,8 @@ OSDShard::OSDShard(
     shard_lock_name(shard_name + "::shard_lock"),
     shard_lock{make_mutex(shard_lock_name)},
     scheduler(ceph::osd::scheduler::make_scheduler(
-      cct, osd->num_shards, osd->store->is_rotational(),
-      osd->store->get_type())),
+      cct, osd->whoami, osd->num_shards, id, osd->store->is_rotational(),
+      osd->store->get_type(), osd->monc)),
     context_queue(sdata_wait_lock, sdata_cond)
 {
   dout(0) << "using op scheduler " << *scheduler << dendl;

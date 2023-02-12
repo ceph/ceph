@@ -9,7 +9,7 @@
 #include <string_view>
 
 #include <boost/container/static_vector.hpp>
-#include <boost/crc.hpp> 
+#include <boost/crc.hpp>
 
 #include "common/sstring.hh"
 #include "rgw_op.h"
@@ -355,7 +355,7 @@ public:
   RGWPutACLs_ObjStore_S3() {}
   ~RGWPutACLs_ObjStore_S3() override {}
 
-  int get_policy_from_state(rgw::sal::Store* store, req_state *s, std::stringstream& ss) override;
+  int get_policy_from_state(rgw::sal::Driver* driver, req_state *s, std::stringstream& ss) override;
   void send_response() override;
   int get_params(optional_yield y) override;
 };
@@ -516,8 +516,9 @@ public:
   int get_params(optional_yield y) override;
   void send_status() override;
   void begin_response() override;
-  void send_partial_response(rgw_obj_key& key, bool delete_marker,
-                             const std::string& marker_version_id, int ret) override;
+  void send_partial_response(const rgw_obj_key& key, bool delete_marker,
+                             const std::string& marker_version_id, int ret,
+                             boost::asio::deadline_timer *formatter_flush_cond) override;
   void end_response() override;
 };
 
@@ -615,7 +616,7 @@ public:
 class RGW_Auth_S3 {
 public:
   static int authorize(const DoutPrefixProvider *dpp,
-                       rgw::sal::Store* store,
+                       rgw::sal::Driver* driver,
                        const rgw::auth::StrategyRegistry& auth_registry,
                        req_state *s, optional_yield y);
 };
@@ -635,11 +636,11 @@ public:
   static int validate_bucket_name(const std::string& bucket);
   static int validate_object_name(const std::string& bucket);
 
-  int init(rgw::sal::Store* store,
+  int init(rgw::sal::Driver* driver,
            req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override {
-    return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
+    return RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
   }
   int postauth_init(optional_yield) override { return 0; }
 };
@@ -649,7 +650,7 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
 protected:
   const rgw::auth::StrategyRegistry& auth_registry;
 public:
-  static int init_from_header(rgw::sal::Store* store, req_state *s, RGWFormat default_formatter,
+  static int init_from_header(rgw::sal::Driver* driver, req_state *s, RGWFormat default_formatter,
 			      bool configurable_format);
 
   explicit RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
@@ -658,7 +659,7 @@ public:
     }
   ~RGWHandler_REST_S3() override = default;
 
-  int init(rgw::sal::Store* store,
+  int init(rgw::sal::Driver* driver,
            req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
@@ -793,7 +794,7 @@ public:
 
   ~RGWRESTMgr_S3() override = default;
 
-  RGWHandler_REST *get_handler(rgw::sal::Store* store,
+  RGWHandler_REST *get_handler(rgw::sal::Driver* driver,
 			       req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
@@ -1092,7 +1093,7 @@ class LDAPEngine : public AWSEngine {
   using result_t = rgw::auth::Engine::result_t;
 
 protected:
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   const rgw::auth::RemoteApplier::Factory* const apl_factory;
 
   acl_strategy_t get_acl_strategy() const;
@@ -1109,11 +1110,11 @@ protected:
 			optional_yield y) const override;
 public:
   LDAPEngine(CephContext* const cct,
-             rgw::sal::Store* store,
+             rgw::sal::Driver* driver,
              const VersionAbstractor& ver_abstractor,
              const rgw::auth::RemoteApplier::Factory* const apl_factory)
     : AWSEngine(cct, ver_abstractor),
-      store(store),
+      driver(driver),
       apl_factory(apl_factory) {
     init(cct);
   }
@@ -1129,7 +1130,7 @@ public:
 };
 
 class LocalEngine : public AWSEngine {
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
@@ -1143,11 +1144,11 @@ class LocalEngine : public AWSEngine {
 			optional_yield y) const override;
 public:
   LocalEngine(CephContext* const cct,
-              rgw::sal::Store* store,
+              rgw::sal::Driver* driver,
               const VersionAbstractor& ver_abstractor,
               const rgw::auth::LocalApplier::Factory* const apl_factory)
     : AWSEngine(cct, ver_abstractor),
-      store(store),
+      driver(driver),
       apl_factory(apl_factory) {
   }
 
@@ -1159,7 +1160,7 @@ public:
 };
 
 class STSEngine : public AWSEngine {
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   const rgw::auth::LocalApplier::Factory* const local_apl_factory;
   const rgw::auth::RemoteApplier::Factory* const remote_apl_factory;
   const rgw::auth::RoleApplier::Factory* const role_apl_factory;
@@ -1173,7 +1174,7 @@ class STSEngine : public AWSEngine {
   int get_session_token(const DoutPrefixProvider* dpp, const std::string_view& session_token,
                         STS::SessionToken& token) const;
 
-  result_t authenticate(const DoutPrefixProvider* dpp, 
+  result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string_view& access_key_id,
                         const std::string_view& signature,
                         const std::string_view& session_token,
@@ -1184,13 +1185,13 @@ class STSEngine : public AWSEngine {
 			optional_yield y) const override;
 public:
   STSEngine(CephContext* const cct,
-              rgw::sal::Store* store,
+              rgw::sal::Driver* driver,
               const VersionAbstractor& ver_abstractor,
               const rgw::auth::LocalApplier::Factory* const local_apl_factory,
               const rgw::auth::RemoteApplier::Factory* const remote_apl_factory,
               const rgw::auth::RoleApplier::Factory* const role_apl_factory)
     : AWSEngine(cct, ver_abstractor),
-      store(store),
+      driver(driver),
       local_apl_factory(local_apl_factory),
       remote_apl_factory(remote_apl_factory),
       role_apl_factory(role_apl_factory) {

@@ -14,6 +14,7 @@ function usage {
 
 
 function create {
+  ceph config set mds mds_bal_fragment_dirs 0
   mkdir dir
   DIR_INODE=$(stat -c '%i' dir)
   touch dir/a
@@ -35,6 +36,11 @@ function create {
   touch dir/a
   # unlink then create, HEAD not snapped
   ls dir/.snap/*/
+  mkdir big
+  BIG_DIR_INODE=$(stat -c '%i' big)
+  for i in `seq 1 15000`; do
+    touch $(printf 'big/%08d' $i)
+  done
 }
 
 function flush {
@@ -49,13 +55,24 @@ function damage {
 
   # nuke snap 1 version of "a"
   rados --pool="$METADATA_POOL" getomapval "$IS" a_$(printf %x $((LS-4))) "$T"
-  printf '\xff\xff\xff\xf0' | dd of="$T" count=4 bs=1
+  printf '\xff\xff\xff\xf0' | dd of="$T" count=4 bs=1 conv=notrunc,nocreat
   rados --pool="$METADATA_POOL" setomapval "$IS" a_$(printf %x $((LS-4))) --input-file="$T"
 
   # nuke snap 4 version of "a"
   rados --pool="$METADATA_POOL" getomapval "$IS" a_$(printf %x $((LS-1))) "$T"
-  printf '\xff\xff\xff\xff' | dd of="$T" count=4 bs=1
+  printf '\xff\xff\xff\xff' | dd of="$T" count=4 bs=1 conv=notrunc,nocreat
   rados --pool="$METADATA_POOL" setomapval "$IS" a_$(printf %x $((LS-1))) --input-file="$T"
+
+  # screw up HEAD
+  rados --pool="$METADATA_POOL" getomapval "$IS" a_head "$T"
+  printf '\xfe\xff\xff\xff' | dd of="$T" count=4 bs=1 conv=notrunc,nocreat
+  rados --pool="$METADATA_POOL" setomapval "$IS" a_head --input-file="$T"
+
+  # screw up HEAD on what dentry in big
+  IS=$(printf '%llx.%08llx' "$BIG_DIR_INODE" 0)
+  rados --pool="$METADATA_POOL" getomapval "$IS" 00009999_head "$T"
+  printf '\xfe\xff\xff\xff' | dd of="$T" count=4 bs=1 conv=notrunc,nocreat
+  rados --pool="$METADATA_POOL" setomapval "$IS" 00009999_head --input-file="$T"
 
   rm -f "$T"
 }
@@ -66,13 +83,15 @@ function recover {
   sleep 5
   cephfs-journal-tool --rank="$FS":0 event recover_dentries summary
   cephfs-journal-tool --rank="$FS":0 journal reset
-  python3 $FIRST_DAMAGE --memo /tmp/memo1 "$METADATA_POOL"
-  python3 $FIRST_DAMAGE --memo /tmp/memo2 --remove "$METADATA_POOL"
+  python3 $FIRST_DAMAGE --debug /tmp/debug1 --memo /tmp/memo1 "$METADATA_POOL"
+  python3 $FIRST_DAMAGE --debug /tmp/debug2 --memo /tmp/memo2 --repair-nosnap  "$METADATA_POOL"
+  python3 $FIRST_DAMAGE --debug /tmp/debug3 --memo /tmp/memo3 --remove "$METADATA_POOL"
   ceph fs set "$FS" joinable true
 }
 
 function check {
   stat dir || exit 1
+  stat dir/a || exit 1
   for i in `seq 1 5`; do
     stat dir/.snap/$i || exit 2
   done
@@ -94,6 +113,7 @@ function check {
 
 function cleanup {
   rmdir dir/.snap/*
+  find dir
   rm -rf dir
 }
 

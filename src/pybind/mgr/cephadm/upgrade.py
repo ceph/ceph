@@ -10,6 +10,7 @@ from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, \
     MONITORING_STACK_TYPES, CEPH_TYPES, GATEWAY_TYPES
+from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
 
 if TYPE_CHECKING:
@@ -122,7 +123,8 @@ class CephadmUpgrade:
         'UPGRADE_FAILED_PULL',
         'UPGRADE_REDEPLOY_DAEMON',
         'UPGRADE_BAD_TARGET_VERSION',
-        'UPGRADE_EXCEPTION'
+        'UPGRADE_EXCEPTION',
+        'UPGRADE_OFFLINE_HOST'
     ]
 
     def __init__(self, mgr: "CephadmOrchestrator"):
@@ -467,6 +469,8 @@ class CephadmUpgrade:
         self.mgr.log.info('Upgrade: Resumed upgrade to %s' % self.target_image)
         self._save_upgrade_state()
         self.mgr.event.set()
+        for alert_id in self.UPGRADE_ERRORS:
+            self.mgr.remove_health_warning(alert_id)
         return 'Resumed upgrade to %s' % self.target_image
 
     def upgrade_stop(self) -> str:
@@ -491,6 +495,14 @@ class CephadmUpgrade:
         if self.upgrade_state and not self.upgrade_state.paused:
             try:
                 self._do_upgrade()
+            except HostConnectionError as e:
+                self._fail_upgrade('UPGRADE_OFFLINE_HOST', {
+                    'severity': 'error',
+                    'summary': f'Upgrade: Failed to connect to host {e.hostname} at addr ({e.addr})',
+                    'count': 1,
+                    'detail': [f'SSH connection failed to {e.hostname} at addr ({e.addr}): {str(e)}'],
+                })
+                return False
             except Exception as e:
                 self._fail_upgrade('UPGRADE_EXCEPTION', {
                     'severity': 'error',
@@ -1025,6 +1037,18 @@ class CephadmUpgrade:
             logger.debug('_do_upgrade no state, exiting')
             return
 
+        if self.mgr.offline_hosts:
+            # offline host(s), on top of potential connection errors when trying to upgrade a daemon
+            # or pull an image, can cause issues where daemons are never ok to stop. Since evaluating
+            # whether or not that risk is present for any given offline hosts is a difficult problem,
+            # it's best to just fail upgrade cleanly so user can address the offline host(s)
+
+            # the HostConnectionError expects a hostname and addr, so let's just take
+            # one at random. It doesn't really matter which host we say we couldn't reach here.
+            hostname: str = list(self.mgr.offline_hosts)[0]
+            addr: str = self.mgr.inventory.get_addr(hostname)
+            raise HostConnectionError(f'Host(s) were marked offline: {self.mgr.offline_hosts}', hostname, addr)
+
         target_image = self.target_image
         target_id = self.upgrade_state.target_id
         target_digests = self.upgrade_state.target_digests
@@ -1156,7 +1180,7 @@ class CephadmUpgrade:
                     # no point in trying to redeploy with new version if active mgr is not on the new version
                     need_upgrade_deployer = []
 
-            if not need_upgrade_self:
+            if any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
                 # only after the mgr itself is upgraded can we expect daemons to have
                 # deployed_by == target_digests
                 need_upgrade += need_upgrade_deployer

@@ -18,7 +18,7 @@ class RootMapItem:
 
 class TestPgAutoscaler(object):
 
-    def setup(self):
+    def setup_method(self):
         # a bunch of attributes for testing.
         self.autoscaler = module.PgAutoscaler('module_name', 0, 0)
 

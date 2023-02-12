@@ -31,6 +31,7 @@ namespace ceph::os {
 namespace crimson::osd {
   class ShardServices;
   class PG;
+  class ObjectContextLoader;
 }
 
 class PGBackend
@@ -63,14 +64,16 @@ public:
     std::tuple<interruptible_future<>,
 	       interruptible_future<crimson::osd::acked_peers_t>>;
   PGBackend(shard_id_t shard, CollectionRef coll,
-            crimson::osd::ShardServices &shard_services);
+            crimson::osd::ShardServices &shard_services,
+            DoutPrefixProvider &dpp);
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> create(pg_t pgid,
 					   const pg_shard_t pg_shard,
 					   const pg_pool_t& pool,
 					   crimson::os::CollectionRef coll,
 					   crimson::osd::ShardServices& shard_services,
-					   const ec_profile_t& ec_profile);
+					   const ec_profile_t& ec_profile,
+					   DoutPrefixProvider &dpp);
   using attrs_t =
     std::map<std::string, ceph::bufferptr, std::less<>>;
   using read_errorator = ll_read_errorator::extend<
@@ -186,6 +189,20 @@ public:
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats);
+  using rollback_ertr = crimson::errorator<
+    crimson::ct_error::enoent>;
+  using rollback_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      rollback_ertr>;
+  rollback_iertr::future<> rollback(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params,
+    object_stat_sum_t& delta_stats,
+    crimson::osd::ObjectContextRef head,
+    crimson::osd::ObjectContextLoader& obc_loader);
   write_iertr::future<> truncate(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -261,9 +278,9 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
   void clone(
-    object_info_t& snap_oi,
-    ObjectState& os,
-    ObjectState& d_os,
+    /* const */object_info_t& snap_oi,
+    const ObjectState& os,
+    const ObjectState& d_os,
     ceph::os::Transaction& trans);
   interruptible_future<struct stat> stat(
     CollectionRef c,
@@ -273,6 +290,31 @@ public:
     const ghobject_t& oid,
     uint64_t off,
     uint64_t len);
+
+  write_iertr::future<> tmapput(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans,
+    object_stat_sum_t& delta_stats,
+    osd_op_params_t& osd_op_params);
+
+  using tmapup_ertr = write_ertr::extend<
+    crimson::ct_error::enoent,
+    crimson::ct_error::eexist>;
+  using tmapup_iertr = ::crimson::interruptible::interruptible_errorator<
+    ::crimson::osd::IOInterruptCondition,
+    tmapup_ertr>;
+  tmapup_iertr::future<> tmapup(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans,
+    object_stat_sum_t& delta_stats,
+    osd_op_params_t& osd_op_params);
+
+  read_ierrorator::future<> tmapget(
+    const ObjectState& os,
+    OSDOp& osd_op,
+    object_stat_sum_t& delta_stats);
 
   // OMAP
   ll_read_ierrorator::future<> omap_get_keys(
@@ -341,18 +383,13 @@ public:
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
   virtual seastar::future<> stop() = 0;
-  struct peering_info_t {
-    bool is_primary;
-  };
-  virtual void on_actingset_changed(peering_info_t pi) = 0;
-  virtual void on_activate_complete();
+  virtual void on_actingset_changed(bool same_primary) = 0;
 protected:
   const shard_id_t shard;
   CollectionRef coll;
   crimson::osd::ShardServices &shard_services;
+  DoutPrefixProvider &dpp; ///< provides log prefix context
   crimson::os::FuturizedStore* store;
-  bool stopping = false;
-  std::optional<peering_info_t> peering;
   virtual seastar::future<> request_committed(
     const osd_reqid_t& reqid,
     const eversion_t& at_version) = 0;
@@ -372,6 +409,22 @@ private:
     size_t offset,
     size_t length,
     uint32_t flags) = 0;
+  write_iertr::future<> _writefull(
+    ObjectState& os,
+    off_t truncate_size,
+    const bufferlist& bl,
+    ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params,
+    object_stat_sum_t& delta_stats,
+    unsigned flags);
+  write_iertr::future<> _truncate(
+    ObjectState& os,
+    ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params,
+    object_stat_sum_t& delta_stats,
+    size_t offset,
+    size_t truncate_size,
+    uint32_t truncate_seq);
 
   bool maybe_create_new_object(ObjectState& os,
     ceph::os::Transaction& txn,

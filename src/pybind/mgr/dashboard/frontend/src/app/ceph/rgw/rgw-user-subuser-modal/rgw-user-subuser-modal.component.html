@@ -50,7 +50,7 @@
                  i18n>Permission</label>
           <div class="cd-col-form-input">
             <select id="perm"
-                    class="form-control"
+                    class="form-select"
                     formControlName="perm">
               <option i18n
                       [ngValue]="null">-- Select a permission --</option>
@@ -100,14 +100,12 @@
                        class="form-control"
                        type="password"
                        formControlName="secret_key">
-                <span class="input-group-append">
-                  <button type="button"
-                          class="btn btn-light"
-                          cdPasswordButton="secret_key">
-                  </button>
-                  <cd-copy-2-clipboard-button source="secret_key">
-                  </cd-copy-2-clipboard-button>
-                </span>
+                <button type="button"
+                        class="btn btn-light"
+                        cdPasswordButton="secret_key">
+                </button>
+                <cd-copy-2-clipboard-button source="secret_key">
+                </cd-copy-2-clipboard-button>
               </div>
               <span class="invalid-feedback"
                     *ngIf="formGroup.showError('secret_key', frm, 'required')"

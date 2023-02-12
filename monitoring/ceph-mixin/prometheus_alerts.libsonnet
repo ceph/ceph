@@ -552,6 +552,17 @@
           },
         },
         {
+          alert: 'CephNodeNetworkBondDegraded',
+          expr: |||
+            node_bonding_slaves - node_bonding_active != 0
+          |||,
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Degraded Bond on Node {{ $labels.instance }}%(cluster)s' % $.MultiClusterSummary(),
+            description: 'Bond {{ $labels.master }} is degraded on Node {{ $labels.instance }}.',
+          },
+        },
+        {
           alert: 'CephNodeDiskspaceWarning',
           expr: 'predict_linear(node_filesystem_free_bytes{device=~"/.*"}[2d], 3600 * 24 * 5) *on(instance) group_left(nodename) node_uname_info < 0',
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.8.4' },
@@ -627,6 +638,17 @@
             documentation: 'https://docs.ceph.com/en/latest/rados/operations/health-checks#slow-ops',
             summary: 'OSD operations are slow to complete%(cluster)s' % $.MultiClusterSummary(),
             description: '{{ $value }} OSD requests are taking too long to process (osd_op_complaint_time exceeded)',
+          },
+        },
+        {
+          alert: 'CephDaemonSlowOps',
+          'for': '30s',
+          expr: 'ceph_daemon_health_metrics{type="SLOW_OPS"} > 0',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            documentation: 'https://docs.ceph.com/en/latest/rados/operations/health-checks#slow-ops',
+            summary: '{{ $labels.ceph_daemon }} operations are slow to complete',
+            description: '{{ $labels.ceph_daemon }} operations are taking too long to process (complaint time exceeded)',
           },
         },
       ],

@@ -175,52 +175,73 @@ target_link_libraries(unittest_rgw_iam_policy
 
 add_executable(unittest_rgw_string test_rgw_string.cc)
 add_ceph_unittest(unittest_rgw_string)
+target_include_directories(unittest_rgw_string
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
 
 # unitttest_rgw_dmclock_queue
 add_executable(unittest_rgw_dmclock_scheduler test_rgw_dmclock_scheduler.cc $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_dmclock_scheduler)
+target_include_directories(unittest_rgw_dmclock_scheduler
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
 
 target_link_libraries(unittest_rgw_dmclock_scheduler rgw_schedulers global ${UNITTEST_LIBS})
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   add_executable(unittest_rgw_amqp test_rgw_amqp.cc)
   add_ceph_unittest(unittest_rgw_amqp)
+  target_include_directories(unittest_rgw_amqp
+    SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+    SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
   target_link_libraries(unittest_rgw_amqp ${rgw_libs})
 endif()
 
 # unittest_rgw_xml
 add_executable(unittest_rgw_xml test_rgw_xml.cc)
 add_ceph_unittest(unittest_rgw_xml)
-
+target_include_directories(unittest_rgw_xml
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
 target_link_libraries(unittest_rgw_xml ${rgw_libs} ${EXPAT_LIBRARIES})
 
 # unittest_rgw_lc
 add_executable(unittest_rgw_lc test_rgw_lc.cc)
 add_ceph_unittest(unittest_rgw_lc)
-target_include_directories(unittest_rgw_lc SYSTEM PRIVATE
-  "${CMAKE_SOURCE_DIR}/src/rgw")
+target_include_directories(unittest_rgw_lc
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
 target_link_libraries(unittest_rgw_lc
   rgw_common ${rgw_libs} ${EXPAT_LIBRARIES})
 
 # unittest_rgw_arn
 add_executable(unittest_rgw_arn test_rgw_arn.cc)
 add_ceph_unittest(unittest_rgw_arn)
-
+target_include_directories(unittest_rgw_arn
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
 target_link_libraries(unittest_rgw_arn ${rgw_libs})
 
 # unittest_rgw_kms
 add_executable(unittest_rgw_kms test_rgw_kms.cc)
 add_ceph_unittest(unittest_rgw_kms)
-
+target_include_directories(unittest_rgw_kms
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
 target_link_libraries(unittest_rgw_kms ${rgw_libs})
 
 # unittest_rgw_url
 add_executable(unittest_rgw_url test_rgw_url.cc)
 add_ceph_unittest(unittest_rgw_url)
-
+target_include_directories(unittest_rgw_url
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
 target_link_libraries(unittest_rgw_url ${rgw_libs})
 
 add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
+target_include_directories(ceph_test_rgw_gc_log
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
 target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} radostest-cxx)
 install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -229,15 +250,33 @@ add_ceph_test(test-ceph-diff-sorted.sh
 
 # unittest_cls_fifo_legacy
 add_executable(unittest_cls_fifo_legacy test_cls_fifo_legacy.cc)
+target_include_directories(unittest_cls_fifo_legacy
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
 target_link_libraries(unittest_cls_fifo_legacy radostest-cxx ${UNITTEST_LIBS}
   ${rgw_libs})
 
 # unittest_log_backing
 add_executable(unittest_log_backing test_log_backing.cc)
+target_include_directories(unittest_log_backing
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
 target_link_libraries(unittest_log_backing radostest-cxx ${UNITTEST_LIBS}
   ${rgw_libs})
 
 add_executable(unittest_rgw_lua test_rgw_lua.cc)
 add_ceph_unittest(unittest_rgw_lua)
+target_include_directories(unittest_rgw_lua
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
 target_link_libraries(unittest_rgw_lua ${rgw_libs})
 
+add_executable(radosgw-cr-test rgw_cr_test.cc)
+target_link_libraries(radosgw-cr-test ${rgw_libs} librados
+  cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
+  cls_log_client cls_timeindex_client
+  cls_version_client cls_user_client
+  global ${LIB_RESOLV}
+  OATH::OATH
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
+  GTest::GTest)

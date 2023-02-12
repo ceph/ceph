@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_LC_H
-#define CEPH_RGW_LC_H
+#pragma once
 
 #include <map>
 #include <array>
@@ -515,7 +514,7 @@ WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
 class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   std::unique_ptr<rgw::sal::Lifecycle> sal_lc;
   int max_objs{0};
   std::string *obj_names{nullptr};
@@ -569,10 +568,10 @@ public:
 
   std::vector<std::unique_ptr<RGWLC::LCWorker>> workers;
 
-  RGWLC() : cct(nullptr), store(nullptr) {}
+  RGWLC() : cct(nullptr), driver(nullptr) {}
   virtual ~RGWLC() override;
 
-  void initialize(CephContext *_cct, rgw::sal::Store* _store);
+  void initialize(CephContext *_cct, rgw::sal::Driver* _driver);
   void finalize();
 
   int process(LCWorker* worker,
@@ -619,7 +618,7 @@ public:
 namespace rgw::lc {
 
 int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
-                       rgw::sal::Store* store,
+                       rgw::sal::Driver* driver,
 		       rgw::sal::Lifecycle* sal_lc,
 		       rgw::sal::Bucket* bucket);
 
@@ -639,5 +638,3 @@ bool s3_multipart_abort_header(
   std::string& rule_id);
 
 } // namespace rgw::lc
-
-#endif

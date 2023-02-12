@@ -63,6 +63,7 @@ SUBSYS(rgw_sync, 1, 5)
 SUBSYS(rgw_datacache, 1, 5)
 SUBSYS(rgw_access, 1, 5)
 SUBSYS(rgw_dbstore, 1, 5)
+SUBSYS(rgw_flight, 1, 5)
 SUBSYS(javaclient, 1, 5)
 SUBSYS(asok, 1, 5)
 SUBSYS(throttle, 1, 1)
@@ -102,3 +103,8 @@ SUBSYS(mclock, 1, 5)
 SUBSYS(cyanstore, 0, 5)
 SUBSYS(ceph_exporter, 1, 5)
 SUBSYS(memstore, 1, 5)
+// *********************************************************************
+// Developers should update /doc/rados/troubleshooting/log-and-debug.rst
+// when adding or removing a subsystem accordingly.
+// *********************************************************************
+

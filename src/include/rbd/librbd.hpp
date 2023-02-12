@@ -217,6 +217,7 @@ namespace librbd {
   typedef rbd_encryption_format_t encryption_format_t;
   typedef rbd_encryption_algorithm_t encryption_algorithm_t;
   typedef rbd_encryption_options_t encryption_options_t;
+  typedef rbd_encryption_spec_t encryption_spec_t;
 
   typedef struct {
     encryption_algorithm_t alg;
@@ -227,6 +228,10 @@ namespace librbd {
     encryption_algorithm_t alg;
     std::string passphrase;
   } encryption_luks2_format_options_t;
+
+  typedef struct {
+    std::string passphrase;
+  } encryption_luks_format_options_t;
 
 class CEPH_RBD_API RBD
 {
@@ -595,6 +600,7 @@ public:
                         size_t opts_size);
   int encryption_load(encryption_format_t format, encryption_options_t opts,
                       size_t opts_size);
+  int encryption_load2(const encryption_spec_t *specs, size_t spec_count);
 
   /* striping */
   uint64_t get_stripe_unit() const;

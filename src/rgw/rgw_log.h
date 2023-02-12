@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_LOG_H
-#define CEPH_RGW_LOG_H
+#pragma once
 
 #include <boost/container/flat_map.hpp>
 #include "rgw_common.h"
@@ -14,9 +13,13 @@
 class RGWOp;
 
 struct delete_multi_obj_entry {
-  std::string key, version_id, error_message, marker_version_id;
-  uint32_t http_status;
-  bool error, delete_marker;
+  std::string key;
+  std::string version_id;
+  std::string error_message;
+  std::string marker_version_id;
+  uint32_t http_status = 0;
+  bool error = false;
+  bool delete_marker = false;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
@@ -45,7 +48,8 @@ struct delete_multi_obj_entry {
 WRITE_CLASS_ENCODER(delete_multi_obj_entry)
 
 struct delete_multi_obj_op_meta {
-  uint32_t num_ok, num_err;
+  uint32_t num_ok = 0;
+  uint32_t num_err = 0;
   std::vector<delete_multi_obj_entry> objects;
 
   void encode(bufferlist &bl) const {
@@ -92,7 +96,7 @@ struct rgw_log_entry {
   headers_map x_headers;
   std::string trans_id;
   std::vector<std::string> token_claims;
-  uint32_t identity_type;
+  uint32_t identity_type = TYPE_NONE;
   std::string access_key_id;
   std::string subuser;
   bool temp_url {false};
@@ -267,11 +271,11 @@ public:
 };
 
 class OpsLogRados : public OpsLogSink {
-  // main()'s Store pointer as a reference, possibly modified by RGWRealmReloader
-  rgw::sal::Store* const& store;
+  // main()'s driver pointer as a reference, possibly modified by RGWRealmReloader
+  rgw::sal::Driver* const& driver;
 
 public:
-  OpsLogRados(rgw::sal::Store* const& store);
+  OpsLogRados(rgw::sal::Driver* const& driver);
   int log(req_state* s, struct rgw_log_entry& entry) override;
 };
 
@@ -279,10 +283,7 @@ class RGWREST;
 
 int rgw_log_op(RGWREST* const rest, struct req_state* s,
 	             const RGWOp* op, OpsLogSink* olog);
-void rgw_log_usage_init(CephContext* cct, rgw::sal::Store* store);
+void rgw_log_usage_init(CephContext* cct, rgw::sal::Driver* driver);
 void rgw_log_usage_finalize();
 void rgw_format_ops_log_entry(struct rgw_log_entry& entry,
 			      ceph::Formatter *formatter);
-
-#endif /* CEPH_RGW_LOG_H */
-

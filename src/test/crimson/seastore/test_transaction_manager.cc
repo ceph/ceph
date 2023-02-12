@@ -45,10 +45,14 @@ struct test_extent_record_t {
   }
 };
 
-std::ostream &operator<<(std::ostream &lhs, const test_extent_record_t &rhs) {
-  return lhs << "test_extent_record_t(" << rhs.desc
-	     << ", refcount=" << rhs.refcount << ")";
-}
+template<>
+struct fmt::formatter<test_extent_record_t> : fmt::formatter<std::string_view> {
+  template <typename FormatContext>
+  auto format(const test_extent_record_t& r, FormatContext& ctx) const {
+    return fmt::format_to(ctx.out(), "test_extent_record_t({}, refcount={})",
+			  r.desc, r.refcount);
+  }
+};
 
 struct transaction_manager_test_t :
   public seastar_test_suite_t,
@@ -1269,7 +1273,6 @@ INSTANTIATE_TEST_SUITE_P(
   transaction_manager_test,
   tm_multi_device_test_t,
   ::testing::Values (
-    "segmented",
-    "circularbounded"
+    "segmented"
   )
 );

@@ -34,5 +34,16 @@ std::ostream& operator<<(std::ostream& os, const SparseExtent& se) {
   return os;
 }
 
+std::ostream& operator<<(std::ostream& os, ImageArea area) {
+  switch (area) {
+  case ImageArea::DATA:
+    return os << "data";
+  case ImageArea::CRYPTO_HEADER:
+    return os << "crypto_header";
+  default:
+    ceph_abort();
+  }
+}
+
 } // namespace io
 } // namespace librbd

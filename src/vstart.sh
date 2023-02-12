@@ -224,6 +224,7 @@ options:
 	-o config		 add extra config parameters to all sections
 	--rgw_port specify ceph rgw http listen port
 	--rgw_frontend specify the rgw frontend configuration
+	--rgw_arrow_flight start arrow flight frontend
 	--rgw_compression specify the rgw compression plugin
 	--seastore use seastore as crimson osd backend
 	-b, --bluestore use bluestore as the osd objectstore backend (default)
@@ -414,6 +415,9 @@ case $1 in
     --rgw_frontend)
         rgw_frontend=$2
         shift
+        ;;
+    --rgw_arrow_flight)
+        rgw_flight_frontend="yes"
         ;;
     --rgw_compression)
         rgw_compression=$2
@@ -626,13 +630,17 @@ do_rgw_conf() {
     # setup each rgw on a sequential port, starting at $CEPH_RGW_PORT.
     # individual rgw's ids will be their ports.
     current_port=$CEPH_RGW_PORT
+    # allow only first rgw to start arrow_flight server/port
+    local flight_conf=$rgw_flight_frontend
     for n in $(seq 1 $CEPH_NUM_RGW); do
         wconf << EOF
 [client.rgw.${current_port}]
-        rgw frontends = $rgw_frontend port=${current_port}
+        rgw frontends = $rgw_frontend port=${current_port}${flight_conf:+,arrow_flight}
         admin socket = ${CEPH_OUT_DIR}/radosgw.${current_port}.asok
+        debug rgw_flight = 20
 EOF
         current_port=$((current_port + 1))
+        unset flight_conf
 done
 
 }
@@ -969,9 +977,9 @@ start_osd() {
 	local extra_seastar_args
 	if [ "$ceph_osd" == "crimson-osd" ]; then
         bottom_cpu=$(( osd * crimson_smp ))
-        top_cpu=$(( bottom_cpu + crimson_smp ))
+        top_cpu=$(( bottom_cpu + crimson_smp - 1 ))
 	    # set a single CPU nodes for each osd
-	    extra_seastar_args="--smp $crimson_smp --cpuset $bottom_cpu-$top_cpu"
+	    extra_seastar_args="--cpuset $bottom_cpu-$top_cpu"
 	    if [ "$debug" -ne 0 ]; then
 		extra_seastar_args+=" --debug"
 	    fi
@@ -1130,6 +1138,11 @@ EOF
         run 'mgr' $name $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 
+    while ! ceph_adm mgr stat | jq -e '.available'; do
+        debug echo 'waiting for mgr to become available'
+        sleep 1
+    done
+    
     if [ "$new" -eq 1 ]; then
         # setting login credentials for dashboard
         if $with_mgr_dashboard; then
@@ -1333,6 +1346,7 @@ if [ "$debug" -eq 0 ]; then
 else
     debug echo "** going verbose **"
     CMONDEBUG='
+        debug osd = 20
         debug mon = 20
         debug paxos = 20
         debug auth = 20
@@ -1493,6 +1507,10 @@ EOF
     fi
 fi
 
+if [ "$ceph_osd" == "crimson-osd" ]; then
+    $CEPH_BIN/ceph -c $conf_fn config set osd crimson_seastar_smp $crimson_smp
+fi
+
 if [ $CEPH_NUM_MGR -gt 0 ]; then
     start_mgr
 fi
@@ -1650,6 +1668,11 @@ do_rgw()
             $CEPH_BIN/radosgw-admin zone placement modify -c $conf_fn --rgw-zone=default --placement-id=default-placement --compression=$rgw_compression > /dev/null
         fi
     fi
+
+    if [ -n "$rgw_flight_frontend" ] ;then
+        debug echo "starting arrow_flight frontend on first rgw"
+    fi
+
     # Start server
     if [ "$cephadm" -gt 0 ]; then
         ceph_adm orch apply rgw rgwTest
@@ -1672,6 +1695,8 @@ do_rgw()
     [ $CEPH_RGW_PORT_NUM -lt 1024 ] && RGWSUDO=sudo
 
     current_port=$CEPH_RGW_PORT
+    # allow only first rgw to start arrow_flight server/port
+    local flight_conf=$rgw_flight_frontend
     for n in $(seq 1 $CEPH_NUM_RGW); do
         rgw_name="client.rgw.${current_port}"
 
@@ -1689,12 +1714,13 @@ do_rgw()
             --rgw_luarocks_location=${CEPH_OUT_DIR}/luarocks \
             ${RGWDEBUG} \
             -n ${rgw_name} \
-            "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
+            "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}${flight_conf:+,arrow_flight}"
 
         i=$(($i + 1))
         [ $i -eq $CEPH_NUM_RGW ] && break
 
         current_port=$((current_port+1))
+        unset flight_conf
     done
 }
 if [ "$CEPH_NUM_RGW" -gt 0 ]; then

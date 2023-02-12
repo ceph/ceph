@@ -8,6 +8,7 @@ from ..services.exception import handle_custom_error, handle_orchestrator_error
 from ..services.orchestrator import OrchClient, OrchFeature
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
     ReadPermission, RESTController, Task, UpdatePermission
+from ._version import APIVersion
 from .orchestrator import raise_if_no_orchestrator
 
 
@@ -29,9 +30,14 @@ class Service(RESTController):
         return ServiceSpec.KNOWN_SERVICE_TYPES
 
     @raise_if_no_orchestrator([OrchFeature.SERVICE_LIST])
-    def list(self, service_name: Optional[str] = None) -> List[dict]:
+    @RESTController.MethodMap(version=APIVersion(2, 0))  # type: ignore
+    def list(self, service_name: Optional[str] = None, offset: int = 0, limit: int = 5,
+             search: str = '', sort: str = '+service_name') -> List[dict]:
         orch = OrchClient.instance()
-        return [service.to_dict() for service in orch.services.list(service_name=service_name)]
+        services, count = orch.services.list(service_name=service_name, offset=int(offset),
+                                             limit=int(limit), search=search, sort=sort)
+        cherrypy.response.headers['X-Total-Count'] = count
+        return services
 
     @raise_if_no_orchestrator([OrchFeature.SERVICE_LIST])
     def get(self, service_name: str) -> List[dict]:

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_ACL_S3_H
-#define CEPH_RGW_ACL_S3_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -84,7 +83,7 @@ public:
   bool xml_end(const char *el) override;
 
   void to_xml(std::ostream& out);
-  int rebuild(const DoutPrefixProvider *dpp, rgw::sal::Store* store, ACLOwner *owner,
+  int rebuild(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, ACLOwner *owner,
 	      RGWAccessControlPolicy& dest, std::string &err_msg);
   bool compare_group_name(std::string& id, ACLGroupTypeEnum group) override;
 
@@ -98,7 +97,7 @@ public:
     int ret = _acl.create_canned(owner, bucket_owner, canned_acl);
     return ret;
   }
-  int create_from_headers(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+  int create_from_headers(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 			  const RGWEnv *env, ACLOwner& _owner);
 };
 
@@ -114,5 +113,3 @@ class RGWACLXMLParser_S3 : public RGWXMLParser
 public:
   explicit RGWACLXMLParser_S3(CephContext *_cct) : cct(_cct) {}
 };
-
-#endif

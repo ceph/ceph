@@ -24,7 +24,7 @@ namespace rgw::auth::sts {
 class WebTokenEngine : public rgw::auth::Engine {
   static constexpr std::string_view princTagsNamespace = "https://aws.amazon.com/tags";
   CephContext* const cct;
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
 
   using result_t = rgw::auth::Engine::result_t;
   using Pair = std::pair<std::string, std::string>;
@@ -47,7 +47,7 @@ class WebTokenEngine : public rgw::auth::Engine {
   std::string get_role_name(const string& role_arn) const;
 
   std::string get_cert_url(const std::string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
-  
+
   std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
 
@@ -63,11 +63,11 @@ class WebTokenEngine : public rgw::auth::Engine {
 
 public:
   WebTokenEngine(CephContext* const cct,
-                    rgw::sal::Store* store,
+                    rgw::sal::Driver* driver,
                     const rgw::auth::TokenExtractor* const extractor,
                     const rgw::auth::WebIdentityApplier::Factory* const apl_factory)
     : cct(cct),
-      store(store),
+      driver(driver),
       extractor(extractor),
       apl_factory(apl_factory) {
   }
@@ -84,8 +84,8 @@ public:
 class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::TokenExtractor,
                         public rgw::auth::WebIdentityApplier::Factory {
-  rgw::sal::Store* store;
-  ImplicitTenants& implicit_tenant_context;
+  rgw::sal::Driver* driver;
+  const ImplicitTenants& implicit_tenant_context;
 
   /* The engine. */
   const WebTokenEngine web_token_engine;
@@ -104,18 +104,18 @@ class DefaultStrategy : public rgw::auth::Strategy,
                                     const std::unordered_multimap<std::string, std::string>& token,
                                     boost::optional<std::multimap<std::string, std::string>> role_tags,
                                     boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags) const override {
-    auto apl = rgw::auth::add_sysreq(cct, store, s,
-      rgw::auth::WebIdentityApplier(cct, store, role_session, role_tenant, token, role_tags, principal_tags));
+    auto apl = rgw::auth::add_sysreq(cct, driver, s,
+      rgw::auth::WebIdentityApplier(cct, driver, role_session, role_tenant, token, role_tags, principal_tags));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
 public:
   DefaultStrategy(CephContext* const cct,
-                  ImplicitTenants& implicit_tenant_context,
-                  rgw::sal::Store* store)
-    : store(store),
+                  const ImplicitTenants& implicit_tenant_context,
+                  rgw::sal::Driver* driver)
+    : driver(driver),
       implicit_tenant_context(implicit_tenant_context),
-      web_token_engine(cct, store,
+      web_token_engine(cct, driver,
                         static_cast<rgw::auth::TokenExtractor*>(this),
                         static_cast<rgw::auth::WebIdentityApplier::Factory*>(this)) {
     /* When the constructor's body is being executed, all member engines
@@ -192,7 +192,7 @@ public:
 class RGW_Auth_STS {
 public:
   static int authorize(const DoutPrefixProvider *dpp,
-                       rgw::sal::Store* store,
+                       rgw::sal::Driver* driver,
                        const rgw::auth::StrategyRegistry& auth_registry,
                        req_state *s, optional_yield y);
 };
@@ -212,7 +212,7 @@ public:
       post_body(post_body) {}
   ~RGWHandler_REST_STS() override = default;
 
-  int init(rgw::sal::Store* store,
+  int init(rgw::sal::Driver* driver,
            req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider* dpp, optional_yield y) override;
@@ -223,14 +223,14 @@ class RGWRESTMgr_STS : public RGWRESTMgr {
 public:
   RGWRESTMgr_STS() = default;
   ~RGWRESTMgr_STS() override = default;
-  
+
   RGWRESTMgr *get_resource_mgr(req_state* const s,
                                const std::string& uri,
                                std::string* const out_uri) override {
     return this;
   }
 
-  RGWHandler_REST* get_handler(rgw::sal::Store* store,
+  RGWHandler_REST* get_handler(rgw::sal::Driver* driver,
 			       req_state*,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override;

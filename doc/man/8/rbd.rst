@@ -258,7 +258,7 @@ Commands
   Show the rbd images that are mapped via the rbd kernel module
   (default) or other supported device.
 
-:command:`device map` [-t | --device-type *device-type*] [--cookie *device-cookie*] [--show-cookie] [--read-only] [--exclusive] [-o | --options *device-options*] *image-spec* | *snap-spec*
+:command:`device map` [-t | --device-type *device-type*] [--cookie *device-cookie*] [--show-cookie] [--snap-id *snap-id*] [--read-only] [--exclusive] [-o | --options *device-options*] *image-spec* | *snap-spec*
   Map the specified image to a block device via the rbd kernel module
   (default) or other supported device (*nbd* on Linux or *ggate* on
   FreeBSD).
@@ -266,14 +266,14 @@ Commands
   The --options argument is a comma separated list of device type
   specific options (opt1,opt2=val,...).
 
-:command:`device unmap` [-t | --device-type *device-type*] [-o | --options *device-options*] *image-spec* | *snap-spec* | *device-path*
+:command:`device unmap` [-t | --device-type *device-type*] [-o | --options *device-options*] [--snap-id *snap-id*] *image-spec* | *snap-spec* | *device-path*
   Unmap the block device that was mapped via the rbd kernel module
   (default) or other supported device.
 
   The --options argument is a comma separated list of device type
   specific options (opt1,opt2=val,...).
 
-:command:`device attach` [-t | --device-type *device-type*] --device *device-path* [--cookie *device-cookie*] [--show-cookie] [--read-only] [--exclusive] [--force] [-o | --options *device-options*] *image-spec* | *snap-spec*
+:command:`device attach` [-t | --device-type *device-type*] --device *device-path* [--cookie *device-cookie*] [--show-cookie] [--snap-id *snap-id*] [--read-only] [--exclusive] [--force] [-o | --options *device-options*] *image-spec* | *snap-spec*
   Attach the specified image to the specified block device (currently only
   `nbd` on Linux). This operation is unsafe and should not be normally used.
   In particular, specifying the wrong image or the wrong block device may
@@ -282,7 +282,7 @@ Commands
   The --options argument is a comma separated list of device type
   specific options (opt1,opt2=val,...).
 
-:command:`device detach` [-t | --device-type *device-type*] [-o | --options *device-options*] *image-spec* | *snap-spec* | *device-path*
+:command:`device detach` [-t | --device-type *device-type*] [-o | --options *device-options*] [--snap-id *snap-id*] *image-spec* | *snap-spec* | *device-path*
   Detach the block device that was mapped or attached (currently only `nbd`
   on Linux). This operation is unsafe and should not be normally used.
 
@@ -308,7 +308,6 @@ Commands
 :command:`encryption format` *image-spec* *format* *passphrase-file* [--cipher-alg *alg*]
   Formats image to an encrypted format.
   All data previously written to the image will become unreadable.
-  A cloned image cannot be formatted, although encrypted images can be cloned.
   Supported formats: *luks1*, *luks2*.
   Supported cipher algorithms: *aes-128*, *aes-256* (default).
 
@@ -333,7 +332,7 @@ Commands
   Enable the specified feature on the specified image. Multiple features can
   be specified.
 
-:command:`flatten` *image-spec*
+:command:`flatten` [--encryption-format *encryption-format* --encryption-passphrase-file *passphrase-file*]... *image-spec*
   If image is a clone, copy all shared blocks from the parent snapshot and
   make the child independent of the parent, severing the link between
   parent snap and child.  The parent snapshot can be unprotected and
@@ -607,7 +606,7 @@ Commands
   Initialize pool for use by RBD. Newly created pools must initialized
   prior to use.
 
-:command:`resize` (-s | --size *size-in-M/G/T*) [--allow-shrink] *image-spec*
+:command:`resize` (-s | --size *size-in-M/G/T*) [--allow-shrink] [--encryption-format *encryption-format* --encryption-passphrase-file *passphrase-file*]... *image-spec*
   Resize rbd image. The size parameter also needs to be specified.
   The --allow-shrink option lets the size be reduced.
   

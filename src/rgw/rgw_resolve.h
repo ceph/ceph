@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_RESOLVE_H
-#define CEPH_RGW_RESOLVE_H
+#pragma once
 
 #include "rgw_common.h"
 
@@ -23,5 +22,3 @@ public:
 extern void rgw_init_resolver(void);
 extern void rgw_shutdown_resolver(void);
 extern RGWResolver *rgw_resolver;
-
-#endif

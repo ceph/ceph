@@ -575,10 +575,14 @@ def verify_cacrt_content(crt):
     # type: (str) -> None
     from OpenSSL import crypto
     try:
-        x509 = crypto.load_certificate(crypto.FILETYPE_PEM, crt)
+        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
+        x509 = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
         if x509.has_expired():
             org, cn = get_cert_issuer_info(crt)
-            end_date = datetime.datetime.strptime(x509.get_notAfter().decode('ascii'), '%Y%m%d%H%M%SZ')
+            no_after = x509.get_notAfter()
+            end_date = None
+            if no_after is not None:
+                end_date = datetime.datetime.strptime(no_after.decode('ascii'), '%Y%m%d%H%M%SZ')
             msg = f'Certificate issued by "{org}/{cn}" expired on {end_date}'
             logger.warning(msg)
             raise ServerConfigException(msg)
@@ -607,8 +611,9 @@ def get_cert_issuer_info(crt: str) -> Tuple[Optional[str],Optional[str]]:
 
     from OpenSSL import crypto, SSL
     try:
+        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
         (org_name, cn) = (None, None)
-        cert = crypto.load_certificate(crypto.FILETYPE_PEM, crt)
+        cert = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
         components = cert.get_issuer().get_components()
         for c in components:
             if c[0].decode() == 'O':  # org comp
@@ -631,7 +636,8 @@ def verify_tls(crt, key):
         raise ServerConfigException(
             'Invalid private key: {}'.format(str(e)))
     try:
-        _crt = crypto.load_certificate(crypto.FILETYPE_PEM, crt)
+        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
+        _crt = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
     except ValueError as e:
         raise ServerConfigException(
             'Invalid certificate key: {}'.format(str(e))

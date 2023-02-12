@@ -5,9 +5,9 @@
 #include "svc_bilog_rados.h"
 #include "svc_zone.h"
 
-#include "rgw/rgw_bucket.h"
-#include "rgw/rgw_zone.h"
-#include "rgw/rgw_datalog.h"
+#include "rgw_bucket.h"
+#include "rgw_zone.h"
+#include "rgw_datalog.h"
 
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -465,9 +465,10 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp, c
   return 0;
 }
 
-int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp, 
+int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
                                               const RGWBucketInfo& info,
-                                              const RGWBucketInfo& orig_info)
+                                              const RGWBucketInfo& orig_info,
+					      optional_yield y)
 {
   bool new_sync_enabled = info.datasync_flag_enabled();
   bool old_sync_enabled = orig_info.datasync_flag_enabled();
@@ -496,7 +497,7 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
   }
 
   for (int i = 0; i < shards_num; ++i) {
-    ret = svc.datalog_rados->add_entry(dpp, info, bilog, i);
+    ret = svc.datalog_rados->add_entry(dpp, info, bilog, i, y);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << i << ")" << dendl;
     } // datalog error is not fatal

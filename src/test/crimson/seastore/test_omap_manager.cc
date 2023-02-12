@@ -137,46 +137,95 @@ struct omap_manager_test_t :
     test_omap_mappings.erase(test_omap_mappings.find(key));
   }
 
+  std::vector<std::string> rm_key_range(
+    omap_root_t &omap_root,
+    Transaction &t,
+    const std::string &first,
+    const std::string &last) {
+    logger().debug("rm keys in range {} ~ {}", first, last);
+    auto config = OMapManager::omap_list_config_t()
+      .with_max(3000)
+      .with_inclusive(true, false);
+
+    with_trans_intr(
+      t,
+      [&, this](auto &t) {
+      return omap_manager->omap_rm_key_range(
+	omap_root, t, first, last, config);
+    }).unsafe_get0();
+
+    std::vector<std::string> keys;
+    size_t count = 0;
+    for (auto iter = test_omap_mappings.begin();
+	iter != test_omap_mappings.end(); ) {
+      if (iter->first >= first && iter->first < last) {
+	keys.push_back(iter->first);
+	iter = test_omap_mappings.erase(iter);
+	count++;
+      } else {
+	iter++;
+      }
+      if (count == config.max_result_size) {
+	break;
+      }
+    }
+    return keys;
+  }
+
   void list(
     const omap_root_t &omap_root,
     Transaction &t,
-    const std::optional<std::string> &start,
+    const std::optional<std::string> &first,
+    const std::optional<std::string> &last,
     size_t max = 128,
     bool inclusive = false) {
 
-    if (start) {
-      logger().debug("list on {}", *start);
+    if (first && last) {
+      logger().debug("list on {} ~ {}", *first, *last);
+    } else if (first) {
+      logger().debug("list on {} ~ end", *first);
+    } else if (last) {
+      logger().debug("list on start ~ {}", *last);
     } else {
-      logger().debug("list on start");
+      logger().debug("list on start ~ end");
     }
 
-    auto config = OMapManager::omap_list_config_t::with_max(max);
-    config.max_result_size = max;
-    config.inclusive = inclusive;
+    auto config = OMapManager::omap_list_config_t()
+      .with_max(max)
+      .with_inclusive(inclusive, false);
 
     auto [complete, results] = with_trans_intr(
       t,
       [&, this](auto &t) {
-	return omap_manager->omap_list(omap_root, t, start, config);
+	return omap_manager->omap_list(omap_root, t, first, last, config);
       }).unsafe_get0();
 
-    test_omap_t::iterator it;
-    if (start) {
-      it = config.inclusive ?
-	test_omap_mappings.lower_bound(*start) :
-	test_omap_mappings.upper_bound(*start);
+    test_omap_t::iterator it, lit;
+    if (first) {
+      it = config.first_inclusive ?
+	test_omap_mappings.lower_bound(*first) :
+	test_omap_mappings.upper_bound(*first);
     } else {
       it = test_omap_mappings.begin();
     }
+    if (last) {
+      lit = config.last_inclusive ?
+	test_omap_mappings.upper_bound(*last) :
+	test_omap_mappings.lower_bound(*last);
+    } else {
+      lit = test_omap_mappings.end();
+    }
+
     for (auto &&[k, v]: results) {
       EXPECT_NE(it, test_omap_mappings.end());
-      if (it == test_omap_mappings.end())
+      if (it == test_omap_mappings.end()) {
 	return;
+      }
       EXPECT_EQ(k, it->first);
       EXPECT_EQ(v, it->second);
       it++;
     }
-    if (it == test_omap_mappings.end()) {
+    if (it == lit) {
       EXPECT_TRUE(complete);
     } else {
       EXPECT_EQ(results.size(), max);
@@ -364,8 +413,9 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
         check_mappings(omap_root, *t);
         check_mappings(omap_root);
       }
-      if (i == 100)
+      if (i == 100) {
         break;
+      }
     }
     logger().debug("finally submitting transaction ");
     submit_transaction(std::move(t));
@@ -373,19 +423,26 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
   });
 }
 
-TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
+TEST_F(omap_manager_test_t, force_split_listkeys_list_rmkey_range_clear)
 {
   run_async([this] {
     omap_root_t omap_root = initialize();
 
-    string temp;
+    string first, last;
     for (unsigned i = 0; i < 40; i++) {
       auto t = create_mutate_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 10; ++j) {
         auto key = set_random_key(omap_root, *t);
-        if (i == 10)
-          temp = key;
+        if (i == 10) {
+          first = key;
+	}
+	if (i == 30) {
+	  last = key;
+	  if (first > last) {
+	    std::swap(first, last);
+	  }
+	}
         if ((i % 20 == 0) && (j == 5)) {
           check_mappings(omap_root, *t);
         }
@@ -395,19 +452,55 @@ TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
       check_mappings(omap_root);
     }
 
+    std::optional<std::string> first_temp;
+    std::optional<std::string> last_temp;
     {
       auto t = create_read_transaction();
-      list(omap_root, *t, std::nullopt);
+      first_temp = std::nullopt;
+      last_temp = std::nullopt;
+      list(omap_root, *t, first_temp, last_temp);
     }
 
     {
       auto t = create_read_transaction();
-      list(omap_root, *t, temp, 100);
+      first_temp = first;
+      last_temp = std::nullopt;
+      list(omap_root, *t, first_temp, last_temp, 100);
     }
 
     {
       auto t = create_read_transaction();
-      list(omap_root, *t, temp, 100, true);
+      first_temp = first;
+      last_temp = std::nullopt;
+      list(omap_root, *t, first_temp, last_temp, 100, true);
+    }
+
+    {
+      auto t = create_read_transaction();
+      first_temp = std::nullopt;
+      last_temp = last;
+      list(omap_root, *t, first_temp, last_temp, 10240);
+    }
+
+    {
+      auto t = create_read_transaction();
+      first_temp = first;
+      last_temp = last;
+      list(omap_root, *t, first_temp, last_temp, 10240, true);
+    }
+
+    {
+      auto t = create_read_transaction();
+      list(omap_root, *t, first, last, 10240, true);
+    }
+
+    {
+      auto t = create_mutate_transaction();
+      auto keys = rm_key_range(omap_root, *t, first, last);
+      for (const auto& key : keys) {
+	get_value(omap_root, *t, key);
+      }
+      submit_transaction(std::move(t));
     }
 
     {
@@ -418,34 +511,68 @@ TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
   });
 }
 
-TEST_F(omap_manager_test_t, force_inner_node_split_list)
+TEST_F(omap_manager_test_t, force_inner_node_split_list_rmkey_range)
 {
   run_async([this] {
     omap_root_t omap_root = initialize();
 
-    string temp = "";
+    string first = "";
+    string last;
     while (cache->get_omap_tree_depth() < 3) {
       for (unsigned i = 0; i < 40; i++) {
 	auto t = create_mutate_transaction();
 	logger().debug("opened transaction");
 	for (unsigned j = 0; j < 10; ++j) {
 	  auto key = set_random_key(omap_root, *t);
-	  if (key.compare(temp) < 0 || !temp.length())
-	    temp = key;
+	  if (key.compare(first) < 0 || !first.length()) {
+	    first = key;
+	  }
+	  if (i == 10) {
+	    last = key;
+	  }
 	}
 	logger().debug("force split submit transaction i = {}", i);
 	submit_transaction(std::move(t));
       }
     }
 
+    std::optional<std::string> first_temp;
+    std::optional<std::string> last_temp;
     {
       auto t = create_read_transaction();
-      list(omap_root, *t, temp, 10240);
+      first_temp = first;
+      last_temp = std::nullopt;
+      list(omap_root, *t, first_temp, last_temp, 10240);
     }
 
     {
       auto t = create_read_transaction();
-      list(omap_root, *t, temp, 10240, true);
+      first_temp = first;
+      last_temp = std::nullopt;
+      list(omap_root, *t, first_temp, last_temp, 10240, true);
+    }
+
+    {
+      auto t = create_read_transaction();
+      first_temp = std::nullopt;
+      last_temp = last;
+      list(omap_root, *t, first_temp, last_temp, 10240);
+    }
+
+    {
+      auto t = create_read_transaction();
+      first_temp = first;
+      last_temp = last;
+      list(omap_root, *t, first_temp, last_temp, 10240, true);
+    }
+
+    {
+      auto t = create_mutate_transaction();
+      auto keys = rm_key_range(omap_root, *t, first, last);
+      for (const auto& key : keys) {
+	get_value(omap_root, *t, key);
+      }
+      submit_transaction(std::move(t));
     }
 
     {

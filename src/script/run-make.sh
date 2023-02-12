@@ -38,7 +38,7 @@ function get_processors() {
 }
 
 function detect_ceph_dev_pkgs() {
-    local cmake_opts
+    local cmake_opts="-DWITH_FMT_VERSION=9.0.0"
     local boost_root=/opt/ceph
     if test -f $boost_root/include/boost/config.hpp; then
         cmake_opts+=" -DWITH_SYSTEM_BOOST=ON -DBOOST_ROOT=$boost_root"
@@ -123,8 +123,8 @@ function prepare() {
     fi
 
     if test -f ./install-deps.sh ; then
-            in_jenkins && echo "CI_DEBUG: Running install-deps.sh"
-	    $DRY_RUN source ./install-deps.sh || return 1
+        in_jenkins && echo "CI_DEBUG: Running install-deps.sh"
+        $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
 

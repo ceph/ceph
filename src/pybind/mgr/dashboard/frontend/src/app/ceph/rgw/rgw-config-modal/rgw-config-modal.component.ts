@@ -64,7 +64,7 @@ export class RgwConfigModalComponent implements OnInit {
         ]
       ],
       kms_provider: ['vault', Validators.required],
-      encryptionType: [null, Validators.required],
+      encryptionType: ['aws:kms', Validators.required],
       auth_method: [null, Validators.required],
       secret_engine: [null, Validators.required],
       secret_path: ['/'],
@@ -80,14 +80,6 @@ export class RgwConfigModalComponent implements OnInit {
       ssl_cert: [null, CdValidators.sslCert()],
       client_cert: [null, CdValidators.pemCert()],
       client_key: [null, CdValidators.sslPrivKey()],
-      role: [
-        null,
-        [
-          CdValidators.requiredIf({
-            auth_method: 'agent'
-          })
-        ]
-      ],
       kmsEnabled: [{ value: false }],
       s3Enabled: [{ value: false }]
     });

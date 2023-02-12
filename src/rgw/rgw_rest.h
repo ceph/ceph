@@ -122,8 +122,8 @@ protected:
 public:
   RGWGetObj_ObjStore() : sent_header(false) {}
 
-  void init(rgw::sal::Store* store, req_state *s, RGWHandler *h) override {
-    RGWGetObj::init(store, s, h);
+  void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
+    RGWGetObj::init(driver, s, h);
     sent_header = false;
   }
 
@@ -145,13 +145,13 @@ public:
 class RGWGetBucketTags_ObjStore : public RGWGetBucketTags {
 public:
   RGWGetBucketTags_ObjStore() = default;
-  virtual ~RGWGetBucketTags_ObjStore() = default; 
+  virtual ~RGWGetBucketTags_ObjStore() = default;
 };
 
 class RGWPutBucketTags_ObjStore: public RGWPutBucketTags {
 public:
   RGWPutBucketTags_ObjStore() = default;
-  virtual ~RGWPutBucketTags_ObjStore() = default; 
+  virtual ~RGWPutBucketTags_ObjStore() = default;
 };
 
 class RGWGetBucketReplication_ObjStore : public RGWGetBucketReplication {
@@ -163,13 +163,13 @@ public:
 class RGWPutBucketReplication_ObjStore: public RGWPutBucketReplication {
 public:
   RGWPutBucketReplication_ObjStore() = default;
-  virtual ~RGWPutBucketReplication_ObjStore() = default; 
+  virtual ~RGWPutBucketReplication_ObjStore() = default;
 };
 
 class RGWDeleteBucketReplication_ObjStore: public RGWDeleteBucketReplication {
 public:
   RGWDeleteBucketReplication_ObjStore() = default;
-  virtual ~RGWDeleteBucketReplication_ObjStore() = default; 
+  virtual ~RGWDeleteBucketReplication_ObjStore() = default;
 };
 
 class RGWListBuckets_ObjStore : public RGWListBuckets {
@@ -523,9 +523,9 @@ protected:
   RGWRESTFlusher flusher;
 
 public:
-  void init(rgw::sal::Store* store, req_state *s,
+  void init(rgw::sal::Driver* driver, req_state *s,
             RGWHandler *dialect_handler) override {
-    RGWOp::init(store, s, dialect_handler);
+    RGWOp::init(driver, s, dialect_handler);
     flusher.init(s, this);
   }
   void send_response() override;
@@ -616,7 +616,7 @@ public:
   }
 
   virtual RGWHandler_REST* get_handler(
-    rgw::sal::Store* store,
+    rgw::sal::Driver* driver,
     req_state* const s,
     const rgw::auth::StrategyRegistry& auth_registry,
     const std::string& frontend_prefix
@@ -648,7 +648,7 @@ class RGWREST {
   static int preprocess(req_state *s, rgw::io::BasicClient* rio);
 public:
   RGWREST() {}
-  RGWHandler_REST *get_handler(rgw::sal::Store* store,
+  RGWHandler_REST *get_handler(rgw::sal::Driver* driver,
                                req_state *s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix,
@@ -656,7 +656,7 @@ public:
                                RGWRESTMgr **pmgr,
                                int *init_error);
 #if 0
-  RGWHandler *get_handler(RGWRados *store, req_state *s,
+  RGWHandler *get_handler(RGWRados *driver, req_state *s,
 			  RGWLibIO *io, RGWRESTMgr **pmgr,
 			  int *init_error);
 #endif

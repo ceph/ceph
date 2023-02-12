@@ -90,7 +90,7 @@ will fail.
 List a Container's Objects
 ==========================
 
-To list the objects within a container, make a ``GET`` request with the with the 
+To list the objects within a container, make a ``GET`` request with the 
 API version, account, and the name of the container.  You can specify query 
 parameters to filter the full list, or leave out the parameters to return a list 
 of the first 10,000 object names stored in the container.

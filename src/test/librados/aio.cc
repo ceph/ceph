@@ -4,6 +4,7 @@
 #include <sstream>
 #include <utility>
 #include <boost/scoped_ptr.hpp>
+#include <fmt/format.h>
 
 #include "include/err.h"
 #include "include/rados/librados.h"
@@ -41,7 +42,8 @@ public:
   std::string init()
   {
     int ret;
-    m_pool_name = get_temp_pool_name();
+    auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_info()->name());
+    m_pool_name = get_temp_pool_name(pool_prefix);
     std::string err = create_one_pool(m_pool_name, &m_cluster);
     if (!err.empty()) {
       ostringstream oss;
@@ -1007,7 +1009,8 @@ public:
   std::string init()
   {
     int ret;
-    m_pool_name = get_temp_pool_name();
+    auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_info()->name());
+    m_pool_name = get_temp_pool_name(pool_prefix);
     std::string err = create_one_ec_pool(m_pool_name, &m_cluster);
     if (!err.empty()) {
       ostringstream oss;

@@ -762,7 +762,7 @@ bool PrimaryLogPG::maybe_await_blocked_head(
 
 void PrimaryLogPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef op)
 {
-  dout(10) << __func__ << " " << soid << " " << op << dendl;
+  dout(10) << __func__ << " " << soid << " " << *op->get_req() << dendl;
   waiting_for_blocked_object[soid].push_back(op);
   op->mark_delayed("waiting for blocked object");
 }
@@ -1001,8 +1001,7 @@ void PrimaryLogPG::do_command(
 {
   string format;
   cmd_getval(cmdmap, "format", format);
-  std::unique_ptr<Formatter> f(Formatter::create(
-				 format, "json-pretty", "json-pretty"));
+  auto f(Formatter::create_unique(format, "json-pretty", "json-pretty"));
   int ret = 0;
   stringstream ss;   // stderr error message stream
   bufferlist outbl;  // if empty at end, we'll dump formatter as output
@@ -1878,7 +1877,7 @@ void PrimaryLogPG::do_request(
   }
 
   if (recovery_state.needs_flush()) {
-    dout(20) << "waiting for flush on " << op << dendl;
+    dout(20) << "waiting for flush on " << *op->get_req() << dendl;
     waiting_for_flush.push_back(op);
     op->mark_delayed("waiting for flush");
     return;
@@ -1892,7 +1891,8 @@ void PrimaryLogPG::do_request(
   case CEPH_MSG_OSD_OP:
   case CEPH_MSG_OSD_BACKOFF:
     if (!is_active()) {
-      dout(20) << " peered, not active, waiting for active on " << op << dendl;
+      dout(20) << " peered, not active, waiting for active on "
+               << *op->get_req() << dendl;
       waiting_for_active.push_back(op);
       op->mark_delayed("waiting for active");
       return;
@@ -2914,7 +2914,7 @@ void PrimaryLogPG::do_cache_redirect(OpRequestRef op)
   request_redirect_t redir(m->get_object_locator(), pool.info.tier_of);
   reply->set_redirect(redir);
   dout(10) << "sending redirect to pool " << pool.info.tier_of << " for op "
-	   << op << dendl;
+	   << *op->get_req() << dendl;
   m->get_connection()->send_message(reply);
   return;
 }
@@ -3626,6 +3626,7 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
 	mop->tids[offset] = tid;
 
 	if (!ctx->obc->is_blocked()) {
+          dout(15) << fmt::format("{}: blocking object on rc: tid:{}", __func__, tid) << dendl;
 	  ctx->obc->start_block();
 	}
 	need_inc_ref = true;
@@ -7434,6 +7435,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  p.second.set_flag(chunk_info_t::FLAG_MISSING);
 	  // punch hole
 	  t->zero(soid, p.first, p.second.length);
+	  interval_set<uint64_t> ch;
+	  ch.insert(p.first, p.second.length);
+	  ctx->modified_ranges.union_of(ch);
+	  ctx->clean_regions.mark_data_region_dirty(p.first, p.second.length);
 	}
 	oi.clear_data_digest();
 	ctx->delta_stats.num_wr++;
@@ -9387,6 +9392,7 @@ void PrimaryLogPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 			   mirror_snapset, src_obj_fadvise_flags,
 			   dest_obj_fadvise_flags));
   copy_ops[dest] = cop;
+  dout(20) << fmt::format("{}: blocking {}", __func__, dest) << dendl;
   obc->start_block();
 
   if (!obc->obs.oi.has_manifest()) {
@@ -10837,8 +10843,10 @@ int PrimaryLogPG::start_flush(
     }
   }
 
-  if (blocking)
+  if (blocking) {
+    dout(20) << fmt::format("{}: blocking {}", __func__, soid) << dendl;
     obc->start_block();
+  }
 
   map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(soid);
   if (p != flush_ops.end()) {
@@ -11731,7 +11739,7 @@ void PrimaryLogPG::populate_obc_watchers(ObjectContextRef obc)
 void PrimaryLogPG::handle_watch_timeout(WatchRef watch)
 {
   ObjectContextRef obc = watch->get_obc(); // handle_watch_timeout owns this ref
-  dout(10) << "handle_watch_timeout obc " << obc << dendl;
+  dout(10) << "handle_watch_timeout obc " << *obc << dendl;
 
   if (!is_active()) {
     dout(10) << "handle_watch_timeout not active, no-op" << dendl;
@@ -11830,7 +11838,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
   osd->logger->inc(l_osd_object_ctx_cache_total);
   if (obc) {
     osd->logger->inc(l_osd_object_ctx_cache_hit);
-    dout(10) << __func__ << ": found obc in cache: " << obc
+    dout(10) << __func__ << ": found obc in cache: " << *obc
 	     << dendl;
   } else {
     dout(10) << __func__ << ": obc NOT found in cache: " << soid << dendl;
@@ -11859,11 +11867,9 @@ ObjectContextRef PrimaryLogPG::get_object_context(
 	  soid, true, 0, false);
         ceph_assert(ssc);
 	obc = create_object_context(oi, ssc);
-	dout(10) << __func__ << ": " << obc << " " << soid
-		 << " " << obc->rwstate
+	dout(10) << __func__ << ": " << *obc
 		 << " oi: " << obc->obs.oi
-		 << " ssc: " << obc->ssc
-		 << " snapset: " << obc->ssc->snapset << dendl;
+		 << " " << *obc->ssc << dendl;
 	return obc;
       }
     }
@@ -11902,7 +11908,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
       }
     }
 
-    dout(10) << __func__ << ": creating obc from disk: " << obc
+    dout(10) << __func__ << ": creating obc from disk: " << *obc
 	     << dendl;
   }
 
@@ -11912,12 +11918,10 @@ ObjectContextRef PrimaryLogPG::get_object_context(
     return ObjectContextRef();   // -ENOENT!
   }
 
-  dout(10) << __func__ << ": " << obc << " " << soid
-	   << " " << obc->rwstate
+  dout(10) << __func__ << ": " << *obc
 	   << " oi: " << obc->obs.oi
 	   << " exists: " << (int)obc->obs.exists
-	   << " ssc: " << obc->ssc
-	   << " snapset: " << obc->ssc->snapset << dendl;
+	   << " " << *obc->ssc << dendl;
   return obc;
 }
 
@@ -15066,12 +15070,11 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
 	     << ", evict_effort " << agent_state->evict_effort
 	     << dendl;
     dout(30) << "agent_state:\n";
-    Formatter *f = Formatter::create("");
+    auto f = Formatter::create_unique("");
     f->open_object_section("agent_state");
-    agent_state->dump(f);
+    agent_state->dump(f.get());
     f->close_section();
     f->flush(*_dout);
-    delete f;
     *_dout << dendl;
 
     if (1000000 - temp_upper >= agent_state->evict_effort)
@@ -15756,7 +15759,11 @@ int PrimaryLogPG::getattr_maybe_cache(
 	*val = i->second;
       return 0;
     } else {
-      return -ENODATA;
+      if (obc->obs.exists) {
+        return -ENODATA;
+      } else {
+        return -ENOENT;
+      }
     }
   }
   return pgbackend->objects_get_attr(obc->obs.oi.soid, key, val);

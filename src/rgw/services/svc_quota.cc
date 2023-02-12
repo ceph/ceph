@@ -4,7 +4,7 @@
 #include "svc_quota.h"
 #include "svc_zone.h"
 
-#include "rgw/rgw_zone.h"
+#include "rgw_zone.h"
 
 const RGWQuotaInfo& RGWSI_Quota::get_bucket_quota() const
 {

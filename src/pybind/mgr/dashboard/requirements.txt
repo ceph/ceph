@@ -11,3 +11,4 @@ pytest
 pyyaml
 natsort
 setuptools
+jsonpatch

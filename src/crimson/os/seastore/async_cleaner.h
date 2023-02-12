@@ -14,6 +14,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/segment_manager_group.h"
+#include "crimson/os/seastore/randomblock_manager_group.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/segment_seq_allocator.h"
 
@@ -38,7 +39,7 @@ struct segment_info_t {
 
   data_category_t category = data_category_t::NUM;
 
-  reclaim_gen_t generation = NULL_GENERATION;
+  rewrite_gen_t generation = NULL_GENERATION;
 
   sea_time_point modify_time = NULL_TIME;
 
@@ -64,11 +65,11 @@ struct segment_info_t {
   }
 
   void init_closed(segment_seq_t, segment_type_t,
-                   data_category_t, reclaim_gen_t,
+                   data_category_t, rewrite_gen_t,
                    segment_off_t);
 
   void set_open(segment_seq_t, segment_type_t,
-                data_category_t, reclaim_gen_t);
+                data_category_t, rewrite_gen_t);
 
   void set_empty();
 
@@ -214,10 +215,10 @@ public:
 
   // initiate non-empty segments, the others are by default empty
   void init_closed(segment_id_t, segment_seq_t, segment_type_t,
-                   data_category_t, reclaim_gen_t);
+                   data_category_t, rewrite_gen_t);
 
   void mark_open(segment_id_t, segment_seq_t, segment_type_t,
-                 data_category_t, reclaim_gen_t);
+                 data_category_t, rewrite_gen_t);
 
   void mark_empty(segment_id_t);
 
@@ -328,7 +329,7 @@ public:
   virtual rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent,
-    reclaim_gen_t target_generation,
+    rewrite_gen_t target_generation,
     sea_time_point modify_time) = 0;
 
   /**
@@ -425,11 +426,22 @@ public:
   virtual void update_journal_tails(
       journal_seq_t dirty_tail, journal_seq_t alloc_tail) = 0;
 
+  // try reserve the projected usage in journal
+  // returns if the reservation is successful
+  // if the reservation is successful, user should call
+  // release_inline_usage to restore.
+  virtual bool try_reserve_inline_usage(std::size_t usage) = 0;
+
+  // release the projected usage in journal
+  virtual void release_inline_usage(std::size_t usage) = 0;
+
   virtual ~JournalTrimmer() {}
 
   journal_seq_t get_journal_tail() const {
     return std::min(get_alloc_tail(), get_dirty_tail());
   }
+
+  virtual std::size_t get_trim_size_per_cycle() const = 0;
 
   bool check_is_ready() const {
     return (get_journal_head() != JOURNAL_SEQ_NULL &&
@@ -509,6 +521,11 @@ public:
   void update_journal_tails(
       journal_seq_t dirty_tail, journal_seq_t alloc_tail) final;
 
+  std::size_t get_trim_size_per_cycle() const final {
+    return config.rewrite_backref_bytes_per_cycle +
+      config.rewrite_dirty_bytes_per_cycle;
+  }
+
   journal_type_t get_journal_type() const {
     return journal_type;
   }
@@ -535,15 +552,32 @@ public:
     return get_alloc_tail_target() > journal_alloc_tail;
   }
 
-  bool should_block_io_on_trim() const {
-    return get_tail_limit() > get_journal_tail();
+  bool should_trim() const {
+    return should_trim_alloc() || should_trim_dirty();
   }
 
-  using trim_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  trim_ertr::future<> trim_dirty();
+  bool should_block_io_on_trim() const {
+    return get_tail_limit() >
+      get_journal_tail().add_offset(
+        journal_type, reserved_usage, roll_start, roll_size);
+  }
 
-  trim_ertr::future<> trim_alloc();
+  bool try_reserve_inline_usage(std::size_t usage) final {
+    reserved_usage += usage;
+    if (should_block_io_on_trim()) {
+      reserved_usage -= usage;
+      return false;
+    } else {
+      return true;
+    }
+  }
+
+  void release_inline_usage(std::size_t usage) final {
+    ceph_assert(reserved_usage >= usage);
+    reserved_usage -= usage;
+  }
+
+  seastar::future<> trim();
 
   static JournalTrimmerImplRef create(
       BackrefManager &backref_manager,
@@ -562,6 +596,12 @@ public:
   friend std::ostream &operator<<(std::ostream &, const stat_printer_t &);
 
 private:
+  using trim_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  trim_ertr::future<> trim_dirty();
+
+  trim_ertr::future<> trim_alloc();
+
   journal_seq_t get_tail_limit() const;
   journal_seq_t get_dirty_tail_target() const;
   journal_seq_t get_alloc_tail_target() const;
@@ -582,6 +622,8 @@ private:
   journal_seq_t journal_dirty_tail;
   journal_seq_t journal_alloc_tail;
 
+  std::size_t reserved_usage;
+
   seastar::metrics::metric_group metrics;
 };
 
@@ -596,7 +638,7 @@ public:
   virtual const segment_info_t& get_seg_info(segment_id_t id) const = 0;
 
   virtual segment_id_t allocate_segment(
-      segment_seq_t, segment_type_t, data_category_t, reclaim_gen_t) = 0;
+      segment_seq_t, segment_type_t, data_category_t, rewrite_gen_t) = 0;
 
   virtual void close_segment(segment_id_t) = 0;
 
@@ -819,6 +861,247 @@ public:
   bool equals(const SpaceTrackerI &other) const;
 };
 
+template <typename T>
+class block_map_t {
+public:
+  block_map_t() {
+    device_to_blocks.resize(DEVICE_ID_MAX_VALID);
+    device_block_size.resize(DEVICE_ID_MAX_VALID);
+  }
+  void add_device(device_id_t device, std::size_t blocks, const T& init,
+		  size_t block_size) {
+    ceph_assert(device <= DEVICE_ID_MAX_VALID);
+    ceph_assert(device_to_blocks[device].size() == 0);
+    ceph_assert(blocks > 0);
+    device_to_blocks[device].resize(blocks, init);
+    total_blocks += blocks;
+    device_block_size[device] = block_size;
+  }
+  void clear() {
+    device_to_blocks.clear();
+    device_to_blocks.resize(DEVICE_ID_MAX_VALID);
+    total_blocks = 0;
+  }
+
+  T& operator[](paddr_t block) {
+    ceph_assert(device_to_blocks[block.get_device_id()].size() != 0);
+    auto &blk = block.as_blk_paddr();
+    auto block_id = get_block_id(block.get_device_id(), blk.get_device_off());
+    return device_to_blocks[block.get_device_id()][block_id];
+  }
+  const T& operator[](paddr_t block) const {
+    ceph_assert(device_to_blocks[block.get_device_id()].size() != 0);
+    auto &blk = block.as_blk_paddr();
+    auto block_id = get_block_id(block.get_device_id(), blk.get_device_off());
+    return device_to_blocks[block.get_device_id()][block_id];
+  }
+
+  auto begin() {
+    return iterator<false>::lower_bound(*this, 0, 0);
+  }
+  auto begin() const {
+    return iterator<true>::lower_bound(*this, 0, 0);
+  }
+
+  auto end() {
+    return iterator<false>::end_iterator(*this);
+  }
+  auto end() const {
+    return iterator<true>::end_iterator(*this);
+  }
+
+  size_t size() const {
+    return total_blocks;
+  }
+
+  uint64_t get_block_size(device_id_t device_id) {
+    return device_block_size[device_id];
+  }
+
+  uint32_t get_block_id(device_id_t device_id, device_off_t blk_off) const {
+    auto block_size = device_block_size[device_id];
+    return blk_off == 0 ? 0 : blk_off/block_size;
+  }
+
+  template <bool is_const = false>
+  class iterator {
+    /// points at set being iterated over
+    std::conditional_t<
+      is_const,
+      const block_map_t &,
+      block_map_t &> parent;
+
+    /// points at current device, or DEVICE_ID_MAX_VALID if is_end()
+    device_id_t device_id;
+
+    /// segment at which we are pointing, 0 if is_end()
+    device_off_t blk_off;
+
+    /// holds referent for operator* and operator-> when !is_end()
+    std::optional<
+      std::pair<
+        const device_off_t,
+	std::conditional_t<is_const, const T&, T&>
+	>> current;
+
+    bool is_end() const {
+      return device_id == DEVICE_ID_MAX_VALID;
+    }
+
+    uint32_t get_block_id() {
+      return parent.get_block_id(device_id, blk_off);
+    }
+
+    void find_valid() {
+      assert(!is_end());
+      auto &device_vec = parent.device_to_blocks[device_id];
+      if (device_vec.size() == 0 ||
+	  get_block_id() == device_vec.size()) {
+	while (++device_id < DEVICE_ID_MAX_VALID&&
+	       parent.device_to_blocks[device_id].size() == 0);
+	blk_off = 0;
+      }
+      if (is_end()) {
+	current = std::nullopt;
+      } else {
+	current.emplace(
+	  blk_off,
+	  parent.device_to_blocks[device_id][get_block_id()]
+	);
+      }
+    }
+
+    iterator(
+      decltype(parent) &parent,
+      device_id_t device_id,
+      device_off_t device_block_off)
+      : parent(parent), device_id(device_id),
+	blk_off(device_block_off) {}
+
+  public:
+    static iterator lower_bound(
+      decltype(parent) &parent,
+      device_id_t device_id,
+      device_off_t block_off) {
+      if (device_id == DEVICE_ID_MAX_VALID) {
+	return end_iterator(parent);
+      } else {
+	auto ret = iterator{parent, device_id, block_off};
+	ret.find_valid();
+	return ret;
+      }
+    }
+
+    static iterator end_iterator(
+      decltype(parent) &parent) {
+      return iterator{parent, DEVICE_ID_MAX_VALID, 0};
+    }
+
+    iterator<is_const>& operator++() {
+      assert(!is_end());
+      auto block_size = parent.device_block_size[device_id];
+      blk_off += block_size;
+      find_valid();
+      return *this;
+    }
+
+    bool operator==(iterator<is_const> rit) {
+      return (device_id == rit.device_id &&
+	      blk_off == rit.blk_off);
+    }
+
+    bool operator!=(iterator<is_const> rit) {
+      return !(*this == rit);
+    }
+    template <bool c = is_const, std::enable_if_t<c, int> = 0>
+    const std::pair<const device_off_t, const T&> *operator->() {
+      assert(!is_end());
+      return &*current;
+    }
+    template <bool c = is_const, std::enable_if_t<!c, int> = 0>
+    std::pair<const device_off_t, T&> *operator->() {
+      assert(!is_end());
+      return &*current;
+    }
+    template <bool c = is_const, std::enable_if_t<c, int> = 0>
+    const std::pair<const device_off_t, const T&> &operator*() {
+      assert(!is_end());
+      return *current;
+    }
+    template <bool c = is_const, std::enable_if_t<!c, int> = 0>
+    std::pair<const device_off_t, T&> &operator*() {
+      assert(!is_end());
+      return *current;
+    }
+  };
+  std::vector<std::vector<T>> device_to_blocks;
+  std::vector<size_t> device_block_size;
+  size_t total_blocks = 0;
+};
+
+class RBMSpaceTracker {
+  struct random_block_t {
+    bool used = false;
+    void allocate() {
+      used = true;
+    }
+    void release() {
+      used = false;
+    }
+  };
+  block_map_t<random_block_t> block_usage;
+
+public:
+  RBMSpaceTracker(const RBMSpaceTracker &) = default;
+  RBMSpaceTracker(const std::vector<RandomBlockManager*> &rbms) {
+    for (auto rbm : rbms) {
+      block_usage.add_device(
+	rbm->get_device_id(),
+	rbm->get_device()->get_available_size() / rbm->get_block_size(),
+	{false},
+	rbm->get_block_size());
+    }
+  }
+
+  void allocate(
+    paddr_t addr,
+    extent_len_t len) {
+    paddr_t cursor = addr;
+    paddr_t end = addr.add_offset(len);
+    do {
+      block_usage[cursor].allocate();
+      cursor = cursor.add_offset(
+	block_usage.get_block_size(addr.get_device_id()));
+    } while (cursor < end);
+  }
+
+  void release(
+    paddr_t addr,
+    extent_len_t len) {
+    paddr_t cursor = addr;
+    paddr_t end = addr.add_offset(len);
+    do {
+      block_usage[cursor].release();
+      cursor = cursor.add_offset(
+	block_usage.get_block_size(addr.get_device_id()));
+    } while (cursor < end);
+  }
+
+  void reset() {
+    for (auto &i : block_usage) {
+      i.second = {false};
+    }
+  }
+
+  std::unique_ptr<RBMSpaceTracker> make_empty() const {
+    auto ret = std::make_unique<RBMSpaceTracker>(*this);
+    ret->reset();
+    return ret;
+  }
+  friend class RBMCleaner;
+};
+using RBMSpaceTrackerRef = std::unique_ptr<RBMSpaceTracker>;
+
 /*
  * AsyncCleaner
  *
@@ -849,7 +1132,13 @@ public:
 
   virtual void mark_space_free(paddr_t, extent_len_t) = 0;
 
-  virtual void reserve_projected_usage(std::size_t) = 0;
+  virtual void commit_space_used(paddr_t, extent_len_t) = 0;
+
+  // try reserve the projected usage in cleaner
+  // returns if the reservation is successful
+  // if the reservation is successful, user should call
+  // release_projected_usage to restore.
+  virtual bool try_reserve_projected_usage(std::size_t) = 0;
 
   virtual void release_projected_usage(std::size_t) = 0;
 
@@ -949,7 +1238,7 @@ public:
   }
 
   segment_id_t allocate_segment(
-      segment_seq_t, segment_type_t, data_category_t, reclaim_gen_t) final;
+      segment_seq_t, segment_type_t, data_category_t, rewrite_gen_t) final;
 
   void close_segment(segment_id_t segment) final;
 
@@ -1005,8 +1294,12 @@ public:
   void mark_space_used(paddr_t, extent_len_t) final;
 
   void mark_space_free(paddr_t, extent_len_t) final;
+  
+  void commit_space_used(paddr_t addr, extent_len_t len) final {
+    mark_space_used(addr, len);
+  }
 
-  void reserve_projected_usage(std::size_t) final;
+  bool try_reserve_projected_usage(std::size_t) final;
 
   void release_projected_usage(size_t) final;
 
@@ -1075,20 +1368,30 @@ private:
   segment_id_t get_next_reclaim_segment() const;
 
   struct reclaim_state_t {
-    reclaim_gen_t generation;
-    reclaim_gen_t target_generation;
+    rewrite_gen_t generation;
+    rewrite_gen_t target_generation;
     segment_off_t segment_size;
     paddr_t start_pos;
     paddr_t end_pos;
 
     static reclaim_state_t create(
         segment_id_t segment_id,
-        reclaim_gen_t generation,
+        rewrite_gen_t generation,
         segment_off_t segment_size) {
-      ceph_assert(generation < RECLAIM_GENERATIONS);
+      ceph_assert(is_rewrite_generation(generation));
+
+      rewrite_gen_t target_gen;
+      if (generation < MIN_REWRITE_GENERATION) {
+        target_gen = MIN_REWRITE_GENERATION;
+      } else {
+        // tolerate the target_gen to exceed MAX_REWRETE_GENERATION to make EPM
+        // aware of its original generation for the decisions.
+        target_gen = generation + 1;
+      }
+
+      assert(is_target_rewrite_generation(target_gen));
       return {generation,
-              (reclaim_gen_t)(generation == RECLAIM_GENERATIONS - 1 ?
-                              generation : generation + 1),
+              target_gen,
               segment_size,
               P_ADDR_NULL,
               paddr_t::make_seg_paddr(segment_id, 0)};
@@ -1209,7 +1512,7 @@ private:
       segment_seq_t seq,
       segment_type_t s_type,
       data_category_t category,
-      reclaim_gen_t generation) {
+      rewrite_gen_t generation) {
     assert(background_callback->get_state() == state_t::MOUNT);
     ceph_assert(s_type == segment_type_t::OOL ||
                 trimmer != nullptr); // segment_type_t::JOURNAL
@@ -1243,7 +1546,7 @@ private:
      * projected_used_bytes
      *
      * Sum of projected bytes used by each transaction between throttle
-     * acquisition and commit completion.  See reserve_projected_usage()
+     * acquisition and commit completion.  See try_reserve_projected_usage()
      */
     uint64_t projected_used_bytes = 0;
     uint64_t projected_count = 0;
@@ -1274,4 +1577,127 @@ private:
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
 };
 
+class RBMCleaner;
+using RBMCleanerRef = std::unique_ptr<RBMCleaner>;
+
+class RBMCleaner : public AsyncCleaner {
+public:
+  RBMCleaner(
+    RBMDeviceGroupRef&& rb_group,
+    BackrefManager &backref_manager,
+    bool detailed);
+
+  static RBMCleanerRef create(
+      RBMDeviceGroupRef&& rb_group,
+      BackrefManager &backref_manager,
+      bool detailed) {
+    return std::make_unique<RBMCleaner>(
+      std::move(rb_group), backref_manager, detailed);
+  }
+
+  RBMDeviceGroup* get_rb_group() {
+    return rb_group.get();
+  }
+
+  /*
+   * AsyncCleaner interfaces
+   */
+
+  void set_background_callback(BackgroundListener *cb) final {
+    background_callback = cb;
+  }
+
+  void set_extent_callback(ExtentCallbackInterface *cb) final {
+    extent_callback = cb;
+  }
+
+  store_statfs_t get_stat() const final {
+    store_statfs_t st;
+    // TODO 
+    return st;
+  }
+
+  void print(std::ostream &, bool is_detailed) const final;
+
+  mount_ret mount() final;
+
+  void mark_space_used(paddr_t, extent_len_t) final;
+
+  void mark_space_free(paddr_t, extent_len_t) final;
+
+  void commit_space_used(paddr_t, extent_len_t) final;
+
+  bool try_reserve_projected_usage(std::size_t) final;
+
+  void release_projected_usage(size_t) final;
+
+  bool should_block_io_on_clean() const final {
+    return false;
+  }
+
+  bool should_clean_space() const final {
+    return false;
+  }
+
+  clean_space_ret clean_space() final;
+
+  RandomBlockManager* get_rbm(paddr_t paddr) {
+    auto rbs = rb_group->get_rb_managers();
+    for (auto p : rbs) {
+      if (p->get_device_id() == paddr.get_device_id()) {
+	return p;
+      }
+    }
+    return nullptr;
+  }
+
+  paddr_t alloc_paddr(extent_len_t length) {
+    // TODO: implement allocation strategy (dirty metadata and multiple devices)
+    auto rbs = rb_group->get_rb_managers();
+    return rbs[0]->alloc_extent(length);
+  }
+
+  // Testing interfaces
+
+  bool check_usage() final;
+
+  bool check_usage_is_empty() const final {
+    // TODO
+    return true;
+  }
+
+private:
+  bool equals(const RBMSpaceTracker &other) const;
+
+  const bool detailed;
+  RBMDeviceGroupRef rb_group;
+  BackrefManager &backref_manager;
+
+  struct {
+    /**
+     * used_bytes
+     *
+     * Bytes occupied by live extents
+     */
+    uint64_t used_bytes = 0;
+
+    /**
+     * projected_used_bytes
+     *
+     * Sum of projected bytes used by each transaction between throttle
+     * acquisition and commit completion.  See reserve_projected_usage()
+     */
+    uint64_t projected_used_bytes = 0;
+  } stats;
+
+  ExtentCallbackInterface *extent_callback = nullptr;
+  BackgroundListener *background_callback = nullptr;
+};
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::segment_info_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::segments_info_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::AsyncCleaner::stat_printer_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::JournalTrimmerImpl::stat_printer_t> : fmt::ostream_formatter {};
+#endif

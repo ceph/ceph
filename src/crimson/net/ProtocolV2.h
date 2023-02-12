@@ -13,6 +13,8 @@
 namespace crimson::net {
 
 class ProtocolV2 final : public Protocol {
+  using AuthConnectionMetaRef = seastar::lw_shared_ptr<AuthConnectionMeta>;
+
  public:
   ProtocolV2(ChainedDispatchers& dispatchers,
              SocketConnection& conn,
@@ -42,6 +44,8 @@ class ProtocolV2 final : public Protocol {
 
  private:
   SocketMessenger &messenger;
+
+  AuthConnectionMetaRef auth_meta;
 
   enum class state_t {
     NONE = 0,
@@ -73,8 +77,7 @@ class ProtocolV2 final : public Protocol {
 
   void trigger_state(state_t state, write_state_t write_state, bool reentrant);
 
-  uint64_t connection_features = 0;
-  uint64_t peer_required_features = 0;
+  uint64_t peer_supported_features = 0;
 
   uint64_t client_cookie = 0;
   uint64_t server_cookie = 0;
@@ -192,7 +195,7 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> finish_auth();
 
   // ESTABLISHING
-  void execute_establishing(SocketConnectionRef existing_conn, bool dispatch_reset);
+  void execute_establishing(SocketConnectionRef existing_conn);
 
   // ESTABLISHING/REPLACING (server)
   seastar::future<> send_server_ident();
@@ -208,8 +211,7 @@ class ProtocolV2 final : public Protocol {
                          uint64_t new_client_cookie,
                          entity_name_t new_peer_name,
                          uint64_t new_conn_features,
-                         bool tx_is_rev1,
-                         bool rx_is_rev1,
+                         uint64_t new_peer_supported_features,
                          // reconnect
                          uint64_t new_connect_seq,
                          uint64_t new_msg_seq);
@@ -229,3 +231,7 @@ class ProtocolV2 final : public Protocol {
 };
 
 } // namespace crimson::net
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::net::ProtocolV2> : fmt::ostream_formatter {};
+#endif

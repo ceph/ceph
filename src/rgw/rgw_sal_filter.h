@@ -144,15 +144,15 @@ public:
   }
 };
 
-class FilterStore : public Store {
+class FilterDriver : public Driver {
 protected:
-  Store* next;
+  Driver* next;
 private:
   std::unique_ptr<FilterZone> zone;
 
 public:
-  FilterStore(Store* _next) : next(_next) {}
-  virtual ~FilterStore() = default;
+  FilterDriver(Driver* _next) : next(_next) {}
+  virtual ~FilterDriver() = default;
 
   virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
   virtual const std::string get_name() const override;
@@ -202,10 +202,11 @@ public:
 
   virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj,
 				 rgw::sal::Object* src_obj, struct req_state* s,
-				 rgw::notify::EventType event_type,
+				 rgw::notify::EventType event_type, optional_yield y,
 				 const std::string* object_name=nullptr) override;
   virtual std::unique_ptr<Notification> get_notification(
-    const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, 
+    const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj,
+
     rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
     std::string& _user_id, std::string& _user_tenant,
     std::string& _req_id, optional_yield y) override;
@@ -305,9 +306,7 @@ public:
 
   virtual CephContext* ctx(void) override;
 
-  virtual const std::string& get_luarocks_path() const override;
-  virtual void set_luarocks_path(const std::string& path) override;
-  virtual void  register_admin_apis(RGWRESTMgr* mgr)override {
+  virtual void register_admin_apis(RGWRESTMgr* mgr) override {
       return next->register_admin_apis(mgr);
   }
 };
@@ -435,9 +434,8 @@ public:
   virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
   virtual int update_container_stats(const DoutPrefixProvider* dpp) override;
   virtual int check_bucket_shards(const DoutPrefixProvider* dpp) override;
-  virtual int chown(const DoutPrefixProvider* dpp, User* new_user,
-		    User* old_user, optional_yield y,
-		    const std::string* marker = nullptr) override;
+  virtual int chown(const DoutPrefixProvider* dpp, User& new_user,
+		    optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
 		       ceph::real_time mtime) override;
   virtual bool is_owner(User* user) override;
@@ -673,6 +671,8 @@ public:
   virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp,
 				  const std::string& key, bufferlist& val,
 				  bool must_exist, optional_yield y) override;
+  virtual int chown(User& new_user, const DoutPrefixProvider* dpp,
+		    optional_yield y) override;
 
   virtual std::unique_ptr<Object> clone() override {
     return std::make_unique<FilterObject>(*this);

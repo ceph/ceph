@@ -3,9 +3,9 @@
 #include "svc_sys_obj_cache.h"
 #include "svc_bucket_sobj.h"
 
-#include "rgw/rgw_bucket_sync.h"
-#include "rgw/rgw_zone.h"
-#include "rgw/rgw_sync_policy.h"
+#include "rgw_bucket_sync.h"
+#include "rgw_zone.h"
+#include "rgw_sync_policy.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -171,7 +171,29 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
     return 0;
   }
 
-  auto& bucket = *_bucket;
+  auto bucket = *_bucket;
+
+  if (bucket.bucket_id.empty()) {
+    RGWBucketEntryPoint ep_info;
+    int ret = svc.bucket_sobj->read_bucket_entrypoint_info(ctx.ep,
+                                                           RGWSI_Bucket::get_entrypoint_meta_key(bucket),
+                                                           &ep_info,
+                                                           nullptr, /* objv_tracker */
+                                                           nullptr, /* mtime */
+                                                           nullptr, /* attrs */
+                                                           y,
+                                                           dpp,
+                                                           nullptr, /* cache_info */
+                                                           boost::none /* refresh_version */);
+    if (ret < 0) {
+      if (ret != -ENOENT) {
+        ldout(cct, 0) << "ERROR: svc.bucket->read_bucket_info(bucket=" << bucket << ") returned r=" << ret << dendl;
+      }
+      return ret;
+    }
+
+    bucket = ep_info.bucket;
+  }
 
   string zone_key;
   string bucket_key;

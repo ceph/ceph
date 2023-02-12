@@ -58,7 +58,7 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
       {
         name: $localize`Name`,
         prop: 'labels.alertname',
-        cellClass: 'font-weight-bold',
+        cellClass: 'fw-bold',
         flexGrow: 2
       },
       {

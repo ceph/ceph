@@ -173,8 +173,8 @@ http://tracker.ceph.com/issues/4000.
    contributions in a single commit. When you keep documentation
    commits separate from source code commits, it simplifies the review
    process. We highly recommend that any pull request that adds a feature or
-   a configuration option, should also include a documentation commit,
-   describing the relevant changes/options.
+   a configuration option should also include a documentation commit that
+   describes the changes.
 
 Before you create your branch name, ensure that it doesn't already exist in the
 local or remote repository. :
@@ -352,7 +352,7 @@ distributions, execute the following:
 .. prompt:: bash $
 
 	sudo apt-get install gcc python-dev python3-pip libxml2-dev libxslt-dev doxygen graphviz ant ditaa
-	sudo apt-get install python-sphinx
+	sudo apt-get install python3-sphinx python3-venv
 
 For Fedora distributions, execute the following:
 
@@ -644,31 +644,158 @@ The Ceph project uses `paragraph level markup`_ to highlight points.
    additional details.
 
 
-TOC and Hyperlinks
-------------------
+Table of Contents (TOC) and Hyperlinks
+---------------------------------------
 
-All documents must be linked from another document or a table of contents,
-otherwise you will receive a warning when building the documentation.
+The documents in the Ceph documentation suite follow certain conventions that
+are explained in this section.
 
-The Ceph project uses the ``.. toctree::`` directive. See `The TOC tree`_
-for details. When rendering a TOC, consider specifying the ``:maxdepth:`` 
-parameter so the rendered TOC is reasonably terse.
+Every document (every ``.rst`` file) in the Sphinx-controlled Ceph
+documentation suite must be linked either (1) from another document in the
+documentation suite or (2) from a table of contents (TOC). If any document in
+the documentation suite is not linked in this way, the ``build-doc`` script
+generates warnings when it tries to build the documentation. 
 
-Document authors should prefer to use the ``:ref:`` syntax where a link target
-contains a specific unique identifier (e.g., ``.. _unique-target-id:``), and  a
-reference to the target specifically references the target  (e.g.,
-``:ref:`unique-target-id```) so that if source files are moved or the
-information architecture changes, the links will still work. See
-`Cross referencing arbitrary locations`_ for details.
+The Ceph project uses the ``.. toctree::`` directive. See `The TOC tree`_ for
+details. When rendering a table of contents (TOC), specify the ``:maxdepth:``
+parameter so that the rendered TOC is not too long.
 
-Ceph documentation also uses the backtick (accent grave) character followed by
-the link text, another backtick and an underscore. Sphinx allows you to
-incorporate the link destination inline; however, we prefer to use the use the
-``.. _Link Text: ../path`` convention at the bottom of the document, because it
-improves the readability of the document in a command line interface.
+Use the ``:ref:`` syntax where a link target contains a specific unique
+identifier (for example, ``.. _unique-target-id:``). A link to the section
+designated by ``.. _unique-target-id:`` looks like this:
+``:ref:`unique-target-id```. If this convention is followed, the links within
+the ``.rst`` source files will work even if the source files are moved within
+the ``ceph/doc`` directory. See `Cross referencing arbitrary locations`_ for
+details.
 
+.. _start_external_hyperlink_example:
 
-.. _Python Sphinx: http://sphinx-doc.org
+External Hyperlink Example
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+It is also possible to create a link to a section of the documentation and to
+have custom text appear in the body of the link. This is useful when it is more
+important to preserve the text of the sentence containing the link than it is
+to refer explicitly to the title of the section being linked to.
+
+For example, RST that links to the Sphinx Python Document Generator homepage
+and generates a sentence reading "Click here to learn more about Python
+Sphinx." looks like this: 
+
+::
+
+    ``Click `here <https://www.sphinx-doc.org>`_ to learn more about Python
+    Sphinx.`` 
+
+And here it is, rendered:
+
+Click `here <https://www.sphinx-doc.org>`_ to learn more about Python Sphinx. 
+
+Pay special attention to the underscore after the backtick. If you forget to
+include it and this is your first day working with RST, there's a chance that
+you'll spend all day wondering what went wrong without realizing that you
+omitted that underscore. Also, pay special attention to the space between the
+substitution text (in this case, "here") and the less-than bracket that sets
+the explicit link apart from the substition text. The link will not render
+properly without this space.
+
+Linking Customs
+~~~~~~~~~~~~~~~
+
+By a custom established when Ceph was still being developed by Inktank,
+contributors to the documentation of the Ceph project preferred to use the
+convention of putting ``.. _Link Text: ../path`` links at the bottom of the
+document and linking to them using references of the form ``:ref:`path```. This
+convention was preferred because it made the documents more readable in a
+command line interface. As of 2023, though, we have no preference for one over
+the other. Use whichever convention makes the text easier to read.
+
+Quirks of ReStructured Text
+---------------------------
+
+External Links
+~~~~~~~~~~~~~~
+
+.. _external_link_with_inline_text:
+
+This is the formula for links to addresses external to the Ceph documentation:
+
+::
+
+   `inline text <http:www.foo.com>`_
+
+.. note:: Do not fail to include the space between the inline text and the
+   less-than sign. 
+   
+   Do not fail to include the underscore after the final backtick.
+
+   To link to addresses that are external to the Ceph documentation, include a
+   space between the inline text and the angle bracket that precedes the
+   external address. This is precisely the opposite of :ref:`the convention for
+   inline text that links to a location inside the Ceph
+   documentation<internal_link_with_inline_text>`. If this seems inconsistent
+   and confusing to you, then you're right. It is inconsistent and confusing.
+
+See also ":ref:`External Hyperlink Example<start_external_hyperlink_example>`".
+
+Internal Links
+~~~~~~~~~~~~~~
+
+To link to a section in the Ceph documentation, you must (1) define a target
+link before the section and then (2) link to that target from another location
+in the documentation. Here are the formulas for targets and links to those
+targets:
+
+Target::
+
+   .. _target:
+
+   Title of Targeted Section
+   =========================
+
+   Lorem ipsum...
+
+Link to target::
+
+   :ref:`target`
+
+.. _internal_link_with_inline_text:
+
+Link to target with inline text::
+
+   :ref:`inline text<target>`
+
+.. note:: 
+
+   There is no space between "inline text" and the angle bracket that
+   immediately follows it. This is precisely the opposite of :ref:`the
+   convention for inline text that links to a location outside of the Ceph
+   documentation<external_link_with_inline_text>`. If this seems inconsistent
+   and confusing to you, then you're right. It is inconsistent and confusing.
+
+Escaping Bold Characters within Words
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This section explains how to make certain letters within a word bold while
+leaving the other letters in the word regular (non-bold). 
+
+The following single-line paragraph provides an example of this:
+
+**C**\eph **F**\ile **S**\ystem.
+
+In ReStructured Text, the following formula will not work:
+
+::
+
+   **C**eph **F**ile **S**ystem
+
+The bolded notation must be turned off by means of the escape character (\\), as shown here:
+
+::
+
+   **C**\eph **F**\ile **S**\ystem
+
+.. _Python Sphinx: https://www.sphinx-doc.org
 .. _restructuredText: http://docutils.sourceforge.net/rst.html
 .. _Fork and Pull: https://help.github.com/articles/using-pull-requests
 .. _github: http://github.com

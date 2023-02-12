@@ -212,7 +212,7 @@ class DeltaRecorderT final: public DeltaRecorder {
     } catch (buffer::error& e) {
       SUBERROR(seastore_onode,
           "got decode error {} when replay {}",
-          e, node);
+          e.what(), node);
       ceph_abort("fatal error");
     }
   }

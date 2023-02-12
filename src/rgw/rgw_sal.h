@@ -258,48 +258,48 @@ class Completions {
 /**
  * @brief Base singleton representing a Store or Filter
  *
- * The Store is the base abstraction of the SAL layer.  It represents a base storage
+ * The Driver is the base abstraction of the SAL layer.  It represents a base storage
  * mechanism, or a intermediate stacking layer.  There is a single instance of a given
- * Store per RGW, and this Store mediates all access to it's backing.
+ * Driver per RGW, and this Driver mediates all access to it's backing.
  *
- * A store contains, loosely, @a User, @a Bucket, and @a Object entities.  The @a Object
+ * A Driver contains, loosely, @a User, @a Bucket, and @a Object entities.  The @a Object
  * contains data, and it's associated metadata.  The @a Bucket contains Objects, and
  * metadata about the bucket.  Both Buckets and Objects are owned by a @a User, which is
  * the basic unit of access control.
  *
- * A store also has metadata and some global responsibilities.  For example, a store is
+ * A Driver also has metadata and some global responsibilities.  For example, a driver is
  * responsible for managing the LifeCycle activities for it's data.
  */
-class Store {
+class Driver {
   public:
-    Store() {}
-    virtual ~Store() = default;
+    Driver() {}
+    virtual ~Driver() = default;
 
-    /** Post-creation initialization of store */
+    /** Post-creation initialization of driver */
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) = 0;
-    /** Name of this store provider (e.g., "rados") */
+    /** Name of this driver provider (e.g., "rados") */
     virtual const std::string get_name() const = 0;
     /** Get cluster unique identifier */
     virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y) = 0;
-    /** Get a User from a rgw_user.  Does not query store for user info, so quick */
+    /** Get a User from a rgw_user.  Does not query driver for user info, so quick */
     virtual std::unique_ptr<User> get_user(const rgw_user& u) = 0;
-    /** Lookup a User by access key.  Queries store for user info. */
+    /** Lookup a User by access key.  Queries driver for user info. */
     virtual int get_user_by_access_key(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user) = 0;
-    /** Lookup a User by email address.  Queries store for user info. */
+    /** Lookup a User by email address.  Queries driver for user info. */
     virtual int get_user_by_email(const DoutPrefixProvider* dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user) = 0;
-    /** Lookup a User by swift username.  Queries store for user info. */
+    /** Lookup a User by swift username.  Queries driver for user info. */
     virtual int get_user_by_swift(const DoutPrefixProvider* dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user) = 0;
     /** Get a basic Object.  This Object is not looked up, and is incomplete, since is
      * does not have a bucket.  This should only be used when an Object is needed before
      * there is a Bucket, otherwise use the get_object() in the Bucket class. */
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) = 0;
-    /** Get a Bucket by info.  Does not query the store, just uses the give bucket info. */
+    /** Get a Bucket by info.  Does not query the driver, just uses the give bucket info. */
     virtual int get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket) = 0;
-    /** Lookup a Bucket by key.  Queries store for bucket info. */
+    /** Lookup a Bucket by key.  Queries driver for bucket info. */
     virtual int get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
-    /** Lookup a Bucket by name.  Queries store for bucket info. */
+    /** Lookup a Bucket by name.  Queries driver for bucket info. */
     virtual int get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
-    /** For multisite, this Store is the zone's master */
+    /** For multisite, this driver is the zone's master */
     virtual bool is_meta_master() = 0;
     /** For multisite, forward an OP to the zone's master */
     virtual int forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version* objv,
@@ -309,7 +309,7 @@ class Store {
 					     bufferlist& in_data,
 					     RGWXMLDecoder::XMLParser* parser, req_info& info,
 					     optional_yield y) = 0;
-    /** Get zone info for this store */
+    /** Get zone info for this driver */
     virtual Zone* get_zone() = 0;
     /** Get a unique ID specific to this zone. */
     virtual std::string zone_unique_id(uint64_t unique_num) = 0;
@@ -319,7 +319,7 @@ class Store {
     virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) = 0;
     /** List all zones in all zone groups by ID */
     virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) = 0;
-    /** Get statistics about the cluster represented by this Store */
+    /** Get statistics about the cluster represented by this driver */
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
@@ -330,10 +330,10 @@ class Store {
       * management/tracking software */
     /** RGWOp variant */
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s,
-        rgw::notify::EventType event_type, const std::string* object_name=nullptr) = 0;
+        rgw::notify::EventType event_type, optional_yield y, const std::string* object_name=nullptr) = 0;
     /** No-req_state variant (e.g., rgwlc) */
     virtual std::unique_ptr<Notification> get_notification(
-    const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, 
+    const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj,
     rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant,
     std::string& _req_id, optional_yield y) = 0;
 
@@ -342,12 +342,12 @@ class Store {
     /** Get access to the coroutine registry.  Used to create new coroutine managers */
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() = 0;
 
-    /** Log usage data to the store.  Usage data is things like bytes sent/received and
+    /** Log usage data to the driver.  Usage data is things like bytes sent/received and
      * op count */
     virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info) = 0;
-    /** Log OP data to the store.  Data is opaque to SAL */
+    /** Log OP data to the driver.  Data is opaque to SAL */
     virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) = 0;
-    /** Register this Store to the service map.  Somewhat Rados specific; may be removed*/
+    /** Register this driver to the service map.  Somewhat Rados specific; may be removed*/
     virtual int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
 					const std::map<std::string, std::string>& meta) = 0;
     /** Get default quota info.  Used as fallback if a user or bucket has no quota set*/
@@ -442,17 +442,13 @@ class Store {
     /** Check to see if this placement rule is valid */
     virtual bool valid_placement(const rgw_placement_rule& rule) = 0;
 
-    /** Clean up a store for termination */
+    /** Clean up a driver for termination */
     virtual void finalize(void) = 0;
 
-    /** Get the Ceph context associated with this store.  May be removed. */
+    /** Get the Ceph context associated with this driver.  May be removed. */
     virtual CephContext* ctx(void) = 0;
 
-    /** Get the location of where lua packages are installed */
-    virtual const std::string& get_luarocks_path() const = 0;
-    /** Set the location of where lua packages are installed */
-    virtual void set_luarocks_path(const std::string& path) = 0;
-    /** Register admin APIs unique to this store */
+    /** Register admin APIs unique to this driver */
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
 };
 
@@ -680,8 +676,9 @@ class Bucket {
     virtual int update_container_stats(const DoutPrefixProvider* dpp) = 0;
     /** Check if this bucket needs resharding, and schedule it if it does */
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp) = 0;
-    /** Change the owner of this bucket in the backing store */
-    virtual int chown(const DoutPrefixProvider* dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker = nullptr) = 0;
+    /** Change the owner of this bucket in the backing store.  Current owner must be set.  Does not
+     * change ownership of the objects in the bucket. */
+    virtual int chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y) = 0;
     /** Store the cached bucket info into the backing store */
     virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime) = 0;
     /** Check to see if the given user is the owner of this bucket */
@@ -883,11 +880,18 @@ class Object {
 
       /** Prepare the Read op.  Must be called first */
       virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) = 0;
-      /** Synchronous read. Read from @a ofs to @a end into @a bl */
-      virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y, const DoutPrefixProvider* dpp) = 0;
-      /** Asynchronous read.  Read from @a ofs to @a end calling @a cb on each read
-       * chunk. */
-      virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end, RGWGetDataCB* cb, optional_yield y) = 0;
+
+      /** Synchronous read. Read from @a ofs to @a end (inclusive)
+       * into @a bl. Length is `end - ofs + 1`. */
+      virtual int read(int64_t ofs, int64_t end, bufferlist& bl,
+		       optional_yield y, const DoutPrefixProvider* dpp) = 0;
+
+      /** Asynchronous read.  Read from @a ofs to @a end (inclusive)
+       * calling @a cb on each read chunk. Length is `end - ofs +
+       * 1`. */
+      virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs,
+			  int64_t end, RGWGetDataCB* cb, optional_yield y) = 0;
+
       /** Get an attribute by name */
       virtual int get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y) = 0;
     };
@@ -1013,7 +1017,7 @@ class Object {
 			   optional_yield y) = 0;
     /** Check to see if two placement rules match */
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
-    /** Dump store-specific object layout info in JSON */
+    /** Dump driver-specific object layout info in JSON */
     virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) = 0;
 
     /** Get the cached attributes for this object */
@@ -1081,6 +1085,8 @@ class Object {
     /** Get a single OMAP value matching the given key */
     virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
 				    bool must_exist, optional_yield y) = 0;
+    /** Change the ownership of this object */
+    virtual int chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y) = 0;
 
     /** Check to see if the given object pointer is uninitialized */
     static bool empty(const Object* o) { return (!o || o->empty()); }
@@ -1543,14 +1549,14 @@ public:
 } } // namespace rgw::sal
 
 /**
- * @brief A manager for Stores
+ * @brief A manager for Drivers
  *
- * This will manage the singleton instances of the various stores.  Stores come in two
- * varieties: Full and Raw.  A full store is suitable for use in a radosgw daemon.  It
- * has full access to the cluster, if any.  A raw store is a stripped down store, used
+ * This will manage the singleton instances of the various drivers.  Drivers come in two
+ * varieties: Full and Raw.  A full driver is suitable for use in a radosgw daemon.  It
+ * has full access to the cluster, if any.  A raw driver is a stripped down driver, used
  * for admin commands.
  */
-class StoreManager {
+class DriverManager {
 public:
   struct Config {
     /** Name of store to create */
@@ -1559,9 +1565,9 @@ public:
     std::string filter_name;
   };
 
-  StoreManager() {}
-  /** Get a full store by service name */
-  static rgw::sal::Store* get_storage(const DoutPrefixProvider* dpp,
+  DriverManager() {}
+  /** Get a full driver by service name */
+  static rgw::sal::Driver* get_storage(const DoutPrefixProvider* dpp,
 				      CephContext* cct,
 				      const Config& cfg,
 				      bool use_gc_thread,
@@ -1571,22 +1577,22 @@ public:
 				      bool run_reshard_thread,
 				      bool use_cache = true,
 				      bool use_gc = true) {
-    rgw::sal::Store* store = init_storage_provider(dpp, cct, cfg, use_gc_thread,
+    rgw::sal::Driver* driver = init_storage_provider(dpp, cct, cfg, use_gc_thread,
 						   use_lc_thread,
 						   quota_threads,
 						   run_sync_thread,
 						   run_reshard_thread,
 						   use_cache, use_gc);
-    return store;
+    return driver;
   }
-  /** Get a stripped down store by service name */
-  static rgw::sal::Store* get_raw_storage(const DoutPrefixProvider* dpp,
+  /** Get a stripped down driver by service name */
+  static rgw::sal::Driver* get_raw_storage(const DoutPrefixProvider* dpp,
 					  CephContext* cct, const Config& cfg) {
-    rgw::sal::Store* store = init_raw_storage_provider(dpp, cct, cfg);
-    return store;
+    rgw::sal::Driver* driver = init_raw_storage_provider(dpp, cct, cfg);
+    return driver;
   }
-  /** Initialize a new full Store */
-  static rgw::sal::Store* init_storage_provider(const DoutPrefixProvider* dpp,
+  /** Initialize a new full Driver */
+  static rgw::sal::Driver* init_storage_provider(const DoutPrefixProvider* dpp,
 						CephContext* cct,
 						const Config& cfg,
 						bool use_gc_thread,
@@ -1596,14 +1602,14 @@ public:
 						bool run_reshard_thread,
 						bool use_metadata_cache,
 						bool use_gc);
-  /** Initialize a new raw Store */
-  static rgw::sal::Store* init_raw_storage_provider(const DoutPrefixProvider* dpp,
+  /** Initialize a new raw Driver */
+  static rgw::sal::Driver* init_raw_storage_provider(const DoutPrefixProvider* dpp,
 						    CephContext* cct,
 						    const Config& cfg);
-  /** Close a Store when it's no longer needed */
-  static void close_storage(rgw::sal::Store* store);
+  /** Close a Driver when it's no longer needed */
+  static void close_storage(rgw::sal::Driver* driver);
 
-  /** Get the config for stores/filters */
+  /** Get the config for Drivers */
   static Config get_config(bool admin, CephContext* cct);
 
   /** Create a ConfigStore */

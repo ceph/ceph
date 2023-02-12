@@ -113,10 +113,10 @@ function get_pid()
 
 unmap_device()
 {
-    local dev=$1
+    local args=$1
     local pid=$2
 
-    _sudo rbd device --device-type nbd unmap ${dev}
+    _sudo rbd device --device-type nbd unmap ${args}
     rbd device --device-type nbd list | expect_false grep "^${pid}\\b" || return 1
     ps -C rbd-nbd | expect_false grep "^ *${pid}\\b" || return 1
 
@@ -253,11 +253,34 @@ get_pid ${POOL}
 unmap_device "${IMAGE}@snap" ${PID}
 DEV=
 
+# map/unmap snap test with --snap-id
+SNAPID=`rbd snap ls ${POOL}/${IMAGE} | awk '$2 == "snap" {print $1}'`
+DEV=`_sudo rbd device --device-type nbd map --snap-id ${SNAPID} ${POOL}/${IMAGE}`
+get_pid ${POOL}
+unmap_device "--snap-id ${SNAPID} ${IMAGE}" ${PID}
+DEV=
+
 # map/unmap namespace test
 rbd snap create ${POOL}/${NS}/${IMAGE}@snap
 DEV=`_sudo rbd device --device-type nbd map ${POOL}/${NS}/${IMAGE}@snap`
 get_pid ${POOL} ${NS}
 unmap_device "${POOL}/${NS}/${IMAGE}@snap" ${PID}
+DEV=
+
+# map/unmap namespace test with --snap-id
+SNAPID=`rbd snap ls ${POOL}/${NS}/${IMAGE} | awk '$2 == "snap" {print $1}'`
+DEV=`_sudo rbd device --device-type nbd map --snap-id ${SNAPID} ${POOL}/${NS}/${IMAGE}`
+get_pid ${POOL} ${NS}
+unmap_device "--snap-id ${SNAPID} ${POOL}/${NS}/${IMAGE}" ${PID}
+DEV=
+
+# map/unmap namespace using options test
+DEV=`_sudo rbd device --device-type nbd map --pool ${POOL} --namespace ${NS} --image ${IMAGE}`
+get_pid ${POOL} ${NS}
+unmap_device "--pool ${POOL} --namespace ${NS} --image ${IMAGE}" ${PID}
+DEV=`_sudo rbd device --device-type nbd map --pool ${POOL} --namespace ${NS} --image ${IMAGE} --snap snap`
+get_pid ${POOL} ${NS}
+unmap_device "--pool ${POOL} --namespace ${NS} --image ${IMAGE} --snap snap" ${PID}
 DEV=
 
 # unmap by image name test 2
@@ -399,5 +422,24 @@ if [ -n "${COOKIE}" ]; then
     test "${ANOTHER_COOKIE}" = "abc de"
     unmap_device ${DEV} ${PID}
 fi
+DEV=
+
+# test detach/attach with --snap-id
+SNAPID=`rbd snap ls ${POOL}/${IMAGE} | awk '$2 == "snap" {print $1}'`
+OUT=`_sudo rbd device --device-type nbd --options try-netlink,show-cookie map --snap-id ${SNAPID} ${POOL}/${IMAGE}`
+read DEV COOKIE <<< "${OUT}"
+get_pid ${POOL}
+_sudo rbd device detach ${POOL}/${IMAGE} --snap-id ${SNAPID} --device-type nbd
+expect_false get_pid ${POOL}
+expect_false _sudo rbd device attach --device ${DEV} --snap-id ${SNAPID} ${POOL}/${IMAGE} --device-type nbd
+if [ -n "${COOKIE}" ]; then
+    _sudo rbd device attach --device ${DEV} --cookie ${COOKIE} --snap-id ${SNAPID} ${POOL}/${IMAGE} --device-type nbd
+else
+    _sudo rbd device attach --device ${DEV} --snap-id ${SNAPID} ${POOL}/${IMAGE} --device-type nbd --force
+fi
+get_pid ${POOL}
+_sudo rbd device detach ${DEV} --device-type nbd
+expect_false get_pid ${POOL}
+DEV=
 
 echo OK

@@ -68,6 +68,9 @@ constexpr device_id_t DEVICE_ID_ZERO = DEVICE_ID_MAX - 5;
 constexpr device_id_t DEVICE_ID_ROOT = DEVICE_ID_MAX - 6;
 constexpr device_id_t DEVICE_ID_MAX_VALID = DEVICE_ID_MAX - 7;
 constexpr device_id_t DEVICE_ID_MAX_VALID_SEGMENT = DEVICE_ID_MAX >> 1;
+constexpr device_id_t DEVICE_ID_SEGMENTED_MIN = 0;
+constexpr device_id_t DEVICE_ID_RANDOM_BLOCK_MIN = 
+  1 << (std::numeric_limits<device_id_t>::digits - 1);
 
 struct device_id_printer_t {
   device_id_t id;
@@ -391,13 +394,11 @@ private:
       assert(!is_end());
       return &*current;
     }
-    template <bool c = is_const, std::enable_if_t<c, int> = 0>
-    const std::pair<const segment_id_t, const T&> &operator*() {
-      assert(!is_end());
-      return *current;
-    }
-    template <bool c = is_const, std::enable_if_t<!c, int> = 0>
-    std::pair<const segment_id_t, T&> &operator*() {
+
+    using reference = std::conditional_t<
+      is_const, const std::pair<const segment_id_t, const T&>&,
+      std::pair<const segment_id_t, T&>&>;
+    reference operator*() {
       assert(!is_end());
       return *current;
     }
@@ -870,7 +871,7 @@ constexpr auto PLACEMENT_HINT_NULL = placement_hint_t::NUM_HINTS;
 
 std::ostream& operator<<(std::ostream& out, placement_hint_t h);
 
-enum class alignas(4) device_type_t : uint_fast8_t {
+enum class device_type_t : uint8_t {
   NONE = 0,
   HDD,
   SSD,
@@ -1114,19 +1115,70 @@ constexpr bool is_backref_node(extent_types_t type)
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
-using reclaim_gen_t = uint8_t;
+/**
+ * rewrite_gen_t
+ *
+ * The goal is to group the similar aged extents in the same segment for better
+ * bimodel utilization distribution, and also to the same device tier. For EPM,
+ * it has the flexibility to make placement decisions by re-assigning the
+ * generation. And each non-inline generation will be statically mapped to a
+ * writer in EPM.
+ *
+ * All the fresh and dirty extents start with INIT_GENERATION upon allocation,
+ * and they will be assigned to INLINE/OOL generation by EPM before the initial
+ * writes. After that, the generation can only be increased upon rewrite.
+ *
+ * Note, although EPM can re-assign the generations according to the tiering
+ * status, it cannot decrease the generation for the correctness of space
+ * reservation. It may choose to assign a larger generation if the extent is
+ * hinted cold, or if want to evict extents to the cold tier. And it may choose
+ * to not increase the generation if want to keep the hot tier as filled as
+ * possible.
+ */
+using rewrite_gen_t = uint8_t;
 
-constexpr reclaim_gen_t DIRTY_GENERATION = 1;
-constexpr reclaim_gen_t COLD_GENERATION = 1;
-constexpr reclaim_gen_t RECLAIM_GENERATIONS = 3;
-constexpr reclaim_gen_t NULL_GENERATION =
-  std::numeric_limits<reclaim_gen_t>::max();
+// INIT_GENERATION requires EPM decision to INLINE/OOL_GENERATION
+constexpr rewrite_gen_t INIT_GENERATION = 0;
+constexpr rewrite_gen_t INLINE_GENERATION = 1; // to the journal
+constexpr rewrite_gen_t OOL_GENERATION = 2;
 
-struct reclaim_gen_printer_t {
-  reclaim_gen_t gen;
+// All the rewritten extents start with MIN_REWRITE_GENERATION
+constexpr rewrite_gen_t MIN_REWRITE_GENERATION = 3;
+constexpr rewrite_gen_t MAX_REWRITE_GENERATION = 4;
+
+/**
+ * TODO:
+ * For tiering, might introduce 5 and 6 for the cold tier, and 1 ~ 4 for the
+ * hot tier.
+ */
+
+constexpr rewrite_gen_t REWRITE_GENERATIONS = MAX_REWRITE_GENERATION + 1;
+constexpr rewrite_gen_t NULL_GENERATION =
+  std::numeric_limits<rewrite_gen_t>::max();
+
+struct rewrite_gen_printer_t {
+  rewrite_gen_t gen;
 };
 
-std::ostream &operator<<(std::ostream &out, reclaim_gen_printer_t gen);
+std::ostream &operator<<(std::ostream &out, rewrite_gen_printer_t gen);
+
+constexpr std::size_t generation_to_writer(rewrite_gen_t gen) {
+  // caller to assert the gen is in the reasonable range
+  return gen - OOL_GENERATION;
+}
+
+// before EPM decision
+constexpr bool is_target_rewrite_generation(rewrite_gen_t gen) {
+  return gen == INIT_GENERATION ||
+         (gen >= MIN_REWRITE_GENERATION &&
+          gen <= REWRITE_GENERATIONS);
+}
+
+// after EPM decision
+constexpr bool is_rewrite_generation(rewrite_gen_t gen) {
+  return gen >= INLINE_GENERATION &&
+         gen < REWRITE_GENERATIONS;
+}
 
 enum class data_category_t : uint8_t {
   METADATA = 0,
@@ -1640,7 +1692,7 @@ struct segment_header_t {
   segment_type_t type;
 
   data_category_t category;
-  reclaim_gen_t generation;
+  rewrite_gen_t generation;
 
   segment_type_t get_type() const {
     return type;
@@ -2055,74 +2107,32 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_blk_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_delta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_tail_t)
 
-template<>
-struct denc_traits<crimson::os::seastore::device_type_t> {
-  static constexpr bool supported = true;
-  static constexpr bool featured = false;
-  static constexpr bool bounded = true;
-  static constexpr bool need_contiguous = false;
-
-  static void bound_encode(
-    const crimson::os::seastore::device_type_t &o,
-    size_t& p,
-    uint64_t f=0) {
-    p += sizeof(crimson::os::seastore::device_type_t);
-  }
-  template<class It>
-  requires (!is_const_iterator<It>)
-  static void encode(
-    const crimson::os::seastore::device_type_t &o,
-    It& p,
-    uint64_t f=0) {
-    get_pos_add<crimson::os::seastore::device_type_t>(p) = o;
-  }
-  template<is_const_iterator It>
-  static void decode(
-    crimson::os::seastore::device_type_t& o,
-    It& p,
-    uint64_t f=0) {
-    o = get_pos_add<crimson::os::seastore::device_type_t>(p);
-  }
-  static void decode(
-    crimson::os::seastore::device_type_t& o,
-    ceph::buffer::list::const_iterator &p) {
-    p.copy(sizeof(crimson::os::seastore::device_type_t),
-           reinterpret_cast<char*>(&o));
-  }
-};
-
-template<>
-struct denc_traits<crimson::os::seastore::segment_type_t> {
-  static constexpr bool supported = true;
-  static constexpr bool featured = false;
-  static constexpr bool bounded = true;
-  static constexpr bool need_contiguous = false;
-
-  static void bound_encode(
-    const crimson::os::seastore::segment_type_t &o,
-    size_t& p,
-    uint64_t f=0) {
-    p += sizeof(crimson::os::seastore::segment_type_t);
-  }
-  template<class It>
-  requires (!is_const_iterator<It>)
-  static void encode(
-    const crimson::os::seastore::segment_type_t &o,
-    It& p,
-    uint64_t f=0) {
-    get_pos_add<crimson::os::seastore::segment_type_t>(p) = o;
-  }
-  template<is_const_iterator It>
-  static void decode(
-    crimson::os::seastore::segment_type_t& o,
-    It& p,
-    uint64_t f=0) {
-    o = get_pos_add<crimson::os::seastore::segment_type_t>(p);
-  }
-  static void decode(
-    crimson::os::seastore::segment_type_t& o,
-    ceph::buffer::list::const_iterator &p) {
-    p.copy(sizeof(crimson::os::seastore::segment_type_t),
-           reinterpret_cast<char*>(&o));
-  }
-};
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::data_category_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::delta_info_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::device_id_printer_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::extent_types_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::journal_seq_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::journal_tail_delta_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::laddr_list_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::paddr_list_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::paddr_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::placement_hint_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::record_group_size_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::record_header_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::record_locator_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::record_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::rewrite_gen_printer_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::scan_valid_records_cursor> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::sea_time_point_printer_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::segment_header_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::segment_id_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::segment_seq_printer_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::segment_tail_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::segment_type_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::transaction_type_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::write_result_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ceph::buffer::list> : fmt::ostream_formatter {};
+#endif

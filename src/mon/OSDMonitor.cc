@@ -5940,19 +5940,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
   } else if (prefix == "pg map") {
     pg_t pgid;
-    string pgidstr;
-    cmd_getval(cmdmap, "pgid", pgidstr);
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "invalid pgid '" << pgidstr << "'";
-      r = -EINVAL;
-      goto reply;
-    }
     vector<int> up, acting;
-    if (!osdmap.have_pg_pool(pgid.pool())) {
-      ss << "pg '" << pgidstr << "' does not exist";
-      r = -ENOENT;
+    r = parse_pgid(cmdmap, ss, pgid);
+    if (r < 0)
       goto reply;
-    }
     pg_t mpgid = osdmap.raw_pg_to_pg(pgid);
     osdmap.pg_to_up_acting_osds(pgid, up, acting);
     if (f) {
@@ -7938,15 +7929,16 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, int crush_rule,
     }
   }
   auto max_pgs = max_pgs_per_osd * num_osds;
+  auto projected_pgs_per_osd = projected / num_osds;
   if (projected > max_pgs) {
     if (pool >= 0) {
       *ss << "pool id " << pool;
     }
     *ss << " pg_num " << pg_num << " size " << size
-	<< " would mean " << projected
-	<< " total pgs, which exceeds max " << max_pgs
-	<< " (mon_max_pg_per_osd " << max_pgs_per_osd
-	<< " * num_in_osds " << num_osds << ")";
+	<< " for this new pool would result in " << projected_pgs_per_osd
+	<< " cumulative PGs per OSD (" << projected
+	<< " total PG replicas on " << num_osds
+	<< " 'in' OSDs) which exceeds the mon_max_pg_per_osd value of " << max_pgs_per_osd;
     return -ERANGE;
   }
   return 0;
@@ -8041,7 +8033,8 @@ int OSDMonitor::prepare_new_pool(string& name,
     tester.set_rule(crush_rule);
     tester.set_num_rep(size);
     auto start = ceph::coarse_mono_clock::now();
-    r = tester.test_with_fork(g_conf()->mon_lease);
+    r = tester.test_with_fork(cct, g_conf()->mon_lease);
+    dout(10) << __func__ << " crush test_with_fork tester created " << dendl;
     auto duration = ceph::coarse_mono_clock::now() - start;
     if (r < 0) {
       dout(10) << "tester.test_with_fork returns " << r
@@ -9892,6 +9885,27 @@ int OSDMonitor::prepare_command_osd_purge(
   return 0;
 }
 
+int OSDMonitor::parse_pgid(const cmdmap_t& cmdmap, stringstream &ss,
+                           /* out */ pg_t &pgid, std::optional<string> pgids) {
+  string pgidstr;
+  if (!cmd_getval(cmdmap, "pgid", pgidstr)) {
+    ss << "unable to parse 'pgid' value '"
+       << cmd_vartype_stringify(cmdmap.at("pgid")) << "'";
+    return -EINVAL;
+  }
+  if (!pgid.parse(pgidstr.c_str())) {
+    ss << "invalid pgid '" << pgidstr << "'";
+    return -EINVAL;
+  }
+  if (!osdmap.pg_exists(pgid)) {
+    ss << "pgid '" << pgid << "' does not exist";
+    return -ENOENT;
+  }
+  if (pgids.has_value())
+    pgids.value() = pgidstr;
+  return 0;
+}
+
 bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 				      const cmdmap_t& cmdmap)
 {
@@ -10019,7 +10033,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       tester.set_max_x(50);
       tester.set_num_rep(3);  // arbitrary
       auto start = ceph::coarse_mono_clock::now();
-      int r = tester.test_with_fork(g_conf()->mon_lease);
+      int r = tester.test_with_fork(cct, g_conf()->mon_lease);
       auto duration = ceph::coarse_mono_clock::now() - start;
       if (r < 0) {
 	dout(10) << " tester.test_with_fork returns " << r
@@ -11966,24 +11980,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return true;
     }
   } else if (prefix == "osd pg-temp") {
-    string pgidstr;
-    if (!cmd_getval(cmdmap, "pgid", pgidstr)) {
-      ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap.at("pgid")) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
     pg_t pgid;
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "invalid pgid '" << pgidstr << "'";
-      err = -EINVAL;
+    err = parse_pgid(cmdmap, ss, pgid);
+    if (err < 0)
       goto reply;
-    }
-    if (!osdmap.pg_exists(pgid)) {
-      ss << "pg " << pgid << " does not exist";
-      err = -ENOENT;
-      goto reply;
-    }
     if (pending_inc.new_pg_temp.count(pgid)) {
       dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));
@@ -12028,24 +12028,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set " << pgid << " pg_temp mapping to " << new_pg_temp;
     goto update;
   } else if (prefix == "osd primary-temp") {
-    string pgidstr;
-    if (!cmd_getval(cmdmap, "pgid", pgidstr)) {
-      ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap.at("pgid")) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
     pg_t pgid;
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "invalid pgid '" << pgidstr << "'";
-      err = -EINVAL;
+    err = parse_pgid(cmdmap, ss, pgid);
+    if (err < 0)
       goto reply;
-    }
-    if (!osdmap.pg_exists(pgid)) {
-      ss << "pg " << pgid << " does not exist";
-      err = -ENOENT;
-      goto reply;
-    }
 
     int64_t osd;
     if (!cmd_getval(cmdmap, "id", osd)) {
@@ -12074,18 +12060,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     goto update;
   } else if (prefix == "pg repeer") {
     pg_t pgid;
-    string pgidstr;
-    cmd_getval(cmdmap, "pgid", pgidstr);
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "invalid pgid '" << pgidstr << "'";
-      err = -EINVAL;
+    err = parse_pgid(cmdmap, ss, pgid);
+    if (err < 0)
       goto reply;
-    }
-    if (!osdmap.pg_exists(pgid)) {
-      ss << "pg '" << pgidstr << "' does not exist";
-      err = -ENOENT;
-      goto reply;
-    }
     vector<int> acting;
     int primary;
     osdmap.pg_to_acting_osds(pgid, &acting, &primary);
@@ -12120,39 +12097,77 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd pg-upmap" ||
              prefix == "osd rm-pg-upmap" ||
              prefix == "osd pg-upmap-items" ||
-             prefix == "osd rm-pg-upmap-items") {
-    if (osdmap.require_min_compat_client < ceph_release_t::luminous) {
+             prefix == "osd rm-pg-upmap-items" ||
+	     prefix == "osd pg-upmap-primary" ||
+	     prefix == "osd rm-pg-upmap-primary") {
+    enum {
+      OP_PG_UPMAP,
+      OP_RM_PG_UPMAP,
+      OP_PG_UPMAP_ITEMS,
+      OP_RM_PG_UPMAP_ITEMS,
+      OP_PG_UPMAP_PRIMARY,
+      OP_RM_PG_UPMAP_PRIMARY,
+    } upmap_option;
+
+    if (prefix == "osd pg-upmap") {
+      upmap_option = OP_PG_UPMAP;
+    } else if (prefix == "osd rm-pg-upmap") {
+      upmap_option = OP_RM_PG_UPMAP;
+    } else if (prefix == "osd pg-upmap-items") {
+      upmap_option = OP_PG_UPMAP_ITEMS;
+    } else if (prefix == "osd rm-pg-upmap-items") {
+      upmap_option = OP_RM_PG_UPMAP_ITEMS;
+    } else if (prefix == "osd pg-upmap-primary") {
+      upmap_option = OP_PG_UPMAP_PRIMARY;
+    } else if (prefix == "osd rm-pg-upmap-primary") {
+      upmap_option = OP_RM_PG_UPMAP_PRIMARY;
+    } else {
+      ceph_abort_msg("invalid upmap option");
+    }
+
+    ceph_release_t min_release = ceph_release_t::unknown;
+    string feature_name = "unknown";
+    switch (upmap_option) {
+    case OP_PG_UPMAP: 		// fall through
+    case OP_RM_PG_UPMAP:	// fall through
+    case OP_PG_UPMAP_ITEMS:	// fall through
+    case OP_RM_PG_UPMAP_ITEMS:
+      min_release = ceph_release_t::luminous;
+      feature_name = "pg-upmap";
+      break;
+
+    case OP_PG_UPMAP_PRIMARY:	// fall through
+    case OP_RM_PG_UPMAP_PRIMARY:
+      min_release = ceph_release_t::reef;
+      feature_name = "pg-upmap-primary";
+      break;
+
+    default:
+      ceph_abort_msg("invalid upmap option");
+    }
+    uint64_t min_feature = CEPH_FEATUREMASK_OSDMAP_PG_UPMAP;
+    string min_release_name = ceph_release_name(static_cast<int>(min_release));
+
+    if (osdmap.require_min_compat_client < min_release) {
       ss << "min_compat_client "
 	 << osdmap.require_min_compat_client
-	 << " < luminous, which is required for pg-upmap. "
-         << "Try 'ceph osd set-require-min-compat-client luminous' "
+	 << " < " << min_release_name << ", which is required for " << feature_name << ". "
+         << "Try 'ceph osd set-require-min-compat-client " << min_release_name << "' "
          << "before using the new interface";
       err = -EPERM;
       goto reply;
     }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
+
+    //TODO: Should I add feature and test for upmap-primary?
+    err = check_cluster_features(min_feature, ss);
     if (err == -EAGAIN)
       goto wait;
     if (err < 0)
       goto reply;
-    string pgidstr;
-    if (!cmd_getval(cmdmap, "pgid", pgidstr)) {
-      ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap.at("pgid")) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
     pg_t pgid;
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "invalid pgid '" << pgidstr << "'";
-      err = -EINVAL;
+    err = parse_pgid(cmdmap, ss, pgid);
+    if (err < 0)
       goto reply;
-    }
-    if (!osdmap.pg_exists(pgid)) {
-      ss << "pg " << pgid << " does not exist";
-      err = -ENOENT;
-      goto reply;
-    }
     if (pending_inc.old_pools.count(pgid.pool())) {
       ss << "pool of " << pgid << " is pending removal";
       err = -ENOENT;
@@ -12162,25 +12177,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return true;
     }
 
-    enum {
-      OP_PG_UPMAP,
-      OP_RM_PG_UPMAP,
-      OP_PG_UPMAP_ITEMS,
-      OP_RM_PG_UPMAP_ITEMS,
-    } option;
-
-    if (prefix == "osd pg-upmap") {
-      option = OP_PG_UPMAP;
-    } else if (prefix == "osd rm-pg-upmap") {
-      option = OP_RM_PG_UPMAP;
-    } else if (prefix == "osd pg-upmap-items") {
-      option = OP_PG_UPMAP_ITEMS;
-    } else {
-      option = OP_RM_PG_UPMAP_ITEMS;
-    }
-
     // check pending upmap changes
-    switch (option) {
+    switch (upmap_option) {
     case OP_PG_UPMAP: // fall through
     case OP_RM_PG_UPMAP:
       if (pending_inc.new_pg_upmap.count(pgid) ||
@@ -12192,8 +12190,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
       break;
 
-    case OP_PG_UPMAP_ITEMS: // fall through
-    case OP_RM_PG_UPMAP_ITEMS:
+    case OP_PG_UPMAP_PRIMARY:   // fall through
+    case OP_RM_PG_UPMAP_PRIMARY:
+      {
+	const pg_pool_t *pt = osdmap.get_pg_pool(pgid.pool());
+        if (! pt->is_replicated()) {
+	  ss << "pg-upmap-primary is only supported for replicated pools";
+	  err = -EINVAL;
+	  goto reply;
+	}
+      }
+      // fall through
+    case OP_PG_UPMAP_ITEMS:     // fall through
+    case OP_RM_PG_UPMAP_ITEMS:  // fall through
       if (pending_inc.new_pg_upmap_items.count(pgid) ||
           pending_inc.old_pg_upmap_items.count(pgid)) {
         dout(10) << __func__ << " waiting for pending update on "
@@ -12204,10 +12213,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       break;
 
     default:
-      ceph_abort_msg("invalid option");
+      ceph_abort_msg("invalid upmap option");
     }
 
-    switch (option) {
+    switch (upmap_option) {
     case OP_PG_UPMAP:
       {
         vector<int64_t> id_vec;
@@ -12346,8 +12355,69 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
       break;
 
+    case OP_PG_UPMAP_PRIMARY:
+      {
+	int64_t id;
+	if (!cmd_getval(cmdmap, "id", id)) {
+	  ss << "invalid osd id value '"
+             << cmd_vartype_stringify(cmdmap.at("id")) << "'";
+	  err = -EINVAL;
+	  goto reply;
+	}
+        if (id != CRUSH_ITEM_NONE && !osdmap.exists(id)) {
+          ss << "osd." << id << " does not exist";
+          err = -ENOENT;
+          goto reply;
+        }
+    	vector<int> acting;
+    	int primary;
+    	osdmap.pg_to_acting_osds(pgid, &acting, &primary);
+	if (id == primary) {
+	  ss << "osd." << id << " is already primary for pg " << pgid;
+	  err = -EINVAL;
+	  goto reply;
+	}
+	int found_idx = 0;
+	for (int i = 1 ; i < (int)acting.size(); i++) {  // skip 0 on purpose
+	  if (acting[i] == id) {
+	    found_idx = i;
+	    break;
+	  }
+	}
+	if (found_idx == 0) {
+	  ss << "osd." << id << " is not in acting set for pg " << pgid;
+	  err = -EINVAL;
+	  goto reply;
+	}
+	vector<int> new_acting(acting);
+	new_acting[found_idx] = new_acting[0];
+	new_acting[0] = id;
+	int pool_size = osdmap.get_pg_pool_size(pgid);
+	if (osdmap.crush->verify_upmap(cct, osdmap.get_pg_pool_crush_rule(pgid),
+	    pool_size, new_acting) >= 0) {
+          ss << "change primary for pg " << pgid << " to osd." << id;
+	}
+	else {
+	  ss << "can't change primary for pg " << pgid << " to osd." << id
+	     << " - illegal pg after the change";
+	  err = -EINVAL;
+	  goto reply;
+	}
+	pending_inc.new_pg_upmap_primary[pgid] = id;
+	//TO-REMOVE: 
+	ldout(cct, 20) << "pg " << pgid << ": set pg_upmap_primary to " << id << dendl;
+      }
+      break;
+
+    case OP_RM_PG_UPMAP_PRIMARY:
+      {
+        pending_inc.old_pg_upmap_primary.insert(pgid);
+        ss << "clear " << pgid << " pg_upmap_primary mapping";
+      }
+      break;
+
     default:
-      ceph_abort_msg("invalid option");
+      ceph_abort_msg("invalid upmap option");
     }
 
     goto update;
@@ -13748,17 +13818,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd force-create-pg") {
     pg_t pgid;
     string pgidstr;
-    cmd_getval(cmdmap, "pgid", pgidstr);
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "invalid pgid '" << pgidstr << "'";
-      err = -EINVAL;
+    err = parse_pgid(cmdmap, ss, pgid, pgidstr);
+    if (err < 0)
       goto reply;
-    }
-    if (!osdmap.pg_exists(pgid)) {
-      ss << "pg " << pgid << " should not exist";
-      err = -ENOENT;
-      goto reply;
-    }
     bool sure = false;
     cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
     if (!sure) {
@@ -14051,6 +14113,16 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
   }
 
   const pg_pool_t *pool = osdmap.get_pg_pool(m->pool);
+
+  if (m->op == POOL_OP_CREATE_SNAP ||
+      m->op == POOL_OP_CREATE_UNMANAGED_SNAP) {
+    if (const auto& fsmap = mon.mdsmon()->get_fsmap(); fsmap.pool_in_use(m->pool)) {
+      dout(20) << "monitor-managed snapshots have been disabled for pools "
+		  " attached to an fs - pool:" << m->pool << dendl;
+      _pool_op_reply(op, -EOPNOTSUPP, osdmap.get_epoch());
+      return false;
+    }
+  }
 
   switch (m->op) {
     case POOL_OP_CREATE_SNAP:

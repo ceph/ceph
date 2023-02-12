@@ -215,8 +215,8 @@ The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
 Prerequisites
 ~~~~~~~~~~~~~
 
- * Node 12.18.2 or higher
- * NPM 6.13.4 or higher
+ * Node 14.15.0 or higher
+ * NPM 6.14.9 or higher
 
 nodeenv:
   During Ceph's build we create a virtualenv with ``node`` and ``npm``
@@ -290,7 +290,7 @@ HTML files:
 - `html-linter <https://github.com/chinchiheather/html-linter>`_
 - `htmllint-cli <https://github.com/htmllint/htmllint-cli>`_
 - `Prettier <https://prettier.io/>`_
-- `TSLint <https://palantir.github.io/tslint/>`_
+- `ESLint <https://eslint.org/>`_
 - `stylelint <https://stylelint.io/>`_
 
 We added 2 npm scripts to help run these tools:

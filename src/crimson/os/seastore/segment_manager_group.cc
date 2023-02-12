@@ -41,7 +41,7 @@ SegmentManagerGroup::read_segment_tail(segment_id_t segment)
       decode(tail, bp);
     } catch (ceph::buffer::error &e) {
       DEBUG("segment {} unable to decode tail, skipping -- {}",
-            segment, e);
+            segment, e.what());
       return crimson::ct_error::enodata::make();
     }
     DEBUG("segment {} tail {}", segment, tail);
@@ -81,7 +81,7 @@ SegmentManagerGroup::read_segment_header(segment_id_t segment)
       decode(header, bp);
     } catch (ceph::buffer::error &e) {
       DEBUG("segment {} unable to decode header, skipping -- {}",
-            segment, e);
+            segment, e.what());
       return crimson::ct_error::enodata::make();
     }
     DEBUG("segment {} header {}", segment, header);

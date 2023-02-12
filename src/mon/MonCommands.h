@@ -377,7 +377,7 @@ COMMAND("fs set "
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
         "|allow_new_snaps|inline_data|cluster_down|allow_dirfrags|balancer"
         "|standby_count_wanted|session_timeout|session_autoclose"
-        "|allow_standby_replay|down|joinable|min_compat_client "
+        "|allow_standby_replay|down|joinable|min_compat_client|bal_rank_mask "
 	"name=val,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false "
 	"name=yes_i_really_really_mean_it,type=CephBool,req=false",
@@ -961,7 +961,7 @@ COMMAND("osd force-create-pg "
 COMMAND("osd pg-temp "
 	"name=pgid,type=CephPgid "
 	"name=id,type=CephOsdName,n=N,req=false",
-	"set pg_temp mapping pgid:[<id> [<id>...]] (developers only)",
+	"set pg_temp mapping <pgid>:[<id> [<id>...]] (developers only)",
         "osd", "rw")
 COMMAND("osd pg-upmap "
 	"name=pgid,type=CephPgid "
@@ -980,6 +980,15 @@ COMMAND("osd pg-upmap-items "
 COMMAND("osd rm-pg-upmap-items "
 	"name=pgid,type=CephPgid",
 	"clear pg_upmap_items mapping for <pgid> (developers only)",
+        "osd", "rw")
+COMMAND("osd pg-upmap-primary "
+	"name=pgid,type=CephPgid "
+	"name=id,type=CephOsdName ",
+	"set pg primary osd <pgid>:<id> (id (osd) must be part of pgid)",
+        "osd", "rw")
+COMMAND("osd rm-pg-upmap-primary "
+	"name=pgid,type=CephPgid ",
+	"clear pg primary setting for <pgid>",
         "osd", "rw")
 COMMAND("osd primary-temp "
 	"name=pgid,type=CephPgid "
@@ -1389,6 +1398,10 @@ COMMAND_WITH_FLAG("sessions",
             "mon", "r",
             FLAG(TELL))
 COMMAND_WITH_FLAG("dump_historic_ops",
-            "dump_historic_ops",
+            "show recent ops",
+            "mon", "r",
+            FLAG(TELL))
+COMMAND_WITH_FLAG("dump_historic_slow_ops",
+            "show recent slow ops",
             "mon", "r",
             FLAG(TELL))

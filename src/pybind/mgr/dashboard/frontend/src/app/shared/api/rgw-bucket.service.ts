@@ -186,8 +186,8 @@ export class RgwBucketService extends ApiClient {
   }
 
   getEncryptionConfig() {
-    return this.rgwDaemonService.request(() => {
-      return this.http.get(`${this.url}/getEncryptionConfig`);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`${this.url}/getEncryptionConfig`, { params: params });
     });
   }
 }

@@ -209,7 +209,7 @@ class RgwBucket(RgwRESTController):
 
         CephService.set_encryption_config(encryption_type, kms_provider, auth_method,
                                           secret_engine, secret_path, namespace, address,
-                                          token, ssl_cert, client_cert, client_key)
+                                          token, daemon_name, ssl_cert, client_cert, client_key)
 
     def _get_encryption(self, bucket_name, daemon_name, owner):
         rgw_client = RgwClient.instance(owner, daemon_name)
@@ -390,8 +390,8 @@ class RgwBucket(RgwRESTController):
 
     @RESTController.Collection(method='GET', path='/getEncryptionConfig')
     @allow_empty_body
-    def get_encryption_config(self):
-        return CephService.get_encryption_config()
+    def get_encryption_config(self, daemon_name=None, owner=None):
+        return CephService.get_encryption_config(daemon_name)
 
 
 @APIRouter('/rgw/user', Scope.RGW)
@@ -569,15 +569,32 @@ class RgwUser(RgwRESTController):
     def create_subuser(self, uid, subuser, access, key_type='s3',
                        generate_secret='true', access_key=None,
                        secret_key=None, daemon_name=None):
-        return self.proxy(daemon_name, 'PUT', 'user', {
-            'uid': uid,
-            'subuser': subuser,
-            'key-type': key_type,
-            'access': access,
-            'generate-secret': generate_secret,
-            'access-key': access_key,
-            'secret-key': secret_key
-        })
+        # pylint: disable=R1705
+        subusr_array = []
+        user = json.loads(self.get(uid, daemon_name))  # type: ignore
+        subusers = user["subusers"]
+        for sub_usr in subusers:
+            subusr_array.append(sub_usr["id"])
+        if subuser in subusr_array:
+            return self.proxy(daemon_name, 'POST', 'user', {
+                'uid': uid,
+                'subuser': subuser,
+                'key-type': key_type,
+                'access': access,
+                'generate-secret': generate_secret,
+                'access-key': access_key,
+                'secret-key': secret_key
+            })
+        else:
+            return self.proxy(daemon_name, 'PUT', 'user', {
+                'uid': uid,
+                'subuser': subuser,
+                'key-type': key_type,
+                'access': access,
+                'generate-secret': generate_secret,
+                'access-key': access_key,
+                'secret-key': secret_key
+            })
 
     @RESTController.Resource(method='DELETE', path='/subuser/{subuser}', status=204)
     def delete_subuser(self, uid, subuser, purge_keys='true', daemon_name=None):

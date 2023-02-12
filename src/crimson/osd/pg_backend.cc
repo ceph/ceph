@@ -18,9 +18,11 @@
 #include "common/Clock.h"
 
 #include "crimson/common/exception.h"
+#include "crimson/common/tmap_helpers.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/object_context_loader.h"
 #include "replicated_backend.h"
 #include "replicated_recovery_backend.h"
 #include "ec_backend.h"
@@ -43,16 +45,19 @@ PGBackend::create(pg_t pgid,
 		  const pg_pool_t& pool,
 		  crimson::os::CollectionRef coll,
 		  crimson::osd::ShardServices& shard_services,
-		  const ec_profile_t& ec_profile)
+		  const ec_profile_t& ec_profile,
+		  DoutPrefixProvider &dpp)
 {
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED:
     return std::make_unique<ReplicatedBackend>(pgid, pg_shard,
-					       coll, shard_services);
+					       coll, shard_services,
+					       dpp);
   case pg_pool_t::TYPE_ERASURE:
     return std::make_unique<ECBackend>(pg_shard.shard, coll, shard_services,
                                        std::move(ec_profile),
-                                       pool.stripe_width);
+                                       pool.stripe_width,
+				       dpp);
   default:
     throw runtime_error(seastar::format("unsupported pool type '{}'",
                                         pool.type));
@@ -61,10 +66,12 @@ PGBackend::create(pg_t pgid,
 
 PGBackend::PGBackend(shard_id_t shard,
                      CollectionRef coll,
-                     crimson::osd::ShardServices &shard_services)
+                     crimson::osd::ShardServices &shard_services,
+		     DoutPrefixProvider &dpp)
   : shard{shard},
     coll{coll},
     shard_services{shard_services},
+    dpp{dpp},
     store{&shard_services.get_store()}
 {}
 
@@ -72,10 +79,6 @@ PGBackend::load_metadata_iertr::future
   <PGBackend::loaded_object_md_t::ref>
 PGBackend::load_metadata(const hobject_t& oid)
 {
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
-
   return interruptor::make_interruptible(store->get_attrs(
     coll,
     ghobject_t{oid, ghobject_t::NO_GEN, shard})).safe_then_interruptible(
@@ -104,15 +107,15 @@ PGBackend::load_metadata(const hobject_t& oid)
           bool object_corrupted = true;
           if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
             object_corrupted = false;
-            logger().debug(
-              "load_metadata: object {} and snapset {} present",
-              oid, ssiter->second);
             bufferlist bl = std::move(ssiter->second);
             if (bl.length()) {
               ret->ssc = new crimson::osd::SnapSetContext(oid.get_snapdir());
               try {
                 ret->ssc->snapset = SnapSet(bl);
                 ret->ssc->exists = true;
+                logger().debug(
+                  "load_metadata: object {} and snapset {} present",
+                   oid, ret->ssc->snapset);
               } catch (const buffer::error&) {
                 logger().warn("unable to decode SnapSet");
                 throw crimson::osd::invalid_argument();
@@ -422,11 +425,6 @@ PGBackend::cmp_ext_ierrorator::future<>
 PGBackend::cmp_ext(const ObjectState& os, OSDOp& osd_op)
 {
   const ceph_osd_op& op = osd_op.op;
-  // return the index of the first unmatched byte in the payload, hence the
-  // strange limit and check
-  if (op.extent.length > MAX_ERRNO) {
-    return crimson::ct_error::invarg::make();
-  }
   uint64_t obj_size = os.oi.size;
   if (os.oi.truncate_seq < op.extent.truncate_seq &&
       op.extent.offset + op.extent.length > op.extent.truncate_size) {
@@ -482,6 +480,84 @@ PGBackend::stat(
   }
   delta_stats.num_rd++;
   return stat_errorator::now();
+}
+
+PGBackend::write_iertr::future<> PGBackend::_writefull(
+  ObjectState& os,
+  off_t truncate_size,
+  const bufferlist& bl,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params,
+  object_stat_sum_t& delta_stats,
+  unsigned flags)
+{
+  const bool existing = maybe_create_new_object(os, txn, delta_stats);
+  if (existing && bl.length() < os.oi.size) {
+
+    txn.truncate(coll->get_cid(), ghobject_t{os.oi.soid}, bl.length());
+    truncate_update_size_and_usage(delta_stats, os.oi, truncate_size);
+
+    osd_op_params.clean_regions.mark_data_region_dirty(
+      bl.length(),
+      os.oi.size - bl.length());
+  }
+  if (bl.length()) {
+    txn.write(
+      coll->get_cid(), ghobject_t{os.oi.soid}, 0, bl.length(),
+      bl, flags);
+    update_size_and_usage(
+      delta_stats, os.oi, 0,
+      bl.length(), true);
+    osd_op_params.clean_regions.mark_data_region_dirty(
+      0,
+      std::max((uint64_t)bl.length(), os.oi.size));
+  }
+  return seastar::now();
+}
+
+PGBackend::write_iertr::future<> PGBackend::_truncate(
+  ObjectState& os,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params,
+  object_stat_sum_t& delta_stats,
+  size_t offset,
+  size_t truncate_size,
+  uint32_t truncate_seq)
+{
+  if (truncate_seq) {
+    assert(offset == truncate_size);
+    if (truncate_seq <= os.oi.truncate_seq) {
+      logger().debug("{} truncate seq {} <= current {}, no-op",
+                     __func__, truncate_seq, os.oi.truncate_seq);
+      return write_ertr::make_ready_future<>();
+    } else {
+      logger().debug("{} truncate seq {} > current {}, truncating",
+                     __func__, truncate_seq, os.oi.truncate_seq);
+      os.oi.truncate_seq = truncate_seq;
+      os.oi.truncate_size = truncate_size;
+    }
+  }
+  maybe_create_new_object(os, txn, delta_stats);
+  if (os.oi.size != offset) {
+    txn.truncate(
+      coll->get_cid(),
+      ghobject_t{os.oi.soid}, offset);
+    if (os.oi.size > offset) {
+      // TODO: modified_ranges.union_of(trim);
+      osd_op_params.clean_regions.mark_data_region_dirty(
+        offset,
+	os.oi.size - offset);
+    } else {
+      // os.oi.size < offset
+      osd_op_params.clean_regions.mark_data_region_dirty(
+        os.oi.size,
+        offset - os.oi.size);
+    }
+    truncate_update_size_and_usage(delta_stats, os.oi, offset);
+    os.oi.clear_data_digest();
+  }
+  delta_stats.num_wr++;
+  return write_ertr::now();
 }
 
 bool PGBackend::maybe_create_new_object(
@@ -682,22 +758,75 @@ PGBackend::write_iertr::future<> PGBackend::writefull(
     return crimson::ct_error::file_too_large::make();
   }
 
-  const bool existing = maybe_create_new_object(os, txn, delta_stats);
-  if (existing && op.extent.length < os.oi.size) {
-    txn.truncate(coll->get_cid(), ghobject_t{os.oi.soid}, op.extent.length);
-    truncate_update_size_and_usage(delta_stats, os.oi, op.extent.truncate_size);
-    osd_op_params.clean_regions.mark_data_region_dirty(op.extent.length,
-	os.oi.size - op.extent.length);
-  }
-  if (op.extent.length) {
-    txn.write(coll->get_cid(), ghobject_t{os.oi.soid}, 0, op.extent.length,
-              osd_op.indata, op.flags);
-    update_size_and_usage(delta_stats, os.oi, 0,
-      op.extent.length, true);
+  return _writefull(
+    os,
+    op.extent.truncate_size,
+    osd_op.indata,
+    txn,
+    osd_op_params,
+    delta_stats,
+    op.flags);
+}
+
+PGBackend::rollback_iertr::future<> PGBackend::rollback(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params,
+  object_stat_sum_t& delta_stats,
+  crimson::osd::ObjectContextRef head,
+  crimson::osd::ObjectContextLoader& obc_loader)
+{
+  const ceph_osd_op& op = osd_op.op;
+  snapid_t snapid = (uint64_t)op.snap.snapid;
+  assert(os.oi.soid.is_head());
+  logger().debug("{} deleting {} and rolling back to old snap {}",
+                  __func__, os.oi.soid ,snapid);
+  hobject_t target_coid = os.oi.soid;
+  target_coid.snap = snapid;
+  return obc_loader.with_clone_obc_only<RWState::RWREAD>(
+    head, target_coid,
+    [this, &os, &txn, &delta_stats, &osd_op_params]
+    (auto clone_obc) {
+    logger().debug("PGBackend::rollback: loaded clone_obc: {}",
+                   clone_obc->obs.oi.soid);
+    // 1) Delete current head
+    if (os.exists) {
+      txn.remove(coll->get_cid(), ghobject_t{os.oi.soid,
+                                  ghobject_t::NO_GEN, shard});
+    }
+    // 2) Clone correct snapshot into head
+    txn.clone(coll->get_cid(), ghobject_t{clone_obc->obs.oi.soid},
+                               ghobject_t{os.oi.soid});
+    //    Copy clone obc.os.oi to os.oi
+    os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+    os.oi.copy_user_bits(clone_obc->obs.oi);
+    delta_stats.num_bytes -= os.oi.size;
+    delta_stats.num_bytes += clone_obc->obs.oi.size;
     osd_op_params.clean_regions.mark_data_region_dirty(0,
-	std::max((uint64_t) op.extent.length, os.oi.size));
-  }
-  return seastar::now();
+      std::max(os.oi.size, clone_obc->obs.oi.size));
+    osd_op_params.clean_regions.mark_omap_dirty();
+    // TODO: 3) Calculate clone_overlaps by following overlaps
+    //          forward from rollback snapshot
+    //          https://tracker.ceph.com/issues/58263
+    return rollback_iertr::now();
+  }).safe_then_interruptible([] {
+    logger().debug("PGBackend::rollback succefully");
+    return rollback_iertr::now();
+  },// there's no snapshot here, or there's no object.
+    // if there's no snapshot, we delete the object;
+    // otherwise, do nothing.
+    crimson::ct_error::enoent::handle(
+    [this, &os, &snapid, &txn, &delta_stats] {
+      logger().debug("PGBackend::rollback: deleting head on {}"
+                     " with snap_id of {}"
+                     " because got ENOENT|whiteout on obc lookup",
+                     os.oi.soid, snapid);
+      return remove(os, txn, delta_stats, false);
+    }),
+    rollback_ertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error in rollback"}
+  );
 }
 
 PGBackend::append_ierrorator::future<> PGBackend::append(
@@ -739,41 +868,9 @@ PGBackend::write_iertr::future<> PGBackend::truncate(
   if (!is_offset_and_length_valid(op.extent.offset, op.extent.length)) {
     return crimson::ct_error::file_too_large::make();
   }
-  if (op.extent.truncate_seq) {
-    assert(op.extent.offset == op.extent.truncate_size);
-    if (op.extent.truncate_seq <= os.oi.truncate_seq) {
-      logger().debug("{} truncate seq {} <= current {}, no-op",
-                     __func__, op.extent.truncate_seq, os.oi.truncate_seq);
-      return write_ertr::make_ready_future<>();
-    } else {
-      logger().debug("{} truncate seq {} > current {}, truncating",
-                     __func__, op.extent.truncate_seq, os.oi.truncate_seq);
-      os.oi.truncate_seq = op.extent.truncate_seq;
-      os.oi.truncate_size = op.extent.truncate_size;
-    }
-  }
-  maybe_create_new_object(os, txn, delta_stats);
-  if (os.oi.size != op.extent.offset) {
-    txn.truncate(coll->get_cid(),
-                 ghobject_t{os.oi.soid}, op.extent.offset);
-    if (os.oi.size > op.extent.offset) {
-      // TODO: modified_ranges.union_of(trim);
-      osd_op_params.clean_regions.mark_data_region_dirty(
-        op.extent.offset,
-	os.oi.size - op.extent.offset);
-    } else {
-      // os.oi.size < op.extent.offset
-      osd_op_params.clean_regions.mark_data_region_dirty(
-        os.oi.size,
-        op.extent.offset - os.oi.size);
-    }
-    truncate_update_size_and_usage(delta_stats, os.oi, op.extent.offset);
-    os.oi.clear_data_digest();
-  }
-  delta_stats.num_wr++;
-  // ----
-  // do no set exists, or we will break above DELETE -> TRUNCATE munging.
-  return write_ertr::now();
+  return _truncate(
+    os, txn, osd_op_params, delta_stats,
+    op.extent.offset, op.extent.truncate_size, op.extent.truncate_seq);
 }
 
 PGBackend::write_iertr::future<> PGBackend::zero(
@@ -791,7 +888,17 @@ PGBackend::write_iertr::future<> PGBackend::zero(
   if (!is_offset_and_length_valid(op.extent.offset, op.extent.length)) {
     return crimson::ct_error::file_too_large::make();
   }
-  assert(op.extent.length);
+
+  if (op.extent.offset >= os.oi.size || op.extent.length == 0) {
+    return write_iertr::now(); // noop
+  }
+
+  if (op.extent.offset + op.extent.length >= os.oi.size) {
+    return _truncate(
+      os, txn, osd_op_params, delta_stats,
+      op.extent.offset, op.extent.truncate_size, op.extent.truncate_seq);
+  }
+
   txn.zero(coll->get_cid(),
            ghobject_t{os.oi.soid},
            op.extent.offset,
@@ -856,6 +963,10 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
     return crimson::ct_error::enoent::make();
   }
 
+  if (!os.exists) {
+    logger().debug("{} {} does not exist",__func__, os.oi.soid);
+    return seastar::now();
+  }
   if (whiteout && os.oi.is_whiteout()) {
     logger().debug("{} whiteout set on {} ",__func__, os.oi.soid);
     return seastar::now();
@@ -888,10 +999,6 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
 PGBackend::interruptible_future<std::tuple<std::vector<hobject_t>, hobject_t>>
 PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
 {
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
-
   auto gstart = start.is_min() ? ghobject_t{} : ghobject_t{start, 0, shard};
   return interruptor::make_interruptible(store->list_objects(coll,
 					 gstart,
@@ -980,10 +1087,6 @@ PGBackend::getxattr(
   const hobject_t& soid,
   std::string_view key) const
 {
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
-
   return store->get_attr(coll, ghobject_t{soid}, key);
 }
 
@@ -992,9 +1095,6 @@ PGBackend::getxattr(
   const hobject_t& soid,
   std::string&& key) const
 {
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
   return seastar::do_with(key, [this, &soid](auto &key) {
     return store->get_attr(coll, ghobject_t{soid}, key);
   });
@@ -1005,9 +1105,6 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
   return store->get_attrs(coll, ghobject_t{os.oi.soid}).safe_then(
     [&delta_stats, &osd_op](auto&& attrs) {
     std::vector<std::pair<std::string, bufferlist>> user_xattrs;
@@ -1139,9 +1236,6 @@ PGBackend::rm_xattr(
   const OSDOp& osd_op,
   ceph::os::Transaction& txn)
 {
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
   if (!os.exists || os.oi.is_whiteout()) {
     logger().debug("{}: {} DNE", __func__, os.oi.soid);
     return crimson::ct_error::enoent::make();
@@ -1154,22 +1248,18 @@ PGBackend::rm_xattr(
 }
 
 void PGBackend::clone(
-  object_info_t& snap_oi,
-  ObjectState& os,
-  ObjectState& d_os,
+  /* const */object_info_t& snap_oi,
+  const ObjectState& os,
+  const ObjectState& d_os,
   ceph::os::Transaction& txn)
 {
-  // Prepend the cloning operation to txn
-  ceph::os::Transaction c_txn;
-  c_txn.clone(coll->get_cid(), ghobject_t{os.oi.soid}, ghobject_t{d_os.oi.soid});
-  // Operations will be removed from txn while appending
-  c_txn.append(txn);
-  txn = std::move(c_txn);
-
-  ceph::bufferlist bv;
-  snap_oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
-
-  txn.setattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, OI_ATTR, bv);
+  // See OpsExecutor::execute_clone documentation
+  txn.clone(coll->get_cid(), ghobject_t{os.oi.soid}, ghobject_t{d_os.oi.soid});
+  {
+    ceph::bufferlist bv;
+    snap_oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
+    txn.setattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, OI_ATTR, bv);
+  }
   txn.rmattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, SS_ATTR);
 }
 
@@ -1247,9 +1337,6 @@ PGBackend::omap_get_keys(
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
   if (!os.exists || os.oi.is_whiteout()) {
     logger().debug("{}: object does not exist: {}", os.oi.soid);
     return crimson::ct_error::enoent::make();
@@ -1372,10 +1459,6 @@ PGBackend::omap_get_vals(
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
-
   if (!os.exists || os.oi.is_whiteout()) {
     logger().debug("{}: object does not exist: {}", os.oi.soid);
     return crimson::ct_error::enoent::make();
@@ -1442,9 +1525,6 @@ PGBackend::omap_get_vals_by_keys(
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
   if (!os.exists || os.oi.is_whiteout()) {
     logger().debug("{}: object does not exist: {}", __func__, os.oi.soid);
     return crimson::ct_error::enoent::make();
@@ -1567,9 +1647,6 @@ PGBackend::omap_clear(
   osd_op_params_t& osd_op_params,
   object_stat_sum_t& delta_stats)
 {
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
   if (!os.exists || os.oi.is_whiteout()) {
     logger().debug("{}: object does not exist: {}", os.oi.soid);
     return crimson::ct_error::enoent::make();
@@ -1603,7 +1680,110 @@ PGBackend::fiemap(
   return store->fiemap(c, oid, off, len);
 }
 
-void PGBackend::on_activate_complete() {
-  peering.reset();
+PGBackend::write_iertr::future<> PGBackend::tmapput(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  object_stat_sum_t& delta_stats,
+  osd_op_params_t& osd_op_params)
+{
+  logger().debug("PGBackend::tmapput: {}", os.oi.soid);
+  auto ret = crimson::common::do_tmap_put(osd_op.indata.cbegin());
+  if (!ret.has_value()) {
+    logger().debug("PGBackend::tmapup: {}, ret={}", os.oi.soid, ret.error());
+    ceph_assert(ret.error() == -EINVAL);
+    return crimson::ct_error::invarg::make();
+  } else {
+    auto bl = std::move(ret.value());
+    return _writefull(
+      os,
+      bl.length(),
+      std::move(bl),
+      txn,
+      osd_op_params,
+      delta_stats,
+      0);
+  }
+}
+
+PGBackend::tmapup_iertr::future<> PGBackend::tmapup(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  object_stat_sum_t& delta_stats,
+  osd_op_params_t& osd_op_params)
+{
+  logger().debug("PGBackend::tmapup: {}", os.oi.soid);
+  return PGBackend::write_iertr::now(
+  ).si_then([this, &os] {
+    return _read(os.oi.soid, 0, os.oi.size, 0);
+  }).handle_error_interruptible(
+    crimson::ct_error::enoent::handle([](auto &) {
+      return seastar::make_ready_future<bufferlist>();
+    }),
+    PGBackend::write_iertr::pass_further{},
+    crimson::ct_error::assert_all{"read error in mutate_object_contents"}
+  ).si_then([this, &os, &osd_op, &txn,
+	     &delta_stats, &osd_op_params]
+	    (auto &&bl) mutable -> PGBackend::tmapup_iertr::future<> {
+    auto result = crimson::common::do_tmap_up(
+      osd_op.indata.cbegin(),
+      std::move(bl));
+    if (!result.has_value()) {
+      int ret = result.error();
+      logger().debug("PGBackend::tmapup: {}, ret={}", os.oi.soid, ret);
+      switch (ret) {
+      case -EEXIST:
+	return crimson::ct_error::eexist::make();
+      case -ENOENT:
+	return crimson::ct_error::enoent::make();
+      case -EINVAL:
+	return crimson::ct_error::invarg::make();
+      default:
+	ceph_assert(0 == "impossible error");
+	return crimson::ct_error::invarg::make();
+      }
+    }
+
+    logger().debug(
+      "PGBackend::tmapup: {}, result.value.length()={}, ret=0",
+      os.oi.soid, result.value().length());
+    return _writefull(
+      os,
+      result.value().length(),
+      result.value(),
+      txn,
+      osd_op_params,
+      delta_stats,
+      0);
+  });
+}
+
+PGBackend::read_ierrorator::future<> PGBackend::tmapget(
+  const ObjectState& os,
+  OSDOp& osd_op,
+  object_stat_sum_t& delta_stats)
+{
+  logger().debug("PGBackend::tmapget: {}", os.oi.soid);
+  const auto& oi = os.oi;
+  logger().debug("PGBackend::tmapget: read {} 0~{}", oi.soid, oi.size);
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("PGBackend::tmapget: {} DNE", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
+
+  return _read(oi.soid, 0, oi.size, 0).safe_then_interruptible_tuple(
+    [&delta_stats, &osd_op](auto&& bl) -> read_errorator::future<> {
+      logger().debug("PGBackend::tmapget: data length: {}", bl.length());
+      osd_op.op.extent.length = bl.length();
+      osd_op.rval = 0;
+      delta_stats.num_rd++;
+      delta_stats.num_rd_kb += shift_round_up(bl.length(), 10);
+      osd_op.outdata = std::move(bl);
+      return read_errorator::now();
+    }, crimson::ct_error::input_output_error::handle([] {
+      return read_errorator::future<>{crimson::ct_error::object_corrupted::make()};
+    }),
+    read_errorator::pass_further{});
 }
 
