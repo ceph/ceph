@@ -3083,7 +3083,15 @@ Then run the following:
         }
         for host, dm in self.cache.daemons.items():
             for name, dd in dm.items():
-                if image_info.image_id == dd.container_image_id:
+                # check if the container digest for the digest we're checking upgrades for matches
+                # the container digests for the daemon if "use_repo_digest" setting is true
+                # or that the image name matches the daemon's image name if "use_repo_digest"
+                # is false. The idea is to generally check if the daemon is already using
+                # the image we're checking upgrade to.
+                if (
+                    (self.use_repo_digest and dd.matches_digests(image_info.repo_digests))
+                    or (not self.use_repo_digest and dd.matches_image_name(image))
+                ):
                     r['up_to_date'].append(dd.name())
                 elif dd.daemon_type in CEPH_IMAGE_TYPES:
                     r['needs_update'][dd.name()] = {
