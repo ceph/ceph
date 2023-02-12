@@ -59,6 +59,7 @@ README*                                         @ceph/doc-writers
 /doc/man/8/monmaptool.rst                       @ceph/core
 /doc/man/8/rados.rst                            @ceph/core
 /doc/rados                                      @ceph/core
+/examples/librados                              @ceph/core
 /qa/standalone                                  @ceph/core
 /qa/suites/rados                                @ceph/core
 /qa/workunits/erasure-code                      @ceph/core
@@ -88,6 +89,8 @@ README*                                         @ceph/doc-writers
 /doc/man/8/rbd*                                 @ceph/rbd
 /doc/rbd                                        @ceph/rbd
 /doc/start/quick-rbd.rst                        @ceph/rbd
+/examples/librbd                                @ceph/rbd
+/examples/rbd-replay                            @ceph/rbd
 /qa/rbd                                         @ceph/rbd
 /qa/run_xfstests*                               @ceph/rbd
 /qa/suites/krbd                                 @ceph/rbd
@@ -134,6 +137,7 @@ README*                                         @ceph/doc-writers
 # rgw
 /doc/dev/radosgw                                @ceph/rgw @ceph/doc-writers
 /doc/radosgw                                    @ceph/rgw @ceph/doc-writers
+/examples                                       @ceph/rgw
 /qa/rgw                                         @ceph/rgw
 /qa/suites/rgw                                  @ceph/rgw
 /qa/tasks/barbican.py                           @ceph/rgw
