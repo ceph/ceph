@@ -592,41 +592,47 @@ this period to other zones.
 Failover and Disaster Recovery
 ==============================
 
-If the master zone should fail, failover to the secondary zone for
-disaster recovery.
+Setting Up Failover to the Secondary Zone
+-----------------------------------------
 
-1. Make the secondary zone the master and default zone. For example:
+If the master zone fails, you can fail over to the secondary zone for
+disaster recovery by following these steps:
+
+#. Make the secondary zone the master and default zone. For example:
 
    .. prompt:: bash #
 
       radosgw-admin zone modify --rgw-zone={zone-name} --master --default
 
-   By default, Ceph Object Gateway will run in an active-active
-   configuration. If the cluster was configured to run in an
+   By default, Ceph Object Gateway runs in an active-active
+   configuration. However, if the cluster is configured to run in an
    active-passive configuration, the secondary zone is a read-only zone.
-   Remove the ``--read-only`` status to allow the zone to receive write
-   operations. For example:
+   To allow the secondary zone to receive write
+   operations, remove its ``--read-only`` status. For example:
 
    .. prompt:: bash #
 
       radosgw-admin zone modify --rgw-zone={zone-name} --master --default \
                                    --read-only=false
 
-2. Update the period to make the changes take effect.
+#. Update the period to make the changes take effect.
 
    .. prompt:: bash #
 
       radosgw-admin period update --commit
 
-3. Finally, restart the Ceph Object Gateway.
+#. Finally, restart the Ceph Object Gateway.
 
    .. prompt:: bash #
 
       systemctl restart ceph-radosgw@rgw.`hostname -s`
 
-If the former master zone recovers, revert the operation.
+Reverting from Failover
+-----------------------
 
-1. From the recovered zone, pull the latest realm configuration
+If the former master zone recovers, you can revert the failover operation by following these steps:
+
+#. From within the recovered zone, pull the latest realm configuration
    from the current master zone:
 
    .. prompt:: bash #
@@ -634,38 +640,38 @@ If the former master zone recovers, revert the operation.
       radosgw-admin realm pull --url={url-to-master-zone-gateway} \
                                   --access-key={access-key} --secret={secret}
 
-2. Make the recovered zone the master and default zone.
+#. Make the recovered zone the master and default zone:
 
    .. prompt:: bash #
 
       radosgw-admin zone modify --rgw-zone={zone-name} --master --default
 
-3. Update the period to make the changes take effect.
+#. Update the period so that the changes take effect:
 
    .. prompt:: bash #
 
       radosgw-admin period update --commit
 
-4. Then, restart the Ceph Object Gateway in the recovered zone.
+#. Restart the Ceph Object Gateway in the recovered zone:
 
    .. prompt:: bash #
 
        systemctl restart ceph-radosgw@rgw.`hostname -s`
 
-5. If the secondary zone needs to be a read-only configuration, update
-   the secondary zone.
+#. If the secondary zone needs to be a read-only configuration, update
+   the secondary zone:
 
    .. prompt:: bash #
 
       radosgw-admin zone modify --rgw-zone={zone-name} --read-only
 
-6. Update the period to make the changes take effect.
+#. Update the period so that the changes take effect:
 
    .. prompt:: bash #
 
       radosgw-admin period update --commit
 
-7. Finally, restart the Ceph Object Gateway in the secondary zone.
+#. Restart the Ceph Object Gateway in the secondary zone:
 
    .. prompt:: bash #
 
