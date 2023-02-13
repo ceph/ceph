@@ -1546,16 +1546,24 @@ SeaStore::tm_ret SeaStore::_setattrs(
 {
   LOG_PREFIX(SeaStore::_setattrs);
   DEBUGT("onode={}", *ctx.transaction, *onode);
+
+  auto fut = tm_iertr::now();
   auto& layout = onode->get_mutable_layout(*ctx.transaction);
   if (auto it = aset.find(OI_ATTR); it != aset.end()) {
     auto& val = it->second;
     if (likely(val.length() <= onode_layout_t::MAX_OI_LENGTH)) {
-      layout.oi_size = val.length();
       maybe_inline_memcpy(
 	&layout.oi[0],
 	val.c_str(),
 	val.length(),
 	onode_layout_t::MAX_OI_LENGTH);
+
+      if (!layout.oi_size) {
+	// if oi was not in the layout, it probably exists in the omap,
+	// need to remove it first
+	fut = _xattr_rmattr(ctx, onode, OI_ATTR);
+      }
+      layout.oi_size = val.length();
       aset.erase(it);
     } else {
       layout.oi_size = 0;
@@ -1565,12 +1573,17 @@ SeaStore::tm_ret SeaStore::_setattrs(
   if (auto it = aset.find(SS_ATTR); it != aset.end()) {
     auto& val = it->second;
     if (likely(val.length() <= onode_layout_t::MAX_SS_LENGTH)) {
-      layout.ss_size = val.length();
       maybe_inline_memcpy(
 	&layout.ss[0],
 	val.c_str(),
 	val.length(),
 	onode_layout_t::MAX_SS_LENGTH);
+
+      if (!layout.ss_size) {
+	fut = _xattr_rmattr(ctx, onode, SS_ATTR);
+      }
+      layout.ss_size = val.length();
+
       aset.erase(it);
     } else {
       layout.ss_size = 0;
@@ -1578,15 +1591,19 @@ SeaStore::tm_ret SeaStore::_setattrs(
   }
 
   if (aset.empty()) {
-    return tm_iertr::now();
+    return fut;
   }
 
-  return _omap_set_kvs(
-    onode,
-    onode->get_layout().xattr_root,
-    *ctx.transaction,
-    layout.xattr_root,
-    std::move(aset));
+  return fut.si_then(
+    [this, onode, &ctx, &layout,
+    aset=std::move(aset)]() mutable {
+    return _omap_set_kvs(
+      onode,
+      onode->get_layout().xattr_root,
+      *ctx.transaction,
+      layout.xattr_root,
+      std::move(aset));
+  });
 }
 
 SeaStore::tm_ret SeaStore::_rmattr(

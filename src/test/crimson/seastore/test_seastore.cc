@@ -904,6 +904,43 @@ TEST_P(seastore_test_t, attr)
     EXPECT_EQ(attrs.find(SS_ATTR), attrs.end());
     EXPECT_EQ(attrs.find("test_key"), attrs.end());
   }
+  {
+    // create OI_ATTR with len > onode_layout_t::MAX_OI_LENGTH, then
+    // overwrite it with another OI_ATTR len of which < onode_layout_t::MAX_OI_LENGTH
+    // create SS_ATTR with len > onode_layout_t::MAX_SS_LENGTH, then
+    // overwrite it with another SS_ATTR len of which < onode_layout_t::MAX_SS_LENGTH
+    char oi_array[onode_layout_t::MAX_OI_LENGTH + 1] = {'a'};
+    std::string oi(&oi_array[0], sizeof(oi_array));
+    bufferlist bl;
+    encode(oi, bl);
+    test_obj.set_attr(*seastore, OI_ATTR, bl);
+
+    oi = "asdfasdfasdf";
+    bl.clear();
+    encode(oi, bl);
+    test_obj.set_attr(*seastore, OI_ATTR, bl);
+
+    char ss_array[onode_layout_t::MAX_SS_LENGTH + 1] = {'b'};
+    std::string ss(&ss_array[0], sizeof(ss_array));
+    bl.clear();
+    encode(ss, bl);
+    test_obj.set_attr(*seastore, SS_ATTR, bl);
+
+    ss = "f";
+    bl.clear();
+    encode(ss, bl);
+    test_obj.set_attr(*seastore, SS_ATTR, bl);
+
+    auto attrs = test_obj.get_attrs(*seastore);
+    std::string oi2, ss2;
+    bufferlist bl2 = attrs[OI_ATTR];
+    decode(oi2, bl2);
+    bl2.clear();
+    bl2 = attrs[SS_ATTR];
+    decode(ss2, bl2);
+    EXPECT_EQ(oi, oi2);
+    EXPECT_EQ(ss, ss2);
+  }
   });
 }
 

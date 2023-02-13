@@ -591,6 +591,7 @@ private:
   interruptible_future<> repair_object(
     const hobject_t& oid,
     eversion_t& v);
+  void check_blocklisted_obc_watchers(ObjectContextRef &obc);
 
 private:
   PG_OSDMapGate osdmap_gate;
