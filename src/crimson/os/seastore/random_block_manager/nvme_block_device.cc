@@ -186,6 +186,7 @@ open_ertr::future<> NVMeBlockDevice::open_for_io(
   return seastar::do_for_each(io_device, [=, this](auto &target_device) {
     return seastar::open_file_dma(in_path, mode).then([this](
       auto file) {
+      assert(io_device.size() > stream_index_to_open);
       io_device[stream_index_to_open] = file;
       return io_device[stream_index_to_open].fcntl(
         F_SET_FILE_RW_HINT,
@@ -318,6 +319,7 @@ write_ertr::future<> NVMeBlockDevice::writev(
 
 Device::close_ertr::future<> NVMeBlockDevice::close() {
   logger().debug(" close ");
+  stream_index_to_open = WRITE_LIFE_NOT_SET;
   return device.close().then([this]() {
     return seastar::do_for_each(io_device, [](auto target_device) {
       return target_device.close();
