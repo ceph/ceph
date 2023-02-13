@@ -2139,3 +2139,11 @@ Traceback (most recent call last):
                 cephadm_module.inventory.all_specs = mock.Mock(
                     return_value=[mock.Mock().hostname, mock.Mock().hostname])
                 cephadm_module._validate_tuned_profile_spec(spec)
+
+    def test_set_unmanaged(self, cephadm_module):
+        cephadm_module.spec_store._specs['crash'] = ServiceSpec('crash', unmanaged=False)
+        assert not cephadm_module.spec_store._specs['crash'].unmanaged
+        cephadm_module.spec_store.set_unmanaged('crash', True)
+        assert cephadm_module.spec_store._specs['crash'].unmanaged
+        cephadm_module.spec_store.set_unmanaged('crash', False)
+        assert not cephadm_module.spec_store._specs['crash'].unmanaged
