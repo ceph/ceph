@@ -39,6 +39,7 @@
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/pg_recovery.h"
 #include "crimson/osd/replicated_recovery_backend.h"
+#include "crimson/osd/watch.h"
 
 using std::ostream;
 using std::set;
@@ -1005,6 +1006,22 @@ RWState::State PG::get_lock_type(const OpInfo &op_info)
   }
 }
 
+void PG::check_blocklisted_obc_watchers(
+  ObjectContextRef &obc)
+{
+  if (obc->watchers.empty()) {
+    for (auto &[src, winfo] : obc->obs.oi.watchers) {
+      auto watch = crimson::osd::Watch::create(
+        obc, winfo, src.second, this);
+      watch->disconnect();
+      auto [it, emplaced] = obc->watchers.emplace(src, std::move(watch));
+      assert(emplaced);
+      logger().debug("added watch for obj {}, client {}",
+        obc->get_oid(), src.second);
+    }
+  }
+}
+
 PG::load_obc_iertr::future<>
 PG::with_locked_obc(const hobject_t &hobj,
                     const OpInfo &op_info,
@@ -1014,13 +1031,17 @@ PG::with_locked_obc(const hobject_t &hobj,
     throw crimson::common::system_shutdown_exception();
   }
   const hobject_t oid = get_oid(hobj);
+  auto wrapper = [f=std::move(f), this](auto obc) {
+    check_blocklisted_obc_watchers(obc);
+    return f(obc);
+  };
   switch (get_lock_type(op_info)) {
   case RWState::RWREAD:
-      return obc_loader.with_obc<RWState::RWREAD>(oid, std::move(f));
+      return obc_loader.with_obc<RWState::RWREAD>(oid, std::move(wrapper));
   case RWState::RWWRITE:
-      return obc_loader.with_obc<RWState::RWWRITE>(oid, std::move(f));
+      return obc_loader.with_obc<RWState::RWWRITE>(oid, std::move(wrapper));
   case RWState::RWEXCL:
-      return obc_loader.with_obc<RWState::RWEXCL>(oid, std::move(f));
+      return obc_loader.with_obc<RWState::RWEXCL>(oid, std::move(wrapper));
   default:
     ceph_abort();
   };
