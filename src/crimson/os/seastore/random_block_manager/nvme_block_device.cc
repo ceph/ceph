@@ -134,7 +134,6 @@ open_ertr::future<> NVMeBlockDevice::open(
   seastar::open_flags mode) {
   return seastar::do_with(in_path, [this, mode](auto& in_path) {
     return seastar::file_stat(in_path).then([this, mode, in_path](auto stat) {
-      super.size = stat.size;
       super.block_size = stat.block_size;
       return seastar::open_file_dma(in_path, mode).then([=, this](auto file) {
         device = file;

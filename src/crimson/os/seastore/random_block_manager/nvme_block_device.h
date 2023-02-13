@@ -218,11 +218,24 @@ public:
 
   stat_device_ret stat_device() final {
     return seastar::file_stat(device_path, seastar::follow_symlink::yes
-    ).then([](auto stat) {
-      return stat_device_ret(
-	  read_ertr::ready_future_marker{},
-	  stat
-      );
+    ).handle_exception([](auto e) -> stat_device_ret {
+      return crimson::ct_error::input_output_error::make();
+    }).then([this](auto stat) {
+      return seastar::open_file_dma(
+	device_path,
+	seastar::open_flags::rw | seastar::open_flags::dsync
+      ).then([stat](auto file) mutable {
+	return file.size().then([stat, file](auto size) mutable {
+	  stat.size = size;
+	  return file.close(
+	  ).then([stat] {
+	    return stat_device_ret(
+	      read_ertr::ready_future_marker{},
+	      stat
+	    );
+	  });
+	});
+      });
     });
   }
 
