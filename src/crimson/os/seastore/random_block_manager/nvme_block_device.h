@@ -207,9 +207,7 @@ public:
     uint64_t offset,
     uint64_t len) override;
 
-  mount_ret mount() final {
-    return mount_ertr::now();
-  }
+  mount_ret mount() final;
 
   mkfs_ret mkfs(device_config_t config) final {
     using crimson::common::get_conf;
