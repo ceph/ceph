@@ -137,7 +137,7 @@ README*                                         @ceph/doc-writers
 # rgw
 /doc/dev/radosgw                                @ceph/rgw @ceph/doc-writers
 /doc/radosgw                                    @ceph/rgw @ceph/doc-writers
-/examples                                       @ceph/rgw
+/examples/rgw                                   @ceph/rgw
 /qa/rgw                                         @ceph/rgw
 /qa/suites/rgw                                  @ceph/rgw
 /qa/tasks/barbican.py                           @ceph/rgw
