@@ -502,6 +502,14 @@ class Orchestrator(object):
             return OrchResult(l_res)
         return raise_if_exception(reduce(merge, [fns[spec.service_type](spec) for spec in specs], OrchResult([])))
 
+    def set_unmanaged(self, service_name: str, value: bool) -> OrchResult[str]:
+        """
+        Set unmanaged parameter to True/False for a given service
+
+        :return: None
+        """
+        raise NotImplementedError()
+
     def plan(self, spec: Sequence["GenericSpec"]) -> OrchResult[List]:
         """
         Plan (Dry-run, Preview) a List of Specs.
