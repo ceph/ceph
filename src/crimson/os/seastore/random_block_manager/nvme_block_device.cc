@@ -197,6 +197,22 @@ open_ertr::future<> NVMeBlockDevice::open_for_io(
   });
 }
 
+NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
+{
+  logger().debug(" mount ");
+  return open(device_path, seastar::open_flags::rw | seastar::open_flags::dsync
+  ).safe_then([this] {
+    return read_rbm_header(RBM_START_ADDRESS
+    ).safe_then([](auto s) {
+      return seastar::now();
+    });
+  }).handle_error(
+    mount_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+    "Invalid error mount in NVMeBlockDevice::mount"}
+  );
+}
+
 write_ertr::future<> NVMeBlockDevice::write(
   uint64_t offset,
   bufferptr &bptr,
