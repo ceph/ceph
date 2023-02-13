@@ -105,9 +105,11 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
       start, end, addr, bptr.length());
     return crimson::ct_error::erange::make();
   }
+  bufferptr bp = bufferptr(ceph::buffer::create_page_aligned(bptr.length()));
+  bp.copy_in(0, bptr.length(), bptr.c_str());
   return device->write(
     addr,
-    bptr);
+    std::move(bp));
 }
 
 BlockRBManager::read_ertr::future<> BlockRBManager::read(
@@ -153,7 +155,7 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
   }
   return device->write(
     addr,
-    bptr);
+    std::move(bptr));
 }
 
 std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)
