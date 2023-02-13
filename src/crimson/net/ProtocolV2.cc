@@ -126,19 +126,8 @@ void intercept(Breakpoint bp,
 #define INTERCEPT_CUSTOM(bp, type)       \
 intercept({bp}, type, conn,              \
           conn.interceptor, conn.socket)
-
-#define INTERCEPT_N_RW(bp)                               \
-if (conn.interceptor) {                                  \
-  auto action = conn.interceptor->intercept(conn, {bp}); \
-  ceph_assert(action != bp_action_t::BLOCK);             \
-  if (action == bp_action_t::FAULT) {                    \
-    abort_in_fault();                                    \
-  }                                                      \
-}
-
 #else
 #define INTERCEPT_CUSTOM(bp, type)
-#define INTERCEPT_N_RW(bp)
 #endif
 
 seastar::future<> ProtocolV2::Timer::backoff(double seconds)
@@ -794,13 +783,35 @@ void ProtocolV2::execute_connecting()
         logger().debug("{} UPDATE: gs={} for connect", conn, global_seq);
       }
       return wait_exit_io().then([this] {
+#ifdef UNIT_TESTS_BUILT
+          // process custom_bp_t::SOCKET_CONNECTING
+          // supports CONTINUE/FAULT/BLOCK
+          if (conn.interceptor) {
+            auto action = conn.interceptor->intercept(
+                conn, {custom_bp_t::SOCKET_CONNECTING});
+            switch (action) {
+            case bp_action_t::CONTINUE:
+              return seastar::now();
+            case bp_action_t::FAULT:
+              logger().info("[Test] got FAULT");
+              abort_in_fault();
+            case bp_action_t::BLOCK:
+              logger().info("[Test] got BLOCK");
+              return conn.interceptor->blocker.block();
+            default:
+              ceph_abort("unexpected action from trap");
+            }
+          } else {
+            return seastar::now();
+          }
+        }).then([this] {
+#endif
           ceph_assert_always(frame_assembler);
           if (unlikely(state != state_t::CONNECTING)) {
             logger().debug("{} triggered {} before Socket::connect()",
                            conn, get_state_name(state));
             abort_protocol();
           }
-          INTERCEPT_N_RW(custom_bp_t::SOCKET_CONNECTING);
           return Socket::connect(conn.peer_addr);
         }).then([this](SocketRef new_socket) {
           logger().debug("{} socket connected", conn);
@@ -1471,7 +1482,21 @@ void ProtocolV2::execute_accepting()
   trigger_state(state_t::ACCEPTING, io_state_t::none, false);
   gate.dispatch_in_background("execute_accepting", conn, [this] {
       return seastar::futurize_invoke([this] {
-          INTERCEPT_N_RW(custom_bp_t::SOCKET_ACCEPTED);
+#ifdef UNIT_TESTS_BUILT
+          if (conn.interceptor) {
+            auto action = conn.interceptor->intercept(
+                conn, {custom_bp_t::SOCKET_ACCEPTED});
+            switch (action) {
+            case bp_action_t::CONTINUE:
+              break;
+            case bp_action_t::FAULT:
+              logger().info("[Test] got FAULT");
+              abort_in_fault();
+            default:
+              ceph_abort("unexpected action from trap");
+            }
+          }
+#endif
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
           frame_assembler->reset_handlers();
           frame_assembler->start_recording();
