@@ -2242,3 +2242,11 @@ Traceback (most recent call last):
         assert cephadm_module.inventory.get_addr('host5') == '1.2.3.5'
         with pytest.raises(OrchestratorError):
             cephadm_module.inventory.get_addr('host5.domain')
+
+    def test_set_unmanaged(self, cephadm_module):
+        cephadm_module.spec_store._specs['crash'] = ServiceSpec('crash', unmanaged=False)
+        assert not cephadm_module.spec_store._specs['crash'].unmanaged
+        cephadm_module.spec_store.set_unmanaged('crash', True)
+        assert cephadm_module.spec_store._specs['crash'].unmanaged
+        cephadm_module.spec_store.set_unmanaged('crash', False)
+        assert not cephadm_module.spec_store._specs['crash'].unmanaged

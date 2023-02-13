@@ -1385,6 +1385,22 @@ Usage:
 
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
+    @_cli_write_command('orch set-unmanaged')
+    def _set_unmanaged(self, service_name: str) -> HandleCommandResult:
+        """Set 'unmanaged: true' for the given service name"""
+        completion = self.set_unmanaged(service_name, True)
+        raise_if_exception(completion)
+        out = completion.result_str()
+        return HandleCommandResult(stdout=out)
+
+    @_cli_write_command('orch set-managed')
+    def _set_managed(self, service_name: str) -> HandleCommandResult:
+        """Set 'unmanaged: false' for the given service name"""
+        completion = self.set_unmanaged(service_name, False)
+        raise_if_exception(completion)
+        out = completion.result_str()
+        return HandleCommandResult(stdout=out)
+
     @_cli_write_command('orch set backend')
     def _set_backend(self, module_name: Optional[str] = None) -> HandleCommandResult:
         """

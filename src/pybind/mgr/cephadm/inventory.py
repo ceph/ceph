@@ -349,6 +349,15 @@ class SpecStore():
     def get_created(self, spec: ServiceSpec) -> Optional[datetime.datetime]:
         return self.spec_created.get(spec.service_name())
 
+    def set_unmanaged(self, service_name: str, value: bool) -> str:
+        if service_name not in self._specs:
+            return f'No service of name {service_name} found. Check "ceph orch ls" for all known services'
+        if self._specs[service_name].unmanaged == value:
+            return f'Service {service_name}{" already " if value else " not "}marked unmanaged. No action taken.'
+        self._specs[service_name].unmanaged = value
+        self.save(self._specs[service_name])
+        return f'Set unmanaged to {str(value)} for service {service_name}'
+
 
 class ClientKeyringSpec(object):
     """
