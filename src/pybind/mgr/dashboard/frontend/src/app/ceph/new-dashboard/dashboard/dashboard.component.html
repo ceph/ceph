@@ -94,56 +94,63 @@
     <cd-card title="Inventory"
              i18n-title
              class="col-sm-3 px-3 d-flex">
+      <hr>
       <!-- Hosts -->
-      <li class="border-top list-group-item">
+      <li class="list-group-item">
         <cd-card-row [data]="healthData.hosts"
                      link="/hosts"
                      title="Host"
                      summaryType="simplified"
                      *ngIf="healthData.hosts != null"></cd-card-row>
       </li>
+      <hr>
       <!-- Monitors -->
-      <li class="border-top list-group-item">
+      <li class="list-group-item">
         <cd-card-row [data]="healthData.mon_status.monmap.mons.length"
                      link="/monitor"
                      title="Monitor"
                      summaryType="simplified"
                      *ngIf="healthData.mon_status"></cd-card-row>
       </li>
+      <hr>
       <!-- Managers -->
       <li *ngIf="healthData.mgr_map"
-          class="border-top list-group-item">
+          class="list-group-item">
         <cd-card-row [data]="healthData.mgr_map | mgrSummary"
                      link="/manager"
                      title="Manager"
                      *ngIf="healthData.mgr_map"></cd-card-row>
       </li>
+      <hr>
       <!-- OSDs -->
-      <li class="border-top list-group-item">
+      <li class="list-group-item">
         <cd-card-row [data]="healthData.osd_map | osdSummary"
                      link="/osd"
                      title="OSD"
                      summaryType="osd"
                      *ngIf="healthData.osd_map"></cd-card-row>
       </li>
+      <hr>
       <!-- Pools -->
       <li *ngIf="healthData.pools"
-          class="border-top list-group-item">
+          class="list-group-item">
         <cd-card-row [data]="healthData.pools.length"
                      link="/pool"
                      title="Pool"
                      summaryType="simplified"
                      *ngIf="healthData.pools"></cd-card-row>
       </li>
+      <hr>
       <!-- PG Info -->
-      <li class="border-top list-group-item">
+      <li class="list-group-item">
         <cd-card-row [data]="healthData.pg_info | pgSummary"
                      title="PG"
                      *ngIf="healthData.pg_info"></cd-card-row>
       </li>
+      <hr>
       <!-- Object gateways -->
       <li *ngIf="enabledFeature.rgw && healthData.rgw != null"
-          class="border-top list-group-item"
+          class="list-group-item"
           id="rgw-item">
         <cd-card-row [data]="healthData.rgw"
                      link="/rgw/daemon"
@@ -151,19 +158,19 @@
                      summaryType="simplified"
                      *ngIf="healthData.rgw || healthData.rgw === 0 "></cd-card-row>
       </li>
-
+      <hr>
       <!-- Metadata Servers -->
       <li *ngIf="enabledFeature.cephfs && healthData.fs_map"
-          class="border-top list-group-item"
+          class="list-group-item"
           id="mds-item">
         <cd-card-row [data]="healthData.fs_map | mdsSummary"
                      title="Metadata Server"
                      *ngIf="healthData.fs_map"></cd-card-row>
       </li>
-
+      <hr>
       <!-- iSCSI Gateways -->
       <li *ngIf="enabledFeature.iscsi && healthData.iscsi_daemons != null"
-          class="border-top list-group-item"
+          class="list-group-item"
           id="iscsi-item">
         <cd-card-row [data]="healthData.iscsi_daemons"
                      link="/iscsi/daemon"
@@ -189,8 +196,8 @@
         </ng-container>
         <cd-dashboard-area-chart chartTitle="IOPS"
                                  dataUnits="none"
-                                 label="IPS"
-                                 label2="OPS"
+                                 label="OPS"
+                                 label2="IPS"
                                  [data]="queriesResults.OPS"
                                  [data2]="queriesResults.IPS">
         </cd-dashboard-area-chart>
@@ -207,6 +214,11 @@
                                  label2="Write"
                                  [data]="queriesResults.READCLIENTTHROUGHPUT"
                                  [data2]="queriesResults.WRITECLIENTTHROUGHPUT">
+        </cd-dashboard-area-chart>
+        <cd-dashboard-area-chart chartTitle="Recovery Throughput"
+                                 dataUnits="bytesPerSecond"
+                                 label="Recovery Throughput"
+                                 [data]="queriesResults.RECOVERYBYTES">
         </cd-dashboard-area-chart>
       </div>
     </cd-card>
