@@ -233,17 +233,13 @@ export class DashboardAreaChartComponent implements OnInit, OnChanges, AfterView
       };
       this.chart.chart.update();
     } else if (this.chart && this.data) {
-      let maxValue = 0,
-        maxValueDataUnits = '';
       let maxValueData = Math.max(...this.data.map((values: any) => values[1]));
       if (this.data2) {
         var maxValueData2 = Math.max(...this.data2.map((values: any) => values[1]));
-        [maxValue, maxValueDataUnits] = this.convertUnits(
-          Math.max(maxValueData, maxValueData2)
-        ).split(' ');
-      } else {
-        [maxValue, maxValueDataUnits] = this.convertUnits(Math.max(maxValueData)).split(' ');
       }
+      let [maxValue, maxValueDataUnits] = this.convertUnits(
+        Math.max(maxValueData, maxValueData2)
+      ).split(' ');
 
       this.chart.chart.options.scales.yAxes[0].ticks.suggestedMax = maxValue * 1.2;
       this.chart.chart.options.scales.yAxes[0].ticks.suggestedMin = 0;

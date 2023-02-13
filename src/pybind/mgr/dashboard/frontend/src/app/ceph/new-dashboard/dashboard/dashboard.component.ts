@@ -65,15 +65,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     READLATENCY: '',
     WRITELATENCY: '',
     READCLIENTTHROUGHPUT: '',
-    WRITECLIENTTHROUGHPUT: '',
-    RECOVERYBYTES: ''
+    WRITECLIENTTHROUGHPUT: ''
   };
   timerGetPrometheusDataSub: Subscription;
   timerTime = 30000;
   readonly lastHourDateObject = {
     start: moment().unix() - 3600,
     end: moment().unix(),
-    step: 12
+    step: 30
   };
 
   constructor(
@@ -184,20 +183,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
       for (const queryName in queries) {
         if (queries.hasOwnProperty(queryName)) {
-          const query = queries[queryName];
-          let interval = selectedTime.step;
-
-          if (query.includes('rate') && selectedTime.step < 20) {
-            interval = 20;
-          } else if (query.includes('rate')) {
-            interval = selectedTime.step * 2;
-          }
-
-          const intervalAdjustedQuery = query.replace(/\[(.*?)\]/g, `[${interval}s]`);
-
           this.prometheusService
             .getPrometheusData({
-              params: intervalAdjustedQuery,
+              params: queries[queryName],
               start: selectedTime['start'],
               end: selectedTime['end'],
               step: selectedTime['step']
