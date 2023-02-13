@@ -40,13 +40,21 @@ RBMDevice::mkfs_ret RBMDevice::do_mkfs(device_config_t config) {
     assert(super.size >= super.journal_size);
     DEBUG("super {} ", super);
     // write super block
-    return write_rbm_header(
-    ).safe_then([] {
-      return mkfs_ertr::now();
-    }).handle_error(
+    return open(get_device_path(),
+      seastar::open_flags::rw | seastar::open_flags::dsync
+    ).handle_error(
       mkfs_ertr::pass_further{},
       crimson::ct_error::assert_all{
-      "Invalid error write_rbm_header in RBMDevice::mkfs"
+      "Invalid error open in RBMDevice::mkfs"}
+    ).safe_then([this] {
+      return write_rbm_header(
+      ).safe_then([this] {
+	return close();
+      }).handle_error(
+	mkfs_ertr::pass_further{},
+	crimson::ct_error::assert_all{
+	"Invalid error write_rbm_header in RBMDevice::mkfs"
+      });
     });
   });
 }

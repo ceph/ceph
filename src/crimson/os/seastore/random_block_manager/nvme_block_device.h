@@ -245,6 +245,10 @@ public:
     });
   }
 
+  std::string get_device_path() const final {
+    return device_path;
+  }
+
   uint64_t get_preffered_write_granularity() const { return write_granularity; }
   uint64_t get_preffered_write_alignment() const { return write_alignment; }
   uint64_t get_atomic_write_unit() const { return atomic_write_unit; }

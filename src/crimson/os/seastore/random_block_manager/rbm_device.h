@@ -160,6 +160,8 @@ public:
     read_ertr::future<seastar::stat_data>;
   virtual stat_device_ret stat_device() = 0;
 
+  virtual std::string get_device_path() const = 0;
+
   uint64_t get_journal_size() const {
     return super.journal_size;
   }
@@ -247,6 +249,11 @@ public:
       stat
     );
   }
+
+  std::string get_device_path() const final {
+    return "";
+  }
+
   char *buf;
 };
 using EphemeralRBMDeviceRef = std::unique_ptr<EphemeralRBMDevice>;
