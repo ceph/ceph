@@ -13,7 +13,7 @@ constexpr uint64_t TEST_NONCE = 2;
 constexpr int64_t TEST_OSD = 2;
 constexpr uint64_t CMD_SRV_NONCE = 3;
 constexpr int64_t CMD_SRV_OSD = 3;
-constexpr uint64_t TEST_PEER_NONCE = 4;
+constexpr uint64_t TEST_PEER_NONCE = 2;
 constexpr int64_t TEST_PEER_OSD = 4;
 
 inline entity_addr_t get_test_peer_addr(

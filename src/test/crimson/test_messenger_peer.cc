@@ -411,7 +411,7 @@ int main(int argc, char** argv)
   po::options_description desc{"Allowed options"};
   desc.add_options()
     ("help,h", "show help message")
-    ("addr", po::value<std::string>()->default_value("v2:127.0.0.1:9013"),
+    ("addr", po::value<std::string>()->default_value("v2:127.0.0.1:9012"),
      "This is CmdSrv address, and TestPeer address is at port+=1")
     ("nonstop", po::value<bool>()->default_value(false),
      "Do not shutdown TestPeer when all tests are successful");
