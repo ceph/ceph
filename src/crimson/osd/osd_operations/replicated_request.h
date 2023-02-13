@@ -7,6 +7,7 @@
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/pg_map.h"
+#include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/common/type_helpers.h"
 #include "messages/MOSDRepOp.h"
 
@@ -23,15 +24,6 @@ class PG;
 
 class RepRequest final : public PhasedOperationT<RepRequest> {
 public:
-  class PGPipeline {
-    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
-      static constexpr auto type_name = "RepRequest::PGPipeline::await_map";
-    } await_map;
-    struct Process : OrderedExclusivePhaseT<Process> {
-      static constexpr auto type_name = "RepRequest::PGPipeline::process";
-    } process;
-    friend RepRequest;
-  };
   static constexpr OperationTypeCode type = OperationTypeCode::replicated_request;
   RepRequest(crimson::net::ConnectionRef&&, Ref<MOSDRepOp>&&);
 
@@ -58,7 +50,7 @@ public:
   > tracking_events;
 
 private:
-  PGPipeline &pp(PG &pg);
+  ClientRequest::PGPipeline &pp(PG &pg);
 
   crimson::net::ConnectionFRef conn;
   PipelineHandle handle;

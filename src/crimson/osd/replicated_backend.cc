@@ -161,7 +161,7 @@ ReplicatedBackend::request_committed(const osd_reqid_t& reqid,
   //
   // The following line of code should be "assert(pending_txn.at_version == at_version)",
   // as there can be only one transaction at any time in pending_trans due to
-  // PG::client_request_pg_pipeline. But there's a high possibility that we will
+  // PG::request_pg_pipeline. But there's a high possibility that we will
   // improve the parallelism here in the future, which means there may be multiple
   // client requests in flight, so we loosed the restriction to as follows. Correct
   // me if I'm wrong:-)

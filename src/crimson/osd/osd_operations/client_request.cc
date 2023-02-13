@@ -87,7 +87,7 @@ ConnectionPipeline &ClientRequest::cp()
 
 ClientRequest::PGPipeline &ClientRequest::pp(PG &pg)
 {
-  return pg.client_request_pg_pipeline;
+  return pg.request_pg_pipeline;
 }
 
 bool ClientRequest::same_session_and_pg(const ClientRequest& other_op) const
