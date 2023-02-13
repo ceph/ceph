@@ -211,6 +211,12 @@ public:
     return mount_ertr::now();
   }
 
+  mkfs_ret mkfs(device_config_t config) final {
+    using crimson::common::get_conf;
+    super.journal_size = get_conf<Option::size_t>("seastore_cbjournal_size");
+    return do_mkfs(config);
+  }
+
   write_ertr::future<> writev(
     uint64_t offset,
     ceph::bufferlist bl,

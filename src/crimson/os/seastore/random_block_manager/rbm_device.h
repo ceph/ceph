@@ -150,7 +150,7 @@ public:
 
   bool is_data_protection_enabled() const { return false; }
 
-  mkfs_ret mkfs(device_config_t) final;
+  mkfs_ret do_mkfs(device_config_t);
 
   write_ertr::future<> write_rbm_header();
 
@@ -172,15 +172,14 @@ public:
   void set_device_id(device_id_t id) {
     super.config.spec.id = id;
   }
-  void set_journal_size(uint64_t size) {
-    super.journal_size = size;
-  }
 
   void set_block_size(size_t size) {
     super.block_size = size;
   }
 };
 using RBMDeviceRef = std::unique_ptr<RBMDevice>;
+
+constexpr uint64_t DEFAULT_TEST_CBJOURNAL_SIZE = 1 << 26;
 
 class EphemeralRBMDevice : public RBMDevice {
 public:
@@ -211,6 +210,11 @@ public:
 	"Invalid error mount"
       }
     );
+  }
+
+  mkfs_ret mkfs(device_config_t config) final {
+    super.journal_size = DEFAULT_TEST_CBJOURNAL_SIZE;
+    return do_mkfs(config);
   }
 
   open_ertr::future<> open(
@@ -246,6 +250,8 @@ public:
   char *buf;
 };
 using EphemeralRBMDeviceRef = std::unique_ptr<EphemeralRBMDevice>;
-EphemeralRBMDeviceRef create_test_ephemeral(uint64_t journal_size, uint64_t data_size);
+EphemeralRBMDeviceRef create_test_ephemeral(
+  uint64_t journal_size = DEFAULT_TEST_CBJOURNAL_SIZE,
+  uint64_t data_size = DEFAULT_TEST_CBJOURNAL_SIZE);
 
 }

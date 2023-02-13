@@ -24,7 +24,7 @@ namespace crimson::os::seastore::random_block_device {
 #include "crimson/os/seastore/logging.h"
 SET_SUBSYS(seastore_device);
 
-RBMDevice::mkfs_ret RBMDevice::mkfs(device_config_t config) {
+RBMDevice::mkfs_ret RBMDevice::do_mkfs(device_config_t config) {
   LOG_PREFIX(RBMDevice::mkfs);
   return stat_device(
   ).handle_error(
@@ -34,9 +34,10 @@ RBMDevice::mkfs_ret RBMDevice::mkfs(device_config_t config) {
   ).safe_then([this, FNAME, config=std::move(config)](auto st) {
     super.block_size = st.block_size;
     super.size = st.size;
-
     super.feature |= RBM_BITMAP_BLOCK_CRC;
     super.config = std::move(config);
+    assert(super.journal_size);
+    assert(super.size >= super.journal_size);
     DEBUG("super {} ", super);
     // write super block
     return write_rbm_header(
