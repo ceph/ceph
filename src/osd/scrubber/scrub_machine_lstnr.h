@@ -48,23 +48,42 @@ struct preemption_t {
 /// an aux used when blocking on a busy object.
 /// Issues a log warning if still blocked after 'waittime'.
 struct blocked_range_t {
-  blocked_range_t(OSDService* osds,
-		  ceph::timespan waittime,
-		  ScrubMachineListener& scrubber,
-		  spg_t pg_id);
+  blocked_range_t(
+      PGRef pg,
+      OSDService* osds,
+      ceph::timespan waittime,
+      ScrubMachineListener& scrubber,
+      epoch_t epoch,
+      spg_t pg_id);
+
   ~blocked_range_t();
 
+  PGRef m_pg;
   OSDService* m_osds;
   ScrubMachineListener& m_scrubber;
+  epoch_t m_epoch;
 
   /// used to identify ourselves to the PG, when no longer blocked
   spg_t m_pgid;
   Context* m_callbk;
 
-  // once timed-out, we flag the OSD's scrub-queue as having
-  // a problem. 'm_warning_issued' signals the need to clear
-  // that OSD-wide flag.
+  /**
+   * when the callback is triggered by the sleep-timer, it should
+   * be ignored. Note - this is our way to deactivate the alarm
+   * without locking the sleep-timer mutex (as we may be called while
+   * holding it).
+   */
+  bool m_was_deleted{false};
+
+  /**
+   * once timed-out, we flag the OSD's scrub-queue as having
+   * a problem. 'm_warning_issued' signals the need to clear
+   * that OSD-wide flag.
+   */
   bool m_warning_issued{false};
+
+  /// cancel the alarm - while holding the PG lock, but not the sleep-timer lock
+  void cancel_future_alarm();
 };
 
 using BlockedRangeWarning = std::unique_ptr<blocked_range_t>;

@@ -213,6 +213,17 @@ RangeBlocked::RangeBlocked(my_context ctx)
   m_timeout = scrbr->acquire_blocked_alarm();
 }
 
+sc::result RangeBlocked::react(const Unblocked&)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "RangeBlocked::react(const Unblocked&)" << dendl;
+
+  if (m_timeout) {
+    m_timeout->cancel_future_alarm();
+  }
+  return transit<PendingTimer>();
+}
+
 // ----------------------- PendingTimer -----------------------------------
 
 /**

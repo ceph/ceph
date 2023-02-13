@@ -244,7 +244,9 @@ struct ActiveScrubbing
 
 struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing>, NamedSimply {
   explicit RangeBlocked(my_context ctx);
-  using reactions = mpl::list<sc::transition<Unblocked, PendingTimer>>;
+  using reactions = mpl::list<sc::custom_reaction<Unblocked>>;
+
+  sc::result react(const Unblocked&);
 
   Scrub::BlockedRangeWarning m_timeout;
 };
