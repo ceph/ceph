@@ -8,7 +8,6 @@
 
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
-#include "crimson/osd/osd_operations/background_recovery.h"
 #include "osd/osd_types.h"
 #include "osd/PGPeeringEvent.h"
 #include "osd/PeeringState.h"
@@ -22,6 +21,7 @@ namespace crimson::osd {
 class OSD;
 class ShardServices;
 class PG;
+class BackfillRecovery;
 
   class PGPeeringPipeline {
     struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
@@ -35,6 +35,7 @@ class PG;
     friend class LocalPeeringEvent;
     friend class RemotePeeringEvent;
     friend class PGAdvanceMap;
+    friend class BackfillRecovery;
   };
 
 template <class T>
@@ -143,7 +144,6 @@ public:
     PGPeeringPipeline::AwaitMap::BlockingEvent,
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
     PGPeeringPipeline::Process::BlockingEvent,
-    BackfillRecovery::BackfillRecoveryPipeline::Process::BlockingEvent,
     OSDPipeline::AwaitActive::BlockingEvent,
     CompletionEvent
   > tracking_events;
@@ -180,7 +180,6 @@ public:
     PGPeeringPipeline::AwaitMap::BlockingEvent,
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
     PGPeeringPipeline::Process::BlockingEvent,
-    BackfillRecovery::BackfillRecoveryPipeline::Process::BlockingEvent,
     CompletionEvent
   > tracking_events;
 };
