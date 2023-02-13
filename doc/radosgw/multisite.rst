@@ -679,37 +679,37 @@ If the former master zone recovers, you can revert the failover operation by fol
 
 .. _rgw-multisite-migrate-from-single-site:
 
-Migrating a Single Site System to Multi-Site
-============================================
+Migrating a Single-Site Deployment to Multi-Site
+=================================================
 
-To migrate from a single site system with a ``default`` zone group and
-zone to a multi site system, use the following steps:
+To migrate from a single-site deployment with a ``default`` zonegroup and zone
+to a multi-site system, follow these steps:
 
-1. Create a realm. Replace ``<name>`` with the realm name.
+1. Create a realm. Replace ``<name>`` with the realm name:
 
    .. prompt:: bash #
 
       radosgw-admin realm create --rgw-realm=<name> --default
 
-2. Rename the default zone and zonegroup. Replace ``<name>`` with the
-   zonegroup or zone name.
+2. Rename the default zonegroup and zone. Replace ``<name>`` with the zone name
+   or zonegroup name:
 
    .. prompt:: bash #
 
       radosgw-admin zonegroup rename --rgw-zonegroup default --zonegroup-new-name=<name>
       radosgw-admin zone rename --rgw-zone default --zone-new-name us-east-1 --rgw-zonegroup=<name>
 
-3. Configure the master zonegroup. Replace ``<name>`` with the realm or
-   zonegroup name. Replace ``<fqdn>`` with the fully qualified domain
-   name(s) in the zonegroup.
+3. Configure the master zonegroup. Replace ``<name>`` with the realm name or
+   zonegroup name. Replace ``<fqdn>`` with the fully qualified domain name(s)
+   in the zonegroup:
 
    .. prompt:: bash #
 
       radosgw-admin zonegroup modify --rgw-realm=<name> --rgw-zonegroup=<name> --endpoints http://<fqdn>:80 --master --default
 
-4. Configure the master zone. Replace ``<name>`` with the realm,
-   zonegroup or zone name. Replace ``<fqdn>`` with the fully qualified
-   domain name(s) in the zonegroup.
+4. Configure the master zone. Replace ``<name>`` with the realm name, zone
+   name, or zonegroup name. Replace ``<fqdn>`` with the fully qualified domain
+   name(s) in the zonegroup:
 
    .. prompt:: bash #
 
@@ -718,9 +718,9 @@ zone to a multi site system, use the following steps:
                                 --access-key=<access-key> --secret=<secret-key> \
                                 --master --default
 
-5. Create a system user. Replace ``<user-id>`` with the username.
-   Replace ``<display-name>`` with a display name. It may contain
-   spaces.
+5. Create a system user. Replace ``<user-id>`` with the username.  Replace
+   ``<display-name>`` with a display name. The display name is allowed to
+   contain spaces:
 
    .. prompt:: bash #
 
@@ -729,22 +729,21 @@ zone to a multi site system, use the following steps:
       --access-key=<access-key> \ 
       --secret=<secret-key> --system
 
-6. Commit the updated configuration.
+6. Commit the updated configuration:
 
    .. prompt:: bash #
 
       radosgw-admin period update --commit
 
-7. Finally, restart the Ceph Object Gateway.
+7. Restart the Ceph Object Gateway:
 
    .. prompt:: bash #
 
       systemctl restart ceph-radosgw@rgw.`hostname -s`
 
 After completing this procedure, proceed to `Configure a Secondary
-Zone <#configure-secondary-zones>`__ to create a secondary zone
-in the master zone group.
-
+Zone <#configure-secondary-zones>`_ and create a secondary zone
+in the master zonegroup.
 
 Multi-Site Configuration Reference
 ==================================
