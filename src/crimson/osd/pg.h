@@ -29,7 +29,6 @@
 #include "crimson/osd/osd_operations/logmissing_request_reply.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
-#include "crimson/osd/osd_operations/background_recovery.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/pg_activation_blocker.h"
@@ -58,6 +57,7 @@ namespace crimson::os {
 
 namespace crimson::osd {
 class OpsExecuter;
+class BackfillRecovery;
 
 class PG : public boost::intrusive_ref_counter<
   PG,
@@ -748,8 +748,6 @@ private:
   }
 
 private:
-  BackfillRecovery::BackfillRecoveryPipeline backfill_pipeline;
-
   friend class IOInterruptCondition;
   struct log_update_t {
     std::set<pg_shard_t> waiting_on;

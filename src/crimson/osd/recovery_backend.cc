@@ -7,6 +7,7 @@
 #include "crimson/osd/recovery_backend.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_backend.h"
+#include "crimson/osd/osd_operations/background_recovery.h"
 
 #include "messages/MOSDFastDispatchOp.h"
 #include "osd/osd_types.h"
