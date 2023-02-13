@@ -1716,9 +1716,9 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                                    uint64_t new_connect_seq,
                                    uint64_t new_msg_seq)
 {
-  trigger_state(state_t::REPLACING, io_state_t::delay, false);
-  ceph_assert_always(has_socket);
+  ceph_assert_always(has_socket || state == state_t::CONNECTING);
   ceph_assert_always(!mover.socket->is_shutdown());
+  trigger_state(state_t::REPLACING, io_state_t::delay, false);
   if (is_socket_valid) {
     frame_assembler->shutdown_socket();
     is_socket_valid = false;
@@ -1775,6 +1775,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
         }
       );
       is_socket_valid = true;
+      has_socket = true;
 
       if (reconnect) {
         connect_seq = new_connect_seq;

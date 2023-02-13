@@ -83,7 +83,12 @@ seastar::future<> FrameAssemblerV2::replace_by(FrameAssemblerV2::mover_t &&mover
   txbuf.clear();
   session_stream_handlers = std::move(mover.session_stream_handlers);
   session_comp_handlers = std::move(mover.session_comp_handlers);
-  return replace_shutdown_socket(std::move(mover.socket));
+  if (has_socket()) {
+    return replace_shutdown_socket(std::move(mover.socket));
+  } else {
+    set_socket(std::move(mover.socket));
+    return seastar::now();
+  }
 }
 
 void FrameAssemblerV2::start_recording()
