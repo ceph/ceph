@@ -5200,10 +5200,10 @@ void StoreTest::doSyntheticLimitedTest(
     if (option(1)) test_obj.fsck(false);
     if (option(1)) test_obj.scan();
     if (option(497)) test_obj.stat();
-    if (option(500)) test_obj.zero();
+    if (option(1000)) test_obj.zero();
     if (option(1500)) test_obj.read();
     if (option(1500)) test_obj.write();
-    if (option(1000)) test_obj.truncate();
+    if (option(500)) test_obj.truncate();
     if (option(1000)) test_obj.clone_range();
     if (option(1000)) test_obj.stash();
     if (option(1500)) test_obj.unlink();
@@ -5245,13 +5245,37 @@ TEST_P(StoreTestSpecificAUSize, SyntheticLimited) {
     return;
 
   const char *m[][10] = {
-    { "bluestore_min_alloc_size", "4096", 0 }, // must be the first!
+    { "bluestore_min_alloc_size", "65536", "4096", 0 }, // must be the first!
     { "num_ops", "10000", 0 },
     { "max_write", "65536", 0 },
     { "max_size", "262144", 0 },
     { "alignment", "4096", 0 },
-    { "start_object_count", "3000", "1000", "200", "50", 0 },
+    { "start_object_count", "1000", "200", "50", 0 },
     { "bluestore_max_blob_size", "65536", 0 },
+    { "bluestore_default_buffered_read", "true", 0 },
+    { "bluestore_default_buffered_write", "true", 0 },
+    { "bluestore_compression_mode", "force", "none", 0},
+    { "bluestore_prefer_deferred_size", "32768", "0", 0},
+    { 0 },
+  };
+  do_matrix(m, &StoreTestSpecificAUSize::SyntheticLimitedTest);
+}
+
+TEST_P(StoreTestSpecificAUSize, SyntheticShardingLimited) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  const char *m[][10] = {
+    { "bluestore_min_alloc_size", "65536", "4096", 0 }, // must be the first!
+    { "num_ops", "10000", 0 },
+    { "max_write", "65536", 0 },
+    { "max_size", "262144", 0 },
+    { "alignment", "4096", 0 },
+    { "start_object_count", "1000", "200", "50", 0 },
+    { "bluestore_max_blob_size", "65536", 0 },
+    { "bluestore_extent_map_shard_min_size", "60", 0 },
+    { "bluestore_extent_map_shard_max_size", "300", 0 },
+    { "bluestore_extent_map_shard_target_size", "150", 0 },
     { "bluestore_default_buffered_read", "true", 0 },
     { "bluestore_default_buffered_write", "true", 0 },
     { 0 },
