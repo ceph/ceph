@@ -209,10 +209,12 @@ private:
 
   bool is_closed() const override;
 
+  // peer wins if myaddr > peeraddr
   bool peer_wins() const override;
 
   Interceptor *interceptor = nullptr;
 #else
+  // peer wins if myaddr > peeraddr
   bool peer_wins() const;
 #endif
 

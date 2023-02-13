@@ -1166,6 +1166,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
     // each other at the same time.
     if (existing_proto->client_cookie != client_cookie) {
       if (existing_conn->peer_wins()) {
+        // acceptor (this connection, the peer) wins
         logger().warn("{} server_connect: connection race detected (cs={}, e_cs={}, ss=0)"
                       " and win, reusing existing {} {}",
                       conn,
@@ -1175,6 +1176,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
                       *existing_conn);
         return reuse_connection(existing_proto);
       } else {
+        // acceptor (this connection, the peer) loses
         logger().warn("{} server_connect: connection race detected (cs={}, e_cs={}, ss=0)"
                       " and lose to existing {}, ask client to wait",
                       conn, client_cookie, existing_proto->client_cookie, *existing_conn);
@@ -1446,6 +1448,7 @@ ProtocolV2::server_reconnect()
     } else if (existing_proto->connect_seq == reconnect.connect_seq()) {
       // reconnect race: both peers are sending reconnect messages
       if (existing_conn->peer_wins()) {
+        // acceptor (this connection, the peer) wins
         logger().warn("{} server_reconnect: reconnect race detected (cs={})"
                       " and win, reusing existing {} {}",
                       conn,
@@ -1456,6 +1459,7 @@ ProtocolV2::server_reconnect()
             existing_proto, false,
             true, reconnect.connect_seq(), reconnect.msg_seq());
       } else {
+        // acceptor (this connection, the peer) loses
         logger().warn("{} server_reconnect: reconnect race detected (cs={})"
                       " and lose to existing {}, ask client to wait",
                       conn, reconnect.connect_seq(), *existing_conn);
