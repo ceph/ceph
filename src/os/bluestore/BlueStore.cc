@@ -3209,6 +3209,9 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
     bcs = c->cache;
     bcs->lock.lock();
   }
+  oldo->extent_map.fault_range(c->store->db, 0, OBJECT_MAX_SIZE);//srcoff, length);
+  newo->extent_map.fault_range(c->store->db, 0, OBJECT_MAX_SIZE);//dstoff, length);
+
   make_range_shared(b, txc, c, oldo, srcoff, length);
   vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
   for (auto& e : oldo->extent_map.extent_map) {
