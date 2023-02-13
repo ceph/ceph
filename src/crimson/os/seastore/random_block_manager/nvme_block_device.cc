@@ -79,58 +79,58 @@ write_ertr::future<> RBMDevice::write_rbm_header()
   auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
   assert(bl.length() < super.block_size);
   iter.copy(bl.length(), bp.c_str());
-
-  return write(RBM_START_ADDRESS, bp);
+  return write(RBM_START_ADDRESS, std::move(bp));
 }
 
 read_ertr::future<rbm_metadata_header_t> RBMDevice::read_rbm_header(
   rbm_abs_addr addr)
 {
   LOG_PREFIX(RBMDevice::read_rbm_header);
-  bufferptr bptr =
-    bufferptr(ceph::buffer::create_page_aligned(RBM_SUPERBLOCK_SIZE));
-  bptr.zero();
-  return read(
-    addr,
-    bptr
-  ).safe_then([length=bptr.length(), this, bptr, FNAME]()
-    -> read_ertr::future<rbm_metadata_header_t> {
-    bufferlist bl;
-    bl.append(bptr);
-    auto p = bl.cbegin();
-    rbm_metadata_header_t super_block;
-    try {
-      decode(super_block, p);
-    }
-    catch (ceph::buffer::error& e) {
-      DEBUG("read_rbm_header: unable to decode rbm super block {}",
-	    e.what());
-      return crimson::ct_error::enoent::make();
-    }
-    checksum_t crc = super_block.crc;
-    bufferlist meta_b_header;
-    super_block.crc = 0;
-    encode(super_block, meta_b_header);
-    assert(ceph::encoded_sizeof<rbm_metadata_header_t>(super_block) <
-	super_block.block_size);
-
-    // Do CRC verification only if data protection is not supported.
-    if (is_data_protection_enabled() == false) {
-      if (meta_b_header.crc32c(-1) != crc) {
-	DEBUG("bad crc on super block, expected {} != actual {} ",
-	      meta_b_header.crc32c(-1), crc);
-	return crimson::ct_error::input_output_error::make();
+  return seastar::do_with(
+    bufferptr(ceph::buffer::create_page_aligned(super.block_size)),
+    [this, addr, FNAME](auto &bptr) {
+    return read(
+      addr,
+      bptr
+    ).safe_then([length=bptr.length(), this, bptr, FNAME]()
+      -> read_ertr::future<rbm_metadata_header_t> {
+      bufferlist bl;
+      bl.append(bptr);
+      auto p = bl.cbegin();
+      rbm_metadata_header_t super_block;
+      try {
+	decode(super_block, p);
       }
-    } else {
-      ceph_assert_always(crc == (checksum_t)-1);
-    }
-    super_block.crc = crc;
-    super = super_block;
-    DEBUG("got {} ", super);
-    return read_ertr::future<rbm_metadata_header_t>(
-      read_ertr::ready_future_marker{},
-      super_block
-    );
+      catch (ceph::buffer::error& e) {
+	DEBUG("read_rbm_header: unable to decode rbm super block {}",
+	      e.what());
+	return crimson::ct_error::enoent::make();
+      }
+      checksum_t crc = super_block.crc;
+      bufferlist meta_b_header;
+      super_block.crc = 0;
+      encode(super_block, meta_b_header);
+      assert(ceph::encoded_sizeof<rbm_metadata_header_t>(super_block) <
+	  super_block.block_size);
+
+      // Do CRC verification only if data protection is not supported.
+      if (is_data_protection_enabled() == false) {
+	if (meta_b_header.crc32c(-1) != crc) {
+	  DEBUG("bad crc on super block, expected {} != actual {} ",
+		meta_b_header.crc32c(-1), crc);
+	  return crimson::ct_error::input_output_error::make();
+	}
+      } else {
+	ceph_assert_always(crc == (checksum_t)-1);
+      }
+      super_block.crc = crc;
+      super = super_block;
+      DEBUG("got {} ", super);
+      return read_ertr::future<rbm_metadata_header_t>(
+	read_ertr::ready_future_marker{},
+	super_block
+      );
+    });
   });
 }
 
@@ -215,7 +215,7 @@ NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
 
 write_ertr::future<> NVMeBlockDevice::write(
   uint64_t offset,
-  bufferptr &bptr,
+  bufferptr &&bptr,
   uint16_t stream) {
   logger().debug(
       "block: write offset {} len {}",
@@ -228,17 +228,21 @@ write_ertr::future<> NVMeBlockDevice::write(
   if (stream >= stream_id_count) {
     supported_stream = WRITE_LIFE_NOT_SET;
   }
-  return io_device[supported_stream].dma_write(
-    offset, bptr.c_str(), length).handle_exception(
-    [](auto e) -> write_ertr::future<size_t> {
-    logger().error("write: dma_write got error{}", e);
-    return crimson::ct_error::input_output_error::make();
-  }).then([length](auto result) -> write_ertr::future<> {
-    if (result != length) {
-      logger().error("write: dma_write got error with not proper length");
+  return seastar::do_with(
+    std::move(bptr),
+    [this, offset, length, supported_stream] (auto& bptr) {
+    return io_device[supported_stream].dma_write(
+      offset, bptr.c_str(), length).handle_exception(
+      [](auto e) -> write_ertr::future<size_t> {
+      logger().error("write: dma_write got error{}", e);
       return crimson::ct_error::input_output_error::make();
-    }
-    return write_ertr::now();
+    }).then([length](auto result) -> write_ertr::future<> {
+      if (result != length) {
+	logger().error("write: dma_write got error with not proper length");
+	return crimson::ct_error::input_output_error::make();
+      }
+      return write_ertr::now();
+    });
   });
 }
 
@@ -419,7 +423,7 @@ open_ertr::future<> EphemeralRBMDevice::open(
 
 write_ertr::future<> EphemeralRBMDevice::write(
   uint64_t offset,
-  bufferptr &bptr,
+  bufferptr &&bptr,
   uint16_t stream) {
   ceph_assert(buf);
   logger().debug(

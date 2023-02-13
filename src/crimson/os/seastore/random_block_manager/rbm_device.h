@@ -132,7 +132,7 @@ public:
    */
   virtual write_ertr::future<> write(
     uint64_t offset,
-    bufferptr &bptr,
+    bufferptr &&bptr,
     uint16_t stream = 0) = 0;
 
   virtual discard_ertr::future<> discard(
@@ -225,7 +225,7 @@ public:
 
   write_ertr::future<> write(
     uint64_t offset,
-    bufferptr &bptr,
+    bufferptr &&bptr,
     uint16_t stream = 0) override;
 
   using RBMDevice::read;
