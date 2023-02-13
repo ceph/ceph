@@ -6277,7 +6277,8 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
   }
   BlueFSVolumeSelector* vselector = nullptr;
   if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW ||
-      cct->_conf->bluestore_volume_selection_policy == "use_some_extra_enforced") {
+      cct->_conf->bluestore_volume_selection_policy == "use_some_extra_enforced" ||
+      cct->_conf->bluestore_volume_selection_policy == "fit_to_fast") {
 
     string options = cct->_conf->bluestore_rocksdb_options;
     string options_annex = cct->_conf->bluestore_rocksdb_options_annex;
