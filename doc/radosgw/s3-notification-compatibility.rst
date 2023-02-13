@@ -146,4 +146,4 @@ We also have the following extensions to topic configuration:
 .. _AWS S3 Bucket Notifications API: https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html
 .. _Event Message Structure: https://docs.aws.amazon.com/AmazonS3/latest/dev/notification-content-structure.html
 .. _`Bucket Notifications`: ../notifications
-.. _`boto3 SDK filter extensions`: https://github.com/ceph/ceph/tree/master/examples/boto3
+.. _`boto3 SDK filter extensions`: https://github.com/ceph/ceph/tree/main/examples/rgw/boto3
