@@ -232,6 +232,7 @@ struct seastore_test_t :
 	bl.length(),
 	bl);
     }
+
     void write(
       SeaStore &seastore,
       uint64_t offset,
@@ -961,6 +962,35 @@ TEST_P(seastore_test_t, omap_test_iterator)
 	make_bufferlist(128));
     }
     test_obj.check_omap(*seastore);
+  });
+}
+
+TEST_P(seastore_test_t, object_data_omap_remove)
+{
+  run_async([this] {
+    auto make_key = [](unsigned i) {
+      std::stringstream ss;
+      ss << "key" << i;
+      return ss.str();
+    };
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.touch(*seastore);
+    for (unsigned i = 0; i < 1024; ++i) {
+      test_obj.set_omap(
+	*seastore,
+	make_key(i),
+	make_bufferlist(128));
+    }
+    test_obj.check_omap(*seastore);
+
+    for (uint64_t i = 0; i < 16; i++) {
+      test_obj.write(
+	*seastore,
+	4096 * i,
+	4096,
+	'a');
+    }
+    test_obj.remove(*seastore);
   });
 }
 

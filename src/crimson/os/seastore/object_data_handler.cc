@@ -1190,6 +1190,9 @@ ObjectDataHandler::clear_ret ObjectDataHandler::clear(
 	     ctx.t,
 	     object_data.get_reserved_data_base(),
 	     object_data.get_reserved_data_len());
+      if (object_data.is_null()) {
+	return clear_iertr::now();
+      }
       return trim_data_reservation(ctx, object_data, 0);
     });
 }
