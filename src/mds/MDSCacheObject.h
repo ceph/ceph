@@ -262,6 +262,9 @@ class MDSCacheObject {
   void set_replica_nonce(unsigned n) { replica_nonce = n; }
 
   bool is_waiter_for(uint64_t mask, uint64_t min=0);
+
+  inline size_t count_waiters(uint64_t mask) const { return waiting.count(mask); }
+
   virtual void add_waiter(uint64_t mask, MDSContext *c) {
     if (waiting.empty())
       get(PIN_WAITER);
