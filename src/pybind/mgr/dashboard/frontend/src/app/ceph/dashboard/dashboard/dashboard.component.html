@@ -1,32 +1,15 @@
-<main aria-label="Dashboard" >
+<main aria-label="Dashboard">
   <a href="#main"
      class="sr-only">skip to content</a>
 
-  <cd-refresh-selector></cd-refresh-selector>
+  <ng-container *ngIf="(enabledFeature$ | async)?.dashboard === false; else dashboardV3"
+                class="main-padding">
+    <cd-refresh-selector></cd-refresh-selector>
 
-  <ng-container *ngIf="hasGrafana">
-    <nav ngbNav
-         #nav="ngbNav"
-         class="nav-tabs">
-      <ng-container ngbNavItem>
-        <a ngbNavLink
-           i18n>Health</a>
-        <ng-template ngbNavContent>
-          <cd-health></cd-health>
-        </ng-template>
-      </ng-container>
-      <ng-container ngbNavItem>
-        <a ngbNavLink
-           i18n>Statistics</a>
-        <ng-template ngbNavContent>
-        </ng-template>
-      </ng-container>
-
-    </nav>
-
-    <div [ngbNavOutlet]="nav"></div>
+    <cd-health id="main"></cd-health>
   </ng-container>
 
-  <cd-health id="main"
-             *ngIf="!hasGrafana"></cd-health>
+  <ng-template #dashboardV3>
+    <cd-dashboard-v3></cd-dashboard-v3>
+  </ng-template>
 </main>
