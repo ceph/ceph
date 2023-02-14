@@ -598,6 +598,12 @@ public:
   OstreamTemp get_clog_info() override;
   OstreamTemp get_clog_debug() override;
 
+  void request_pg_delete_background_io_reservation(
+    unsigned priority,
+    PGPeeringEventURef on_grant,
+    PGPeeringEventURef on_preempt) override;
+  void cancel_pg_delete_background_io_reservation() override;
+
   void schedule_event_after(
     PGPeeringEventRef event,
     float delay) override;
@@ -704,7 +710,7 @@ public:
   void with_heartbeat_peers(std::function<void(int)>&& f);
 
   void shutdown();
-  virtual void on_shutdown() = 0;
+  virtual void on_shutdown(bool is_deleting=false) = 0;
 
   bool get_must_scrub() const;
   Scrub::schedule_result_t sched_scrub();

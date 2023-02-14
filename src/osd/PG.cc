@@ -1762,6 +1762,24 @@ OstreamTemp PG::get_clog_error() {
   return osd->clog->error();
 }
 
+void PG::request_pg_delete_background_io_reservation(
+  unsigned priority,
+  PGPeeringEventURef on_grant,
+  PGPeeringEventURef on_preempt) {
+  osd->pg_delete_reserver.request_reservation(
+    pg_id,
+    on_grant ? new QueuePeeringEvt(
+      this, std::move(on_grant)) : nullptr,
+    priority,
+    on_preempt ? new QueuePeeringEvt(
+      this, std::move(on_preempt)) : nullptr);
+}
+
+void PG::cancel_pg_delete_background_io_reservation() {
+  osd->pg_delete_reserver.cancel_reservation(
+    pg_id);
+}
+
 void PG::schedule_event_after(
   PGPeeringEventRef event,
   float delay) {
@@ -2748,7 +2766,7 @@ std::pair<ghobject_t, bool> PG::do_delete_work(
 
       // cancel reserver here, since the PG is about to get deleted and the
       // exit() methods don't run when that happens.
-      osd->local_reserver.cancel_reservation(info.pgid);
+      osd->pg_delete_reserver.cancel_reservation(info.pgid);
 
       running = false;
     }

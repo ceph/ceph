@@ -1893,8 +1893,8 @@ public:
   void on_change(ObjectStore::Transaction &t) override;
   void on_activate_complete() override;
   void on_flushed() override;
-  void on_removal(ObjectStore::Transaction &t) override;
-  void on_shutdown() override;
+  void on_removal(ObjectStore::Transaction &t, bool is_deleting) override;
+  void on_shutdown(bool is_deleting) override;
   bool check_failsafe_full() override;
   bool maybe_preempt_replica_scrub(const hobject_t& oid) override;
   int rep_repair_primary_object(const hobject_t& soid, OpContext *ctx);

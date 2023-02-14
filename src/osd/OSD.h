@@ -461,6 +461,7 @@ public:
   Finisher reserver_finisher;
   AsyncReserver<spg_t, Finisher> local_reserver;
   AsyncReserver<spg_t, Finisher> remote_reserver;
+  AsyncReserver<spg_t, Finisher> pg_delete_reserver;
 
   // -- pg merge --
   ceph::mutex merge_lock = ceph::make_mutex("OSD::merge_lock");
