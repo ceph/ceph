@@ -24,7 +24,7 @@ import { CardRowComponent } from '../card-row/card-row.component';
 import { CardComponent } from '../card/card.component';
 import { DashboardPieComponent } from '../dashboard-pie/dashboard-pie.component';
 import { PgSummaryPipe } from '../pg-summary.pipe';
-import { DashboardComponent } from './dashboard.component';
+import { DashboardV3Component } from './dashboard-v3.component';
 
 export class SummaryServiceMock {
   summaryDataSource = new BehaviorSubject({
@@ -40,8 +40,8 @@ export class SummaryServiceMock {
 }
 
 describe('Dashbord Component', () => {
-  let component: DashboardComponent;
-  let fixture: ComponentFixture<DashboardComponent>;
+  let component: DashboardV3Component;
+  let fixture: ComponentFixture<DashboardV3Component>;
   let configurationService: ConfigurationService;
   let orchestratorService: MgrModuleService;
   let getHealthSpy: jasmine.Spy;
@@ -153,7 +153,7 @@ describe('Dashbord Component', () => {
   configureTestBed({
     imports: [RouterTestingModule, HttpClientTestingModule, ToastrModule.forRoot(), SharedModule],
     declarations: [
-      DashboardComponent,
+      DashboardV3Component,
       CardComponent,
       DashboardPieComponent,
       CardRowComponent,
@@ -184,7 +184,7 @@ describe('Dashbord Component', () => {
         rgw: true
       })
     );
-    fixture = TestBed.createComponent(DashboardComponent);
+    fixture = TestBed.createComponent(DashboardV3Component);
     component = fixture.componentInstance;
     configurationService = TestBed.inject(ConfigurationService);
     orchestratorService = TestBed.inject(MgrModuleService);
@@ -306,7 +306,7 @@ describe('Dashbord Component', () => {
           rgw: false
         })
       );
-      fixture = TestBed.createComponent(DashboardComponent);
+      fixture = TestBed.createComponent(DashboardV3Component);
       component = fixture.componentInstance;
     });
 
