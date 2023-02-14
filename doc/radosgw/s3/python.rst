@@ -194,4 +194,4 @@ For example, unordered list of objects could be fetched using:
 Without the extensions file, in the above example, boto3 would complain that the ``AllowUnordered`` argument is invalid.
 
 
-.. _extensions file: https://github.com/ceph/ceph/blob/master/examples/boto3/service-2.sdk-extras.json
+.. _extensions file: https://github.com/ceph/ceph/blob/main/examples/rgw/boto3/service-2.sdk-extras.json
