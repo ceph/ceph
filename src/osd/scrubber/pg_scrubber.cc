@@ -683,6 +683,16 @@ void PgScrubber::cancel_callback(scrubber_callback_cancel_token_t token)
   m_osds->sleep_timer.cancel_event(token);
 }
 
+LogChannelRef &PgScrubber::get_clog() const
+{
+  return m_osds->clog;
+}
+
+int PgScrubber::get_whoami() const
+{
+  return m_osds->whoami;
+}
+
 /*
  * The selected range is set directly into 'm_start' and 'm_end'
  * setting:
