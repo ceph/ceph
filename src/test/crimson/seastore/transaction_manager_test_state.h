@@ -63,7 +63,7 @@ public:
       });
     }).safe_then([this] {
       return segment_manager->mkfs(
-        segment_manager::get_ephemeral_device_config(0, get_num_devices()));
+        segment_manager::get_ephemeral_device_config(0, get_num_devices(), 0));
     }).safe_then([this] {
       return seastar::do_with(std::size_t(0), [this](auto &cnt) {
         return crimson::do_for_each(
@@ -73,7 +73,7 @@ public:
         {
           ++cnt;
           return sec_sm->mkfs(
-            segment_manager::get_ephemeral_device_config(cnt, get_num_devices()));
+            segment_manager::get_ephemeral_device_config(cnt, get_num_devices(), 0));
         });
       });
     }).handle_error(
