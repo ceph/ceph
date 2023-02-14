@@ -83,7 +83,7 @@ do_killcephadm() {
     fi
 }
 
-do_umountall() {
+do_umount_all_kclient() {
     #VSTART_IP_PORTS is of the format as below
     #"[v[num]:IP:PORT/0,v[num]:IP:PORT/0][v[num]:IP:PORT/0,v[num]:IP:PORT/0]..."
     VSTART_IP_PORTS=$("${CEPH_BIN}"/ceph -c $conf_fn mon metadata 2>/dev/null | jq -j '.[].addrs')
@@ -107,12 +107,40 @@ do_umountall() {
         [ -n "$CEPH_MNT" ] && sudo umount -f $CEPH_MNT
       fi
     done
+}
 
-    #Get fuse mounts of the cluster
+do_umount_all_fuse_client() {
     num_of_ceph_mdss=$(ps -e | grep \ ceph-mds$ | wc -l)
+
     if test $num_of_ceph_mdss -ne 0; then
-        CEPH_FUSE_MNTS=$("${CEPH_BIN}"/ceph -c $conf_fn tell mds.* client ls 2>/dev/null | grep mount_point | tr -d '",' | awk '{print $2}')
+        CEPH_FUSE_MNTS=$("${CEPH_BIN}"/ceph -c $conf_fn tell mds.* client ls 2> /dev/null | grep mount_point | tr -d '",' | awk '{print $2}')
         [ -n "$CEPH_FUSE_MNTS" ] && sudo umount -f $CEPH_FUSE_MNTS
+    else
+        for fuse_pid in `pgrep ceph-fuse`; do
+            # We are limiting ourselves to unmounting the clients the process
+            # CWD of which is "<ceph-repo-root>/build" dir.
+            if test "$(sudo pwdx $fuse_pid | awk '{print $2}')" = `pwd`; then
+                sudo umount -fl $(ps -ef | grep $fuse_pid | awk '{print $NF}' | awk 'NR==1{print $1}')
+
+                # It migh be that MDSs already has been terminated and CephFSs
+                # has been dismounted from the mount point but the
+                # corresponding ceph-fuse process is still running. In such
+                # a case, the terminate this process.
+                if test -n "$(pgrep $fuse_pid)" ; then
+                    sudo kill -9 $fuse_pid
+                fi
+            fi
+        done
+
+    fi
+}
+
+do_umountall() {
+    do_umount_all_fuse_client
+
+    if "${CEPH_BIN}"/ceph -s --connect-timeout 1 -c $conf_fn >/dev/null 2>&1; then
+        # Umount mounted filesystems from vstart cluster
+        do_umount_all_kclient
     fi
 }
 
@@ -172,10 +200,7 @@ while [ $# -ge 1 ]; do
 done
 
 if [ $stop_all -eq 1 ]; then
-    if "${CEPH_BIN}"/ceph -s --connect-timeout 1 -c $conf_fn >/dev/null 2>&1; then
-        # Umount mounted filesystems from vstart cluster
-        do_umountall
-    fi
+    do_umountall
 
     if "${CEPH_BIN}"/rbd device list -c $conf_fn >/dev/null 2>&1; then
         "${CEPH_BIN}"/rbd device list -c $conf_fn | tail -n +2 |
