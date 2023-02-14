@@ -660,6 +660,29 @@ int size_from_conf(
 }
 }  // anonymous namespace
 
+PgScrubber::scrubber_callback_cancel_token_t
+PgScrubber::schedule_callback_after(
+  ceph::timespan duration, scrubber_callback_t &&cb)
+{
+  std::lock_guard l(m_osds->sleep_lock);
+  return m_osds->sleep_timer.add_event_after(
+    duration,
+    new LambdaContext(
+      [this, pg=PGRef(m_pg), cb=std::move(cb), epoch=get_osdmap_epoch()] {
+	pg->lock();
+	if (check_interval(epoch)) {
+	  cb();
+	}
+	pg->unlock();
+      }));
+}
+
+void PgScrubber::cancel_callback(scrubber_callback_cancel_token_t token)
+{
+  std::lock_guard l(m_osds->sleep_lock);
+  m_osds->sleep_timer.cancel_event(token);
+}
+
 /*
  * The selected range is set directly into 'm_start' and 'm_end'
  * setting:
