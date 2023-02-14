@@ -498,6 +498,11 @@ class PgScrubber : public ScrubPgIF,
   // the I/F used by the state-machine (i.e. the implementation of
   // ScrubMachineListener)
 
+  scrubber_callback_cancel_token_t schedule_callback_after(
+    ceph::timespan duration, scrubber_callback_t &&cb);
+
+  void cancel_callback(scrubber_callback_cancel_token_t);
+
   [[nodiscard]] bool is_primary() const final
   {
     return m_pg->recovery_state.is_primary();

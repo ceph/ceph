@@ -72,6 +72,32 @@ using BlockedRangeWarning = std::unique_ptr<blocked_range_t>;
 }  // namespace Scrub
 
 struct ScrubMachineListener {
+  using scrubber_callback_t = std::function<void(void)>;
+  using scrubber_callback_cancel_token_t = Context*;
+
+  /**
+   * schedule_callback_after
+   *
+   * cb will be invoked after least duration time has elapsed.
+   * Interface implementation is responsible for maintaining and locking
+   * a PG reference.  cb will be silently discarded if the interval has changed
+   * between the call to schedule_callback_after and when the pg is locked.
+   *
+   * Returns an associated token to be used in cancel_callback below.
+   */
+  virtual scrubber_callback_cancel_token_t schedule_callback_after(
+    ceph::timespan duration, scrubber_callback_t &&cb) = 0;
+
+  /**
+   * cancel_callback
+   *
+   * Attempts to cancel the callback to whcih the passed token is associated.
+   * cancel_callback is best effort, the callback may still fire.
+   * cancel_callback guarrantees that exactly one of the two things will happen:
+   * - the callback is destroyed and will not be invoked
+   * - the callback will be invoked
+   */
+  virtual void cancel_callback(scrubber_callback_cancel_token_t) = 0;
 
   struct MsgAndEpoch {
     MessageRef m_msg;

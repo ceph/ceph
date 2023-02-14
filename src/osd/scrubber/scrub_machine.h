@@ -153,6 +153,126 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
   void assert_not_active() const;
   [[nodiscard]] bool is_reserving() const;
   [[nodiscard]] bool is_accepting_updates() const;
+
+private:
+  /**
+   * scheduled_event_state_t
+   *
+   * Heap allocated, ref-counted state shared between scheduled event callback
+   * and timer_event_token_t.  Ensures that callback and timer_event_token_t
+   * can be safetly destroyed in either order while still allowing for
+   * cancellation.
+   */
+  struct scheduled_event_state_t {
+    bool canceled = false;
+    ScrubMachineListener::scrubber_callback_cancel_token_t cb_token = nullptr;
+
+    operator bool() const {
+      return nullptr != cb_token;
+    }
+
+    ~scheduled_event_state_t() {
+      /* For the moment, this assert encodes an assumption that we always
+       * retain the token until the event either fires or is canceled.
+       * If a user needs/wants to relaxt that requirement, this assert can
+       * be removed */
+      assert(!cb_token);
+    }
+  };
+public:
+  /**
+   * timer_event_token_t
+   *
+   * Represents in-flight timer event.  Destroying the object or invoking
+   * release() directly will cancel the in-flight timer event preventing it
+   * from being delivered.  The intended usage is to invoke
+   * schedule_timer_event_after in the constructor of the state machine state
+   * intended to handle the event and assign the returned timer_event_token_t
+   * to a member of that state. That way, exiting the state will implicitely
+   * cancel the event.  See RangedBlocked::m_timeout_token and
+   * RangeBlockedAlarm for an example usage.
+   */
+  class timer_event_token_t {
+    friend ScrubMachine;
+
+    // invariant: (bool)parent == (bool)event_state
+    ScrubMachine *parent = nullptr;
+    std::shared_ptr<scheduled_event_state_t> event_state;
+
+    timer_event_token_t(
+      ScrubMachine *parent,
+      std::shared_ptr<scheduled_event_state_t> event_state)
+      :  parent(parent), event_state(event_state) {
+      assert(*this);
+    }
+
+    void swap(timer_event_token_t &rhs) {
+      std::swap(parent, rhs.parent);
+      std::swap(event_state, rhs.event_state);
+    }
+
+  public:
+    timer_event_token_t() = default;
+    timer_event_token_t(timer_event_token_t &&rhs) {
+      swap(rhs);
+      assert(static_cast<bool>(parent) == static_cast<bool>(event_state));
+    }
+
+    timer_event_token_t &operator=(timer_event_token_t &&rhs) {
+      swap(rhs);
+      assert(static_cast<bool>(parent) == static_cast<bool>(event_state));
+      return *this;
+    }
+
+    operator bool() const {
+      assert(static_cast<bool>(parent) == static_cast<bool>(event_state));
+      return parent;
+    }
+
+    void release() {
+      if (*this) {
+	if (*event_state) {
+	  parent->m_scrbr->cancel_callback(event_state->cb_token);
+	  event_state->canceled = true;
+	  event_state->cb_token = nullptr;
+	}
+	event_state.reset();
+	parent = nullptr;
+      }
+    }
+
+    ~timer_event_token_t() {
+      release();
+    }
+  };
+
+  /**
+   * schedule_timer_event_after
+   *
+   * Schedules event EventT{Args...} to be delivered duration in the future.
+   * The implementation implicitely drops the event on interval change.  The
+   * returned timer_event_token_t can be used to cancel the event prior to
+   * its delivery -- it should generally be embedded as a member in the state
+   * intended to handle the event.  See the comment on timer_event_token_t
+   * for further information.
+   */
+  template <typename EventT, typename... Args>
+  timer_event_token_t schedule_timer_event_after(
+    ceph::timespan duration, Args&&... args) {
+    auto token = std::make_shared<scheduled_event_state_t>();
+    token->cb_token = m_scrbr->schedule_callback_after(
+      duration,
+      [this, token, event=EventT(std::forward<Args>(args)...)] {
+	if (!token->canceled) {
+	  token->cb_token = nullptr;
+	  process_event(std::move(event));
+	} else {
+	  assert(nullptr == token->cb_token);
+	}
+      }
+    );
+    return timer_event_token_t{this, token};
+  }
 };
 
 /**
