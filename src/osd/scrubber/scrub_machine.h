@@ -77,6 +77,8 @@ MEV(Unblocked)
 
 MEV(InternalSchedScrub)
 
+MEV(RangeBlockedAlarm)
+
 MEV(SelectedChunkFree)
 
 MEV(ChunkIsBusy)
@@ -361,9 +363,14 @@ struct ActiveScrubbing
 
 struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing>, NamedSimply {
   explicit RangeBlocked(my_context ctx);
-  using reactions = mpl::list<sc::transition<Unblocked, PendingTimer>>;
+  using reactions = mpl::list<
+    sc::custom_reaction<RangeBlockedAlarm>,
+    sc::transition<Unblocked, PendingTimer>>;
 
-  Scrub::BlockedRangeWarning m_timeout;
+  ceph::coarse_real_clock::time_point entered_at =
+    ceph::coarse_real_clock::now();
+  ScrubMachine::timer_event_token_t m_timeout_token;
+  sc::result react(const RangeBlockedAlarm &);
 };
 
 struct PendingTimer : sc::state<PendingTimer, ActiveScrubbing>, NamedSimply {

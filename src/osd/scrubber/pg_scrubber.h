@@ -508,6 +508,18 @@ class PgScrubber : public ScrubPgIF,
 
   void cancel_callback(scrubber_callback_cancel_token_t);
 
+  ceph::timespan get_range_blocked_grace() {
+    int grace = get_pg_cct()->_conf->osd_blocked_scrub_grace_period;
+    if (grace == 0) {
+      return ceph::timespan{};
+    }
+    ceph::timespan grace_period{
+      m_debug_blockrange ?
+      std::chrono::seconds(4) :
+      std::chrono::seconds{grace}};
+    return grace_period;
+  }
+
   [[nodiscard]] bool is_primary() const final
   {
     return m_pg->recovery_state.is_primary();
@@ -520,7 +532,6 @@ class PgScrubber : public ScrubPgIF,
 
   void select_range_n_notify() final;
 
-  Scrub::BlockedRangeWarning acquire_blocked_alarm() final;
   void set_scrub_blocked(utime_t since) final;
   void clear_scrub_blocked() final;
 

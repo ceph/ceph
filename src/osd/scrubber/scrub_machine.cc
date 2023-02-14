@@ -21,9 +21,11 @@ using namespace std::chrono;
 using namespace std::chrono_literals;
 
 #define DECLARE_LOCALS                                           \
-  ScrubMachineListener* scrbr = context<ScrubMachine>().m_scrbr; \
+  auto& machine = context<ScrubMachine>();			 \
+  std::ignore = machine;					 \
+  ScrubMachineListener* scrbr = machine.m_scrbr;		 \
   std::ignore = scrbr;                                           \
-  auto pg_id = context<ScrubMachine>().m_pg_id;                  \
+  auto pg_id = machine.m_pg_id;					 \
   std::ignore = pg_id;
 
 NamedSimply::NamedSimply(ScrubMachineListener* scrubber, const char* name)
@@ -208,9 +210,42 @@ RangeBlocked::RangeBlocked(my_context ctx)
   dout(10) << "-- state -->> Act/RangeBlocked" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
-  // arrange to have a warning message issued if we are stuck in this
-  // state for longer than some reasonable number of minutes.
-  m_timeout = scrbr->acquire_blocked_alarm();
+  auto grace = scrbr->get_range_blocked_grace();
+  if (grace == ceph::timespan{}) {
+    // we will not be sending any alarms re the blocked object
+    dout(10)
+      << __func__
+      << ": blocked-alarm disabled ('osd_blocked_scrub_grace_period' set to 0)"
+      << dendl;
+  } else {
+    // Schedule an event to warn that the pg has been blocked for longer than
+    // the timeout, see RangeBlockedAlarm handler below
+    dout(20) << fmt::format(": timeout:{}",
+			    std::chrono::duration_cast<seconds>(grace))
+	     << dendl;
+
+    m_timeout_token = machine.schedule_timer_event_after<RangeBlockedAlarm>(
+      grace);
+  }
+}
+
+sc::result RangeBlocked::react(const RangeBlockedAlarm&)
+{
+  DECLARE_LOCALS;
+  char buf[50];
+  std::time_t now_c = ceph::coarse_real_clock::to_time_t(entered_at);
+  strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&now_c));
+  dout(10)
+    << "PgScrubber: " << scrbr->get_spgid()
+    << " blocked on an object for too long (since " << buf << ")" << dendl;
+  scrbr->get_clog()->warn()
+    << "osd." << scrbr->get_whoami()
+    << " PgScrubber: " << scrbr->get_spgid()
+    << " blocked on an object for too long (since " << buf
+    << ")";
+
+  scrbr->set_scrub_blocked(utime_t{now_c, 0});
+  return discard_event();
 }
 
 // ----------------------- PendingTimer -----------------------------------

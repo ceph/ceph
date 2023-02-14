@@ -878,27 +878,6 @@ bool PgScrubber::range_intersects_scrub(const hobject_t& start,
   return (start < m_max_end && end >= m_start);
 }
 
-Scrub::BlockedRangeWarning PgScrubber::acquire_blocked_alarm()
-{
-  int grace = get_pg_cct()->_conf->osd_blocked_scrub_grace_period;
-  if (grace == 0) {
-    // we will not be sending any alarms re the blocked object
-    dout(10)
-      << __func__
-      << ": blocked-alarm disabled ('osd_blocked_scrub_grace_period' set to 0)"
-      << dendl;
-    return nullptr;
-  }
-  ceph::timespan grace_period{m_debug_blockrange ? 4s : seconds{grace}};
-  dout(20) << fmt::format(": timeout:{}",
-			  std::chrono::duration_cast<seconds>(grace_period))
-	   << dendl;
-  return std::make_unique<blocked_range_t>(m_osds,
-					   grace_period,
-					   *this,
-					   m_pg_id);
-}
-
 /**
  *  if we are required to sleep:
  *	arrange a callback sometimes later.
@@ -2997,47 +2976,6 @@ ostream& operator<<(ostream& out, const MapsCollectionStatus& sf)
     out << " local ";
   }
   return out << " ] ";
-}
-
-// ///////////////////// blocked_range_t ///////////////////////////////
-
-blocked_range_t::blocked_range_t(OSDService* osds,
-				 ceph::timespan waittime,
-				 ScrubMachineListener& scrubber,
-				 spg_t pg_id)
-    : m_osds{osds}
-    , m_scrubber{scrubber}
-    , m_pgid{pg_id}
-{
-  auto now_is = std::chrono::system_clock::now();
-  m_callbk = new LambdaContext([this, now_is]([[maybe_unused]] int r) {
-    std::time_t now_c = std::chrono::system_clock::to_time_t(now_is);
-    char buf[50];
-    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&now_c));
-    lgeneric_subdout(g_ceph_context, osd, 10)
-      << "PgScrubber: " << m_pgid
-      << " blocked on an object for too long (since " << buf << ")" << dendl;
-    m_osds->clog->warn() << "osd." << m_osds->whoami
-			 << " PgScrubber: " << m_pgid
-			 << " blocked on an object for too long (since " << buf
-			 << ")";
-
-    m_warning_issued = true;
-    m_scrubber.set_scrub_blocked(utime_t{now_c,0});
-    return;
-  });
-
-  std::lock_guard l(m_osds->sleep_lock);
-  m_osds->sleep_timer.add_event_after(waittime, m_callbk);
-}
-
-blocked_range_t::~blocked_range_t()
-{
-  if (m_warning_issued) {
-    m_scrubber.clear_scrub_blocked();
-  }
-  std::lock_guard l(m_osds->sleep_lock);
-  m_osds->sleep_timer.cancel_event(m_callbk);
 }
 
 }  // namespace Scrub
