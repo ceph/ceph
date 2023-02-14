@@ -648,6 +648,9 @@ TransactionManagerRef make_transaction_manager(
   auto p_backend_type = primary_device->get_backend_type();
 
   if (p_backend_type == backend_type_t::SEGMENTED) {
+    auto dtype = primary_device->get_device_type();
+    ceph_assert(dtype != device_type_t::HDD &&
+		dtype != device_type_t::EPHEMERAL_COLD);
     sms->add_segment_manager(static_cast<SegmentManager*>(primary_device));
   } else {
     auto rbm = std::make_unique<BlockRBManager>(
