@@ -993,7 +993,11 @@ COMMAND("osd rm-pg-upmap-primary "
 COMMAND("osd primary-temp "
 	"name=pgid,type=CephPgid "
 	"name=id,type=CephOsdName",
-        "set primary_temp mapping pgid:<id>|-1 (developers only)",
+        "set primary_temp mapping pgid:<id> (developers only)",
+        "osd", "rw")
+COMMAND("osd rm-primary-temp "
+	"name=pgid,type=CephPgid ",
+        "clear primary_temp mapping pgid (developers only)",
         "osd", "rw")
 COMMAND("osd primary-affinity "
 	"name=id,type=CephOsdName "
