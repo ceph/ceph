@@ -1,3 +1,16 @@
+<ul class="nav nav-tabs"
+    *ngIf="tabs">
+  <li class="nav-item"
+      *ngFor="let tab of tabs; keyvalue">
+    <a class="nav-link"
+       [routerLink]="tab.url"
+       routerLinkActive="active"
+       ariaCurrentWhenActive="page"
+       [routerLinkActiveOptions]="{exact: true}"
+       i18n>{{tab.name}}</a>
+  </li>
+</ul>
+
 <ng-container *ngIf="meta">
   <cd-table
       [data]="data$ | async"
@@ -22,4 +35,14 @@
     <span class="badge badge-background-primary" >{{ instance.key }}: {{ instance.value }}</span>
     <ng-container *ngIf="!isLast">&nbsp;</ng-container>
   </span>
+</ng-template>
+
+<ng-template #dateTpl
+             let-value="value">
+  <span>{{ value | cdDate }}</span>
+</ng-template>
+
+<ng-template #durationTpl
+             let-value="value">
+  <span>{{ value | duration }}</span>
 </ng-template>
