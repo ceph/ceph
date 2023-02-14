@@ -761,7 +761,7 @@ to support multiple namespaces and their configuration on the same
 hardware.
 
 A realm contains the notion of periods. Each period represents the state
-of the zone group and zone configuration in time. Each time you make a
+of the zonegroup and zone configuration in time. Each time you make a
 change to a zonegroup or zone, update the period and commit it.
 
 By default, the Ceph Object Gateway does not create a realm
@@ -834,8 +834,6 @@ For example:
 
    radosgw-admin realm get --rgw-realm=movies [> filename.json]
 
-The CLI will echo a JSON object with the realm properties.
-
 ::
 
     {
@@ -845,13 +843,12 @@ The CLI will echo a JSON object with the realm properties.
         "epoch": 1
     }
 
-Use ``>`` and an output file name to output the JSON object to a file.
-
 Set a Realm
 ~~~~~~~~~~~
 
-To set a realm, execute ``realm set``, specify the realm name, and
-``--infile=`` with an input file name.
+To set a realm, run ``realm set``, specify the realm name, and use the
+``--infile=`` option (make sure that  the ``--infile`` option has an input file
+name as an argument):
 
 .. prompt:: bash #
 
@@ -884,9 +881,9 @@ To list realm periods, execute ``realm list-periods``.
 Pull a Realm
 ~~~~~~~~~~~~
 
-To pull a realm from the node containing the master zone group and
-master zone to a node containing a secondary zone group or zone, execute
-``realm pull`` on the node that will receive the realm configuration.
+To pull a realm from the node that contains both the master zonegroup and
+master zone to a node that contains a secondary zonegroup or zone, run ``realm
+pull`` on the node that will receive the realm configuration:
 
 .. prompt:: bash #
 
@@ -895,40 +892,48 @@ master zone to a node containing a secondary zone group or zone, execute
 Rename a Realm
 ~~~~~~~~~~~~~~
 
-A realm is not part of the period. Consequently, renaming the realm is
-only applied locally, and will not get pulled with ``realm pull``. When
-renaming a realm with multiple zones, run the command on each zone. To
-rename a realm, execute the following:
+A realm is not part of the period. Consequently, any renaming of the realm is
+applied only locally, and will therefore not get pulled when you run ``realm
+pull``. If you are renaming a realm that contains multiple zones, run the
+``rename`` command on each zone. 
+
+To rename a realm, run the following:
 
 .. prompt:: bash #
 
    radosgw-admin realm rename --rgw-realm=<current-name> --realm-new-name=<new-realm-name>
 
-.. note:: DO NOT use ``realm set`` to change the ``name`` parameter. That
-          changes the internal name only. Specifying ``--rgw-realm`` would
-          still use the old realm name.
+.. note:: DO NOT use ``realm set`` to change the ``name`` parameter. Doing so
+   changes the internal name only. If you use ``realm set`` to change the
+   ``name`` parameter, then ``--rgw-realm`` still expects the realm's old name.
 
 Zone Groups
 -----------
 
-The Ceph Object Gateway supports multi-site deployments and a global
-namespace by using the notion of zone groups. Formerly called a region
-in Infernalis, a zone group defines the geographic location of one or more Ceph
-Object Gateway instances within one or more zones.
+Zonegroups make it possible for the Ceph Object Gateway to support multi-site
+deployments and a global namespace. Zonegroups were formerly called "regions"
+(in releases prior to and including Infernalis). 
 
-Configuring zone groups differs from typical configuration procedures,
-because not all of the settings end up in a Ceph configuration file. You
-can list zone groups, get a zone group configuration, and set a zone
-group configuration.
+A zonegroup defines the geographic location of one or more Ceph Object Gateway
+instances within one or more zones.
 
-Create a Zone Group
-~~~~~~~~~~~~~~~~~~~
+The configuration of zonegroups differs from typical configuration procedures,
+because not all of the zonegroup configuration settings are stored to a
+configuration file. 
 
-Creating a zone group consists of specifying the zone group name.
-Creating a zone assumes it will live in the default realm unless
-``--rgw-realm=<realm-name>`` is specified. If the zonegroup is the
-default zonegroup, specify the ``--default`` flag. If the zonegroup is
-the master zonegroup, specify the ``--master`` flag. For example:
+You can list zonegroups, get a zonegroup configuration, and set a zonegroup
+configuration.
+
+Creating a Zonegroup
+~~~~~~~~~~~~~~~~~~~~
+
+Creating a zonegroup consists of specifying the zonegroup name. Newly created
+zones reside in the default realm unless a different realm is specified by
+using the option ``--rgw-realm=<realm-name>``. 
+
+If the zonegroup is the default zonegroup, specify the ``--default`` flag. If
+the zonegroup is the master zonegroup, specify the ``--master`` flag. For
+example:
 
 .. prompt:: bash #
 
@@ -938,100 +943,102 @@ the master zonegroup, specify the ``--master`` flag. For example:
 .. note:: Use ``zonegroup modify --rgw-zonegroup=<zonegroup-name>`` to modify
           an existing zone group’s settings.
 
-Make a Zone Group the Default
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Making a Zonegroup the Default
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-One zonegroup in the list of zonegroups should be the default zonegroup.
-There may be only one default zonegroup. If there is only one zonegroup
-and it wasn’t specified as the default zonegroup when it was created,
-make it the default zonegroup. Alternatively, to change which zonegroup
-is the default, execute:
+One zonegroup in the list of zonegroups must be the default zonegroup.  There
+can be only one default zonegroup. In the case that there is only one zonegroup
+which was not designated the default zonegroup when it was created, use the
+folloiwng command to make it the default zonegroup. Commands of this form can
+be used to change which zonegroup is the default. 
 
-.. prompt:: bash #
+#. Designate a zonegroup as the default zonegroup:
 
-   radosgw-admin zonegroup default --rgw-zonegroup=comedy
+   .. prompt:: bash #
 
-.. note:: When the zonegroup is default, the command line assumes
-          ``--rgw-zonegroup=<zonegroup-name>`` as an argument.
+      radosgw-admin zonegroup default --rgw-zonegroup=comedy
 
-Then, update the period:
+   .. note:: When the zonegroup is default, the command line assumes that the name of the zonegroup will be the argument of the ``--rgw-zonegroup=<zonegroup-name>`` option. (In this example, ``<zonegroup-name>`` has been retained for the sake of consistency and legibility.)
 
-.. prompt:: bash #
+#. Update the period:
 
-   radosgw-admin period update --commit
+   .. prompt:: bash #
 
-Add a Zone to a Zone Group
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+      radosgw-admin period update --commit
 
-To add a zone to a zonegroup, execute the following:
+Adding a Zone to a Zonegroup
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. prompt:: bash #
+This procedure explains how to add a zone to a zonegroup.
 
-   radosgw-admin zonegroup add --rgw-zonegroup=<name> --rgw-zone=<name>
+#. Run the following command to add a zone to a zonegroup: 
 
-Then, update the period:
+   .. prompt:: bash #
 
-.. prompt:: bash #
+      radosgw-admin zonegroup add --rgw-zonegroup=<name> --rgw-zone=<name>
 
-   radosgw-admin period update --commit
+#. Update the period:
 
-Remove a Zone from a Zone Group
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   .. prompt:: bash #
 
-To remove a zone from a zonegroup, execute the following:
+      radosgw-admin period update --commit
 
-.. prompt:: bash #
+Removing a Zone from a Zonegroup
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-   radosgw-admin zonegroup remove --rgw-zonegroup=<name> --rgw-zone=<name>
+#. Run this command to remove a zone from a zonegroup:
 
-Then, update the period:
+   .. prompt:: bash #
 
-.. prompt:: bash #
+      radosgw-admin zonegroup remove --rgw-zonegroup=<name> --rgw-zone=<name>
 
-   radosgw-admin period update --commit
+#. Update the period:
 
-Rename a Zone Group
-~~~~~~~~~~~~~~~~~~~
+   .. prompt:: bash #
 
-To rename a zonegroup, execute the following:
+      radosgw-admin period update --commit
 
+Renaming a Zonegroup
+~~~~~~~~~~~~~~~~~~~~
 
-.. prompt:: bash #
+#. Run this command to rename the zonegroup:
 
-   radosgw-admin zonegroup rename --rgw-zonegroup=<name> --zonegroup-new-name=<name>
+   .. prompt:: bash #
 
-Then, update the period:
+      radosgw-admin zonegroup rename --rgw-zonegroup=<name> --zonegroup-new-name=<name>
 
-.. prompt:: bash #
+#. Update the period:
+
+   .. prompt:: bash #
    
-   radosgw-admin period update --commit
+      radosgw-admin period update --commit
 
-Delete a Zone Group
-~~~~~~~~~~~~~~~~~~~
+Deleting a Zonegroup
+~~~~~~~~~~~~~~~~~~~~
 
-To delete a zonegroup, execute the following:
+#. To delete a zonegroup, execute the following:
 
-.. prompt:: bash #
+   .. prompt:: bash #
    
-   radosgw-admin zonegroup delete --rgw-zonegroup=<name>
+      radosgw-admin zonegroup delete --rgw-zonegroup=<name>
 
-Then, update the period:
+#. Update the period:
 
-.. prompt:: bash #
+   .. prompt:: bash #
    
-   radosgw-admin period update --commit
+      radosgw-admin period update --commit
 
-List Zone Groups
-~~~~~~~~~~~~~~~~
+Listing Zonegroups
+~~~~~~~~~~~~~~~~~~
 
-A Ceph cluster contains a list of zone groups. To list the zone groups,
-execute:
+A Ceph cluster contains a list of zonegroup. To list the zonegroups, run
+this command:
 
 .. prompt:: bash #
    
    radosgw-admin zonegroup list
 
-The ``radosgw-admin`` returns a JSON formatted list of zone groups.
+The ``radosgw-admin`` returns a JSON formatted list of zonegroups.
 
 ::
 
@@ -1042,28 +1049,28 @@ The ``radosgw-admin`` returns a JSON formatted list of zone groups.
         ]
     }
 
-Get a Zone Group Map
-~~~~~~~~~~~~~~~~~~~~
+Getting a Zonegroup Map
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-To list the details of each zone group, execute:
+To list the details of each zonegroup, run this command:
 
 .. prompt:: bash #
    
    radosgw-admin zonegroup-map get
 
 .. note:: If you receive a ``failed to read zonegroup map`` error, run
-          ``radosgw-admin zonegroup-map update`` as ``root`` first.
+   ``radosgw-admin zonegroup-map update`` as ``root`` first.
 
-Get a Zone Group
-~~~~~~~~~~~~~~~~
+Getting a Zonegroup
+~~~~~~~~~~~~~~~~~~~~
 
-To view the configuration of a zone group, execute:
+To view the configuration of a zonegroup, run this command:
 
 .. prompt:: bash #
    
    dosgw-admin zonegroup get [--rgw-zonegroup=<zonegroup>]
 
-The zone group configuration looks like this:
+The zonegroup configuration looks like this:
 
 ::
 
@@ -1112,52 +1119,51 @@ The zone group configuration looks like this:
         "realm_id": "ae031368-8715-4e27-9a99-0c9468852cfe"
     }
 
-Set a Zone Group
-~~~~~~~~~~~~~~~~
+Setting a Zonegroup
+~~~~~~~~~~~~~~~~~~~~
 
-Defining a zone group consists of creating a JSON object, specifying at
-least the required settings:
+The process of defining a zonegroup consists of creating a JSON object and, at
+a minimum, specifying the required settings:
 
-1. ``name``: The name of the zone group. Required.
+1. ``name``: The name of the zonegroup. Required.
 
-2. ``api_name``: The API name for the zone group. Optional.
+2. ``api_name``: The API name for the zonegroup. Optional.
 
-3. ``is_master``: Determines if the zone group is the master zone group.
-   Required. **note:** You can only have one master zone group.
+3. ``is_master``: Determines whether the zonegroup is the master zonegroup.
+   Required. **note:** You can only have one master zonegroup.
 
-4. ``endpoints``: A list of all the endpoints in the zone group. For
+4. ``endpoints``: A list of all the endpoints in the zonegroup. For
    example, you may use multiple domain names to refer to the same zone
    group. Remember to escape the forward slashes (``\/``). You may also
    specify a port (``fqdn:port``) for each endpoint. Optional.
 
-5. ``hostnames``: A list of all the hostnames in the zone group. For
-   example, you may use multiple domain names to refer to the same zone
-   group. Optional. The ``rgw dns name`` setting will automatically be
-   included in this list. You should restart the gateway daemon(s) after
-   changing this setting.
+5. ``hostnames``: A list of all the hostnames in the zonegroup. For example,
+   you may use multiple domain names to refer to the same zone group. Optional.
+   The ``rgw dns name`` setting will be included in this list automatically.
+   Restart the gateway daemon(s) after changing this setting.
 
-6. ``master_zone``: The master zone for the zone group. Optional. Uses
+6. ``master_zone``: The master zone for the zonegroup. Optional. Uses
    the default zone if not specified. **note:** You can only have one
-   master zone per zone group.
+   master zone per zonegroup.
 
-7. ``zones``: A list of all zones within the zone group. Each zone has a
-   name (required), a list of endpoints (optional), and whether or not
-   the gateway will log metadata and data operations (false by default).
+7. ``zones``: A list of all zones within the zonegroup. Each zone has a name
+   (required), a list of endpoints (optional), and a setting that determines
+   whether the gateway will log metadata and data operations (false by
+   default).
 
 8. ``placement_targets``: A list of placement targets (optional). Each
    placement target contains a name (required) for the placement target
    and a list of tags (optional) so that only users with the tag can use
-   the placement target (i.e., the user’s ``placement_tags`` field in
+   the placement target (that is, the user’s ``placement_tags`` field in
    the user info).
 
-9. ``default_placement``: The default placement target for the object
-   index and object data. Set to ``default-placement`` by default. You
-   may also set a per-user default placement in the user info for each
-   user.
+9. ``default_placement``: The default placement target for the object index and
+   object data. Set to ``default-placement`` by default. It is  also possible
+   to set a per-user default placement in the user info for each user.
 
-To set a zone group, create a JSON object consisting of the required
-fields, save the object to a file (e.g., ``zonegroup.json``); then,
-execute the following command:
+To set a zonegroup, create a JSON object that contains the required fields,
+save the object to a file (e.g., ``zonegroup.json``), and run the following
+command:
 
 .. prompt:: bash #
    
@@ -1165,11 +1171,10 @@ execute the following command:
 
 Where ``zonegroup.json`` is the JSON file you created.
 
-.. important:: The ``default`` zone group ``is_master`` setting is ``true`` by
-               default. If you create a new zone group and want to make it the
-               master zone group, you must either set the ``default`` zone group
-               ``is_master`` setting to ``false``, or delete the ``default`` zone
-               group.
+.. important:: The ``default`` zonegroup ``is_master`` setting is ``true`` by
+   default. If you create a new zonegroup and want to make it the master
+   zonegroup, you must either set the ``default`` zonegroup ``is_master``
+   setting to ``false``, or delete the ``default`` zonegroup.
 
 Finally, update the period:
 
@@ -1177,20 +1182,19 @@ Finally, update the period:
    
    radosgw-admin period update --commit
 
-Set a Zone Group Map
-~~~~~~~~~~~~~~~~~~~~
+Setting a Zonegroup Map
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-Setting a zone group map consists of creating a JSON object consisting
-of one or more zone groups, and setting the ``master_zonegroup`` for the
-cluster. Each zone group in the zone group map consists of a key/value
-pair, where the ``key`` setting is equivalent to the ``name`` setting
-for an individual zone group configuration, and the ``val`` is a JSON
-object consisting of an individual zone group configuration.
+The process of setting a zonegroup map comprises (1) creating a JSON object
+that consists of one or more zonegroups, and (2) setting the
+``master_zonegroup`` for the cluster. Each zonegroup in the zonegroup map
+consists of a key/value pair where the ``key`` setting is equivalent to the
+``name`` setting for an individual zonegroup configuration and the ``val`` is
+a JSON object consisting of an individual zonegroup configuration.
 
-You may only have one zone group with ``is_master`` equal to ``true``,
-and it must be specified as the ``master_zonegroup`` at the end of the
-zone group map. The following JSON object is an example of a default
-zone group map.
+You may only have one zonegroup with ``is_master`` equal to ``true``, and it
+must be specified as the ``master_zonegroup`` at the end of the zonegroup map.
+The following JSON object is an example of a default zonegroup map:
 
 ::
 
@@ -1257,19 +1261,20 @@ zone group map.
         }
     }
 
-To set a zone group map, execute the following:
+#. To set a zonegroup map, run the following command:
 
-.. prompt:: bash #
+   .. prompt:: bash #
    
-   radosgw-admin zonegroup-map set --infile zonegroupmap.json
+      radosgw-admin zonegroup-map set --infile zonegroupmap.json
 
-Where ``zonegroupmap.json`` is the JSON file you created. Ensure that
-you have zones created for the ones specified in the zone group map.
-Finally, update the period.
+   In this command, ``zonegroupmap.json`` is the JSON file you created. Ensure
+   that you have zones created for the ones specified in the zonegroup map.
 
-.. prompt:: bash #
+#. Update the period:
+
+   .. prompt:: bash #
    
-   radosgw-admin period update --commit
+      radosgw-admin period update --commit
 
 Zones
 -----
@@ -1282,8 +1287,8 @@ procedures, because not all of the settings end up in a Ceph configuration
 file. Zones can be listed. You can "get" a zone configuration and "set" a zone
 configuration.
 
-Create a Zone
-~~~~~~~~~~~~~
+Creating a Zone
+~~~~~~~~~~~~~~~
 
 To create a zone, specify a zone name. If you are creating a master zone,
 specify the ``--master`` flag. Only one zone in a zone group may be a master
@@ -1304,8 +1309,8 @@ After you have created the zone, update the period:
    
    radosgw-admin period update --commit
 
-Delete a Zone
-~~~~~~~~~~~~~
+Deleting a Zone
+~~~~~~~~~~~~~~~
 
 To delete a zone, first remove it from the zonegroup:
 
@@ -1357,8 +1362,8 @@ with the deleted zone’s name.
    ceph osd pool rm <del-zone>.rgw.buckets.non-ec <del-zone>.rgw.buckets.non-ec --yes-i-really-really-mean-it
    ceph osd pool rm <del-zone>.rgw.buckets.data <del-zone>.rgw.buckets.data --yes-i-really-really-mean-it
 
-Modify a Zone
-~~~~~~~~~~~~~
+Modifying a Zone
+~~~~~~~~~~~~~~~~
 
 To modify a zone, specify the zone name and the parameters you wish to
 modify.
@@ -1381,8 +1386,8 @@ Then, update the period:
    
    radosgw-admin period update --commit
 
-List Zones
-~~~~~~~~~~
+Listing Zones
+~~~~~~~~~~~~~
 
 As ``root``, to list the zones in a cluster, execute:
 
@@ -1390,8 +1395,8 @@ As ``root``, to list the zones in a cluster, execute:
    
    radosgw-admin zone list
 
-Get a Zone
-~~~~~~~~~~
+Getting a Zone
+~~~~~~~~~~~~~~
 
 As ``root``, to get the configuration of a zone, execute:
 
@@ -1422,8 +1427,8 @@ The ``default`` zone looks like this:
         ]
       }
 
-Set a Zone
-~~~~~~~~~~
+Setting a Zone
+~~~~~~~~~~~~~~
 
 Configuring a zone involves specifying a series of Ceph Object Gateway
 pools. For consistency, we recommend using a pool prefix that is the
@@ -1447,8 +1452,8 @@ Then, as ``root``, update the period:
    
    radosgw-admin period update --commit
 
-Rename a Zone
-~~~~~~~~~~~~~
+Renaming a Zone
+~~~~~~~~~~~~~~~
 
 To rename a zone, specify the zone name and the new zone name.
 
