@@ -498,6 +498,11 @@ class PgScrubber : public ScrubPgIF,
   // the I/F used by the state-machine (i.e. the implementation of
   // ScrubMachineListener)
 
+  CephContext* get_cct() const final { return m_pg->cct; }
+  LogChannelRef &get_clog() const final;
+  int get_whoami() const final;
+  spg_t get_spgid() const final { return m_pg->get_pgid(); }
+
   scrubber_callback_cancel_token_t schedule_callback_after(
     ceph::timespan duration, scrubber_callback_t &&cb);
 

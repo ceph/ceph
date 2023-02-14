@@ -72,6 +72,11 @@ using BlockedRangeWarning = std::unique_ptr<blocked_range_t>;
 }  // namespace Scrub
 
 struct ScrubMachineListener {
+  virtual CephContext *get_cct() const = 0;
+  virtual LogChannelRef &get_clog() const = 0;
+  virtual int get_whoami() const = 0;
+  virtual spg_t get_spgid() const = 0;
+
   using scrubber_callback_t = std::function<void(void)>;
   using scrubber_callback_cancel_token_t = Context*;
 
