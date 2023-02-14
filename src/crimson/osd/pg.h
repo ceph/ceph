@@ -617,6 +617,7 @@ private:
   eversion_t projected_last_update;
 
 public:
+  ObjectContextRegistry obc_registry;
   ObjectContextLoader obc_loader;
 
   // PeeringListener
