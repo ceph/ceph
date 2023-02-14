@@ -1,4 +1,5 @@
 #include "crimson/osd/object_context_loader.h"
+#include "osd/osd_types_fmt.h"
 
 SET_SUBSYS(osd);
 
@@ -66,7 +67,7 @@ using crimson::common::local_conf;
         crimson::ct_error::enoent::make()
       };
     }
-    auto [clone, existed] = shard_services.get_cached_obc(*coid);
+    auto [clone, existed] = obc_registry.get_cached_obc(*coid);
     return clone->template with_lock<State, IOInterruptCondition>(
       [existed=existed, clone=std::move(clone),
        func=std::move(func), head=std::move(head), this]()
@@ -87,7 +88,7 @@ using crimson::common::local_conf;
   {
     if (oid.is_head()) {
       auto [obc, existed] =
-        shard_services.get_cached_obc(std::move(oid));
+        obc_registry.get_cached_obc(std::move(oid));
       return with_head_obc<State>(std::move(obc),
                                   existed,
                                   std::move(func));
