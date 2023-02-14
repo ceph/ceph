@@ -19,6 +19,7 @@
 #include <bit>
 #include <optional>
 #include <random>
+#include <fmt/format.h>
 
 #include <boost/algorithm/string.hpp>
 
@@ -3754,7 +3755,61 @@ void OSDMap::dump_osd(int id, Formatter *f) const
   f->close_section();
 }
 
-void OSDMap::dump(Formatter *f) const
+void OSDMap::dump_pool(CephContext *cct,
+		       int64_t pid,
+                       const pg_pool_t &pdata,
+		       ceph::Formatter *f) const
+{
+  std::string name("<unknown>");
+  const auto &pni = pool_name.find(pid);
+  if (pni != pool_name.end())
+    name = pni->second;
+  f->open_object_section("pool");
+  f->dump_int("pool", pid);
+  f->dump_string("pool_name", name);
+  pdata.dump(f);
+  dump_read_balance_score(cct, pid, pdata, f);
+  f->close_section(); // pool
+}
+
+void OSDMap::dump_read_balance_score(CephContext *cct,
+				     int64_t pid,
+				     const pg_pool_t &pdata,
+				     ceph::Formatter *f) const
+{
+  if (pdata.is_replicated()) {
+    // Add rb section with values for score, optimal score, raw score
+    //       // and primary_affinity average
+    OSDMap::read_balance_info_t rb_info;
+    auto rc = calc_read_balance_score(cct, pid, &rb_info);
+    if (rc >= 0) {
+      f->open_object_section("read_balance");
+      f->dump_float("score_acting", rb_info.acting_adj_score);
+      f->dump_float("score_stable", rb_info.adjusted_score);
+      f->dump_float("optimal_score", rb_info.optimal_score);
+      f->dump_float("raw_score_acting", rb_info.acting_raw_score);
+      f->dump_float("raw_score_stable", rb_info.raw_score);
+      f->dump_float("primary_affinity_weighted", rb_info.pa_weighted);
+      f->dump_float("average_primary_affinity", rb_info.pa_avg);
+      f->dump_float("average_primary_affinity_weighted", rb_info.pa_weighted_avg);
+      if (rb_info.err_msg.length() > 0) {
+        f->dump_string("error_message", rb_info.err_msg);
+      }
+      f->close_section(); // read_balance
+    }
+    else {
+      if (rb_info.err_msg.length() > 0) {
+        f->open_object_section("read_balance");
+        f->dump_string("error_message", rb_info.err_msg);
+        f->dump_float("score_acting", rb_info.acting_adj_score);
+        f->dump_float("score_stable", rb_info.adjusted_score);
+        f->close_section(); // read_balance
+      }
+    }
+  }
+}
+
+void OSDMap::dump(Formatter *f, CephContext *cct) const
 {
   f->dump_int("epoch", get_epoch());
   f->dump_stream("fsid") << get_fsid();
@@ -3786,16 +3841,8 @@ void OSDMap::dump(Formatter *f) const
 		 to_string(require_osd_release));
 
   f->open_array_section("pools");
-  for (const auto &pool : pools) {
-    std::string name("<unknown>");
-    const auto &pni = pool_name.find(pool.first);
-    if (pni != pool_name.end())
-      name = pni->second;
-    f->open_object_section("pool");
-    f->dump_int("pool", pool.first);
-    f->dump_string("pool_name", name);
-    pool.second.dump(f);
-    f->close_section();
+  for (const auto &[pid, pdata] : pools) {
+    dump_pool(cct, pid, pdata, f);
   }
   f->close_section();
 
@@ -4028,23 +4075,39 @@ string OSDMap::get_flag_string() const
   return get_flag_string(flags);
 }
 
-void OSDMap::print_pools(ostream& out) const
+void OSDMap::print_pools(CephContext *cct, ostream& out) const
 {
-  for (const auto &pool : pools) {
+  for (const auto &[pid, pdata] : pools) {
     std::string name("<unknown>");
-    const auto &pni = pool_name.find(pool.first);
+    const auto &pni = pool_name.find(pid);
     if (pni != pool_name.end())
       name = pni->second;
-    out << "pool " << pool.first
-	<< " '" << name
-	<< "' " << pool.second << "\n";
+    char rb_score_str[32] = "";
+    int rc = 0;
+    read_balance_info_t rb_info;
+    if (pdata.is_replicated()) {
+      rc = calc_read_balance_score(cct, pid, &rb_info);
+      if (rc >= 0)
+        snprintf (rb_score_str, sizeof(rb_score_str),
+		  " read_balance_score %.2f", rb_info.acting_adj_score);
+    }
 
-    for (const auto &snap : pool.second.snaps)
+    out << "pool " << pid
+	<< " '" << name
+	<< "' " << pdata
+	<< rb_score_str << "\n";
+    if (rb_info.err_msg.length() > 0) {
+      out << (rc < 0 ? " ERROR: " : " Warning: ") << rb_info.err_msg << "\n";
+    }
+
+  //TODO - print error messages here.
+
+    for (const auto &snap : pdata.snaps)
       out << "\tsnap " << snap.second.snapid << " '" << snap.second.name << "' " << snap.second.stamp << "\n";
 
-    if (!pool.second.removed_snaps.empty())
-      out << "\tremoved_snaps " << pool.second.removed_snaps << "\n";
-    auto p = removed_snaps_queue.find(pool.first);
+    if (!pdata.removed_snaps.empty())
+      out << "\tremoved_snaps " << pdata.removed_snaps << "\n";
+    auto p = removed_snaps_queue.find(pid);
     if (p != removed_snaps_queue.end()) {
       out << "\tremoved_snaps_queue " << p->second << "\n";
     }
@@ -4085,7 +4148,7 @@ void OSDMap::print_osd(int id, ostream& out) const
   out << "\n";
 }
 
-void OSDMap::print(ostream& out) const
+void OSDMap::print(CephContext *cct, ostream& out) const
 {
   out << "epoch " << get_epoch() << "\n"
       << "fsid " << get_fsid() << "\n"
@@ -4118,7 +4181,7 @@ void OSDMap::print(ostream& out) const
     out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
   out << "\n";
 
-  print_pools(out);
+  print_pools(cct, out);
 
   out << "max_osd " << get_max_osd() << "\n";
   print_osds(out);
@@ -4692,13 +4755,13 @@ int OSDMap::summarize_mapping_stats(
 	  if (osd >= 0 && osd < get_max_osd())
 	    ++new_by_osd[osd];
 	}
-	if (pi->type == pg_pool_t::TYPE_ERASURE) {
+	if (pi->is_erasure()) {
 	  for (unsigned i=0; i<up.size(); ++i) {
 	    if (up[i] != up2[i]) {
 	      ++moved_pg;
 	    }
 	  }
-	} else if (pi->type == pg_pool_t::TYPE_REPLICATED) {
+	} else if (pi->is_replicated()) {
 	  for (int osd : up) {
 	    if (std::find(up2.begin(), up2.end(), osd) == up2.end()) {
 	      ++moved_pg;
@@ -5182,20 +5245,92 @@ int OSDMap::calc_pg_upmaps(
   return num_changed;
 }
 
+map<uint64_t,set<pg_t>> OSDMap::get_pgs_by_osd(
+    CephContext *cct,
+    int64_t pid,
+    map<uint64_t, set<pg_t>> *p_primaries_by_osd,
+    map<uint64_t, set<pg_t>> *p_acting_primaries_by_osd) const
+{
+  // Set up the OSDMap
+  OSDMap tmp_osd_map;
+  tmp_osd_map.deepish_copy_from(*this);
+
+  // Get the pool from the provided pool id
+  const pg_pool_t* pool = get_pg_pool(pid);
+
+  // build array of pgs from the pool
+  map<uint64_t,set<pg_t>> pgs_by_osd;
+  for (unsigned ps = 0; ps < pool->get_pg_num(); ++ps) {
+    pg_t pg(ps, pid);
+    vector<int> up;
+    int primary;
+    int acting_prim;
+    tmp_osd_map.pg_to_up_acting_osds(pg, &up, &primary, nullptr, &acting_prim);
+    if (cct != nullptr)
+      ldout(cct, 20) << __func__ << " " << pg
+                     << " up " << up
+		     << " primary " << primary
+		     << " acting_primary " << acting_prim
+		     << dendl;
+
+    if (!up.empty()) {  // up can be empty is test generated files
+			// in this case, we return empty result
+      for (auto osd : up) {
+        if (osd != CRUSH_ITEM_NONE)
+          pgs_by_osd[osd].insert(pg);
+      }
+      if (p_primaries_by_osd != nullptr) {
+        if (primary != CRUSH_ITEM_NONE)
+	  (*p_primaries_by_osd)[primary].insert(pg);
+      }
+      if (p_acting_primaries_by_osd != nullptr) {
+        if (acting_prim != CRUSH_ITEM_NONE)
+	  (*p_acting_primaries_by_osd)[acting_prim].insert(pg);
+      }
+    }
+  }
+  return pgs_by_osd;
+}
+
+float OSDMap::get_osds_weight(
+  CephContext *cct,
+  const OSDMap& tmp_osd_map,
+  int64_t pid,
+  map<int,float>& osds_weight) const
+{
+  map<int,float> pmap;
+  ceph_assert(pools.count(pid));
+  int ruleno = pools.at(pid).get_crush_rule();
+  tmp_osd_map.crush->get_rule_weight_osd_map(ruleno, &pmap);
+    ldout(cct,20) << __func__ << " pool " << pid
+                  << " ruleno " << ruleno
+                  << " weight-map " << pmap
+                  << dendl;
+  float osds_weight_total = 0;
+  for (auto [oid, oweight] : pmap) {
+    auto adjusted_weight = tmp_osd_map.get_weightf(oid) * oweight;
+    if (adjusted_weight != 0) {
+      osds_weight[oid] += adjusted_weight;
+      osds_weight_total += adjusted_weight;
+    }
+  }
+  return osds_weight_total;
+}
+
 float OSDMap::build_pool_pgs_info (
   CephContext *cct,
   const std::set<int64_t>& only_pools,        ///< [optional] restrict to pool
   const OSDMap& tmp_osd_map,
   int& total_pgs,
   map<int,set<pg_t>>& pgs_by_osd,
-  map<int,float>& osd_weight) 
+  map<int,float>& osds_weight)
 {
   //
   // This function builds some data structures that are used by calc_pg_upmaps.
   // Specifically it builds pgs_by_osd and osd_weight maps, updates total_pgs 
   // and returns the osd_weight_total
   //
-  float osd_weight_total = 0.0;
+  float osds_weight_total = 0.0;
   for (auto& [pid, pdata] : pools) {
     if (!only_pools.empty() && !only_pools.count(pid))
       continue;
@@ -5211,23 +5346,9 @@ float OSDMap::build_pool_pgs_info (
     }
     total_pgs += pdata.get_size() * pdata.get_pg_num();
 
-    map<int,float> pmap;
-    int ruleno = pdata.get_crush_rule();
-    tmp_osd_map.crush->get_rule_weight_osd_map(ruleno, &pmap);
-    ldout(cct,20) << __func__ << " pool " << pid
-                  << " ruleno " << ruleno
-                  << " weight-map " << pmap
-                  << dendl;
-    for (auto [oid, oweight] : pmap) {
-      auto adjusted_weight = tmp_osd_map.get_weightf(oid) * oweight;
-      if (adjusted_weight == 0) {
-        continue;
-      }
-      osd_weight[oid] += adjusted_weight;
-      osd_weight_total += adjusted_weight;
-    }
+    osds_weight_total = get_osds_weight(cct, tmp_osd_map, pid, osds_weight);
   }
-  for (auto& [oid, oweight] : osd_weight) {
+  for (auto& [oid, oweight] : osds_weight) {
     int pgs = 0;
     auto p = pgs_by_osd.find(oid);
     if (p != pgs_by_osd.end())
@@ -5237,7 +5358,7 @@ float OSDMap::build_pool_pgs_info (
     ldout(cct, 20) << " osd." << oid << " weight " << oweight
 		   << " pgs " << pgs << dendl;
   }
-  return osd_weight_total;
+  return osds_weight_total;
 
 } // return total weight of all OSDs
 
@@ -5580,6 +5701,289 @@ OSDMap::candidates_t OSDMap::build_candidates(
     std::shuffle(candidates.begin(), candidates.end(), get_random_engine(cct, p_seed));
   }
   return candidates;
+}
+
+// return -1 if all PGs are OK, else the first PG which includes only zero PA OSDs
+int64_t OSDMap::has_zero_pa_pgs(CephContext *cct, int64_t pool_id) const
+{
+  const pg_pool_t* pool = get_pg_pool(pool_id);
+  for (unsigned ps = 0; ps < pool->get_pg_num(); ++ps) {
+    pg_t pg(ps, pool_id);
+    vector<int> acting;
+    pg_to_up_acting_osds(pg, nullptr, nullptr, &acting, nullptr);
+    if (cct != nullptr) {
+      ldout(cct, 30) << __func__ << " " << pg << " acting " << acting << dendl;
+    }
+    bool pg_zero_pa = true;
+    for (auto osd : acting) {
+      if (get_primary_affinityf(osd) != 0) {
+        pg_zero_pa = false;
+        break;
+      }
+    }
+    if (pg_zero_pa) {
+      if (cct != nullptr) {
+        ldout(cct, 20) << __func__ << " " << pg << " - maps only to OSDs with primiary affinity 0" << dendl;
+      }
+      return (int64_t)ps;
+    }
+  }
+  return -1;
+}
+
+void OSDMap::zero_rbi(read_balance_info_t &rbi) const {
+  rbi.pa_avg = 0.;
+  rbi.pa_weighted = 0.;
+  rbi.pa_weighted_avg = 0.;
+  rbi.raw_score = 0.;
+  rbi.optimal_score = 0.;
+  rbi.adjusted_score = 0.;
+  rbi.acting_raw_score = 0.;
+  rbi.acting_adj_score = 0.;
+  rbi.err_msg = "";
+}
+
+int OSDMap::set_rbi(
+    CephContext *cct,
+    read_balance_info_t &rbi,
+    int64_t pool_id,
+    float total_w_pa,
+    float pa_sum,
+    int num_osds,
+    int osd_pa_count,
+    float total_osd_weight,
+    uint max_prims_per_osd,
+    uint max_acting_prims_per_osd,
+    float avg_prims_per_osd,
+    bool prim_on_zero_pa,
+    bool acting_on_zero_pa,
+    float max_osd_score) const
+{
+  // put all the ugly code here, so rest of code is nicer.
+  const pg_pool_t* pool = get_pg_pool(pool_id);
+  zero_rbi(rbi);
+
+  if (total_w_pa / total_osd_weight < 1. / float(pool->get_size())) {
+    ldout(cct, 20) << __func__ << " pool " << pool_id << " average primary affinity is lower than"
+                    << 1. / float(pool->get_size()) << dendl;
+    rbi.err_msg = fmt::format(
+              "pool {} average primary affinity is lower than {:.2f}, read balance score is not reliable",
+              pool_id, 1. / float(pool->get_size()));
+    return -EINVAL;
+  }
+  rbi.pa_weighted = total_w_pa;
+
+  // weighted_prim_affinity_avg
+  rbi.pa_weighted_avg = rbi_round(rbi.pa_weighted / total_osd_weight); // in [0..1]
+  // p_rbi->pa_weighted / osd_pa_count; // in [0..1]
+
+  rbi.raw_score = rbi_round((float)max_prims_per_osd / avg_prims_per_osd); // >=1
+  if (acting_on_zero_pa) {
+    rbi.acting_raw_score = rbi_round(max_osd_score);
+    rbi.err_msg = fmt::format(
+              "pool {} has acting primaries on OSD(s) with primary affinity 0, read balance score is not accurate",
+              pool_id);
+  } else {
+    rbi.acting_raw_score = rbi_round((float)max_acting_prims_per_osd / avg_prims_per_osd);
+  }
+
+  if (osd_pa_count != 0) {
+    // this implies that pa_sum > 0
+    rbi.pa_avg = rbi_round(pa_sum / osd_pa_count);  // in [0..1]
+  } else {
+    rbi.pa_avg = 0.;
+  }
+
+  if (rbi.pa_avg != 0.) {
+    int64_t zpg;
+    if ((zpg = has_zero_pa_pgs(cct, pool_id)) >= 0) {
+      pg_t pg(zpg, pool_id);
+      std::stringstream ss;
+      ss << pg;
+      ldout(cct, 10) << __func__ << " pool " << pool_id << " has some PGs where all OSDs are with primary_affinity 0 (" << pg << ",...)" << dendl;
+      rbi.err_msg = fmt::format(
+                      "pool {} has some PGs where all OSDs are with primary_affinity 0 (at least pg {}), read balance score may not be reliable",
+                      pool_id, ss.str());
+      return -EINVAL;
+    }
+    rbi.optimal_score = rbi_round(float(num_osds) / float(osd_pa_count)); // >= 1
+    // adjust the score to the primary affinity setting (if prim affinity is set
+    // the raw score can't be 1 and the optimal (perfect) score is hifgher than 1)
+    // When total system primary affinity is too low (average < 1 / pool replica count)
+    // the score is negative in order to grab the user's attention.
+    rbi.adjusted_score = rbi_round(rbi.raw_score / rbi.optimal_score); // >= 1 if PA is not low
+    rbi.acting_adj_score = rbi_round(rbi.acting_raw_score / rbi.optimal_score); // >= 1 if PA is not low
+
+  } else {
+    // We should never get here - this condition is checked before calling this function - this is just sanity check code.
+    rbi.err_msg = fmt::format(
+            "pool {} all OSDs have zero primary affinity, can't calculate a reliable read balance score",
+            pool_id);
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int OSDMap::calc_read_balance_score(CephContext *cct, int64_t pool_id,
+				    read_balance_info_t *p_rbi) const
+{
+  //BUG: wrong score with one PG replica 3 and 4 OSDs
+  if (cct != nullptr)
+    ldout(cct,20) << __func__ << " pool " << get_pool_name(pool_id) << dendl;
+
+  OSDMap tmp_osd_map;
+  tmp_osd_map.deepish_copy_from(*this);
+  if (p_rbi == nullptr) {
+    // The only case where error message is not set - this is not tested in the unit test.
+    if (cct != nullptr)
+      ldout(cct,30) << __func__ << " p_rbi is nullptr." << dendl;
+    return -EINVAL;
+  }
+
+  if (tmp_osd_map.pools.count(pool_id) == 0) {
+    if (cct != nullptr)
+      ldout(cct,30) << __func__ << " pool " << pool_id << " not found." << dendl;
+    zero_rbi(*p_rbi);
+    p_rbi->err_msg = fmt::format("pool {} not found", pool_id);
+    return -ENOENT;
+  }
+  int rc = 0;
+  const pg_pool_t* pool = tmp_osd_map.get_pg_pool(pool_id);
+  auto num_pgs = pool->get_pg_num();
+
+  map<uint64_t,set<pg_t>> pgs_by_osd;
+  map<uint64_t,set<pg_t>> prim_pgs_by_osd;
+  map<uint64_t,set<pg_t>> acting_prims_by_osd;
+
+  pgs_by_osd = tmp_osd_map.get_pgs_by_osd(cct, pool_id, &prim_pgs_by_osd, &acting_prims_by_osd);
+
+  if (cct != nullptr)
+    ldout(cct,30) << __func__ << " Primaries for pool: "
+		  << prim_pgs_by_osd << dendl;
+
+  if (pgs_by_osd.empty()) {
+    //p_rbi->err_msg = fmt::format("pool {} has no PGs mapped to OSDs", pool_id);
+    return -EINVAL;
+  }
+  if (cct != nullptr) {
+    for (auto& [osd,pgs] : prim_pgs_by_osd) {
+      ldout(cct,20) << __func__ << " Pool " << pool_id << " OSD." << osd
+                    << " has " << pgs.size() << " primary PGs, "
+		    << acting_prims_by_osd[osd].size() << " acting primaries."
+		    << dendl;
+    }
+  }
+
+  auto num_osds = pgs_by_osd.size();
+
+  float avg_prims_per_osd = (float)num_pgs / (float)num_osds;
+  uint64_t max_prims_per_osd = 0;
+  uint64_t max_acting_prims_per_osd = 0;
+  float    max_osd_score = 0.;
+  bool     prim_on_zero_pa = false;
+  bool     acting_on_zero_pa = false;
+
+  float prim_affinity_sum = 0.;
+  float total_osd_weight = 0.;
+  float total_weighted_pa = 0.;
+
+  map<int,float> osds_crush_weight;
+  // Set up the OSDMap
+  int ruleno = tmp_osd_map.pools.at(pool_id).get_crush_rule();
+  tmp_osd_map.crush->get_rule_weight_osd_map(ruleno, &osds_crush_weight);
+
+  if (cct != nullptr) {
+    ldout(cct,20) << __func__ << " pool " << pool_id
+                  << " ruleno " << ruleno
+                  << " weight-map " << osds_crush_weight
+                  << dendl;
+  }
+  uint osd_pa_count = 0;
+
+  for (auto [osd, oweight] : osds_crush_weight) {  // loop over all OSDs
+    total_osd_weight += oweight;
+    float osd_pa = tmp_osd_map.get_primary_affinityf(osd);
+    total_weighted_pa += oweight * osd_pa;
+    if (osd_pa != 0.) {
+      osd_pa_count++;
+    }
+    if (prim_pgs_by_osd.count(osd)) {
+      auto n_prims = prim_pgs_by_osd.at(osd).size();
+      max_prims_per_osd = std::max(max_prims_per_osd, n_prims);
+      if (osd_pa == 0.) {
+        prim_on_zero_pa = true;
+      }
+    }
+    if (acting_prims_by_osd.count(osd)) {
+      auto n_aprims = acting_prims_by_osd.at(osd).size();
+      max_acting_prims_per_osd = std::max(max_acting_prims_per_osd, n_aprims);
+      if (osd_pa != 0.) {
+        max_osd_score = std::max(max_osd_score, float(n_aprims) / osd_pa);
+      }
+      else {
+        acting_on_zero_pa = true;
+      }
+    }
+
+    prim_affinity_sum += osd_pa;
+    if (cct != nullptr) {
+      auto np = prim_pgs_by_osd.count(osd) ? prim_pgs_by_osd.at(osd).size() : 0;
+      auto nap = acting_prims_by_osd.count(osd) ? acting_prims_by_osd.at(osd).size() : 0;
+      auto wt = osds_crush_weight.count(osd) ? osds_crush_weight.at(osd) : 0.;
+      ldout(cct,30) << __func__ << " OSD." << osd << " info: "
+		    << " num_primaries " << np
+		    << " num_acting_prims " << nap
+		    << " prim_affinity " << tmp_osd_map.get_primary_affinityf(osd)
+		    << " weight " << wt
+		    << dendl;
+    }
+  }
+  if (cct != nullptr) {
+    ldout(cct,30) << __func__ << " pool " << pool_id
+		  << " total_osd_weight " << total_osd_weight
+		  << " total_weighted_pa " << total_weighted_pa
+		  << dendl;
+  }
+
+  if (prim_affinity_sum == 0.0) {
+    if (cct != nullptr) {
+      ldout(cct, 10) << __func__ << " pool " << pool_id
+	         << " has primary_affinity set to zero on all OSDs" << dendl;
+    }
+    zero_rbi(*p_rbi);
+    p_rbi->err_msg = fmt::format("pool {} has primary_affinity set to zero on all OSDs", pool_id);
+
+    return -ERANGE;   // score has a different meaning now.
+  }
+  else {
+    max_osd_score *= prim_affinity_sum / num_osds;
+  }
+
+  rc = tmp_osd_map.set_rbi(cct, *p_rbi, pool_id, total_weighted_pa,
+                           prim_affinity_sum, num_osds, osd_pa_count,
+                           total_osd_weight, max_prims_per_osd,
+                           max_acting_prims_per_osd, avg_prims_per_osd,
+                           prim_on_zero_pa, acting_on_zero_pa, max_osd_score);
+
+  if (cct != nullptr) {
+    ldout(cct,30) << __func__ << " pool " << get_pool_name(pool_id)
+                  << " pa_avg " << p_rbi->pa_avg
+                  << " pa_weighted " << p_rbi->pa_weighted
+                  << " pa_weighted_avg " << p_rbi->pa_weighted_avg
+                  << " optimal_score " << p_rbi->optimal_score
+                  << " adjusted_score " << p_rbi->adjusted_score
+                  << " acting_adj_score " << p_rbi->acting_adj_score
+                  << dendl;
+    ldout(cct,20) << __func__ << " pool " << get_pool_name(pool_id)
+		  << " raw_score: " << p_rbi->raw_score
+		  << " acting_raw_score: " << p_rbi->acting_raw_score
+		  << dendl;
+    ldout(cct,10) << __func__ << " pool " << get_pool_name(pool_id)
+		  << " wl_score: " << p_rbi->acting_adj_score << dendl;
+  }
+
+  return rc;
 }
 
 int OSDMap::get_osds_by_bucket_name(const string &name, set<int> *osds) const
