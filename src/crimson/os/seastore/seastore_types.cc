@@ -797,8 +797,10 @@ std::ostream& operator<<(std::ostream& out, device_type_t t)
     return out << "SSD";
   case device_type_t::ZNS:
     return out << "ZNS";
-  case device_type_t::SEGMENTED_EPHEMERAL:
-    return out << "SEGMENTED_EPHEMERAL";
+  case device_type_t::EPHEMERAL_COLD:
+    return out << "EPHEMERAL_COLD";
+  case device_type_t::EPHEMERAL_MAIN:
+    return out << "EPHEMERAL_MAIN";
   case device_type_t::RANDOM_BLOCK_SSD:
     return out << "RANDOM_BLOCK_SSD";
   case device_type_t::RANDOM_BLOCK_EPHEMERAL:
