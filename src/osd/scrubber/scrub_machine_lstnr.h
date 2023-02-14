@@ -45,30 +45,6 @@ struct preemption_t {
   virtual bool disable_and_test() = 0;
 };
 
-/// an aux used when blocking on a busy object.
-/// Issues a log warning if still blocked after 'waittime'.
-struct blocked_range_t {
-  blocked_range_t(OSDService* osds,
-		  ceph::timespan waittime,
-		  ScrubMachineListener& scrubber,
-		  spg_t pg_id);
-  ~blocked_range_t();
-
-  OSDService* m_osds;
-  ScrubMachineListener& m_scrubber;
-
-  /// used to identify ourselves to the PG, when no longer blocked
-  spg_t m_pgid;
-  Context* m_callbk;
-
-  // once timed-out, we flag the OSD's scrub-queue as having
-  // a problem. 'm_warning_issued' signals the need to clear
-  // that OSD-wide flag.
-  bool m_warning_issued{false};
-};
-
-using BlockedRangeWarning = std::unique_ptr<blocked_range_t>;
-
 }  // namespace Scrub
 
 struct ScrubMachineListener {
@@ -104,6 +80,8 @@ struct ScrubMachineListener {
    */
   virtual void cancel_callback(scrubber_callback_cancel_token_t) = 0;
 
+  virtual ceph::timespan get_range_blocked_grace() = 0;
+
   struct MsgAndEpoch {
     MessageRef m_msg;
     epoch_t m_epoch;
@@ -118,8 +96,6 @@ struct ScrubMachineListener {
   [[nodiscard]] virtual bool is_primary() const = 0;
 
   virtual void select_range_n_notify() = 0;
-
-  virtual Scrub::BlockedRangeWarning acquire_blocked_alarm() = 0;
 
   /// walk the log to find the latest update that affects our chunk
   virtual eversion_t search_log_for_updates() const = 0;
