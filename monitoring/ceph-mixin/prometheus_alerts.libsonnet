@@ -801,5 +801,50 @@
         },
       ],
     },
+    {
+      name: 'rbdmirror',
+      rules: [
+        {
+          alert: 'CephRBDMirrorImagesPerDaemonHigh',
+          'for': '1m',
+          expr: 'sum by (ceph_daemon, namespace) (ceph_rbd_mirror_snapshot_image_snapshots) > %(CephRBDMirrorImagesPerDaemonThreshold)s' % $._config,
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.10.2' },
+          annotations: {
+            summary: 'Number of image replications are now above %(CephRBDMirrorImagesPerDaemonThreshold)s' % $._config,
+            description: 'Number of image replications per daemon is not suppossed to go beyond threshold %(CephRBDMirrorImagesPerDaemonThreshold)s' % $._config,
+          },
+        },
+        {
+          alert: 'CephRBDMirrorImagesNotInSync',
+          'for': '1m',
+          expr: 'sum by (ceph_daemon, image, namespace, pool) (topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_local_timestamp) - topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_remote_timestamp)) != 0',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.10.3' },
+          annotations: {
+            summary: 'Some of the RBD mirror images are not in sync with the remote counter parts.',
+            description: 'Both local and remote RBD mirror images should be in sync.',
+          },
+        },
+        {
+          alert: 'CephRBDMirrorImagesNotInSyncVeryHigh',
+          'for': '1m',
+          expr: 'count by (ceph_daemon) ((topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_local_timestamp) - topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_remote_timestamp)) != 0) > (sum by (ceph_daemon) (ceph_rbd_mirror_snapshot_snapshots)*.1)',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.10.4' },
+          annotations: {
+            summary: 'Number of unsynchronized images are very high.',
+            description: 'More than 10% of the images have synchronization problems',
+          },
+        },
+        {
+          alert: 'CephRBDMirrorImageTransferBandwidthHigh',
+          'for': '1m',
+          expr: 'rate(ceph_rbd_mirror_journal_replay_bytes[30m]) > %.2f' % [$._config.CephRBDMirrorImageTransferBandwidthThreshold],
+          labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.10.5' },
+          annotations: {
+            summary: 'The replication network usage has been increased over %d%s in the last 30 minutes. Review the number of images being replicated. This alert will be cleaned automatically after 30 minutes' % [$._config.CephRBDMirrorImageTransferBandwidthThreshold * 100, '%'],
+            description: 'Detected a heavy increase in bandwidth for rbd replications (over %d%s) in the last 30 min. This might not be a problem, but it is good to review the number of images being replicated simultaneously' % [$._config.CephRBDMirrorImageTransferBandwidthThreshold * 100, '%'],
+          },
+        },
+      ],
+    },
   ],
 }
