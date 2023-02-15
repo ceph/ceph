@@ -3,7 +3,26 @@
 
 #pragma once
 
+#include "msg/msg_types.h"
+
 namespace ceph::net::test {
+
+constexpr uint64_t CMD_CLI_NONCE = 1;
+constexpr int64_t CMD_CLI_OSD = 1;
+constexpr uint64_t TEST_NONCE = 2;
+constexpr int64_t TEST_OSD = 2;
+constexpr uint64_t CMD_SRV_NONCE = 3;
+constexpr int64_t CMD_SRV_OSD = 3;
+constexpr uint64_t TEST_PEER_NONCE = 2;
+constexpr int64_t TEST_PEER_OSD = 4;
+
+inline entity_addr_t get_test_peer_addr(
+    const entity_addr_t &cmd_peer_addr) {
+  entity_addr_t test_peer_addr = cmd_peer_addr;
+  test_peer_addr.set_port(cmd_peer_addr.get_port() + 1);
+  test_peer_addr.set_nonce(TEST_PEER_NONCE);
+  return test_peer_addr;
+}
 
 enum class cmd_t : char {
   none = '\0',

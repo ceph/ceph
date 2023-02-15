@@ -43,7 +43,7 @@ SocketMessenger::SocketMessenger(const entity_name_t& myname,
 
 SocketMessenger::~SocketMessenger()
 {
-  logger().debug("{}: {}", __func__, logic_name);
+  logger().debug("~SocketMessenger: {}", logic_name);
   ceph_assert(!listener);
 }
 
@@ -262,16 +262,16 @@ seastar::future<> SocketMessenger::shutdown()
   // close all connections
   }).then([this] {
     return seastar::parallel_for_each(accepting_conns, [] (auto conn) {
-      return conn->close_clean(false);
+      return conn->close_clean_yielded();
     });
   }).then([this] {
     ceph_assert(accepting_conns.empty());
     return seastar::parallel_for_each(connections, [] (auto conn) {
-      return conn.second->close_clean(false);
+      return conn.second->close_clean_yielded();
     });
   }).then([this] {
     return seastar::parallel_for_each(closing_conns, [] (auto conn) {
-      return conn->close_clean(false);
+      return conn->close_clean_yielded();
     });
   }).then([this] {
     ceph_assert(connections.empty());
