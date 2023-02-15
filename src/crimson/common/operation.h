@@ -326,6 +326,8 @@ class Operation : public boost::intrusive_ref_counter<
     return id;
   }
 
+  static constexpr bool is_trackable = false;
+
   virtual unsigned get_type() const = 0;
   virtual const char *get_type_name() const = 0;
   virtual void print(std::ostream &) const = 0;
