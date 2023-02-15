@@ -256,14 +256,18 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   bufferlist bl;
   int ret = 0;
 
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
 
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   ret = rop->get_attr(dpp, RGW_ATTR_ACL, bl, y);
   if (ret >= 0) {
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     ret = decode_policy(dpp, cct, bl, policy);
     if (ret < 0)
       return ret;
   } else if (ret == -ENODATA) {
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     /* object exists, but policy is broken */
     ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
     std::unique_ptr<rgw::sal::User> user = store->get_user(bucket_info.owner);
@@ -271,18 +275,23 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
     if (ret < 0)
       return ret;
 
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     policy->create_default(bucket_info.owner, user->get_display_name());
   }
 
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (storage_class) {
     bufferlist scbl;
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     int r = rop->get_attr(dpp, RGW_ATTR_STORAGE_CLASS, scbl, y);
     if (r >= 0) {
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       *storage_class = scbl.to_str();
     } else {
       storage_class->clear();
     }
   }
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   return ret;
 }
@@ -396,6 +405,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   }
   policy = get_iam_policy_from_attr(s->cct, bucket_attrs, bucket->get_tenant());
 
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   int ret = get_obj_policy_from_attr(dpp, s->cct, store, bucket_info,
 				     bucket_attrs, acl, storage_class, object,
 				     s->yield);
@@ -649,6 +659,7 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
 {
   int ret = 0;
 
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (!rgw::sal::Object::empty(s->object.get())) {
     if (!s->bucket_exists) {
       return -ERR_NO_SUCH_BUCKET;
@@ -659,6 +670,7 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
     if (prefetch_data) {
       s->object->set_prefetch_data();
     }
+	ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     ret = read_obj_policy(dpp, store, s, s->bucket->get_info(), s->bucket_attrs,
 			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket.get(),
                           s->object.get(), y);
@@ -1580,6 +1592,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   part->set_atomic();
   part->set_prefetch_data();
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op = part->get_read_op();
 
   if (!swift_slo) {
@@ -2155,7 +2168,9 @@ void RGWGetObj::execute(optional_yield y)
 
   perfcounter->inc(l_rgw_get);
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(s->object->get_read_op());
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -2179,16 +2194,20 @@ void RGWGetObj::execute(optional_yield y)
     goto done_err;
   version_id = s->object->get_instance();
   s->obj_size = s->object->get_obj_size();
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " size is: " << s->obj_size << dendl;
   attrs = s->object->get_attrs();
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   /* STAT ops don't need data, and do no i/o */
   if (get_type() == RGW_OP_STAT_OBJ) {
     return;
   }
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (s->info.env->exists("HTTP_X_RGW_AUTH")) {
     op_ret = 0;
     goto done_err;
   }
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   /* start gettorrent */
   if (torrent.get_flag())
   {
@@ -2218,6 +2237,7 @@ void RGWGetObj::execute(optional_yield y)
   }
   /* end gettorrent */
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   // run lua script on decompressed and decrypted data - first filter runs last
   op_ret = get_lua_filter(&run_lua, filter);
   if (run_lua != nullptr) {
@@ -2227,6 +2247,7 @@ void RGWGetObj::execute(optional_yield y)
     goto done_err;
   }
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
@@ -2239,6 +2260,7 @@ void RGWGetObj::execute(optional_yield y)
       filter = &*decompress;
   }
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   attr_iter = attrs.find(RGW_ATTR_MANIFEST);
   if (attr_iter != attrs.end() && get_type() == RGW_OP_GET_OBJ && get_data) {
     RGWObjManifest m;
@@ -2252,6 +2274,7 @@ void RGWGetObj::execute(optional_yield y)
     }
   }
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
   if (attr_iter != attrs.end() && !skip_manifest) {
     op_ret = handle_user_manifest(attr_iter->second.c_str(), y);
@@ -2263,6 +2286,7 @@ void RGWGetObj::execute(optional_yield y)
     return;
   }
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   attr_iter = attrs.find(RGW_ATTR_SLO_MANIFEST);
   if (attr_iter != attrs.end() && !skip_manifest) {
     is_slo = true;
@@ -2275,6 +2299,7 @@ void RGWGetObj::execute(optional_yield y)
     return;
   }
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   // for range requests with obj size 0
   if (range_str && !(s->obj_size)) {
     total_len = 0;
@@ -2282,6 +2307,7 @@ void RGWGetObj::execute(optional_yield y)
     goto done_err;
   }
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   op_ret = s->object->range_to_ofs(s->obj_size, ofs, end);
   if (op_ret < 0)
     goto done_err;
@@ -2291,6 +2317,7 @@ void RGWGetObj::execute(optional_yield y)
   end_x = end;
   filter->fixup_range(ofs_x, end_x);
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   /* Check whether the object has expired. Swift API documentation
    * stands that we should return 404 Not Found in such case. */
   if (need_object_expiration() && s->object->is_expired()) {
@@ -2303,6 +2330,7 @@ void RGWGetObj::execute(optional_yield y)
 
   start = ofs;
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   attr_iter = attrs.find(RGW_ATTR_MANIFEST);
   op_ret = this->get_decrypt_filter(&decrypt, filter,
                                     attr_iter != attrs.end() ? &(attr_iter->second) : nullptr);
@@ -2315,6 +2343,8 @@ void RGWGetObj::execute(optional_yield y)
   }
 
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " get_data is: "<< get_data << dendl;
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " ofs is: "<< ofs << " end is: " << end << dendl;
   if (!get_data || ofs > end) {
     send_response_data(bl, 0, 0);
     return;
@@ -2322,20 +2352,25 @@ void RGWGetObj::execute(optional_yield y)
 
   perfcounter->inc(l_rgw_get_b, end - ofs);
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (op_ret >= 0)
     op_ret = filter->flush();
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   perfcounter->tinc(l_rgw_get_lat, s->time_elapsed());
   if (op_ret < 0) {
     goto done_err;
   }
 
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   op_ret = send_response_data(bl, 0, 0);
   if (op_ret < 0) {
     goto done_err;
   }
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   return;
 
 done_err:
@@ -3602,6 +3637,7 @@ int RGWPutObj::verify_permission(optional_yield y)
     cs_object->set_prefetch_data();
 
     /* check source object permissions */
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (ret = read_obj_policy(this, store, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
 			policy, cs_bucket.get(), cs_object.get(), y, true); ret < 0) {
       return ret;
@@ -3797,6 +3833,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
     return ret;
 
   std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
+  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
 
   ret = read_op->prepare(s->yield, this);
@@ -5224,6 +5261,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
 
     rgw_placement_rule src_placement;
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     /* check source object permissions */
     op_ret = read_obj_policy(this, store, s, src_bucket->get_info(), src_bucket->get_attrs(), &src_acl, &src_placement.storage_class,
 			     src_policy, src_bucket.get(), s->src_object.get(), y);

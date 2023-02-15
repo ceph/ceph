@@ -322,6 +322,7 @@ static bool pass_object_lock_check(rgw::sal::Store* store, rgw::sal::Object* obj
   if (!obj->get_bucket()->get_info().obj_lock_enabled()) {
     return true;
   }
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op = obj->get_read_op();
   int ret = read_op->prepare(null_yield, dpp);
   if (ret < 0) {
@@ -908,6 +909,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
 static int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, bufferlist& tags_bl)
 {
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
 
   return rop->get_attr(dpp, RGW_ATTR_TAGS, tags_bl, null_yield);

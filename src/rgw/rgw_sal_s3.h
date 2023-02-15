@@ -41,6 +41,8 @@ vector<string> get_xml_data(string &text, string tag)
 
 
 class S3FilterBucket;
+class S3FilterObject;
+class S3InternalFilterWriter;
 
 class RGWGetBucketCB : public RGWHTTPStreamRWRequest::ReceiveCB {
 public:
@@ -52,6 +54,18 @@ public:
 
   int handle_data(bufferlist& bl, bool *pause) override;
 };
+
+class RGWGetObjectCB : public RGWHTTPStreamRWRequest::ReceiveCB {
+public:
+  S3FilterObject *object;
+  Attrs attrs;
+  bufferlist *rc_bl;
+
+  RGWGetObjectCB(S3FilterObject *_object, Attrs _attrs, bufferlist* _bl): object(_object), attrs(_attrs), rc_bl(_bl) {}
+
+  int handle_data(bufferlist& bl, bool *pause) override;
+};
+
 
 class S3FilterStore : public FilterStore {
   private:
@@ -74,6 +88,14 @@ class S3FilterStore : public FilterStore {
 	int get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket);
 	int get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y);
 	
+    std::unique_ptr<S3InternalFilterWriter> get_s3_atomic_writer(const DoutPrefixProvider *dpp,
+				  optional_yield y,
+				  S3FilterObject* _head_obj,
+				  const rgw_user& owner,
+				  const rgw_placement_rule *ptail_placement_rule,
+				  uint64_t olh_epoch,
+				  const std::string& unique_tag);
+
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
@@ -81,11 +103,17 @@ class S3FilterStore : public FilterStore {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
+
+
+
 	/*
     RGWBlockDirectory* get_block_dir() { return blk_dir; }
     cache_block* get_cache_block() { return c_blk; }
     RGWD4NCache* get_d4n_cache() { return d4n_cache; }
 	*/
+
+	/* Internal to S3 Filter */
+	Store* get_next() {return next; }
 };
 
 class S3FilterUser : public FilterUser {
@@ -118,8 +146,6 @@ class S3FilterUser : public FilterUser {
 
 class S3FilterBucket : public FilterBucket {
   protected:
-    //RGWBucketEnt ent;
-    //RGWBucketInfo info;
   
   private:
     S3FilterStore* filter;
@@ -172,14 +198,19 @@ class S3FilterObject : public FilterObject {
   public:
     struct S3FilterReadOp : FilterReadOp {
       S3FilterObject* source;
+	  bufferlist received_data; //received data from remote. We pass it to the next to be written to the disk
+	  RGWRESTStreamRWRequest *ord; 
 
       S3FilterReadOp(std::unique_ptr<ReadOp> _next, S3FilterObject* _source) : FilterReadOp(std::move(_next)),
 										 source(_source) {}
       virtual ~S3FilterReadOp() = default;
 
+      virtual int get_attr(const DoutPrefixProvider* dpp, const char* name,
+			 bufferlist& dest, optional_yield y) override;
+
 	  virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
 			RGWGetDataCB* cb, optional_yield y) override;
-      //virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
+      virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
     };
 
     struct S3FilterDeleteOp : FilterDeleteOp {
@@ -200,6 +231,7 @@ class S3FilterObject : public FilterObject {
 								    filter(_filter) {}
     virtual ~S3FilterObject() = default;
 
+	virtual Attrs& get_attrs(void) override;
     virtual const std::string &get_name() const override { return next->get_name(); }
     //virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
     //                        Attrs* delattrs, optional_yield y) override;
@@ -212,8 +244,9 @@ class S3FilterObject : public FilterObject {
     virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state,
 			    optional_yield y, bool follow_olh = true) override;
 
-    virtual std::unique_ptr<ReadOp> get_read_op() override;
+	virtual std::unique_ptr<ReadOp> get_read_op() override;
     virtual std::unique_ptr<DeleteOp> get_delete_op() override;
+    S3FilterStore* get_filter() {return filter;};
 };
 
 class S3FilterWriter : public FilterWriter {
@@ -230,33 +263,46 @@ public:
 					  const DoutPrefixProvider* _dpp) : FilterWriter(std::move(_next), std::move(_head_obj)),
 					  filter(_filter),
 					  save_dpp(_dpp), atomic(false) {
-						/*
-						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : obejct is : " << _head_obj->get_name() << dendl;
-						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : bucket is : " << _head_obj->get_bucket()->get_name() << dendl;
-						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : owner is : " << _head_obj->get_bucket()->get_owner()->get_tenant() << dendl;
-						this->user = (rgw::sal::S3FilterUser*)this->head_obj->get_bucket()->get_owner();
-						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : user is : " << this->user->get_tenant() << dendl;
-						*/
 					  }
 
   S3FilterWriter(std::unique_ptr<Writer> _next, S3FilterStore* _filter, std::unique_ptr<Object> _head_obj, 
 					  const DoutPrefixProvider* _dpp, bool _atomic) : FilterWriter(std::move(_next), std::move(_head_obj)),
 					  filter(_filter),
 					  save_dpp(_dpp), atomic(_atomic) {
-						/*
-						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : obejct is : " << _head_obj->get_name() << dendl;
-						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : bucket is : " << _head_obj->get_bucket()->get_name() << dendl;
-						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : owner is : " << _head_obj->get_bucket()->get_owner()->get_tenant() << dendl;
-
-						this->user = (rgw::sal::S3FilterUser*) this->head_obj->get_bucket()->get_owner();
-						ldpp_dout(save_dpp, 20) << "AMIN" << __func__ << " : user is : " << this->user->get_tenant() << dendl;
-						*/
 						}
 
   virtual ~S3FilterWriter() = default;
 
   //virtual int prepare(optional_yield y, uint64_t obj_size = 0);
   virtual int prepare(optional_yield y);
+  virtual int process(bufferlist&& data, uint64_t offset) override;
+  virtual int complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+                       std::map<std::string, bufferlist>& attrs,
+                       ceph::real_time delete_at,
+                       const char *if_match, const char *if_nomatch,
+                       const std::string *user_data,
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y) override;
+};
+
+class S3InternalFilterWriter : public FilterWriter {
+private:
+  S3FilterStore* filter; 
+  const DoutPrefixProvider* dpp;
+
+public:
+  S3InternalFilterWriter(std::unique_ptr<Writer> _next, S3FilterStore* _filter, std::unique_ptr<Object> _head_obj, 
+					  const DoutPrefixProvider* _dpp) : FilterWriter(std::move(_next), std::move(_head_obj)),
+					  filter(_filter),
+					  dpp(_dpp) {}
+
+  virtual ~S3InternalFilterWriter() = default;
+  
+  //This is for TEST
+  S3FilterStore* get_filter(){return filter;};
+   
+  virtual int prepare(optional_yield y) { return next->prepare(y); }
   virtual int process(bufferlist&& data, uint64_t offset) override;
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,

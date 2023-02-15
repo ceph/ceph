@@ -670,6 +670,7 @@ int rgw_object_get_attr(const DoutPrefixProvider *dpp,
 			rgw::sal::Store* store, rgw::sal::Object* obj,
 			const char* attr_name, bufferlist& out_bl, optional_yield y)
 {
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
 
   return rop->get_attr(dpp, attr_name, out_bl, y);

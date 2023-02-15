@@ -14,6 +14,7 @@
  */
 
 #include "rgw_sal_s3.h"
+#include <string>
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -116,6 +117,55 @@ int RGWGetBucketCB::handle_data(bufferlist& bl, bool *pause){
     return 0;
 }
 
+int RGWGetObjectCB::handle_data(bufferlist& bl, bool *pause){
+
+	string in_data = bl.c_str();
+	ldout(object->get_filter()->_cct, 20) << " AMIN: " << __func__ << __LINE__ << " bufferlist is: " << in_data << dendl;
+
+//<Contents><Key>test.img</Key><LastModified>2023-02-08T16:08:51.221Z</LastModified><Size>9437184</Size><StorageClass>STANDARD</StorageClass><Owner><ID>amin5</ID><DisplayName>amin5</DisplayName></Owner><RgwxTag>9f98304c-1eac-46fe-a181-5038ed96051e.974111.12749701074102518225</RgwxTag><Type>Normal</Type></Contents>
+	this->rc_bl->append(bl);
+  
+	//FIXME: AMIN: use below code in get bucket to setup its objects' attributes.
+	
+	bool loop = true;
+    while(loop){
+      vector<string> all;
+      vector<string> all_keys = get_xml_data(in_data, "Key");
+      vector<string> name = get_xml_data(in_data, "Name");
+      vector<string> all_prefix = get_xml_data(in_data, "Prefix");
+      vector<string> sizes = get_xml_data(in_data, "Size");
+      vector<string> etags = get_xml_data(in_data, "ETag");
+      vector<string> owners = get_xml_data(in_data, "ID");
+      vector<string> modified = get_xml_data(in_data, "LastModified");
+      vector<string> storageClass = get_xml_data(in_data, "StorageClass");
+      //vector<string> marker = get_xml_data(in_data, "Marker");
+      if(all_keys.size() == 0)
+        return -2;
+      else if (all_keys.size() >= 1){
+          all = all_keys;
+      }
+      int ind = 0;
+	  //RGWBucketInfo info = this->bucket->get_info();
+      for (vector<string>::iterator t=all.begin(); t!=all.end(); ++t)
+      {
+        if(all[ind] == object->get_name()){
+          string s = "&quot;";
+          etags[ind].erase (0,s.length());
+          etags[ind].erase(etags[ind].length()-s.length(),etags[ind].length());
+		  attrs[RGW_ATTR_ETAG] = bufferlist::static_from_string(etags[ind]);
+		  attrs[RGW_ATTR_STORAGE_CLASS] = bufferlist::static_from_string(storageClass[ind]);
+		  object->set_attrs(attrs);
+		  loop = false;
+		  break;
+		}
+        ind = ind + 1;
+      }
+	}
+	
+
+    return 0;
+}
+
 
 
 int S3FilterStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
@@ -139,112 +189,12 @@ std::unique_ptr<Object> S3FilterStore::get_object(const rgw_obj_key& k)
   return std::make_unique<S3FilterObject>(std::move(o), this);
 }
 
-//TODO
 std::unique_ptr<Object> S3FilterBucket::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> o = next->get_object(k);
 
   return std::make_unique<S3FilterObject>(std::move(o), this, filter);
 }
-
-// Returns user's S3 Access and Secret Key
-/*
-int RGWRados::get_s3_credentials(RGWRados *store, string userid, RGWAccessKey& s3_key){
-  RGWObjVersionTracker objv_tracker;
-  RGWObjectCtx obj_ctx(this->store);
-  RGWUserInfo info;
-  rgw_user user_id(userid);
-  int ret = rgw_get_user_info_by_uid(this->store->ctl()->user, user_id , info, &objv_tracker, NULL, NULL, NULL);
-  if (ret < 0)
-    return ret;
-  map<string, RGWAccessKey>::iterator kiter;
-  for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
-    RGWAccessKey& k = kiter->second;
-    s3_key.id=k.id;
-    s3_key.key = k.key;
-  }
-  return 0;
-}
-
-
-
-int RGWRados::copy_remote(RGWRados *store, cache_obj* c_obj){
-   ldout(cct, 0) << __func__ << "key" << c_obj->bucket_name + c_obj->obj_name <<dendl;
-  // Get S3 Credentials of the user
-  RGWAccessKey accesskey;
-  int ret = get_s3_credentials(store, c_obj->owner, accesskey);
-  RGWBucketInfo src_bucket_info;
-  RGWBucketInfo dest_bucket_info;
-  RGWObjectCtx obj_ctx(this->store);
-  map<string, bufferlist> dest_attrs;
-  map<string, bufferlist> src_attrs;
-  const string src_tenant_name = "";
-  const string src_bucket_name = c_obj->bucket_name;
-  const string src_obj_name = c_obj->obj_name;
-  string url ="http://" + cct->_conf->backend_url;
-  string etag;
-
-  HostStyle host_style = PathStyle;
-  ret = get_bucket_info(&svc, src_tenant_name, src_bucket_name, src_bucket_info, NULL, null_yield, &src_attrs);
-  rgw_obj src_obj(src_bucket_info.bucket, src_obj_name);
-  dest_bucket_info = src_bucket_info;
-  dest_attrs = src_attrs;
-  rgw_bucket dest_bucket = dest_bucket_info.bucket;
-  rgw_obj dest_obj(dest_bucket, src_obj_name); 
-  uint64_t obj_size;
-
-  //Create Bucket
-  RGWRESTStreamS3PutObj *bucket_wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, NULL, host_style);
-  bucket_wr->set_send_length(0);
-  map<string, bufferlist> bucket_attrs;
-  rgw_obj dest_bucket_obj(dest_bucket, "");
-  ret = bucket_wr->put_obj_init(accesskey, dest_bucket_obj, 0, bucket_attrs, true);
-  if (ret < 0) {
-    delete bucket_wr;
-	return -1;
-  }
-  
-  ret = bucket_wr->complete_request(&etag, nullptr);
-  if (ret < 0){
-	return -1;
-	delete bucket_wr;
-  }
-  
-  //Create Object
-  RGWObjState *astate = NULL;
-  ret =  get_obj_state(&obj_ctx, src_bucket_info, src_obj, &astate, false, null_yield);
-  
-  RGWRados::Object src_op_target(store, src_bucket_info, obj_ctx, src_obj);
-  RGWRados::Object::Read read_op(&src_op_target);
-  read_op.params.attrs = &src_attrs;
-  read_op.params.obj_size = &obj_size;
-  ret = read_op.prepare(null_yield);
-  if (ret < 0)
-	 return ret;
-  
-  RGWRESTConn *conn = svc.zone->get_master_conn();
-  RGWRESTStreamS3PutObj *wr;
-  rgw_user user_id(c_obj->owner);
-
-  ret = conn->put_obj_async(user_id, dest_obj, astate->size, src_attrs, true, &wr, url, accesskey);
-  if (ret < 0) 
-    return ret;
-  
-  ret = read_op.iterate(0, astate->size - 1, wr->get_out_cb(), null_yield);
-  if (ret < 0) {
-    delete wr;
-    return ret;
-  }
-  ret = conn->complete_request(wr, etag, nullptr);
-  if (ret < 0)
-    return ret;
-
-  objDirectory->updateField(c_obj, "home_location", "dataLake");
-  objDirectory->updateField(c_obj, "intermediate", "false");
-  return 0;
-}
-
-*/
 
 int S3FilterUser::create_bucket(const DoutPrefixProvider* dpp,
                               const rgw_bucket& b,
@@ -284,29 +234,6 @@ int S3FilterUser::create_bucket(const DoutPrefixProvider* dpp,
   //strcpy(b.tenant, this->get_id().tenant.c_str());
   /* If it exists, look it up; otherwise create it */
   //FIXME: AMIN: we should first check if the bucket exist or not.
-  /* 
-  ret = this->filter->get_bucket(dpp, this, b, &nb, y);
-  ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: get_bucket return is: " << ret << " ENOENT is: " << ENOENT << dendl;
-  if (ret < 0 && ret != -ENOENT){
-    return ret;
-  }
-  ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: ret bucket name is: " << nb->get_info().bucket.name << dendl;
-  */ 
-  //nb = std::make_unique<S3FilterBucket>(this->filter, b, this);
-/* UGUR's remote request old version 
-		  if (cct->_conf->rgw_datacache_test){
-		  //if (true){
-			string cache_id = "10.12.1.15:8082";
-			//this->getRemoteCacheWeight();
-			ldout(cct, 10) << __func__  <<" last copy, no dw, remote copy : " << del_oid <<dendl;
-			RemoteRequest *c =  new RemoteRequest();
-			c->req_type = 1;
-			c->path = del_oid;
-			c->dest =  cache_id;
-			c->sizeleft = tmp.size_in_bytes;
-			tp->addTask(new RemoteS3Request(c, cct));
-*/
-
 
   ldpp_dout(dpp, 20) << __func__ << " AMIN bucket name: " << b.name << " tenant: " + b.tenant << dendl;
   string url ="http://" + this->filter->_cct->_conf->backend_url;
@@ -368,43 +295,18 @@ int S3FilterUser::create_bucket(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-std::unique_ptr<Object::ReadOp> S3FilterObject::get_read_op()
-{
-  std::unique_ptr<Object::ReadOp> r = next->get_read_op();
-  return std::make_unique<S3FilterObject::S3FilterReadOp>(std::move(r), this);
-}
-
-std::unique_ptr<Object::DeleteOp> S3FilterObject::get_delete_op()
-{
-  std::unique_ptr<DeleteOp> d = next->get_delete_op();
-  return std::make_unique<S3FilterDeleteOp>(std::move(d), this);
-}
-
-int S3FilterObject::S3FilterReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
-					int64_t end, RGWGetDataCB* cb, optional_yield y)
-{
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "ofs is: " << ofs << " end is: " << end << dendl;
-  /*
-  int ret = next->iterate(dpp, ofs, end, cb, y);
-  if (ret < 0)
-    return ret;
-  */
-  //cb->handle_data();
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  /* Copy params out of next */
-  //params = next->params;
-  return 0;
-}
-
-
-
 int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket_out, optional_yield y)
 {
  
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<Bucket> nb;
   int ret;
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "name is: " << this->get_name()<< dendl;
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "next name is: " << this->next->get_name()<< dendl;
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "user empty is: " << u->empty()<< dendl;
   User* nu = nextUser(u);
 
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   rgw_placement_rule placement_rule;
   placement_rule.name = "";
   placement_rule.storage_class = "";
@@ -419,6 +321,7 @@ int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_
   RGWEnv env;
   req_info req_info(this->_cct, &env);
 
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   //ret = next->get_bucket(dpp, nu, b, &nb, y);
   ret = nu->create_bucket(dpp, b, "", placement_rule, swift_ver_location, nullptr, policy, attrs, info, ep_objv, exclusive, obj_lock_enabled, &existed, req_info, &nb, y);
   ldpp_dout(dpp, 20) << "AMIN: " << __func__ << " return is: " << ret << dendl;
@@ -522,6 +425,26 @@ int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_
 
 }
 
+//This is the basic writer to send data to the next
+std::unique_ptr<S3InternalFilterWriter> S3FilterStore::get_s3_atomic_writer(const DoutPrefixProvider *dpp,
+				  optional_yield y,
+				  S3FilterObject * _head_obj,
+				  const rgw_user& owner,
+				  const rgw_placement_rule *ptail_placement_rule,
+				  uint64_t olh_epoch,
+				  const std::string& unique_tag)
+{
+  std::unique_ptr<Object> no = nextObject(_head_obj)->clone();
+  std::unique_ptr<Object> co = _head_obj->clone();
+  std::unique_ptr<Writer> writer = next->get_atomic_writer(dpp, y, std::move(no),
+							   owner, ptail_placement_rule,
+							   olh_epoch, unique_tag);
+
+  return std::make_unique<S3InternalFilterWriter>(std::move(writer), this, std::move(co), dpp);
+  
+}
+
+//This is used to send data to remote over HTTP client
 std::unique_ptr<Writer> S3FilterStore::get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
@@ -530,28 +453,37 @@ std::unique_ptr<Writer> S3FilterStore::get_atomic_writer(const DoutPrefixProvide
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
 {
-  ldpp_dout(dpp, 20) << "AMIN: " << __func__  << dendl;
   std::unique_ptr<Object> no = nextObject(_head_obj.get())->clone();
-  ldpp_dout(dpp, 20) << "AMIN: " << __func__ << " : " << "next object name is : " <<  no->get_name() << dendl;
-   
-  ldpp_dout(dpp, 20) << "AMIN " << __func__ << " : owner is : " << owner.tenant << dendl;
-  ldpp_dout(dpp, 20) << "AMIN " << __func__ << " : owner id is : " << owner.id << dendl;
-  ldpp_dout(dpp, 20) << "AMIN " << __func__ << " : store name is : " << next->get_name() << dendl;
- 
-   
   std::unique_ptr<Writer> writer = next->get_atomic_writer(dpp, y, std::move(no),
 							   owner, ptail_placement_rule,
 							   olh_epoch, unique_tag);
-  //ldpp_dout(dpp, 20) << "AMIN: " << __func__ << " : " << "next write name is : " <<  no->get_name() << dendl;
 
-  ldpp_dout(dpp, 20) << "AMIN " << __func__ << " : " << __LINE__ << dendl;
   return std::make_unique<S3FilterWriter>(std::move(writer), this, std::move(_head_obj), dpp, true);
-  //return std::make_unique<S3FilterWriter>(nullptr, this, std::move(_head_obj), dpp, true);
   
 }
 
-//TODO
-//int S3FilterWriter::prepare(optional_yield y, uint64_t obj_size = 0)
+int S3InternalFilterWriter::process(bufferlist&& data, uint64_t offset)
+{
+  ldpp_dout(dpp, 20) << "AMIN " << __func__ << ": " << __LINE__ << dendl;
+  return next->process(std::move(data), offset);
+}
+
+int S3InternalFilterWriter::complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+                       std::map<std::string, bufferlist>& attrs,
+                       ceph::real_time delete_at,
+                       const char *if_match, const char *if_nomatch,
+                       const std::string *user_data,
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y)
+{
+  ldpp_dout(dpp, 20) << "AMIN " << __func__ << " : owner is : " << this->head_obj->get_bucket()->get_owner() << dendl;
+  return next->complete(accounted_size, etag, mtime, set_mtime, attrs,
+			delete_at, if_match, if_nomatch, user_data, zones_trace,
+			canceled, y);
+}
+
+
 int S3FilterWriter::prepare(optional_yield y)
 {
   ldpp_dout(this->save_dpp, 20) << "AMIN " << __func__ << " : owner is : " << this->head_obj->get_bucket()->get_owner() << dendl;
@@ -654,9 +586,207 @@ int S3FilterWriter::complete(size_t accounted_size, const std::string& etag,
 }
 
 
+std::unique_ptr<Object::ReadOp> S3FilterObject::get_read_op()
+{
+  CephContext *cct  = this->filter->_cct;
+  ldout(cct, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  std::unique_ptr<Object::ReadOp> r = next->get_read_op();
+  ldout(cct, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  return std::make_unique<S3FilterObject::S3FilterReadOp>(std::move(r), this);
+}
+
+int S3FilterObject::S3FilterReadOp::get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y)
+{ 
+  map<string, bufferlist>::iterator attr_iter;
+  Attrs b_attr = source->get_bucket()->get_attrs();
+
+  attr_iter = b_attr.find(name);
+  if (attr_iter != b_attr.end()) {
+	ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " attr is: " << name << " its value is: " << attr_iter->second << dendl;
+	dest.append(attr_iter->second);
+    return 0;
+  }
+  else{
+	ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " NO DATA! "<< dendl;
+	return -ENODATA;
+  }
+  /*
+  if (strcmp(name, RGW_ATTR_ACL) == 0)
+	return -ENODATA;
+  else if (strcmp(name, RGW_ATTR_STORAGE_CLASS) == 0) //FIXME: AMIN : we need to get bucket attributes and return storage_class
+	return 0;
+  */
+
+  return 0;
+
+  /*
+ 
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  User* u = source->get_bucket()->get_owner();
+ 
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  map<std::string, RGWAccessKey> accessKeys =  u->get_info().access_keys;
+  RGWAccessKey accesskey;
+  //RGWAccessKey& k = accessKeys[u->get_id().to_str()];
+  accesskey.id= "test5"; //FIXME
+  accesskey.key = "test5";
+  string url ="http://" + source->filter->_cct->_conf->backend_url;
+
+  HostStyle host_style = PathStyle;
+
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  Attrs object_attrs;
+  RGWGetObjectCB cb(this->source, object_attrs, &(this->received_data));
+
+
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  list<string> endpoints;
+  endpoints.push_back(url);
+  
+  RGWRESTStreamRWRequest *object_rd = new RGWRESTStreamRWRequest(source->filter->_cct, "GET", url, &cb, NULL, NULL, "", host_style);
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+
+  map<string, string> extra_headers;
+  int ret = 0;
+  ret = object_rd->send_request(dpp, accesskey, extra_headers, source->get_obj(), nullptr);
+  if (ret < 0) {
+    delete object_rd;
+    return ret;
+  }
+
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  ret = object_rd->complete_request(null_yield);
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  if (ret < 0){
+	delete object_rd;
+	return -1;
+  }
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " received data is: "<< received_data.to_str() << dendl;
+
+  const rgw_placement_rule placement_rule;
+  //placement_rule.name = "";
+  //placement_rule.storage_class = "";
+
+  S3FilterStore *ns =  source->filter;
+
+  unique_ptr<S3InternalFilterWriter> nw = ns->get_s3_atomic_writer(dpp, y, source, u->get_id(), &placement_rule, 0, std::to_string(ns->get_new_req_id()));
+
+  ceph::real_time mtime = real_clock::now();
+  size_t data_size = received_data.length();
+
+  nw->prepare(y);
+  nw->process(move(received_data), 0); //FIXME: AMIN : In case of data bigger than 4M
+  nw->complete(data_size, "", 
+                &mtime, mtime, source->get_attrs(), real_time(),
+                "", "", nullptr, nullptr, nullptr, y);
+
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " writer store is: "<< nw->get_filter()->get_name() << dendl;
+  return 0;
+  */
+}
+
+
+Attrs& S3FilterObject::get_attrs()
+{ 
+  ldout(this->filter->_cct, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  return this->get_bucket()->get_attrs();
+}
+
+
+int S3FilterObject::S3FilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
+{
+  //return next->prepare(y, dpp);
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  User* u = source->get_bucket()->get_owner();
+ 
+  map<std::string, RGWAccessKey> accessKeys =  u->get_info().access_keys;
+  RGWAccessKey accesskey;
+  //RGWAccessKey& k = accessKeys[u->get_id().to_str()];
+  accesskey.id= "test5"; //FIXME
+  accesskey.key = "test5";
+  string url ="http://" + source->filter->_cct->_conf->backend_url;
+
+  HostStyle host_style = PathStyle;
+
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  Attrs object_attrs;
+  RGWGetObjectCB cb(this->source, object_attrs, &(this->received_data));
+
+
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  list<string> endpoints;
+  endpoints.push_back(url);
+  
+  ord = new RGWRESTStreamRWRequest(source->filter->_cct, "GET", url, &cb, NULL, NULL, "", host_style);
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+
+  map<string, string> extra_headers;
+  int ret = 0;
+  ret = ord->send_request(dpp, accesskey, extra_headers, source->get_obj(), nullptr);
+  if (ret < 0) {
+    delete ord;
+    return ret;
+  }
+
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  ret = ord->complete_request(null_yield);
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  if (ret < 0){
+	delete ord;
+	return -1;
+  }
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " received data is: "<< received_data.to_str() << dendl;
+  source->set_obj_size(received_data.length());
+
+  const rgw_placement_rule placement_rule;
+  //placement_rule.name = "";
+  //placement_rule.storage_class = "";
+
+  S3FilterStore *ns =  source->filter;
+
+  unique_ptr<S3InternalFilterWriter> nw = ns->get_s3_atomic_writer(dpp, y, source, u->get_id(), &placement_rule, 0, std::to_string(ns->get_new_req_id()));
+
+  ceph::real_time mtime = real_clock::now();
+  size_t data_size = received_data.length();
+
+  /*
+  nw->prepare(y);
+  nw->process(move(received_data), 0); //FIXME: AMIN : In case of data bigger than 4M
+  nw->complete(data_size, "", 
+                &mtime, mtime, source->get_attrs(), real_time(),
+                "", "", nullptr, nullptr, nullptr, y);
+  */
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " writer store is: "<< nw->get_filter()->get_name() << dendl;
+
+  return 0;
+}
+
+int S3FilterObject::S3FilterReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
+					int64_t end, RGWGetDataCB* cb, optional_yield y)
+{
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "ofs is: " << ofs << " end is: " << end << dendl;
+  /*
+  int ret = next->iterate(dpp, ofs, end, cb, y);
+  if (ret < 0)
+    return ret;
+  */
+  cb->handle_data(received_data, ofs, end);
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  /* Copy params out of next */
+  //params = next->params;
+  return 0;
+}
+
+std::unique_ptr<Object::DeleteOp> S3FilterObject::get_delete_op()
+{
+  std::unique_ptr<DeleteOp> d = next->get_delete_op();
+  return std::make_unique<S3FilterDeleteOp>(std::move(d), this);
+}
+
 
 int S3FilterStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
 {
+  /*
   std::unique_ptr<Bucket> nb;
   int ret;
   User* nu = nextUser(u);
@@ -667,11 +797,13 @@ int S3FilterStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<B
 
   Bucket* fb = new S3FilterBucket(std::move(nb), u, this);
   bucket->reset(fb);
+  */
   return 0;
 }
 
 int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
+  /*
   std::unique_ptr<Bucket> nb;
   int ret;
   User* nu = nextUser(u);
@@ -682,11 +814,11 @@ int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const std:
 
   Bucket* fb = new S3FilterBucket(std::move(nb), u, this);
   bucket->reset(fb);
+  */
   return 0;
 }
 
 
-//TODO
 int S3FilterObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state,
 			    optional_yield y, bool follow_olh){
   return 0;
@@ -812,29 +944,6 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
   return next->delete_obj_attrs(dpp, attr_name, y);  
 }
 
-
-int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
-{
-  int getDirReturn = source->filter->get_block_dir()->getValue(source->filter->get_cache_block());
-
-  if (getDirReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Directory get operation failed." << dendl;
-  } else {
-    ldpp_dout(dpp, 20) << "D4N Filter: Directory get operation succeeded." << dendl;
-  }
-
-  rgw::sal::Attrs newAttrs;
-  source->filter->get_d4n_cache()->getObject(source->get_name(), &(source->get_attrs()), &newAttrs);
-  int getObjReturn = source->set_attrs(newAttrs);
-
-  if (getObjReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache get operation failed." << dendl;
-  } else {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache get operation succeeded." << dendl;
-  }
-  
-  return next->prepare(y, dpp);
-}
 
 int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y)
