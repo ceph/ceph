@@ -754,20 +754,20 @@ usage for realms, periods, zonegroups and zones.
 Realms
 ------
 
-A realm represents a globally unique namespace consisting of one or more
-zonegroups containing one or more zones, and zones containing buckets,
-which in turn contain objects. A realm enables the Ceph Object Gateway
-to support multiple namespaces and their configuration on the same
-hardware.
+A realm is a globally unique namespace that consists of one or more zonegroups.
+Zonegroups contain one or more zones. Zones contain buckets. Buckets contain
+objects. 
 
-A realm contains the notion of periods. Each period represents the state
+Realms make it possible for the Ceph Object Gateway to support multiple
+namespaces and their configurations on the same hardware.
+
+Each realm is associated with a "period". A period represents the state
 of the zonegroup and zone configuration in time. Each time you make a
-change to a zonegroup or zone, update the period and commit it.
+change to a zonegroup or zone, you should update and commit the period.
 
-By default, the Ceph Object Gateway does not create a realm
-for backward compatibility with Infernalis and earlier releases.
-However, as a best practice, we recommend creating realms for new
-clusters.
+To ensure backward compatibility with Infernalis and earlier releases, the Ceph
+Object Gateway does not by default create a realm. However, as a best practice,
+we recommend that you create realms when creating new clusters.
 
 Create a Realm
 ~~~~~~~~~~~~~~
