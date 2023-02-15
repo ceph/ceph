@@ -758,6 +758,8 @@ options easily. On the page, set the level to ``advanced`` and search for RGW,
 to see all basic and advanced configuration options with a short description.
 Expand the details of an option to reveal a longer description.
 
+.. _rgw-realms:
+
 Realms
 ------
 
