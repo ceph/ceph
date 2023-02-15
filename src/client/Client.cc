@@ -33,10 +33,10 @@
 
 #include "common/async/waiter.h"
 
-#if defined(__FreeBSD__) || defined(_WIN32)
+#if defined(__FreeBSD__)
 #define XATTR_CREATE    0x1
 #define XATTR_REPLACE   0x2
-#else
+#elif !defined(_WIN32)
 #include <sys/xattr.h>
 #endif
 
@@ -2539,7 +2539,7 @@ ref_t<MClientRequest> Client::build_client_request(MetaRequest *request)
   int max_retry = sizeof(((struct ceph_mds_request_head*)0)->num_retry);
   max_retry = 1 << (max_retry * CHAR_BIT);
   if (request->retry_attempt >= max_retry) {
-    request->abort(-EMULTIHOP);
+    request->abort(-CEPHFS_EMULTIHOP);
     request->caller_cond->notify_all();
     ldout(cct, 1) << __func__ << " request tid " << request->tid
                   << " seq overflow" << ", abort it" << dendl;
@@ -2623,7 +2623,7 @@ void Client::handle_client_request_forward(const MConstRef<MClientRequestForward
   auto num_fwd = fwd->get_num_fwd();
   if (num_fwd <= request->num_fwd || num_fwd >= max_fwd) {
     if (request->num_fwd >= max_fwd || num_fwd >= max_fwd) {
-      request->abort(-EMULTIHOP);
+      request->abort(-CEPHFS_EMULTIHOP);
       request->caller_cond->notify_all();
       ldout(cct, 1) << __func__ << " tid " << tid << " seq overflow"
                     << ", abort it" << dendl;
@@ -5952,7 +5952,7 @@ int Client::may_delete(const char *relpath, const UserPerm& perms) {
 
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
-    return -ENOTCONN;
+    return -CEPHFS_ENOTCONN;
 
   filepath path(relpath);
   string name = path.last_dentry();
@@ -8050,7 +8050,9 @@ void Client::stat_to_statx(struct stat *st, struct ceph_statx *stx)
   stx->stx_atime = st->st_atimespec;
 #elif __WIN32
   stx->stx_mtime.tv_sec = st->st_mtime;
+  stx->stx_mtime.tv_nsec = 0;
   stx->stx_atime.tv_sec = st->st_atime;
+  stx->stx_atime.tv_nsec = 0;
 #else
   stx->stx_mtime = st->st_mtim;
   stx->stx_atime = st->st_atim;
@@ -8368,7 +8370,7 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
 
   /* Type bits are always set, even when CEPH_STATX_MODE is not */
   stx->stx_mode = S_IFMT & in->mode;
-  stx->stx_ino = use_faked_inos() ? in->faked_ino : (ino_t)in->ino;
+  stx->stx_ino = use_faked_inos() ? in->faked_ino : (uint64_t)in->ino;
   stx->stx_rdev = in->rdev;
   stx->stx_mask |= (CEPH_STATX_INO|CEPH_STATX_RDEV);
 
@@ -8651,12 +8653,11 @@ int Client::utimes(const char *relpath, struct timeval times[2],
   int r = path_walk(path, &in, perms);
   if (r < 0)
     return r;
-  struct stat attr;
-  utime_t atime(times[0]);
-  utime_t mtime(times[1]);
+  struct ceph_statx attr;
+  utime_t(times[0]).to_timespec(&attr.stx_atime);
+  utime_t(times[1]).to_timespec(&attr.stx_mtime);
 
-  attr_set_atime_and_mtime(&attr, atime, mtime);
-  return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
+  return _setattrx(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
 }
 
 int Client::lutimes(const char *relpath, struct timeval times[2],
@@ -8680,12 +8681,11 @@ int Client::lutimes(const char *relpath, struct timeval times[2],
   int r = path_walk(path, &in, perms, false);
   if (r < 0)
     return r;
-  struct stat attr;
-  utime_t atime(times[0]);
-  utime_t mtime(times[1]);
+  struct ceph_statx attr;
+  utime_t(times[0]).to_timespec(&attr.stx_atime);
+  utime_t(times[1]).to_timespec(&attr.stx_mtime);
 
-  attr_set_atime_and_mtime(&attr, atime, mtime);
-  return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
+  return _setattrx(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
 }
 
 int Client::futimes(int fd, struct timeval times[2], const UserPerm& perms)
@@ -8720,12 +8720,11 @@ int Client::futimens(int fd, struct timespec times[2], const UserPerm& perms)
   if (f->flags & O_PATH)
     return -CEPHFS_EBADF;
 #endif
-  struct stat attr;
-  utime_t atime(times[0]);
-  utime_t mtime(times[1]);
+  struct ceph_statx attr;
+  utime_t(times[0]).to_timespec(&attr.stx_atime);
+  utime_t(times[1]).to_timespec(&attr.stx_mtime);
 
-  attr_set_atime_and_mtime(&attr, atime, mtime);
-  return _setattr(f->inode, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
+  return _setattrx(f->inode, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
 }
 
 int Client::utimensat(int dirfd, const char *relpath, struct timespec times[2], int flags,
@@ -8764,12 +8763,11 @@ int Client::utimensat(int dirfd, const char *relpath, struct timespec times[2], 
   if (r < 0) {
     return r;
   }
-  struct stat attr;
-  utime_t atime(times[0]);
-  utime_t mtime(times[1]);
+  struct ceph_statx attr;
+  utime_t(times[0]).to_timespec(&attr.stx_atime);
+  utime_t(times[1]).to_timespec(&attr.stx_mtime);
 
-  attr_set_atime_and_mtime(&attr, atime, mtime);
-  return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
+  return _setattrx(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
 }
 
 int Client::flock(int fd, int operation, uint64_t owner)
@@ -14588,7 +14586,11 @@ out:
     ll_unclosed_fh_set.insert(*fhp);
   }
 
+  #ifdef _WIN32
+  uint64_t ino = 0;
+  #else
   ino_t ino = 0;
+  #endif
   if (r >= 0) {
     Inode *inode = in->get();
     if (use_faked_inos())

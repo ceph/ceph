@@ -14,6 +14,7 @@
  */
 
 #include "gtest/gtest.h"
+#include "include/compat.h"
 #include "include/cephfs/libcephfs.h"
 
 static int update_root_mode()

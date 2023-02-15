@@ -13,7 +13,9 @@
  */
 
 #include "gtest/gtest.h"
+#include "include/compat.h"
 #include "include/cephfs/libcephfs.h"
+#include "include/fs_types.h"
 #include "common/ceph_context.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -66,7 +68,7 @@ TEST_F(MonConfig, MonAddrsMissing) {
   ASSERT_NE(nullptr, cct);
   clear_mon_config(cct);
 
-  ASSERT_EQ(-ENOENT, ceph_mount(ca, NULL));
+  ASSERT_EQ(-CEPHFS_ENOENT, ceph_mount(ca, NULL));
 }
 
 TEST_F(MonConfig, MonAddrsInConfigProxy) {
