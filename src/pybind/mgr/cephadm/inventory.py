@@ -1,6 +1,7 @@
 import datetime
 from copy import copy
 import ipaddress
+import itertools
 import json
 import logging
 import socket
@@ -80,20 +81,39 @@ class Inventory:
                 self.save()
         else:
             self._inventory = dict()
+        self._all_known_names: Dict[str, List[str]] = {}
         logger.debug('Loaded inventory %s' % self._inventory)
 
     def keys(self) -> List[str]:
         return list(self._inventory.keys())
 
     def __contains__(self, host: str) -> bool:
-        return host in self._inventory
+        return host in self._inventory or host in itertools.chain.from_iterable(self._all_known_names.values())
+
+    def _get_stored_name(self, host: str) -> str:
+        self.assert_host(host)
+        if host in self._inventory:
+            return host
+        for stored_name, all_names in self._all_known_names.items():
+            if host in all_names:
+                return stored_name
+        return host
+
+    def update_known_hostnames(self, hostname: str, shortname: str, fqdn: str) -> None:
+        for hname in [hostname, shortname, fqdn]:
+            # if we know the host by any of the names, store the full set of names
+            # in order to be able to check against those names for matching a host
+            if hname in self._inventory:
+                self._all_known_names[hname] = [hostname, shortname, fqdn]
+                return
+        logger.debug(f'got hostname set from gather-facts for unknown host: {[hostname, shortname, fqdn]}')
 
     def assert_host(self, host: str) -> None:
-        if host not in self._inventory:
+        if host not in self:
             raise OrchestratorError('host %s does not exist' % host)
 
     def add_host(self, spec: HostSpec) -> None:
-        if spec.hostname in self._inventory:
+        if spec.hostname in self:
             # addr
             if self.get_addr(spec.hostname) != spec.addr:
                 self.set_addr(spec.hostname, spec.addr)
@@ -105,17 +125,18 @@ class Inventory:
             self.save()
 
     def rm_host(self, host: str) -> None:
-        self.assert_host(host)
+        host = self._get_stored_name(host)
         del self._inventory[host]
+        self._all_known_names.pop(host, [])
         self.save()
 
     def set_addr(self, host: str, addr: str) -> None:
-        self.assert_host(host)
+        host = self._get_stored_name(host)
         self._inventory[host]['addr'] = addr
         self.save()
 
     def add_label(self, host: str, label: str) -> None:
-        self.assert_host(host)
+        host = self._get_stored_name(host)
 
         if 'labels' not in self._inventory[host]:
             self._inventory[host]['labels'] = list()
@@ -124,7 +145,7 @@ class Inventory:
         self.save()
 
     def rm_label(self, host: str, label: str) -> None:
-        self.assert_host(host)
+        host = self._get_stored_name(host)
 
         if 'labels' not in self._inventory[host]:
             self._inventory[host]['labels'] = list()
@@ -133,17 +154,19 @@ class Inventory:
         self.save()
 
     def has_label(self, host: str, label: str) -> bool:
+        host = self._get_stored_name(host)
         return (
             host in self._inventory
             and label in self._inventory[host].get('labels', [])
         )
 
     def get_addr(self, host: str) -> str:
-        self.assert_host(host)
+        host = self._get_stored_name(host)
         return self._inventory[host].get('addr', host)
 
     def spec_from_dict(self, info: dict) -> HostSpec:
         hostname = info['hostname']
+        hostname = self._get_stored_name(hostname)
         return HostSpec(
             hostname,
             addr=info.get('addr', hostname),
@@ -517,6 +540,11 @@ class HostCache():
     def update_host_facts(self, host, facts):
         # type: (str, Dict[str, Dict[str, Any]]) -> None
         self.facts[host] = facts
+        hostnames: List[str] = []
+        for k in ['hostname', 'shortname', 'fqdn']:
+            v = facts.get(k, '')
+            hostnames.append(v if isinstance(v, str) else '')
+        self.mgr.inventory.update_known_hostnames(hostnames[0], hostnames[1], hostnames[2])
         self.last_facts_update[host] = datetime_now()
 
     def update_autotune(self, host: str) -> None:
