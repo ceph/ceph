@@ -312,6 +312,9 @@ public:
 
     auto &opref = *op;
     auto id = op->get_id();
+    if constexpr (T::is_trackable) {
+      op->template track_event<typename T::StartEvent>();
+    }
     auto fut = opref.template enter_stage<>(
       opref.get_connection_pipeline().await_active
     ).then([this, &opref, &logger] {

@@ -42,6 +42,7 @@ public:
     ShardServices &shard_services, Ref<PG> pg);
 
   std::tuple<
+    StartEvent,
     ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
     ConnectionPipeline::GetPG::BlockingEvent,
