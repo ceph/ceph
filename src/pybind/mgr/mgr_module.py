@@ -1342,6 +1342,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             addrs = self._rados.get_addrs()
             self._rados.shutdown()
             self._ceph_unregister_client(addrs)
+            self._rados = None
 
     @API.expose
     def get(self, data_name: str) -> Any:
