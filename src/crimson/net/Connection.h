@@ -76,14 +76,14 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   virtual seastar::future<> send(MessageURef msg) = 0;
 
   /**
-   * keepalive
+   * send_keepalive
    *
    * Send a keepalive message over a connection that has completed its
    * handshake.
    *
    * May be invoked from any core.
    */
-  virtual seastar::future<> keepalive() = 0;
+  virtual seastar::future<> send_keepalive() = 0;
 
   virtual clock_t::time_point get_last_keepalive() const = 0;
 
