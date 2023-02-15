@@ -1496,8 +1496,6 @@ void ActivePyModules::cluster_log(const std::string &channel, clog_type prio,
 
 void ActivePyModules::register_client(std::string_view name, std::string addrs)
 {
-  std::lock_guard l(lock);
-
   entity_addrvec_t addrv;
   addrv.parse(addrs.data());
 
@@ -1507,8 +1505,6 @@ void ActivePyModules::register_client(std::string_view name, std::string addrs)
 
 void ActivePyModules::unregister_client(std::string_view name, std::string addrs)
 {
-  std::lock_guard l(lock);
-
   entity_addrvec_t addrv;
   addrv.parse(addrs.data());
 
