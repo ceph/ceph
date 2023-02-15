@@ -107,37 +107,6 @@ mark {
   border-left: 1px solid vv.$gray-400;
 }
 
-.accordion {
-  .card {
-    border: 0;
-  }
-
-  .card-header {
-    border: 0;
-    border-bottom: 3px solid vv.$white;
-    padding-left: 0;
-
-    .btn:focus,
-    .btn.focus {
-      box-shadow: none;
-    }
-
-    button.dropdown-toggle {
-      position: relative;
-
-      &::after {
-        border: 0;
-        content: '\f054';
-        font-family: 'ForkAwesome';
-        font-size: 1rem;
-        position: absolute;
-        right: 20px;
-        transition: transform 0.3s ease-in-out;
-      }
-
-      &[aria-expanded='true']::after {
-        transform: rotate(90deg);
-      }
-    }
-  }
+a.nav-link {
+  color: vv.$primary;
 }

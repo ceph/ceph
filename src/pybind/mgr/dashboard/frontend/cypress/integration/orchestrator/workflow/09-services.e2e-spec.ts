@@ -31,14 +31,18 @@ describe('Services page', () => {
     services.checkServiceStatus(mdsDaemonName);
 
     services.daemonAction('mds', 'stop');
-    services.checkServiceStatus(mdsDaemonName, 'stopped');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus(mdsDaemonName, 'stopped');
+    });
   });
 
   it('should restart a daemon', () => {
     services.checkExist(mdsDaemonName, true);
     services.clickServiceTab(mdsDaemonName, 'Details');
     services.daemonAction('mds', 'restart');
-    services.checkServiceStatus(mdsDaemonName, 'running');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus(mdsDaemonName, 'running');
+    });
   });
 
   it('should redeploy a daemon', () => {
@@ -46,9 +50,13 @@ describe('Services page', () => {
     services.clickServiceTab(mdsDaemonName, 'Details');
 
     services.daemonAction('mds', 'stop');
-    services.checkServiceStatus(mdsDaemonName, 'stopped');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus(mdsDaemonName, 'stopped');
+    });
     services.daemonAction('mds', 'redeploy');
-    services.checkServiceStatus(mdsDaemonName, 'running');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus(mdsDaemonName, 'running');
+    });
   });
 
   it('should start a daemon', () => {
@@ -56,9 +64,13 @@ describe('Services page', () => {
     services.clickServiceTab(mdsDaemonName, 'Details');
 
     services.daemonAction('mds', 'stop');
-    services.checkServiceStatus(mdsDaemonName, 'stopped');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus(mdsDaemonName, 'stopped');
+    });
     services.daemonAction('mds', 'start');
-    services.checkServiceStatus(mdsDaemonName, 'running');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus(mdsDaemonName, 'running');
+    });
   });
 
   it('should delete an mds service', () => {
@@ -67,7 +79,7 @@ describe('Services page', () => {
 
   it('should create and delete snmp-gateway service with version V2c', () => {
     services.navigateTo('create');
-    services.addService('snmp-gateway', false, '1', 'V2c');
+    services.addService('snmp-gateway', false, 1, 'V2c');
     services.checkExist('snmp-gateway', true);
 
     services.clickServiceTab('snmp-gateway', 'Details');
@@ -80,7 +92,7 @@ describe('Services page', () => {
 
   it('should create and delete snmp-gateway service with version V3', () => {
     services.navigateTo('create');
-    services.addService('snmp-gateway', false, '1', 'V3', true);
+    services.addService('snmp-gateway', false, 1, 'V3', true);
     services.checkExist('snmp-gateway', true);
 
     services.clickServiceTab('snmp-gateway', 'Details');
@@ -93,7 +105,7 @@ describe('Services page', () => {
 
   it('should create and delete snmp-gateway service with version V3 and w/o privacy protocol', () => {
     services.navigateTo('create');
-    services.addService('snmp-gateway', false, '1', 'V3', false);
+    services.addService('snmp-gateway', false, 1, 'V3', false);
     services.checkExist('snmp-gateway', true);
 
     services.clickServiceTab('snmp-gateway', 'Details');
@@ -102,5 +114,13 @@ describe('Services page', () => {
     });
 
     services.deleteService('snmp-gateway');
+  });
+
+  it('should create ingress as unmanaged', () => {
+    services.navigateTo('create');
+    services.addService('ingress', false, undefined, undefined, undefined, true);
+    services.checkExist('ingress.rgw.foo', true);
+    services.isUnmanaged('ingress.rgw.foo', true);
+    services.deleteService('ingress.rgw.foo');
   });
 });

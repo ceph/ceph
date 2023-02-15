@@ -35,7 +35,7 @@ Synopsis
 
 | **ceph** **mds** [ *compat* \| *fail* \| *rm* \| *rmfailed* \| *set_state* \| *stat* \| *repaired* ] ...
 
-| **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
+| **ceph** **mon** [ *add* \| *dump* \| *enable_stretch_mode* \| *getmap* \| *remove* \| *stat* ] ...
 
 | **ceph** **osd** [ *blocklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *ls* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
 
@@ -232,7 +232,7 @@ Usage::
     ceph config rm <who> <option>
 
 Subcommand ``log`` to show recent history of config changes. If `count` option
-is omitted it defeaults to 10.
+is omitted it defaults to 10.
 
 Usage::
 
@@ -543,6 +543,23 @@ Subcommand ``getmap`` gets monmap.
 Usage::
 
 	ceph mon getmap {<int[0-]>}
+
+Subcommand ``enable_stretch_mode`` enables stretch mode, changing the peering
+rules and failure handling on all pools. For a given PG to successfully peer
+and be marked active, ``min_size`` replicas will now need to be active under all
+(currently two) CRUSH buckets of type <dividing_bucket>.
+
+<tiebreaker_mon> is the tiebreaker mon to use if a network split happens.
+
+<dividing_bucket> is the bucket type across which to stretch.
+This will typically be ``datacenter`` or other CRUSH hierarchy bucket type that
+denotes physically or logically distant subdivisions.
+
+<new_crush_rule> will be set as CRUSH rule for all pools.
+
+Usage::
+
+	ceph mon enable_stretch_mode <tiebreaker_mon> <new_crush_rule> <dividing_bucket>
 
 Subcommand ``remove`` removes monitor named <name>.
 

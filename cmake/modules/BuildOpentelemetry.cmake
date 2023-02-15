@@ -6,7 +6,7 @@ function(target_create _target _lib)
 endfunction()
 
 function(build_opentelemetry)
-  set(opentelemetry_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/opentelemetry-cpp")
+  set(opentelemetry_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/jaegertracing/opentelemetry-cpp")
   set(opentelemetry_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/opentelemetry-cpp")
   set(opentelemetry_cpp_targets opentelemetry_trace opentelemetry_exporter_jaeger_trace)
   set(opentelemetry_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON
@@ -20,7 +20,7 @@ function(build_opentelemetry)
       ${opentelemetry_BINARY_DIR}/sdk/src/resource/libopentelemetry_resources.a
       ${opentelemetry_BINARY_DIR}/sdk/src/common/libopentelemetry_common.a
       ${opentelemetry_BINARY_DIR}/exporters/jaeger/libopentelemetry_exporter_jaeger_trace.a
-      ${opentelemetry_BINARY_DIR}/ext/src/http/client/curl/libhttp_client_curl.a
+      ${opentelemetry_BINARY_DIR}/ext/src/http/client/curl/libopentelemetry_http_client_curl.a
       ${CURL_LIBRARIES}
   )
   set(opentelemetry_include_dir ${opentelemetry_SOURCE_DIR}/api/include/
@@ -48,11 +48,7 @@ function(build_opentelemetry)
   endif()
 
   include(ExternalProject)
-  ExternalProject_Add(
-    opentelemetry-cpp
-    GIT_REPOSITORY https://github.com/ideepika/opentelemetry-cpp.git
-    GIT_TAG wip-ceph
-    GIT_SHALLOW 1
+  ExternalProject_Add(opentelemetry-cpp
     SOURCE_DIR ${opentelemetry_SOURCE_DIR}
     PREFIX "opentelemetry-cpp"
     CMAKE_ARGS ${opentelemetry_CMAKE_ARGS}
@@ -74,7 +70,7 @@ function(build_opentelemetry)
   target_create("opentelemetry_exporter_jaeger_trace"
                 "exporters/jaeger/libopentelemetry_exporter_jaeger_trace.a")
   target_create("http_client_curl"
-                "ext/src/http/client/curl/libhttp_client_curl.a")
+                "ext/src/http/client/curl/libopentelemetry_http_client_curl.a")
 
   # will do all linking and path setting fake include path for
   # interface_include_directories since this happens at build time

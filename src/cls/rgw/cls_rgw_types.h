@@ -355,75 +355,7 @@ struct rgw_bucket_entry_ver {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_entry_ver)
 
-
-struct cls_rgw_obj_key {
-  std::string name;
-  std::string instance;
-
-  cls_rgw_obj_key() {}
-  cls_rgw_obj_key(const std::string &_name) : name(_name) {}
-  cls_rgw_obj_key(const std::string& n, const std::string& i) : name(n), instance(i) {}
-
-  std::string to_string() const {
-    return fmt::format("{}({})", name, instance);
-  }
-
-  bool empty() const {
-    return name.empty();
-  }
-
-  void set(const std::string& _name) {
-    name = _name;
-    instance.clear();
-  }
-
-  bool operator==(const cls_rgw_obj_key& k) const {
-    return (name.compare(k.name) == 0) &&
-           (instance.compare(k.instance) == 0);
-  }
-
-  bool operator!=(const cls_rgw_obj_key& k) const {
-    return (name.compare(k.name) != 0) ||
-           (instance.compare(k.instance) != 0);
-  }
-
-  bool operator<(const cls_rgw_obj_key& k) const {
-    int r = name.compare(k.name);
-    if (r == 0) {
-      r = instance.compare(k.instance);
-    }
-    return (r < 0);
-  }
-
-  bool operator<=(const cls_rgw_obj_key& k) const {
-    return !(k < *this);
-  }
-
-  void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(name, bl);
-    encode(instance, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(name, bl);
-    decode(instance, bl);
-    DECODE_FINISH(bl);
-  }
-  void dump(ceph::Formatter *f) const {
-    f->dump_string("name", name);
-    f->dump_string("instance", instance);
-  }
-  void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<cls_rgw_obj_key*>& ls) {
-    ls.push_back(new cls_rgw_obj_key);
-    ls.push_back(new cls_rgw_obj_key);
-    ls.back()->name = "name";
-    ls.back()->instance = "instance";
-  }
-};
-WRITE_CLASS_ENCODER(cls_rgw_obj_key)
+typedef rgw_obj_index_key cls_rgw_obj_key;
 
 inline std::ostream& operator<<(std::ostream& out, const cls_rgw_obj_key& o) {
   out << o.name;
@@ -788,6 +720,7 @@ enum class cls_rgw_reshard_status : uint8_t {
   IN_PROGRESS     = 1,
   DONE            = 2
 };
+std::ostream& operator<<(std::ostream&, cls_rgw_reshard_status);
 
 inline std::string to_string(const cls_rgw_reshard_status status)
 {
@@ -808,17 +741,23 @@ struct cls_rgw_bucket_instance_entry {
   cls_rgw_reshard_status reshard_status{RESHARD_STATUS::NOT_RESHARDING};
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode((uint8_t)reshard_status, bl);
+    { // fields removed in v2 but added back as empty in v3
+      std::string bucket_instance_id;
+      encode(bucket_instance_id, bl);
+      int32_t num_shards{-1};
+      encode(num_shards, bl);
+    }
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     uint8_t s;
     decode(s, bl);
     reshard_status = (cls_rgw_reshard_status)s;
-    if (struct_v < 2) { // fields removed from v2
+    if (struct_v != 2) { // fields removed from v2, added back in v3
       std::string bucket_instance_id;
       decode(bucket_instance_id, bl);
       int32_t num_shards{-1};
@@ -841,8 +780,14 @@ struct cls_rgw_bucket_instance_entry {
   bool resharding() const {
     return reshard_status != RESHARD_STATUS::NOT_RESHARDING;
   }
+
   bool resharding_in_progress() const {
     return reshard_status == RESHARD_STATUS::IN_PROGRESS;
+  }
+
+  friend std::ostream& operator<<(std::ostream& out, const cls_rgw_bucket_instance_entry& v) {
+    out << "instance entry reshard status: " << v.reshard_status;
+    return out;
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_bucket_instance_entry)
@@ -1160,6 +1105,16 @@ struct cls_rgw_obj {
     ls.back()->key.name = "myoid";
     ls.back()->loc = "mykey";
   }
+
+  size_t estimate_encoded_size() const {
+    constexpr size_t start_overhead = sizeof(__u8) + sizeof(__u8) + sizeof(ceph_le32); // version and length prefix
+    constexpr size_t string_overhead = sizeof(__u32); // strings are encoded with 32-bit length prefix
+    return start_overhead +
+        string_overhead + pool.size() +
+        string_overhead + key.name.size() +
+        string_overhead + loc.size() +
+        key.estimate_encoded_size();
+  }
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj)
 
@@ -1204,6 +1159,16 @@ struct cls_rgw_obj_chain {
   bool empty() {
     return objs.empty();
   }
+
+  size_t estimate_encoded_size() const {
+    constexpr size_t start_overhead = sizeof(__u8) + sizeof(__u8) + sizeof(ceph_le32);
+    constexpr size_t size_overhead = sizeof(__u32); // size of the chain
+    size_t chain_overhead = 0;
+    for (auto& it : objs) {
+      chain_overhead += it.estimate_encoded_size();
+    }
+    return (start_overhead + size_overhead + chain_overhead);
+  }
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj_chain)
 
@@ -1244,6 +1209,14 @@ struct cls_rgw_gc_obj_info
     ls.back()->tag = "footag";
     ceph_timespec ts{ceph_le32(21), ceph_le32(32)};
     ls.back()->time = ceph::real_clock::from_ceph_timespec(ts);
+  }
+
+  size_t estimate_encoded_size() const {
+    constexpr size_t start_overhead = sizeof(__u8) + sizeof(__u8) + sizeof(ceph_le32); // version and length prefix
+    constexpr size_t string_overhead = sizeof(__u32); // strings are encoded with 32-bit length prefix
+    constexpr size_t time_overhead = 2 * sizeof(ceph_le32); // time is stored as tv_sec and tv_nsec
+    return start_overhead + string_overhead + tag.size() +
+            time_overhead + chain.estimate_encoded_size();
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_obj_info)

@@ -1,0 +1,16 @@
+# renamed tasks: to upgrade-sequence:
+upgrade-sequence:
+   sequential:
+   - print: "**** done start upgrade, wait"
+   - cephadm.shell:
+       env: [sha1]
+       mon.a:
+         - ceph config set global log_to_journald false --force
+         - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+         - while ceph orch upgrade status | jq '.in_progress' | grep true ; do ceph orch ps ; ceph versions ; sleep 30 ; done
+         - ceph orch ps
+         - ceph versions
+         - ceph versions | jq -e '.overall | length == 1'
+         - ceph versions | jq -e '.overall | keys' | grep $sha1
+   - print: "**** done end upgrade, wait..."
+

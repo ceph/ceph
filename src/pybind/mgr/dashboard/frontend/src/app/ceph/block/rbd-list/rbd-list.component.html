@@ -6,12 +6,15 @@
           [columns]="columns"
           identifier="unique_id"
           [searchableObjects]="true"
+          [serverSide]="true"
+          [count]="count"
           forceIdentifier="true"
           selectionType="single"
           [hasDetails]="true"
           [status]="tableStatus"
+          [maxLimit]="25"
           [autoReload]="-1"
-          (fetchData)="taskListService.fetch()"
+          (fetchData)="taskListService.fetch($event)"
           (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
   <cd-table-actions class="table-actions"
@@ -57,15 +60,28 @@
 </ng-template>
 
 <ng-template #mirroringTpl
-             let-value="value">
+             let-value="value"
+             let-row="row">
   <span *ngIf="value.length === 3; else probb"
         class="badge badge-info">{{ value[0] }}</span>&nbsp;
   <span *ngIf="value.length === 3"
+        class="badge badge-info">{{ value[1] }}</span>&nbsp;
+  <span *ngIf="row.primary === true"
         class="badge badge-info"
-        [ngbTooltip]="'Next scheduled snapshot on' + ' ' + (value[2] | cdDate)">{{ value[1] }}</span>
+        i18n>primary</span>
+  <span *ngIf="row.primary === false"
+        class="badge badge-info"
+        i18n>secondary</span>
   <ng-template #probb>
     <span class="badge badge-info">{{ value }}</span>
   </ng-template>
+</ng-template>
+
+<ng-template #ScheduleTpl
+             let-value="value"
+             let-row="row">
+  <span *ngIf="value.length === 3"
+        class="badge badge-info">{{ value[2] | cdDate  }}</span>
 </ng-template>
 
 <ng-template #flattenTpl

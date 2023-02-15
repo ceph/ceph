@@ -42,7 +42,7 @@ The general format for function documentation is
    *
    * Detailed description when necessary
    *
-   * preconditons, postconditions, warnings, bugs or other notes
+   * preconditions, postconditions, warnings, bugs or other notes
    *
    * parameter reference
    * return value (if non-void)
@@ -88,6 +88,10 @@ separate file, like this::
 
   .. graphviz:: myfile.dot
 
+See the `Dot User's Manual <https://www.graphviz.org/pdf/dotguide.pdf>`_ by
+Emden R. Gansner, Eleftherios Koutsofios, and Stephen North for examples of
+digraphs. This is especially useful if this is your first time encountering
+GraphViz.
 
 Ditaa
 -----
@@ -128,7 +132,7 @@ Inkscape
 --------
 
 You can use Inkscape to generate scalable vector graphics.
-https://inkscape.org/en/ for restructedText documents.
+https://inkscape.org/en/ for restructuredText documents.
 
 If you generate diagrams with Inkscape, you should
 commit both the Scalable Vector Graphics (SVG) file and export a

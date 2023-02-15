@@ -6,13 +6,12 @@ import uuid
 from io import StringIO
 from os.path import join as os_path_join
 
-from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.filesystem import FileLayout, FSMissing
 from tasks.cephfs.fuse_mount import FuseMount
-from tasks.cephfs.caps_helper import CapsHelper
+from tasks.cephfs.caps_helper import CapTester
 
 log = logging.getLogger(__name__)
 
@@ -112,6 +111,66 @@ class TestAddDataPool(TestAdminCommands):
         self.setup_ec_pools(n, metadata=False)
         self.fs.add_data_pool(n+"-data", create=False)
 
+    def test_add_already_in_use_data_pool(self):
+        """
+        That command try to add data pool which is already in use with another fs.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        # create second data pool, metadata pool and add with filesystem
+        second_fs = "second_fs"
+        second_metadata_pool = "second_metadata_pool"
+        second_data_pool = "second_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
+
+        # try to add 'first_data_pool' with 'second_fs'
+        # Expecting EINVAL exit status because 'first_data_pool' is already in use with 'first_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'add_data_pool', second_fs, first_data_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because data pool is already in use as data pool for first_fs")
+
+    def test_add_already_in_use_metadata_pool(self):
+        """
+        That command try to add metadata pool which is already in use with another fs.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        # create second data pool, metadata pool and add with filesystem
+        second_fs = "second_fs"
+        second_metadata_pool = "second_metadata_pool"
+        second_data_pool = "second_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
+
+        # try to add 'second_metadata_pool' with 'first_fs' as a data pool
+        # Expecting EINVAL exit status because 'second_metadata_pool'
+        # is already in use with 'second_fs' as a metadata pool
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'add_data_pool', first_fs, second_metadata_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because data pool is already in use as metadata pool for 'second_fs'")
 
 class TestFsNew(TestAdminCommands):
     """
@@ -285,6 +344,239 @@ class TestFsNew(TestAdminCommands):
         else:
             self.fail("expected creating file system with ID already in use to fail")
 
+    def test_fs_new_metadata_pool_already_in_use(self):
+        """
+        That creating file system with metadata pool already in use.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        second_fs = "second_fs"
+        second_data_pool = "second_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
+
+        # try to create new fs 'second_fs' with following configuration
+        # metadata pool -> 'first_metadata_pool'
+        # data pool -> 'second_data_pool'
+        # Expecting EINVAL exit status because 'first_metadata_pool'
+        # is already in use with 'first_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, first_metadata_pool, second_data_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because metadata  pool is already in use for 'first_fs'")
+
+    def test_fs_new_data_pool_already_in_use(self):
+        """
+        That creating file system with data pool already in use.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        second_fs = "second_fs"
+        second_metadata_pool = "second_metadata_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
+
+        # try to create new fs 'second_fs' with following configuration
+        # metadata pool -> 'second_metadata_pool'
+        # data pool -> 'first_data_pool'
+        # Expecting EINVAL exit status because 'first_data_pool'
+        # is already in use with 'first_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, first_data_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because data pool is already in use for 'first_fs'")
+
+    def test_fs_new_metadata_and_data_pool_in_use_by_another_same_fs(self):
+        """
+        That creating file system with metadata and data pool which is already in use by another same fs.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        second_fs = "second_fs"
+
+        # try to create new fs 'second_fs' with following configuration
+        # metadata pool -> 'first_metadata_pool'
+        # data pool -> 'first_data_pool'
+        # Expecting EINVAL exit status because 'first_metadata_pool' and 'first_data_pool'
+        # is already in use with 'first_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, first_metadata_pool, first_data_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because metadata and data pool is already in use for 'first_fs'")
+
+    def test_fs_new_metadata_and_data_pool_in_use_by_different_fs(self):
+        """
+        That creating file system with metadata and data pool which is already in use by different fs.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        # create second data pool, metadata pool and add with filesystem
+        second_fs = "second_fs"
+        second_metadata_pool = "second_metadata_pool"
+        second_data_pool = "second_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
+
+        third_fs = "third_fs"
+
+        # try to create new fs 'third_fs' with following configuration
+        # metadata pool -> 'first_metadata_pool'
+        # data pool -> 'second_data_pool'
+        # Expecting EINVAL exit status because 'first_metadata_pool' and 'second_data_pool'
+        # is already in use with 'first_fs' and 'second_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', third_fs, first_metadata_pool, second_data_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because metadata and data pool is already in use for 'first_fs' and 'second_fs'")
+
+    def test_fs_new_interchange_already_in_use_metadata_and_data_pool_of_same_fs(self):
+        """
+        That creating file system with interchanging metadata and data pool which is already in use by same fs.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        second_fs = "second_fs"
+
+        # try to create new fs 'second_fs' with following configuration
+        # metadata pool -> 'first_data_pool' (already used as data pool for 'first_fs')
+        # data pool -> 'first_metadata_pool' (already used as metadata pool for 'first_fs')
+        # Expecting EINVAL exit status because 'first_data_pool' and 'first_metadata_pool'
+        # is already in use with 'first_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, first_data_pool, first_metadata_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because metadata and data pool is already in use for 'first_fs'")
+
+    def test_fs_new_interchange_already_in_use_metadata_and_data_pool_of_different_fs(self):
+        """
+        That creating file system with interchanging metadata and data pool which is already in use by defferent fs.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        # create second data pool, metadata pool and add with filesystem
+        second_fs = "second_fs"
+        second_metadata_pool = "second_metadata_pool"
+        second_data_pool = "second_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
+
+        third_fs = "third_fs"
+
+        # try to create new fs 'third_fs' with following configuration
+        # metadata pool -> 'first_data_pool' (already used as data pool for 'first_fs')
+        # data pool -> 'second_metadata_pool' (already used as metadata pool for 'second_fs')
+        # Expecting EINVAL exit status because 'first_data_pool' and 'second_metadata_pool'
+        # is already in use with 'first_fs' and 'second_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', third_fs, first_data_pool, second_metadata_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because metadata and data pool is already in use for 'first_fs' and 'second_fs'")
+
+    def test_fs_new_metadata_pool_already_in_use_with_rbd(self):
+        """
+        That creating new file system with metadata pool already used by rbd.
+        """
+
+        # create pool and initialise with rbd
+        new_pool = "new_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_pool)
+        self.ctx.cluster.run(args=['rbd', 'pool', 'init', new_pool])
+
+        new_fs = "new_fs"
+        new_data_pool = "new_data_pool"
+
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_data_pool)
+
+        # try to create new fs 'new_fs' with following configuration
+        # metadata pool -> 'new_pool' (already used by rbd app)
+        # data pool -> 'new_data_pool'
+        # Expecting EINVAL exit status because 'new_pool' is already in use with 'rbd' app
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', new_fs, new_pool, new_data_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because metadata pool is already in use for rbd")
+
+    def test_fs_new_data_pool_already_in_use_with_rbd(self):
+        """
+        That creating new file system with data pool already used by rbd.
+        """
+
+        # create pool and initialise with rbd
+        new_pool = "new_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_pool)
+        self.ctx.cluster.run(args=['rbd', 'pool', 'init', new_pool])
+
+        new_fs = "new_fs"
+        new_metadata_pool = "new_metadata_pool"
+
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_metadata_pool)
+
+        # try to create new fs 'new_fs' with following configuration
+        # metadata pool -> 'new_metadata_pool'
+        # data pool -> 'new_pool' (already used by rbd app)
+        # Expecting EINVAL exit status because 'new_pool' is already in use with 'rbd' app
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', new_fs, new_metadata_pool, new_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because data pool is already in use for rbd")
 
 class TestRenameCommand(TestAdminCommands):
     """
@@ -376,7 +668,7 @@ class TestRenameCommand(TestAdminCommands):
         try:
             self.run_cluster_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool} --force")
         except CommandFailedError as ce:
-            self.assertEqual(ce.exitstatus, errno.EEXIST,
+            self.assertEqual(ce.exitstatus, errno.EINVAL,
                 "invalid error code on creating a new file system with old "
                 "name, existing pools and --force flag.")
         else:
@@ -907,47 +1199,44 @@ class TestMirroringCommands(CephFSTestCase):
         self._verify_mirroring(self.fs.name, "disabled")
 
 
-class TestFsAuthorize(CapsHelper):
+class TestFsAuthorize(CephFSTestCase):
     client_id = 'testuser'
     client_name = 'client.' + client_id
 
     def test_single_path_r(self):
-        perm = 'r'
-        filepaths, filedata, mounts, keyring = self.setup_test_env(perm)
-        moncap = self.get_mon_cap_from_keyring(self.client_name)
+        PERM = 'r'
+        FS_AUTH_CAPS = (('/', PERM),)
+        self.captester = CapTester()
+        self.setup_test_env(FS_AUTH_CAPS)
 
-        self.run_mon_cap_tests(moncap, keyring)
-        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+        self.captester.run_mon_cap_tests(self.fs, self.client_id)
+        self.captester.run_mds_cap_tests(PERM)
 
     def test_single_path_rw(self):
-        perm = 'rw'
-        filepaths, filedata, mounts, keyring = self.setup_test_env(perm)
-        moncap = self.get_mon_cap_from_keyring(self.client_name)
+        PERM = 'rw'
+        FS_AUTH_CAPS = (('/', PERM),)
+        self.captester = CapTester()
+        self.setup_test_env(FS_AUTH_CAPS)
 
-        self.run_mon_cap_tests(moncap, keyring)
-        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+        self.captester.run_mon_cap_tests(self.fs, self.client_id)
+        self.captester.run_mds_cap_tests(PERM)
 
     def test_single_path_rootsquash(self):
-        filedata, filename = 'some data on fs 1', 'file_on_fs1'
-        filepath = os_path_join(self.mount_a.hostfs_mntpt, filename)
-        self.mount_a.write_file(filepath, filedata)
+        PERM = 'rw'
+        FS_AUTH_CAPS = (('/', PERM, 'root_squash'),)
+        self.captester = CapTester()
+        self.setup_test_env(FS_AUTH_CAPS)
 
-        keyring = self.fs.authorize(self.client_id, ('/', 'rw', 'root_squash'))
-        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
-        self.mount_a.remount(client_id=self.client_id,
-                             client_keyring_path=keyring_path,
-                             cephfs_mntpt='/')
-
-        if filepath.find(self.mount_a.hostfs_mntpt) != -1:
-            # can read, but not write as root
-            contents = self.mount_a.read_file(filepath)
-            self.assertEqual(filedata, contents)
-            cmdargs = ['echo', 'some random data', Raw('|'), 'sudo', 'tee', filepath]
-            self.mount_a.negtestcmd(args=cmdargs, retval=1, errmsg='permission denied')
+        # testing MDS caps...
+        # Since root_squash is set in client caps, client can read but not
+        # write even thought access level is set to "rw".
+        self.captester.conduct_pos_test_for_read_caps()
+        self.captester.conduct_neg_test_for_write_caps(sudo_write=True)
 
     def test_single_path_authorize_on_nonalphanumeric_fsname(self):
         """
-        That fs authorize command works on filesystems with names having [_.-] characters
+        That fs authorize command works on filesystems with names having [_.-]
+        characters
         """
         self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
@@ -959,41 +1248,42 @@ class TestFsAuthorize(CapsHelper):
                              f'osd "allow rw pool={self.fs.get_data_pool_name()}" '
                              f'mds allow')
         self.mount_a.remount(cephfs_name=self.fs.name)
-        perm = 'rw'
-        filepaths, filedata, mounts, keyring = self.setup_test_env(perm)
-        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+        PERM = 'rw'
+        FS_AUTH_CAPS = (('/', PERM),)
+        self.captester = CapTester()
+        self.setup_test_env(FS_AUTH_CAPS)
+        self.captester.run_mds_cap_tests(PERM)
 
     def test_multiple_path_r(self):
-        perm, paths = 'r', ('/dir1', '/dir2/dir22')
-        filepaths, filedata, mounts, keyring = self.setup_test_env(perm, paths)
-        moncap = self.get_mon_cap_from_keyring(self.client_name)
+        PERM = 'r'
+        FS_AUTH_CAPS = (('/dir1/dir12', PERM), ('/dir2/dir22', PERM))
+        for c in FS_AUTH_CAPS:
+            self.mount_a.run_shell(f'mkdir -p .{c[0]}')
+        self.captesters = (CapTester(), CapTester())
+        self.setup_test_env(FS_AUTH_CAPS)
 
-        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
-        for path in paths:
-            self.mount_a.remount(client_id=self.client_id,
-                                 client_keyring_path=keyring_path,
-                                 cephfs_mntpt=path)
-
-
-            # actual tests...
-            self.run_mon_cap_tests(moncap, keyring)
-            self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+        self.run_cap_test_one_by_one(FS_AUTH_CAPS)
 
     def test_multiple_path_rw(self):
-        perm, paths = 'rw', ('/dir1', '/dir2/dir22')
-        filepaths, filedata, mounts, keyring = self.setup_test_env(perm, paths)
-        moncap = self.get_mon_cap_from_keyring(self.client_name)
+        PERM = 'rw'
+        FS_AUTH_CAPS = (('/dir1/dir12', PERM), ('/dir2/dir22', PERM))
+        for c in FS_AUTH_CAPS:
+            self.mount_a.run_shell(f'mkdir -p .{c[0]}')
+        self.captesters = (CapTester(), CapTester())
+        self.setup_test_env(FS_AUTH_CAPS)
 
-        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
-        for path in paths:
-            self.mount_a.remount(client_id=self.client_id,
-                                 client_keyring_path=keyring_path,
-                                 cephfs_mntpt=path)
+        self.run_cap_test_one_by_one(FS_AUTH_CAPS)
 
-
+    def run_cap_test_one_by_one(self, fs_auth_caps):
+        keyring = self.run_cluster_cmd(f'auth get {self.client_name}')
+        for i, c in enumerate(fs_auth_caps):
+            self.assertIn(i, (0, 1))
+            PATH = c[0]
+            PERM = c[1]
+            self._remount(keyring, PATH)
             # actual tests...
-            self.run_mon_cap_tests(moncap, keyring)
-            self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+            self.captesters[i].run_mon_cap_tests(self.fs, self.client_id)
+            self.captesters[i].run_mds_cap_tests(PERM, PATH)
 
     def tearDown(self):
         self.mount_a.umount_wait()
@@ -1001,49 +1291,29 @@ class TestFsAuthorize(CapsHelper):
 
         super(type(self), self).tearDown()
 
-    def setup_for_single_path(self, perm):
-        filedata, filename = 'some data on fs 1', 'file_on_fs1'
-
-        filepath = os_path_join(self.mount_a.hostfs_mntpt, filename)
-        self.mount_a.write_file(filepath, filedata)
-
-        keyring = self.fs.authorize(self.client_id, ('/', perm))
+    def _remount(self, keyring, path='/'):
         keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
-
         self.mount_a.remount(client_id=self.client_id,
                              client_keyring_path=keyring_path,
-                             cephfs_mntpt='/')
+                             cephfs_mntpt=path)
 
-        return filepath, filedata, keyring
+    def setup_for_single_path(self, fs_auth_caps):
+        self.captester.write_test_files((self.mount_a,), '/')
+        keyring = self.fs.authorize(self.client_id, fs_auth_caps)
+        self._remount(keyring)
 
-    def setup_for_multiple_paths(self, perm, paths):
-        filedata, filename = 'some data on fs 1', 'file_on_fs1'
+    def setup_for_multiple_paths(self, fs_auth_caps):
+        for i, c in enumerate(fs_auth_caps):
+            PATH = c[0]
+            self.captesters[i].write_test_files((self.mount_a,), PATH)
 
-        self.mount_a.run_shell('mkdir -p dir1/dir12/dir13 dir2/dir22/dir23')
+        self.fs.authorize(self.client_id, fs_auth_caps)
 
-        filepaths = []
-        for path in paths:
-            filepath = os_path_join(self.mount_a.hostfs_mntpt, path[1:], filename)
-            self.mount_a.write_file(filepath, filedata)
-            filepaths.append(filepath.replace(path, ''))
-        filepaths = tuple(filepaths)
-
-        keyring = self.fs.authorize(self.client_id, (paths[0], perm, paths[1],
-                                                     perm))
-
-        return filepaths, filedata, keyring
-
-    def setup_test_env(self, perm, paths=()):
-        filepaths, filedata, keyring = self.setup_for_multiple_paths(perm, paths) if paths \
-            else self.setup_for_single_path(perm)
-
-        if not isinstance(filepaths, tuple):
-            filepaths = (filepaths, )
-        if not isinstance(filedata, tuple):
-            filedata = (filedata, )
-        mounts = (self.mount_a, )
-
-        return filepaths, filedata, mounts, keyring
+    def setup_test_env(self, fs_auth_caps):
+        if len(fs_auth_caps) == 1:
+            self.setup_for_single_path(fs_auth_caps[0])
+        else:
+            self.setup_for_multiple_paths(fs_auth_caps)
 
 
 class TestAdminCommandIdempotency(CephFSTestCase):
@@ -1097,3 +1367,100 @@ class TestAdminCommandDumpTree(CephFSTestCase):
         self.fs.mds_asok(['dump', 'tree', '/'])
         log.info("  subtree: '~mdsdir'")
         self.fs.mds_asok(['dump', 'tree', '~mdsdir'])
+
+class TestAdminCommandDumpLoads(CephFSTestCase):
+    """
+    Tests for administration command dump loads.
+    """
+
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 1
+
+    def test_dump_loads(self):
+        """
+        make sure depth limit param is considered when dump loads for a MDS daemon.
+        """
+
+        log.info("dumping loads")
+        loads = self.fs.mds_asok(['dump', 'loads', '1'])
+        self.assertIsNotNone(loads)
+        self.assertIn("dirfrags", loads)
+        for d in loads["dirfrags"]:
+            self.assertLessEqual(d["path"].count("/"), 1)
+
+class TestFsBalRankMask(CephFSTestCase):
+    """
+    Tests ceph fs set <fs_name> bal_rank_mask
+    """
+
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 2
+
+    def test_bal_rank_mask(self):
+        """
+        check whether a specified bal_rank_mask value is valid or not.
+        """
+        bal_rank_mask = '0x0'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = '0'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = '-1'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = 'all'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = '0x1'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = '1'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = 'f0'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = 'ab'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = '0xfff0'
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        MAX_MDS = 256
+        bal_rank_mask = '0x' + 'f' * int(MAX_MDS / 4)
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        self.fs.set_bal_rank_mask(bal_rank_mask)
+        self.assertEqual(bal_rank_mask, self.fs.get_var('bal_rank_mask'))
+
+        bal_rank_mask = ''
+        log.info("set bal_rank_mask to empty string")
+        try:
+            self.fs.set_bal_rank_mask(bal_rank_mask)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+
+        bal_rank_mask = '0x1' + 'f' * int(MAX_MDS / 4)
+        log.info(f"set bal_rank_mask {bal_rank_mask}")
+        try:
+            self.fs.set_bal_rank_mask(bal_rank_mask)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)

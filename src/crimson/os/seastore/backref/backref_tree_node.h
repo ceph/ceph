@@ -26,11 +26,11 @@ struct backref_map_val_t {
     laddr_t laddr,
     extent_types_t type)
     : len(len), laddr(laddr), type(type) {}
+
+  bool operator==(const backref_map_val_t& rhs) const noexcept {
+    return len == rhs.len && laddr == rhs.laddr;
+  }
 };
-WRITE_EQ_OPERATORS_2(
-  backref_map_val_t,
-  len,
-  laddr);
 
 std::ostream& operator<<(std::ostream &out, const backref_map_val_t& val);
 
@@ -67,10 +67,6 @@ public:
   extent_types_t get_type() const final {
     return TYPE;
   }
-
-  bool may_conflict() const final {
-    return false;
-  }
 };
 using BackrefInternalNodeRef = BackrefInternalNode::Ref;
 
@@ -90,10 +86,6 @@ public:
 
   extent_types_t get_type() const final  {
     return TYPE;
-  }
-
-  bool may_conflict() const final {
-    return false;
   }
 
   const_iterator insert(
@@ -133,3 +125,9 @@ public:
 using BackrefLeafNodeRef = BackrefLeafNode::Ref;
 
 } // namespace crimson::os::seastore::backref
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::backref::backref_map_val_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefInternalNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefLeafNode> : fmt::ostream_formatter {};
+#endif

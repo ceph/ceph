@@ -9,6 +9,7 @@ import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
+import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { IscsiSettingComponent } from './iscsi-setting/iscsi-setting.component';
 import { IscsiTabsComponent } from './iscsi-tabs/iscsi-tabs.component';
@@ -90,8 +91,17 @@ const routes: Routes = [
   { path: '', redirectTo: 'rbd', pathMatch: 'full' },
   {
     path: 'rbd',
-    canActivate: [FeatureTogglesGuardService],
-    data: { breadcrumbs: 'Images' },
+    canActivate: [FeatureTogglesGuardService, ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        uiApiPath: 'block/rbd',
+        redirectTo: 'error',
+        header: 'No RBD pools available',
+        button_name: 'Create RBD pool',
+        button_route: '/pool/create'
+      },
+      breadcrumbs: 'Images'
+    },
     children: [
       { path: '', component: RbdListComponent },
       {
@@ -139,8 +149,19 @@ const routes: Routes = [
   {
     path: 'mirroring',
     component: RbdMirroringComponent,
-    canActivate: [FeatureTogglesGuardService],
-    data: { breadcrumbs: 'Mirroring' },
+    canActivate: [FeatureTogglesGuardService, ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        uiApiPath: 'block/mirroring',
+        redirectTo: 'error',
+        header: $localize`RBD mirroring is not configured`,
+        button_name: $localize`Configure RBD Mirroring`,
+        button_title: $localize`This will create rbd-mirror service and a replicated RBD pool`,
+        component: 'RBD Mirroring',
+        uiConfig: true
+      },
+      breadcrumbs: 'Mirroring'
+    },
     children: [
       {
         path: `${URLVerbs.EDIT}/:pool_name`,

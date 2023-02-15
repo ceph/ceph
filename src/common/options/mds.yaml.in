@@ -633,7 +633,7 @@ options:
   type: float
   level: advanced
   desc: hot popularity threshold to replicate a subtree
-  fmt_desc: The maximum temperature before Ceph attempts to replicate
+  fmt_desc: The minimum temperature before Ceph attempts to replicate
     metadata to other nodes.
   default: 8000
   services:
@@ -1054,6 +1054,12 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_inject_health_dummy
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
 #  percentage of MDS modify replies to skip sending the client a trace on [0-1]
 - name: mds_inject_traceless_reply_probability
   type: float
@@ -1337,14 +1343,6 @@ options:
   default: 0
   services:
   - mds
-- name: mds_max_retries_on_remount_failure
-  type: uint
-  level: advanced
-  desc: number of consecutive failed remount attempts for invalidating kernel dcache
-    after which client would abort.
-  default: 5
-  services:
-  - mds
 - name: mds_dump_cache_threshold_formatter
   type: size
   level: dev
@@ -1454,6 +1452,20 @@ options:
   desc: Stores symlink target on the first data object of symlink file.
     Allows recover of symlink using recovery tools.
   default: true
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_extraordinary_events_dump_interval
+  type: secs
+  level: advanced
+  desc: Interval in seconds for dumping the recent in-memory logs when there is an extra-ordinary event.
+  long_desc: Interval in seconds for dumping the recent in-memory logs when there is an extra-ordinary
+    event. The default is ``0`` (disabled). The log level should be ``< 10`` and the gather level
+    should be ``>=10`` in debug_mds for enabling this option.
+  default: 0
+  min: 0
+  max: 60
   services:
   - mds
   flags:

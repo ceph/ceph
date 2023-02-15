@@ -5,15 +5,17 @@ import json
 from enum import IntEnum
 
 import cherrypy
+import rados
 import rbd
 
 from .. import mgr
 from ..exceptions import DashboardException
-from ..tools import ViewCache
+from ..plugins.ttl_cache import ttl_cache
+from ._paginate import ListPaginator
 from .ceph_service import CephService
 
 try:
-    from typing import List
+    from typing import List, Optional
 except ImportError:
     pass  # For typing only
 
@@ -115,9 +117,8 @@ def rbd_image_call(pool_name, namespace, image_name, func, *args, **kwargs):
 class RbdConfiguration(object):
     _rbd = rbd.RBD()
 
-    def __init__(self, pool_name='', namespace='', image_name='', pool_ioctx=None,
-                 image_ioctx=None):
-        # type: (str, str, str, object, object) -> None
+    def __init__(self, pool_name: str = '', namespace: str = '', image_name: str = '',
+                 pool_ioctx: Optional[rados.Ioctx] = None, image_ioctx: Optional[rbd.Image] = None):
         assert bool(pool_name) != bool(pool_ioctx)  # xor
         self._pool_name = pool_name
         self._namespace = namespace if namespace is not None else ''
@@ -135,8 +136,13 @@ class RbdConfiguration(object):
         def _list(ioctx):
             if self._image_name:  # image config
                 try:
-                    with rbd.Image(ioctx, self._image_name) as image:
-                        result = image.config_list()
+                    # No need to open the context of the image again
+                    # if we already did open it.
+                    if self._image_ioctx:
+                        result = self._image_ioctx.config_list()
+                    else:
+                        with rbd.Image(ioctx, self._image_name) as image:
+                            result = image.config_list()
                 except rbd.ImageNotFound:
                     result = []
             else:  # pool config
@@ -236,6 +242,7 @@ class RbdConfiguration(object):
 
 
 class RbdService(object):
+    _rbd_inst = rbd.RBD()
 
     @classmethod
     def _rbd_disk_usage(cls, image, snaps, whole_object=True):
@@ -265,8 +272,9 @@ class RbdService(object):
     def _rbd_image(cls, ioctx, pool_name, namespace, image_name):  # pylint: disable=R0912
         with rbd.Image(ioctx, image_name) as img:
             stat = img.stat()
+            mirror_info = img.mirror_image_get_info()
             mirror_mode = img.mirror_image_get_mode()
-            if mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL:
+            if mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL and mirror_info['state'] != rbd.RBD_MIRROR_IMAGE_DISABLED:  # noqa E501 #pylint: disable=line-too-long
                 stat['mirror_mode'] = 'journal'
             elif mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
                 stat['mirror_mode'] = 'snapshot'
@@ -276,11 +284,10 @@ class RbdService(object):
                     if scheduled_image['image'] == get_image_spec(pool_name, namespace, image_name):
                         stat['schedule_info'] = scheduled_image
             else:
-                stat['mirror_mode'] = 'unknown'
+                stat['mirror_mode'] = 'Disabled'
 
             stat['name'] = image_name
 
-            mirror_info = img.mirror_image_get_info()
             stat['primary'] = None
             if mirror_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED:
                 stat['primary'] = mirror_info['primary']
@@ -368,7 +375,10 @@ class RbdService(object):
                 stat['total_disk_usage'] = None
                 stat['disk_usage'] = None
 
-            stat['configuration'] = RbdConfiguration(pool_ioctx=ioctx, image_name=image_name).list()
+            stat['configuration'] = RbdConfiguration(
+                pool_ioctx=ioctx, image_name=image_name, image_ioctx=img).list()
+
+            stat['metadata'] = RbdImageMetadataService(img).list()
 
             return stat
 
@@ -383,9 +393,33 @@ class RbdService(object):
         return stat_parent
 
     @classmethod
-    def _rbd_image_refs(cls, ioctx):
-        rbd_inst = rbd.RBD()
-        return rbd_inst.list2(ioctx)
+    @ttl_cache(10)
+    def get_ioctx(cls, pool_name, namespace=''):
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        ioctx.set_namespace(namespace)
+        return ioctx
+
+    @classmethod
+    @ttl_cache(30)
+    def _rbd_image_refs(cls, pool_name, namespace=''):
+        # We add and set the namespace here so that we cache by ioctx and namespace.
+        images = []
+        ioctx = cls.get_ioctx(pool_name, namespace)
+        images = cls._rbd_inst.list2(ioctx)
+        return images
+
+    @classmethod
+    @ttl_cache(30)
+    def _pool_namespaces(cls, pool_name, namespace=None):
+        namespaces = []
+        if namespace:
+            namespaces = [namespace]
+        else:
+            ioctx = cls.get_ioctx(pool_name, namespace=rados.LIBRADOS_ALL_NSPACES)
+            namespaces = cls._rbd_inst.namespace_list(ioctx)
+            # images without namespace
+            namespaces.append('')
+        return namespaces
 
     @classmethod
     def _rbd_image_stat(cls, ioctx, pool_name, namespace, image_name):
@@ -393,8 +427,7 @@ class RbdService(object):
 
     @classmethod
     def _rbd_image_stat_removing(cls, ioctx, pool_name, namespace, image_id):
-        rbd_inst = rbd.RBD()
-        img = rbd_inst.trash_get(ioctx, image_id)
+        img = cls._rbd_inst.trash_get(ioctx, image_id)
         img_spec = get_image_spec(pool_name, namespace, image_id)
 
         if img['source'] == 'REMOVING':
@@ -408,34 +441,44 @@ class RbdService(object):
                                 errno=errno.ENOENT)
 
     @classmethod
-    @ViewCache()
-    def rbd_pool_list(cls, pool_name, namespace=None):
-        rbd_inst = rbd.RBD()
-        with mgr.rados.open_ioctx(pool_name) as ioctx:
-            result = []
-            if namespace:
-                namespaces = [namespace]
-            else:
-                namespaces = rbd_inst.namespace_list(ioctx)
-                # images without namespace
-                namespaces.append('')
-            for current_namespace in namespaces:
-                ioctx.set_namespace(current_namespace)
-                image_refs = cls._rbd_image_refs(ioctx)
-                for image_ref in image_refs:
+    def _rbd_pool_image_refs(cls, pool_names: List[str], namespace: Optional[str] = None):
+        joint_refs = []
+        for pool in pool_names:
+            for current_namespace in cls._pool_namespaces(pool, namespace=namespace):
+                image_refs = cls._rbd_image_refs(pool, current_namespace)
+                for image in image_refs:
+                    image['namespace'] = current_namespace
+                    image['pool_name'] = pool
+                    joint_refs.append(image)
+        return joint_refs
+
+    @classmethod
+    def rbd_pool_list(cls, pool_names: List[str], namespace: Optional[str] = None, offset: int = 0,
+                      limit: int = 5, search: str = '', sort: str = ''):
+        image_refs = cls._rbd_pool_image_refs(pool_names, namespace)
+        params = ['name', 'pool_name', 'namespace']
+        paginator = ListPaginator(offset, limit, sort, search, image_refs,
+                                  searchable_params=params, sortable_params=params,
+                                  default_sort='+name')
+
+        result = []
+        for image_ref in paginator.list():
+            with mgr.rados.open_ioctx(image_ref['pool_name']) as ioctx:
+                ioctx.set_namespace(image_ref['namespace'])
+                # Check if the RBD has been deleted partially. This happens for example if
+                # the deletion process of the RBD has been started and was interrupted.
+
+                try:
+                    stat = cls._rbd_image_stat(
+                        ioctx, image_ref['pool_name'], image_ref['namespace'], image_ref['name'])
+                except rbd.ImageNotFound:
                     try:
-                        stat = cls._rbd_image_stat(
-                            ioctx, pool_name, current_namespace, image_ref['name'])
+                        stat = cls._rbd_image_stat_removing(
+                            ioctx, image_ref['pool_name'], image_ref['namespace'], image_ref['id'])
                     except rbd.ImageNotFound:
-                        # Check if the RBD has been deleted partially. This happens for example if
-                        # the deletion process of the RBD has been started and was interrupted.
-                        try:
-                            stat = cls._rbd_image_stat_removing(
-                                ioctx, pool_name, current_namespace, image_ref['id'])
-                        except rbd.ImageNotFound:
-                            continue
-                    result.append(stat)
-            return result
+                        continue
+                result.append(stat)
+        return result, paginator.get_count()
 
     @classmethod
     def get_image(cls, image_spec):
@@ -509,3 +552,32 @@ class RbdMirroringService:
     @classmethod
     def snapshot_schedule_remove(cls, image_spec: str):
         _rbd_support_remote('mirror_snapshot_schedule_remove', image_spec)
+
+
+class RbdImageMetadataService(object):
+    def __init__(self, image):
+        self._image = image
+
+    def list(self):
+        result = self._image.metadata_list()
+        # filter out configuration metadata
+        return {v[0]: v[1] for v in result if not v[0].startswith('conf_')}
+
+    def get(self, name):
+        return self._image.metadata_get(name)
+
+    def set(self, name, value):
+        self._image.metadata_set(name, value)
+
+    def remove(self, name):
+        try:
+            self._image.metadata_remove(name)
+        except KeyError:
+            pass
+
+    def set_metadata(self, metadata):
+        for name, value in metadata.items():
+            if value is not None:
+                self.set(name, value)
+            else:
+                self.remove(name)

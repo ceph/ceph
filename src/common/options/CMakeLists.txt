@@ -76,7 +76,7 @@ endif()
 set(mgr_disabled_modules "")
 if(WITH_MGR)
   # https://tracker.ceph.com/issues/45147
-  if(Python3_VERSION VERSION_GREATER_EQUAL 3.8)
+  if(Python3_VERSION VERSION_EQUAL 3.8)
     set(mgr_disabled_modules "diskprediction_local")
     message(STATUS "mgr module disabled for ${Python3_VERSION}: ${mgr_disabled_modules}")
   endif()
@@ -93,6 +93,7 @@ add_options(osd)
 add_options(rbd)
 add_options(rbd-mirror)
 add_options(immutable-object-cache)
+add_options(ceph-exporter)
 
 # if set to empty string, system default luarocks package location (if exist) will be used
 set(rgw_luarocks_location "")

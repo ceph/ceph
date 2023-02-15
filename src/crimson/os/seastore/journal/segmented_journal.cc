@@ -27,12 +27,13 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore::journal {
 
 SegmentedJournal::SegmentedJournal(
-  SegmentProvider &segment_provider)
-  : segment_provider(segment_provider),
-    segment_seq_allocator(
+  SegmentProvider &segment_provider,
+  JournalTrimmer &trimmer)
+  : segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::JOURNAL)),
-    journal_segment_allocator("JOURNAL",
-                              segment_type_t::JOURNAL,
+    journal_segment_allocator(&trimmer,
+                              data_category_t::METADATA,
+                              INLINE_GENERATION,
                               segment_provider,
                               *segment_seq_allocator),
     record_submitter(crimson::common::get_conf<uint64_t>(
@@ -44,13 +45,21 @@ SegmentedJournal::SegmentedJournal(
                      crimson::common::get_conf<double>(
                        "seastore_journal_batch_preferred_fullness"),
                      journal_segment_allocator),
-    sm_group(*segment_provider.get_segment_manager_group())
+    sm_group(*segment_provider.get_segment_manager_group()),
+    trimmer{trimmer}
 {
 }
 
-SegmentedJournal::open_for_write_ret SegmentedJournal::open_for_write()
+SegmentedJournal::open_for_mkfs_ret
+SegmentedJournal::open_for_mkfs()
 {
-  return record_submitter.open();
+  return record_submitter.open(true);
+}
+
+SegmentedJournal::open_for_mount_ret
+SegmentedJournal::open_for_mount()
+{
+  return record_submitter.open(false);
 }
 
 SegmentedJournal::close_ertr::future<> SegmentedJournal::close()
@@ -92,68 +101,148 @@ SegmentedJournal::prep_replay_segments(
     }
   });
 
-  auto journal_tail = segments.rbegin()->second.journal_tail;
-  segment_provider.update_journal_tail_committed(journal_tail);
-  auto replay_from = journal_tail.offset;
-  auto from = segments.begin();
-  if (replay_from != P_ADDR_NULL) {
-    from = std::find_if(
+  auto last_segment_id = segments.rbegin()->first;
+  auto last_header = segments.rbegin()->second;
+  return scan_last_segment(last_segment_id, last_header
+  ).safe_then([this, FNAME, segments=std::move(segments)] {
+    INFO("dirty_tail={}, alloc_tail={}",
+         trimmer.get_dirty_tail(),
+         trimmer.get_alloc_tail());
+    auto journal_tail = trimmer.get_journal_tail();
+    auto journal_tail_paddr = journal_tail.offset;
+    ceph_assert(journal_tail != JOURNAL_SEQ_NULL);
+    ceph_assert(journal_tail_paddr != P_ADDR_NULL);
+    auto from = std::find_if(
       segments.begin(),
       segments.end(),
-      [&replay_from](const auto &seg) -> bool {
-	auto& seg_addr = replay_from.as_seg_paddr();
-	return seg.first == seg_addr.get_segment_id();
+      [&journal_tail_paddr](const auto &seg) -> bool {
+        auto& seg_addr = journal_tail_paddr.as_seg_paddr();
+        return seg.first == seg_addr.get_segment_id();
       });
     if (from->second.segment_seq != journal_tail.segment_seq) {
       ERROR("journal_tail {} does not match {}",
             journal_tail, from->second);
       ceph_abort();
     }
-  } else {
-    replay_from = paddr_t::make_seg_paddr(
-      from->first,
-      journal_segment_allocator.get_block_size());
-  }
 
-  auto num_segments = segments.end() - from;
-  INFO("{} segments to replay, from {}",
-       num_segments, replay_from);
-  auto ret = replay_segments_t(num_segments);
-  std::transform(
-    from, segments.end(), ret.begin(),
-    [this](const auto &p) {
-      auto ret = journal_seq_t{
-	p.second.segment_seq,
-	paddr_t::make_seg_paddr(
-	  p.first,
-	  journal_segment_allocator.get_block_size())
-      };
-      return std::make_pair(ret, p.second);
-    });
-  ret[0].first.offset = replay_from;
-  return prep_replay_segments_fut(
-    prep_replay_segments_ertr::ready_future_marker{},
-    std::move(ret));
+    auto num_segments = segments.end() - from;
+    INFO("{} segments to replay", num_segments);
+    auto ret = replay_segments_t(num_segments);
+    std::transform(
+      from, segments.end(), ret.begin(),
+      [this](const auto &p) {
+        auto ret = journal_seq_t{
+          p.second.segment_seq,
+          paddr_t::make_seg_paddr(
+            p.first,
+            sm_group.get_block_size())
+        };
+        return std::make_pair(ret, p.second);
+      });
+    ret[0].first.offset = journal_tail_paddr;
+    return prep_replay_segments_fut(
+      replay_ertr::ready_future_marker{},
+      std::move(ret));
+  });
+}
+
+SegmentedJournal::scan_last_segment_ertr::future<>
+SegmentedJournal::scan_last_segment(
+  const segment_id_t &segment_id,
+  const segment_header_t &segment_header)
+{
+  LOG_PREFIX(SegmentedJournal::scan_last_segment);
+  assert(segment_id == segment_header.physical_segment_id);
+  trimmer.update_journal_tails(
+      segment_header.dirty_tail, segment_header.alloc_tail);
+  auto seq = journal_seq_t{
+    segment_header.segment_seq,
+    paddr_t::make_seg_paddr(segment_id, 0)
+  };
+  INFO("scanning journal tail deltas -- {}", segment_header);
+  return seastar::do_with(
+    scan_valid_records_cursor(seq),
+    SegmentManagerGroup::found_record_handler_t(
+      [FNAME, this](
+        record_locator_t locator,
+        const record_group_header_t& record_group_header,
+        const bufferlist& mdbuf
+      ) -> SegmentManagerGroup::scan_valid_records_ertr::future<>
+    {
+      DEBUG("decoding {} at {}", record_group_header, locator);
+      bool has_tail_delta = false;
+      auto maybe_headers = try_decode_record_headers(
+          record_group_header, mdbuf);
+      if (!maybe_headers) {
+        // This should be impossible, we did check the crc on the mdbuf
+        ERROR("unable to decode headers from {} at {}",
+              record_group_header, locator);
+        ceph_abort();
+      }
+      for (auto &record_header : *maybe_headers) {
+        ceph_assert(is_valid_transaction(record_header.type));
+        if (is_background_transaction(record_header.type)) {
+          has_tail_delta = true;
+        }
+      }
+      if (has_tail_delta) {
+        bool found_delta = false;
+        auto maybe_record_deltas_list = try_decode_deltas(
+          record_group_header, mdbuf, locator.record_block_base);
+        if (!maybe_record_deltas_list) {
+          ERROR("unable to decode deltas from {} at {}",
+                record_group_header, locator);
+          ceph_abort();
+        }
+        for (auto &record_deltas : *maybe_record_deltas_list) {
+          for (auto &[ctime, delta] : record_deltas.deltas) {
+            if (delta.type == extent_types_t::JOURNAL_TAIL) {
+              found_delta = true;
+              journal_tail_delta_t tail_delta;
+              decode(tail_delta, delta.bl);
+              auto start_seq = locator.write_result.start_seq;
+              DEBUG("got {}, at {}", tail_delta, start_seq);
+              ceph_assert(tail_delta.dirty_tail != JOURNAL_SEQ_NULL);
+              ceph_assert(tail_delta.alloc_tail != JOURNAL_SEQ_NULL);
+              trimmer.update_journal_tails(
+                  tail_delta.dirty_tail, tail_delta.alloc_tail);
+            }
+          }
+        }
+        ceph_assert(found_delta);
+      }
+      return seastar::now();
+    }),
+    [this, nonce=segment_header.segment_nonce](auto &cursor, auto &handler)
+  {
+    return sm_group.scan_valid_records(
+      cursor,
+      nonce,
+      std::numeric_limits<std::size_t>::max(),
+      handler).discard_result();
+  });
 }
 
 SegmentedJournal::replay_ertr::future<>
 SegmentedJournal::replay_segment(
   journal_seq_t seq,
   segment_header_t header,
-  delta_handler_t &handler)
+  delta_handler_t &handler,
+  replay_stats_t &stats)
 {
   LOG_PREFIX(Journal::replay_segment);
   INFO("starting at {} -- {}", seq, header);
   return seastar::do_with(
     scan_valid_records_cursor(seq),
     SegmentManagerGroup::found_record_handler_t(
-      [s_type=header.type, &handler, this](
+      [&handler, this, &stats](
       record_locator_t locator,
       const record_group_header_t& header,
       const bufferlist& mdbuf)
       -> SegmentManagerGroup::scan_valid_records_ertr::future<>
     {
       LOG_PREFIX(Journal::replay_segment);
+      ++stats.num_record_groups;
       auto maybe_record_deltas_list = try_decode_deltas(
           header, mdbuf, locator.record_block_base);
       if (!maybe_record_deltas_list) {
@@ -166,19 +255,20 @@ SegmentedJournal::replay_segment(
       return seastar::do_with(
         std::move(*maybe_record_deltas_list),
         [write_result=locator.write_result,
-	 s_type,
          this,
          FNAME,
-         &handler](auto& record_deltas_list)
+         &handler,
+         &stats](auto& record_deltas_list)
       {
         return crimson::do_for_each(
           record_deltas_list,
           [write_result,
-	   s_type,
            this,
            FNAME,
-           &handler](record_deltas_t& record_deltas)
+           &handler,
+           &stats](record_deltas_t& record_deltas)
         {
+          ++stats.num_records;
           auto locator = record_locator_t{
             record_deltas.record_block_base,
             write_result
@@ -189,48 +279,34 @@ SegmentedJournal::replay_segment(
           return crimson::do_for_each(
             record_deltas.deltas,
             [locator,
-	     s_type,
              this,
-             FNAME,
-             &handler](auto &p)
+             &handler,
+             &stats](auto &p)
           {
-	    auto& commit_time = p.first;
+	    auto& modify_time = p.first;
 	    auto& delta = p.second;
-            /* The journal may validly contain deltas for extents in
-             * since released segments.  We can detect those cases by
-             * checking whether the segment in question currently has a
-             * sequence number > the current journal segment seq. We can
-             * safetly skip these deltas because the extent must already
-             * have been rewritten.
-             */
-            if (delta.paddr != P_ADDR_NULL) {
-              auto& seg_addr = delta.paddr.as_seg_paddr();
-              auto& seg_info = segment_provider.get_seg_info(seg_addr.get_segment_id());
-              auto delta_paddr_segment_seq = seg_info.seq;
-	      auto delta_paddr_segment_type = seg_info.type;
-              if (s_type == segment_type_t::NULL_SEG ||
-                  (delta_paddr_segment_seq != delta.ext_seq ||
-		   delta_paddr_segment_type != delta.seg_type)) {
-                SUBDEBUG(seastore_cache,
-                         "delta is obsolete, delta_paddr_segment_seq={},"
-			 " delta_paddr_segment_type={} -- {}",
-                         segment_seq_printer_t{delta_paddr_segment_seq},
-			 delta_paddr_segment_type,
-                         delta);
-                return replay_ertr::now();
-              }
-            }
 	    return handler(
 	      locator,
 	      delta,
-	      segment_provider.get_alloc_info_replay_from(),
-	      seastar::lowres_system_clock::time_point(
-		seastar::lowres_system_clock::duration(commit_time)));
+	      trimmer.get_dirty_tail(),
+	      trimmer.get_alloc_tail(),
+              modify_time
+            ).safe_then([&stats, delta_type=delta.type](bool is_applied) {
+              if (is_applied) {
+                // see Cache::replay_delta()
+                assert(delta_type != extent_types_t::JOURNAL_TAIL);
+                if (delta_type == extent_types_t::ALLOC_INFO) {
+                  ++stats.num_alloc_deltas;
+                } else {
+                  ++stats.num_dirty_deltas;
+                }
+              }
+            });
           });
         });
       });
     }),
-    [=](auto &cursor, auto &dhandler) {
+    [=, this](auto &cursor, auto &dhandler) {
       return sm_group.scan_valid_records(
 	cursor,
 	header.segment_nonce,
@@ -255,16 +331,25 @@ SegmentedJournal::replay_ret SegmentedJournal::replay(
     (auto &&segment_headers) mutable -> replay_ret {
     INFO("got {} segments", segment_headers.size());
     return seastar::do_with(
-      std::move(delta_handler), replay_segments_t(),
-      [this, segment_headers=std::move(segment_headers)]
-      (auto &handler, auto &segments) mutable -> replay_ret {
+      std::move(delta_handler),
+      replay_segments_t(),
+      replay_stats_t(),
+      [this, segment_headers=std::move(segment_headers), FNAME]
+      (auto &handler, auto &segments, auto &stats) mutable -> replay_ret {
 	return prep_replay_segments(std::move(segment_headers)
-	).safe_then([this, &handler, &segments](auto replay_segs) mutable {
+	).safe_then([this, &handler, &segments, &stats](auto replay_segs) mutable {
 	  segments = std::move(replay_segs);
-	  return crimson::do_for_each(segments, [this, &handler](auto i) mutable {
-	    return replay_segment(i.first, i.second, handler);
+	  return crimson::do_for_each(segments,[this, &handler, &stats](auto i) mutable {
+	    return replay_segment(i.first, i.second, handler, stats);
 	  });
-	});
+        }).safe_then([&stats, FNAME] {
+          INFO("replay done, record_groups={}, records={}, "
+               "alloc_deltas={}, dirty_deltas={}",
+               stats.num_record_groups,
+               stats.num_records,
+               stats.num_alloc_deltas,
+               stats.num_dirty_deltas);
+        });
       });
   });
 }

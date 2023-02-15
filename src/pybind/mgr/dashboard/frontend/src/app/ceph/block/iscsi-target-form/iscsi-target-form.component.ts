@@ -15,6 +15,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -86,9 +87,13 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
+    const rbdListContext = new CdTableFetchDataContext(() => undefined);
+    /* limit -1 to specify all images */
+    rbdListContext.pageInfo.limit = -1;
     const promises: any[] = [
       this.iscsiService.listTargets(),
-      this.rbdService.list(),
+      /* tslint:disable:no-empty */
+      this.rbdService.list(rbdListContext.toParams()),
       this.iscsiService.portals(),
       this.iscsiService.settings(),
       this.iscsiService.version()
@@ -800,9 +805,9 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
     const imageFeatures = image.features;
     const requiredFeatures = this.required_rbd_features[backstore];
     const unsupportedFeatures = this.unsupported_rbd_features[backstore];
-    // tslint:disable-next-line:no-bitwise
+    // eslint-disable-next-line no-bitwise
     const validRequiredFeatures = (imageFeatures & requiredFeatures) === requiredFeatures;
-    // tslint:disable-next-line:no-bitwise
+    // eslint-disable-next-line no-bitwise
     const validSupportedFeatures = (imageFeatures & unsupportedFeatures) === 0;
     return validRequiredFeatures && validSupportedFeatures;
   }

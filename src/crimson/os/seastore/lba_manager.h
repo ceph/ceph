@@ -145,17 +145,6 @@ public:
     scan_mappings_func_t &&f) = 0;
 
   /**
-   * Calls f for each mapped space usage
-   */
-  using scan_mapped_space_iertr = base_iertr;
-  using scan_mapped_space_ret = scan_mapped_space_iertr::future<>;
-  using scan_mapped_space_func_t = std::function<
-    void(paddr_t, extent_len_t, depth_t)>;
-  virtual scan_mapped_space_ret scan_mapped_space(
-    Transaction &t,
-    scan_mapped_space_func_t &&f) = 0;
-
-  /**
    * rewrite_extent
    *
    * rewrite extent into passed transaction
@@ -188,8 +177,7 @@ public:
   using update_mappings_ret = update_mapping_ret;
   update_mappings_ret update_mappings(
     Transaction& t,
-    const std::list<LogicalCachedExtentRef>& extents,
-    const std::vector<paddr_t>& original_paddrs);
+    const std::list<LogicalCachedExtentRef>& extents);
 
   /**
    * get_physical_extent_if_live
@@ -208,7 +196,7 @@ public:
     extent_types_t type,
     paddr_t addr,
     laddr_t laddr,
-    seastore_off_t len) = 0;
+    extent_len_t len) = 0;
 
   virtual void add_pin(LBAPin &pin) = 0;
 

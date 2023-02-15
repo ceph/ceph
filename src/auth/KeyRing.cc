@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <boost/algorithm/string/replace.hpp>
 #include "auth/KeyRing.h"
+#include "include/stringify.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/debug.h"
@@ -136,24 +137,19 @@ void KeyRing::encode_plaintext(bufferlist& bl)
 void KeyRing::encode_formatted(string label, Formatter *f, bufferlist& bl)
 {
   f->open_array_section(label.c_str());
-  for (map<EntityName, EntityAuth>::iterator p = keys.begin();
-       p != keys.end();
-       ++p) {
-
+  for (const auto &[ename, eauth] : keys) {
     f->open_object_section("auth_entities");
-    f->dump_string("entity", p->first.to_str().c_str());
-    std::ostringstream keyss;
-    keyss << p->second.key;
-    f->dump_string("key", keyss.str());
+    f->dump_string("entity", ename.to_str().c_str());
+    f->dump_string("key", stringify(eauth.key));
+    if (!eauth.pending_key.empty()) {
+      f->dump_string("pending_key", stringify(eauth.pending_key));
+    }
     f->open_object_section("caps");
-    for (map<string, bufferlist>::iterator q = p->second.caps.begin();
-	 q != p->second.caps.end();
-	 ++q) {
-      auto dataiter = q->second.cbegin();
+    for (auto& [sys, capsbl] : eauth.caps) {
+      auto dataiter = capsbl.cbegin();
       string caps;
-      using ceph::decode;
-      decode(caps, dataiter);
-      f->dump_string(q->first.c_str(), caps);
+      ceph::decode(caps, dataiter);
+      f->dump_string(sys.c_str(), caps);
     }
     f->close_section();	/* caps */
     f->close_section();	/* auth_entities */
@@ -229,21 +225,19 @@ int KeyRing::load(CephContext *cct, const std::string &filename)
 
 void KeyRing::print(ostream& out)
 {
-  for (map<EntityName, EntityAuth>::iterator p = keys.begin();
-       p != keys.end();
-       ++p) {
-    out << "[" << p->first << "]" << std::endl;
-    out << "\tkey = " << p->second.key << std::endl;
+  for (auto& [ename, eauth] : keys) {
+    out << "[" << ename << "]" << std::endl;
+    out << "\tkey = " << eauth.key << std::endl;
+    if (!eauth.pending_key.empty()) {
+      out << "\tpending key = " << eauth.pending_key << std::endl;
+    }
 
-    for (map<string, bufferlist>::iterator q = p->second.caps.begin();
-	 q != p->second.caps.end();
-	 ++q) {
-      auto dataiter = q->second.cbegin();
+    for (auto& [sys, capbl] : eauth.caps) {
+      auto dataiter = capbl.cbegin();
       string caps;
-      using ceph::decode;
-      decode(caps, dataiter);
+      ceph::decode(caps, dataiter);
       boost::replace_all(caps, "\"", "\\\"");
-      out << "\tcaps " << q->first << " = \"" << caps << '"' << std::endl;
+      out << "\tcaps " << sys << " = \"" << caps << '"' << std::endl;
     }
   }
 }

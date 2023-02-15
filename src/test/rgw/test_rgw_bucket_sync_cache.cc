@@ -12,7 +12,7 @@
  * Foundation.  See file COPYING.
  */
 
-#include "rgw/rgw_bucket_sync_cache.h"
+#include "rgw_bucket_sync_cache.h"
 #include <gtest/gtest.h>
 
 using namespace rgw::bucket_sync;

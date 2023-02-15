@@ -15,7 +15,17 @@ overrides:
         bluestore block size: 1073741824
 tasks:
 - workunit:
-    cleanup: false
+    cleanup: true
     clients:
       client.0:
         - fs/full/subvolume_rm.sh
+- workunit:
+    cleanup: true
+    clients:
+      client.0:
+        - fs/full/subvolume_clone.sh
+- workunit:
+    cleanup: true
+    clients:
+      client.0:
+        - fs/full/subvolume_snapshot_rm.sh

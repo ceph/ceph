@@ -15,6 +15,9 @@
 #ifndef CEPH_INTARITH_H
 #define CEPH_INTARITH_H
 
+#include <bit>
+#include <climits>
+#include <concepts>
 #include <type_traits>
 
 template<typename T, typename U>
@@ -31,14 +34,6 @@ constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> round_up_to(T n,
 template<typename T, typename U>
 constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> shift_round_up(T x, U y) {
   return (x + (1 << y) - 1) >> y;
-}
-
-/*
- * Wrapper to determine if value is a power of 2
- */
-template<typename T>
-constexpr inline bool isp2(T x) {
-  return (x & (x - 1)) == 0;
 }
 
 /*
@@ -89,117 +84,10 @@ constexpr inline T p2roundup(T x, T align) {
   return -(-x & -align);
 }
 
-// count trailing zeros.
-// NOTE: the builtin is nondeterministic on 0 input
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) <= sizeof(unsigned)),
-  unsigned>::type ctz(T v) {
-  if (v == 0)
-    return sizeof(v) * 8;
-  return __builtin_ctz(v);
-}
-
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) > sizeof(unsigned int) &&
-   sizeof(T) <= sizeof(unsigned long)),
-  unsigned>::type ctz(T v) {
-  if (v == 0)
-    return sizeof(v) * 8;
-  return __builtin_ctzl(v);
-}
-
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) > sizeof(unsigned long) &&
-   sizeof(T) <= sizeof(unsigned long long)),
-  unsigned>::type ctz(T v) {
-  if (v == 0)
-    return sizeof(v) * 8;
-  return __builtin_ctzll(v);
-}
-
-// count leading zeros
-// NOTE: the builtin is nondeterministic on 0 input
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) <= sizeof(unsigned)),
-  unsigned>::type clz(T v) {
-  if (v == 0)
-    return sizeof(v) * 8;
-  return __builtin_clz(v);
-}
-
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) > sizeof(unsigned int) &&
-   sizeof(T) <= sizeof(unsigned long)),
-  unsigned>::type clz(T v) {
-  if (v == 0)
-    return sizeof(v) * 8;
-  return __builtin_clzl(v);
-}
-
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) > sizeof(unsigned long) &&
-   sizeof(T) <= sizeof(unsigned long long)),
-  unsigned>::type clz(T v) {
-  if (v == 0)
-    return sizeof(v) * 8;
-  return __builtin_clzll(v);
-}
-
 // count bits (set + any 0's that follow)
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) <= sizeof(unsigned)),
-  unsigned>::type cbits(T v) {
-  if (v == 0)
-    return 0;
-  return (sizeof(v) * 8) - __builtin_clz(v);
+template<std::integral T>
+unsigned cbits(T v) {
+  return (sizeof(v) * CHAR_BIT) - std::countl_zero(std::make_unsigned_t<T>(v));
 }
 
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) > sizeof(unsigned int) &&
-   sizeof(T) <= sizeof(unsigned long)),
-  unsigned>::type cbits(T v) {
-  if (v == 0)
-    return 0;
-  return (sizeof(v) * 8) - __builtin_clzl(v);
-}
-
-template<class T>
-  inline typename std::enable_if<
-  (std::is_integral<T>::value &&
-   sizeof(T) > sizeof(unsigned long) &&
-   sizeof(T) <= sizeof(unsigned long long)),
-  unsigned>::type cbits(T v) {
-  if (v == 0)
-    return 0;
-  return (sizeof(v) * 8) - __builtin_clzll(v);
-}
-
-// count the bits set to 1, a.k.a. population count
-template<class T>
-unsigned popcount(T v) {
-  static_assert(sizeof(T) <= sizeof(unsigned long long), "type too large");
-  if constexpr (sizeof(T) <= sizeof(unsigned int)) {
-    return __builtin_popcount(v);
-  } else if constexpr (sizeof(T) <= sizeof(unsigned long)) {
-    return __builtin_popcountl(v);
-  } else {
-    return __builtin_popcountll(v);
-  }
-}
 #endif

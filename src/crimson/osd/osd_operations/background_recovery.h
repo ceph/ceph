@@ -114,6 +114,7 @@ public:
     const EventT& evt);
 
   static BackfillRecoveryPipeline &bp(PG &pg);
+  PipelineHandle& get_handle() { return handle; }
 
   std::tuple<
     OperationThrottler::BlockingEvent,
@@ -123,6 +124,7 @@ public:
 private:
   boost::intrusive_ptr<const boost::statechart::event_base> evt;
   PipelineHandle handle;
+
   interruptible_future<bool> do_recovery() override;
 };
 
@@ -140,5 +142,11 @@ BackfillRecovery::BackfillRecovery(
     evt(evt.intrusive_from_this())
 {}
 
-
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::BackfillRecovery> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::osd::PglogBasedRecovery> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::osd::UrgentRecovery> : fmt::ostream_formatter {};
+template <class T> struct fmt::formatter<crimson::osd::BackgroundRecoveryT<T>> : fmt::ostream_formatter {};
+#endif

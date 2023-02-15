@@ -18,6 +18,10 @@
 #include <sstream>
 
 #include <netinet/in.h>
+#include <fmt/format.h>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 
 #include "include/ceph_features.h"
 #include "include/types.h"
@@ -547,6 +551,9 @@ struct entity_addr_t {
 WRITE_CLASS_ENCODER_FEATURES(entity_addr_t)
 
 std::ostream& operator<<(std::ostream& out, const entity_addr_t &addr);
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<entity_addr_t> : fmt::ostream_formatter {};
+#endif
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
 inline bool operator!=(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) != 0; }
@@ -735,6 +742,9 @@ struct entity_addrvec_t {
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<entity_addrvec_t> : fmt::ostream_formatter {};
+#endif
 
 namespace std {
 template<> struct hash<entity_addrvec_t> {

@@ -29,7 +29,7 @@ int execute_init(const po::variables_map &vm,
                  const std::vector<std::string> &ceph_global_init_args) {
   std::string pool_name;
   size_t arg_index = 0;
-  int r = utils::get_pool_and_namespace_names(vm, true, false, &pool_name,
+  int r = utils::get_pool_and_namespace_names(vm, false, &pool_name,
                                               nullptr, &arg_index);
   if (r < 0) {
     return r;
@@ -68,7 +68,7 @@ int execute_stats(const po::variables_map &vm,
   std::string pool_name;
   std::string namespace_name;
   size_t arg_index = 0;
-  int r = utils::get_pool_and_namespace_names(vm, true, false, &pool_name,
+  int r = utils::get_pool_and_namespace_names(vm, false, &pool_name,
                                               &namespace_name, &arg_index);
   if (r < 0) {
     return r;

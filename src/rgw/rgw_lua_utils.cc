@@ -18,7 +18,7 @@ constexpr const char* RGWDebugLogAction{"RGWDebugLog"};
 
 int RGWDebugLog(lua_State* L) 
 {
-  auto cct = reinterpret_cast<CephContext*>(lua_touserdata(L, lua_upvalueindex(1)));
+  auto cct = reinterpret_cast<CephContext*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
   auto message = luaL_checkstring(L, 1);
   ldout(cct, 20) << "Lua INFO: " << message << dendl;
@@ -73,4 +73,5 @@ void open_standard_libs(lua_State* L) {
   lua_settable(L, -3);
 }
 
-}
+} // namespace rgw::lua
+

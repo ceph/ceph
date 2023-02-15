@@ -42,7 +42,6 @@ public:
 
   void commit(MDSContext *c, uint64_t log_seq, int op_prio);
   uint64_t get_committed_log_seq() const { return committed_log_seq; }
-  uint64_t get_committing_log_seq() const { return committing_log_seq; }
   bool is_any_committing() const { return num_pending_commit > 0; }
 
   void load(MDSContext *c);

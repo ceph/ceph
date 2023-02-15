@@ -54,7 +54,7 @@ class IscsiGatewaysConfig(object):
         If Ceph Dashboard were configured before v10, we try to update our internal gateways
         database automatically.
         """
-        for gateway_name, gateway_config in config['gateways'].items():
+        for gateway_name, gateway_config in list(config['gateways'].items()):
             if '.' not in gateway_name:
                 from ..rest_client import RequestException
                 from .iscsi_client import IscsiClient  # pylint: disable=cyclic-import

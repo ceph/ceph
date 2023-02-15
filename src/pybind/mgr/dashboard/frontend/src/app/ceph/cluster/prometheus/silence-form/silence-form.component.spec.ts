@@ -15,7 +15,10 @@ import { ErrorComponent } from '~/app/core/error/error.component';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { AlertmanagerSilence } from '~/app/shared/models/alertmanager-silence';
+import {
+  AlertmanagerSilence,
+  AlertmanagerSilenceMatcher
+} from '~/app/shared/models/alertmanager-silence';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -283,12 +286,7 @@ describe('SilenceFormComponent', () => {
       expectMode('alertAdd', false, false, 'Create');
       expect(prometheusService.getSilences).not.toHaveBeenCalled();
       expect(prometheusService.getAlerts).toHaveBeenCalled();
-      expect(component.matchers).toEqual([
-        createMatcher('alertname', 'alert0', false),
-        createMatcher('instance', 'someInstance', false),
-        createMatcher('job', 'someJob', false),
-        createMatcher('severity', 'someSeverity', false)
-      ]);
+      expect(component.matchers).toEqual([createMatcher('alertname', 'alert0', false)]);
       expect(component.matcherMatch).toEqual({
         cssClass: 'has-success',
         status: 'Matches 1 rule with 1 active alert.'
@@ -404,13 +402,7 @@ describe('SilenceFormComponent', () => {
     it('should show added matcher', () => {
       addMatcher('job', 'someJob', true);
       fixtureH.expectIdElementsVisible(
-        [
-          'matcher-name-0',
-          'matcher-value-0',
-          'matcher-isRegex-0',
-          'matcher-edit-0',
-          'matcher-delete-0'
-        ],
+        ['matcher-name-0', 'matcher-value-0', 'matcher-edit-0', 'matcher-delete-0'],
         true
       );
       expectMatch(null);
@@ -423,12 +415,10 @@ describe('SilenceFormComponent', () => {
         [
           'matcher-name-0',
           'matcher-value-0',
-          'matcher-isRegex-0',
           'matcher-edit-0',
           'matcher-delete-0',
           'matcher-name-1',
           'matcher-value-1',
-          'matcher-isRegex-1',
           'matcher-edit-1',
           'matcher-delete-1'
         ],
@@ -443,8 +433,6 @@ describe('SilenceFormComponent', () => {
       fixture.detectChanges();
       fixtureH.expectFormFieldToBe('#matcher-name-0', 'alertname');
       fixtureH.expectFormFieldToBe('#matcher-value-0', 'alert.*');
-      fixtureH.expectFormFieldToBe('#matcher-isRegex-0', 'true');
-      fixtureH.expectFormFieldToBe('#matcher-isRegex-1', 'false');
       expectMatch(null);
     });
 
@@ -467,7 +455,6 @@ describe('SilenceFormComponent', () => {
 
       fixtureH.expectFormFieldToBe('#matcher-name-0', 'alertname');
       fixtureH.expectFormFieldToBe('#matcher-value-0', 'alert0');
-      fixtureH.expectFormFieldToBe('#matcher-isRegex-0', 'false');
       expectMatch('Matches 1 rule with 1 active alert.');
     });
 
@@ -506,14 +493,22 @@ describe('SilenceFormComponent', () => {
     let silence: AlertmanagerSilence;
     const silenceId = '50M3-10N6-1D';
 
-    const expectSuccessNotification = (titleStartsWith: string) =>
+    const expectSuccessNotification = (
+      titleStartsWith: string,
+      matchers: AlertmanagerSilenceMatcher[]
+    ) => {
+      let msg = '';
+      for (const matcher of matchers) {
+        msg = msg.concat(` ${matcher.name} - ${matcher.value},`);
+      }
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        `${titleStartsWith} silence ${silenceId}`,
+        `${titleStartsWith} silence for ${msg.slice(0, -1)}`,
         undefined,
         undefined,
         'Prometheus'
       );
+    };
 
     const fillAndSubmit = () => {
       ['createdBy', 'comment'].forEach((attr) => {
@@ -575,7 +570,7 @@ describe('SilenceFormComponent', () => {
     it('should create a silence', () => {
       fillAndSubmit();
       expect(prometheusService.setSilence).toHaveBeenCalledWith(silence);
-      expectSuccessNotification('Created');
+      expectSuccessNotification('Created', silence.matchers);
     });
 
     it('should recreate a silence', () => {
@@ -583,7 +578,7 @@ describe('SilenceFormComponent', () => {
       component.id = 'recreateId';
       fillAndSubmit();
       expect(prometheusService.setSilence).toHaveBeenCalledWith(silence);
-      expectSuccessNotification('Recreated');
+      expectSuccessNotification('Recreated', silence.matchers);
     });
 
     it('should edit a silence', () => {
@@ -592,7 +587,7 @@ describe('SilenceFormComponent', () => {
       silence.id = component.id;
       fillAndSubmit();
       expect(prometheusService.setSilence).toHaveBeenCalledWith(silence);
-      expectSuccessNotification('Edited');
+      expectSuccessNotification('Edited', silence.matchers);
     });
   });
 });

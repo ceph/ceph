@@ -35,11 +35,13 @@ struct scope_guard {
 };
 
 template <typename F>
+[[nodiscard("Unassigned scope guards will execute immediately")]]
 scope_guard<F> make_scope_guard(F &&f) {
   return scope_guard<F>(std::forward<F>(f));
 }
 
 template<typename F, typename... Args>
+[[nodiscard("Unassigned scope guards will execute immediately")]]
 scope_guard<F> make_scope_guard(std::in_place_type_t<F>, Args&& ...args) {
   return { std::in_place, std::forward<Args>(args)... };
 }

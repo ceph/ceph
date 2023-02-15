@@ -453,6 +453,14 @@ options:
   services:
   - mds_client
   with_legacy: true
+- name: client_max_retries_on_remount_failure
+  type: uint
+  level: advanced
+  desc: number of consecutive failed remount attempts for invalidating kernel dcache
+    after which client would abort.
+  default: 5
+  services:
+  - mds_client
 - name: client_die_on_failed_remount
   type: bool
   level: dev
@@ -484,6 +492,9 @@ options:
   default: false
   services:
   - mds_client
+  flags:
+  - startup
+  - no_mon_update
   with_legacy: true
 - name: client_fs
   type: str
@@ -553,6 +564,16 @@ options:
   default: false
   tags:
   - client
+  services:
+  - mds_client
+  flags:
+  - runtime
+- name: client_quota
+  type: bool
+  level: advanced
+  desc: Enable quota enforcement
+  long_desc: Enable quota_bytes and quota_files enforcement for the client.
+  default: true
   services:
   - mds_client
   flags:

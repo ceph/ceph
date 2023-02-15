@@ -56,6 +56,7 @@ ostream& operator<<(ostream &out, const Inode &in)
       << " btime=" << in.btime
       << " mtime=" << in.mtime
       << " ctime=" << in.ctime
+      << " change_attr=" << in.change_attr
       << " caps=" << ccap_string(in.caps_issued());
   if (!in.caps.empty()) {
     out << "(";
@@ -85,7 +86,7 @@ ostream& operator<<(ostream &out, const Inode &in)
   if (in.is_dir() && in.has_dir_layout())
     out << " has_dir_layout";
 
-  if (in.quota.is_enable())
+  if (in.quota.is_enabled())
     out << " " << in.quota;
 
   out << ' ' << &in << ")";

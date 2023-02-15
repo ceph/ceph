@@ -49,12 +49,7 @@ install(TARGETS
 
 option(WITH_CEPHFS_SHELL "install cephfs-shell" OFF)
 if(WITH_CEPHFS_SHELL)
-  include(Distutils)
-  distutils_install_module(cephfs-shell)
-  if(WITH_TESTS)
-    include(AddCephTest)
-    add_tox_test(cephfs-shell)
-  endif()
+  add_subdirectory(shell)
 endif()
 
 option(WITH_CEPHFS_TOP "install cephfs-top utility" ON)

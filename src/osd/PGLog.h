@@ -633,7 +633,7 @@ public:
     void trim(
       CephContext* cct,
       eversion_t s,
-      std::set<std::string> *trimmed,
+      std::set<eversion_t> *trimmed,
       std::set<std::string>* trimmed_dups,
       eversion_t *write_from_dups);
 
@@ -650,7 +650,7 @@ protected:
   eversion_t dirty_to;         ///< must clear/writeout all keys <= dirty_to
   eversion_t dirty_from;       ///< must clear/writeout all keys >= dirty_from
   eversion_t writeout_from;    ///< must writout keys >= writeout_from
-  std::set<std::string> trimmed;     ///< must clear keys in trimmed
+  std::set<eversion_t> trimmed;     ///< must clear keys in trimmed
   eversion_t dirty_to_dups;    ///< must clear/writeout all dups <= dirty_to_dups
   eversion_t dirty_from_dups;  ///< must clear/writeout all dups >= dirty_from_dups
   eversion_t write_from_dups;  ///< must write keys >= write_from_dups
@@ -942,6 +942,13 @@ public:
   void rebuild_missing_set_with_deletes(ObjectStore *store,
 					ObjectStore::CollectionHandle& ch,
 					const pg_info_t &info);
+
+#ifdef WITH_SEASTAR
+  seastar::future<> rebuild_missing_set_with_deletes_crimson(
+    crimson::os::FuturizedStore &store,
+    crimson::os::CollectionRef ch,
+    const pg_info_t &info);
+#endif
 
 protected:
   static void split_by_object(
@@ -1334,7 +1341,8 @@ public:
     pg_log_t &log,
     const coll_t& coll,
     const ghobject_t &log_oid, std::map<eversion_t, hobject_t> &divergent_priors,
-    bool require_rollback);
+    bool require_rollback,
+    const DoutPrefixProvider *dpp = nullptr);
 
   static void write_log_and_missing(
     ObjectStore::Transaction& t,
@@ -1344,7 +1352,8 @@ public:
     const ghobject_t &log_oid,
     const pg_missing_tracker_t &missing,
     bool require_rollback,
-    bool *rebuilt_missing_set_with_deletes);
+    bool *rebuilt_missing_set_with_deletes,
+    const DoutPrefixProvider *dpp = nullptr);
 
   static void _write_log_and_missing_wo_missing(
     ObjectStore::Transaction& t,
@@ -1361,7 +1370,8 @@ public:
     eversion_t dirty_to_dups,
     eversion_t dirty_from_dups,
     eversion_t write_from_dups,
-    std::set<std::string> *log_keys_debug
+    std::set<std::string> *log_keys_debug,
+    const DoutPrefixProvider *dpp = nullptr
     );
 
   static void _write_log_and_missing(
@@ -1372,7 +1382,7 @@ public:
     eversion_t dirty_to,
     eversion_t dirty_from,
     eversion_t writeout_from,
-    std::set<std::string> &&trimmed,
+    std::set<eversion_t> &&trimmed,
     std::set<std::string> &&trimmed_dups,
     const pg_missing_tracker_t &missing,
     bool touch_log,
@@ -1382,7 +1392,8 @@ public:
     eversion_t dirty_from_dups,
     eversion_t write_from_dups,
     bool *may_include_deletes_in_missing_dirty,
-    std::set<std::string> *log_keys_debug
+    std::set<std::string> *log_keys_debug,
+    const DoutPrefixProvider *dpp = nullptr
     );
 
   void read_log_and_missing(
@@ -1420,8 +1431,9 @@ public:
     std::set<std::string> *log_keys_debug = nullptr,
     bool debug_verify_stored_missing = false
     ) {
-    ldpp_dout(dpp, 20) << "read_log_and_missing coll " << ch->cid
+    ldpp_dout(dpp, 10) << "read_log_and_missing coll " << ch->cid
 		       << " " << pgmeta_oid << dendl;
+    size_t total_dups = 0;
 
     // legacy?
     struct stat st;
@@ -1439,6 +1451,7 @@ public:
     missing.may_include_deletes = false;
     std::list<pg_log_entry_t> entries;
     std::list<pg_log_dup_t> dups;
+    const auto NUM_DUPS_WARN_THRESHOLD = 2*cct->_conf->osd_pg_log_dups_tracked;
     if (p) {
       using ceph::decode;
       for (p->seek_to_first(); p->valid() ; p->next()) {
@@ -1470,15 +1483,21 @@ public:
 	  }
 	  missing.add(oid, std::move(item));
 	} else if (p->key().substr(0, 4) == std::string("dup_")) {
+	  ++total_dups;
 	  pg_log_dup_t dup;
 	  decode(dup, bp);
 	  if (!dups.empty()) {
 	    ceph_assert(dups.back().version < dup.version);
 	  }
-	  dups.push_back(dup);
-	  if (dups.size() >= cct->_conf->osd_pg_log_dups_tracked) {
-	    dups.pop_front();
+	  if (dups.size() == NUM_DUPS_WARN_THRESHOLD) {
+	    ldpp_dout(dpp, 0) << "read_log_and_missing WARN num of dups exceeded "
+			      << NUM_DUPS_WARN_THRESHOLD << "."
+			      << " You can be hit by THE DUPS BUG"
+			      << " https://tracker.ceph.com/issues/53729."
+			      << " Consider ceph-objectstore-tool --op trim-pg-log-dups"
+			      << dendl;
 	  }
+	  dups.push_back(dup);
 	} else {
 	  pg_log_entry_t e;
 	  e.decode_with_checksum(bp);
@@ -1657,7 +1676,9 @@ public:
 	(*clear_divergent_priors) = false;
       missing.flush();
     }
-    ldpp_dout(dpp, 10) << "read_log_and_missing done" << dendl;
+    ldpp_dout(dpp, 10) << "read_log_and_missing done coll " << ch->cid
+		       << " total_dups=" << total_dups
+		       << " log.dups.size()=" << log.dups.size() << dendl;
   } // static read_log_and_missing
 
 #ifdef WITH_SEASTAR

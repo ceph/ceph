@@ -47,6 +47,10 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
   // Do not display these columns
   @Input() hiddenColumns: string[] = [];
 
+  @Input() hostname = '';
+
+  @Input() diskType = '';
+
   // Show filters for these columns, specify empty array to disable
   @Input() filterColumns = [
     'hostname',
@@ -166,6 +170,14 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
       const col = _.find(this.columns, { prop: prop });
       if (col) {
         col.filterable = true;
+      }
+
+      if (col?.prop === 'human_readable_type' && this.diskType === 'ssd') {
+        col.filterInitValue = this.diskType;
+      }
+
+      if (col?.prop === 'hostname' && this.hostname) {
+        col.filterInitValue = this.hostname;
       }
     });
 

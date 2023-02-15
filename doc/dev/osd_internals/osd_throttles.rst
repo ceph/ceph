@@ -24,7 +24,7 @@ when any of these hits the soft limit and will block in throttle()
 while any has exceeded the hard limit.
 
 Tighter soft limits will cause writeback to happen more quickly,
-but may cause the OSD to miss oportunities for write coalescing.
+but may cause the OSD to miss opportunities for write coalescing.
 Tighter hard limits may cause a reduction in latency variance by
 reducing time spent flushing the journal, but may reduce writeback
 parallelism.
@@ -68,7 +68,7 @@ changed.
 Setting these properly should help to smooth out op latencies by
 mostly avoiding the hard limit.
 
-See FileStore::throttle_ops and FileSTore::thottle_bytes.
+See FileStore::throttle_ops and FileSTore::throttle_bytes.
 
 journal usage throttle
 ----------------------

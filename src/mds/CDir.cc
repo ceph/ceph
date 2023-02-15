@@ -208,7 +208,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdc, bool auth) :
   pop_nested(mdc->decayrate),
   pop_auth_subtree(mdc->decayrate),
   pop_auth_subtree_nested(mdc->decayrate),
-  pop_spread(mdc->decayrate),
   pop_lru_subdirs(member_offset(CInode, item_pop_lru)),
   dir_auth(CDIR_AUTH_DEFAULT)
 {
@@ -829,7 +828,9 @@ void CDir::try_remove_dentries_for_stray()
 
 bool CDir::try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps)
 {
-  ceph_assert(dn->last != CEPH_NOSNAP);
+  if (dn->last == CEPH_NOSNAP) {
+    return false;
+  }
   set<snapid_t>::const_iterator p = snaps.lower_bound(dn->first);
   CDentry::linkage_t *dnl= dn->get_linkage();
   CInode *in = 0;
@@ -849,23 +850,6 @@ bool CDir::try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps)
     return true;
   }
   return false;
-}
-
-
-void CDir::purge_stale_snap_data(const set<snapid_t>& snaps)
-{
-  dout(10) << __func__ << " " << snaps << dendl;
-
-  auto p = items.begin();
-  while (p != items.end()) {
-    CDentry *dn = p->second;
-    ++p;
-
-    if (dn->last == CEPH_NOSNAP)
-      continue;
-
-    try_trim_snap_dentry(dn, snaps);
-  }
 }
 
 
@@ -1813,6 +1797,11 @@ CDentry *CDir::_load_dentry(
            << " [" << first << "," << last << "]"
            << dendl;
 
+  if (first > last) {
+    go_bad_dentry(last, dname);
+    /* try to continue */
+  }
+
   bool stale = false;
   if (snaps && last != CEPH_NOSNAP) {
     set<snapid_t>::const_iterator p = snaps->lower_bound(first);
@@ -2432,6 +2421,13 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
   auto commit_one = [&](bool header=false) {
     ObjectOperation op;
 
+    /*
+     * Shouldn't submit empty op to Rados, which could cause
+     * the cephfs to become readonly.
+     */
+    ceph_assert(header || !_set.empty() || !_rm.empty());
+
+
     // don't create new dirfrag blindly
     if (!_new)
       op.stat(nullptr, nullptr, nullptr);
@@ -2467,7 +2463,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
   int count = 0;
   for (auto &key : stales) {
     unsigned size = key.length() + sizeof(__u32);
-    if (write_size + size > max_write_size)
+    if (write_size > 0 && write_size + size > max_write_size)
       commit_one();
 
     write_size += size;
@@ -2479,7 +2475,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
 
   for (auto &key : to_remove) {
     unsigned size = key.length() + sizeof(__u32);
-    if (write_size + size > max_write_size)
+    if (write_size > 0 && write_size + size > max_write_size)
       commit_one();
 
     write_size += size;
@@ -2507,7 +2503,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
     }
 
     unsigned size = item.key.length() + bl.length() + 2 * sizeof(__u32);
-    if (write_size + size > max_write_size)
+    if (write_size > 0 && write_size + size > max_write_size)
       commit_one();
 
     write_size += size;
@@ -2566,8 +2562,7 @@ void CDir::_omap_commit(int op_prio)
     string key;
     dn->key().encode(key);
 
-    if (dn->last != CEPH_NOSNAP &&
-	snaps && try_trim_snap_dentry(dn, *snaps)) {
+    if (snaps && try_trim_snap_dentry(dn, *snaps)) {
       dout(10) << " rm " << key << dendl;
       to_remove.emplace_back(std::move(key));
       return;
@@ -3754,6 +3749,7 @@ bool CDir::scrub_local()
   if (!good && scrub_infop->header->get_repair()) {
     mdcache->repair_dirfrag_stats(this);
     scrub_infop->header->set_repaired();
+    good = true;
   }
   return good;
 }
@@ -3805,7 +3801,7 @@ bool CDir::should_merge() const
       return false;
   }
 
-  return (int)get_frag_size() < g_conf()->mds_bal_merge_size;
+  return ((int)get_frag_size() + (int)get_num_snap_items()) < g_conf()->mds_bal_merge_size;
 }
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(CDir, co_dir, mds_co);

@@ -19,6 +19,9 @@
 #include <iostream>
 #include <string>
 #include <optional>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 #include <sys/time.h>
 
 #if defined(__APPLE__)
@@ -532,5 +535,10 @@ namespace std {
 template<typename Rep, typename Period>
 ostream& operator<<(ostream& m, const chrono::duration<Rep, Period>& t);
 }
+
+#if FMT_VERSION >= 90000
+template<typename Clock>
+struct fmt::formatter<std::chrono::time_point<Clock>> : fmt::ostream_formatter {};
+#endif
 
 #endif // COMMON_CEPH_TIME_H

@@ -12,8 +12,7 @@
  *
  */
 
-#ifndef RGW_DMCLOCK_SCHEDULER_H
-#define RGW_DMCLOCK_SCHEDULER_H
+#pragma once
 
 #include "common/ceph_time.h"
 #include "common/ceph_context.h"
@@ -85,5 +84,3 @@ private:
 };
 
 } // namespace rgw::dmclock
-
-#endif // RGW_DMCLOCK_SCHEDULER_H

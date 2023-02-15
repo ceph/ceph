@@ -24,22 +24,22 @@ struct cache_test_t : public seastar_test_suite_t {
   ExtentPlacementManagerRef epm;
   CacheRef cache;
   paddr_t current;
-  journal_seq_t seq;
+  journal_seq_t seq = JOURNAL_SEQ_MIN;
 
   cache_test_t() = default;
 
   seastar::future<paddr_t> submit_transaction(
     TransactionRef t) {
-    auto record = cache->prepare_record(*t, nullptr);
+    auto record = cache->prepare_record(*t, JOURNAL_SEQ_NULL, JOURNAL_SEQ_NULL);
 
     bufferlist bl;
     for (auto &&block : record.extents) {
       bl.append(block.bl);
     }
 
-    ceph_assert((seastore_off_t)bl.length() <
+    ceph_assert((segment_off_t)bl.length() <
 		segment_manager->get_segment_size());
-    if (current.as_seg_paddr().get_segment_off() + (seastore_off_t)bl.length() >
+    if (current.as_seg_paddr().get_segment_off() + (segment_off_t)bl.length() >
 	segment_manager->get_segment_size())
       current = paddr_t::make_seg_paddr(
 	segment_id_t(
@@ -91,7 +91,7 @@ struct cache_test_t : public seastar_test_suite_t {
       epm.reset(new ExtentPlacementManager());
       cache.reset(new Cache(*epm));
       current = paddr_t::make_seg_paddr(segment_id_t(segment_manager->get_device_id(), 0), 0);
-      epm->add_device(segment_manager.get(), true);
+      epm->test_init_no_background(segment_manager.get());
       return seastar::do_with(
           get_transaction(),
           [this](auto &ref_t) {
@@ -131,7 +131,9 @@ TEST_F(cache_test_t, test_addr_fixup)
       auto t = get_transaction();
       auto extent = cache->alloc_new_extent<TestBlockPhysical>(
 	*t,
-	TestBlockPhysical::SIZE);
+	TestBlockPhysical::SIZE,
+	placement_hint_t::HOT,
+	0);
       extent->set_contents('c');
       csum = extent->get_crc32c();
       submit_transaction(std::move(t)).get0();
@@ -160,7 +162,9 @@ TEST_F(cache_test_t, test_dirty_extent)
       auto t = get_transaction();
       auto extent = cache->alloc_new_extent<TestBlockPhysical>(
 	*t,
-	TestBlockPhysical::SIZE);
+	TestBlockPhysical::SIZE,
+	placement_hint_t::HOT,
+	0);
       extent->set_contents('c');
       csum = extent->get_crc32c();
       auto reladdr = extent->get_paddr();

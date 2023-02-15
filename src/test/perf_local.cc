@@ -132,7 +132,7 @@ double atomic_int_read()
 {
   int count = 1000000;
   std::atomic<int64_t> value = { 11 };
-  int total = 0;
+  [[maybe_unused]] int total = 0;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
     total += value;
@@ -566,7 +566,7 @@ double rdtsc_test()
 {
   int count = 1000000;
   uint64_t start = Cycles::rdtsc();
-  uint64_t total = 0;
+  [[maybe_unused]] uint64_t total = 0;
   for (int i = 0; i < count; i++) {
     total += Cycles::rdtsc();
   }
@@ -578,7 +578,7 @@ double rdtsc_test()
 double perf_cycles_to_seconds()
 {
   int count = 1000000;
-  double total = 0;
+  [[maybe_unused]] double total = 0;
   uint64_t cycles = 994261;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
@@ -593,7 +593,7 @@ double perf_cycles_to_seconds()
 double perf_cycles_to_nanoseconds()
 {
   int count = 1000000;
-  uint64_t total = 0;
+  [[maybe_unused]] uint64_t total = 0;
   uint64_t cycles = 994261;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {

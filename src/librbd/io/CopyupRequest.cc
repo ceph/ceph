@@ -116,9 +116,10 @@ private:
 
 template <typename I>
 CopyupRequest<I>::CopyupRequest(I *ictx, uint64_t objectno,
-                                Extents &&image_extents,
+                                Extents &&image_extents, ImageArea area,
                                 const ZTracer::Trace &parent_trace)
-  : m_image_ctx(ictx), m_object_no(objectno), m_image_extents(image_extents),
+  : m_image_ctx(ictx), m_object_no(objectno),
+    m_image_extents(std::move(image_extents)), m_image_area(area),
     m_trace(librbd::util::create_trace(*m_image_ctx, "copy-up", parent_trace))
 {
   ceph_assert(m_image_ctx->data_ctx.is_valid());
@@ -178,12 +179,12 @@ void CopyupRequest<I>::read_from_parent() {
     &CopyupRequest<I>::handle_read_from_parent>(
       this, librbd::util::get_image_ctx(m_image_ctx->parent), AIO_TYPE_READ);
 
-  ldout(cct, 20) << "completion=" << comp << ", "
-                 << "extents=" << m_image_extents
-                 << dendl;
+  ldout(cct, 20) << "completion=" << comp
+                 << " image_extents=" << m_image_extents
+                 << " area=" << m_image_area << dendl;
   auto req = io::ImageDispatchSpec::create_read(
     *m_image_ctx->parent, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, comp,
-    std::move(m_image_extents),
+    std::move(m_image_extents), m_image_area,
     ReadResult{&m_copyup_extent_map, &m_copyup_data},
     m_image_ctx->parent->get_data_io_context(), 0, 0, m_trace);
   req->send();
@@ -648,21 +649,19 @@ void CopyupRequest<I>::compute_deep_copy_snap_ids() {
         return false;
       }
 
-      uint64_t parent_overlap = 0;
-      int r = m_image_ctx->get_parent_overlap(snap_id, &parent_overlap);
+      uint64_t raw_overlap = 0;
+      uint64_t object_overlap = 0;
+      int r = m_image_ctx->get_parent_overlap(snap_id, &raw_overlap);
       if (r < 0) {
         ldout(cct, 5) << "failed getting parent overlap for snap_id: "
                       << snap_id << ": " << cpp_strerror(r) << dendl;
+      } else if (raw_overlap > 0) {
+        auto [parent_extents, area] = util::object_to_area_extents(
+            m_image_ctx, m_object_no, {{0, m_image_ctx->layout.object_size}});
+        object_overlap = m_image_ctx->prune_parent_extents(parent_extents, area,
+                                                           raw_overlap, false);
       }
-      if (parent_overlap == 0) {
-        return false;
-      }
-      std::vector<std::pair<uint64_t, uint64_t>> extents;
-      util::extent_to_file(m_image_ctx, m_object_no, 0,
-                               m_image_ctx->layout.object_size, extents);
-      auto overlap = m_image_ctx->prune_parent_extents(
-          extents, parent_overlap);
-      return overlap > 0;
+      return object_overlap > 0;
     });
 }
 
@@ -677,8 +676,8 @@ void CopyupRequest<I>::convert_copyup_extent_map() {
   // convert the image-extent extent map to object-extents
   for (auto [image_offset, image_length] : image_extent_map) {
     striper::LightweightObjectExtents object_extents;
-    util::file_to_extents(
-      m_image_ctx, image_offset, image_length, 0, &object_extents);
+    util::area_to_object_extents(m_image_ctx, image_offset, image_length,
+                                 m_image_area, 0, &object_extents);
     for (auto& object_extent : object_extents) {
       m_copyup_extent_map.emplace_back(
         object_extent.offset, object_extent.length);

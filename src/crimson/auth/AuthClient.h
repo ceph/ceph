@@ -34,23 +34,23 @@ public:
   /// Build an authentication request to begin the handshake
   ///
   /// @throw auth::error if unable to build the request
-  virtual auth_request_t get_auth_request(crimson::net::ConnectionRef conn,
-					  AuthConnectionMetaRef auth_meta) = 0;
+  virtual auth_request_t get_auth_request(crimson::net::Connection &conn,
+					  AuthConnectionMeta &auth_meta) = 0;
 
   /// Handle server's request to continue the handshake
   ///
   /// @throw auth::error if unable to build the request
   virtual ceph::bufferlist handle_auth_reply_more(
-    crimson::net::ConnectionRef conn,
-    AuthConnectionMetaRef auth_meta,
+    crimson::net::Connection &conn,
+    AuthConnectionMeta &auth_meta,
     const ceph::bufferlist& bl) = 0;
 
   /// Handle server's indication that authentication succeeded
   ///
   /// @return 0 if authenticated, a negative number otherwise
   virtual int handle_auth_done(
-    crimson::net::ConnectionRef conn,
-    AuthConnectionMetaRef auth_meta,
+    crimson::net::Connection &conn,
+    AuthConnectionMeta &auth_meta,
     uint64_t global_id,
     uint32_t con_mode,
     const bufferlist& bl) = 0;
@@ -60,8 +60,8 @@ public:
   /// @return 0 if will try next auth method, a negative number if we have no
   ///         more options
   virtual int handle_auth_bad_method(
-    crimson::net::ConnectionRef conn,
-    AuthConnectionMetaRef auth_meta,
+    crimson::net::Connection &conn,
+    AuthConnectionMeta &auth_meta,
     uint32_t old_auth_method,
     int result,
     const std::vector<uint32_t>& allowed_methods,

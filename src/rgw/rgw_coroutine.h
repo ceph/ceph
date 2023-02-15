@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_COROUTINE_H
-#define CEPH_RGW_COROUTINE_H
+#pragma once
 
 #ifdef _ASSERT_H
 #define NEED_ASSERT_H
@@ -613,6 +612,7 @@ public:
 
   int hook_to_admin_command(const std::string& command);
   int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist&,
 	   Formatter *f,
 	   std::ostream& ss,
 	   bufferlist& out) override;
@@ -636,7 +636,7 @@ class RGWCoroutinesManager {
   RGWIOIDProvider io_id_provider;
 
   void handle_unblocked_stack(std::set<RGWCoroutinesStack *>& context_stacks, std::list<RGWCoroutinesStack *>& scheduled_stacks,
-                              RGWCompletionManager::io_completion& io, int *waiting_count);
+                              RGWCompletionManager::io_completion& io, int *waiting_count, int *interval_wait_count);
 protected:
   RGWCompletionManager *completion_mgr;
   RGWCoroutinesManagerRegistry *cr_registry;
@@ -727,5 +727,3 @@ public:
   virtual int finish() { return 0; }
   virtual void request_cleanup() {}
 };
-
-#endif

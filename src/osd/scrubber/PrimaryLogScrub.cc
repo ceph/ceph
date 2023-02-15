@@ -63,6 +63,10 @@ void PrimaryLogScrub::submit_digest_fixes(const digests_fixes_t& fixes)
       num_digest_updates_pending--;
       continue;
     }
+    dout(15) << fmt::format(
+		  "{}: {}, pg[{}] {}/{}", __func__, num_digest_updates_pending,
+		  m_pg_id, obj, dgs)
+	     << dendl;
     if (obc->obs.oi.soid != obj) {
       m_osds->clog->error()
 	<< m_pg_id << " " << m_mode_desc << " " << obj
@@ -117,7 +121,7 @@ void PrimaryLogScrub::_scrub_finish()
 	   << " m_is_repair: " << m_is_repair << dendl;
 
   if (info.stats.stats_invalid) {
-    m_pl_pg->recovery_state.update_stats([=](auto& history, auto& stats) {
+    m_pl_pg->recovery_state.update_stats([=, this](auto& history, auto& stats) {
       stats.stats = m_scrub_cstat;
       stats.stats_invalid = false;
       return false;
@@ -227,7 +231,6 @@ PrimaryLogScrub::PrimaryLogScrub(PrimaryLogPG* pg) : PgScrubber{pg}, m_pl_pg{pg}
 
 void PrimaryLogScrub::_scrub_clear_state()
 {
-  dout(15) << __func__ << dendl;
   m_scrub_cstat = object_stat_collection_t();
 }
 

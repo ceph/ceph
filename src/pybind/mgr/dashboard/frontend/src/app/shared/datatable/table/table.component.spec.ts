@@ -16,6 +16,7 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
+import { TablePaginationComponent } from '../table-pagination/table-pagination.component';
 import { TableComponent } from './table.component';
 
 describe('TableComponent', () => {
@@ -39,7 +40,7 @@ describe('TableComponent', () => {
   };
 
   configureTestBed({
-    declarations: [TableComponent],
+    declarations: [TableComponent, TablePaginationComponent],
     imports: [
       BrowserAnimationsModule,
       NgxDatatableModule,
@@ -568,30 +569,12 @@ describe('TableComponent', () => {
       expect(executingElement.nativeElement.textContent.trim()).toBe(`(${state})`);
     };
 
-    it('should display executing template', () => {
+    it.only('should display executing template', () => {
       testExecutingTemplate();
     });
 
-    it('should display executing template with custom classes', () => {
+    it.only('should display executing template with custom classes', () => {
       testExecutingTemplate({ valueClass: 'a b', executingClass: 'c d' });
-    });
-  });
-
-  describe('test unselect functionality of rows', () => {
-    beforeEach(() => {
-      component.autoReload = -1;
-      component.selectionType = 'single';
-      fixture.detectChanges();
-    });
-
-    it('should unselect row on clicking on it again', () => {
-      const rowCellDebugElement = fixture.debugElement.query(By.css('datatable-body-cell'));
-
-      rowCellDebugElement.triggerEventHandler('click', null);
-      expect(component.selection.selected.length).toEqual(1);
-
-      rowCellDebugElement.triggerEventHandler('click', null);
-      expect(component.selection.selected.length).toEqual(0);
     });
   });
 

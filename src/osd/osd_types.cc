@@ -2862,6 +2862,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("last_clean_scrub_stamp") << last_clean_scrub_stamp;
   f->dump_int("objects_scrubbed", objects_scrubbed);
   f->dump_int("log_size", log_size);
+  f->dump_int("log_dups_size", log_dups_size);
   f->dump_int("ondisk_log_size", ondisk_log_size);
   f->dump_bool("stats_invalid", stats_invalid);
   f->dump_bool("dirty_stats_invalid", dirty_stats_invalid);
@@ -2931,10 +2932,17 @@ void pg_stat_t::dump_brief(Formatter *f) const
 std::string pg_stat_t::dump_scrub_schedule() const
 {
   if (scrub_sched_status.m_is_active) {
-    return fmt::format(
-      "{}scrubbing for {}s",
-      ((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""),
-      scrub_sched_status.m_duration_seconds);
+    // are we blocked (in fact, stuck) on some locked object?
+    if (scrub_sched_status.m_sched_status == pg_scrub_sched_status_t::blocked) {
+      return fmt::format(
+	"Blocked! locked objects (for {}s)",
+	scrub_sched_status.m_duration_seconds);
+    } else {
+      return fmt::format(
+	"{}scrubbing for {}s",
+	((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""),
+	scrub_sched_status.m_duration_seconds);
+    }
   }
   switch (scrub_sched_status.m_sched_status) {
     case pg_scrub_sched_status_t::unknown:
@@ -2971,7 +2979,7 @@ bool operator==(const pg_scrubbing_status_t& l, const pg_scrubbing_status_t& r)
 
 void pg_stat_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(28, 22, bl);
+  ENCODE_START(29, 22, bl);
   encode(version, bl);
   encode(reported_seq, bl);
   encode(reported_epoch, bl);
@@ -3030,6 +3038,7 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(scrub_duration, bl);
   encode(objects_trimmed, bl);
   encode(snaptrim_duration, bl);
+  encode(log_dups_size, bl);
 
   ENCODE_FINISH(bl);
 }
@@ -3038,7 +3047,7 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(28, bl);
+  DECODE_START(29, bl);
   decode(version, bl);
   decode(reported_seq, bl);
   decode(reported_epoch, bl);
@@ -3124,6 +3133,9 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
       decode(scrub_duration, bl);
       decode(objects_trimmed, bl);
       decode(snaptrim_duration, bl);
+    }
+    if (struct_v >= 29) {
+      decode(log_dups_size, bl);
     }
   }
   DECODE_FINISH(bl);
@@ -3217,6 +3229,7 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.stats == r.stats &&
     l.stats_invalid == r.stats_invalid &&
     l.log_size == r.log_size &&
+    l.log_dups_size == r.log_dups_size &&
     l.ondisk_log_size == r.ondisk_log_size &&
     l.up == r.up &&
     l.acting == r.acting &&
@@ -5226,7 +5239,8 @@ static void _handle_dups(CephContext* cct, pg_log_t &target, const pg_log_t &oth
 {
   auto earliest_dup_version =
 	        target.head.version < maxdups ? 0u : target.head.version - maxdups + 1;
-  lgeneric_subdout(cct, osd, 20) << "copy_up_to/copy_after earliest_dup_version " << earliest_dup_version << dendl;
+  lgeneric_subdout(cct, osd, 20) << __func__ << " earliest_dup_version "
+				 << earliest_dup_version << dendl;
 
   for (auto d = other.dups.cbegin(); d != other.dups.cend(); ++d) {
     if (d->version.version >= earliest_dup_version) {
@@ -5256,7 +5270,9 @@ void pg_log_t::copy_after(CephContext* cct, const pg_log_t &other, eversion_t v)
   can_rollback_to = other.can_rollback_to;
   head = other.head;
   tail = other.tail;
-  lgeneric_subdout(cct, osd, 20) << __func__ << " v " << v << dendl;
+  lgeneric_subdout(cct, osd, 20) << __func__ << " v " << v
+				 << " dups.size()=" << dups.size()
+				 << " other.dups.size()=" << other.dups.size() << dendl;
   for (auto i = other.log.crbegin(); i != other.log.crend(); ++i) {
     ceph_assert(i->version > other.tail);
     if (i->version <= v) {
@@ -5268,6 +5284,9 @@ void pg_log_t::copy_after(CephContext* cct, const pg_log_t &other, eversion_t v)
     log.push_front(*i);
   }
   _handle_dups(cct, *this, other, cct->_conf->osd_pg_log_dups_tracked);
+  lgeneric_subdout(cct, osd, 20) << __func__ << " END v " << v
+				 << " dups.size()=" << dups.size()
+				 << " other.dups.size()=" << other.dups.size() << dendl;
 }
 
 void pg_log_t::copy_up_to(CephContext* cct, const pg_log_t &other, int max)
@@ -5276,7 +5295,9 @@ void pg_log_t::copy_up_to(CephContext* cct, const pg_log_t &other, int max)
   int n = 0;
   head = other.head;
   tail = other.tail;
-  lgeneric_subdout(cct, osd, 20) << __func__ << " max " << max << dendl;
+  lgeneric_subdout(cct, osd, 20) << __func__ << " max " << max
+				<< " dups.size()=" << dups.size()
+				<< " other.dups.size()=" << other.dups.size() << dendl;
   for (auto i = other.log.crbegin(); i != other.log.crend(); ++i) {
     ceph_assert(i->version > other.tail);
     if (n++ >= max) {
@@ -5287,6 +5308,9 @@ void pg_log_t::copy_up_to(CephContext* cct, const pg_log_t &other, int max)
     log.push_front(*i);
   }
   _handle_dups(cct, *this, other, cct->_conf->osd_pg_log_dups_tracked);
+  lgeneric_subdout(cct, osd, 20) << __func__ << " END max " << max
+				 << " dups.size()=" << dups.size()
+				 << " other.dups.size()=" << other.dups.size() << dendl;
 }
 
 ostream& pg_log_t::print(ostream& out) const

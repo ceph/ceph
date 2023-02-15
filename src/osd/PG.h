@@ -265,7 +265,7 @@ public:
 
   void set_last_scrub_stamp(utime_t t) {
     recovery_state.update_stats(
-      [=](auto &history, auto &stats) {
+      [t](auto &history, auto &stats) {
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
@@ -279,7 +279,7 @@ public:
 
   void set_last_deep_scrub_stamp(utime_t t) {
     recovery_state.update_stats(
-      [=](auto &history, auto &stats) {
+      [t](auto &history, auto &stats) {
 	set_last_deep_scrub_stamp(t, history, stats);
 	return true;
       });
@@ -292,7 +292,7 @@ public:
 
   void add_objects_scrubbed_count(int64_t count) {
     recovery_state.update_stats(
-      [=](auto &history, auto &stats) {
+      [count](auto &history, auto &stats) {
 	add_objects_scrubbed_count(count, stats);
 	return true;
       });
@@ -304,7 +304,7 @@ public:
 
   void reset_objects_scrubbed()
   {
-    recovery_state.update_stats([=](auto& history, auto& stats) {
+    recovery_state.update_stats([](auto& history, auto& stats) {
       reset_objects_scrubbed(stats);
       return true;
     });
@@ -557,7 +557,7 @@ public:
 
   void add_objects_trimmed_count(int64_t count) {
     recovery_state.update_stats_wo_resched(
-      [=](auto &history, auto &stats) {
+      [count](auto &history, auto &stats) {
         add_objects_trimmed_count(count, stats);
       });
   }
@@ -568,7 +568,7 @@ public:
 
   void reset_objects_trimmed() {
     recovery_state.update_stats_wo_resched(
-      [=](auto &history, auto &stats) {
+      [](auto &history, auto &stats) {
         reset_objects_trimmed(stats);
       });
   }
@@ -583,7 +583,7 @@ public:
     utime_t cur_stamp = ceph_clock_now();
     utime_t duration = cur_stamp - snaptrim_begin_stamp;
     recovery_state.update_stats_wo_resched(
-      [=](auto &history, auto &stats) {
+      [duration](auto &history, auto &stats) {
         stats.snaptrim_duration = double(duration);
     });
   }
@@ -662,7 +662,7 @@ public:
 
   void send_pg_created(pg_t pgid) override;
 
-  ceph::signedspan get_mnow() override;
+  ceph::signedspan get_mnow() const override;
   HeartbeatStampsRef get_hb_stamps(int peer) override;
   void schedule_renew_lease(epoch_t lpr, ceph::timespan delay) override;
   void queue_check_readable(epoch_t lpr, ceph::timespan delay) override;
@@ -699,7 +699,8 @@ public:
   void dump_pgstate_history(ceph::Formatter *f);
   void dump_missing(ceph::Formatter *f);
 
-  void with_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)>&& f);
+  void with_pg_stats(ceph::coarse_real_clock::time_point now_is,
+		     std::function<void(const pg_stat_t&, epoch_t lec)>&& f);
   void with_heartbeat_peers(std::function<void(int)>&& f);
 
   void shutdown();
@@ -717,23 +718,32 @@ private:
 
   /// should we perform deep scrub?
   bool is_time_for_deep(bool allow_deep_scrub,
-		        bool allow_scrub,
-		        bool has_deep_errors,
-		        const requested_scrub_t& planned) const;
+                        bool allow_shallow_scrub,
+                        bool has_deep_errors,
+                        const requested_scrub_t& planned) const;
 
   /**
-   * Verify the various 'next scrub' flags in m_planned_scrub against configuration
+   * Validate the various 'next scrub' flags in m_planned_scrub against configuration
    * and scrub-related timestamps.
    *
    * @returns an updated copy of the m_planned_flags (or nothing if no scrubbing)
    */
-  std::optional<requested_scrub_t> verify_scrub_mode() const;
+  std::optional<requested_scrub_t> validate_scrub_mode() const;
 
-  bool verify_periodic_scrub_mode(bool allow_deep_scrub,
-				  bool try_to_auto_repair,
-				  bool allow_regular_scrub,
-				  bool has_deep_errors,
-				  requested_scrub_t& planned) const;
+  std::optional<requested_scrub_t> validate_periodic_mode(
+    bool allow_deep_scrub,
+    bool try_to_auto_repair,
+    bool allow_shallow_scrub,
+    bool time_for_deep,
+    bool has_deep_errors,
+    const requested_scrub_t& planned) const;
+
+  std::optional<requested_scrub_t> validate_initiated_scrub(
+    bool allow_deep_scrub,
+    bool try_to_auto_repair,
+    bool time_for_deep,
+    bool has_deep_errors,
+    const requested_scrub_t& planned) const;
 
   using ScrubAPI = void (ScrubPgIF::*)(epoch_t epoch_queued);
   void forward_scrub_event(ScrubAPI fn, epoch_t epoch_queued, std::string_view desc);

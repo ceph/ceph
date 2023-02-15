@@ -72,6 +72,14 @@ class ESubtreeMap;
 
 enum {
   l_mdc_first = 3000,
+
+  // dir updates for replication
+  l_mdc_dir_update,
+  l_mdc_dir_update_receipt,
+  l_mdc_dir_try_discover,
+  l_mdc_dir_send_discover,
+  l_mdc_dir_handle_discover,
+
   // How many inodes currently in stray dentries
   l_mdc_num_strays,
   // How many stray dentries are currently delayed for purge due to refs
@@ -883,7 +891,7 @@ class MDCache {
   void encode_remote_dentry_link(CDentry::linkage_t *dnl, bufferlist& bl);
   void decode_remote_dentry_link(CDir *dir, CDentry *dn, bufferlist::const_iterator& p);
   void send_dentry_link(CDentry *dn, MDRequestRef& mdr);
-  void send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr);
+  void send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr, bool unlinking=false);
 
   void wait_for_uncommitted_fragment(dirfrag_t dirfrag, MDSContext *c) {
     uncommitted_fragments.at(dirfrag).waiters.push_back(c);
@@ -1126,6 +1134,7 @@ class MDCache {
   void handle_discover_reply(const cref_t<MDiscoverReply> &m);
   void handle_dentry_link(const cref_t<MDentryLink> &m);
   void handle_dentry_unlink(const cref_t<MDentryUnlink> &m);
+  void handle_dentry_unlink_ack(const cref_t<MDentryUnlinkAck> &m);
 
   int dump_cache(std::string_view fn, Formatter *f, double timeout);
 

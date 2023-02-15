@@ -16,9 +16,9 @@
 
 #pragma once
 
-#include "rgw/rgw_datalog.h"
-#include "rgw/rgw_service.h"
-#include "rgw/rgw_tools.h"
+#include "rgw_datalog.h"
+#include "rgw_service.h"
+#include "rgw_tools.h"
 
 #include "svc_bi.h"
 #include "svc_rados.h"
@@ -134,7 +134,8 @@ public:
                          std::list<cls_rgw_bucket_instance_entry> *status);
 
   int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,
-                       const RGWBucketInfo& orig_info) override;
+                       const RGWBucketInfo& orig_info,
+		       optional_yield y) override;
 
   int open_bucket_index_shard(const DoutPrefixProvider *dpp,
                               const RGWBucketInfo& bucket_info,

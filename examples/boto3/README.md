@@ -14,6 +14,11 @@ The standard [AWS CLI](https://docs.aws.amazon.com/cli/latest/) may also be used
 aws --endpoint-url http://localhost:8000 s3api list-objects --bucket=mybucket --allow-unordered
 ```
 
+- Unordered listing (version 2):
+```
+aws --endpoint-url http://localhost:8000 s3api list-objects-v2 --bucket=mybucket --allow-unordered
+```
+
 - Topic creation with endpoint:
 ```
 aws --endpoint-url http://localhost:8000 sns create-topic --name=mytopic --attributes='{"push-endpoint": "amqp://localhost:5672", "amqp-exchange": "ex1", "amqp-ack-level": "broker"}'

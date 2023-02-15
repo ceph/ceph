@@ -133,16 +133,6 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
                   "{}", _out.str().c_str());    \
     }                                           \
   } while (0)
-#elif defined(WITH_SEASTAR) && defined(WITH_ALIEN)
-#define dout_impl(cct, sub, v)						\
-  do {									\
-  if (0) {							\
-    ceph::logging::MutableEntry _dout_e(v, sub);                        \
-    std::ostream* _dout = &_dout_e.get_ostream();
-
-#define dendl_impl std::flush;                                          \
-  }                                                                     \
-  } while (0)
 #else
 #define dout_impl(cct, sub, v)						\
   do {									\

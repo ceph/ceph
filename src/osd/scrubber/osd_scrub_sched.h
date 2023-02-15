@@ -77,7 +77,7 @@
 └─────────────────────────────────┘
 
 
-SqrubQueue interfaces (main functions):
+ScrubQueue interfaces (main functions):
 
 <1> - OSD/PG resources management:
 
@@ -235,6 +235,13 @@ class ScrubQueue {
      */
     std::atomic_bool updated{false};
 
+    /**
+     * the scrubber is waiting for locked objects to be unlocked.
+     * Set after a grace period has passed.
+     */
+    bool blocked{false};
+    utime_t blocked_since{};
+
     utime_t penalty_timeout{0, 0};
 
     CephContext* cct;
@@ -264,8 +271,8 @@ class ScrubQueue {
      */
     std::string_view registration_state() const
     {
-      return in_queues.load(std::memory_order_relaxed) ? " in-queue"
-						       : " not-queued";
+      return in_queues.load(std::memory_order_relaxed) ? "in-queue"
+						       : "not-queued";
     }
 
     /**
@@ -333,7 +340,7 @@ class ScrubQueue {
   void register_with_osd(ScrubJobRef sjob, const sched_params_t& suggested);
 
   /**
-   * modify a scrub-job's schduled time and deadline
+   * modify a scrub-job's scheduled time and deadline
    *
    * There are 3 argument combinations to consider:
    * - 'must' is asserted, and the suggested time is 'scrub_must_stamp':
@@ -356,7 +363,7 @@ class ScrubQueue {
 
   sched_params_t determine_scrub_time(const requested_scrub_t& request_flags,
 				      const pg_info_t& pg_info,
-				      const pool_opts_t pool_conf) const;
+				      const pool_opts_t& pool_conf) const;
 
  public:
   void dump_scrubs(ceph::Formatter* f) const;
@@ -375,6 +382,11 @@ class ScrubQueue {
   bool inc_scrubs_remote();
   void dec_scrubs_remote();
   void dump_scrub_reservations(ceph::Formatter* f) const;
+
+  /// counting the number of PGs stuck while scrubbing, waiting for objects
+  void mark_pg_scrub_blocked(spg_t blocked_pg);
+  void clear_pg_scrub_blocked(spg_t blocked_pg);
+  int get_blocked_pgs_count() const;
 
   /**
    * Pacing the scrub operation by inserting delays (mostly between chunks)
@@ -409,7 +421,7 @@ class ScrubQueue {
    *  variables. Specifically, the following are guaranteed:
    *  - 'in_queues' is asserted only if the job is in one of the queues;
    *  - a job will only be in state 'registered' if in one of the queues;
-   *  - no job will be in the two queues simulatenously
+   *  - no job will be in the two queues simultaneously;
    *
    *  Note that PG locks should not be acquired while holding jobs_lock.
    */
@@ -456,9 +468,21 @@ class ScrubQueue {
   mutable ceph::mutex resource_lock =
     ceph::make_mutex("ScrubQueue::resource_lock");
 
-  // the counters used to manage scrub activity parallelism:
+  /// the counters used to manage scrub activity parallelism:
   int scrubs_local{0};
   int scrubs_remote{0};
+
+  /**
+   * The scrubbing of PGs might be delayed if the scrubbed chunk of objects is
+   * locked by some other operation. A bug might cause this to be an infinite
+   * delay. If that happens, the OSDs "scrub resources" (i.e. the
+   * counters that limit the number of concurrent scrub operations) might
+   * be exhausted.
+   * We do issue a cluster-log warning in such occasions, but that message is
+   * easy to miss. The 'some pg is blocked' global flag is used to note the
+   * existence of such a situation in the scrub-queue log messages.
+   */
+  std::atomic_int_fast16_t blocked_scrubs_cnt{0};
 
   std::atomic_bool a_pg_is_reserving{false};
 
@@ -499,6 +523,19 @@ protected: // used by the unit-tests
 };
 
 template <>
+struct fmt::formatter<ScrubQueue::qu_state_t>
+    : fmt::formatter<std::string_view> {
+  template <typename FormatContext>
+  auto format(const ScrubQueue::qu_state_t& s, FormatContext& ctx)
+  {
+    auto out = ctx.out();
+    out = fmt::formatter<string_view>::format(
+      std::string{ScrubQueue::qu_state_text(s)}, ctx);
+    return out;
+  }
+};
+
+template <>
 struct fmt::formatter<ScrubQueue::ScrubJob> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
@@ -507,13 +544,10 @@ struct fmt::formatter<ScrubQueue::ScrubJob> {
   {
     return fmt::format_to(
       ctx.out(),
-      "{}, {} dead: {} - {} / failure: {} / pen. t.o.: {} / queue state: {}",
-      sjob.pgid,
-      sjob.schedule.scheduled_at,
-      sjob.schedule.deadline,
-      sjob.registration_state(),
-      sjob.resources_failure,
-      sjob.penalty_timeout,
-      ScrubQueue::qu_state_text(sjob.state));
+      "pg[{}] @ {:s} (dl:{:s}) - <{}> / failure: {} / pen. t.o.: {:s} / queue "
+      "state: {:.7}",
+      sjob.pgid, sjob.schedule.scheduled_at, sjob.schedule.deadline,
+      sjob.registration_state(), sjob.resources_failure, sjob.penalty_timeout,
+      sjob.state.load(std::memory_order_relaxed));
   }
 };

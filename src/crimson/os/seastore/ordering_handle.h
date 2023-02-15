@@ -54,8 +54,12 @@ public:
     return IRef{new PlaceholderOperation()};
   }
 
+  PipelineHandle handle;
   WritePipeline::BlockingEvents tracking_events;
 
+  PipelineHandle& get_handle() {
+    return handle;
+  }
 private:
   void dump_detail(ceph::Formatter *f) const final {}
   void print(std::ostream &) const final {}

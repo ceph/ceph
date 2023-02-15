@@ -50,12 +50,12 @@ public:
    *
    * Assume all segment managers share the same following information.
    */
-  seastore_off_t get_block_size() const {
+  extent_len_t get_block_size() const {
     assert(device_ids.size());
     return segment_managers[*device_ids.begin()]->get_block_size();
   }
 
-  seastore_off_t get_segment_size() const {
+  segment_off_t get_segment_size() const {
     assert(device_ids.size());
     return segment_managers[*device_ids.begin()]->get_segment_size();
   }
@@ -91,32 +91,8 @@ public:
     segment_tail_t>;
   read_segment_tail_ret  read_segment_tail(segment_id_t segment);
 
-  struct commit_info_t {
-    mod_time_point_t commit_time;
-    record_commit_type_t commit_type;
-  };
-
-  /**
-   * scan_extents
-   *
-   * Scans records beginning at addr until the first record boundary after
-   * addr + bytes_to_read.
-   *
-   * Returns list<extent, extent_info>
-   * cursor.is_complete() will be true when no further extents exist in segment.
-   */
   using read_ertr = SegmentManager::read_ertr;
-  using scan_extents_cursor = scan_valid_records_cursor;
-  using scan_extents_ertr = read_ertr::extend<crimson::ct_error::enodata>;
-  using scan_extents_ret_bare =
-    std::list<std::pair<paddr_t, std::pair<commit_info_t, extent_info_t>>>;
-  using scan_extents_ret = scan_extents_ertr::future<scan_extents_ret_bare>;
-  scan_extents_ret scan_extents(
-    scan_extents_cursor &cursor,
-    extent_len_t bytes_to_read
-  );
-
-  using scan_valid_records_ertr = read_ertr::extend<crimson::ct_error::enodata>;
+  using scan_valid_records_ertr = read_ertr;
   using scan_valid_records_ret = scan_valid_records_ertr::future<
     size_t>;
   using found_record_handler_t = std::function<

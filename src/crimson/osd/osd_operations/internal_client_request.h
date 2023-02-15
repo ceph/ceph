@@ -45,8 +45,11 @@ private:
 
   Ref<PG> pg;
   OpInfo op_info;
+  PipelineHandle handle;
 
 public:
+  PipelineHandle& get_handle() { return handle; }
+
   std::tuple<
     StartEvent,
     CommonPGPipeline::WaitForActive::BlockingEvent,
@@ -59,3 +62,7 @@ public:
 };
 
 } // namespace crimson::osd
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::InternalClientRequest> : fmt::ostream_formatter {};
+#endif

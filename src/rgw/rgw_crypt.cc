@@ -217,7 +217,7 @@ get_tenant_or_id(req_state *s)
 }
 
 int
-make_canonical_context(struct req_state *s,
+make_canonical_context(req_state *s,
     std::string_view &context,
     std::string &cooked_context)
 {
@@ -892,7 +892,7 @@ struct CryptAttributes {
   }
 };
 
-std::string fetch_bucket_key_id(struct req_state *s)
+std::string fetch_bucket_key_id(req_state *s)
 {
   auto kek_iter = s->bucket_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID);
   if (kek_iter == s->bucket_attrs.end())
@@ -907,7 +907,7 @@ std::string fetch_bucket_key_id(struct req_state *s)
 }
 
 const std::string cant_expand_key{ "\uFFFD" };
-std::string expand_key_name(struct req_state *s, const std::string_view&t)
+std::string expand_key_name(req_state *s, const std::string_view&t)
 {
   std::string r;
   size_t i, j;
@@ -989,7 +989,7 @@ static int get_sse_s3_bucket_key(req_state *s,
   return 0;
 }
 
-int rgw_s3_prepare_encrypt(struct req_state* s,
+int rgw_s3_prepare_encrypt(req_state* s,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string, std::string>& crypt_http_responses)
@@ -1270,7 +1270,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 }
 
 
-int rgw_s3_prepare_decrypt(struct req_state* s,
+int rgw_s3_prepare_decrypt(req_state* s,
                        map<string, bufferlist>& attrs,
                        std::unique_ptr<BlockCrypt>* block_crypt,
                        std::map<std::string, std::string>& crypt_http_responses)
@@ -1387,7 +1387,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
       ldpp_dout(s, 0) << "ERROR: key obtained from key_id:" <<
           key_id << " is not 256 bit size" << dendl;
       s->err.message = "KMS provided an invalid key for the given kms-keyid.";
-      return -ERR_INVALID_ACCESS_KEY;
+      return -EINVAL;
     }
 
     auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
@@ -1457,7 +1457,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
       ldpp_dout(s, 0) << "ERROR: key obtained " <<
           "is not 256 bit size" << dendl;
       s->err.message = "SSE-S3 provided an invalid key for the given keyid.";
-      return -ERR_INVALID_ACCESS_KEY;
+      return -EINVAL;
     }
 
     auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));

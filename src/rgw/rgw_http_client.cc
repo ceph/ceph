@@ -586,6 +586,7 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
   curl_easy_setopt(easy_handle, CURLOPT_ERRORBUFFER, (void *)req_data->error_buf);
   curl_easy_setopt(easy_handle, CURLOPT_LOW_SPEED_TIME, cct->_conf->rgw_curl_low_speed_time);
   curl_easy_setopt(easy_handle, CURLOPT_LOW_SPEED_LIMIT, cct->_conf->rgw_curl_low_speed_limit);
+  curl_easy_setopt(easy_handle, CURLOPT_TCP_KEEPALIVE, cct->_conf->rgw_curl_tcp_keepalive);
   curl_easy_setopt(easy_handle, CURLOPT_READFUNCTION, send_http_data);
   curl_easy_setopt(easy_handle, CURLOPT_READDATA, (void *)req_data);
   curl_easy_setopt(easy_handle, CURLOPT_BUFFERSIZE, cct->_conf->rgw_curl_buffersize);

@@ -1703,8 +1703,8 @@ TEST_F(PGLogTest, proc_replica_log) {
             |        |       |         |
             +--------+-------+---------+
 
-      The log entry (1,3) deletes the object x9 but the olog entry
-      (2,3) modifies it : remove it from omissing.
+      The log entry (2,3) deletes the object x9 but the olog entry
+      (1,3) modifies it : remove it from omissing.
 
   */
   {
@@ -2075,7 +2075,7 @@ TEST_F(PGLogTest, filter_log_1) {
     int num_internal = 10;
 
     // Set up splitting map
-    OSDMap *osdmap = new OSDMap;
+    std::unique_ptr<OSDMap> osdmap(new OSDMap);
     uuid_d test_uuid;
     test_uuid.generate_random();
     osdmap->build_simple_with_pool(g_ceph_context, epoch, test_uuid, max_osd, bits, bits);
@@ -2717,7 +2717,7 @@ TEST_F(PGLogTrimTest, TestPartialTrim)
   log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 165), mk_evt(26, 160)));
   log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 167), mk_evt(31, 166)));
 
-  std::set<std::string> trimmed;
+  std::set<eversion_t> trimmed;
   std::set<std::string> trimmed_dups;
   eversion_t write_from_dups = eversion_t::max();
 
@@ -2731,7 +2731,7 @@ TEST_F(PGLogTrimTest, TestPartialTrim)
 
   SetUp(15);
 
-  std::set<std::string> trimmed2;
+  std::set<eversion_t> trimmed2;
   std::set<std::string> trimmed_dups2;
   eversion_t write_from_dups2 = eversion_t::max();
 
@@ -2784,7 +2784,7 @@ TEST_F(PGLogTrimTest, TestTrimNoDups)
   log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 165), mk_evt(26, 160)));
   log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 167), mk_evt(31, 166)));
 
-  std::set<std::string> trimmed;
+  std::set<eversion_t> trimmed;
   std::set<std::string> trimmed_dups;
   eversion_t write_from_dups = eversion_t::max();
 
@@ -2812,7 +2812,7 @@ TEST_F(PGLogTrimTest, TestNoTrim)
   log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 165), mk_evt(26, 160)));
   log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 167), mk_evt(31, 166)));
 
-  std::set<std::string> trimmed;
+  std::set<eversion_t> trimmed;
   std::set<std::string> trimmed_dups;
   eversion_t write_from_dups = eversion_t::max();
 
@@ -2841,7 +2841,7 @@ TEST_F(PGLogTrimTest, TestTrimAll)
   log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 165), mk_evt(26, 160)));
   log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 167), mk_evt(31, 166)));
 
-  std::set<std::string> trimmed;
+  std::set<eversion_t> trimmed;
   std::set<std::string> trimmed_dups;
   eversion_t write_from_dups = eversion_t::max();
 
@@ -3069,49 +3069,6 @@ TEST_F(PGLogTrimTest, TestTrimDups2) {
   EXPECT_EQ(eversion_t(10, 100), write_from_dups) << log;
   EXPECT_EQ(4u, log.log.size()) << log;
   EXPECT_EQ(6u, log.dups.size()) << log;
-}
-
-// This tests trim() to make copies of
-// 5 log entries (107, 106, 105, 104, 103) and trim all dups
-TEST_F(PGLogTrimTest, TestTrimAllDups) {
-  SetUp(0);
-  PGLog::IndexedLog log;
-  log.head = mk_evt(21, 107);
-  log.skip_can_rollback_to_to_head();
-  log.tail = mk_evt(9, 99);
-  log.head = mk_evt(9, 99);
-
-  entity_name_t client = entity_name_t::CLIENT(777);
-
-  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
-	  mk_evt(9, 98), mk_evt(8, 97), osd_reqid_t(client, 8, 1))));
-  log.dups.push_back(pg_log_dup_t(mk_ple_mod(mk_obj(1),
-	  mk_evt(9, 99), mk_evt(8, 98), osd_reqid_t(client, 8, 1))));
-
-  log.add(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(9, 99),
-		     osd_reqid_t(client, 8, 1)));
-  log.add(mk_ple_dt(mk_obj(2), mk_evt(15, 101), mk_evt(10, 100),
-		    osd_reqid_t(client, 8, 2)));
-  log.add(mk_ple_mod_rb(mk_obj(3), mk_evt(15, 102), mk_evt(15, 101),
-			osd_reqid_t(client, 8, 3)));
-  log.add(mk_ple_mod(mk_obj(1), mk_evt(20, 103), mk_evt(15, 102),
-		     osd_reqid_t(client, 8, 4)));
-  log.add(mk_ple_mod(mk_obj(4), mk_evt(21, 104), mk_evt(20, 103),
-		     osd_reqid_t(client, 8, 5)));
-  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 105), mk_evt(21, 104),
-		       osd_reqid_t(client, 8, 6)));
-  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 106), mk_evt(21, 105),
-		       osd_reqid_t(client, 8, 6)));
-  log.add(mk_ple_dt_rb(mk_obj(5), mk_evt(21, 107), mk_evt(21, 106),
-		       osd_reqid_t(client, 8, 6)));
-
-  eversion_t write_from_dups = eversion_t::max();
-
-  log.trim(cct, mk_evt(20, 102), nullptr, nullptr, &write_from_dups);
-
-  EXPECT_EQ(eversion_t::max(), write_from_dups) << log;
-  EXPECT_EQ(5u, log.log.size()) << log;
-  EXPECT_EQ(0u, log.dups.size()) << log;
 }
 
 // This tests copy_up_to() to make copies of

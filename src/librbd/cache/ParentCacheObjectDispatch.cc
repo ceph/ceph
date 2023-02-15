@@ -94,10 +94,10 @@ bool ParentCacheObjectDispatch<I>::read(
   CacheGenContextURef ctx = make_gen_lambda_context<ObjectCacheRequest*,
                                      std::function<void(ObjectCacheRequest*)>>
    ([this, extents, dispatch_result, on_dispatched, object_no, io_context,
-     &parent_trace]
+     read_flags, &parent_trace]
    (ObjectCacheRequest* ack) {
-      handle_read_cache(ack, object_no, extents, io_context, parent_trace,
-                        dispatch_result, on_dispatched);
+      handle_read_cache(ack, object_no, extents, io_context, read_flags,
+                        parent_trace, dispatch_result, on_dispatched);
   });
 
   m_cache_client->lookup_object(m_image_ctx->data_ctx.get_namespace(),
@@ -111,7 +111,7 @@ bool ParentCacheObjectDispatch<I>::read(
 template <typename I>
 void ParentCacheObjectDispatch<I>::handle_read_cache(
      ObjectCacheRequest* ack, uint64_t object_no, io::ReadExtents* extents,
-     IOContext io_context, const ZTracer::Trace &parent_trace,
+     IOContext io_context, int read_flags, const ZTracer::Trace &parent_trace,
      io::DispatchResult* dispatch_result, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
@@ -126,6 +126,11 @@ void ParentCacheObjectDispatch<I>::handle_read_cache(
   ceph_assert(ack->type == RBDSC_READ_REPLY);
   std::string file_path = ((ObjectCacheReadReplyData*)ack)->cache_path;
   if (file_path.empty()) {
+    if ((read_flags & io::READ_FLAG_DISABLE_READ_FROM_PARENT) != 0) {
+      on_dispatched->complete(-ENOENT);
+      return;
+    }
+
     auto ctx = new LambdaContext(
       [this, dispatch_result, on_dispatched](int r) {
         if (r < 0 && r != -ENOENT) {

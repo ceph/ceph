@@ -20,8 +20,73 @@
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
 #include "osdc/ObjectCacher.h"
-
+#include "client/MetaRequest.h"
 #include "client/Client.h"
+#include "messages/MClientReclaim.h"
+#include "messages/MClientSession.h"
+#include "common/async/blocked_completion.h"
+
+#define dout_subsys ceph_subsys_client
+
+namespace bs = boost::system;
+namespace ca = ceph::async;
+
+class ClientScaffold : public Client {  
+public:
+    ClientScaffold(Messenger *m, MonClient *mc, Objecter *objecter_) : Client(m, mc, objecter_) {}
+    virtual ~ClientScaffold()
+    { }
+    int check_dummy_op(const UserPerm& perms){
+      RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+      if (!mref_reader.is_state_satisfied()) {
+        return -CEPHFS_ENOTCONN;
+      }
+      std::scoped_lock l(client_lock);
+      MetaRequest *req = new MetaRequest(CEPH_MDS_OP_DUMMY);
+      int res = make_request(req, perms);
+      ldout(cct, 10) << __func__ << " result=" << res << dendl;
+      return res;
+    }
+    int send_unknown_session_op(int op) {
+      RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+      if (!mref_reader.is_state_satisfied()) {
+        return -CEPHFS_ENOTCONN;
+      }
+      std::scoped_lock l(client_lock);
+      auto session = _get_or_open_mds_session(0);
+      auto msg = make_message<MClientSession>(op, session->seq);
+      int res = session->con->send_message2(std::move(msg));
+      ldout(cct, 10) << __func__ << " result=" << res << dendl;
+      return res;
+    }
+    bool check_client_blocklisted() {
+      RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+      if (!mref_reader.is_state_satisfied()) {
+        return -CEPHFS_ENOTCONN;
+      }
+      std::scoped_lock l(client_lock);
+      bs::error_code ec;
+      ldout(cct, 20) << __func__ << ": waiting for latest osdmap" << dendl;
+      objecter->wait_for_latest_osdmap(ca::use_blocked[ec]);
+      ldout(cct, 20) << __func__ << ": got latest osdmap: " << ec << dendl;
+      const auto myaddrs = messenger->get_myaddrs();
+      return objecter->with_osdmap([&](const OSDMap& o) {return o.is_blocklisted(myaddrs);});
+    }
+    bool check_unknown_reclaim_flag(uint32_t flag) {
+      RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+      if (!mref_reader.is_state_satisfied()) {
+        return -CEPHFS_ENOTCONN;
+      }
+      std::scoped_lock l(client_lock);
+      char uuid[256];
+      sprintf(uuid, "unknownreclaimflag:%x", getpid());
+      auto session = _get_or_open_mds_session(0);
+      auto m = make_message<MClientReclaim>(uuid, flag);
+      ceph_assert(session->con->send_message2(std::move(m)) == 0);
+      wait_on_list(waiting_for_reclaim);
+      return session->reclaim_state == MetaSession::RECLAIM_FAIL ? true : false;
+    }
+};
 
 class TestClient : public ::testing::Test {
 public:
@@ -53,7 +118,7 @@ public:
       messenger->add_dispatcher_tail(objecter);
       objecter->start();
 
-      client = new Client(messenger, mc, objecter);
+      client = new ClientScaffold(messenger, mc, objecter);
       client->init();
       client->mount("/", myperm, true);
     }
@@ -81,5 +146,5 @@ protected:
     MonClient* mc = nullptr;
     Messenger* messenger = nullptr;
     Objecter* objecter = nullptr;
-    Client* client = nullptr;
+    ClientScaffold* client = nullptr;
 };

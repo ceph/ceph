@@ -43,18 +43,16 @@ void OSDMeta::store_superblock(ceph::os::Transaction& t,
   t.write(coll->get_cid(), superblock_oid(), 0, bl.length(), bl);
 }
 
-seastar::future<OSDSuperblock> OSDMeta::load_superblock()
+OSDMeta::load_superblock_ret OSDMeta::load_superblock()
 {
-  return store.read(coll, superblock_oid(), 0, 0).safe_then(
-    [] (bufferlist&& bl) {
-      auto p = bl.cbegin();
-      OSDSuperblock superblock;
-      decode(superblock, p);
-      return seastar::make_ready_future<OSDSuperblock>(std::move(superblock));
-    }, read_errorator::all_same_way([] {
-      throw std::runtime_error(fmt::format("read gave enoent on {}",
-                                           superblock_oid()));
-    }));
+  return store.read(
+    coll, superblock_oid(), 0, 0
+  ).safe_then([] (bufferlist&& bl) {
+    auto p = bl.cbegin();
+    OSDSuperblock superblock;
+    decode(superblock, p);
+    return seastar::make_ready_future<OSDSuperblock>(std::move(superblock));
+  });
 }
 
 seastar::future<std::tuple<pg_pool_t,

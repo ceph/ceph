@@ -3,7 +3,7 @@
 # README:
 #
 # This tool's purpose is to make it easier to merge PRs into test branches and
-# into master. Make sure you generate a Personal access token in GitHub and
+# into main. Make sure you generate a Personal access token in GitHub and
 # add it your ~/.github.key.
 #
 # Because developers often have custom names for the ceph upstream remote
@@ -27,7 +27,7 @@
 # Adding labeled PR #18774 to PR list
 # Adding labeled PR #18600 to PR list
 # Will merge PRs: [18805, 18774, 18600]
-# Detaching HEAD onto base: master
+# Detaching HEAD onto base: main
 # Merging PR #18805
 # Merging PR #18774
 # Merging PR #18600
@@ -35,28 +35,28 @@
 # Created tag testing/wip-pdonnell-testing-20171108.054517
 #
 #
-# Merging all PRs labeled 'wip-pdonnell-testing' into master:
+# Merging all PRs labeled 'wip-pdonnell-testing' into main:
 #
-# $ src/script/ptl-tool.py --pr-label wip-pdonnell-testing --branch master
+# $ src/script/ptl-tool.py --pr-label wip-pdonnell-testing --branch main
 # Adding labeled PR #18805 to PR list
 # Adding labeled PR #18774 to PR list
 # Adding labeled PR #18600 to PR list
 # Will merge PRs: [18805, 18774, 18600]
-# Detaching HEAD onto base: master
+# Detaching HEAD onto base: main
 # Merging PR #18805
 # Merging PR #18774
 # Merging PR #18600
-# Checked out branch master
+# Checked out branch main
 #
-# Now push to master:
-# $ git push upstream master
+# Now push to main:
+# $ git push upstream main
 # ...
 #
 #
 # Merging PR #1234567 and #2345678 into a new test branch with a testing label added to the PR:
 #
 # $ src/script/ptl-tool.py 1234567 2345678 --label wip-pdonnell-testing
-# Detaching HEAD onto base: master
+# Detaching HEAD onto base: main
 # Merging PR #1234567
 # Labeled PR #1234567 wip-pdonnell-testing
 # Merging PR #2345678
@@ -66,18 +66,18 @@
 # Created tag testing/wip-pdonnell-testing-20170928_03
 #
 #
-# Merging PR #1234567 into master leaving a detached HEAD (i.e. do not update your repo's master branch) and do not label:
+# Merging PR #1234567 into main leaving a detached HEAD (i.e. do not update your repo's main branch) and do not label:
 #
-# $ src/script/ptl-tool.py --branch HEAD --merge-branch-name master 1234567
-# Detaching HEAD onto base: master
+# $ src/script/ptl-tool.py --branch HEAD --merge-branch-name main 1234567
+# Detaching HEAD onto base: main
 # Merging PR #1234567
 # Leaving HEAD detached; no branch anchors your commits
 #
-# Now push to master:
-# $ git push upstream HEAD:master
+# Now push to main:
+# $ git push upstream HEAD:main
 #
 #
-# Merging PR #12345678 into luminous leaving a detached HEAD (i.e. do not update your repo's master branch) and do not label:
+# Merging PR #12345678 into luminous leaving a detached HEAD (i.e. do not update your repo's main branch) and do not label:
 #
 # $ src/script/ptl-tool.py --base luminous --branch HEAD --merge-branch-name luminous 12345678
 # Detaching HEAD onto base: luminous
@@ -88,12 +88,12 @@
 # $ git push upstream HEAD:luminous
 #
 #
-# Merging all PRs labelled 'wip-pdonnell-testing' into master leaving a detached HEAD:
+# Merging all PRs labelled 'wip-pdonnell-testing' into main leaving a detached HEAD:
 #
-# $ src/script/ptl-tool.py --base master --branch HEAD --merge-branch-name master --pr-label wip-pdonnell-testing
+# $ src/script/ptl-tool.py --base main --branch HEAD --merge-branch-name main --pr-label wip-pdonnell-testing
 # Adding labeled PR #18192 to PR list
 # Will merge PRs: [18192]
-# Detaching HEAD onto base: master
+# Detaching HEAD onto base: main
 # Merging PR #18192
 # Leaving HEAD detached; no branch anchors your commit
 
@@ -131,7 +131,7 @@ with open(expanduser("~/.github.key")) as f:
     PASSWORD = f.read().strip()
 TEST_BRANCH = os.getenv("PTL_TOOL_TEST_BRANCH", "wip-{user}-testing-%Y%m%d.%H%M%S")
 
-SPECIAL_BRANCHES = ('master', 'luminous', 'jewel', 'HEAD')
+SPECIAL_BRANCHES = ('main', 'luminous', 'jewel', 'HEAD')
 
 INDICATIONS = [
     re.compile("(Reviewed-by: .+ <[\w@.-]+>)", re.IGNORECASE),
@@ -357,7 +357,7 @@ def build_branch(args):
                 sys.exit(1)
             log.info("Labeled PR #{pr} {label}".format(pr=pr, label=label))
 
-    # If the branch is 'HEAD', leave HEAD detached (but use "master" for commit message)
+    # If the branch is 'HEAD', leave HEAD detached (but use "main" for commit message)
     if branch == 'HEAD':
         log.info("Leaving HEAD detached; no branch anchors your commits")
     else:
@@ -378,7 +378,7 @@ def build_branch(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Ceph PTL tool")
-    default_base = 'master'
+    default_base = 'main'
     default_branch = TEST_BRANCH
     default_label = ''
     if len(sys.argv) > 1 and sys.argv[1] in SPECIAL_BRANCHES:

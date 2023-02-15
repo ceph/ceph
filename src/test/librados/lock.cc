@@ -10,6 +10,8 @@
 #include "gtest/gtest.h"
 #include <sys/time.h>
 
+#include "crimson_utils.h"
+
 using namespace std::chrono_literals;
 
 typedef RadosTest LibRadosLock;
@@ -122,16 +124,19 @@ TEST_F(LibRadosLock, BreakLock) {
 
 // EC testing
 TEST_F(LibRadosLockEC, LockExclusive) {
+  SKIP_IF_CRIMSON();
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLockEC1", "Cookie", "", NULL,  0));
   ASSERT_EQ(-EEXIST, rados_lock_exclusive(ioctx, "foo", "TestLockEC1", "Cookie", "", NULL, 0));
 }
 
 TEST_F(LibRadosLockEC, LockShared) {
+  SKIP_IF_CRIMSON();
   ASSERT_EQ(0, rados_lock_shared(ioctx, "foo", "TestLockEC2", "Cookie", "Tag", "", NULL, 0));
   ASSERT_EQ(-EEXIST, rados_lock_shared(ioctx, "foo", "TestLockEC2", "Cookie", "Tag", "", NULL, 0));
 }
 
 TEST_F(LibRadosLockEC, LockExclusiveDur) {
+  SKIP_IF_CRIMSON();
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
@@ -144,6 +149,7 @@ TEST_F(LibRadosLockEC, LockExclusiveDur) {
 }
 
 TEST_F(LibRadosLockEC, LockSharedDur) {
+  SKIP_IF_CRIMSON();
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
@@ -157,18 +163,21 @@ TEST_F(LibRadosLockEC, LockSharedDur) {
 
 
 TEST_F(LibRadosLockEC, LockMayRenew) {
+  SKIP_IF_CRIMSON();
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLockEC5", "Cookie", "", NULL, 0));
   ASSERT_EQ(-EEXIST, rados_lock_exclusive(ioctx, "foo", "TestLockEC5", "Cookie", "", NULL, 0));
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLockEC5", "Cookie", "", NULL, LOCK_FLAG_MAY_RENEW));
 }
 
 TEST_F(LibRadosLockEC, Unlock) {
+  SKIP_IF_CRIMSON();
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLockEC6", "Cookie", "", NULL, 0));
   ASSERT_EQ(0, rados_unlock(ioctx, "foo", "TestLockEC6", "Cookie"));
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLockEC6", "Cookie", "", NULL,  0));
 }
 
 TEST_F(LibRadosLockEC, ListLockers) {
+  SKIP_IF_CRIMSON();
   int exclusive;
   char tag[1024];
   char clients[1024];
@@ -201,6 +210,7 @@ TEST_F(LibRadosLockEC, ListLockers) {
 }
 
 TEST_F(LibRadosLockEC, BreakLock) {
+  SKIP_IF_CRIMSON();
   int exclusive;
   char tag[1024];
   char clients[1024];

@@ -330,3 +330,8 @@ std::unique_ptr<ValueDeltaRecorder>
 build_value_recorder_by_type(ceph::bufferlist& encoded, const value_magic_t& magic);
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::onode::value_config_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::onode::value_header_t> : fmt::ostream_formatter {};
+#endif

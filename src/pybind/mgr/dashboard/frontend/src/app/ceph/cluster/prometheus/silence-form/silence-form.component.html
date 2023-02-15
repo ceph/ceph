@@ -3,12 +3,12 @@
              let-index="index">
   <div class="input-group my-2">
     <ng-container *ngFor="let config of matcherConfig">
-      <div class="input-group-prepend">
-        <span class="input-group-text"
-              [ngbTooltip]="config.tooltip">
-          <i [ngClass]="[config.icon]"></i>
-        </span>
-      </div>
+      <span class="input-group-text"
+            *ngIf="config.attribute === 'isRegex'"
+            [ngbTooltip]="config.tooltip">
+        <i *ngIf="matcher[config.attribute]">~</i>
+        <i *ngIf="!matcher[config.attribute]">=</i>
+      </span>
 
       <ng-container *ngIf="config.attribute !== 'isRegex'">
         <input type="text"
@@ -18,39 +18,25 @@
                disabled
                readonly>
       </ng-container>
-
-      <ng-container *ngIf="config.attribute === 'isRegex'">
-        <div class="input-group-append">
-          <div class="input-group-text">
-            <input type="checkbox"
-                   id="matcher-{{config.attribute}}-{{index}}"
-                   [checked]="matcher[config.attribute]"
-                   disabled
-                   readonly>
-          </div>
-        </div>
-      </ng-container>
     </ng-container>
 
     <!-- Matcher actions -->
-    <span class="input-group-append">
-      <button type="button"
-              class="btn btn-light"
-              id="matcher-edit-{{index}}"
-              i18n-ngbTooltip
-              ngbTooltip="Edit"
-              (click)="showMatcherModal(index)">
-        <i [ngClass]="[icons.edit]"></i>
-      </button>
-      <button type="button"
-              class="btn btn-light"
-              id="matcher-delete-{{index}}"
-              i18n-ngbTooltip
-              ngbTooltip="Delete"
-              (click)="deleteMatcher(index)">
-        <i [ngClass]="[icons.trash]"></i>
-      </button>
-    </span>
+    <button type="button"
+            class="btn btn-light"
+            id="matcher-edit-{{index}}"
+            i18n-ngbTooltip
+            ngbTooltip="Edit"
+            (click)="showMatcherModal(index)">
+      <i [ngClass]="[icons.edit]"></i>
+    </button>
+    <button type="button"
+            class="btn btn-light"
+            id="matcher-delete-{{index}}"
+            i18n-ngbTooltip
+            ngbTooltip="Delete"
+            (click)="deleteMatcher(index)">
+      <i [ngClass]="[icons.trash]"></i>
+    </button>
   </div>
   <span class="help-block"></span>
 </ng-template>
@@ -181,7 +167,7 @@
               <div class="col-12">
                 <button type="button"
                         id="add-matcher"
-                        class="btn btn-light float-right my-3"
+                        class="btn btn-light float-end my-3"
                         [ngClass]="{'btn-warning': formDir.submitted && matchers.length === 0 }"
                         (click)="showMatcherModal()">
                   <i [ngClass]="[icons.add]"></i>

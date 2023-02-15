@@ -128,12 +128,15 @@ export class ActionLabelsI18n {
   ENTER_MAINTENANCE: string;
   EXIT_MAINTENANCE: string;
   REMOVE_SCHEDULING: string;
+  PROMOTE: string;
+  DEMOTE: string;
   START_DRAIN: string;
   STOP_DRAIN: string;
   START: string;
   STOP: string;
   REDEPLOY: string;
   RESTART: string;
+  RESYNC: string;
 
   constructor() {
     /* Create a new item */
@@ -190,7 +193,7 @@ export class ActionLabelsI18n {
 
     this.START_DRAIN = $localize`Start Drain`;
     this.STOP_DRAIN = $localize`Stop Drain`;
-
+    this.RESYNC = $localize`Resync`;
     /* Prometheus wording */
     this.RECREATE = $localize`Recreate`;
     this.EXPIRE = $localize`Expire`;
@@ -201,6 +204,8 @@ export class ActionLabelsI18n {
     this.RESTART = $localize`Restart`;
 
     this.REMOVE_SCHEDULING = $localize`Remove Scheduling`;
+    this.PROMOTE = $localize`Promote`;
+    this.DEMOTE = $localize`Demote`;
   }
 }
 

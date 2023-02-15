@@ -300,7 +300,7 @@ if(WITH_CEPHFS)
     test_global_doublefree.cc
     )
   add_ceph_unittest(unittest_global_doublefree)
-  target_link_libraries(unittest_global_doublefree cephfs librados)
+  target_link_libraries(unittest_global_doublefree cephfs librados ceph-common)
 endif(WITH_CEPHFS)
 
 if(NOT WIN32)

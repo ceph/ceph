@@ -21,21 +21,30 @@ data cluster (e.g., OpenStack, CloudStack, etc).
 CPU
 ===
 
-CephFS metadata servers are CPU intensive, so they should have significant
-processing power (e.g., quad core or better CPUs) and benefit from higher clock
-rate (frequency in GHz). Ceph OSDs run the :term:`RADOS` service, calculate
-data placement with :term:`CRUSH`, replicate data, and maintain their own copy of the
-cluster map. Therefore, OSD nodes should have a reasonable amount of processing
-power. Requirements vary by use-case; a starting point might be one core per
-OSD for light / archival usage, and two cores per OSD for heavy workloads such
-as RBD volumes attached to VMs.  Monitor / manager nodes do not have heavy CPU
-demands so a modest processor can be chosen for them.  Also consider whether the
-host machine will run CPU-intensive processes in addition to Ceph daemons. For
-example, if your hosts will run computing VMs (e.g., OpenStack Nova), you will
-need to ensure that these other processes leave sufficient processing power for
-Ceph daemons. We recommend running additional CPU-intensive processes on
-separate hosts to avoid resource contention.
+CephFS metadata servers (MDS) are CPU-intensive. CephFS metadata servers (MDS)
+should therefore have quad-core (or better) CPUs and high clock rates (GHz). OSD
+nodes need enough processing power to run the RADOS service, to calculate data
+placement with CRUSH, to replicate data, and to maintain their own copies of the
+cluster map.
 
+The requirements of one Ceph cluster are not the same as the requirements of
+another, but here are some general guidelines. 
+
+In earlier versions of Ceph, we would make hardware recommendations based on
+the number of cores per OSD, but this cores-per-OSD metric is no longer as
+useful a metric as the number of cycles per IOP and the number of IOPs per OSD.
+For example, for NVMe drives, Ceph can easily utilize five or six cores on real
+clusters and up to about fourteen cores on single OSDs in isolation. So cores
+per OSD are no longer as pressing a concern as they were. When selecting
+hardware, select for IOPs per core.
+
+Monitor nodes and manager nodes have no heavy CPU demands and require only
+modest processors. If your host machines will run CPU-intensive processes in
+addition to Ceph daemons, make sure that you have enough processing power to
+run both the CPU-intensive processes and the Ceph daemons. (OpenStack Nova is
+one such example of a CPU-intensive process.) We recommend that you run
+non-Ceph CPU-intensive processes on separate hosts (that is, on hosts that are
+not your monitor and manager nodes) in order to avoid resource contention.
 
 RAM
 ===
@@ -375,34 +384,50 @@ multiple OSDs per host.
 Networks
 ========
 
-Provision at least 10Gbps+ networking in your racks. Replicating 1TB of data
-across a 1Gbps network takes 3 hours, and 10TBs takes 30 hours! By contrast,
-with a 10Gbps network, the replication times would be 20 minutes and 1 hour
-respectively. In a petabyte-scale cluster, failure of an OSD drive is an
-expectation, not an exception. System administrators will appreciate PGs
-recovering from a ``degraded`` state to an ``active + clean`` state as rapidly
-as possible, with price / performance tradeoffs taken into consideration.
-Additionally, some deployment tools employ VLANs to make  hardware and network
-cabling more manageable. VLANs using 802.1q protocol require VLAN-capable NICs
-and Switches. The added hardware expense may be offset by the operational cost
-savings for network setup and maintenance. When using VLANs to handle VM
+Provision at least 10 Gb/s networking in your racks.
+
+Speed
+-----
+
+It takes three hours to replicate 1 TB of data across a 1 Gb/s network and it
+takes thirty hours to replicate 10 TB across a 1 Gb/s network. But it takes only
+twenty minutes to replicate 1 TB across a 10 Gb/s network, and it takes
+only one hour to replicate 10 TB across a 10 Gb/s network. 
+
+Cost
+----
+
+The larger the Ceph cluster, the more common OSD failures will be.
+The faster that a placement group (PG) can recover from a ``degraded`` state to
+an ``active + clean`` state, the better. Notably, fast recovery minimizes
+the likelihood of multiple, overlapping failures that can cause data to become
+temporarily unavailable or even lost. Of course, when provisioning your
+network, you will have to balance price against performance. 
+
+Some deployment tools employ VLANs to make hardware and network cabling more
+manageable. VLANs that use the 802.1q protocol require VLAN-capable NICs and
+switches. The added expense of this hardware may be offset by the operational
+cost savings on network setup and maintenance. When using VLANs to handle VM
 traffic between the cluster and compute stacks (e.g., OpenStack, CloudStack,
-etc.), there is additional value in using 10G Ethernet or better; 40Gb or
-25/50/100 Gb networking as of 2020 is common for production clusters.
+etc.), there is additional value in using 10 Gb/s Ethernet or better; 40 Gb/s or
+25/50/100 Gb/s networking as of 2022 is common for production clusters.
 
-Top-of-rack routers for each network also need to be able to communicate with
-spine routers that have even faster throughput, often 40Gbp/s or more.
+Top-of-rack (TOR) switches also need fast and redundant uplinks to spind
+spine switches / routers, often at least 40 Gb/s.
 
 
-Your server hardware should have a Baseboard Management Controller (BMC).
+Baseboard Management Controller (BMC)
+-------------------------------------
+
+Your server chassis should have a Baseboard Management Controller (BMC).
+Well-known examples are iDRAC (Dell), CIMC (Cisco UCS), and iLO (HPE).
 Administration and deployment tools may also use BMCs extensively, especially
-via IPMI or Redfish, so consider
-the cost/benefit tradeoff of an out-of-band network for administration.
-Hypervisor SSH access, VM image uploads, OS image installs, management sockets,
-etc. can impose significant loads on a network.  Running three networks may seem
-like overkill, but each traffic path represents a potential capacity, throughput
-and/or performance bottleneck that you should carefully consider before
-deploying a large scale data cluster.
+via IPMI or Redfish, so consider the cost/benefit tradeoff of an out-of-band
+network for security and administration.  Hypervisor SSH access, VM image uploads,
+OS image installs, management sockets, etc. can impose significant loads on a network.
+Running three networks may seem like overkill, but each traffic path represents
+a potential capacity, throughput and/or performance bottleneck that you should
+carefully consider before deploying a large scale data cluster.
  
 
 Failure Domains

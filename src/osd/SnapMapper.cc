@@ -14,6 +14,12 @@
 
 #include "SnapMapper.h"
 
+#include <fmt/printf.h>
+#include <fmt/ranges.h>
+
+#include "osd/osd_types_fmt.h"
+#include "SnapMapReaderI.h"
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
@@ -26,10 +32,12 @@ using std::set;
 using std::string;
 using std::vector;
 
-using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
 using ceph::timespan_str;
+using result_t = Scrub::SnapMapReaderI::result_t;
+using code_t = Scrub::SnapMapReaderI::result_t::code_t;
+
 
 const string SnapMapper::LEGACY_MAPPING_PREFIX = "MAP_";
 const string SnapMapper::MAPPING_PREFIX = "SNA_";
@@ -72,14 +80,14 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
 
 int OSDriver::get_keys(
   const std::set<std::string> &keys,
-  std::map<std::string, bufferlist> *out)
+  std::map<std::string, ceph::buffer::list> *out)
 {
   return os->omap_get_values(ch, hoid, keys, out);
 }
 
 int OSDriver::get_next(
   const std::string &key,
-  pair<std::string, bufferlist> *next)
+  pair<std::string, ceph::buffer::list> *next)
 {
   ObjectMap::ObjectMapIterator iter =
     os->get_omap_iterator(ch, hoid);
@@ -99,38 +107,49 @@ int OSDriver::get_next(
 
 string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
 {
-  char buf[100];
-  int len = snprintf(
-    buf, sizeof(buf),
-    "%lld_%.*X_",
-    (long long)pool,
-    (int)(sizeof(snap)*2), static_cast<unsigned>(snap));
-  return MAPPING_PREFIX + string(buf, len);
+  static_assert(sizeof(pool) == 8, "assumed by the formatting code");
+  return fmt::sprintf("%s%lld_%.16X_",
+		      MAPPING_PREFIX,
+		      pool,
+		      snap);
 }
 
 string SnapMapper::to_raw_key(
-  const pair<snapid_t, hobject_t> &in)
+  const pair<snapid_t, hobject_t> &in) const
 {
   return get_prefix(in.second.pool, in.first) + shard_prefix + in.second.to_str();
 }
 
-pair<string, bufferlist> SnapMapper::to_raw(
-  const pair<snapid_t, hobject_t> &in)
+std::string SnapMapper::to_raw_key(snapid_t snap, const hobject_t &clone) const
 {
-  bufferlist bl;
+  return get_prefix(clone.pool, snap) + shard_prefix + clone.to_str();
+}
+
+pair<string, ceph::buffer::list> SnapMapper::to_raw(
+  const pair<snapid_t, hobject_t> &in) const
+{
+  ceph::buffer::list bl;
   encode(Mapping(in), bl);
-  return make_pair(
-    to_raw_key(in),
-    bl);
+  return make_pair(to_raw_key(in), bl);
 }
 
 pair<snapid_t, hobject_t> SnapMapper::from_raw(
-  const pair<std::string, bufferlist> &image)
+  const pair<std::string, ceph::buffer::list> &image)
 {
   using ceph::decode;
   Mapping map;
-  bufferlist bl(image.second);
+  ceph::buffer::list bl(image.second);
   auto bp = bl.cbegin();
+  decode(map, bp);
+  return make_pair(map.snap, map.hoid);
+}
+
+std::pair<snapid_t, hobject_t> SnapMapper::from_raw(
+  const ceph::buffer::list &image)
+{
+  using ceph::decode;
+  Mapping map;
+  auto bp = image.cbegin();
   decode(map, bp);
   return make_pair(map.snap, map.hoid);
 }
@@ -140,12 +159,12 @@ bool SnapMapper::is_mapping(const string &to_test)
   return to_test.substr(0, MAPPING_PREFIX.size()) == MAPPING_PREFIX;
 }
 
-string SnapMapper::to_object_key(const hobject_t &hoid)
+string SnapMapper::to_object_key(const hobject_t &hoid) const
 {
   return OBJECT_PREFIX + shard_prefix + hoid.to_str();
 }
 
-void SnapMapper::object_snaps::encode(bufferlist &bl) const
+void SnapMapper::object_snaps::encode(ceph::buffer::list &bl) const
 {
   ENCODE_START(1, 1, bl);
   encode(oid, bl);
@@ -153,7 +172,7 @@ void SnapMapper::object_snaps::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void SnapMapper::object_snaps::decode(bufferlist::const_iterator &bl)
+void SnapMapper::object_snaps::decode(ceph::buffer::list::const_iterator &bl)
 {
   DECODE_START(1, bl);
   decode(oid, bl);
@@ -172,40 +191,146 @@ bool SnapMapper::check(const hobject_t &hoid) const
   return false;
 }
 
-int SnapMapper::get_snaps(
-  const hobject_t &oid,
-  object_snaps *out)
+int SnapMapper::get_snaps(const hobject_t &oid, object_snaps *out) const
+{
+  auto snaps = get_snaps_common(oid);
+  if (snaps) {
+    *out = *snaps;
+    return 0;
+  }
+  switch (auto e = snaps.error(); e.code) {
+    case code_t::backend_error:
+      return e.backend_error;
+    case code_t::not_found:
+      return -ENOENT;
+    case code_t::inconsistent:
+      // As this is a legacy interface, we cannot surprise the user with
+      // a new error code here.
+      return -ENOENT;
+    default:
+      // Can't happen. Just to keep the compiler happy.
+      ceph_abort("get_snaps_common() returned invalid error code");
+  }
+}
+
+tl::expected<std::set<snapid_t>, Scrub::SnapMapReaderI::result_t>
+SnapMapper::get_snaps(const hobject_t &oid) const
+{
+  auto snaps = get_snaps_common(oid);
+  if (snaps) {
+    return snaps->snaps;
+  }
+  return tl::unexpected(snaps.error());
+}
+
+tl::expected<SnapMapper::object_snaps, Scrub::SnapMapReaderI::result_t>
+SnapMapper::get_snaps_common(const hobject_t &oid) const
 {
   ceph_assert(check(oid));
-  set<string> keys;
-  map<string, bufferlist> got;
-  keys.insert(to_object_key(oid));
+  set<string> keys{to_object_key(oid)};
+  dout(20) << fmt::format("{}: key string: {} oid:{}", __func__, keys, oid)
+	   << dendl;
+
+  map<string, ceph::buffer::list> got;
   int r = backend.get_keys(keys, &got);
   if (r < 0) {
-    dout(20) << __func__ << " " << oid << " got err " << r << dendl;
-    return r;
+    dout(10) << __func__ << " " << oid << " got err " << r << dendl;
+    return tl::unexpected(result_t{code_t::backend_error, r});
   }
   if (got.empty()) {
-    dout(20) << __func__ << " " << oid << " got.empty()" << dendl;
-    return -ENOENT;
+    dout(10) << __func__ << " " << oid << " got.empty()" << dendl;
+    return tl::unexpected(result_t{code_t::not_found, -ENOENT});
   }
-  if (out) {
-    auto bp = got.begin()->second.cbegin();
-    decode(*out, bp);
-    dout(20) << __func__ << " " << oid << " " << out->snaps << dendl;
-    if (out->snaps.empty()) {
-      dout(1) << __func__ << " " << oid << " empty snapset" << dendl;
-      ceph_assert(!cct->_conf->osd_debug_verify_snaps);
+
+  object_snaps out;
+  auto bp = got.begin()->second.cbegin();
+  try {
+    decode(out, bp);
+  } catch (...) {
+    dout(1) << __func__ << ": " << oid << " decode failed" << dendl;
+    return tl::unexpected(result_t{code_t::backend_error, -EIO});
+  }
+
+  dout(20) << __func__ << " " << oid << " " << out.snaps << dendl;
+  if (out.snaps.empty()) {
+    dout(1) << __func__ << " " << oid << " empty snapset" << dendl;
+    ceph_assert(!cct->_conf->osd_debug_verify_snaps);
+  }
+  return out;
+}
+
+std::set<std::string> SnapMapper::to_raw_keys(
+  const hobject_t &clone,
+  const std::set<snapid_t> &snaps) const
+{
+  std::set<std::string> keys;
+  for (auto snap : snaps) {
+    keys.insert(to_raw_key(snap, clone));
+  }
+  dout(20) << fmt::format(
+		"{}: clone:{} snaps:{} -> keys: {}", __func__, clone, snaps,
+		keys)
+	   << dendl;
+  return keys;
+}
+
+tl::expected<std::set<snapid_t>, result_t>
+SnapMapper::get_snaps_check_consistency(const hobject_t &hoid) const
+{
+  // derive the set of snaps from the 'OBJ_' entry
+  auto obj_snaps = get_snaps(hoid);
+  if (!obj_snaps) {
+    return obj_snaps;
+  }
+
+  // make sure we have the expected set of SNA_ entries:
+  // we have the clone oid and the set of snaps relevant to this clone.
+  // Let's construct all expected SNA_ key, then fetch them.
+
+  auto mapping_keys = to_raw_keys(hoid, *obj_snaps);
+  map<string, ceph::buffer::list> kvmap;
+  auto r = backend.get_keys(mapping_keys, &kvmap);
+  if (r < 0) {
+    dout(10) << fmt::format(
+		  "{}: backend error ({}) for cobject {}", __func__, r, hoid)
+	     << dendl;
+    // that's a backend error, but for the SNA_ entries. Let's treat it as an
+    // internal consistency error (although a backend error would have made
+    // sense too).
+    return tl::unexpected(result_t{code_t::inconsistent, r});
+  }
+
+  std::set<snapid_t> snaps_from_mapping;
+  for (auto &[k, v] : kvmap) {
+    dout(20) << __func__ << " " << hoid << " " << k << dendl;
+    // extract the object ID from the value fetched for an SNA mapping key
+    auto [sn, obj] = SnapMapper::from_raw(v);
+    if (obj != hoid) {
+      dout(1) << fmt::format(
+		   "{}: unexpected object ID {} for key{} (expected {})",
+		   __func__, obj, k, hoid)
+	      << dendl;
+      return tl::unexpected(result_t{code_t::inconsistent});
     }
-  } else {
-    dout(20) << __func__ << " " << oid << " (out == NULL)" << dendl;
+    snaps_from_mapping.insert(sn);
   }
-  return 0;
+
+  if (snaps_from_mapping != *obj_snaps) {
+    dout(10) << fmt::format(
+		  "{}: hoid:{} -> mapper internal inconsistency ({} vs {})",
+		  __func__, hoid, *obj_snaps, snaps_from_mapping)
+	     << dendl;
+    return tl::unexpected(result_t{code_t::inconsistent});
+  }
+  dout(10) << fmt::format(
+		"{}: snaps for {}: {}", __func__, hoid, snaps_from_mapping)
+	   << dendl;
+  return obj_snaps;
 }
 
 void SnapMapper::clear_snaps(
   const hobject_t &oid,
-  MapCacher::Transaction<std::string, bufferlist> *t)
+  MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
   dout(20) << __func__ << " " << oid << dendl;
   ceph_assert(check(oid));
@@ -222,11 +347,11 @@ void SnapMapper::clear_snaps(
 void SnapMapper::set_snaps(
   const hobject_t &oid,
   const object_snaps &in,
-  MapCacher::Transaction<std::string, bufferlist> *t)
+  MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
   ceph_assert(check(oid));
-  map<string, bufferlist> to_set;
-  bufferlist bl;
+  map<string, ceph::buffer::list> to_set;
+  ceph::buffer::list bl;
   encode(in, bl);
   to_set[to_object_key(oid)] = bl;
   dout(20) << __func__ << " " << oid << " " << in.snaps << dendl;
@@ -242,7 +367,7 @@ int SnapMapper::update_snaps(
   const hobject_t &oid,
   const set<snapid_t> &new_snaps,
   const set<snapid_t> *old_snaps_check,
-  MapCacher::Transaction<std::string, bufferlist> *t)
+  MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
   dout(20) << __func__ << " " << oid << " " << new_snaps
 	   << " was " << (old_snaps_check ? *old_snaps_check : set<snapid_t>())
@@ -282,7 +407,7 @@ int SnapMapper::update_snaps(
 void SnapMapper::add_oid(
   const hobject_t &oid,
   const set<snapid_t>& snaps,
-  MapCacher::Transaction<std::string, bufferlist> *t)
+  MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
   dout(20) << __func__ << " " << oid << " " << snaps << dendl;
   ceph_assert(!snaps.empty());
@@ -301,7 +426,7 @@ void SnapMapper::add_oid(
   object_snaps _snaps(oid, snaps);
   set_snaps(oid, _snaps, t);
 
-  map<string, bufferlist> to_add;
+  map<string, ceph::buffer::list> to_add;
   for (set<snapid_t>::iterator i = snaps.begin();
        i != snaps.end();
        ++i) {
@@ -327,13 +452,15 @@ int SnapMapper::get_next_objects_to_trim(
   // trim the snaptrim queue
   ceph_assert(max > 0);
   int r = 0;
+
+  /// \todo cache the prefixes-set in update_bits()
   for (set<string>::iterator i = prefixes.begin();
        i != prefixes.end() && out->size() < max && r == 0;
        ++i) {
     string prefix(get_prefix(pool, snap) + *i);
     string pos = prefix;
     while (out->size() < max) {
-      pair<string, bufferlist> next;
+      pair<string, ceph::buffer::list> next;
       r = backend.get_next(pos, &next);
       dout(20) << __func__ << " get_next(" << pos << ") returns " << r
 	       << " " << next << dendl;
@@ -367,7 +494,7 @@ int SnapMapper::get_next_objects_to_trim(
 
 int SnapMapper::remove_oid(
   const hobject_t &oid,
-  MapCacher::Transaction<std::string, bufferlist> *t)
+  MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
   dout(20) << __func__ << " " << oid << dendl;
   ceph_assert(check(oid));
@@ -376,7 +503,7 @@ int SnapMapper::remove_oid(
 
 int SnapMapper::_remove_oid(
   const hobject_t &oid,
-  MapCacher::Transaction<std::string, bufferlist> *t)
+  MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
   dout(20) << __func__ << " " << oid << dendl;
   object_snaps out;
@@ -403,7 +530,7 @@ int SnapMapper::_remove_oid(
 
 int SnapMapper::get_snaps(
   const hobject_t &oid,
-  std::set<snapid_t> *snaps)
+  std::set<snapid_t> *snaps) const
 {
   ceph_assert(check(oid));
   object_snaps out;
@@ -420,14 +547,14 @@ int SnapMapper::get_snaps(
 
 string SnapMapper::make_purged_snap_key(int64_t pool, snapid_t last)
 {
-  char k[80];
-  snprintf(k, sizeof(k), "%s_%llu_%016llx", PURGED_SNAP_PREFIX,
-	   (unsigned long long)pool, (unsigned long long)last);
-  return k;
+  return fmt::sprintf("%s_%lld_%016llx",
+		      PURGED_SNAP_PREFIX,
+		      pool,
+		      last);
 }
 
 void SnapMapper::make_purged_snap_key_value(
-  int64_t pool, snapid_t begin, snapid_t end, map<string,bufferlist> *m)
+  int64_t pool, snapid_t begin, snapid_t end, map<string,ceph::buffer::list> *m)
 {
   string k = make_purged_snap_key(pool, end - 1);
   auto& v = (*m)[k];
@@ -458,7 +585,7 @@ int SnapMapper::_lookup_purged_snap(
 	     << it->key() << "'" << dendl;
     return -ENOENT;
   }
-  bufferlist v = it->value();
+  ceph::buffer::list v = it->value();
   auto p = v.cbegin();
   int64_t gotpool;
   decode(gotpool, p);
@@ -481,7 +608,7 @@ void SnapMapper::record_purged_snaps(
   map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps)
 {
   dout(10) << __func__ << " purged_snaps " << purged_snaps << dendl;
-  map<string,bufferlist> m;
+  map<string,ceph::buffer::list> m;
   set<string> rm;
   for (auto& [epoch, bypool] : purged_snaps) {
     // index by (pool, snap)
@@ -540,7 +667,7 @@ bool SnapMapper::Scrubber::_parse_p()
     pool = -1;
     return false;
   }
-  bufferlist v = psit->value();
+  ceph::buffer::list v = psit->value();
   auto p = v.cbegin();
   ceph::decode(pool, p);
   ceph::decode(begin, p);
@@ -640,12 +767,9 @@ void SnapMapper::Scrubber::run()
 
 string SnapMapper::get_legacy_prefix(snapid_t snap)
 {
-  char buf[100];
-  int len = snprintf(
-    buf, sizeof(buf),
-    "%.*X_",
-    (int)(sizeof(snap)*2), static_cast<unsigned>(snap));
-  return LEGACY_MAPPING_PREFIX + string(buf, len);
+  return fmt::sprintf("%s%.16X_",
+		      LEGACY_MAPPING_PREFIX,
+		      snap);
 }
 
 string SnapMapper::to_legacy_raw_key(
@@ -658,6 +782,38 @@ bool SnapMapper::is_legacy_mapping(const string &to_test)
 {
   return to_test.substr(0, LEGACY_MAPPING_PREFIX.size()) ==
     LEGACY_MAPPING_PREFIX;
+}
+
+/* Octopus modified the SnapMapper key format from
+ *
+ *  <LEGACY_MAPPING_PREFIX><snapid>_<shardid>_<hobject_t::to_str()>
+ *
+ * to
+ *
+ *  <MAPPING_PREFIX><pool>_<snapid>_<shardid>_<hobject_t::to_str()>
+ *
+ * We can't reconstruct the new key format just from the value since the
+ * Mapping object contains an hobject rather than a ghobject. Instead,
+ * we exploit the fact that the new format is identical starting at <snapid>.
+ *
+ * Note that the original version of this conversion introduced in 94ebe0ea
+ * had a crucial bug which essentially destroyed legacy keys by mapping
+ * them to
+ *
+ *  <MAPPING_PREFIX><poolid>_<snapid>_
+ *
+ * without the object-unique suffix.
+ * See https://tracker.ceph.com/issues/56147
+ */
+std::string SnapMapper::convert_legacy_key(
+  const std::string& old_key,
+  const ceph::buffer::list& value)
+{
+  auto old = from_raw(make_pair(old_key, value));
+  std::string object_suffix = old_key.substr(
+    SnapMapper::LEGACY_MAPPING_PREFIX.length());
+  return SnapMapper::MAPPING_PREFIX + std::to_string(old.second.pool)
+    + "_" + object_suffix;
 }
 
 int SnapMapper::convert_legacy(
@@ -677,17 +833,13 @@ int SnapMapper::convert_legacy(
   auto start = ceph::mono_clock::now();
 
   iter->upper_bound(SnapMapper::LEGACY_MAPPING_PREFIX);
-  map<string,bufferlist> to_set;
+  map<string,ceph::buffer::list> to_set;
   while (iter->valid()) {
     bool valid = SnapMapper::is_legacy_mapping(iter->key());
     if (valid) {
-      SnapMapper::Mapping m;
-      bufferlist bl(iter->value());
-      auto bp = bl.cbegin();
-      decode(m, bp);
       to_set.emplace(
-	SnapMapper::get_prefix(m.hoid.pool, m.snap),
-	bl);
+	convert_legacy_key(iter->key(), iter->value()),
+	iter->value());
       ++n;
       iter->next();
     }

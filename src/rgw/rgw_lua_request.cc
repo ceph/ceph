@@ -7,7 +7,8 @@
 #include "rgw_lua.h"
 #include "rgw_common.h"
 #include "rgw_log.h"
-#include "rgw_process.h"
+#include "rgw_op.h"
+#include "rgw_process_env.h"
 #include "rgw_zone.h"
 #include "rgw_acl.h"
 #include "rgw_sal_rados.h"
@@ -26,12 +27,12 @@ constexpr const char* RequestLogAction{"Log"};
 
 int RequestLog(lua_State* L) 
 {
-  const auto rest = reinterpret_cast<RGWREST*>(lua_touserdata(L, lua_upvalueindex(1)));
-  const auto olog = reinterpret_cast<OpsLogSink*>(lua_touserdata(L, lua_upvalueindex(2)));
-  const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(3)));
-  const std::string op_name(reinterpret_cast<const char*>(lua_touserdata(L, lua_upvalueindex(4))));
+  const auto rest = reinterpret_cast<RGWREST*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+  const auto olog = reinterpret_cast<OpsLogSink*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+  const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(THIRD_UPVAL)));
+  const auto op(reinterpret_cast<RGWOp*>(lua_touserdata(L, lua_upvalueindex(FOURTH_UPVAL))));
   if (s) {
-    const auto rc = rgw_log_op(rest, s, op_name, olog);
+    const auto rc = rgw_log_op(rest, s, op, olog);
     lua_pushinteger(L, rc);
   } else {
     ldpp_dout(s, 1) << "Lua ERROR: missing request state, cannot use ops log"  << dendl;
@@ -41,12 +42,86 @@ int RequestLog(lua_State* L)
   return ONE_RETURNVAL;
 }
 
+int SetAttribute(lua_State* L)  {
+  auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(1)));
+
+  if (!s->trace || !s->trace->IsRecording()) {
+    return 0;
+  }
+
+  auto key = luaL_checkstring(L, 1);
+  int value_type = lua_type(L, 2);
+
+  switch (value_type) {
+    case LUA_TSTRING:
+      s->trace->SetAttribute(key, lua_tostring(L, 2));
+      break;
+
+    case LUA_TNUMBER:
+      if (lua_isinteger(L, 2)) {
+        s->trace->SetAttribute(key, static_cast<int64_t>(lua_tointeger(L, 2)));
+      } else {
+        s->trace->SetAttribute(key, static_cast<double>(lua_tonumber(L, 2)));
+      }
+      break;
+
+    default:
+      luaL_error(L, "unsupported value type for SetAttribute");
+  }
+  return 0;
+}
+
+int AddEvent(lua_State* L)  {
+  auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(1)));
+
+  if (!s->trace || !s->trace->IsRecording()) {
+    return 0;
+  }
+
+  int args = lua_gettop(L);
+  if (args == 1) {
+    auto log = luaL_checkstring(L, 1);
+    s->trace->AddEvent(log);
+  } else if(args == 2) {
+    auto event_name = luaL_checkstring(L, 1);
+    std::unordered_map<const char*, jspan_attribute> event_values;
+    lua_pushnil(L);
+    while (lua_next(L, 2) != 0) {
+      if (lua_type(L, -2) != LUA_TSTRING) {
+        // skip pair if key is not a string
+        lua_pop(L, 1);
+        continue;
+      }
+
+      auto key = luaL_checkstring(L, -2);
+      int value_type = lua_type(L, -1);
+      switch (value_type) {
+        case LUA_TSTRING:
+          event_values.emplace(key, lua_tostring(L, -1));
+          break;
+
+        case LUA_TNUMBER:
+          if (lua_isinteger(L, -1)) {
+            event_values.emplace(key, static_cast<int64_t>(lua_tointeger(L, -1)));
+          } else {
+            event_values.emplace(key, static_cast<double>(lua_tonumber(L, -1)));
+          }
+          break;
+      }
+      lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+    s->trace->AddEvent(event_name, event_values);
+  }
+  return 0;
+}
+
 struct ResponseMetaTable : public EmptyMetaTable {
   static std::string TableName() {return "Response";} 
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto err = reinterpret_cast<const rgw_err*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto err = reinterpret_cast<const rgw_err*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -65,7 +140,7 @@ struct ResponseMetaTable : public EmptyMetaTable {
   }
   
   static int NewIndexClosure(lua_State* L) {
-    auto err = reinterpret_cast<rgw_err*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto err = reinterpret_cast<rgw_err*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -89,7 +164,7 @@ struct QuotaMetaTable : public EmptyMetaTable {
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto info = reinterpret_cast<RGWQuotaInfo*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto info = reinterpret_cast<RGWQuotaInfo*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -113,7 +188,7 @@ struct PlacementRuleMetaTable : public EmptyMetaTable {
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto rule = reinterpret_cast<rgw_placement_rule*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto rule = reinterpret_cast<rgw_placement_rule*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -133,7 +208,7 @@ struct UserMetaTable : public EmptyMetaTable {
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto user = reinterpret_cast<const rgw_user*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto user = reinterpret_cast<const rgw_user*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -153,12 +228,18 @@ struct TraceMetaTable : public EmptyMetaTable {
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, "Enable") == 0) {
       lua_pushboolean(L, s->trace_enabled);
+    } else if(strcasecmp(index, "SetAttribute") == 0) {
+        lua_pushlightuserdata(L, s);
+        lua_pushcclosure(L, SetAttribute, ONE_UPVAL);
+    } else if(strcasecmp(index, "AddEvent") == 0) {
+        lua_pushlightuserdata(L, s);
+        lua_pushcclosure(L, AddEvent, ONE_UPVAL);
     } else {
       return error_unknown_field(L, index, TableName());
     }
@@ -166,7 +247,7 @@ struct TraceMetaTable : public EmptyMetaTable {
   }
 
   static int NewIndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -184,7 +265,7 @@ struct OwnerMetaTable : public EmptyMetaTable {
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto owner = reinterpret_cast<ACLOwner*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto owner = reinterpret_cast<ACLOwner*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -204,7 +285,7 @@ struct BucketMetaTable : public EmptyMetaTable {
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     const auto bucket = s->bucket.get();
 
     const char* index = luaL_checkstring(L, 2);
@@ -244,6 +325,21 @@ struct BucketMetaTable : public EmptyMetaTable {
     }
     return ONE_RETURNVAL;
   }
+  
+  static int NewIndexClosure(lua_State* L) {
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto bucket = s->bucket.get();
+
+    const char* index = luaL_checkstring(L, 2);
+
+    if (rgw::sal::Bucket::empty(bucket)) {
+      if (strcasecmp(index, "Name") == 0) {
+        s->init_state.url_bucket = luaL_checkstring(L, 3);
+        return NO_RETURNVAL;
+      }
+    }
+    return error_unknown_field(L, index, TableName());
+  }
 };
 
 struct ObjectMetaTable : public EmptyMetaTable {
@@ -253,7 +349,7 @@ struct ObjectMetaTable : public EmptyMetaTable {
   using Type = rgw::sal::Object;
 
   static int IndexClosure(lua_State* L) {
-    const auto obj = reinterpret_cast<const Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto obj = reinterpret_cast<const Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -279,7 +375,7 @@ struct GrantMetaTable : public EmptyMetaTable {
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto grant = reinterpret_cast<ACLGrant*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto grant = reinterpret_cast<ACLGrant*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -310,7 +406,7 @@ struct GrantsMetaTable : public EmptyMetaTable {
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -324,7 +420,7 @@ struct GrantsMetaTable : public EmptyMetaTable {
   }
   
   static int PairsClosure(lua_State* L) {
-    auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     ceph_assert(map);
     lua_pushlightuserdata(L, map);
     lua_pushcclosure(L, stateless_iter, ONE_UPVAL); // push the stateless iterator function
@@ -336,7 +432,7 @@ struct GrantsMetaTable : public EmptyMetaTable {
   
   static int stateless_iter(lua_State* L) {
     // based on: http://lua-users.org/wiki/GeneralizedPairsAndIpairs
-    auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     ACLGrantMap::iterator next_it;
     if (lua_isnil(L, -1)) {
       next_it = map->begin();
@@ -375,7 +471,7 @@ struct GrantsMetaTable : public EmptyMetaTable {
   }
 
   static int LenClosure(lua_State* L) {
-    const auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     lua_pushinteger(L, map->size());
 
@@ -390,7 +486,7 @@ struct ACLMetaTable : public EmptyMetaTable {
   using Type = RGWAccessControlPolicy;
 
   static int IndexClosure(lua_State* L) {
-    const auto acl = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto acl = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -418,7 +514,7 @@ struct StatementsMetaTable : public EmptyMetaTable {
   }
 
   static int IndexClosure(lua_State* L) {
-    const auto statements = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto statements = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const auto index = luaL_checkinteger(L, 2);
 
@@ -432,7 +528,7 @@ struct StatementsMetaTable : public EmptyMetaTable {
   }
   
   static int PairsClosure(lua_State* L) {
-    auto statements = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto statements = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     ceph_assert(statements);
     lua_pushlightuserdata(L, statements);
     lua_pushcclosure(L, stateless_iter, ONE_UPVAL); // push the stateless iterator function
@@ -443,7 +539,7 @@ struct StatementsMetaTable : public EmptyMetaTable {
   }
   
   static int stateless_iter(lua_State* L) {
-    auto statements = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto statements = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     size_t next_it;
     if (lua_isnil(L, -1)) {
       next_it = 0;
@@ -467,7 +563,7 @@ struct StatementsMetaTable : public EmptyMetaTable {
   }
 
   static int LenClosure(lua_State* L) {
-    const auto statements = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto statements = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     lua_pushinteger(L, statements->size());
 
@@ -480,7 +576,7 @@ struct PolicyMetaTable : public EmptyMetaTable {
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto policy = reinterpret_cast<rgw::IAM::Policy*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto policy = reinterpret_cast<rgw::IAM::Policy*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -494,7 +590,7 @@ struct PolicyMetaTable : public EmptyMetaTable {
         pushstring(L, policy->id.get());
       }
     } else if (strcasecmp(index, "Statements") == 0) {
-      create_metatable<StatementsMetaTable>(L, &(policy->statements));
+      create_metatable<StatementsMetaTable>(L, false, &(policy->statements));
     } else {
       return error_unknown_field(L, index, TableName());
     }
@@ -509,7 +605,7 @@ struct PoliciesMetaTable : public EmptyMetaTable {
   using Type = std::vector<rgw::IAM::Policy>;
 
   static int IndexClosure(lua_State* L) {
-    const auto policies = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto policies = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const auto index = luaL_checkinteger(L, 2);
 
@@ -522,7 +618,7 @@ struct PoliciesMetaTable : public EmptyMetaTable {
   }
   
   static int PairsClosure(lua_State* L) {
-    auto policies = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto policies = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     ceph_assert(policies);
     lua_pushlightuserdata(L, policies);
     lua_pushcclosure(L, stateless_iter, ONE_UPVAL); // push the stateless iterator function
@@ -533,7 +629,7 @@ struct PoliciesMetaTable : public EmptyMetaTable {
   }
   
   static int stateless_iter(lua_State* L) {
-    auto policies = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto policies = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     size_t next_it;
     if (lua_isnil(L, -1)) {
       next_it = 0;
@@ -558,7 +654,7 @@ struct PoliciesMetaTable : public EmptyMetaTable {
   }
 
   static int LenClosure(lua_State* L) {
-    const auto policies = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto policies = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     lua_pushinteger(L, policies->size());
 
@@ -571,7 +667,7 @@ struct HTTPMetaTable : public EmptyMetaTable {
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto info = reinterpret_cast<req_info*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto info = reinterpret_cast<req_info*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -602,7 +698,7 @@ struct HTTPMetaTable : public EmptyMetaTable {
   }
 
   static int NewIndexClosure(lua_State* L) {
-    auto info = reinterpret_cast<req_info*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto info = reinterpret_cast<req_info*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -620,7 +716,7 @@ struct CopyFromMetaTable : public EmptyMetaTable {
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -642,7 +738,7 @@ struct ZoneGroupMetaTable : public EmptyMetaTable {
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -663,8 +759,8 @@ struct RequestMetaTable : public EmptyMetaTable {
 
   // __index closure that expect req_state to be captured
   static int IndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(1)));
-    const auto op_name = reinterpret_cast<const char*>(lua_touserdata(L, lua_upvalueindex(2)));
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto op_name = reinterpret_cast<const char*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -744,23 +840,26 @@ struct RequestMetaTable : public EmptyMetaTable {
   }
 };
 
+void create_top_metatable(lua_State* L, req_state* s, const char* op_name) {
+  create_metatable<RequestMetaTable>(L, true, s, const_cast<char*>(op_name));
+  lua_getglobal(L, RequestMetaTable::TableName().c_str());
+  ceph_assert(lua_istable(L, -1));
+}
+
 int execute(
-    rgw::sal::Store* store,
+    rgw::sal::Driver* driver,
     RGWREST* rest,
     OpsLogSink* olog,
     req_state* s, 
-    const char* op_name,
-    const std::string& script,
-    rgw::lua::Background* background)
-
+    RGWOp* op,
+    const std::string& script)
 {
   auto L = luaL_newstate();
+  const char* op_name = op ? op->name() : "Unknown";
   lua_state_guard lguard(L);
 
   open_standard_libs(L);
-  set_package_path(L, store ?
-      store->get_luarocks_path() : 
-      "");
+  set_package_path(L, s->penv.lua.luarocks_path);
 
   create_debug_action(L, s->cct);  
   
@@ -774,12 +873,12 @@ int execute(
   lua_pushlightuserdata(L, rest);
   lua_pushlightuserdata(L, olog);
   lua_pushlightuserdata(L, s);
-  lua_pushlightuserdata(L, const_cast<char*>(op_name));
+  lua_pushlightuserdata(L, op);
   lua_pushcclosure(L, RequestLog, FOUR_UPVALS);
   lua_rawset(L, -3);
   
-  if (background) {
-    background->create_background_metatable(L);
+  if (s->penv.lua.background) {
+    s->penv.lua.background->create_background_metatable(L);
     lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
     ceph_assert(lua_istable(L, -1));
   }
@@ -803,4 +902,5 @@ int execute(
   return rc;
 }
 
-}
+} // namespace rgw::lua::request
+

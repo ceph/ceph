@@ -82,9 +82,9 @@ void F013_T::append_offset(
 }
 
 template <typename SlotType>
-template <KeyT KT>
+template <IsFullKey Key>
 void F013_T::insert_at(
-    NodeExtentMutable& mut, const full_key_t<KT>& key,
+    NodeExtentMutable& mut, const Key& key,
     const me_t& node, index_t index, node_offset_t size_right)
 {
   assert(index <= node.num_keys);
@@ -96,21 +96,21 @@ void F013_T::insert_at(
                      node.get_key_start_offset(node.num_keys, node_size);
   mut.shift_absolute(p_insert, p_shift_end - p_insert, estimate_insert_one());
   mut.copy_in_absolute((void*)&node.num_keys, num_keys_t(node.num_keys + 1));
-  append_key(mut, key_t::template from_key<KT>(key), p_insert);
+  append_key(mut, key_t::from_key(key), p_insert);
   int new_offset = node.get_item_end_offset(index, node_size) - size_right;
   assert(new_offset > 0);
   assert(new_offset < (int)node_size);
   append_offset(mut, new_offset, p_insert);
 }
 #define IA_TEMPLATE(ST, KT) template void F013_INST(ST)::      \
-    insert_at<KT>(NodeExtentMutable&, const full_key_t<KT>&, \
+    insert_at<KT>(NodeExtentMutable&, const KT&, \
                   const F013_INST(ST)&, index_t, node_offset_t)
-IA_TEMPLATE(slot_0_t, KeyT::VIEW);
-IA_TEMPLATE(slot_1_t, KeyT::VIEW);
-IA_TEMPLATE(slot_3_t, KeyT::VIEW);
-IA_TEMPLATE(slot_0_t, KeyT::HOBJ);
-IA_TEMPLATE(slot_1_t, KeyT::HOBJ);
-IA_TEMPLATE(slot_3_t, KeyT::HOBJ);
+IA_TEMPLATE(slot_0_t, key_view_t);
+IA_TEMPLATE(slot_1_t, key_view_t);
+IA_TEMPLATE(slot_3_t, key_view_t);
+IA_TEMPLATE(slot_0_t, key_hobj_t);
+IA_TEMPLATE(slot_1_t, key_hobj_t);
+IA_TEMPLATE(slot_3_t, key_hobj_t);
 
 template <typename SlotType>
 node_offset_t F013_T::erase_at(

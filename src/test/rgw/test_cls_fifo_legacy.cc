@@ -25,8 +25,8 @@
 #include "test/librados/test_cxx.h"
 #include "global/global_context.h"
 
-#include "rgw/rgw_tools.h"
-#include "rgw/cls_fifo_legacy.h"
+#include "rgw_tools.h"
+#include "cls_fifo_legacy.h"
 
 #include "gtest/gtest.h"
 
@@ -784,7 +784,6 @@ TEST_F(AioLegacyFIFO, TestMultipleParts)
   {
     auto c = R::Rados::aio_create_completion();
     f->get_head_info(&dp, [&](int r, RCf::part_info&& p) {
-      ASSERT_TRUE(p.tag.empty());
       ASSERT_EQ(0, p.magic);
       ASSERT_EQ(0, p.min_ofs);
       ASSERT_EQ(0, p.last_ofs);

@@ -100,6 +100,12 @@ struct ceph_statx {
 #endif
 
 /*
+ * This is deprecated and just for backwards compatibility.
+ * Please use AT_STATX_DONT_SYNC instead.
+ */
+#define AT_NO_ATTR_SYNC		AT_STATX_DONT_SYNC /* Deprecated */
+
+/*
  * The statx interfaces only allow these flags. In order to allow us to add
  * others in the future, we disallow setting any that aren't recognized.
  */

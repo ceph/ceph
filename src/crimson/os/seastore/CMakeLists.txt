@@ -8,7 +8,7 @@ set(crimson_seastore_srcs
   transaction.cc
   cache.cc
   lba_manager.cc
-  segment_cleaner.cc
+  async_cleaner.cc
   backref_manager.cc
   backref/backref_tree_node.cc
   backref/btree_backref_manager.cc
@@ -36,8 +36,9 @@ set(crimson_seastore_srcs
   extent_placement_manager.cc
   object_data_handler.cc
   seastore.cc
-  random_block_manager/nvme_manager.cc
-  random_block_manager/nvmedevice.cc
+  random_block_manager/block_rb_manager.cc
+  random_block_manager/nvme_block_device.cc
+  random_block_manager/avlallocator.cc
   journal/segmented_journal.cc
   journal/segment_allocator.cc
   journal.cc

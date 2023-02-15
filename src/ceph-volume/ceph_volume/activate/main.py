@@ -27,7 +27,7 @@ class Activate(object):
         )
         parser.add_argument(
             '--osd-uuid',
-            help='OSD UUID to active'
+            help='OSD UUID to activate'
         )
         parser.add_argument(
             '--no-systemd',
@@ -67,7 +67,7 @@ class Activate(object):
             )
             return
         except Exception as e:
-            terminal.info(f'Failed to activate via lvm: {e}')
+            terminal.info(f'Failed to activate via LVM: {e}')
 
         # then try simple
         try:

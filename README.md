@@ -1,6 +1,6 @@
 # Ceph - a scalable distributed storage system
 
-Please see http://ceph.com/ for current info.
+Please see https://ceph.com/ for current info.
 
 
 ## Contributing Code
@@ -29,7 +29,7 @@ You can clone from github with
 
 or, if you are not a github user,
 
-	git clone git://github.com/ceph/ceph
+	git clone https://github.com/ceph/ceph.git
 
 Ceph contains many git submodules that need to be checked out with
 

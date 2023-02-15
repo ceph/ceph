@@ -9,13 +9,13 @@ class Module(MgrModule):
 
     def self_test(self) -> None:
         r = self.get('io_rate')
-        assert('pg_stats_delta' in r)
-        assert('stamp_delta' in r['pg_stats_delta'])
-        assert('stat_sum' in r['pg_stats_delta'])
-        assert('num_read_kb' in r['pg_stats_delta']['stat_sum'])
-        assert('num_write_kb' in r['pg_stats_delta']['stat_sum'])
-        assert('num_write' in r['pg_stats_delta']['stat_sum'])
-        assert('num_read' in r['pg_stats_delta']['stat_sum'])
+        assert 'pg_stats_delta' in r
+        assert 'stamp_delta' in r['pg_stats_delta']
+        assert 'stat_sum' in r['pg_stats_delta']
+        assert 'num_read_kb' in r['pg_stats_delta']['stat_sum']
+        assert 'num_write_kb' in r['pg_stats_delta']['stat_sum']
+        assert 'num_write' in r['pg_stats_delta']['stat_sum']
+        assert 'num_read' in r['pg_stats_delta']['stat_sum']
 
     @CLIReadCommand('iostat', poll=True)
     def iostat(self, width: int = 80, print_header: bool = False) -> HandleCommandResult:

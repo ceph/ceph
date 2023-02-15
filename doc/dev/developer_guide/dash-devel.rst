@@ -31,7 +31,7 @@ introduced in this chapter are based on a so called ``vstart`` environment.
 
 .. note::
 
-  Every ``vstart`` environment needs Ceph `to be compiled`_ from its Github
+  Every ``vstart`` environment needs Ceph `to be compiled`_ from its GitHub
   repository, though Docker environments simplify that step by providing a
   shell script that contains those instructions.
 
@@ -54,7 +54,7 @@ You can read more about vstart in `Deploying a development cluster`_.
 Additional information for developers can also be found in the `Developer
 Guide`_.
 
-.. _Deploying a development cluster: https://docs.ceph.com/docs/master/dev/dev_cluster_deployement/
+.. _Deploying a development cluster: https://docs.ceph.com/docs/master/dev/dev_cluster_deployment/
 .. _Developer Guide: https://docs.ceph.com/docs/master/dev/quick_guide/
 
 Host-based vs Docker-based Development Environments
@@ -96,7 +96,7 @@ based on vstart. Those are:
 
   `ceph-dev`_ is an exception to this rule as one of the options it provides
   is `build-free`_. This is accomplished through a Ceph installation using
-  RPM system packages. You will still be able to work with a local Github
+  RPM system packages. You will still be able to work with a local GitHub
   repository like you are used to.
 
 
@@ -215,8 +215,8 @@ The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
 Prerequisites
 ~~~~~~~~~~~~~
 
- * Node 12.18.2 or higher
- * NPM 6.13.4 or higher
+ * Node 14.15.0 or higher
+ * NPM 6.14.9 or higher
 
 nodeenv:
   During Ceph's build we create a virtualenv with ``node`` and ``npm``
@@ -290,7 +290,7 @@ HTML files:
 - `html-linter <https://github.com/chinchiheather/html-linter>`_
 - `htmllint-cli <https://github.com/htmllint/htmllint-cli>`_
 - `Prettier <https://prettier.io/>`_
-- `TSLint <https://palantir.github.io/tslint/>`_
+- `ESLint <https://eslint.org/>`_
 - `stylelint <https://stylelint.io/>`_
 
 We added 2 npm scripts to help run these tools:
@@ -685,7 +685,7 @@ applitools eyes test runner, where you can see all your screenshots. And if ther
 Writing More Visual Regression Tests
 ....................................
 
-Please refer to `Applitools's official cypress sdk documentation <https://github.com/applitools/eyes.sdk.javascript1/tree/master/packages/eyes-cypress>`_ to write more tests.
+Please refer to `Applitools's official cypress sdk documentation <https://www.npmjs.com/package/@applitools/eyes-cypress#usage>`_ to write more tests.
 
 Visual Regression Tests In Jenkins
 ..................................
@@ -1039,8 +1039,8 @@ scenarios.
 
 For example - ``throw new DashboardNotFoundError()``.
 
-I18N
-----
+Internationalization (i18n)
+---------------------------
 
 How to extract messages from source code?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1203,6 +1203,92 @@ Keep elements that affect the sentence:
 
   <!-- recommended -->
   <span i18n>Profile <b>foo</b> will be removed.</span>
+
+
+.. _accessibility:
+
+Accessibility
+-------------
+
+Many parts of the Ceph Dashboard are modeled on `Web Content Accessibility Guidelines (WCAG) 2.1 <https://www.w3.org/TR/WCAG21/>`_  level A accessibility conformance guidelines. 
+By implementing accessibility best practices, you are improving the usability of the Ceph Dashboard for blind and visually impaired users.
+
+Summary
+~~~~~~~
+
+A few things you should check before introducing a new code change include:
+
+1) Add `ARIA labels and descriptions <https://www.w3.org/TR/wai-aria/>`_ to actionable HTML elements.
+2) Don't forget to tag ARIA labels/descriptions or any user-readable text for translation (i18n-title, i18n-aria-label...).
+3) Add `ARIA roles <https://www.w3.org/TR/wai-aria/#usage_intro>`_ to tag HTML elements that behave different from their intended behaviour (<a> tags behaving as <buttons>) or that provide extended behaviours (roles).
+4) Avoid poor `color contrast choices <https://www.w3.org/TR/WCAG21/#contrast-minimum>`_ (foreground-background) when styling a component. Here are some :ref:`tools <color-contrast-checkers>` you can use.
+5) When testing menus or dropdowns, be sure to scan them with an :ref:`accessibility checker <accessibility-checkers>` in both opened and closed states. Sometimes issues are hidden when menus are closed.
+
+.. _accessibility-checkers:
+
+Accessibility checkers
+~~~~~~~~~~~~~~~~~~~~~~
+
+During development, you can test the accessibility compliance of your features using one of the tools below:
+
+- `Accessibility insights plugin <https://accessibilityinsights.io/downloads/>`_
+- `Site Improve plugin <https://www.siteimprove.com/integrations/browser-extensions/>`_
+- `Axe devtools <https://www.deque.com/axe/devtools/>`_
+
+Testing with two or more of these tools can greatly improve the detection of accessibility violations.
+
+.. _color-contrast-checkers:
+
+Color contrast checkers
+~~~~~~~~~~~~~~~~~~~~~~~
+
+When adding new colors, making sure they are accessible is also important. Here are some tools which can help with color contrast testing:
+
+- `Accessible web color-contrast checker <https://accessibleweb.com/color-contrast-checker/>`_
+- `Colorsafe generator <https://colorsafe.co/>`_
+
+Accessibility linters
+~~~~~~~~~~~~~~~~~~~~~
+
+If you use VSCode, you may install the `axe accessibility linter <https://marketplace.visualstudio.com/items?itemName=deque-systems.vscode-axe-linter>`_,
+which can help you catch and fix potential issues during development.
+
+Accessibility testing
+~~~~~~~~~~~~~~~~~~~~~
+
+Our e2e testing suite, which is based on Cypress, supports the addition of accessibility tests using `axe-core <https://github.com/dequelabs/axe-core>`_ 
+and `cypress-axe <https://github.com/component-driven/cypress-axe>`_. A custom Cypress command, `cy.checkAccessibility`, can also be used directly. 
+This is a great way to prevent accessibility regressions on high impact components.
+
+Tests can be found under the `a11y folder <./src/pybind/mgr/dashboard/frontend/cypress/integration/a11y>`_ in the dashboard. Here is an example:
+
+.. code:: TypeScript
+
+  describe('Navigation accessibility', { retries: 0 }, () => {
+    const shared = new NavigationPageHelper();
+  
+    beforeEach(() => {
+      cy.login();
+      Cypress.Cookies.preserveOnce('token');
+      shared.navigateTo();
+    });
+  
+    it('top-nav should have no accessibility violations', () => {
+      cy.injectAxe();
+      cy.checkAccessibility('.cd-navbar-top');
+    });
+  
+    it('sidebar should have no accessibility violations', () => {
+      cy.injectAxe();
+      cy.checkAccessibility('nav[id=sidebar]');
+    });
+  
+  });
+
+Additional guidelines
+~~~~~~~~~~~~~~~~~~~~~
+
+If you're unsure about which UI pattern to follow in order to implement an accessibility fix, `patternfly <https://www.patternfly.org/v4/accessibility/accessibility-fundamentals>`_ guidelines can be used.
 
 Backend Development
 -------------------
@@ -1781,7 +1867,7 @@ To specify the grafana dashboard properties such as title, uid etc we can create
 
     local dashboardSchema(title, uid, time_from, refresh, schemaVersion, tags,timezone, timepicker)
 
-To add a graph panel we can spcify the graph schema in a local function such as -
+To add a graph panel we can specify the graph schema in a local function such as -
 
 ::
 
@@ -2340,7 +2426,7 @@ If that checker failed, it means that the current Pull Request is modifying the
 Ceph API and therefore:
 
 #. The versioned OpenAPI specification should be updated explicitly: ``tox -e openapi-fix``.
-#. The team @ceph/api will be requested for reviews (this is automated via Github CODEOWNERS), in order to asses the impact of changes.
+#. The team @ceph/api will be requested for reviews (this is automated via GitHub CODEOWNERS), in order to asses the impact of changes.
 
 Additionally, Sphinx documentation can be generated from the OpenAPI
 specification with ``tox -e openapi-doc``.

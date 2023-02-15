@@ -563,7 +563,7 @@ bool RGWCoroutinesStack::consume_io_finish(const rgw_io_id& io_id)
 
 
 void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& scheduled_stacks,
-                                                  RGWCompletionManager::io_completion& io, int *blocked_count)
+                                                  RGWCompletionManager::io_completion& io, int *blocked_count, int *interval_wait_count)
 {
   ceph_assert(ceph_mutex_is_wlocked(lock));
   RGWCoroutinesStack *stack = static_cast<RGWCoroutinesStack *>(io.user_info);
@@ -576,6 +576,9 @@ void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& con
   if (stack->is_io_blocked()) {
     --(*blocked_count);
     stack->set_io_blocked(false);
+    if (stack->is_interval_waiting()) {
+      --(*interval_wait_count);
+    }
   }
   stack->set_interval_wait(false);
   if (!stack->is_done()) {
@@ -713,7 +716,7 @@ int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp, list<RGWCoroutinesS
     }
 
     while (completion_mgr->try_get_next(&io)) {
-      handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count);
+      handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count, &interval_wait_count);
     }
 
     /*
@@ -728,7 +731,7 @@ int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp, list<RGWCoroutinesS
       if (ret < 0) {
        ldout(cct, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
       }
-      handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count);
+      handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count, &interval_wait_count);
     }
 
 next:
@@ -745,7 +748,7 @@ next:
         canceled = true;
         break;
       }
-      handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count);
+      handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count, &interval_wait_count);
       iter = scheduled_stacks.begin();
     }
     if (canceled) {
@@ -886,6 +889,7 @@ int RGWCoroutinesManagerRegistry::hook_to_admin_command(const string& command)
 
 int RGWCoroutinesManagerRegistry::call(std::string_view command,
 				       const cmdmap_t& cmdmap,
+				       const bufferlist&,
 				       Formatter *f,
 				       std::ostream& ss,
 				       bufferlist& out) {

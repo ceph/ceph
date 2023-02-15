@@ -11,30 +11,35 @@
 
 namespace crimson::os::seastore {
 
-namespace nvme_device {
-class NVMeBlockDevice;
+namespace random_block_device {
+class RBMDevice;
 }
 
 class SegmentManagerGroup;
 class SegmentProvider;
-
-enum class journal_type_t {
-  SEGMENT_JOURNAL = 0,
-  CIRCULARBOUNDED_JOURNAL
-};
+class JournalTrimmer;
 
 class Journal {
 public:
+  virtual JournalTrimmer &get_trimmer() = 0;
+  /**
+   * initializes journal for mkfs writes -- must run prior to calls
+   * to submit_record.
+   */
+  using open_for_mkfs_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error
+    >;
+  using open_for_mkfs_ret = open_for_mkfs_ertr::future<journal_seq_t>;
+  virtual open_for_mkfs_ret open_for_mkfs() = 0;
+
   /**
    * initializes journal for new writes -- must run prior to calls
    * to submit_record.  Should be called after replay if not a new
    * Journal.
    */
-  using open_for_write_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error
-    >;
-  using open_for_write_ret = open_for_write_ertr::future<journal_seq_t>;
-  virtual open_for_write_ret open_for_write() = 0;
+  using open_for_mount_ertr = open_for_mkfs_ertr;
+  using open_for_mount_ret = open_for_mkfs_ret;
+  virtual open_for_mount_ret open_for_mount() = 0;
 
   /// close journal
   using close_ertr = crimson::errorator<
@@ -83,13 +88,17 @@ public:
     crimson::ct_error::erange>;
   using replay_ret = replay_ertr::future<>;
   using delta_handler_t = std::function<
-    replay_ret(const record_locator_t&,
-	       const delta_info_t&,
-	       const journal_seq_t, // journal seq from which
-				    // alloc delta should replayed
-	       seastar::lowres_system_clock::time_point last_modified)>;
+    replay_ertr::future<bool>(
+      const record_locator_t&,
+      const delta_info_t&,
+      const journal_seq_t&, // dirty_tail
+      const journal_seq_t&, // alloc_tail
+      sea_time_point modify_time)>;
   virtual replay_ret replay(
     delta_handler_t &&delta_handler) = 0;
+
+  virtual seastar::future<> finish_commit(
+    transaction_type_t type) = 0;
 
   virtual ~Journal() {}
 
@@ -99,10 +108,13 @@ using JournalRef = std::unique_ptr<Journal>;
 
 namespace journal {
 
-JournalRef make_segmented(SegmentProvider &provider);
+JournalRef make_segmented(
+  SegmentProvider &provider,
+  JournalTrimmer &trimmer);
 
 JournalRef make_circularbounded(
-  crimson::os::seastore::nvme_device::NVMeBlockDevice* device,
+  JournalTrimmer &trimmer,
+  crimson::os::seastore::random_block_device::RBMDevice* device,
   std::string path);
 
 }

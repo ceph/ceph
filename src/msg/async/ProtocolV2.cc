@@ -562,8 +562,11 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
     ldout(cct, 1) << __func__ << " error sending " << m << ", "
                   << cpp_strerror(rc) << dendl;
   } else {
-    connection->logger->inc(
-        l_msgr_send_bytes, total_send_size - connection->outgoing_bl.length());
+    const auto sent_bytes = total_send_size - connection->outgoing_bl.length();
+    connection->logger->inc(l_msgr_send_bytes, sent_bytes);
+    if (session_stream_handlers.tx) {
+      connection->logger->inc(l_msgr_send_encrypted_bytes, sent_bytes);
+    }
     ldout(cct, 10) << __func__ << " sending " << m
                    << (rc ? " continuely." : " done.") << dendl;
   }
@@ -1483,6 +1486,10 @@ CtPtr ProtocolV2::handle_message() {
   connection->logger->inc(l_msgr_recv_messages);
   connection->logger->inc(l_msgr_recv_bytes,
                           rx_frame_asm.get_frame_onwire_len());
+  if (session_stream_handlers.rx) {
+    connection->logger->inc(l_msgr_recv_encrypted_bytes,
+                            rx_frame_asm.get_frame_onwire_len());
+  }
 
   messenger->ms_fast_preprocess(message);
   fast_dispatch_time = ceph::mono_clock::now();
@@ -1537,7 +1544,7 @@ CtPtr ProtocolV2::throttle_message() {
                    << "/" << connection->policy.throttler_messages->get_max()
                    << dendl;
     if (!connection->policy.throttler_messages->get_or_fail()) {
-      ldout(cct, 10) << __func__ << " wants 1 message from policy throttle "
+      ldout(cct, 1) << __func__ << " wants 1 message from policy throttle "
                      << connection->policy.throttler_messages->get_current()
                      << "/" << connection->policy.throttler_messages->get_max()
                      << " failed, just wait." << dendl;
@@ -1567,7 +1574,7 @@ CtPtr ProtocolV2::throttle_bytes() {
                      << connection->policy.throttler_bytes->get_current() << "/"
                      << connection->policy.throttler_bytes->get_max() << dendl;
       if (!connection->policy.throttler_bytes->get_or_fail(cur_msg_size)) {
-        ldout(cct, 10) << __func__ << " wants " << cur_msg_size
+        ldout(cct, 1) << __func__ << " wants " << cur_msg_size
                        << " bytes from policy throttler "
                        << connection->policy.throttler_bytes->get_current()
                        << "/" << connection->policy.throttler_bytes->get_max()
@@ -1595,7 +1602,7 @@ CtPtr ProtocolV2::throttle_dispatch_queue() {
   if (cur_msg_size) {
     if (!connection->dispatch_queue->dispatch_throttler.get_or_fail(
             cur_msg_size)) {
-      ldout(cct, 10)
+      ldout(cct, 1)
           << __func__ << " wants " << cur_msg_size
           << " bytes from dispatch throttle "
           << connection->dispatch_queue->dispatch_throttler.get_current() << "/"
@@ -2603,7 +2610,7 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
 CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing) {
   ldout(cct, 20) << __func__ << " existing=" << existing << dendl;
 
-  std::lock_guard<std::mutex> l(existing->lock);
+  std::unique_lock<std::mutex> l(existing->lock);
 
   ProtocolV2 *exproto = dynamic_cast<ProtocolV2 *>(existing->protocol.get());
   if (!exproto) {
@@ -2614,6 +2621,7 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
   if (exproto->state == CLOSED) {
     ldout(cct, 1) << __func__ << " existing " << existing << " already closed."
                   << dendl;
+    l.unlock();
     return send_server_ident();
   }
 
@@ -2643,6 +2651,7 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
         << dendl;
     existing->protocol->stop();
     existing->dispatch_queue->queue_reset(existing.get());
+    l.unlock();
     return send_server_ident();
   }
 
@@ -2721,14 +2730,11 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
   exproto->pre_auth.enabled = false;
 
   if (!reconnecting) {
-    exproto->peer_supported_features = peer_supported_features;
-    exproto->tx_frame_asm.set_is_rev1(tx_frame_asm.get_is_rev1());
-    exproto->rx_frame_asm.set_is_rev1(rx_frame_asm.get_is_rev1());
-
     exproto->client_cookie = client_cookie;
     exproto->peer_name = peer_name;
     exproto->connection_features = connection_features;
     existing->set_features(connection_features);
+    exproto->peer_supported_features = peer_supported_features;
   }
   exproto->peer_global_seq = peer_global_seq;
 
@@ -2771,6 +2777,9 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
         new_worker,
         new_center,
         exproto,
+        reconnecting=reconnecting,
+        tx_is_rev1=tx_frame_asm.get_is_rev1(),
+        rx_is_rev1=rx_frame_asm.get_is_rev1(),
         temp_stream_handlers=std::move(temp_stream_handlers),
         temp_compression_handlers=std::move(temp_compression_handlers)
       ](ConnectedSocket &cs) mutable {
@@ -2788,6 +2797,10 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
           existing->open_write = false;
           exproto->session_stream_handlers = std::move(temp_stream_handlers);
           exproto->session_compression_handlers = std::move(temp_compression_handlers);
+          if (!reconnecting) {
+            exproto->tx_frame_asm.set_is_rev1(tx_is_rev1);
+            exproto->rx_frame_asm.set_is_rev1(rx_is_rev1);
+          }
           existing->write_lock.unlock();
           if (exproto->state == NONE) {
             existing->shutdown_socket();

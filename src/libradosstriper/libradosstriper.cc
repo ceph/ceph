@@ -532,6 +532,15 @@ extern "C" int rados_striper_stat(rados_striper_t striper,
   return impl->stat(soid, psize, pmtime);
 }
 
+extern "C" int rados_striper_stat2(rados_striper_t striper,
+				  const char* soid,
+				  uint64_t *psize,
+				  struct timespec *pmtime)
+{
+  libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
+  return impl->stat2(soid, psize, pmtime);
+}
+
 extern "C" int rados_striper_multi_aio_create_completion(void *cb_arg,
 							 rados_callback_t cb_complete,
 							 rados_callback_t cb_safe,
@@ -666,4 +675,14 @@ extern "C" int rados_striper_aio_stat(rados_striper_t striper,
 {
   libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
   return impl->aio_stat(soid, (librados::AioCompletionImpl*)completion, psize, pmtime);
+}
+
+extern "C" int rados_striper_aio_stat2(rados_striper_t striper,
+				      const char* soid,
+				      rados_completion_t completion,
+				      uint64_t *psize,
+				      struct timespec *pmtime)
+{
+  libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
+  return impl->aio_stat2(soid, (librados::AioCompletionImpl*)completion, psize, pmtime);
 }

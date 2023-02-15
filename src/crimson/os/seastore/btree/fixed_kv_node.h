@@ -154,9 +154,9 @@ struct FixedKVInternalNode
   std::tuple<Ref, Ref, NODE_KEY>
   make_split_children(op_context_t<NODE_KEY> c) {
     auto left = c.cache.template alloc_new_extent<node_type_t>(
-      c.trans, node_size);
+      c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     auto right = c.cache.template alloc_new_extent<node_type_t>(
-      c.trans, node_size);
+      c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     auto pivot = this->split_into(*left, *right);
     left->pin.set_range(left->get_meta());
     right->pin.set_range(right->get_meta());
@@ -170,7 +170,7 @@ struct FixedKVInternalNode
     op_context_t<NODE_KEY> c,
     Ref &right) {
     auto replacement = c.cache.template alloc_new_extent<node_type_t>(
-      c.trans, node_size);
+      c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     replacement->merge_from(*this, *right->template cast<node_type_t>());
     replacement->pin.set_range(replacement->get_meta());
     return replacement;
@@ -184,9 +184,9 @@ struct FixedKVInternalNode
     ceph_assert(_right->get_type() == this->get_type());
     auto &right = *_right->template cast<node_type_t>();
     auto replacement_left = c.cache.template alloc_new_extent<node_type_t>(
-      c.trans, node_size);
+      c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     auto replacement_right = c.cache.template alloc_new_extent<node_type_t>(
-      c.trans, node_size);
+      c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
 
     auto pivot = this->balance_into_new_nodes(
       *this,
@@ -243,7 +243,7 @@ struct FixedKVInternalNode
       for (auto i = from; i != to; ++i) {
 	if (i->get_val().is_relative()) {
 	  assert(i->get_val().is_record_relative());
-	  i->set_val(i->get_val() - this->get_paddr());
+	  i->set_val(i->get_val().block_relative_to(this->get_paddr()));
 	}
       }
     }
@@ -355,9 +355,9 @@ struct FixedKVLeafNode
   std::tuple<Ref, Ref, NODE_KEY>
   make_split_children(op_context_t<NODE_KEY> c) {
     auto left = c.cache.template alloc_new_extent<node_type_t>(
-      c.trans, node_size);
+      c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     auto right = c.cache.template alloc_new_extent<node_type_t>(
-      c.trans, node_size);
+      c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     auto pivot = this->split_into(*left, *right);
     left->pin.set_range(left->get_meta());
     right->pin.set_range(right->get_meta());
@@ -371,7 +371,7 @@ struct FixedKVLeafNode
     op_context_t<NODE_KEY> c,
     Ref &right) {
     auto replacement = c.cache.template alloc_new_extent<node_type_t>(
-      c.trans, node_size);
+      c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     replacement->merge_from(*this, *right->template cast<node_type_t>());
     replacement->pin.set_range(replacement->get_meta());
     return replacement;
@@ -385,9 +385,9 @@ struct FixedKVLeafNode
     ceph_assert(_right->get_type() == this->get_type());
     auto &right = *_right->template cast<node_type_t>();
     auto replacement_left = c.cache.template alloc_new_extent<node_type_t>(
-      c.trans, node_size);
+      c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     auto replacement_right = c.cache.template alloc_new_extent<node_type_t>(
-      c.trans, node_size);
+      c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
 
     auto pivot = this->balance_into_new_nodes(
       *this,

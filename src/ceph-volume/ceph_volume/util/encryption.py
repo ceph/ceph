@@ -1,13 +1,14 @@
 import base64
 import os
 import logging
-from ceph_volume import process, conf
+from ceph_volume import process, conf, terminal
 from ceph_volume.util import constants, system
 from ceph_volume.util.device import Device
 from .prepare import write_keyring
 from .disk import lsblk, device_family, get_part_entry_type
 
 logger = logging.getLogger(__name__)
+mlogger = terminal.MultiLogger(__name__)
 
 def get_key_size_from_conf():
     """
@@ -18,7 +19,7 @@ def get_key_size_from_conf():
     key_size = conf.ceph.get_safe(
         'osd',
         'osd_dmcrypt_key_size',
-        default='512')
+        default='512', check_valid=False)
 
     if key_size not in ['256', '512']:
         logger.warning(("Invalid value set for osd_dmcrypt_key_size ({}). "
@@ -135,6 +136,7 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
     name = 'client.osd-lockbox.%s' % osd_fsid
     config_key = 'dm-crypt/osd/%s/luks' % osd_fsid
 
+    mlogger.info(f'Running ceph config-key get {config_key}')
     stdout, stderr, returncode = process.call(
         [
             'ceph',
@@ -145,7 +147,8 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
             'get',
             config_key
         ],
-        show_command=True
+        show_command=True,
+        logfile_verbose=False
     )
     if returncode != 0:
         raise RuntimeError('Unable to retrieve dmcrypt secret')
@@ -232,7 +235,7 @@ def legacy_encrypted(device):
     This function assumes that ``device`` will be a partition.
     """
     if os.path.isdir(device):
-        mounts = system.get_mounts(paths=True)
+        mounts = system.Mounts(paths=True).get_mounts()
         # yes, rebind the device variable here because a directory isn't going
         # to help with parsing
         device = mounts.get(device, [None])[0]
@@ -270,6 +273,6 @@ def legacy_encrypted(device):
     devices = [Device(i['NAME']) for i in device_family(parent_device)]
     for d in devices:
         if d.ceph_disk.type == 'lockbox':
-            metadata['lockbox'] = d.abspath
+            metadata['lockbox'] = d.path
             break
     return metadata

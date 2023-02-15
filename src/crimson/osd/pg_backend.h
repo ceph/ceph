@@ -6,7 +6,6 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <boost/container/flat_set.hpp>
 
 #include "include/rados.h"
@@ -32,6 +31,7 @@ namespace ceph::os {
 namespace crimson::osd {
   class ShardServices;
   class PG;
+  class ObjectContextLoader;
 }
 
 class PGBackend
@@ -99,7 +99,8 @@ public:
     const ObjectState& os,
     OSDOp& osd_op);
   using cmp_ext_errorator = ll_read_errorator::extend<
-    crimson::ct_error::invarg>;
+    crimson::ct_error::invarg,
+    crimson::ct_error::cmp_fail>;
   using cmp_ext_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
@@ -146,10 +147,16 @@ public:
   remove_iertr::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn,
-    object_stat_sum_t& delta_stats);
+    object_stat_sum_t& delta_stats,
+    bool whiteout);
   interruptible_future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
+  interruptible_future<> set_allochint(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans,
+    object_stat_sum_t& delta_stats);
   write_iertr::future<> write(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -180,6 +187,20 @@ public:
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats);
+  using rollback_ertr = crimson::errorator<
+    crimson::ct_error::enoent>;
+  using rollback_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      rollback_ertr>;
+  rollback_iertr::future<> rollback(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params,
+    object_stat_sum_t& delta_stats,
+    crimson::osd::ObjectContextRef head,
+    crimson::osd::ObjectContextLoader& obc_loader);
   write_iertr::future<> truncate(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -254,6 +275,11 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
+  void clone(
+    /* const */object_info_t& snap_oi,
+    const ObjectState& os,
+    const ObjectState& d_os,
+    ceph::os::Transaction& trans);
   interruptible_future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;
@@ -262,6 +288,31 @@ public:
     const ghobject_t& oid,
     uint64_t off,
     uint64_t len);
+
+  write_iertr::future<> tmapput(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans,
+    object_stat_sum_t& delta_stats,
+    osd_op_params_t& osd_op_params);
+
+  using tmapup_ertr = write_ertr::extend<
+    crimson::ct_error::enoent,
+    crimson::ct_error::eexist>;
+  using tmapup_iertr = ::crimson::interruptible::interruptible_errorator<
+    ::crimson::osd::IOInterruptCondition,
+    tmapup_ertr>;
+  tmapup_iertr::future<> tmapup(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans,
+    object_stat_sum_t& delta_stats,
+    osd_op_params_t& osd_op_params);
+
+  read_ierrorator::future<> tmapget(
+    const ObjectState& os,
+    OSDOp& osd_op,
+    object_stat_sum_t& delta_stats);
 
   // OMAP
   ll_read_ierrorator::future<> omap_get_keys(
@@ -348,7 +399,7 @@ protected:
 public:
   struct loaded_object_md_t {
     ObjectState os;
-    std::optional<SnapSet> ss;
+    crimson::osd::SnapSetContextRef ssc;
     using ref = std::unique_ptr<loaded_object_md_t>;
   };
   load_metadata_iertr::future<loaded_object_md_t::ref>
@@ -361,6 +412,22 @@ private:
     size_t offset,
     size_t length,
     uint32_t flags) = 0;
+  write_iertr::future<> _writefull(
+    ObjectState& os,
+    off_t truncate_size,
+    const bufferlist& bl,
+    ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params,
+    object_stat_sum_t& delta_stats,
+    unsigned flags);
+  write_iertr::future<> _truncate(
+    ObjectState& os,
+    ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params,
+    object_stat_sum_t& delta_stats,
+    size_t offset,
+    size_t truncate_size,
+    uint32_t truncate_seq);
 
   bool maybe_create_new_object(ObjectState& os,
     ceph::os::Transaction& txn,

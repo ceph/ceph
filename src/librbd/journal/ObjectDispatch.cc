@@ -51,10 +51,9 @@ struct C_CommitIOEvent : public Context {
     if (r >= 0 ||
         (object_dispatch_flags &
            io::OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR) == 0) {
-      io::Extents file_extents;
-      io::util::extent_to_file(image_ctx, object_no, object_off, object_len,
-                               file_extents);
-      for (auto& extent : file_extents) {
+      auto [image_extents, _] = io::util::object_to_area_extents(
+          image_ctx, object_no, {{object_off, object_len}});
+      for (const auto& extent : image_extents) {
         journal->commit_io_event_extent(journal_tid, extent.first,
                                         extent.second, r);
       }

@@ -16,6 +16,7 @@ namespace crimson::osd {
 
 void OSDOperationRegistry::do_stop()
 {
+  logger().info("OSDOperationRegistry::{}", __func__);
   // we need to decouple visiting the registry from destructing
   // ops because of the auto-unlink feature of boost::intrusive.
   // the list shouldn't change while iterating due to constrains
@@ -37,6 +38,7 @@ void OSDOperationRegistry::do_stop()
 }
 
 OSDOperationRegistry::OSDOperationRegistry()
+  : OperationRegistryT(seastar::this_shard_id())
 {
   constexpr auto historic_reg_index =
     static_cast<size_t>(OperationTypeCode::historic_client_request);
@@ -93,21 +95,11 @@ void OSDOperationRegistry::put_historic(const ClientRequest& op)
     assert(fastest_historic_iter != std::end(historic_registry));
     const auto& fastest_historic_op =
       static_cast<const ClientRequest&>(*fastest_historic_iter);
+    historic_registry.erase(fastest_historic_iter);
     // clear a previously "leaked" op
     ClientRequest::ICRef(&fastest_historic_op, /* add_ref= */false);
     --num_slow_ops;
   }
-}
-
-size_t OSDOperationRegistry::dump_client_requests(ceph::Formatter* f) const
-{
-  const auto& client_registry =
-    get_registry<static_cast<size_t>(ClientRequest::type)>();
-  logger().warn("{} num_ops={}", __func__, std::size(client_registry));
-  for (const auto& op : client_registry) {
-    op.dump(f);
-  }
-  return std::size(client_registry);
 }
 
 size_t OSDOperationRegistry::dump_historic_client_requests(ceph::Formatter* f) const

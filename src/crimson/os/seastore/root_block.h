@@ -33,7 +33,7 @@ namespace crimson::os::seastore {
  * mutation which changes the journal trim bound.
  */
 struct RootBlock : CachedExtent {
-  constexpr static seastore_off_t SIZE = 4<<10;
+  constexpr static extent_len_t SIZE = 4<<10;
   using Ref = TCachedExtentRef<RootBlock>;
 
   root_t root;
@@ -88,3 +88,7 @@ struct RootBlock : CachedExtent {
 using RootBlockRef = RootBlock::Ref;
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::RootBlock> : fmt::ostream_formatter {};
+#endif

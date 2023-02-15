@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "operation.h"
-#include "common/Formatter.h"
 
 namespace crimson {
 

@@ -38,9 +38,9 @@ struct logging_allocator {
   template <typename U>
   logging_allocator(const logging_allocator<U>& other) : log(other.log) {}
 
-  T* allocate(size_t n, const void* hint=0)
+  T* allocate(size_t n)
   {
-    auto p = std::allocator<T>{}.allocate(n, hint);
+    auto p = std::allocator<T>{}.allocate(n);
     log->emplace_back(event{n * sizeof(T), true});
     return p;
   }

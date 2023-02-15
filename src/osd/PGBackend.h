@@ -297,7 +297,6 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual bool check_failsafe_full() = 0;
 
-     virtual bool pg_is_repair() = 0;
      virtual void inc_osd_stat_repaired() = 0;
      virtual bool pg_is_remote_backfilling() = 0;
      virtual void pg_add_local_num_bytes(int64_t num_bytes) = 0;

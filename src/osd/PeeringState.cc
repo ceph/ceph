@@ -1220,7 +1220,7 @@ void PeeringState::proc_lease_ack(int from, const pg_lease_ack_t& a)
   if (was_min) {
     auto old_ru = readable_until;
     recalc_readable_until();
-    if (now < old_ru) {
+    if (now >= old_ru) {
       pl->recheck_readable();
     }
   }
@@ -3514,6 +3514,7 @@ void PeeringState::update_calc_stats()
   info.stats.last_epoch_clean = info.history.last_epoch_clean;
 
   info.stats.log_size = pg_log.get_head().version - pg_log.get_tail().version;
+  info.stats.log_dups_size = pg_log.get_log().dups.size();
   info.stats.ondisk_log_size = info.stats.log_size;
   info.stats.log_start = pg_log.get_tail();
   info.stats.ondisk_log_start = pg_log.get_tail();
@@ -4164,6 +4165,8 @@ void PeeringState::append_log(
 
   psdout(10) << __func__ << " approx pg log length =  "
 	     << pg_log.get_log().approx_size() << dendl;
+  psdout(10) << __func__ << " dups pg log length =  "
+	     << pg_log.get_log().dups.size() << dendl;
   psdout(10) << __func__ << " transaction_applied = "
 	     << transaction_applied << dendl;
   if (!transaction_applied || async)
@@ -6226,6 +6229,8 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
   if (ps->pool.info.has_flag(pg_pool_t::FLAG_CREATING)) {
     pl->send_pg_created(pgid);
   }
+
+  psdout(1) << __func__ << " AllReplicasActivated Activating complete" << dendl;
 
   ps->info.history.last_epoch_started = ps->info.last_epoch_started;
   ps->info.history.last_interval_started = ps->info.last_interval_started;

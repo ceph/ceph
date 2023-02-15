@@ -12,7 +12,6 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDRepScrubMap.h"
-#include "messages/MOSDScrub.h"
 #include "messages/MOSDScrubReserve.h"
 #include "osd/OSD.h"
 

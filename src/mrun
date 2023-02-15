@@ -6,7 +6,7 @@ root=`dirname $0`
 run_name=$1
 command=$2
 CEPH_BIN=""
-CEPH_CONF_PATH="/etc/ceph/"
+CEPH_CONF_PATH=${CEPH_CONF_PATH:-/etc/ceph/}
 
 [ -z "$BUILD_DIR" ] && BUILD_DIR=build
 

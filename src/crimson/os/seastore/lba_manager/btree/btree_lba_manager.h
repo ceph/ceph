@@ -121,10 +121,6 @@ public:
     laddr_t end,
     scan_mappings_func_t &&f) final;
 
-  scan_mapped_space_ret scan_mapped_space(
-    Transaction &t,
-    scan_mapped_space_func_t &&f) final;
-
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent) final;
@@ -140,7 +136,7 @@ public:
     extent_types_t type,
     paddr_t addr,
     laddr_t laddr,
-    seastore_off_t len) final;
+    extent_len_t len) final;
 
   void add_pin(LBAPin &pin) final {
     auto *bpin = reinterpret_cast<BtreeLBAPin*>(&pin);

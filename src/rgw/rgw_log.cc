@@ -24,7 +24,7 @@
 
 using namespace std;
 
-static void set_param_str(struct req_state *s, const char *name, string& str)
+static void set_param_str(req_state *s, const char *name, string& str)
 {
   const char *p = s->info.env->get(name);
   if (p)
@@ -94,7 +94,7 @@ string render_log_object_name(const string& format,
 /* usage logger */
 class UsageLogger : public DoutPrefixProvider {
   CephContext *cct;
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   map<rgw_user_bucket, RGWUsageBatch> usage_map;
   ceph::mutex lock = ceph::make_mutex("UsageLogger");
   int32_t num_entries;
@@ -117,7 +117,7 @@ class UsageLogger : public DoutPrefixProvider {
   }
 public:
 
-  UsageLogger(CephContext *_cct, rgw::sal::Store* _store) : cct(_cct), store(_store), num_entries(0), timer(cct, timer_lock) {
+  UsageLogger(CephContext *_cct, rgw::sal::Driver* _driver) : cct(_cct), driver(_driver), num_entries(0), timer(cct, timer_lock) {
     timer.init();
     std::lock_guard l{timer_lock};
     set_timer();
@@ -171,7 +171,7 @@ public:
     num_entries = 0;
     lock.unlock();
 
-    store->log_usage(this, old_map);
+    driver->log_usage(this, old_map);
   }
 
   CephContext *get_cct() const override { return cct; }
@@ -181,9 +181,9 @@ public:
 
 static UsageLogger *usage_logger = NULL;
 
-void rgw_log_usage_init(CephContext *cct, rgw::sal::Store* store)
+void rgw_log_usage_init(CephContext *cct, rgw::sal::Driver* driver)
 {
-  usage_logger = new UsageLogger(cct, store);
+  usage_logger = new UsageLogger(cct, driver);
 }
 
 void rgw_log_usage_finalize()
@@ -192,7 +192,7 @@ void rgw_log_usage_finalize()
   usage_logger = NULL;
 }
 
-static void log_usage(struct req_state *s, const string& op_name)
+static void log_usage(req_state *s, const string& op_name)
 {
   if (s->system_request) /* don't log system user operations */
     return;
@@ -323,6 +323,29 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
     formatter->dump_string("subuser", entry.subuser);
   }
   formatter->dump_bool("temp_url", entry.temp_url);
+
+  if (entry.op == "multi_object_delete") {
+    formatter->open_object_section("op_data");
+    formatter->dump_int("num_ok", entry.delete_multi_obj_meta.num_ok);
+    formatter->dump_int("num_err", entry.delete_multi_obj_meta.num_err);
+    formatter->open_array_section("objects");
+    for (const auto& iter: entry.delete_multi_obj_meta.objects) {
+      formatter->open_object_section("");
+      formatter->dump_string("key", iter.key);
+      formatter->dump_string("version_id", iter.version_id);
+      formatter->dump_int("http_status", iter.http_status);
+      formatter->dump_bool("error", iter.error);
+      if (iter.error) {
+        formatter->dump_string("error_message", iter.error_message);
+      } else {
+        formatter->dump_bool("delete_marker", iter.delete_marker);
+        formatter->dump_string("marker_version_id", iter.marker_version_id);
+      }
+      formatter->close_section();
+    }
+    formatter->close_section();
+    formatter->close_section();
+  }
   formatter->close_section();
 }
 
@@ -338,7 +361,7 @@ void OpsLogManifold::add_sink(OpsLogSink* sink)
     sinks.push_back(sink);
 }
 
-int OpsLogManifold::log(struct req_state* s, struct rgw_log_entry& entry)
+int OpsLogManifold::log(req_state* s, struct rgw_log_entry& entry)
 {
   int ret = 0;
   for (const auto &sink : sinks) {
@@ -431,7 +454,7 @@ OpsLogFile::~OpsLogFile()
   file.close();
 }
 
-int OpsLogFile::log_json(struct req_state* s, bufferlist& bl)
+int OpsLogFile::log_json(req_state* s, bufferlist& bl)
 {
   std::unique_lock lock(mutex);
   if (data_size + bl.length() >= max_data_size) {
@@ -464,7 +487,7 @@ void JsonOpsLogSink::formatter_to_bl(bufferlist& bl)
   bl.append(s);
 }
 
-int JsonOpsLogSink::log(struct req_state* s, struct rgw_log_entry& entry)
+int JsonOpsLogSink::log(req_state* s, struct rgw_log_entry& entry)
 {
   bufferlist bl;
 
@@ -486,17 +509,17 @@ OpsLogSocket::OpsLogSocket(CephContext *cct, uint64_t _backlog) : OutputDataSock
   delim.append(",\n");
 }
 
-int OpsLogSocket::log_json(struct req_state* s, bufferlist& bl)
+int OpsLogSocket::log_json(req_state* s, bufferlist& bl)
 {
   append_output(bl);
   return 0;
 }
 
-OpsLogRados::OpsLogRados(rgw::sal::Store* const& store): store(store)
+OpsLogRados::OpsLogRados(rgw::sal::Driver* const& driver): driver(driver)
 {
 }
 
-int OpsLogRados::log(struct req_state* s, struct rgw_log_entry& entry)
+int OpsLogRados::log(req_state* s, struct rgw_log_entry& entry)
 {
   if (!s->cct->_conf->rgw_ops_log_rados) {
     return 0;
@@ -512,17 +535,18 @@ int OpsLogRados::log(struct req_state* s, struct rgw_log_entry& entry)
     localtime_r(&t, &bdt);
   string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
                                       entry.bucket_id, entry.bucket);
-  if (store->log_op(s, oid, bl) < 0) {
+  if (driver->log_op(s, oid, bl) < 0) {
     ldpp_dout(s, 0) << "ERROR: failed to log RADOS RGW ops log entry for txn: " << s->trans_id << dendl;
     return -1;
   }
   return 0;
 }
 
-int rgw_log_op(RGWREST* const rest, struct req_state *s, const string& op_name, OpsLogSink *olog)
+int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *olog)
 {
   struct rgw_log_entry entry;
   string bucket_id;
+  string op_name = (op ? op->name() : "unknown");
 
   if (s->enable_usage_log)
     log_usage(s, op_name);
@@ -598,6 +622,9 @@ int rgw_log_op(RGWREST* const rest, struct req_state *s, const string& op_name, 
   entry.uri = std::move(uri);
 
   entry.op = op_name;
+  if (op) {
+    op->write_ops_log_entry(entry);
+  }
 
   if (s->auth.identity) {
     entry.identity_type = s->auth.identity->get_identity_type();

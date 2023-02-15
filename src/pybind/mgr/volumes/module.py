@@ -69,6 +69,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs volume info '
+                   'name=vol_name,type=CephString '
+                   'name=human_readable,type=CephBool,req=false ',
+            'desc': "Get the information of a CephFS volume",
+            'perm': 'r'
+        },
+        {
             'cmd': 'fs subvolumegroup ls '
             'name=vol_name,type=CephString ',
             'desc': "List subvolumegroups",
@@ -78,6 +85,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs subvolumegroup create '
                    'name=vol_name,type=CephString '
                    f'name=group_name,type=CephString,goodchars={goodchars} '
+                   'name=size,type=CephInt,req=false '
                    'name=pool_layout,type=CephString,req=false '
                    'name=uid,type=CephInt,req=false '
                    'name=gid,type=CephInt,req=false '
@@ -93,6 +101,28 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=force,type=CephBool,req=false ',
             'desc': "Delete a CephFS subvolume group in a volume",
             'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolumegroup info '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString ',
+            'desc': "Get the metadata of a CephFS subvolume group in a volume, ",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolumegroup resize '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString '
+                   'name=new_size,type=CephString,req=true '
+                   'name=no_shrink,type=CephBool,req=false ',
+            'desc': "Resize a CephFS subvolume group",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolumegroup exist '
+                   'name=vol_name,type=CephString ',
+            'desc': "Check a volume for the existence of subvolumegroup",
+            'perm': 'r'
         },
         {
             'cmd': 'fs subvolume ls '
@@ -191,6 +221,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=group_name,type=CephString,req=false ',
             'desc': "Get the information of a CephFS subvolume in a volume, "
                     "and optionally, in a specific subvolume group",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolume exist '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Check a volume for the existence of a subvolume, "
+                    "optionally in a specified subvolume group",
             'perm': 'r'
         },
         {
@@ -517,12 +555,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         cmd.get('yes_i_really_mean_it', False))
 
     @mgr_cmd_wrap
+    def _cmd_fs_volume_info(self, inbuf, cmd):
+        return self.vc.volume_info(vol_name=cmd['vol_name'],
+                                   human_readable=cmd.get('human_readable', False))
+
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_create(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
         """
         return self.vc.create_subvolume_group(
-            vol_name=cmd['vol_name'], group_name=cmd['group_name'],
+            vol_name=cmd['vol_name'], group_name=cmd['group_name'], size=cmd.get('size', None),
             pool_layout=cmd.get('pool_layout', None), mode=cmd.get('mode', '755'),
             uid=cmd.get('uid', None), gid=cmd.get('gid', None))
 
@@ -536,8 +579,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                               force=cmd.get('force', False))
 
     @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_info(self, inbuf, cmd):
+        return self.vc.subvolumegroup_info(vol_name=cmd['vol_name'],
+                                           group_name=cmd['group_name'])
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_resize(self, inbuf, cmd):
+        return self.vc.resize_subvolume_group(vol_name=cmd['vol_name'],
+                                              group_name=cmd['group_name'],
+                                              new_size=cmd['new_size'],
+                                              no_shrink=cmd.get('no_shrink', False))
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_ls(self, inbuf, cmd):
         return self.vc.list_subvolume_groups(vol_name=cmd['vol_name'])
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_exist(self, inbuf, cmd):
+        return self.vc.subvolume_group_exists(vol_name=cmd['vol_name'])
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_create(self, inbuf, cmd):
@@ -629,6 +687,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                       sub_name=cmd['sub_name'],
                                       group_name=cmd.get('group_name', None))
 
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_exist(self, inbuf, cmd):
+        return self.vc.subvolume_exists(vol_name=cmd['vol_name'],
+                                        group_name=cmd.get('group_name', None))
+    
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_metadata_set(self, inbuf, cmd):
         return self.vc.set_user_metadata(vol_name=cmd['vol_name'],

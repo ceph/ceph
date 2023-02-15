@@ -3,25 +3,44 @@
 import json
 import logging
 import re
+from enum import IntEnum
 from functools import partial
-from typing import no_type_check
+from typing import NamedTuple, Optional, no_type_check
 
 import cherrypy
 import rbd
 
 from .. import mgr
+from ..controllers.pool import RBDPool
+from ..controllers.service import Service
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
+from ..services.orchestrator import OrchClient
 from ..services.rbd import rbd_call
 from ..tools import ViewCache
-from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, Task, UpdatePermission, allow_empty_body
+from . import APIDoc, APIRouter, BaseController, CreatePermission, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, Task, UIRouter, \
+    UpdatePermission, allow_empty_body
 
 logger = logging.getLogger('controllers.rbd_mirror')
 
 
+class MirrorHealth(IntEnum):
+    # RBD defined mirroring health states in in src/tools/rbd/action/MirrorPool.cc where the order
+    # is relevant.
+    MIRROR_HEALTH_OK = 0
+    MIRROR_HEALTH_UNKNOWN = 1
+    MIRROR_HEALTH_WARNING = 2
+    MIRROR_HEALTH_ERROR = 3
+
+    # extra states for the dashboard
+    MIRROR_HEALTH_DISABLED = 4
+    MIRROR_HEALTH_INFO = 5
+
 # pylint: disable=not-callable
+
+
 def handle_rbd_mirror_error():
     def composed_decorator(func):
         func = handle_rados_error('rbd-mirroring')(func)
@@ -75,28 +94,24 @@ def get_daemons():
 
 def get_daemon_health(daemon):
     health = {
-        'health_color': 'info',
-        'health': 'Unknown'
+        'health': MirrorHealth.MIRROR_HEALTH_UNKNOWN
     }
     for _, pool_data in daemon['status'].items():
-        if (health['health'] != 'error'
+        if (health['health'] != MirrorHealth.MIRROR_HEALTH_ERROR
                 and [k for k, v in pool_data.get('callouts', {}).items()
                      if v['level'] == 'error']):
             health = {
-                'health_color': 'error',
-                'health': 'Error'
+                'health': MirrorHealth.MIRROR_HEALTH_ERROR
             }
-        elif (health['health'] != 'error'
+        elif (health['health'] != MirrorHealth.MIRROR_HEALTH_ERROR
                 and [k for k, v in pool_data.get('callouts', {}).items()
                      if v['level'] == 'warning']):
             health = {
-                'health_color': 'warning',
-                'health': 'Warning'
+                'health': MirrorHealth.MIRROR_HEALTH_WARNING
             }
-        elif health['health_color'] == 'info':
+        elif health['health'] == MirrorHealth.MIRROR_HEALTH_INFO:
             health = {
-                'health_color': 'success',
-                'health': 'OK'
+                'health': MirrorHealth.MIRROR_HEALTH_OK
             }
     return health
 
@@ -109,45 +124,48 @@ def get_pools(daemons):  # pylint: disable=R0912, R0915
     return pool_stats
 
 
+def transform_mirror_health(stat):
+    health = 'OK'
+    health_color = 'success'
+    if stat['health'] == MirrorHealth.MIRROR_HEALTH_ERROR:
+        health = 'Error'
+        health_color = 'error'
+    elif stat['health'] == MirrorHealth.MIRROR_HEALTH_WARNING:
+        health = 'Warning'
+        health_color = 'warning'
+    elif stat['health'] == MirrorHealth.MIRROR_HEALTH_UNKNOWN:
+        health = 'Unknown'
+        health_color = 'warning'
+    elif stat['health'] == MirrorHealth.MIRROR_HEALTH_OK:
+        health = 'OK'
+        health_color = 'success'
+    elif stat['health'] == MirrorHealth.MIRROR_HEALTH_DISABLED:
+        health = 'Disabled'
+        health_color = 'info'
+    stat['health'] = health
+    stat['health_color'] = health_color
+
+
 def _update_pool_stats(daemons, pool_stats):
     _update_pool_stats_with_daemons(daemons, pool_stats)
-    for _, stats in pool_stats.items():
-        if stats['mirror_mode'] == 'disabled':
-            continue
-        if stats.get('health', None) is None:
-            # daemon doesn't know about pool
-            stats['health_color'] = 'error'
-            stats['health'] = 'Error'
-        elif stats.get('leader_id', None) is None:
-            # no daemons are managing the pool as leader instance
-            stats['health_color'] = 'warning'
-            stats['health'] = 'Warning'
+    for pool_stat in pool_stats.values():
+        transform_mirror_health(pool_stat)
 
 
 def _update_pool_stats_with_daemons(daemons, pool_stats):
     for daemon in daemons:
         for _, pool_data in daemon['status'].items():
-            stats = pool_stats.get(pool_data['name'], None)  # type: ignore
-            if stats is None:
+            pool_stat = pool_stats.get(pool_data['name'], None)  # type: ignore
+            if pool_stat is None:
                 continue
 
             if pool_data.get('leader', False):
                 # leader instance stores image counts
-                stats['leader_id'] = daemon['metadata']['instance_id']
-                stats['image_local_count'] = pool_data.get('image_local_count', 0)
-                stats['image_remote_count'] = pool_data.get('image_remote_count', 0)
+                pool_stat['leader_id'] = daemon['metadata']['instance_id']
+                pool_stat['image_local_count'] = pool_data.get('image_local_count', 0)
+                pool_stat['image_remote_count'] = pool_data.get('image_remote_count', 0)
 
-            if (stats.get('health_color', '') != 'error'
-                    and pool_data.get('image_error_count', 0) > 0):
-                stats['health_color'] = 'error'
-                stats['health'] = 'Error'
-            elif (stats.get('health_color', '') != 'error'
-                    and pool_data.get('image_warning_count', 0) > 0):
-                stats['health_color'] = 'warning'
-                stats['health'] = 'Warning'
-            elif stats.get('health', None) is None:
-                stats['health_color'] = 'success'
-                stats['health'] = 'OK'
+            pool_stat['health'] = max(pool_stat['health'], daemon['health'])
 
 
 def _get_pool_stats(pool_names):
@@ -172,16 +190,27 @@ def _get_pool_stats(pool_names):
         stats = {}
         if mirror_mode == rbd.RBD_MIRROR_MODE_DISABLED:
             mirror_mode = "disabled"
-            stats['health_color'] = "info"
-            stats['health'] = "Disabled"
+            stats['health'] = MirrorHealth.MIRROR_HEALTH_DISABLED
         elif mirror_mode == rbd.RBD_MIRROR_MODE_IMAGE:
             mirror_mode = "image"
         elif mirror_mode == rbd.RBD_MIRROR_MODE_POOL:
             mirror_mode = "pool"
         else:
             mirror_mode = "unknown"
-            stats['health_color'] = "warning"
-            stats['health'] = "Warning"
+
+        if mirror_mode != "disabled":
+            # In case of a pool being enabled we will infer the health like the RBD cli tool does
+            # in src/tools/rbd/action/MirrorPool.cc::execute_status
+            mirror_image_health: MirrorHealth = MirrorHealth.MIRROR_HEALTH_OK
+            for status, _ in rbdctx.mirror_image_status_summary(ioctx):
+                if (mirror_image_health < MirrorHealth.MIRROR_HEALTH_WARNING
+                    and status != rbd.MIRROR_IMAGE_STATUS_STATE_REPLAYING
+                        and status != rbd.MIRROR_IMAGE_STATUS_STATE_STOPPED):
+                    mirror_image_health = MirrorHealth.MIRROR_HEALTH_WARNING
+                if (mirror_image_health < MirrorHealth.MIRROR_HEALTH_ERROR
+                        and status == rbd.MIRROR_IMAGE_STATUS_STATE_ERROR):
+                    mirror_image_health = MirrorHealth.MIRROR_HEALTH_ERROR
+            stats['health'] = mirror_image_health
 
         pool_stats[pool_name] = dict(stats, **{
             'mirror_mode': mirror_mode,
@@ -193,10 +222,20 @@ def _get_pool_stats(pool_names):
 @ViewCache()
 def get_daemons_and_pools():  # pylint: disable=R0915
     daemons = get_daemons()
-    return {
+    daemons_and_pools = {
         'daemons': daemons,
         'pools': get_pools(daemons)
     }
+    for daemon in daemons:
+        transform_mirror_health(daemon)
+    return daemons_and_pools
+
+
+class ReplayingData(NamedTuple):
+    bytes_per_second: Optional[int] = None
+    seconds_until_synced: Optional[int] = None
+    syncing_percent: Optional[float] = None
+    entries_behind_primary: Optional[int] = None
 
 
 @ViewCache()
@@ -228,15 +267,17 @@ def _get_pool_datum(pool_name):
             'state': 'Error'
         },
         rbd.MIRROR_IMAGE_STATUS_STATE_SYNCING: {
-            'health': 'syncing'
+            'health': 'syncing',
+            'state_color': 'success',
+            'state': 'Syncing'
         },
         rbd.MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY: {
-            'health': 'ok',
+            'health': 'syncing',
             'state_color': 'success',
             'state': 'Starting'
         },
         rbd.MIRROR_IMAGE_STATUS_STATE_REPLAYING: {
-            'health': 'ok',
+            'health': 'syncing',
             'state_color': 'success',
             'state': 'Replaying'
         },
@@ -248,8 +289,9 @@ def _get_pool_datum(pool_name):
         rbd.MIRROR_IMAGE_STATUS_STATE_STOPPED: {
             'health': 'ok',
             'state_color': 'info',
-            'state': 'Primary'
+            'state': 'Stopped'
         }
+
     }
 
     rbdctx = rbd.RBD()
@@ -269,6 +311,29 @@ def _get_pool_datum(pool_name):
         raise
 
     return data
+
+
+def _update_syncing_image_data(mirror_image, image):
+    if mirror_image['state'] == 'Replaying':
+        p = re.compile("replaying, ({.*})")
+        replaying_data = p.findall(mirror_image['description'])
+        assert len(replaying_data) == 1
+        replaying_data = json.loads(replaying_data[0])
+        if 'replay_state' in replaying_data and replaying_data['replay_state'] == 'idle':
+            image.update({
+                'state_color': 'info',
+                'state': 'Idle'
+            })
+        for field in ReplayingData._fields:
+            try:
+                image[field] = replaying_data[field]
+            except KeyError:
+                pass
+    else:
+        p = re.compile("bootstrapping, IMAGE_COPY/COPY_OBJECT (.*)%")
+        image.update({
+            'progress': (p.findall(mirror_image['description']) or [0])[0]
+        })
 
 
 @ViewCache()
@@ -296,26 +361,21 @@ def _get_content_data():  # pylint: disable=R0914
         for mirror_image in mirror_images:
             image = {
                 'pool_name': pool_name,
-                'name': mirror_image['name']
+                'name': mirror_image['name'],
+                'state_color': mirror_image['state_color'],
+                'state': mirror_image['state']
             }
 
             if mirror_image['health'] == 'ok':
                 image.update({
-                    'state_color': mirror_image['state_color'],
-                    'state': mirror_image['state'],
                     'description': mirror_image['description']
                 })
                 image_ready.append(image)
             elif mirror_image['health'] == 'syncing':
-                p = re.compile("bootstrapping, IMAGE_COPY/COPY_OBJECT (.*)%")
-                image.update({
-                    'progress': (p.findall(mirror_image['description']) or [0])[0]
-                })
+                _update_syncing_image_data(mirror_image, image)
                 image_syncing.append(image)
             else:
                 image.update({
-                    'state_color': mirror_image['state_color'],
-                    'state': mirror_image['state'],
                     'description': mirror_image['description']
                 })
                 image_error.append(image)
@@ -574,3 +634,41 @@ class RbdMirroringPoolPeer(RESTController):
             rbd.RBD().mirror_peer_set_attributes(ioctx, peer_uuid, attributes)
 
         _reset_view_cache()
+
+
+@UIRouter('/block/mirroring', Scope.RBD_MIRRORING)
+class RbdMirroringStatus(BaseController):
+    @EndpointDoc('Display RBD Mirroring Status')
+    @Endpoint()
+    @ReadPermission
+    def status(self):
+        status = {'available': True, 'message': None}
+        orch_status = OrchClient.instance().status()
+
+        # if the orch is not available we can't create the service
+        # using dashboard.
+        if not orch_status['available']:
+            return status
+        if not CephService.get_service_list('rbd-mirror') or not CephService.get_pool_list('rbd'):
+            status['available'] = False
+            status['message'] = 'RBD mirroring is not configured'  # type: ignore
+        return status
+
+    @Endpoint('POST')
+    @EndpointDoc('Configure RBD Mirroring')
+    @CreatePermission
+    def configure(self):
+        rbd_pool = RBDPool()
+        service = Service()
+
+        service_spec = {
+            'service_type': 'rbd-mirror',
+            'placement': {},
+            'unmanaged': False
+        }
+
+        if not CephService.get_service_list('rbd-mirror'):
+            service.create(service_spec, 'rbd-mirror')
+
+        if not CephService.get_pool_list('rbd'):
+            rbd_pool.create()

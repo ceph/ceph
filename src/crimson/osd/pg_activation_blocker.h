@@ -24,6 +24,7 @@ protected:
 
 public:
   static constexpr const char *type_name = "PGActivationBlocker";
+  using Blocker = PGActivationBlocker;
 
   PGActivationBlocker(PG *pg) : pg(pg) {}
   void unblock();

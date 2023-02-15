@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_HTTP_ERRORS_H_
-#define RGW_HTTP_ERRORS_H_
+#pragma once
 
 #include "rgw_common.h"
 
@@ -43,6 +42,3 @@ static inline int rgw_http_error_to_errno(int http_err)
 
   return 0; /* unreachable */
 }
-
-
-#endif

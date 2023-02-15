@@ -134,7 +134,7 @@ class OpenSSLKeys(Task):
 
             csr = f'{self.cadir}/{cert.name}.csr'
             srl = f'{self.cadir}/{ca_cert.name}.srl'
-            remove_files = ['rm', csr, srl]
+            remove_files = ['rm', '-f', csr, srl]
 
             # these commands are run on the ca certificate's client because
             # they need access to its private key and cert

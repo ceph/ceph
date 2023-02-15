@@ -4,9 +4,9 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include "common/ceph_context.h"
-#include "rgw/rgw_common.h"
+#include "rgw_common.h"
 #define FORTEST_VIRTUAL virtual
-#include "rgw/rgw_kms.cc"
+#include "rgw_kms.cc"
 
 using ::testing::_;
 using ::testing::Action;

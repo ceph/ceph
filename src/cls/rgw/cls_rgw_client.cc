@@ -965,7 +965,7 @@ int cls_rgw_lc_put_head(IoCtx& io_ctx, const string& oid, cls_rgw_lc_obj_head& h
   return r;
 }
 
-int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, string& marker,
+int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, const string& marker,
 			      cls_rgw_lc_entry& entry)
 {
   bufferlist in, out;
@@ -1196,6 +1196,7 @@ static bool issue_set_bucket_resharding(librados::IoCtx& io_ctx,
   call.entry = entry;
   encode(call, in);
   librados::ObjectWriteOperation op;
+  op.assert_exists(); // the shard must exist; if not fail rather than recreate
   op.exec(RGW_CLASS, RGW_SET_BUCKET_RESHARDING, in);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }

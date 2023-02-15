@@ -27,6 +27,10 @@ const BASE_URL = '/block/mirroring';
 export class PoolListComponent implements OnInit, OnDestroy {
   @ViewChild('healthTmpl', { static: true })
   healthTmpl: TemplateRef<any>;
+  @ViewChild('localTmpl', { static: true })
+  localTmpl: TemplateRef<any>;
+  @ViewChild('remoteTmpl', { static: true })
+  remoteTmpl: TemplateRef<any>;
 
   subs: Subscription;
 
@@ -89,8 +93,18 @@ export class PoolListComponent implements OnInit, OnDestroy {
       { prop: 'name', name: $localize`Name`, flexGrow: 2 },
       { prop: 'mirror_mode', name: $localize`Mode`, flexGrow: 2 },
       { prop: 'leader_id', name: $localize`Leader`, flexGrow: 2 },
-      { prop: 'image_local_count', name: $localize`# Local`, flexGrow: 2 },
-      { prop: 'image_remote_count', name: $localize`# Remote`, flexGrow: 2 },
+      {
+        prop: 'image_local_count',
+        name: $localize`# Local`,
+        headerTemplate: this.localTmpl,
+        flexGrow: 2
+      },
+      {
+        prop: 'image_remote_count',
+        name: $localize`# Remote`,
+        headerTemplate: this.remoteTmpl,
+        flexGrow: 2
+      },
       {
         prop: 'health',
         name: $localize`Health`,

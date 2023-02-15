@@ -13,6 +13,8 @@
 #include "test/librados/test_cxx.h"
 #include "test/librados/testcase_cxx.h"
 
+#include "crimson_utils.h"
+
 using namespace librados;
 using std::string;
 
@@ -461,6 +463,7 @@ TEST_F(LibRadosIoPP, XattrListPP) {
 }
 
 TEST_F(LibRadosIoECPP, SimpleWritePP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -471,6 +474,7 @@ TEST_F(LibRadosIoECPP, SimpleWritePP) {
 }
 
 TEST_F(LibRadosIoECPP, ReadOpPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -617,6 +621,7 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
 }
 
 TEST_F(LibRadosIoECPP, SparseReadOpPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -636,6 +641,7 @@ TEST_F(LibRadosIoECPP, SparseReadOpPP) {
 }
 
 TEST_F(LibRadosIoECPP, RoundTripPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   Rados cluster;
   memset(buf, 0xcc, sizeof(buf));
@@ -649,6 +655,7 @@ TEST_F(LibRadosIoECPP, RoundTripPP) {
 
 TEST_F(LibRadosIoECPP, RoundTripPP2)
 {
+  SKIP_IF_CRIMSON();
   bufferlist bl;
   bl.append("ceph");
   ObjectWriteOperation write;
@@ -664,6 +671,7 @@ TEST_F(LibRadosIoECPP, RoundTripPP2)
 }
 
 TEST_F(LibRadosIoECPP, OverlappingWriteRoundTripPP) {
+  SKIP_IF_CRIMSON();
   int bsize = alignment;
   int dbsize = bsize * 2;
   char *buf = (char *)new char[dbsize];
@@ -688,6 +696,7 @@ TEST_F(LibRadosIoECPP, OverlappingWriteRoundTripPP) {
 }
 
 TEST_F(LibRadosIoECPP, WriteFullRoundTripPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   char buf2[64];
   memset(buf, 0xcc, sizeof(buf));
@@ -705,6 +714,7 @@ TEST_F(LibRadosIoECPP, WriteFullRoundTripPP) {
 
 TEST_F(LibRadosIoECPP, WriteFullRoundTripPP2)
 {
+  SKIP_IF_CRIMSON();
   bufferlist bl;
   bl.append("ceph");
   ObjectWriteOperation write;
@@ -720,6 +730,7 @@ TEST_F(LibRadosIoECPP, WriteFullRoundTripPP2)
 }
 
 TEST_F(LibRadosIoECPP, AppendRoundTripPP) {
+  SKIP_IF_CRIMSON();
   char *buf = (char *)new char[alignment];
   char *buf2 = (char *)new char[alignment];
   auto cleanup = [&] {
@@ -744,6 +755,7 @@ TEST_F(LibRadosIoECPP, AppendRoundTripPP) {
 }
 
 TEST_F(LibRadosIoECPP, TruncTestPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xaa, sizeof(buf));
   bufferlist bl;
@@ -758,6 +770,7 @@ TEST_F(LibRadosIoECPP, TruncTestPP) {
 }
 
 TEST_F(LibRadosIoECPP, RemoveTestPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xaa, sizeof(buf));
   bufferlist bl1;
@@ -769,6 +782,7 @@ TEST_F(LibRadosIoECPP, RemoveTestPP) {
 }
 
 TEST_F(LibRadosIoECPP, XattrsRoundTripPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
@@ -788,6 +802,7 @@ TEST_F(LibRadosIoECPP, XattrsRoundTripPP) {
 }
 
 TEST_F(LibRadosIoECPP, RmXattrPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
@@ -818,6 +833,7 @@ TEST_F(LibRadosIoECPP, RmXattrPP) {
 }
 
 TEST_F(LibRadosIoECPP, XattrListPP) {
+  SKIP_IF_CRIMSON();
   char buf[128];
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
@@ -910,6 +926,7 @@ TEST_F(LibRadosIoPP, CmpExtMismatchPP) {
 }
 
 TEST_F(LibRadosIoECPP, CmpExtPP) {
+  SKIP_IF_CRIMSON();
   bufferlist bl;
   bl.append("ceph");
   ObjectWriteOperation write1;
@@ -930,6 +947,7 @@ TEST_F(LibRadosIoECPP, CmpExtPP) {
 }
 
 TEST_F(LibRadosIoECPP, CmpExtDNEPP) {
+  SKIP_IF_CRIMSON();
   bufferlist bl;
   bl.append(std::string(4, '\0'));
 
@@ -947,6 +965,7 @@ TEST_F(LibRadosIoECPP, CmpExtDNEPP) {
 }
 
 TEST_F(LibRadosIoECPP, CmpExtMismatchPP) {
+  SKIP_IF_CRIMSON();
   bufferlist bl;
   bl.append("ceph");
   ObjectWriteOperation write1;

@@ -61,6 +61,8 @@
 
 #include "common/config.h"
 
+#include "msg/Message.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
@@ -362,8 +364,8 @@ void Server::dispatch(const cref_t<Message> &m)
     handle_peer_request(ref_cast<MMDSPeerRequest>(m));
     return;
   default:
-    derr << "server unknown message " << m->get_type() << dendl;
-    ceph_abort_msg("server unknown message");  
+    derr << "Server unknown message " << m->get_type() << " from peer type " << m->get_connection()->get_peer_type() << dendl;
+    ceph_abort_msg("server unknown message  " + to_string(m->get_type()) + " from peer type " + to_string(m->get_connection()->get_peer_type()));  
   }
 }
 
@@ -439,7 +441,7 @@ void Server::reclaim_session(Session *session, const cref_t<MClientReclaim> &m)
   unsigned flags = m->get_flags();
   if (flags != CEPH_RECLAIM_RESET) { // currently only support reset
     dout(10) << __func__ << " unsupported flags" << dendl;
-    reply->set_result(-CEPHFS_EOPNOTSUPP);
+    reply->set_result(-CEPHFS_EINVAL);
     mds->send_message_client(reply, session);
     return;
   }
@@ -461,10 +463,7 @@ void Server::reclaim_session(Session *session, const cref_t<MClientReclaim> &m)
 
   if (flags & CEPH_RECLAIM_RESET) {
     finish_reclaim_session(session, reply);
-    return;
-  }
-
-  ceph_abort();
+  } else ceph_assert(0); /* no other flags are handled at this time */
 }
 
 void Server::finish_reclaim_session(Session *session, const ref_t<MClientReclaimReply> &reply)
@@ -508,8 +507,9 @@ void Server::finish_reclaim_session(Session *session, const ref_t<MClientReclaim
 void Server::handle_client_reclaim(const cref_t<MClientReclaim> &m)
 {
   Session *session = mds->get_session(m);
+  uint32_t flags = m->get_flags();
   dout(3) << __func__ <<  " " << *m << " from " << m->get_source() << dendl;
-  ceph_assert(m->get_source().is_client()); // should _not_ come from an mds!
+  ceph_assert(m->is_a_client()); // should _not_ come from an mds!
 
   if (!session) {
     dout(0) << " ignoring sessionless msg " << *m << dendl;
@@ -527,7 +527,15 @@ void Server::handle_client_reclaim(const cref_t<MClientReclaim> &m)
     return;
   }
 
-  if (m->get_flags() & MClientReclaim::FLAG_FINISH) {
+  if (flags & MClientReclaim::FLAG_FINISH) {
+    if (flags ^ MClientReclaim::FLAG_FINISH) {
+      dout(0) << __func__ << " client specified FLAG_FINISH with other flags."
+                             " Other flags:" << flags << dendl;
+      auto reply = make_message<MClientReclaimReply>(0);
+      reply->set_result(-CEPHFS_EINVAL);
+      mds->send_message_client(reply, session);
+      return;
+    }
     finish_reclaim_session(session);
   } else {
     reclaim_session(session, m);
@@ -540,7 +548,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
   Session *session = mds->get_session(m);
 
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
-  ceph_assert(m->get_source().is_client()); // should _not_ come from an mds!
+  ceph_assert(m->is_a_client()); // should _not_ come from an mds!
 
   if (!session) {
     dout(0) << " ignoring sessionless msg " << *m << dendl;
@@ -799,7 +807,11 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
     break;
 
   default:
-    ceph_abort();
+    auto m = make_message<MClientSession>(CEPH_SESSION_REJECT);
+    mds->send_message_client(m, session);
+    derr << "Server received unknown message " << m->get_type() << ", closing session and blocklisting the client " << session->get_client() << dendl;
+    CachedStackStringStream css;
+    mds->evict_client(session->get_client().v, false, true, *css, nullptr);
   }
 }
 
@@ -1940,20 +1952,23 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
     mdr->pin(dn);
 
   early_reply(mdr, in, dn);
-  
+
   mdr->committing = true;
   submit_mdlog_entry(le, fin, mdr, __func__);
-  
+
   if (mdr->client_request && mdr->client_request->is_queued_for_replay()) {
     if (mds->queue_one_replay()) {
       dout(10) << " queued next replay op" << dendl;
     } else {
       dout(10) << " journaled last replay op" << dendl;
     }
-  } else if (mdr->did_early_reply)
+  } else if (mdr->did_early_reply) {
     mds->locker->drop_rdlocks_for_early_reply(mdr.get());
-  else
+    if (dn && dn->is_waiter_for(CDentry::WAIT_UNLINK_FINISH))
+      mdlog->flush();
+  } else {
     mdlog->flush();
+  }
 }
 
 void Server::submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin, MDRequestRef& mdr,
@@ -2365,7 +2380,7 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
   bool sessionclosed_isok = replay_unsafe_with_closed_session;
   // active session?
   Session *session = 0;
-  if (req->get_source().is_client()) {
+  if (req->is_a_client()) {
     session = mds->get_session(req);
     if (!session) {
       dout(5) << "no session for " << req->get_source() << ", dropping" << dendl;
@@ -2469,7 +2484,7 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
 
   // process embedded cap releases?
   //  (only if NOT replay!)
-  if (!req->releases.empty() && req->get_source().is_client() && !req->is_replay()) {
+  if (!req->releases.empty() && req->is_a_client() && !req->is_replay()) {
     client_t client = req->get_source().num();
     for (const auto &r : req->releases) {
       mds->locker->process_request_cap_release(mdr, client, r.item, r.dname);
@@ -2880,7 +2895,7 @@ void Server::handle_peer_request_reply(const cref_t<MMDSPeerRequest> &m)
     break;
 
   default:
-    ceph_abort();
+    ceph_abort_msg("unknown op " + to_string(m->get_op()) + " requested");
   }
 }
 
@@ -2907,7 +2922,7 @@ void Server::dispatch_peer_request(MDRequestRef& mdr)
 
       if (!lock) {
 	dout(10) << "don't have object, dropping" << dendl;
-	ceph_abort(); // can this happen, if we auth pinned properly.
+	ceph_abort_msg("don't have object"); // can this happen, if we auth pinned properly.
       }
       if (op == MMDSPeerRequest::OP_XLOCK && !lock->get_parent()->is_auth()) {
 	dout(10) << "not auth for remote xlock attempt, dropping on " 
@@ -2994,7 +3009,7 @@ void Server::dispatch_peer_request(MDRequestRef& mdr)
     break;
 
   default: 
-    ceph_abort();
+    ceph_abort_msg("unknown op "+ to_string(op)+ " received");
   }
 }
 
@@ -3359,18 +3374,20 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   _inode->truncate_seq = 1; /* starting with 1, 0 is kept for no-truncation logic */
 
   CInode *diri = dir->get_inode();
+  auto pip = diri->get_projected_inode();
 
-  dout(10) << oct << " dir mode 0" << diri->get_inode()->mode << " new mode 0" << mode << dec << dendl;
+  dout(10) << oct << " dir mode 0" << pip->mode << " new mode 0" << mode << dec << dendl;
 
-  if (diri->get_inode()->mode & S_ISGID) {
+  if (pip->mode & S_ISGID) {
     dout(10) << " dir is sticky" << dendl;
-    _inode->gid = diri->get_inode()->gid;
+    _inode->gid = pip->gid;
     if (S_ISDIR(mode)) {
-      dout(10) << " new dir also sticky" << dendl;      
+      dout(10) << " new dir also sticky" << dendl;
       _inode->mode |= S_ISGID;
     }
-  } else 
+  } else {
     _inode->gid = mdr->client_request->get_caller_gid();
+  }
 
   _inode->uid = mdr->client_request->get_caller_uid();
 
@@ -3988,7 +4005,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   // value for them.  (currently this matters for xattrs and inline data)
   mdr->getattr_caps = mask;
 
-  mds->balancer->hit_inode(ref, META_POP_IRD, req->get_source().num());
+  mds->balancer->hit_inode(ref, META_POP_IRD);
 
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
@@ -4387,8 +4404,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   if (cmode & CEPH_FILE_MODE_WR)
     mds->balancer->hit_inode(cur, META_POP_IWR);
   else
-    mds->balancer->hit_inode(cur, META_POP_IRD,
-			     mdr->client_request->get_source().num());
+    mds->balancer->hit_inode(cur, META_POP_IRD);
 
   CDentry *dn = 0;
   if (req->get_dentry_wanted()) {
@@ -4449,6 +4465,11 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true, !excl, true);
   if (!dn)
     return;
+
+  if (is_unlink_pending(dn)) {
+    wait_for_pending_unlink(dn, mdr);
+    return;
+  }
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   if (!excl && !dnl->is_null()) {
@@ -4871,7 +4892,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   mdr->reply_extra_bl = dirbl;
 
   // bump popularity.  NOTE: this doesn't quite capture it.
-  mds->balancer->hit_dir(dir, META_POP_READDIR, -1, numfiles);
+  mds->balancer->hit_dir(dir, META_POP_READDIR, numfiles);
   
   // reply
   mdr->tracei = diri;
@@ -5934,7 +5955,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
       return;
     }
 
-    if (quota.is_enable() && !cur->get_projected_srnode())
+    if (quota.is_enabled() && !cur->get_projected_srnode())
       adjust_realm = true;
 
     if (!xlock_policylock(mdr, cur, false, adjust_realm))
@@ -6691,6 +6712,45 @@ void Server::handle_client_getvxattr(MDRequestRef& mdr)
 
 // ------------------------------------------------
 
+struct C_WaitUnlinkToFinish : public MDSContext {
+protected:
+  MDCache *mdcache;
+  CDentry *dn;
+  MDSContext *fin;
+
+  MDSRank *get_mds() override
+  {
+    ceph_assert(mdcache != NULL);
+    return mdcache->mds;
+  }
+
+public:
+  C_WaitUnlinkToFinish(MDCache *m, CDentry *d, MDSContext *f) :
+    mdcache(m), dn(d), fin(f) {}
+  void finish(int r) override {
+    fin->complete(r);
+    dn->put(CDentry::PIN_PURGING);
+  }
+};
+
+bool Server::is_unlink_pending(CDentry *dn)
+{
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
+  if (!dnl->is_null() && dn->state_test(CDentry::STATE_UNLINKING)) {
+      return true;
+  }
+  return false;
+}
+
+void Server::wait_for_pending_unlink(CDentry *dn, MDRequestRef& mdr)
+{
+  dout(20) << __func__ << " dn " << *dn << dendl;
+  mds->locker->drop_locks(mdr.get());
+  auto fin = new C_MDS_RetryRequest(mdcache, mdr);
+  dn->get(CDentry::PIN_PURGING);
+  dn->add_waiter(CDentry::WAIT_UNLINK_FINISH, new C_WaitUnlinkToFinish(mdcache, dn, fin));
+}
+
 // MKNOD
 
 class C_MDS_mknod_finish : public ServerLogContext {
@@ -6753,6 +6813,11 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true, false, S_ISREG(mode));
   if (!dn)
     return;
+
+  if (is_unlink_pending(dn)) {
+    wait_for_pending_unlink(dn, mdr);
+    return;
+  }
 
   CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
@@ -6852,6 +6917,11 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   if (!dn)
     return;
 
+  if (is_unlink_pending(dn)) {
+    wait_for_pending_unlink(dn, mdr);
+    return;
+  }
+
   CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
 
@@ -6946,6 +7016,11 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true);
   if (!dn)
     return;
+
+  if (is_unlink_pending(dn)) {
+    wait_for_pending_unlink(dn, mdr);
+    return;
+  }
 
   CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
@@ -7051,6 +7126,11 @@ void Server::handle_client_link(MDRequestRef& mdr)
     }
 
     targeti = ret.second->get_projected_linkage()->get_inode();
+  }
+
+  if (is_unlink_pending(destdn)) {
+    wait_for_pending_unlink(destdn, mdr);
+    return;
   }
 
   ceph_assert(destdn->get_projected_linkage()->is_null());
@@ -7337,11 +7417,17 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
   mdr->apply();
 
   MDRequestRef null_ref;
-  if (inc)
+  if (inc) {
     mdcache->send_dentry_link(dn, null_ref);
-  else
+  } else {
+    dn->state_clear(CDentry::STATE_UNLINKING);
     mdcache->send_dentry_unlink(dn, NULL, null_ref);
-  
+
+    MDSContext::vec finished;
+    dn->take_waiting(CDentry::WAIT_UNLINK_FINISH, finished);
+    mdcache->mds->queue_waiters(finished);
+  }
+
   // bump target popularity
   mds->balancer->hit_inode(targeti, META_POP_IWR);
   mds->balancer->hit_dir(dn->get_dir(), META_POP_IWR);
@@ -7715,9 +7801,19 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
 
   if (rmdir)
     mdr->disable_lock_cache();
+
   CDentry *dn = rdlock_path_xlock_dentry(mdr, false, true);
   if (!dn)
     return;
+
+  // notify replica MDSes the dentry is under unlink
+  if (!dn->state_test(CDentry::STATE_UNLINKING)) {
+    dn->state_set(CDentry::STATE_UNLINKING);
+    mdcache->send_dentry_unlink(dn, nullptr, mdr, true);
+    if (dn->replica_unlinking_ref) {
+      return;
+    }
+  }
 
   CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
   ceph_assert(!dnl->is_null());
@@ -7735,11 +7831,13 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     if (rmdir) {
       // do empty directory checks
       if (_dir_is_nonempty_unlocked(mdr, in)) {
-	respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
+        dn->state_clear(CDentry::STATE_UNLINKING);
+        respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
 	return;
       }
     } else {
       dout(7) << "handle_client_unlink on dir " << *in << ", returning error" << dendl;
+      dn->state_clear(CDentry::STATE_UNLINKING);
       respond_to_request(mdr, -CEPHFS_EISDIR);
       return;
     }
@@ -7747,6 +7845,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     if (rmdir) {
       // unlink
       dout(7) << "handle_client_rmdir on non-dir " << *in << ", returning error" << dendl;
+      dn->state_clear(CDentry::STATE_UNLINKING);
       respond_to_request(mdr, -CEPHFS_ENOTDIR);
       return;
     }
@@ -7754,8 +7853,10 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
 
   CInode *diri = dn->get_dir()->get_inode();
   if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
-    if (!check_access(mdr, diri, MAY_WRITE))
+    if (!check_access(mdr, diri, MAY_WRITE)) {
+      dn->state_clear(CDentry::STATE_UNLINKING);
       return;
+    }
   }
 
   // -- create stray dentry? --
@@ -7794,6 +7895,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   if (in->is_dir() &&
       _dir_is_nonempty(mdr, in)) {
     respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
+    dn->state_clear(CDentry::STATE_UNLINKING);
     return;
   }
 
@@ -7993,9 +8095,14 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   }
 
   mdr->apply();
-  
+
+  dn->state_clear(CDentry::STATE_UNLINKING);
   mdcache->send_dentry_unlink(dn, straydn, mdr);
-  
+
+  MDSContext::vec finished;
+  dn->take_waiting(CDentry::WAIT_UNLINK_FINISH, finished);
+  mdcache->mds->queue_waiters(finished);
+
   if (straydn) {
     // update subtree map?
     if (strayin->is_dir())
@@ -8010,7 +8117,7 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
 
   // reply
   respond_to_request(mdr, 0);
-  
+
   // removing a new dn?
   dn->get_dir()->try_remove_unlinked_dn(dn);
 
@@ -8468,6 +8575,16 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   auto [destdn, srcdn] = rdlock_two_paths_xlock_destdn(mdr, true);
   if (!destdn)
     return;
+
+  if (is_unlink_pending(destdn)) {
+    wait_for_pending_unlink(destdn, mdr);
+    return;
+  }
+
+  if (is_unlink_pending(srcdn)) {
+    wait_for_pending_unlink(srcdn, mdr);
+    return;
+  }
 
   dout(10) << " destdn " << *destdn << dendl;
   CDir *destdir = destdn->get_dir();
@@ -10772,6 +10889,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
     return;
   }
   if (snapname.length() == 0 ||
+      snapname.length() > snapshot_name_max ||
       snapname[0] == '_') {
     respond_to_request(mdr, -CEPHFS_EINVAL);
     return;
@@ -10983,9 +11101,6 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
 {
   dout(10) << "_rmsnap_finish " << *mdr << " " << snapid << dendl;
   snapid_t stid = mdr->more()->stid;
-  auto p = mdr->more()->snapidbl.cbegin();
-  snapid_t seq;
-  decode(seq, p);  
 
   mdr->apply();
 

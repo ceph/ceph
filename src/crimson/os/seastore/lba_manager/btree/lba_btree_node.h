@@ -44,13 +44,8 @@ struct lba_map_val_t {
     uint32_t refcount,
     uint32_t checksum)
     : len(len), paddr(paddr), refcount(refcount), checksum(checksum) {}
+  bool operator==(const lba_map_val_t&) const = default;
 };
-WRITE_EQ_OPERATORS_4(
-  lba_map_val_t,
-  len,
-  paddr,
-  refcount,
-  checksum);
 
 std::ostream& operator<<(std::ostream& out, const lba_map_val_t&);
 
@@ -77,7 +72,7 @@ using lba_node_meta_le_t = fixed_kv_node_meta_le_t<laddr_le_t>;
  * TODO: make the above capacity calculation part of FixedKVNodeLayout
  * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t INTERNAL_NODE_CAPACITY = 32;
+constexpr size_t INTERNAL_NODE_CAPACITY = 254;
 struct LBAInternalNode
   : FixedKVInternalNode<
       INTERNAL_NODE_CAPACITY,
@@ -115,7 +110,7 @@ using LBAInternalNodeRef = LBAInternalNode::Ref;
  * TODO: update FixedKVNodeLayout to handle the above calculation
  * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t LEAF_NODE_CAPACITY = 32;
+constexpr size_t LEAF_NODE_CAPACITY = 145;
 
 /**
  * lba_map_val_le_t
@@ -206,7 +201,7 @@ struct LBALeafNode
 	if (val.paddr.is_relative()) {
 	  auto val = i->get_val();
 	  assert(val.paddr.is_record_relative());
-	  val.paddr = val.paddr - get_paddr();
+	  val.paddr = val.paddr.block_relative_to(get_paddr());
 	  i->set_val(val);
 	}
       }
@@ -222,3 +217,9 @@ struct LBALeafNode
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::lba_map_val_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::LBAInternalNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::LBALeafNode> : fmt::ostream_formatter {};
+#endif

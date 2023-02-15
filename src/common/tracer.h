@@ -11,6 +11,7 @@
 
 using jspan = opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span>;
 using jspan_context = opentelemetry::trace::SpanContext;
+using jspan_attribute = opentelemetry::common::AttributeValue;
 
 namespace tracing {
 
@@ -54,11 +55,12 @@ void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl);
 
 #include <string_view>
 
-
 class Value {
  public:
   template <typename T> Value(T val) {}
 };
+
+using jspan_attribute = Value;
 
 struct jspan_context {
   jspan_context() {}
@@ -69,9 +71,12 @@ struct span_stub {
   jspan_context _ctx;
   template <typename T>
   void SetAttribute(std::string_view key, const T& value) const noexcept {}
-  void AddEvent(std::string_view, std::initializer_list<std::pair<std::string_view, Value>> fields) {}
+  void AddEvent(std::string_view) {}
+  void AddEvent(std::string_view, std::initializer_list<std::pair<std::string_view, jspan_attribute>> fields) {}
+  template <typename T> void AddEvent(std::string_view name, const T& fields = {}) {}
   const jspan_context& GetContext() { return _ctx; }
   void UpdateName(std::string_view) {}
+  bool IsRecording() { return false; }
 };
 
 class jspan {

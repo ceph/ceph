@@ -4,32 +4,37 @@
 #include "segment_allocator.h"
 
 #include <fmt/format.h>
+#include <fmt/os.h>
 
 #include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/async_cleaner.h"
 
 SET_SUBSYS(seastore_journal);
 
 namespace crimson::os::seastore::journal {
 
 SegmentAllocator::SegmentAllocator(
-  std::string name,
-  segment_type_t type,
+  JournalTrimmer *trimmer,
+  data_category_t category,
+  rewrite_gen_t gen,
   SegmentProvider &sp,
   SegmentSeqAllocator &ssa)
-  : name{name},
-    print_name{fmt::format("D?_{}", name)},
-    type{type},
+  : print_name{fmt::format("{}_G{}", category, gen)},
+    type{trimmer == nullptr ?
+         segment_type_t::OOL :
+         segment_type_t::JOURNAL},
+    category{category},
+    gen{gen},
     segment_provider{sp},
     sm_group{*sp.get_segment_manager_group()},
-    segment_seq_allocator(ssa)
+    segment_seq_allocator(ssa),
+    trimmer{trimmer}
 {
-  ceph_assert(type != segment_type_t::NULL_SEG);
   reset();
 }
 
 SegmentAllocator::open_ret
-SegmentAllocator::do_open()
+SegmentAllocator::do_open(bool is_mkfs)
 {
   LOG_PREFIX(SegmentAllocator::do_open);
   ceph_assert(!current_segment);
@@ -40,7 +45,8 @@ SegmentAllocator::do_open()
     new_segment_seq,
     reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
     sizeof(meta.seastore_id.uuid));
-  auto new_segment_id = segment_provider.allocate_segment(new_segment_seq, type);
+  auto new_segment_id = segment_provider.allocate_segment(
+      new_segment_seq, type, category, gen);
   ceph_assert(new_segment_id != NULL_SEG_ID);
   return sm_group.open(new_segment_id
   ).handle_error(
@@ -48,27 +54,42 @@ SegmentAllocator::do_open()
     crimson::ct_error::assert_all{
       "Invalid error in SegmentAllocator::do_open open"
     }
-  ).safe_then([this, FNAME, new_segment_seq](auto sref) {
+  ).safe_then([this, is_mkfs, FNAME, new_segment_seq](auto sref) {
     // initialize new segment
-    journal_seq_t new_journal_tail;
-    journal_seq_t new_alloc_replay_from;
-    if (type == segment_type_t::JOURNAL) {
-      new_journal_tail = segment_provider.get_journal_tail_target();
-      new_alloc_replay_from = segment_provider.get_alloc_info_replay_from();
-    } else { // OOL
-      new_journal_tail = NO_DELTAS;
-      new_alloc_replay_from = NO_DELTAS;
-    }
     segment_id_t segment_id = sref->get_segment_id();
+    journal_seq_t dirty_tail;
+    journal_seq_t alloc_tail;
+    if (type == segment_type_t::JOURNAL) {
+      dirty_tail = trimmer->get_dirty_tail();
+      alloc_tail = trimmer->get_alloc_tail();
+      if (is_mkfs) {
+        ceph_assert(dirty_tail == JOURNAL_SEQ_NULL);
+        ceph_assert(alloc_tail == JOURNAL_SEQ_NULL);
+        auto mkfs_seq = journal_seq_t{
+          new_segment_seq,
+          paddr_t::make_seg_paddr(segment_id, 0)
+        };
+        dirty_tail = mkfs_seq;
+        alloc_tail = mkfs_seq;
+      } else {
+        ceph_assert(dirty_tail != JOURNAL_SEQ_NULL);
+        ceph_assert(alloc_tail != JOURNAL_SEQ_NULL);
+      }
+    } else { // OOL
+      ceph_assert(!is_mkfs);
+      dirty_tail = JOURNAL_SEQ_NULL;
+      alloc_tail = JOURNAL_SEQ_NULL;
+    }
     auto header = segment_header_t{
       new_segment_seq,
       segment_id,
-      new_journal_tail,
-      new_alloc_replay_from,
+      dirty_tail,
+      alloc_tail,
       current_segment_nonce,
-      type};
-    INFO("{} writing header to new segment ... -- {}",
-         print_name, header);
+      type,
+      category,
+      gen};
+    INFO("{} writing header {}", print_name, header);
 
     auto header_length = get_block_size();
     bufferlist bl;
@@ -88,7 +109,7 @@ SegmentAllocator::do_open()
       paddr_t::make_seg_paddr(segment_id, written_to)};
     segment_provider.update_segment_avail_bytes(
         type, new_journal_seq.offset);
-    return sref->write(0, bl
+    return sref->write(0, std::move(bl)
     ).handle_error(
       open_ertr::pass_further{},
       crimson::ct_error::assert_all{
@@ -97,13 +118,9 @@ SegmentAllocator::do_open()
     ).safe_then([this,
                  FNAME,
                  new_journal_seq,
-                 new_journal_tail,
                  sref=std::move(sref)]() mutable {
       ceph_assert(!current_segment);
       current_segment = std::move(sref);
-      if (type == segment_type_t::JOURNAL) {
-        segment_provider.update_journal_tail_committed(new_journal_tail);
-      }
       DEBUG("{} rolled new segment id={}",
             print_name, current_segment->get_segment_id());
       ceph_assert(new_journal_seq.segment_seq ==
@@ -114,21 +131,20 @@ SegmentAllocator::do_open()
 }
 
 SegmentAllocator::open_ret
-SegmentAllocator::open()
+SegmentAllocator::open(bool is_mkfs)
 {
   LOG_PREFIX(SegmentAllocator::open);
   auto& device_ids = sm_group.get_device_ids();
   ceph_assert(device_ids.size());
   std::ostringstream oss;
-  oss << "D";
   for (auto& device_id : device_ids) {
-    oss << "_" << device_id_printer_t{device_id};
+    oss << device_id_printer_t{device_id} << "_";
   }
-  oss << "_" << name;
+  oss << fmt::format("{}_G{}", category, gen);
   print_name = oss.str();
 
-  INFO("{}", print_name);
-  return do_open();
+  DEBUG("{}", print_name);
+  return do_open(is_mkfs);
 }
 
 SegmentAllocator::roll_ertr::future<>
@@ -136,12 +152,12 @@ SegmentAllocator::roll()
 {
   ceph_assert(can_write());
   return close_segment().safe_then([this] {
-    return do_open().discard_result();
+    return do_open(false).discard_result();
   });
 }
 
 SegmentAllocator::write_ret
-SegmentAllocator::write(ceph::bufferlist to_write)
+SegmentAllocator::write(ceph::bufferlist&& to_write)
 {
   LOG_PREFIX(SegmentAllocator::write);
   assert(can_write());
@@ -159,7 +175,7 @@ SegmentAllocator::write(ceph::bufferlist to_write)
 
   auto write_result = write_result_t{
     write_start_seq,
-    static_cast<seastore_off_t>(write_length)
+    write_length
   };
   written_to += write_length;
   segment_provider.update_segment_avail_bytes(
@@ -168,7 +184,7 @@ SegmentAllocator::write(ceph::bufferlist to_write)
       current_segment->get_segment_id(), written_to)
   );
   return current_segment->write(
-    write_start_offset, to_write
+    write_start_offset, std::move(to_write)
   ).handle_error(
     write_ertr::pass_further{},
     crimson::ct_error::assert_all{
@@ -185,7 +201,7 @@ SegmentAllocator::close()
   return [this] {
     LOG_PREFIX(SegmentAllocator::close);
     if (current_segment) {
-      INFO("{} close current segment", print_name);
+      DEBUG("{} close current segment", print_name);
       return close_segment();
     } else {
       INFO("{} no current segment", print_name);
@@ -204,35 +220,24 @@ SegmentAllocator::close_segment()
   // Note: make sure no one can access the current segment once closing
   auto seg_to_close = std::move(current_segment);
   auto close_segment_id = seg_to_close->get_segment_id();
-  segment_provider.close_segment(close_segment_id);
   auto close_seg_info = segment_provider.get_seg_info(close_segment_id);
-  journal_seq_t cur_journal_tail;
-  journal_seq_t new_alloc_replay_from;
-  if (type == segment_type_t::JOURNAL) {
-    cur_journal_tail = segment_provider.get_journal_tail_target();
-    new_alloc_replay_from = segment_provider.get_alloc_info_replay_from();
-  } else { // OOL
-    cur_journal_tail = NO_DELTAS;
-    new_alloc_replay_from = NO_DELTAS;
-  }
+  ceph_assert((close_seg_info.modify_time == NULL_TIME &&
+               close_seg_info.num_extents == 0) ||
+              (close_seg_info.modify_time != NULL_TIME &&
+               close_seg_info.num_extents != 0));
   auto tail = segment_tail_t{
     close_seg_info.seq,
     close_segment_id,
-    cur_journal_tail,
-    new_alloc_replay_from,
     current_segment_nonce,
     type,
-    close_seg_info.last_modified.time_since_epoch().count(),
-    close_seg_info.last_rewritten.time_since_epoch().count()};
+    timepoint_to_mod(close_seg_info.modify_time),
+    close_seg_info.num_extents};
   ceph::bufferlist bl;
   encode(tail, bl);
-  INFO("{} close segment id={}, seq={}, written_to={}, nonce={}, journal_tail={}",
+  INFO("{} close segment {}, written_to={}",
        print_name,
-       close_segment_id,
-       close_seg_info.seq,
-       written_to,
-       current_segment_nonce,
-       tail.journal_tail);
+       tail,
+       written_to);
 
   bufferptr bp(ceph::buffer::create_page_aligned(get_block_size()));
   bp.zero();
@@ -242,17 +247,25 @@ SegmentAllocator::close_segment()
   bl.append(bp);
 
   assert(bl.length() == sm_group.get_rounded_tail_length());
-  return seg_to_close->write(
-    sm_group.get_segment_size() - sm_group.get_rounded_tail_length(),
-    bl
-  ).safe_then([seg_to_close=std::move(seg_to_close)] {
-    return seg_to_close->close();
+
+  auto p_seg_to_close = seg_to_close.get();
+  return p_seg_to_close->advance_wp(
+    sm_group.get_segment_size() - sm_group.get_rounded_tail_length()
+  ).safe_then([this, FNAME, bl=std::move(bl), p_seg_to_close]() mutable {
+    DEBUG("Writing tail info to segment {}", p_seg_to_close->get_segment_id());
+    return p_seg_to_close->write(
+      sm_group.get_segment_size() - sm_group.get_rounded_tail_length(),
+      std::move(bl));
+  }).safe_then([p_seg_to_close] {
+    return p_seg_to_close->close();
+  }).safe_then([this, seg_to_close=std::move(seg_to_close)] {
+    segment_provider.close_segment(seg_to_close->get_segment_id());
   }).handle_error(
     close_segment_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in SegmentAllocator::close_segment"
-    }
-  );
+    crimson::ct_error::assert_all {
+    "Invalid error in SegmentAllocator::close_segment"
+  });
+
 }
 
 RecordBatch::add_pending_ret
@@ -319,7 +332,7 @@ RecordBatch::encode_batch(
   submitting_mdlength = gsize.get_mdlength();
   auto bl = encode_records(pending, committed_to, segment_nonce);
   // Note: pending is cleared here
-  assert(bl.length() == (std::size_t)submitting_length);
+  assert(bl.length() == submitting_length);
   return std::make_pair(bl, gsize);
 }
 
@@ -362,7 +375,7 @@ RecordBatch::submit_pending_fast(
   assert(size == new_size);
   auto bl = encode_records(group, committed_to, segment_nonce);
   assert(bl.length() == size.get_encoded_length());
-  return std::make_pair(bl, size);
+  return std::make_pair(std::move(bl), size);
 }
 
 RecordSubmitter::RecordSubmitter(
@@ -513,6 +526,10 @@ RecordSubmitter::submit(record_t&& record)
   LOG_PREFIX(RecordSubmitter::submit);
   assert(is_available());
   assert(check_action(record.size) != action_t::ROLL);
+  segment_allocator.get_provider().update_modify_time(
+      segment_allocator.get_segment_id(),
+      record.modify_time,
+      record.extents.size());
   auto eval = p_current_batch->evaluate_submit(
       record.size, segment_allocator.get_block_size());
   bool needs_flush = (
@@ -535,7 +552,7 @@ RecordSubmitter::submit(record_t&& record)
     DEBUG("{} fast submit {}, committed_to={}, outstanding_io={} ...",
           get_name(), sizes, committed_to, num_outstanding_io);
     account_submission(1, sizes);
-    return segment_allocator.write(to_write
+    return segment_allocator.write(std::move(to_write)
     ).safe_then([mdlength = sizes.get_mdlength()](auto write_result) {
       return record_locator_t{
         write_result.start_seq.offset.add_offset(mdlength),
@@ -583,9 +600,9 @@ RecordSubmitter::submit(record_t&& record)
 }
 
 RecordSubmitter::open_ret
-RecordSubmitter::open()
+RecordSubmitter::open(bool is_mkfs)
 {
-  return segment_allocator.open(
+  return segment_allocator.open(is_mkfs
   ).safe_then([this](journal_seq_t ret) {
     LOG_PREFIX(RecordSubmitter::open);
     DEBUG("{} register metrics", get_name());
@@ -742,7 +759,7 @@ void RecordSubmitter::flush_current_batch()
   DEBUG("{} {} records, {}, committed_to={}, outstanding_io={} ...",
         get_name(), num, sizes, committed_to, num_outstanding_io);
   account_submission(num, sizes);
-  std::ignore = segment_allocator.write(to_write
+  std::ignore = segment_allocator.write(std::move(to_write)
   ).safe_then([this, p_batch, FNAME, num, sizes=sizes](auto write_result) {
     TRACE("{} {} records, {}, write done with {}",
           get_name(), num, sizes, write_result);

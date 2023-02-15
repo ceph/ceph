@@ -6,16 +6,18 @@
  */
 
 #include "common/hobject_fmt.h"
-#include "include/types_fmt.h"
 #include "osd/osd_types.h"
 #include <fmt/chrono.h>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 
 template <>
 struct fmt::formatter<osd_reqid_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const osd_reqid_t& req_id, FormatContext& ctx)
+  auto format(const osd_reqid_t& req_id, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(), "{}.{}:{}", req_id.name, req_id.inc,
 			  req_id.tid);
@@ -27,7 +29,7 @@ struct fmt::formatter<pg_shard_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const pg_shard_t& shrd, FormatContext& ctx)
+  auto format(const pg_shard_t& shrd, FormatContext& ctx) const
   {
     if (shrd.is_undefined()) {
       return fmt::format_to(ctx.out(), "?");
@@ -44,7 +46,7 @@ struct fmt::formatter<eversion_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const eversion_t& ev, FormatContext& ctx)
+  auto format(const eversion_t& ev, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(), "{}'{}", ev.epoch, ev.version);
   }
@@ -68,7 +70,7 @@ struct fmt::formatter<object_manifest_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const object_manifest_t& om, FormatContext& ctx)
+  auto format(const object_manifest_t& om, FormatContext& ctx) const
   {
     fmt::format_to(ctx.out(), "manifest({}", om.get_type_name());
     if (om.is_redirect()) {
@@ -85,7 +87,7 @@ struct fmt::formatter<object_info_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const object_info_t& oi, FormatContext& ctx)
+  auto format(const object_info_t& oi, FormatContext& ctx) const
   {
     fmt::format_to(ctx.out(), "{}({} {} {} s {} uv {}", oi.soid, oi.version,
 		   oi.last_reqid, (oi.flags ? oi.get_flag_string() : ""), oi.size,
@@ -112,9 +114,9 @@ struct fmt::formatter<pg_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const pg_t& pg, FormatContext& ctx)
+  auto format(const pg_t& pg, FormatContext& ctx) const
   {
-    return fmt::format_to(ctx.out(), "{}.{}", pg.pool(), pg.m_seed);
+    return fmt::format_to(ctx.out(), "{}.{:x}", pg.pool(), pg.m_seed);
   }
 };
 
@@ -124,7 +126,7 @@ struct fmt::formatter<spg_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const spg_t& spg, FormatContext& ctx)
+  auto format(const spg_t& spg, FormatContext& ctx) const
   {
     if (shard_id_t::NO_SHARD == spg.shard.id) {
       return fmt::format_to(ctx.out(), "{}", spg.pgid);
@@ -139,7 +141,7 @@ struct fmt::formatter<pg_history_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const pg_history_t& pgh, FormatContext& ctx)
+  auto format(const pg_history_t& pgh, FormatContext& ctx) const
   {
     fmt::format_to(ctx.out(),
 		   "ec={}/{} lis/c={}/{} les/c/f={}/{}/{} sis={}",
@@ -194,23 +196,6 @@ struct fmt::formatter<pg_info_t> {
 };
 
 // snaps and snap-sets
-
-template <typename T, template <typename, typename, typename...> class C>
-struct fmt::formatter<interval_set<T, C>> {
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const interval_set<T, C>& inter, FormatContext& ctx)
-  {
-    bool first = true;
-    fmt::format_to(ctx.out(), "[");
-    for (const auto& [start, len] : inter) {
-      fmt::format_to(ctx.out(), "{}{}~{}", (first ? "" : ","), start, len);
-      first = false;
-    }
-    return fmt::format_to(ctx.out(), "]");
-  }
-};
 
 template <>
 struct fmt::formatter<SnapSet> {
@@ -342,3 +327,12 @@ struct fmt::formatter<ScrubMap> {
 
   bool debug_log{false};
 };
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<ObjectRecoveryInfo> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ObjectRecoveryProgress> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<PastIntervals> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<pg_log_op_return_item_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<watch_info_t> : fmt::ostream_formatter {};
+template <bool TrackChanges> struct fmt::formatter<pg_missing_set<TrackChanges>> : fmt::ostream_formatter {};
+#endif

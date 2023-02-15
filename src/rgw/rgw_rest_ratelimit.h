@@ -25,8 +25,8 @@ public:
   RGWRESTMgr_Ratelimit() = default;
   ~RGWRESTMgr_Ratelimit() override = default;
 
-  RGWHandler_REST *get_handler(rgw::sal::Store* store,
-			       struct req_state*,
+  RGWHandler_REST *get_handler(rgw::sal::Driver* driver,
+			       req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
     return new RGWHandler_Ratelimit(auth_registry);

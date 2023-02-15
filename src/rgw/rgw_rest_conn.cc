@@ -10,7 +10,7 @@
 
 using namespace std;
 
-RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Store* store,
+RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Driver* driver,
                          const string& _remote_id,
                          const list<string>& remote_endpoints,
                          std::optional<string> _api_name,
@@ -21,9 +21,9 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Store* store,
     api_name(_api_name),
     host_style(_host_style)
 {
-  if (store) {
-    key = store->get_zone()->get_system_key();
-    self_zone_group = store->get_zone()->get_zonegroup().get_id();
+  if (driver) {
+    key = driver->get_zone()->get_system_key();
+    self_zone_group = driver->get_zone()->get_zonegroup().get_id();
   }
 }
 
@@ -107,6 +107,24 @@ int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_user& uid, req
   }
   RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params, api_name);
   return req.forward_request(dpp, key, info, max_response, inbl, outbl, y);
+}
+
+int RGWRESTConn::forward_iam_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
+{
+  string url;
+  int ret = get_url(url);
+  if (ret < 0)
+    return ret;
+  param_vec_t params;
+  if (objv) {
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "ver", buf));
+  }
+  std::string service = "iam";
+  RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params, api_name);
+  return req.forward_request(dpp, key, info, max_response, inbl, outbl, y, service);
 }
 
 int RGWRESTConn::put_obj_send_init(rgw::sal::Object* obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req)
@@ -372,7 +390,12 @@ int RGWRESTConn::send_resource(const DoutPrefixProvider *dpp, const std::string&
     return ret;
   }
 
-  return req.complete_request(y);
+  ret = req.complete_request(y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 5) << __func__ << ": complete_request() resource=" << resource << " returned ret=" << ret << dendl;
+  }
+
+  return ret;
 }
 
 RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,

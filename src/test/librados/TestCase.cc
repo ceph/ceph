@@ -2,10 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <errno.h>
+#include <fmt/format.h>
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
 #include "include/scope_guard.h"
-
+#include "crimson_utils.h"
 
 std::string RadosTestNS::pool_name;
 rados_t RadosTestNS::s_cluster = NULL;
@@ -13,7 +14,8 @@ rados_t RadosTestNS::s_cluster = NULL;
 
 void RadosTestNS::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
+  pool_name = get_temp_pool_name(pool_prefix);
   ASSERT_EQ("", create_one_pool(pool_name, &s_cluster));
 }
 
@@ -65,7 +67,8 @@ rados_t RadosTestECNS::s_cluster = NULL;
 
 void RadosTestECNS::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
+  pool_name = get_temp_pool_name(pool_prefix);
   ASSERT_EQ("", create_one_ec_pool(pool_name, &s_cluster));
 }
 
@@ -76,6 +79,7 @@ void RadosTestECNS::TearDownTestCase()
 
 void RadosTestECNS::SetUp()
 {
+  SKIP_IF_CRIMSON();
   cluster = RadosTestECNS::s_cluster;
   ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
   int req;
@@ -87,6 +91,7 @@ void RadosTestECNS::SetUp()
 
 void RadosTestECNS::TearDown()
 {
+  SKIP_IF_CRIMSON();
   if (cleanup)
     cleanup_all_objects(ioctx);
   rados_ioctx_destroy(ioctx);
@@ -97,7 +102,8 @@ rados_t RadosTest::s_cluster = NULL;
 
 void RadosTest::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
+  pool_name = get_temp_pool_name(pool_prefix);
   ASSERT_EQ("", create_one_pool(pool_name, &s_cluster));
 }
 
@@ -157,7 +163,8 @@ rados_t RadosTestEC::s_cluster = NULL;
 
 void RadosTestEC::SetUpTestCase()
 {
-  pool_name = get_temp_pool_name();
+  auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name()); 
+  pool_name = get_temp_pool_name(pool_prefix);
   ASSERT_EQ("", create_one_ec_pool(pool_name, &s_cluster));
 }
 

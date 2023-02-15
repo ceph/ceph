@@ -440,7 +440,6 @@ void Replayer<I>::scan_local_mirror_snapshots(
 
   std::set<uint64_t> prune_snap_ids;
 
-  bool completed_non_primary_snapshots_exist = false;
   auto local_image_ctx = m_state_builder->local_image_ctx;
   std::shared_lock image_locker{local_image_ctx->image_lock};
   for (auto snap_info_it = local_image_ctx->snap_info.begin();
@@ -461,8 +460,7 @@ void Replayer<I>::scan_local_mirror_snapshots(
       if (mirror_ns->complete) {
         // if remote has new snapshots, we would sync from here
         m_local_snap_id_start = local_snap_id;
-        m_local_snap_id_end = CEPH_NOSNAP;
-        completed_non_primary_snapshots_exist = true;
+        ceph_assert(m_local_snap_id_end == CEPH_NOSNAP);
 
         if (mirror_ns->mirror_peer_uuids.empty()) {
           // no other peer will attempt to sync to this snapshot so store as
@@ -471,15 +469,6 @@ void Replayer<I>::scan_local_mirror_snapshots(
         }
       } else if (mirror_ns->last_copied_object_number == 0 &&
                  m_local_snap_id_start > 0) {
-        // shouldn't be possible, but ensure that pruning this snapshot
-        // wouldn't leave this image w/o any non-primary snapshots
-        if (!completed_non_primary_snapshots_exist) {
-          derr << "incomplete local non-primary snapshot" << dendl;
-          handle_replay_complete(locker, -EINVAL,
-                                 "incomplete local non-primary snapshot");
-          return;
-        }
-
         // snapshot might be missing image state, object-map, etc, so just
         // delete and re-create it if we haven't started copying data
         // objects. Also only prune this snapshot since we will need the
@@ -499,7 +488,7 @@ void Replayer<I>::scan_local_mirror_snapshots(
     } else if (mirror_ns->is_primary()) {
       if (mirror_ns->complete) {
         m_local_snap_id_start = local_snap_id;
-        m_local_snap_id_end = CEPH_NOSNAP;
+        ceph_assert(m_local_snap_id_end == CEPH_NOSNAP);
       } else {
         derr << "incomplete local primary snapshot" << dendl;
         handle_replay_complete(locker, -EINVAL,
@@ -1413,8 +1402,6 @@ void Replayer<I>::handle_unregister_remote_update_watcher(int r) {
   if (r < 0) {
     derr << "failed to unregister remote update watcher: " << cpp_strerror(r)
          << dendl;
-    handle_replay_complete(
-      r, "failed to unregister remote image update watcher");
   }
 
   unregister_local_update_watcher();
@@ -1438,8 +1425,6 @@ void Replayer<I>::handle_unregister_local_update_watcher(int r) {
   if (r < 0) {
     derr << "failed to unregister local update watcher: " << cpp_strerror(r)
          << dendl;
-    handle_replay_complete(
-      r, "failed to unregister local image update watcher");
   }
 
   delete m_update_watch_ctx;
@@ -1501,15 +1486,21 @@ void Replayer<I>::handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
                                          const std::string& description) {
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
 
-  if (m_error_code == 0) {
-    m_error_code = r;
-    m_error_description = description;
-  }
-
   if (m_sync_in_progress) {
     m_sync_in_progress = false;
     m_instance_watcher->notify_sync_complete(
       m_state_builder->local_image_ctx->id);
+  }
+
+  // don't set error code and description if resuming a pending
+  // shutdown
+  if (is_replay_interrupted(locker)) {
+    return;
+  }
+
+  if (m_error_code == 0) {
+    m_error_code = r;
+    m_error_description = description;
   }
 
   if (m_state != STATE_REPLAYING && m_state != STATE_IDLE) {

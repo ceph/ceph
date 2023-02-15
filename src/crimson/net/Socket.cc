@@ -36,7 +36,7 @@ struct bufferlist_consumer {
     if (remaining >= data.size()) {
       // consume the whole buffer
       remaining -= data.size();
-      bl.append(buffer::create_foreign(std::move(data)));
+      bl.append(buffer::create(std::move(data)));
       if (remaining > 0) {
         // return none to request more segments
         return seastar::make_ready_future<consumption_result_type>(
@@ -49,7 +49,7 @@ struct bufferlist_consumer {
     }
     if (remaining > 0) {
       // consume the front
-      bl.append(buffer::create_foreign(data.share(0, remaining)));
+      bl.append(buffer::create(data.share(0, remaining)));
       data.trim_front(remaining);
       remaining = 0;
     }

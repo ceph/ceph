@@ -14,9 +14,9 @@
 #include <iostream>
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
-#include "rgw/rgw_common.h"
-#include "rgw/rgw_rados.h"
-#include "rgw/rgw_zone.h"
+#include "rgw_common.h"
+#include "rgw_rados.h"
+#include "rgw_zone.h"
 
 #ifndef CEPH_TEST_RGW_COMMON_H
 #define CEPH_TEST_RGW_COMMON_H

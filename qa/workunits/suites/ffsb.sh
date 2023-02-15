@@ -9,10 +9,10 @@ trap -- 'retry' EXIT
 retry() {
     rm -rf ffsb
     # double the timeout value
-    timeout 3600 git clone git://git.ceph.com/ffsb.git --depth 1
+    timeout 3600 git clone https://git.ceph.com/ffsb.git --depth 1
 }
 rm -rf ffsb
-timeout 1800 git clone git://git.ceph.com/ffsb.git --depth 1
+timeout 1800 git clone https://git.ceph.com/ffsb.git --depth 1
 trap - EXIT
 
 cd ffsb

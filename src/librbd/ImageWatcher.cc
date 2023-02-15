@@ -572,12 +572,11 @@ template <typename I>
 void ImageWatcher<I>::schedule_request_lock(bool use_timer, int timer_delay) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
 
-  if (m_image_ctx.exclusive_lock == nullptr) {
-    // exclusive lock dynamically disabled via image refresh
+  // see notify_request_lock()
+  if (m_image_ctx.exclusive_lock == nullptr ||
+      m_image_ctx.exclusive_lock->is_lock_owner()) {
     return;
   }
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
 
   std::shared_lock watch_locker{this->m_watch_lock};
   if (this->is_registered(this->m_watch_lock)) {

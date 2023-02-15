@@ -1,5 +1,9 @@
 >=18.0.0
 
+* The RGW policy parser now rejects unknown principals by default. If you are
+  mirroring policies between RGW and AWS, you may wish to set
+  "rgw policy reject invalid principals" to "false". This affects only newly set
+  policies, not policies that are already in place.
 * RGW's default backend for `rgw_enable_ops_log` changed from RADOS to file.
   The default value of `rgw_ops_log_rados` is now false, and `rgw_ops_log_file_path`
   defaults to "/var/log/ceph/ops-log-$cluster-$name.log".
@@ -43,6 +47,63 @@
   * system
   * truncated
   * user_stats_sync
+* RGW: The beast frontend's HTTP access log line uses a new debug_rgw_access
+  configurable. This has the same defaults as debug_rgw, but can now be controlled
+  independently.
+* RBD: The semantics of compare-and-write C++ API (`Image::compare_and_write`
+  and `Image::aio_compare_and_write` methods) now match those of C API.  Both
+  compare and write steps operate only on `len` bytes even if the respective
+  buffers are larger. The previous behavior of comparing up to the size of
+  the compare buffer was prone to subtle breakage upon straddling a stripe
+  unit boundary.
+* RBD: compare-and-write operation is no longer limited to 512-byte sectors.
+  Assuming proper alignment, it now allows operating on stripe units (4M by
+  default).
+* RBD: New `rbd_aio_compare_and_writev` API method to support scatter/gather
+  on both compare and write buffers.  This compliments existing `rbd_aio_readv`
+  and `rbd_aio_writev` methods.
+* The 'AT_NO_ATTR_SYNC' macro is deprecated, please use the standard 'AT_STATX_DONT_SYNC'
+  macro. The 'AT_NO_ATTR_SYNC' macro will be removed in the future.
+* Trimming of PGLog dups is now controlled by the size instead of the version.
+  This fixes the PGLog inflation issue that was happening when the on-line
+  (in OSD) trimming got jammed after a PG split operation. Also, a new off-line
+  mechanism has been added: `ceph-objectstore-tool` got `trim-pg-log-dups` op
+  that targets situations where OSD is unable to boot due to those inflated dups.
+  If that is the case, in OSD logs the "You can be hit by THE DUPS BUG" warning
+  will be visible.
+  Relevant tracker: https://tracker.ceph.com/issues/53729
+* RBD: `rbd device unmap` command gained `--namespace` option.  Support for
+  namespaces was added to RBD in Nautilus 14.2.0 and it has been possible to
+  map and unmap images in namespaces using the `image-spec` syntax since then
+  but the corresponding option available in most other commands was missing.
+* RGW: Compression is now supported for objects uploaded with Server-Side Encryption.
+  When both are enabled, compression is applied before encryption.
+* RGW: the "pubsub" functionality for storing bucket notifications inside Ceph
+  is removed. Together with it, the "pubsub" zone should not be used anymore.
+  The REST operations, as well as radosgw-admin commands for manipulating
+  subscriptions, as well as fetching and acking the notifications are removed 
+  as well.
+  In case that the endpoint to which the notifications are sent maybe down or 
+  disconnected, it is recommended to use persistent notifications to guarantee 
+  the delivery of the notifications. In case the system that consumes the 
+  notifications needs to pull them (instead of the notifications be pushed 
+  to it), an external message bus (e.g. rabbitmq, Kafka) should be used for 
+  that purpose.
+* RGW: The serialized format of notification and topics has changed, so that 
+  new/updated topics will be unreadable by old RGWs. We recommend completing 
+  the RGW upgrades before creating or modifying any notification topics.
+* RBD: Trailing newline in passphrase files (`<passphrase-file>` argument in
+  `rbd encryption format` command and `--encryption-passphrase-file` option
+  in other commands) is no longer stripped.
+* RBD: Support for layered client-side encryption is added.  Cloned images
+  can now be encrypted each with its own encryption format and passphrase,
+  potentially different from that of the parent image.  The efficient
+  copy-on-write semantics intrinsic to unformatted (regular) cloned images
+  are retained.
+* CEPHFS: Rename the `mds_max_retries_on_remount_failure` option to
+  `client_max_retries_on_remount_failure` and move it from mds.yaml.in to
+  mds-client.yaml.in because this option was only used by MDS client from its
+  birth.
 
 >=17.2.1
 
@@ -62,3 +123,44 @@ Relevant tracker: https://tracker.ceph.com/issues/55521
   For more details, see:
 
   https://docs.ceph.com/en/latest/mgr/telemetry/
+
+* OSD: The issue of high CPU utilization during recovery/backfill operations
+  has been fixed. For more details, see: https://tracker.ceph.com/issues/56530.
+
+>=15.2.17
+
+* OSD: Octopus modified the SnapMapper key format from
+  <LEGACY_MAPPING_PREFIX><snapid>_<shardid>_<hobject_t::to_str()>
+  to
+  <MAPPING_PREFIX><pool>_<snapid>_<shardid>_<hobject_t::to_str()>
+  When this change was introduced, 94ebe0e also introduced a conversion
+  with a crucial bug which essentially destroyed legacy keys by mapping them
+  to
+  <MAPPING_PREFIX><poolid>_<snapid>_
+  without the object-unique suffix. The conversion is fixed in this release.
+  Relevant tracker: https://tracker.ceph.com/issues/56147
+  
+* Cephadm may now be configured to carry out CephFS MDS upgrades without
+reducing ``max_mds`` to 1. Previously, Cephadm would reduce ``max_mds`` to 1 to
+avoid having two active MDS modifying on-disk structures with new versions,
+communicating cross-version-incompatible messages, or other potential
+incompatibilities. This could be disruptive for large-scale CephFS deployments
+because the cluster cannot easily reduce active MDS daemons to 1.
+NOTE: Staggered upgrade of the mons/mgrs may be necessary to take advantage
+of the feature, refer this link on how to perform it:
+https://docs.ceph.com/en/quincy/cephadm/upgrade/#staggered-upgrade
+Relevant tracker: https://tracker.ceph.com/issues/55715
+
+  Relevant tracker: https://tracker.ceph.com/issues/5614
+  
+* Cephadm may now be configured to carry out CephFS MDS upgrades without
+reducing ``max_mds`` to 1. Previously, Cephadm would reduce ``max_mds`` to 1 to
+avoid having two active MDS modifying on-disk structures with new versions,
+communicating cross-version-incompatible messages, or other potential
+incompatibilities. This could be disruptive for large-scale CephFS deployments
+because the cluster cannot easily reduce active MDS daemons to 1.
+NOTE: Staggered upgrade of the mons/mgrs may be necessary to take advantage
+of the feature, refer this link on how to perform it:
+https://docs.ceph.com/en/quincy/cephadm/upgrade/#staggered-upgrade
+Relevant tracker: https://tracker.ceph.com/issues/55715
+

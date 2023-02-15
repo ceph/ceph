@@ -305,7 +305,7 @@ public:
     /// Send pg_created to mon
     virtual void send_pg_created(pg_t pgid) = 0;
 
-    virtual ceph::signedspan get_mnow() = 0;
+    virtual ceph::signedspan get_mnow() const = 0;
     virtual HeartbeatStampsRef get_hb_stamps(int peer) = 0;
     virtual void schedule_renew_lease(epoch_t plr, ceph::timespan delay) = 0;
     virtual void queue_check_readable(epoch_t lpr, ceph::timespan delay) = 0;

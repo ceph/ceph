@@ -47,7 +47,6 @@
 #include "common/snap_types.h"
 #include "HitSet.h"
 #include "Watch.h"
-#include "include/cmp.h"
 #include "librados/ListObjectImpl.h"
 #include "compressor/Compressor.h"
 #include "osd_perf_counters.h"
@@ -196,10 +195,9 @@ struct pg_shard_t {
       f->dump_unsigned("shard", shard);
     }
   }
+  auto operator<=>(const pg_shard_t&) const = default;
 };
 WRITE_CLASS_ENCODER(pg_shard_t)
-WRITE_EQ_OPERATORS_2(pg_shard_t, osd, shard)
-WRITE_CMP_OPERATORS_2(pg_shard_t, osd, shard)
 std::ostream& operator<<(std::ostream &lhs, const pg_shard_t &rhs);
 
 using HobjToShardSetMapping = std::map<hobject_t, std::set<pg_shard_t>>;
@@ -468,17 +466,7 @@ struct pg_t {
   hobject_t get_hobj_end(unsigned pg_num) const;
 
   // strong ordering is supported
-  inline int compare(const pg_t& p) const noexcept {
-    if (auto delta = pool() - p.pool(); delta != 0) {
-      return delta;
-    } else if (ps() < p.ps()) {
-      return -1;
-    } else if (ps() > p.ps()) {
-      return 1;
-    } else {
-      return 0;
-    }
-  }
+  auto operator<=>(const pg_t&) const noexcept = default;
 
   void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
@@ -507,25 +495,6 @@ struct pg_t {
 };
 WRITE_CLASS_ENCODER(pg_t)
 
-inline bool operator<(const pg_t& l, const pg_t& r) {
-  return l.compare(r) < 0;
-}
-inline bool operator<=(const pg_t& l, const pg_t& r) {
-  return l.compare(r) <= 0;
-}
-inline bool operator==(const pg_t& l, const pg_t& r) {
-  return l.compare(r) == 0;
-}
-inline bool operator!=(const pg_t& l, const pg_t& r) {
-  return l.compare(r) != 0;
-}
-inline bool operator>(const pg_t& l, const pg_t& r) {
-  return l.compare(r) > 0;
-}
-inline bool operator>=(const pg_t& l, const pg_t& r) {
-  return l.compare(r) >= 0;
-}
-
 std::ostream& operator<<(std::ostream& out, const pg_t &pg);
 
 namespace std {
@@ -546,6 +515,7 @@ struct spg_t {
   spg_t() : shard(shard_id_t::NO_SHARD) {}
   spg_t(pg_t pgid, shard_id_t shard) : pgid(pgid), shard(shard) {}
   explicit spg_t(pg_t pgid) : pgid(pgid), shard(shard_id_t::NO_SHARD) {}
+  auto operator<=>(const spg_t&) const = default;
   unsigned get_split_bits(unsigned pg_num) const {
     return pgid.get_split_bits(pg_num);
   }
@@ -639,8 +609,6 @@ struct spg_t {
   }
 };
 WRITE_CLASS_ENCODER(spg_t)
-WRITE_EQ_OPERATORS_2(spg_t, pgid, shard)
-WRITE_CMP_OPERATORS_2(spg_t, pgid, shard)
 
 namespace std {
   template<> struct hash< spg_t >
@@ -816,6 +784,10 @@ inline std::ostream& operator<<(std::ostream& out, const coll_t& c) {
   out << c.to_str();
   return out;
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<coll_t> : fmt::ostream_formatter {};
+#endif
 
 namespace std {
   template<> struct hash<coll_t> {
@@ -1527,6 +1499,10 @@ public:
     grade_table.resize(0);
   }
 
+  bool has_snaps() const {
+    return snaps.size() > 0;
+  }
+
   bool is_stretch_pool() const {
     return peering_crush_bucket_count != 0;
   }
@@ -2170,7 +2146,8 @@ enum class pg_scrub_sched_status_t : uint16_t {
   not_queued,	   ///< not in the OSD's scrub queue. Probably not active.
   active,          ///< scrubbing
   scheduled,	   ///< scheduled for a scrub at an already determined time
-  queued	   ///< queued to be scrubbed
+  queued,	   ///< queued to be scrubbed
+  blocked	   ///< blocked waiting for objects to be unlocked
 };
 
 struct pg_scrubbing_status_t {
@@ -2222,6 +2199,7 @@ struct pg_stat_t {
   object_stat_collection_t stats;
 
   int64_t log_size;
+  int64_t log_dups_size;
   int64_t ondisk_log_size;    // >= active_log_size
   int64_t objects_scrubbed;
   double scrub_duration;
@@ -2266,7 +2244,8 @@ struct pg_stat_t {
       state(0),
       created(0), last_epoch_clean(0),
       parent_split_bits(0),
-      log_size(0), ondisk_log_size(0),
+      log_size(0), log_dups_size(0),
+      ondisk_log_size(0),
       objects_scrubbed(0),
       scrub_duration(0),
       mapping_epoch(0),
@@ -2321,6 +2300,7 @@ struct pg_stat_t {
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
     log_size += o.log_size;
+    log_dups_size += o.log_dups_size;
     ondisk_log_size += o.ondisk_log_size;
     snaptrimq_len = std::min((uint64_t)snaptrimq_len + o.snaptrimq_len,
                              (uint64_t)(1ull << 31));
@@ -2329,6 +2309,7 @@ struct pg_stat_t {
   void sub(const pg_stat_t& o) {
     stats.sub(o.stats);
     log_size -= o.log_size;
+    log_dups_size -= o.log_dups_size;
     ondisk_log_size -= o.ondisk_log_size;
     if (o.snaptrimq_len < snaptrimq_len) {
       snaptrimq_len -= o.snaptrimq_len;
@@ -4091,7 +4072,7 @@ struct OSDOp {
   sobject_t soid;
 
   ceph::buffer::list indata, outdata;
-  errorcode32_t rval = 0;
+  errorcode32_t rval;
 
   OSDOp() {
     // FIPS zeroization audit 20191115: this memset clean for security
@@ -4738,6 +4719,9 @@ struct pg_missing_item {
 };
 WRITE_CLASS_ENCODER_FEATURES(pg_missing_item)
 std::ostream& operator<<(std::ostream& out, const pg_missing_item &item);
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<pg_missing_item> : fmt::ostream_formatter {};
+#endif
 
 class pg_missing_const_i {
 public:
@@ -6097,6 +6081,8 @@ std::ostream& operator<<(std::ostream& out, const PushOp &op);
 
 /*
  * summarize pg contents for purposes of a scrub
+ *
+ * If members are added to ScrubMap, make sure to modify swap().
  */
 struct ScrubMap {
   struct object {
@@ -6134,8 +6120,8 @@ struct ScrubMap {
   std::map<hobject_t,object> objects;
   eversion_t valid_through;
   eversion_t incr_since;
-  bool has_large_omap_object_errors:1;
-  bool has_omap_keys:1;
+  bool has_large_omap_object_errors{false};
+  bool has_omap_keys{false};
 
   void merge_incr(const ScrubMap &l);
   void clear_from(const hobject_t& start) {
@@ -6149,6 +6135,8 @@ struct ScrubMap {
     swap(objects, r.objects);
     swap(valid_through, r.valid_through);
     swap(incr_since, r.incr_since);
+    swap(has_large_omap_object_errors, r.has_large_omap_object_errors);
+    swap(has_omap_keys, r.has_omap_keys);
   }
 
   void encode(ceph::buffer::list& bl) const;
