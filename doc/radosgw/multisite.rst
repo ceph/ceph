@@ -6,7 +6,7 @@ Multi-Site
 
 .. versionadded:: Jewel
 
-A single-zone configuration typically consists of (1) one "zone group", which
+A single-zone configuration typically consists of (1) one "zonegroup", which
 contains one zone and (2) one or more `ceph-radosgw` instances between which
 gateway client requests are load-balanced. In a typical single-zone
 configuration, multiple gateway instances make use of a single Ceph storage
@@ -16,28 +16,28 @@ Beginning with the Kraken release, Ceph supports several multi-site
 configurations for the Ceph Object Gateway:
 
 - **Multi-zone:** A more advanced topology, the "multi-zone" configuration, is
-  possible. This multi-zone configuration consists of one zone group and
+  possible. This multi-zone configuration consists of one zonegroup and
   multiple zones, with each zone comprising one or more `ceph-radosgw`
   instances. Each zone is backed by its own Ceph Storage Cluster. The presence
-  of multiple zones in a given zone group provides disaster recovery for that
-  zone group in the event that one of the zones experiences a significant
+  of multiple zones in a given zonegroup provides disaster recovery for that
+  zonegroup in the event that one of the zones experiences a significant
   failure. Beginning with Kraken, each zone is active and can receive write
   operations. A multi-zone configuration with multiple active zones enhances
   disaster recovery and can also be used as a foundation for content delivery
   networks. 
 
 - **Multi-zone-groups:** Formerly called 'regions'. Ceph Object Gateway
-  supports multiple zone groups, with each zone group containing one or more
-  zones. Objects that are stored to zones in one zone group within the same
-  realm as another zone group share a global object namespace, which ensures
-  unique object IDs across zone groups and zones.
+  supports multiple zonegroups, with each zonegroup containing one or more
+  zones. Objects that are stored to zones in one zonegroup within the same
+  realm as another zonegroup share a global object namespace, which ensures
+  unique object IDs across zonegroups and zones.
 
 - **Multiple Realms:** Beginning with the Kraken Ceph release, the Ceph Object
   Gateway supports something called "realms". Realms have a globally unique
-  namespace and can be a either a single-zone group or multiple-zone groups.
+  namespace and can be a either a single-zonegroup or multiple-zonegroups.
   Multiple realms provide support for multiple configurations and namespaces.
 
-The replication of object data between zones within a zone group looks
+The replication of object data between zones within a zonegroup looks
 something like this:
 
 .. image:: ../images/zone-sync2.png
@@ -53,7 +53,7 @@ Beginning with Kraken, each Ceph Object Gateway can be configured to work in an
 active-active zone configuration, allowing for writes to non-master zones.
 
 The multi-site configuration is stored within a container called a "realm". The
-realm stores zone groups, zones, and a time "period" with multiple epochs for
+realm stores zonegroups, zones, and a time "period" with multiple epochs for
 tracking changes to the configuration. Beginning with Kraken, the
 ``ceph-radosgw`` daemons handle the synchronization, which eliminates the need
 for a separate synchronization agent. Additionally, the new approach to
@@ -75,13 +75,13 @@ same site. This guide also assumes two Ceph object gateway servers named
 .. important:: Running a single geographically-distributed Ceph storage cluster
    is NOT recommended unless you have low latency WAN connections.
 
-A multi-site configuration requires a master zone group and a master zone. Each
-zone group requires a master zone. Zone groups may have one or more secondary
+A multi-site configuration requires a master zonegroup and a master zone. Each
+zonegroup requires a master zone. Zonegroups may have one or more secondary
 or non-master zones.
 
 In this guide, the ``rgw1`` host will serve as the master zone of the master
-zone group; and, the ``rgw2`` host will serve as the secondary zone of the
-master zone group.
+zonegroup; and, the ``rgw2`` host will serve as the secondary zone of the
+master zonegroup.
 
 See `Pools`_ for instructions on creating and tuning pools for Ceph Object
 Storage.
@@ -95,19 +95,19 @@ Configuring a Master Zone
 =========================
 
 All gateways in a multi-site configuration retrieve their configurations from a
-``ceph-radosgw`` daemon that is on a host within both the master zone group and
+``ceph-radosgw`` daemon that is on a host within both the master zonegroup and
 the master zone. To configure your gateways in a multi-site configuration,
-choose a ``ceph-radosgw`` instance to configure the master zone group and
+choose a ``ceph-radosgw`` instance to configure the master zonegroup and
 master zone.
 
 Create a Realm
 --------------
 
-A realm contains the multi-site configuration of zone groups and zones. The
+A realm contains the multi-site configuration of zonegroups and zones. The
 realm enforces a globally unique namespace within itself.
 
 #. Create a new realm for the multi-site configuration by opening a command
-   line interface on a host that will serve in the master zone group and zone.
+   line interface on a host that will serve in the master zonegroup and zone.
    Then execute the following:
 
    .. prompt:: bash #
@@ -120,7 +120,7 @@ realm enforces a globally unique namespace within itself.
 
       radosgw-admin realm create --rgw-realm=movies --default
 
-   .. note:: If you intend the cluster to have a single realm, specify the ``--default`` flag.  If ``--default`` is specified, ``radosgw-admin`` uses this realm by default. If ``--default`` is not specified, you must specify either the ``--rgw-realm`` flag or the ``--realm-id`` flag to identify the realm when adding zone groups and zones.
+   .. note:: If you intend the cluster to have a single realm, specify the ``--default`` flag.  If ``--default`` is specified, ``radosgw-admin`` uses this realm by default. If ``--default`` is not specified, you must specify either the ``--rgw-realm`` flag or the ``--realm-id`` flag to identify the realm when adding zonegroups and zones.
 
 #. After the realm has been created, ``radosgw-admin`` echoes back the realm
    configuration. For example:
@@ -136,14 +136,14 @@ realm enforces a globally unique namespace within itself.
 
    .. note:: Ceph generates a unique ID for the realm, which can be used to rename the realm if the need arises.
 
-Create a Master Zone Group
+Create a Master Zonegroup
 --------------------------
 
-A realm must have at least one zone group which serves as the master zone
+A realm must have at least one zonegroup which serves as the master zone
 group for the realm.
 
-#. To create a new master zone group for the multi-site configuration, open a
-   command-line interface on a host in the master zone group and zone. Then
+#. To create a new master zonegroup for the multi-site configuration, open a
+   command-line interface on a host in the master zonegroup and zone. Then
    execute the following:
 
    .. prompt:: bash #
@@ -156,9 +156,9 @@ group for the realm.
 
       radosgw-admin zonegroup create --rgw-zonegroup=us --endpoints=http://rgw1:80 --rgw-realm=movies --master --default
 
-   .. note:: If the realm will have only a single zone group, specify the ``--default`` flag. If ``--default`` is specified, ``radosgw-admin`` uses this zone group by default when adding new zones. If ``--default`` is not specified, you must use either the ``--rgw-zonegroup`` flag or the ``--zonegroup-id`` flag to identify the zone group when adding or modifying zones.
+   .. note:: If the realm will have only a single zonegroup, specify the ``--default`` flag. If ``--default`` is specified, ``radosgw-admin`` uses this zonegroup by default when adding new zones. If ``--default`` is not specified, you must use either the ``--rgw-zonegroup`` flag or the ``--zonegroup-id`` flag to identify the zonegroup when adding or modifying zones.
 
-#. After creating the master zone group, ``radosgw-admin`` echoes back the zone
+#. After creating the master zonegroup, ``radosgw-admin`` echoes back the zone
    group configuration. For example:
 
    ::
@@ -187,7 +187,7 @@ Create a Master Zone
    within the zone.
 
 Create a new master zone for the multi-site configuration by opening a command
-line interface on a host that serves in the master zone group and zone. Then
+line interface on a host that serves in the master zonegroup and zone. Then
 execute the following:
 
 .. prompt:: bash #
@@ -215,7 +215,7 @@ For example:
    ``default`` zone and its pools if you are already using the zone to store
    data, or the data will be deleted and unrecoverable.
 
-Delete Default Zone Group and Zone
+Delete Default Zonegroup and Zone
 ----------------------------------
 
 #. Delete the ``default`` zone if it exists. Remove it from the default zone
@@ -232,7 +232,7 @@ Delete Default Zone Group and Zone
 
 #. Delete the ``default`` pools in your Ceph storage cluster if they exist.
 
-   .. important:: The following step assumes a multi-site configuration that uses newly installed systems that aren’t currently storing data. DO NOT DELETE the ``default`` zone group if you are already using it to store data.
+   .. important:: The following step assumes a multi-site configuration that uses newly installed systems that aren’t currently storing data. DO NOT DELETE the ``default`` zonegroup if you are already using it to store data.
 
    .. prompt:: bash #
    
@@ -319,7 +319,7 @@ service:
 Configuring Secondary Zones
 ===========================
 
-Zones that are within a zone group replicate all data in order to ensure that
+Zones that are within a zonegroup replicate all data in order to ensure that
 every zone has the same data. When creating a secondary zone, run the following
 operations on a host identified to serve the secondary zone.
 
@@ -363,16 +363,16 @@ Creating a Secondary Zone
 
 In order to create a secondary zone for the multi-site configuration, open a
 command line interface on a host identified to serve the secondary zone.
-Specify the zone group ID, the new zone name, and an endpoint for the zone.
+Specify the zonegroup ID, the new zone name, and an endpoint for the zone.
 **DO NOT** use the ``--master`` or ``--default`` flags. Beginning in Kraken,
 all zones run in an active-active configuration by default, which means that a
 gateway client may write data to any zone and the zone will replicate the data
-to all other zones within the zone group.  If you want to prevent the secondary
+to all other zones within the zonegroup.  If you want to prevent the secondary
 zone from accepting write operations, include the ``--read-only`` flag in the
 command in order to create an active-passive configuration between the master
 zone and the secondary zone. In any case, don't forget to provide the
 ``access_key`` and ``secret_key`` of the generated system user that is stored
-in the master zone of the master zone group. Run the following command:
+in the master zone of the master zonegroup. Run the following command:
 
 .. prompt:: bash #
 
@@ -749,7 +749,7 @@ Multi-Site Configuration Reference
 ==================================
 
 The following sections provide additional details and command-line
-usage for realms, periods, zone groups and zones.
+usage for realms, periods, zonegroups and zones.
 
 Realms
 ------
@@ -907,7 +907,7 @@ To rename a realm, run the following:
    changes the internal name only. If you use ``realm set`` to change the
    ``name`` parameter, then ``--rgw-realm`` still expects the realm's old name.
 
-Zone Groups
+Zonegroups
 -----------
 
 Zonegroups make it possible for the Ceph Object Gateway to support multi-site
@@ -941,7 +941,7 @@ example:
 
 
 .. note:: Use ``zonegroup modify --rgw-zonegroup=<zonegroup-name>`` to modify
-          an existing zone group’s settings.
+          an existing zonegroup’s settings.
 
 Making a Zonegroup the Default
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1138,7 +1138,7 @@ a minimum, specifying the required settings:
    specify a port (``fqdn:port``) for each endpoint. Optional.
 
 5. ``hostnames``: A list of all the hostnames in the zonegroup. For example,
-   you may use multiple domain names to refer to the same zone group. Optional.
+   you may use multiple domain names to refer to the same zonegroup. Optional.
    The ``rgw dns name`` setting will be included in this list automatically.
    Restart the gateway daemon(s) after changing this setting.
 
@@ -1291,7 +1291,7 @@ Creating a Zone
 ~~~~~~~~~~~~~~~
 
 To create a zone, specify a zone name. If you are creating a master zone,
-specify the ``--master`` flag. Only one zone in a zone group may be a master
+specify the ``--master`` flag. Only one zone in a zonegroup may be a master
 zone. To add the zone to a zonegroup, specify the ``--rgw-zonegroup`` option
 with the zonegroup name.
 
@@ -1337,7 +1337,7 @@ Finally, update the period:
    
    radosgw-admin period update --commit
 
-.. important:: Do not delete a zone without removing it from a zone group first.
+.. important:: Do not delete a zone without removing it from a zonegroup first.
                Otherwise, updating the period will fail.
 
 If the pools for the deleted zone will not be used anywhere else,
@@ -1467,10 +1467,10 @@ Then, update the period:
    
    radosgw-admin period update --commit
 
-Zone Group and Zone Settings
+Zonegroup and Zone Settings
 ----------------------------
 
-When configuring a default zone group and zone, the pool name includes
+When configuring a default zonegroup and zone, the pool name includes
 the zone name. For example:
 
 -  ``default.rgw.control``
@@ -1485,15 +1485,15 @@ instance.
 | ``rgw_zone``                        | The name of the zone for the      | String  | None                  |
 |                                     | gateway instance.                 |         |                       |
 +-------------------------------------+-----------------------------------+---------+-----------------------+
-| ``rgw_zonegroup``                   | The name of the zone group for    | String  | None                  |
+| ``rgw_zonegroup``                   | The name of the zonegroup for     | String  | None                  |
 |                                     | the gateway instance.             |         |                       |
 +-------------------------------------+-----------------------------------+---------+-----------------------+
-| ``rgw_zonegroup_root_pool``         | The root pool for the zone group. | String  | ``.rgw.root``         |
+| ``rgw_zonegroup_root_pool``         | The root pool for the zonegroup.  | String  | ``.rgw.root``         |
 +-------------------------------------+-----------------------------------+---------+-----------------------+
 | ``rgw_zone_root_pool``              | The root pool for the zone.       | String  | ``.rgw.root``         |
 +-------------------------------------+-----------------------------------+---------+-----------------------+
 | ``rgw_default_zone_group_info_oid`` | The OID for storing the default   | String  | ``default.zonegroup`` |
-|                                     | zone group. We do not recommend   |         |                       |
+|                                     | zonegroup. We do not recommend    |         |                       |
 |                                     | changing this setting.            |         |                       |
 +-------------------------------------+-----------------------------------+---------+-----------------------+
 
