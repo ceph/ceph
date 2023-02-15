@@ -125,6 +125,7 @@ struct Config {
   Command command = None;
   int pid = 0;
   std::string cookie;
+  uint64_t snapid = CEPH_NOSNAP;
 
   std::string image_spec() const {
     std::string spec = poolname + "/";
@@ -168,6 +169,11 @@ static void usage()
             << "  --try-netlink                 Use the nbd netlink interface\n"
             << "  --show-cookie                 Show device cookie\n"
             << "  --cookie                      Specify device cookie\n"
+            << "  --snap-id <snap-id>           Specify snapshot by ID instead of by name\n"
+            << "\n"
+            << "Unmap and detach options:\n"
+            << "  --device <device path>        Specify nbd device path (/dev/nbd{num})\n"
+            << "  --snap-id <snap-id>           Specify snapshot by ID instead of by name\n"
             << "\n"
             << "List options:\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
@@ -1656,10 +1662,20 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
     }
   }
 
-  if (!cfg->snapname.empty()) {
-    r = image.snap_set(cfg->snapname.c_str());
-    if (r < 0)
+  if (cfg->snapid != CEPH_NOSNAP) {
+    r = image.snap_set_by_id(cfg->snapid);
+    if (r < 0) {
+      cerr << "rbd-nbd: failed to set snap id: " << cpp_strerror(r)
+           << std::endl;
       goto close_fd;
+    }
+  } else if (!cfg->snapname.empty()) {
+    r = image.snap_set(cfg->snapname.c_str());
+    if (r < 0) {
+      cerr << "rbd-nbd: failed to set snap name: " << cpp_strerror(r)
+           << std::endl;
+      goto close_fd;
+    }
   }
 
   if (cfg->encryption_format.has_value()) {
@@ -1944,23 +1960,23 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
   Config cfg;
   NBDListIterator it;
   while (it.get(&cfg)) {
+    std::string snap = (cfg.snapid != CEPH_NOSNAP ?
+        "@" + std::to_string(cfg.snapid) : cfg.snapname);
     if (f) {
       f->open_object_section("device");
       f->dump_int("id", cfg.pid);
       f->dump_string("pool", cfg.poolname);
       f->dump_string("namespace", cfg.nsname);
       f->dump_string("image", cfg.imgname);
-      f->dump_string("snap", cfg.snapname);
+      f->dump_string("snap", snap);
       f->dump_string("device", cfg.devpath);
       f->dump_string("cookie", cfg.cookie);
       f->close_section();
     } else {
       should_print = true;
-      if (cfg.snapname.empty()) {
-        cfg.snapname = "-";
-      }
       tbl << cfg.pid << cfg.poolname << cfg.nsname << cfg.imgname
-          << cfg.snapname << cfg.devpath << cfg.cookie << TextTable::endrow;
+          << (snap.empty() ? "-" : snap) << cfg.devpath << cfg.cookie
+	  << TextTable::endrow;
     }
   }
 
@@ -1981,7 +1997,8 @@ static bool find_mapped_dev_by_spec(Config *cfg, int skip_pid=-1) {
     if (c.pid != skip_pid &&
         c.poolname == cfg->poolname && c.nsname == cfg->nsname &&
         c.imgname == cfg->imgname && c.snapname == cfg->snapname &&
-        (cfg->devpath.empty() || c.devpath == cfg->devpath)) {
+        (cfg->devpath.empty() || c.devpath == cfg->devpath) &&
+        c.snapid == cfg->snapid) {
       *cfg = c;
       return true;
     }
@@ -2024,6 +2041,7 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
   std::vector<const char*>::iterator i;
   std::ostringstream err;
   std::string arg_value;
+  long long snapid;
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
@@ -2100,6 +2118,17 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     } else if (ceph_argparse_flag(args, i, "--show-cookie", (char *)NULL)) {
       cfg->show_cookie = true;
     } else if (ceph_argparse_witharg(args, i, &cfg->cookie, "--cookie", (char *)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &snapid, err,
+                                     "--snap-id", (char *)NULL)) {
+      if (!err.str().empty()) {
+        *err_msg << "rbd-nbd: " << err.str();
+        return -EINVAL;
+      }
+      if (snapid < 0) {
+        *err_msg << "rbd-nbd: Invalid argument for snap-id!";
+        return -EINVAL;
+      }
+      cfg->snapid = snapid;
     } else if (ceph_argparse_witharg(args, i, &arg_value,
                                      "--encryption-format", (char *)NULL)) {
       if (arg_value == "luks1") {
@@ -2196,6 +2225,11 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     default:
       //shut up gcc;
       break;
+  }
+
+  if (cfg->snapid != CEPH_NOSNAP && !cfg->snapname.empty()) {
+    *err_msg << "rbd-nbd: use either snapname or snapid, not both";
+    return -EINVAL;
   }
 
   if (args.begin() != args.end()) {
