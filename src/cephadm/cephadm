@@ -8362,6 +8362,14 @@ class HostFacts():
         return platform.node()
 
     @property
+    def shortname(self) -> str:
+        return platform.node().split('.', 1)[0]
+
+    @property
+    def fqdn(self) -> str:
+        return get_fqdn()
+
+    @property
     def subscribed(self):
         # type: () -> str
         """Highlevel check to see if the host is subscribed to receive updates/support"""
