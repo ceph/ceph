@@ -1382,6 +1382,7 @@ class OSDThrasher(Thrasher):
         delay = self.config.get("op_delay", 5)
         self.rerrosd = self.live_osds[0]
         if self.random_eio > 0:
+            self.ceph_manager.wait_till_osd_is_up(self.rerrosd, 300)
             self.ceph_manager.inject_args('osd', self.rerrosd,
                                           'filestore_debug_random_read_err',
                                           self.random_eio)
