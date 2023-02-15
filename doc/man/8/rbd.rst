@@ -260,7 +260,7 @@ Commands
 
 :command:`device map` [-t | --device-type *device-type*] [--cookie *device-cookie*] [--show-cookie] [--snap-id *snap-id*] [--read-only] [--exclusive] [-o | --options *device-options*] *image-spec* | *snap-spec*
   Map the specified image to a block device via the rbd kernel module
-  (default) or other supported device (*nbd* on Linux or *ggate* on
+  (default) or other supported device (*nbd* or *ubbd* on Linux or *ggate* on
   FreeBSD).
 
   The --options argument is a comma separated list of device type
