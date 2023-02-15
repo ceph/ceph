@@ -635,6 +635,31 @@ void PgScrubber::on_applied_when_primary(const eversion_t& applied_version)
   }
 }
 
+
+namespace {
+
+/**
+ * an aux function to be used in select_range() below, to
+ * select the correct chunk size based on the type of scrub
+ */
+int size_from_conf(
+    bool is_deep,
+    const ceph::common::ConfigProxy& conf,
+    std::string_view deep_opt,
+    std::string_view shallow_opt)
+{
+  if (!is_deep) {
+    auto sz = conf.get_val<int64_t>(shallow_opt);
+    if (sz != 0) {
+      // assuming '0' means that no distinction was yet configured between
+      // deep and shallow scrubbing
+      return static_cast<int>(sz);
+    }
+  }
+  return static_cast<int>(conf.get_val<int64_t>(deep_opt));
+}
+}  // anonymous namespace
+
 /*
  * The selected range is set directly into 'm_start' and 'm_end'
  * setting:
@@ -663,27 +688,36 @@ bool PgScrubber::select_range()
    * left end of the range if we are a tier because they may legitimately
    * not exist (see _scrub).
    */
-  int min_idx = static_cast<int>(
-    std::max<int64_t>(3,
-		      m_pg->get_cct()->_conf->osd_scrub_chunk_min /
-			(int)preemption_data.chunk_divisor()));
 
-  int max_idx = static_cast<int>(
-    std::max<int64_t>(min_idx,
-		      m_pg->get_cct()->_conf->osd_scrub_chunk_max /
-			(int)preemption_data.chunk_divisor()));
+  const auto& conf = m_pg->get_cct()->_conf;
+  dout(20) << fmt::format(
+		  "{} {} mins: {}d {}s, max: {}d {}s", __func__,
+		  (m_is_deep ? "D" : "S"),
+		  conf.get_val<int64_t>("osd_scrub_chunk_min"),
+		  conf.get_val<int64_t>("osd_shallow_scrub_chunk_min"),
+		  conf.get_val<int64_t>("osd_scrub_chunk_max"),
+		  conf.get_val<int64_t>("osd_shallow_scrub_chunk_max"))
+	   << dendl;
 
-  dout(10) << __func__ << " Min: " << min_idx << " Max: " << max_idx
-	   << " Div: " << preemption_data.chunk_divisor() << dendl;
+  const int min_from_conf = size_from_conf(
+      m_is_deep, conf, "osd_scrub_chunk_min", "osd_shallow_scrub_chunk_min");
+  const int max_from_conf = size_from_conf(
+      m_is_deep, conf, "osd_scrub_chunk_max", "osd_shallow_scrub_chunk_max");
+
+  const int divisor = static_cast<int>(preemption_data.chunk_divisor());
+  const int min_chunk_sz = std::max(3, min_from_conf / divisor);
+  const int max_chunk_sz = std::max(min_chunk_sz, max_from_conf / divisor);
+
+  dout(10) << fmt::format(
+		  "{}: Min: {} Max: {} Div: {}", __func__, min_chunk_sz,
+		  max_chunk_sz, divisor)
+	   << dendl;
 
   hobject_t start = m_start;
   hobject_t candidate_end;
   std::vector<hobject_t> objects;
-  int ret = m_pg->get_pgbackend()->objects_list_partial(start,
-							min_idx,
-							max_idx,
-							&objects,
-							&candidate_end);
+  int ret = m_pg->get_pgbackend()->objects_list_partial(
+      start, min_chunk_sz, max_chunk_sz, &objects, &candidate_end);
   ceph_assert(ret >= 0);
 
   if (!objects.empty()) {
