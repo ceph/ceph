@@ -152,7 +152,6 @@ MigrationStatusT = Dict[str, str]
 class TaskHandler:
     lock = Lock()
     condition = Condition(lock)
-    thread = None
 
     in_progress_task = None
     tasks_by_sequence: Dict[int, Task] = dict()
@@ -169,6 +168,7 @@ class TaskHandler:
         with self.lock:
             self.init_task_queue()
 
+        self.stop_thread = False
         self.thread = Thread(target=self.run)
         self.thread.start()
 
@@ -190,10 +190,18 @@ class TaskHandler:
         return (match.group(1) or self.default_pool_name, match.group(2) or '',
                 match.group(3))
 
+    def shutdown(self) -> None:
+        self.log.info("TaskHandler: shutting down")
+        self.stop_thread = True
+        if self.thread.is_alive():
+            self.log.debug("TaskHandler: joining thread")
+            self.thread.join()
+        self.log.info("TaskHandler: shut down")
+
     def run(self) -> None:
         try:
             self.log.info("TaskHandler: starting")
-            while True:
+            while not self.stop_thread:
                 with self.lock:
                     now = datetime.now()
                     for sequence in sorted([sequence for sequence, task
@@ -204,6 +212,9 @@ class TaskHandler:
                     self.condition.wait(5)
                     self.log.debug("TaskHandler: tick")
 
+        except (rados.ConnectionShutdown, rbd.ConnectionShutdown):
+            self.log.exception("TaskHandler: client blocklisted")
+            self.module.client_blocklisted.set()
         except Exception as ex:
             self.log.fatal("Fatal runtime error: {}\n{}".format(
                 ex, traceback.format_exc()))
@@ -426,6 +437,9 @@ class TaskHandler:
                 # pool DNE -- remove in-memory task
                 self.complete_progress(task)
                 self.remove_task(None, task)
+
+        except (rados.ConnectionShutdown, rbd.ConnectionShutdown):
+            raise
 
         except (rados.Error, rbd.Error) as e:
             self.log.error("execute_task: {}".format(e))
