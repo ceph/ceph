@@ -61,6 +61,7 @@ public:
     std::string key;
     snapid_t first;
     bool is_remote = false;
+    bool is_referent = false;
 
     inodeno_t ino;
     unsigned char d_type;
@@ -387,6 +388,7 @@ public:
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
   void link_remote_inode( CDentry *dn, CInode *in );
   void link_primary_inode( CDentry *dn, CInode *in );
+  void link_referent_inode( CDentry *dn, CInode *in, inodeno_t ino, unsigned char d_type);
   void unlink_inode(CDentry *dn, bool adjust_lru=true);
   void try_remove_unlinked_dn(CDentry *dn);
 

@@ -300,6 +300,20 @@ void CDentry::push_projected_linkage()
   }
 }
 
+void CDentry::push_projected_linkage(CInode *ref_inode, inodeno_t remote_ino)
+{
+  ceph_assert(remote_ino);
+  ceph_assert(ref_inode);
+
+  linkage_t *p = _project_linkage();
+  p->ref_inode = ref_inode;
+  //flushing dirty_inode in try_to_expire
+  ref_inode->push_projected_parent(this);
+  //ref_inode->set_remote_ino(remote_ino);
+
+  p->remote_ino = remote_ino;
+  p->remote_d_type = ref_inode->d_type();
+}
 
 void CDentry::push_projected_linkage(CInode *inode)
 {
@@ -333,12 +347,19 @@ CDentry::linkage_t *CDentry::pop_projected_linkage()
    * much).
    */
 
-  if (n.remote_ino) {
+  if (n.is_remote()) {
     dir->link_remote_inode(this, n.remote_ino, n.remote_d_type);
     if (n.inode) {
       linkage.inode = n.inode;
       linkage.inode->add_remote_parent(this);
     }
+  } else if (n.is_referent()){
+    dir->link_referent_inode(this, n.ref_inode, n.remote_ino, n.remote_d_type);
+    if (n.inode) {
+      linkage.inode = n.inode;
+      linkage.inode->add_remote_parent(this);
+    }
+    n.ref_inode->pop_projected_parent();
   } else {
     if (n.inode) {
       dir->link_primary_inode(this, n.inode);

@@ -581,6 +581,33 @@ void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
   ceph_assert(get_num_any() == items.size());
 }
 
+void CDir::link_referent_inode(CDentry *dn, CInode *ref_in, inodeno_t rino, unsigned char d_type)
+{
+  dout(12) << __func__ << " " << *dn << " remote " << rino << " referent inode " << *ref_in << dendl;
+  ceph_assert(dn->get_linkage()->is_null());
+
+  // If remote is set, remote is written to backend instead of CInode created.
+  dn->get_linkage()->set_remote(rino, d_type);
+  dn->get_linkage()->ref_inode = ref_in;
+
+  link_inode_work(dn, ref_in);
+
+  if (dn->state_test(CDentry::STATE_BOTTOMLRU)) {
+    mdcache->bottom_lru.lru_remove(dn);
+    mdcache->lru.lru_insert_mid(dn);
+    dn->state_clear(CDentry::STATE_BOTTOMLRU);
+  }
+
+  if (dn->last == CEPH_NOSNAP) {
+    num_head_items++;
+    num_head_null--;
+  } else {
+    num_snap_items++;
+    num_snap_null--;
+  }
+  ceph_assert(get_num_any() == items.size());
+}
+
 void CDir::link_primary_inode(CDentry *dn, CInode *in)
 {
   dout(12) << __func__ << " " << *dn << " " << *in << dendl;
@@ -2501,6 +2528,14 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
     if (item.is_remote) {
       // remote link
       CDentry::encode_remote(item.ino, item.d_type, item.alternate_name, bl);
+    } else if (item.is_referent) {
+      // marker, name, inode, [symlink string]
+      bl.append('i');         // inode
+
+      ENCODE_START(2, 1, bl);
+      encode(item.alternate_name, bl);
+      _encode_primary_inode_base(item, dfts, bl);
+      ENCODE_FINISH(bl);
     } else {
       // marker, name, inode, [symlink string]
       bl.append('i');         // inode
@@ -2648,6 +2683,27 @@ void CDir::_parse_dentry(CDentry *dn, dentry_commit_item &item,
     item.ino = linkage.get_remote_ino();
     item.d_type = linkage.get_remote_d_type();
     dout(14) << " dn '" << dn->get_name() << "' remote ino " << item.ino << dendl;
+  } else if (linkage.is_referent()) {
+    // referent link
+    item.is_referent = true;
+    item.ino = linkage.get_remote_ino();
+    item.d_type = linkage.get_remote_d_type();
+
+    CInode *in = linkage.get_ref_inode();
+    ceph_assert(in);
+
+    dout(14) << " dn '" << dn->get_name() << "' ref inode " << *in << "' remote ino " << item.ino << dendl;
+
+    item.features = mdcache->mds->mdsmap->get_up_features();
+    item.inode = in->inode;
+    if (in->inode->is_symlink())
+      item.symlink = in->symlink;
+    using ceph::encode;
+    encode(in->dirfragtree, bl);
+    item.xattrs = in->xattrs;
+    item.old_inodes = in->old_inodes;
+    item.oldest_snap = in->oldest_snap;
+    item.damage_flags = in->damage_flags;
   } else if (linkage.is_primary()) {
     // primary link
     CInode *in = linkage.get_inode();
@@ -2781,6 +2837,23 @@ void CDir::_committed(int r, version_t v)
     CDentry *dn = *p;
     ++p;
     
+    // referent inode
+    if (dn->linkage.is_referent()) {
+      CInode *in = dn->linkage.get_ref_inode();
+      ceph_assert(in);
+      ceph_assert(in->is_auth());
+
+      if (committed_version >= in->get_version()) {
+	if (in->is_dirty()) {
+	  dout(15) << " referent inode " << " dir " << committed_version << " >= inode " << in->get_version() << " now clean " << *in << dendl;
+	  in->mark_clean();
+	}
+      } else {
+	dout(15) << " referent inode " << " dir " << committed_version << " < inode " << in->get_version() << " still dirty " << *in << dendl;
+	ceph_assert(in->is_dirty() || in->last < CEPH_NOSNAP);  // special case for cow snap items (not predirtied)
+      }
+    }
+
     // inode?
     if (dn->linkage.is_primary()) {
       CInode *in = dn->linkage.get_inode();

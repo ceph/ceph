@@ -80,20 +80,24 @@ public:
     CInode *inode = nullptr;
     inodeno_t remote_ino = 0;
     unsigned char remote_d_type = 0;
+    CInode *ref_inode = nullptr;
     
     linkage_t() {}
 
     // dentry type is primary || remote || null
     // inode ptr is required for primary, optional for remote, undefined for null
     bool is_primary() const { return remote_ino == 0 && inode != 0; }
-    bool is_remote() const { return remote_ino > 0; }
+    bool is_remote() const { return remote_ino > 0 && ref_inode == 0; }
     bool is_null() const { return remote_ino == 0 && inode == 0; }
+    bool is_referent() const {return remote_ino > 0 && ref_inode != 0;}
 
     CInode *get_inode() { return inode; }
     const CInode *get_inode() const { return inode; }
     inodeno_t get_remote_ino() const { return remote_ino; }
     unsigned char get_remote_d_type() const { return remote_d_type; }
     std::string get_remote_d_type_string() const;
+    CInode *get_ref_inode() { return ref_inode; }
+    const CInode *get_ref_inode() const { return ref_inode; }
 
     void set_remote(inodeno_t ino, unsigned char d_type) {
       remote_ino = ino;
@@ -209,7 +213,8 @@ public:
     p->remote_ino = ino;
     p->remote_d_type = d_type;
   }
-  void push_projected_linkage(CInode *inode); 
+  void push_projected_linkage(CInode *inode);
+  void push_projected_linkage(CInode *ref_inode, inodeno_t remote_ino);
   linkage_t *pop_projected_linkage();
 
   bool is_projected() const { return !projected.empty(); }
