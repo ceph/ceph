@@ -536,7 +536,7 @@ TEST_P(MessengerTest, ConnectionRaceReuseBannerTest) {
  *    - B fails before sending server_ident to A
  *    - A reconnects
  */ 
-TEST_P(MessengerTest, MissingServerIdenTest) {
+TEST_P(MessengerTest, MissingServerIdentTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(false);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -614,7 +614,7 @@ TEST_P(MessengerTest, MissingServerIdenTest) {
  *    - A goes to standby
  *    - B reconnects to A
  */ 
-TEST_P(MessengerTest, MissingServerIdenTest2) {
+TEST_P(MessengerTest, MissingServerIdentTest2) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(false);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
