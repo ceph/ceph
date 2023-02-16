@@ -3494,6 +3494,12 @@ void BlueStore::ExtentMap::reshard(
     dout(20) << __func__ << "   shards [" << si_begin << "," << si_end << ")"
 	     << " over 0x[" << std::hex << needs_reshard_begin << ","
 	     << needs_reshard_end << ")" << std::dec << dendl;
+  } else {
+    // When sharding is not applied yet, it is an error to request reshard on range.
+    // The problem is that reshard() function will not touch any extent outside the range.
+    // Thus initial reshard() must encompass whole object.
+    needs_reshard_begin = 0;
+    needs_reshard_end = OBJECT_MAX_SIZE;
   }
 
   fault_range(db, needs_reshard_begin, (needs_reshard_end - needs_reshard_begin));
