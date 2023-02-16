@@ -6730,7 +6730,7 @@ void RGWAbortMultipart::execute(optional_yield y)
   }
   multipart_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
 
-  op_ret = upload->abort(this, s->cct);
+  op_ret = upload->abort(this, s->cct, y);
 }
 
 int RGWListMultipart::verify_permission(optional_yield y)

@@ -169,7 +169,7 @@ class RadosStore : public StoreDriver {
     virtual RGWLC* get_rgwlc(void) override { return rados->get_lc(); }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return rados->get_cr_registry(); }
 
-    virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;
+    virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y) override;
     virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) override;
     virtual int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
 				const std::map<std::string, std::string>& meta) override;
@@ -184,12 +184,12 @@ class RadosStore : public StoreDriver {
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) override;
     virtual void wakeup_meta_sync_shards(std::set<int>& shard_ids) override { rados->wakeup_meta_sync_shards(shard_ids); }
     virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, boost::container::flat_map<int, boost::container::flat_set<rgw_data_notify_entry>>& shard_ids) override { rados->wakeup_data_sync_shards(dpp, source_zone, shard_ids); }
-    virtual int clear_usage(const DoutPrefixProvider *dpp) override { return rados->clear_usage(dpp); }
+    virtual int clear_usage(const DoutPrefixProvider *dpp, optional_yield y) override { return rados->clear_usage(dpp, y); }
     virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
 			       uint32_t max_entries, bool* is_truncated,
 			       RGWUsageIter& usage_iter,
 			       std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
-    virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
+    virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override;
     virtual int get_config_key_val(std::string name, bufferlist* bl) override;
     virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) override;
     virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::list<std::string>& keys, bool* truncated) override;
@@ -243,7 +243,7 @@ class RadosStore : public StoreDriver {
     /* Unique to RadosStore */
     int get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
 			   librados::IoCtx* ioctx);
-    int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj);
+    int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, optional_yield y);
     void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj);
     int get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_obj& obj, uint64_t* chunk_size);
 
@@ -301,7 +301,7 @@ class RadosUser : public StoreUser {
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool* is_truncated, RGWUsageIter& usage_iter,
 			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
-    virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
+    virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override;
 
     virtual int load_user(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info = nullptr) override;
@@ -568,7 +568,7 @@ class RadosBucket : public StoreBucket {
                                  int shard_id, RGWGetBucketStats_CB* ctx) override;
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual int update_container_stats(const DoutPrefixProvider* dpp) override;
-    virtual int check_bucket_shards(const DoutPrefixProvider* dpp) override;
+    virtual int check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y) override;
     virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime) override;
     virtual bool is_owner(User* user) override;
@@ -579,7 +579,7 @@ class RadosBucket : public StoreBucket {
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool* is_truncated, RGWUsageIter& usage_iter,
 			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
-    virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
+    virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override;
     virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) override;
     virtual int check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
     virtual int rebuild_index(const DoutPrefixProvider *dpp) override;
@@ -601,7 +601,7 @@ class RadosBucket : public StoreBucket {
 				std::map<std::string, bool> *common_prefixes,
 				bool *is_truncated) override;
     virtual int abort_multiparts(const DoutPrefixProvider* dpp,
-				 CephContext* cct) override;
+				 CephContext* cct, optional_yield y) override;
     int read_topics(rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* objv_tracker, 
         optional_yield y, const DoutPrefixProvider *dpp) override;
     int write_topics(const rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* objv_tracker, 
@@ -662,7 +662,7 @@ public:
 			 int num_parts, int marker,
 			 int* next_marker, bool* truncated,
 			 bool assume_unsorted = false) override;
-  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct) override;
+  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y) override;
   virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
 		       std::map<int, std::string>& part_etags,

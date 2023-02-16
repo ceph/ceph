@@ -187,7 +187,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
+  int DBUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y)
   {
     return 0;
   }
@@ -316,7 +316,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::check_bucket_shards(const DoutPrefixProvider *dpp)
+  int DBBucket::check_bucket_shards(const DoutPrefixProvider *dpp, optional_yield y)
   {
     return 0;
   }
@@ -392,7 +392,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
+  int DBBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y)
   {
     return 0;
   }
@@ -504,7 +504,7 @@ namespace rgw::sal {
   }
 
   int DBBucket::abort_multiparts(const DoutPrefixProvider* dpp,
-				 CephContext* cct) {
+				 CephContext* cct, optional_yield y) {
     return 0;
   }
 
@@ -886,7 +886,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
+  int DBMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y)
   {
     std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
     meta_obj->set_in_extra_data(true);
@@ -1817,7 +1817,7 @@ namespace rgw::sal {
     return lc;
   }
 
-  int DBStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info)
+  int DBStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y)
   {
     return 0;
   }
@@ -1905,7 +1905,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBStore::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
+  int DBStore::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y)
   {
     return 0;
   }

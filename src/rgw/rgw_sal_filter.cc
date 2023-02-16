@@ -306,9 +306,9 @@ RGWCoroutinesManagerRegistry* FilterDriver::get_cr_registry()
   return next->get_cr_registry();
 }
 
-int FilterDriver::log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info)
+int FilterDriver::log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y)
 {
-    return next->log_usage(dpp, usage_info);
+    return next->log_usage(dpp, usage_info, y);
 }
 
 int FilterDriver::log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl)
@@ -372,9 +372,9 @@ void FilterDriver::wakeup_data_sync_shards(const DoutPrefixProvider *dpp,
   return next->wakeup_data_sync_shards(dpp, source_zone, shard_ids);
 }
 
-int FilterDriver::clear_usage(const DoutPrefixProvider *dpp)
+int FilterDriver::clear_usage(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return next->clear_usage(dpp);
+  return next->clear_usage(dpp, y);
 }
 
 int FilterDriver::read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
@@ -387,9 +387,9 @@ int FilterDriver::read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_e
 }
 
 int FilterDriver::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
-				uint64_t end_epoch)
+				uint64_t end_epoch, optional_yield y)
 {
-  return next->trim_all_usage(dpp, start_epoch, end_epoch);
+  return next->trim_all_usage(dpp, start_epoch, end_epoch, y);
 }
 
 int FilterDriver::get_config_key_val(std::string name, bufferlist* bl)
@@ -620,9 +620,9 @@ int FilterUser::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 }
 
 int FilterUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
-			   uint64_t end_epoch)
+			   uint64_t end_epoch, optional_yield y)
 {
-  return next->trim_usage(dpp, start_epoch, end_epoch);
+  return next->trim_usage(dpp, start_epoch, end_epoch, y);
 }
 
 int FilterUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
@@ -716,9 +716,9 @@ int FilterBucket::update_container_stats(const DoutPrefixProvider* dpp)
   return next->update_container_stats(dpp);
 }
 
-int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp)
+int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return next->check_bucket_shards(dpp);
+  return next->check_bucket_shards(dpp, y);
 }
 
 int FilterBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y)
@@ -771,9 +771,9 @@ int FilterBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch
 }
 
 int FilterBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
-			     uint64_t end_epoch)
+			     uint64_t end_epoch, optional_yield y)
 {
-  return next->trim_usage(dpp, start_epoch, end_epoch);
+  return next->trim_usage(dpp, start_epoch, end_epoch, y);
 }
 
 int FilterBucket::remove_objs_from_index(const DoutPrefixProvider *dpp,
@@ -839,9 +839,9 @@ int FilterBucket::list_multiparts(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct)
+int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y)
 {
-  return next->abort_multiparts(dpp, cct);
+  return next->abort_multiparts(dpp, cct, y);
 }
 
 int FilterObject::delete_object(const DoutPrefixProvider* dpp,
@@ -1115,9 +1115,9 @@ int FilterMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext
   return 0;
 }
 
-int FilterMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
+int FilterMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y)
 {
-  return next->abort(dpp, cct);
+  return next->abort(dpp, cct, y);
 }
 
 int FilterMultipartUpload::complete(const DoutPrefixProvider *dpp,

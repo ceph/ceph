@@ -107,7 +107,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						     bool run_reshard_thread,
                                                      bool run_notification_thread,
 						     bool use_cache,
-						     bool use_gc)
+						     bool use_gc, optional_yield y)
 {
   rgw::sal::Driver* driver{nullptr};
 
@@ -132,7 +132,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
       delete driver;
       return nullptr;
     }
-    if (rados->init_complete(dpp) < 0) {
+    if (rados->init_complete(dpp, y) < 0) {
       delete driver;
       return nullptr;
     }
@@ -159,7 +159,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
       delete driver;
       return nullptr;
     }
-    if (rados->init_complete(dpp) < 0) {
+    if (rados->init_complete(dpp, y) < 0) {
       delete driver;
       return nullptr;
     }

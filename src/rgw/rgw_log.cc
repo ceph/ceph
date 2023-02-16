@@ -171,7 +171,7 @@ public:
     num_entries = 0;
     lock.unlock();
 
-    driver->log_usage(this, old_map);
+    driver->log_usage(this, old_map, null_yield);
   }
 
   CephContext *get_cct() const override { return cct; }
