@@ -88,7 +88,7 @@ class RGWBucketReshard {
                  bool verbose,
                  std::ostream *os,
 		 Formatter *formatter,
-                 const DoutPrefixProvider *dpp);
+                 const DoutPrefixProvider *dpp, optional_yield y);
 public:
 
   // pass nullptr for the final parameter if no outer reshard lock to

@@ -111,7 +111,7 @@ public:
     store(_store), bucket_info(_bucket_info), shard_id(shard_id),
     bs(store->getRados()), aio_completions(_completions)
   {
-    bs.init(dpp, bucket_info, index, shard_id);
+    bs.init(dpp, bucket_info, index, shard_id, null_yield);
 
     max_aio_completions =
       store->ctx()->_conf.get_val<uint64_t>("rgw_reshard_max_aio");
@@ -150,7 +150,7 @@ public:
 
     librados::ObjectWriteOperation op;
     for (auto& entry : entries) {
-      store->getRados()->bi_put(op, bs, entry);
+      store->getRados()->bi_put(op, bs, entry, null_yield);
     }
     cls_rgw_bucket_update_stats(op, false, stats);
 
@@ -798,7 +798,7 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
 				 bool verbose,
 				 ostream *out,
 				 Formatter *formatter,
-                                 const DoutPrefixProvider *dpp)
+                                 const DoutPrefixProvider *dpp, optional_yield y)
 {
   if (out) {
     (*out) << "tenant: " << bucket_info.bucket.tenant << std::endl;
@@ -836,7 +836,7 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
     const std::string null_object_filter; // empty string since we're not filtering by object
     while (is_truncated) {
       entries.clear();
-      int ret = store->getRados()->bi_list(dpp, bucket_info, i, null_object_filter, marker, max_entries, &entries, &is_truncated);
+      int ret = store->getRados()->bi_list(dpp, bucket_info, i, null_object_filter, marker, max_entries, &entries, &is_truncated, y);
       if (ret == -ENOENT) {
         ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to find shard "
             << i << ", skipping" << dendl;
@@ -973,7 +973,7 @@ int RGWBucketReshard::execute(int num_shards,
       ret == 0) { // no fault injected, do the reshard
     ret = do_reshard(bucket_info.layout.current_index,
                      *bucket_info.layout.target_index,
-                     max_op_entries, verbose, out, formatter, dpp);
+                     max_op_entries, verbose, out, formatter, dpp, y);
   }
 
   if (ret < 0) {

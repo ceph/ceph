@@ -690,13 +690,13 @@ int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y
   return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y, &ent);
 }
 
-int RadosBucket::update_container_stats(const DoutPrefixProvider* dpp)
+int RadosBucket::update_container_stats(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret;
   map<std::string, RGWBucketEnt> m;
 
   m[info.bucket.name] = ent;
-  ret = store->getRados()->update_containers_stats(m, dpp);
+  ret = store->getRados()->update_containers_stats(m, dpp, y);
   if (!ret)
     return -EEXIST;
   if (ret < 0)
@@ -801,9 +801,9 @@ int RadosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new
 				new_attrs, &get_info().objv_tracker, y, dpp);
 }
 
-int RadosBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime)
+int RadosBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y)
 {
-  return store->getRados()->try_refresh_bucket_info(info, pmtime, dpp, &attrs);
+  return store->getRados()->try_refresh_bucket_info(info, pmtime, dpp, y, &attrs);
 }
 
 int RadosBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
@@ -841,13 +841,13 @@ int RadosBucket::set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout
   return store->getRados()->cls_obj_set_bucket_tag_timeout(dpp, info, timeout);
 }
 
-int RadosBucket::purge_instance(const DoutPrefixProvider* dpp)
+int RadosBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int max_shards = (info.layout.current_index.layout.normal.num_shards > 0 ? info.layout.current_index.layout.normal.num_shards : 1);
   for (int i = 0; i < max_shards; i++) {
     RGWRados::BucketShard bs(store->getRados());
     int shard_id = (info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
-    int ret = bs.init(dpp, info, info.layout.current_index, shard_id);
+    int ret = bs.init(dpp, info, info.layout.current_index, shard_id, y);
     if (ret < 0) {
       cerr << "ERROR: bs.init(bucket=" << info.bucket << ", shard=" << shard_id
            << "): " << cpp_strerror(-ret) << std::endl;
@@ -1455,9 +1455,9 @@ void RadosStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitI
   anon_ratelimit = svc()->zone->get_current_period().get_config().anon_ratelimit;
 }
 
-int RadosStore::set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled)
+int RadosStore::set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled, optional_yield y)
 {
-    return rados->set_buckets_enabled(buckets, enabled, dpp);
+    return rados->set_buckets_enabled(buckets, enabled, dpp, y);
 }
 
 int RadosStore::get_sync_policy_handler(const DoutPrefixProvider* dpp,
@@ -2371,7 +2371,7 @@ int RadosObject::RadosReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
 }
 
 int RadosObject::swift_versioning_restore(bool& restored,
-					  const DoutPrefixProvider* dpp)
+					  const DoutPrefixProvider* dpp, optional_yield y)
 {
   rgw_obj obj = get_obj();
   return store->getRados()->swift_versioning_restore(*rados_ctx,
@@ -2379,7 +2379,7 @@ int RadosObject::swift_versioning_restore(bool& restored,
 						     bucket->get_info(),
 						     obj,
 						     restored,
-						     dpp);
+						     dpp, y);
 }
 
 int RadosObject::swift_versioning_copy(const DoutPrefixProvider* dpp, optional_yield y)

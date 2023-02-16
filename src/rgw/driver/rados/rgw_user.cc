@@ -1936,7 +1936,7 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
         marker = iter->first;
       }
 
-      ret = driver->set_buckets_enabled(dpp, bucket_names, !suspended);
+      ret = driver->set_buckets_enabled(dpp, bucket_names, !suspended, y);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to modify bucket");
         return ret;

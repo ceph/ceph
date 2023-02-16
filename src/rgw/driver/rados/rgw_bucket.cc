@@ -1339,7 +1339,7 @@ int RGWBucketAdminOp::clear_stale_instances(rgw::sal::Driver* driver,
                      for (const auto &binfo: lst) {
 		       std::unique_ptr<rgw::sal::Bucket> bucket;
 		       driver->get_bucket(nullptr, binfo, &bucket);
-		       int ret = bucket->purge_instance(dpp);
+		       int ret = bucket->purge_instance(dpp, null_yield);
                        if (ret == 0){
                          auto md_key = "bucket.instance:" + binfo.bucket.get_key();
                          ret = driver->meta_remove(dpp, md_key, null_yield);
