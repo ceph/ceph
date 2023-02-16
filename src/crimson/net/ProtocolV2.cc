@@ -1082,7 +1082,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
                  " found existing {}(state={}, gs={}, pgs={}, cs={}, cc={}, sc={})",
                  conn, global_seq, peer_global_seq, connect_seq,
                  client_cookie, server_cookie,
-                 fmt::ptr(existing_conn), get_state_name(existing_proto->state),
+                 fmt::ptr(existing_conn.get()), get_state_name(existing_proto->state),
                  existing_proto->global_seq,
                  existing_proto->peer_global_seq,
                  existing_proto->connect_seq,
@@ -1091,7 +1091,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
 
   if (!validate_peer_name(existing_conn->get_peer_name())) {
     logger().error("{} server_connect: my peer_name doesn't match"
-                   " the existing connection {}, abort", conn, fmt::ptr(existing_conn));
+                   " the existing connection {}, abort", conn, fmt::ptr(existing_conn.get()));
     abort_in_fault();
   }
 
@@ -1380,7 +1380,7 @@ ProtocolV2::server_reconnect()
                    " found existing {}(state={}, gs={}, pgs={}, cs={}, cc={}, sc={})",
                    conn, global_seq, peer_global_seq, reconnect.connect_seq(),
                    reconnect.client_cookie(), reconnect.server_cookie(),
-                   fmt::ptr(existing_conn),
+                   fmt::ptr(existing_conn.get()),
                    get_state_name(existing_proto->state),
                    existing_proto->global_seq,
                    existing_proto->peer_global_seq,
@@ -1390,7 +1390,7 @@ ProtocolV2::server_reconnect()
 
     if (!validate_peer_name(existing_conn->get_peer_name())) {
       logger().error("{} server_reconnect: my peer_name doesn't match"
-                     " the existing connection {}, abort", conn, fmt::ptr(existing_conn));
+                     " the existing connection {}, abort", conn, fmt::ptr(existing_conn.get()));
       abort_in_fault();
     }
 
