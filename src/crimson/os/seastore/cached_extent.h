@@ -76,6 +76,85 @@ using read_set_t = std::set<
   read_set_item_t<T>,
   typename read_set_item_t<T>::cmp_t>;
 
+using region_list_t = std::list<std::pair<extent_len_t, extent_len_t>>;
+/// manage small chunks of extent
+class BufferSpace {
+    private:
+    extent_len_t extent_length; // length of extent
+    extent_len_t space_length = 0; // length of valid buffer
+    /// map extent range onto buffers.
+    /// key: offset in extent -> value:buffer start from offset
+    std::map<extent_len_t, std::unique_ptr<ceph::bufferlist>> buffer_map;
+
+    protected:
+      BufferSpace() : extent_length(0) {}
+      BufferSpace(extent_len_t elength) : extent_length(elength) {}
+      BufferSpace(const BufferSpace &other)
+        : extent_length(other.get_extent_length()),
+          space_length(other.get_space_length()) {
+          for(auto it = other.buffer_map.begin();
+          it != other.buffer_map.end();
+          ++it) {
+            auto listptr = new ceph::bufferlist(*it->second);
+            buffer_map[it->first].reset(listptr);
+          }
+      }
+      BufferSpace(BufferSpace &&other)
+        : extent_length(other.get_extent_length()),
+          space_length(other.get_space_length()),
+          buffer_map(std::move(other.buffer_map)) {}
+
+      struct deep_copy_t {};
+      BufferSpace(const BufferSpace &other, deep_copy_t)
+        : extent_length(other.get_extent_length()),
+          space_length(other.get_space_length()) {
+          for(auto it = other.buffer_map.begin();
+          it != other.buffer_map.end();
+          ++it) {
+            auto other_list = it->second.get();
+            ceph::bufferptr ptr(other_list->c_str(), other_list->length());
+            auto listptr = new ceph::bufferlist();
+            listptr->append(ptr);
+            buffer_map[it->first].reset(listptr);
+          }
+      }
+
+      friend class CachedExtent;
+
+      void _add_buffer(extent_len_t offset, ceph::bufferlist&& buffer);
+
+      void _add_buffer(extent_len_t offset, ceph::bufferptr&& ptr) {
+        ceph::bufferlist to_add;
+        to_add.append(std::move(ptr));
+        _add_buffer(offset, std::move(to_add));
+      }
+
+      ceph::bufferlist get_data() {
+        return get_data(0, extent_length);
+      }
+
+      ceph::bufferlist get_data(extent_len_t length) {
+        return get_data(0, length);
+      }
+
+      ceph::bufferlist get_data(extent_len_t offset, extent_len_t length);
+
+      ceph::bufferptr build_ptr();
+
+      bool is_full() {
+        return space_length == extent_length
+        && buffer_map.size() == 1;
+      }
+
+      bool check_buffer(extent_len_t offset, extent_len_t length);
+
+      region_list_t read_buffer(extent_len_t offset, extent_len_t length);
+
+      extent_len_t get_space_length() const { return space_length; }
+      extent_len_t get_extent_length() const { return extent_length; }
+  };
+
+
 class ExtentIndex;
 class CachedExtent : public boost::intrusive_ref_counter<
   CachedExtent, boost::thread_unsafe_counter> {
