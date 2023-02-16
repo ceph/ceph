@@ -3196,12 +3196,10 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
     bcs = c->cache;
     bcs->lock.lock();
   }
-  oldo->extent_map.fault_range(c->store->db, 0, OBJECT_MAX_SIZE);//srcoff, length);
-  newo->extent_map.fault_range(c->store->db, 0, OBJECT_MAX_SIZE);//dstoff, length);
 
-  dout(25) << __func__ << "start oldo=" << dendl;
+  dout(25) << __func__ << " start oldo=" << dendl;
   _dump_onode<25>(onode->c->store->cct, *oldo);
-  dout(25) << __func__ << "start newo=" << dendl;
+  dout(25) << __func__ << " start newo=" << dendl;
   _dump_onode<25>(onode->c->store->cct, *newo);
 
   make_range_shared(b, txc, c, oldo, srcoff, length);
@@ -3311,15 +3309,16 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
       dirty_range_end - dirty_range_begin);
     txc->write_onode(oldo);
   }
-  txc->write_onode(newo);
 
   if (dstoff + length > newo->onode.size) {
     newo->onode.size = dstoff + length;
   }
   newo->extent_map.dirty_range(dstoff, length);
-  dout(25) << __func__ << "end oldo=" << dendl;
+  newo->extent_map.maybe_reshard(dstoff, dstoff + length);
+  txc->write_onode(newo);
+  dout(25) << __func__ << " end oldo=" << dendl;
   _dump_onode<25>(onode->c->store->cct, *oldo);
-  dout(25) << __func__ << "end newo=" << dendl;
+  dout(25) << __func__ << " end newo=" << dendl;
   _dump_onode<25>(onode->c->store->cct, *newo);
   bcs->lock.unlock();
 }
