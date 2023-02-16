@@ -13,6 +13,7 @@
  *
  */
 
+#include "include/rados/librados.hpp"
 #include "rgw_aio.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_multi.h"
@@ -471,7 +472,6 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   if (r < 0)
     return r;
 
-  bufferlist bl;
   RGWUploadPartInfo info;
   string p = "part.";
   bool sorted_omap = is_v2_upload_id(upload_id);
@@ -497,13 +497,32 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  encode(info, bl);
-
   std::unique_ptr<rgw::sal::Object> meta_obj =
     head_obj->get_bucket()->get_object(rgw_obj_key(mp.get_meta(), std::string(), RGW_OBJ_NS_MULTIPART));
   meta_obj->set_in_extra_data(true);
 
-  r = meta_obj->omap_set_val_by_key(dpp, p, bl, true, null_yield);
+  rgw_raw_obj meta_raw_obj;
+  store->getRados()->obj_to_raw(meta_obj->get_bucket()->get_placement_rule(), 
+                                meta_obj->get_obj(),
+                                &meta_raw_obj);
+  rgw_rados_ref meta_obj_ref;
+  r = store->getRados()->get_raw_obj_ref(dpp, meta_raw_obj, &meta_obj_ref);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to get obj ref of meta obj with ret=" << r << dendl;
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  cls_rgw_mp_upload_part_info_update(op, p, info);
+  r = rgw_rados_operate(dpp, meta_obj_ref.pool.ioctx(), meta_obj_ref.obj.oid, &op, y);
+  ldpp_dout(dpp, 20) << "Update meta: " << meta_obj_ref.obj.oid << " part " << p << " prefix " << info.manifest.get_prefix() << " return " << r << dendl;
+
+  if (r == -EOPNOTSUPP) {
+    // New CLS call to update part info is not yet supported. Fall back to the old handling.
+    bufferlist bl;
+    encode(info, bl);
+    r = meta_obj->omap_set_val_by_key(dpp, p, bl, true, null_yield);
+  }
   if (r < 0) {
     return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
   }
