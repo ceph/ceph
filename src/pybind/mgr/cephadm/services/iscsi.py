@@ -26,9 +26,11 @@ class IscsiService(CephService):
     def get_trusted_ips(self, spec: IscsiServiceSpec) -> str:
         # add active mgr ip address to trusted list so dashboard can access
         trusted_ip_list = spec.trusted_ip_list if spec.trusted_ip_list else ''
-        if trusted_ip_list:
-            trusted_ip_list += ','
-        trusted_ip_list += self.mgr.get_mgr_ip()
+        mgr_ip = self.mgr.get_mgr_ip()
+        if mgr_ip not in [s.strip() for s in trusted_ip_list.split(',')]:
+            if trusted_ip_list:
+                trusted_ip_list += ','
+            trusted_ip_list += mgr_ip
         return trusted_ip_list
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
