@@ -925,6 +925,14 @@ public:
 	needs_reshard_end = end;
       }
     }
+    // signals that there was a modification on range <begin, end)
+    // if this spans over a shard boundary, then shards no longer
+    // can be encoded separately, and reshard run is needed
+    void maybe_reshard(uint32_t begin, uint32_t end) {
+      if (spans_shard(begin, end - begin)) {
+	request_reshard(begin, end);
+      }
+    }
 
     struct DeleteDisposer {
       void operator()(Extent *e) { delete e; }
