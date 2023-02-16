@@ -111,10 +111,10 @@ class RGWReadDataSyncStatusMarkersCR : public RGWShardCollectCR {
     : RGWShardCollectCR(sc->cct, MAX_CONCURRENT_SHARDS),
       sc(sc), env(sc->env), num_shards(num_shards), markers(markers), objvs(objvs)
   {}
-  bool spawn_next(const DoutPrefixProvider *dpp) override;
+  bool spawn_next() override;
 };
 
-bool RGWReadDataSyncStatusMarkersCR::spawn_next(const DoutPrefixProvider *dpp)
+bool RGWReadDataSyncStatusMarkersCR::spawn_next()
 {
   if (shard_id >= num_shards) {
     return false;
@@ -157,10 +157,10 @@ class RGWReadDataSyncRecoveringShardsCR : public RGWShardCollectCR {
     : RGWShardCollectCR(sc->cct, MAX_CONCURRENT_SHARDS), sc(sc), env(sc->env),
       max_entries(_max_entries), num_shards(_num_shards), omapkeys(omapkeys)
   {}
-  bool spawn_next(const DoutPrefixProvider *dpp) override;
+  bool spawn_next() override;
 };
 
-bool RGWReadDataSyncRecoveringShardsCR::spawn_next(const DoutPrefixProvider *dpp)
+bool RGWReadDataSyncRecoveringShardsCR::spawn_next()
 {
   if (shard_id >= num_shards)
     return false;
@@ -408,10 +408,10 @@ public:
                      map<int, RGWDataChangesLogInfo> *_datalog_info) : RGWShardCollectCR(_sc->cct, READ_DATALOG_MAX_CONCURRENT),
                                                                  sc(_sc), sync_env(_sc->env), num_shards(_num_shards),
                                                                  datalog_info(_datalog_info), shard_id(0) {}
-  bool spawn_next(const DoutPrefixProvider *dpp) override;
+  bool spawn_next() override;
 };
 
-bool RGWReadRemoteDataLogInfoCR::spawn_next(const DoutPrefixProvider *dpp) {
+bool RGWReadRemoteDataLogInfoCR::spawn_next() {
   if (shard_id >= num_shards) {
     return false;
   }
@@ -512,10 +512,10 @@ public:
     shards.swap(_shards);
     iter = shards.begin();
   }
-  bool spawn_next(const DoutPrefixProvider *dpp) override;
+  bool spawn_next() override;
 };
 
-bool RGWListRemoteDataLogCR::spawn_next(const DoutPrefixProvider *dpp) {
+bool RGWListRemoteDataLogCR::spawn_next() {
   if (iter == shards.end()) {
     return false;
   }
@@ -615,7 +615,7 @@ public:
     boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr,
     RGWObjVersionTracker& objv_tracker,
     std::vector<RGWObjVersionTracker>& objvs)
-    : RGWCoroutine(_sc->cct), sc(_sc), dsi(_sc->dsi),
+    : RGWCoroutine(_sc->cct), sc(_sc), dsi(_sc->dsi), status(status),
       tn(sync_env->sync_tracer->add_node(tn_parent, "init_data_sync_status")),
       lease_cr(std::move(lease_cr)), objv_tracker(objv_tracker), objvs(objvs) {
     status->sync_info.instance_id = instance_id;
@@ -1721,8 +1721,7 @@ public:
                                                                 sync_marker(_marker),
                                                                 tn(_tn), objv(objv) {}
 
-  RGWCoroutine* store_marker(const DoutPrefixProvider *dpp, const string& new_marker, const string& key,
-                             uint64_t index_pos, const real_time& timestamp) override {
+  RGWCoroutine* store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.marker = new_marker;
     sync_marker.pos = index_pos;
     sync_marker.timestamp = timestamp;
@@ -2108,7 +2107,7 @@ public:
       /* FIXME: what do do in case of error */
       if (marker_tracker && !complete->marker.empty()) {
         /* update marker */
-        yield call(marker_tracker->finish(dpp, complete->marker));
+        yield call(marker_tracker->finish(complete->marker));
         if (retcode < 0) {
           return set_cr_error(retcode);
         }
@@ -4099,7 +4098,7 @@ class CheckAllBucketShardStatusIsIncremental : public RGWShardCollectCR {
       sc(sc), sync_pair(sync_pair), num_shards(num_shards), result(result)
   {}
 
-  bool spawn_next(const DoutPrefixProvider *dpp) override {
+  bool spawn_next() override {
     // stop spawning if we saw any errors or non-incremental shards
     if (shard >= num_shards || status < 0 || !*result) {
       return false;
@@ -4180,7 +4179,7 @@ class InitBucketShardStatusCollectCR : public RGWShardCollectCR {
       sc(sc), sync_pair(sync_pair), gen(gen), marker_mgr(marker_mgr), num_shards(num_shards)
   {}
 
-  bool spawn_next(const DoutPrefixProvider *dpp) override {
+  bool spawn_next() override {
     if (shard >= num_shards || status < 0) { // stop spawning on any errors
       return false;
     }
@@ -4248,7 +4247,7 @@ class RemoveBucketShardStatusCollectCR : public RGWShardCollectCR {
       sc(sc), sync_env(sc->env), sync_pair(sync_pair), gen(gen), num_shards(num_shards)
   {}
 
-  bool spawn_next(const DoutPrefixProvider *dpp) override {
+  bool spawn_next() override {
     if (shard >= num_shards) {
       return false;
     }
@@ -4760,7 +4759,7 @@ public:
   {}
 
 
-  RGWCoroutine *store_marker(const DoutPrefixProvider *dpp, const rgw_obj_key& new_marker, const rgw_obj_key& key,
+  RGWCoroutine *store_marker(const rgw_obj_key& new_marker, const rgw_obj_key& key,
                              uint64_t index_pos, const real_time& timestamp) override {
     sync_status.full.position = new_marker;
     sync_status.full.count = index_pos;
@@ -4862,7 +4861,7 @@ public:
 
   const rgw_raw_obj& get_obj() const { return obj; }
 
-  RGWCoroutine* store_marker(const DoutPrefixProvider *dpp, const string& new_marker, const rgw_obj_key& key,
+  RGWCoroutine* store_marker(const string& new_marker, const rgw_obj_key& key,
                              uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.position = new_marker;
     sync_marker.timestamp = timestamp;
@@ -5081,7 +5080,7 @@ done:
       if (sync_status == 0) {
         /* update marker */
         set_status() << "calling marker_tracker->finish(" << entry_marker << ")";
-        yield call(marker_tracker->finish(dpp, entry_marker));
+        yield call(marker_tracker->finish(entry_marker));
         sync_status = retcode;
       }
       if (sync_status < 0) {
@@ -5242,7 +5241,7 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
           continue;
         }
         total_entries++;
-        if (!marker_tracker.start(entry->key, std::nullopt, total_entries, real_time())) {
+        if (!marker_tracker.start(entry->key, total_entries, real_time())) {
           tn->log(0, SSTR("ERROR: cannot start syncing " << entry->key << ". Duplicate entry?"));
         } else {
           using SyncCR = RGWBucketSyncSingleEntryCR<rgw_obj_key, rgw_obj_key>;
@@ -5283,7 +5282,7 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
       }
       return set_cr_error(-ECANCELED);
     }
-    yield call(marker_tracker.flush(dpp));
+    yield call(marker_tracker.flush());
     if (retcode < 0) {
       tn->log(0, SSTR("ERROR: bucket full sync marker_tracker.flush() returned retcode=" << retcode));
       return set_cr_error(retcode);
@@ -5554,14 +5553,14 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
 
         if (entry->op == RGWModifyOp::CLS_RGW_OP_SYNCSTOP || entry->op == RGWModifyOp::CLS_RGW_OP_RESYNC) {
           ldpp_dout(dpp, 20) << "detected syncstop or resync on " << entries_iter->timestamp << ", skipping entry" << dendl;
-          marker_tracker.try_update_high_marker(cur_id, std::nullopt, 0, entry->timestamp);
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
 
         if (!key.set(rgw_obj_index_key{entry->object, entry->instance})) {
           set_status() << "parse_raw_oid() on " << entry->object << " returned false, skipping entry";
           tn->log(20, SSTR("parse_raw_oid() on " << entry->object << " returned false, skipping entry"));
-          marker_tracker.try_update_high_marker(cur_id, std::nullopt, 0, entry->timestamp);
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
 
@@ -5570,14 +5569,14 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
         if (!key.ns.empty()) {
           set_status() << "skipping entry in namespace: " << entry->object;
           tn->log(20, SSTR("skipping entry in namespace: " << entry->object));
-          marker_tracker.try_update_high_marker(cur_id, std::nullopt, 0, entry->timestamp);
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
 
         if (!check_key_handled(key)) {
           set_status() << "skipping entry due to policy rules: " << entry->object;
           tn->log(20, SSTR("skipping entry due to policy rules: " << entry->object));
-          marker_tracker.try_update_high_marker(cur_id, std::nullopt, 0, entry->timestamp);
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
 
@@ -5586,28 +5585,28 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
           set_status() << "canceled operation, skipping";
           tn->log(20, SSTR("skipping object: "
               << bucket_shard_str{bs} << "/" << key << ": canceled operation"));
-          marker_tracker.try_update_high_marker(cur_id, std::nullopt, 0, entry->timestamp);
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
         if (entry->state != CLS_RGW_STATE_COMPLETE) {
           set_status() << "non-complete operation, skipping";
           tn->log(20, SSTR("skipping object: "
               << bucket_shard_str{bs} << "/" << key << ": non-complete operation"));
-          marker_tracker.try_update_high_marker(cur_id, std::nullopt, 0, entry->timestamp);
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
         if (entry->zones_trace.exists(zone_id.id, target_location_key)) {
           set_status() << "redundant operation, skipping";
           tn->log(20, SSTR("skipping object: "
               <<bucket_shard_str{bs} <<"/"<<key<<": redundant operation"));
-          marker_tracker.try_update_high_marker(cur_id, std::nullopt, 0, entry->timestamp);
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
         if (make_pair<>(entry->timestamp, entry->op) != squash_map[make_pair(entry->object, entry->instance)]) {
           set_status() << "squashed operation, skipping";
           tn->log(20, SSTR("skipping object: "
               << bucket_shard_str{bs} << "/" << key << ": squashed operation"));
-          marker_tracker.try_update_high_marker(cur_id, std::nullopt, 0, entry->timestamp);
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
         tn->set_flag(RGW_SNS_FLAG_ACTIVE);
@@ -5640,12 +5639,12 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
         if (!marker_tracker.index_key_to_marker(key, cur_id, has_olh_epoch(entry->op))) {
           set_status() << "can't do op, sync already in progress for object";
           tn->log(20, SSTR("skipping sync of entry: " << cur_id << ":" << key << " sync already in progress for object"));
-          marker_tracker.try_update_high_marker(cur_id, std::nullopt, 0, entry->timestamp);
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
         // yield {
           set_status() << "start object sync";
-          if (!marker_tracker.start(cur_id, std::nullopt, 0, entry->timestamp)) {
+          if (!marker_tracker.start(cur_id, 0, entry->timestamp)) {
             tn->log(0, SSTR("ERROR: cannot start syncing " << cur_id << ". Duplicate entry?"));
           } else {
             std::optional<uint64_t> versioned_epoch;
@@ -5692,7 +5691,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
       return set_cr_done();
     }
 
-    yield call(marker_tracker.flush(dpp));
+    yield call(marker_tracker.flush());
     if (retcode < 0) {
       tn->log(0, SSTR("ERROR: incremental sync marker_tracker.flush() returned retcode=" << retcode));
       return set_cr_error(retcode);
@@ -6893,7 +6892,7 @@ public:
     assert(pairs.size() == shards);
   }
 
-  virtual bool spawn_next(const DoutPrefixProvider *dpp) override {
+  virtual bool spawn_next() override {
     if (iter == pairs.cend()) {
       return false;
     }
@@ -7164,7 +7163,7 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
       i(status->begin()), end(status->end())
   {}
 
-  bool spawn_next(const DoutPrefixProvider *dpp) override {
+  bool spawn_next() override {
     if (i == end) {
       return false;
     }
