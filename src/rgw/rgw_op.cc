@@ -2237,10 +2237,14 @@ void RGWGetObj::execute(optional_yield y)
   }
 
 #ifdef WITH_ARROW_FLIGHT
-  if (ofs == 0) {
-    // insert a GetObj_Filter to monitor and create flight
-    flight_filter.emplace(s, filter);
-    filter = &*flight_filter;
+  if (s->penv.flight_store) {
+    if (ofs == 0) {
+      // insert a GetObj_Filter to monitor and create flight
+      flight_filter.emplace(s, filter);
+      filter = &*flight_filter;
+    }
+  } else {
+    ldpp_dout(this, 0) << "ERROR: flight_store not created in " << __func__ << dendl;
   }
 #endif
 
