@@ -3091,6 +3091,11 @@ BlueStore::Blob* BlueStore::ExtentMap::find_mergable_companion(
 void BlueStore::ExtentMap::reblob_extents(uint32_t blob_start, uint32_t blob_end,
 					  BlobRef from_blob, BlobRef to_blob)
 {
+  if (from_blob->is_spanning()) {
+    dout(20) << __func__ << " removing spanning blob" << dendl;
+    spanning_blob_map.erase(from_blob->id);
+    from_blob->id = -1;
+  }
   auto prev = extent_map.end();
   for (auto ep = seek_lextent(blob_start); ep != extent_map.end();) {
     auto& e = *ep;
