@@ -51,6 +51,8 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
 
   TestBlock(ceph::bufferptr &&ptr)
     : LogicalCachedExtent(std::move(ptr)) {}
+  TestBlock(extent_len_t length)
+    : LogicalCachedExtent(length) {}
   TestBlock(const TestBlock &other)
     : LogicalCachedExtent(other) {}
 
@@ -90,6 +92,8 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
 
   TestBlockPhysical(ceph::bufferptr &&ptr)
     : CachedExtent(std::move(ptr)) {}
+  TestBlockPhysical(extent_len_t length)
+    : CachedExtent(length) {}
   TestBlockPhysical(const TestBlockPhysical &other)
     : CachedExtent(other) {}
 

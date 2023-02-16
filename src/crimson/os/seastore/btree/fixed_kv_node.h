@@ -33,6 +33,7 @@ struct FixedKVNode : CachedExtent {
   btree_range_pin_t<node_key_t> pin;
 
   FixedKVNode(ceph::bufferptr &&ptr) : CachedExtent(std::move(ptr)), pin(this) {}
+  FixedKVNode(extent_len_t length) : CachedExtent(length), pin(this) {}
   FixedKVNode(const FixedKVNode &rhs)
     : CachedExtent(rhs), pin(rhs.pin, this) {}
 

@@ -441,7 +441,20 @@ public:
   paddr_t get_paddr() const { return poffset; }
 
   /// Returns length of extent
-  virtual extent_len_t get_length() const { return ptr.length(); }
+  virtual extent_len_t get_length() const { 
+    if (ptr.has_value()) {
+      return ptr->length();
+    }
+    return buffer_space.get_extent_length(); 
+  }
+
+  /// Returns length of valid extent
+  extent_len_t get_valid_length() const {
+    if (ptr.has_value()) {
+      return ptr->length();
+    }
+    return buffer_space.get_space_length();
+  }
 
   /// Returns version, get_version() == 0 iff is_clean()
   extent_version_t get_version() const {
@@ -457,8 +470,14 @@ public:
   }
 
   /// Get ref to raw buffer
-  bufferptr &get_bptr() { return ptr; }
-  const bufferptr &get_bptr() const { return ptr; }
+  bufferptr &get_bptr() {
+    assert(ptr.has_value());
+    return ptr.value();
+  }
+  const bufferptr &get_bptr() const {
+    assert(ptr.has_value());
+    return ptr.value();
+  }
 
   /// Compare by paddr
   friend bool operator< (const CachedExtent &a, const CachedExtent &b) {
@@ -505,6 +524,31 @@ public:
     return ret;
   }
 
+  bool is_ptr() {
+    return ptr.has_value();
+  }
+
+  bool is_interval_contained(extent_len_t offset, extent_len_t length) {
+    return ptr.has_value() || buffer_space.check_buffer(offset, length);
+  }
+
+  /// check bufferspace and return uncovered interval(to load)
+  region_list_t read_buffer(extent_len_t offset, extent_len_t length) {
+    return buffer_space.read_buffer(offset, length);
+  }
+
+  /// get buffer by given offset and length.
+  ceph::bufferlist get_buffer(extent_len_t offset, extent_len_t length) {
+    ceph::bufferlist res;
+    if (ptr.has_value()) {
+      res.append(ceph::bufferptr(ptr.value(), offset, length));
+    }
+    else {
+      res = buffer_space.get_data(offset, length);
+    }
+    return res;
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -548,8 +592,11 @@ private:
    */
   journal_seq_t dirty_from_or_retired_at;
 
-  /// Actual data contents
-  ceph::bufferptr ptr;
+  /// Actual data contents of extent if present
+  std::optional<ceph::bufferptr>  ptr;
+
+  /// manager of buffer pieces if ptr not present
+  BufferSpace buffer_space;
 
   /// number of deltas since initial write
   extent_version_t version = 0;
@@ -591,18 +638,33 @@ private:
 protected:
   CachedExtent(CachedExtent &&other) = delete;
   CachedExtent(ceph::bufferptr &&ptr) : ptr(std::move(ptr)) {}
-  CachedExtent(const CachedExtent &other)
-    : state(other.state),
-      dirty_from_or_retired_at(other.dirty_from_or_retired_at),
-      ptr(other.ptr.c_str(), other.ptr.length()),
-      version(other.version),
-      poffset(other.poffset) {}
+  CachedExtent(extent_len_t length) : ptr(ceph::bufferptr(
+    buffer::create_page_aligned(length))) {}
+
+  struct build_space_t {};
+  CachedExtent(extent_len_t length, build_space_t) : buffer_space(length) {}
+
+  CachedExtent(const CachedExtent &other) :
+    state(other.state),
+    dirty_from_or_retired_at(other.dirty_from_or_retired_at),
+    buffer_space(other.buffer_space, BufferSpace::deep_copy_t{}),
+    version(other.version),
+    poffset(other.poffset) {
+    if (other.ptr.has_value()) {
+      ptr = std::make_optional<ceph::bufferptr>
+        (other.ptr->c_str(), other.ptr->length());
+    }
+    else {
+      ptr.reset();
+    }
+  }
 
   struct share_buffer_t {};
   CachedExtent(const CachedExtent &other, share_buffer_t) :
     state(other.state),
     dirty_from_or_retired_at(other.dirty_from_or_retired_at),
     ptr(other.ptr),
+    buffer_space(other.buffer_space),
     version(other.version),
     poffset(other.poffset) {}
 
@@ -657,6 +719,21 @@ protected:
     } else {
       ceph_assert(!addr.is_record_relative() || is_mutation_pending());
       return addr;
+    }
+  }
+
+  /// add buffer to bufferspace if fragmented
+  void add_buffer(extent_len_t offset, ceph::bufferptr&& bptr) {
+    if(offset == 0 && bptr.length() == get_length()) {
+      ptr = std::move(bptr);
+    }
+    else { buffer_space._add_buffer(offset, std::move(bptr)); }
+  }
+
+  /// convert bufferspace to ptr if full
+  void check_and_rebuild() {
+    if (!is_ptr() && buffer_space.is_full()) {
+      ptr = buffer_space.build_ptr();
     }
   }
 

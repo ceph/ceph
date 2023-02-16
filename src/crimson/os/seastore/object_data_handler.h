@@ -23,6 +23,8 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
     : LogicalCachedExtent(std::move(ptr)) {}
   ObjectDataBlock(const ObjectDataBlock &other)
     : LogicalCachedExtent(other) {}
+  ObjectDataBlock(extent_len_t length)
+    : LogicalCachedExtent(length, CachedExtent::build_space_t{}) {}
 
   CachedExtentRef duplicate_for_write() final {
     return CachedExtentRef(new ObjectDataBlock(*this));
