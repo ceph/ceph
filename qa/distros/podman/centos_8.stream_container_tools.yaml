@@ -10,5 +10,5 @@ tasks:
     all:
     - sudo cp /etc/containers/registries.conf /etc/containers/registries.conf.backup
     - sudo dnf -y  module reset container-tools
-    - sudo dnf -y  module install container-tools
+    - sudo dnf -y  module install container-tools --allowerasing --nobest
     - sudo cp /etc/containers/registries.conf.backup /etc/containers/registries.conf
