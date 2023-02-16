@@ -1069,16 +1069,20 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 		      current = end;
 		      return seastar::now();
 		    } else {
+		      extent_len_t e_off = current > pin->get_key() ?
+		        current - pin->get_key() : 0;
+		      extent_len_t e_len = end - current;
 		      return ctx.tm.pin_to_extent<ObjectDataBlock>(
 			ctx.t,
-			std::move(pin)
+			std::move(pin),
+			e_off,
+			e_len
 		      ).si_then([&ret, &current, end](auto extent) {
 			ceph_assert(
 			  (extent->get_laddr() + extent->get_length()) >= end);
 			ceph_assert(end > current);
 			ret.append(
-			  bufferptr(
-			    extent->get_bptr(),
+			  extent->get_buffer(
 			    current - extent->get_laddr(),
 			    end - current));
 			current = end;

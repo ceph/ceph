@@ -129,8 +129,25 @@ public:
   pin_to_extent_ret<T> pin_to_extent(
     Transaction &t,
     LBAPinRef pin) {
+      extent_len_t length = pin->get_length();
+      return pin_to_extent<T>(t, std::move(pin), 0, length);
+    }
+
+  /**
+   * pin_to_extent
+   *
+   * Get extent mapped at pin.
+   * partially load buffer from offset~length if not present
+   */
+  template <typename T>
+  pin_to_extent_ret<T> pin_to_extent(
+    Transaction &t,
+    LBAPinRef pin,
+    extent_len_t offset,
+    extent_len_t length) {
     LOG_PREFIX(TransactionManager::pin_to_extent);
-    SUBTRACET(seastore_tm, "getting extent {}", t, *pin);
+    SUBTRACET(seastore_tm, "getting extent {}, data offset {} length {}",
+    t, *pin, offset, length);
     static_assert(is_logical_type(T::TYPE));
     using ret = pin_to_extent_ret<T>;
     auto &pref = *pin;
@@ -138,6 +155,8 @@ public:
       t,
       pref.get_val(),
       pref.get_length(),
+      offset,
+      length,
       [this, pin=std::move(pin)](T &extent) mutable {
 	assert(!extent.has_pin());
 	assert(!extent.has_been_invalidated());

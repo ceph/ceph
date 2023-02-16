@@ -10,6 +10,7 @@
 #include "include/buffer.h"
 
 #include "crimson/common/errorator.h"
+#include "crimson/common/errorator-loop.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/logging.h"
@@ -186,6 +187,12 @@ public:
     crimson::ct_error::input_output_error>;
   using base_iertr = trans_iertr<base_ertr>;
 
+  using read_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error,
+    crimson::ct_error::invarg,
+    crimson::ct_error::enoent,
+    crimson::ct_error::erange>;
+
   Cache(ExtentPlacementManager &epm);
   ~Cache();
 
@@ -263,6 +270,8 @@ public:
    * returns ref to extent at offset~length of type T either from
    * - extent_set if already in cache
    * - disk
+   * containing buffer at e_off~e_len in extent
+   * if not specified, get complete extent default
    */
   using src_ext_t = std::pair<Transaction::src_t, extent_types_t>;
   using get_extent_ertr = base_ertr;
@@ -272,6 +281,8 @@ public:
   get_extent_ret<T> get_extent(
     paddr_t offset,                ///< [in] starting addr
     extent_len_t length,           ///< [in] length
+    extent_len_t e_off,            ///< [in] offset of piece in extent
+    extent_len_t e_len,            ///< [in] length of piece in extent
     const src_ext_t* p_src_ext,    ///< [in] cache query metric key
     Func &&extent_init_func,       ///< [in] init func for extent
     OnCache &&on_cache
@@ -280,33 +291,33 @@ public:
     auto cached = query_cache(offset, p_src_ext);
     if (!cached) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
-        alloc_cache_buf(length));
+        length);
       ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
                 offset,
                 PLACEMENT_HINT_NULL,
                 NULL_GENERATION);
       SUBDEBUG(seastore_cache,
-          "{} {}~{} is absent, add extent and reading ... -- {}",
-          T::TYPE, offset, length, *ret);
+          "{} {}~{} is absent, add extent and reading interval {}~{} ... -- {}",
+          T::TYPE, offset, length, e_off, e_len, *ret);
       const auto p_src = p_src_ext ? &p_src_ext->first : nullptr;
       add_extent(ret, p_src);
       on_cache(*ret);
       extent_init_func(*ret);
       return read_extent<T>(
-	std::move(ret));
+	std::move(ret), e_off, e_len);
     }
 
     // extent PRESENT in cache
     if (cached->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
-        alloc_cache_buf(length));
+        length);
       ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
                 offset,
                 PLACEMENT_HINT_NULL,
                 NULL_GENERATION);
       SUBDEBUG(seastore_cache,
-          "{} {}~{} is absent(placeholder), reading ... -- {}",
-          T::TYPE, offset, length, *ret);
+          "{} {}~{} is absent(placeholder), reading interval {}~{} ... -- {}",
+          T::TYPE, offset, e_off, e_len, length, *ret);
       extents.replace(*ret, *cached);
       on_cache(*ret);
 
@@ -319,7 +330,7 @@ public:
       cached->state = CachedExtent::extent_state_t::INVALID;
       extent_init_func(*ret);
       return read_extent<T>(
-	std::move(ret));
+	std::move(ret), e_off, e_len);
     } else {
       SUBTRACE(seastore_cache,
           "{} {}~{} is present in cache -- {}",
@@ -327,15 +338,35 @@ public:
       auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
       on_cache(*ret);
       return ret->wait_io(
-      ).then([ret=std::move(ret)]() mutable
+      ).then([ret=std::move(ret), e_off, e_len, this]() mutable
 	     -> get_extent_ret<T> {
-        // ret may be invalid, caller must check
-        return get_extent_ret<T>(
+        if (ret->is_interval_contained(e_off, e_len)) {
+          // ret may be invalid, caller must check
+          return get_extent_ret<T>(
           get_extent_ertr::ready_future_marker{},
           std::move(ret));
+        }
+        else {
+          return read_extent<T>(
+	    std::move(ret), e_off, e_len);
+        }
       });
     }
   }
+  template <typename T, typename Func, typename OnCache>
+  get_extent_ret<T> get_extent(
+    paddr_t offset,                ///< [in] starting addr
+    extent_len_t length,           ///< [in] length
+    const src_ext_t* p_src_ext,    ///< [in] cache query metric key
+    Func &&extent_init_func,       ///< [in] init func for extent
+    OnCache &&on_cache
+  ) {
+    return get_extent<T>(
+      offset, length, 0, length, p_src_ext,
+      std::forward<Func>(extent_init_func),
+      std::forward<OnCache>(on_cache));
+  }
+
   template <typename T>
   get_extent_ret<T> get_extent(
     paddr_t offset,                ///< [in] starting addr
@@ -406,6 +437,8 @@ public:
    * - t if modified by t
    * - extent_set if already in cache
    * - disk
+   * containing buffer at e_off~e_len in extent
+   * if not specified, get complete extent default
    *
    * t *must not* have retired offset
    */
@@ -415,6 +448,8 @@ public:
     Transaction &t,
     paddr_t offset,
     extent_len_t length,
+    extent_len_t e_off,
+    extent_len_t e_len,
     Func &&extent_init_func) {
     CachedExtentRef ret;
     LOG_PREFIX(Cache::get_extent);
@@ -428,9 +463,16 @@ public:
           result == Transaction::get_extent_ret::PRESENT ? "present" : "retired",
           *ret);
       assert(result != Transaction::get_extent_ret::RETIRED);
-      return ret->wait_io().then([ret] {
-	return seastar::make_ready_future<TCachedExtentRef<T>>(
-	  ret->cast<T>());
+      return ret->wait_io().then([this, ret, e_off, e_len]() mutable
+      -> get_extent_iertr::future<TCachedExtentRef<T>> {
+        if (ret->is_interval_contained(e_off, e_len)) {
+	  return seastar::make_ready_future<TCachedExtentRef<T>>(
+	    ret->cast<T>());
+        } else {
+          touch_extent(*ret);
+          return trans_intr::make_interruptible(
+            read_extent<T>(ret->cast<T>(), e_off, e_len));
+        }
       });
     } else {
       SUBTRACET(seastore_cache, "{} {}~{} is absent on t, query cache ...",
@@ -442,11 +484,21 @@ public:
       auto metric_key = std::make_pair(t.get_src(), T::TYPE);
       return trans_intr::make_interruptible(
 	get_extent<T>(
-	  offset, length, &metric_key,
+	  offset, length, e_off, e_len, &metric_key,
 	  std::forward<Func>(extent_init_func), std::move(f))
       );
     }
   }
+
+  template <typename T, typename Func>
+  get_extent_iertr::future<TCachedExtentRef<T>> get_extent(
+    Transaction &t,
+    paddr_t offset,
+    extent_len_t length,
+    Func &&extent_init_func) {
+    return get_extent<T>(t, offset, length, 0, length, std::forward<Func>(extent_init_func));
+  }
+
   template <typename T>
   get_extent_iertr::future<TCachedExtentRef<T>> get_extent(
     Transaction &t,
@@ -1318,6 +1370,64 @@ private:
         extent->on_clean_read();
         extent->complete_io();
         SUBDEBUG(seastore_cache, "read extent done -- {}", *extent);
+        return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
+          std::move(extent));
+      },
+      get_extent_ertr::pass_further{},
+      crimson::ct_error::assert_all{
+        "Cache::get_extent: invalid error"
+      }
+    );
+  }
+
+  template <typename T>
+  get_extent_ret<T> read_extent(
+    TCachedExtentRef<T>&& extent,
+    extent_len_t offset,
+    extent_len_t length
+  ) {
+    if (extent->is_ptr()) {
+      return read_extent(std::move(extent));
+    }
+    assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING);
+    extent->set_io_wait();
+    return seastar::do_with(
+      extent->read_buffer(offset, length),
+      [extent, this](auto &read_regions) {
+        return read_ertr::parallel_for_each(
+          read_regions,
+          [extent, this](auto &read_region) {
+            extent_len_t start = p2align(read_region.first,
+              epm.get_block_size());
+            extent_len_t end = p2roundup(
+              read_region.first + read_region.second,
+              epm.get_block_size());
+            extent_len_t aligned_length = end - start;
+            return seastar::do_with(
+              alloc_cache_buf(aligned_length),
+              [extent, this, start, aligned_length](auto &ptr){
+                return epm.read(
+                  extent->get_paddr() + start,
+                  aligned_length,
+                  ptr
+                ).safe_then(
+                  [extent, &ptr, start]() {
+                    extent->add_buffer(start, std::move(ptr));
+                  });
+              });
+          });
+    }).safe_then(
+        [extent=std::move(extent), offset, length]() mutable {
+        LOG_PREFIX(Cache::read_extent);
+        extent->state = CachedExtent::extent_state_t::CLEAN;
+        /* TODO: crc should be checked against LBA manager */
+        extent->last_committed_crc = extent->get_crc32c();
+
+        extent->on_clean_read();
+        extent->check_and_rebuild();
+        extent->complete_io();
+        SUBDEBUG(seastore_cache, "read extent interval {} ~ {} done -- {}",
+          offset, length, *extent);
         return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
           std::move(extent));
       },
