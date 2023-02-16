@@ -325,7 +325,7 @@ public:
     }
   }
 
-  const mempool::osdmap_mapping::vector<pg_t>& get_osd_acting_pgs(unsigned osd) { 
+  const mempool::osdmap_mapping::vector<pg_t>& get_osd_acting_pgs(unsigned osd) {
     ceph_assert(osd < acting_rmap.size());
     return acting_rmap[osd];
   }

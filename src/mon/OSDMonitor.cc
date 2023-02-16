@@ -7902,56 +7902,22 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
   return 0;
 }
 
-int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, ostream *ss)
+int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
 {
   auto max_pgs_per_osd = g_conf().get_val<uint64_t>("mon_max_pg_per_osd");
+  auto num_osds = std::max(osdmap.get_num_in_osds(), 3u);   // assume min cluster size 3
+  auto max_pgs = max_pgs_per_osd * num_osds;
   uint64_t projected = 0;
-  unsigned osd_num = 0;
-  // assume min cluster size 3
-  auto num_osds = std::max(osdmap.get_num_in_osds(), 3u);
   if (pool < 0) {
-    // a new pool
     projected += pg_num * size;
   }
-  if (mapping.get_epoch() >= osdmap.get_epoch()) {
-    set<int> roots;
-    CrushWrapper newcrush = _get_pending_crush();
-    newcrush.find_takes_by_rule(crush_rule, &roots);
-    int max_osd = osdmap.get_max_osd();
-    for (auto root : roots) {
-      const char *rootname = newcrush.get_item_name(root);
-      set<int> osd_ids;
-      newcrush.get_leaves(rootname, &osd_ids);
-      unsigned out_osd = 0;
-      for (auto id : osd_ids) {
-	if (id > max_osd) { 
-	  out_osd++;
-	  continue;
-	}
-	projected += mapping.get_osd_acting_pgs(id).size();
-      }
-      osd_num += osd_ids.size() - out_osd;
-    }
-    if (pool >= 0) {   
-      // update an existing pool's pg num
-      const auto& pg_info = osdmap.get_pools().at(pool);    
-      // already counted the pgs of this `pool` by iterating crush map, so 
-      // remove them using adding the specified pg num
+  for (const auto& i : osdmap.get_pools()) {
+    if (i.first == pool) {
       projected += pg_num * size;
-      projected -= pg_info.get_pg_num_target() * pg_info.get_size();
-    }
-    num_osds = std::max(osd_num, 3u);  // assume min cluster size 3
-  } else {
-    // use pg_num target for evaluating the projected pg num
-    for (const auto& [pool_id, pool_info] : osdmap.get_pools()) {
-      if (pool_id == pool) {
-	projected += pg_num * size;
-      } else {
-	projected += pool_info.get_pg_num_target() * pool_info.get_size();
-      }
+    } else {
+      projected += i.second.get_pg_num_target() * i.second.get_size();
     }
   }
-  auto max_pgs = max_pgs_per_osd * num_osds;
   if (projected > max_pgs) {
     if (pool >= 0) {
       *ss << "pool id " << pool;
@@ -8066,7 +8032,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     dout(10) << __func__ << " crush smoke test duration: "
              << duration << dendl;
   }
-  r = check_pg_num(-1, pg_num, size, crush_rule, ss);
+  r = check_pg_num(-1, pg_num, size, ss);
   if (r) {
     dout(10) << "check_pg_num returns " << r << dendl;
     return r;
@@ -8344,7 +8310,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "crush rule " << p.get_crush_rule() << " type does not match pool";
       return -EINVAL;
     }
-    int r = check_pg_num(pool, p.get_pg_num(), n, p.get_crush_rule(), &ss);
+    int r = check_pg_num(pool, p.get_pg_num(), n, &ss);
     if (r < 0) {
       return r;
     }
@@ -8450,7 +8416,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -ERANGE;
     }
     if (n > (int)p.get_pg_num_target()) {
-      int r = check_pg_num(pool, n, p.get_size(), p.get_crush_rule(), &ss);
+      int r = check_pg_num(pool, n, p.get_size(), &ss);
       if (r) {
 	return r;
       }
