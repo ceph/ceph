@@ -1836,6 +1836,18 @@ uint64_t OSDMap::get_up_osd_features() const
   return cached_up_osd_features;
 }
 
+bool OSDMap::any_osd_laggy() const
+{
+  for (int osd = 0; osd < max_osd; ++osd) {
+    if (!is_up(osd)) { continue; }
+    const auto &xi = get_xinfo(osd);
+    if (xi.laggy_probability || xi.laggy_interval) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void OSDMap::dedup(const OSDMap *o, OSDMap *n)
 {
   using ceph::encode;

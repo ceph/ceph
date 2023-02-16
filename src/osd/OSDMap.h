@@ -643,6 +643,7 @@ private:
  public:
   bool have_crc() const { return crc_defined; }
   uint32_t get_crc() const { return crc; }
+  bool any_osd_laggy() const;
 
   std::shared_ptr<CrushWrapper> crush;       // hierarchical map
   bool stretch_mode_enabled; // we are in stretch mode, requiring multiple sites
