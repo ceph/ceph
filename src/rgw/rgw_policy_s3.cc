@@ -7,6 +7,7 @@
 #include "rgw_policy_s3.h"
 #include "rgw_common.h"
 #include "rgw_crypt_sanitize.h"
+#include "rgw_checksum.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -109,6 +110,8 @@ bool RGWPolicyEnv::match_policy_vars(map<string, bool, ltstr_nocase>& policy_var
   for (iter = vars.begin(); iter != vars.end(); ++iter) {
     const string& var = iter->first;
     if (strncasecmp(ignore_prefix.c_str(), var.c_str(), ignore_prefix.size()) == 0)
+      continue;
+    if (RGWChecksum::is_supplied_checksum(var) || strcmp(var.c_str(),"x-amz-checksum-algorithm") == 0) 
       continue;
     if (policy_vars.count(var) == 0) {
       err_msg = "Policy missing condition: ";

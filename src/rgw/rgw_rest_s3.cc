@@ -292,6 +292,11 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
   // all of the data from its parts. the parts will sync as separate objects
   skip_manifest = s->info.args.exists(RGW_SYS_PARAM_PREFIX "sync-manifest");
 
+  string checksum_mode_arg = s->info.env->get("HTTP_CHECKSUM_MODE","");
+  if (checksum_mode_arg == "ENABLED") {
+    checksum_mode = true;
+  }
+
   // multisite sync requests should fetch encrypted data, along with the
   // attributes needed to support decryption on the other zone
   if (s->system_request) {
@@ -445,6 +450,21 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       auto iter = attrs.find(RGW_ATTR_ETAG);
       if (iter != attrs.end()) {
         dump_etag(s, iter->second.to_str());
+      }
+      if (checksum_mode){
+        string checksum_b64;
+        iter = attrs.find(RGW_ATTR_PREFIX RGW_ATTR_CHECKSUM_CRC32);
+        if (iter != attrs.end() && !checksum.disable_crc32) {
+          checksum.set_enable_crc32();
+          checksum.resp_armor(iter->second, checksum_b64);
+          dump_header(s, RGW_ATTR_CHECKSUM_CRC32, checksum_b64);
+        }
+        iter = attrs.find(RGW_ATTR_PREFIX RGW_ATTR_CHECKSUM_SHA1);
+        if (iter != attrs.end() && !checksum.disable_sha1) {
+          checksum.set_enable_sha1();
+          checksum.resp_armor(iter->second, checksum_b64);
+          dump_header(s, RGW_ATTR_CHECKSUM_SHA1, checksum_b64);
+        }
       }
     }
 
@@ -2614,7 +2634,12 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
       return -EINVAL;
     }
     position = uint64_t(pos_tmp);
+    checksum.disable_all();
   }
+  supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
+  checksum.supplied_crc32_b64 = s->info.env->get("HTTP_X_AMZ_CHECKSUM_CRC32");
+  checksum.supplied_sha1_b64 = s->info.env->get("HTTP_X_AMZ_CHECKSUM_SHA1");
+  checksum.specified_algorithm = s->info.env->get("HTTP_X_AMZ_SDK_CHECKSUM_ALGORITHM");
 
   return RGWPutObj_ObjStore::get_params(y);
 }
@@ -2931,6 +2956,18 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
 
     attrs[attr_name] = attr_bl;
   }
+  if (part_str(parts, "x-amz-checksum-algorithm", &checksum_algorithm)) {
+    checksum.specified_algorithm = checksum_algorithm.c_str();
+  }
+
+  if (part_str(parts, "x-amz-checksum-crc32", &checksum_crc32)) {
+    checksum.supplied_crc32_b64 = checksum_crc32.c_str();
+  }
+
+  if (part_str(parts, "x-amz-checksum-sha1", &checksum_sha1)) {
+    checksum.supplied_sha1_b64 = checksum_sha1.c_str();
+  }
+
   // TODO: refactor this and the above loop to share code
   piter = parts.find(RGW_AMZ_WEBSITE_REDIRECT_LOCATION);
   if (piter != parts.end()) {

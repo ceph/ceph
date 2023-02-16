@@ -45,6 +45,7 @@
 #include "rgw_public_access.h"
 #include "common/tracer.h"
 #include "rgw_sal_fwd.h"
+#include "rgw_checksum.h"
 
 namespace ceph {
   class Formatter;
@@ -100,6 +101,9 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_SLO_UINDICATOR RGW_ATTR_META_PREFIX "static-large-object"
 #define RGW_ATTR_X_ROBOTS_TAG	RGW_ATTR_PREFIX "x-robots-tag"
 #define RGW_ATTR_STORAGE_CLASS  RGW_ATTR_PREFIX "storage_class"
+#define RGW_ATTR_CHECKSUM_CRC32  RGW_AMZ_PREFIX "checksum-crc32"
+#define RGW_ATTR_CHECKSUM_SHA1 RGW_AMZ_PREFIX "checksum-sha1"
+#define RGW_ATTR_CHECKSUM_ALGORITHM   RGW_AMZ_PREFIX "checksum-algorithm"
 
 /* S3 Object Lock*/
 #define RGW_ATTR_OBJECT_LOCK        RGW_ATTR_PREFIX "object-lock"

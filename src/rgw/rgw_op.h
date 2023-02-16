@@ -54,6 +54,7 @@
 #include "rgw_public_access.h"
 #include "rgw_bucket_encryption.h"
 #include "rgw_tracer.h"
+#include "rgw_checksum.h"
 
 #include "services/svc_sys_obj.h"
 #include "services/svc_tier_rados.h"
@@ -1230,6 +1231,7 @@ protected:
   RGWObjectRetention *obj_retention;
   RGWObjectLegalHold *obj_legal_hold;
 
+  RGWChecksum checksum;
 public:
   RGWPutObj() : ofs(0),
                 supplied_md5_b64(NULL),
@@ -1258,6 +1260,7 @@ public:
   void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
     RGWOp::init(driver, s, h);
     policy.set_ctx(s->cct);
+    checksum.init(s->cct);
   }
 
   virtual int init_processing(optional_yield y) override;
@@ -1311,6 +1314,7 @@ protected:
   RGWAccessControlPolicy policy;
   std::map<std::string, bufferlist> attrs;
   boost::optional<ceph::real_time> delete_at;
+  RGWChecksum checksum;
 
   /* Must be called after get_data() or the result is undefined. */
   virtual std::string get_current_filename() const = 0;
@@ -1334,6 +1338,7 @@ public:
   void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
     RGWOp::init(driver, s, h);
     policy.set_ctx(s->cct);
+    checksum.init(s->cct);
   }
 
   int verify_permission(optional_yield y) override;
@@ -1844,6 +1849,7 @@ class RGWInitMultipart : public RGWOp {
 protected:
   std::string upload_id;
   RGWAccessControlPolicy policy;
+  std::string checksum_algorithm;
   ceph::real_time mtime;
   jspan multipart_trace;
 
@@ -2185,7 +2191,8 @@ inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp,
     const std::string& name = kv.first;
     std::string& xattr = kv.second;
 
-    if (blocklisted_headers.count(name) == 1) {
+    if (blocklisted_headers.count(name) == 1 ||
+      RGWChecksum::is_supplied_checksum(name)) {
       ldpp_subdout(dpp, rgw, 10) << "skipping x>> " << name << dendl;
       continue;
     } else if (allow_empty_attrs || !xattr.empty()) {

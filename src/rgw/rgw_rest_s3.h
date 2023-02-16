@@ -21,6 +21,7 @@
 #include "rgw_keystone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_ldap.h"
+#include "rgw_checksum.h"
 
 #include "rgw_token.h"
 #include "include/ceph_assert.h"
@@ -42,9 +43,11 @@ protected:
   // Serving a custom error page from an object is really a 200 response with
   // just the status line altered.
   int custom_http_ret = 0;
+  bool checksum_mode = false;
   std::map<std::string, std::string> crypt_http_responses;
   int override_range_hdr(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y);
 public:
+  RGWChecksum checksum;
   RGWGetObj_ObjStore_S3() {}
   ~RGWGetObj_ObjStore_S3() override {}
 
@@ -56,6 +59,10 @@ public:
   int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
                          RGWGetObj_Filter* cb,
                          bufferlist* manifest_bl) override;
+  void init(rgw::sal::Driver *store, struct req_state *s, RGWHandler *h) override {
+    RGWGetObj_ObjStore::init(store, s, h);
+    checksum.init(s->cct);
+  }
 };
 
 class RGWGetObjTags_ObjStore_S3 : public RGWGetObjTags_ObjStore
@@ -301,6 +308,10 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
 
   std::string get_current_filename() const override;
   std::string get_current_content_type() const override;
+
+  std::string checksum_algorithm;
+  std::string checksum_crc32;
+  std::string checksum_sha1;
 
 public:
   RGWPostObj_ObjStore_S3() {}

@@ -245,6 +245,8 @@ struct RGWUploadPartInfo {
   uint64_t size;
   uint64_t accounted_size{0};
   std::string etag;
+  std::string checksum_crc32_str;
+  std::string checksum_sha1_str;
   ceph::real_time modified;
   RGWObjManifest manifest;
   RGWCompressionInfo cs_info;
@@ -252,7 +254,7 @@ struct RGWUploadPartInfo {
   RGWUploadPartInfo() : num(0), size(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 2, bl);
+    ENCODE_START(5, 2, bl);
     encode(num, bl);
     encode(size, bl);
     encode(etag, bl);
@@ -260,10 +262,12 @@ struct RGWUploadPartInfo {
     encode(manifest, bl);
     encode(cs_info, bl);
     encode(accounted_size, bl);
+    encode(checksum_crc32_str, bl);
+    encode(checksum_sha1_str, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
     decode(num, bl);
     decode(size, bl);
     decode(etag, bl);
@@ -275,6 +279,13 @@ struct RGWUploadPartInfo {
       decode(accounted_size, bl);
     } else {
       accounted_size = size;
+    }
+    if (struct_v >= 5) {
+      decode(checksum_crc32_str, bl);
+      decode(checksum_sha1_str, bl);
+    }else{
+      checksum_crc32_str = "";
+      checksum_sha1_str = "";
     }
     DECODE_FINISH(bl);
   }

@@ -21,6 +21,7 @@
 #include <sstream>
 #include <boost/algorithm/string.hpp>
 #include <boost/process.hpp>
+#include <boost/crc.hpp>
 
 #include "common/Clock.h"
 #include "common/errno.h"
@@ -2545,6 +2546,13 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   uint64_t min_part_size = cct->_conf->rgw_multipart_min_part_size;
   auto etags_iter = part_etags.begin();
   rgw::sal::Attrs attrs = target_obj->get_attrs();
+  RGWChecksum checksum;
+  string target_checksum_algorithm;
+  if (attrs.find(RGW_ATTR_PREFIX RGW_ATTR_CHECKSUM_ALGORITHM) != attrs.end()) {
+    target_checksum_algorithm = attrs[RGW_ATTR_PREFIX RGW_ATTR_CHECKSUM_ALGORITHM].to_str();
+  }
+  checksum.enable_by_name(target_checksum_algorithm);
+  checksum.reset();
 
   do {
     ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated);
@@ -2658,6 +2666,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   etag_bl.append(etag);
 
   attrs[RGW_ATTR_ETAG] = etag_bl;
+  checksum.final();
+  checksum.add_checksum_attr(attrs, parts.size());
 
   if (compressed) {
     // write compression attribute to full object
