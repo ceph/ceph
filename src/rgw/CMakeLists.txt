@@ -100,7 +100,6 @@ set(librgw_common_srcs
   rgw_sync_policy.cc
   rgw_notify_event_type.cc
   rgw_trim_tools.cc
-  rgw_remote.cc
   rgw_period_history.cc
   rgw_period_puller.cc
   rgw_coroutine.cc
@@ -180,6 +179,7 @@ set(librgw_common_srcs
   driver/rados/rgw_pubsub_push.cc
   driver/rados/rgw_putobj_processor.cc
   driver/rados/rgw_rados.cc
+  driver/rados/rgw_remote.cc
   driver/rados/rgw_reshard.cc
   driver/rados/rgw_rest_bucket.cc
   driver/rados/rgw_rest_log.cc

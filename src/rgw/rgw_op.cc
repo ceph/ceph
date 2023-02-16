@@ -637,7 +637,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     ret = -EACCES;
   }
 
-  bool success = driver->ctl()->remote->get_redirect_zone_endpoint(&s->redirect_zone_endpoint);
+  bool success = driver->get_zone()->get_redirect_endpoint(&s->redirect_zone_endpoint);
   if (success) {
     ldpp_dout(dpp, 20) << "redirect_zone_endpoint=" << s->redirect_zone_endpoint << dendl;
   }

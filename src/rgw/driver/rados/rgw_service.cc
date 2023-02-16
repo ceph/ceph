@@ -512,14 +512,14 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver, const DoutPrefixPr
                                                                                    { SIProviderRef(meta_full_sip),
                                                                                      SIProviderRef(meta_inc_sip) } )));
 
-  auto data_full_sip = new SIProvider_DataFull(cct, meta.mgr, bucket);
+  auto data_full_sip = new SIProvider_DataFull(cct, meta.mgr, driver);
   r = data_full_sip->init(dpp);
   if (r < 0) {
     lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;
     return r;
   }
 
-  auto data_inc_sip = new SIProvider_DataInc(cct, svc->datalog_rados, bucket);
+  auto data_inc_sip = new SIProvider_DataInc(cct, svc->datalog_rados, driver);
   r = data_inc_sip->init(dpp);
   if (r < 0) {
     lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;

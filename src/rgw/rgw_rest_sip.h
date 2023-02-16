@@ -18,6 +18,8 @@
 #include "rgw_rest_s3.h"
 #include "rgw_sync_info.h"
 
+#include "rgw_sal.h"
+
 class RGWOp_SIP_GetInfo : public RGWRESTOp {
   std::optional<std::string> provider;
   std::optional<std::string> data_type;
@@ -219,7 +221,7 @@ public:
   RGWRESTMgr_SIP() = default;
   ~RGWRESTMgr_SIP() override = default;
 
-  RGWHandler_REST* get_handler(rgw::sal::Store *store,
+  RGWHandler_REST* get_handler(rgw::sal::Driver *store,
                                struct req_state* const,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefixs) override {

@@ -29,9 +29,9 @@ void RGWOp_SIP_GetInfo::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
   if (provider) {
-    sip = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip(this, *provider, opt_instance);
+    sip = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->si.mgr->find_sip(this, *provider, opt_instance);
   } else {
-    sip = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip_by_type(this,
+    sip = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->si.mgr->find_sip_by_type(this,
                                                  *data_type,
                                                  SIProvider::stage_type_from_str(*stage_type),
                                                  opt_instance);
@@ -58,7 +58,7 @@ void RGWOp_SIP_GetInfo::send_response() {
 void RGWOp_SIP_GetStageStatus::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
-  auto sip = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
+  auto sip = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
   if (!sip) {
     ldout(s->cct, 5) << "ERROR: sync info provider not found" << dendl;
     op_ret = -ENOENT;
@@ -116,7 +116,7 @@ void RGWOp_SIP_GetStageStatus::send_response() {
 void RGWOp_SIP_GetMarkerInfo::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
-  auto sip = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
+  auto sip = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
   if (!sip) {
     ldout(s->cct, 5) << "ERROR: sync info provider not found" << dendl;
     op_ret = -ENOENT;
@@ -138,7 +138,7 @@ void RGWOp_SIP_GetMarkerInfo::execute(optional_yield y) {
     return;
   }
 
-  auto marker_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker->get_handler(sip);
+  auto marker_handler = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sip_marker->get_handler(sip);
   if (!marker_handler) {
     ldout(s->cct, 0) << "ERROR: can't get sip marker handler" << dendl;
     op_ret = -EIO;
@@ -171,7 +171,7 @@ void RGWOp_SIP_GetMarkerInfo::send_response() {
 void RGWOp_SIP_SetMarkerInfo::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
-  auto sip = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
+  auto sip = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
   if (!sip) {
     ldout(s->cct, 5) << "ERROR: sync info provider not found" << dendl;
     op_ret = -ENOENT;
@@ -197,7 +197,7 @@ void RGWOp_SIP_SetMarkerInfo::execute(optional_yield y) {
 
   RGWSI_SIP_Marker::SetParams params;
   bool empty;
-  op_ret = get_json_input(store->ctx(), s, params, SET_PARAMS_INPUT_MAX_LEN, &empty);
+  op_ret = get_json_input(driver->ctx(), s, params, SET_PARAMS_INPUT_MAX_LEN, &empty);
   if (op_ret < 0) {
     ldout(s->cct,  5) << "ERROR: " << __func__ << "(): failed parsing input" << dendl;
     return;
@@ -209,7 +209,7 @@ void RGWOp_SIP_SetMarkerInfo::execute(optional_yield y) {
     return;
   }
 
-  auto marker_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker->get_handler(sip);
+  auto marker_handler = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sip_marker->get_handler(sip);
   if (!marker_handler) {
     ldout(s->cct, 0) << "ERROR: can't get sip marker handler" << dendl;
     op_ret = -EIO;
@@ -237,7 +237,7 @@ void RGWOp_SIP_SetMarkerInfo::send_response() {
 void RGWOp_SIP_RemoveMarkerInfo::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
-  auto sip = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
+  auto sip = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
   if (!sip) {
     ldout(s->cct, 5) << "ERROR: sync info provider not found" << dendl;
     op_ret = -ENOENT;
@@ -266,7 +266,7 @@ void RGWOp_SIP_RemoveMarkerInfo::execute(optional_yield y) {
     return;
   }
 
-  auto marker_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker->get_handler(sip);
+  auto marker_handler = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sip_marker->get_handler(sip);
   if (!marker_handler) {
     ldout(s->cct, 0) << "ERROR: can't get sip marker handler" << dendl;
     op_ret = -EIO;
@@ -292,7 +292,7 @@ void RGWOp_SIP_RemoveMarkerInfo::send_response() {
 }
 
 void RGWOp_SIP_List::execute(optional_yield y) {
-  providers = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->list_sip();
+  providers = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->si.mgr->list_sip();
 }
 
 void RGWOp_SIP_List::send_response() {
@@ -326,7 +326,7 @@ void RGWOp_SIP_Fetch::execute(optional_yield y) {
     return;
   }
 
-  sip = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
+  sip = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
   if (!sip) {
     ldout(s->cct, 20) << "ERROR: sync info provider not found" << dendl;
     return;
@@ -393,7 +393,7 @@ void RGWOp_SIP_Trim::execute(optional_yield y) {
     return;
   }
 
-  auto sip = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
+  auto sip = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
   if (!sip) {
     ldout(s->cct, 20) << "ERROR: sync info provider not found" << dendl;
     return;

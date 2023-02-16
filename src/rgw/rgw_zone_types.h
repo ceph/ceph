@@ -34,6 +34,7 @@
 #include "rgw_pool_types.h"
 #include "rgw_acl_types.h"
 #include "rgw_placement_types.h"
+#include "rgw_user_types.h"
 
 #include "common/Formatter.h"
 

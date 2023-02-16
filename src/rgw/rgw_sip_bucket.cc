@@ -235,8 +235,8 @@ SIProviderRef RGWSIPGen_BucketFull::get(const DoutPrefixProvider *dpp, std::opti
     return nullptr;
   }
 
-  RGWBucketInfo bucket_info;
-  r = ctl.bucket->read_bucket_info(bucket, &bucket_info, null_yield, dpp);
+  std::unique_ptr<rgw::sal::Bucket> b;
+  r = store->get_bucket(dpp, nullptr, bucket, &b, null_yield);
   if (r < 0) {
     ldout(cct, 20) << "failed to read bucket info (bucket=" << bucket << ") r=" << r << dendl;
     return nullptr;
@@ -244,7 +244,7 @@ SIProviderRef RGWSIPGen_BucketFull::get(const DoutPrefixProvider *dpp, std::opti
 
   SIProviderRef result;
 
-  result.reset(new SIProvider_BucketFull(cct, store, bucket_info));
+  result.reset(new SIProvider_BucketFull(cct, store, b->get_info()));
 
   return result;
 }
@@ -381,8 +381,8 @@ SIProviderRef RGWSIPGen_BucketInc::get(const DoutPrefixProvider *dpp,
     return nullptr;
   }
 
-  RGWBucketInfo bucket_info;
-  r = ctl.bucket->read_bucket_info(bucket, &bucket_info, null_yield, dpp);
+  std::unique_ptr<rgw::sal::Bucket> b;
+  r = store->get_bucket(dpp, nullptr, bucket, &b, null_yield);
   if (r < 0) {
     ldout(cct, 20) << "failed to read bucket info (bucket=" << bucket << ") r=" << r << dendl;
     return nullptr;
@@ -392,7 +392,7 @@ SIProviderRef RGWSIPGen_BucketInc::get(const DoutPrefixProvider *dpp,
 
   SIProviderRef result;
 
-  result.reset(new SIProvider_BucketInc(cct, store, bucket_info));
+  result.reset(new SIProvider_BucketInc(cct, store, b->get_info()));
 
   return result;
 }
@@ -412,12 +412,14 @@ SIProviderRef RGWSIPGen_BucketContainer::get(const DoutPrefixProvider *dpp,
     return nullptr;
   }
 
-  RGWBucketInfo bucket_info;
-  r = ctl.bucket->read_bucket_info(bucket, &bucket_info, null_yield, dpp);
+  std::unique_ptr<rgw::sal::Bucket> b;
+  r = store->get_bucket(dpp, nullptr, bucket, &b, null_yield);
   if (r < 0) {
     ldout(cct, 20) << "failed to read bucket info (bucket=" << bucket << ") r=" << r << dendl;
     return nullptr;
   }
+
+  auto& bucket_info = b->get_info();
 
   SIProviderRef result;
 

@@ -29,7 +29,7 @@ void siprovider_data_info::decode_json(JSONObj *obj)
 }
 
 static int siprovider_data_create_entry(const DoutPrefixProvider *dpp,
-                                        RGWBucketCtl *bucket_ctl,
+                                        rgw::sal::Driver *driver,
                                         const string& key,
                                         std::optional<ceph::real_time> timestamp,
                                         const std::string& m,
@@ -39,12 +39,8 @@ static int siprovider_data_create_entry(const DoutPrefixProvider *dpp,
   int shard_id;
   rgw_bucket_parse_bucket_key(dpp->get_cct(), key, &bucket, &shard_id);
 
-  RGWBucketInfo info;
-
-  int ret = bucket_ctl->read_bucket_instance_info(bucket,
-                                                  &info,
-                                                  null_yield,
-                                                  dpp);
+  std::unique_ptr<rgw::sal::Bucket> b;
+  int ret = driver->get_bucket(dpp, nullptr, bucket, &b, null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): cannot read bucket instance info for bucket=" << bucket << dendl;
     return ret;
@@ -52,7 +48,7 @@ static int siprovider_data_create_entry(const DoutPrefixProvider *dpp,
 
   siprovider_data_info data_info = { key,
                                      shard_id,
-                                     (int)info.layout.current_index.layout.normal.num_shards,
+                                     (int)b->get_info().layout.current_index.layout.normal.num_shards,
                                      timestamp };
   result->key = m;
   data_info.encode(result->data);
@@ -101,7 +97,7 @@ int SIProvider_DataFull::do_fetch(const DoutPrefixProvider *dpp,
 
       for (auto& k : entries) {
         SIProvider::Entry e;
-        ret = siprovider_data_create_entry(dpp, ctl.bucket, k.key, std::nullopt,
+        ret = siprovider_data_create_entry(dpp, driver, k.key, std::nullopt,
                                            k.marker, &e);
         if (ret < 0) {
           ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): skipping entry,siprovider_data_create_entry() returned error: key=" << k.key << " ret=" << ret << dendl;
@@ -125,16 +121,15 @@ int SIProvider_DataFull::do_fetch(const DoutPrefixProvider *dpp,
 
 SIProvider_DataInc::SIProvider_DataInc(CephContext *_cct,
 				       RGWDataChangesLog *_datalog_svc,
-                                       RGWBucketCtl *_bucket_ctl) : SIProvider_SingleStage(_cct,
+                                       rgw::sal::Driver *_driver) : SIProvider_SingleStage(_cct,
                                                                                            "data.inc",
                                                                                            std::nullopt,
                                                                                            std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >(),
                                                                                            std::nullopt, /* stage id */
                                                                                            SIProvider::StageType::INC,
                                                                                            _cct->_conf->rgw_data_log_num_shards,
-                                                                                           false) {
+                                                                                           false), driver(_driver) {
   svc.datalog = _datalog_svc;
-  ctl.bucket = _bucket_ctl;
 }
 
 int SIProvider_DataInc::init(const DoutPrefixProvider *dpp)
@@ -159,7 +154,7 @@ int SIProvider_DataInc::do_fetch(const DoutPrefixProvider *dpp,
   bool truncated;
   do {
     vector<rgw_data_change_log_entry> entries;
-    int ret = data_log->list_entries(dpp, shard_id, max, entries, m, &m, &truncated);
+    int ret = data_log->list_entries(dpp, shard_id, max, entries, m, &m, &truncated, null_yield);
     if (ret == -ENOENT) {
       truncated = false;
       break;
@@ -173,7 +168,7 @@ int SIProvider_DataInc::do_fetch(const DoutPrefixProvider *dpp,
 
     for (auto& entry : entries) {
       SIProvider::Entry e;
-      ret = siprovider_data_create_entry(dpp, ctl.bucket, entry.entry.key, entry.entry.timestamp,
+      ret = siprovider_data_create_entry(dpp, driver, entry.entry.key, entry.entry.timestamp,
                                          entry.log_id, &e);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): skipping entry,siprovider_data_create_entry() returned error: key=" << entry.entry.key << " ret=" << ret << dendl;
@@ -204,7 +199,7 @@ int SIProvider_DataInc::do_get_cur_state(const DoutPrefixProvider *dpp,
                                          bool *disabled, optional_yield y) const
 {
   RGWDataChangesLogInfo info;
-  int ret = data_log->get_info(dpp, shard_id, &info);
+  int ret = data_log->get_info(dpp, shard_id, &info, y);
   if (ret == -ENOENT) {
     ret = 0;
   }
@@ -225,7 +220,7 @@ int SIProvider_DataInc::do_trim(const DoutPrefixProvider *dpp,
   int ret;
   // trim until -ENODATA
   do {
-    ret = data_log->trim_entries(dpp, shard_id, marker);
+    ret = data_log->trim_entries(dpp, shard_id, marker, null_yield);
   } while (ret == 0);
   if (ret < 0 && ret != -ENODATA) {
     ldpp_dout(dpp, 20) << "ERROR: data_log->trim(): returned ret=" << ret << dendl;

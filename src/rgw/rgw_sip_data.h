@@ -3,6 +3,7 @@
 
 #include "include/encoding.h"
 
+#include "rgw_sal.h"
 #include "rgw_sync_info.h"
 
 namespace ceph {
@@ -54,7 +55,6 @@ struct siprovider_data_info : public SIProvider::EntryInfoBase {
 WRITE_CLASS_ENCODER(siprovider_data_info)
 
 class RGWDatadataManager;
-class RGWBucketCtl;
 
 class SIProvider_DataFull : public SIProvider_SingleStage
 {
@@ -62,9 +62,7 @@ class SIProvider_DataFull : public SIProvider_SingleStage
     RGWMetadataManager *mgr;
   } meta;
 
-  struct {
-    RGWBucketCtl *bucket;
-  } ctl;
+  rgw::sal::Driver *driver;
 
 protected:
   int do_fetch(const DoutPrefixProvider *dpp,
@@ -94,16 +92,15 @@ protected:
 public:
   SIProvider_DataFull(CephContext *_cct,
                       RGWMetadataManager *meta_mgr,
-                      RGWBucketCtl *_bucket_ctl) : SIProvider_SingleStage(_cct,
+                      rgw::sal::Driver *_driver) : SIProvider_SingleStage(_cct,
 									  "data.full",
                                                                           std::nullopt,
                                                                           std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >(),
                                                                           std::nullopt, /* stage id */
 									  SIProvider::StageType::FULL,
 									  1,
-                                                                          false) {
+                                                                          false), driver(_driver) {
     meta.mgr = meta_mgr;
-    ctl.bucket = _bucket_ctl;
   }
 
   int init(const DoutPrefixProvider *dpp) {
@@ -120,9 +117,7 @@ class SIProvider_DataInc : public SIProvider_SingleStage
     RGWDataChangesLog *datalog;
   } svc;
 
-  struct {
-    RGWBucketCtl *bucket;
-  } ctl;
+  rgw::sal::Driver *driver;
 
   RGWDataChangesLog *data_log{nullptr};
 
@@ -140,7 +135,7 @@ protected:
 public:
   SIProvider_DataInc(CephContext *_cct,
                      RGWDataChangesLog *_datalog_svc,
-                     RGWBucketCtl *_bucket_ctl);
+                     rgw::sal::Driver *driver);
 
   int init(const DoutPrefixProvider *dpp);
 };

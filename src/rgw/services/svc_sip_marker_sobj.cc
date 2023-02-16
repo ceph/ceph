@@ -2,8 +2,8 @@
 #include "svc_sys_obj.h"
 #include "svc_zone.h"
 
-#include "rgw/rgw_zone.h"
-#include "rgw/rgw_sync_info.h"
+#include "rgw_zone.h"
+#include "rgw_sync_info.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -37,16 +37,14 @@ class RGWSI_SIP_Marker_SObj_Handler : public RGWSI_SIP_Marker::Handler {
 
   class ShardObj {
     CephContext *cct;
-    RGWSysObjectCtx obj_ctx;
     rgw_raw_obj obj;
     RGWSysObj sysobj;
 
   public:
     ShardObj(RGWSI_SysObj *_sysobj_svc,
              const rgw_raw_obj& _obj) : cct(_sysobj_svc->ctx()),
-                                        obj_ctx(_sysobj_svc->init_obj_ctx()),
                                         obj(_obj),
-                                        sysobj(obj_ctx.get_obj(obj)) {}
+                                        sysobj(_sysobj_svc->get_obj(obj)) {}
 
     int read(const DoutPrefixProvider *dpp, stage_shard_info *result, RGWObjVersionTracker *ot, optional_yield y);
     int write(const DoutPrefixProvider *dpp, const stage_shard_info& info, RGWObjVersionTracker *ot, optional_yield y);

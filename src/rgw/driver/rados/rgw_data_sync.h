@@ -488,13 +488,13 @@ class RGWDataSyncStatusManager : public DoutPrefixProvider {
 public:
   RGWDataSyncStatusManager(rgw::sal::RadosStore* _driver, RGWAsyncRadosProcessor *async_rados,
                            const rgw_zone_id& _source_zone, PerfCounters* counters)
-    : driver(_dirver), store(_store), source_zone(_source_zone), error_logger(NULL),
+    : driver(_driver), source_zone(_source_zone), error_logger(NULL),
       sync_module(nullptr), counters(counters),
       source_log(this, driver, async_rados), num_shards(0) {}
   RGWDataSyncStatusManager(rgw::sal::RadosStore* _driver, RGWAsyncRadosProcessor *async_rados,
                            const rgw_zone_id& _source_zone, PerfCounters* counters,
                            const RGWSyncModuleInstanceRef& _sync_module)
-    : driver(_driver), store(_store), source_zone(_source_zone), error_logger(NULL),
+    : driver(_driver), source_zone(_source_zone), error_logger(NULL),
       sync_module(_sync_module), counters(counters),
       source_log(this, driver, async_rados), num_shards(0) {}
   ~RGWDataSyncStatusManager() {
@@ -797,6 +797,7 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
     source(RGWDataSyncEnv* env, const rgw_zone_id& zone, const RGWRemoteCtl::Conns& conns,
 	   const RGWBucketInfo& info, const rgw_bucket& dest,
 	   const RGWBucketSyncFlowManager::pipe_handler& handler,
+           const std::string& zone_name)
       : sc(env, conns, zone), info(info), dest(dest), handler(handler),
 	zone_name(zone_name) {}
   };
