@@ -7,6 +7,5 @@ requests
 Routes
 pkg-resources
 prettytable
-pytest
 pyyaml
 ceph-common
