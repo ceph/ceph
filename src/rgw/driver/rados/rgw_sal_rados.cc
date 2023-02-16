@@ -438,7 +438,7 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
     for (const auto& obj : results.objs) {
       rgw_obj_key key(obj.key);
       /* xxx dang */
-      ret = rgw_remove_object(dpp, store, this, key);
+      ret = rgw_remove_object(dpp, store, this, key, y);
       if (ret < 0 && ret != -ENOENT) {
 	return ret;
       }

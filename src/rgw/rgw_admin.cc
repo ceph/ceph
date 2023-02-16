@@ -6900,13 +6900,13 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT::POLICY) {
     if (format == "xml") {
-      int ret = RGWBucketAdminOp::dump_s3_policy(driver, bucket_op, cout, dpp());
+      int ret = RGWBucketAdminOp::dump_s3_policy(driver, bucket_op, cout, dpp(), null_yield);
       if (ret < 0) {
         cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
     } else {
-      int ret = RGWBucketAdminOp::get_policy(driver, bucket_op, stream_flusher, dpp());
+      int ret = RGWBucketAdminOp::get_policy(driver, bucket_op, stream_flusher, dpp(), null_yield);
       if (ret < 0) {
         cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -7096,7 +7096,7 @@ int main(int argc, const char **argv)
     bucket_op.set_bucket_id(bucket_id);
     bucket_op.set_new_bucket_name(new_bucket_name);
     string err;
-    int r = RGWBucketAdminOp::link(driver, bucket_op, dpp(), &err);
+    int r = RGWBucketAdminOp::link(driver, bucket_op, dpp(), null_yield, &err);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
@@ -7104,7 +7104,7 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT::BUCKET_UNLINK) {
-    int r = RGWBucketAdminOp::unlink(driver, bucket_op, dpp());
+    int r = RGWBucketAdminOp::unlink(driver, bucket_op, dpp(), null_yield);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << std::endl;
       return -r;
@@ -7179,7 +7179,7 @@ int main(int argc, const char **argv)
     bucket_op.set_new_bucket_name(new_bucket_name);
     string err;
 
-    int r = RGWBucketAdminOp::chown(driver, bucket_op, marker, dpp(), &err);
+    int r = RGWBucketAdminOp::chown(driver, bucket_op, marker, dpp(), null_yield, &err);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
@@ -7736,7 +7736,7 @@ next:
       return -ret;
     }
     rgw_obj_key key(object, object_version);
-    ret = rgw_remove_object(dpp(), driver, bucket.get(), key);
+    ret = rgw_remove_object(dpp(), driver, bucket.get(), key, null_yield);
 
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
@@ -7863,7 +7863,7 @@ next:
   }
 
   if (opt_cmd == OPT::OBJECTS_EXPIRE_STALE_LIST) {
-    ret = RGWBucketAdminOp::fix_obj_expiry(driver, bucket_op, stream_flusher, dpp(), true);
+    ret = RGWBucketAdminOp::fix_obj_expiry(driver, bucket_op, stream_flusher, dpp(), null_yield, true);
     if (ret < 0) {
       cerr << "ERROR: listing returned " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7871,7 +7871,7 @@ next:
   }
 
   if (opt_cmd == OPT::OBJECTS_EXPIRE_STALE_RM) {
-    ret = RGWBucketAdminOp::fix_obj_expiry(driver, bucket_op, stream_flusher, dpp(), false);
+    ret = RGWBucketAdminOp::fix_obj_expiry(driver, bucket_op, stream_flusher, dpp(), null_yield, false);
     if (ret < 0) {
       cerr << "ERROR: removing returned " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -9211,7 +9211,7 @@ next:
     }
     bucket_op.set_tenant(tenant);
     string err_msg;
-    ret = RGWBucketAdminOp::sync_bucket(driver, bucket_op, dpp(), &err_msg);
+    ret = RGWBucketAdminOp::sync_bucket(driver, bucket_op, dpp(), null_yield, &err_msg);
     if (ret < 0) {
       cerr << err_msg << std::endl;
       return -ret;
@@ -10397,7 +10397,7 @@ next:
      return EINVAL;
    }
 
-   ret = RGWBucketAdminOp::list_stale_instances(driver, bucket_op, stream_flusher, dpp());
+   ret = RGWBucketAdminOp::list_stale_instances(driver, bucket_op, stream_flusher, dpp(), null_yield);
    if (ret < 0) {
      cerr << "ERROR: listing stale instances" << cpp_strerror(-ret) << std::endl;
    }
@@ -10409,7 +10409,7 @@ next:
      return EINVAL;
    }
 
-   ret = RGWBucketAdminOp::clear_stale_instances(driver, bucket_op, stream_flusher, dpp());
+   ret = RGWBucketAdminOp::clear_stale_instances(driver, bucket_op, stream_flusher, dpp(), null_yield);
    if (ret < 0) {
      cerr << "ERROR: deleting stale instances" << cpp_strerror(-ret) << std::endl;
    }

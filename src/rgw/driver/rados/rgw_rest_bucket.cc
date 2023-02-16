@@ -79,7 +79,7 @@ void RGWOp_Get_Policy::execute(optional_yield y)
   op_state.set_bucket_name(bucket);
   op_state.set_object(object);
 
-  op_ret = RGWBucketAdminOp::get_policy(driver, op_state, flusher, this);
+  op_ret = RGWBucketAdminOp::get_policy(driver, op_state, flusher, this, y);
 }
 
 class RGWOp_Check_Bucket_Index : public RGWRESTOp {
@@ -156,7 +156,7 @@ void RGWOp_Bucket_Link::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWBucketAdminOp::link(driver, op_state, s);
+  op_ret = RGWBucketAdminOp::link(driver, op_state, s, y);
 }
 
 class RGWOp_Bucket_Unlink : public RGWRESTOp {
@@ -194,7 +194,7 @@ void RGWOp_Bucket_Unlink::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWBucketAdminOp::unlink(driver, op_state, s);
+  op_ret = RGWBucketAdminOp::unlink(driver, op_state, s, y);
 }
 
 class RGWOp_Bucket_Remove : public RGWRESTOp {
@@ -310,7 +310,7 @@ void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
   op_state.set_bucket_name(bucket_name);
   op_state.set_quota(quota);
 
-  op_ret = RGWBucketAdminOp::set_quota(driver, op_state, s);
+  op_ret = RGWBucketAdminOp::set_quota(driver, op_state, s, y);
 }
 
 class RGWOp_Sync_Bucket : public RGWRESTOp {
@@ -342,7 +342,7 @@ void RGWOp_Sync_Bucket::execute(optional_yield y)
   op_state.set_tenant(tenant);
   op_state.set_sync_bucket(sync_bucket);
 
-  op_ret = RGWBucketAdminOp::sync_bucket(driver, op_state, s);
+  op_ret = RGWBucketAdminOp::sync_bucket(driver, op_state, s, y);
 }
 
 class RGWOp_Object_Remove: public RGWRESTOp {
@@ -372,7 +372,7 @@ void RGWOp_Object_Remove::execute(optional_yield y)
   op_state.set_bucket_name(bucket);
   op_state.set_object(object);
 
-  op_ret = RGWBucketAdminOp::remove_object(driver, op_state, s);
+  op_ret = RGWBucketAdminOp::remove_object(driver, op_state, s, y);
 }
 
 
