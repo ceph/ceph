@@ -1004,7 +1004,7 @@ static int get_sse_s3_bucket_key(req_state *s,
       if (res != -ECANCELED) {
         break;
       }
-      res = s->bucket->try_refresh_info(s, nullptr);
+      res = s->bucket->try_refresh_info(s, nullptr, null_yield);
       if (res != 0) {
         break;
       }

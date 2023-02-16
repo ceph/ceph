@@ -175,7 +175,7 @@ class RadosStore : public StoreDriver {
 				const std::map<std::string, std::string>& meta) override;
     virtual void get_quota(RGWQuota& quota) override;
     virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) override;
-    virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled) override;
+    virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled, optional_yield y) override;
     virtual int get_sync_policy_handler(const DoutPrefixProvider* dpp,
 					std::optional<rgw_zone_id> zone,
 					std::optional<rgw_bucket> bucket,
@@ -452,7 +452,7 @@ class RadosObject : public StoreObject {
 
     /* Swift versioning */
     virtual int swift_versioning_restore(bool& restored,
-					 const DoutPrefixProvider* dpp) override;
+					 const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
 				      optional_yield y) override;
 
@@ -567,7 +567,7 @@ class RadosBucket : public StoreBucket {
                                  const bucket_index_layout_generation& idx_layout,
                                  int shard_id, RGWGetBucketStats_CB* ctx) override;
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
-    virtual int update_container_stats(const DoutPrefixProvider* dpp) override;
+    virtual int update_container_stats(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y) override;
     virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime) override;
@@ -575,7 +575,7 @@ class RadosBucket : public StoreBucket {
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
     virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y) override;
-    virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime) override;
+    virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) override;
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool* is_truncated, RGWUsageIter& usage_iter,
 			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
@@ -584,7 +584,7 @@ class RadosBucket : public StoreBucket {
     virtual int check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
     virtual int rebuild_index(const DoutPrefixProvider *dpp) override;
     virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) override;
-    virtual int purge_instance(const DoutPrefixProvider* dpp) override;
+    virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual std::unique_ptr<Bucket> clone() override {
       return std::make_unique<RadosBucket>(*this);
     }

@@ -355,7 +355,7 @@ class Driver {
     /** Get global rate limit configuration*/
     virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) = 0;
     /** Enable or disable a set of bucket.  e.g. if a User is suspended */
-    virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled) = 0;
+    virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled, optional_yield y) = 0;
     /** Get a new request ID */
     virtual uint64_t get_new_req_id() = 0;
     /** Get a handler for bucket sync policy. */
@@ -677,7 +677,7 @@ class Bucket {
     /** Sync this bucket's stats to the owning user's stats in the backing store */
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     /** Refresh the metadata stats (size, count, and so on) from the backing store */
-    virtual int update_container_stats(const DoutPrefixProvider* dpp) = 0;
+    virtual int update_container_stats(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Check if this bucket needs resharding, and schedule it if it does */
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Change the owner of this bucket in the backing store.  Current owner must be set.  Does not
@@ -700,7 +700,7 @@ class Bucket {
     virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y) = 0;
     /** Try to refresh the cached bucket info from the backing store.  Used in
      * read-modify-update loop. */
-    virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime) = 0;
+    virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) = 0;
     /** Read usage information about this bucket from the backing store */
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool* is_truncated, RGWUsageIter& usage_iter,
@@ -716,7 +716,7 @@ class Bucket {
     /** Set a timeout on the check_index() call.  May be removed from API */
     virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) = 0;
     /** Remove this specific bucket instance from the backing store.  May be removed from API */
-    virtual int purge_instance(const DoutPrefixProvider* dpp) = 0;
+    virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Set the cached object count of this bucket */
     virtual void set_count(uint64_t _count) = 0;
     /** Set the cached size of this bucket */
@@ -1078,7 +1078,7 @@ class Object {
 
     /** Restore the previous swift version of this object */
     virtual int swift_versioning_restore(bool& restored,   /* out */
-					 const DoutPrefixProvider* dpp) = 0;
+					 const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Copy the current version of a swift object to the configured destination bucket*/
     virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
 				      optional_yield y) = 0;

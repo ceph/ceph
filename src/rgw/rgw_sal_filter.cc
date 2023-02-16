@@ -336,9 +336,9 @@ void FilterDriver::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit,
 }
 
 int FilterDriver::set_buckets_enabled(const DoutPrefixProvider* dpp,
-				     std::vector<rgw_bucket>& buckets, bool enabled)
+				     std::vector<rgw_bucket>& buckets, bool enabled, optional_yield y)
 {
-    return next->set_buckets_enabled(dpp, buckets, enabled);
+    return next->set_buckets_enabled(dpp, buckets, enabled, y);
 }
 
 uint64_t FilterDriver::get_new_req_id()
@@ -711,9 +711,9 @@ int FilterBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield 
   return next->sync_user_stats(dpp, y);
 }
 
-int FilterBucket::update_container_stats(const DoutPrefixProvider* dpp)
+int FilterBucket::update_container_stats(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return next->update_container_stats(dpp);
+  return next->update_container_stats(dpp, y);
 }
 
 int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y)
@@ -756,9 +756,9 @@ int FilterBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 }
 
 int FilterBucket::try_refresh_info(const DoutPrefixProvider* dpp,
-				   ceph::real_time* pmtime)
+				   ceph::real_time* pmtime, optional_yield y)
 {
-  return next->try_refresh_info(dpp, pmtime);
+  return next->try_refresh_info(dpp, pmtime, y);
 }
 
 int FilterBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
@@ -799,9 +799,9 @@ int FilterBucket::set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeou
   return next->set_tag_timeout(dpp, timeout);
 }
 
-int FilterBucket::purge_instance(const DoutPrefixProvider* dpp)
+int FilterBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return next->purge_instance(dpp);
+  return next->purge_instance(dpp, y);
 }
 
 std::unique_ptr<MultipartUpload> FilterBucket::get_multipart_upload(
@@ -984,9 +984,9 @@ void FilterObject::set_bucket(Bucket* b)
 };
 
 int FilterObject::swift_versioning_restore(bool& restored,
-					   const DoutPrefixProvider* dpp)
+					   const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return next->swift_versioning_restore(restored, dpp);
+  return next->swift_versioning_restore(restored, dpp, y);
 }
 
 int FilterObject::swift_versioning_copy(const DoutPrefixProvider* dpp,

@@ -311,7 +311,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::update_container_stats(const DoutPrefixProvider *dpp)
+  int DBBucket::update_container_stats(const DoutPrefixProvider *dpp, optional_yield y)
   {
     return 0;
   }
@@ -373,7 +373,7 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBBucket::try_refresh_info(const DoutPrefixProvider *dpp, ceph::real_time *pmtime)
+  int DBBucket::try_refresh_info(const DoutPrefixProvider *dpp, ceph::real_time *pmtime, optional_yield y)
   {
     int ret = 0;
 
@@ -424,7 +424,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::purge_instance(const DoutPrefixProvider *dpp)
+  int DBBucket::purge_instance(const DoutPrefixProvider *dpp, optional_yield y)
   {
     /* XXX: CHECK: for dbstore only single instance supported.
      * Remove all the objects for that instance? Anything extra needed?
@@ -875,7 +875,7 @@ namespace rgw::sal {
   }
 
   int DBObject::swift_versioning_restore(bool& restored,
-      const DoutPrefixProvider* dpp)
+      const DoutPrefixProvider* dpp, optional_yield y)
   {
     return 0;
   }
@@ -1844,7 +1844,7 @@ namespace rgw::sal {
     return;
   }
 
-  int DBStore::set_buckets_enabled(const DoutPrefixProvider *dpp, vector<rgw_bucket>& buckets, bool enabled)
+  int DBStore::set_buckets_enabled(const DoutPrefixProvider *dpp, vector<rgw_bucket>& buckets, bool enabled, optional_yield y)
   {
     int ret = 0;
 
