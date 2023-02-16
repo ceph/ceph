@@ -90,11 +90,12 @@ class XFSTestsDev(CephFSTestCase):
         distro = distro.lower()
         major_ver_num = int(version.split('.')[0]) # only keep major release
                                                    # number
+        log.info(f'distro and version detected is "{distro}" and "{version}".')
 
         # we keep fedora here so that right deps are installed when this test
         # is run locally by a dev.
         if distro in ('redhatenterpriseserver', 'redhatenterprise', 'fedora',
-                      'centos'):
+                      'centos', 'centosstream', 'rhel'):
             deps = """acl attr automake bc dbench dump e2fsprogs fio \
             gawk gcc indent libtool lvm2 make psmisc quota sed \
             xfsdump xfsprogs \
