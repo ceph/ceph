@@ -3342,13 +3342,15 @@ void BlueStore::ExtentMap::fault_range(
 {
   dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
+  if (shards.size() == 0) {
+    // no sharding yet; everyting is loaded
+    return;
+  }
   auto start = seek_shard(offset);
   auto last = seek_shard(offset + length);
-
-  if (start < 0)
-    return;
-
   ceph_assert(last >= start);
+  ceph_assert(start >= 0);
+
   string key;
   while (start <= last) {
     ceph_assert((size_t)start < shards.size());
