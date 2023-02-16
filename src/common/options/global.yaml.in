@@ -4005,6 +4005,18 @@ options:
   desc: Allocation unit size for primary/shared device
   default: 64_K
   with_legacy: true
+- name: bluefs_failed_shared_alloc_cooldown
+  type: float
+  level: advanced
+  desc: duration(in seconds) untill the next attempt to use
+   'bluefs_shared_alloc_size' after facing ENOSPC failure.
+  long_desc: Cooldown period(in seconds) when BlueFS uses shared/slow device
+   allocation size instead of "bluefs_shared_alloc_size' one after facing
+   recoverable (via fallback to smaller chunk size) ENOSPC failure. Intended
+   primarily to avoid repetitive unsuccessful allocations which might be
+   expensive.
+  default: 600
+  with_legacy: true
 - name: bluefs_max_prefetch
   type: size
   level: advanced
@@ -4161,7 +4173,7 @@ options:
 - name: bluestore_bluefs_alloc_failure_dump_interval
   type: float
   level: advanced
-  desc: How frequently (in seconds) to dump allocator onBlueFS space allocation failure
+  desc: How frequently (in seconds) to dump allocator on BlueFS space allocation failure
   default: 0
   with_legacy: true
 - name: bluestore_spdk_mem
