@@ -49,7 +49,11 @@ FlightFrontend::FlightFrontend(RGWProcessEnv& _env,
 
 FlightFrontend::~FlightFrontend() {
   delete env.flight_server;
+  env.flight_server = nullptr;
+
   delete env.flight_store;
+  env.flight_store = nullptr;
+
   INFO << "flight server shut down" << dendl;
 }
 
