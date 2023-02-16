@@ -540,16 +540,10 @@ int S3FilterWriter::process(bufferlist&& data, uint64_t offset)
     delete obj_wr;
     return ret;
   }
- 
-  //if (objectData.length() == 0)
-  //	return 0;
 
   ldpp_dout(this->save_dpp, 20) << __func__ << " : "<< __LINE__  << " AMIN data is: " << send_data << dendl;
   
-  //ret = this->obj_wr->get_out_cb()->handle_data(objectData, offset, objectData.length());
-  //ret = this->obj_wr->get_out_cb()->handle_data(objectData, 0, objectData.length());
   ret = this->obj_wr->get_out_cb()->handle_data(send_data, 0, send_data.length());
-  //FIXME: implement iterate. use RGWEADOS::Object::Read::read_op in rgw_rados.cc
   ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   }
   return 0;
@@ -566,13 +560,6 @@ int S3FilterWriter::complete(size_t accounted_size, const std::string& etag,
                        optional_yield y)
 {
   int ret = 0;
-/*
-  ret = RGWHTTP::send(this->obj_wr);
-  if (ret < 0) {
-    delete obj_wr;
-    return ret;
-  }
-*/
   this->obj_wr->set_send_length(accounted_size);
   ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   ret = this->obj_wr->complete_request(null_yield);
@@ -619,70 +606,6 @@ int S3FilterObject::S3FilterReadOp::get_attr(const DoutPrefixProvider* dpp, cons
 
   return 0;
 
-  /*
- 
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  User* u = source->get_bucket()->get_owner();
- 
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  map<std::string, RGWAccessKey> accessKeys =  u->get_info().access_keys;
-  RGWAccessKey accesskey;
-  //RGWAccessKey& k = accessKeys[u->get_id().to_str()];
-  accesskey.id= "test5"; //FIXME
-  accesskey.key = "test5";
-  string url ="http://" + source->filter->_cct->_conf->backend_url;
-
-  HostStyle host_style = PathStyle;
-
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  Attrs object_attrs;
-  RGWGetObjectCB cb(this->source, object_attrs, &(this->received_data));
-
-
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  list<string> endpoints;
-  endpoints.push_back(url);
-  
-  RGWRESTStreamRWRequest *object_rd = new RGWRESTStreamRWRequest(source->filter->_cct, "GET", url, &cb, NULL, NULL, "", host_style);
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-
-  map<string, string> extra_headers;
-  int ret = 0;
-  ret = object_rd->send_request(dpp, accesskey, extra_headers, source->get_obj(), nullptr);
-  if (ret < 0) {
-    delete object_rd;
-    return ret;
-  }
-
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  ret = object_rd->complete_request(null_yield);
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  if (ret < 0){
-	delete object_rd;
-	return -1;
-  }
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " received data is: "<< received_data.to_str() << dendl;
-
-  const rgw_placement_rule placement_rule;
-  //placement_rule.name = "";
-  //placement_rule.storage_class = "";
-
-  S3FilterStore *ns =  source->filter;
-
-  unique_ptr<S3InternalFilterWriter> nw = ns->get_s3_atomic_writer(dpp, y, source, u->get_id(), &placement_rule, 0, std::to_string(ns->get_new_req_id()));
-
-  ceph::real_time mtime = real_clock::now();
-  size_t data_size = received_data.length();
-
-  nw->prepare(y);
-  nw->process(move(received_data), 0); //FIXME: AMIN : In case of data bigger than 4M
-  nw->complete(data_size, "", 
-                &mtime, mtime, source->get_attrs(), real_time(),
-                "", "", nullptr, nullptr, nullptr, y);
-
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " writer store is: "<< nw->get_filter()->get_name() << dendl;
-  return 0;
-  */
 }
 
 
@@ -738,25 +661,23 @@ int S3FilterObject::S3FilterReadOp::prepare(optional_yield y, const DoutPrefixPr
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " received data is: "<< received_data.to_str() << dendl;
   source->set_obj_size(received_data.length());
 
+  /*
   const rgw_placement_rule placement_rule;
-  //placement_rule.name = "";
-  //placement_rule.storage_class = "";
 
+  size_t data_size = received_data.length();
   S3FilterStore *ns =  source->filter;
 
   unique_ptr<S3InternalFilterWriter> nw = ns->get_s3_atomic_writer(dpp, y, source, u->get_id(), &placement_rule, 0, std::to_string(ns->get_new_req_id()));
 
   ceph::real_time mtime = real_clock::now();
-  size_t data_size = received_data.length();
 
-  /*
   nw->prepare(y);
   nw->process(move(received_data), 0); //FIXME: AMIN : In case of data bigger than 4M
   nw->complete(data_size, "", 
                 &mtime, mtime, source->get_attrs(), real_time(),
                 "", "", nullptr, nullptr, nullptr, y);
-  */
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " writer store is: "<< nw->get_filter()->get_name() << dendl;
+  */
 
   return 0;
 }
@@ -770,7 +691,7 @@ int S3FilterObject::S3FilterReadOp::iterate(const DoutPrefixProvider* dpp, int64
   if (ret < 0)
     return ret;
   */
-  cb->handle_data(received_data, ofs, end);
+  cb->handle_data(received_data, ofs, end - ofs + 1);
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   /* Copy params out of next */
   //params = next->params;
