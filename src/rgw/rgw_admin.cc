@@ -1651,7 +1651,7 @@ int check_obj_locator_underscore(rgw::sal::Object* obj, bool fix, bool remove_ba
   string status = (needs_fixing ? "needs_fixing" : "ok");
 
   if ((needs_fixing || remove_bad) && fix) {
-    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->fix_head_obj_locator(dpp(), obj->get_bucket()->get_info(), needs_fixing, remove_bad, obj->get_key());
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->fix_head_obj_locator(dpp(), obj->get_bucket()->get_info(), needs_fixing, remove_bad, obj->get_key(), null_yield);
     if (ret < 0) {
       cerr << "ERROR: fix_head_object_locator() returned ret=" << ret << std::endl;
       goto done;
@@ -4244,6 +4244,7 @@ int main(int argc, const char **argv)
 					false,
 					false,
                                         false,
+                                        null_yield,
 					need_cache && g_conf()->rgw_cache_enabled,
 					need_gc);
     }
@@ -7433,7 +7434,7 @@ next:
 	return -ret;
       }
     }
-    ret = RGWUsage::trim(dpp(), driver, user.get(), bucket.get(), start_epoch, end_epoch);
+    ret = RGWUsage::trim(dpp(), driver, user.get(), bucket.get(), start_epoch, end_epoch, null_yield);
     if (ret < 0) {
       cerr << "ERROR: read_usage() returned ret=" << ret << std::endl;
       return 1;
@@ -7447,7 +7448,7 @@ next:
       return 1;
     }
 
-    ret = RGWUsage::clear(dpp(), driver);
+    ret = RGWUsage::clear(dpp(), driver, null_yield);
     if (ret < 0) {
       return ret;
     }
@@ -7473,7 +7474,7 @@ next:
     }
     RGWOLHInfo olh;
     rgw_obj obj(bucket->get_key(), object);
-    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_olh(dpp(), bucket->get_info(), obj, &olh);
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_olh(dpp(), bucket->get_info(), obj, &olh, null_yield);
     if (ret < 0) {
       cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7500,7 +7501,7 @@ next:
       return -ret;
     }
 
-    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bucket_index_read_olh_log(dpp(), bucket->get_info(), *state, obj->get_obj(), 0, &log, &is_truncated);
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bucket_index_read_olh_log(dpp(), bucket->get_info(), *state, obj->get_obj(), 0, &log, &is_truncated, null_yield);
     if (ret < 0) {
       cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7855,7 +7856,7 @@ next:
   } // OPT::OBJECT_REINDEX
 
   if (opt_cmd == OPT::OBJECTS_EXPIRE) {
-    if (!static_cast<rgw::sal::RadosStore*>(driver)->getRados()->process_expire_objects(dpp())) {
+    if (!static_cast<rgw::sal::RadosStore*>(driver)->getRados()->process_expire_objects(dpp(), null_yield)) {
       cerr << "ERROR: process_expire_objects() processing returned error." << std::endl;
       return 1;
     }
@@ -8040,7 +8041,7 @@ next:
     } else if (inject_abort_at) {
       fault.inject(*inject_abort_at, InjectAbort{});
     }
-    ret = br.execute(num_shards, fault, max_entries, dpp(),
+    ret = br.execute(num_shards, fault, max_entries, dpp(), null_yield,
                      verbose, &cout, formatter.get());
     return -ret;
   }
@@ -8069,7 +8070,7 @@ next:
     entry.old_num_shards = num_source_shards;
     entry.new_num_shards = num_shards;
 
-    return reshard.add(dpp(), entry);
+    return reshard.add(dpp(), entry, null_yield);
   }
 
   if (opt_cmd == OPT::RESHARD_LIST) {
@@ -8145,7 +8146,7 @@ next:
   if (opt_cmd == OPT::RESHARD_PROCESS) {
     RGWReshard reshard(static_cast<rgw::sal::RadosStore*>(driver), true, &cout);
 
-    int ret = reshard.process_all_logshards(dpp());
+    int ret = reshard.process_all_logshards(dpp(), null_yield);
     if (ret < 0) {
       cerr << "ERROR: failed to process reshard logs, error=" << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8202,7 +8203,7 @@ next:
     entry.tenant = tenant;
     entry.bucket_name = bucket_name;
 
-    ret = reshard.remove(dpp(), entry);
+    ret = reshard.remove(dpp(), entry, null_yield);
     if (ret == -ENOENT) {
       if (!resharding_underway) {
 	cerr << "Error, bucket \"" << bucket_name <<

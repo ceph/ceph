@@ -114,7 +114,7 @@ protected:
       virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
           bool* is_truncated, RGWUsageIter& usage_iter,
           std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
-      virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
+      virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override;
 
       /* Placeholders */
       virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y) override;
@@ -201,7 +201,7 @@ protected:
       virtual int read_stats_async(const DoutPrefixProvider *dpp, const bucket_index_layout_generation& idx_layout, int shard_id, RGWGetBucketStats_CB* ctx) override;
       virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual int update_container_stats(const DoutPrefixProvider *dpp) override;
-      virtual int check_bucket_shards(const DoutPrefixProvider *dpp) override;
+      virtual int check_bucket_shards(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual int chown(const DoutPrefixProvider *dpp, User& new_user, optional_yield y) override;
       virtual int put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time mtime) override;
       virtual bool is_owner(User* user) override;
@@ -212,7 +212,7 @@ protected:
       virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
           bool *is_truncated, RGWUsageIter& usage_iter,
           std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
-      virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
+      virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override;
       virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) override;
       virtual int check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
       virtual int rebuild_index(const DoutPrefixProvider *dpp) override;
@@ -233,7 +233,7 @@ protected:
 				std::map<std::string, bool> *common_prefixes,
 				bool *is_truncated) override;
       virtual int abort_multiparts(const DoutPrefixProvider* dpp,
-				   CephContext* cct) override;
+				   CephContext* cct, optional_yield y) override;
 
       friend class DBStore;
   };
@@ -502,7 +502,7 @@ protected:
 			 int num_parts, int marker,
 			 int* next_marker, bool* truncated,
 			 bool assume_unsorted = false) override;
-    virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct) override;
+    virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y) override;
     virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
 		       std::map<int, std::string>& part_etags,
@@ -817,7 +817,7 @@ public:
 
       virtual RGWLC* get_rgwlc(void) override;
       virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
-      virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;
+      virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y) override;
       virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) override;
       virtual int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
           const std::map<std::string, std::string>& meta) override;
@@ -836,12 +836,12 @@ public:
 					   boost::container::flat_map<
 					     int,
 					   boost::container::flat_set<rgw_data_notify_entry>>& shard_ids) override { return; }
-      virtual int clear_usage(const DoutPrefixProvider *dpp) override { return 0; }
+      virtual int clear_usage(const DoutPrefixProvider *dpp, optional_yield y) override { return 0; }
       virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
           uint32_t max_entries, bool *is_truncated,
           RGWUsageIter& usage_iter,
           std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
-      virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
+      virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override;
       virtual int get_config_key_val(std::string name, bufferlist* bl) override;
       virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) override;
       virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::list<std::string>& keys, bool* truncated) override;

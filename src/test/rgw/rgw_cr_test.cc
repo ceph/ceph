@@ -10,6 +10,8 @@
 
 #include "include/rados/librados.hpp"
 
+#include "rgw_tools.h"
+
 #include "common/common_init.h"
 #include "common/config.h"
 #include "common/ceph_argparse.h"
@@ -326,7 +328,7 @@ int main(int argc, const char **argv)
 			      false,
 			      false,
 			      false,
-			      false,
+			      false, null_yield,
 			      true,
 			      false));
   if (!store) {
