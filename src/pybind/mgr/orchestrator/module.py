@@ -1502,7 +1502,7 @@ Usage:
 
     @_cli_write_command('orch upgrade status')
     def _upgrade_status(self) -> HandleCommandResult:
-        """Check service versions vs available and target containers"""
+        """Check the status of any potential ongoing upgrade operation"""
         completion = self.upgrade_status()
         status = raise_if_exception(completion)
         r = {
