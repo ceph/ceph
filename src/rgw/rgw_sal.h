@@ -843,6 +843,12 @@ class Object {
         const char* if_nomatch{nullptr};
         ceph::real_time* lastmod{nullptr};
         rgw_obj* target_obj{nullptr}; // XXX dang remove?
+
+        /// If non-null, read data/attributes from the given multipart part.
+        int* part_num{nullptr};
+        /// If part_num is specified, the total number of multipart parts is
+        /// written to this output parameter.
+        int* parts_count{nullptr};
       } params;
 
       virtual ~ReadOp() = default;
