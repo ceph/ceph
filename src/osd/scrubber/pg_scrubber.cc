@@ -1836,6 +1836,13 @@ void PgScrubber::unreserve_replicas()
   m_reservations.reset();
 }
 
+void PgScrubber::on_replica_reservation_timeout()
+{
+  if (m_reservations) {
+    m_reservations->handle_no_reply_timeout();
+  }
+}
+
 void PgScrubber::set_reserving_now()
 {
   m_osds->get_scrub_services().set_reserving_now();
@@ -2645,10 +2652,6 @@ ReplicaReservations::ReplicaReservations(
     send_all_done();
 
   } else {
-    // start a timer to handle the case of no replies
-    m_no_reply = make_unique<ReplicaReservations::no_reply_t>(
-      m_osds, m_conf, *this, m_log_msg_prefix);
-
     // send the reservation requests
     for (auto p : m_acting_set) {
       if (p == whoami)
@@ -2666,14 +2669,12 @@ ReplicaReservations::ReplicaReservations(
 void ReplicaReservations::send_all_done()
 {
   // stop any pending timeout timer
-  m_no_reply.reset();
   m_osds->queue_for_scrub_granted(m_pg, scrub_prio_t::low_priority);
 }
 
 void ReplicaReservations::send_reject()
 {
   // stop any pending timeout timer
-  m_no_reply.reset();
   m_scrub_job->resources_failure = true;
   m_osds->queue_for_scrub_denied(m_pg, scrub_prio_t::low_priority);
 }
@@ -2682,7 +2683,6 @@ void ReplicaReservations::discard_all()
 {
   dout(10) << __func__ << ": " << m_reserved_peers << dendl;
 
-  m_no_reply.reset();
   m_had_rejections = true;  // preventing late-coming responses from triggering
 			    // events
   m_reserved_peers.clear();
@@ -2711,9 +2711,6 @@ ReplicaReservations::~ReplicaReservations()
 {
   m_had_rejections = true;  // preventing late-coming responses from triggering
 			    // events
-
-  // stop any pending timeout timer
-  m_no_reply.reset();
 
   // send un-reserve messages to all reserved replicas. We do not wait for
   // answer (there wouldn't be one). Other incoming messages will be discarded
@@ -2834,6 +2831,7 @@ void ReplicaReservations::handle_no_reply_timeout()
 	       "{}: timeout! no reply from {}", __func__, m_waited_for_peers)
 	  << dendl;
 
+  // treat reply timeout as if a REJECT was received
   m_had_rejections = true;  // preventing any additional notifications
   send_reject();
 }
@@ -2843,39 +2841,6 @@ std::ostream& ReplicaReservations::gen_prefix(std::ostream& out) const
   return out << m_log_msg_prefix;
 }
 
-ReplicaReservations::no_reply_t::no_reply_t(
-  OSDService* osds,
-  const ConfigProxy& conf,
-  ReplicaReservations& parent,
-  std::string_view log_prfx)
-    : m_osds{osds}
-    , m_conf{conf}
-    , m_parent{parent}
-    , m_log_prfx{log_prfx}
-{
-  using namespace std::chrono;
-  auto now_is = clock::now();
-  auto timeout =
-    conf.get_val<std::chrono::milliseconds>("osd_scrub_reservation_timeout");
-
-  m_abort_callback = new LambdaContext([this, now_is]([[maybe_unused]] int r) {
-    // behave as if a REJECT was received
-    m_osds->clog->warn() << fmt::format(
-      "{} timeout on replica reservations (since {})", m_log_prfx, now_is);
-    m_parent.handle_no_reply_timeout();
-  });
-
-  std::lock_guard l(m_osds->sleep_lock);
-  m_osds->sleep_timer.add_event_after(timeout, m_abort_callback);
-}
-
-ReplicaReservations::no_reply_t::~no_reply_t()
-{
-  std::lock_guard l(m_osds->sleep_lock);
-  if (m_abort_callback) {
-    m_osds->sleep_timer.cancel_event(m_abort_callback);
-  }
-}
 
 // ///////////////////// LocalReservation //////////////////////////////////
 

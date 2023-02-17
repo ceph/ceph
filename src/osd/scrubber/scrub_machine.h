@@ -65,6 +65,9 @@ MEV(RemotesReserved)
 /// a reservation request has failed
 MEV(ReservationFailure)
 
+/// reservations have timed out
+MEV(ReservationTimeout)
+
 /// initiate a new scrubbing session (relevant if we are a Primary)
 MEV(StartScrub)
 
@@ -310,15 +313,21 @@ struct NotActive : sc::state<NotActive, ScrubMachine>, NamedSimply {
 
 struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine>,
 			   NamedSimply {
-
   explicit ReservingReplicas(my_context ctx);
   ~ReservingReplicas();
   using reactions = mpl::list<sc::custom_reaction<FullReset>,
 			      // all replicas granted our resources request
 			      sc::transition<RemotesReserved, ActiveScrubbing>,
+			      sc::custom_reaction<ReservationTimeout>,
 			      sc::custom_reaction<ReservationFailure>>;
 
+  ceph::coarse_real_clock::time_point entered_at =
+    ceph::coarse_real_clock::now();
+  ScrubMachine::timer_event_token_t m_timeout_token;
+
   sc::result react(const FullReset&);
+
+  sc::result react(const ReservationTimeout&);
 
   /// at least one replica denied us the scrub resources we've requested
   sc::result react(const ReservationFailure&);

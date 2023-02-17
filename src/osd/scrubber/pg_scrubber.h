@@ -123,22 +123,6 @@ class ReplicaReservations {
   using clock = std::chrono::system_clock;
   using tpoint_t = std::chrono::time_point<clock>;
 
-  /// a no-reply timeout handler
-  struct no_reply_t {
-    explicit no_reply_t(
-      OSDService* osds,
-      const ConfigProxy& conf,
-      ReplicaReservations& parent,
-      std::string_view log_prfx);
-
-    ~no_reply_t();
-    OSDService* m_osds;
-    const ConfigProxy& m_conf;
-    ReplicaReservations& m_parent;
-    std::string m_log_prfx;
-    Context* m_abort_callback{nullptr};
-  };
-
   PG* m_pg;
   std::set<pg_shard_t> m_acting_set;
   OSDService* m_osds;
@@ -153,9 +137,6 @@ class ReplicaReservations {
   // detecting slow peers (see 'slow-secondary' above)
   std::chrono::milliseconds m_timeout;
   std::optional<tpoint_t> m_timeout_point;
-
-  // detecting & handling a "no show" of a replica
-  std::unique_ptr<no_reply_t> m_no_reply;
 
   void release_replica(pg_shard_t peer, epoch_t epoch);
 
@@ -398,6 +379,8 @@ class PgScrubber : public ScrubPgIF,
   void discard_replica_reservations() final;
   void clear_scrub_reservations() final;  // PG::clear... fwds to here
   void unreserve_replicas() final;
+  void on_replica_reservation_timeout() final;
+
 
   // managing scrub op registration
 
