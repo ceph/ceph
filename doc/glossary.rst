@@ -301,6 +301,10 @@
                 The block storage component of Ceph. Also called "RADOS Block
                 Device" or :term:`Ceph Block Device`.
 
+        :ref:`Realm<rgw-realms>`
+                In the context of RADOS Gateway (RGW), a realm is a globally
+                unique namespace that consists of one or more zonegroups.
+
         Releases
 
 	        Ceph Interim Release
