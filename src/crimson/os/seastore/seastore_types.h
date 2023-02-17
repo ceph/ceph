@@ -1190,7 +1190,8 @@ enum class data_category_t : uint8_t {
 std::ostream &operator<<(std::ostream &out, data_category_t c);
 
 constexpr data_category_t get_extent_category(extent_types_t type) {
-  if (type == extent_types_t::OBJECT_DATA_BLOCK) {
+  if (type == extent_types_t::OBJECT_DATA_BLOCK ||
+      type == extent_types_t::TEST_BLOCK) {
     return data_category_t::DATA;
   } else {
     return data_category_t::METADATA;

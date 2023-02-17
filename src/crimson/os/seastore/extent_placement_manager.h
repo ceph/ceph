@@ -13,6 +13,8 @@
 #include "crimson/os/seastore/random_block_manager/block_rb_manager.h"
 #include "crimson/os/seastore/randomblock_manager_group.h"
 
+class transaction_manager_test_t;
+
 namespace crimson::os::seastore {
 
 /**
@@ -870,6 +872,8 @@ private:
     bool is_running_until_halt = false;
     state_t state = state_t::STOP;
     eviction_state_t eviction_state;
+
+    friend class ::transaction_manager_test_t;
   };
 
   std::vector<ExtentOolWriterRef> writer_refs;
@@ -881,10 +885,12 @@ private:
   Device* primary_device = nullptr;
   std::size_t num_devices = 0;
 
-  rewrite_gen_t dynamic_max_rewrite_generation;
+  rewrite_gen_t dynamic_max_rewrite_generation = REWRITE_GENERATIONS;
   BackgroundProcess background_process;
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
+
+  friend class ::transaction_manager_test_t;
 };
 
 using ExtentPlacementManagerRef = std::unique_ptr<ExtentPlacementManager>;
