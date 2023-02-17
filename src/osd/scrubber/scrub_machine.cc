@@ -122,12 +122,40 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
   // replicas resources
   scrbr->set_reserving_now();
   scrbr->reserve_replicas();
+
+  auto timeout = scrbr->get_cct()->_conf.get_val<
+    std::chrono::milliseconds>("osd_scrub_reservation_timeout");
+  if (timeout.count() > 0) {
+    // Start a timer to handle case where the replicas take a long time to
+    // ack the reservation.  See ReservationTimeout handler below.
+    m_timeout_token = machine.schedule_timer_event_after<ReservationTimeout>(
+      timeout);
+  }
 }
 
 ReservingReplicas::~ReservingReplicas()
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   scrbr->clear_reserving_now();
+}
+
+sc::result ReservingReplicas::react(const ReservationTimeout&)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "ReservingReplicas::react(const ReservationTimeout&)" << dendl;
+
+  dout(10)
+    << "PgScrubber: " << scrbr->get_spgid()
+    << " timeout on reserving replicas (since " << entered_at
+    << ")" << dendl;
+  scrbr->get_clog()->warn()
+    << "osd." << scrbr->get_whoami()
+    << " PgScrubber: " << scrbr->get_spgid()
+    << " timeout on reserving replicsa (since " << entered_at
+    << ")";
+
+  scrbr->on_replica_reservation_timeout();
+  return discard_event();
 }
 
 sc::result ReservingReplicas::react(const ReservationFailure&)

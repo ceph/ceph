@@ -179,6 +179,8 @@ struct ScrubMachineListener {
 
   virtual void unreserve_replicas() = 0;
 
+  virtual void on_replica_reservation_timeout() = 0;
+
   virtual void set_scrub_begin_time() = 0;
 
   virtual void set_scrub_duration() = 0;
