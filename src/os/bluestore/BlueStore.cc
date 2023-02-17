@@ -10230,6 +10230,9 @@ void BlueStore::inject_global_statfs(const store_statfs_t& new_statfs)
   v.encode(bl);
   t->set(PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY, bl);
   db->submit_transaction_sync(t);
+  // must set these; are needed at _close_db() statfs persisting
+  per_pool_stat_collection = false;
+  vstatfs = new_statfs;
 }
 
 void BlueStore::inject_misreference(coll_t cid1, ghobject_t oid1,
