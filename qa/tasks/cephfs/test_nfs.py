@@ -646,15 +646,20 @@ class TestNFS(MgrTestCase):
         '''
         Test setting user config for non-existing nfs cluster.
         '''
-        try:
-            cluster_id = 'invalidtest'
-            self.ctx.cluster.run(args=['ceph', 'nfs', 'cluster',
-                'config', 'set', self.cluster_id, '-i', '-'], stdin='testing')
-            self.fail(f"User config set for non-existing cluster {cluster_id}")
-        except CommandFailedError as e:
-            # Command should fail for test to pass
-            if e.exitstatus != errno.ENOENT:
-                raise
+        cluster_id = 'invalidtest'
+        with contextutil.safe_while(sleep=3, tries=3) as proceed:
+            while proceed():
+                try:
+                    self.ctx.cluster.run(args=['ceph', 'nfs', 'cluster',
+                                               'config', 'set', cluster_id,
+                                               '-i', '-'], stdin='testing')
+                    self.fail(f"User config set for non-existing cluster"
+                              f"{cluster_id}")
+                except CommandFailedError as e:
+                    # Command should fail for test to pass
+                    if e.exitstatus == errno.ENOENT:
+                        break
+                    log.warning('exitstatus != ENOENT, retrying')
 
     def test_cluster_reset_user_config_with_non_existing_clusterid(self):
         '''
