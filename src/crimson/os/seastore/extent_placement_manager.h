@@ -249,72 +249,28 @@ public:
     assert(is_target_rewrite_generation(gen));
     assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
 
+    data_category_t category = get_extent_category(type);
+    gen = adjust_generation(category, type, hint, gen);
+
     // XXX: bp might be extended to point to different memory (e.g. PMem)
     // according to the allocator.
-    auto alloc_paddr = [this](rewrite_gen_t gen, 
-      data_category_t category, extent_len_t length) 
-      -> alloc_result_t {
-      auto bp = ceph::bufferptr(
+    auto bp = ceph::bufferptr(
       buffer::create_page_aligned(length));
-      bp.zero();
-      paddr_t addr;
-      if (gen == INLINE_GENERATION) {
-	addr = make_record_relative_paddr(0);
-      } else if (category == data_category_t::DATA) {
-        gen = background_process.adjust_generation(gen);
-	assert(data_writers_by_gen[generation_to_writer(gen)]);
-	addr = data_writers_by_gen[
+    bp.zero();
+    paddr_t addr;
+    if (gen == INLINE_GENERATION) {
+      addr = make_record_relative_paddr(0);
+    } else if (category == data_category_t::DATA) {
+      assert(data_writers_by_gen[generation_to_writer(gen)]);
+      addr = data_writers_by_gen[
 	  generation_to_writer(gen)]->alloc_paddr(length);
-      } else {
-        gen = background_process.adjust_generation(gen);
-	assert(category == data_category_t::METADATA);
-	assert(md_writers_by_gen[generation_to_writer(gen)]);
-	addr = md_writers_by_gen[
-	  generation_to_writer(gen)]->alloc_paddr(length);
-      }
-      return {addr,
-	      std::move(bp),
-	      gen};
-    };
-
-    if (type == extent_types_t::ROOT) {
-      return alloc_paddr(INLINE_GENERATION, data_category_t::METADATA, length);
-    }
-
-    if (get_main_backend_type() == backend_type_t::SEGMENTED &&
-	is_lba_backref_node(type)) {
-      // with SEGMENTED, lba-backref extents must be INLINE
-      return alloc_paddr(INLINE_GENERATION, data_category_t::METADATA, length);
-    }
-
-    if (hint == placement_hint_t::COLD) {
-      assert(gen == INIT_GENERATION);
-      return alloc_paddr(MIN_REWRITE_GENERATION, get_extent_category(type), length);
-    }
-
-    if (get_extent_category(type) == data_category_t::METADATA &&
-        gen == INIT_GENERATION) {
-      if (get_main_backend_type() == backend_type_t::SEGMENTED) {
-	// with SEGMENTED, default not to ool metadata extents to reduce 
-	// padding overhead.
-	// TODO: improve padding so we can default to the ool path.
-	return alloc_paddr(INLINE_GENERATION, get_extent_category(type), length);
-      } else {
-	 // with RBM, all extents must be OOL
-	assert(get_main_backend_type() ==
-	       backend_type_t::RANDOM_BLOCK);
-	return alloc_paddr(OOL_GENERATION, get_extent_category(type), length);
-      }
     } else {
-      assert(get_extent_category(type) == data_category_t::DATA ||
-             gen >= MIN_REWRITE_GENERATION);
-      if (gen > dynamic_max_rewrite_generation) {
-        gen = dynamic_max_rewrite_generation;
-      } else if (gen == INIT_GENERATION) {
-        gen = OOL_GENERATION;
-      }
-      return alloc_paddr(gen, get_extent_category(type), length);
+      assert(category == data_category_t::METADATA);
+      assert(md_writers_by_gen[generation_to_writer(gen)]);
+      addr = md_writers_by_gen[
+	  generation_to_writer(gen)]->alloc_paddr(length);
     }
+    return {addr, std::move(bp), gen};
   }
 
   /**
@@ -423,6 +379,51 @@ public:
   }
 
 private:
+  rewrite_gen_t adjust_generation(
+      data_category_t category,
+      extent_types_t type,
+      placement_hint_t hint,
+      rewrite_gen_t gen) {
+    if (type == extent_types_t::ROOT) {
+      gen = INLINE_GENERATION;
+    } else if (get_main_backend_type() == backend_type_t::SEGMENTED &&
+               is_lba_backref_node(type)) {
+      gen = INLINE_GENERATION;
+    } else if (hint == placement_hint_t::COLD) {
+      assert(gen == INIT_GENERATION);
+      if (background_process.has_cold_tier()) {
+        gen = MIN_COLD_GENERATION;
+      } else {
+        gen = MIN_REWRITE_GENERATION;
+      }
+    } else if (gen == INIT_GENERATION) {
+      if (category == data_category_t::METADATA) {
+        if (get_main_backend_type() == backend_type_t::SEGMENTED) {
+          // with SEGMENTED, default not to ool metadata extents to reduce
+          // padding overhead.
+          // TODO: improve padding so we can default to the ool path.
+          gen = INLINE_GENERATION;
+        } else {
+          // with RBM, all extents must be OOL
+          assert(get_main_backend_type() ==
+                 backend_type_t::RANDOM_BLOCK);
+          gen = OOL_GENERATION;
+        }
+      } else {
+        assert(category == data_category_t::DATA);
+        gen = OOL_GENERATION;
+      }
+    } else if (background_process.has_cold_tier()) {
+      gen = background_process.adjust_generation(gen);
+    }
+
+    if (gen > dynamic_max_rewrite_generation) {
+      gen = dynamic_max_rewrite_generation;
+    }
+
+    return gen;
+  }
+
   void add_device(Device *device) {
     auto device_id = device->get_device_id();
     ceph_assert(devices_by_id[device_id] == nullptr);
