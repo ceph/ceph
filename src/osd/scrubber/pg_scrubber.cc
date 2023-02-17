@@ -891,9 +891,8 @@ void PgScrubber::add_delayed_scheduling()
 
   milliseconds sleep_time{0ms};
   if (m_needs_sleep) {
-    double scrub_sleep =
-      1000.0 * m_osds->get_scrub_services().scrub_sleep_time(m_flags.required);
-    sleep_time = milliseconds{int64_t(scrub_sleep)};
+    sleep_time = m_osds->get_scrub_services().scrub_sleep_time(
+      m_flags.required);
   }
   dout(15) << __func__ << " sleep: " << sleep_time.count() << "ms. needed? "
 	   << m_needs_sleep << dendl;

@@ -558,9 +558,10 @@ ScrubQueue::scrub_schedule_t ScrubQueue::adjust_target_time(
   return sched_n_dead;
 }
 
-double ScrubQueue::scrub_sleep_time(bool must_scrub) const
+std::chrono::milliseconds ScrubQueue::scrub_sleep_time(bool must_scrub) const
 {
-  double regular_sleep_period = conf()->osd_scrub_sleep;
+  std::chrono::milliseconds regular_sleep_period{
+    uint64_t(std::max(0.0, conf()->osd_scrub_sleep) * 1000)};
 
   if (must_scrub || scrub_time_permit(time_now())) {
     return regular_sleep_period;
@@ -568,8 +569,10 @@ double ScrubQueue::scrub_sleep_time(bool must_scrub) const
 
   // relevant if scrubbing started during allowed time, but continued into
   // forbidden hours
-  double extended_sleep = conf()->osd_scrub_extended_sleep;
+  std::chrono::milliseconds extended_sleep{
+    uint64_t(std::max(0.0, conf()->osd_scrub_extended_sleep) * 1000)};
   dout(20) << "w/ extended sleep (" << extended_sleep << ")" << dendl;
+
   return std::max(extended_sleep, regular_sleep_period);
 }
 
