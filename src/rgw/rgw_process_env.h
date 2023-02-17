@@ -43,8 +43,8 @@ struct RGWProcessEnv {
 
 #ifdef WITH_ARROW_FLIGHT
   // managed by rgw:flight::FlightFrontend in rgw_flight_frontend.cc
-  rgw::flight::FlightServer* flight_server;
-  rgw::flight::FlightStore* flight_store;
+  rgw::flight::FlightServer* flight_server = nullptr;
+  rgw::flight::FlightStore* flight_store = nullptr;
 #endif
 };
 
