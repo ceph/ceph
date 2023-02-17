@@ -82,6 +82,8 @@ class CephadmServe:
                         self.mgr.remote('dashboard', 'set_rgw_credentials')
 
                 if not self.mgr.paused:
+                    self._run_async_actions()
+
                     self.mgr.to_remove_osds.process_removal_queue()
 
                     self.mgr.migration.migrate()
@@ -392,6 +394,10 @@ class CephadmServe:
         self.mgr.cache.osdspec_previews[search_host] = previews
         # Unset global 'pending' flag for host
         self.mgr.cache.loading_osdspec_preview.remove(search_host)
+
+    def _run_async_actions(self) -> None:
+        while self.mgr.scheduled_async_actions:
+            (self.mgr.scheduled_async_actions.pop(0))()
 
     def _check_for_strays(self) -> None:
         self.log.debug('_check_for_strays')
@@ -1249,8 +1255,13 @@ class CephadmServe:
             self.mgr.cache.invalidate_host_daemons(host)
 
             if not no_post_remove:
-                self.mgr.cephadm_services[daemon_type_to_service(
-                    daemon_type)].post_remove(daemon, is_failed_deploy=False)
+                if daemon_type not in ['iscsi']:
+                    self.mgr.cephadm_services[daemon_type_to_service(
+                        daemon_type)].post_remove(daemon, is_failed_deploy=False)
+                else:
+                    self.mgr.scheduled_async_actions.append(lambda: self.mgr.cephadm_services[daemon_type_to_service(
+                                                            daemon_type)].post_remove(daemon, is_failed_deploy=False))
+                    self.mgr._kick_serve_loop()
 
             return "Removed {} from host '{}'".format(name, host)
 
