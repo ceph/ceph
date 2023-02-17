@@ -733,10 +733,6 @@ class PgScrubber : public ScrubPgIF,
 
   epoch_t m_last_aborted{};  // last time we've noticed a request to abort
 
-  bool m_needs_sleep{true};  ///< should we sleep before being rescheduled?
-			     ///< always 'true', unless we just got out of a
-			     ///< sleep period
-
   utime_t m_sleep_started_at;
 
 

@@ -422,7 +422,6 @@ void PgScrubber::reset_epoch(epoch_t epoch_queued)
   m_fsm->assert_not_active();
 
   m_epoch_start = epoch_queued;
-  m_needs_sleep = true;
   ceph_assert(m_is_deep == state_test(PG_STATE_DEEP_SCRUB));
   update_op_mode_text();
 }
@@ -890,17 +889,13 @@ void PgScrubber::add_delayed_scheduling()
   m_end = m_start;  // not blocking any range now
 
   milliseconds sleep_time{0ms};
-  if (m_needs_sleep) {
     sleep_time = m_osds->get_scrub_services().scrub_sleep_time(
       m_flags.required);
-  }
-  dout(15) << __func__ << " sleep: " << sleep_time.count() << "ms. needed? "
-	   << m_needs_sleep << dendl;
+  dout(15) << __func__ << " sleep: " << sleep_time.count() << "ms." << dendl;
 
   if (sleep_time.count()) {
     // schedule a transition for some 'sleep_time' ms in the future
 
-    m_needs_sleep = false;
     m_sleep_started_at = ceph_clock_now();
 
     // the following log line is used by osd-scrub-test.sh
@@ -919,7 +914,6 @@ void PgScrubber::add_delayed_scheduling()
 	  << dendl;
 	return;
       }
-      scrbr->m_needs_sleep = true;
       lgeneric_dout(scrbr->get_pg_cct(), 7)
 	<< "scrub_requeue_callback: slept for "
 	<< ceph_clock_now() - scrbr->m_sleep_started_at << ", re-queuing scrub"
@@ -2441,7 +2435,6 @@ void PgScrubber::reset_internal_state()
   m_primary_scrubmap_pos.reset();
   replica_scrubmap = ScrubMap{};
   replica_scrubmap_pos.reset();
-  m_needs_sleep = true;
   m_sleep_started_at = utime_t{};
 
   m_active = false;
