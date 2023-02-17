@@ -66,6 +66,17 @@ public:
   int handle_data(bufferlist& bl, bool *pause) override;
 };
 
+class RGWDelObjectCB : public RGWHTTPStreamRWRequest::ReceiveCB {
+public:
+  S3FilterObject *object;
+
+  RGWDelObjectCB(S3FilterObject *_object): object(_object){}
+  //There is no data to handle
+  int handle_data(bufferlist& bl, bool *pause) override;// {}
+	//return 0;
+  //}
+};
+
 
 class S3FilterStore : public FilterStore {
   private:
@@ -220,7 +231,7 @@ class S3FilterObject : public FilterObject {
 										     source(_source) {}
       virtual ~S3FilterDeleteOp() = default;
 
-      //virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
+      virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
     };
 
     S3FilterObject(std::unique_ptr<Object> _next, S3FilterStore* _filter) : FilterObject(std::move(_next)),

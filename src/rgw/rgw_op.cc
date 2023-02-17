@@ -5041,107 +5041,145 @@ void RGWDeleteObj::pre_exec()
 
 void RGWDeleteObj::execute(optional_yield y)
 {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
     return;
   }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (!rgw::sal::Object::empty(s->object.get())) {
     uint64_t obj_size = 0;
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     std::string etag;
     {
       RGWObjState* astate = nullptr;
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       op_ret = s->object->get_obj_state(this, &astate, s->yield, true);
       if (op_ret < 0) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         if (need_object_expiration() || multipart_delete) {
           return;
         }
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
         if (check_obj_lock) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           /* check if obj exists, read orig attrs */
           if (op_ret == -ENOENT) {
             /* object maybe delete_marker, skip check_obj_lock*/
             check_obj_lock = false;
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           } else {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
             return;
           }
         }
       } else {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         obj_size = astate->size;
         etag = astate->attrset[RGW_ATTR_ETAG].to_str();
       }
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
       // ignore return value from get_obj_attrs in all other cases
       op_ret = 0;
 
       if (check_obj_lock) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         ceph_assert(astate);
         int object_lock_response = verify_object_lock(this, astate->attrset, bypass_perm, bypass_governance_mode);
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         if (object_lock_response != 0) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           op_ret = object_lock_response;
           if (op_ret == -EACCES) {
             s->err.message = "forbidden by object lock";
           }
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           return;
         }
       }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       if (multipart_delete) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         if (!astate) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           op_ret = -ERR_NOT_SLO_MANIFEST;
           return;
         }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         const auto slo_attr = astate->attrset.find(RGW_ATTR_SLO_MANIFEST);
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
         if (slo_attr != astate->attrset.end()) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           op_ret = handle_slo_manifest(slo_attr->second, y);
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           if (op_ret < 0) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
             ldpp_dout(this, 0) << "ERROR: failed to handle slo manifest ret=" << op_ret << dendl;
           }
         } else {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           op_ret = -ERR_NOT_SLO_MANIFEST;
         }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         return;
       }
     }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     // make reservation for notification if needed
     const auto versioned_object = s->bucket->versioning_enabled();
     const auto event_type = versioned_object &&
       s->object->get_instance().empty() ?
       rgw::notify::ObjectRemovedDeleteMarkerCreated :
       rgw::notify::ObjectRemovedDelete;
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     std::unique_ptr<rgw::sal::Notification> res
       = store->get_notification(s->object.get(), s->src_object.get(), s,
 				event_type);
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     op_ret = res->publish_reserve(this);
     if (op_ret < 0) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       return;
     }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     s->object->set_atomic();
     
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     bool ver_restored = false;
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     op_ret = s->object->swift_versioning_restore(ver_restored, this);
     if (op_ret < 0) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       return;
     }
 
     if (!ver_restored) {
       uint64_t epoch = 0;
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       /* Swift's versioning mechanism hasn't found any previous version of
        * the object that could be restored. This means we should proceed
        * with the regular delete path. */
       op_ret = get_system_versioning_params(s, &epoch, &version_id);
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       if (op_ret < 0) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 	return;
       }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = s->object->get_delete_op();
       del_op->params.obj_owner = s->owner;
       del_op->params.bucket_owner = s->bucket_owner;
@@ -5151,36 +5189,50 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       op_ret = del_op->delete_obj(this, y);
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       if (op_ret >= 0) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 	delete_marker = del_op->result.delete_marker;
 	version_id = del_op->result.version_id;
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       }
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
       /* Check whether the object has expired. Swift API documentation
        * stands that we should return 404 Not Found in such case. */
       if (need_object_expiration() && s->object->is_expired()) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         op_ret = -ENOENT;
         return;
       }
     }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (op_ret == -ECANCELED) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       op_ret = 0;
     }
     if (op_ret == -ERR_PRECONDITION_FAILED && no_precondition_error) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       op_ret = 0;
     }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     // send request to notification manager
     int ret = res->publish_commit(this, obj_size, ceph::real_clock::now(), etag, version_id);
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (ret < 0) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
       // too late to rollback operation, hence op_ret is not set here
     }
   } else {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     op_ret = -EINVAL;
   }
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 }
 
 bool RGWCopyObj::parse_copy_location(const std::string_view& url_src,

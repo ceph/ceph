@@ -108,8 +108,8 @@ int RGWGetBucketCB::handle_data(bufferlist& bl, bool *pause){
 
 int RGWGetObjectCB::handle_data(bufferlist& bl, bool *pause){
 
-	string in_data = bl.c_str();
-	ldout(object->get_filter()->_cct, 20) << " AMIN: " << __func__ << __LINE__ << " bufferlist is: " << in_data << dendl;
+	//string in_data = bl.c_str();
+	//ldout(object->get_filter()->_cct, 20) << " AMIN: " << __func__ << __LINE__ << " bufferlist is: " << in_data << dendl;
 
 //<Contents><Key>test.img</Key><LastModified>2023-02-08T16:08:51.221Z</LastModified><Size>9437184</Size><StorageClass>STANDARD</StorageClass><Owner><ID>amin5</ID><DisplayName>amin5</DisplayName></Owner><RgwxTag>9f98304c-1eac-46fe-a181-5038ed96051e.974111.12749701074102518225</RgwxTag><Type>Normal</Type></Contents>
 	this->rc_bl->append(bl);
@@ -158,6 +158,13 @@ int RGWGetObjectCB::handle_data(bufferlist& bl, bool *pause){
 	*/
 
     return 0;
+}
+
+int RGWDelObjectCB::handle_data(bufferlist& bl, bool *pause){
+
+	string in_data = bl.c_str();
+	ldout(object->get_filter()->_cct, 20) << " AMIN: " << __func__ << __LINE__ << " bufferlist is: " << in_data << dendl;
+  return 0;
 }
 
 
@@ -549,7 +556,7 @@ int S3FilterObject::S3FilterReadOp::prepare(optional_yield y, const DoutPrefixPr
   ret = ord->complete_request(null_yield);
   if (ret < 0){
 	delete ord;
-	return -1;
+	return ret;
   }
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " received data size is: "<< received_data.length() << dendl;
   source->set_obj_size(received_data.length());
@@ -612,6 +619,49 @@ std::unique_ptr<Object::DeleteOp> S3FilterObject::get_delete_op()
   return std::make_unique<S3FilterDeleteOp>(std::move(d), this);
 }
 
+int S3FilterObject::S3FilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
+					   optional_yield y)
+{
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  User* u = source->get_bucket()->get_owner();
+ 
+  map<std::string, RGWAccessKey> accessKeys =  u->get_info().access_keys;
+  RGWAccessKey accesskey;
+  //RGWAccessKey& k = accessKeys[u->get_id().to_str()];
+  accesskey.id= "test5"; //FIXME
+  accesskey.key = "test5";
+  string url ="http://" + source->filter->_cct->_conf->backend_url; //FIXME: AMIN : We need to have the flexbility of choosing backend
+
+  HostStyle host_style = PathStyle;
+
+  Attrs object_attrs;
+  RGWDelObjectCB cb(source);
+
+
+  list<string> endpoints;
+  endpoints.push_back(url);
+  
+  RGWRESTStreamRWRequest *odl = new RGWRESTStreamRWRequest(source->filter->_cct, "DELETE", url, &cb, NULL, NULL, "", host_style);
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+
+  map<string, string> extra_headers;
+  int ret = 0;
+  ret = odl->send_request(dpp, accesskey, extra_headers, source->get_obj(), nullptr);
+  if (ret < 0) {
+    delete odl;
+    return ret;
+  }
+
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+  ret = odl->complete_request(null_yield);
+  if (ret < 0){
+	delete odl;
+	return ret;
+  }
+
+  return 0;
+}
+
 
 int S3FilterStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
 {
@@ -650,6 +700,8 @@ int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const std:
 
 int S3FilterObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state,
 			    optional_yield y, bool follow_olh){
+  RGWObjState *astate = new RGWObjState;
+  *state = astate;
   return 0;
 }
 
@@ -773,28 +825,6 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
   return next->delete_obj_attrs(dpp, attr_name, y);  
 }
 
-
-int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
-					   optional_yield y)
-{
-  int delDirReturn = source->filter->get_block_dir()->delValue(source->filter->get_cache_block());
-
-  if (delDirReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Directory delete operation failed." << dendl;
-  } else {
-    ldpp_dout(dpp, 20) << "D4N Filter: Directory delete operation succeeded." << dendl;
-  }
-
-  int delObjReturn = source->filter->get_d4n_cache()->delObject(source->get_name());
-
-  if (delObjReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache delete operation failed." << dendl;
-  } else {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache delete operation succeeded." << dendl;
-  }
-
-  return next->delete_obj(dpp, y);
-}
 
 */
 } } // namespace rgw::sal
