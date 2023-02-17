@@ -1898,8 +1898,61 @@ CDentry *CDir::_load_dentry(
         dout(12) << "_fetched  got remote link " << ino << " (don't have it)" << dendl;
       }
     }
-  }
-  else if (type == 'I' || type == 'i') {
+  } else if (type == 'r') {
+    // hard link with referent inode
+    InodeStore inode_data;
+    inodeno_t ino;
+    unsigned char d_type;
+    mempool::mds_co::string alternate_name;
+
+    //Load referent inode and get remote inode details
+    DECODE_START(2, q);
+    if (struct_v >= 2) {
+      decode(alternate_name, q);
+    }
+    inode_data.decode(q);
+    DECODE_FINISH(q);
+
+    //Fill in remote inode details
+    ino = inode_data.inode->remote_ino;
+    d_type = IFTODT(inode_data.inode->mode);
+
+    //TODO - Referent CInode is not loaded.
+    if (stale) {
+      if (!dn) {
+        stale_items.insert(mempool::mds_co::string(key));
+        *force_dirty = true;
+      }
+      return dn;
+    }
+
+    if (dn) {
+      CDentry::linkage_t *dnl = dn->get_linkage();
+      dout(12) << "_fetched had " << (dnl->is_null() ? "NEG" : "") << " dentry " << *dn << dendl;
+      if (committed_version == 0 &&
+	  dnl->is_referent() &&
+	  dn->is_dirty() &&
+	  ino == dnl->get_remote_ino() &&
+	  d_type == dnl->get_remote_d_type() &&
+          alternate_name == dn->get_alternate_name()) {
+	// see comment below
+	dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << dendl;
+	dn->mark_clean();
+      }
+    } else {
+      // (remote) link
+      dn = add_remote_dentry(dname, ino, d_type, std::move(alternate_name), first, last);
+
+      // link to inode?
+      CInode *in = mdcache->get_inode(ino);   // we may or may not have it.
+      if (in) {
+        dn->link_remote(dn->get_linkage(), in);
+        dout(12) << "_fetched  got remote link " << ino << " which we have " << *in << dendl;
+      } else {
+        dout(12) << "_fetched  got remote link " << ino << " (don't have it)" << dendl;
+      }
+    }
+  } else if (type == 'I' || type == 'i') {
     InodeStore inode_data;
     mempool::mds_co::string alternate_name;
     // inode
@@ -2528,7 +2581,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
       CDentry::encode_remote(item.ino, item.d_type, item.alternate_name, bl);
     } else if (item.is_referent) {
       // marker, name, inode, [symlink string]
-      bl.append('i');         // inode
+      bl.append('r');         // inode
 
       ENCODE_START(2, 1, bl);
       encode(item.alternate_name, bl);
