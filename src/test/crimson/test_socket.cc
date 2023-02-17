@@ -115,10 +115,12 @@ future<> test_accept() {
   return FixedCPUServerSocket::create().then([] (auto pss) {
     auto saddr = get_server_addr();
     return pss->listen(saddr).safe_then([pss] {
-      return pss->accept([] (auto socket, auto paddr) {
+      return pss->accept([](auto socket, auto paddr) {
         // simple accept
-        return seastar::sleep(100ms).then([socket = std::move(socket)] () mutable {
-          return socket->close().finally([cleanup = std::move(socket)] {});
+        return seastar::sleep(100ms
+        ).then([socket = std::move(socket)]() mutable {
+          return socket->close(
+          ).finally([cleanup = std::move(socket)] {});
         });
       });
     }, listen_ertr::all_same_way(
