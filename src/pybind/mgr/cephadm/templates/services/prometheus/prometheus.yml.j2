@@ -39,3 +39,14 @@ scrape_configs:
           instance: '{{ haproxy.service }}'
 {% endfor %}
 {% endif %}
+
+{% if ceph_exporter_targets %}
+  - job_name: 'ceph-exporter'
+    honor_labels: true
+    static_configs:
+{% for ceph_exporter in ceph_exporter_targets %}
+    - targets: ['{{ ceph_exporter.url }}']
+      labels:
+        instance: '{{ ceph_exporter.hostname }}'
+{% endfor %}
+{% endif %}
