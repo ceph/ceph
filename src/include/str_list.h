@@ -54,8 +54,7 @@ std::list<std::string> get_str_list(const std::string& str,
  * @param [in] str String to split and save as Vector
  * @param [out] str_vec Vector modified containing str after it has been split
 **/
-extern void get_str_vec(const std::string& str,
-			 std::vector<std::string>& str_vec);
+void get_str_vec(std::string_view str, std::vector<std::string>& str_vec);
 
 /**
  * Split **str** into a vector of strings, using the **delims** delimiters and output the result in **str_vec**.
@@ -64,11 +63,11 @@ extern void get_str_vec(const std::string& str,
  * @param [in] delims characters used to split **str**
  * @param [out] str_vec Vector modified containing str after it has been split
 **/
-extern void get_str_vec(const std::string& str,
-                         const char *delims,
-			 std::vector<std::string>& str_vec);
+void get_str_vec(std::string_view str,
+                 const char *delims,
+                 std::vector<std::string>& str_vec);
 
-std::vector<std::string> get_str_vec(const std::string& str,
+std::vector<std::string> get_str_vec(std::string_view str,
                                      const char *delims = ";,= \t");
 
 /**

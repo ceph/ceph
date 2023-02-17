@@ -19,8 +19,16 @@
 #define CEPH_ERASURE_CODE_BENCHMARK_H
 
 #include <string>
+#include <map>
+#include <vector>
 
-using namespace std;
+#include <boost/intrusive_ptr.hpp>
+
+#include "include/buffer.h"
+
+#include "common/ceph_context.h"
+
+#include "erasure-code/ErasureCodeInterface.h"
 
 class ErasureCodeBench {
   int in_size;
@@ -29,21 +37,21 @@ class ErasureCodeBench {
   int k;
   int m;
 
-  string plugin;
+  std::string plugin;
 
   bool exhaustive_erasures;
-  vector<int> erased;
-  string workload;
+  std::vector<int> erased;
+  std::string workload;
 
-  ErasureCodeProfile profile;
+  ceph::ErasureCodeProfile profile;
 
   bool verbose;
   boost::intrusive_ptr<CephContext> cct;
 public:
   int setup(int argc, char** argv);
   int run();
-  int decode_erasures(const map<int,bufferlist> &all_chunks,
-		      const map<int,bufferlist> &chunks,
+  int decode_erasures(const std::map<int, ceph::buffer::list> &all_chunks,
+		      const std::map<int, ceph::buffer::list> &chunks,
 		      unsigned i,
 		      unsigned want_erasures,
 		      ErasureCodeInterfaceRef erasure_code);

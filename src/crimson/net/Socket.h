@@ -42,6 +42,7 @@ class Socket
       // the default buffer size 8192 is too small that may impact our write
       // performance. see seastar::net::connected_socket::output()
       out(socket.output(65536)),
+      socket_is_shutdown(false),
       side(_side),
       ephemeral_port(e_port) {}
 
@@ -55,8 +56,11 @@ class Socket
 
   static seastar::future<SocketRef>
   connect(const entity_addr_t& peer_addr) {
-    return seastar::connect(peer_addr.in4_addr()
-    ).then([] (seastar::connected_socket socket) {
+    inject_failure();
+    return inject_delay(
+    ).then([peer_addr] {
+      return seastar::connect(peer_addr.in4_addr());
+    }).then([] (seastar::connected_socket socket) {
       return std::make_unique<Socket>(
         std::move(socket), side_t::connector, 0, construct_tag{});
     });
@@ -70,9 +74,14 @@ class Socket
 
   seastar::future<> write(packet&& buf) {
 #ifdef UNIT_TESTS_BUILT
-    return try_trap_pre(next_trap_write).then([buf = std::move(buf), this] () mutable {
+    return try_trap_pre(next_trap_write
+    ).then([buf = std::move(buf), this] () mutable {
 #endif
-      return out.write(std::move(buf));
+      inject_failure();
+      return inject_delay(
+      ).then([buf = std::move(buf), this] () mutable {
+        return out.write(std::move(buf));
+      });
 #ifdef UNIT_TESTS_BUILT
     }).then([this] {
       return try_trap_post(next_trap_write);
@@ -80,13 +89,20 @@ class Socket
 #endif
   }
   seastar::future<> flush() {
-    return out.flush();
+    inject_failure();
+    return inject_delay().then([this] {
+      return out.flush();
+    });
   }
   seastar::future<> write_flush(packet&& buf) {
 #ifdef UNIT_TESTS_BUILT
     return try_trap_pre(next_trap_write).then([buf = std::move(buf), this] () mutable {
 #endif
-      return out.write(std::move(buf)).then([this] { return out.flush(); });
+      inject_failure();
+      return inject_delay(
+      ).then([buf = std::move(buf), this] () mutable {
+        return out.write(std::move(buf)).then([this] { return out.flush(); });
+      });
 #ifdef UNIT_TESTS_BUILT
     }).then([this] {
       return try_trap_post(next_trap_write);
@@ -94,11 +110,25 @@ class Socket
 #endif
   }
 
+  bool is_shutdown() const {
+    return socket_is_shutdown;
+  }
+
   // preemptively disable further reads or writes, can only be shutdown once.
   void shutdown();
 
   /// Socket can only be closed once.
   seastar::future<> close();
+
+  static seastar::future<> inject_delay();
+
+  static void inject_failure();
+
+  // shutdown for tests
+  void force_shutdown() {
+    socket.shutdown_input();
+    socket.shutdown_output();
+  }
 
   // shutdown input_stream only, for tests
   void force_shutdown_in() {
@@ -136,6 +166,7 @@ class Socket
   seastar::connected_socket socket;
   seastar::input_stream<char> in;
   seastar::output_stream<char> out;
+  bool socket_is_shutdown;
   side_t side;
   uint16_t ephemeral_port;
 

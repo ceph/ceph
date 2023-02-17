@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_XML_H
-#define CEPH_RGW_XML_H
+#pragma once
 
 #include <map>
 #include <stdexcept>
@@ -20,7 +19,7 @@ public:
   typedef std::map<std::string, XMLObj *>::iterator const_map_iter_t;
 
   XMLObjIter();
-  ~XMLObjIter();
+  virtual ~XMLObjIter();
   void set(const XMLObjIter::const_map_iter_t &_cur, const XMLObjIter::const_map_iter_t &_end);
   XMLObj *get_next();
   bool get_name(std::string& name) const;
@@ -122,7 +121,7 @@ private:
 protected:
   // if objects are created while parsing, this should be implemented in the derived class
   // and be a factory for creating the classes derived from XMLObj
-  // note that not all sub-tags has to be constructed here, any such tag which is not 
+  // note that not all sub-tags has to be constructed here, any such tag which is not
   // constructed will be lazily created when decode_xml() is invoked on it
   //
   // note that in case of different tags sharing the same name at different levels
@@ -133,7 +132,7 @@ protected:
 
 public:
   RGWXMLParser();
-  ~RGWXMLParser() override;
+  virtual ~RGWXMLParser() override;
 
   // initialize the parser, must be called before parsing
   bool init();
@@ -370,6 +369,3 @@ static void encode_xml(const char *name, const std::optional<T>& o, ceph::Format
 
   encode_xml(name, *o, f);
 }
-
-
-#endif

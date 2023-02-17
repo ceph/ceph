@@ -5,6 +5,8 @@ import textwrap
 import pytest
 import yaml
 
+from ceph.deployment.hostspec import HostSpec
+from ceph.deployment.inventory import Devices, Device
 from ceph.deployment.service_spec import ServiceSpec
 from ceph.deployment import inventory
 from ceph.utils import datetime_now
@@ -174,6 +176,77 @@ def test_orch_ls(_describe_service):
           size: 0
         """).lstrip()
     assert r == HandleCommandResult(retval=0, stdout=out, stderr='')
+
+
+dlist = OrchResult([DaemonDescription(daemon_type="osd", daemon_id="1"), DaemonDescription(
+    daemon_type="osd", daemon_id="10"), DaemonDescription(daemon_type="osd", daemon_id="2")])
+
+
+@mock.patch("orchestrator.OrchestratorCli.list_daemons", return_value=dlist)
+def test_orch_ps(_describe_service):
+
+    # Ensure natural sorting on daemon names (osd.1, osd.2, osd.10)
+    cmd = {
+        'prefix': 'orch ps'
+    }
+    m = OrchestratorCli('orchestrator', 0, 0)
+    r = m._handle_command(None, cmd)
+    expected_out = 'NAME    HOST       PORTS  STATUS   REFRESHED  AGE  MEM USE  MEM LIM  VERSION    IMAGE ID   \n'\
+                   'osd.1   <unknown>         unknown          -    -        -        -  <unknown>  <unknown>  \n'\
+                   'osd.2   <unknown>         unknown          -    -        -        -  <unknown>  <unknown>  \n'\
+                   'osd.10  <unknown>         unknown          -    -        -        -  <unknown>  <unknown>  '
+    expected_out = [c for c in expected_out if c.isalpha()]
+    actual_out = [c for c in r.stdout if c.isalpha()]
+    assert r.retval == 0
+    assert expected_out == actual_out
+    assert r.stderr == ''
+
+
+hlist = OrchResult([HostSpec("ceph-node-1"), HostSpec("ceph-node-2"), HostSpec("ceph-node-10")])
+
+
+@mock.patch("orchestrator.OrchestratorCli.get_hosts", return_value=hlist)
+def test_orch_host_ls(_describe_service):
+
+    # Ensure natural sorting on hostnames (ceph-node-1, ceph-node-2, ceph-node-10)
+    cmd = {
+        'prefix': 'orch host ls'
+    }
+    m = OrchestratorCli('orchestrator', 0, 0)
+    r = m._handle_command(None, cmd)
+    expected_out = 'HOST          ADDR          LABELS  STATUS  \n'\
+                   'ceph-node-1   ceph-node-1                   \n'\
+                   'ceph-node-2   ceph-node-2                   \n'\
+                   'ceph-node-10  ceph-node-10                  \n'\
+                   '3 hosts in cluster'
+    expected_out = [c for c in expected_out if c.isalpha()]
+    actual_out = [c for c in r.stdout if c.isalpha()]
+    assert r.retval == 0
+    assert expected_out == actual_out
+    assert r.stderr == ''
+
+
+def test_orch_device_ls():
+    devices = Devices([Device("/dev/vdb", available=True)])
+    ilist = OrchResult([InventoryHost("ceph-node-1", devices=devices), InventoryHost("ceph-node-2",
+                       devices=devices), InventoryHost("ceph-node-10", devices=devices)])
+
+    with mock.patch("orchestrator.OrchestratorCli.get_inventory", return_value=ilist):
+        # Ensure natural sorting on hostnames (ceph-node-1, ceph-node-2, ceph-node-10)
+        cmd = {
+            'prefix': 'orch device ls'
+        }
+        m = OrchestratorCli('orchestrator', 0, 0)
+        r = m._handle_command(None, cmd)
+        expected_out = 'HOST          PATH      TYPE     DEVICE ID   SIZE  AVAILABLE  REFRESHED  REJECT REASONS  \n'\
+                       'ceph-node-1   /dev/vdb  unknown  None          0   Yes        0s ago                     \n'\
+                       'ceph-node-2   /dev/vdb  unknown  None          0   Yes        0s ago                     \n'\
+                       'ceph-node-10  /dev/vdb  unknown  None          0   Yes        0s ago                     '
+        expected_out = [c for c in expected_out if c.isalpha()]
+        actual_out = [c for c in r.stdout if c.isalpha()]
+        assert r.retval == 0
+        assert expected_out == actual_out
+        assert r.stderr == ''
 
 
 def test_preview_table_osd_smoke():

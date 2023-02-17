@@ -7,10 +7,10 @@ set_target_properties(alien::cflags PROPERTIES
 
 set(crimson_alien_common_srcs
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket.cc
+  ${PROJECT_SOURCE_DIR}/src/common/url_escape.cc
   ${PROJECT_SOURCE_DIR}/src/common/blkdev.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_crypto.cc
-  ${PROJECT_SOURCE_DIR}/src/common/cmdparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/Finisher.cc
   ${PROJECT_SOURCE_DIR}/src/common/HeartbeatMap.cc
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
@@ -25,6 +25,7 @@ set(crimson_alien_common_srcs
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
   ${PROJECT_SOURCE_DIR}/src/crush/CrushLocation.cc
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
+  ${PROJECT_SOURCE_DIR}/src/log/Log.cc
   $<TARGET_OBJECTS:compressor_objs>
   $<TARGET_OBJECTS:common_prioritycache_obj>)
 if(WITH_CEPH_DEBUG_MUTEX)
@@ -44,6 +45,7 @@ target_link_libraries(crimson-alien-common
 set(alien_store_srcs
   alien_store.cc
   thread_pool.cc
+  alien_log.cc
   ${PROJECT_SOURCE_DIR}/src/os/ObjectStore.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Allocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/AvlAllocator.cc
@@ -53,6 +55,7 @@ set(alien_store_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/bluefs_types.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueRocksEnv.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueStore.cc
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/simple_bitmap.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/bluestore_types.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/fastbmap_allocator_impl.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/FreelistManager.cc

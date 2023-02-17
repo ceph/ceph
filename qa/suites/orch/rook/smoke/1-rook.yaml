@@ -1,8 +1,2 @@
 tasks:
 - rook:
-- rook.shell:
-    - ceph -s
-    - ceph orch status
-    - ceph orch ps
-    - ceph orch ls
-    - ceph orch device ls

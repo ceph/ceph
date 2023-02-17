@@ -22,7 +22,7 @@ typedef boost::variant<std::string,
 		       std::vector<double>>  cmd_vartype;
 typedef std::map<std::string, cmd_vartype, std::less<>> cmdmap_t;
 
-namespace TOPNSPC::common {
+namespace ceph::common {
 std::string cmddesc_get_prefix(const std::string_view &cmddesc);
 std::string cmddesc_get_prenautilus_compat(const std::string &cmddesc);
 void dump_cmd_to_json(ceph::Formatter *f, uint64_t features,
@@ -118,8 +118,7 @@ cmd_putval(CephContext *cct, cmdmap_t& cmdmap, std::string_view k, const T& val)
   cmdmap.insert_or_assign(std::string{k}, val);
 }
 
-bool validate_cmd(CephContext* cct,
-		  const std::string& desc,
+bool validate_cmd(const std::string& desc,
 		  const cmdmap_t& cmdmap,
 		  std::ostream& os);
 extern int parse_osd_id(const char *s, std::ostream *pss);

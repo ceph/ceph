@@ -5,6 +5,7 @@
 
 #include <boost/algorithm/string/join.hpp>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <seastar/net/api.hh>
 #include <seastar/net/inet_address.hh>
 #include <seastar/core/future-util.hh>
@@ -21,6 +22,12 @@
 #include "crimson/net/Socket.h"
 
 using namespace crimson::common;
+using namespace std::literals;
+using ceph::common::cmdmap_from_json;
+using ceph::common::cmd_getval;
+using ceph::common::bad_cmd_get;
+using ceph::common::validate_cmd;
+using ceph::common::dump_cmd_and_help_to_json;
 
 namespace {
 seastar::logger& logger()
@@ -87,6 +94,10 @@ auto AdminSocket::parse_cmd(const std::vector<std::string>& cmd)
   try {
     cmd_getval(cmdmap, "format", format);
     cmd_getval(cmdmap, "prefix", prefix);
+    // tolerate old-style pg <pgid> command <args> style formatting
+    if (prefix == "pg") {
+      cmd_getval(cmdmap, "cmd", prefix);
+    }
   } catch (const bad_cmd_get& e) {
     logger().error("{}: invalid syntax: {}", __func__, cmd);
     out.append(string{e.what()});
@@ -153,7 +164,7 @@ auto AdminSocket::execute_command(const std::vector<std::string>& cmd,
   if (auto* parsed = std::get_if<parsed_command_t>(&maybe_parsed); parsed) {
     stringstream os;
     string desc{parsed->hook.desc};
-    if (!validate_cmd(nullptr, desc, parsed->params, os)) {
+    if (!validate_cmd(desc, parsed->params, os)) {
       logger().error("AdminSocket::execute_command: "
                      "failed to validate '{}': {}", cmd, os.str());
       ceph::bufferlist out;

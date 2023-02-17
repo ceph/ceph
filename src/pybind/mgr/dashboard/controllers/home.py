@@ -139,3 +139,10 @@ class LangsController(BaseController, LanguageMixin):
     @Endpoint('GET')
     def __call__(self):
         return list(self.LANGUAGES)
+
+
+@UIRouter("/login", secure=False)
+class LoginController(BaseController):
+    @Endpoint('GET', 'custom_banner')
+    def __call__(self):
+        return mgr.get_store('custom_login_banner')

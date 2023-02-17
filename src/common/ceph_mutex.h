@@ -69,6 +69,9 @@ namespace ceph {
 // ============================================================================
 // debug (lockdep-capable, various sanity checks and asserts)
 // ============================================================================
+//
+// Note: this is known to cause deadlocks on Windows because
+// of the winpthreads shared mutex implementation.
 
 #include "common/condition_variable_debug.h"
 #include "common/mutex_debug.h"
@@ -115,27 +118,39 @@ namespace ceph {
 
 #include <condition_variable>
 #include <mutex>
-#include <shared_mutex>
 
+// The winpthreads shared mutex implementation is broken.
+// We'll use boost::shared_mutex instead.
+// https://github.com/msys2/MINGW-packages/issues/3319
+#if __MINGW32__
+#include <boost/thread/shared_mutex.hpp>
+#else
+#include <shared_mutex>
+#endif
 
 namespace ceph {
 
   typedef std::mutex mutex;
   typedef std::recursive_mutex recursive_mutex;
   typedef std::condition_variable condition_variable;
+
+#if __MINGW32__
+  typedef boost::shared_mutex shared_mutex;
+#else
   typedef std::shared_mutex shared_mutex;
+#endif
 
   // discard arguments to make_mutex (they are for debugging only)
   template <typename ...Args>
-  std::mutex make_mutex(Args&& ...args) {
+  mutex make_mutex(Args&& ...args) {
     return {};
   }
   template <typename ...Args>
-  std::recursive_mutex make_recursive_mutex(Args&& ...args) {
+  recursive_mutex make_recursive_mutex(Args&& ...args) {
     return {};
   }
   template <typename ...Args>
-  std::shared_mutex make_shared_mutex(Args&& ...args) {
+  shared_mutex make_shared_mutex(Args&& ...args) {
     return {};
   }
 

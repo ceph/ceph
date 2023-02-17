@@ -617,7 +617,7 @@ Reading / Writing Global Rate Limit Configuration
 You can read and write global rate limit settings in the period configuration. To
 view the global rate limit settings::
 
-	radosgw-admin global rate limit get
+	radosgw-admin global ratelimit get
 
 The global rate limit settings can be manipulated with the ``global ratelimit``
 counterparts of the ``ratelimit set``, ``ratelimit enable``, and ``ratelimit disable``

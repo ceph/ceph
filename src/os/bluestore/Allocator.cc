@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "Allocator.h"
+#include <bit>
 #include "StupidAllocator.h"
 #include "BitmapAllocator.h"
 #include "AvlAllocator.h"
@@ -64,6 +65,7 @@ public:
 
   int call(std::string_view command,
 	   const cmdmap_t& cmdmap,
+	   const bufferlist&,
 	   Formatter *f,
 	   std::ostream& ss,
 	   bufferlist& out) override {
@@ -87,7 +89,7 @@ public:
         f->dump_string("length", len_hex);
         f->close_section();
       };
-      alloc->dump(iterated_allocation);
+      alloc->foreach(iterated_allocation);
       f->close_section();
       f->close_section();
     } else if (command == "bluestore allocator score " + name) {
@@ -194,7 +196,7 @@ double Allocator::get_fragmentation_score()
   size_t sum = 0;
 
   auto get_score = [&](size_t v) -> double {
-    size_t sc = sizeof(v) * 8 - clz(v) - 1; //assign to grade depending on log2(len)
+    size_t sc = sizeof(v) * 8 - std::countl_zero(v) - 1; //assign to grade depending on log2(len)
     while (scales.size() <= sc + 1) {
       //unlikely expand scales vector
       scales.push_back(scales[scales.size() - 1] * double_size_worth);
@@ -213,7 +215,7 @@ double Allocator::get_fragmentation_score()
     score_sum += get_score(len);
     sum += len;
   };
-  dump(iterated_allocation);
+  foreach(iterated_allocation);
 
 
   double ideal = get_score(sum);

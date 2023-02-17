@@ -2,7 +2,7 @@
 
 import logging
 from functools import wraps
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ceph.deployment.service_spec import ServiceSpec
 from orchestrator import DaemonDescription, DeviceLightLoc, HostSpec, \
@@ -10,6 +10,7 @@ from orchestrator import DaemonDescription, DeviceLightLoc, HostSpec, \
     ServiceDescription, raise_if_exception
 
 from .. import mgr
+from ._paginate import ListPaginator
 
 logger = logging.getLogger('orchestrator')
 
@@ -95,11 +96,21 @@ class InventoryManager(ResourceManager):
 
 
 class ServiceManager(ResourceManager):
-    @wait_api_result
     def list(self,
              service_type: Optional[str] = None,
-             service_name: Optional[str] = None) -> List[ServiceDescription]:
-        return self.api.describe_service(service_type, service_name)
+             service_name: Optional[str] = None,
+             offset: int = 0, limit: int = -1,
+             sort: str = '+service_name', search: str = '') -> Tuple[List[Dict[Any, Any]], int]:
+        services = self.api.describe_service(service_type, service_name)
+        services = [service.to_dict() for service in services.result]
+        paginator = ListPaginator(offset, limit, sort, search,
+                                  input_list=services,
+                                  searchable_params=['service_name', 'status.running',
+                                                     'status.last_refreshed', 'status.size'],
+                                  sortable_params=['service_name', 'status.running',
+                                                   'status.last_refreshed', 'status.size'],
+                                  default_sort='+service_name')
+        return list(paginator.list()), paginator.get_count()
 
     @wait_api_result
     def get(self, service_name: str) -> ServiceDescription:
@@ -128,9 +139,11 @@ class ServiceManager(ResourceManager):
             raise_if_exception(c)
 
     @wait_api_result
-    def apply(self, service_spec: Dict) -> OrchResult[List[str]]:
+    def apply(self,
+              service_spec: Dict,
+              no_overwrite: Optional[bool] = False) -> OrchResult[List[str]]:
         spec = ServiceSpec.from_json(service_spec)
-        return self.api.apply([spec])
+        return self.api.apply([spec], no_overwrite)
 
     @wait_api_result
     def remove(self, service_name: str) -> List[str]:
@@ -151,6 +164,12 @@ class OsdManager(ResourceManager):
         return self.api.remove_osds_status()
 
 
+class DaemonManager(ResourceManager):
+    @wait_api_result
+    def action(self, daemon_name='', action='', image=None):
+        return self.api.daemon_action(daemon_name=daemon_name, action=action, image=image)
+
+
 class OrchClient(object):
 
     _instance = None
@@ -169,6 +188,7 @@ class OrchClient(object):
         self.inventory = InventoryManager(self.api)
         self.services = ServiceManager(self.api)
         self.osds = OsdManager(self.api)
+        self.daemons = DaemonManager(self.api)
 
     def available(self, features: Optional[List[str]] = None) -> bool:
         available = self.status()['available']
@@ -218,3 +238,5 @@ class OrchFeature(object):
 
     DEVICE_LIST = 'get_inventory'
     DEVICE_BLINK_LIGHT = 'blink_device_light'
+
+    DAEMON_ACTION = 'daemon_action'

@@ -37,6 +37,11 @@ using namespace std;
 #include "common/config.h"
 #include "common/errno.h"
 
+/* Note, by default debug_mds_balancer is 1/5. For debug messages 1<lvl<=5,
+ * should_gather (below) will be true; so, debug_mds will be ignored even if
+ * set to 20/20. For this reason, some messages may not appear in the log.
+ * Increase both debug levels to get expected output!
+ */
 #define dout_context g_ceph_context
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".bal " << __func__ << " "
@@ -82,10 +87,17 @@ MDBalancer::MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc) :
 
 void MDBalancer::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map)
 {
-  if (changed.count("mds_bal_fragment_dirs"))
+  if (changed.count("mds_bal_fragment_dirs")) {
     bal_fragment_dirs = g_conf().get_val<bool>("mds_bal_fragment_dirs");
-  if (changed.count("mds_bal_fragment_interval"))
+  }
+  if (changed.count("mds_bal_fragment_interval")) {
     bal_fragment_interval = g_conf().get_val<int64_t>("mds_bal_fragment_interval");
+  }
+}
+
+bool MDBalancer::test_rank_mask(mds_rank_t rank)
+{
+  return mds->mdsmap->get_bal_rank_mask_bitset().test(rank);
 }
 
 void MDBalancer::handle_export_pins(void)
@@ -508,6 +520,9 @@ void MDBalancer::handle_heartbeat(const cref_t<MHeartbeat> &m)
   }
   mds_import_map[who] = m->get_import_map();
 
+  mds->mdsmap->update_num_mdss_in_rank_mask_bitset();
+
+  if (mds->mdsmap->get_num_mdss_in_rank_mask_bitset() > 0)
   {
     unsigned cluster_size = mds->get_mds_map()->get_num_in_mds();
     if (mds_load.size() == cluster_size) {
@@ -730,7 +745,7 @@ void MDBalancer::prep_rebalance(int beat)
     }
 
     // target load
-    target_load = total_load / (double)cluster_size;
+    target_load = total_load / (double)mds->mdsmap->get_num_mdss_in_rank_mask_bitset();
     dout(7) << "my load " << my_load
 	    << "   target " << target_load
 	    << "   total " << total_load
@@ -738,7 +753,8 @@ void MDBalancer::prep_rebalance(int beat)
 
     // under or over?
     for (const auto& [load, rank] : load_map) {
-      if (load < target_load * (1.0 + g_conf()->mds_bal_min_rebalance)) {
+      if (test_rank_mask(rank) &&
+          load < target_load * (1.0 + g_conf()->mds_bal_min_rebalance)) {
 	dout(7) << " mds." << rank << " is underloaded or barely overloaded." << dendl;
 	mds_last_epoch_under_map[rank] = beat_epoch;
       }
@@ -767,7 +783,7 @@ void MDBalancer::prep_rebalance(int beat)
     for (multimap<double,mds_rank_t>::iterator it = load_map.begin();
 	 it != load_map.end();
 	 ++it) {
-      if (it->first < target_load) {
+      if (it->first < target_load && test_rank_mask(it->second)) {
 	dout(15) << "   mds." << it->second << " is importer" << dendl;
 	importers.insert(pair<double,mds_rank_t>(it->first,it->second));
 	importer_set.insert(it->second);
@@ -793,14 +809,15 @@ void MDBalancer::prep_rebalance(int beat)
       for (multimap<double,mds_rank_t>::reverse_iterator ex = exporters.rbegin();
 	   ex != exporters.rend();
 	   ++ex) {
-	double maxex = get_maxex(state, ex->second);
+	double ex_target_load = test_rank_mask(ex->second) ? target_load : 0.0;
+	double maxex = get_maxex(state, ex->second, ex_target_load);
 	if (maxex <= .001) continue;
 
 	// check importers. for now, just in arbitrary order (no intelligent matching).
 	for (map<mds_rank_t, float>::iterator im = mds_import_map[ex->second].begin();
 	     im != mds_import_map[ex->second].end();
 	     ++im) {
-	  double maxim = get_maxim(state, im->first);
+	  double maxim = get_maxim(state, im->first, target_load);
 	  if (maxim <= .001) continue;
 	  try_match(state, ex->second, maxex, im->first, maxim);
 	  if (maxex <= .001) break;
@@ -816,8 +833,9 @@ void MDBalancer::prep_rebalance(int beat)
       multimap<double,mds_rank_t>::iterator im = importers.begin();
       while (ex != exporters.rend() &&
 	     im != importers.end()) {
-        double maxex = get_maxex(state, ex->second);
-	double maxim = get_maxim(state, im->second);
+	double ex_target_load = test_rank_mask(ex->second) ? target_load : 0.0;
+	double maxex = get_maxex(state, ex->second, ex_target_load);
+	double maxim = get_maxim(state, im->second, target_load);
 	if (maxex < .001 || maxim < .001) break;
 	try_match(state, ex->second, maxex, im->second, maxim);
 	if (maxex <= .001) ++ex;
@@ -830,8 +848,9 @@ void MDBalancer::prep_rebalance(int beat)
       multimap<double,mds_rank_t>::iterator im = importers.begin();
       while (ex != exporters.end() &&
 	     im != importers.end()) {
-        double maxex = get_maxex(state, ex->second);
-	double maxim = get_maxim(state, im->second);
+	double ex_target_load = test_rank_mask(ex->second) ? target_load : 0.0;
+	double maxex = get_maxex(state, ex->second, ex_target_load);
+	double maxim = get_maxim(state, im->second, target_load);
 	if (maxex < .001 || maxim < .001) break;
 	try_match(state, ex->second, maxex, im->second, maxim);
 	if (maxex <= .001) ++ex;
@@ -936,10 +955,12 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     mds_rank_t target = it.first;
     double amount = it.second;
 
-    if (amount < MIN_OFFLOAD)
+    if (amount < MIN_OFFLOAD) {
       continue;
-    if (amount * 10 * state.targets.size() < target_load)
+    }
+    if (amount * 10 * state.targets.size() < target_load) {
       continue;
+    }
 
     dout(5) << "want to send " << amount << " to mds." << target
       //<< " .. " << (*it).second << " * " << load_fac
@@ -1190,13 +1211,13 @@ void MDBalancer::find_exports(CDir *dir,
   }
 }
 
-void MDBalancer::hit_inode(CInode *in, int type, int who)
+void MDBalancer::hit_inode(CInode *in, int type)
 {
   // hit inode
   in->pop.get(type).hit();
 
   if (in->get_parent_dn())
-    hit_dir(in->get_parent_dn()->get_dir(), type, who);
+    hit_dir(in->get_parent_dn()->get_dir(), type);
 }
 
 void MDBalancer::maybe_fragment(CDir *dir, bool hot)
@@ -1222,14 +1243,13 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
     }
 
     // merge?
-    if (dir->get_frag() != frag_t() && dir->should_merge() &&
-	merge_pending.count(dir->dirfrag()) == 0) {
+    if (dir->should_merge() && merge_pending.count(dir->dirfrag()) == 0) {
       queue_merge(dir);
     }
   }
 }
 
-void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
+void MDBalancer::hit_dir(CDir *dir, int type, double amount)
 {
   if (dir->inode->is_stray())
     return;
@@ -1245,31 +1265,16 @@ void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
   maybe_fragment(dir, hot);
 
   // replicate?
-  if (type == META_POP_IRD && who >= 0) {
-    dir->pop_spread.hit(who);
-  }
-
+  const bool readop = (type == META_POP_IRD || type == META_POP_READDIR);
   double rd_adj = 0.0;
-  if (type == META_POP_IRD &&
-      dir->last_popularity_sample < last_sample) {
+  if (readop && dir->last_popularity_sample < last_sample) {
     double dir_pop = dir->pop_auth_subtree.get(type).get();    // hmm??
+    dir_pop += v * 10;
     dir->last_popularity_sample = last_sample;
-    double pop_sp = dir->pop_spread.get();
-    dir_pop += pop_sp * 10;
 
-    //if (dir->ino() == inodeno_t(0x10000000002))
-    if (pop_sp > 0) {
-      dout(20) << type << " pop " << dir_pop << " spread " << pop_sp
-	      << " " << dir->pop_spread.last[0]
-	      << " " << dir->pop_spread.last[1]
-	      << " " << dir->pop_spread.last[2]
-	      << " " << dir->pop_spread.last[3]
-	      << " in " << *dir << dendl;
-    }
-
-    if (dir->is_auth() && !dir->is_ambiguous_auth()) {
-      if (dir->can_rep() &&
-	  dir_pop >= g_conf()->mds_bal_replicate_threshold) {
+    dout(20) << type << " pop " << dir_pop << " spread in " << *dir << dendl;
+    if (dir->is_auth() && !dir->is_ambiguous_auth() && dir->can_rep()) {
+      if (dir_pop >= g_conf()->mds_bal_replicate_threshold) {
 	// replicate
 	double rdp = dir->pop_me.get(META_POP_IRD).get();
 	rd_adj = rdp / mds->get_mds_map()->get_num_in_mds() - rdp;
@@ -1404,11 +1409,17 @@ void MDBalancer::handle_mds_failure(mds_rank_t who)
   }
 }
 
-int MDBalancer::dump_loads(Formatter *f) const
+int MDBalancer::dump_loads(Formatter *f, int64_t depth) const
 {
-  std::deque<CDir*> dfs;
+  std::deque<pair<CDir*, int>> dfs;
+  std::deque<CDir*> dfs_root;
   if (mds->mdcache->get_root()) {
-    mds->mdcache->get_root()->get_dirfrags(dfs);
+    mds->mdcache->get_root()->get_dirfrags(dfs_root);
+    while (!dfs_root.empty()) {
+        CDir *dir = dfs_root.front();
+        dfs_root.pop_front();
+        dfs.push_back(make_pair(dir, 0));
+    }
   } else {
     dout(10) << "no root" << dendl;
   }
@@ -1417,12 +1428,17 @@ int MDBalancer::dump_loads(Formatter *f) const
 
   f->open_array_section("dirfrags");
   while (!dfs.empty()) {
-    CDir *dir = dfs.front();
+    auto [dir, cur_depth] = dfs.front();
     dfs.pop_front();
 
     f->open_object_section("dir");
     dir->dump_load(f);
     f->close_section();
+
+    //limit output dirfrags depth
+    if (depth >= 0 && (cur_depth + 1) > depth) {
+        continue;
+    }
 
     for (auto it = dir->begin(); it != dir->end(); ++it) {
       CInode *in = it->second->get_linkage()->get_inode();
@@ -1431,9 +1447,10 @@ int MDBalancer::dump_loads(Formatter *f) const
 
       auto&& ls = in->get_dirfrags();
       for (const auto& subdir : ls) {
+
 	if (subdir->pop_nested.meta_load() < .001)
 	  continue;
-	dfs.push_back(subdir);
+	dfs.push_back(make_pair(subdir, cur_depth+1));
       }
     }
   }

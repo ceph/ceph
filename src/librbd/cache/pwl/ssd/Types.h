@@ -28,8 +28,15 @@ struct SuperBlock{
   }
 
   static void generate_test_instances(std::list<SuperBlock*>& ls) {
+    ls.push_back(new SuperBlock());
     ls.push_back(new SuperBlock);
-    ls.push_back(new SuperBlock);
+    ls.back()->root.layout_version = 3;
+    ls.back()->root.cur_sync_gen = 1;
+    ls.back()->root.pool_size = 10737418240;
+    ls.back()->root.flushed_sync_gen = 1;
+    ls.back()->root.block_size = 4096;
+    ls.back()->root.num_log_entries = 0;
+    ls.back()->root.first_free_entry = 30601;
     ls.back()->root.first_valid_entry = 2;
   }
 };

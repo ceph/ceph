@@ -60,7 +60,7 @@ target_link_libraries(ceph_test_rados_api_aio_pp
 
 add_executable(ceph_test_rados_api_asio asio.cc)
 target_link_libraries(ceph_test_rados_api_asio global
-  librados ${UNITTEST_LIBS} Boost::coroutine Boost::context)
+  librados ${UNITTEST_LIBS} spawn)
 
 add_executable(ceph_test_rados_api_list
   list.cc
@@ -128,6 +128,9 @@ target_link_libraries(ceph_test_rados_api_service_pp
 add_executable(ceph_test_rados_api_tier_pp
   tier_cxx.cc
   $<TARGET_OBJECTS:unit-main>)
+target_include_directories(ceph_test_rados_api_tier_pp
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(ceph_test_rados_api_tier_pp
   librados global ${UNITTEST_LIBS} Boost::system radostest-cxx cls_cas_internal
   cls_cas_client spawn)
@@ -139,6 +142,14 @@ target_link_libraries(ceph_test_rados_api_snapshots
 add_executable(ceph_test_rados_api_snapshots_pp
   snapshots_cxx.cc)
 target_link_libraries(ceph_test_rados_api_snapshots_pp
+  librados ${UNITTEST_LIBS} radostest-cxx)
+add_executable(ceph_test_rados_api_snapshots_stats
+  snapshots_stats.cc)
+target_link_libraries(ceph_test_rados_api_snapshots_stats
+  librados ${UNITTEST_LIBS} radostest)
+add_executable(ceph_test_rados_api_snapshots_stats_pp
+  snapshots_stats_cxx.cc)
+target_link_libraries(ceph_test_rados_api_snapshots_stats_pp
   librados ${UNITTEST_LIBS} radostest-cxx)
 
 add_executable(ceph_test_rados_api_cls_remote_reads

@@ -251,7 +251,7 @@ bool C_WriteRequest<T>::append_write_request(std::shared_ptr<SyncPoint> sync_poi
   std::lock_guard locker(m_lock);
   auto write_req_sp = this;
   if (sync_point->earlier_sync_point) {
-    Context *schedule_append_ctx = new LambdaContext([this, write_req_sp](int r) {
+    Context *schedule_append_ctx = new LambdaContext([write_req_sp](int r) {
         write_req_sp->schedule_append();
       });
     sync_point->earlier_sync_point->on_sync_point_appending.push_back(schedule_append_ctx);

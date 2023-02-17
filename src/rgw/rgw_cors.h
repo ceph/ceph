@@ -13,8 +13,7 @@
  *
  */
 
-#ifndef CEPH_RGW_CORS_H
-#define CEPH_RGW_CORS_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -133,4 +132,3 @@ static inline int validate_name_string(std::string_view o) {
     return -1;
   return 0;
 }
-#endif /*CEPH_RGW_CORS_H*/

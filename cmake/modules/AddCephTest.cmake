@@ -38,7 +38,6 @@ if(WITH_GTEST_PARALLEL)
       BUILD_COMMAND ""
       INSTALL_COMMAND "")
     add_dependencies(tests gtest-parallel_ext)
-    find_package(Python3 QUIET REQUIRED)
     set(GTEST_PARALLEL_COMMAND
       ${Python3_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
   endif()
@@ -70,7 +69,6 @@ function(add_tox_test name)
     list(APPEND tox_envs py3)
   endif()
   string(REPLACE ";" "," tox_envs "${tox_envs}")
-  find_package(Python3 QUIET REQUIRED)
   add_test(
     NAME setup-venv-for-${name}
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${Python3_EXECUTABLE} ${venv_path}
@@ -100,7 +98,7 @@ function(add_tox_test name)
     CEPH_LIB=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV}
     LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib
-    PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
+    PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:${CMAKE_CURRENT_BINARY_DIR}:$ENV{PATH}
     PYTHONPATH=${CMAKE_SOURCE_DIR}/src/pybind)
   list(APPEND tox_test run-tox-${name})
 endfunction()

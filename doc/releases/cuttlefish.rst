@@ -381,7 +381,7 @@ Please see `Upgrading from Bobtail to Cuttlefish`_ for details.
   reflect just that.
 
 * The monitor now enforces that MDS names be unique.  If you have
-  multiple daemons start with with the same id (e.g., ``mds.a``) the
+  multiple daemons start with the same id (e.g., ``mds.a``) the
   second one will implicitly mark the first as failed.  This makes
   things less confusing and makes a daemon restart faster (we no
   longer wait for the stopped daemon to time out) but existing
@@ -650,7 +650,7 @@ Upgrading
 ---------
 
 * The monitor now enforces that MDS names be unique.  If you have
-  multiple daemons start with with the same id (e.g., ``mds.a``) the
+  multiple daemons start with the same id (e.g., ``mds.a``) the
   second one will implicitly mark the first as failed.  This makes
   things less confusing and makes a daemon restart faster (we no
   longer wait for the stopped daemon to time out) but existing

@@ -3,9 +3,9 @@ overrides:
     conf:
       client:
         rgw crypt s3 kms backend: kmip
-        rgw crypt kmip ca path: /home/ubuntu/cephtest/ca/kmiproot.crt
-        rgw crypt kmip client cert: /home/ubuntu/cephtest/ca/kmip-client.crt
-        rgw crypt kmip client key: /home/ubuntu/cephtest/ca/kmip-client.key
+        rgw crypt kmip ca path: /etc/ceph/kmiproot.crt
+        rgw crypt kmip client cert: /etc/ceph/kmip-client.crt
+        rgw crypt kmip client key: /etc/ceph/kmip-client.key
         rgw crypt kmip kms key template: pykmip-$keyid
   rgw:
     client.0:

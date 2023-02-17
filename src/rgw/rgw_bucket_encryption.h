@@ -12,7 +12,10 @@ class ApplyServerSideEncryptionByDefault
   std::string sseAlgorithm;
 
 public:
-  ApplyServerSideEncryptionByDefault(): kmsMasterKeyID(""), sseAlgorithm("") {};
+  ApplyServerSideEncryptionByDefault() {};
+  ApplyServerSideEncryptionByDefault(const std::string &algorithm,
+     const std::string &key_id)
+   : kmsMasterKeyID(key_id), sseAlgorithm(algorithm) {};
 
   const std::string& kms_master_key_id() const {
     return kmsMasterKeyID;
@@ -49,6 +52,10 @@ protected:
 
 public:
   ServerSideEncryptionConfiguration(): bucketKeyEnabled(false) {};
+  ServerSideEncryptionConfiguration(const std::string &algorithm,
+    const std::string &keyid="", bool enabled = false)
+      : applyServerSideEncryptionByDefault(algorithm, keyid),
+        bucketKeyEnabled(enabled) {}
 
   const std::string& kms_master_key_id() const {
     return applyServerSideEncryptionByDefault.kms_master_key_id();
@@ -89,6 +96,9 @@ protected:
 
 public:
   RGWBucketEncryptionConfig(): rule_exist(false) {}
+  RGWBucketEncryptionConfig(const std::string &algorithm,
+    const std::string &keyid = "", bool enabled = false)
+      : rule_exist(true), rule(algorithm, keyid, enabled) {}
 
   const std::string& kms_master_key_id() const {
     return rule.kms_master_key_id();
@@ -126,5 +136,7 @@ public:
 
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<RGWBucketEncryptionConfig*>& o);
 };
 WRITE_CLASS_ENCODER(RGWBucketEncryptionConfig)

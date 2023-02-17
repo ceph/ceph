@@ -27,10 +27,20 @@ options:
   - osd_numa_auto_affinity
   flags:
   - startup
+- name: set_keepcaps
+  type: bool
+  level: advanced
+  desc: set the keepcaps flag before changing UID, preserving the permitted capability set
+  long_desc: When ceph switches from root to the ceph uid, all capabilities in all sets are eraseed. If
+    a component that is capability aware needs a specific capability, the keepcaps flag maintains
+     the permitted capability set, allowing the capabilities in the effective set to be activated as needed.
+  default: false
+  flags:
+  - startup
 - name: osd_smart_report_timeout
   type: uint
   level: advanced
-  desc: Timeout (in seconds) for smarctl to run, default is set to 5
+  desc: Timeout (in seconds) for smartctl to run, default is set to 5
   default: 5
 # verify backend can support configured max object name length
 - name: osd_check_max_object_name_len_on_startup
@@ -80,7 +90,8 @@ options:
 - name: osd_recovery_sleep
   type: float
   level: advanced
-  desc: Time in seconds to sleep before next recovery or backfill op
+  desc: Time in seconds to sleep before next recovery or backfill op. This setting
+    overrides _ssd, _hdd, and _hybrid if non-zero.
   fmt_desc: Time in seconds to sleep before the next recovery or backfill op.
     Increasing this value will slow down recovery operation while
     client operations will be less impacted.
@@ -125,7 +136,8 @@ options:
 - name: osd_snap_trim_sleep
   type: float
   level: advanced
-  desc: Time in seconds to sleep before next snap trim (overrides values below)
+  desc: Time in seconds to sleep before next snap trim. This setting overrides _ssd,
+    _hdd, and _hybrid if non-zero.
   fmt_desc: Time in seconds to sleep before next snap trim op.
     Increasing this value will slow down snap trimming.
     This option overrides backend specific variants.
@@ -321,7 +333,7 @@ options:
 - name: osd_scrub_chunk_min
   type: int
   level: advanced
-  desc: Minimum number of objects to scrub in a single chunk
+  desc: Minimum number of objects to deep-scrub in a single chunk
   fmt_desc: The minimal number of object store chunks to scrub during single operation.
     Ceph blocks writes to single chunk during scrub.
   default: 5
@@ -331,11 +343,34 @@ options:
 - name: osd_scrub_chunk_max
   type: int
   level: advanced
-  desc: Maximum number of objects to scrub in a single chunk
+  desc: Maximum number of objects to deep-scrub in a single chunk
   fmt_desc: The maximum number of object store chunks to scrub during single operation.
   default: 25
   see_also:
   - osd_scrub_chunk_min
+  with_legacy: true
+- name: osd_shallow_scrub_chunk_min
+  type: int
+  level: advanced
+  desc: Minimum number of objects to scrub in a single chunk
+  fmt_desc: The minimum number of object store chunks to scrub during single operation.
+    Not applicable to deep scrubs.
+    Ceph blocks writes to single chunk during scrub.
+  default: 50
+  see_also:
+  - osd_shallow_scrub_chunk_max
+  - osd_scrub_chunk_min
+  with_legacy: true
+- name: osd_shallow_scrub_chunk_max
+  type: int
+  level: advanced
+  desc: Maximum number of objects to scrub in a single chunk
+  fmt_desc: The maximum number of object store chunks to scrub during single operation.
+    Not applicable to deep scrubs.
+  default: 100
+  see_also:
+  - osd_shallow_scrub_chunk_min
+  - osd_scrub_chunk_max
   with_legacy: true
 # sleep between [deep]scrub ops
 - name: osd_scrub_sleep
@@ -447,6 +482,57 @@ options:
   see_also:
   - osd_deep_scrub_large_omap_object_key_threshold
   with_legacy: true
+# when scrubbing blocks on a locked object
+- name: osd_blocked_scrub_grace_period
+  type: int
+  level: advanced
+  desc: Time (seconds) before issuing a cluster-log warning
+  long_desc: Waiting too long for an object in the scrubbed chunk to be unlocked.
+  default: 120
+  with_legacy: true
+# timely updates to the 'pg dump' output, esp. re scrub scheduling
+- name: osd_stats_update_period_scrubbing
+  type: int
+  level: advanced
+  desc: Stats update period (seconds) when scrubbing
+  long_desc: A PG actively scrubbing (or blocked while scrubbing) publishes its
+    stats (inc. scrub/block duration) every this many seconds.
+  default: 15
+  with_legacy: false
+- name: osd_stats_update_period_not_scrubbing
+  type: int
+  level: advanced
+  desc: Stats update period (seconds) when not scrubbing
+  long_desc: A PG we are a primary of, publishes its
+    stats (inc. scrub/block duration) every this many seconds.
+  default: 120
+  with_legacy: false
+# when replicas are slow to respond to scrub resource reservations
+# Note: disable by using a very large value
+- name: osd_scrub_slow_reservation_response
+  type: millisecs
+  level: advanced
+  desc: Duration before issuing a cluster-log warning
+  long_desc: Waiting too long for a replica to respond (after at least half of the
+    replicas have responded).
+  default: 2200
+  min: 500
+  see_also:
+  - osd_scrub_reservation_timeout
+  with_legacy: false
+# when a replica does not respond to scrub resource request
+# Note: disable by using a very large value
+- name: osd_scrub_reservation_timeout
+  type: millisecs
+  level: advanced
+  desc: Duration before aborting the scrub session
+  long_desc: Waiting too long for some replicas to respond to
+    scrub reservation requests.
+  default: 5000
+  min: 2000
+  see_also:
+  - osd_scrub_slow_reservation_response
+  with_legacy: false
 # where rados plugins are stored
 - name: osd_class_dir
   type: str
@@ -739,6 +825,15 @@ options:
   default: 32
   flags:
   - startup
+- name: osd_aggregated_slow_ops_logging
+  type: bool
+  level: advanced
+  desc: Allow OSD daemon to send an aggregated slow ops to the cluster log
+  fmt_desc: If set to ``true``, the OSD daemon will send slow ops information in 
+    an aggregated format to the cluster log else sends every slow op to the
+    cluster log.
+  default: true
+  with_legacy: true
 - name: osd_op_num_threads_per_shard
   type: int
   level: advanced
@@ -964,7 +1059,7 @@ options:
     cost factor in QoS calculations. Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: Cost per IO in microseconds to consider per OSD (for rotational
     media)
-  default: 25000
+  default: 11400
   flags:
   - runtime
 - name: osd_mclock_cost_per_io_usec_ssd
@@ -1003,7 +1098,7 @@ options:
     = mclock_scheduler
   fmt_desc: Cost per byte in microseconds to consider per OSD (for rotational
     media)
-  default: 5.2
+  default: 2.6
   flags:
   - runtime
 - name: osd_mclock_cost_per_byte_usec_ssd
@@ -1096,6 +1191,53 @@ options:
   - high_recovery_ops
   - high_client_ops
   - custom
+  flags:
+  - runtime
+- name: osd_mclock_override_recovery_settings
+  type: bool
+  level: advanced
+  desc: Setting this option enables the override of recovery/backfill limits
+    for the mClock scheduler.
+  long_desc: This option when set enables the override of the max recovery
+    active and the max backfills limits with mClock scheduler active. These
+    options are not modifiable when mClock scheduler is active. Any attempt
+    to modify these values without setting this option will reset the
+    recovery or backfill option back to its default value.
+  fmt_desc: Setting this option will enable the override of the
+    recovery/backfill limits for the mClock scheduler as defined by the
+    ``osd_recovery_max_active_hdd``, ``osd_recovery_max_active_ssd`` and
+    ``osd_max_backfills`` options.
+  default: false
+  see_also:
+  - osd_recovery_max_active_hdd
+  - osd_recovery_max_active_ssd
+  - osd_max_backfills
+  flags:
+  - runtime
+- name: osd_mclock_iops_capacity_threshold_hdd
+  type: float
+  level: basic
+  desc: The threshold IOPs capacity (at 4KiB block size) beyond which to ignore
+    the OSD bench results for an OSD (for rotational media)
+  long_desc: This option specifies the threshold IOPS capacity for an OSD under
+    which the OSD bench results can be considered for QoS calculations. Only
+    considered for osd_op_queue = mclock_scheduler
+  fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
+    ignore OSD bench results for an OSD (for rotational media)
+  default: 500
+  flags:
+  - runtime
+- name: osd_mclock_iops_capacity_threshold_ssd
+  type: float
+  level: basic
+  desc: The threshold IOPs capacity (at 4KiB block size) beyond which to ignore
+    the OSD bench results for an OSD (for solid state media)
+  long_desc: This option specifies the threshold IOPS capacity for an OSD under
+    which the OSD bench results can be considered for QoS calculations. Only
+    considered for osd_op_queue = mclock_scheduler
+  fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
+    ignore OSD bench results for an OSD (for solid state media)
+  default: 80000
   flags:
   - runtime
 # Set to true for testing.  Users should NOT set this.
@@ -1231,6 +1373,13 @@ options:
   default: 512
   fmt_desc: The maximum number of objects per backfill scan.p
   with_legacy: true
+- name: osd_extblkdev_plugins
+  type: str
+  level: advanced
+  desc: extended block device plugins to load, provide compression feedback at runtime
+  default: vdo
+  flags:
+  - startup
 # minimum number of peers
 - name: osd_heartbeat_min_peers
   type: int
@@ -1240,8 +1389,8 @@ options:
 - name: osd_delete_sleep
   type: float
   level: advanced
-  desc: Time in seconds to sleep before next removal transaction (overrides values
-    below)
+  desc: Time in seconds to sleep before next removal transaction. This setting
+    overrides _ssd, _hdd, and _hybrid if non-zero.
   fmt_desc: Time in seconds to sleep before the next removal transaction. This
     throttles the PG deletion process.
   default: 0
@@ -1269,3 +1418,9 @@ options:
   default: 1
   flags:
   - runtime
+- name: osd_rocksdb_iterator_bounds_enabled
+  desc: Whether omap iterator bounds are applied to rocksdb iterator ReadOptions
+  type: bool
+  level: dev
+  default: true
+  with_legacy: true

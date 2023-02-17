@@ -7,6 +7,7 @@ overrides:
       osd:
         osd scrub min interval: 60
         osd scrub max interval: 120
+        osd max backfills: 6
 tasks:
 - thrashosds:
     timeout: 1200

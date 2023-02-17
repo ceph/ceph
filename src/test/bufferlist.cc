@@ -29,6 +29,7 @@
 #include "include/utime.h"
 #include "include/coredumpctl.h"
 #include "include/encoding.h"
+#include "common/buffer_instrumentation.h"
 #include "common/environment.h"
 #include "common/Clock.h"
 #include "common/safe_io.h"
@@ -47,11 +48,7 @@ using namespace std;
 
 static char cmd[128];
 
-struct instrumented_bptr : public ceph::buffer::ptr {
-  const ceph::buffer::raw* get_raw() const {
-    return _raw;
-  }
-};
+using ceph::buffer_instrumentation::instrumented_bptr;
 
 TEST(Buffer, constructors) {
   unsigned len = 17;
@@ -71,8 +68,7 @@ TEST(Buffer, constructors) {
     bufferptr ptr(buffer::claim_char(len, str));
     EXPECT_EQ(len, ptr.length());
     EXPECT_EQ(str, ptr.c_str());
-    bufferptr clone = ptr.clone();
-    EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+    EXPECT_EQ(0, ::memcmp(str, ptr.c_str(), len));
     delete [] str;
   }
   //
@@ -103,8 +99,7 @@ TEST(Buffer, constructors) {
     bufferptr ptr(buffer::claim_malloc(len, str));
     EXPECT_EQ(len, ptr.length());
     EXPECT_EQ(str, ptr.c_str());
-    bufferptr clone = ptr.clone();
-    EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+    EXPECT_EQ(0, ::memcmp(str, ptr.c_str(), len));
   }
   //
   // buffer::copy
@@ -126,8 +121,6 @@ TEST(Buffer, constructors) {
 #ifndef DARWIN
     ASSERT_TRUE(ptr.is_page_aligned());
 #endif // DARWIN 
-    bufferptr clone = ptr.clone();
-    EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
   }
 }
 
@@ -334,14 +327,6 @@ TEST(BufferPtr, assignment) {
     ASSERT_EQ(original.offset(), ptr.offset());
     ASSERT_EQ(original.length(), ptr.length());
   }
-}
-
-TEST(BufferPtr, clone) {
-  unsigned len = 17;
-  bufferptr ptr(len);
-  ::memset(ptr.c_str(), 'X', len);
-  bufferptr clone = ptr.clone();
-  EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
 }
 
 TEST(BufferPtr, swap) {
@@ -1856,15 +1841,17 @@ TEST(BufferList, rebuild_aligned_size_and_memory) {
      * scenario where the first bptr is both size and memory aligned and
      * the second is 0-length */
     bl.clear();
-    bufferptr ptr1(buffer::create_aligned(4096, 4096));
-    bl.append(ptr1);
-    bufferptr ptr(10);
-    /* bl.back().length() must be 0 */
-    bl.append(ptr, 0, 0);
+    bl.append(bufferptr{buffer::create_aligned(4096, 4096)});
+    bufferptr ptr(buffer::create_aligned(42, 4096));
+    /* bl.back().length() must be 0. offset set to 42 guarantees
+     * the entire list is unaligned. */
+    bl.append(ptr, 42, 0);
     EXPECT_EQ(bl.get_num_buffers(), 2);
     EXPECT_EQ(bl.back().length(), 0);
-    /* rebuild_aligned() calls rebuild_aligned_size_and_memory() */
-    bl.rebuild_aligned(4096);
+    EXPECT_FALSE(bl.is_aligned(4096));
+    /* rebuild_aligned() calls rebuild_aligned_size_and_memory().
+     * we assume the rebuild always happens. */
+    EXPECT_TRUE(bl.rebuild_aligned(4096));
     EXPECT_EQ(bl.get_num_buffers(), 1);
   }
 }

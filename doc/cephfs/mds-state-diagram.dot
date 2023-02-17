@@ -57,6 +57,7 @@ D0 -> N3 [color=red,penwidth=2.0];
 // terminal (but not "in")
 node [shape=polygon,sides=6,color=black,peripheries=1];
 D1 [label="down:damaged"]
+S2 -> D1 [color=black,penwidth=2.0];
 N3 -> D1 [color=black,penwidth=2.0];
 N4 -> D1 [color=black,penwidth=2.0];
 N5 -> D1 [color=black,penwidth=2.0];
@@ -69,5 +70,6 @@ D1 -> D0 [color=red,penwidth=2.0]
 node [shape=polygon,sides=6,color=purple,peripheries=1];
 D3 [label="down:stopped"]
 S3 -> D3 [color=purple,penwidth=2.0];
+N6 -> D3 [color=purple,penwidth=2.0];
 
 }

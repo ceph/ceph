@@ -15,6 +15,7 @@
 #ifndef CEPH_LOGMONITOR_H
 #define CEPH_LOGMONITOR_H
 
+#include <atomic>
 #include <map>
 #include <set>
 
@@ -50,7 +51,8 @@ private:
   version_t external_log_to = 0;
   std::map<std::string, int> channel_fds;
 
-  fmt::memory_buffer file_log_buffer;
+  fmt::memory_buffer log_buffer;
+  std::atomic<bool> log_rotated = false;
 
   struct log_channel_info {
 
@@ -164,9 +166,13 @@ private:
   
   void tick() override;  // check state, take actions
 
+  void dump_info(Formatter *f);
   void check_subs();
   void check_sub(Subscription *s);
 
+  void reopen_logs() {
+    this->log_rotated.store(true);
+  }
   void log_external_close_fds();
   void log_external(const LogEntry& le);
   void log_external_backlog();

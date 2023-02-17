@@ -1,0 +1,30 @@
+overrides:
+  ceph:
+    conf:
+      mgr:
+        debug mgr: 20
+        debug ms: 1
+        debug finisher: 20
+        debug client: 20
+    log-whitelist:
+      - OSD full dropping all updates
+      - OSD near full
+      - pausewr flag
+      - failsafe engaged, dropping updates
+      - failsafe disengaged, no longer dropping
+      - is full \(reached quota
+      - POOL_FULL
+      - POOL_BACKFILLFULL
+
+overrides:
+  kclient:
+    snapdirname: .customsnapkernel
+  ceph:
+    conf:
+      client:
+        client snapdir: .customsnapfuse
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_snap_schedules.TestSnapSchedulesSnapdir

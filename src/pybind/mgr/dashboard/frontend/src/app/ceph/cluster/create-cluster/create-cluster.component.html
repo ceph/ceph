@@ -12,13 +12,15 @@
       <div class="m-4">
         <h4 class="text-center"
             i18n>Please expand your cluster first</h4>
-        <div class="offset-md-2">
+        <div class="text-center">
           <button class="btn btn-accent m-2"
                   name="expand-cluster"
                   (click)="createCluster()"
+                  aria-label="Expand Cluster"
                   i18n>Expand Cluster</button>
           <button class="btn btn-light"
                   name="skip-cluster-creation"
+                  aria-label="Skip"
                   (click)="skipClusterCreation()"
                   i18n>Skip</button>
         </div>
@@ -36,29 +38,29 @@
     <div class="card-body vertical-line">
       <ng-container [ngSwitch]="currentStep?.stepIndex">
         <div *ngSwitchCase="'1'"
-             class="ml-5">
+             class="ms-5">
           <h4 class="title"
               i18n>Add Hosts</h4>
           <br>
           <cd-hosts [hiddenColumns]="['services']"
-                    [hideTitle]="true"
-                    [hideSubmitBtn]="true"
+                    [hideMaintenance]="true"
                     [hasTableDetails]="false"
                     [showGeneralActionsOnly]="true"></cd-hosts>
         </div>
         <div *ngSwitchCase="'2'"
-             class="ml-5">
+             class="ms-5">
           <h4 class="title"
               i18n>Create OSDs</h4>
-          <br>
           <div class="alignForm">
             <cd-osd-form [hideTitle]="true"
                          [hideSubmitBtn]="true"
-                         (emitDriveGroup)="getDriveGroup($event)"></cd-osd-form>
+                         (emitDriveGroup)="setDriveGroup($event)"
+                         (emitDeploymentOption)="setDeploymentOptions($event)"
+                         (emitMode)="setDeploymentMode($event)"></cd-osd-form>
           </div>
         </div>
         <div *ngSwitchCase="'3'"
-             class="ml-5">
+             class="ms-5">
           <h4 class="title"
               i18n>Create Services</h4>
           <br>
@@ -68,18 +70,18 @@
                        [routedModal]="false"></cd-services>
         </div>
         <div *ngSwitchCase="'4'"
-             class="ml-5">
+             class="ms-5">
           <cd-create-cluster-review></cd-create-cluster-review>
         </div>
       </ng-container>
     </div>
   </div>
   <div class="card-footer">
-    <button class="btn btn-accent m-2 float-right"
+    <button class="btn btn-accent m-2 float-end"
             (click)="onNextStep()"
             aria-label="Next"
             i18n>{{ showSubmitButtonLabel() }}</button>
-    <cd-back-button class="m-2 float-right"
+    <cd-back-button class="m-2 float-end"
                     aria-label="Close"
                     (backAction)="onPreviousStep()"
                     [name]="showCancelButtonLabel()"></cd-back-button>

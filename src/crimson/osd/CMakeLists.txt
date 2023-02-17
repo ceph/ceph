@@ -3,6 +3,7 @@ add_executable(crimson-osd
   ec_backend.cc
   heartbeat.cc
   main.cc
+  main_config_bootstrap_helpers.cc
   osd.cc
   osd_meta.cc
   pg.cc
@@ -10,16 +11,19 @@ add_executable(crimson-osd
   pg_meta.cc
   replicated_backend.cc
   shard_services.cc
+  pg_shard_manager.cc
   object_context.cc
+  object_context_loader.cc
   ops_executer.cc
   osd_operation.cc
   osd_operations/client_request.cc
   osd_operations/client_request_common.cc
-  osd_operations/compound_peering_request.cc
   osd_operations/internal_client_request.cc
   osd_operations/peering_event.cc
   osd_operations/pg_advance_map.cc
   osd_operations/replicated_request.cc
+  osd_operations/logmissing_request.cc
+  osd_operations/logmissing_request_reply.cc
   osd_operations/background_recovery.cc
   osd_operations/recovery_subrequest.cc
   pg_recovery.cc
@@ -28,6 +32,7 @@ add_executable(crimson-osd
   scheduler/scheduler.cc
   scheduler/mclock_scheduler.cc
   osdmap_gate.cc
+  pg_activation_blocker.cc
   pg_map.cc
   pg_interval_interrupt_condition.cc
   objclass.cc

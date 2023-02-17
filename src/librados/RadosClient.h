@@ -121,7 +121,7 @@ public:
   int get_fsid(std::string *s);
   int64_t lookup_pool(const char *name);
   bool pool_requires_alignment(int64_t pool_id);
-  int pool_requires_alignment2(int64_t pool_id, bool *requires);
+  int pool_requires_alignment2(int64_t pool_id, bool *req);
   uint64_t pool_required_alignment(int64_t pool_id);
   int pool_required_alignment2(int64_t pool_id, uint64_t *alignment);
   int pool_get_name(uint64_t pool_id, std::string *name,

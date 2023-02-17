@@ -15,7 +15,6 @@
 
 #include <algorithm>
 #include <boost/algorithm/string/trim.hpp>
-#include <boost/process.hpp>
 #include <boost/tokenizer.hpp>
 #include <boost/uuid/uuid.hpp>             // uuid class
 #include <boost/uuid/uuid_generators.hpp>  // generators
@@ -25,11 +24,13 @@
 #include <thread>
 #include <vector>
 
-#include "lazy_omap_stats_test.h"
+#include "common/ceph_json.h"
+#include "global/global_init.h"
 #include "include/compat.h"
 
+#include "lazy_omap_stats_test.h"
+
 using namespace std;
-namespace bp = boost::process;
 
 void LazyOmapStatsTest::init(const int argc, const char** argv)
 {
@@ -100,6 +101,8 @@ void LazyOmapStatsTest::init(const int argc, const char** argv)
          << endl;
     exit(ret);
   }
+
+  get_pool_id(conf.pool_name);
 }
 
 void LazyOmapStatsTest::shutdown()
@@ -167,20 +170,54 @@ void LazyOmapStatsTest::create_payload()
        << endl;
 }
 
-void LazyOmapStatsTest::scrub() const
+void LazyOmapStatsTest::scrub()
 {
-  // Use CLI because we need to block
-
   cout << "Scrubbing" << endl;
-  error_code ec;
-  bp::ipstream is;
-  bp::child c("ceph osd deep-scrub all --block");
-  c.wait(ec);
-  if (ec) {
-    cout << "Deep scrub command failed! Error: " << ec.value() << " "
-         << ec.message() << endl;
-    exit(ec.value());
+
+  cout << "Before scrub stamps:" << endl;
+  string target_pool(conf.pool_id);
+  target_pool.append(".");
+  bool target_pool_found = false;
+  map<string, string> before_scrub = get_scrub_stamps();
+  for (auto [pg, stamp] : before_scrub) {
+    cout << "pg = " << pg << " stamp = " << stamp << endl;
+    if (pg.rfind(target_pool, 0) == 0) {
+        target_pool_found = true;
+    }
   }
+  if (!target_pool_found) {
+    cout << "Error: Target pool " << conf.pool_name << ":" << conf.pool_id
+         << " not found!" << endl;
+    exit(2); // ENOENT
+  }
+  cout << endl;
+
+  // Short sleep to make sure the new pool is visible
+  sleep(5);
+
+  string command = R"({"prefix": "osd deep-scrub", "who": "all"})";
+  auto output = get_output(command);
+  cout << output << endl;
+
+  cout << "Waiting for deep-scrub to complete..." << endl;
+  while (sleep(1) == 0) {
+    cout << "Current scrub stamps:" <<  endl;
+    bool complete = true;
+    map<string, string> current_stamps = get_scrub_stamps();
+    for (auto [pg, stamp] : current_stamps) {
+        cout << "pg = " << pg << " stamp = " << stamp << endl;
+        if (stamp == before_scrub[pg]) {
+          // See if stamp for each pg has changed
+          // If not, we haven't completed the deep-scrub
+          complete = false;
+        }
+    }
+    cout << endl;
+    if (complete) {
+      break;
+    }
+  }
+  cout << "Scrubbing complete" << endl;
 }
 
 const int LazyOmapStatsTest::find_matches(string& output, regex& reg) const
@@ -195,11 +232,17 @@ const int LazyOmapStatsTest::find_matches(string& output, regex& reg) const
 }
 
 const string LazyOmapStatsTest::get_output(const string command,
-                                           const bool silent)
+                                           const bool silent,
+                                           const CommandTarget target)
 {
   librados::bufferlist inbl, outbl;
   string output;
-  int ret = rados.mgr_command(command, inbl, &outbl, &output);
+  int ret = 0;
+  if (target == CommandTarget::TARGET_MON) {
+    ret = rados.mon_command(command, inbl, &outbl, &output);
+  } else {
+    ret = rados.mgr_command(command, inbl, &outbl, &output);
+  }
   if (output.length() && !silent) {
     cout << output << endl;
   }
@@ -210,6 +253,46 @@ const string LazyOmapStatsTest::get_output(const string command,
     exit(ret);
   }
   return string(outbl.c_str(), outbl.length());
+}
+
+void LazyOmapStatsTest::get_pool_id(const string& pool)
+{
+  cout << R"(Querying pool id)" << endl;
+
+  string command = R"({"prefix": "osd pool ls", "detail": "detail", "format": "json"})";
+  librados::bufferlist inbl, outbl;
+  auto output = get_output(command, false, CommandTarget::TARGET_MON);
+  JSONParser parser;
+  parser.parse(output.c_str(), output.size());
+  for (const auto& pool : parser.get_array_elements()) {
+    JSONParser parser2;
+    parser2.parse(pool.c_str(), static_cast<int>(pool.size()));
+    auto* obj = parser2.find_obj("pool_name");
+    if (obj->get_data().compare(conf.pool_name) == 0) {
+      obj = parser2.find_obj("pool_id");
+      conf.pool_id = obj->get_data();
+    }
+  }
+  if (conf.pool_id.empty()) {
+    cout << "Failed to find pool ID for pool " << conf.pool_name << "!" << endl;
+    exit(2);    // ENOENT
+  } else {
+    cout << "Found pool ID: " << conf.pool_id << endl;
+  }
+}
+
+map<string, string> LazyOmapStatsTest::get_scrub_stamps() {
+  map<string, string> stamps;
+  string command = R"({"prefix": "pg dump", "format": "json"})";
+  auto output = get_output(command);
+  JSONParser parser;
+  parser.parse(output.c_str(), output.size());
+  auto* obj = parser.find_obj("pg_map")->find_obj("pg_stats");
+  for (auto pg = obj->find_first(); !pg.end(); ++pg) {
+    stamps.insert({(*pg)->find_obj("pgid")->get_data(),
+                  (*pg)->find_obj("last_deep_scrub_stamp")->get_data()});
+  }
+  return stamps;
 }
 
 void LazyOmapStatsTest::check_one()
@@ -333,34 +416,6 @@ index_t LazyOmapStatsTest::get_indexes(regex& reg, string& output) const
   return indexes;
 }
 
-const string LazyOmapStatsTest::get_pool_id(string& pool)
-{
-  cout << R"(Querying pool id)" << endl;
-
-  string command = R"({"prefix": "osd pool ls", "detail": "detail"})";
-  librados::bufferlist inbl, outbl;
-  string output;
-  int ret = rados.mon_command(command, inbl, &outbl, &output);
-  if (output.length()) cout << output << endl;
-  if (ret < 0) {
-    ret = -ret;
-    cerr << "Failed to get pool id! Error: " << ret << " " << strerror(ret)
-         << endl;
-    exit(ret);
-  }
-  string dump_output(outbl.c_str(), outbl.length());
-  cout << dump_output << endl;
-
-  string poolregstring = R"(pool\s(\d+)\s')" + pool + "'";
-  regex reg(poolregstring);
-  smatch match;
-  regex_search(dump_output, match, reg);
-  auto pool_id = match[1].str();
-  cout << "Found pool ID: " << pool_id << endl;
-
-  return pool_id;
-}
-
 void LazyOmapStatsTest::check_pg_dump()
 {
   cout << R"(Checking "pg dump" output)" << endl;
@@ -459,12 +514,10 @@ void LazyOmapStatsTest::check_pg_dump_pools()
             "\n");
   index_t indexes = get_indexes(reg, dump_output);
 
-  auto pool_id = get_pool_id(conf.pool_name);
-
   reg =
       "\n"
       R"(()" +
-      pool_id +
+      conf.pool_id +
       R"(\s.*))"
       "\n";
   smatch match;

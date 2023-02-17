@@ -912,20 +912,25 @@ connect_to_cluster(rados_t *pcluster)
 	return 0;
 }
 
+#define OPT_NOT_FOUND -1
+
 int main(int argc, const char *argv[])
 {
 	memset(&rbd_image_data, 0, sizeof(rbd_image_data));
 
-	// librados will filter out -f/-d options from command-line
-	std::map<std::string, bool> filter_args = {
-		{"-f", false},
-		{"-d", false}};
+	// librados will filter out -r/-f/-d options from command-line
+	std::map<std::string, int> filter_options = {
+		{"-r", OPT_NOT_FOUND},
+		{"-f", OPT_NOT_FOUND},
+		{"-d", OPT_NOT_FOUND}};
+
+	std::set<std::string> require_arg_options = {"-r"};
 
 	std::vector<const char*> arg_vector;
 	for (auto idx = 0; idx < argc; ++idx) {
-		auto it = filter_args.find(argv[idx]);
-		if (it != filter_args.end()) {
-			it->second = true;
+		auto it = filter_options.find(argv[idx]);
+		if (it != filter_options.end()) {
+			it->second = idx;
 		}
 		arg_vector.push_back(argv[idx]);
 	}
@@ -941,9 +946,13 @@ int main(int argc, const char *argv[])
 		exit(1);
 	}
 
-	for (auto& it : filter_args) {
-		if (it.second) {
+	for (auto& it : filter_options) {
+		if (it.second != OPT_NOT_FOUND) {
 			arg_vector.push_back(it.first.c_str());
+			if (require_arg_options.count(it.first) &&
+			    it.second + 1 < argc) {
+				arg_vector.push_back(argv[it.second + 1]);
+			}
 		}
 	}
 

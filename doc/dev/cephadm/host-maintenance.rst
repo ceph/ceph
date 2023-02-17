@@ -32,8 +32,8 @@ The ceph orch command will be extended to support maintenance.
 
 .. code-block::
 
-    ceph orch host enter-maintenance <host> [ --check ]
-    ceph orch host exit-maintenance <host> 
+    ceph orch host maintenance enter <host> [ --force ]
+    ceph orch host maintenance exit <host>
 
 .. note:: In addition, the host's status should be updated to reflect whether it
    is in maintenance or not. 
@@ -58,7 +58,7 @@ The list below shows some of these additional daemons.
 
 By using the --check option first, the Admin can choose whether to proceed. This 
 workflow is obviously optional for the CLI user, but could be integrated into the
-UI workflow to help less experienced Administators manage the cluster.
+UI workflow to help less experienced administrators manage the cluster.
 
 By adopting this two-phase approach, a UI based workflow would look something
 like this.

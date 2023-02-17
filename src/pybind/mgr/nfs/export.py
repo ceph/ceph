@@ -1,17 +1,42 @@
 import errno
 import json
 import logging
-from typing import List, Any, Dict, Tuple, Optional, TYPE_CHECKING, TypeVar, Callable, cast
+from typing import (
+    List,
+    Any,
+    Dict,
+    Optional,
+    TYPE_CHECKING,
+    TypeVar,
+    Callable,
+    Set,
+    cast)
 from os.path import normpath
 
-from rados import TimedOut, ObjectNotFound
+from rados import TimedOut, ObjectNotFound, Rados, LIBRADOS_ALL_NSPACES
 
+from object_format import ErrorResponse
+from orchestrator import NoOrchestrator
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
 
-from .export_utils import GaneshaConfParser, Export, RawBlock, CephFSFSAL, RGWFSAL
-from .exception import NFSException, NFSInvalidOperation, FSNotFound, \
-    ClusterNotFound
-from .utils import available_clusters, check_fs, restart_nfs_service
+from .ganesha_conf import (
+    CephFSFSAL,
+    Export,
+    GaneshaConfParser,
+    RGWFSAL,
+    RawBlock,
+    format_block)
+from .exception import NFSException, NFSInvalidOperation, FSNotFound
+from .utils import (
+    CONF_PREFIX,
+    EXPORT_PREFIX,
+    NonFatalError,
+    USER_CONF_PREFIX,
+    export_obj_name,
+    conf_obj_name,
+    available_clusters,
+    check_fs,
+    restart_nfs_service)
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -21,33 +46,33 @@ FuncT = TypeVar('FuncT', bound=Callable)
 log = logging.getLogger(__name__)
 
 
-def export_cluster_checker(func: FuncT) -> FuncT:
-    def cluster_check(
-            export: 'ExportMgr',
-            *args: Any,
-            **kwargs: Any
-    ) -> Tuple[int, str, str]:
-        """
-        This method checks if cluster exists
-        """
-        if kwargs['cluster_id'] not in available_clusters(export.mgr):
-            return -errno.ENOENT, "", "Cluster does not exists"
-        return func(export, *args, **kwargs)
-    return cast(FuncT, cluster_check)
+def known_cluster_ids(mgr: 'Module') -> Set[str]:
+    """Return the set of known cluster IDs."""
+    try:
+        clusters = set(available_clusters(mgr))
+    except NoOrchestrator:
+        clusters = nfs_rados_configs(mgr.rados)
+    return clusters
 
 
-def exception_handler(
-        exception_obj: Exception,
-        log_msg: str = ""
-) -> Tuple[int, str, str]:
-    if log_msg:
-        log.exception(log_msg)
-    return getattr(exception_obj, 'errno', -1), "", str(exception_obj)
+def _check_rados_notify(ioctx: Any, obj: str) -> None:
+    try:
+        ioctx.notify(obj)
+    except TimedOut:
+        log.exception("Ganesha timed out")
+
+
+def normalize_path(path: str) -> str:
+    if path:
+        path = normpath(path.strip())
+        if path[:2] == "//":
+            path = path[1:]
+    return path
 
 
 class NFSRados:
-    def __init__(self, mgr: 'Module', namespace: str) -> None:
-        self.mgr = mgr
+    def __init__(self, rados: 'Rados', namespace: str) -> None:
+        self.rados = rados
         self.pool = POOL_NAME
         self.namespace = namespace
 
@@ -58,7 +83,7 @@ class NFSRados:
         return RawBlock('%url', values={'value': self._make_rados_url(obj_name)})
 
     def write_obj(self, conf_block: str, obj: str, config_obj: str = '') -> None:
-        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+        with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             ioctx.write_full(obj, conf_block.encode('utf-8'))
             if not config_obj:
@@ -68,52 +93,90 @@ class NFSRados:
                       self.pool, self.namespace, obj)
 
             # Add created obj url to common config obj
-            ioctx.append(config_obj, GaneshaConfParser.write_block(
+            ioctx.append(config_obj, format_block(
                          self._create_url_block(obj)).encode('utf-8'))
-            ExportMgr._check_rados_notify(ioctx, config_obj)
+            _check_rados_notify(ioctx, config_obj)
             log.debug("Added %s url to %s", obj, config_obj)
 
     def read_obj(self, obj: str) -> Optional[str]:
-        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+        with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             try:
                 return ioctx.read(obj, 1048576).decode()
             except ObjectNotFound:
                 return None
 
-    def update_obj(self, conf_block: str, obj: str, config_obj: str) -> None:
-        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+    def update_obj(self, conf_block: str, obj: str, config_obj: str,
+                   should_notify: Optional[bool] = True) -> None:
+        with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             ioctx.write_full(obj, conf_block.encode('utf-8'))
             log.debug("write configuration into rados object %s/%s/%s",
                       self.pool, self.namespace, obj)
-            ExportMgr._check_rados_notify(ioctx, config_obj)
+            if should_notify:
+                _check_rados_notify(ioctx, config_obj)
             log.debug("Update export %s in %s", obj, config_obj)
 
     def remove_obj(self, obj: str, config_obj: str) -> None:
-        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+        with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             export_urls = ioctx.read(config_obj)
             url = '%url "{}"\n\n'.format(self._make_rados_url(obj))
             export_urls = export_urls.replace(url.encode('utf-8'), b'')
             ioctx.remove_object(obj)
             ioctx.write_full(config_obj, export_urls)
-            ExportMgr._check_rados_notify(ioctx, config_obj)
+            _check_rados_notify(ioctx, config_obj)
             log.debug("Object deleted: %s", url)
 
     def remove_all_obj(self) -> None:
-        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+        with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             for obj in ioctx.list_objects():
                 obj.remove()
 
     def check_user_config(self) -> bool:
-        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+        with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             for obj in ioctx.list_objects():
-                if obj.key.startswith("userconf-nfs"):
+                if obj.key.startswith(USER_CONF_PREFIX):
                     return True
         return False
+
+
+def nfs_rados_configs(rados: 'Rados', nfs_pool: str = POOL_NAME) -> Set[str]:
+    """Return a set of all the namespaces in the nfs_pool where nfs
+    configuration objects are found. The namespaces also correspond
+    to the cluster ids.
+    """
+    ns: Set[str] = set()
+    prefixes = (EXPORT_PREFIX, CONF_PREFIX, USER_CONF_PREFIX)
+    with rados.open_ioctx(nfs_pool) as ioctx:
+        ioctx.set_namespace(LIBRADOS_ALL_NSPACES)
+        for obj in ioctx.list_objects():
+            if obj.key.startswith(prefixes):
+                ns.add(obj.nspace)
+    return ns
+
+
+class AppliedExportResults:
+    """Gathers the results of multiple changed exports.
+    Returned by apply_export.
+    """
+
+    def __init__(self) -> None:
+        self.changes: List[Dict[str, str]] = []
+        self.has_error = False
+
+    def append(self, value: Dict[str, str]) -> None:
+        if value.get("state", "") == "error":
+            self.has_error = True
+        self.changes.append(value)
+
+    def to_simplified(self) -> List[Dict[str, str]]:
+        return self.changes
+
+    def mgr_return_value(self) -> int:
+        return -errno.EIO if self.has_error else 0
 
 
 class ExportMgr:
@@ -126,22 +189,15 @@ class ExportMgr:
         self.rados_pool = POOL_NAME
         self._exports: Optional[Dict[str, List[Export]]] = export_ls
 
-    @staticmethod
-    def _check_rados_notify(ioctx: Any, obj: str) -> None:
-        try:
-            ioctx.notify(obj)
-        except TimedOut:
-            log.exception("Ganesha timed out")
-
     @property
     def exports(self) -> Dict[str, List[Export]]:
         if self._exports is None:
             self._exports = {}
             log.info("Begin export parsing")
-            for cluster_id in available_clusters(self.mgr):
+            for cluster_id in known_cluster_ids(self.mgr):
                 self.export_conf_objs = []  # type: List[Export]
                 self._read_raw_config(cluster_id)
-                self.exports[cluster_id] = self.export_conf_objs
+                self._exports[cluster_id] = self.export_conf_objs
                 log.info("Exports parsed successfully %s", self.exports.items())
         return self._exports
 
@@ -189,17 +245,9 @@ class ExportMgr:
         if isinstance(export.fsal, CephFSFSAL):
             fsal = cast(CephFSFSAL, export.fsal)
             assert fsal.fs_name
-
-            # is top-level or any client rw?
-            rw = export.access_type.lower() == 'rw'
-            for c in export.clients:
-                if c.access_type.lower() == 'rw':
-                    rw = True
-                    break
-
             fsal.user_id = f"nfs.{export.cluster_id}.{export.export_id}"
             fsal.cephx_key = self._create_user_key(
-                export.cluster_id, fsal.user_id, export.path, fsal.fs_name, not rw
+                export.cluster_id, fsal.user_id, export.path, fsal.fs_name
             )
             log.debug("Successfully created user %s for cephfs path %s", fsal.user_id, export.path)
 
@@ -244,7 +292,7 @@ class ExportMgr:
         with self.mgr.rados.open_ioctx(self.rados_pool) as ioctx:
             ioctx.set_namespace(rados_namespace)
             for obj in ioctx.list_objects():
-                if obj.key.startswith("export-"):
+                if obj.key.startswith(EXPORT_PREFIX):
                     size, _ = obj.stat()
                     raw_config = obj.read(size)
                     raw_config = raw_config.decode("utf-8")
@@ -256,10 +304,10 @@ class ExportMgr:
 
     def _save_export(self, cluster_id: str, export: Export) -> None:
         self.exports[cluster_id].append(export)
-        NFSRados(self.mgr, cluster_id).write_obj(
-            GaneshaConfParser.write_block(export.to_export_block()),
-            f'export-{export.export_id}',
-            f'conf-nfs.{export.cluster_id}'
+        self._rados(cluster_id).write_obj(
+            format_block(export.to_export_block()),
+            export_obj_name(export.export_id),
+            conf_obj_name(export.cluster_id)
         )
 
     def _delete_export(
@@ -267,7 +315,7 @@ class ExportMgr:
             cluster_id: str,
             pseudo_path: Optional[str],
             export_obj: Optional[Export] = None
-    ) -> Tuple[int, str, str]:
+    ) -> None:
         try:
             if export_obj:
                 export: Optional[Export] = export_obj
@@ -277,17 +325,18 @@ class ExportMgr:
 
             if export:
                 if pseudo_path:
-                    NFSRados(self.mgr, cluster_id).remove_obj(
-                        f'export-{export.export_id}', f'conf-nfs.{cluster_id}')
+                    self._rados(cluster_id).remove_obj(
+                        export_obj_name(export.export_id), conf_obj_name(cluster_id))
                 self.exports[cluster_id].remove(export)
                 self._delete_export_user(export)
                 if not self.exports[cluster_id]:
                     del self.exports[cluster_id]
                     log.debug("Deleted all exports for cluster %s", cluster_id)
-                return 0, "Successfully deleted export", ""
-            return 0, "", "Export does not exist"
+                return None
+            raise NonFatalError("Export does not exist")
         except Exception as e:
-            return exception_handler(e, f"Failed to delete {pseudo_path} export for {cluster_id}")
+            log.exception(f"Failed to delete {pseudo_path} export for {cluster_id}")
+            raise ErrorResponse.wrap(e)
 
     def _fetch_export_obj(self, cluster_id: str, ex_id: int) -> Optional[Export]:
         try:
@@ -295,7 +344,7 @@ class ExportMgr:
                 ioctx.set_namespace(cluster_id)
                 export = Export.from_export_block(
                     GaneshaConfParser(
-                        ioctx.read(f"export-{ex_id}").decode("utf-8")
+                        ioctx.read(export_obj_name(ex_id)).decode("utf-8")
                     ).parse()[0],
                     cluster_id
                 )
@@ -304,21 +353,27 @@ class ExportMgr:
             log.exception("Export ID: %s not found", ex_id)
         return None
 
-    def _update_export(self, cluster_id: str, export: Export) -> None:
+    def _update_export(self, cluster_id: str, export: Export,
+                       need_nfs_service_restart: bool) -> None:
         self.exports[cluster_id].append(export)
-        NFSRados(self.mgr, cluster_id).update_obj(
-            GaneshaConfParser.write_block(export.to_export_block()),
-            f'export-{export.export_id}', f'conf-nfs.{export.cluster_id}')
+        self._rados(cluster_id).update_obj(
+            format_block(export.to_export_block()),
+            export_obj_name(export.export_id), conf_obj_name(export.cluster_id),
+            should_notify=not need_nfs_service_restart)
+        if need_nfs_service_restart:
+            restart_nfs_service(self.mgr, export.cluster_id)
 
-    def format_path(self, path: str) -> str:
-        if path:
-            path = normpath(path.strip())
-            if path[:2] == "//":
-                path = path[1:]
-        return path
+    def _validate_cluster_id(self, cluster_id: str) -> None:
+        """Raise an exception if cluster_id is not valid."""
+        clusters = known_cluster_ids(self.mgr)
+        log.debug("checking for %r in known nfs clusters: %r",
+                  cluster_id, clusters)
+        if cluster_id not in clusters:
+            raise ErrorResponse(f"Cluster {cluster_id!r} does not exist",
+                                return_value=-errno.ENOENT)
 
-    @export_cluster_checker
-    def create_export(self, addr: Optional[List[str]] = None, **kwargs: Any) -> Tuple[int, str, str]:
+    def create_export(self, addr: Optional[List[str]] = None, **kwargs: Any) -> Dict[str, Any]:
+        self._validate_cluster_id(kwargs['cluster_id'])
         # if addr(s) are provided, construct client list and adjust outer block
         clients = []
         if addr:
@@ -348,12 +403,14 @@ class ExportMgr:
                 return self.create_rgw_export(**kwargs)
             raise NotImplementedError()
         except Exception as e:
-            return exception_handler(e, f"Failed to create {kwargs['pseudo_path']} export for {kwargs['cluster_id']}")
+            log.exception(
+                f"Failed to create {kwargs['pseudo_path']} export for {kwargs['cluster_id']}")
+            raise ErrorResponse.wrap(e)
 
-    @export_cluster_checker
     def delete_export(self,
                       cluster_id: str,
-                      pseudo_path: str) -> Tuple[int, str, str]:
+                      pseudo_path: str) -> None:
+        self._validate_cluster_id(cluster_id)
         return self._delete_export(cluster_id, pseudo_path)
 
     def delete_all_exports(self, cluster_id: str) -> None:
@@ -363,10 +420,11 @@ class ExportMgr:
             log.info("No exports to delete")
             return
         for export in export_list:
-            ret, out, err = self._delete_export(cluster_id=cluster_id, pseudo_path=None,
-                                                export_obj=export)
-            if ret != 0:
-                raise NFSException(f"Failed to delete exports: {err} and {ret}")
+            try:
+                self._delete_export(cluster_id=cluster_id, pseudo_path=None,
+                                    export_obj=export)
+            except Exception as e:
+                raise NFSException(f"Failed to delete export {export.export_id}: {e}")
         log.info("All exports successfully deleted for cluster id: %s", cluster_id)
 
     def list_all_exports(self) -> List[Dict[str, Any]]:
@@ -375,23 +433,24 @@ class ExportMgr:
             r.extend([e.to_dict() for e in ls])
         return r
 
-    @export_cluster_checker
     def list_exports(self,
                      cluster_id: str,
-                     detailed: bool = False) -> Tuple[int, str, str]:
+                     detailed: bool = False) -> List[Any]:
+        self._validate_cluster_id(cluster_id)
         try:
             if detailed:
                 result_d = [export.to_dict() for export in self.exports[cluster_id]]
-                return 0, json.dumps(result_d, indent=2), ''
+                return result_d
             else:
                 result_ps = [export.pseudo for export in self.exports[cluster_id]]
-                return 0, json.dumps(result_ps, indent=2), ''
+                return result_ps
 
         except KeyError:
             log.warning("No exports to list for %s", cluster_id)
-            return 0, '', ''
+            return []
         except Exception as e:
-            return exception_handler(e, f"Failed to list exports for {cluster_id}")
+            log.exception(f"Failed to list exports for {cluster_id}")
+            raise ErrorResponse.wrap(e)
 
     def _get_export_dict(self, cluster_id: str, pseudo_path: str) -> Optional[Dict[str, Any]]:
         export = self._fetch_export(cluster_id, pseudo_path)
@@ -400,20 +459,19 @@ class ExportMgr:
         log.warning(f"No {pseudo_path} export to show for {cluster_id}")
         return None
 
-    @export_cluster_checker
     def get_export(
             self,
             cluster_id: str,
             pseudo_path: str,
-    ) -> Tuple[int, str, str]:
+    ) -> Dict[str, Any]:
+        self._validate_cluster_id(cluster_id)
         try:
             export_dict = self._get_export_dict(cluster_id, pseudo_path)
-            if export_dict:
-                return 0, json.dumps(export_dict, indent=2), ''
-            log.warning("No %s export to show for %s", pseudo_path, cluster_id)
-            return 0, '', ''
+            log.info(f"Fetched {export_dict!r} for {cluster_id!r}, {pseudo_path!r}")
+            return export_dict if export_dict else {}
         except Exception as e:
-            return exception_handler(e, f"Failed to get {pseudo_path} export for {cluster_id}")
+            log.exception(f"Failed to get {pseudo_path} export for {cluster_id}")
+            raise ErrorResponse.wrap(e)
 
     def get_export_by_id(
             self,
@@ -431,64 +489,79 @@ class ExportMgr:
         export = self._fetch_export(cluster_id, pseudo_path)
         return export.to_dict() if export else None
 
-    def apply_export(self, cluster_id: str, export_config: str) -> Tuple[int, str, str]:
+    # This method is used by the dashboard module (../dashboard/controllers/nfs.py)
+    # Do not change interface without updating the Dashboard code
+    def apply_export(self, cluster_id: str, export_config: str) -> AppliedExportResults:
         try:
-            if not export_config:
-                raise NFSInvalidOperation("Empty Config!!")
-            try:
-                j = json.loads(export_config)
-            except ValueError:
-                # okay, not JSON.  is it an EXPORT block?
-                try:
-                    blocks = GaneshaConfParser(export_config).parse()
-                    exports = [
-                        Export.from_export_block(block, cluster_id)
-                        for block in blocks
-                    ]
-                    j = [export.to_dict() for export in exports]
-                except Exception as ex:
-                    raise NFSInvalidOperation(f"Input must be JSON or a ganesha EXPORT block: {ex}")
-
-            # check export type
-            if isinstance(j, list):
-                ret, out, err = (0, '', '')
-                for export in j:
-                    try:
-                        r, o, e = self._apply_export(cluster_id, export)
-                    except Exception as ex:
-                        r, o, e = exception_handler(ex, f'Failed to apply export: {ex}')
-                        if r:
-                            ret = r
-                    if o:
-                        out += o + '\n'
-                    if e:
-                        err += e + '\n'
-                return ret, out, err
-            else:
-                r, o, e = self._apply_export(cluster_id, j)
-                return r, o, e
-        except NotImplementedError:
-            return 0, " Manual Restart of NFS PODS required for successful update of exports", ""
+            exports = self._read_export_config(cluster_id, export_config)
         except Exception as e:
-            return exception_handler(e, f'Failed to update export: {e}')
+            log.exception(f'Failed to update export: {e}')
+            raise ErrorResponse.wrap(e)
+
+        aeresults = AppliedExportResults()
+        for export in exports:
+            aeresults.append(self._change_export(cluster_id, export))
+        return aeresults
+
+    def _read_export_config(self, cluster_id: str, export_config: str) -> List[Dict]:
+        if not export_config:
+            raise NFSInvalidOperation("Empty Config!!")
+        try:
+            j = json.loads(export_config)
+        except ValueError:
+            # okay, not JSON.  is it an EXPORT block?
+            try:
+                blocks = GaneshaConfParser(export_config).parse()
+                exports = [
+                    Export.from_export_block(block, cluster_id)
+                    for block in blocks
+                ]
+                j = [export.to_dict() for export in exports]
+            except Exception as ex:
+                raise NFSInvalidOperation(f"Input must be JSON or a ganesha EXPORT block: {ex}")
+        # check export type - always return a list
+        if isinstance(j, list):
+            return j  # j is already a list object
+        return [j]  # return a single object list, with j as the only item
+
+    def _change_export(self, cluster_id: str, export: Dict) -> Dict[str, str]:
+        try:
+            return self._apply_export(cluster_id, export)
+        except NotImplementedError:
+            # in theory, the NotImplementedError here may be raised by a hook back to
+            # an orchestration module. If the orchestration module supports it the NFS
+            # servers may be restarted. If not supported the expectation is that an
+            # (unfortunately generic) NotImplementedError will be raised. We then
+            # indicate to the user that manual intervention may be needed now that the
+            # configuration changes have been applied.
+            return {
+                "pseudo": export['pseudo'],
+                "state": "warning",
+                "msg": "changes applied (Manual restart of NFS Pods required)",
+            }
+        except Exception as ex:
+            msg = f'Failed to apply export: {ex}'
+            log.exception(msg)
+            return {"state": "error", "msg": msg}
 
     def _update_user_id(
             self,
             cluster_id: str,
             path: str,
-            access_type: str,
             fs_name: str,
             user_id: str
     ) -> None:
         osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
             self.rados_pool, cluster_id, fs_name)
-        access_type = 'r' if access_type == 'RO' else 'rw'
-
+        # NFS-Ganesha can dynamically enforce an export's access type changes, but Ceph server
+        # daemons can't dynamically enforce changes in Ceph user caps of the Ceph clients. To
+        # allow dynamic updates of CephFS NFS exports, always set FSAL Ceph user's MDS caps with
+        # path restricted read-write access. Rely on the ganesha servers to enforce the export
+        # access type requested for the NFS clients.
         self.mgr.check_mon_command({
             'prefix': 'auth caps',
             'entity': f'client.{user_id}',
-            'caps': ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow {} path={}'.format(
-                access_type, path)],
+            'caps': ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow rw path={}'.format(path)],
         })
 
         log.info("Export user updated %s", user_id)
@@ -499,15 +572,13 @@ class ExportMgr:
             entity: str,
             path: str,
             fs_name: str,
-            fs_ro: bool
     ) -> str:
         osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
             self.rados_pool, cluster_id, fs_name)
-        access_type = 'r' if fs_ro else 'rw'
         nfs_caps = [
             'mon', 'allow r',
             'osd', osd_cap,
-            'mds', 'allow {} path={}'.format(access_type, path)
+            'mds', 'allow rw path={}'.format(path)
         ]
 
         ret, out, err = self.mgr.mon_command({
@@ -548,7 +619,7 @@ class ExportMgr:
         path = ex_dict.get("path")
         if path is None:
             raise NFSInvalidOperation("export must specify path")
-        path = self.format_path(path)
+        path = normalize_path(path)
 
         fsal = ex_dict.get("fsal", {})
         fsal_type = fsal.get("name")
@@ -585,8 +656,9 @@ class ExportMgr:
                              path: str,
                              squash: str,
                              access_type: str,
-                             clients: list = []) -> Tuple[int, str, str]:
-        pseudo_path = self.format_path(pseudo_path)
+                             clients: list = [],
+                             sectype: Optional[List[str]] = None) -> Dict[str, Any]:
+        pseudo_path = normalize_path(pseudo_path)
 
         if not self._fetch_export(cluster_id, pseudo_path):
             export = self.create_export_from_dict(
@@ -602,6 +674,7 @@ class ExportMgr:
                         "fs_name": fs_name,
                     },
                     "clients": clients,
+                    "sectype": sectype,
                 }
             )
             log.debug("creating cephfs export %s", export)
@@ -614,8 +687,8 @@ class ExportMgr:
                 "cluster": cluster_id,
                 "mode": export.access_type,
             }
-            return (0, json.dumps(result, indent=4), '')
-        return 0, "", "Export already exists"
+            return result
+        raise NonFatalError("Export already exists")
 
     def create_rgw_export(self,
                           cluster_id: str,
@@ -625,11 +698,12 @@ class ExportMgr:
                           squash: str,
                           bucket: Optional[str] = None,
                           user_id: Optional[str] = None,
-                          clients: list = []) -> Tuple[int, str, str]:
-        pseudo_path = self.format_path(pseudo_path)
+                          clients: list = [],
+                          sectype: Optional[List[str]] = None) -> Dict[str, Any]:
+        pseudo_path = normalize_path(pseudo_path)
 
         if not bucket and not user_id:
-            return -errno.EINVAL, "", "Must specify either bucket or user_id"
+            raise ErrorResponse("Must specify either bucket or user_id")
 
         if not self._fetch_export(cluster_id, pseudo_path):
             export = self.create_export_from_dict(
@@ -645,6 +719,7 @@ class ExportMgr:
                         "user_id": user_id,
                     },
                     "clients": clients,
+                    "sectype": sectype,
                 }
             )
             log.debug("creating rgw export %s", export)
@@ -657,24 +732,22 @@ class ExportMgr:
                 "mode": export.access_type,
                 "squash": export.squash,
             }
-            return (0, json.dumps(result, indent=4), '')
-        return 0, "", "Export already exists"
+            return result
+        raise NonFatalError("Export already exists")
 
     def _apply_export(
             self,
             cluster_id: str,
             new_export_dict: Dict,
-    ) -> Tuple[int, str, str]:
+    ) -> Dict[str, str]:
         for k in ['path', 'pseudo']:
             if k not in new_export_dict:
                 raise NFSInvalidOperation(f'Export missing required field {k}')
-        if cluster_id not in available_clusters(self.mgr):
-            raise ClusterNotFound()
         if cluster_id not in self.exports:
             self.exports[cluster_id] = []
 
-        new_export_dict['path'] = self.format_path(new_export_dict['path'])
-        new_export_dict['pseudo'] = self.format_path(new_export_dict['pseudo'])
+        new_export_dict['path'] = normalize_path(new_export_dict['path'])
+        new_export_dict['pseudo'] = normalize_path(new_export_dict['pseudo'])
 
         old_export = self._fetch_export(cluster_id, new_export_dict['pseudo'])
         if old_export:
@@ -702,8 +775,9 @@ class ExportMgr:
         if not old_export:
             self._create_export_user(new_export)
             self._save_export(cluster_id, new_export)
-            return 0, f'Added export {new_export.pseudo}', ''
+            return {"pseudo": new_export.pseudo, "state": "added"}
 
+        need_nfs_service_restart = True
         if old_export.fsal.name != new_export.fsal.name:
             raise NFSInvalidOperation('FSAL change not allowed')
         if old_export.pseudo != new_export.pseudo:
@@ -723,13 +797,32 @@ class ExportMgr:
                 self._update_user_id(
                     cluster_id,
                     new_export.path,
-                    new_export.access_type,
                     cast(str, new_fsal.fs_name),
                     cast(str, new_fsal.user_id)
                 )
                 new_fsal.cephx_key = old_fsal.cephx_key
             else:
+                expected_mds_caps = 'allow rw path={}'.format(new_export.path)
+                entity = new_fsal.user_id
+                ret, out, err = self.mgr.mon_command({
+                    'prefix': 'auth get',
+                    'entity': 'client.{}'.format(entity),
+                    'format': 'json',
+                })
+                if ret:
+                    raise NFSException(f'Failed to fetch caps for {entity}: {err}')
+                actual_mds_caps = json.loads(out)[0]['caps'].get('mds')
+                if actual_mds_caps != expected_mds_caps:
+                    self._update_user_id(
+                        cluster_id,
+                        new_export.path,
+                        cast(str, new_fsal.fs_name),
+                        cast(str, new_fsal.user_id)
+                    )
+                elif old_export.pseudo == new_export.pseudo:
+                    need_nfs_service_restart = False
                 new_fsal.cephx_key = old_fsal.cephx_key
+
         if old_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:
             old_rgw_fsal = cast(RGWFSAL, old_export.fsal)
             new_rgw_fsal = cast(RGWFSAL, new_export.fsal)
@@ -742,9 +835,11 @@ class ExportMgr:
                 raise NFSInvalidOperation('secret_access_key change is not allowed')
 
         self.exports[cluster_id].remove(old_export)
-        self._update_export(cluster_id, new_export)
 
-        # TODO: detect whether the update is such that a reload is sufficient
-        restart_nfs_service(self.mgr, new_export.cluster_id)
+        self._update_export(cluster_id, new_export, need_nfs_service_restart)
 
-        return 0, f"Updated export {new_export.pseudo}", ""
+        return {"pseudo": new_export.pseudo, "state": "updated"}
+
+    def _rados(self, cluster_id: str) -> NFSRados:
+        """Return a new NFSRados object for the given cluster id."""
+        return NFSRados(self.mgr.rados, cluster_id)

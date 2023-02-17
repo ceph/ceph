@@ -20,7 +20,7 @@ void DiscardLogOperation::init_op(
   log_entry->init(current_sync_gen, persist_on_flush, last_op_sequence_num);
   if (persist_on_flush) {
     this->on_write_append = new LambdaContext(
-        [this, write_persist, write_append] (int r) {
+        [write_persist, write_append] (int r) {
         write_append->complete(r);
         write_persist->complete(r);
         });

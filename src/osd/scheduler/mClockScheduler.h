@@ -25,7 +25,6 @@
 
 #include "osd/scheduler/OpScheduler.h"
 #include "common/config.h"
-#include "include/cmp.h"
 #include "common/ceph_context.h"
 #include "common/mClockPriorityQueue.h"
 #include "osd/scheduler/OpSchedulerItem.h"
@@ -43,6 +42,7 @@ struct client_profile_id_t {
   client_id_t client_id;
   profile_id_t profile_id;
 
+  auto operator<=>(const client_profile_id_t&) const = default;
   friend std::ostream& operator<<(std::ostream& out,
                                   const client_profile_id_t& client_profile) {
     out << " client_id: " << client_profile.client_id
@@ -51,14 +51,11 @@ struct client_profile_id_t {
   }
 };
 
-WRITE_EQ_OPERATORS_2(client_profile_id_t, client_id, profile_id)
-WRITE_CMP_OPERATORS_2(client_profile_id_t, client_id, profile_id)
-
-
 struct scheduler_id_t {
   op_scheduler_class class_id;
   client_profile_id_t client_profile_id;
 
+  auto operator<=>(const scheduler_id_t&) const = default;
   friend std::ostream& operator<<(std::ostream& out,
                                   const scheduler_id_t& sched_id) {
     out << "{ class_id: " << sched_id.class_id
@@ -66,9 +63,6 @@ struct scheduler_id_t {
     return out << " }";
   }
 };
-
-WRITE_EQ_OPERATORS_2(scheduler_id_t, class_id, client_profile_id)
-WRITE_CMP_OPERATORS_2(scheduler_id_t, class_id, client_profile_id)
 
 /**
  * Scheduler implementation based on mclock.
@@ -78,8 +72,11 @@ WRITE_CMP_OPERATORS_2(scheduler_id_t, class_id, client_profile_id)
 class mClockScheduler : public OpScheduler, md_config_obs_t {
 
   CephContext *cct;
+  const int whoami;
   const uint32_t num_shards;
+  const int shard_id;
   bool is_rotational;
+  MonClient *monc;
   double max_osd_capacity;
   double osd_mclock_cost_per_io;
   double osd_mclock_cost_per_byte;
@@ -150,7 +147,8 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   }
 
 public:
-  mClockScheduler(CephContext *cct, uint32_t num_shards, bool is_rotational);
+  mClockScheduler(CephContext *cct, int whoami, uint32_t num_shards,
+    int shard_id, bool is_rotational, MonClient *monc);
   ~mClockScheduler() override;
 
   // Set the max osd capacity in iops

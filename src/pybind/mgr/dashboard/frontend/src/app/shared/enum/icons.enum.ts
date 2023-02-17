@@ -21,6 +21,7 @@ export enum Icons {
   analyse = 'fa fa-stethoscope', // Scrub
   deepCheck = 'fa fa-cog', // Deep Scrub, Setting, Configuration
   reweight = 'fa fa-balance-scale', // Reweight
+  up = 'fa fa-arrow-up', // Up
   left = 'fa fa-arrow-left', // Mark out
   right = 'fa fa-arrow-right', // Mark in
   down = 'fa fa-arrow-down', // Mark Down
@@ -34,6 +35,8 @@ export enum Icons {
   info = 'fa fa-info', // Notification information
   infoCircle = 'fa fa-info-circle', // Info on landing page
   questionCircle = 'fa fa-question-circle-o',
+  danger = 'fa fa-exclamation-circle',
+  success = 'fa fa-check-circle',
   check = 'fa fa-check', // Notification check
   show = 'fa fa-eye', // Show
   paragraph = 'fa fa-paragraph', // Silence Matcher - Attribute name
@@ -53,6 +56,7 @@ export enum Icons {
   health = 'fa fa-heartbeat', // Health
   circle = 'fa fa-circle', // Circle
   bell = 'fa fa-bell', // Notification
+  mute = 'fa fa-bell-slash', // Mute or silence
   tag = 'fa fa-tag', // Tag, Badge
   leftArrow = 'fa fa-angle-left', // Left facing angle
   rightArrow = 'fa fa-angle-right', // Right facing angle
@@ -68,6 +72,8 @@ export enum Icons {
   wrench = 'fa fa-wrench', // Configuration Error
   enter = 'fa fa-sign-in', // Enter
   exit = 'fa fa-sign-out', // Exit
+  restart = 'fa fa-history', // Restart
+  deploy = 'fa fa-cube', // Deploy, Redeploy
 
   /* Icons for special effect */
   large = 'fa fa-lg', // icon becomes 33% larger

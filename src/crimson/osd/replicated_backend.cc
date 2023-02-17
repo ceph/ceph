@@ -11,20 +11,16 @@
 #include "crimson/osd/shard_services.h"
 #include "osd/PeeringState.h"
 
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_osd);
-  }
-}
+SET_SUBSYS(osd);
 
 ReplicatedBackend::ReplicatedBackend(pg_t pgid,
                                      pg_shard_t whoami,
                                      ReplicatedBackend::CollectionRef coll,
-                                     crimson::osd::ShardServices& shard_services)
-  : PGBackend{whoami.shard, coll, &shard_services.get_store()},
+                                     crimson::osd::ShardServices& shard_services,
+				     DoutPrefixProvider &dpp)
+  : PGBackend{whoami.shard, coll, shard_services, dpp},
     pgid{pgid},
-    whoami{whoami},
-    shard_services{shard_services}
+    whoami{whoami}
 {}
 
 ReplicatedBackend::ll_read_ierrorator::future<ceph::bufferlist>
@@ -33,9 +29,6 @@ ReplicatedBackend::_read(const hobject_t& hoid,
                          const uint64_t len,
                          const uint32_t flags)
 {
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
   return store->read(coll, ghobject_t{hoid}, off, len, flags);
 }
 
@@ -47,28 +40,24 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                        epoch_t min_epoch, epoch_t map_epoch,
 				       std::vector<pg_log_entry_t>&& log_entries)
 {
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
-  if (__builtin_expect((bool)peering, false)) {
-    throw crimson::common::actingset_changed(peering->is_primary);
-  }
+  LOG_PREFIX(ReplicatedBackend::_submit_transaction);
 
-  const ceph_tid_t tid = next_txn_id++;
+  const ceph_tid_t tid = shard_services.get_tid();
   auto pending_txn =
     pending_trans.try_emplace(tid, pg_shards.size(), osd_op_p.at_version).first;
   bufferlist encoded_txn;
   encode(txn, encoded_txn);
 
-  logger().debug("ReplicatedBackend::_submit_transaction: do_transaction...");
+  DEBUGDPP("object {}", dpp, hoid);
   auto all_completed = interruptor::make_interruptible(
-      shard_services.get_store().do_transaction(coll, std::move(txn)))
-  .then_interruptible([this, peers=pending_txn->second.weak_from_this()] {
+    shard_services.get_store().do_transaction(coll, std::move(txn))
+  ).then_interruptible([FNAME, this,
+			peers=pending_txn->second.weak_from_this()] {
     if (!peers) {
       // for now, only actingset_changed can cause peers
       // to be nullptr
-      assert(peering);
-      throw crimson::common::actingset_changed(peering->is_primary);
+      ERRORDPP("peers is null, this should be impossible", dpp);
+      assert(0 == "impossible");
     }
     if (--peers->pending == 0) {
       peers->all_committed.set_value();
@@ -82,6 +71,7 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
     return seastar::make_ready_future<crimson::osd::acked_peers_t>(std::move(acked_peers));
   });
 
+  auto sends = std::make_unique<std::vector<seastar::future<>>>();
   for (auto pg_shard : pg_shards) {
     if (pg_shard != whoami) {
       auto m = crimson::make_message<MOSDRepOp>(
@@ -101,16 +91,18 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
       m->min_last_complete_ondisk = osd_op_p.min_last_complete_ondisk;
       m->set_rollback_to(osd_op_p.at_version);
       // TODO: set more stuff. e.g., pg_states
-      (void) shard_services.send_to_osd(pg_shard.osd, std::move(m), map_epoch);
+      sends->emplace_back(shard_services.send_to_osd(pg_shard.osd, std::move(m), map_epoch));
     }
   }
-  return {seastar::now(), std::move(all_completed)};
+  auto sends_complete = seastar::when_all_succeed(
+    sends->begin(), sends->end()
+  ).finally([sends=std::move(sends)] {});
+  return {std::move(sends_complete), std::move(all_completed)};
 }
 
-void ReplicatedBackend::on_actingset_changed(peering_info_t pi)
+void ReplicatedBackend::on_actingset_changed(bool same_primary)
 {
-  peering.emplace(pi);
-  crimson::common::actingset_changed e_actingset_changed{peering->is_primary};
+  crimson::common::actingset_changed e_actingset_changed{same_primary};
   for (auto& [tid, pending_txn] : pending_trans) {
     pending_txn.all_committed.set_exception(e_actingset_changed);
   }
@@ -119,9 +111,10 @@ void ReplicatedBackend::on_actingset_changed(peering_info_t pi)
 
 void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
 {
+  LOG_PREFIX(ReplicatedBackend::got_rep_op_reply);
   auto found = pending_trans.find(reply.get_tid());
   if (found == pending_trans.end()) {
-    logger().warn("{}: no matched pending rep op: {}", __func__, reply);
+    WARNDPP("cannot find rep op for message {}", dpp, reply);
     return;
   }
   auto& peers = found->second;
@@ -139,8 +132,8 @@ void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
 
 seastar::future<> ReplicatedBackend::stop()
 {
-  logger().info("ReplicatedBackend::stop {}", coll->get_cid());
-  stopping = true;
+  LOG_PREFIX(ReplicatedBackend::stop);
+  INFODPP("cid {}", coll->get_cid());
   for (auto& [tid, pending_on] : pending_trans) {
     pending_on.all_committed.set_exception(
 	crimson::common::system_shutdown_exception());
@@ -168,7 +161,7 @@ ReplicatedBackend::request_committed(const osd_reqid_t& reqid,
   //
   // The following line of code should be "assert(pending_txn.at_version == at_version)",
   // as there can be only one transaction at any time in pending_trans due to
-  // PG::client_request_pg_pipeline. But there's a high possibility that we will
+  // PG::request_pg_pipeline. But there's a high possibility that we will
   // improve the parallelism here in the future, which means there may be multiple
   // client requests in flight, so we loosed the restriction to as follows. Correct
   // me if I'm wrong:-)

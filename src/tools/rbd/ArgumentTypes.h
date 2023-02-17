@@ -56,6 +56,10 @@ static const std::string PATH("path");
 static const std::string FROM_SNAPSHOT_NAME("from-snap");
 static const std::string WHOLE_OBJECT("whole-object");
 
+// encryption arguments
+static const std::string ENCRYPTION_FORMAT("encryption-format");
+static const std::string ENCRYPTION_PASSPHRASE_FILE("encryption-passphrase-file");
+
 static const std::string IMAGE_FORMAT("image-format");
 static const std::string IMAGE_NEW_FORMAT("new-format");
 static const std::string IMAGE_ORDER("order");
@@ -87,7 +91,8 @@ static const std::string SKIP_QUIESCE("skip-quiesce");
 static const std::string IGNORE_QUIESCE_ERROR("ignore-quiesce-error");
 
 static const std::set<std::string> SWITCH_ARGUMENTS = {
-  WHOLE_OBJECT, NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERR, SKIP_QUIESCE,
+  WHOLE_OBJECT, IMAGE_SHARED, IMAGE_THICK_PROVISION, IMAGE_FLATTEN,
+  NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERR, SKIP_QUIESCE,
   IGNORE_QUIESCE_ERROR
 };
 
@@ -126,6 +131,9 @@ struct ExportFormat {};
 struct Secret {};
 
 struct EncryptionAlgorithm {};
+struct EncryptionFormat {
+  uint64_t format;
+};
 
 void add_export_format_option(boost::program_options::options_description *opt);
 
@@ -197,6 +205,8 @@ void add_flatten_option(boost::program_options::options_description *opt);
 
 void add_snap_create_options(boost::program_options::options_description *opt);
 
+void add_encryption_options(boost::program_options::options_description *opt);
+
 std::string get_short_features_help(bool append_suffix);
 std::string get_long_features_help();
 
@@ -220,6 +230,8 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               JournalObjectSize *target_type, int);
 void validate(boost::any& v, const std::vector<std::string>& values,
               EncryptionAlgorithm *target_type, int);
+void validate(boost::any& v, const std::vector<std::string>& values,
+              EncryptionFormat *target_type, int);
 void validate(boost::any& v, const std::vector<std::string>& values,
               Secret *target_type, int);
 

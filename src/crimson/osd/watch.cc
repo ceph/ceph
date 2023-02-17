@@ -47,15 +47,16 @@ const hobject_t& WatchTimeoutRequest::get_target_oid() const
 PG::do_osd_ops_params_t
 WatchTimeoutRequest::get_do_osd_ops_params() const
 {
-  PG::do_osd_ops_params_t params;
-  params.conn = watch->conn;
-  params.reqid.name = watch->entity_name;
-  // as in the classical's simple_opc_create()
-  params.mtime = ceph_clock_now();
-  params.map_epoch = get_pg().get_osdmap_epoch();
-  params.orig_source_inst = { watch->entity_name, watch->winfo.addr };
-  //entity_inst_t orig_source_inst;
-  params.features = 0;
+  osd_reqid_t reqid;
+  reqid.name = watch->entity_name;
+  PG::do_osd_ops_params_t params{
+    watch->conn,
+    reqid,
+    ceph_clock_now(),
+    get_pg().get_osdmap_epoch(),
+    entity_inst_t{ watch->entity_name, watch->winfo.addr },
+    0
+  };
   logger().debug("{}: params.reqid={}", __func__, params.reqid);
   return params;
 }
@@ -77,7 +78,7 @@ Watch::~Watch()
   logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());
 }
 
-seastar::future<> Watch::connect(crimson::net::ConnectionRef conn, bool)
+seastar::future<> Watch::connect(crimson::net::ConnectionFRef conn, bool)
 {
   if (this->conn == conn) {
     logger().debug("conn={} already connected", conn);
@@ -87,6 +88,13 @@ seastar::future<> Watch::connect(crimson::net::ConnectionRef conn, bool)
   timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
   this->conn = std::move(conn);
   return seastar::now();
+}
+
+void Watch::disconnect()
+{
+  ceph_assert(!conn);
+  timeout_timer.cancel();
+  timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
 }
 
 seastar::future<> Watch::send_notify_msg(NotifyRef notify)
@@ -116,7 +124,7 @@ seastar::future<> Watch::notify_ack(
 {
   logger().info("{}", __func__);
   return seastar::do_for_each(in_progress_notifies,
-    [this_shared=shared_from_this(), &reply_bl] (auto notify) {
+    [this_shared=shared_from_this(), reply_bl] (auto notify) {
       return notify->complete_watcher(this_shared, reply_bl);
     }
   ).then([this] {
@@ -210,7 +218,7 @@ std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs)
   return out;
 }
 
-Notify::Notify(crimson::net::ConnectionRef conn,
+Notify::Notify(crimson::net::ConnectionFRef conn,
                const notify_info_t& ninfo,
                const uint64_t client_gid,
                const uint64_t user_version)
@@ -308,3 +316,7 @@ void Notify::do_notify_timeout()
 }
 
 } // namespace crimson::osd
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::osd::WatchTimeoutRequest> : fmt::ostream_formatter {};
+#endif

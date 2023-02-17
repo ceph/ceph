@@ -77,7 +77,7 @@ following:
 .. confval:: mon_host_override
 
 - :confval:`mon_dns_srv_name`
-- ``mon_data``, ``osd_data``, ``mds_data``, ``mgr_data``, and
+- :confval:`mon_data`, :confval:`osd_data`, :confval:`mds_data`, :confval:`mgr_data`, and
   similar options that define which local directory the daemon
   stores its data in.
 - :confval:`keyring`, :confval:`keyfile`, and/or :confval:`key`, which can be used to
@@ -457,12 +457,17 @@ Commands
 
 The following CLI commands are used to configure the cluster:
 
-* ``ceph config dump`` will dump the entire configuration database for
-  the cluster.
+* ``ceph config dump`` will dump the entire monitors' configuration
+  database for the cluster.
 
-* ``ceph config get <who>`` will dump the configuration for a specific
-  daemon or client (e.g., ``mds.a``), as stored in the monitors'
-  configuration database.
+* ``ceph config get <who>`` will dump configuration options stored in
+  the monitors' configuration database for a specific daemon or client
+  (e.g., ``mds.a``).
+
+* ``ceph config get <who> <option>`` will show a configuration value
+  stored in the monitors' configuration database for a specific daemon
+  or client (e.g., ``mds.a``), or, if not present in the monitors'
+  configuration database, the compiled-in default value.
 
 * ``ceph config set <who> <option> <value>`` will set a configuration
   option in the monitors' configuration database.
@@ -482,21 +487,35 @@ The following CLI commands are used to configure the cluster:
   *output file*.  This command is useful for transitioning from legacy
   configuration files to centralized monitor-based configuration.
 
+Note that ``ceph config set <who> <option> <value>`` and ``ceph config get
+<who> <option>`` aren't symmetric because the latter also shows compiled-in
+default values.  In order to determine whether a configuration option is
+present in the monitors' configuration database, use ``ceph config dump``.
+
 
 Help
 ====
 
-You can get help for a particular option with::
+You can get help for a particular option with:
 
-  ceph config help <option>
+.. prompt:: bash $
 
-Note that this will use the configuration schema that is compiled into the running monitors.  If you have a mixed-version cluster (e.g., during an upgrade), you might also want to query the option schema from a specific running daemon::
+   ceph config help <option>
 
-  ceph daemon <name> config help [option]
+Note that this will use the configuration schema that is compiled into the running monitors.  If you have a mixed-version cluster (e.g., during an upgrade), you might also want to query the option schema from a specific running daemon:
 
-For example,::
+.. prompt:: bash $
 
-  $ ceph config help log_file
+   ceph daemon <name> config help [option]
+
+For example:
+
+.. prompt:: bash $
+
+   ceph config help log_file
+
+:: 
+
   log_file - path to log file
     (std::string, basic)
     Default (non-daemon):
@@ -504,9 +523,14 @@ For example,::
     Can update at runtime: false
     See also: [log_to_stderr,err_to_stderr,log_to_syslog,err_to_syslog]
 
-or::
+or:
 
-  $ ceph config help log_file -f json-pretty
+.. prompt:: bash $
+
+   ceph config help log_file -f json-pretty
+
+::
+
   {
       "name": "log_file",
       "type": "std::string",
@@ -537,83 +561,109 @@ testing purposes, and are not recommended for use by operators.
 Runtime Changes
 ===============
 
-In most cases, Ceph allows you to make changes to the configuration of
-a daemon at runtime. This capability is quite useful for
-increasing/decreasing logging output, enabling/disabling debug
-settings, and even for runtime optimization.
+In most cases, Ceph permits changes to the configuration of a daemon at
+runtime. This can be used for increasing or decreasing the amount of logging
+output, for enabling or disabling debug settings, and for runtime optimization.
 
-Generally speaking, configuration options can be updated in the usual
-way via the ``ceph config set`` command.  For example, do enable the debug log level on a specific OSD,::
+Configuration options can be updated via the ``ceph config set`` command.  For
+example, to enable the debug log level on a specific OSD, run a command of this form:
 
-  ceph config set osd.123 debug_ms 20
+.. prompt:: bash $
 
-Note that if the same option is also customized in a local
-configuration file, the monitor setting will be ignored (it has a
-lower priority than the local config file).
+   ceph config set osd.123 debug_ms 20
+
+.. note:: If an option has been customized in a local configuration file, the
+   `central config
+   <https://ceph.io/en/news/blog/2018/new-mimic-centralized-configuration-management/>`_
+   setting will be ignored (it has a lower priority than the local
+   configuration file).
 
 Override values
 ---------------
 
-You can also temporarily set an option using the `tell` or `daemon`
-interfaces on the Ceph CLI.  These *override* values are ephemeral in
-that they only affect the running process and are discarded/lost if
-the daemon or process restarts.
+Options can be set temporarily by using the `tell` or `daemon` interfaces on
+the Ceph CLI. These *override* values are ephemeral, which means that they
+affect only the current instance of the daemon and revert to persistently
+configured values when the daemon restarts.
 
 Override values can be set in two ways:
 
-#. From any host, we can send a message to a daemon over the network with::
+#. From any host, send a message to a daemon with a command of the following
+   form:
+   
+   .. prompt:: bash $
 
-     ceph tell <name> config set <option> <value>
+      ceph tell <name> config set <option> <value>
 
-   For example,::
+   For example:
+   
+   .. prompt:: bash $
 
-     ceph tell osd.123 config set debug_osd 20
+      ceph tell osd.123 config set debug_osd 20
 
-   The `tell` command can also accept a wildcard for the daemon
-   identifier.  For example, to adjust the debug level on all OSD
-   daemons,::
+   The ``tell`` command can also accept a wildcard as the daemon identifier.
+   For example, to adjust the debug level on all OSD daemons, run a command of
+   this form:
+   
+   .. prompt:: bash $
 
-     ceph tell osd.* config set debug_osd 20
+      ceph tell osd.* config set debug_osd 20
 
-#. From the host the process is running on, we can connect directly to
-   the process via a socket in ``/var/run/ceph`` with::
+#. On the host where the daemon is running, connect to the daemon via a socket
+   in ``/var/run/ceph`` by running a command of this form:
 
-     ceph daemon <name> config set <option> <value>
+   .. prompt:: bash $
 
-   For example,::
+      ceph daemon <name> config set <option> <value>
 
-     ceph daemon osd.4 config set debug_osd 20
+   For example:
+   
+   .. prompt:: bash $
 
-Note that in the ``ceph config show`` command output these temporary
-values will be shown with a source of ``override``.
+      ceph daemon osd.4 config set debug_osd 20
+
+.. note:: In the output of the ``ceph config show`` command, these temporary
+   values are shown with a source of ``override``.
 
 
 Viewing runtime settings
 ========================
 
-You can see the current options set for a running daemon with the ``ceph config show`` command.  For example,::
+You can see the current options set for a running daemon with the ``ceph config show`` command.  For example:
 
-  ceph config show osd.0
+.. prompt:: bash $
 
-will show you the (non-default) options for that daemon.  You can also look at a specific option with::
+   ceph config show osd.0
 
-  ceph config show osd.0 debug_osd
+will show you the (non-default) options for that daemon.  You can also look at a specific option with:
 
-or view all options (even those with default values) with::
+.. prompt:: bash $
 
-  ceph config show-with-defaults osd.0
+   ceph config show osd.0 debug_osd
 
-You can also observe settings for a running daemon by connecting to it from the local host via the admin socket.  For example,::
+or view all options (even those with default values) with:
 
-  ceph daemon osd.0 config show
+.. prompt:: bash $
 
-will dump all current settings,::
+   ceph config show-with-defaults osd.0
 
-  ceph daemon osd.0 config diff
+You can also observe settings for a running daemon by connecting to it from the local host via the admin socket.  For example:
 
-will show only non-default settings (as well as where the value came from: a config file, the monitor, an override, etc.), and::
+.. prompt:: bash $
 
-  ceph daemon osd.0 config get debug_osd
+   ceph daemon osd.0 config show
+
+will dump all current settings:
+
+.. prompt:: bash $
+
+   ceph daemon osd.0 config diff
+
+will show only non-default settings (as well as where the value came from: a config file, the monitor, an override, etc.), and:
+
+.. prompt:: bash $
+
+   ceph daemon osd.0 config get debug_osd
 
 will report the value of a single option.
 
@@ -622,7 +672,7 @@ will report the value of a single option.
 Changes since Nautilus
 ======================
 
-With the Octopus release We changed the way the configuration file is parsed.
+The Octopus release changed the way the configuration file is parsed.
 These changes are as follows:
 
 - Repeated configuration options are allowed, and no warnings will be printed.

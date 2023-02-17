@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_REQUEST_H
-#define RGW_REQUEST_H
+#pragma once
 
 #include "rgw_common.h"
 #include "rgw_acl.h"
@@ -16,7 +15,7 @@
 struct RGWRequest
 {
   uint64_t id;
-  struct req_state *s;
+  req_state *s;
   RGWOp *op;
 
   explicit RGWRequest(uint64_t id) : id(id), s(NULL), op(NULL) {}
@@ -39,5 +38,3 @@ RGWLoadGenRequest(uint64_t req_id, const std::string& _m, const std::string& _r,
 	: RGWRequest(req_id), method(_m), resource(_r), content_length(_cl),
 		fail_flag(ff) {}
 };
-
-#endif /* RGW_REQUEST_H */

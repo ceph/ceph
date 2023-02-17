@@ -324,6 +324,11 @@ int rados_striper_stat(rados_striper_t striper,
                        uint64_t *psize,
                        time_t *pmtime);
 
+int rados_striper_stat2(rados_striper_t striper,
+                       const char* soid,
+                       uint64_t *psize,
+                       struct timespec *pmtime);
+
 /**
  * @defgroup libradosstriper_h_asynch_io Asynchronous I/O
  * Read and write to objects without blocking.
@@ -601,6 +606,11 @@ int rados_striper_aio_stat(rados_striper_t striper,
                            uint64_t *psize,
                            time_t *pmtime);
 
+int rados_striper_aio_stat2(rados_striper_t striper,
+                           const char* soid,
+                           rados_completion_t completion,
+                           uint64_t *psize,
+                           struct timespec *pmtime);
 /** @} Asynchronous I/O */
 
 #ifdef __cplusplus

@@ -4,7 +4,7 @@
 #include "MonClient.h"
 
 #include <random>
-
+#include <fmt/ranges.h>
 #include <seastar/core/future-util.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/shared_future.hh>
@@ -137,15 +137,16 @@ seastar::future<> Connection::handle_auth_reply(Ref<MAuthReply> m)
 seastar::future<> Connection::renew_tickets()
 {
   if (auth->need_tickets()) {
+    logger().info("{}: retrieving new tickets", __func__);
     return do_auth(request_t::general).then([](const auth_result_t r) {
       if (r == auth_result_t::failure)  {
-        throw std::system_error(
-	  make_error_code(
-	    crimson::net::error::negotiation_failure));
+        logger().info("renew_tickets: ignoring failed auth reply");
       }
     });
+  } else {
+    logger().debug("{}: don't need new tickets", __func__);
+    return seastar::now();
   }
-  return seastar::now();
 }
 
 seastar::future<> Connection::renew_rotating_keyring()
@@ -153,19 +154,25 @@ seastar::future<> Connection::renew_rotating_keyring()
   auto now = clock_t::now();
   auto ttl = std::chrono::seconds{
     static_cast<long>(crimson::common::local_conf()->auth_service_ticket_ttl)};
-  auto cutoff = now - ttl / 4;
-  if (!rotating_keyring->need_new_secrets(utime_t(cutoff))) {
+  auto cutoff = utime_t{now - std::min(std::chrono::seconds{30}, ttl / 4)};
+  if (!rotating_keyring->need_new_secrets(cutoff)) {
+    logger().debug("renew_rotating_keyring secrets are up-to-date "
+                   "(they expire after {})", cutoff);
     return seastar::now();
+  } else {
+    logger().info("renew_rotating_keyring renewing rotating keys "
+                  " (they expired before {})", cutoff);
   }
-  if (now - last_rotating_renew_sent < std::chrono::seconds{1}) {
-    logger().info("renew_rotating_keyring called too often");
+  if ((now > last_rotating_renew_sent) &&
+      (now - last_rotating_renew_sent < std::chrono::seconds{1})) {
+    logger().info("renew_rotating_keyring called too often (last: {})",
+                  utime_t{last_rotating_renew_sent});
     return seastar::now();
   }
   last_rotating_renew_sent = now;
   return do_auth(request_t::rotating).then([](const auth_result_t r) {
     if (r == auth_result_t::failure)  {
-      throw std::system_error(make_error_code(
-        crimson::net::error::negotiation_failure));
+      logger().info("renew_rotating_keyring: ignoring failed auth reply");
     }
   });
 }
@@ -235,10 +242,8 @@ Connection::do_auth_single(Connection::request_t what)
       logger().info("do_auth_single: connection closed");
       return std::make_optional(auth_result_t::canceled);
     }
-    logger().info(
-      "do_auth_single: mon {} => {} returns {}: {}",
-      conn->get_messenger()->get_myaddr(),
-      conn->get_peer_addr(), *m, m->result);
+    logger().info("do_auth_single: {} returns {}: {}",
+                  *conn, *m, m->result);
     auto p = m->result_bl.cbegin();
     auto ret = auth->handle_response(m->result, p,
 				     nullptr, nullptr);
@@ -404,8 +409,8 @@ crimson::net::ConnectionRef Connection::get_conn() {
   return conn;
 }
 
-Client::mon_command_t::mon_command_t(ceph::ref_t<MMonCommand> req)
-  : req(req)
+Client::mon_command_t::mon_command_t(MURef<MMonCommand> req)
+  : req(std::move(req))
 {}
 
 Client::Client(crimson::net::Messenger& messenger,
@@ -460,9 +465,9 @@ void Client::tick()
   gate.dispatch_in_background(__func__, *this, [this] {
     if (active_con) {
       return seastar::when_all_succeed(wait_for_send_log(),
-                                       active_con->get_conn()->keepalive(),
+                                       active_con->get_conn()->send_keepalive(),
                                        active_con->renew_tickets(),
-                                       active_con->renew_rotating_keyring()).then_unpack([] {});
+                                       active_con->renew_rotating_keyring()).discard_result();
     } else {
       assert(is_hunting());
       logger().info("{} continuing the hunt", __func__);
@@ -502,10 +507,10 @@ Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
     // we only care about these message types
     switch (m->get_type()) {
     case CEPH_MSG_MON_MAP:
-      return handle_monmap(conn, boost::static_pointer_cast<MMonMap>(m));
+      return handle_monmap(*conn, boost::static_pointer_cast<MMonMap>(m));
     case CEPH_MSG_AUTH_REPLY:
       return handle_auth_reply(
-	conn, boost::static_pointer_cast<MAuthReply>(m));
+	*conn, boost::static_pointer_cast<MAuthReply>(m));
     case CEPH_MSG_MON_SUBSCRIBE_ACK:
       return handle_subscribe_ack(
 	boost::static_pointer_cast<MMonSubscribeAck>(m));
@@ -579,38 +584,32 @@ AuthAuthorizeHandler* Client::get_auth_authorize_handler(int peer_type,
 }
 
 
-int Client::handle_auth_request(crimson::net::ConnectionRef con,
-                                AuthConnectionMetaRef auth_meta,
+int Client::handle_auth_request(crimson::net::Connection &conn,
+                                AuthConnectionMeta &auth_meta,
                                 bool more,
                                 uint32_t auth_method,
                                 const ceph::bufferlist& payload,
+                                uint64_t *p_peer_global_id,
                                 ceph::bufferlist *reply)
 {
-  // for some channels prior to nautilus (osd heartbeat), we tolerate the lack of
-  // an authorizer.
   if (payload.length() == 0) {
-    if (con->get_messenger()->get_require_authorizer()) {
-      return -EACCES;
-    } else {
-      auth_handler.handle_authentication({}, {});
-      return 1;
-    }
-  }
-  auth_meta->auth_mode = payload[0];
-  if (auth_meta->auth_mode < AUTH_MODE_AUTHORIZER ||
-      auth_meta->auth_mode > AUTH_MODE_AUTHORIZER_MAX) {
     return -EACCES;
   }
-  AuthAuthorizeHandler* ah = get_auth_authorize_handler(con->get_peer_type(),
+  auth_meta.auth_mode = payload[0];
+  if (auth_meta.auth_mode < AUTH_MODE_AUTHORIZER ||
+      auth_meta.auth_mode > AUTH_MODE_AUTHORIZER_MAX) {
+    return -EACCES;
+  }
+  AuthAuthorizeHandler* ah = get_auth_authorize_handler(conn.get_peer_type(),
                                                         auth_method);
   if (!ah) {
     logger().error("no AuthAuthorizeHandler found for auth method: {}",
                    auth_method);
     return -EOPNOTSUPP;
   }
-  auto authorizer_challenge = &auth_meta->authorizer_challenge;
-  if (auth_meta->skip_authorizer_challenge) {
-    logger().info("skipping challenge on {}", con);
+  auto authorizer_challenge = &auth_meta.authorizer_challenge;
+  if (auth_meta.skip_authorizer_challenge) {
+    logger().info("skipping challenge on {}", conn);
     authorizer_challenge = nullptr;
   }
   if (!active_con) {
@@ -618,44 +617,44 @@ int Client::handle_auth_request(crimson::net::ConnectionRef con,
     // let's instruct the client to come back later
     return -EBUSY;
   }
-  bool was_challenge = (bool)auth_meta->authorizer_challenge;
+  bool was_challenge = (bool)auth_meta.authorizer_challenge;
   EntityName name;
   AuthCapsInfo caps_info;
   bool is_valid = ah->verify_authorizer(
     &cct,
     active_con->get_keys(),
     payload,
-    auth_meta->get_connection_secret_length(),
+    auth_meta.get_connection_secret_length(),
     reply,
     &name,
-    &con->peer_global_id,
+    p_peer_global_id,
     &caps_info,
-    &auth_meta->session_key,
-    &auth_meta->connection_secret,
+    &auth_meta.session_key,
+    &auth_meta.connection_secret,
     authorizer_challenge);
   if (is_valid) {
     auth_handler.handle_authentication(name, caps_info);
     return 1;
   }
-  if (!more && !was_challenge && auth_meta->authorizer_challenge) {
-    logger().info("added challenge on {}", con);
+  if (!more && !was_challenge && auth_meta.authorizer_challenge) {
+    logger().info("added challenge on {}", conn);
     return 0;
   } else {
-    logger().info("bad authorizer on {}", con);
+    logger().info("bad authorizer on {}", conn);
     return -EACCES;
   }
 }
 
 auth::AuthClient::auth_request_t
-Client::get_auth_request(crimson::net::ConnectionRef con,
-                         AuthConnectionMetaRef auth_meta)
+Client::get_auth_request(crimson::net::Connection &conn,
+                         AuthConnectionMeta &auth_meta)
 {
-  logger().info("get_auth_request(con={}, auth_method={})",
-                con, auth_meta->auth_method);
+  logger().info("get_auth_request(conn={}, auth_method={})",
+                conn, auth_meta.auth_method);
   // connection to mon?
-  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+  if (conn.get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
-                              [peer_addr = con->get_peer_addr()](auto& mc) {
+                              [peer_addr = conn.get_peer_addr()](auto& mc) {
                                 return mc->is_my_peer(peer_addr);
                               });
     if (found == pending_conns.end()) {
@@ -668,90 +667,90 @@ Client::get_auth_request(crimson::net::ConnectionRef con,
       logger().error(" but no auth handler is set up");
       throw crimson::auth::error("no auth available");
     }
-    auto authorizer = active_con->get_authorizer(con->get_peer_type());
+    auto authorizer = active_con->get_authorizer(conn.get_peer_type());
     if (!authorizer) {
       logger().error("failed to build_authorizer for type {}",
-                     ceph_entity_type_name(con->get_peer_type()));
+                     ceph_entity_type_name(conn.get_peer_type()));
       throw crimson::auth::error("unable to build auth");
     }
-    auth_meta->authorizer.reset(authorizer);
-    auth_meta->auth_method = authorizer->protocol;
+    auth_meta.authorizer.reset(authorizer);
+    auth_meta.auth_method = authorizer->protocol;
     vector<uint32_t> modes;
-    auth_registry.get_supported_modes(con->get_peer_type(),
-                                      auth_meta->auth_method,
+    auth_registry.get_supported_modes(conn.get_peer_type(),
+                                      auth_meta.auth_method,
                                       &modes);
     return {authorizer->protocol, modes, authorizer->bl};
   }
 }
 
-ceph::bufferlist Client::handle_auth_reply_more(crimson::net::ConnectionRef conn,
-                                                AuthConnectionMetaRef auth_meta,
+ceph::bufferlist Client::handle_auth_reply_more(crimson::net::Connection &conn,
+                                                AuthConnectionMeta &auth_meta,
                                                 const bufferlist& bl)
 {
-  if (conn->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+  if (conn.get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
-                              [peer_addr = conn->get_peer_addr()](auto& mc) {
+                              [peer_addr = conn.get_peer_addr()](auto& mc) {
                                 return mc->is_my_peer(peer_addr);
                               });
     if (found == pending_conns.end()) {
       throw crimson::auth::error{"unknown connection"};
     }
     bufferlist reply;
-    tie(auth_meta->session_key, auth_meta->connection_secret, reply) =
+    tie(auth_meta.session_key, auth_meta.connection_secret, reply) =
       (*found)->handle_auth_reply_more(bl);
     return reply;
   } else {
     // authorizer challenges
-    if (!active_con || !auth_meta->authorizer) {
+    if (!active_con || !auth_meta.authorizer) {
       logger().error("no authorizer?");
       throw crimson::auth::error("no auth available");
     }
-    auth_meta->authorizer->add_challenge(&cct, bl);
-    return auth_meta->authorizer->bl;
+    auth_meta.authorizer->add_challenge(&cct, bl);
+    return auth_meta.authorizer->bl;
   }
 }
 
-int Client::handle_auth_done(crimson::net::ConnectionRef conn,
-                             AuthConnectionMetaRef auth_meta,
+int Client::handle_auth_done(crimson::net::Connection &conn,
+                             AuthConnectionMeta &auth_meta,
                              uint64_t global_id,
                              uint32_t /*con_mode*/,
                              const bufferlist& bl)
 {
-  if (conn->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+  if (conn.get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
-                              [peer_addr = conn->get_peer_addr()](auto& mc) {
+                              [peer_addr = conn.get_peer_addr()](auto& mc) {
                                 return mc->is_my_peer(peer_addr);
                               });
     if (found == pending_conns.end()) {
       return -ENOENT;
     }
     int r = 0;
-    tie(auth_meta->session_key, auth_meta->connection_secret, r) =
+    tie(auth_meta.session_key, auth_meta.connection_secret, r) =
       (*found)->handle_auth_done(global_id, bl);
     return r;
   } else {
     // verify authorizer reply
     auto p = bl.begin();
-    if (!auth_meta->authorizer->verify_reply(p, &auth_meta->connection_secret)) {
+    if (!auth_meta.authorizer->verify_reply(p, &auth_meta.connection_secret)) {
       logger().error("failed verifying authorizer reply");
       return -EACCES;
     }
-    auth_meta->session_key = auth_meta->authorizer->session_key;
+    auth_meta.session_key = auth_meta.authorizer->session_key;
     return 0;
   }
 }
 
  // Handle server's indication that the previous auth attempt failed
-int Client::handle_auth_bad_method(crimson::net::ConnectionRef conn,
-                                   AuthConnectionMetaRef auth_meta,
+int Client::handle_auth_bad_method(crimson::net::Connection &conn,
+                                   AuthConnectionMeta &auth_meta,
                                    uint32_t old_auth_method,
                                    int result,
                                    const std::vector<uint32_t>& allowed_methods,
                                    const std::vector<uint32_t>& allowed_modes)
 {
-  if (conn->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+  if (conn.get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
-                              [peer_addr = conn->get_peer_addr()](auto& mc) {
+                              [peer_addr = conn.get_peer_addr()](auto& mc) {
                                 return mc->is_my_peer(peer_addr);
                               });
     if (found != pending_conns.end()) {
@@ -769,11 +768,11 @@ int Client::handle_auth_bad_method(crimson::net::ConnectionRef conn,
   }
 }
 
-seastar::future<> Client::handle_monmap(crimson::net::ConnectionRef conn,
+seastar::future<> Client::handle_monmap(crimson::net::Connection &conn,
                                         Ref<MMonMap> m)
 {
   monmap.decode(m->monmapbl);
-  const auto peer_addr = conn->get_peer_addr();
+  const auto peer_addr = conn.get_peer_addr();
   auto cur_mon = monmap.get_name(peer_addr);
   logger().info("got monmap {}, mon.{}, is now rank {}",
                  monmap.epoch, cur_mon, monmap.get_rank(cur_mon));
@@ -784,7 +783,7 @@ seastar::future<> Client::handle_monmap(crimson::net::ConnectionRef conn,
       logger().info("handle_monmap: renewing tickets");
       return seastar::when_all_succeed(
 	active_con->renew_tickets(),
-	active_con->renew_rotating_keyring()).then_unpack([](){
+	active_con->renew_rotating_keyring()).then_unpack([] {
 	  logger().info("handle_mon_map: renewed tickets");
 	});
     } else {
@@ -802,23 +801,25 @@ seastar::future<> Client::handle_monmap(crimson::net::ConnectionRef conn,
   }
 }
 
-seastar::future<> Client::handle_auth_reply(crimson::net::ConnectionRef conn,
+seastar::future<> Client::handle_auth_reply(crimson::net::Connection &conn,
                                             Ref<MAuthReply> m)
 {
-  logger().info(
-    "handle_auth_reply mon {} => {} returns {}: {}",
-    conn->get_messenger()->get_myaddr(),
-    conn->get_peer_addr(), *m, m->result);
+  logger().info("handle_auth_reply {} returns {}: {}",
+                conn, *m, m->result);
   auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
-                            [peer_addr = conn->get_peer_addr()](auto& mc) {
+                            [peer_addr = conn.get_peer_addr()](auto& mc) {
                               return mc->is_my_peer(peer_addr);
                             });
   if (found != pending_conns.end()) {
     return (*found)->handle_auth_reply(m);
   } else if (active_con) {
-    return active_con->handle_auth_reply(m);
+    return active_con->handle_auth_reply(m).then([this] {
+      return seastar::when_all_succeed(
+        active_con->renew_rotating_keyring(),
+        active_con->renew_tickets()).discard_result();
+    });
   } else {
-    logger().error("unknown auth reply from {}", conn->get_peer_addr());
+    logger().error("unknown auth reply from {}", conn.get_peer_addr());
     return seastar::now();
   }
 }
@@ -1064,7 +1065,7 @@ Client::run_command(std::string&& cmd,
   m->set_tid(tid);
   m->cmd = {std::move(cmd)};
   m->set_data(std::move(bl));
-  auto& command = mon_commands.emplace_back(ceph::make_message<MMonCommand>(*m));
+  auto& command = mon_commands.emplace_back(crimson::make_message<MMonCommand>(*m));
   return send_message(std::move(m)).then([&result=command.result] {
     return result.get_future();
   });

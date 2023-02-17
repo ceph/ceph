@@ -598,7 +598,7 @@ void Mgr::handle_mon_map()
       continue;
     }
     auto c = new MetadataUpdate(daemon_state, k);
-    const char* cmd = R"({{"prefix": "mon metadata", "id": "{}"}})";
+    constexpr std::string_view cmd = R"({{"prefix": "mon metadata", "id": "{}"}})";
     monc->start_mon_command({fmt::format(cmd, name)}, {},
 			    &c->outbl, &c->outs, c);
   }
@@ -806,6 +806,7 @@ std::map<std::string, std::string> Mgr::get_services() const
 int Mgr::call(
   std::string_view admin_command,
   const cmdmap_t& cmdmap,
+  const bufferlist&,
   Formatter *f,
   std::ostream& errss,
   bufferlist& out)

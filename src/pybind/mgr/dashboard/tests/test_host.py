@@ -1,40 +1,13 @@
-import contextlib
 import unittest
-from typing import List, Optional
 from unittest import mock
 
-from orchestrator import HostSpec, InventoryHost
+from orchestrator import DaemonDescription, HostSpec
 
 from .. import mgr
 from ..controllers._version import APIVersion
 from ..controllers.host import Host, HostUi, get_device_osd_map, get_hosts, get_inventories
-from ..tests import ControllerTestCase
+from ..tests import ControllerTestCase, patch_orch
 from ..tools import NotificationQueue, TaskManager
-
-
-@contextlib.contextmanager
-def patch_orch(available: bool, missing_features: Optional[List[str]] = None,
-               hosts: Optional[List[HostSpec]] = None,
-               inventory: Optional[List[dict]] = None):
-    with mock.patch('dashboard.controllers.orchestrator.OrchClient.instance') as instance:
-        fake_client = mock.Mock()
-        fake_client.available.return_value = available
-        fake_client.get_missing_features.return_value = missing_features
-
-        if hosts is not None:
-            fake_client.hosts.list.return_value = hosts
-
-        if inventory is not None:
-            def _list_inventory(hosts=None, refresh=False):  # pylint: disable=unused-argument
-                inv_hosts = []
-                for inv_host in inventory:
-                    if hosts is None or inv_host['name'] in hosts:
-                        inv_hosts.append(InventoryHost.from_json(inv_host))
-                return inv_hosts
-            fake_client.inventory.list.side_effect = _list_inventory
-
-        instance.return_value = fake_client
-        yield fake_client
 
 
 class HostControllerTest(ControllerTestCase):
@@ -150,14 +123,14 @@ class HostControllerTest(ControllerTestCase):
             self._get('{}?facts=true'.format(self.URL_HOST), version=APIVersion(1, 1))
             self.assertStatus(200)
             self.assertHeader('Content-Type',
-                              'application/vnd.ceph.api.v1.1+json')
+                              APIVersion(1, 2).to_mime_type())
             self.assertJsonBody(hosts_with_facts)
 
             # test with ?facts=false
             self._get('{}?facts=false'.format(self.URL_HOST), version=APIVersion(1, 1))
             self.assertStatus(200)
             self.assertHeader('Content-Type',
-                              'application/vnd.ceph.api.v1.1+json')
+                              APIVersion(1, 2).to_mime_type())
             self.assertJsonBody(hosts_without_facts)
 
         # test with orchestrator available but orch backend!=cephadm
@@ -179,7 +152,7 @@ class HostControllerTest(ControllerTestCase):
             self._get('{}?facts=false'.format(self.URL_HOST), version=APIVersion(1, 1))
             self.assertStatus(200)
             self.assertHeader('Content-Type',
-                              'application/vnd.ceph.api.v1.1+json')
+                              APIVersion(1, 2).to_mime_type())
             self.assertJsonBody(hosts_without_facts)
 
     def test_get_1(self):
@@ -190,7 +163,10 @@ class HostControllerTest(ControllerTestCase):
             self.assertStatus(404)
 
     def test_get_2(self):
-        mgr.list_servers.return_value = [{'hostname': 'node1'}]
+        mgr.list_servers.return_value = [{
+            'hostname': 'node1',
+            'services': []
+        }]
 
         with patch_orch(False):
             self._get('{}/node1'.format(self.URL_HOST))
@@ -208,6 +184,87 @@ class HostControllerTest(ControllerTestCase):
             self.assertIn('labels', self.json_body())
             self.assertIn('status', self.json_body())
             self.assertIn('addr', self.json_body())
+
+    def test_populate_service_instances(self):
+        mgr.list_servers.return_value = []
+
+        node1_daemons = [
+            DaemonDescription(
+                hostname='node1',
+                daemon_type='mon',
+                daemon_id='a'
+            ),
+            DaemonDescription(
+                hostname='node1',
+                daemon_type='mon',
+                daemon_id='b'
+            )
+        ]
+
+        node2_daemons = [
+            DaemonDescription(
+                hostname='node2',
+                daemon_type='mgr',
+                daemon_id='x'
+            ),
+            DaemonDescription(
+                hostname='node2',
+                daemon_type='mon',
+                daemon_id='c'
+            )
+        ]
+
+        node1_instances = [{
+            'type': 'mon',
+            'count': 2
+        }]
+
+        node2_instances = [{
+            'type': 'mgr',
+            'count': 1
+        }, {
+            'type': 'mon',
+            'count': 1
+        }]
+
+        # test with orchestrator available
+        with patch_orch(True,
+                        hosts=[HostSpec('node1'), HostSpec('node2')]) as fake_client:
+            fake_client.services.list_daemons.return_value = node1_daemons
+            self._get('{}/node1'.format(self.URL_HOST))
+            self.assertStatus(200)
+            self.assertIn('service_instances', self.json_body())
+            self.assertEqual(self.json_body()['service_instances'], node1_instances)
+
+            fake_client.services.list_daemons.return_value = node2_daemons
+            self._get('{}/node2'.format(self.URL_HOST))
+            self.assertStatus(200)
+            self.assertIn('service_instances', self.json_body())
+            self.assertEqual(self.json_body()['service_instances'], node2_instances)
+
+        # test with no orchestrator available
+        with patch_orch(False):
+            mgr.list_servers.return_value = [{
+                'hostname': 'node1',
+                'services': [{
+                    'type': 'mon',
+                    'id': 'a'
+                }, {
+                    'type': 'mgr',
+                    'id': 'b'
+                }]
+            }]
+            self._get('{}/node1'.format(self.URL_HOST))
+            self.assertStatus(200)
+            self.assertIn('service_instances', self.json_body())
+            self.assertEqual(self.json_body()['service_instances'],
+                             [{
+                                 'type': 'mon',
+                                 'count': 1
+                             }, {
+                                 'type': 'mgr',
+                                 'count': 1
+                             }])
 
     @mock.patch('dashboard.controllers.host.add_host')
     def test_add_host(self, mock_add_host):
@@ -402,9 +459,11 @@ class HostUiControllerTest(ControllerTestCase):
 class TestHosts(unittest.TestCase):
     def test_get_hosts(self):
         mgr.list_servers.return_value = [{
-            'hostname': 'node1'
+            'hostname': 'node1',
+            'services': []
         }, {
-            'hostname': 'localhost'
+            'hostname': 'localhost',
+            'services': []
         }]
         orch_hosts = [
             HostSpec('node1', labels=['foo', 'bar']),
@@ -526,11 +585,15 @@ class TestHosts(unittest.TestCase):
             host0 = inventories[0]
             self.assertEqual(host0['name'], 'host-0')
             self.assertEqual(host0['addr'], '1.2.3.4')
-            self.assertEqual(host0['devices'][0]['osd_ids'], [1, 2])
-            self.assertEqual(host0['devices'][1]['osd_ids'], [1])
-            self.assertEqual(host0['devices'][2]['osd_ids'], [2])
+            # devices should be sorted by path name, so
+            # /dev/sdb, /dev/sdc, nvme0n1
+            self.assertEqual(host0['devices'][0]['osd_ids'], [1])
+            self.assertEqual(host0['devices'][1]['osd_ids'], [2])
+            self.assertEqual(host0['devices'][2]['osd_ids'], [1, 2])
             host1 = inventories[1]
             self.assertEqual(host1['name'], 'host-1')
             self.assertEqual(host1['addr'], '1.2.3.5')
+            # devices should be sorted by path name, so
+            # /dev/sda, sdb
             self.assertEqual(host1['devices'][0]['osd_ids'], [])
             self.assertEqual(host1['devices'][1]['osd_ids'], [3])

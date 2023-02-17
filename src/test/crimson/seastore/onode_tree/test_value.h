@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/value.h"
 
@@ -35,6 +37,30 @@ struct test_item_t {
 inline std::ostream& operator<<(std::ostream& os, const test_item_t& item) {
   return os << "TestItem(#" << item.id << ", " << item.size << "B)";
 }
+
+enum class delta_op_t : uint8_t {
+  UPDATE_ID,
+  UPDATE_TAIL_MAGIC,
+};
+
+inline std::ostream& operator<<(std::ostream& os, const delta_op_t op) {
+  switch (op) {
+  case delta_op_t::UPDATE_ID:
+    return os << "update_id";
+  case delta_op_t::UPDATE_TAIL_MAGIC:
+    return os << "update_tail_magic";
+  default:
+    return os << "unknown";
+  }
+}
+
+} // namespace crimson::os::seastore::onode
+
+#if FMT_VERSION >= 90000
+template<> struct fmt::formatter<crimson::os::seastore::onode::delta_op_t> : fmt::ostream_formatter {};
+#endif
+
+namespace crimson::os::seastore::onode {
 
 template <value_magic_t MAGIC,
           string_size_t MAX_NS_SIZE,
@@ -86,10 +112,6 @@ class TestValue final : public Value {
 
  public:
   class Recorder final : public ValueDeltaRecorder {
-    enum class delta_op_t : uint8_t {
-      UPDATE_ID,
-      UPDATE_TAIL_MAGIC,
-    };
 
    public:
     Recorder(ceph::bufferlist& encoded)
@@ -143,7 +165,7 @@ class TestValue final : public Value {
         }
       } catch (buffer::error& e) {
         logger().error("OTree::TestValue::Replay: got decode error {} when replay {:#x}+{:#x}",
-                       e, value_addr, payload_mut.get_length());
+                       e.what(), value_addr, payload_mut.get_length());
         ceph_abort();
       }
     }
@@ -211,3 +233,8 @@ using ExtendedValue  = TestValue<
   value_magic_t::TEST_EXTENDED, 256, 2048, 1200, 8192, 16384, true>;
 
 }
+
+#if FMT_VERSION >= 90000
+template<>
+struct fmt::formatter<crimson::os::seastore::onode::test_item_t> : fmt::ostream_formatter {};
+#endif

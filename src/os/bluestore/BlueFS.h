@@ -61,9 +61,12 @@ enum {
   l_bluefs_read_disk_bytes_slow,
   l_bluefs_read_prefetch_count,
   l_bluefs_read_prefetch_bytes,
+  l_bluefs_compaction_lat,
+  l_bluefs_compaction_lock_lat,
+  l_bluefs_alloc_shared_dev_fallbacks,
+  l_bluefs_alloc_shared_size_fallbacks,
   l_bluefs_read_zeros_candidate,
   l_bluefs_read_zeros_errors,
-
   l_bluefs_last,
 };
 
@@ -83,21 +86,28 @@ public:
   virtual uint8_t select_prefer_bdev(void* hint) = 0;
   virtual void get_paths(const std::string& base, paths& res) const = 0;
   virtual void dump(std::ostream& sout) = 0;
+
+  /* used for sanity checking of vselector */
+  virtual BlueFSVolumeSelector* clone_empty() const { return nullptr; }
+  virtual bool compare(BlueFSVolumeSelector* other) { return true; };
 };
 
 struct bluefs_shared_alloc_context_t {
   bool need_init = false;
   Allocator* a = nullptr;
+  uint64_t alloc_unit = 0;
 
   std::atomic<uint64_t> bluefs_used = 0;
 
-  void set(Allocator* _a) {
+  void set(Allocator* _a, uint64_t _au) {
     a = _a;
+    alloc_unit = _au;
     need_init = true;
     bluefs_used = 0;
   }
   void reset() {
     a = nullptr;
+    alloc_unit = 0;
   }
 };
 
@@ -327,6 +337,8 @@ private:
     l_bluefs_max_bytes_wal,
     l_bluefs_max_bytes_db,
     l_bluefs_max_bytes_slow,
+    l_bluefs_max_bytes_wal,
+    l_bluefs_max_bytes_db,
   };
 
   // cache
@@ -387,6 +399,7 @@ private:
   inline bool is_shared_alloc(unsigned id) const {
     return id == shared_alloc_id;
   }
+  std::atomic<int64_t> cooldown_deadline = 0;
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;
@@ -400,7 +413,8 @@ private:
   void _init_alloc();
   void _stop_alloc();
 
-  void _pad_bl(ceph::buffer::list& bl);  ///< pad ceph::buffer::list to block size w/ zeros
+  ///< pad ceph::buffer::list to max(block size, pad_size) w/ zeros
+  void _pad_bl(ceph::buffer::list& bl, uint64_t pad_size = 0);
 
   uint64_t _get_used(unsigned id) const;
   uint64_t _get_total(unsigned id) const;
@@ -414,16 +428,17 @@ private:
   }
   const char* get_device_name(unsigned id);
   int _allocate(uint8_t bdev, uint64_t len,
-		bluefs_fnode_t* node);
-  int _allocate_without_fallback(uint8_t id, uint64_t len,
-				 PExtentVector* extents);
+                uint64_t alloc_unit,
+		bluefs_fnode_t* node,
+                size_t alloc_attempts = 0,
+                bool permit_dev_fallback = true);
 
   /* signal replay log to include h->file in nearest log flush */
   int _signal_dirty_to_log_D(FileWriter *h);
   int _flush_range_F(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered);
   int _flush_F(FileWriter *h, bool force, bool *flushed = nullptr);
-  int _flush_special(FileWriter *h);
+  uint64_t _flush_special(FileWriter *h);
   int _fsync(FileWriter *h);
 
 #ifdef HAVE_LIBAIO
@@ -443,6 +458,11 @@ private:
 			       int64_t available_runway);
   int _flush_and_sync_log_LD(uint64_t want_seq = 0);
 
+  uint64_t _estimate_transaction_size(bluefs_transaction_t* t);
+  uint64_t _make_initial_transaction(uint64_t start_seq,
+                                     bluefs_fnode_t& fnode,
+                                     uint64_t expected_final_size,
+                                     bufferlist* out);
   uint64_t _estimate_log_size_N();
   bool _should_start_compact_log_L_N();
 
@@ -452,15 +472,15 @@ private:
     RENAME_SLOW2DB = 4,
     RENAME_DB2SLOW = 8,
   };
-  void _compact_log_dump_metadata_NF(bluefs_transaction_t *t,
-				 int flags);
-  void _compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
-					   uint64_t capture_before_seq);
+  void _compact_log_dump_metadata_NF(uint64_t start_seq,
+                                     bluefs_transaction_t *t,
+				     int flags,
+				     uint64_t capture_before_seq);
 
   void _compact_log_sync_LNF_LD();
   void _compact_log_async_LD_LNF_D();
 
-  void _rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
+  void _rewrite_log_and_layout_sync_LNF_LD(bool permit_dev_fallback,
 				    int super_dev,
 				    int log_dev,
 				    int new_log_dev,
@@ -469,7 +489,7 @@ private:
 
   //void _aio_finish(void *priv);
 
-  void _flush_bdev(FileWriter *h);
+  void _flush_bdev(FileWriter *h, bool check_mutex_locked = true);
   void _flush_bdev();  // this is safe to call without a lock
   void _flush_bdev(std::array<bool, MAX_BDEV>& dirty_bdevs);  // this is safe to call without a lock
 
@@ -496,6 +516,7 @@ private:
     const char* op_name);
   int _verify_alloc_granularity(
     __u8 id, uint64_t offset, uint64_t length,
+    uint64_t alloc_unit,
     const char *op);
   int _replay(bool noop, bool to_stdout = false); ///< replay journal
 
@@ -511,7 +532,11 @@ private:
   unsigned get_super_length() {
     return 4096;
   }
-
+  void _maybe_check_vselector_LNF() {
+    if (cct->_conf->bluefs_check_volume_selector_often) {
+      _check_vselector_LNF();
+    }
+  }
 public:
   BlueFS(CephContext* cct);
   ~BlueFS();
@@ -552,7 +577,9 @@ public:
   void dump_block_extents(std::ostream& out);
 
   /// get current extents that we own for given block device
-  int get_block_extents(unsigned id, interval_set<uint64_t> *extents);
+  void foreach_block_extents(
+    unsigned id,
+    std::function<void(uint64_t, uint32_t)> cb);
 
   int open_for_write(
     std::string_view dir,
@@ -578,6 +605,7 @@ public:
   int mkdir(std::string_view dirname);
   int rmdir(std::string_view dirname);
   bool wal_is_rotational();
+  bool db_is_rotational();
 
   bool dir_exists(std::string_view dirname);
   int stat(std::string_view dirname, std::string_view filename,
@@ -661,6 +689,7 @@ private:
 			       size_t read_offset,
 			       size_t read_len,
 			       bufferlist* bl);
+  void _check_vselector_LNF();
 };
 
 class OriginalVolumeSelector : public BlueFSVolumeSelector {

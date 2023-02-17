@@ -18,6 +18,10 @@
 #include <sstream>
 
 #include <netinet/in.h>
+#include <fmt/format.h>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 
 #include "include/ceph_features.h"
 #include "include/types.h"
@@ -25,6 +29,11 @@
 #include "include/encoding.h"
 
 #define MAX_PORT_NUMBER 65535
+
+#ifdef _WIN32
+// ceph_sockaddr_storage matches the Linux format.
+#define AF_INET6_LINUX 10
+#endif
 
 namespace ceph {
   class Formatter;
@@ -161,6 +170,14 @@ static inline void encode(const sockaddr_storage& a, ceph::buffer::list& bl) {
 				  (unsigned char*)(&ss + 1) - dst);
   ::memcpy(dst, src, copy_size);
   encode(ss, bl);
+#elif defined(_WIN32)
+  ceph_sockaddr_storage ss{};
+  ::memcpy(&ss, &a, std::min(sizeof(ss), sizeof(a)));
+  // The Windows AF_INET6 definition doesn't match the Linux one.
+  if (a.ss_family == AF_INET6) {
+    ss.ss_family = AF_INET6_LINUX;
+  }
+  encode(ss, bl);
 #else
   ceph_sockaddr_storage ss;
   ::memset(&ss, '\0', sizeof(ss));
@@ -186,6 +203,13 @@ static inline void decode(sockaddr_storage& a,
   auto const copy_size = std::min((unsigned char*)(&ss + 1) - src,
 				  (unsigned char*)(&a + 1) - dst);
   ::memcpy(dst, src, copy_size);
+#elif defined(_WIN32)
+  ceph_sockaddr_storage ss{};
+  decode(ss, bl);
+  ::memcpy(&a, &ss, std::min(sizeof(ss), sizeof(a)));
+  if (a.ss_family == AF_INET6_LINUX) {
+    a.ss_family = AF_INET6;
+  }
 #else
   ceph_sockaddr_storage ss{};
   decode(ss, bl);
@@ -197,7 +221,9 @@ static inline void decode(sockaddr_storage& a,
  * an entity's network address.
  * includes a random value that prevents it from being reused.
  * thus identifies a particular process instance.
- * ipv4 for now.
+ *
+ * This also happens to work to support cidr ranges, in which
+ * case the nonce contains the netmask. It's great!
  */
 struct entity_addr_t {
   typedef enum {
@@ -205,6 +231,7 @@ struct entity_addr_t {
     TYPE_LEGACY = 1,  ///< legacy msgr1 protocol (ceph jewel and older)
     TYPE_MSGR2 = 2,   ///< msgr2 protocol (new in ceph kraken)
     TYPE_ANY = 3,  ///< ambiguous
+    TYPE_CIDR = 4,
   } type_t;
   static const type_t TYPE_DEFAULT = TYPE_MSGR2;
   static std::string_view get_type_name(int t) {
@@ -213,6 +240,7 @@ struct entity_addr_t {
     case TYPE_LEGACY: return "v1";
     case TYPE_MSGR2: return "v2";
     case TYPE_ANY: return "any";
+    case TYPE_CIDR: return "cidr";
     default: return "???";
     }
   };
@@ -245,6 +273,8 @@ struct entity_addr_t {
   bool is_legacy() const { return type == TYPE_LEGACY; }
   bool is_msgr2() const { return type == TYPE_MSGR2; }
   bool is_any() const { return type == TYPE_ANY; }
+  // this isn't a guarantee; some client addrs will match it
+  bool maybe_cidr() const { return get_port() == 0 && nonce != 0; }
 
   __u32 get_nonce() const { return nonce; }
   void set_nonce(__u32 n) { nonce = n; }
@@ -400,6 +430,7 @@ struct entity_addr_t {
   }
 
   std::string ip_only_to_str() const;
+  std::string ip_n_port_to_str() const;
 
   std::string get_legacy_str() const {
     std::ostringstream ss;
@@ -463,7 +494,11 @@ struct entity_addr_t {
     encode(elen, bl);
     if (elen) {
       uint16_t ss_family = u.sa.sa_family;
-
+#if defined(_WIN32)
+      if (ss_family == AF_INET6) {
+        ss_family = AF_INET6_LINUX;
+      }
+#endif
       encode(ss_family, bl);
       elen -= sizeof(u.sa.sa_family);
       bl.append(u.sa.sa_data, elen);
@@ -494,6 +529,11 @@ struct entity_addr_t {
 	throw ceph::buffer::malformed_input("elen smaller than family len");
       }
       decode(ss_family, bl);
+#if defined(_WIN32)
+      if (ss_family == AF_INET6_LINUX) {
+        ss_family = AF_INET6;
+      }
+#endif
       u.sa.sa_family = ss_family;
       elen -= sizeof(ss_family);
       if (elen > get_sockaddr_len() - sizeof(u.sa.sa_family)) {
@@ -511,6 +551,9 @@ struct entity_addr_t {
 WRITE_CLASS_ENCODER_FEATURES(entity_addr_t)
 
 std::ostream& operator<<(std::ostream& out, const entity_addr_t &addr);
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<entity_addr_t> : fmt::ostream_formatter {};
+#endif
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
 inline bool operator!=(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) != 0; }
@@ -699,6 +742,9 @@ struct entity_addrvec_t {
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<entity_addrvec_t> : fmt::ostream_formatter {};
+#endif
 
 namespace std {
 template<> struct hash<entity_addrvec_t> {

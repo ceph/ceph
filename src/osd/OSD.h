@@ -94,7 +94,7 @@ class MMonGetPurgedSnapsReply;
 
 class OSD;
 
-class OSDService {
+class OSDService : public Scrub::ScrubSchedListener {
   using OpSchedulerItem = ceph::osd::scheduler::OpSchedulerItem;
 public:
   OSD *osd;
@@ -130,7 +130,7 @@ public:
     }
   }
 
-  ceph::signedspan get_mnow();
+  ceph::signedspan get_mnow() const;
 
 private:
   // -- superblock --
@@ -147,7 +147,7 @@ public:
     superblock = block;
   }
 
-  int get_nodeid() const { return whoami; }
+  int get_nodeid() const final { return whoami; }
 
   std::atomic<epoch_t> max_oldest_map;
 private:
@@ -197,40 +197,11 @@ public:
   std::map<epoch_t, unsigned> map_reservations;
 
   /// gets ref to next_osdmap and registers the epoch as reserved
-  OSDMapRef get_nextmap_reserved() {
-    std::lock_guard l(pre_publish_lock);
-    epoch_t e = next_osdmap->get_epoch();
-    std::map<epoch_t, unsigned>::iterator i =
-      map_reservations.insert(std::make_pair(e, 0)).first;
-    i->second++;
-    return next_osdmap;
-  }
+  OSDMapRef get_nextmap_reserved();
   /// releases reservation on map
-  void release_map(OSDMapRef osdmap) {
-    std::lock_guard l(pre_publish_lock);
-    std::map<epoch_t, unsigned>::iterator i =
-      map_reservations.find(osdmap->get_epoch());
-    ceph_assert(i != map_reservations.end());
-    ceph_assert(i->second > 0);
-    if (--(i->second) == 0) {
-      map_reservations.erase(i);
-    }
-    if (pre_publish_waiter) {
-      pre_publish_cond.notify_all();
-    }
-  }
+  void release_map(OSDMapRef osdmap);
   /// blocks until there are no reserved maps prior to next_osdmap
-  void await_reserved_maps() {
-    std::unique_lock l{pre_publish_lock};
-    ceph_assert(next_osdmap);
-    pre_publish_waiter++;
-    pre_publish_cond.wait(l, [this] {
-      auto i = map_reservations.cbegin();
-      return (i == map_reservations.cend() ||
-	      i->first >= next_osdmap->get_epoch());
-    });
-    pre_publish_waiter--;
-  }
+  void await_reserved_maps() ;
   OSDMapRef get_next_osdmap() {
     std::lock_guard l(pre_publish_lock);
     return next_osdmap;
@@ -290,7 +261,9 @@ public:
    * @param allow_requested_repair_only
    * @return a Scrub::attempt_t detailing either a success, or the failure reason.
    */
-  Scrub::schedule_result_t initiate_a_scrub(spg_t pgid, bool allow_requested_repair_only);
+  Scrub::schedule_result_t initiate_a_scrub(
+    spg_t pgid,
+    bool allow_requested_repair_only) final;
 
 
  private:
@@ -1128,7 +1101,6 @@ protected:
   void tick();
   void tick_without_osd_lock();
   void _dispatch(Message *m);
-  void dispatch_op(OpRequestRef op);
 
   void check_osdmap_features();
 
@@ -1543,15 +1515,6 @@ public:
   } heartbeat_dispatcher;
 
 private:
-  // -- waiters --
-  std::list<OpRequestRef> finished;
-
-  void take_waiters(std::list<OpRequestRef>& ls) {
-    ceph_assert(ceph_mutex_is_locked(osd_lock));
-    finished.splice(finished.end(), ls);
-  }
-  void do_waiters();
-
   // -- op tracking --
   OpTracker op_tracker;
   void test_ops(std::string command, std::string args, std::ostream& ss);
@@ -1592,7 +1555,7 @@ protected:
     : public ShardedThreadPool::ShardedWQ<OpSchedulerItem>
   {
     OSD *osd;
-
+    bool m_fast_shutdown = false;
   public:
     ShardedOpWQ(OSD *o,
 		ceph::timespan ti,
@@ -1609,6 +1572,8 @@ protected:
 
     /// try to do some work
     void _process(uint32_t thread_index, ceph::heartbeat_handle_d *hb) override;
+
+    void stop_for_fast_shutdown();
 
     /// enqueue a new item
     void _enqueue(OpSchedulerItem&& item) override;
@@ -1716,12 +1681,10 @@ protected:
   pool_pg_num_history_t pg_num_history;
 
   ceph::shared_mutex map_lock = ceph::make_shared_mutex("OSD::map_lock");
-  std::list<OpRequestRef>  waiting_for_osdmap;
   std::deque<utime_t> osd_markdown_log;
 
   friend struct send_map_on_destruct;
 
-  void wait_for_new_map(OpRequestRef op);
   void handle_osd_map(class MOSDMap *m);
   void _committed_osd_maps(epoch_t first, epoch_t last, class MOSDMap *m);
   void trim_maps(epoch_t oldest, int nreceived, bool skip_maps);
@@ -1803,17 +1766,7 @@ protected:
 
   void load_pgs();
 
-  /// build initial pg history and intervals on create
-  void build_initial_pg_history(
-    spg_t pgid,
-    epoch_t created,
-    utime_t created_stamp,
-    pg_history_t *h,
-    PastIntervals *pi);
-
   epoch_t last_pg_create_epoch;
-
-  void handle_pg_create(OpRequestRef op);
 
   void split_pgs(
     PG *parent,
@@ -1890,21 +1843,6 @@ protected:
   bool require_mon_peer(const Message *m);
   bool require_mon_or_mgr_peer(const Message *m);
   bool require_osd_peer(const Message *m);
-  /***
-   * Verifies that we were alive in the given epoch, and that
-   * still are.
-   */
-  bool require_self_aliveness(const Message *m, epoch_t alive_since);
-  /**
-   * Verifies that the OSD who sent the given op has the same
-   * address as in the given std::map.
-   * @pre op was sent by an OSD using the cluster messenger
-   */
-  bool require_same_peer_instance(const Message *m, const OSDMapRef& map,
-				  bool is_fast_dispatch);
-
-  bool require_same_or_newer_map(OpRequestRef& op, epoch_t e,
-				 bool is_fast_dispatch);
 
   void handle_fast_pg_create(MOSDPGCreate2 *m);
   void handle_pg_query_nopg(const MQuery& q);
@@ -2041,7 +1979,6 @@ private:
 			ObjectStore *store,
 			uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami, std::string& osdspec_affinity);
 
-  void handle_scrub(class MOSDScrub *m);
   void handle_fast_scrub(class MOSDScrub2 *m);
   void handle_osd_ping(class MOSDPing *m);
 
@@ -2055,14 +1992,16 @@ private:
 
   int get_recovery_max_active();
   void maybe_override_max_osd_capacity_for_qos();
-  bool maybe_override_options_for_qos();
+  void maybe_override_sleep_options_for_qos();
+  bool maybe_override_options_for_qos(
+    const std::set<std::string> *changed = nullptr);
   int run_osd_bench_test(int64_t count,
                          int64_t bsize,
                          int64_t osize,
                          int64_t onum,
                          double *elapsed,
                          std::ostream& ss);
-  int mon_cmd_set_config(const std::string &key, const std::string &val);
+  void mon_cmd_set_config(const std::string &key, const std::string &val);
   bool unsupported_objstore_for_qos();
 
   void scrub_purged_snaps();

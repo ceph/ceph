@@ -45,7 +45,7 @@ Running a development deployment
 --------------------------------
 
 Ceph contains a script called ``vstart.sh`` (see also
-:doc:`/dev/dev_cluster_deployement`) which allows developers to quickly test
+:doc:`/dev/dev_cluster_deployment`) which allows developers to quickly test
 their code using a simple deployment on your development system. Once the build
 finishes successfully, start the ceph deployment using the following command:
 

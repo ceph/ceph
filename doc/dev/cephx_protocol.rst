@@ -102,7 +102,7 @@ we'll assume that we are in that state.
 The message C sends to A in phase I is build in ``CephxClientHandler::build_request()`` (in 
 ``auth/cephx/CephxClientHandler.cc``).  This routine is used for more than one purpose.  
 In this case, we first call ``validate_tickets()`` (from routine 
-``CephXTicektManager::validate_tickets()`` which lives in ``auth/cephx/CephxProtocol.h``).  
+``CephXTicketManager::validate_tickets()`` which lives in ``auth/cephx/CephxProtocol.h``).  
 This code runs through the list of possible tickets to determine what we need, setting values 
 in the ``need`` flag as necessary.  Then we call ``ticket.get_handler()``.  This routine 
 (in ``CephxProtocol.h``) finds a ticket of the specified type (a ticket to perform 

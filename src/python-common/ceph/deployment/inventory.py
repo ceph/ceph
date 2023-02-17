@@ -3,6 +3,8 @@ try:
 except ImportError:
     pass  # for type checking
 
+from ceph.utils import datetime_now, datetime_to_str, str_to_datetime
+import datetime
 import json
 
 
@@ -13,10 +15,18 @@ class Devices(object):
 
     def __init__(self, devices):
         # type: (List[Device]) -> None
-        self.devices = devices  # type: List[Device]
+        # sort devices by path name so ordering is consistent
+        self.devices: List[Device] = sorted(devices, key=lambda d: d.path if d.path else '')
 
     def __eq__(self, other: Any) -> bool:
-        return self.to_json() == other.to_json()
+        if not isinstance(other, Devices):
+            return NotImplemented
+        if len(self.devices) != len(other.devices):
+            return False
+        for d1, d2 in zip(other.devices, self.devices):
+            if d1 != d2:
+                return False
+        return True
 
     def to_json(self):
         # type: () -> List[dict]
@@ -34,14 +44,17 @@ class Devices(object):
 
 class Device(object):
     report_fields = [
+        'ceph_device',
         'rejected_reasons',
         'available',
         'path',
         'sys_api',
+        'created',
         'lvs',
         'human_readable_type',
         'device_id',
         'lsm_data',
+        'crush_device_class'
     ]
 
     def __init__(self,
@@ -52,7 +65,11 @@ class Device(object):
                  lvs=None,  # type: Optional[List[str]]
                  device_id=None,  # type: Optional[str]
                  lsm_data=None,  # type: Optional[Dict[str, Dict[str, str]]]
+                 created=None,  # type: Optional[datetime.datetime]
+                 ceph_device=None,  # type: Optional[bool]
+                 crush_device_class=None  # type: Optional[str]
                  ):
+
         self.path = path
         self.sys_api = sys_api if sys_api is not None else {}  # type: Dict[str, Any]
         self.available = available
@@ -60,11 +77,25 @@ class Device(object):
         self.lvs = lvs
         self.device_id = device_id
         self.lsm_data = lsm_data if lsm_data is not None else {}  # type: Dict[str, Dict[str, str]]
+        self.created = created if created is not None else datetime_now()
+        self.ceph_device = ceph_device
+        self.crush_device_class = crush_device_class
+
+    def __eq__(self, other):
+        # type: (Any) -> bool
+        if not isinstance(other, Device):
+            return NotImplemented
+        diff = [k for k in self.report_fields if k != 'created' and (getattr(self, k)
+                                                                     != getattr(other, k))]
+        return not diff
 
     def to_json(self):
         # type: () -> dict
         return {
-            k: getattr(self, k) for k in self.report_fields
+            k: (getattr(self, k) if k != 'created'
+                or not isinstance(getattr(self, k), datetime.datetime)
+                else datetime_to_str(getattr(self, k)))
+            for k in self.report_fields
         }
 
     @classmethod
@@ -74,7 +105,9 @@ class Device(object):
             raise ValueError('Device: Expected dict. Got `{}...`'.format(json.dumps(input)[:10]))
         ret = cls(
             **{
-                key: input.get(key, None)
+                key: (input.get(key, None) if key != 'created'
+                      or not input.get(key, None)
+                      else str_to_datetime(input.get(key, None)))
                 for key in Device.report_fields
                 if key != 'human_readable_type'
             }
@@ -95,6 +128,8 @@ class Device(object):
             'path': self.path if self.path is not None else 'unknown',
             'lvs': self.lvs if self.lvs else 'None',
             'available': str(self.available),
+            'ceph_device': str(self.ceph_device),
+            'crush_device_class': str(self.crush_device_class)
         }
         if not self.available and self.rejected_reasons:
             device_desc['rejection reasons'] = self.rejected_reasons

@@ -18,11 +18,7 @@ const auto TYPE = "type";
 const auto REQUEST = "request";
 const auto MULTIPART = "multipart_upload ";
 
-#ifdef HAVE_JAEGER
-extern thread_local tracing::Tracer tracer;
-#else
 extern tracing::Tracer tracer;
-#endif
 
 } // namespace rgw
 } // namespace tracing

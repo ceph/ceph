@@ -10,6 +10,7 @@
 #include "include/types.h"
 #include "global/global_context.h"
 #include "common/Cond.h"
+#include "common/ceph_crypto.h"
 #include "test/librados/test_cxx.h"
 #include "test/librados/testcase_cxx.h"
 #include "json_spirit/json_spirit.h"
@@ -25,9 +26,11 @@
 
 #include "cls/cas/cls_cas_client.h"
 #include "cls/cas/cls_cas_internal.h"
+#include "crimson_utils.h"
 
 using namespace std;
 using namespace librados;
+using ceph::crypto::SHA1;
 
 typedef RadosTestPP LibRadosTierPP;
 typedef RadosTestECPP LibRadosTierECPP;
@@ -107,9 +110,14 @@ void manifest_set_chunk(Rados& cluster, librados::IoCtx& src_ioctx,
   completion->release();
 }
 
-#include "common/ceph_crypto.h"
-using ceph::crypto::SHA1;
-#include "rgw/rgw_common.h"
+static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
+{
+  int i;
+  str[0] = '\0';
+  for (i = 0; i < len; i++) {
+    sprintf(&str[i*2], "%02x", (int)buf[i]);
+  }
+}
 
 void check_fp_oid_refcount(librados::IoCtx& ioctx, std::string foid, uint64_t count,
 			   std::string fp_algo = NULL)
@@ -212,6 +220,7 @@ protected:
   static std::string cache_pool_name;
 
   void SetUp() override {
+    SKIP_IF_CRIMSON();
     cache_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestPP::SetUp();
@@ -221,6 +230,7 @@ protected:
     cache_ioctx.set_namespace(nspace);
   }
   void TearDown() override {
+    SKIP_IF_CRIMSON();
     // flush + evict cache
     flush_evict_all(cluster, cache_ioctx);
 
@@ -274,6 +284,7 @@ Completions completions;
 std::string LibRadosTwoPoolsPP::cache_pool_name;
 
 TEST_F(LibRadosTierPP, Dirty) {
+  SKIP_IF_CRIMSON();
   {
     ObjectWriteOperation op;
     op.undirty();
@@ -329,6 +340,7 @@ TEST_F(LibRadosTierPP, Dirty) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, Overlay) {
+  SKIP_IF_CRIMSON();
   // create objects
   {
     bufferlist bl;
@@ -389,6 +401,7 @@ TEST_F(LibRadosTwoPoolsPP, Overlay) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, Promote) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -443,6 +456,7 @@ TEST_F(LibRadosTwoPoolsPP, Promote) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, PromoteSnap) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -586,6 +600,7 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnap) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, PromoteSnapScrub) {
+  SKIP_IF_CRIMSON();
   int num = 100;
 
   // create objects
@@ -694,6 +709,7 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnapScrub) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, PromoteSnapTrimRace) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -753,6 +769,7 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnapTrimRace) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, Whiteout) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -848,6 +865,7 @@ TEST_F(LibRadosTwoPoolsPP, Whiteout) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, WhiteoutDeleteCreate) {
+  SKIP_IF_CRIMSON();
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -893,6 +911,7 @@ TEST_F(LibRadosTwoPoolsPP, WhiteoutDeleteCreate) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, Evict) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -1042,6 +1061,7 @@ TEST_F(LibRadosTwoPoolsPP, Evict) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, EvictSnap) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -1281,6 +1301,7 @@ TEST_F(LibRadosTwoPoolsPP, EvictSnap) {
 
 // this test case reproduces http://tracker.ceph.com/issues/8629
 TEST_F(LibRadosTwoPoolsPP, EvictSnap2) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -1357,6 +1378,7 @@ TEST_F(LibRadosTwoPoolsPP, EvictSnap2) {
 
 //This test case reproduces http://tracker.ceph.com/issues/17445
 TEST_F(LibRadosTwoPoolsPP, ListSnap){
+  SKIP_IF_CRIMSON();
   // Create object
   {
     bufferlist bl;
@@ -1508,6 +1530,7 @@ TEST_F(LibRadosTwoPoolsPP, ListSnap){
 
 // This test case reproduces https://tracker.ceph.com/issues/49409
 TEST_F(LibRadosTwoPoolsPP, EvictSnapRollbackReadRace) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -1618,6 +1641,7 @@ TEST_F(LibRadosTwoPoolsPP, EvictSnapRollbackReadRace) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, TryFlush) {
+  SKIP_IF_CRIMSON();
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -1762,6 +1786,7 @@ TEST_F(LibRadosTwoPoolsPP, TryFlush) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, Flush) {
+  SKIP_IF_CRIMSON();
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -1958,6 +1983,7 @@ TEST_F(LibRadosTwoPoolsPP, Flush) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, FlushSnap) {
+  SKIP_IF_CRIMSON();
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -2153,6 +2179,7 @@ TEST_F(LibRadosTwoPoolsPP, FlushSnap) {
 }
 
 TEST_F(LibRadosTierPP, FlushWriteRaces) {
+  SKIP_IF_CRIMSON();
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
   std::string cache_pool_name = pool_name + "-cache";
@@ -2272,6 +2299,7 @@ TEST_F(LibRadosTierPP, FlushWriteRaces) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, FlushTryFlushRaces) {
+  SKIP_IF_CRIMSON();
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -2469,6 +2497,7 @@ void flush_read_race_cb(completion_t cb, void *arg)
 }
 
 TEST_F(LibRadosTwoPoolsPP, TryFlushReadRace) {
+  SKIP_IF_CRIMSON();
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -2529,6 +2558,7 @@ TEST_F(LibRadosTwoPoolsPP, TryFlushReadRace) {
 }
 
 TEST_F(LibRadosTierPP, HitSetNone) {
+  SKIP_IF_CRIMSON();
   {
     list< pair<time_t,time_t> > ls;
     AioCompletion *c = librados::Rados::aio_create_completion();
@@ -2563,6 +2593,7 @@ string set_pool_str(string pool, string var, int val)
 }
 
 TEST_F(LibRadosTwoPoolsPP, HitSetRead) {
+  SKIP_IF_CRIMSON();
   // make it a tier
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -2700,6 +2731,7 @@ int make_hitset(Rados& cluster, librados::IoCtx& cache_ioctx, int num_pg,
 }
 
 TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
+  SKIP_IF_CRIMSON();
   int num_pg = _get_pg_num(cluster, pool_name);
   ceph_assert(num_pg > 0);
 
@@ -2758,6 +2790,7 @@ TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, HitSetTrim) {
+  SKIP_IF_CRIMSON();
   unsigned count = 3;
   unsigned period = 3;
 
@@ -2826,6 +2859,7 @@ TEST_F(LibRadosTwoPoolsPP, HitSetTrim) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, PromoteOn2ndRead) {
+  SKIP_IF_CRIMSON();
   // create object
   for (int i=0; i<20; ++i) {
     bufferlist bl;
@@ -2950,6 +2984,7 @@ TEST_F(LibRadosTwoPoolsPP, PromoteOn2ndRead) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ProxyRead) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -3008,6 +3043,7 @@ TEST_F(LibRadosTwoPoolsPP, ProxyRead) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, CachePin) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -3159,6 +3195,7 @@ TEST_F(LibRadosTwoPoolsPP, CachePin) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, SetRedirectRead) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -3199,6 +3236,7 @@ TEST_F(LibRadosTwoPoolsPP, SetRedirectRead) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestPromoteRead) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet mimic
   if (_get_required_osd_release(cluster) < "mimic") {
     GTEST_SKIP() << "cluster is not yet mimic, skipping test";
@@ -3288,6 +3326,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestPromoteRead) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
+  SKIP_IF_CRIMSON();
   // note: require >= mimic
 
   // create object
@@ -3376,6 +3415,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet nautilus
   if (_get_required_osd_release(cluster) < "nautilus") {
     GTEST_SKIP() << "cluster is not yet nautilus, skipping test";
@@ -3516,10 +3556,8 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   cluster.wait_for_latest_osdmap();
 }
 
-#include "common/ceph_crypto.h"
-using ceph::crypto::SHA1;
-#include "rgw/rgw_common.h"
 TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet nautilus
   if (_get_required_osd_release(cluster) < "nautilus") {
     GTEST_SKIP() << "cluster is not yet nautilus, skipping test";
@@ -3583,6 +3621,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus
   if (_get_required_osd_release(cluster) < "octopus") {
     cout << "cluster is not yet octopus, skipping test" << std::endl;
@@ -3890,6 +3929,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus
   if (_get_required_osd_release(cluster) < "octopus") {
     cout << "cluster is not yet octopus, skipping test" << std::endl;
@@ -4113,6 +4153,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestTestSnapCreate) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus
   if (_get_required_osd_release(cluster) < "octopus") {
     GTEST_SKIP() << "cluster is not yet octopus, skipping test";
@@ -4209,6 +4250,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestTestSnapCreate) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestRedirectAfterPromote) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus 
   if (_get_required_osd_release(cluster) < "octopus") {
     GTEST_SKIP() << "cluster is not yet octopus, skipping test";
@@ -4275,6 +4317,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRedirectAfterPromote) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestCheckRefcountWhenModification) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus 
   if (_get_required_osd_release(cluster) < "octopus") {
     GTEST_SKIP() << "cluster is not yet octopus, skipping test";
@@ -4496,6 +4539,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestCheckRefcountWhenModification) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestSnapIncCount) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus
   if (_get_required_osd_release(cluster) < "octopus") {
     cout << "cluster is not yet octopus, skipping test" << std::endl;
@@ -4612,6 +4656,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapIncCount) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestEvict) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus
   if (_get_required_osd_release(cluster) < "octopus") {
     cout << "cluster is not yet octopus, skipping test" << std::endl;
@@ -4756,6 +4801,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestEvict) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestEvictPromote) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus
   if (_get_required_osd_release(cluster) < "octopus") {
     cout << "cluster is not yet octopus, skipping test" << std::endl;
@@ -4852,6 +4898,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestEvictPromote) {
 
 
 TEST_F(LibRadosTwoPoolsPP, ManifestSnapSizeMismatch) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus
   if (_get_required_osd_release(cluster) < "octopus") {
     cout << "cluster is not yet octopus, skipping test" << std::endl;
@@ -4963,6 +5010,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapSizeMismatch) {
 
 #include <common/CDC.h>
 TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus
   if (_get_required_osd_release(cluster) < "octopus") {
     GTEST_SKIP() << "cluster is not yet octopus, skipping test";
@@ -5217,6 +5265,7 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestFlushSnap) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus
   if (_get_required_osd_release(cluster) < "octopus") {
     cout << "cluster is not yet octopus, skipping test" << std::endl;
@@ -5400,6 +5449,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushSnap) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus
   if (_get_required_osd_release(cluster) < "octopus") {
     cout << "cluster is not yet octopus, skipping test" << std::endl;
@@ -5617,6 +5667,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, TierFlushDuringFlush) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus
   if (_get_required_osd_release(cluster) < "octopus") {
     cout << "cluster is not yet octopus, skipping test" << std::endl;
@@ -5659,6 +5710,9 @@ TEST_F(LibRadosTwoPoolsPP, TierFlushDuringFlush) {
     ASSERT_EQ(0, ioctx.operate("bar", &op));
   }
 
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
   // set-chunk to set manifest object
   {
     ObjectReadOperation op;
@@ -5674,6 +5728,9 @@ TEST_F(LibRadosTwoPoolsPP, TierFlushDuringFlush) {
 
   // delete temp pool, so flushing chunk will fail
   ASSERT_EQ(0, s_cluster.pool_delete(temp_pool_name.c_str()));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
 
   // flush to check if proper error is returned
   {
@@ -5691,6 +5748,7 @@ TEST_F(LibRadosTwoPoolsPP, TierFlushDuringFlush) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestSnapHasChunk) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet octopus
   if (_get_required_osd_release(cluster) < "octopus") {
     cout << "cluster is not yet octopus, skipping test" << std::endl;
@@ -5869,6 +5927,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapHasChunk) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestRollback) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet pacific
   if (_get_required_osd_release(cluster) < "pacific") {
     cout << "cluster is not yet pacific, skipping test" << std::endl;
@@ -5970,6 +6029,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRollback) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestRollbackRefcount) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet pacific
   if (_get_required_osd_release(cluster) < "pacific") {
     cout << "cluster is not yet pacific, skipping test" << std::endl;
@@ -6101,6 +6161,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRollbackRefcount) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestEvictRollback) {
+  SKIP_IF_CRIMSON();
   // skip test if not yet pacific
   if (_get_required_osd_release(cluster) < "pacific") {
     cout << "cluster is not yet pacific, skipping test" << std::endl;
@@ -6212,6 +6273,7 @@ protected:
   static std::string cache_pool_name;
 
   void SetUp() override {
+    SKIP_IF_CRIMSON();
     cache_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestECPP::SetUp();
@@ -6221,6 +6283,7 @@ protected:
     cache_ioctx.set_namespace(nspace);
   }
   void TearDown() override {
+    SKIP_IF_CRIMSON();
     // flush + evict cache
     flush_evict_all(cluster, cache_ioctx);
 
@@ -6253,6 +6316,7 @@ protected:
 std::string LibRadosTwoPoolsECPP::cache_pool_name;
 
 TEST_F(LibRadosTierECPP, Dirty) {
+  SKIP_IF_CRIMSON();
   {
     ObjectWriteOperation op;
     op.undirty();
@@ -6308,6 +6372,7 @@ TEST_F(LibRadosTierECPP, Dirty) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, Overlay) {
+  SKIP_IF_CRIMSON();
   // create objects
   {
     bufferlist bl;
@@ -6368,6 +6433,7 @@ TEST_F(LibRadosTwoPoolsECPP, Overlay) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, Promote) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -6422,6 +6488,7 @@ TEST_F(LibRadosTwoPoolsECPP, Promote) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, PromoteSnap) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -6594,6 +6661,7 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteSnap) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, PromoteSnapTrimRace) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -6653,6 +6721,7 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteSnapTrimRace) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, Whiteout) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -6748,6 +6817,7 @@ TEST_F(LibRadosTwoPoolsECPP, Whiteout) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, Evict) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -6897,6 +6967,7 @@ TEST_F(LibRadosTwoPoolsECPP, Evict) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, EvictSnap) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -7135,6 +7206,7 @@ TEST_F(LibRadosTwoPoolsECPP, EvictSnap) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, TryFlush) {
+  SKIP_IF_CRIMSON();
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -7279,6 +7351,7 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlush) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, FailedFlush) {
+  SKIP_IF_CRIMSON();
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -7416,6 +7489,7 @@ TEST_F(LibRadosTwoPoolsECPP, FailedFlush) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, Flush) {
+  SKIP_IF_CRIMSON();
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -7612,6 +7686,7 @@ TEST_F(LibRadosTwoPoolsECPP, Flush) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, FlushSnap) {
+  SKIP_IF_CRIMSON();
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -7808,6 +7883,7 @@ TEST_F(LibRadosTwoPoolsECPP, FlushSnap) {
 }
 
 TEST_F(LibRadosTierECPP, FlushWriteRaces) {
+  SKIP_IF_CRIMSON();
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
   std::string cache_pool_name = pool_name + "-cache";
@@ -7927,6 +8003,7 @@ TEST_F(LibRadosTierECPP, FlushWriteRaces) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, FlushTryFlushRaces) {
+  SKIP_IF_CRIMSON();
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -8093,6 +8170,7 @@ TEST_F(LibRadosTwoPoolsECPP, FlushTryFlushRaces) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, TryFlushReadRace) {
+  SKIP_IF_CRIMSON();
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -8153,6 +8231,7 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlushReadRace) {
 }
 
 TEST_F(LibRadosTierECPP, CallForcesPromote) {
+  SKIP_IF_CRIMSON();
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
   std::string cache_pool_name = pool_name + "-cache";
@@ -8270,6 +8349,7 @@ TEST_F(LibRadosTierECPP, CallForcesPromote) {
 }
 
 TEST_F(LibRadosTierECPP, HitSetNone) {
+  SKIP_IF_CRIMSON();
   {
     list< pair<time_t,time_t> > ls;
     AioCompletion *c = librados::Rados::aio_create_completion();
@@ -8290,6 +8370,7 @@ TEST_F(LibRadosTierECPP, HitSetNone) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, HitSetRead) {
+  SKIP_IF_CRIMSON();
   // make it a tier
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -8429,6 +8510,7 @@ TEST_F(LibRadosTierECPP, HitSetWrite) {
 #endif
 
 TEST_F(LibRadosTwoPoolsECPP, HitSetTrim) {
+  SKIP_IF_CRIMSON();
   unsigned count = 3;
   unsigned period = 3;
 
@@ -8502,6 +8584,7 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetTrim) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, PromoteOn2ndRead) {
+  SKIP_IF_CRIMSON();
   // create object
   for (int i=0; i<20; ++i) {
     bufferlist bl;
@@ -8626,6 +8709,7 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteOn2ndRead) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, ProxyRead) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -8684,6 +8768,7 @@ TEST_F(LibRadosTwoPoolsECPP, ProxyRead) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, CachePin) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -8834,6 +8919,7 @@ TEST_F(LibRadosTwoPoolsECPP, CachePin) {
   cluster.wait_for_latest_osdmap();
 }
 TEST_F(LibRadosTwoPoolsECPP, SetRedirectRead) {
+  SKIP_IF_CRIMSON();
   // create object
   {
     bufferlist bl;
@@ -8887,6 +8973,7 @@ TEST_F(LibRadosTwoPoolsECPP, SetRedirectRead) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, SetChunkRead) {
+  SKIP_IF_CRIMSON();
   // note: require >= mimic
 
   {
@@ -8934,6 +9021,7 @@ TEST_F(LibRadosTwoPoolsECPP, SetChunkRead) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, ManifestPromoteRead) {
+  SKIP_IF_CRIMSON();
   // note: require >= mimic
 
   // create object
@@ -9016,6 +9104,7 @@ TEST_F(LibRadosTwoPoolsECPP, ManifestPromoteRead) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, TrySetDedupTier) {
+  SKIP_IF_CRIMSON();
   // note: require >= mimic
   
   bufferlist inbl;
@@ -9025,6 +9114,7 @@ TEST_F(LibRadosTwoPoolsECPP, TrySetDedupTier) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, PropagateBaseTierError) {
+  SKIP_IF_CRIMSON();
   // write object  to base tier
   bufferlist omap_bl;
   encode(static_cast<uint32_t>(0U), omap_bl);
@@ -9077,6 +9167,7 @@ TEST_F(LibRadosTwoPoolsPP, PropagateBaseTierError) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, HelloWriteReturn) {
+  SKIP_IF_CRIMSON();
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -9143,3 +9234,69 @@ TEST_F(LibRadosTwoPoolsPP, HelloWriteReturn) {
     ASSERT_EQ("", std::string(out.c_str(), out.length()));
   }
 }
+
+TEST_F(LibRadosTwoPoolsPP, TierFlushDuringUnsetDedupTier) {
+  SKIP_IF_CRIMSON();
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  bufferlist inbl;
+
+  // set dedup parameters without dedup_tier
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
+    inbl, NULL, NULL));
+
+  // create object
+  bufferlist gbl;
+  {
+    generate_buffer(1024*8, &gbl);
+    ObjectWriteOperation op;
+    op.write_full(gbl);
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("bar", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // set-chunk to set manifest object
+  {
+    ObjectReadOperation op;
+    op.set_chunk(0, 2, ioctx, "bar", 0, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush to check if proper error is returned
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op, librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(-EINVAL, completion->get_return_value());
+    completion->release();
+  }
+}
+

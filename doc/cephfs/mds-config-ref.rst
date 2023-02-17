@@ -62,3 +62,4 @@
 .. confval:: mds_skip_ino
 .. confval:: mds_min_caps_per_client
 .. confval:: mds_symlink_recovery
+.. confval:: mds_extraordinary_events_dump_interval

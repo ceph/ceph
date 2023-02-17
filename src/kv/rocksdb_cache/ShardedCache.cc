@@ -109,7 +109,7 @@ size_t ShardedCache::GetPinnedUsage() const {
   return usage;
 }
 
-#if (ROCKSDB_MAJOR >= 6 && ROCKSDB_MINOR >= 22)
+#if (ROCKSDB_MAJOR >= 7 || (ROCKSDB_MAJOR == 6 && ROCKSDB_MINOR >= 22))
 DeleterFn ShardedCache::GetDeleter(Handle* handle) const
 {
   uint32_t hash = GetHash(handle);

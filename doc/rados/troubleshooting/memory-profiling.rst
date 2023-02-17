@@ -140,3 +140,32 @@ For example::
 
 .. _Logging and Debugging: ../log-and-debug
 .. _Google Heap Profiler: http://goog-perftools.sourceforge.net/doc/heap_profiler.html
+
+Alternative ways for memory profiling
+-------------------------------------
+
+Running Massif heap profiler with Valgrind
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The Massif heap profiler tool can be used with Valgrind to
+measure how much heap memory is used and is good for
+troubleshooting for example Ceph RadosGW.
+
+See the `Massif documentation <https://valgrind.org/docs/manual/ms-manual.html>`_ for
+more information.
+
+Install Valgrind from the package manager for your distribution
+then start the Ceph daemon you want to troubleshoot::
+
+        sudo -u ceph valgrind --max-threads=1024 --tool=massif /usr/bin/radosgw -f --cluster ceph --name NAME --setuser ceph --setgroup ceph
+
+A file similar to ``massif.out.<pid>`` will be saved when it exits
+in your current working directory. The user running the process above
+must have write permissions in the current directory.
+
+You can then run the ``ms_print`` command to get a graph and statistics
+from the collected data in the ``massif.out.<pid>`` file::
+
+        ms_print massif.out.12345
+
+This output is great for inclusion in a bug report.

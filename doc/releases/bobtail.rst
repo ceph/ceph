@@ -331,7 +331,7 @@ Compatibility changes
 ---------------------
 
 * The 'ceph osd create [<uuid>]' command now rejects an argument that
-  is not a UUID.  (Previously it would take take an optional integer
+  is not a UUID.  (Previously it would take an optional integer
   OSD id.)  This correct syntax has been 'ceph osd create [<uuid>]'
   since v0.47, but the older calling convention was being silently
   ignored.

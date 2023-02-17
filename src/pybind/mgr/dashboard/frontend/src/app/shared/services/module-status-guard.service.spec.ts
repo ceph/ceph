@@ -67,7 +67,7 @@ describe('ModuleStatusGuardService', () => {
     route.url = [];
     route.data = {
       moduleStatusGuardConfig: {
-        apiPath: 'bar',
+        uiApiPath: 'bar',
         redirectTo: '/foo',
         backend: 'rook'
       }

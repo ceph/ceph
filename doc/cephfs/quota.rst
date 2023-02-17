@@ -41,6 +41,18 @@ Limitations
    the directory the client is restricted too (e.g., ``/home/user``)
    or something nested beneath it.
 
+   In case of a kernel client, it needs to have access to the parent
+   of the directory inode on which quotas are configured in order to
+   enforce them. If quota is configured on a directory path
+   (e.g., ``/home/volumes/group``), the kclient needs to have access
+   to the parent (e.g., ``/home/volumes``).
+
+   An example command to create such an user is as below::
+
+     $ ceph auth get-or-create client.guest mds 'allow r path=/home/volumes, allow rw path=/home/volumes/group' mgr 'allow rw' osd 'allow rw tag cephfs metadata=*' mon 'allow r'
+
+   See also: https://tracker.ceph.com/issues/55090
+
 #. *Snapshot file data which has since been deleted or changed does not count
    towards the quota.* See also: http://tracker.ceph.com/issues/24284
 
@@ -74,3 +86,11 @@ To remove a quota::
 
   setfattr -n ceph.quota.max_bytes -v 0 /some/dir
   setfattr -n ceph.quota.max_files -v 0 /some/dir
+
+
+.. note:: In cases where CephFS extended attributes are set on a CephFS
+   directory (for example, ``/some/dir``), running ``getfattr /some/dir -d -m
+   -`` will not print those CephFS extended attributes. This is because CephFS
+   kernel and FUSE clients hide this information from the ``listxattr(2)``
+   system call. You can access a specific CephFS extended attribute by running
+   ``getfattr /some/dir -n ceph.<some-xattr>`` instead.

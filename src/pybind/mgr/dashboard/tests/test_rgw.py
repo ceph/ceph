@@ -20,7 +20,7 @@ class RgwControllerTestCase(ControllerTestCase):
     @patch.object(RgwClient, 'is_service_online', Mock(return_value=True))
     @patch.object(RgwClient, '_is_system_user', Mock(return_value=True))
     def test_status_available(self):
-        self._get('/test/api/rgw/status')
+        self._get('/test/ui-api/rgw/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': True, 'message': None})
 
@@ -28,7 +28,7 @@ class RgwControllerTestCase(ControllerTestCase):
     @patch.object(RgwClient, 'is_service_online', Mock(
         side_effect=RequestException('My test error')))
     def test_status_online_check_error(self):
-        self._get('/test/api/rgw/status')
+        self._get('/test/ui-api/rgw/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': False,
                              'message': 'My test error'})
@@ -36,7 +36,7 @@ class RgwControllerTestCase(ControllerTestCase):
     @patch.object(RgwClient, '_get_user_id', Mock(return_value='fake-user'))
     @patch.object(RgwClient, 'is_service_online', Mock(return_value=False))
     def test_status_not_online(self):
-        self._get('/test/api/rgw/status')
+        self._get('/test/ui-api/rgw/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': False,
                              'message': "Failed to connect to the Object Gateway's Admin Ops API."})
@@ -45,14 +45,14 @@ class RgwControllerTestCase(ControllerTestCase):
     @patch.object(RgwClient, 'is_service_online', Mock(return_value=True))
     @patch.object(RgwClient, '_is_system_user', Mock(return_value=False))
     def test_status_not_system_user(self):
-        self._get('/test/api/rgw/status')
+        self._get('/test/ui-api/rgw/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': False,
                              'message': 'The system flag is not set for user "fake-user".'})
 
     def test_status_no_service(self):
         RgwStub.get_mgr_no_services()
-        self._get('/test/api/rgw/status')
+        self._get('/test/ui-api/rgw/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': False, 'message': 'No RGW service is running.'})
 

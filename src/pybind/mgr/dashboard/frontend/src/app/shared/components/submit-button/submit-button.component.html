@@ -2,7 +2,8 @@
         class="btn btn-accent tc_submitButton"
         [ngClass]="btnClass"
         [disabled]="loading || disabled"
-        (click)="submit($event)">
+        (click)="submit($event)"
+        [attr.aria-label]="ariaLabel">
   <ng-content></ng-content>
   <span *ngIf="loading">
     <i [ngClass]="[icons.spinner, icons.spin]"></i>

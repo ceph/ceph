@@ -13,6 +13,7 @@
 #include "common/escape.h"
 #include "common/safe_io.h"
 #include "global/global_context.h"
+#include <fstream>
 #include <iostream>
 #include <regex>
 #include <boost/algorithm/string.hpp>
@@ -44,7 +45,7 @@ static std::string mgr_command_args_to_str(
 
 int ProgressContext::update_progress(uint64_t offset, uint64_t total) {
   if (progress) {
-    int pc = total ? (offset * 100ull / total) : 0;
+    int pc = get_percentage(offset, total);
     if (pc > last_pc) {
       std::cerr << "\r" << operation << ": "
 		<< pc << "% complete..." << std::flush;
@@ -65,6 +66,10 @@ void ProgressContext::fail() {
     std::cerr << "\r" << operation << ": " << last_pc << "% complete...failed."
 	      << std::endl;
   }
+}
+
+int get_percentage(uint64_t part, uint64_t whole) {
+  return whole ? (100 * part / whole) : 0;
 }
 
 void aio_context_callback(librbd::completion_t completion, void *arg)
@@ -193,8 +198,7 @@ std::string get_default_pool_name() {
 }
 
 int get_pool_and_namespace_names(
-    const boost::program_options::variables_map &vm,
-    bool default_empty_pool_name, bool validate_pool_name,
+    const boost::program_options::variables_map &vm, bool validate_pool_name,
     std::string* pool_name, std::string* namespace_name, size_t *arg_index) {
   if (namespace_name != nullptr && vm.count(at::NAMESPACE_NAME)) {
     *namespace_name = vm[at::NAMESPACE_NAME].as<std::string>();
@@ -268,6 +272,57 @@ int get_pool_image_id(const po::variables_map &vm,
   }
 
   return 0;
+}
+
+int get_image_or_snap_spec(const po::variables_map &vm, std::string *spec) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string nspace_name;
+  std::string image_name;
+  std::string snap_name;
+  int r = get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &nspace_name,
+    &image_name, &snap_name, true, SNAPSHOT_PRESENCE_PERMITTED,
+    SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
+
+  if (pool_name.empty()) {
+    // connect to the cluster to get the default pool
+    librados::Rados rados;
+    r = init_rados(&rados);
+    if (r < 0) {
+      return r;
+    }
+
+    normalize_pool_name(&pool_name);
+  }
+
+  spec->append(pool_name);
+  spec->append("/");
+  if (!nspace_name.empty()) {
+    spec->append(nspace_name);
+    spec->append("/");
+  }
+  spec->append(image_name);
+  if (!snap_name.empty()) {
+    spec->append("@");
+    spec->append(snap_name);
+  }
+
+  return 0;
+}
+
+void append_options_as_args(const std::vector<std::string> &options,
+                            std::vector<std::string> *args) {
+  for (auto &opts : options) {
+    std::vector<std::string> args_;
+    boost::split(args_, opts, boost::is_any_of(","));
+    for (auto &o : args_) {
+      args->push_back("--" + o);
+    }
+  }
 }
 
 int get_pool_image_snapshot_names(const po::variables_map &vm,
@@ -665,6 +720,72 @@ int get_snap_create_flags(const po::variables_map &vm, uint32_t *flags) {
   return 0;
 }
 
+int get_encryption_options(const boost::program_options::variables_map &vm,
+                           EncryptionOptions* result) {
+  std::vector<std::string> passphrase_files;
+  if (vm.count(at::ENCRYPTION_PASSPHRASE_FILE)) {
+    passphrase_files =
+            vm[at::ENCRYPTION_PASSPHRASE_FILE].as<std::vector<std::string>>();
+  }
+
+  std::vector<at::EncryptionFormat> formats;
+  if (vm.count(at::ENCRYPTION_FORMAT)) {
+    formats = vm[at::ENCRYPTION_FORMAT].as<decltype(formats)>();
+  } else if (vm.count(at::ENCRYPTION_PASSPHRASE_FILE)) {
+    formats.resize(passphrase_files.size(),
+                   at::EncryptionFormat{RBD_ENCRYPTION_FORMAT_LUKS});
+  }
+
+  if (formats.size() != passphrase_files.size()) {
+    std::cerr << "rbd: encryption formats count does not match "
+              << "passphrase files count" << std::endl;
+    return -EINVAL;
+  }
+
+  result->specs.clear();
+  result->specs.reserve(formats.size());
+  for (size_t i = 0; i < formats.size(); ++i) {
+    std::ifstream file(passphrase_files[i], std::ios::in | std::ios::binary);
+    if (file.fail()) {
+      std::cerr << "rbd: unable to open passphrase file '"
+                << passphrase_files[i] << "': " << cpp_strerror(errno)
+                << std::endl;
+      return -errno;
+    }
+    std::string passphrase((std::istreambuf_iterator<char>(file)),
+                           std::istreambuf_iterator<char>());
+    file.close();
+
+    switch (formats[i].format) {
+    case RBD_ENCRYPTION_FORMAT_LUKS: {
+      auto opts = new librbd::encryption_luks_format_options_t{
+          std::move(passphrase)};
+      result->specs.push_back(
+          {RBD_ENCRYPTION_FORMAT_LUKS, opts, sizeof(*opts)});
+      break;
+    }
+    case RBD_ENCRYPTION_FORMAT_LUKS1: {
+      auto opts = new librbd::encryption_luks1_format_options_t{
+          .passphrase = std::move(passphrase)};
+      result->specs.push_back(
+          {RBD_ENCRYPTION_FORMAT_LUKS1, opts, sizeof(*opts)});
+      break;
+    }
+    case RBD_ENCRYPTION_FORMAT_LUKS2: {
+      auto opts = new librbd::encryption_luks2_format_options_t{
+          .passphrase = std::move(passphrase)};
+      result->specs.push_back(
+          {RBD_ENCRYPTION_FORMAT_LUKS2, opts, sizeof(*opts)});
+      break;
+    }
+    default:
+      ceph_abort();
+    }
+  }
+
+  return 0;
+}
+
 void init_context() {
   g_conf().set_val_or_die("rbd_cache_writethrough_until_flush", "false");
   g_conf().apply_changes(nullptr);
@@ -812,6 +933,7 @@ int init_and_open_image(const std::string &pool_name,
       return r;
     }
   }
+
   return 0;
 }
 

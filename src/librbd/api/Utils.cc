@@ -5,7 +5,7 @@
 #include "common/dout.h"
 
 #if defined(HAVE_LIBCRYPTSETUP)
-#include "librbd/crypto/luks/EncryptionFormat.h"
+#include "librbd/crypto/luks/LUKSEncryptionFormat.h"
 #endif
 
 #define dout_subsys ceph_subsys_rbd
@@ -37,7 +37,7 @@ int create_encryption_format(
         if (expected_opts_size == opts_size) {
           auto cpp_opts = (encryption_luks1_format_options_t*)opts;
           *result_format = new crypto::luks::LUKS1EncryptionFormat<I>(
-                  cpp_opts->alg, std::move(cpp_opts->passphrase));
+                  cpp_opts->alg, cpp_opts->passphrase);
         }
       }
       break;
@@ -55,7 +55,25 @@ int create_encryption_format(
         if (expected_opts_size == opts_size) {
           auto cpp_opts = (encryption_luks2_format_options_t*)opts;
           *result_format = new crypto::luks::LUKS2EncryptionFormat<I>(
-                  cpp_opts->alg, std::move(cpp_opts->passphrase));
+                  cpp_opts->alg, cpp_opts->passphrase);
+        }
+      }
+      break;
+    }
+    case RBD_ENCRYPTION_FORMAT_LUKS: {
+      if (c_api) {
+        expected_opts_size = sizeof(rbd_encryption_luks_format_options_t);
+        if (expected_opts_size == opts_size) {
+          auto c_opts = (rbd_encryption_luks_format_options_t*)opts;
+          *result_format = new crypto::luks::LUKSEncryptionFormat<I>(
+                  {c_opts->passphrase, c_opts->passphrase_size});
+        }
+      } else {
+        expected_opts_size = sizeof(encryption_luks_format_options_t);
+        if (expected_opts_size == opts_size) {
+          auto cpp_opts = (encryption_luks_format_options_t*)opts;
+          *result_format = new crypto::luks::LUKSEncryptionFormat<I>(
+                  cpp_opts->passphrase);
         }
       }
       break;

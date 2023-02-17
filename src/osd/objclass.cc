@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <cstdarg>
+#include <boost/container/small_vector.hpp>
 #include "common/ceph_context.h"
 #include "common/ceph_releases.h"
 #include "common/config.h"
@@ -26,6 +27,8 @@ using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
 using ceph::real_time;
+
+static constexpr int dout_subsys = ceph_subsys_objclass;
 
 
 int cls_call(cls_method_context_t hctx, const char *cls, const char *method,
@@ -614,7 +617,6 @@ uint64_t cls_current_version(cls_method_context_t hctx)
   return ctx->pg->get_last_user_version();
 }
 
-
 int cls_current_subop_num(cls_method_context_t hctx)
 {
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
@@ -644,6 +646,18 @@ ceph_release_t cls_get_min_compatible_client(cls_method_context_t hctx)
 {
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
   return ctx->pg->get_osdmap()->get_require_min_compat_client();
+}
+
+const ConfigProxy& cls_get_config(cls_method_context_t hctx)
+{
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  return ctx->pg->get_cct()->_conf;
+}
+
+const object_info_t& cls_get_object_info(cls_method_context_t hctx)
+{
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  return ctx->obs->oi;
 }
 
 int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {
@@ -745,4 +759,24 @@ int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, b
     r = gf->osd_op->rval;
   }
   return r;
+}
+
+// although at first glance the implementation looks the same as in
+// crimson-osd, it's different b/c of how the dout macro expands.
+int cls_log(int level, const char *format, ...)
+{
+   size_t size = 256;
+   va_list ap;
+   while (1) {
+     boost::container::small_vector<char, 256> buf(size);
+     va_start(ap, format);
+     int n = vsnprintf(buf.data(), size, format, ap);
+     va_end(ap);
+#define MAX_SIZE 8196UL
+     if ((n > -1 && static_cast<size_t>(n) < size) || size > MAX_SIZE) {
+       dout(ceph::dout::need_dynamic(level)) << buf.data() << dendl;
+       return n;
+     }
+     size *= 2;
+   }
 }

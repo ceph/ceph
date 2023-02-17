@@ -81,16 +81,7 @@ class S3Auth(AuthBase):
         h = hmac.new(key, msg, digestmod=sha)
         return encodestring(h.digest()).strip()
 
-    def get_canonical_string(self, url, headers, method):
-        parsedurl = urlparse(url)
-        objectkey = parsedurl.path[1:]
-        query_args = sorted(parsedurl.query.split('&'))
-
-        bucket = parsedurl.netloc[:-len(self.service_base_url)]
-        if len(bucket) > 1:
-            # remove last dot
-            bucket = bucket[:-1]
-
+    def get_interesting_headers(self, headers):
         interesting_headers = {
             'content-md5': '',
             'content-type': '',
@@ -109,6 +100,19 @@ class S3Auth(AuthBase):
         # If x-amz-date is used it supersedes the date header.
         if 'x-amz-date' in interesting_headers:
             interesting_headers['date'] = ''
+        return interesting_headers
+
+    def get_canonical_string(self, url, headers, method):
+        parsedurl = urlparse(url)
+        objectkey = parsedurl.path[1:]
+        query_args = sorted(parsedurl.query.split('&'))
+
+        bucket = parsedurl.netloc[:-len(self.service_base_url)]
+        if len(bucket) > 1:
+            # remove last dot
+            bucket = bucket[:-1]
+
+        interesting_headers = self.get_interesting_headers(headers)
 
         buf = '%s\n' % method
         for key in sorted(interesting_headers.keys()):

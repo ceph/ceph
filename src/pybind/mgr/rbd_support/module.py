@@ -8,7 +8,6 @@ import functools
 import inspect
 import rados
 import rbd
-import traceback
 from typing import cast, Any, Callable, Optional, Tuple, TypeVar
 
 from mgr_module import CLIReadCommand, CLIWriteCommand, MgrModule, Option
@@ -108,7 +107,7 @@ class Module(MgrModule):
     @CLIReadCommand('rbd mirror snapshot schedule list')
     @with_latest_osdmap
     def mirror_snapshot_schedule_list(self,
-                                      level_spec: str) -> Tuple[int, str, str]:
+                                      level_spec: str = '') -> Tuple[int, str, str]:
         """
         List rbd mirror snapshot schedule
         """
@@ -118,7 +117,7 @@ class Module(MgrModule):
     @CLIReadCommand('rbd mirror snapshot schedule status')
     @with_latest_osdmap
     def mirror_snapshot_schedule_status(self,
-                                        level_spec: str) -> Tuple[int, str, str]:
+                                        level_spec: str = '') -> Tuple[int, str, str]:
         """
         Show rbd mirror snapshot schedule status
         """
@@ -169,12 +168,12 @@ class Module(MgrModule):
 
     @CLIWriteCommand('rbd task add trash remove')
     @with_latest_osdmap
-    def task_add_trash_remove(self, image_spec: str) -> Tuple[int, str, str]:
+    def task_add_trash_remove(self, image_id_spec: str) -> Tuple[int, str, str]:
         """
         Remove an image from the trash asynchronously in the background
         """
         with self.task.lock:
-            return self.task.queue_trash_remove(image_spec)
+            return self.task.queue_trash_remove(image_id_spec)
 
     @CLIWriteCommand('rbd task add migration execute')
     @with_latest_osdmap
@@ -248,7 +247,7 @@ class Module(MgrModule):
     @CLIReadCommand('rbd trash purge schedule list')
     @with_latest_osdmap
     def trash_purge_schedule_list(self,
-                                  level_spec: str) -> Tuple[int, str, str]:
+                                  level_spec: str = '') -> Tuple[int, str, str]:
         """
         List rbd trash purge schedule
         """
@@ -258,7 +257,7 @@ class Module(MgrModule):
     @CLIReadCommand('rbd trash purge schedule status')
     @with_latest_osdmap
     def trash_purge_schedule_status(self,
-                                    level_spec: str) -> Tuple[int, str, str]:
+                                    level_spec: str = '') -> Tuple[int, str, str]:
         """
         Show rbd trash purge schedule status
         """

@@ -35,7 +35,7 @@ class LZ4Compressor : public Compressor {
 #endif
   }
 
-  int compress(const ceph::buffer::list &src, ceph::buffer::list &dst, boost::optional<int32_t> &compressor_message) override {
+  int compress(const ceph::buffer::list &src, ceph::buffer::list &dst, std::optional<int32_t> &compressor_message) override {
     // older versions of liblz4 introduce bit errors when compressing
     // fragmented buffers.  this was fixed in lz4 commit
     // af127334670a5e7b710bbd6adb71aa7c3ef0cd72, which first
@@ -83,7 +83,7 @@ class LZ4Compressor : public Compressor {
     return 0;
   }
 
-  int decompress(const ceph::buffer::list &src, ceph::buffer::list &dst, boost::optional<int32_t> compressor_message) override {
+  int decompress(const ceph::buffer::list &src, ceph::buffer::list &dst, std::optional<int32_t> compressor_message) override {
 #ifdef HAVE_QATZIP
     if (qat_enabled)
       return qat_accel.decompress(src, dst, compressor_message);
@@ -95,7 +95,7 @@ class LZ4Compressor : public Compressor {
   int decompress(ceph::buffer::list::const_iterator &p,
 		 size_t compressed_len,
 		 ceph::buffer::list &dst,
-		 boost::optional<int32_t> compressor_message) override {
+		 std::optional<int32_t> compressor_message) override {
 #ifdef HAVE_QATZIP
     if (qat_enabled)
       return qat_accel.decompress(p, compressed_len, dst, compressor_message);

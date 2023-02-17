@@ -39,7 +39,7 @@ eth: 'eth1'
 # For more boxes have a look at:
 #   - https://atlas.hashicorp.com/boxes/search?utf8=✓&sort=&provider=virtualbox&q=
 #   - https://download.gluster.org/pub/gluster/purpleidea/vagrant/
-vagrant_box: centos/8
+vagrant_box: centos/stream8
 # vagrant_box_url: https://cloud.centos.org/centos/8/x86_64/images/CentOS-8-Vagrant-8.1.1911-20200113.3.x86_64.vagrant-libvirt.box
 #ssh_private_key_path: "~/.ssh/id_rsa"
 # The sync directory changes based on vagrant box

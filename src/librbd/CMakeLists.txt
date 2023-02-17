@@ -14,7 +14,7 @@ add_library(rbd_types STATIC
 
 if (WITH_RBD_RWL)
   target_link_libraries(rbd_types
-    PUBLIC pmem::pmemobj)
+    PUBLIC pmdk::pmemobj)
 endif()
 
 set(librbd_internal_srcs
@@ -212,10 +212,12 @@ endif()
 
 if(LINUX AND HAVE_LIBCRYPTSETUP)
   list(APPEND librbd_internal_srcs
-          crypto/luks/EncryptionFormat.cc
-          crypto/luks/Header.cc
+          crypto/luks/LUKSEncryptionFormat.cc
           crypto/luks/FormatRequest.cc
-          crypto/luks/LoadRequest.cc)
+          crypto/luks/FlattenRequest.cc
+          crypto/luks/Header.cc
+          crypto/luks/LoadRequest.cc
+          crypto/luks/Magic.cc)
 endif()
 
 add_library(rbd_api STATIC librbd.cc)
@@ -306,8 +308,8 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
 
   if(WITH_RBD_RWL)
     target_link_libraries(librbd_plugin_pwl_cache
-      PUBLIC pmem::pmemobj
-      PRIVATE pmem::pmem)
+      PUBLIC pmdk::pmemobj
+      PRIVATE pmdk::pmem)
   endif()
 
   set_target_properties(librbd_plugin_pwl_cache PROPERTIES
@@ -344,7 +346,7 @@ endif()
 if(ENABLE_SHARED)
   set_target_properties(librbd PROPERTIES
     OUTPUT_NAME rbd
-    VERSION 1.17.0
+    VERSION 1.18.0
     SOVERSION 1
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON)

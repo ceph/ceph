@@ -40,6 +40,13 @@ public:
   const uint64_t my_ec_pool = 1;
   const uint64_t my_rep_pool = 2;
 
+  // Blacklist testing lists
+  // I pulled the first two ranges and their start/end points from
+  // https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing#CIDR_notation
+  static const string range_addrs[];
+  static const string ip_addrs[];
+  static const string unblocked_ip_addrs[];
+  const string EC_RULE_NAME = "erasure";
 
   OSDMapTest() {}
 
@@ -67,39 +74,57 @@ public:
     if (no_default_pools) // do not create any default pool(s)
       return;
 
-    // Create an EC rule and a pool using it
-    int r = osdmap.crush->add_simple_rule(
-      "erasure", "default", "osd", "",
-      "indep", pg_pool_t::TYPE_ERASURE,
-      &cerr);
-
     OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
     new_pool_inc.new_pool_max = osdmap.get_pool_max();
     new_pool_inc.fsid = osdmap.get_fsid();
-    pg_pool_t empty;
     // make an ec pool
+    set_ec_pool("ec", new_pool_inc);
+    // and a replicated pool
+    set_rep_pool("reppool",new_pool_inc);
+    osdmap.apply_incremental(new_pool_inc);
+  }
+  int get_ec_crush_rule() {
+    int r = osdmap.crush->get_rule_id(EC_RULE_NAME);
+    if (r < 0) {
+      r = osdmap.crush->add_simple_rule(
+        EC_RULE_NAME, "default", "osd", "",
+        "indep", pg_pool_t::TYPE_ERASURE,
+        &cerr);
+    }
+    return r;
+  }
+  uint64_t set_ec_pool(const string &name, OSDMap::Incremental &new_pool_inc,
+                       bool assert_pool_id = true) {
+    pg_pool_t empty;
     uint64_t pool_id = ++new_pool_inc.new_pool_max;
-    ceph_assert(pool_id == my_ec_pool);
+    if (assert_pool_id)
+      ceph_assert(pool_id == my_ec_pool);
     pg_pool_t *p = new_pool_inc.get_new_pool(pool_id, &empty);
     p->size = 3;
     p->set_pg_num(64);
     p->set_pgp_num(64);
     p->type = pg_pool_t::TYPE_ERASURE;
-    p->crush_rule = r;
-    new_pool_inc.new_pool_names[pool_id] = "ec";
-    // and a replicated pool
-    pool_id = ++new_pool_inc.new_pool_max;
-    ceph_assert(pool_id == my_rep_pool);
-    p = new_pool_inc.get_new_pool(pool_id, &empty);
+    p->crush_rule = get_ec_crush_rule();
+    new_pool_inc.new_pool_names[pool_id] = name;//"ec";
+    return pool_id;
+  }
+  uint64_t set_rep_pool(const string name, OSDMap::Incremental &new_pool_inc,
+                        bool assert_pool_id = true) {
+    pg_pool_t empty;
+    uint64_t pool_id = ++new_pool_inc.new_pool_max;
+    if (assert_pool_id)
+      ceph_assert(pool_id == my_rep_pool);
+    pg_pool_t *p = new_pool_inc.get_new_pool(pool_id, &empty);
     p->size = 3;
     p->set_pg_num(64);
     p->set_pgp_num(64);
     p->type = pg_pool_t::TYPE_REPLICATED;
     p->crush_rule = 0;
     p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
-    new_pool_inc.new_pool_names[pool_id] = "reppool";
-    osdmap.apply_incremental(new_pool_inc);
+    new_pool_inc.new_pool_names[pool_id] = name;//"reppool";
+    return pool_id;
   }
+
   unsigned int get_num_osds() { return num_osds; }
   void get_crush(const OSDMap& tmap, CrushWrapper& newcrush) {
     bufferlist bl;
@@ -204,6 +229,17 @@ public:
     mapper.queue(&job, pgs_per_chunk, pgs_to_check);
     job.wait();
     tp.stop();
+  }
+  void set_primary_affinity_all(float pa) {
+    for (uint i = 0 ; i < get_num_osds() ; i++) {
+      osdmap.set_primary_affinity(i, int(pa * CEPH_OSD_MAX_PRIMARY_AFFINITY));
+    }
+  }
+  bool score_in_range(float score, uint nosds = 0) {
+    if (nosds == 0) {
+      nosds = get_num_osds();
+    }
+    return score >= 1.0 && score <= float(nosds);
   }
 };
 
@@ -2072,6 +2108,340 @@ TEST_P(OSDMapTest, BUG_51842) {
       ASSERT_TRUE(!tmpmap.have_pg_upmaps(rep_pgid3));
     }
 }
+
+const string OSDMapTest::range_addrs[] = {"198.51.100.0/22", "10.2.5.102/32", "2001:db8::/48",
+  "3001:db8::/72", "4001:db8::/30", "5001:db8::/64", "6001:db8::/128", "7001:db8::/127"};
+const string OSDMapTest::ip_addrs[] = {"198.51.100.14", "198.51.100.0", "198.51.103.255",
+  "10.2.5.102",
+  "2001:db8:0:0:0:0:0:0", "2001:db8:0:0:0:0001:ffff:ffff",
+  "2001:db8:0:ffff:ffff:ffff:ffff:ffff",
+  "3001:db8:0:0:0:0:0:0", "3001:db8:0:0:0:0001:ffff:ffff",
+  "3001:db8:0:0:00ff:ffff:ffff:ffff",
+  "4001:db8::", "4001:db8:0:0:0:0001:ffff:ffff",
+  "4001:dbb:ffff:ffff:ffff:ffff:ffff:ffff",
+  "5001:db8:0:0:0:0:0:0", "5001:db8:0:0:0:0:ffff:ffff",
+  "5001:db8:0:0:ffff:ffff:ffff:ffff",
+  "6001:db8:0:0:0:0:0:0",
+  "7001:db8:0:0:0:0:0:0", "7001:db8:0:0:0:0:0:0001"
+};
+const string OSDMapTest::unblocked_ip_addrs[] = { "0.0.0.0", "1.1.1.1", "192.168.1.1",
+  "198.51.99.255", "198.51.104.0",
+  "10.2.5.101", "10.2.5.103",
+  "2001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "2001:db8:0001::",
+  "3001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "3001:db8:0:0:0100::",
+  "4001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "4001:dbc::",
+  "5001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "5001:db8:0:0001:0:0:0:0", 
+  "6001:db8:0:0:0:0:0:0001",
+  "7001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "7001:db8:0:0:0:0:0:0002"
+};
+
+TEST_F(OSDMapTest, blocklisting_ips) {
+  set_up_map(6); //whatever
+
+  OSDMap::Incremental new_blocklist_inc(osdmap.get_epoch() + 1);
+  for (const auto& a : ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    new_blocklist_inc.new_blocklist[addr] = ceph_clock_now();
+  }
+  osdmap.apply_incremental(new_blocklist_inc);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    ASSERT_TRUE(osdmap.is_blocklisted(addr, g_ceph_context));
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    ASSERT_FALSE(osdmap.is_blocklisted(addr, g_ceph_context));
+  }
+
+  OSDMap::Incremental rm_blocklist_inc(osdmap.get_epoch() + 1);
+  for (const auto& a : ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    rm_blocklist_inc.old_blocklist.push_back(addr);
+  }
+  osdmap.apply_incremental(rm_blocklist_inc);
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    ASSERT_FALSE(osdmap.is_blocklisted(addr, g_ceph_context));
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (blocklisted) {
+      cout << "erroneously blocklisted " << addr << std::endl;
+    }
+    EXPECT_FALSE(blocklisted);
+  }
+}
+
+TEST_F(OSDMapTest, blocklisting_ranges) {
+  set_up_map(6); //whatever
+  OSDMap::Incremental range_blocklist_inc(osdmap.get_epoch() + 1);
+  for (const auto& a : range_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.type = entity_addr_t::TYPE_CIDR;
+    range_blocklist_inc.new_range_blocklist[addr] = ceph_clock_now();
+  }
+  osdmap.apply_incremental(range_blocklist_inc);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (blocklisted) {
+      cout << "erroneously blocklisted " << addr << std::endl;
+    }
+    EXPECT_FALSE(blocklisted);
+  }
+
+  OSDMap::Incremental rm_range_blocklist(osdmap.get_epoch() + 1);
+  for (const auto& a : range_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.type = entity_addr_t::TYPE_CIDR;
+    rm_range_blocklist.old_range_blocklist.push_back(addr);
+  }
+  osdmap.apply_incremental(rm_range_blocklist);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    ASSERT_FALSE(osdmap.is_blocklisted(addr, g_ceph_context));
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (blocklisted) {
+      cout << "erroneously blocklisted " << addr << std::endl;
+    }
+    EXPECT_FALSE(blocklisted);
+  }
+}
+
+TEST_F(OSDMapTest, blocklisting_everything) {
+  set_up_map(6); //whatever
+  OSDMap::Incremental range_blocklist_inc(osdmap.get_epoch() + 1);
+  entity_addr_t baddr;
+  baddr.parse("2001:db8::/0");
+  baddr.type = entity_addr_t::TYPE_CIDR;
+  range_blocklist_inc.new_range_blocklist[baddr] = ceph_clock_now();
+  osdmap.apply_incremental(range_blocklist_inc);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    if (addr.is_ipv4()) continue;
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not  blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    if (addr.is_ipv4()) continue;
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not  blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+
+  OSDMap::Incremental swap_blocklist_inc(osdmap.get_epoch()+1);
+  swap_blocklist_inc.old_range_blocklist.push_back(baddr);
+
+  entity_addr_t caddr;
+  caddr.parse("1.1.1.1/0");
+  caddr.type = entity_addr_t::TYPE_CIDR;
+  swap_blocklist_inc.new_range_blocklist[caddr] = ceph_clock_now();
+  osdmap.apply_incremental(swap_blocklist_inc);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    if (!addr.is_ipv4()) continue;
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not  blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    if (!addr.is_ipv4()) continue;
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not  blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+}
+
+TEST_F(OSDMapTest, ReadBalanceScore1) {
+    std::srand ( unsigned ( std::time(0) ) );
+    uint osd_rand = rand() % 13;
+    set_up_map(6 + osd_rand); //whatever
+    auto pools = osdmap.get_pools();
+    for (auto &[pid, pg_pool] : pools) {
+      const pg_pool_t *pi = osdmap.get_pg_pool(pid);
+      if (pi->is_replicated()) {
+        //cout << "pool " << pid << " " << pg_pool << std::endl;
+        auto replica_count = pi->get_size();
+        OSDMap::read_balance_info_t rbi;
+        auto rc = osdmap.calc_read_balance_score(g_ceph_context, pid, &rbi);
+
+        // "Normal" score is between 1 and num_osds
+        ASSERT_TRUE(rc == 0);
+        ASSERT_TRUE(score_in_range(rbi.adjusted_score));
+        ASSERT_TRUE(score_in_range(rbi.acting_adj_score));
+        ASSERT_TRUE(rbi.err_msg.empty());
+
+        // When all OSDs have primary_affinity 0, score should be 0
+        auto num_osds = get_num_osds();
+        set_primary_affinity_all(0.);
+
+        rc = osdmap.calc_read_balance_score(g_ceph_context, pid, &rbi);
+        ASSERT_TRUE(rc < 0);
+        ASSERT_TRUE(rbi.adjusted_score == 0.);
+        ASSERT_TRUE(rbi.acting_adj_score == 0.);
+        ASSERT_FALSE(rbi.err_msg.empty());
+
+        std::vector<uint> osds;
+        for (uint i = 0 ; i < num_osds ; i++) {
+          osds.push_back(i);
+        }
+
+        // Change primary_affinity of some OSDs to 1 others are 0
+        float fratio = 1. / (float)replica_count;
+        for (int iter = 0 ; iter < 100 ; iter++) {  // run the test 100 times
+          // Create random shuffle of OSDs
+          std::random_shuffle (osds.begin(), osds.end());
+          for (uint i = 0 ; i < num_osds ; i++) {
+            if ((float(i + 1) / float(num_osds)) < fratio) {
+              ASSERT_TRUE(osds[i] < num_osds);
+              osdmap.set_primary_affinity(osds[i], CEPH_OSD_MAX_PRIMARY_AFFINITY);
+              rc = osdmap.calc_read_balance_score(g_ceph_context, pid, &rbi);
+
+              ASSERT_TRUE(rc < 0);
+              ASSERT_TRUE(rbi.adjusted_score == 0.);
+              ASSERT_TRUE(rbi.acting_adj_score == 0.);
+              ASSERT_FALSE(rbi.err_msg.empty());
+            }
+            else {
+              if (rc < 0) {
+                ASSERT_TRUE(rbi.adjusted_score == 0.);
+                ASSERT_TRUE(rbi.acting_adj_score == 0.);
+                ASSERT_FALSE(rbi.err_msg.empty());
+              }
+              else {
+                ASSERT_TRUE(score_in_range(rbi.acting_adj_score, i + 1));
+                ASSERT_TRUE(rbi.err_msg.empty());
+              }
+            }
+          }
+          set_primary_affinity_all(0.);
+        }
+      }
+    }
+
+  }
+
+TEST_F(OSDMapTest, ReadBalanceScore2) {
+    std::srand ( unsigned ( std::time(0) ) );
+    uint osd_num = 6 + rand() % 13;
+    set_up_map(osd_num, true);
+    for (int i = 0 ; i < 100 ; i++) { //running 100 random tests
+      uint num_pa_osds = 0;
+      float pa_sum = 0.;
+      OSDMap::read_balance_info_t rbi;
+
+      // set pa for all osds
+      for (uint j = 0 ; j < osd_num ; j++) {
+        uint pa = 1 + rand() % 100;
+        if (pa > 80)
+          pa = 100;
+        if (pa < 20)
+          pa = 0;
+        float fpa = (float)pa / 100.;
+        if (pa > 0) {
+          num_pa_osds++;
+          pa_sum += fpa;
+        }
+        osdmap.set_primary_affinity(j, int(fpa * CEPH_OSD_MAX_PRIMARY_AFFINITY));
+      }
+      float pa_ratio = pa_sum / (float) osd_num;
+
+      // create a pool with the current osdmap configuration
+      OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+      new_pool_inc.new_pool_max = osdmap.get_pool_max();
+      new_pool_inc.fsid = osdmap.get_fsid();
+      string pool_name = "rep_pool" + stringify(i);
+      uint64_t new_pid = set_rep_pool(pool_name, new_pool_inc, false);
+      ASSERT_TRUE(new_pid > 0);
+      osdmap.apply_incremental(new_pool_inc);
+
+      // now run the test on the pool.
+      const pg_pool_t *pi = osdmap.get_pg_pool(new_pid);
+      ASSERT_NE(pi, nullptr);
+      ASSERT_TRUE(pi->is_replicated());
+      float fratio = 1. / (float)pi->get_size();
+      auto rc = osdmap.calc_read_balance_score(g_ceph_context, new_pid, &rbi);
+      if (pa_ratio < fratio) {
+        ASSERT_TRUE(rc < 0);
+        ASSERT_FALSE(rbi.err_msg.empty());
+        ASSERT_TRUE(rbi.acting_adj_score == 0.);
+        ASSERT_TRUE(rbi.adjusted_score == 0.);
+      }
+      else {
+        if (rc < 0) {
+          ASSERT_TRUE(rbi.adjusted_score == 0.);
+          ASSERT_TRUE(rbi.acting_adj_score == 0.);
+          ASSERT_FALSE(rbi.err_msg.empty());
+        }
+        else {
+          if (rbi.err_msg.empty()) {
+            ASSERT_TRUE(score_in_range(rbi.acting_adj_score, num_pa_osds));
+          }
+        }
+      }
+
+    }
+        //TODO add ReadBalanceScore3 - with weighted osds.
+
+  }
 
 INSTANTIATE_TEST_SUITE_P(
   OSDMap,

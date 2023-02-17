@@ -48,8 +48,10 @@ static void simple_segv_test()
 
 // Given the name of the function, we can be pretty sure this is intentional.
 
-#pragma clang diagnostic push
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winfinite-recursion"
 
+#pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Winfinite-recursion"
 
 static void infinite_recursion_test_impl()
@@ -57,6 +59,7 @@ static void infinite_recursion_test_impl()
   infinite_recursion_test_impl();
 }
 
+#pragma GCC diagnostic pop
 #pragma clang diagnostic pop
 
 static void infinite_recursion_test()

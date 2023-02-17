@@ -8,6 +8,7 @@
 
 #include "include/buffer.h"
 #include "common/map_cacher.hpp"
+#include "osd/osd_types_fmt.h"
 #include "osd/SnapMapper.h"
 #include "common/Cond.h"
 
@@ -496,6 +497,31 @@ public:
     }
   }
 
+  std::pair<std::string, ceph::buffer::list> to_raw(
+    const std::pair<snapid_t, hobject_t> &to_map) {
+    return mapper->to_raw(to_map);
+  }
+
+  std::string to_legacy_raw_key(
+    const std::pair<snapid_t, hobject_t> &to_map) {
+    return mapper->to_legacy_raw_key(to_map);
+  }
+
+  template <typename... Args>
+  std::string to_object_key(Args&&... args) {
+    return mapper->to_object_key(std::forward<Args>(args)...);
+  }
+
+  std::string to_raw_key(
+    const std::pair<snapid_t, hobject_t> &to_map) {
+    return mapper->to_raw_key(to_map);
+  }
+
+  template <typename... Args>
+  std::string make_purged_snap_key(Args&&... args) {
+    return mapper->make_purged_snap_key(std::forward<Args>(args)...);
+  }
+
   void trim_snap() {
     std::lock_guard l{lock};
     if (snap_to_hobject.empty())
@@ -652,3 +678,262 @@ TEST_F(SnapMapperTest, MultiPG) {
   init(50);
   run();
 }
+
+// Check to_object_key against current format to detect accidental changes in encoding
+TEST_F(SnapMapperTest, CheckObjectKeyFormat) {
+  init(1);
+  // <object, test_raw_key>
+  std::vector<std::tuple<hobject_t, std::string>> object_to_object_key({
+      {hobject_t{"test_object", "", 20, 0x01234567, 20, ""},
+	  "OBJ_.1_0000000000000014.76543210.14.test%uobject.."},
+      {hobject_t{"test._ob.ject", "k.ey", 20, 0x01234567, 20, ""},
+	  "OBJ_.1_0000000000000014.76543210.14.test%e%uob%eject.k%eey."},
+      {hobject_t{"test_object", "", 20, 0x01234567, 20, "namespace"},
+	  "OBJ_.1_0000000000000014.76543210.14.test%uobject..namespace"},
+      {hobject_t{
+	  "test_object", "", std::numeric_limits<snapid_t>::max() - 20, 0x01234567,
+	    std::numeric_limits<int64_t>::max() - 20, "namespace"},
+	  "OBJ_.1_7FFFFFFFFFFFFFEB.76543210.ffffffffffffffec.test%uobject..namespace"}
+    });
+
+  for (auto &[object, test_object_key]: object_to_object_key) {
+    auto object_key = get_tester().to_object_key(object);
+    if (object_key != test_object_key) {
+      std::cout << object << " should be "
+	        << test_object_key << " is "
+	        << get_tester().to_object_key(object)
+	        << std::endl;
+    }
+    ASSERT_EQ(object_key, test_object_key);
+  }
+}
+
+
+// Check to_raw_key against current format to detect accidental changes in encoding
+TEST_F(SnapMapperTest, CheckRawKeyFormat) {
+  init(1);
+  // <object, snapid, test_raw_key>
+  std::vector<std::tuple<hobject_t, snapid_t, std::string>> object_to_raw_key({
+      {hobject_t{"test_object", "", 20, 0x01234567, 20, ""}, 25,
+	  "SNA_20_0000000000000019_.1_0000000000000014.76543210.14.test%uobject.."},
+      {hobject_t{"test._ob.ject", "k.ey", 20, 0x01234567, 20, ""}, 25,
+	  "SNA_20_0000000000000019_.1_0000000000000014.76543210.14.test%e%uob%eject.k%eey."},
+      {hobject_t{"test_object", "", 20, 0x01234567, 20, "namespace"}, 25,
+	  "SNA_20_0000000000000019_.1_0000000000000014.76543210.14.test%uobject..namespace"},
+      {hobject_t{
+	  "test_object", "", std::numeric_limits<snapid_t>::max() - 20, 0x01234567,
+	    std::numeric_limits<int64_t>::max() - 20, "namespace"}, std::numeric_limits<snapid_t>::max() - 20,
+	  "SNA_9223372036854775787_FFFFFFFFFFFFFFEC_.1_7FFFFFFFFFFFFFEB.76543210.ffffffffffffffec.test%uobject..namespace"}
+    });
+
+  for (auto &[object, snap, test_raw_key]: object_to_raw_key) {
+    auto raw_key = get_tester().to_raw_key(std::make_pair(snap, object));
+    if (raw_key != test_raw_key) {
+      std::cout << object << " " << snap << " should be "
+	        << test_raw_key << " is "
+	        << get_tester().to_raw_key(std::make_pair(snap, object))
+	        << std::endl;
+    }
+    ASSERT_EQ(raw_key, test_raw_key);
+  }
+}
+
+// Check make_purged_snap_key against current format to detect accidental changes
+// in encoding
+TEST_F(SnapMapperTest, CheckMakePurgedSnapKeyFormat) {
+  init(1);
+  // <pool, snap, test_key>
+  std::vector<std::tuple<int64_t, snapid_t, std::string>> purged_snap_to_key({
+      {20, 30, "PSN__20_000000000000001e"},
+      {std::numeric_limits<int64_t>::max() - 20,
+       std::numeric_limits<snapid_t>::max() - 20,
+       "PSN__9223372036854775787_ffffffffffffffec"}
+  });
+
+  for (auto &[pool, snap, test_key]: purged_snap_to_key) {
+    auto raw_purged_snap_key = get_tester().make_purged_snap_key(pool, snap);
+    if (raw_purged_snap_key != test_key) {
+      std::cout << "<" << pool << ", " << snap << "> should be " << test_key
+                << " is " << raw_purged_snap_key << std::endl;
+    }
+    // retesting (mostly for test numbers accounting)
+    ASSERT_EQ(raw_purged_snap_key, test_key);
+  }
+}
+
+TEST_F(SnapMapperTest, LegacyKeyConvertion) {
+    init(1);
+    auto obj = get_tester().random_hobject();
+    snapid_t snapid = random() % 10;
+    auto snap_obj = make_pair(snapid, obj);
+    auto raw = get_tester().to_raw(snap_obj);
+    std::string old_key = get_tester().to_legacy_raw_key(snap_obj);
+    std::string converted_key =
+      SnapMapper::convert_legacy_key(old_key, raw.second);
+    std::string new_key = get_tester().to_raw_key(snap_obj);
+    if (converted_key != new_key) {
+      std::cout << "Converted: " << old_key << "\nTo:        " << converted_key
+	        << "\nNew key:   " << new_key << std::endl;
+    }
+    ASSERT_EQ(converted_key, new_key);
+}
+
+/**
+ * 'DirectMapper' provides simple, controlled, interface to the underlying
+ * SnapMapper.
+ */
+class DirectMapper {
+public:
+  std::unique_ptr<PausyAsyncMap> driver{make_unique<PausyAsyncMap>()};
+  std::unique_ptr<SnapMapper> mapper;
+  uint32_t mask;
+  uint32_t bits;
+  ceph::mutex lock = ceph::make_mutex("lock");
+
+  DirectMapper(
+    uint32_t mask,
+    uint32_t bits)
+   : mapper(new SnapMapper(g_ceph_context, driver.get(), mask, bits, 0, shard_id_t(1))), 
+             mask(mask), bits(bits) {}
+
+  hobject_t random_hobject() {
+    return hobject_t(
+      random_string(1+(rand() % 16)),
+      random_string(1+(rand() % 16)),
+      snapid_t(rand() % 1000),
+      (rand() & ((~0)<<bits)) | (mask & ~((~0)<<bits)),
+      0, random_string(rand() % 16));
+  }
+
+  void create_object(const hobject_t& obj, const set<snapid_t> &snaps) {
+    std::lock_guard l{lock};
+      PausyAsyncMap::Transaction t;
+      mapper->add_oid(obj, snaps, &t);
+      driver->submit(&t);
+  }
+
+  std::pair<std::string, ceph::buffer::list> to_raw(
+    const std::pair<snapid_t, hobject_t> &to_map) {
+    return mapper->to_raw(to_map);
+  }
+
+  std::string to_legacy_raw_key(
+    const std::pair<snapid_t, hobject_t> &to_map) {
+    return mapper->to_legacy_raw_key(to_map);
+  }
+
+  std::string to_raw_key(
+    const std::pair<snapid_t, hobject_t> &to_map) {
+    return mapper->to_raw_key(to_map);
+  }
+
+  void shorten_mapping_key(snapid_t snap, const hobject_t &clone)
+  {
+    // calculate the relevant key
+    std::string k = mapper->to_raw_key(snap, clone);
+
+    // find the value for this key
+    map<string, bufferlist> kvmap;
+    auto r = mapper->backend.get_keys(set{k}, &kvmap);
+    ASSERT_GE(r, 0);
+
+    // replace the key with its shortened version
+    PausyAsyncMap::Transaction t;
+    mapper->backend.remove_keys(set{k}, &t);
+    auto short_k = k.substr(0, 10);
+    mapper->backend.set_keys(map<string, bufferlist>{{short_k, kvmap[k]}}, &t);
+    driver->submit(&t);
+    driver->flush();
+  }
+};
+
+class DirectMapperTest : public ::testing::Test {
+ public:
+  // ctor & initialization
+  DirectMapperTest() = default;
+  ~DirectMapperTest() = default;
+  void SetUp() override;
+  void TearDown() override;
+
+ protected:
+  std::unique_ptr<DirectMapper> direct;
+};
+
+void DirectMapperTest::SetUp()
+{
+  direct = std::make_unique<DirectMapper>(0, 0);
+}
+
+void DirectMapperTest::TearDown()
+{
+  direct->driver->stop();
+  direct->mapper.reset();
+  direct->driver.reset();
+}
+
+
+TEST_F(DirectMapperTest, BasciObject)
+{
+  auto obj = direct->random_hobject();
+  set<snapid_t> snaps{100, 200};
+  direct->create_object(obj, snaps);
+
+  // verify that the OBJ_ & SNA_ entries are there
+  auto osn1 = direct->mapper->get_snaps(obj);
+  ASSERT_EQ(snaps, osn1);
+  auto vsn1 = direct->mapper->get_snaps_check_consistency(obj);
+  ASSERT_EQ(snaps, vsn1);
+}
+
+TEST_F(DirectMapperTest, CorruptedSnaRecord)
+{
+  object_t base_name{"obj"};
+  std::string key{"key"};
+
+  hobject_t head{base_name, key, CEPH_NOSNAP, 0x17, 0, ""};
+  hobject_t cln1{base_name, key, 10, 0x17, 0, ""};
+  hobject_t cln2{base_name, key, 20, 0x17, 0, ""}; // the oldest version
+  set<snapid_t> head_snaps{400, 500};
+  set<snapid_t> cln1_snaps{300};
+  set<snapid_t> cln2_snaps{100, 200};
+
+  PausyAsyncMap::Transaction t;
+  direct->mapper->add_oid(head, head_snaps, &t);
+  direct->mapper->add_oid(cln1, cln1_snaps, &t);
+  direct->mapper->add_oid(cln2, cln2_snaps, &t);
+  direct->driver->submit(&t);
+  direct->driver->flush();
+
+  // verify that the OBJ_ & SNA_ entries are there
+  {
+    auto osn1 = direct->mapper->get_snaps(cln1);
+    EXPECT_EQ(cln1_snaps, osn1);
+    auto osn2 = direct->mapper->get_snaps(cln2);
+    EXPECT_EQ(cln2_snaps, osn2);
+    auto osnh = direct->mapper->get_snaps(head);
+    EXPECT_EQ(head_snaps, osnh);
+  }
+  {
+    auto vsn1 = direct->mapper->get_snaps_check_consistency(cln1);
+    EXPECT_EQ(cln1_snaps, vsn1);
+    auto vsn2 = direct->mapper->get_snaps_check_consistency(cln2);
+    EXPECT_EQ(cln2_snaps, vsn2);
+    auto vsnh = direct->mapper->get_snaps_check_consistency(head);
+    EXPECT_EQ(head_snaps, vsnh);
+  }
+
+  // corrupt the SNA_ entry for cln1
+  direct->shorten_mapping_key(300, cln1);
+  {
+    auto vsnh = direct->mapper->get_snaps_check_consistency(head);
+    EXPECT_EQ(head_snaps, vsnh);
+    auto vsn1 = direct->mapper->get_snaps(cln1);
+    EXPECT_EQ(cln1_snaps, vsn1);
+    auto osn1 = direct->mapper->get_snaps_check_consistency(cln1);
+    EXPECT_NE(cln1_snaps, osn1);
+    auto vsn2 = direct->mapper->get_snaps_check_consistency(cln2);
+    EXPECT_EQ(cln2_snaps, vsn2);
+  }
+}
+
+///\todo test the case of a corrupted OBJ_ entry

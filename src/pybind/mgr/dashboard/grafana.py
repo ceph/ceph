@@ -104,7 +104,7 @@ def load_local_dashboards():
     if os.environ.get('CEPH_DEV') == '1' or 'UNITTEST' in os.environ:
         path = os.path.abspath(os.path.join(
             os.path.dirname(__file__),
-            '../../../../monitoring/grafana/dashboards/'
+            '../../../../monitoring/ceph-mixin/dashboards_out/'
         ))
     else:
         path = '/etc/grafana/dashboards/ceph-dashboard'

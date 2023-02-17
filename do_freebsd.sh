@@ -60,6 +60,7 @@ mkdir ${BUILD_DIR}
 	-D WITH_MGR=YES \
 	-D WITH_RDMA=OFF \
 	-D WITH_SPDK=OFF \
+	-D WITH_JAEGER=OFF \
 	2>&1 | tee cmake.log
 
 echo -n "start building: "; date

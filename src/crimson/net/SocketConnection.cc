@@ -27,9 +27,12 @@ using crimson::common::local_conf;
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
                                    ChainedDispatchers& dispatchers)
-  : messenger(messenger),
-    protocol(std::make_unique<ProtocolV2>(dispatchers, *this, messenger))
+  : core(messenger.shard_id()),
+    messenger(messenger)
 {
+  auto ret = create_handlers(dispatchers, *this);
+  io_handler = std::move(ret.io_handler);
+  protocol = std::move(ret.protocol);
 #ifdef UNIT_TESTS_BUILT
   if (messenger.interceptor) {
     interceptor = messenger.interceptor;
@@ -40,15 +43,10 @@ SocketConnection::SocketConnection(SocketMessenger& messenger,
 
 SocketConnection::~SocketConnection() {}
 
-crimson::net::Messenger*
-SocketConnection::get_messenger() const {
-  return &messenger;
-}
-
 bool SocketConnection::is_connected() const
 {
   assert(seastar::this_shard_id() == shard_id());
-  return protocol->is_connected();
+  return io_handler->is_connected();
 }
 
 #ifdef UNIT_TESTS_BUILT
@@ -61,7 +59,7 @@ bool SocketConnection::is_closed() const
 bool SocketConnection::is_closed_clean() const
 {
   assert(seastar::this_shard_id() == shard_id());
-  return protocol->is_closed_clean;
+  return protocol->is_closed_clean();
 }
 
 #endif
@@ -72,39 +70,43 @@ bool SocketConnection::peer_wins() const
 
 seastar::future<> SocketConnection::send(MessageURef msg)
 {
-  assert(seastar::this_shard_id() == shard_id());
-  return protocol->send(std::move(msg));
+  return seastar::smp::submit_to(
+    shard_id(),
+    [this, msg=std::move(msg)]() mutable {
+      return io_handler->send(std::move(msg));
+    });
 }
 
-seastar::future<> SocketConnection::keepalive()
+seastar::future<> SocketConnection::send_keepalive()
 {
-  assert(seastar::this_shard_id() == shard_id());
-  return protocol->keepalive();
+  return seastar::smp::submit_to(
+    shard_id(),
+    [this] {
+      return io_handler->send_keepalive();
+    });
+}
+
+SocketConnection::clock_t::time_point
+SocketConnection::get_last_keepalive() const
+{
+  return io_handler->get_last_keepalive();
+}
+
+SocketConnection::clock_t::time_point
+SocketConnection::get_last_keepalive_ack() const
+{
+  return io_handler->get_last_keepalive_ack();
+}
+
+void SocketConnection::set_last_keepalive_ack(clock_t::time_point when)
+{
+  io_handler->set_last_keepalive_ack(when);
 }
 
 void SocketConnection::mark_down()
 {
   assert(seastar::this_shard_id() == shard_id());
-  protocol->close(false);
-}
-
-bool SocketConnection::update_rx_seq(seq_num_t seq)
-{
-  if (seq <= in_seq) {
-    if (HAVE_FEATURE(features, RECONNECT_SEQ) &&
-        local_conf()->ms_die_on_old_message) {
-      ceph_abort_msg("old msgs despite reconnect_seq feature");
-    }
-    return false;
-  } else if (seq > in_seq + 1) {
-    if (local_conf()->ms_die_on_skipped_message) {
-      ceph_abort_msg("skipped incoming seq");
-    }
-    return false;
-  } else {
-    in_seq = seq;
-    return true;
-  }
+  io_handler->mark_down();
 }
 
 void
@@ -122,28 +124,29 @@ SocketConnection::start_accept(SocketRef&& sock,
 }
 
 seastar::future<>
-SocketConnection::close_clean(bool dispatch_reset)
+SocketConnection::close_clean_yielded()
 {
-  return protocol->close_clean(dispatch_reset);
+  return protocol->close_clean_yielded();
 }
 
 seastar::shard_id SocketConnection::shard_id() const {
-  return messenger.shard_id();
+  return core;
 }
 
 seastar::socket_address SocketConnection::get_local_address() const {
-  return protocol->socket->get_local_address();
+  return socket->get_local_address();
 }
 
 void SocketConnection::print(ostream& out) const {
+    out << (void*)this << " ";
     messenger.print(out);
-    if (!protocol->socket) {
+    if (!socket) {
       out << " >> " << get_peer_name() << " " << peer_addr;
-    } else if (protocol->socket->get_side() == Socket::side_t::acceptor) {
+    } else if (socket->get_side() == Socket::side_t::acceptor) {
       out << " >> " << get_peer_name() << " " << peer_addr
-          << "@" << protocol->socket->get_ephemeral_port();
-    } else { // protocol->socket->get_side() == Socket::side_t::connector
-      out << "@" << protocol->socket->get_ephemeral_port()
+          << "@" << socket->get_ephemeral_port();
+    } else { // socket->get_side() == Socket::side_t::connector
+      out << "@" << socket->get_ephemeral_port()
           << " >> " << get_peer_name() << " " << peer_addr;
     }
 }

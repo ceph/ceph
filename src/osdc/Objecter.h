@@ -519,9 +519,13 @@ struct ObjectOperation {
     }
   };
   void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t, uint64_t>* m,
-		   ceph::buffer::list* data_bl, int* prval) {
+		   ceph::buffer::list* data_bl, int* prval,
+		   uint64_t truncate_size = 0, uint32_t truncate_seq = 0) {
     ceph::buffer::list bl;
     add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
+    OSDOp& o = *ops.rbegin();
+    o.op.extent.truncate_size = truncate_size;
+    o.op.extent.truncate_seq = truncate_seq;
     set_handler(CB_ObjectOperation_sparse_read(data_bl, m, prval, nullptr));
     out_rval.back() = prval;
   }

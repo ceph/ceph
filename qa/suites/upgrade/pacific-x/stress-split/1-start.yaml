@@ -5,7 +5,7 @@ tasks:
       - ceph-volume
 
 - cephadm:
-    image: docker.io/ceph/daemon-base:latest-pacific
+    image: quay.io/ceph/daemon-base:latest-pacific
     cephadm_branch: pacific
     cephadm_git_url: https://github.com/ceph/ceph
     conf:

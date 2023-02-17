@@ -94,8 +94,8 @@ Regarding how to use, please see ``osd_internals/manifest.rst``
 Usage Patterns
 ==============
 
-The different Ceph interface layers present potentially different oportunities
-and costs for deduplication and tiering in general.
+Each Ceph interface layer presents unique opportunities and costs for
+deduplication and tiering in general.
 
 RadosGW
 -------
@@ -149,3 +149,109 @@ Aside from radosgw, completing work on manifest object support in the
 OSD particularly as it relates to snapshots would be the next step for
 rbd and cephfs workloads.
 
+How to use deduplication
+========================
+
+ * This feature is highly experimental and is subject to change or removal.
+
+Ceph provides deduplication using RADOS machinery.
+Below we explain how to perform deduplication. 
+
+
+1. Estimate space saving ratio of a target pool using ``ceph-dedup-tool``.
+
+.. code:: bash
+
+    ceph-dedup-tool --op estimate --pool $POOL --chunk-size chunk_size  
+      --chunk-algorithm fixed|fastcdc --fingerprint-algorithm sha1|sha256|sha512
+      --max-thread THREAD_COUNT
+
+This CLI command will show how much storage space can be saved when deduplication
+is applied on the pool. If the amount of the saved space is higher than user's expectation,
+the pool probably is worth performing deduplication. 
+Users should specify $POOL where the object---the users want to perform
+deduplication---is stored. The users also need to run ceph-dedup-tool multiple time
+with varying ``chunk_size`` to find the optimal chunk size. Note that the
+optimal value probably differs in the content of each object in case of fastcdc
+chunk algorithm (not fixed). Example output:
+
+::
+
+    {
+      "chunk_algo": "fastcdc",
+      "chunk_sizes": [
+        {
+          "target_chunk_size": 8192,
+          "dedup_bytes_ratio": 0.4897049
+          "dedup_object_ratio": 34.567315
+          "chunk_size_average": 64439,
+          "chunk_size_stddev": 33620
+        }
+      ],
+      "summary": {
+        "examined_objects": 95,
+        "examined_bytes": 214968649
+      }
+    }
+
+The above is an example output when executing ``estimate``. ``target_chunk_size`` is the same as
+``chunk_size`` given by the user. ``dedup_bytes_ratio`` shows how many bytes are redundant from 
+examined bytes. For instance, 1 - ``dedup_bytes_ratio`` means the percentage of saved storage space.
+``dedup_object_ratio`` is the generated chunk objects / ``examined_objects``. ``chunk_size_average`` 
+means that the divided chunk size on average when performing CDC---this may differnet from ``target_chunk_size``
+because CDC genarates different chunk-boundary depending on the content. ``chunk_size_stddev``
+represents the standard deviation of the chunk size. 
+
+
+2. Create chunk pool. 
+
+.. code:: bash
+
+  ceph osd pool create CHUNK_POOL
+    
+
+3. Run dedup command (there are two ways).
+  
+.. code:: bash
+
+    ceph-dedup-tool --op sample-dedup --pool POOL --chunk-pool CHUNK_POOL --chunk-size 
+    CHUNK_SIZE --chunk-algorithm fastcdc --fingerprint-algorithm sha1|sha256|sha512 
+    --chunk-dedup-threshold THRESHOLD --max-thread THREAD_COUNT ----sampling-ratio SAMPLE_RATIO
+    --wakeup-period WAKEUP_PERIOD --loop --snap
+
+The ``sample-dedup`` comamnd spawns threads specified by ``THREAD_COUNT`` to deduplicate objects on
+the ``POOL``. According to sampling-ratio---do a full search if ``SAMPLE_RATIO`` is 100, the threads selectively
+perform deduplication if the chunk is redundant over ``THRESHOLD`` times during iteration.
+If --loop is set, the theads will wakeup after ``WAKEUP_PERIOD``. If not, the threads will exit after one iteration.
+
+.. code:: bash
+
+    ceph-dedup-tool --op object-dedup --pool POOL --object OID --chunk-pool CHUNK_POOL
+      --fingerprint-algorithm sha1|sha256|sha512 --dedup-cdc-chunk-size CHUNK_SIZE
+
+The ``object-dedup`` command triggers deduplication on the RADOS object specified by ``OID``.
+All parameters shown above must be specified. ``CHUNK_SIZE`` should be taken from
+the results of step 1 above.
+Note that when this command is executed, ``fastcdc`` will be set by default and other parameters
+such as ``FP`` and ``CHUNK_SIZE`` will be set as defaults for the pool.
+Deduplicated objects will appear in the chunk pool. If the object is mutated over time, user needs to re-run
+``object-dedup`` because chunk-boundary should be recalculated based on updated contents.
+The user needs to specify ``snap`` if the target object is snapshotted. After deduplication is done, the target
+object size in ``POOL`` is zero (evicted) and chunks objects are genereated---these appear in ``CHUNK_POOL``.
+
+
+4. Read/write I/Os
+
+After step 3, the users don't need to consider anything about I/Os. Deduplicated objects are
+completely compatible with existing RAODS operations.
+
+
+5. Run scrub to fix reference count 
+
+Reference mismatches can on rare occasions occur to false positives when handling reference counts for
+deduplicated RADOS objects. These mismatches will be fixed by periodically scrubbing the pool:
+
+.. code:: bash
+
+    ceph-dedup-tool --op chunk-scrub --op chunk-scrub --chunk-pool CHUNK_POOL --pool POOL --max-thread THREAD_COUNT
+  

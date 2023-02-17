@@ -256,8 +256,9 @@ public:
     return get_sm()->states[state].next == 0;
   }
   bool is_unstable_and_locked() const {
-    if (is_stable())
-      return false;
+    return (!is_stable() && is_locked());
+  }
+  bool is_locked() const {
     return is_rdlocked() || is_wrlocked() || is_xlocked();
   }
   int get_next_state() {

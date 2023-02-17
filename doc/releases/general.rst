@@ -21,33 +21,9 @@ name, since the latin names are harder to remember or pronounce).
 Version numbers have three components, *x.y.z*.  *x* identifies the release
 cycle (e.g., 13 for Mimic).  *y* identifies the release type:
 
-* x.0.z - development releases (for early testers and the brave at heart)
+* x.0.z - development versions
 * x.1.z - release candidates (for test clusters, brave users)
 * x.2.z - stable/bugfix releases (for users)
-
-This versioning convention started with the 9.y.z Infernalis cycle.  Prior to
-that, versions looked with 0.y for development releases and 0.y.z for stable
-series.
-
-Development releases (x.0.z)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Each development release (x.0.z) freezes the master development branch
-and applies `integration and upgrade tests
-<https://github.com/ceph/ceph/tree/master/qa/suites/>`_ before it is released.  Once
-released, there is no effort to backport fixes; developer focus is on
-the next development release which is usually only a few weeks away.
-
-* Development release every 8 to 12 weeks
-* Intended for testing, not production deployments
-* Full integration testing
-* Upgrade testing from the last stable release(s)
-* Every effort is made to allow *offline* upgrades from previous
-  development releases (meaning you can stop all daemons, upgrade, and
-  restart).  No attempt is made to support online rolling upgrades
-  between development releases.  This facilitates deployment of
-  development releases on non-production test clusters without
-  repopulating them with data.
 
 Release candidates (x.1.z)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -97,10 +73,6 @@ months (i.e., two 12 month release cycles) after the month of the first release.
 For example, Mimic (13.2.z) will reach end of life (EOL) shortly after Octopus
 (15.2.0) is released. The lifetime of a release may vary because it depends on
 how quickly the stable releases are published.
-
-In the case of Jewel and Kraken, the lifetime was slightly different than
-described above. Prior to Luminous, only every other stable release was an "LTS"
-release.
 
 Detailed information on all releases, past and present, can be found at :ref:`ceph-releases-index`
 

@@ -473,6 +473,7 @@ options:
     to the log.  For example, debug_osd=1/5 will write everything <= 1 to the log
     unconditionally but keep entries at levels 2-5 in memory.  If there is a seg fault
     or assertion failure, all entries will be dumped to the log.
+  min: 1
   default: 500
   daemon_default: 10000
   # default changed by common_preinit()
@@ -761,6 +762,11 @@ options:
   desc: Enable Intel QAT acceleration support for compression if available
   default: false
   with_legacy: true
+- name: qat_compressor_session_max_number
+  type: uint
+  level: advanced
+  desc: Set the maximum number of session within Qatzip when using QAT compressor
+  default: 256
 - name: plugin_crypto_accelerator
   type: str
   level: advanced
@@ -1260,6 +1266,12 @@ options:
   type: float
   level: dev
   desc: Inject various internal delays to induce races (seconds)
+  default: 0
+  with_legacy: true
+- name: ms_inject_network_congestion
+  type: uint
+  level: dev
+  desc: Inject a network congestions that stuck with N times operations
   default: 0
   with_legacy: true
 - name: ms_blackhole_osd
@@ -1947,19 +1959,19 @@ options:
   see_also:
   - mon_debug_dump_transactions
   with_legacy: true
-- name: mon_debug_no_require_pacific
+- name: mon_debug_no_require_quincy
   type: bool
   level: dev
-  desc: do not set pacific feature for new mon clusters
+  desc: do not set quincy feature for new mon clusters
   default: false
   services:
   - mon
   flags:
   - cluster_create
-- name: mon_debug_no_require_quincy
+- name: mon_debug_no_require_reef
   type: bool
   level: dev
-  desc: do not set quincy feature for new mon clusters
+  desc: do not set reef feature for new mon clusters
   default: false
   services:
   - mon
@@ -2379,6 +2391,14 @@ options:
   level: advanced
   desc: try to calculate PG upmaps more aggressively, e.g., by doing a fairly exhaustive
     search of existing PGs that can be unmapped or upmapped
+  default: true
+  flags:
+  - runtime
+- name: osd_calc_pg_upmaps_aggressively_fast
+  type: bool
+  level: advanced
+  desc: Prevent very long (>10 minutes) calculations in some extreme cases (applicable
+    only to aggressive mode)
   default: true
   flags:
   - runtime
@@ -2817,6 +2837,7 @@ options:
   type: uint
   level: advanced
   default: 2
+  min: 1
   with_legacy: true
 # max number of trimming pgs
 - name: osd_max_trimming_pgs
@@ -3259,13 +3280,20 @@ options:
     slow shutdown is primarilyy useful for doing memory leak checking with valgrind.
   default: true
   with_legacy: true
+- name: osd_fast_shutdown_timeout
+  type: int
+  level: advanced
+  desc: timeout in seconds for osd fast-shutdown (0 is unlimited)
+  default: 15
+  with_legacy: true
+  min: 0
 - name: osd_fast_shutdown_notify_mon
   type: bool
   level: advanced
   desc: Tell mon about OSD shutdown on immediate shutdown
   long_desc: Tell the monitor the OSD is shutting down on immediate shutdown. This
     helps with cluster log messages from other OSDs reporting it immediately failed.
-  default: false
+  default: true
   see_also:
   - osd_fast_shutdown
   - osd_mon_shutdown_timeout
@@ -3520,6 +3548,36 @@ options:
 # osd_*_priority determines the ratio of available io between client and
 # recovery.  Each option may be set between
 # 1..63.
+- name: rocksdb_cf_compact_on_deletion
+  type: bool
+  level: dev
+  desc: Compact the column family when a certain number of tombstones are observed within a given window.
+  long_desc: 'This setting instructs RocksDB to compact a column family when a certain
+    number of tombstones are observed during iteration within a certain sliding window.
+    For instance if rocksdb_cf_compact_on_deletion_sliding_window is 8192 and
+    rocksdb_cf_compact_on_deletion_trigger is 4096,  then once 4096 tombstones are
+    observed after iteration over 8192 entries, the column family will be compacted.'
+  default: true
+  with_legacy: true
+  see_also:
+  - rocksdb_cf_compact_on_deletion_sliding_window
+  - rocksdb_cf_compact_on_deletion_trigger
+- name: rocksdb_cf_compact_on_deletion_sliding_window
+  type: int
+  level: dev
+  desc: The sliding window to use when rocksdb_cf_compact_on_deletion is enabled.
+  default: 32768
+  with_legacy: true
+  see_also:
+  - rocksdb_cf_compact_on_deletion
+- name: rocksdb_cf_compact_on_deletion_trigger
+  type: int
+  level: dev
+  desc: The trigger to use when rocksdb_cf_compact_on_deletion is enabled.
+  default: 16384
+  with_legacy: true
+  see_also:
+  - rocksdb_cf_compact_on_deletion
 - name: osd_client_op_priority
   type: uint
   level: advanced
@@ -3915,6 +3973,31 @@ options:
   level: advanced
   default: 4_K
   with_legacy: true
+- name: bdev_read_buffer_alignment
+  type: size
+  level: advanced
+  default: 4_K
+  with_legacy: true
+- name: bdev_read_preallocated_huge_buffers
+  type: str
+  level: advanced
+  desc: description of pools arrangement for huge page-based read buffers
+  long_desc: Arrangement of preallocated, huge pages-based pools for reading
+    from a KernelDevice. Applied to minimize size of scatter-gather lists
+    sent to NICs. Targets really  big buffers (>= 2 or 4 MBs).
+    Keep in mind the system must be configured accordingly (see /proc/sys/vm/nr_hugepages).
+    Otherwise the OSD wil fail early.
+    Beware BlueStore, by default, stores large chunks across many smaller blobs.
+    Increasing bluestore_max_blob_size changes that, and thus allows the data to
+    be read back into small number of huge page-backed buffers.
+  fmt_desc: List of key=value pairs delimited by comma, semicolon or tab.
+    key specifies the targeted read size and must be expressed in bytes.
+    value specifies the number of preallocated buffers.
+    For instance, to preallocate 64 buffers that will be used to serve
+    2 MB-sized read requests and 128 for 4 MB, someone needs to set
+    "2097152=64,4194304=128".
+  see_also:
+  - bluestore_max_blob_size
 - name: bdev_debug_aio
   type: bool
   level: dev
@@ -3971,6 +4054,18 @@ options:
   level: advanced
   desc: Allocation unit size for primary/shared device
   default: 64_K
+  with_legacy: true
+- name: bluefs_failed_shared_alloc_cooldown
+  type: float
+  level: advanced
+  desc: duration(in seconds) untill the next attempt to use
+   'bluefs_shared_alloc_size' after facing ENOSPC failure.
+  long_desc: Cooldown period(in seconds) when BlueFS uses shared/slow device
+   allocation size instead of "bluefs_shared_alloc_size' one after facing
+   recoverable (via fallback to smaller chunk size) ENOSPC failure. Intended
+   primarily to avoid repetitive unsuccessful allocations which might be
+   expensive.
+  default: 600
   with_legacy: true
 - name: bluefs_max_prefetch
   type: size
@@ -4078,6 +4173,28 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluefs_check_volume_selector_on_umount
+  type: bool
+  level: dev
+  desc: Check validity of volume selector on umount
+  long_desc: Checks if volume selector did not diverge from the state it should be in.
+    Reference is constructed from bluefs inode table. Asserts on inconsistency.
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluefs_check_volume_selector_often
+  type: bool
+  level: dev
+  desc: Periodically check validity of volume selector
+  long_desc: Periodically checks if current volume selector does not diverge from the valid state.
+    Reference is constructed from bluefs inode table. Asserts on inconsistency. This is debug feature.
+  default: false
+  see_also:
+  - bluefs_check_volume_selector_on_umount
+  flags:
+  - startup
+  with_legacy: true
 - name: bluestore_bluefs
   type: bool
   level: dev
@@ -4106,7 +4223,7 @@ options:
 - name: bluestore_bluefs_alloc_failure_dump_interval
   type: float
   level: advanced
-  desc: How frequently (in seconds) to dump allocator onBlueFS space allocation failure
+  desc: How frequently (in seconds) to dump allocator on BlueFS space allocation failure
   default: 0
   with_legacy: true
 - name: bluestore_spdk_mem
@@ -4670,10 +4787,10 @@ options:
   level: dev
   desc: The number of seconds to wait between rebalances when cache autotune is enabled.
   fmt_desc: |
-    The number of seconds to wait between rebalances when cache autotune
-    is enabled.  This setting changes how quickly the allocation ratios of
-    various caches are recomputed.  Note:  Setting this interval too small
-    can result in high CPU usage and lower performance.
+    The number of seconds to wait between rebalances when cache autotune is
+    enabled.  `bluestore_cache_autotune_interval` sets the speed at which Ceph
+    recomputes the allocation ratios of various caches. Note: Setting this
+    interval too small can result in high CPU usage and lower performance.
   default: 5
   see_also:
   - bluestore_cache_autotune
@@ -4836,7 +4953,7 @@ options:
   type: str
   level: advanced
   desc: Full set of rocksdb settings to override
-  default: compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456,writable_file_max_buffer_size=0,compaction_readahead_size=2097152,max_background_compactions=2,max_total_wal_size=1073741824
+  default: compression=kNoCompression,max_write_buffer_number=128,min_write_buffer_number_to_merge=16,compaction_style=kCompactionStyleLevel,write_buffer_size=8388608,max_background_jobs=4,level0_file_num_compaction_trigger=8,max_bytes_for_level_base=1073741824,max_bytes_for_level_multiplier=8,compaction_readahead_size=2MB,max_total_wal_size=1073741824,writable_file_max_buffer_size=0,ttl=21600
   with_legacy: true
 - name: bluestore_rocksdb_options_annex
   type: str
@@ -4883,6 +5000,12 @@ options:
     This setting is used only when OSD is doing ``--mkfs``.
     Next runs of OSD retrieve sharding from disk.
   default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P
+- name: bluestore_qfsck_on_mount
+  type: bool
+  level: dev
+  desc: Run quick-fsck at mount comparing allocation-file to RocksDB allocation state
+  default: true
+  with_legacy: true
 - name: bluestore_fsck_on_mount
   type: bool
   level: dev
@@ -4912,6 +5035,14 @@ options:
   level: dev
   desc: Remove allocation info from RocksDB and store the info in a new allocation file
   default: true
+  with_legacy: true
+- name: bluestore_debug_inject_allocation_from_file_failure
+  type: float
+  level: dev
+  desc: Enables random error injections when restoring allocation map from file.
+  long_desc: Specifies error injection probability for restoring allocation map from file
+    hence causing full recovery. Intended primarily for testing.
+  default: 0
   with_legacy: true
 - name: bluestore_fsck_on_umount_deep
   type: bool
@@ -4951,6 +5082,15 @@ options:
   desc: Number of additional threads to perform quick-fix (shallow fsck) command
   default: 2
   with_legacy: true
+- name: bluestore_fsck_shared_blob_tracker_size
+  type: float
+  level: dev
+  desc: Size(a fraction of osd_memory_target, defaults to 128MB) of a hash table to track shared blobs ref counts. Higher the size, more precise is the tracker -> less overhead during the repair.
+  default: 0.03125
+  see_also:
+  - osd_memory_target
+  flags:
+  - runtime
 - name: bluestore_throttle_bytes
   type: size
   level: advanced
@@ -5283,7 +5423,7 @@ options:
   type: str
   level: dev
   desc: Determines bluefs volume selection policy
-  long_desc: Determines bluefs volume selection policy. 'use_some_extra' policy allows
+  long_desc: Determines bluefs volume selection policy. 'use_some_extra*' policy allows
     to override RocksDB level granularity and put high level's data to faster device
     even when the level doesn't completely fit there. 'fit_to_fast' policy enables
     using 100% of faster disk capacity and allows the user to turn on 'level_compaction_dynamic_level_bytes'
@@ -5292,6 +5432,7 @@ options:
   enum_values:
   - rocksdb_original
   - use_some_extra
+  - use_some_extra_enforced
   - fit_to_fast
   with_legacy: true
 - name: bluestore_volume_selection_reserved_factor
@@ -5344,6 +5485,17 @@ options:
   level: dev
   desc: fail/crash on EIO
   long_desc: whether bluestore osd fails on eio
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluestore_zero_block_detection
+  type: bool
+  level: dev
+  desc: punch holes instead of writing zeros
+  long_desc: Intended for large-scale synthetic testing. Currently this is implemented
+    with punch hole semantics, affecting the logical extent map of the object. This does
+    not interact well with some RBD and CephFS features.
   default: false
   flags:
   - runtime

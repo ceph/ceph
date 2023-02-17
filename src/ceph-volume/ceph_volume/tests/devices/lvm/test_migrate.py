@@ -69,7 +69,7 @@ class TestFindAssociatedDevices(object):
 
         result = migrate.find_associated_devices(osd_id='0', osd_fsid='1234')
         assert len(result) == 1
-        assert result[0][0].abspath == '/dev/VolGroup/lv1'
+        assert result[0][0].path == '/dev/VolGroup/lv1'
         assert result[0][0].lvs == [vol]
         assert result[0][1] == 'block'
 
@@ -96,10 +96,10 @@ class TestFindAssociatedDevices(object):
         assert len(result) == 2
         for d in result:
           if d[1] == 'block':
-            assert d[0].abspath == '/dev/VolGroup/lv1'
+            assert d[0].path == '/dev/VolGroup/lv1'
             assert d[0].lvs == [vol]
           elif d[1] == 'wal':
-            assert d[0].abspath == '/dev/VolGroup/lv2'
+            assert d[0].path == '/dev/VolGroup/lv2'
             assert d[0].lvs == [vol2]
           else:
             assert False
@@ -133,13 +133,13 @@ class TestFindAssociatedDevices(object):
         assert len(result) == 3
         for d in result:
           if d[1] == 'block':
-            assert d[0].abspath == '/dev/VolGroup/lv1'
+            assert d[0].path == '/dev/VolGroup/lv1'
             assert d[0].lvs == [vol]
           elif d[1] == 'wal':
-            assert d[0].abspath == '/dev/VolGroup/lv2'
+            assert d[0].path == '/dev/VolGroup/lv2'
             assert d[0].lvs == [vol2]
           elif d[1] == 'db':
-            assert d[0].abspath == '/dev/VolGroup/lv3'
+            assert d[0].path == '/dev/VolGroup/lv3'
             assert d[0].lvs == [vol3]
           else:
             assert False

@@ -1,7 +1,8 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #pragma once
+
 #include "include/common_fwd.h"
 
 extern PerfCounters *perfcounter;
@@ -49,6 +50,10 @@ enum {
   l_rgw_pubsub_push_failed,
   l_rgw_pubsub_push_pending,
   l_rgw_pubsub_missing_conf,
+
+  l_rgw_lua_current_vms,
+  l_rgw_lua_script_ok,
+  l_rgw_lua_script_fail,
 
   l_rgw_last,
 };

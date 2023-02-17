@@ -7,6 +7,7 @@ import { of } from 'rxjs';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { UserService } from '~/app/shared/api/user.service';
+import { AlertPanelComponent } from '~/app/shared/components/alert-panel/alert-panel.component';
 import { Permissions } from '~/app/shared/models/permissions';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -39,7 +40,7 @@ describe('TelemetryActivationNotificationComponent', () => {
   };
 
   configureTestBed({
-    declarations: [TelemetryNotificationComponent],
+    declarations: [TelemetryNotificationComponent, AlertPanelComponent],
     imports: [NgbAlertModule, HttpClientTestingModule, ToastrModule.forRoot(), PipesModule],
     providers: [MgrModuleService, UserService]
   });
@@ -91,7 +92,7 @@ describe('TelemetryActivationNotificationComponent', () => {
   it('should hide the notification if the user closes it', () => {
     spyOn(notificationService, 'show');
     fixture.detectChanges();
-    component.close();
+    component.onDismissed();
     expect(notificationService.show).toHaveBeenCalled();
     expect(localStorage.getItem('telemetry_notification_hidden')).toBe('true');
   });

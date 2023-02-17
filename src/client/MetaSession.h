@@ -25,6 +25,7 @@ struct MetaSession {
   uint64_t cap_renew_seq = 0;
   entity_addrvec_t addrs;
   feature_bitset_t mds_features;
+  feature_bitset_t mds_metric_flags;
 
   enum {
     STATE_NEW, // Unused

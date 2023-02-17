@@ -173,6 +173,18 @@ COMMAND("auth get-or-create "
 	"name=caps,type=CephString,n=N,req=false",
 	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command",
 	"auth", "rwx")
+COMMAND("auth get-or-create-pending "
+	"name=entity,type=CephString",
+	"generate and/or retrieve existing pending key (rotated into place on first use)",
+	"auth", "rwx")
+COMMAND("auth clear-pending "
+	"name=entity,type=CephString",
+	"clear pending key",
+	"auth", "rwx")
+COMMAND("auth commit-pending "
+	"name=entity,type=CephString",
+	"rotate pending key into active position",
+	"auth", "rwx")
 COMMAND("fs authorize "
    "name=filesystem,type=CephString "
    "name=entity,type=CephString "
@@ -365,7 +377,7 @@ COMMAND("fs set "
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
         "|allow_new_snaps|inline_data|cluster_down|allow_dirfrags|balancer"
         "|standby_count_wanted|session_timeout|session_autoclose"
-        "|allow_standby_replay|down|joinable|min_compat_client "
+        "|allow_standby_replay|down|joinable|min_compat_client|bal_rank_mask "
 	"name=val,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false "
 	"name=yes_i_really_really_mean_it,type=CephBool,req=false",
@@ -839,7 +851,7 @@ COMMAND("osd unset "
 	"notieragent|nosnaptrim",
 	"unset <key>", "osd", "rw")
 COMMAND("osd require-osd-release "\
-	"name=release,type=CephChoices,strings=octopus|pacific|quincy "
+	"name=release,type=CephChoices,strings=octopus|pacific|quincy|reef "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set the minimum allowed OSD release to participate in the cluster",
 	"osd", "rw")
@@ -949,7 +961,7 @@ COMMAND("osd force-create-pg "
 COMMAND("osd pg-temp "
 	"name=pgid,type=CephPgid "
 	"name=id,type=CephOsdName,n=N,req=false",
-	"set pg_temp mapping pgid:[<id> [<id>...]] (developers only)",
+	"set pg_temp mapping <pgid>:[<id> [<id>...]] (developers only)",
         "osd", "rw")
 COMMAND("osd pg-upmap "
 	"name=pgid,type=CephPgid "
@@ -969,10 +981,23 @@ COMMAND("osd rm-pg-upmap-items "
 	"name=pgid,type=CephPgid",
 	"clear pg_upmap_items mapping for <pgid> (developers only)",
         "osd", "rw")
+COMMAND("osd pg-upmap-primary "
+	"name=pgid,type=CephPgid "
+	"name=id,type=CephOsdName ",
+	"set pg primary osd <pgid>:<id> (id (osd) must be part of pgid)",
+        "osd", "rw")
+COMMAND("osd rm-pg-upmap-primary "
+	"name=pgid,type=CephPgid ",
+	"clear pg primary setting for <pgid>",
+        "osd", "rw")
 COMMAND("osd primary-temp "
 	"name=pgid,type=CephPgid "
 	"name=id,type=CephOsdName",
-        "set primary_temp mapping pgid:<id>|-1 (developers only)",
+        "set primary_temp mapping pgid:<id> (developers only)",
+        "osd", "rw")
+COMMAND("osd rm-primary-temp "
+	"name=pgid,type=CephPgid ",
+        "clear primary_temp mapping pgid (developers only)",
         "osd", "rw")
 COMMAND("osd primary-affinity "
 	"name=id,type=CephOsdName "
@@ -1016,6 +1041,7 @@ COMMAND("osd new "
         "Reads secrets from JSON file via `-i <file>` (see man page).",
         "osd", "rw")
 COMMAND("osd blocklist "
+	"name=range,type=CephString,goodchars=[range],req=false "
 	"name=blocklistop,type=CephChoices,strings=add|rm "
 	"name=addr,type=CephEntityAddr "
 	"name=expire,type=CephFloat,range=0.0,req=false",
@@ -1061,7 +1087,8 @@ COMMAND("osd pool create "
 	"name=autoscale_mode,type=CephChoices,strings=on|off|warn,req=false "
 	"name=bulk,type=CephBool,req=false "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
-	"name=target_size_ratio,type=CephFloat,range=0|1,req=false",\
+	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "\
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"create pool", "osd", "rw")
 COMMAND_WITH_FLAG("osd pool delete "
 	"name=pool,type=CephPoolname "
@@ -1080,7 +1107,8 @@ COMMAND("osd pool rm "
 	"osd", "rw")
 COMMAND("osd pool rename "
 	"name=srcpool,type=CephPoolname "
-	"name=destpool,type=CephPoolname",
+	"name=destpool,type=CephPoolname "
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"rename <srcpool> to <destpool>", "osd", "rw")
 COMMAND("osd pool get "
 	"name=pool,type=CephPoolname "
@@ -1171,7 +1199,7 @@ COMMAND_WITH_FLAG("osd tier remove "
     FLAG(DEPRECATED))
 COMMAND("osd tier cache-mode "
 	"name=pool,type=CephPoolname "
-	"name=mode,type=CephChoices,strings=writeback|readproxy|readonly|none "
+	"name=mode,type=CephChoices,strings=writeback|proxy|readproxy|readonly|none "
 	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"specify the caching mode for cache tier <pool>", "osd", "rw")
 COMMAND("osd tier set-overlay "
@@ -1374,6 +1402,10 @@ COMMAND_WITH_FLAG("sessions",
             "mon", "r",
             FLAG(TELL))
 COMMAND_WITH_FLAG("dump_historic_ops",
-            "dump_historic_ops",
+            "show recent ops",
+            "mon", "r",
+            FLAG(TELL))
+COMMAND_WITH_FLAG("dump_historic_slow_ops",
+            "show recent slow ops",
             "mon", "r",
             FLAG(TELL))

@@ -393,7 +393,7 @@ public:
         return r;
       }
 
-      auto ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+      auto ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
         &snap_info.snapshot_namespace);
       if (ns != nullptr) {
         *mirror_snap_id = snap_id;

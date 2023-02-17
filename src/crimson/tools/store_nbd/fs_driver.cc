@@ -182,7 +182,6 @@ seastar::future<> FSDriver::mkfs()
   return init(    
   ).then([this] {
     assert(fs);
-  }).then([this] {
     return fs->start();
   }).then([this] {
     uuid_d uuid;

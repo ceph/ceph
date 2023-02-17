@@ -4,8 +4,7 @@ tasks:
 - tox: [ client.0 ]
 - keystone:
     client.0:
-      sha1: 17.0.0.0rc2
-      force-branch: master
+      force-branch: stable/xena
       services:
         - name: swift
           type: object-store
@@ -16,7 +15,7 @@ tasks:
       use-keystone-role: client.0
 - tempest:
     client.0:
-      sha1: train-last
+      sha1: 30.0.0
       force-branch: master
       use-keystone-role: client.0
       auth:
@@ -45,6 +44,10 @@ tasks:
         - .*test_container_synchronization.*
         - .*test_object_services.PublicObjectTest.test_access_public_container_object_without_using_creds
         - .*test_object_services.ObjectTest.test_create_object_with_transfer_encoding
+        - .*test_container_services.ContainerTest.test_create_container_with_remove_metadata_key
+        - .*test_container_services.ContainerTest.test_create_container_with_remove_metadata_value
+        - .*test_object_expiry.ObjectExpiryTest.test_get_object_after_expiry_time
+        - .*test_object_expiry.ObjectExpiryTest.test_get_object_at_expiry_time
 
 overrides:
   ceph:

@@ -812,6 +812,12 @@ struct btree_iterator {
   bool operator!=(const const_iterator &x) const {
     return node != x.node || position != x.position;
   }
+  bool operator==(const iterator& x) const {
+    return node == x.node && position == x.position;
+  }
+  bool operator!=(const iterator& x) const {
+    return node != x.node || position != x.position;
+  }
 
   // Accessors for the key/value the iterator is pointing at.
   reference operator*() const {

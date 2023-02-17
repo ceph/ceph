@@ -7,6 +7,7 @@ import requests
 
 from ..exceptions import DashboardException
 from ..security import Scope
+from ..services import ceph_service
 from ..settings import Settings
 from . import APIDoc, APIRouter, BaseController, Endpoint, RESTController, Router
 
@@ -41,6 +42,9 @@ class PrometheusRESTController(RESTController):
     def _get_api_url(self, host):
         return host.rstrip('/') + '/api/v1'
 
+    def balancer_status(self):
+        return ceph_service.CephService.send_command('mon', 'balancer status')
+
     def _proxy(self, base_url, method, path, api_name, params=None, payload=None, verify=True):
         # type (str, str, str, str, dict, dict, bool)
         try:
@@ -51,9 +55,22 @@ class PrometheusRESTController(RESTController):
                 "Could not reach {}'s API on {}".format(api_name, base_url),
                 http_status_code=404,
                 component='prometheus')
-        content = json.loads(response.content)
-        if content['status'] == 'success':
+        try:
+            content = json.loads(response.content, strict=False)
+        except json.JSONDecodeError as e:
+            raise DashboardException(
+                "Error parsing Prometheus Alertmanager response: {}".format(e.msg),
+                component='prometheus')
+        balancer_status = self.balancer_status()
+        if content['status'] == 'success':  # pylint: disable=R1702
             if 'data' in content:
+                if balancer_status['active'] and balancer_status['no_optimization_needed'] and path == '/alerts':  # noqa E501  #pylint: disable=line-too-long
+                    for alert in content['data']:
+                        for k, v in alert.items():
+                            if k == 'labels':
+                                for key, value in v.items():
+                                    if key == 'alertname' and value == 'CephPGImbalance':
+                                        content['data'].remove(alert)
                 return content['data']
             return content
         raise DashboardException(content, http_status_code=400, component='prometheus')
@@ -68,6 +85,11 @@ class Prometheus(PrometheusRESTController):
     @RESTController.Collection(method='GET')
     def rules(self, **params):
         return self.prometheus_proxy('GET', '/rules', params)
+
+    @RESTController.Collection(method='GET', path='/data')
+    def get_prometeus_data(self, **params):
+        params['query'] = params.pop('params')
+        return self.prometheus_proxy('GET', '/query_range', params)
 
     @RESTController.Collection(method='GET', path='/silences')
     def get_silences(self, **params):

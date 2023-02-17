@@ -5,20 +5,23 @@ from ceph_volume.devices.simple import scan
 
 class TestGetContents(object):
 
-    def test_multiple_lines_are_left_as_is(self, tmpfile):
-        magic_file = tmpfile(contents='first\nsecond\n')
-        scanner = scan.Scan([])
-        assert scanner.get_contents(magic_file) == 'first\nsecond\n'
+    def setup(self):
+        self.magic_file_name = '/tmp/magic-file'
 
-    def test_extra_whitespace_gets_removed(self, tmpfile):
-        magic_file = tmpfile(contents='first   ')
+    def test_multiple_lines_are_left_as_is(self, fake_filesystem):
+        magic_file = fake_filesystem.create_file(self.magic_file_name, contents='first\nsecond\n')
         scanner = scan.Scan([])
-        assert scanner.get_contents(magic_file) == 'first'
+        assert scanner.get_contents(magic_file.path) == 'first\nsecond\n'
 
-    def test_single_newline_values_are_trimmed(self, tmpfile):
-        magic_file = tmpfile(contents='first\n')
+    def test_extra_whitespace_gets_removed(self, fake_filesystem):
+        magic_file = fake_filesystem.create_file(self.magic_file_name, contents='first   ')
         scanner = scan.Scan([])
-        assert scanner.get_contents(magic_file) == 'first'
+        assert scanner.get_contents(magic_file.path) == 'first'
+
+    def test_single_newline_values_are_trimmed(self, fake_filesystem):
+        magic_file = fake_filesystem.create_file(self.magic_file_name, contents='first\n')
+        scanner = scan.Scan([])
+        assert scanner.get_contents(magic_file.path) == 'first'
 
 
 class TestEtcPath(object):
@@ -36,10 +39,10 @@ class TestEtcPath(object):
         assert scanner.etc_path == path
         assert os.path.isdir(path)
 
-    def test_complains_when_file(self, tmpfile):
-        path = tmpfile()
+    def test_complains_when_file(self, fake_filesystem):
+        etc_dir = fake_filesystem.create_file('/etc/ceph/osd')
         scanner = scan.Scan([])
-        scanner._etc_path = path
+        scanner._etc_path = etc_dir.path
         with pytest.raises(RuntimeError):
             scanner.etc_path
 

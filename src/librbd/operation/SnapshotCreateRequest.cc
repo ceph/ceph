@@ -298,7 +298,7 @@ Context *SnapshotCreateRequest<I>::handle_create_object_map(int *result) {
 template <typename I>
 Context *SnapshotCreateRequest<I>::send_create_image_state() {
   I &image_ctx = this->m_image_ctx;
-  auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+  auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
     &m_snap_namespace);
   if (mirror_ns == nullptr || !mirror_ns->is_primary()) {
     update_snap_context();

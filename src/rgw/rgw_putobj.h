@@ -26,6 +26,8 @@ class Pipe : public rgw::sal::DataProcessor {
  public:
   explicit Pipe(rgw::sal::DataProcessor *next) : next(next) {}
 
+  virtual ~Pipe() override {}
+
   // passes the data on to the next processor
   int process(bufferlist&& data, uint64_t offset) override {
     return next->process(std::move(data), offset);
@@ -40,6 +42,7 @@ class ChunkProcessor : public Pipe {
   ChunkProcessor(rgw::sal::DataProcessor *next, uint64_t chunk_size)
     : Pipe(next), chunk_size(chunk_size)
   {}
+  virtual ~ChunkProcessor() override {}
 
   int process(bufferlist&& data, uint64_t offset) override;
 };
@@ -62,6 +65,7 @@ class StripeProcessor : public Pipe {
                   uint64_t first_stripe_size)
     : Pipe(next), gen(gen), bounds(0, first_stripe_size)
   {}
+  virtual ~StripeProcessor() override {}
 
   int process(bufferlist&& data, uint64_t data_offset) override;
 };

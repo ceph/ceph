@@ -463,6 +463,19 @@ public:
     return mock_journal->append_write_event(0, length, bl, false);
   }
 
+  uint64_t when_append_compare_and_write_event(
+      MockJournalImageCtx &mock_image_ctx, MockJournal *mock_journal,
+      uint64_t length) {
+    bufferlist cmp_bl;
+    cmp_bl.append_zero(length);
+    bufferlist write_bl;
+    write_bl.append_zero(length);
+
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    return mock_journal->append_compare_and_write_event(0, length, cmp_bl,
+                                                        write_bl, false);
+  }
+
   uint64_t when_append_io_event(MockJournalImageCtx &mock_image_ctx,
                                 MockJournal *mock_journal,
                                 int filter_ret_val) {
@@ -1109,6 +1122,51 @@ TEST_F(TestMockJournal, AppendWriteEvent) {
   expect_append_journaler(mock_journaler);
   expect_wait_future(mock_future, &on_journal_safe);
   ASSERT_EQ(1U, when_append_write_event(mock_image_ctx, mock_journal, 1 << 17));
+  mock_journal->get_work_queue()->drain();
+
+  on_journal_safe->complete(0);
+  C_SaferCond event_ctx;
+  mock_journal->wait_event(1U, &event_ctx);
+  ASSERT_EQ(0, event_ctx.wait());
+
+  expect_future_committed(mock_journaler);
+  expect_future_committed(mock_journaler);
+  expect_future_committed(mock_journaler);
+  mock_journal->commit_io_event(1U, 0);
+  ictx->op_work_queue->drain();
+
+  expect_shut_down_journaler(mock_journaler);
+}
+
+TEST_F(TestMockJournal, AppendCompareAndWriteEvent) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockJournalImageCtx mock_image_ctx(*ictx);
+  MockJournal *mock_journal = new MockJournal(mock_image_ctx);
+  MockObjectDispatch mock_object_dispatch;
+  ::journal::MockJournaler mock_journaler;
+  MockJournalOpenRequest mock_open_request;
+  open_journal(mock_image_ctx, mock_journal, mock_object_dispatch,
+               mock_journaler, mock_open_request);
+  BOOST_SCOPE_EXIT_ALL(&) {
+    close_journal(mock_image_ctx, mock_journal, mock_journaler);
+    mock_journal->put();
+  };
+
+  InSequence seq;
+
+  ::journal::MockFuture mock_future;
+  Context *on_journal_safe = nullptr;
+  expect_append_journaler(mock_journaler);
+  expect_append_journaler(mock_journaler);
+  expect_append_journaler(mock_journaler);
+  expect_wait_future(mock_future, &on_journal_safe);
+  ASSERT_EQ(1U, when_append_compare_and_write_event(mock_image_ctx,
+                                                    mock_journal,
+                                                    1 << 16));
   mock_journal->get_work_queue()->drain();
 
   on_journal_safe->complete(0);

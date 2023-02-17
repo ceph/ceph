@@ -45,11 +45,16 @@ Enable Cache
 
 To enable the PWL cache, set the following configuration settings::
 
-        rbd persistent cache mode = {cache-mode}
-        rbd plugins = pwl_cache
+        rbd_persistent_cache_mode = {cache-mode}
+        rbd_plugins = pwl_cache
 
 Value of {cache-mode} can be ``rwl``, ``ssd`` or ``disabled``. By default the
 cache is disabled.
+
+The ``rwl`` cache mode depends on libpmem library (part of PMDK). It should
+be universally available on x86_64 architecture and may also be available on
+ppc64le and aarch64 architectures on some distributions. It is not available
+on s390x architecture.
 
 Here are some cache configuration settings:
 
@@ -59,10 +64,6 @@ Here are some cache configuration settings:
 
 - ``rbd_persistent_cache_size`` The cache size per image. The minimum cache
   size is 1 GB.
-
-- ``rbd_persistent_cache_log_periodic_stats`` This is a debug option. It is
-  used to emit periodic perf stats to the debug log if ``debug rbd pwl`` is
-  set to ``1`` or higher.
 
 The above configurations can be set per-host, per-pool, per-image etc. Eg, to
 set per-host, add the overrides to the appropriate `section`_ in the host's
@@ -79,30 +80,59 @@ users may use the command ``rbd status``.  ::
         rbd status {pool-name}/{image-name}
 
 The status of the cache is shown, including present, clean, cache size and the
-location. Currently the status is updated only at the time the cache is opened
-and closed and therefore may appear to be out of date (e.g. show that the cache
-is clean when it is actually dirty).
+location as well as some basic metrics.
 
 For example::
 
         $ rbd status rbd/foo
-        Watchers: none
-        Image cache state: {"present":"true","empty":"false","clean":"true","cache_type":"ssd","pwl_host":"sceph9","pwl_path":"/tmp/rbd-pwl.rbd.abcdef123456.pool","pwl_size":1073741824}
+        Watchers:
+                watcher=10.10.0.102:0/1061883624 client.25496 cookie=140338056493088
+        Persistent cache state:
+                host: sceph9
+                path: /mnt/nvme0/rbd-pwl.rbd.101e5824ad9a.pool
+                size: 1 GiB
+                mode: ssd
+                stats_timestamp: Sun Apr 10 13:26:32 2022
+                present: true   empty: false    clean: false
+                allocated: 509 MiB
+                cached: 501 MiB
+                dirty: 338 MiB
+                free: 515 MiB
+                hits_full: 1450 / 61%
+                hits_partial: 0 / 0%
+                misses: 924
+                hit_bytes: 192 MiB / 66%
+                miss_bytes: 97 MiB
 
-Discard Cache
--------------
+Flush Cache
+-----------
 
-To discard a cache file with ``rbd``, specify the ``image-cache invalidate``
-option, the pool name and the image name.  ::
+To flush a cache file with ``rbd``, specify the ``persistent-cache flush``
+command, the pool name and the image name.  ::
 
-        rbd image-cache invalidate {pool-name}/{image-name}
+        rbd persistent-cache flush {pool-name}/{image-name}
 
-The command removes the cache metadata of the corresponding image, disable
+If the application dies unexpectedly, this command can also be used to flush
+the cache back to OSDs.
+
+For example::
+
+        $ rbd persistent-cache flush rbd/foo
+
+Invalidate Cache
+----------------
+
+To invalidate (discard) a cache file with ``rbd``, specify the
+``persistent-cache invalidate`` command, the pool name and the image name.  ::
+
+        rbd persistent-cache invalidate {pool-name}/{image-name}
+
+The command removes the cache metadata of the corresponding image, disables
 the cache feature and deletes the local cache file if it exists.
 
 For example::
 
-        $ rbd image-cache invalidate rbd/foo
+        $ rbd persistent-cache invalidate rbd/foo
 
 .. _section: ../../rados/configuration/ceph-conf/#configuration-sections
 .. _commands: ../../man/8/rbd#commands

@@ -42,5 +42,5 @@ target_link_libraries(mon
   heap_profiler
   fmt::fmt)
 if(WITH_JAEGER)
-  target_link_libraries(mon ${jaeger_base})
+  target_link_libraries(mon jaeger_base)
 endif()

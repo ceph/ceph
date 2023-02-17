@@ -10,7 +10,6 @@ from ceph_volume.api import lvm as api
 from ceph_volume.util import system, encryption, disk, arg_validators, str_to_int, merge_dict
 from ceph_volume.util.device import Device
 from ceph_volume.systemd import systemctl
-from ceph_volume.devices.lvm.common import valid_osd_id
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
@@ -169,10 +168,11 @@ class Zap(object):
         """
         lv = api.get_single_lv(filters={'lv_name': device.lv_name, 'vg_name':
                                         device.vg_name})
+        pv = api.get_single_pv(filters={'lv_uuid': lv.lv_uuid})
         self.unmount_lv(lv)
 
-        wipefs(device.abspath)
-        zap_data(device.abspath)
+        wipefs(device.path)
+        zap_data(device.path)
 
         if self.args.destroy:
             lvs = api.get_lvs(filters={'vg_name': device.vg_name})
@@ -183,12 +183,13 @@ class Zap(object):
                 mlogger.info('Only 1 LV left in VG, will proceed to destroy '
                              'volume group %s', device.vg_name)
                 api.remove_vg(device.vg_name)
+                api.remove_pv(pv.pv_name)
             else:
                 mlogger.info('More than 1 LV left in VG, will proceed to '
                              'destroy LV only')
                 mlogger.info('Removing LV because --destroy was given: %s',
-                             device.abspath)
-                api.remove_lv(device.abspath)
+                             device.path)
+                api.remove_lv(device.path)
         elif lv:
             # just remove all lvm metadata, leaving the LV around
             lv.clear_tags()
@@ -208,15 +209,15 @@ class Zap(object):
                 if os.path.realpath(mapper_path) in holders:
                     self.dmcrypt_close(mapper_uuid)
 
-        if system.device_is_mounted(device.abspath):
-            mlogger.info("Unmounting %s", device.abspath)
-            system.unmount(device.abspath)
+        if system.device_is_mounted(device.path):
+            mlogger.info("Unmounting %s", device.path)
+            system.unmount(device.path)
 
-        wipefs(device.abspath)
-        zap_data(device.abspath)
+        wipefs(device.path)
+        zap_data(device.path)
 
         if self.args.destroy:
-            mlogger.info("Destroying partition since --destroy was used: %s" % device.abspath)
+            mlogger.info("Destroying partition since --destroy was used: %s" % device.path)
             disk.remove_partition(device)
 
     def zap_lvm_member(self, device):
@@ -229,7 +230,7 @@ class Zap(object):
         """
         for lv in device.lvs:
             if lv.lv_name:
-                mlogger.info('Zapping lvm member {}. lv_path is {}'.format(device.abspath, lv.lv_path))
+                mlogger.info('Zapping lvm member {}. lv_path is {}'.format(device.path, lv.lv_path))
                 self.zap_lv(Device(lv.lv_path))
             else:
                 vg = api.get_single_vg(filters={'vg_name': lv.vg_name})
@@ -258,16 +259,16 @@ class Zap(object):
         for part_name in device.sys_api.get('partitions', {}).keys():
             self.zap_partition(Device('/dev/%s' % part_name))
 
-        wipefs(device.abspath)
-        zap_data(device.abspath)
+        wipefs(device.path)
+        zap_data(device.path)
 
     @decorators.needs_root
     def zap(self, devices=None):
         devices = devices or self.args.devices
 
         for device in devices:
-            mlogger.info("Zapping: %s", device.abspath)
-            if device.is_mapper:
+            mlogger.info("Zapping: %s", device.path)
+            if device.is_mapper and not device.is_mpath:
                 terminal.error("Refusing to zap the mapper device: {}".format(device))
                 raise SystemExit(1)
             if device.is_lvm_member:
@@ -363,7 +364,7 @@ class Zap(object):
             'devices',
             metavar='DEVICES',
             nargs='*',
-            type=arg_validators.ValidDevice(gpt_ok=True),
+            type=arg_validators.ValidZapDevice(gpt_ok=True),
             default=[],
             help='Path to one or many lv (as vg/lv), partition (as /dev/sda1) or device (as /dev/sda)'
         )
@@ -377,7 +378,7 @@ class Zap(object):
 
         parser.add_argument(
             '--osd-id',
-            type=valid_osd_id,
+            type=arg_validators.valid_osd_id,
             help='Specify an OSD ID to detect associated devices for zapping',
         )
 

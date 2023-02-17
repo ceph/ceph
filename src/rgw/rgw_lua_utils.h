@@ -1,12 +1,15 @@
 #pragma once
 
+#include <string.h>
 #include <memory>
+#include <map>
 #include <string>
 #include <string_view>
 #include <ctime>
 #include <lua.hpp>
 
 #include "include/common_fwd.h"
+#include "rgw_perf_counters.h"
 
 namespace rgw::lua {
 
@@ -38,16 +41,34 @@ void stack_dump(lua_State* L);
 class lua_state_guard {
   lua_State* l;
 public:
-  lua_state_guard(lua_State* _l) : l(_l) {}
-  ~lua_state_guard() {lua_close(l);}
+  lua_state_guard(lua_State* _l) : l(_l) {
+    if (perfcounter) {
+      perfcounter->inc(l_rgw_lua_current_vms, 1);
+    }
+  }
+  ~lua_state_guard() {
+    lua_close(l);
+    if (perfcounter) {
+      perfcounter->dec(l_rgw_lua_current_vms, 1);
+    }
+  }
   void reset(lua_State* _l=nullptr) {l = _l;}
 };
+
+constexpr const int MAX_LUA_VALUE_SIZE = 1000;
+constexpr const int MAX_LUA_KEY_ENTRIES = 100000;
 
 constexpr auto ONE_UPVAL    = 1;
 constexpr auto TWO_UPVALS   = 2;
 constexpr auto THREE_UPVALS = 3;
 constexpr auto FOUR_UPVALS  = 4;
 constexpr auto FIVE_UPVALS  = 5;
+
+constexpr auto FIRST_UPVAL    = 1;
+constexpr auto SECOND_UPVAL   = 2;
+constexpr auto THIRD_UPVAL    = 3;
+constexpr auto FOURTH_UPVAL   = 4;
+constexpr auto FIFTH_UPVAL    = 5;
 
 constexpr auto NO_RETURNVAL    = 0;
 constexpr auto ONE_RETURNVAL    = 1;
@@ -79,12 +100,12 @@ constexpr auto FOUR_RETURNVALS  = 4;
 //   using Type = MyStruct;
 //
 //   static int IndexClosure(lua_State* L) {
-//     const auto value = reinterpret_cast<const Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+//     const auto value = reinterpret_cast<const Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 //     ...
 //   }
 
 //   static int NewIndexClosure(lua_State* L) {
-//     auto value = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+//     auto value = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 //     ...
 //   }
 // };
@@ -193,5 +214,102 @@ void set_package_path(lua_State* L, const std::string& install_dir);
 // and the "debug" library
 void open_standard_libs(lua_State* L);
 
+typedef int MetaTableClosure(lua_State* L);
+
+template<typename MapType=std::map<std::string, std::string>>
+int StringMapWriteableNewIndex(lua_State* L) {
+  const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+
+  const char* index = luaL_checkstring(L, 2);
+
+  if (lua_isnil(L, 3) == 0) {
+    const char* value = luaL_checkstring(L, 3);
+    if (strnlen(value, MAX_LUA_VALUE_SIZE) + strnlen(index, MAX_LUA_VALUE_SIZE)
+        > MAX_LUA_VALUE_SIZE) {
+      return luaL_error(L, "Lua maximum size of entry limit exceeded");
+    } else if (map->size() > MAX_LUA_KEY_ENTRIES) {
+      return luaL_error(L, "Lua max number of entries limit exceeded");
+    } else {
+      map->insert_or_assign(index, value);
+    }
+  } else {
+    map->erase(std::string(index));
+  }
+
+  return NO_RETURNVAL;
 }
+
+template<typename MapType=std::map<std::string, std::string>,
+  MetaTableClosure NewIndex=EmptyMetaTable::NewIndexClosure>
+struct StringMapMetaTable : public EmptyMetaTable {
+
+  static std::string TableName() {return "StringMap";}
+  static std::string Name() {return TableName() + "Meta";}
+
+  static int IndexClosure(lua_State* L) {
+    const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+
+    const char* index = luaL_checkstring(L, 2);
+
+    const auto it = map->find(std::string(index));
+    if (it == map->end()) {
+      lua_pushnil(L);
+    } else {
+        pushstring(L, it->second);
+    }
+    return ONE_RETURNVAL;
+  }
+
+  static int NewIndexClosure(lua_State* L) {
+    return NewIndex(L);
+  }
+
+  static int PairsClosure(lua_State* L) {
+    auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    ceph_assert(map);
+    lua_pushlightuserdata(L, map);
+    lua_pushcclosure(L, stateless_iter, ONE_UPVAL); // push the stateless iterator function
+    lua_pushnil(L);                                 // indicate this is the first call
+    // return stateless_iter, nil
+
+    return TWO_RETURNVALS;
+  }
+  
+  static int stateless_iter(lua_State* L) {
+    // based on: http://lua-users.org/wiki/GeneralizedPairsAndIpairs
+    auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    typename MapType::const_iterator next_it;
+    if (lua_isnil(L, -1)) {
+      next_it = map->begin();
+    } else {
+      const char* index = luaL_checkstring(L, 2);
+      const auto it = map->find(std::string(index));
+      ceph_assert(it != map->end());
+      next_it = std::next(it);
+    }
+
+    if (next_it == map->end()) {
+      // index of the last element was provided
+      lua_pushnil(L);
+      lua_pushnil(L);
+      // return nil, nil
+    } else {
+      pushstring(L, next_it->first);
+      pushstring(L, next_it->second);
+      // return key, value
+    }
+
+    return TWO_RETURNVALS;
+  }
+
+  static int LenClosure(lua_State* L) {
+    const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+
+    lua_pushinteger(L, map->size());
+
+    return ONE_RETURNVAL;
+  }
+};
+
+} // namespace rgw::lua
 

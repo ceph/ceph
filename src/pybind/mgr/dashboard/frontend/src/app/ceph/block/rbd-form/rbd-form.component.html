@@ -66,9 +66,10 @@
                    *ngIf="mode === 'editing' || !poolPermission.read">
             <select id="pool"
                     name="pool"
-                    class="form-control custom-select"
+                    class="form-select"
                     formControlName="pool"
-                    *ngIf="mode !== 'editing' && poolPermission.read">
+                    *ngIf="mode !== 'editing' && poolPermission.read"
+                    (change)="setPoolMirrorMode()">
               <option *ngIf="pools === null"
                       [ngValue]="null"
                       i18n>Loading...</option>
@@ -110,7 +111,7 @@
                    *ngIf="mode === 'editing' || !poolPermission.read">
             <select id="namespace"
                     name="namespace"
-                    class="form-control custom-select"
+                    class="form-select"
                     formControlName="namespace"
                     *ngIf="mode !== 'editing' && poolPermission.read">
               <option *ngIf="pools === null"
@@ -169,7 +170,7 @@
                    *ngIf="mode === 'editing' || !poolPermission.read">
             <select id="dataPool"
                     name="dataPool"
-                    class="form-control custom-select"
+                    class="form-select"
                     formControlName="dataPool"
                     (change)="onDataPoolChange($event.target.value)"
                     *ngIf="mode !== 'editing' && poolPermission.read">
@@ -238,10 +239,66 @@
           </div>
         </div>
 
+        <!-- Mirroring -->
+        <div class="form-group row">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     id="mirroring"
+                     name="mirroring"
+                     (change)="setMirrorMode()"
+                     formControlName="mirroring">
+              <label class="custom-control-label"
+                     for="mirroring">Mirroring</label>
+              <cd-helper *ngIf="mirroring === false && this.currentPoolName">
+                <span i18n>You need to enable a <b>mirror mode</b> in the selected pool. Please <a [routerLink]="['/block/mirroring', {outlets: {modal: ['edit', currentPoolName]}}]">click here to select a mode and enable it in this pool.</a></span>
+              </cd-helper>
+            </div>
+            <div *ngIf="mirroring">
+              <div class="custom-control custom-radio ms-2"
+                   *ngFor="let option of mirroringOptions">
+                <input type="radio"
+                       class="form-check-input"
+                       [id]="option"
+                       [value]="option"
+                       name="mirroringMode"
+                       (change)="setExclusiveLock()"
+                       formControlName="mirroringMode"
+                       [attr.disabled]="(poolMirrorMode === 'pool' && option === 'snapshot') ? true : null">
+                <label class="form-check-label"
+                       [for]="option">{{ option | titlecase }}</label>
+                <cd-helper *ngIf="poolMirrorMode === 'pool' && option === 'snapshot'">
+                  <span i18n>You need to enable <b>image mirror mode</b> in the selected pool. Please <a [routerLink]="['/block/mirroring', {outlets: {modal: ['edit', currentPoolName]}}]">click here to select a mode and enable it in this pool.</a></span>
+                </cd-helper>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="rbdForm.getValue('mirroringMode') === 'snapshot' && mirroring">
+          <label class="cd-col-form-label"
+                 i18n>Schedule Interval
+          <cd-helper i18n-html
+                     html="Create Mirror-Snapshots automatically on a periodic basis. The interval can be specified in days, hours, or minutes using d, h, m suffix respectively. To create mirror snapshots, you must import or create and have available peers to mirror">
+          </cd-helper></label>
+          <div class="cd-col-form-input">
+            <input id="schedule"
+                   name="schedule"
+                   class="form-control"
+                   type="text"
+                   formControlName="schedule"
+                   i18n-placeholder
+                   placeholder="e.g., 12h or 1d or 10m"
+                   [attr.disabled]="(peerConfigured === false) ? true : null">
+          </div>
+        </div>
+
         <!-- Advanced -->
         <div class="row">
           <div class="col-sm-12">
-            <a class="float-right margin-right-md"
+            <a class="float-end margin-right-md"
                (click)="advancedEnabled = true; false"
                *ngIf="!advancedEnabled"
                href=""
@@ -262,11 +319,11 @@
             <div class="form-group row">
               <label i18n
                      class="cd-col-form-label"
-                     for="size">Object size</label>
+                     for="size">Object size<cd-helper>Objects in the Ceph Storage Cluster have a maximum configurable size (e.g., 2MB, 4MB, etc.). The object size should be large enough to accommodate many stripe units, and should be a multiple of the stripe unit.</cd-helper></label>
               <div class="cd-col-form-input">
                 <select id="obj_size"
                         name="obj_size"
-                        class="form-control custom-select"
+                        class="form-select"
                         formControlName="obj_size">
                   <option *ngFor="let objectSize of objectSizes"
                           [value]="objectSize">{{ objectSize }}</option>
@@ -279,11 +336,11 @@
               <label class="cd-col-form-label"
                      [ngClass]="{'required': rbdForm.getValue('stripingCount')}"
                      for="stripingUnit"
-                     i18n>Stripe unit</label>
+                     i18n>Stripe unit<cd-helper>Stripes have a configurable unit size (e.g., 64kb). The Ceph Client divides the data it will write to objects into equally sized stripe units, except for the last stripe unit. A stripe width, should be a fraction of the Object Size so that an object may contain many stripe units.</cd-helper></label>
               <div class="cd-col-form-input">
                 <select id="stripingUnit"
                         name="stripingUnit"
-                        class="form-control custom-select"
+                        class="form-select"
                         formControlName="stripingUnit">
                   <option i18n
                           [ngValue]="null">-- Select stripe unit --</option>
@@ -304,7 +361,7 @@
               <label class="cd-col-form-label"
                      [ngClass]="{'required': rbdForm.getValue('stripingUnit')}"
                      for="stripingCount"
-                     i18n>Stripe count</label>
+                     i18n>Stripe count<cd-helper>The Ceph Client writes a sequence of stripe units over a series of objects determined by the stripe count. The series of objects is called an object set. After the Ceph Client writes to the last object in the object set, it returns to the first object in the object set.</cd-helper></label>
               <div class="cd-col-form-input">
                 <input id="stripingCount"
                        name="stripingCount"

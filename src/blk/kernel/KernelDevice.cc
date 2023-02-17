@@ -19,13 +19,20 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/file.h>
+#include <sys/mman.h>
+
+#include <boost/container/flat_map.hpp>
+#include <boost/lockfree/queue.hpp>
 
 #include "KernelDevice.h"
+#include "include/buffer_raw.h"
 #include "include/intarith.h"
 #include "include/types.h"
 #include "include/compat.h"
 #include "include/stringify.h"
+#include "include/str_map.h"
 #include "common/blkdev.h"
+#include "common/buffer_instrumentation.h"
 #include "common/errno.h"
 #if defined(__FreeBSD__)
 #include "bsm/audit_errno.h"
@@ -126,8 +133,25 @@ int KernelDevice::open(const string& p)
   int r = 0, i = 0;
   dout(1) << __func__ << " path " << path << dendl;
 
+  struct stat statbuf;
+  bool is_block;
+  r = stat(path.c_str(), &statbuf);
+  if (r != 0) {
+    derr << __func__ << " stat got: " << cpp_strerror(r) << dendl;
+    goto out_fail;
+  }
+  is_block = (statbuf.st_mode & S_IFMT) == S_IFBLK;
   for (i = 0; i < WRITE_LIFE_MAX; i++) {
-    int fd = ::open(path.c_str(), O_RDWR | O_DIRECT);
+    int flags = 0;
+    if (lock_exclusive && is_block && (i == 0)) {
+      // If opening block device use O_EXCL flag. It gives us best protection,
+      // as no other process can overwrite the data for as long as we are running.
+      // For block devices ::flock is not enough,
+      // since 2 different inodes with same major/minor can be locked.
+      // Exclusion by O_EXCL works in containers too.
+      flags |= O_EXCL;
+    }
+    int fd = ::open(path.c_str(), O_RDWR | O_DIRECT | flags);
     if (fd  < 0) {
       r = -errno;
       break;
@@ -180,6 +204,10 @@ int KernelDevice::open(const string& p)
   }
 
   if (lock_exclusive) {
+    // We need to keep soft locking (via flock()) because O_EXCL does not work for regular files.
+    // This is as good as we can get. Other processes can still overwrite the data,
+    // but at least we are protected from mounting same device twice in ceph processes.
+    // We also apply soft locking for block devices, as it populates /proc/locks. (see lslocks)
     r = _lock();
     if (r < 0) {
       derr << __func__ << " failed to lock " << path << ": " << cpp_strerror(r)
@@ -235,7 +263,12 @@ int KernelDevice::open(const string& p)
       support_discard = blkdev_buffered.support_discard();
       optimal_io_size = blkdev_buffered.get_optimal_io_size();
       this->devname = devname;
-      _detect_vdo();
+      // check if any extended block device plugin recognizes this device
+      // detect_vdo has moved into the VDO plugin
+      int rc = extblkdev::detect_device(cct, devname, ebd_impl);
+      if (rc != 0) {
+	dout(20) << __func__ << " no plugin volume maps to " << devname << dendl;
+      }
     }
   }
 
@@ -248,7 +281,9 @@ int KernelDevice::open(const string& p)
   if (r < 0) {
     goto out_fail;
   }
-  _discard_start();
+  if (support_discard && cct->_conf->bdev_enable_discard && cct->_conf->bdev_async_discard) {
+    _discard_start();
+  }
 
   // round size down to an even block
   size &= ~(block_size - 1);
@@ -259,7 +294,7 @@ int KernelDevice::open(const string& p)
 	  << byte_u_t(size) << ")"
 	  << " block_size " << block_size
 	  << " (" << byte_u_t(block_size) << ")"
-	  << " " << (rotational ? "rotational" : "non-rotational")
+	  << " " << (rotational ? "rotational device," : "non-rotational device,")
       << " discard " << (support_discard ? "supported" : "not supported")
 	  << dendl;
   return 0;
@@ -295,13 +330,12 @@ void KernelDevice::close()
 {
   dout(1) << __func__ << dendl;
   _aio_stop();
-  _discard_stop();
+  if (discard_thread.is_started()) {
+    _discard_stop();
+  }
   _pre_close();
 
-  if (vdo_fd >= 0) {
-    VOID_TEMP_FAILURE_RETRY(::close(vdo_fd));
-    vdo_fd = -1;
-  }
+  extblkdev::release_device(ebd_impl);
 
   for (int i = 0; i < WRITE_LIFE_MAX; i++) {
     assert(fd_directs[i] >= 0);
@@ -328,11 +362,10 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   } else {
     (*pm)[prefix + "type"] = "ssd";
   }
-  if (vdo_fd >= 0) {
-    (*pm)[prefix + "vdo"] = "true";
-    uint64_t total, avail;
-    get_vdo_utilization(vdo_fd, &total, &avail);
-    (*pm)[prefix + "vdo_physical_size"] = stringify(total);
+  // if compression device detected, collect meta data for device
+  // VDO specific meta data has moved into VDO plugin
+  if (ebd_impl) {
+    ebd_impl->collect_metadata(prefix, pm);
   }
 
   {
@@ -400,24 +433,14 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   return 0;
 }
 
-void KernelDevice::_detect_vdo()
+int KernelDevice::get_ebd_state(ExtBlkDevState &state) const
 {
-  vdo_fd = get_vdo_stats_handle(devname.c_str(), &vdo_name);
-  if (vdo_fd >= 0) {
-    dout(1) << __func__ << " VDO volume " << vdo_name
-	    << " maps to " << devname << dendl;
-  } else {
-    dout(20) << __func__ << " no VDO volume maps to " << devname << dendl;
+  // use compression driver plugin to determine physical size and availability
+  // VDO specific get_thin_utilization has moved into VDO plugin
+  if (ebd_impl) {
+    return ebd_impl->get_state(state);
   }
-  return;
-}
-
-bool KernelDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
-{
-  if (vdo_fd < 0) {
-    return false;
-  }
-  return get_vdo_utilization(vdo_fd, total, avail);
+  return -ENOENT;
 }
 
 int KernelDevice::choose_fd(bool buffered, int write_hint) const
@@ -507,10 +530,9 @@ void KernelDevice::_aio_stop()
   }
 }
 
-int KernelDevice::_discard_start()
+void KernelDevice::_discard_start()
 {
     discard_thread.create("bstore_discard");
-    return 0;
 }
 
 void KernelDevice::_discard_stop()
@@ -697,7 +719,7 @@ void KernelDevice::_discard_thread()
       l.unlock();
       dout(20) << __func__ << " finishing" << dendl;
       for (auto p = discard_finishing.begin();p != discard_finishing.end(); ++p) {
-	discard(p.get_start(), p.get_len());
+	_discard(p.get_start(), p.get_len());
       }
 
       discard_callback(discard_callback_priv, static_cast<void*>(&discard_finishing));
@@ -710,9 +732,10 @@ void KernelDevice::_discard_thread()
   discard_started = false;
 }
 
-int KernelDevice::queue_discard(interval_set<uint64_t> &to_release)
+int KernelDevice::_queue_discard(interval_set<uint64_t> &to_release)
 {
-  if (!support_discard)
+  // if bdev_async_discard enabled on the fly, discard_thread is not started here, fallback to sync discard
+  if (!discard_thread.is_started())
     return -1;
 
   if (to_release.empty())
@@ -722,6 +745,23 @@ int KernelDevice::queue_discard(interval_set<uint64_t> &to_release)
   discard_queued.insert(to_release);
   discard_cond.notify_all();
   return 0;
+}
+
+// return true only if _queue_discard succeeded, so caller won't have to do alloc->release
+// otherwise false
+bool KernelDevice::try_discard(interval_set<uint64_t> &to_release, bool async)
+{
+  if (!support_discard || !cct->_conf->bdev_enable_discard)
+    return false;
+
+  if (async && discard_thread.is_started()) {
+    return 0 == _queue_discard(to_release);
+  } else {
+    for (auto p = to_release.begin(); p != to_release.end(); ++p) {
+      _discard(p.get_start(), p.get_len());
+    }
+  }
+  return false;
 }
 
 void KernelDevice::_aio_log_start(
@@ -1023,7 +1063,7 @@ int KernelDevice::aio_write(
   return 0;
 }
 
-int KernelDevice::discard(uint64_t offset, uint64_t len)
+int KernelDevice::_discard(uint64_t offset, uint64_t len)
 {
   int r = 0;
   if (cct->_conf->objectstore_blackhole) {
@@ -1031,14 +1071,175 @@ int KernelDevice::discard(uint64_t offset, uint64_t len)
 	       << dendl;
     return 0;
   }
-  if (support_discard) {
-      dout(10) << __func__
-	       << " 0x" << std::hex << offset << "~" << len << std::dec
-	       << dendl;
-
-      r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
-  }
+  dout(10) << __func__
+	   << " 0x" << std::hex << offset << "~" << len << std::dec
+	   << dendl;
+  r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
   return r;
+}
+
+struct ExplicitHugePagePool {
+  using region_queue_t = boost::lockfree::queue<void*>;
+  using instrumented_raw = ceph::buffer_instrumentation::instrumented_raw<
+    BlockDevice::hugepaged_raw_marker_t>;
+
+  struct mmaped_buffer_raw : public instrumented_raw {
+    region_queue_t& region_q; // for recycling
+
+    mmaped_buffer_raw(void* mmaped_region, ExplicitHugePagePool& parent)
+      : instrumented_raw(static_cast<char*>(mmaped_region), parent.buffer_size),
+	region_q(parent.region_q) {
+      // the `mmaped_region` has been passed to `raw` as the buffer's `data`
+    }
+    ~mmaped_buffer_raw() override {
+      // don't delete nor unmmap; recycle the region instead
+      region_q.push(data);
+    }
+  };
+
+  ExplicitHugePagePool(const size_t buffer_size, size_t buffers_in_pool)
+    : buffer_size(buffer_size), region_q(buffers_in_pool) {
+    while (buffers_in_pool--) {
+      void* const mmaped_region = ::mmap(
+        nullptr,
+        buffer_size,
+        PROT_READ | PROT_WRITE,
+#if defined(__FreeBSD__)
+        // FreeBSD doesn't have MAP_HUGETLB nor MAP_POPULATE but it has
+        // a different, more automated / implicit mechanisms. However,
+        // we want to mimic the Linux behavior as closely as possible
+        // also in the matter of error handling which is the reason
+        // behind MAP_ALIGNED_SUPER.
+        // See: https://lists.freebsd.org/pipermail/freebsd-questions/2014-August/260578.html
+        MAP_PRIVATE | MAP_ANONYMOUS | MAP_PREFAULT_READ | MAP_ALIGNED_SUPER,
+#else
+        MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB,
+#endif // __FreeBSD__
+        -1,
+        0);
+      if (mmaped_region == MAP_FAILED) {
+        ceph_abort("can't allocate huge buffer;"
+                   " /proc/sys/vm/nr_hugepages misconfigured?");
+      } else {
+        region_q.push(mmaped_region);
+      }
+    }
+  }
+  ~ExplicitHugePagePool() {
+    void* mmaped_region;
+    while (region_q.pop(mmaped_region)) {
+      ::munmap(mmaped_region, buffer_size);
+    }
+  }
+
+  ceph::unique_leakable_ptr<buffer::raw> try_create() {
+    if (void* mmaped_region; region_q.pop(mmaped_region)) {
+      return ceph::unique_leakable_ptr<buffer::raw> {
+	new mmaped_buffer_raw(mmaped_region, *this)
+      };
+    } else {
+      // oops, empty queue.
+      return nullptr;
+    }
+  }
+
+  size_t get_buffer_size() const {
+    return buffer_size;
+  }
+
+private:
+  const size_t buffer_size;
+  region_queue_t region_q;
+};
+
+struct HugePagePoolOfPools {
+  HugePagePoolOfPools(const std::map<size_t, size_t> conf)
+    : pools(conf.size(), [conf] (size_t index, auto emplacer) {
+        ceph_assert(index < conf.size());
+        // it could be replaced with a state-mutating lambda and
+        // `conf::erase()` but performance is not a concern here.
+        const auto [buffer_size, buffers_in_pool] =
+          *std::next(std::begin(conf), index);
+        emplacer.emplace(buffer_size, buffers_in_pool);
+      }) {
+  }
+
+  ceph::unique_leakable_ptr<buffer::raw> try_create(const size_t size) {
+    // thankfully to `conf` being a `std::map` we store the pools
+    // sorted by buffer sizes. this would allow to clamp to log(n)
+    // but I doubt admins want to have dozens of accelerated buffer
+    // size. let's keep this simple for now.
+    if (auto iter = std::find_if(std::begin(pools), std::end(pools),
+                                 [size] (const auto& pool) {
+                                   return size == pool.get_buffer_size();
+                                 });
+        iter != std::end(pools)) {
+      return iter->try_create();
+    }
+    return nullptr;
+  }
+
+  static HugePagePoolOfPools from_desc(const std::string& conf);
+
+private:
+  // let's have some space inside (for 2 MB and 4 MB perhaps?)
+  // NOTE: we need tiny_vector as the boost::lockfree queue inside
+  // pool is not-movable.
+  ceph::containers::tiny_vector<ExplicitHugePagePool, 2> pools;
+};
+
+
+HugePagePoolOfPools HugePagePoolOfPools::from_desc(const std::string& desc) {
+  std::map<size_t, size_t> conf; // buffer_size -> buffers_in_pool
+  std::map<std::string, std::string> exploded_str_conf;
+  get_str_map(desc, &exploded_str_conf);
+  for (const auto& [buffer_size_s, buffers_in_pool_s] : exploded_str_conf) {
+    size_t buffer_size, buffers_in_pool;
+    if (sscanf(buffer_size_s.c_str(), "%zu", &buffer_size) != 1) {
+      ceph_abort("can't parse a key in the configuration");
+    }
+    if (sscanf(buffers_in_pool_s.c_str(), "%zu", &buffers_in_pool) != 1) {
+      ceph_abort("can't parse a value in the configuration");
+    }
+    conf[buffer_size] = buffers_in_pool;
+  }
+  return HugePagePoolOfPools{std::move(conf)};
+}
+
+// create a buffer basing on user-configurable. it's intended to make
+// our buffers THP-able.
+ceph::unique_leakable_ptr<buffer::raw> KernelDevice::create_custom_aligned(
+  const size_t len,
+  IOContext* const ioc) const
+{
+  // just to preserve the logic of create_small_page_aligned().
+  if (len < CEPH_PAGE_SIZE) {
+    return ceph::buffer::create_small_page_aligned(len);
+  } else {
+    static HugePagePoolOfPools hp_pools = HugePagePoolOfPools::from_desc(
+      cct->_conf.get_val<std::string>("bdev_read_preallocated_huge_buffers")
+    );
+    if (auto lucky_raw = hp_pools.try_create(len); lucky_raw) {
+      dout(20) << __func__ << " allocated from huge pool"
+	       << " lucky_raw.data=" << (void*)lucky_raw->get_data()
+	       << " bdev_read_preallocated_huge_buffers="
+	       << cct->_conf.get_val<std::string>("bdev_read_preallocated_huge_buffers")
+	       << dendl;
+      ioc->flags |= IOContext::FLAG_DONT_CACHE;
+      return lucky_raw;
+    } else {
+      // fallthrough due to empty buffer pool. this can happen also
+      // when the configurable was explicitly set to 0.
+      dout(20) << __func__ << " cannot allocate from huge pool"
+               << dendl;
+    }
+  }
+  const size_t custom_alignment = cct->_conf->bdev_read_buffer_alignment;
+  dout(20) << __func__ << " with the custom alignment;"
+           << " len=" << len
+           << " custom_alignment=" << custom_alignment
+           << dendl;
+  return ceph::buffer::create_aligned(len, custom_alignment);
 }
 
 int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
@@ -1054,7 +1255,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 
   auto start1 = mono_clock::now();
 
-  auto p = ceph::buffer::ptr_node::create(ceph::buffer::create_small_page_aligned(len));
+  auto p = ceph::buffer::ptr_node::create(create_custom_aligned(len, ioc));
   int r = ::pread(choose_fd(buffered,  WRITE_LIFE_NOT_SET),
 		  p->c_str(), len, off);
   auto age = cct->_conf->bdev_debug_aio_log_age;
@@ -1067,7 +1268,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 	 << "s" << dendl;
   }
   if (r < 0) {
-    if (ioc->allow_eio && is_expected_ioerr(r)) {
+    if (ioc->allow_eio && is_expected_ioerr(-errno)) {
       r = -EIO;
     } else {
       r = -errno;
@@ -1106,7 +1307,7 @@ int KernelDevice::aio_read(
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     aio.bl.push_back(
-      ceph::buffer::ptr_node::create(ceph::buffer::create_small_page_aligned(len)));
+      ceph::buffer::ptr_node::create(create_custom_aligned(len, ioc)));
     aio.bl.prepare_iov(&aio.iov);
     aio.preadv(off, len);
     dout(30) << aio << dendl;

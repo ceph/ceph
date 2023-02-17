@@ -294,7 +294,7 @@ class StringKVInnerNodeLayout {
   friend class delta_inner_t;
 public:
   template <bool is_const>
-  class iter_t : public std::iterator<std::input_iterator_tag, StringKVInnerNodeLayout> {
+  class iter_t {
     friend class StringKVInnerNodeLayout;
 
     template <typename iterator, typename const_iterator>
@@ -312,6 +312,12 @@ public:
       uint16_t index) : node(parent), index(index) {}
 
   public:
+    using iterator_category = std::input_iterator_tag;
+    using value_type = StringKVInnerNodeLayout;
+    using difference_type = std::ptrdiff_t;
+    using pointer = StringKVInnerNodeLayout*;
+    using reference = iter_t&;
+
     iter_t(const iter_t &) = default;
     iter_t(iter_t &&) = default;
     iter_t &operator=(const iter_t &) = default;
@@ -322,7 +328,6 @@ public:
       return iter_t<!is_const>(node, index);
     }
 
-    using reference = iter_t&;
     iter_t &operator*() { return *this; }
     iter_t *operator->() { return this; }
 
@@ -372,13 +377,9 @@ public:
       return index > rhs.index;
     }
 
-    bool operator==(const iter_t &rhs) const {
-      assert(node == rhs.node);
-      return rhs.index == index;
-    }
-
-    bool operator!=(const iter_t &rhs) const {
-      return !(*this == rhs);
+    friend bool operator==(const iter_t &lhs, const iter_t &rhs) {
+      assert(lhs.node == rhs.node);
+      return lhs.index == rhs.index;
     }
 
   private:
@@ -396,7 +397,7 @@ public:
       return get_node_key().key_off;
     }
     auto get_node_val_ptr() const {
-      auto tail = node->buf + OMAP_BLOCK_SIZE;
+      auto tail = node->buf + OMAP_INNER_BLOCK_SIZE;
       if (*this == node->iter_end())
         return tail;
       else {
@@ -411,7 +412,7 @@ public:
         return (*this - 1)->get_node_val_offset();
     }
     auto get_right_ptr_end() const {
-      return node->buf + OMAP_BLOCK_SIZE - get_right_offset_end();
+      return node->buf + OMAP_INNER_BLOCK_SIZE - get_right_offset_end();
     }
 
     void update_offset(int offset) {
@@ -433,8 +434,8 @@ public:
       static_assert(!is_const);
       assert(str.size() == get_node_key().key_len);
       assert(get_node_key().key_off >= str.size());
-      assert(get_node_key().key_off < OMAP_BLOCK_SIZE);
-      assert(str.size() < OMAP_BLOCK_SIZE);
+      assert(get_node_key().key_off < OMAP_INNER_BLOCK_SIZE);
+      assert(str.size() < OMAP_INNER_BLOCK_SIZE);
       ::memcpy(get_node_val_ptr(), str.data(), str.size());
     }
 
@@ -651,13 +652,19 @@ public:
   }
 
   uint16_t capacity() const {
-    return OMAP_BLOCK_SIZE - (reinterpret_cast<char*>(layout.template Pointer<2>(buf))-
-                        reinterpret_cast<char*>(layout.template Pointer<0>(buf)));
+    return OMAP_INNER_BLOCK_SIZE
+      - (reinterpret_cast<char*>(layout.template Pointer<2>(buf))
+      - reinterpret_cast<char*>(layout.template Pointer<0>(buf)));
   }
 
   bool is_overflow(size_t ksize) const {
     return free_space() < (sizeof(omap_inner_key_le_t) + ksize);
   }
+
+  bool is_overflow(const StringKVInnerNodeLayout &rhs) const {
+    return free_space() < rhs.used_space();
+  }
+
   bool below_min() const {
     return free_space() > (capacity() / 2);
   }
@@ -1002,7 +1009,7 @@ public:
       return get_node_key().key_off;
     }
     auto get_node_val_ptr() const {
-      auto tail = node->buf + OMAP_BLOCK_SIZE;
+      auto tail = node->buf + OMAP_LEAF_BLOCK_SIZE;
       if (*this == node->iter_end())
         return tail;
       else {
@@ -1017,7 +1024,7 @@ public:
         return (*this - 1)->get_node_val_offset();
     }
     auto get_right_ptr_end() const {
-      return node->buf + OMAP_BLOCK_SIZE - get_right_offset_end();
+      return node->buf + OMAP_LEAF_BLOCK_SIZE - get_right_offset_end();
     }
 
     void update_offset(int offset) {
@@ -1257,13 +1264,19 @@ public:
   }
 
   uint32_t capacity() const {
-    return OMAP_BLOCK_SIZE - (reinterpret_cast<char*>(layout.template Pointer<2>(buf))-
-                        reinterpret_cast<char*>(layout.template Pointer<0>(buf)));
+    return OMAP_LEAF_BLOCK_SIZE
+      - (reinterpret_cast<char*>(layout.template Pointer<2>(buf))
+      - reinterpret_cast<char*>(layout.template Pointer<0>(buf)));
   }
 
   bool is_overflow(size_t ksize, size_t vsize) const {
     return free_space() < (sizeof(omap_leaf_key_le_t) + ksize + vsize);
   }
+
+  bool is_overflow(const StringKVLeafNodeLayout &rhs) const {
+    return free_space() < rhs.used_space();
+  }
+
   bool below_min() const {
     return free_space() > (capacity() / 2);
   }

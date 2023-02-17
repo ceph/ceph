@@ -72,6 +72,20 @@ def task(ctx, config):
               mount_timeout: 120 # default is 30, give up if /sys/ is not populated
         - interactive:
 
+    Example that creates and mounts a subvol:
+
+        overrides:
+          ceph:
+            subvols:
+              create: 2
+              subvol_options: "--namespace-isolated --size 25000000000"
+          ceph-fuse:
+            client.0:
+              mount_subvol_num: 0
+          kclient:
+            client.1:
+              mount_subvol_num: 1
+
     :param ctx: Context
     :param config: Configuration
     """
@@ -152,11 +166,7 @@ def task(ctx, config):
     for info in mounted_by_me.values():
         config = info["config"]
         mount_x = info['mount']
-        if config.get("mount_path"):
-            mount_x.cephfs_mntpt = config.get("mount_path")
-        if config.get("mountpoint"):
-            mount_x.hostfs_mntpt = config.get("mountpoint")
-        mount_x.mount()
+        mount_x.mount(mntopts=config.get('mntopts', []), mntargs=config.get('mntargs', []))
 
     for info in mounted_by_me.values():
         info["mount"].wait_until_mounted()

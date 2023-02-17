@@ -796,6 +796,8 @@ public:
     const health_check_map_t& previous,
     MonitorDBStore::TransactionRef t);
 
+  void update_pending_metadata();
+
 protected:
 
   class HealthCheckLogStatus {
@@ -874,7 +876,7 @@ public:
   /** can_change_external_state if we can do things like
    *  call elections as a result of the new map.
    */
-  void notify_new_monmap(bool can_change_external_state=false);
+  void notify_new_monmap(bool can_change_external_state=false, bool remove_rank_elector=true);
 
 public:
   struct C_Command : public C_MonOp {
@@ -1113,6 +1115,7 @@ public:
 #define CEPH_MON_FEATURE_INCOMPAT_OCTOPUS CompatSet::Feature(12, "octopus ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_PACIFIC CompatSet::Feature(13, "pacific ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_QUINCY CompatSet::Feature(14, "quincy ondisk layout")
+#define CEPH_MON_FEATURE_INCOMPAT_REEF CompatSet::Feature(15, "reef ondisk layout")
 // make sure you add your feature to Monitor::get_supported_features
 
 

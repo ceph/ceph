@@ -8,6 +8,7 @@ import errno
 import dateutil.parser
 
 from itertools import combinations
+from itertools import zip_longest
 from io import StringIO
 
 import boto
@@ -16,6 +17,7 @@ from boto.s3.website import WebsiteConfiguration
 from boto.s3.cors import CORSConfiguration
 
 from nose.tools import eq_ as eq
+from nose.tools import assert_not_equal, assert_equal
 from nose.plugins.attrib import attr
 from nose.plugins.skip import SkipTest
 
@@ -63,6 +65,8 @@ log = logging.getLogger('rgw_multi.tests')
 num_buckets = 0
 run_prefix=''.join(random.choice(string.ascii_lowercase) for _ in range(6))
 
+num_roles = 0
+
 def get_zone_connection(zone, credentials):
     """ connect to the zone's first gateway """
     if isinstance(credentials, list):
@@ -100,6 +104,10 @@ def bilog_list(zone, bucket, args = None):
 
 def bilog_autotrim(zone, args = None):
     zone.cluster.admin(['bilog', 'autotrim'] + (args or []))
+
+def bucket_layout(zone, bucket, args = None):
+    (bl_output,_) = zone.cluster.admin(['bucket', 'layout', '--bucket', bucket] + (args or []))
+    return json.loads(bl_output)
 
 def parse_meta_sync_status(meta_sync_status_json):
     log.debug('current meta sync status=%s', meta_sync_status_json)
@@ -439,6 +447,12 @@ def gen_bucket_name():
     num_buckets += 1
     return run_prefix + '-' + str(num_buckets)
 
+def gen_role_name():
+    global num_roles
+
+    num_roles += 1
+    return "roles" + '-' + run_prefix + '-' + str(num_roles)
+
 class ZonegroupConns:
     def __init__(self, zonegroup):
         self.zonegroup = zonegroup
@@ -446,6 +460,7 @@ class ZonegroupConns:
         self.ro_zones = []
         self.rw_zones = []
         self.master_zone = None
+
         for z in zonegroup.zones:
             zone_conn = z.get_conn(user.credentials)
             self.zones.append(zone_conn)
@@ -465,7 +480,7 @@ def check_all_buckets_exist(zone_conn, buckets):
         try:
             zone_conn.get_bucket(b)
         except:
-            log.critical('zone %s does not contain bucket %s', zone.name, b)
+            log.critical('zone %s does not contain bucket %s', zone_conn.zone.name, b)
             return False
 
     return True
@@ -484,6 +499,20 @@ def check_all_buckets_dont_exist(zone_conn, buckets):
         return False
 
     return True
+
+def create_role_per_zone(zonegroup_conns, roles_per_zone = 1):
+    roles = []
+    zone_role = []
+    for zone in zonegroup_conns.rw_zones:
+        for i in range(roles_per_zone):
+            role_name = gen_role_name()
+            log.info('create role zone=%s name=%s', zone.name, role_name)
+            policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam:::user/testuser\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
+            role = zone.create_role("", role_name, policy_document, "")
+            roles.append(role_name)
+            zone_role.append((zone, role))
+
+    return roles, zone_role
 
 def create_bucket_per_zone(zonegroup_conns, buckets_per_zone = 1):
     buckets = []
@@ -571,6 +600,10 @@ def new_key(zone, bucket_name, obj_name):
 def check_bucket_eq(zone_conn1, zone_conn2, bucket):
     if zone_conn2.zone.has_buckets():
         zone_conn2.check_bucket_eq(zone_conn1, bucket.name)
+
+def check_role_eq(zone_conn1, zone_conn2, role):
+    if zone_conn2.zone.has_roles():
+        zone_conn2.check_role_eq(zone_conn1, role['create_role_response']['create_role_result']['role']['role_name'])
 
 def test_object_sync():
     zonegroup = realm.master_zonegroup()
@@ -1099,6 +1132,7 @@ def test_set_bucket_policy():
         bucket.set_policy(policy)
         assert(bucket.get_policy().decode('ascii') == policy)
 
+@attr('bucket_sync_disable')
 def test_bucket_sync_disable():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1113,6 +1147,7 @@ def test_bucket_sync_disable():
 
     zonegroup_data_checkpoint(zonegroup_conns)
 
+@attr('bucket_sync_disable')
 def test_bucket_sync_enable_right_after_disable():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1147,6 +1182,7 @@ def test_bucket_sync_enable_right_after_disable():
 
     zonegroup_data_checkpoint(zonegroup_conns)
 
+@attr('bucket_sync_disable')
 def test_bucket_sync_disable_enable():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1204,6 +1240,7 @@ def test_multipart_object_sync():
     mp.upload_part_from_file(StringIO('d' * part_size), 4)
     mp.complete_upload()
 
+    zonegroup_meta_checkpoint(zonegroup)
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
 def test_encrypted_object_sync():
@@ -1305,6 +1342,161 @@ def test_bucket_index_log_trim():
     cold_bilog = bilog_list(zone.zone, cold_bucket.name)
     assert(len(cold_bilog) == 0)
 
+def test_bucket_reshard_index_log_trim():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a test bucket, upload some objects, and wait for sync
+    def make_test_bucket():
+        name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', zone.name, name)
+        bucket = zone.conn.create_bucket(name)
+        for objname in ('a', 'b', 'c', 'd'):
+            k = new_key(zone, name, objname)
+            k.set_contents_from_string('foo')
+        zonegroup_meta_checkpoint(zonegroup)
+        zonegroup_bucket_checkpoint(zonegroup_conns, name)
+        return bucket
+
+    # create a 'test' bucket
+    test_bucket = make_test_bucket()
+
+    # checking bucket layout before resharding
+    json_obj_1 = bucket_layout(zone.zone, test_bucket.name)
+    assert(len(json_obj_1['layout']['logs']) == 1)
+
+    first_gen = json_obj_1['layout']['current_index']['gen']
+
+    before_reshard_bilog = bilog_list(zone.zone, test_bucket.name, ['--gen', str(first_gen)])
+    assert(len(before_reshard_bilog) == 4)
+
+    # Resharding the bucket
+    zone.zone.cluster.admin(['bucket', 'reshard',
+        '--bucket', test_bucket.name,
+        '--num-shards', '3',
+        '--yes-i-really-mean-it'])
+
+    # checking bucket layout after 1st resharding
+    json_obj_2 = bucket_layout(zone.zone, test_bucket.name)
+    assert(len(json_obj_2['layout']['logs']) == 2)
+
+    second_gen = json_obj_2['layout']['current_index']['gen']
+
+    after_reshard_bilog = bilog_list(zone.zone, test_bucket.name, ['--gen', str(second_gen)])
+    assert(len(after_reshard_bilog) == 0)
+
+    # upload more objects
+    for objname in ('e', 'f', 'g', 'h'):
+        k = new_key(zone, test_bucket.name, objname)
+        k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, test_bucket.name)
+
+    # Resharding the bucket again
+    zone.zone.cluster.admin(['bucket', 'reshard',
+        '--bucket', test_bucket.name,
+        '--num-shards', '3',
+        '--yes-i-really-mean-it'])
+
+    # checking bucket layout after 2nd resharding
+    json_obj_3 = bucket_layout(zone.zone, test_bucket.name)
+    assert(len(json_obj_3['layout']['logs']) == 3)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, test_bucket.name)
+
+    bilog_autotrim(zone.zone)
+
+    # checking bucket layout after 1st bilog autotrim
+    json_obj_4 = bucket_layout(zone.zone, test_bucket.name)
+    assert(len(json_obj_4['layout']['logs']) == 2)
+
+    bilog_autotrim(zone.zone)
+
+    # checking bucket layout after 2nd bilog autotrim
+    json_obj_5 = bucket_layout(zone.zone, test_bucket.name)
+    assert(len(json_obj_5['layout']['logs']) == 1)
+
+    bilog_autotrim(zone.zone)
+
+    # upload more objects
+    for objname in ('i', 'j', 'k', 'l'):
+        k = new_key(zone, test_bucket.name, objname)
+        k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, test_bucket.name)
+
+    # verify the bucket has non-empty bilog
+    test_bilog = bilog_list(zone.zone, test_bucket.name)
+    assert(len(test_bilog) > 0)
+
+@attr('bucket_reshard')
+def test_bucket_reshard_incremental():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a bucket
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload some objects
+    for objname in ('a', 'b', 'c', 'd'):
+        k = new_key(zone, bucket.name, objname)
+        k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # reshard in each zone
+    for z in zonegroup_conns.rw_zones:
+        z.zone.cluster.admin(['bucket', 'reshard',
+            '--bucket', bucket.name,
+            '--num-shards', '3',
+            '--yes-i-really-mean-it'])
+
+    # upload more objects
+    for objname in ('e', 'f', 'g', 'h'):
+        k = new_key(zone, bucket.name, objname)
+        k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+@attr('bucket_reshard')
+def test_bucket_reshard_full():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a bucket
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # stop gateways in other zones so we can force the bucket to full sync
+    for z in zonegroup_conns.rw_zones[1:]:
+        z.zone.stop()
+
+    # use try-finally to restart gateways even if something fails
+    try:
+        # upload some objects
+        for objname in ('a', 'b', 'c', 'd'):
+            k = new_key(zone, bucket.name, objname)
+            k.set_contents_from_string('foo')
+
+        # reshard on first zone
+        zone.zone.cluster.admin(['bucket', 'reshard',
+            '--bucket', bucket.name,
+            '--num-shards', '3',
+            '--yes-i-really-mean-it'])
+
+        # upload more objects
+        for objname in ('e', 'f', 'g', 'h'):
+            k = new_key(zone, bucket.name, objname)
+            k.set_contents_from_string('foo')
+    finally:
+        for z in zonegroup_conns.rw_zones[1:]:
+            z.zone.start()
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
 def test_bucket_creation_time():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1316,3 +1508,1354 @@ def test_bucket_creation_time():
         for a, b in zip(z1, z2):
             eq(a.name, b.name)
             eq(a.creation_date, b.creation_date)
+
+def get_bucket_shard_objects(zone, num_shards):
+    """
+    Get one object for each shard of the bucket index log
+    """
+    cmd = ['bucket', 'shard', 'objects'] + zone.zone_args()
+    cmd += ['--num-shards', str(num_shards)]
+    shardobjs_json, ret = zone.cluster.admin(cmd, read_only=True)
+    assert ret == 0
+    shardobjs = json.loads(shardobjs_json)
+    return shardobjs['objs']
+
+def write_most_shards(zone, bucket_name, num_shards):
+    """
+    Write one object to most (but not all) bucket index shards.
+    """
+    objs = get_bucket_shard_objects(zone.zone, num_shards)
+    random.shuffle(objs)
+    del objs[-(len(objs)//10):]
+    for obj in objs:
+        k = new_key(zone, bucket_name, obj)
+        k.set_contents_from_string('foo')
+
+def reshard_bucket(zone, bucket_name, num_shards):
+    """
+    Reshard a bucket
+    """
+    cmd = ['bucket', 'reshard'] + zone.zone_args()
+    cmd += ['--bucket', bucket_name]
+    cmd += ['--num-shards', str(num_shards)]
+    cmd += ['--yes-i-really-mean-it']
+    zone.cluster.admin(cmd)
+
+def get_obj_names(zone, bucket_name, maxobjs):
+    """
+    Get names of objects in a bucket.
+    """
+    cmd = ['bucket', 'list'] + zone.zone_args()
+    cmd += ['--bucket', bucket_name]
+    cmd += ['--max-entries', str(maxobjs)]
+    objs_json, _ = zone.cluster.admin(cmd, read_only=True)
+    objs = json.loads(objs_json)
+    return [o['name'] for o in objs]
+
+def bucket_keys_eq(zone1, zone2, bucket_name):
+    """
+    Ensure that two buckets have the same keys, but get the lists through
+    radosgw-admin rather than S3 so it can be used when radosgw isn't running.
+    Only works for buckets of 10,000 objects since the tests calling it don't
+    need more, and the output from bucket list doesn't have an obvious marker
+    with which to continue.
+    """
+    keys1 = get_obj_names(zone1, bucket_name, 10000)
+    keys2 = get_obj_names(zone2, bucket_name, 10000)
+    for key1, key2 in zip_longest(keys1, keys2):
+        if key1 is None:
+            log.critical('key=%s is missing from zone=%s', key1.name,
+                         zone1.name)
+            assert False
+        if key2 is None:
+            log.critical('key=%s is missing from zone=%s', key2.name,
+                         zone2.name)
+            assert False
+
+@attr('bucket_reshard')
+def test_bucket_sync_run_basic_incremental():
+    """
+    Create several generations of objects, then run bucket sync
+    run to ensure they're all processed.
+    """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+
+    # create a bucket write objects to it and wait for them to sync, ensuring
+    # we are in incremental.
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+    write_most_shards(primary, bucket.name, 11)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    try:
+        # stop gateways in other zones so we can rely on bucket sync run
+        for secondary in zonegroup_conns.rw_zones[1:]:
+            secondary.zone.stop()
+
+        # build up multiple generations each with some objects written to
+        # them.
+        generations = [17, 19, 23, 29, 31, 37]
+        for num_shards in generations:
+            reshard_bucket(primary.zone, bucket.name, num_shards)
+            write_most_shards(primary, bucket.name, num_shards)
+
+        # bucket sync run on every secondary
+        for secondary in zonegroup_conns.rw_zones[1:]:
+            cmd = ['bucket', 'sync', 'run'] + secondary.zone.zone_args()
+            cmd += ['--bucket', bucket.name, '--source-zone', primary.name]
+            secondary.zone.cluster.admin(cmd)
+
+            bucket_keys_eq(primary.zone, secondary.zone, bucket.name)
+
+    finally:
+        # Restart so bucket_checkpoint can actually fetch things from the
+        # secondaries. Put this in a finally block so they restart even on
+        # error.
+        for secondary in zonegroup_conns.rw_zones[1:]:
+            secondary.zone.start()
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+def trash_bucket(zone, bucket_name):
+    """
+    Remove objects through radosgw-admin, zapping bilog to prevent the deletes
+    from replicating.
+    """
+    objs = get_obj_names(zone, bucket_name, 10000)
+    # Delete the objects
+    for obj in objs:
+        cmd = ['object', 'rm'] + zone.zone_args()
+        cmd += ['--bucket', bucket_name]
+        cmd += ['--object', obj]
+        zone.cluster.admin(cmd)
+
+    # Zap the bilog
+    cmd = ['bilog', 'trim'] + zone.zone_args()
+    cmd += ['--bucket', bucket_name]
+    zone.cluster.admin(cmd)
+
+@attr('bucket_reshard')
+def test_zap_init_bucket_sync_run():
+    """
+    Create several generations of objects, trash them, then run bucket sync init
+    and bucket sync run.
+    """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # Write zeroth generation
+    for obj in range(1, 6):
+        k = new_key(primary, bucket.name, f'obj{obj * 11}')
+        k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # Write several more generations
+    generations = [17, 19, 23, 29, 31, 37]
+    for num_shards in generations:
+        reshard_bucket(primary.zone, bucket.name, num_shards)
+        for obj in range(1, 6):
+            k = new_key(primary, bucket.name, f'obj{obj * num_shards}')
+            k.set_contents_from_string('foo')
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+
+    # Stop gateways, trash bucket, init, sync, and restart for every secondary
+    for secondary in zonegroup_conns.rw_zones[1:]:
+        try:
+            secondary.zone.stop()
+
+            trash_bucket(secondary.zone, bucket.name)
+
+            cmd = ['bucket', 'sync', 'init'] + secondary.zone.zone_args()
+            cmd += ['--bucket', bucket.name]
+            cmd += ['--source-zone', primary.name]
+            secondary.zone.cluster.admin(cmd)
+
+            cmd = ['bucket', 'sync', 'run'] + secondary.zone.zone_args()
+            cmd += ['--bucket', bucket.name, '--source-zone', primary.name]
+            secondary.zone.cluster.admin(cmd)
+
+            bucket_keys_eq(primary.zone, secondary.zone, bucket.name)
+
+        finally:
+            # Do this as a finally so we bring the zone back up even on error.
+            secondary.zone.start()
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+def test_role_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    roles, zone_role = create_role_per_zone(zonegroup_conns)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for source_conn, role in zone_role:
+        for target_conn in zonegroup_conns.zones:
+            if source_conn.zone == target_conn.zone:
+                continue
+
+            check_role_eq(source_conn, target_conn, role)
+
+@attr('data_sync_init')
+def test_bucket_full_sync_after_data_sync_init():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    try:
+        # stop secondary zone before it starts a bucket full sync
+        secondary.zone.stop()
+
+        # write some objects that don't sync yet
+        for obj in range(1, 6):
+            k = new_key(primary, bucket.name, f'obj{obj * 11}')
+            k.set_contents_from_string('foo')
+
+        cmd = ['data', 'sync', 'init'] + secondary.zone.zone_args()
+        cmd += ['--source-zone', primary.name]
+        secondary.zone.cluster.admin(cmd)
+    finally:
+        # Do this as a finally so we bring the zone back up even on error.
+        secondary.zone.start()
+
+    # expect all objects to replicate via 'bucket full sync'
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+    zonegroup_data_checkpoint(zonegroup_conns)
+
+@attr('data_sync_init')
+@attr('bucket_reshard')
+def test_resharded_bucket_full_sync_after_data_sync_init():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    try:
+        # stop secondary zone before it starts a bucket full sync
+        secondary.zone.stop()
+
+        # Write zeroth generation
+        for obj in range(1, 6):
+            k = new_key(primary, bucket.name, f'obj{obj * 11}')
+            k.set_contents_from_string('foo')
+
+        # Write several more generations
+        generations = [17, 19, 23, 29, 31, 37]
+        for num_shards in generations:
+            reshard_bucket(primary.zone, bucket.name, num_shards)
+            for obj in range(1, 6):
+                k = new_key(primary, bucket.name, f'obj{obj * num_shards}')
+                k.set_contents_from_string('foo')
+
+        cmd = ['data', 'sync', 'init'] + secondary.zone.zone_args()
+        cmd += ['--source-zone', primary.name]
+        secondary.zone.cluster.admin(cmd)
+    finally:
+        # Do this as a finally so we bring the zone back up even on error.
+        secondary.zone.start()
+
+    # expect all objects to replicate via 'bucket full sync'
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+    zonegroup_data_checkpoint(zonegroup_conns)
+
+@attr('data_sync_init')
+def test_bucket_incremental_sync_after_data_sync_init():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload a dummy object and wait for sync. this forces each zone to finish
+    # a full sync and switch to incremental
+    k = new_key(primary, bucket, 'dummy')
+    k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    try:
+        # stop secondary zone before it syncs the rest
+        secondary.zone.stop()
+
+        # Write more objects to primary
+        for obj in range(1, 6):
+            k = new_key(primary, bucket.name, f'obj{obj * 11}')
+            k.set_contents_from_string('foo')
+
+        cmd = ['data', 'sync', 'init'] + secondary.zone.zone_args()
+        cmd += ['--source-zone', primary.name]
+        secondary.zone.cluster.admin(cmd)
+    finally:
+        # Do this as a finally so we bring the zone back up even on error.
+        secondary.zone.start()
+
+    # expect remaining objects to replicate via 'bucket incremental sync'
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+    zonegroup_data_checkpoint(zonegroup_conns)
+
+@attr('data_sync_init')
+@attr('bucket_reshard')
+def test_resharded_bucket_incremental_sync_latest_after_data_sync_init():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # Write zeroth generation to primary
+    for obj in range(1, 6):
+        k = new_key(primary, bucket.name, f'obj{obj * 11}')
+        k.set_contents_from_string('foo')
+
+    # Write several more generations
+    generations = [17, 19, 23, 29, 31, 37]
+    for num_shards in generations:
+        reshard_bucket(primary.zone, bucket.name, num_shards)
+        for obj in range(1, 6):
+            k = new_key(primary, bucket.name, f'obj{obj * num_shards}')
+            k.set_contents_from_string('foo')
+
+    # wait for the secondary to catch up to the latest gen
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    try:
+        # stop secondary zone before it syncs the rest
+        secondary.zone.stop()
+
+        # write some more objects to the last gen
+        for obj in range(1, 6):
+            k = new_key(primary, bucket.name, f'obj{obj * generations[-1]}')
+            k.set_contents_from_string('foo')
+
+        cmd = ['data', 'sync', 'init'] + secondary.zone.zone_args()
+        cmd += ['--source-zone', primary.name]
+        secondary.zone.cluster.admin(cmd)
+    finally:
+        # Do this as a finally so we bring the zone back up even on error.
+        secondary.zone.start()
+
+    # expect remaining objects in last gen to replicate via 'bucket incremental sync'
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+    zonegroup_data_checkpoint(zonegroup_conns)
+
+@attr('data_sync_init')
+@attr('bucket_reshard')
+def test_resharded_bucket_incremental_sync_oldest_after_data_sync_init():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # Write zeroth generation to primary
+    for obj in range(1, 6):
+        k = new_key(primary, bucket.name, f'obj{obj * 11}')
+        k.set_contents_from_string('foo')
+
+    # wait for the secondary to catch up
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    try:
+        # stop secondary zone before it syncs later generations
+        secondary.zone.stop()
+
+        # Write several more generations
+        generations = [17, 19, 23, 29, 31, 37]
+        for num_shards in generations:
+            reshard_bucket(primary.zone, bucket.name, num_shards)
+            for obj in range(1, 6):
+                k = new_key(primary, bucket.name, f'obj{obj * num_shards}')
+                k.set_contents_from_string('foo')
+
+        cmd = ['data', 'sync', 'init'] + secondary.zone.zone_args()
+        cmd += ['--source-zone', primary.name]
+        secondary.zone.cluster.admin(cmd)
+    finally:
+        # Do this as a finally so we bring the zone back up even on error.
+        secondary.zone.start()
+
+    # expect all generations to replicate via 'bucket incremental sync'
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+    zonegroup_data_checkpoint(zonegroup_conns)
+
+def sync_info(cluster, bucket = None):
+    cmd = ['sync', 'info']
+    if bucket:
+        cmd += ['--bucket', bucket]
+    (result_json, retcode) = cluster.admin(cmd)
+    if retcode != 0:
+        assert False, 'failed to get sync policy'
+
+    return json.loads(result_json)
+
+def get_sync_policy(cluster, bucket = None):
+    cmd = ['sync', 'policy', 'get']
+    if bucket:
+        cmd += ['--bucket', bucket]
+    (result_json, retcode) = cluster.admin(cmd)
+    if retcode != 0:
+        assert False, 'failed to get sync policy'
+
+    return json.loads(result_json)
+
+def create_sync_policy_group(cluster, group, status = "allowed", bucket = None):
+    cmd = ['sync', 'group', 'create', '--group-id', group, '--status' , status]
+    if bucket:
+        cmd += ['--bucket', bucket]
+    (result_json, retcode) = cluster.admin(cmd)
+    if retcode != 0:
+        assert False, 'failed to create sync policy group id=%s, bucket=%s' % (group, bucket)
+    return json.loads(result_json)
+
+def set_sync_policy_group_status(cluster, group, status, bucket = None):
+    cmd = ['sync', 'group', 'modify', '--group-id', group, '--status' , status]
+    if bucket:
+        cmd += ['--bucket', bucket]
+    (result_json, retcode) = cluster.admin(cmd)
+    if retcode != 0:
+        assert False, 'failed to set sync policy group id=%s, bucket=%s' % (group, bucket)
+    return json.loads(result_json)
+
+def get_sync_policy_group(cluster, group, bucket = None):
+    cmd = ['sync', 'group', 'get', '--group-id', group]
+    if bucket:
+        cmd += ['--bucket', bucket]
+    (result_json, retcode) = cluster.admin(cmd)
+    if retcode != 0:
+        assert False, 'failed to get sync policy group id=%s, bucket=%s' % (group, bucket)
+    return json.loads(result_json)
+
+def remove_sync_policy_group(cluster, group, bucket = None):
+    cmd = ['sync', 'group', 'remove', '--group-id', group]
+    if bucket:
+        cmd += ['--bucket', bucket]
+    (result_json, retcode) = cluster.admin(cmd)
+    if retcode != 0:
+        assert False, 'failed to remove sync policy group id=%s, bucket=%s' % (group, bucket)
+    return json.loads(result_json)
+
+def create_sync_group_flow_symmetrical(cluster, group, flow_id, zones, bucket = None):
+    cmd = ['sync', 'group', 'flow', 'create', '--group-id', group, '--flow-id' , flow_id, '--flow-type', 'symmetrical', '--zones=%s' % zones]
+    if bucket:
+        cmd += ['--bucket', bucket]
+    (result_json, retcode) = cluster.admin(cmd)
+    if retcode != 0:
+        assert False, 'failed to create sync group flow symmetrical groupid=%s, flow_id=%s, zones=%s, bucket=%s' % (group, flow_id, zones, bucket)
+    return json.loads(result_json)
+
+def create_sync_group_flow_directional(cluster, group, flow_id, src_zones, dest_zones, bucket = None):
+    cmd = ['sync', 'group', 'flow', 'create', '--group-id', group, '--flow-id' , flow_id, '--flow-type', 'directional', '--source-zone=%s' % src_zones, '--dest-zone=%s' % dest_zones]
+    if bucket:
+        cmd += ['--bucket', bucket]
+    (result_json, retcode) = cluster.admin(cmd)
+    if retcode != 0:
+        assert False, 'failed to create sync group flow directional groupid=%s, flow_id=%s, src_zones=%s, dest_zones=%s, bucket=%s' % (group, flow_id, src_zones, dest_zones, bucket)
+    return json.loads(result_json)
+
+def remove_sync_group_flow_symmetrical(cluster, group, flow_id, zones = None, bucket = None):
+    cmd = ['sync', 'group', 'flow', 'remove', '--group-id', group, '--flow-id' , flow_id, '--flow-type', 'symmetrical']
+    if zones:
+        cmd += ['--zones=%s' % zones]
+    if bucket:
+        cmd += ['--bucket', bucket]
+    (result_json, retcode) = cluster.admin(cmd)
+    if retcode != 0:
+        assert False, 'failed to remove sync group flow symmetrical groupid=%s, flow_id=%s, zones=%s, bucket=%s' % (group, flow_id, zones, bucket)
+    return json.loads(result_json)
+
+def remove_sync_group_flow_directional(cluster, group, flow_id, src_zones, dest_zones, bucket = None):
+    cmd = ['sync', 'group', 'flow', 'remove', '--group-id', group, '--flow-id' , flow_id, '--flow-type', 'directional', '--source-zone=%s' % src_zones, '--dest-zone=%s' % dest_zones]
+    if bucket:
+        cmd += ['--bucket', bucket]
+    (result_json, retcode) = cluster.admin(cmd)
+    if retcode != 0:
+        assert False, 'failed to remove sync group flow directional groupid=%s, flow_id=%s, src_zones=%s, dest_zones=%s, bucket=%s' % (group, flow_id, src_zones, dest_zones, bucket)
+    return json.loads(result_json)
+
+def create_sync_group_pipe(cluster, group, pipe_id, src_zones, dest_zones, bucket = None, args = []):
+    cmd = ['sync', 'group', 'pipe', 'create', '--group-id', group, '--pipe-id' , pipe_id, '--source-zones=%s' % src_zones, '--dest-zones=%s' % dest_zones]
+    if bucket:
+        b_args = '--bucket=' + bucket
+        cmd.append(b_args)
+    if args:
+        cmd += args
+    (result_json, retcode) = cluster.admin(cmd)
+    if retcode != 0:
+        assert False, 'failed to create sync group pipe groupid=%s, pipe_id=%s, src_zones=%s, dest_zones=%s, bucket=%s' % (group, pipe_id, src_zones, dest_zones, bucket)
+    return json.loads(result_json)
+
+def remove_sync_group_pipe(cluster, group, pipe_id, bucket = None, args = None):
+    cmd = ['sync', 'group', 'pipe', 'remove', '--group-id', group, '--pipe-id' , pipe_id]
+    if bucket:
+        b_args = '--bucket=' + bucket
+        cmd.append(b_args)
+    if args:
+        cmd.append(args)
+    (result_json, retcode) = cluster.admin(cmd)
+    if retcode != 0:
+        assert False, 'failed to remove sync group pipe groupid=%s, pipe_id=%s, src_zones=%s, dest_zones=%s, bucket=%s' % (group, pipe_id, src_zones, dest_zones, bucket)
+    return json.loads(result_json)
+
+def create_zone_bucket(zone):
+    b_name = gen_bucket_name()
+    log.info('create bucket zone=%s name=%s', zone.name, b_name)
+    bucket = zone.create_bucket(b_name)
+    return bucket
+
+def create_object(zone_conn, bucket, objname, content):
+    k = new_key(zone_conn, bucket.name, objname)
+    k.set_contents_from_string(content)
+
+def create_objects(zone_conn, bucket, obj_arr, content):
+    for objname in obj_arr:
+        create_object(zone_conn, bucket, objname, content)
+
+def check_object_exists(bucket, objname, content = None):
+    k = bucket.get_key(objname)
+    assert_not_equal(k, None)
+    if (content != None):
+        assert_equal(k.get_contents_as_string(encoding='ascii'), content)
+
+def check_objects_exist(bucket, obj_arr, content = None):
+    for objname in obj_arr:
+        check_object_exists(bucket, objname, content)
+
+def check_object_not_exists(bucket, objname):
+    k = bucket.get_key(objname)
+    assert_equal(k, None)
+
+def check_objects_not_exist(bucket, obj_arr):
+    for objname in obj_arr:
+        check_object_not_exists(bucket, objname)
+
+@attr('sync_policy')
+def test_sync_policy_config_zonegroup():
+    """
+    test_sync_policy_config_zonegroup:
+        test configuration of all sync commands
+    """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_meta_checkpoint(zonegroup)
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    z1, z2 = zonegroup.zones[0:2]
+    c1, c2 = (z1.cluster, z2.cluster)
+
+    zones = z1.name+","+z2.name
+
+    c1.admin(['sync', 'policy', 'get'])
+
+    # (a) zonegroup level
+    create_sync_policy_group(c1, "sync-group")
+    set_sync_policy_group_status(c1, "sync-group", "enabled")
+    get_sync_policy_group(c1, "sync-group")
+
+    get_sync_policy(c1)
+
+    create_sync_group_flow_symmetrical(c1, "sync-group", "sync-flow1", zones)
+    create_sync_group_flow_directional(c1, "sync-group", "sync-flow2", z1.name, z2.name)
+
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zones, zones)
+    get_sync_policy_group(c1, "sync-group")
+
+    zonegroup.period.update(z1, commit=True)
+
+    # (b)  bucket level
+    zc1, zc2 = zonegroup_conns.zones[0:2]
+    bucket = create_zone_bucket(zc1)
+    bucket_name = bucket.name
+
+    create_sync_policy_group(c1, "sync-bucket", "allowed", bucket_name)
+    set_sync_policy_group_status(c1, "sync-bucket", "enabled", bucket_name)
+    get_sync_policy_group(c1, "sync-bucket", bucket_name)
+
+    get_sync_policy(c1, bucket_name)
+
+    create_sync_group_flow_symmetrical(c1, "sync-bucket", "sync-flow1", zones, bucket_name)
+    create_sync_group_flow_directional(c1, "sync-bucket", "sync-flow2", z1.name, z2.name, bucket_name)
+
+    create_sync_group_pipe(c1, "sync-bucket", "sync-pipe", zones, zones, bucket_name)
+    get_sync_policy_group(c1, "sync-bucket", bucket_name)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    remove_sync_group_pipe(c1, "sync-bucket", "sync-pipe", bucket_name)
+    remove_sync_group_flow_directional(c1, "sync-bucket", "sync-flow2", z1.name, z2.name, bucket_name)
+    remove_sync_group_flow_symmetrical(c1, "sync-bucket", "sync-flow1", zones, bucket_name)
+    remove_sync_policy_group(c1, "sync-bucket", bucket_name)
+
+    get_sync_policy(c1, bucket_name)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    remove_sync_group_pipe(c1, "sync-group", "sync-pipe")
+    remove_sync_group_flow_directional(c1, "sync-group", "sync-flow2", z1.name, z2.name)
+    remove_sync_group_flow_symmetrical(c1, "sync-group", "sync-flow1")
+    remove_sync_policy_group(c1, "sync-group")
+
+    get_sync_policy(c1)
+
+    zonegroup.period.update(z1, commit=True)
+
+    return
+
+@attr('sync_policy')
+def test_sync_flow_symmetrical_zonegroup_all():
+    """
+    test_sync_flow_symmetrical_zonegroup_all:
+        allows sync from all the zones to all other zones (default case)
+    """
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_meta_checkpoint(zonegroup)
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    (zoneA, zoneB) = zonegroup.zones[0:2]
+    (zcA, zcB) = zonegroup_conns.zones[0:2]
+
+    c1 = zoneA.cluster
+
+    c1.admin(['sync', 'policy', 'get'])
+
+    zones = zoneA.name + ',' + zoneB.name
+    create_sync_policy_group(c1, "sync-group")
+    create_sync_group_flow_symmetrical(c1, "sync-group", "sync-flow1", zones)
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zones, zones)
+    set_sync_policy_group_status(c1, "sync-group", "enabled")
+
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    objnames = [ 'obj1', 'obj2' ]
+    content = 'asdasd'
+    buckets = []
+
+    # create bucket & object in all zones
+    bucketA = create_zone_bucket(zcA)
+    buckets.append(bucketA)
+    create_object(zcA, bucketA, objnames[0], content)
+
+    bucketB = create_zone_bucket(zcB)
+    buckets.append(bucketB)
+    create_object(zcB, bucketB, objnames[1], content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    # 'zonegroup_data_checkpoint' currently fails for the zones not
+    # allowed to sync. So as a workaround, data checkpoint is done
+    # for only the ones configured.
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # verify if objects are synced accross the zone
+    bucket = get_bucket(zcB, bucketA.name)
+    check_object_exists(bucket, objnames[0], content)
+
+    bucket = get_bucket(zcA, bucketB.name)
+    check_object_exists(bucket, objnames[1], content)
+
+    remove_sync_policy_group(c1, "sync-group")
+    return
+
+@attr('sync_policy')
+def test_sync_flow_symmetrical_zonegroup_select():
+    """
+    test_sync_flow_symmetrical_zonegroup_select:
+        allow sync between zoneA & zoneB
+        verify zoneC doesnt sync the data
+    """
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    if len(zonegroup.zones) < 3:
+        raise SkipTest("test_sync_flow_symmetrical_zonegroup_select skipped. Requires 3 or more zones in master zonegroup.")
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    (zoneA, zoneB, zoneC) = zonegroup.zones[0:3]
+    (zcA, zcB, zcC) = zonegroup_conns.zones[0:3]
+
+    c1 = zoneA.cluster
+
+    # configure sync policy
+    zones = zoneA.name + ',' + zoneB.name
+    c1.admin(['sync', 'policy', 'get'])
+    create_sync_policy_group(c1, "sync-group")
+    create_sync_group_flow_symmetrical(c1, "sync-group", "sync-flow", zones)
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zones, zones)
+    set_sync_policy_group_status(c1, "sync-group", "enabled")
+
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    buckets = []
+    content = 'asdasd'
+
+    # create bucketA & objects in zoneA
+    objnamesA = [ 'obj1', 'obj2', 'obj3' ]
+    bucketA = create_zone_bucket(zcA)
+    buckets.append(bucketA)
+    create_objects(zcA, bucketA, objnamesA, content)
+
+    # create bucketB & objects in zoneB
+    objnamesB = [ 'obj4', 'obj5', 'obj6' ]
+    bucketB = create_zone_bucket(zcB)
+    buckets.append(bucketB)
+    create_objects(zcB, bucketB, objnamesB, content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+    zone_data_checkpoint(zoneA, zoneB)
+
+    # verify if objnamesA synced to only zoneB but not zoneC
+    bucket = get_bucket(zcB, bucketA.name)
+    check_objects_exist(bucket, objnamesA, content)
+
+    bucket = get_bucket(zcC, bucketA.name)
+    check_objects_not_exist(bucket, objnamesA)
+
+    # verify if objnamesB synced to only zoneA but not zoneC
+    bucket = get_bucket(zcA, bucketB.name)
+    check_objects_exist(bucket, objnamesB, content)
+
+    bucket = get_bucket(zcC, bucketB.name)
+    check_objects_not_exist(bucket, objnamesB)
+
+    remove_sync_policy_group(c1, "sync-group")
+    return
+
+@attr('sync_policy')
+def test_sync_flow_directional_zonegroup_select():
+    """
+    test_sync_flow_directional_zonegroup_select:
+        allow sync from only zoneA to zoneB
+        
+        verify that data doesn't get synced to zoneC and
+        zoneA shouldn't sync data from zoneB either
+    """
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    if len(zonegroup.zones) < 3:
+        raise SkipTest("test_sync_flow_symmetrical_zonegroup_select skipped. Requires 3 or more zones in master zonegroup.")
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    (zoneA, zoneB, zoneC) = zonegroup.zones[0:3]
+    (zcA, zcB, zcC) = zonegroup_conns.zones[0:3]
+
+    c1 = zoneA.cluster
+
+    # configure sync policy
+    zones = zoneA.name + ',' + zoneB.name
+    c1.admin(['sync', 'policy', 'get'])
+    create_sync_policy_group(c1, "sync-group")
+    create_sync_group_flow_directional(c1, "sync-group", "sync-flow", zoneA.name, zoneB.name)
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zoneA.name, zoneB.name)
+    set_sync_policy_group_status(c1, "sync-group", "enabled")
+
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    buckets = []
+    content = 'asdasd'
+
+    # create bucketA & objects in zoneA
+    objnamesA = [ 'obj1', 'obj2', 'obj3' ]
+    bucketA = create_zone_bucket(zcA)
+    buckets.append(bucketA)
+    create_objects(zcA, bucketA, objnamesA, content)
+
+    # create bucketB & objects in zoneB
+    objnamesB = [ 'obj4', 'obj5', 'obj6' ]
+    bucketB = create_zone_bucket(zcB)
+    buckets.append(bucketB)
+    create_objects(zcB, bucketB, objnamesB, content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # verify if objnamesA synced to only zoneB but not zoneC
+    bucket = get_bucket(zcB, bucketA.name)
+    check_objects_exist(bucket, objnamesA, content)
+
+    bucket = get_bucket(zcC, bucketA.name)
+    check_objects_not_exist(bucket, objnamesA)
+
+    # verify if objnamesB are not synced to either zoneA or zoneC
+    bucket = get_bucket(zcA, bucketB.name)
+    check_objects_not_exist(bucket, objnamesB)
+
+    bucket = get_bucket(zcC, bucketB.name)
+    check_objects_not_exist(bucket, objnamesB)
+
+    """
+        verify the same at bucketA level
+        configure another policy at bucketA level with src and dest
+        zones specified to zoneA and zoneB resp.
+
+        verify zoneA bucketA syncs to zoneB BucketA but not viceversa.
+    """
+    # reconfigure zonegroup pipe & flow
+    remove_sync_group_pipe(c1, "sync-group", "sync-pipe")
+    remove_sync_group_flow_directional(c1, "sync-group", "sync-flow", zoneA.name, zoneB.name)
+    create_sync_group_flow_symmetrical(c1, "sync-group", "sync-flow1", zones)
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zones, zones)
+
+    # change state to allowed
+    set_sync_policy_group_status(c1, "sync-group", "allowed")
+
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    # configure sync policy for only bucketA and enable it
+    create_sync_policy_group(c1, "sync-bucket", "allowed", bucketA.name)
+    create_sync_group_flow_symmetrical(c1, "sync-bucket", "sync-flowA", zones, bucketA.name)
+    args = ['--source-bucket=*', '--dest-bucket=*']
+    create_sync_group_pipe(c1, "sync-bucket", "sync-pipe", zoneA.name, zoneB.name, bucketA.name, args)
+    set_sync_policy_group_status(c1, "sync-bucket", "enabled", bucketA.name)
+
+    get_sync_policy(c1, bucketA.name)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create objects in bucketA in zoneA and zoneB
+    objnamesC = [ 'obj7', 'obj8', 'obj9' ]
+    objnamesD = [ 'obj10', 'obj11', 'obj12' ]
+    create_objects(zcA, bucketA, objnamesC, content)
+    create_objects(zcB, bucketA, objnamesD, content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # verify that objnamesC are synced to bucketA in zoneB
+    bucket = get_bucket(zcB, bucketA.name)
+    check_objects_exist(bucket, objnamesC, content)
+
+    # verify that objnamesD are not synced to bucketA in zoneA
+    bucket = get_bucket(zcA, bucketA.name)
+    check_objects_not_exist(bucket, objnamesD)
+
+    remove_sync_policy_group(c1, "sync-bucket", bucketA.name)
+    remove_sync_policy_group(c1, "sync-group")
+    return
+
+@attr('sync_policy')
+def test_sync_single_bucket():
+    """
+    test_sync_single_bucket:
+        Allow data sync for only bucketA but not for other buckets via
+        below 2 methods
+
+        (a) zonegroup: symmetrical flow but configure pipe for only bucketA.
+        (b) bucket level: configure policy for bucketA
+    """
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_meta_checkpoint(zonegroup)
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    (zoneA, zoneB) = zonegroup.zones[0:2]
+    (zcA, zcB) = zonegroup_conns.zones[0:2]
+
+    c1 = zoneA.cluster
+
+    c1.admin(['sync', 'policy', 'get'])
+
+    zones = zoneA.name + ',' + zoneB.name
+    get_sync_policy(c1)
+
+    objnames = [ 'obj1', 'obj2', 'obj3' ]
+    content = 'asdasd'
+    buckets = []
+
+    # create bucketA & bucketB in zoneA
+    bucketA = create_zone_bucket(zcA)
+    buckets.append(bucketA)
+    bucketB = create_zone_bucket(zcA)
+    buckets.append(bucketB)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    """
+        Method (a): configure pipe for only bucketA
+    """
+    # configure sync policy & pipe for only bucketA
+    create_sync_policy_group(c1, "sync-group")
+    create_sync_group_flow_symmetrical(c1, "sync-group", "sync-flow1", zones)
+    args = ['--source-bucket=' +  bucketA.name, '--dest-bucket=' + bucketA.name]
+
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zones, zones, None, args)
+    set_sync_policy_group_status(c1, "sync-group", "enabled")
+    get_sync_policy(c1)
+    zonegroup.period.update(zoneA, commit=True)
+    
+    sync_info(c1)
+
+    # create objects in bucketA & bucketB
+    create_objects(zcA, bucketA, objnames, content)
+    create_object(zcA, bucketB, objnames, content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # verify if bucketA objects are synced
+    bucket = get_bucket(zcB, bucketA.name)
+    check_objects_exist(bucket, objnames, content)
+
+    # bucketB objects should not be synced
+    bucket = get_bucket(zcB, bucketB.name)
+    check_objects_not_exist(bucket, objnames)
+
+
+    """
+        Method (b): configure policy at only bucketA level 
+    """
+    # reconfigure group pipe
+    remove_sync_group_pipe(c1, "sync-group", "sync-pipe")
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zones, zones)
+
+    # change state to allowed
+    set_sync_policy_group_status(c1, "sync-group", "allowed")
+
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+
+    # configure sync policy for only bucketA and enable it
+    create_sync_policy_group(c1, "sync-bucket", "allowed", bucketA.name)
+    create_sync_group_flow_symmetrical(c1, "sync-bucket", "sync-flowA", zones, bucketA.name)
+    create_sync_group_pipe(c1, "sync-bucket", "sync-pipe", zones, zones, bucketA.name)
+    set_sync_policy_group_status(c1, "sync-bucket", "enabled", bucketA.name)
+
+    get_sync_policy(c1, bucketA.name)
+
+    # create object in bucketA
+    create_object(zcA, bucketA, objnames[2], content)
+
+    # create object in bucketA too
+    create_object(zcA, bucketB, objnames[2], content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # verify if bucketA objects are synced
+    bucket = get_bucket(zcB, bucketA.name)
+    check_object_exists(bucket, objnames[2], content)
+
+    # bucketB objects should not be synced
+    bucket = get_bucket(zcB, bucketB.name)
+    check_object_not_exists(bucket, objnames[2])
+
+    remove_sync_policy_group(c1, "sync-bucket", bucketA.name)
+    remove_sync_policy_group(c1, "sync-group")
+    return
+
+@attr('sync_policy')
+def test_sync_different_buckets():
+    """
+    test_sync_different_buckets:
+        sync zoneA bucketA to zoneB bucketB via below methods
+
+        (a) zonegroup: directional flow but configure pipe for zoneA bucketA to zoneB bucketB
+        (b) bucket: configure another policy at bucketA level with pipe set to
+        another bucket(bucketB) in target zone.
+
+        sync zoneA bucketA from zoneB bucketB
+        (c) configure another policy at bucketA level with pipe set from
+        another bucket(bucketB) in source zone.
+
+    """
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_meta_checkpoint(zonegroup)
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    (zoneA, zoneB) = zonegroup.zones[0:2]
+    (zcA, zcB) = zonegroup_conns.zones[0:2]
+    zones = zoneA.name + ',' + zoneB.name
+
+    c1 = zoneA.cluster
+
+    c1.admin(['sync', 'policy', 'get'])
+
+    objnames = [ 'obj1', 'obj2' ]
+    objnamesB = [ 'obj3', 'obj4' ]
+    content = 'asdasd'
+    buckets = []
+
+    # create bucketA & bucketB in zoneA
+    bucketA = create_zone_bucket(zcA)
+    buckets.append(bucketA)
+    bucketB = create_zone_bucket(zcA)
+    buckets.append(bucketB)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    """
+        Method (a): zonegroup - configure pipe for only bucketA
+    """
+    # configure pipe from zoneA bucketA to zoneB bucketB
+    create_sync_policy_group(c1, "sync-group")
+    create_sync_group_flow_symmetrical(c1, "sync-group", "sync-flow1", zones)
+    args = ['--source-bucket=' +  bucketA.name, '--dest-bucket=' + bucketB.name]
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zoneA.name, zoneB.name, None, args)
+    set_sync_policy_group_status(c1, "sync-group", "enabled")
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    # create objects in bucketA
+    create_objects(zcA, bucketA, objnames, content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # verify that objects are synced to bucketB in zoneB
+    # but not to bucketA
+    bucket = get_bucket(zcB, bucketA.name)
+    check_objects_not_exist(bucket, objnames)
+
+    bucket = get_bucket(zcB, bucketB.name)
+    check_objects_exist(bucket, objnames, content)
+    """
+        Method (b): configure policy at only bucketA level with pipe
+        set to bucketB in target zone
+    """
+
+    remove_sync_group_pipe(c1, "sync-group", "sync-pipe")
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zones, zones)
+
+    # change state to allowed
+    set_sync_policy_group_status(c1, "sync-group", "allowed")
+
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    # configure sync policy for only bucketA and enable it
+    create_sync_policy_group(c1, "sync-bucket", "allowed", bucketA.name)
+    create_sync_group_flow_symmetrical(c1, "sync-bucket", "sync-flowA", zones, bucketA.name)
+    args = ['--source-bucket=*', '--dest-bucket=' + bucketB.name]
+    create_sync_group_pipe(c1, "sync-bucket", "sync-pipeA", zones, zones, bucketA.name, args)
+    set_sync_policy_group_status(c1, "sync-bucket", "enabled", bucketA.name)
+
+    get_sync_policy(c1, bucketA.name)
+
+    objnamesC = [ 'obj5', 'obj6' ]
+
+    zonegroup_meta_checkpoint(zonegroup)
+    # create objects in bucketA
+    create_objects(zcA, bucketA, objnamesC, content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    """
+    # verify that objects are synced to bucketB in zoneB
+    # but not to bucketA
+    """
+    bucket = get_bucket(zcB, bucketA.name)
+    check_objects_not_exist(bucket, objnamesC)
+
+    bucket = get_bucket(zcB, bucketB.name)
+    check_objects_exist(bucket, objnamesC, content)
+
+    remove_sync_policy_group(c1, "sync-bucket", bucketA.name)
+    zonegroup_meta_checkpoint(zonegroup)
+    get_sync_policy(c1, bucketA.name)
+
+    """
+        Method (c): configure policy at only bucketA level with pipe
+        set from bucketB in source zone
+        verify zoneA bucketA syncs from zoneB BucketB but not bucketA
+    """
+
+    # configure sync policy for only bucketA and enable it
+    create_sync_policy_group(c1, "sync-bucket", "allowed", bucketA.name)
+    create_sync_group_flow_symmetrical(c1, "sync-bucket", "sync-flowA", zones, bucketA.name)
+    args = ['--source-bucket=' +  bucketB.name, '--dest-bucket=' + '*']
+    create_sync_group_pipe(c1, "sync-bucket", "sync-pipe", zones, zones, bucketA.name, args)
+    set_sync_policy_group_status(c1, "sync-bucket", "enabled", bucketA.name)
+
+    get_sync_policy(c1, bucketA.name)
+
+    # create objects in bucketA & B in ZoneB
+    objnamesD = [ 'obj7', 'obj8' ]
+    objnamesE = [ 'obj9', 'obj10' ]
+
+    create_objects(zcB, bucketA, objnamesD, content)
+    create_objects(zcB, bucketB, objnamesE, content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneA, zoneB)
+    """
+    # verify that objects from only bucketB are synced to
+    # bucketA in zoneA
+    """
+    bucket = get_bucket(zcA, bucketA.name)
+    check_objects_not_exist(bucket, objnamesD)
+    check_objects_exist(bucket, objnamesE, content)
+
+    remove_sync_policy_group(c1, "sync-bucket", bucketA.name)
+    remove_sync_policy_group(c1, "sync-group")
+    return
+
+@attr('sync_policy')
+def test_sync_multiple_buckets_to_single():
+    """
+    test_sync_multiple_buckets_to_single:
+        directional flow
+        (a) pipe: sync zoneA bucketA,bucketB to zoneB bucketB
+
+        (b) configure another policy at bucketA level with pipe configured
+        to sync from multiple buckets (bucketA & bucketB)
+
+        verify zoneA bucketA & bucketB syncs to zoneB BucketB
+    """
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_meta_checkpoint(zonegroup)
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    (zoneA, zoneB) = zonegroup.zones[0:2]
+    (zcA, zcB) = zonegroup_conns.zones[0:2]
+    zones = zoneA.name + ',' + zoneB.name
+
+    c1 = zoneA.cluster
+
+    c1.admin(['sync', 'policy', 'get'])
+
+    objnamesA = [ 'obj1', 'obj2' ]
+    objnamesB = [ 'obj3', 'obj4' ]
+    content = 'asdasd'
+    buckets = []
+
+    # create bucketA & bucketB in zoneA
+    bucketA = create_zone_bucket(zcA)
+    buckets.append(bucketA)
+    bucketB = create_zone_bucket(zcA)
+    buckets.append(bucketB)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # configure pipe from zoneA bucketA,bucketB to zoneB bucketB
+    create_sync_policy_group(c1, "sync-group")
+    create_sync_group_flow_directional(c1, "sync-group", "sync-flow", zoneA.name, zoneB.name)
+    source_buckets = [ bucketA.name, bucketB.name ]
+    for source_bucket in source_buckets:
+        args = ['--source-bucket=' +  source_bucket, '--dest-bucket=' + bucketB.name]
+        create_sync_group_pipe(c1, "sync-group", "sync-pipe-%s" % source_bucket, zoneA.name, zoneB.name, None, args)
+
+    set_sync_policy_group_status(c1, "sync-group", "enabled")
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    # create objects in bucketA & bucketB
+    create_objects(zcA, bucketA, objnamesA, content)
+    create_objects(zcA, bucketB, objnamesB, content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # verify that both zoneA bucketA & bucketB objects are synced to
+    # bucketB in zoneB but not to bucketA
+    bucket = get_bucket(zcB, bucketA.name)
+    check_objects_not_exist(bucket, objnamesA)
+    check_objects_not_exist(bucket, objnamesB)
+
+    bucket = get_bucket(zcB, bucketB.name)
+    check_objects_exist(bucket, objnamesA, content)
+    check_objects_exist(bucket, objnamesB, content)
+
+    """
+        Method (b): configure at bucket level
+    """
+    # reconfigure pipe & flow
+    for source_bucket in source_buckets:
+        remove_sync_group_pipe(c1, "sync-group", "sync-pipe-%s" % source_bucket)
+    remove_sync_group_flow_directional(c1, "sync-group", "sync-flow", zoneA.name, zoneB.name)
+    create_sync_group_flow_symmetrical(c1, "sync-group", "sync-flow1", zones)
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zones, zones)
+
+    # change state to allowed
+    set_sync_policy_group_status(c1, "sync-group", "allowed")
+
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    objnamesC = [ 'obj5', 'obj6' ]
+    objnamesD = [ 'obj7', 'obj8' ]
+
+    # configure sync policy for only bucketA and enable it
+    create_sync_policy_group(c1, "sync-bucket", "allowed", bucketA.name)
+    create_sync_group_flow_symmetrical(c1, "sync-bucket", "sync-flowA", zones, bucketA.name)
+    source_buckets = [ bucketA.name, bucketB.name ]
+    for source_bucket in source_buckets:
+        args = ['--source-bucket=' +  source_bucket, '--dest-bucket=' + '*']
+        create_sync_group_pipe(c1, "sync-bucket", "sync-pipe-%s" % source_bucket, zoneA.name, zoneB.name, bucketA.name, args)
+
+    set_sync_policy_group_status(c1, "sync-bucket", "enabled", bucketA.name)
+
+    get_sync_policy(c1)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    # create objects in bucketA
+    create_objects(zcA, bucketA, objnamesC, content)
+    create_objects(zcA, bucketB, objnamesD, content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # verify that both zoneA bucketA & bucketB objects are synced to
+    # bucketA in zoneB but not to bucketB
+    bucket = get_bucket(zcB, bucketB.name)
+    check_objects_not_exist(bucket, objnamesC)
+    check_objects_not_exist(bucket, objnamesD)
+
+    bucket = get_bucket(zcB, bucketA.name)
+    check_objects_exist(bucket, objnamesD, content)
+    check_objects_exist(bucket, objnamesD, content)
+
+    remove_sync_policy_group(c1, "sync-bucket", bucketA.name)
+    remove_sync_policy_group(c1, "sync-group")
+    return
+
+@attr('sync_policy')
+def test_sync_single_bucket_to_multiple():
+    """
+    test_sync_single_bucket_to_multiple:
+        directional flow
+        (a) pipe: sync zoneA bucketA to zoneB bucketA & bucketB
+
+        (b) configure another policy at bucketA level with pipe configured
+        to sync to multiple buckets (bucketA & bucketB)
+
+        verify zoneA bucketA syncs to zoneB bucketA & bucketB
+    """
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_meta_checkpoint(zonegroup)
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    (zoneA, zoneB) = zonegroup.zones[0:2]
+    (zcA, zcB) = zonegroup_conns.zones[0:2]
+    zones = zoneA.name + ',' + zoneB.name
+
+    c1 = zoneA.cluster
+
+    c1.admin(['sync', 'policy', 'get'])
+
+    objnamesA = [ 'obj1', 'obj2' ]
+    content = 'asdasd'
+    buckets = []
+
+    # create bucketA & bucketB in zoneA
+    bucketA = create_zone_bucket(zcA)
+    buckets.append(bucketA)
+    bucketB = create_zone_bucket(zcA)
+    buckets.append(bucketB)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # configure pipe from zoneA bucketA to zoneB bucketA, bucketB
+    create_sync_policy_group(c1, "sync-group")
+    create_sync_group_flow_symmetrical(c1, "sync-group", "sync-flow1", zones)
+
+    dest_buckets = [ bucketA.name, bucketB.name ]
+    for dest_bucket in dest_buckets:
+        args = ['--source-bucket=' +  bucketA.name, '--dest-bucket=' + dest_bucket]
+        create_sync_group_pipe(c1, "sync-group", "sync-pipe-%s" % dest_bucket, zoneA.name, zoneB.name, None, args)
+
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zoneA.name, zoneB.name, None, args)
+    set_sync_policy_group_status(c1, "sync-group", "enabled")
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    # create objects in bucketA
+    create_objects(zcA, bucketA, objnamesA, content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # verify that objects from zoneA bucketA are synced to both
+    # bucketA & bucketB in zoneB
+    bucket = get_bucket(zcB, bucketA.name)
+    check_objects_exist(bucket, objnamesA, content)
+
+    bucket = get_bucket(zcB, bucketB.name)
+    check_objects_exist(bucket, objnamesA, content)
+
+    """
+        Method (b): configure at bucket level
+    """
+    remove_sync_group_pipe(c1, "sync-group", "sync-pipe")
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", '*', '*')
+
+    # change state to allowed
+    set_sync_policy_group_status(c1, "sync-group", "allowed")
+
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    objnamesB = [ 'obj3', 'obj4' ]
+
+    # configure sync policy for only bucketA and enable it
+    create_sync_policy_group(c1, "sync-bucket", "allowed", bucketA.name)
+    create_sync_group_flow_symmetrical(c1, "sync-bucket", "sync-flowA", zones, bucketA.name)
+    dest_buckets = [ bucketA.name, bucketB.name ]
+    for dest_bucket in dest_buckets:
+        args = ['--source-bucket=' + '*', '--dest-bucket=' + dest_bucket]
+        create_sync_group_pipe(c1, "sync-bucket", "sync-pipe-%s" % dest_bucket, zoneA.name, zoneB.name, bucketA.name, args)
+
+    set_sync_policy_group_status(c1, "sync-bucket", "enabled", bucketA.name)
+
+    get_sync_policy(c1)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    # create objects in bucketA
+    create_objects(zcA, bucketA, objnamesB, content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # verify that objects from zoneA bucketA are synced to both
+    # bucketA & bucketB in zoneB
+    bucket = get_bucket(zcB, bucketA.name)
+    check_objects_exist(bucket, objnamesB, content)
+
+    bucket = get_bucket(zcB, bucketB.name)
+    check_objects_exist(bucket, objnamesB, content)
+
+    remove_sync_policy_group(c1, "sync-bucket", bucketA.name)
+    remove_sync_policy_group(c1, "sync-group")
+    return

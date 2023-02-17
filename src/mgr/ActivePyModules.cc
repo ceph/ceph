@@ -80,7 +80,8 @@ void ActivePyModules::dump_server(const std::string &hostname,
   std::string ceph_version;
 
   for (const auto &[key, state] : dmc) {
-    without_gil([&ceph_version, state=state] {
+    std::string id;
+    without_gil([&ceph_version, &id, state=state] {
       std::lock_guard l(state->lock);
       // TODO: pick the highest version, and make sure that
       // somewhere else (during health reporting?) we are
@@ -89,10 +90,17 @@ void ActivePyModules::dump_server(const std::string &hostname,
       if (ver_iter != state->metadata.end()) {
         ceph_version = state->metadata.at("ceph_version");
       }
+      if (state->metadata.find("id") != state->metadata.end()) {
+        id = state->metadata.at("id");
+      }
     });
     f->open_object_section("service");
     f->dump_string("type", key.type);
     f->dump_string("id", key.name);
+    f->dump_string("ceph_version", ceph_version);
+    if (!id.empty()) {
+      f->dump_string("name", id);
+    }
     f->close_section();
   }
   f->close_section();
@@ -227,7 +235,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     cluster_state.with_osdmap([&](const OSDMap &osd_map){
       no_gil.acquire_gil();
       if (what == "osd_map") {
-        osd_map.dump(&f);
+        osd_map.dump(&f, g_ceph_context);
       } else if (what == "osd_map_tree") {
         osd_map.print_tree(&f, nullptr);
       } else if (what == "osd_map_crush") {
@@ -1419,6 +1427,11 @@ void ActivePyModules::remove_mds_perf_query(MetricQueryID query_id)
   }
 }
 
+void ActivePyModules::reregister_mds_perf_queries()
+{
+  server.reregister_mds_perf_queries();
+}
+
 PyObject *ActivePyModules::get_mds_perf_counters(MetricQueryID query_id)
 {
   MDSPerfCollector collector(query_id);
@@ -1461,6 +1474,11 @@ PyObject *ActivePyModules::get_mds_perf_counters(MetricQueryID query_id)
     f.close_section(); // i
   }
   f.close_section(); // counters
+
+  f.open_array_section("last_updated");
+  f.dump_float("last_updated_mono", collector.last_updated_mono);
+  f.close_section(); // last_updated
+
   f.close_section(); // metrics
 
   return f.get();
@@ -1496,4 +1514,27 @@ void ActivePyModules::unregister_client(std::string_view name, std::string addrs
 
   dout(7) << "unregistering msgr client handle " << addrv << dendl;
   py_module_registry.unregister_client(name, addrv);
+}
+
+PyObject* ActivePyModules::get_daemon_health_metrics()
+{
+  without_gil_t no_gil;
+  return daemon_state.with_daemons_by_server([&no_gil]
+      (const std::map<std::string, DaemonStateCollection> &all) {
+      no_gil.acquire_gil();
+      PyFormatter f;
+      for (const auto &[hostname, daemon_state] : all) {
+        for (const auto &[key, state] : daemon_state) {
+          f.open_array_section(ceph::to_string(key));
+          for (const auto &metric : state->daemon_health_metrics) {
+            f.open_object_section(metric.get_type_name());
+            f.dump_int("value", metric.get_n1());
+            f.dump_string("type", metric.get_type_name());
+            f.close_section();
+          }
+          f.close_section();
+        }
+      }
+      return f.get();
+  });
 }

@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      client:
-        rbd default map options: ms_mode=prefer-crc,read_from_replica=balance

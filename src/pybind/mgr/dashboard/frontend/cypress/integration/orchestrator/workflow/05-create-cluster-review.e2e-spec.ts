@@ -1,7 +1,9 @@
+/* tslint:disable*/
 import {
   CreateClusterHostPageHelper,
   CreateClusterWizardHelper
-} from 'cypress/integration/cluster/create-cluster.po';
+} from '../../cluster/create-cluster.po';
+/* tslint:enable*/
 
 describe('Create Cluster Review page', () => {
   const createCluster = new CreateClusterWizardHelper();

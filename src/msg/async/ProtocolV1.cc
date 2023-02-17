@@ -315,6 +315,13 @@ void ProtocolV1::write_event() {
     auto start = ceph::mono_clock::now();
     bool more;
     do {
+      if (connection->is_queued()) {
+	if (r = connection->_try_send(); r!= 0) {
+	  // either fails to send or not all queued buffer is sent
+	  break;
+	}
+      }
+
       ceph::buffer::list data;
       Message *m = _get_next_outgoing(&data);
       if (!m) {
@@ -662,7 +669,7 @@ CtPtr ProtocolV1::throttle_message() {
                    << "/" << connection->policy.throttler_messages->get_max()
                    << dendl;
     if (!connection->policy.throttler_messages->get_or_fail()) {
-      ldout(cct, 10) << __func__ << " wants 1 message from policy throttle "
+      ldout(cct, 1) << __func__ << " wants 1 message from policy throttle "
                      << connection->policy.throttler_messages->get_current()
                      << "/" << connection->policy.throttler_messages->get_max()
                      << " failed, just wait." << dendl;
@@ -693,7 +700,7 @@ CtPtr ProtocolV1::throttle_bytes() {
                      << connection->policy.throttler_bytes->get_current() << "/"
                      << connection->policy.throttler_bytes->get_max() << dendl;
       if (!connection->policy.throttler_bytes->get_or_fail(cur_msg_size)) {
-        ldout(cct, 10) << __func__ << " wants " << cur_msg_size
+        ldout(cct, 1) << __func__ << " wants " << cur_msg_size
                        << " bytes from policy throttler "
                        << connection->policy.throttler_bytes->get_current()
                        << "/" << connection->policy.throttler_bytes->get_max()
@@ -720,7 +727,7 @@ CtPtr ProtocolV1::throttle_dispatch_queue() {
   if (cur_msg_size) {
     if (!connection->dispatch_queue->dispatch_throttler.get_or_fail(
             cur_msg_size)) {
-      ldout(cct, 10)
+      ldout(cct, 1)
           << __func__ << " wants " << cur_msg_size
           << " bytes from dispatch throttle "
           << connection->dispatch_queue->dispatch_throttler.get_current() << "/"

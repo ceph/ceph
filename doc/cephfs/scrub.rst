@@ -131,3 +131,15 @@ Control (ongoing) File System Scrubs
    {
        "return_code": 0
    }
+
+Damages
+=======
+
+The types of damage that can be reported and repaired by File System Scrub are:
+
+* DENTRY : Inode's dentry is missing.
+
+* DIR_FRAG : Inode's directory fragment(s) is missing.
+
+* BACKTRACE : Inode's backtrace in the data pool is corrupted.
+

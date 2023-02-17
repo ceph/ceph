@@ -37,16 +37,16 @@
 #include "mds/mdstypes.h"
 #include "mds/cephfs_features.h"
 
-#define MDS_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "base v0.20")
-#define MDS_FEATURE_INCOMPAT_CLIENTRANGES CompatSet::Feature(2, "client writeable ranges")
-#define MDS_FEATURE_INCOMPAT_FILELAYOUT CompatSet::Feature(3, "default file layouts on dirs")
-#define MDS_FEATURE_INCOMPAT_DIRINODE CompatSet::Feature(4, "dir inode in separate object")
-#define MDS_FEATURE_INCOMPAT_ENCODING CompatSet::Feature(5, "mds uses versioned encoding")
-#define MDS_FEATURE_INCOMPAT_OMAPDIRFRAG CompatSet::Feature(6, "dirfrag is stored in omap")
-#define MDS_FEATURE_INCOMPAT_INLINE CompatSet::Feature(7, "mds uses inline data")
-#define MDS_FEATURE_INCOMPAT_NOANCHOR CompatSet::Feature(8, "no anchor table")
-#define MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2 CompatSet::Feature(9, "file layout v2")
-#define MDS_FEATURE_INCOMPAT_SNAPREALM_V2 CompatSet::Feature(10, "snaprealm v2")
+static inline const auto MDS_FEATURE_INCOMPAT_BASE = CompatSet::Feature(1, "base v0.20");
+static inline const auto MDS_FEATURE_INCOMPAT_CLIENTRANGES = CompatSet::Feature(2, "client writeable ranges");
+static inline const auto MDS_FEATURE_INCOMPAT_FILELAYOUT = CompatSet::Feature(3, "default file layouts on dirs");
+static inline const auto MDS_FEATURE_INCOMPAT_DIRINODE = CompatSet::Feature(4, "dir inode in separate object");
+static inline const auto MDS_FEATURE_INCOMPAT_ENCODING = CompatSet::Feature(5, "mds uses versioned encoding");
+static inline const auto MDS_FEATURE_INCOMPAT_OMAPDIRFRAG = CompatSet::Feature(6, "dirfrag is stored in omap");
+static inline const auto MDS_FEATURE_INCOMPAT_INLINE = CompatSet::Feature(7, "mds uses inline data");
+static inline const auto MDS_FEATURE_INCOMPAT_NOANCHOR = CompatSet::Feature(8, "no anchor table");
+static inline const auto MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2 = CompatSet::Feature(9, "file layout v2");
+static inline const auto MDS_FEATURE_INCOMPAT_SNAPREALM_V2 = CompatSet::Feature(10, "snaprealm v2");
 
 #define MDS_FS_NAME_DEFAULT "cephfs"
 
@@ -56,9 +56,8 @@ class MDSMap {
 public:
   /* These states are the union of the set of possible states of an MDS daemon,
    * and the set of possible states of an MDS rank. See
-   * doc/cephfs/mds-states.rst for state descriptions,
-   * doc/cephfs/mds-state-diagram.svg for a visual state diagram, and
-   * doc/cephfs/mds-state-diagram.dot to update mds-state-diagram.svg.
+   * doc/cephfs/mds-states.rst for state descriptions and a visual state diagram, and
+   * doc/cephfs/mds-state-diagram.dot to update the diagram.
    */
   typedef enum {
     // States of an MDS daemon not currently holding a rank
@@ -66,10 +65,10 @@ public:
     STATE_NULL     =   CEPH_MDS_STATE_NULL,                                  // null value for fns returning this type.
     STATE_BOOT     =   CEPH_MDS_STATE_BOOT,                // up, boot announcement.  destiny unknown.
     STATE_STANDBY  =   CEPH_MDS_STATE_STANDBY,             // up, idle.  waiting for assignment by monitor.
-    STATE_STANDBY_REPLAY = CEPH_MDS_STATE_STANDBY_REPLAY,  // up, replaying active node, ready to take over.
 
     // States of an MDS rank, and of any MDS daemon holding that rank
     // ==============================================================
+    STATE_STANDBY_REPLAY = CEPH_MDS_STATE_STANDBY_REPLAY,  // up, replaying active node, ready to take over and not serving clients. Note: Up to two MDS hold the rank being replayed.
     STATE_STOPPED  =   CEPH_MDS_STATE_STOPPED,        // down, once existed, but no subtrees. empty log.  may not be held by a daemon.
 
     STATE_CREATING  =  CEPH_MDS_STATE_CREATING,       // up, creating MDS instance (new journal, idalloc..).
@@ -275,6 +274,21 @@ public:
 
   const std::string get_balancer() const { return balancer; }
   void set_balancer(std::string val) { balancer.assign(val); }
+
+  const std::bitset<MAX_MDS>& get_bal_rank_mask_bitset() const;
+  void set_bal_rank_mask(std::string val);
+  unsigned get_num_mdss_in_rank_mask_bitset() const { return num_mdss_in_rank_mask_bitset; }
+  void update_num_mdss_in_rank_mask_bitset();
+  int hex2bin(std::string hex_string, std::string &bin_string, unsigned int max_bits, std::ostream& ss) const;
+
+  typedef enum
+  {
+    BAL_RANK_MASK_TYPE_ANY = 0,
+    BAL_RANK_MASK_TYPE_ALL = 1,
+    BAL_RANK_MASK_TYPE_NONE = 2,
+  } bal_rank_mask_type_t;
+
+  const bool check_special_bal_rank_mask(std::string val, bal_rank_mask_type_t type) const;
 
   mds_rank_t get_tableserver() const { return tableserver; }
   mds_rank_t get_root() const { return root; }
@@ -626,6 +640,10 @@ protected:
   mds_rank_t old_max_mds = 0; /* Value to restore when MDS cluster is marked up */
   mds_rank_t standby_count_wanted = -1;
   std::string balancer;    /* The name/version of the mantle balancer (i.e. the rados obj name) */
+
+  std::string bal_rank_mask = "-1";
+  std::bitset<MAX_MDS> bal_rank_mask_bitset;
+  uint32_t num_mdss_in_rank_mask_bitset;
 
   std::set<mds_rank_t> in;              // currently defined cluster
 

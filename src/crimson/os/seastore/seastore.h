@@ -11,6 +11,7 @@
 
 #include <optional>
 #include <seastar/core/future.hh>
+#include <seastar/core/metrics_types.hh>
 
 #include "include/uuid.h"
 
@@ -18,10 +19,12 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 
+#include "crimson/os/seastore/device.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/omap_manager.h"
 #include "crimson/os/seastore/collection_manager.h"
+#include "crimson/os/seastore/object_data_handler.h"
 
 namespace crimson::os::seastore {
 
@@ -38,6 +41,21 @@ public:
   seastar::shared_mutex ordering_lock;
 };
 
+/**
+ * col_obj_ranges_t
+ *
+ * Represents the two ghobject_t ranges spanned by a PG collection.
+ * Temp objects will be within [temp_begin, temp_end) and normal objects
+ * will be in [obj_begin, obj_end).
+ */
+struct col_obj_ranges_t {
+  ghobject_t temp_begin;
+  ghobject_t temp_end;
+  ghobject_t obj_begin;
+  ghobject_t obj_end;
+};
+
+using coll_core_t = FuturizedStore::coll_core_t;
 class SeaStore final : public FuturizedStore {
 public:
   class MDStore {
@@ -64,16 +82,8 @@ public:
   SeaStore(
     const std::string& root,
     MDStoreRef mdstore,
-    SegmentManagerRef sm,
-    TransactionManagerRef tm,
-    CollectionManagerRef cm,
-    OnodeManagerRef om);
-  SeaStore(
-    const std::string& root,
-    SegmentManagerRef sm,
-    TransactionManagerRef tm,
-    CollectionManagerRef cm,
-    OnodeManagerRef om);
+    DeviceRef device,
+    bool is_test);
   ~SeaStore();
     
   seastar::future<> stop() final;
@@ -121,9 +131,12 @@ public:
     const std::optional<std::string> &start ///< [in] start, empty for begin
     ) final; ///< @return <done, values> values.empty() iff done
 
-  read_errorator::future<bufferlist> omap_get_header(
+  get_attr_errorator::future<bufferlist> omap_get_header(
     CollectionRef c,
     const ghobject_t& oid) final;
+
+  static col_obj_ranges_t
+  get_objs_range(CollectionRef ch, unsigned bits);
 
   seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>> list_objects(
     CollectionRef c,
@@ -133,16 +146,17 @@ public:
 
   seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
   seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
-  seastar::future<std::vector<coll_t>> list_collections() final;
+  seastar::future<std::vector<coll_core_t>> list_collections() final;
 
-  seastar::future<> do_transaction(
+  seastar::future<> do_transaction_no_callbacks(
     CollectionRef ch,
     ceph::os::Transaction&& txn) final;
 
-  seastar::future<OmapIteratorRef> get_omap_iterator(
-    CollectionRef ch,
-    const ghobject_t& oid) final;
-  seastar::future<std::map<uint64_t, uint64_t>> fiemap(
+  /* Note, flush() machinery must go through the same pipeline
+   * stages and locks as do_transaction. */
+  seastar::future<> flush(CollectionRef ch) final;
+
+  read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
     CollectionRef ch,
     const ghobject_t& oid,
     uint64_t off,
@@ -168,6 +182,13 @@ public:
     MAX
   };
 
+  // for test
+  mount_ertr::future<> test_mount();
+  mkfs_ertr::future<> test_mkfs(uuid_d new_osd_fsid);
+  DeviceRef get_primary_device_ref() {
+    return std::move(device);
+  }
+
 private:
   struct internal_context_t {
     CollectionRef ch;
@@ -191,6 +212,9 @@ private:
       iter = ext_transaction.begin();
     }
   };
+
+  TransactionManager::read_extent_iertr::future<std::optional<unsigned>>
+  get_coll_bits(CollectionRef ch, Transaction &t) const;
 
   static void on_error(ceph::os::Transaction &t);
 
@@ -265,6 +289,13 @@ private:
     });
   }
 
+  using _fiemap_ret = ObjectDataHandler::fiemap_ret;
+  _fiemap_ret _fiemap(
+    Transaction &t,
+    Onode &onode,
+    uint64_t off,
+    uint64_t len) const;
+
   using _omap_get_value_iertr = OMapManager::base_iertr::extend<
     crimson::ct_error::enodata
     >;
@@ -281,30 +312,29 @@ private:
     omap_root_t &&root,
     const omap_keys_t &keys) const;
 
-  using _omap_list_bare_ret = OMapManager::omap_list_bare_ret;
-  using _omap_list_ret = OMapManager::omap_list_ret;
-  _omap_list_ret _omap_list(
+  friend class SeaStoreOmapIterator;
+
+  using omap_list_bare_ret = OMapManager::omap_list_bare_ret;
+  using omap_list_ret = OMapManager::omap_list_ret;
+  omap_list_ret omap_list(
     Onode &onode,
     const omap_root_le_t& omap_root,
     Transaction& t,
     const std::optional<std::string>& start,
     OMapManager::omap_list_config_t config) const;
 
-  friend class SeaStoreOmapIterator;
-  omap_get_values_ret_t omap_list(
-    CollectionRef ch,
-    const ghobject_t &oid,
-    const std::optional<std::string> &_start,
-    OMapManager::omap_list_config_t config);
+  void init_managers();
 
   std::string root;
   MDStoreRef mdstore;
-  SegmentManagerRef segment_manager;
-  std::vector<SegmentManagerRef> secondaries;
+  DeviceRef device;
+  const uint32_t max_object_size = 0;
+  bool is_test;
+
+  std::vector<DeviceRef> secondaries;
   TransactionManagerRef transaction_manager;
   CollectionManagerRef collection_manager;
   OnodeManagerRef onode_manager;
-  const uint32_t max_object_size = 0;
 
   using tm_iertr = TransactionManager::base_iertr;
   using tm_ret = tm_iertr::future<>;
@@ -312,6 +342,7 @@ private:
     internal_context_t &ctx,
     CollectionRef &col,
     std::vector<OnodeRef> &onodes,
+    std::vector<OnodeRef> &d_onodes,
     ceph::os::Transaction::iterator &i);
 
   tm_ret _remove(
@@ -326,6 +357,10 @@ private:
     uint64_t offset, size_t len,
     ceph::bufferlist &&bl,
     uint32_t fadvise_flags);
+  tm_ret _zero(
+    internal_context_t &ctx,
+    OnodeRef &onode,
+    objaddr_t offset, extent_len_t len);
   tm_ret _omap_set_values(
     internal_context_t &ctx,
     OnodeRef &onode,
@@ -334,6 +369,9 @@ private:
     internal_context_t &ctx,
     OnodeRef &onode,
     ceph::bufferlist &&header);
+  tm_ret _omap_clear(
+    internal_context_t &ctx,
+    OnodeRef &onode);
   tm_ret _omap_rmkeys(
     internal_context_t &ctx,
     OnodeRef &onode,
@@ -350,6 +388,20 @@ private:
     internal_context_t &ctx,
     OnodeRef &onode,
     std::map<std::string,bufferlist>&& aset);
+  tm_ret _rmattr(
+    internal_context_t &ctx,
+    OnodeRef &onode,
+    std::string name);
+  tm_ret _rmattrs(
+    internal_context_t &ctx,
+    OnodeRef &onode);
+  tm_ret _xattr_rmattr(
+    internal_context_t &ctx,
+    OnodeRef &onode,
+    std::string &&name);
+  tm_ret _xattr_clear(
+    internal_context_t &ctx,
+    OnodeRef &onode);
   tm_ret _create_collection(
     internal_context_t &ctx,
     const coll_t& cid, int bits);
@@ -386,9 +438,14 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
   seastar::future<> write_fsid(uuid_d new_osd_fsid);
+  seastar::future<> _mkfs(uuid_d new_osd_fsid);
 };
 
 seastar::future<std::unique_ptr<SeaStore>> make_seastore(
   const std::string &device,
   const ConfigValues &config);
+
+std::unique_ptr<SeaStore> make_test_seastore(
+  DeviceRef device,
+  SeaStore::MDStoreRef mdstore);
 }

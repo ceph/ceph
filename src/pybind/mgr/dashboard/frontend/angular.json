@@ -5,20 +5,59 @@
   "projects": {
     "ceph-dashboard": {
       "i18n": {
-        "sourceLocale": { "code": "en-US", "baseHref": "" },
+        "sourceLocale": {
+          "code": "en-US",
+          "baseHref": ""
+        },
         "locales": {
-          "cs": { "translation": "src/locale/messages.cs.xlf", "baseHref": "" },
-          "de": { "translation": "src/locale/messages.de-DE.xlf", "baseHref": "" },
-          "es": { "translation": "src/locale/messages.es-ES.xlf", "baseHref": "" },
-          "fr": { "translation": "src/locale/messages.fr-FR.xlf", "baseHref": "" },
-          "id": { "translation": "src/locale/messages.id-ID.xlf", "baseHref": "" },
-          "it": { "translation": "src/locale/messages.it-IT.xlf", "baseHref": "" },
-          "ja": { "translation": "src/locale/messages.ja-JP.xlf", "baseHref": "" },
-          "ko": { "translation": "src/locale/messages.ko-KR.xlf", "baseHref": "" },
-          "pl": { "translation": "src/locale/messages.pl-PL.xlf", "baseHref": "" },
-          "pt": { "translation": "src/locale/messages.pt-BR.xlf", "baseHref": "" },
-          "zh-Hans": { "translation": "src/locale/messages.zh-CN.xlf", "baseHref": "" },
-          "zh-Hant": { "translation": "src/locale/messages.zh-TW.xlf", "baseHref": "" }
+          "cs": {
+            "translation": "src/locale/messages.cs.xlf",
+            "baseHref": ""
+          },
+          "de": {
+            "translation": "src/locale/messages.de-DE.xlf",
+            "baseHref": ""
+          },
+          "es": {
+            "translation": "src/locale/messages.es-ES.xlf",
+            "baseHref": ""
+          },
+          "fr": {
+            "translation": "src/locale/messages.fr-FR.xlf",
+            "baseHref": ""
+          },
+          "id": {
+            "translation": "src/locale/messages.id-ID.xlf",
+            "baseHref": ""
+          },
+          "it": {
+            "translation": "src/locale/messages.it-IT.xlf",
+            "baseHref": ""
+          },
+          "ja": {
+            "translation": "src/locale/messages.ja-JP.xlf",
+            "baseHref": ""
+          },
+          "ko": {
+            "translation": "src/locale/messages.ko-KR.xlf",
+            "baseHref": ""
+          },
+          "pl": {
+            "translation": "src/locale/messages.pl-PL.xlf",
+            "baseHref": ""
+          },
+          "pt": {
+            "translation": "src/locale/messages.pt-BR.xlf",
+            "baseHref": ""
+          },
+          "zh-Hans": {
+            "translation": "src/locale/messages.zh-CN.xlf",
+            "baseHref": ""
+          },
+          "zh-Hant": {
+            "translation": "src/locale/messages.zh-TW.xlf",
+            "baseHref": ""
+          }
         }
       },
       "root": "",
@@ -60,7 +99,9 @@
               "node_modules/ngx-toastr/toastr.css",
               "src/styles.scss"
             ],
-            "scripts": ["node_modules/chart.js/dist/Chart.bundle.js"],
+            "scripts": [
+              "node_modules/chart.js/dist/Chart.bundle.js"
+            ],
             "stylePreprocessorOptions": {
               "includePaths": [
                 "src"
@@ -96,43 +137,69 @@
               ]
             },
             "cs": {
-              "localize": ["cs"]
+              "localize": [
+                "cs"
+              ]
             },
             "de": {
-              "localize": ["de"]
+              "localize": [
+                "de"
+              ]
             },
             "en-US": {
-              "localize": ["en-US"]
+              "localize": [
+                "en-US"
+              ]
             },
             "es": {
-              "localize": ["es"]
+              "localize": [
+                "es"
+              ]
             },
             "fr": {
-              "localize": ["fr"]
+              "localize": [
+                "fr"
+              ]
             },
             "id": {
-              "localize": ["id"]
+              "localize": [
+                "id"
+              ]
             },
             "it": {
-              "localize": ["it"]
+              "localize": [
+                "it"
+              ]
             },
             "ja": {
-              "localize": ["ja"]
+              "localize": [
+                "ja"
+              ]
             },
             "ko": {
-              "localize": ["ko"]
+              "localize": [
+                "ko"
+              ]
             },
             "pl": {
-              "localize": ["pl"]
+              "localize": [
+                "pl"
+              ]
             },
             "pt": {
-              "localize": ["pt"]
+              "localize": [
+                "pt"
+              ]
             },
             "zh-Hans": {
-              "localize": ["zh-Hans"]
+              "localize": [
+                "zh-Hans"
+              ]
             },
             "zh-Hant": {
-              "localize": ["zh-Hant"]
+              "localize": [
+                "zh-Hant"
+              ]
             }
           },
           "defaultConfiguration": ""
@@ -195,15 +262,11 @@
           }
         },
         "lint": {
-          "builder": "@angular-devkit/build-angular:tslint",
+          "builder": "@angular-eslint/builder:lint",
           "options": {
-            "tsConfig": [
-              "tsconfig.app.json",
-              "tsconfig.spec.json",
-              "cypress/tsconfig.json"
-            ],
-            "exclude": [
-              "**/node_modules/**"
+            "lintFilePatterns": [
+              "src/**/*.ts",
+              "src/**/*.html"
             ]
           }
         }
@@ -222,6 +285,7 @@
     }
   },
   "cli": {
-    "analytics": false
+    "analytics": false,
+    "defaultCollection": "@angular-eslint/schematics"
   }
 }

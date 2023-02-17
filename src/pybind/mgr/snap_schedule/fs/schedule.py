@@ -241,6 +241,14 @@ class Schedule(object):
                                (f'{path}',))
             return [cls._from_db_row(row, fs) for row in c.fetchall()]
 
+    @classmethod
+    def list_all_schedules(cls,
+                           db: sqlite3.Connection,
+                           fs: str) -> List['Schedule']:
+        with db:
+            c = db.execute(cls.PROTO_GET_SCHEDULES + " path LIKE '%'")
+            return [cls._from_db_row(row, fs) for row in c.fetchall()]
+
     INSERT_SCHEDULE = '''INSERT INTO
         schedules(path, subvol, retention, rel_path)
         Values(?, ?, ?, ?);'''
@@ -288,7 +296,7 @@ class Schedule(object):
                              (path,))
             row = cur.fetchone()
 
-            if len(row) == 0:
+            if row is None:
                 log.info(f'no schedule for {path} found')
                 raise ValueError('SnapSchedule for {} not found'.format(path))
 
@@ -337,7 +345,7 @@ class Schedule(object):
                       retention_spec: str) -> None:
         with db:
             row = db.execute(cls.GET_RETENTION, (path,)).fetchone()
-            if not row:
+            if row is None:
                 raise ValueError(f'No schedule found for {path}')
             retention = parse_retention(retention_spec)
             if not retention:
@@ -361,7 +369,7 @@ class Schedule(object):
                      retention_spec: str) -> None:
         with db:
             row = db.execute(cls.GET_RETENTION, (path,)).fetchone()
-            if not row:
+            if row is None:
                 raise ValueError(f'No schedule found for {path}')
             retention = parse_retention(retention_spec)
             current = row['retention']

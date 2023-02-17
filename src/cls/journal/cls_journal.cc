@@ -271,11 +271,12 @@ int find_min_commit_position(cls_method_context_t hctx,
     }
 
     start_after = batch.rbegin()->id;
-
     // update the (minimum) commit position from this batch of clients
-    for(std::set<cls::journal::Client>::iterator it = batch.begin();
-        it != batch.end(); ++it) {
-      cls::journal::ObjectSetPosition object_set_position = (*it).commit_position;
+    for (const auto &client : batch) {
+      if (client.state == cls::journal::CLIENT_STATE_DISCONNECTED) {
+        continue;
+      }
+      const auto &object_set_position = client.commit_position;
       if (object_set_position.object_positions.empty()) {
 	*minset = cls::journal::ObjectSetPosition();
 	break;

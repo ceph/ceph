@@ -39,8 +39,9 @@ public:
 };
 
 class RGWCreateRole : public RGWRoleWrite {
+  bufferlist bl_post_body;
 public:
-  RGWCreateRole() = default;
+  RGWCreateRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;
   int get_params();
@@ -50,8 +51,9 @@ public:
 };
 
 class RGWDeleteRole : public RGWRoleWrite {
+  bufferlist bl_post_body;
 public:
-  RGWDeleteRole() = default;
+  RGWDeleteRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "delete_role"; }
@@ -71,14 +73,15 @@ public:
   uint64_t get_op() override { return rgw::IAM::iamGetRole; }
 };
 
-class RGWModifyRole : public RGWRoleWrite {
+class RGWModifyRoleTrustPolicy : public RGWRoleWrite {
+  bufferlist bl_post_body;
 public:
-  RGWModifyRole() = default;
+  RGWModifyRoleTrustPolicy(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
   int get_params();
-  const char* name() const override { return "modify_role"; }
-  RGWOpType get_type() override { return RGW_OP_MODIFY_ROLE; }
-  uint64_t get_op() override { return rgw::IAM::iamModifyRole; }
+  const char* name() const override { return "modify_role_trust_policy"; }
+  RGWOpType get_type() override { return RGW_OP_MODIFY_ROLE_TRUST_POLICY; }
+  uint64_t get_op() override { return rgw::IAM::iamModifyRoleTrustPolicy; }
 };
 
 class RGWListRoles : public RGWRoleRead {
@@ -93,8 +96,9 @@ public:
 };
 
 class RGWPutRolePolicy : public RGWRoleWrite {
+  bufferlist bl_post_body;
 public:
-  RGWPutRolePolicy() = default;
+  RGWPutRolePolicy(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "put_role_policy"; }
@@ -123,8 +127,9 @@ public:
 };
 
 class RGWDeleteRolePolicy : public RGWRoleWrite {
+  bufferlist bl_post_body;
 public:
-  RGWDeleteRolePolicy() = default;
+  RGWDeleteRolePolicy(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "delete_role_policy"; }
@@ -133,8 +138,9 @@ public:
 };
 
 class RGWTagRole : public RGWRoleWrite {
+  bufferlist bl_post_body;
 public:
-  RGWTagRole() = default;
+  RGWTagRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "tag_role"; }
@@ -153,11 +159,23 @@ public:
 };
 
 class RGWUntagRole : public RGWRoleWrite {
+  bufferlist bl_post_body;
 public:
-  RGWUntagRole() = default;
+  RGWUntagRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "untag_role"; }
   RGWOpType get_type() override { return RGW_OP_UNTAG_ROLE; }
   uint64_t get_op() override { return rgw::IAM::iamUntagRole; }
+};
+
+class RGWUpdateRole : public RGWRoleWrite {
+  bufferlist bl_post_body;
+public:
+  RGWUpdateRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
+  void execute(optional_yield y) override;
+  int get_params();
+  const char* name() const override { return "update_role"; }
+  RGWOpType get_type() override { return RGW_OP_UPDATE_ROLE; }
+  uint64_t get_op() override { return rgw::IAM::iamUpdateRole; }
 };

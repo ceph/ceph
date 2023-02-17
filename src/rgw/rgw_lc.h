@@ -1,10 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_LC_H
-#define CEPH_RGW_LC_H
+#pragma once
 
 #include <map>
+#include <array>
 #include <string>
 #include <iostream>
 
@@ -159,13 +159,50 @@ public:
 };
 WRITE_CLASS_ENCODER(LCTransition)
 
+enum class LCFlagType : uint16_t
+{
+  none = 0,
+  ArchiveZone,
+};
+
+class LCFlag {
+public:
+  LCFlagType bit;
+  const char* name;
+
+  constexpr LCFlag(LCFlagType ord, const char* name) : bit(ord), name(name)
+    {}
+};
+
 class LCFilter
 {
- protected:
+ public:
+
+  static constexpr uint32_t make_flag(LCFlagType type) {
+    switch (type) {
+    case LCFlagType::none:
+      return 0;
+      break;
+    default:
+      return 1 << (uint32_t(type) - 1);
+    }
+   }
+
+  static constexpr std::array<LCFlag, 2> filter_flags =
+  {
+    LCFlag(LCFlagType::none, "none"),
+    LCFlag(LCFlagType::ArchiveZone, "ArchiveZone"),
+  };
+
+protected:
   std::string prefix;
   RGWObjTags obj_tags;
+  uint32_t flags;
 
- public:
+public:
+
+  LCFilter() : flags(make_flag(LCFlagType::none))
+    {}
 
   const std::string& get_prefix() const {
     return prefix;
@@ -175,13 +212,17 @@ class LCFilter
     return obj_tags;
   }
 
+  const uint32_t get_flags() const {
+    return flags;
+  }
+
   bool empty() const {
-    return !(has_prefix() || has_tags());
+    return !(has_prefix() || has_tags() || has_flags());
   }
 
   // Determine if we need AND tag when creating xml
   bool has_multi_condition() const {
-    if (obj_tags.count() > 1)
+    if (obj_tags.count() + int(has_prefix()) + int(has_flags()) > 1) // Prefix is a member of Filter
       return true;
     return false;
   }
@@ -194,17 +235,29 @@ class LCFilter
     return !obj_tags.empty();
   }
 
+  bool has_flags() const {
+    return !(flags == uint32_t(LCFlagType::none));
+  }
+
+  bool have_flag(LCFlagType flag) const {
+    return flags & make_flag(flag);
+  }
+
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(prefix, bl);
     encode(obj_tags, bl);
+    encode(flags, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(prefix, bl);
     if (struct_v >= 2) {
       decode(obj_tags, bl);
+      if (struct_v >= 3) {
+	decode(flags, bl);
+      }
     }
     DECODE_FINISH(bl);
   }
@@ -229,7 +282,7 @@ protected:
 public:
 
   LCRule(){};
-  ~LCRule(){};
+  virtual ~LCRule() {}
 
   const std::string& get_id() const {
       return id;
@@ -392,6 +445,7 @@ struct lc_op
   boost::optional<RGWObjTags> obj_tags;
   std::map<std::string, transition_action> transitions;
   std::map<std::string, transition_action> noncur_transitions;
+  uint32_t rule_flags;
 
   /* ctors are nice */
   lc_op() = delete;
@@ -460,7 +514,7 @@ WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
 class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   std::unique_ptr<rgw::sal::Lifecycle> sal_lc;
   int max_objs{0};
   std::string *obj_names{nullptr};
@@ -493,12 +547,17 @@ public:
     LCWorker(const DoutPrefixProvider* dpp, CephContext *_cct, RGWLC *_lc,
 	     int ix);
     RGWLC* get_lc() { return lc; }
+
+    std::string thr_name() {
+      return std::string{"lc_thrd: "} + std::to_string(ix);
+    }
+
     void *entry() override;
     void stop();
     bool should_work(utime_t& now);
     int schedule_next_start_time(utime_t& start, utime_t& now);
     std::set<std::string>& get_cloud_targets() { return cloud_targets; }
-    ~LCWorker();
+    virtual ~LCWorker() override;
 
     friend class RGWRados;
     friend class RGWLC;
@@ -509,24 +568,27 @@ public:
 
   std::vector<std::unique_ptr<RGWLC::LCWorker>> workers;
 
-  RGWLC() : cct(nullptr), store(nullptr) {}
-  ~RGWLC();
+  RGWLC() : cct(nullptr), driver(nullptr) {}
+  virtual ~RGWLC() override;
 
-  void initialize(CephContext *_cct, rgw::sal::Store* _store);
+  void initialize(CephContext *_cct, rgw::sal::Driver* _driver);
   void finalize();
 
   int process(LCWorker* worker,
 	      const std::unique_ptr<rgw::sal::Bucket>& optional_bucket,
 	      bool once);
+  int advance_head(const std::string& lc_shard,
+		   rgw::sal::Lifecycle::LCHead& head,
+		   rgw::sal::Lifecycle::LCEntry& entry,
+		   time_t start_date);
   int process(int index, int max_lock_secs, LCWorker* worker, bool once);
   int process_bucket(int index, int max_lock_secs, LCWorker* worker,
 		     const std::string& bucket_entry_marker, bool once);
-  bool if_already_run_today(time_t start_date);
   bool expired_session(time_t started);
   time_t thread_stop_at();
   int list_lc_progress(std::string& marker, uint32_t max_entries,
-		       std::vector<rgw::sal::Lifecycle::LCEntry>&, int& index);
-  int bucket_lc_prepare(int index, LCWorker* worker);
+		       std::vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>>&,
+		       int& index);
   int bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
 			bool once);
   int bucket_lc_post(int index, int max_lock_sec,
@@ -538,7 +600,8 @@ public:
                         const rgw::sal::Attrs& bucket_attrs,
                         RGWLifecycleConfiguration *config);
   int remove_bucket_config(rgw::sal::Bucket* bucket,
-                           const rgw::sal::Attrs& bucket_attrs);
+                           const rgw::sal::Attrs& bucket_attrs,
+			   bool merge_attrs = true);
 
   CephContext *get_cct() const override { return cct; }
   rgw::sal::Lifecycle* get_lc() const { return sal_lc.get(); }
@@ -555,7 +618,7 @@ public:
 namespace rgw::lc {
 
 int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
-                       rgw::sal::Store* store,
+                       rgw::sal::Driver* driver,
 		       rgw::sal::Lifecycle* sal_lc,
 		       rgw::sal::Bucket* bucket);
 
@@ -575,5 +638,3 @@ bool s3_multipart_abort_header(
   std::string& rule_id);
 
 } // namespace rgw::lc
-
-#endif

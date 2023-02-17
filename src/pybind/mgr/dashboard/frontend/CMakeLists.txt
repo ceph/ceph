@@ -63,7 +63,7 @@ else(WITH_SYSTEM_NPM)
     OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv-dir}
     COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install nodeenv
-    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv --verbose ${node_mirror_opt} -p --node=12.18.2
+    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv --verbose ${node_mirror_opt} -p --node=14.15.1
     COMMAND mkdir ${mgr-dashboard-nodeenv-dir}/.npm
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed")
@@ -109,7 +109,7 @@ execute_process(
 set(frontend_dist_dir "${CMAKE_CURRENT_BINARY_DIR}/dist")
 set(npm_args "--output-path ${frontend_dist_dir}")
 if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  string(APPEND npm_args " --prod --progress=false")
+  string(APPEND npm_args " --configuration=production --progress=false")
 else()
   string(APPEND npm_args " --progress=false")
 endif()

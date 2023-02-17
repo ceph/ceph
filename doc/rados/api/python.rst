@@ -20,10 +20,11 @@ perform object operations as a ``client.admin`` user.
 .. note:: To use the Ceph Python bindings, you must have access to a
    running Ceph cluster. To set one up quickly, see `Getting Started`_.
 
-First, create a Python source file for your Ceph client. ::
-   :linenos:
+First, create a Python source file for your Ceph client.
 
-	sudo vim client.py
+.. prompt:: bash
+
+	vim client.py
 
 
 Import the Module
@@ -68,7 +69,7 @@ Your Python client also requires a client keyring. For this example, we use the
 ``client.admin`` key by default. If you would like to specify the keyring when
 creating the cluster handle, you may use the ``conf`` argument. Alternatively,
 you may specify the keyring path in your Ceph configuration file. For example,
-you may add something like the following line to you Ceph configuration file::
+you may add something like the following line to your Ceph configuration file::
 
 	keyring = /path/to/ceph.client.admin.keyring
 
@@ -114,7 +115,7 @@ configuration file example uses the ``client.admin`` keyring.
 
 	[global]
 	# ... elided configuration
-	keyring=/path/to/keyring/ceph.client.admin.keyring
+	keyring = /path/to/keyring/ceph.client.admin.keyring
 
 
 Manage Pools

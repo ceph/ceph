@@ -28,7 +28,8 @@ namespace crimson::os::seastore::segment_manager::zns {
     size_t block_size = 0;
     size_t segments = 0;
     size_t zone_size = 0;
-    uint64_t first_segment_offset = 0;
+    size_t first_segment_offset = 0;
+
     seastore_meta_t meta;
     
     bool major_dev = false;
@@ -41,8 +42,9 @@ namespace crimson::os::seastore::segment_manager::zns {
       DENC_START(1, 1, p);
       denc(v.size, p);
       denc(v.segment_size, p);
-      denc(v.zone_capacity, p);
+      denc(v.segment_capacity, p);
       denc(v.zones_per_segment, p);
+      denc(v.zone_capacity, p);
       denc(v.block_size, p);
       denc(v.segments, p);
       denc(v.zone_size, p);
@@ -56,10 +58,26 @@ namespace crimson::os::seastore::segment_manager::zns {
       }
       DENC_FINISH(p);
     }
+
+    void validate() const {
+      ceph_assert_always(size > 0);
+      ceph_assert_always(size <= DEVICE_OFF_MAX);
+      ceph_assert_always(segment_capacity > 0);
+      ceph_assert_always(segment_capacity <= SEGMENT_OFF_MAX);
+      ceph_assert_always(segments > 0);
+      ceph_assert_always(segments <= DEVICE_SEGMENT_ID_MAX);
+    }
   };
 
   using write_ertr = crimson::errorator<crimson::ct_error::input_output_error>;
   using read_ertr = crimson::errorator<crimson::ct_error::input_output_error>;
+
+  enum class zone_op {
+    OPEN,
+    FINISH,
+    CLOSE,
+    RESET,
+  };
 
   class ZNSSegmentManager;
 
@@ -72,6 +90,7 @@ namespace crimson::os::seastore::segment_manager::zns {
     segment_off_t get_write_ptr() const final { return write_pointer; }
     close_ertr::future<> close() final;
     write_ertr::future<> write(segment_off_t offset, ceph::bufferlist bl) final;
+    write_ertr::future<> advance_wp(segment_off_t offset) final;
 
     ~ZNSSegment() {}
   private:
@@ -79,12 +98,13 @@ namespace crimson::os::seastore::segment_manager::zns {
     ZNSSegmentManager &manager;
     const segment_id_t id;
     segment_off_t write_pointer = 0;
+    write_ertr::future<> write_padding_bytes(size_t padding_bytes);
   };
 
   class ZNSSegmentManager final : public SegmentManager{
   public:
     mount_ret mount() final;
-    mkfs_ret mkfs(segment_manager_config_t meta) final;
+    mkfs_ret mkfs(device_config_t meta) final;
     open_ertr::future<SegmentRef> open(segment_id_t id) final;
     close_ertr::future<> close() final;
 
@@ -95,16 +115,16 @@ namespace crimson::os::seastore::segment_manager::zns {
       size_t len, 
       ceph::bufferptr &out) final;
 
-    size_t get_size() const final {
+    size_t get_available_size() const final {
       return metadata.size;
     };
 
-    segment_off_t get_block_size() const final {
+    extent_len_t get_block_size() const final {
       return metadata.block_size;
     };
 
     segment_off_t get_segment_size() const final {
-      return metadata.segment_size;
+      return metadata.segment_capacity;
     };
 
     const seastore_meta_t &get_meta() const {
@@ -114,8 +134,6 @@ namespace crimson::os::seastore::segment_manager::zns {
     device_id_t get_device_id() const final;
 
     secondary_device_set_t& get_secondary_devices() final;
-
-    device_spec_t get_device_spec() const final;
 
     magic_t get_magic() const final;
 
@@ -166,11 +184,9 @@ namespace crimson::os::seastore::segment_manager::zns {
 
     uint64_t get_offset(paddr_t addr) {
       auto& seg_addr = addr.as_seg_paddr();
-      const auto default_sector_size = 512;
       return (metadata.first_segment_offset +
 	      (seg_addr.get_segment_id().device_segment_id() * 
-	       metadata.zone_size)) * default_sector_size + 
-	seg_addr.get_segment_off();
+	       metadata.segment_size)) + seg_addr.get_segment_off();
     }
   };
 

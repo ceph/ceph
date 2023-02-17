@@ -15,7 +15,7 @@ the S3 api.
 Time-based one time password tokens can be assigned to a user
 through radosgw-admin. Each token has a secret seed, and a serial
 id that is assigned to it. Tokens are added to the user, can
-be listedm removed, and can also be re-synchronized.
+be listed, removed, and can also be re-synchronized.
 
 Multisite
 =========

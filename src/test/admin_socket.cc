@@ -118,6 +118,7 @@ TEST(AdminSocket, SendTooLongRequest) {
 
 class MyTest : public AdminSocketHook {
   int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist&,
 	   Formatter *f,
 	   std::ostream& ss,
 	   bufferlist& result) override {
@@ -153,6 +154,7 @@ TEST(AdminSocket, RegisterCommand) {
 
 class MyTest2 : public AdminSocketHook {
   int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist&,
 	   Formatter *f,
 	   std::ostream& ss,
 	   bufferlist& result) override {
@@ -210,6 +212,7 @@ public:
   BlockingHook() = default;
 
   int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist&,
 	   Formatter *f,
 	   std::ostream& ss,
 	   bufferlist& result) override {

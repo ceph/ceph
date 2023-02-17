@@ -42,6 +42,9 @@ export class SubmitButtonComponent implements OnInit {
   @Input()
   btnClass: string;
 
+  @Input()
+  ariaLabel: string;
+
   @Output()
   submitAction = new EventEmitter();
 
@@ -51,7 +54,7 @@ export class SubmitButtonComponent implements OnInit {
   constructor(private elRef: ElementRef) {}
 
   ngOnInit() {
-    this.form.statusChanges.subscribe(() => {
+    this.form?.statusChanges.subscribe(() => {
       if (_.has(this.form.errors, 'cdSubmitButton')) {
         this.loading = false;
         _.unset(this.form.errors, 'cdSubmitButton');

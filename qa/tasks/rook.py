@@ -367,6 +367,30 @@ def rook_cluster(ctx, config):
                 'count': num_hosts,
                 'allowMultiplePerNode': True,
             },
+            'storage': {
+                'storageClassDeviceSets': [
+                    {
+                        'name': 'scratch',
+                        'count': num_devs,
+                        'portable': False,
+                        'volumeClaimTemplates': [
+                            {
+                                'metadata': {'name': 'data'},
+                                'spec': {
+                                    'resources': {
+                                        'requests': {
+                                            'storage': '10Gi'  # <= (lte) the actual PV size
+                                        }
+                                    },
+                                    'storageClassName': 'scratch',
+                                    'volumeMode': 'Block',
+                                    'accessModes': ['ReadWriteOnce'],
+                                },
+                            },
+                        ],
+                    }
+                ],
+            },
         }
     }
     teuthology.deep_merge(cluster['spec'], config.get('spec', {}))
@@ -433,6 +457,11 @@ def rook_toolbox(ctx, config):
                     ['-n', 'rook-ceph', 'get', 'pods', '-l', 'app=rook-ceph-tools'],
                     stdout=BytesIO(),
                 )
+                _kubectl(
+                    ctx, config,
+                    ['-n', 'rook-ceph', 'get', 'pods'],
+                    stdout=BytesIO(),
+                )
                 for line in p.stdout.getvalue().decode('utf-8').strip().splitlines():
                     name, ready, status, _ = line.split(None, 3)
                     if status == 'Running':
@@ -450,39 +479,6 @@ def rook_toolbox(ctx, config):
             'delete',
             '-f', (path_to_examples(ctx, cluster_name) + 'toolbox.yaml'),
         ], check_status=False)
-
-
-@contextlib.contextmanager
-def wait_for_orch(ctx, config):
-    log.info('Waiting for mgr/rook orchestrator to be available')
-    with safe_while(sleep=10, tries=90, action="check orch status") as proceed:
-        while proceed():
-            p = _shell(ctx, config, ['ceph', 'orch', 'status', '-f', 'json'],
-                       stdout=BytesIO(),
-                       check_status=False)
-            if p.exitstatus == 0:
-                r = json.loads(p.stdout.getvalue().decode('utf-8'))
-                if r.get('available') and r.get('backend') == 'rook':
-                    log.info(' mgr/rook orchestrator is active')
-                    break
-
-    yield
-
-
-@contextlib.contextmanager
-def rook_post_config(ctx, config):
-    try:
-        _shell(ctx, config, ['ceph', 'config', 'set', 'mgr', 'mgr/rook/storage_class',
-                             'scratch'])
-        _shell(ctx, config, ['ceph', 'orch', 'apply', 'osd', '--all-available-devices'])
-        yield
-
-    except Exception as e:
-        log.exception(e)
-        raise
-
-    finally:
-        pass
 
 
 @contextlib.contextmanager
@@ -635,8 +631,6 @@ def task(ctx, config):
             lambda: ceph_log(ctx, config),
             lambda: rook_cluster(ctx, config),
             lambda: rook_toolbox(ctx, config),
-            lambda: wait_for_orch(ctx, config),
-            lambda: rook_post_config(ctx, config),
             lambda: wait_for_osds(ctx, config),
             lambda: ceph_config_keyring(ctx, config),
             lambda: ceph_clients(ctx, config),
@@ -657,21 +651,4 @@ def task(ctx, config):
             yield
 
         finally:
-            to_remove = []
-            ret = _shell(ctx, config, ['ceph', 'orch', 'ls', '-f', 'json'], stdout=BytesIO())
-            if ret.exitstatus == 0:
-                r = json.loads(ret.stdout.getvalue().decode('utf-8'))
-                for service in r:
-                    if service['service_type'] in ['rgw', 'mds', 'nfs', 'rbd-mirror']:
-                        _shell(ctx, config, ['ceph', 'orch', 'rm', service['service_name']])
-                        to_remove.append(service['service_name'])
-                with safe_while(sleep=10, tries=90, action="waiting for service removal") as proceed:
-                    while proceed():
-                        ret = _shell(ctx, config, ['ceph', 'orch', 'ls', '-f', 'json'], stdout=BytesIO())
-                        if ret.exitstatus == 0:
-                            r = json.loads(ret.stdout.getvalue().decode('utf-8'))
-                            still_up = [service['service_name'] for service in r]
-                            matches = set(still_up).intersection(to_remove)
-                            if not matches:
-                                break
             log.info('Tearing down rook')

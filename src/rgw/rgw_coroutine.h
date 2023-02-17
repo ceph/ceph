@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_COROUTINE_H
-#define CEPH_RGW_COROUTINE_H
+#pragma once
 
 #ifdef _ASSERT_H
 #define NEED_ASSERT_H
@@ -65,7 +64,7 @@ protected:
   void _complete(RGWAioCompletionNotifier *cn, const rgw_io_id& io_id, void *user_info);
 public:
   explicit RGWCompletionManager(CephContext *_cct);
-  ~RGWCompletionManager() override;
+  virtual ~RGWCompletionManager() override;
 
   void complete(RGWAioCompletionNotifier *cn, const rgw_io_id& io_id, void *user_info);
   int get_next(io_completion *io);
@@ -94,7 +93,7 @@ class RGWAioCompletionNotifier : public RefCountedObject {
 
 public:
   RGWAioCompletionNotifier(RGWCompletionManager *_mgr, const rgw_io_id& _io_id, void *_user_data);
-  ~RGWAioCompletionNotifier() override {
+  virtual ~RGWAioCompletionNotifier() override {
     c->release();
     lock.lock();
     bool need_unregister = registered;
@@ -300,9 +299,6 @@ public:
   bool collect(int *ret, RGWCoroutinesStack *skip_stack, uint64_t *stack_id = nullptr); /* returns true if needs to be called again */
   bool collect_next(int *ret, RGWCoroutinesStack **collected_stack = NULL); /* returns true if found a stack to collect */
 
-  RGWCoroutinesStack *prealloc_stack(); /* prepare a stack that will be used in the next spawn operation */
-  uint64_t prealloc_stack_id(); /* prepare a stack that will be used in the next spawn operation, return its id */
-
   int wait(const utime_t& interval);
   bool drain_children(int num_cr_left,
                       RGWCoroutinesStack *skip_stack = nullptr,
@@ -435,8 +431,6 @@ class RGWCoroutinesStack : public RefCountedObject {
 
   rgw_spawned_stacks spawned;
 
-  RGWCoroutinesStack *preallocated_stack{nullptr};
-
   std::set<RGWCoroutinesStack *> blocked_by_stack;
   std::set<RGWCoroutinesStack *> blocking_stacks;
 
@@ -466,7 +460,7 @@ protected:
   bool collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesStack **collected_stack); /* returns true if found a stack to collect */
 public:
   RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start = NULL);
-  ~RGWCoroutinesStack() override;
+  virtual ~RGWCoroutinesStack() override;
 
   int64_t get_id() const {
     return id;
@@ -534,7 +528,6 @@ public:
 
   void call(RGWCoroutine *next_op);
   RGWCoroutinesStack *spawn(RGWCoroutine *next_op, bool wait);
-  RGWCoroutinesStack *prealloc_stack();
   int unwind(int retcode);
 
   int wait(const utime_t& interval);
@@ -612,6 +605,7 @@ public:
 
   int hook_to_admin_command(const std::string& command);
   int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist&,
 	   Formatter *f,
 	   std::ostream& ss,
 	   bufferlist& out) override;
@@ -635,7 +629,7 @@ class RGWCoroutinesManager {
   RGWIOIDProvider io_id_provider;
 
   void handle_unblocked_stack(std::set<RGWCoroutinesStack *>& context_stacks, std::list<RGWCoroutinesStack *>& scheduled_stacks,
-                              RGWCompletionManager::io_completion& io, int *waiting_count);
+                              RGWCompletionManager::io_completion& io, int *waiting_count, int *interval_wait_count);
 protected:
   RGWCompletionManager *completion_mgr;
   RGWCoroutinesManagerRegistry *cr_registry;
@@ -718,7 +712,7 @@ class RGWSimpleCoroutine : public RGWCoroutine {
 
 public:
   RGWSimpleCoroutine(CephContext *_cct) : RGWCoroutine(_cct), called_cleanup(false) {}
-  ~RGWSimpleCoroutine() override;
+  virtual ~RGWSimpleCoroutine() override;
 
   virtual int init() { return 0; }
   virtual int send_request(const DoutPrefixProvider *dpp) = 0;
@@ -726,5 +720,3 @@ public:
   virtual int finish() { return 0; }
   virtual void request_cleanup() {}
 };
-
-#endif

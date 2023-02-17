@@ -45,8 +45,8 @@ snap_t get_group_snap_id(I* ictx,
   for (; it != ictx->snap_ids.end(); ++it) {
     if (it->first.first == in_snap_namespace) {
       return it->second;
-    } else if (boost::get<cls::rbd::GroupSnapshotNamespace>(&it->first.first) ==
-                 nullptr) {
+    } else if (!std::holds_alternative<cls::rbd::GroupSnapshotNamespace>(
+		 it->first.first)) {
       break;
     }
   }

@@ -21,6 +21,8 @@ class FilterGenerator(object):
 
     def __iter__(self):
         # type: () -> Generator[Matcher, None, None]
+        if self.device_filter.actuators:
+            yield EqualityMatcher('actuators', self.device_filter.actuators)
         if self.device_filter.size:
             yield SizeMatcher('size', self.device_filter.size)
         if self.device_filter.model:

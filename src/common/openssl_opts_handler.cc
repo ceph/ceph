@@ -113,7 +113,14 @@ void load_module(const string &engine_conf)
   }
 
   OPENSSL_load_builtin_modules();
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
   ENGINE_load_builtin_engines();
+#pragma clang diagnostic pop
+#pragma GCC diagnostic pop
 
   if (CONF_modules_load(
           conf, nullptr,

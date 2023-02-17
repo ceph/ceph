@@ -3,10 +3,12 @@
 import pytest
 from ceph_volume.util.device import Devices
 from ceph_volume.util.lsmdisk import LSMDisk
+from mock.mock import patch
 import ceph_volume.util.lsmdisk as lsmdisk
 
 
 @pytest.fixture
+@patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
 def device_report_keys(device_info):
     device_info(devices={
         # example output of disk.get_devices()
@@ -28,13 +30,15 @@ def device_report_keys(device_info):
                      'size': 1999844147200.0,
                      'support_discard': '',
                      'vendor': 'DELL',
-                     'device_id': 'Vendor-Model-Serial'}
+                     'device_id': 'Vendor-Model-Serial',
+                     'device_nodes': 'sdb'}
     }
  )
     report = Devices().json_report()[0]
     return list(report.keys())
 
 @pytest.fixture
+@patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
 def device_sys_api_keys(device_info):
     device_info(devices={
         # example output of disk.get_devices()
@@ -55,13 +59,15 @@ def device_sys_api_keys(device_info):
                      'sectorsize': '512',
                      'size': 1999844147200.0,
                      'support_discard': '',
-                     'vendor': 'DELL'}
+                     'vendor': 'DELL',
+                     'device_nodes': 'sdb'}
     }
  )
     report = Devices().json_report()[0]
     return list(report['sys_api'].keys())
 
 @pytest.fixture
+@patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
 def device_data(device_info):
     device_info(
         devices={
@@ -85,6 +91,7 @@ def device_data(device_info):
                 'size': 1999844147200.0,
                 'support_discard': '',
                 'vendor': 'DELL',
+                'device_nodes': 'sdb'
             }
         }
     )
@@ -111,6 +118,7 @@ def device_data(device_info):
 class TestInventory(object):
 
     expected_keys = [
+        'ceph_device',
         'path',
         'rejected_reasons',
         'sys_api',
@@ -139,6 +147,7 @@ class TestInventory(object):
         'size',
         'support_discard',
         'vendor',
+        'device_nodes'
     ]
 
     expected_lsm_keys = [
@@ -152,30 +161,30 @@ class TestInventory(object):
         'errors',
     ]
 
-    def test_json_inventory_keys_unexpected(self, device_report_keys):
+    def test_json_inventory_keys_unexpected(self, fake_call, device_report_keys):
         for k in device_report_keys:
             assert k in self.expected_keys, "unexpected key {} in report".format(k)
 
-    def test_json_inventory_keys_missing(self, device_report_keys):
+    def test_json_inventory_keys_missing(self, fake_call, device_report_keys):
         for k in self.expected_keys:
             assert k in device_report_keys, "expected key {} in report".format(k)
 
-    def test_sys_api_keys_unexpected(self, device_sys_api_keys):
+    def test_sys_api_keys_unexpected(self, fake_call, device_sys_api_keys):
         for k in device_sys_api_keys:
             assert k in self.expected_sys_api_keys, "unexpected key {} in sys_api field".format(k)
 
-    def test_sys_api_keys_missing(self, device_sys_api_keys):
+    def test_sys_api_keys_missing(self, fake_call, device_sys_api_keys):
         for k in self.expected_sys_api_keys:
             assert k in device_sys_api_keys, "expected key {} in sys_api field".format(k)
 
-    def test_lsm_data_type_unexpected(self, device_data):
+    def test_lsm_data_type_unexpected(self, fake_call, device_data):
         assert isinstance(device_data['lsm_data'], dict), "lsm_data field must be of type dict"
 
-    def test_lsm_data_keys_unexpected(self, device_data):
+    def test_lsm_data_keys_unexpected(self, fake_call, device_data):
         for k in device_data['lsm_data'].keys():
             assert k in self.expected_lsm_keys, "unexpected key {} in lsm_data field".format(k)
 
-    def test_lsm_data_keys_missing(self, device_data):
+    def test_lsm_data_keys_missing(self, fake_call, device_data):
         lsm_keys = device_data['lsm_data'].keys()
         assert lsm_keys
         for k in self.expected_lsm_keys:

@@ -397,12 +397,15 @@ public:
 
     mempool::osdmap::map<entity_addr_t,utime_t> new_blocklist;
     mempool::osdmap::vector<entity_addr_t> old_blocklist;
+    mempool::osdmap::map<entity_addr_t,utime_t> new_range_blocklist;
+    mempool::osdmap::vector<entity_addr_t> old_range_blocklist;
     mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_back_up;
     mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_front_up;
 
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t>> new_pg_upmap;
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<std::pair<int32_t,int32_t>>> new_pg_upmap_items;
-    mempool::osdmap::set<pg_t> old_pg_upmap, old_pg_upmap_items;
+    mempool::osdmap::map<pg_t, int32_t> new_pg_upmap_primary;
+    mempool::osdmap::set<pg_t> old_pg_upmap, old_pg_upmap_items, old_pg_upmap_primary;
     mempool::osdmap::map<int64_t, snap_interval_set_t> new_removed_snaps;
     mempool::osdmap::map<int64_t, snap_interval_set_t> new_purged_snaps;
 
@@ -573,6 +576,7 @@ private:
   // remap (post-CRUSH, pre-up)
   mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t>> pg_upmap; ///< remap pg
   mempool::osdmap::map<pg_t,mempool::osdmap::vector<std::pair<int32_t,int32_t>>> pg_upmap_items; ///< remap osds in up set
+  mempool::osdmap::map<pg_t, int32_t> pg_upmap_primaries; ///< remap primary of a pg
 
   mempool::osdmap::map<int64_t,pg_pool_t> pools;
   mempool::osdmap::map<int64_t,std::string> pool_name;
@@ -582,7 +586,31 @@ private:
   std::shared_ptr< mempool::osdmap::vector<uuid_d> > osd_uuid;
   mempool::osdmap::vector<osd_xinfo_t> osd_xinfo;
 
+  class range_bits {
+    struct ip6 {
+      uint64_t upper_64_bits, lower_64_bits;
+      uint64_t upper_mask, lower_mask;
+    };
+    struct ip4 {
+      uint32_t ip_32_bits;
+      uint32_t mask;
+    };
+    union {
+      ip6 ipv6;
+      ip4 ipv4;
+    } bits;
+    bool ipv6;
+    static void get_ipv6_bytes(unsigned const char *addr,
+			uint64_t *upper, uint64_t *lower);
+  public:
+    range_bits();
+    range_bits(const entity_addr_t& addr);
+    void parse(const entity_addr_t& addr);
+    bool matches(const entity_addr_t& addr) const;
+  };
   mempool::osdmap::unordered_map<entity_addr_t,utime_t> blocklist;
+  mempool::osdmap::map<entity_addr_t,utime_t> range_blocklist;
+  mempool::osdmap::map<entity_addr_t,range_bits> calculated_ranges;
 
   /// queue of snaps to remove
   mempool::osdmap::map<int64_t, snap_interval_set_t> removed_snaps_queue;
@@ -693,10 +721,12 @@ public:
   const utime_t& get_created() const { return created; }
   const utime_t& get_modified() const { return modified; }
 
-  bool is_blocklisted(const entity_addr_t& a) const;
-  bool is_blocklisted(const entity_addrvec_t& a) const;
-  void get_blocklist(std::list<std::pair<entity_addr_t,utime_t > > *bl) const;
-  void get_blocklist(std::set<entity_addr_t> *bl) const;
+  bool is_blocklisted(const entity_addr_t& a, CephContext *cct=nullptr) const;
+  bool is_blocklisted(const entity_addrvec_t& a, CephContext *cct=nullptr) const;
+  void get_blocklist(std::list<std::pair<entity_addr_t,utime_t > > *bl,
+		     std::list<std::pair<entity_addr_t,utime_t> > *rl) const;
+  void get_blocklist(std::set<entity_addr_t> *bl,
+		     std::set<entity_addr_t> *rl) const;
 
   std::string get_cluster_snapshot() const {
     if (cluster_snapshot_epoch == epoch)
@@ -1435,13 +1465,29 @@ public:
     );
 
 private: // Bunch of internal functions used only by calc_pg_upmaps (result of code refactoring)
+
+  std::map<uint64_t,std::set<pg_t>> get_pgs_by_osd(
+    CephContext *cct,
+    int64_t pid,
+    std::map<uint64_t, std::set<pg_t>> *p_primaries_by_osd = nullptr,
+    std::map<uint64_t, std::set<pg_t>> *p_acting_primaries_by_osd = nullptr
+  ) const; // used in calc_desired_primary_distribution()
+
+private:
+  float get_osds_weight(
+    CephContext *cct,
+    const OSDMap& tmp_osd_map,
+    int64_t pid,
+    std::map<int,float>& osds_weight
+  ) const;
+
   float build_pool_pgs_info (
     CephContext *cct,
     const std::set<int64_t>& pools,        ///< [optional] restrict to pool
     const OSDMap& tmp_osd_map,
     int& total_pgs,
     std::map<int, std::set<pg_t>>& pgs_by_osd,
-    std::map<int,float>& osd_weight
+    std::map<int,float>& osds_weight
   );  // return total weight of all OSDs
 
   float calc_deviations (
@@ -1530,6 +1576,59 @@ bool try_drop_remap_underfull(
   );
 
 public:
+    typedef struct {
+      float pa_avg;
+      float pa_weighted;
+      float pa_weighted_avg;
+      float raw_score;
+      float optimal_score;  	// based on primary_affinity values
+      float adjusted_score; 	// based on raw_score and pa_avg 1 is optimal
+      float acting_raw_score;   // based on active_primaries (temporary)
+      float acting_adj_score;   // based on raw_active_score and pa_avg 1 is optimal
+      std::string  err_msg;
+    } read_balance_info_t;
+  //
+  // This function calculates scores about the cluster read balance state
+  // p_rb_info->acting_adj_score is the current read balance score (acting)
+  // p_rb_info->adjusted_score is the stable read balance score 
+  // Return value of 0 is OK, negative means an error (may happen with
+  // some arifically generated osamap files)
+  //
+  int calc_read_balance_score(
+    CephContext *cct,
+    int64_t pool_id,
+    read_balance_info_t *p_rb_info) const;
+
+private:
+  float rbi_round(float f) const {
+    return (f > 0.0) ? floor(f * 100 + 0.5) / 100 : ceil(f * 100 - 0.5) / 100;
+  }
+
+  int64_t has_zero_pa_pgs(
+    CephContext *cct,
+    int64_t pool_id) const;
+
+  void zero_rbi(
+    read_balance_info_t &rbi
+  ) const;
+
+  int set_rbi(
+    CephContext *cct,
+    read_balance_info_t &rbi,
+    int64_t pool_id,
+    float total_w_pa,
+    float pa_sum,
+    int num_osds,
+    int osd_pa_count,
+    float total_osd_weight,
+    uint max_prims_per_osd,
+    uint max_acting_prims_per_osd,
+    float avg_prims_per_osd,
+    bool prim_on_zero_pa,
+    bool acting_on_zero_pa,
+    float max_osd_score) const;
+
+public:
   int get_osds_by_bucket_name(const std::string &name, std::set<int> *osds) const;
 
   bool have_pg_upmaps(pg_t pg) const {
@@ -1597,10 +1696,10 @@ public:
 private:
   void print_osd_line(int cur, std::ostream *out, ceph::Formatter *f) const;
 public:
-  void print(std::ostream& out) const;
+  void print(CephContext *cct, std::ostream& out) const;
   void print_osd(int id, std::ostream& out) const;
   void print_osds(std::ostream& out) const;
-  void print_pools(std::ostream& out) const;
+  void print_pools(CephContext *cct, std::ostream& out) const;
   void print_summary(ceph::Formatter *f, std::ostream& out,
 		     const std::string& prefix, bool extra=false) const;
   void print_oneline_summary(std::ostream& out) const;
@@ -1626,9 +1725,11 @@ public:
   static void dump_erasure_code_profiles(
     const mempool::osdmap::map<std::string,std::map<std::string,std::string> > &profiles,
     ceph::Formatter *f);
-  void dump(ceph::Formatter *f) const;
+  void dump(ceph::Formatter *f, CephContext *cct = nullptr) const;
   void dump_osd(int id, ceph::Formatter *f) const;
   void dump_osds(ceph::Formatter *f) const;
+  void dump_pool(CephContext *cct, int64_t pid, const pg_pool_t &pdata, ceph::Formatter *f) const;
+  void dump_read_balance_score(CephContext *cct, int64_t pid, const pg_pool_t &pdata, ceph::Formatter *f) const;
   static void generate_test_instances(std::list<OSDMap*>& o);
   bool check_new_blocklist_entries() const { return new_blocklist_entries; }
 
@@ -1646,7 +1747,9 @@ WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
 
 #ifdef WITH_SEASTAR
-using OSDMapRef = boost::local_shared_ptr<const OSDMap>;
+#include "crimson/common/local_shared_foreign_ptr.h"
+using LocalOSDMapRef = boost::local_shared_ptr<const OSDMap>;
+using OSDMapRef = crimson::local_shared_foreign_ptr<LocalOSDMapRef>;
 #else
 using OSDMapRef = std::shared_ptr<const OSDMap>;
 #endif

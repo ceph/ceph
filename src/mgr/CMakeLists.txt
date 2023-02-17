@@ -34,6 +34,7 @@ if(WITH_MGR)
     mgr_commands.cc
     $<TARGET_OBJECTS:mgr_cap_obj>)
   add_executable(ceph-mgr ${mgr_srcs})
+  target_compile_definitions(ceph-mgr PRIVATE PY_SSIZE_T_CLEAN)
   if(WITH_LIBCEPHSQLITE)
     target_link_libraries(ceph-mgr cephsqlite SQLite3::SQLite3)
   endif()
@@ -43,7 +44,10 @@ if(WITH_MGR)
     osdc client heap_profiler
     global-static ceph-common
     Boost::python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR}
-    Python3::Python ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
+    Python3::Python
+    ${ALLOC_LIBS}
+    ${CMAKE_DL_LIBS}
+    ${GSSAPI_LIBRARIES})
   set_target_properties(ceph-mgr PROPERTIES
     POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
   install(TARGETS ceph-mgr DESTINATION bin)

@@ -2147,7 +2147,7 @@ v0.89
 =====
 
 This is the second development release since Giant.  The big items
-include the first batch of scrub patchs from Greg for CephFS, a rework
+include the first batch of scrub patches from Greg for CephFS, a rework
 in the librados object listing API to properly handle namespaces, and
 a pile of bug fixes for RGW.  There are also several smaller issues
 fixed up in the performance area with buffer alignment and memory

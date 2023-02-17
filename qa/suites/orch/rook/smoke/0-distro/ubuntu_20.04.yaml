@@ -1,2 +1,1 @@
-os_type: ubuntu
-os_version: "20.04"
+.qa/distros/container-hosts/ubuntu_20.04.yaml

@@ -5,6 +5,7 @@ overrides:
 tasks:
 - ceph:
 - rgw: [client.0]
+- tox: [client.0]
 - s3tests:
     client.0:
       force-branch: ceph-master

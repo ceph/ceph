@@ -1,7 +1,7 @@
-<ul ngbNav
-    #nav="ngbNav"
-    class="nav-tabs">
-  <li ngbNavItem>
+<nav ngbNav
+     #nav="ngbNav"
+     class="nav-tabs">
+  <ng-container ngbNavItem>
     <a ngbNavLink
        i18n>Hosts List</a>
     <ng-template ngbNavContent>
@@ -29,39 +29,40 @@
         </cd-host-details>
       </cd-table>
     </ng-template>
-  </li>
-  <li ngbNavItem
-      *ngIf="permissions.grafana.read">
+  </ng-container>
+  <ng-container ngbNavItem
+                *ngIf="permissions.grafana.read">
+  </ng-container>
+  <ng-container ngbNavItem
+                *ngIf="permissions.grafana.read">
     <a ngbNavLink
        i18n>Overall Performance</a>
     <ng-template ngbNavContent>
-      <cd-grafana [grafanaPath]="'host-overview?'"
+      <cd-grafana i18n-title
+                  title="Host overview"
+                  [grafanaPath]="'host-overview?'"
+                  [type]="'metrics'"
                   uid="y0KGL0iZz"
                   grafanaStyle="two">
       </cd-grafana>
     </ng-template>
-  </li>
-</ul>
+  </ng-container>
+</nav>
 
 <div [ngbNavOutlet]="nav"></div>
 
 <ng-template #servicesTpl
-             let-value="value">
-  <span *ngFor="let service of value; last as isLast">
-    <a class="service-link"
-       [routerLink]="[service.cdLink]"
-       [queryParams]="cdParams"
-       *ngIf="service.canRead">{{ service.type }}.{{ service.id }}</a>
-    <span *ngIf="!service.canRead">
-      {{ service.type }}.{{ service.id }}
-    </span>
-    <ng-container *ngIf="!isLast">, </ng-container>
+             let-services="value">
+  <span *ngFor="let service of services">
+    <cd-label [key]="service['type']"
+              [value]="service['count']"
+              class="me-1"></cd-label>
   </span>
 </ng-template>
 
 <ng-template #maintenanceConfirmTpl>
   <div *ngFor="let msg of errorMessage; let last=last">
-    <ul *ngIf="!last || errorMessage.length == '1'">
+    <ul *ngIf="!last || errorMessage.length === '1'">
       <li i18n>{{ msg }}</li>
     </ul>
   </div>

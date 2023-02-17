@@ -164,7 +164,7 @@ Ceph. This profile is enabled by default.
 +------------------------+-------------+--------+-------+
 | background recovery    | 25%         | 1      | 100%  |
 +------------------------+-------------+--------+-------+
-| background best effort | 25%         | 1      | MAX   |
+| background best effort | 25%         | 2      | MAX   |
 +------------------------+-------------+--------+-------+
 
 balanced
@@ -182,7 +182,7 @@ no competing services.
 +------------------------+-------------+--------+-------+
 | background recovery    | 40%         | 1      | 150%  |
 +------------------------+-------------+--------+-------+
-| background best effort | 20%         | 1      | MAX   |
+| background best effort | 20%         | 2      | MAX   |
 +------------------------+-------------+--------+-------+
 
 high_recovery_ops
@@ -200,7 +200,7 @@ recoveries during non-peak hours.
 +------------------------+-------------+--------+-------+
 | background recovery    | 60%         | 2      | 200%  |
 +------------------------+-------------+--------+-------+
-| background best effort | 1 (MIN)     | 1      | MAX   |
+| background best effort | 1 (MIN)     | 2      | MAX   |
 +------------------------+-------------+--------+-------+
 
 custom

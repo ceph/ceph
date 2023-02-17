@@ -13,7 +13,14 @@ import _ from 'lodash';
 import moment from 'moment';
 import { Subscription } from 'rxjs';
 
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import {
+  AlertmanagerSilence,
+  AlertmanagerSilenceMatcher
+} from '~/app/shared/models/alertmanager-silence';
 import { CdNotification } from '~/app/shared/models/cd-notification';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -56,8 +63,10 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
     private summaryService: SummaryService,
     private taskMessageService: TaskMessageService,
     private prometheusNotificationService: PrometheusNotificationService,
+    private succeededLabels: SucceededActionLabelsI18n,
     private authStorageService: AuthStorageService,
     private prometheusAlertService: PrometheusAlertService,
+    private prometheusService: PrometheusService,
     private ngZone: NgZone,
     private cdRef: ChangeDetectorRef
   ) {
@@ -163,5 +172,57 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
 
   trackByFn(index: number) {
     return index;
+  }
+
+  silence(data: CdNotification) {
+    const datetimeFormat = 'YYYY-MM-DD HH:mm';
+    const resource = $localize`silence`;
+    const matcher: AlertmanagerSilenceMatcher = {
+      name: 'alertname',
+      value: data['title'].split(' ')[0],
+      isRegex: false
+    };
+    const silencePayload: AlertmanagerSilence = {
+      matchers: [matcher],
+      startsAt: moment(moment().format(datetimeFormat)).toISOString(),
+      endsAt: moment(moment().add(2, 'hours').format(datetimeFormat)).toISOString(),
+      createdBy: this.authStorageService.getUsername(),
+      comment: 'Silence created from the alert notification'
+    };
+    let msg = '';
+
+    data.alertSilenced = true;
+    msg = msg.concat(` ${matcher.name} - ${matcher.value},`);
+    const title = `${this.succeededLabels.CREATED} ${resource} for ${msg.slice(0, -1)}`;
+    this.prometheusService.setSilence(silencePayload).subscribe((resp) => {
+      if (data) {
+        data.silenceId = resp.body['silenceId'];
+      }
+      this.notificationService.show(
+        NotificationType.success,
+        title,
+        undefined,
+        undefined,
+        'Prometheus'
+      );
+    });
+  }
+
+  expire(data: CdNotification) {
+    data.alertSilenced = false;
+    this.prometheusService.expireSilence(data.silenceId).subscribe(
+      () => {
+        this.notificationService.show(
+          NotificationType.success,
+          `${this.succeededLabels.EXPIRED} ${data.silenceId}`,
+          undefined,
+          undefined,
+          'Prometheus'
+        );
+      },
+      (resp) => {
+        resp['application'] = 'Prometheus';
+      }
+    );
   }
 }

@@ -1,3 +1,4 @@
+import { HttpHeaders } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
@@ -8,9 +9,7 @@ import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
-import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
-import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
@@ -28,6 +27,7 @@ describe('RbdListComponent', () => {
   let component: RbdListComponent;
   let summaryService: SummaryService;
   let rbdService: RbdService;
+  let headers: HttpHeaders;
 
   const refresh = (data: any) => {
     summaryService['summaryDataSource'].next(data);
@@ -58,6 +58,7 @@ describe('RbdListComponent', () => {
     component = fixture.componentInstance;
     summaryService = TestBed.inject(SummaryService);
     rbdService = TestBed.inject(RbdService);
+    headers = new HttpHeaders().set('X-Total-Count', '10');
 
     // this is needed because summaryService isn't being reset after each test.
     summaryService['summaryDataSource'] = new BehaviorSubject(null);
@@ -88,9 +89,6 @@ describe('RbdListComponent', () => {
       spyOn(component.table, 'reset');
       summaryService['summaryDataSource'].error(undefined);
       expect(component.table.reset).toHaveBeenCalled();
-      expect(component.tableStatus).toEqual(
-        new TableStatusViewCache(ViewCacheStatus.ValueException)
-      );
     });
   });
 
@@ -121,7 +119,9 @@ describe('RbdListComponent', () => {
     });
 
     it('should display N/A for Provisioned & Total Provisioned columns if disk usage is null', () => {
-      rbdServiceListSpy.and.callFake(() => of([{ pool_name: 'rbd', status: 1, value: images }]));
+      rbdServiceListSpy.and.callFake(() =>
+        of([{ pool_name: 'rbd', value: images, headers: headers }])
+      );
       fixture.detectChanges();
       const spanWithoutFastDiff = fixture.debugElement.nativeElement.querySelectorAll(
         '.datatable-body-cell-label span'
@@ -133,7 +133,9 @@ describe('RbdListComponent', () => {
       component.images = images;
       refresh({ executing_tasks: [], finished_tasks: [] });
 
-      rbdServiceListSpy.and.callFake(() => of([{ pool_name: 'rbd', status: 1, value: images }]));
+      rbdServiceListSpy.and.callFake(() =>
+        of([{ pool_name: 'rbd', value: images, headers: headers }])
+      );
       fixture.detectChanges();
 
       const spanWithFastDiff = fixture.debugElement.nativeElement.querySelectorAll(
@@ -258,7 +260,7 @@ describe('RbdListComponent', () => {
       component.images = images;
       refresh({ executing_tasks: [], finished_tasks: [] });
       spyOn(rbdService, 'list').and.callFake(() =>
-        of([{ pool_name: 'rbd', status: 1, value: images }])
+        of([{ pool_name: 'rbd', value: images, headers: headers }])
       );
       fixture.detectChanges();
     });
@@ -297,12 +299,12 @@ describe('RbdListComponent', () => {
 
     it('should show when an existing image is being modified', () => {
       addTask('rbd/edit', 'a');
-      addTask('rbd/delete', 'b');
-      addTask('rbd/flatten', 'c');
-      expect(component.images.length).toBe(3);
       expectItemTasks(component.images[0], 'Updating');
+      addTask('rbd/delete', 'b');
       expectItemTasks(component.images[1], 'Deleting');
+      addTask('rbd/flatten', 'c');
       expectItemTasks(component.images[2], 'Flattening');
+      expect(component.images.length).toBe(3);
     });
   });
 
@@ -314,11 +316,31 @@ describe('RbdListComponent', () => {
 
     expect(tableActions).toEqual({
       'create,update,delete': {
-        actions: ['Create', 'Edit', 'Copy', 'Flatten', 'Delete', 'Move to Trash'],
+        actions: [
+          'Create',
+          'Edit',
+          'Copy',
+          'Flatten',
+          'Resync',
+          'Delete',
+          'Move to Trash',
+          'Remove Scheduling',
+          'Promote',
+          'Demote'
+        ],
         primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
       'create,update': {
-        actions: ['Create', 'Edit', 'Copy', 'Flatten'],
+        actions: [
+          'Create',
+          'Edit',
+          'Copy',
+          'Flatten',
+          'Resync',
+          'Remove Scheduling',
+          'Promote',
+          'Demote'
+        ],
         primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
       'create,delete': {
@@ -330,11 +352,20 @@ describe('RbdListComponent', () => {
         primary: { multiple: 'Create', executing: 'Copy', single: 'Copy', no: 'Create' }
       },
       'update,delete': {
-        actions: ['Edit', 'Flatten', 'Delete', 'Move to Trash'],
+        actions: [
+          'Edit',
+          'Flatten',
+          'Resync',
+          'Delete',
+          'Move to Trash',
+          'Remove Scheduling',
+          'Promote',
+          'Demote'
+        ],
         primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
       update: {
-        actions: ['Edit', 'Flatten'],
+        actions: ['Edit', 'Flatten', 'Resync', 'Remove Scheduling', 'Promote', 'Demote'],
         primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
       delete: {

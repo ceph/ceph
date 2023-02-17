@@ -2,29 +2,6 @@
 Upgrading Ceph
 ==============
 
-.. DANGER:: DATE: 01 NOV 2021. 
-
-   DO NOT UPGRADE TO CEPH PACIFIC FROM AN OLDER VERSION.  
-
-   A recently-discovered bug (https://tracker.ceph.com/issues/53062) can cause
-   data corruption. This bug occurs during OMAP format conversion for
-   clusters that are updated to Pacific. New clusters are not affected by this
-   bug.
-
-   The trigger for this bug is BlueStore's repair/quick-fix functionality. This
-   bug can be triggered in two known ways: 
-
-    (1) manually via the ceph-bluestore-tool, or 
-    (2) automatically, by OSD if ``bluestore_fsck_quick_fix_on_mount`` is set 
-        to true.
-
-   The fix for this bug is expected to be available in Ceph v16.2.7.
-
-   DO NOT set ``bluestore_quick_fix_on_mount`` to true. If it is currently
-   set to true in your configuration, immediately set it to false.
-
-   DO NOT run ``ceph-bluestore-tool``'s repair/quick-fix commands.
-
 Cephadm can safely upgrade Ceph from one bugfix release to the next.  For
 example, you can upgrade from v15.2.0 (the first Octopus release) to the next
 point release, v15.2.1.
@@ -47,6 +24,31 @@ The automated upgrade process follows Ceph best practices.  For example:
 
 Starting the upgrade
 ====================
+
+.. note::
+   .. note::
+      `Staggered Upgrade`_ of the mons/mgrs may be necessary to have access
+      to this new feature.
+
+   Cephadm by default reduces `max_mds` to `1`. This can be disruptive for large
+   scale CephFS deployments because the cluster cannot quickly reduce active MDS(s)
+   to `1` and a single active MDS cannot easily handle the load of all clients
+   even for a short time. Therefore, to upgrade MDS(s) without reducing `max_mds`,
+   the `fail_fs` option can to be set to `true` (default value is `false`) prior
+   to initiating the upgrade:
+
+   .. prompt:: bash #
+
+      ceph config set mgr mgr/orchestrator/fail_fs true
+
+   This would:
+               #. Fail CephFS filesystems, bringing active MDS daemon(s) to
+                  `up:standby` state.
+
+               #. Upgrade MDS daemons safely.
+
+               #. Bring CephFS filesystems back up, bringing the state of active
+                  MDS daemon(s) from `up:standby` to `up:active`.
 
 Before you use cephadm to upgrade Ceph, verify that all hosts are currently online and that your cluster is healthy by running the following command:
 
@@ -119,6 +121,12 @@ You can stop the upgrade process at any time by running the following command:
 
   ceph orch upgrade stop
 
+Post upgrade actions
+====================
+
+In case the new version is based on ``cephadm``, once done with the upgrade the user
+has to update the ``cephadm`` package (or ceph-common package in case the user
+doesn't use ``cephadm shell``) to a version compatible with the new version.
 
 Potential problems
 ==================
@@ -188,3 +196,100 @@ you need. For example, the following command upgrades to a development build:
   ceph orch upgrade start --image quay.io/ceph-ci/ceph:recent-git-branch-name
 
 For more information about available container images, see :ref:`containers`.
+
+Staggered Upgrade
+=================
+
+Some users may prefer to upgrade components in phases rather than all at once.
+The upgrade command, starting in 16.2.11 and 17.2.1 allows parameters
+to limit which daemons are upgraded by a single upgrade command. The options in
+include ``daemon_types``, ``services``, ``hosts`` and ``limit``. ``daemon_types``
+takes a comma-separated list of daemon types and will only upgrade daemons of those
+types. ``services`` is mutually exclusive with ``daemon_types``, only takes services
+of one type at a time (e.g. can't provide an OSD and RGW service at the same time), and
+will only upgrade daemons belonging to those services. ``hosts`` can be combined
+with ``daemon_types`` or ``services`` or provided on its own. The ``hosts`` parameter
+follows the same format as the command line options for :ref:`orchestrator-cli-placement-spec`.
+``limit`` takes an integer > 0 and provides a numerical limit on the number of
+daemons cephadm will upgrade. ``limit`` can be combined with any of the other
+parameters. For example, if you specify to upgrade daemons of type osd on host
+Host1 with ``limit`` set to 3, cephadm will upgrade (up to) 3 osd daemons on
+Host1.
+
+Example: specifying daemon types and hosts:
+
+.. prompt:: bash #
+
+  ceph orch upgrade start --image <image-name> --daemon-types mgr,mon --hosts host1,host2
+
+Example: specifying services and using limit:
+
+.. prompt:: bash #
+
+  ceph orch upgrade start --image <image-name> --services rgw.example1,rgw.example2 --limit 2
+
+.. note::
+
+   Cephadm strictly enforces an order to the upgrade of daemons that is still present
+   in staggered upgrade scenarios. The current upgrade ordering is
+   ``mgr -> mon -> crash -> osd -> mds -> rgw -> rbd-mirror -> cephfs-mirror -> iscsi -> nfs``.
+   If you specify parameters that would upgrade daemons out of order, the upgrade
+   command will block and note which daemons will be missed if you proceed.
+
+.. note::
+
+  Upgrade commands with limiting parameters will validate the options before beginning the
+  upgrade, which may require pulling the new container image. Do not be surprised
+  if the upgrade start command takes a while to return when limiting parameters are provided.
+
+.. note::
+
+   In staggered upgrade scenarios (when a limiting parameter is provided) monitoring
+   stack daemons including Prometheus and node-exporter are refreshed after the Manager
+   daemons have been upgraded. Do not be surprised if Manager upgrades thus take longer
+   than expected. Note that the versions of monitoring stack daemons may not change between
+   Ceph releases, in which case they are only redeployed.
+
+Upgrading to a version that supports staggered upgrade from one that doesn't
+----------------------------------------------------------------------------
+
+While upgrading from a version that already supports staggered upgrades the process
+simply requires providing the necessary arguments. However, if you wish to upgrade
+to a version that supports staggered upgrade from one that does not, there is a
+workaround. It requires first manually upgrading the Manager daemons and then passing
+the limiting parameters as usual.
+
+.. warning::
+  Make sure you have multiple running mgr daemons before attempting this procedure.
+
+To start with, determine which Manager is your active one and which are standby. This
+can be done in a variety of ways such as looking at the ``ceph -s`` output. Then,
+manually upgrade each standby mgr daemon with:
+
+.. prompt:: bash #
+
+  ceph orch daemon redeploy mgr.example1.abcdef --image <new-image-name>
+
+.. note::
+
+   If you are on a very early version of cephadm (early Octopus) the ``orch daemon redeploy``
+   command may not have the ``--image`` flag. In that case, you must manually set the
+   Manager container image ``ceph config set mgr container_image <new-image-name>`` and then
+   redeploy the Manager ``ceph orch daemon redeploy mgr.example1.abcdef``
+
+At this point, a Manager fail over should allow us to have the active Manager be one
+running the new version.
+
+.. prompt:: bash #
+
+  ceph mgr fail
+
+Verify the active Manager is now one running the new version. To complete the Manager
+upgrading:
+
+.. prompt:: bash #
+
+  ceph orch upgrade start --image <new-image-name> --daemon-types mgr
+
+You should now have all your Manager daemons on the new version and be able to
+specify the limiting parameters for the rest of the upgrade.

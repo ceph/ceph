@@ -156,6 +156,7 @@ static int easy_readdir(const std::string& dir, std::set<std::string> *out)
   return 0;
 }
 
+#ifdef HAVE_DPDK
 static std::string get_task_comm(pid_t tid)
 {
   static const char* comm_fmt = "/proc/self/task/%d/comm";
@@ -173,7 +174,7 @@ static std::string get_task_comm(pid_t tid)
   if (n < 0) {
     return "";
   }
-  assert(n <= sizeof(name));
+  assert(static_cast<size_t>(n) <= sizeof(name));
   if (name[n - 1] == '\n') {
     name[n - 1] = '\0';
   } else {
@@ -181,6 +182,7 @@ static std::string get_task_comm(pid_t tid)
   }
   return name;
 }
+#endif
 
 int set_cpu_affinity_all_threads(size_t cpu_set_size, cpu_set_t *cpu_set)
 {

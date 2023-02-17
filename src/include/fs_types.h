@@ -45,6 +45,9 @@ class JSONObj;
 #define CEPHFS_EMLINK          31
 #define CEPHFS_ETIME           62
 #define CEPHFS_EOLDSNAPC       85
+#define CEPHFS_EFAULT          14
+#define CEPHFS_EISCONN         106
+#define CEPHFS_EMULTIHOP       72
 
 // taken from linux kernel: include/uapi/linux/fcntl.h
 #define CEPHFS_AT_FDCWD        -100    /* Special value used to indicate
@@ -144,6 +147,8 @@ struct file_layout_t {
       pool_id(-1) {
   }
 
+  bool operator==(const file_layout_t&) const = default;
+
   static file_layout_t get_default() {
     return file_layout_t(1<<22, 1, 1<<22);
   }
@@ -164,8 +169,6 @@ struct file_layout_t {
   static void generate_test_instances(std::list<file_layout_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(file_layout_t)
-
-WRITE_EQ_OPERATORS_5(file_layout_t, stripe_unit, stripe_count, object_size, pool_id, pool_ns);
 
 std::ostream& operator<<(std::ostream& out, const file_layout_t &layout);
 

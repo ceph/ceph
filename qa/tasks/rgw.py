@@ -138,9 +138,12 @@ def start_rgw(ctx, config, clients):
             ctx.cluster.only(client).run(args=['sudo', 'chmod', '600', token_path])
             ctx.cluster.only(client).run(args=['sudo', 'chown', 'ceph', token_path])
 
+            vault_addr = "{}:{}".format(*ctx.vault.endpoints[vault_role])
             rgw_cmd.extend([
-                '--rgw_crypt_vault_addr', "{}:{}".format(*ctx.vault.endpoints[vault_role]),
-                '--rgw_crypt_vault_token_file', token_path
+                '--rgw_crypt_vault_addr', vault_addr,
+                '--rgw_crypt_vault_token_file', token_path,
+                '--rgw_crypt_sse_s3_vault_addr', vault_addr,
+                '--rgw_crypt_sse_s3_vault_token_file', token_path,
             ])
         elif pykmip_role is not None:
             if not hasattr(ctx, 'pykmip'):
@@ -149,6 +152,35 @@ def start_rgw(ctx, config, clients):
             rgw_cmd.extend([
                 '--rgw_crypt_kmip_addr', "{}:{}".format(*ctx.pykmip.endpoints[pykmip_role]),
             ])
+
+            clientcert = ctx.ssl_certificates.get('kmip-client')
+            servercert = ctx.ssl_certificates.get('kmip-server')
+            clientca = ctx.ssl_certificates.get('kmiproot')
+
+            clientkey = clientcert.key
+            clientcert = clientcert.certificate
+            serverkey = servercert.key
+            servercert = servercert.certificate
+            rootkey = clientca.key
+            rootcert = clientca.certificate
+
+            cert_path = '/etc/ceph/'
+            ctx.cluster.only(client).run(args=['sudo', 'cp', clientcert, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', clientkey, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', servercert, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', serverkey, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', rootkey, cert_path])
+            ctx.cluster.only(client).run(args=['sudo', 'cp', rootcert, cert_path])
+
+            clientcert = cert_path + 'kmip-client.crt'
+            clientkey = cert_path + 'kmip-client.key'
+            servercert = cert_path + 'kmip-server.crt'
+            serverkey = cert_path + 'kmip-server.key'
+            rootkey = cert_path + 'kmiproot.key'
+            rootcert = cert_path + 'kmiproot.crt'
+
+            ctx.cluster.only(client).run(args=['sudo', 'chmod', '600', clientcert, clientkey, servercert, serverkey, rootkey, rootcert])
+            ctx.cluster.only(client).run(args=['sudo', 'chown', 'ceph', clientcert, clientkey, servercert, serverkey, rootkey, rootcert])
 
         rgw_cmd.extend([
             '--foreground',
@@ -283,6 +315,20 @@ def configure_compression(ctx, clients, compression):
     yield
 
 @contextlib.contextmanager
+def disable_inline_data(ctx, clients):
+    for client in clients:
+        # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
+        # issue a 'radosgw-admin user list' command to trigger this
+        rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
+
+        rgwadmin(ctx, client,
+                cmd=['zone', 'placement', 'modify', '--rgw-zone', 'default',
+                     '--placement-id', 'default-placement',
+                     '--placement-inline-data', 'false'],
+                check_status=True)
+    yield
+
+@contextlib.contextmanager
 def configure_datacache(ctx, clients, datacache_path):
     """ create directory for rgw datacache """
     log.info('Preparing directory for rgw datacache at %s', datacache_path)
@@ -375,12 +421,14 @@ def task(ctx, config):
     teuthology.deep_merge(config, overrides.get('rgw', {}))
 
     ctx.rgw = argparse.Namespace()
+    ctx.rgw_cloudtier = None
 
     ctx.rgw.ec_data_pool = bool(config.pop('ec-data-pool', False))
     ctx.rgw.erasure_code_profile = config.pop('erasure_code_profile', {})
     ctx.rgw.cache_pools = bool(config.pop('cache-pools', False))
     ctx.rgw.frontend = config.pop('frontend', 'beast')
     ctx.rgw.compression_type = config.pop('compression type', None)
+    ctx.rgw.inline_data = config.pop('inline data', True)
     ctx.rgw.storage_classes = config.pop('storage classes', None)
     default_cert = config.pop('ssl certificate', None)
     ctx.rgw.data_pool_pg_size = config.pop('data_pool_pg_size', 64)
@@ -401,6 +449,10 @@ def task(ctx, config):
         subtasks.extend([
             lambda: configure_compression(ctx=ctx, clients=clients,
                                           compression=ctx.rgw.compression_type),
+        ])
+    if not ctx.rgw.inline_data:
+        subtasks.extend([
+            lambda: disable_inline_data(ctx=ctx, clients=clients),
         ])
     if ctx.rgw.datacache:
         subtasks.extend([

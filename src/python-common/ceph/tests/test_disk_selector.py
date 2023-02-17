@@ -122,6 +122,12 @@ class TestSizeMatcher(object):
         assert matcher.low[0] == '50'
         assert matcher.low[1] == 'GB'
 
+    def test_to_byte_KB(self):
+        """ I doubt anyone ever thought we'd need to understand KB """
+
+        ret = drive_selection.SizeMatcher('size', '4K').to_byte(('4', 'KB'))
+        assert ret == 4 * 1e+3
+
     def test_to_byte_GB(self):
         """ Pretty nonesense test.."""
 

@@ -9,6 +9,8 @@ tasks:
       - ceph fs required_client_features cephfs add metric_collect
 - sleep:
     duration: 5
+# client.0 is upgraded and client.1 is evicted by the MDS due to missing
+# feature compat set
 - fs.clients_evicted:
     clients:
       client.0: False

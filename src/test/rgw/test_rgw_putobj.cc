@@ -12,7 +12,7 @@
  *
  */
 
-#include "rgw/rgw_putobj.h"
+#include "rgw_putobj.h"
 #include <gtest/gtest.h>
 
 inline bufferlist string_buf(const char* buf) {

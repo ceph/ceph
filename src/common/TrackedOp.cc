@@ -88,8 +88,10 @@ void OpHistory::_insert_delayed(const utime_t& now, TrackedOpRef op)
   double opduration = op->get_duration();
   duration.insert(make_pair(opduration, op));
   arrived.insert(make_pair(op->get_initiated(), op));
-  if (opduration >= history_slow_op_threshold.load())
+  if (opduration >= history_slow_op_threshold.load()) {
     slow_op.insert(make_pair(op->get_initiated(), op));
+    logger->inc(l_osd_slow_op_count);
+  }
   cleanup(now);
 }
 
@@ -156,12 +158,13 @@ struct ShardedTrackingData {
 
 OpTracker::OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards):
   seq(0),
+  history(cct_),
   num_optracker_shards(num_shards),
   complaint_time(0), log_threshold(0),
   tracking_enabled(tracking),
   cct(cct_) {
     for (uint32_t i = 0; i < num_optracker_shards; i++) {
-      char lock_name[32] = {0};
+      char lock_name[34] = {0};
       snprintf(lock_name, sizeof(lock_name), "%s:%" PRIu32, "OpTracker::ShardedLock", i);
       ShardedTrackingData* one_shard = new ShardedTrackingData(lock_name);
       sharded_in_flight_list.push_back(one_shard);
@@ -230,7 +233,7 @@ bool OpTracker::dump_historic_slow_ops(Formatter *f, set<string> filters)
   return true;
 }
 
-bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<string> filters)
+bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<string> filters, bool count_only)
 {
   if (!tracking_enabled)
     return false;
@@ -238,7 +241,11 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
   std::shared_lock l{lock};
   f->open_object_section("ops_in_flight"); // overall dump
   uint64_t total_ops_in_flight = 0;
-  f->open_array_section("ops"); // list of TrackedOps
+
+  if (!count_only) {
+    f->open_array_section("ops"); // list of TrackedOps
+  }
+
   utime_t now = ceph_clock_now();
   for (uint32_t i = 0; i < num_optracker_shards; i++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[i];
@@ -249,13 +256,21 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
         break;
       if (!op.filter_out(filters))
         continue;
-      f->open_object_section("op");
-      op.dump(now, f);
-      f->close_section(); // this TrackedOp
+      
+      if (!count_only) {
+        f->open_object_section("op");
+        op.dump(now, f);
+        f->close_section(); // this TrackedOp
+      }
+
       total_ops_in_flight++;
     }
   }
-  f->close_section(); // list of TrackedOps
+
+  if (!count_only) {
+    f->close_section(); // list of TrackedOps
+  }
+
   if (print_only_blocked) {
     f->dump_float("complaint_time", complaint_time);
     f->dump_int("num_blocked_ops", total_ops_in_flight);

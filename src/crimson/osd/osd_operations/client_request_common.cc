@@ -3,6 +3,7 @@
 
 #include "crimson/osd/osd_operations/client_request_common.h"
 #include "crimson/osd/pg.h"
+#include "crimson/osd/osd_operations/background_recovery.h"
 
 namespace {
   seastar::logger& logger() {

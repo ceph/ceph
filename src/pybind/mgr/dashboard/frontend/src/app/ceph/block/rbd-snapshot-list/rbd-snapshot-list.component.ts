@@ -12,6 +12,7 @@ import {
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import moment from 'moment';
 import { of } from 'rxjs';
+import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
@@ -56,6 +57,10 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   @Input()
   namespace: string;
   @Input()
+  mirroring: string;
+  @Input()
+  primary: boolean;
+  @Input()
   rbdName: string;
   @ViewChild('nameTpl')
   nameTpl: TemplateRef<any>;
@@ -74,6 +79,8 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
 
   modalRef: NgbModalRef;
 
+  peerConfigured = false;
+
   builders = {
     'rbd/snap/create': (metadata: any) => {
       const model = new RbdSnapshotModel();
@@ -88,6 +95,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private cdDatePipe: CdDatePipe,
     private rbdService: RbdService,
+    private rbdMirrorService: RbdMirroringService,
     private taskManagerService: TaskManagerService,
     private notificationService: NotificationService,
     private summaryService: SummaryService,
@@ -140,12 +148,20 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
       }
     ];
 
+    this.rbdMirrorService.getPeerForPool(this.poolName).subscribe((resp: any) => {
+      if (resp.length > 0) {
+        this.peerConfigured = true;
+      }
+    });
+
     this.imageSpec = new ImageSpec(this.poolName, this.namespace, this.rbdName);
     this.rbdTableActions = new RbdSnapshotActionsModel(
       this.actionLabels,
       this.featuresName,
       this.rbdService
     );
+    this.rbdTableActions.create.disable = () =>
+      !this.primary || (!this.peerConfigured && this.mirroring === 'snapshot');
     this.rbdTableActions.create.click = () => this.openCreateSnapshotModal();
     this.rbdTableActions.rename.click = () => this.openEditSnapshotModal();
     this.rbdTableActions.protect.click = () => this.toggleProtection();
@@ -210,7 +226,10 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   }
 
   private openSnapshotModal(taskName: string, snapName: string = null) {
-    this.modalRef = this.modalService.show(RbdSnapshotFormModalComponent);
+    const modalVariables = {
+      mirroring: this.mirroring
+    };
+    this.modalRef = this.modalService.show(RbdSnapshotFormModalComponent, modalVariables);
     this.modalRef.componentInstance.poolName = this.poolName;
     this.modalRef.componentInstance.imageName = this.rbdName;
     this.modalRef.componentInstance.namespace = this.namespace;
