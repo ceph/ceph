@@ -102,17 +102,6 @@ int RGWGetBucketCB::handle_data(bufferlist& bl, bool *pause){
 		//info.storage_class = StorageClass[ind];
         ind = ind + 1;
       }
-	  //this->bucket->set_info(info);
-	  /* AMIN
-      vector<string> all_marker = get_xml_data(in_data, "NextMarker");
-      if (all_marker.size() == 0)
-        break;
-      string tmp = all_marker.front();
-      unsigned first = tmp.find(prefix);
-      unsigned last = tmp.find("/", first + prefix.size() + 1);
-      marker =  tmp.substr(first,last-first) +"/";
-      ldout(cct, 20) << __func__ <<" remote_bucket_size" <<  remote_bucket_list.size() << dendl;
-	  */
 
     return 0;
 }
@@ -126,7 +115,7 @@ int RGWGetObjectCB::handle_data(bufferlist& bl, bool *pause){
 	this->rc_bl->append(bl);
   
 	//FIXME: AMIN: use below code in get bucket to setup its objects' attributes.
-	
+	/*	
 	bool loop = true;
     while(loop){
       vector<string> all;
@@ -138,30 +127,35 @@ int RGWGetObjectCB::handle_data(bufferlist& bl, bool *pause){
       vector<string> owners = get_xml_data(in_data, "ID");
       vector<string> modified = get_xml_data(in_data, "LastModified");
       vector<string> storageClass = get_xml_data(in_data, "StorageClass");
-      //vector<string> marker = get_xml_data(in_data, "Marker");
+	  
       if(all_keys.size() == 0)
         return -2;
       else if (all_keys.size() >= 1){
           all = all_keys;
+	  
       }
       int ind = 0;
 	  //RGWBucketInfo info = this->bucket->get_info();
-      for (vector<string>::iterator t=all.begin(); t!=all.end(); ++t)
+      for (vector<string>::iterator t=all_keys.begin(); t!=all_keys.end(); ++t)
       {
-        if(all[ind] == object->get_name()){
+        if(all_keys[ind] == object->get_name()){
+		  ldout(object->get_filter()->_cct, 20) << " AMIN: " << __func__ << " : "<<  __LINE__ << " data is: " << object->get_name() << dendl;
           string s = "&quot;";
           etags[ind].erase (0,s.length());
           etags[ind].erase(etags[ind].length()-s.length(),etags[ind].length());
 		  attrs[RGW_ATTR_ETAG] = bufferlist::static_from_string(etags[ind]);
 		  attrs[RGW_ATTR_STORAGE_CLASS] = bufferlist::static_from_string(storageClass[ind]);
 		  object->set_attrs(attrs);
+		  char *end;
+		  object->set_obj_size(strtoull(sizes[ind], &end, 10));
+		  ldout(object->get_filter()->_cct, 20) << " AMIN: " << __func__ << " : "<<  __LINE__ << " size is: " << object->get_obj_size() << dendl;
 		  loop = false;
 		  break;
 		}
         ind = ind + 1;
       }
 	}
-	
+	*/
 
     return 0;
 }
@@ -250,18 +244,9 @@ int S3FilterUser::create_bucket(const DoutPrefixProvider* dpp,
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   rgw_bucket bucket(b);
   bucket.tenant = (string) this->get_id().tenant;
-  //Bucket* fb = new FilterBucket(std::move(nb), this);
-  //std::unique_ptr<rgw::sal::Object> dest_bucket_obj = fb->get_object(key);
-  //std::unique_ptr<rgw::sal::Object> bucket_obj;
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   bucket_wr->put_bucket_init(dpp, accesskey, &bucket, bucket_attrs);
+  
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  /*
-  if (ret < 0) {
-    delete bucket_wr;
-	return -1;
-  }
-  */
 
   ret = RGWHTTP::send(bucket_wr);
   if (ret < 0) {
@@ -273,40 +258,24 @@ int S3FilterUser::create_bucket(const DoutPrefixProvider* dpp,
   string etag; 
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   ret = bucket_wr->complete_request(null_yield);
-  //ret = bucket_wr->complete_request();
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (ret < 0){
 	delete bucket_wr;
 	return -1;
   }
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   
-  /*
-  ret = next->create_bucket(dpp, b, zonegroup_id, placement_rule, swift_ver_location, pquota_info, policy, attrs, info, ep_objv, exclusive, obj_lock_enabled, existed, req_info, &nb, y);
-  ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: create_bucekt return is: " << ret << " ENOENT is: " << ENOENT << dendl;
-  if (ret < 0)
-    return ret;
-  */
-
-  /*
-  Bucket* fb = new S3FilterBucket(std::move(nb), this, filter);
-  bucket_out->reset(fb);
-  */
   return 0;
 }
 
+//FIXME : AMIN : we should not create a bucket locally
 int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket_out, optional_yield y)
 {
  
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<Bucket> nb;
   int ret;
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "name is: " << this->get_name()<< dendl;
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "next name is: " << this->next->get_name()<< dendl;
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "user empty is: " << u->empty()<< dendl;
   User* nu = nextUser(u);
 
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   rgw_placement_rule placement_rule;
   placement_rule.name = "";
   placement_rule.storage_class = "";
@@ -321,39 +290,19 @@ int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_
   RGWEnv env;
   req_info req_info(this->_cct, &env);
 
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  //ret = next->get_bucket(dpp, nu, b, &nb, y);
   ret = nu->create_bucket(dpp, b, "", placement_rule, swift_ver_location, nullptr, policy, attrs, info, ep_objv, exclusive, obj_lock_enabled, &existed, req_info, &nb, y);
   ldpp_dout(dpp, 20) << "AMIN: " << __func__ << " return is: " << ret << dendl;
-  /* AMIN: FIXME: what should we do if we have it local?
-  if (ret == 0)
-    return ret; //we have it local
-  if (!existed)
-	do something...
-  */
 
-  /*
-  Bucket* fb = new S3FilterBucket(std::move(nb), u, this);
-  bucket_out->reset(fb);
-  return 0;
-  */
-  
   map<std::string, RGWAccessKey> accessKeys =  u->get_info().access_keys;
   RGWAccessKey accesskey;
   //RGWAccessKey& k = accessKeys[u->get_id().to_str()];
   accesskey.id= "test5"; //FIXME
   accesskey.key = "test5";
-  ldpp_dout(dpp, 20) << __func__ << " AMIN bucket name: " << b.name << " tenant: " + b.tenant << dendl;
   string url ="http://" + this->_cct->_conf->backend_url;
-  ldpp_dout(dpp, 20) << __func__ << " AMIN URL: " << url << dendl;
 
   HostStyle host_style = PathStyle;
   vector<rgw_bucket_dir_entry> remote_bucket;
   vector<string> remote_bucket_list;
-
-  //rgw_bucket bucket;
-  //S3FilterBucket* fb = new S3FilterBucket(nullptr, bucket, u, this);
-  //S3FilterBucket* fb = new S3FilterBucket(std::move(nb), bucket, nu, this);
 
   S3FilterBucket* fb = new S3FilterBucket(std::move(nb), nu, this);
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "get_info bucket name is: " <<  fb->get_info().bucket.name << dendl;
@@ -387,44 +336,24 @@ int S3FilterStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_
 	return -1;
   }
   
-  int count = 0;
+  info.has_instance_obj = false;
+  //int count = 0;
   for (auto em: remote_bucket)
   {
-	ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "bucket objects are: "<< em.key.name << dendl;
-	//bucket.name = em;
-	/*
-    ret = next->get_bucket(dpp, nu, b, &nb, y);
-	ldpp_dout(dpp, 20) << "AMIN S3 Filter: " << __func__ << " return is: " << ret << dendl;
-	if (ret != 0)
-	  return ret;
-	*/
-    //Bucket* fb = new S3FilterBucket(std::move(nb), bucket, u, this);
-	//ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "bucket_cb attrs are: " << bucket_cb.attrs << dendl;
-	//fb->set_attrs(bucket_cb.attrs);
-	ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "fb attrs are: " << fb->get_attrs()[RGW_ATTR_ETAG] << dendl;
-	//Bucket* fb = new S3FilterBucket(std::move(nb), u, this);
+	//ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "bucket objects are: "<< em.key.name << dendl;
 	info.has_instance_obj = true;
-	count ++;
+	//count ++;
 	break;
   }
-  if (count == 0)
-	info.has_instance_obj = false;
+  //if (count == 0)
   info.bucket = b;
   info.owner = u->get_id();
-   
-
-  ldpp_dout(dpp, 20) << "AMIN: " << __func__ << " : " << "created info: bucket name: " <<  info.bucket.name << dendl;
-  ldpp_dout(dpp, 20) << "AMIN: " << __func__ << " : " << "created info: owner tenant: " <<  info.owner.tenant << dendl;
-  ldpp_dout(dpp, 20) << "AMIN: " << __func__ << " : " << "created info: owner id: " <<  info.owner.id << dendl;
-  ldpp_dout(dpp, 20) << "AMIN: " << __func__ << " : " << "created info: placement name: " <<  info.placement_rule.name << dendl;
-  ldpp_dout(dpp, 20) << "AMIN: " << __func__ << " : " << "created info: has object: " <<  info.has_instance_obj << dendl;
 
   bucket_out->reset(fb);
-
   return 0;
-
 }
 
+/*
 //This is the basic writer to send data to the next
 std::unique_ptr<S3InternalFilterWriter> S3FilterStore::get_s3_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
@@ -443,6 +372,7 @@ std::unique_ptr<S3InternalFilterWriter> S3FilterStore::get_s3_atomic_writer(cons
   return std::make_unique<S3InternalFilterWriter>(std::move(writer), this, std::move(co), dpp);
   
 }
+*/
 
 //This is used to send data to remote over HTTP client
 std::unique_ptr<Writer> S3FilterStore::get_atomic_writer(const DoutPrefixProvider *dpp,
@@ -462,9 +392,9 @@ std::unique_ptr<Writer> S3FilterStore::get_atomic_writer(const DoutPrefixProvide
   
 }
 
+/*
 int S3InternalFilterWriter::process(bufferlist&& data, uint64_t offset)
 {
-  ldpp_dout(dpp, 20) << "AMIN " << __func__ << ": " << __LINE__ << dendl;
   return next->process(std::move(data), offset);
 }
 
@@ -477,12 +407,11 @@ int S3InternalFilterWriter::complete(size_t accounted_size, const std::string& e
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y)
 {
-  ldpp_dout(dpp, 20) << "AMIN " << __func__ << " : owner is : " << this->head_obj->get_bucket()->get_owner() << dendl;
   return next->complete(accounted_size, etag, mtime, set_mtime, attrs,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
 			canceled, y);
 }
-
+*/
 
 int S3FilterWriter::prepare(optional_yield y)
 {
@@ -491,30 +420,17 @@ int S3FilterWriter::prepare(optional_yield y)
 
   string url ="http://" + this->filter->_cct->_conf->backend_url;
   HostStyle host_style = PathStyle;
-  ldpp_dout(this->save_dpp, 20) << __func__ << " AMIN URL: " << url << dendl;
 	 
   this->obj_wr = new RGWRESTStreamS3PutObj(this->filter->_cct, "PUT", url, NULL, NULL, "", host_style);
-  ldpp_dout(this->save_dpp, 20) << "AMIN " << __func__ << " : tenant is : " << this->user->get_id() << dendl;
 
   //map<std::string, RGWAccessKey> accessKeys =  this->user->get_info().access_keys;
   RGWAccessKey accesskey;
-  accesskey.id="test5";
+  accesskey.id="test5"; //FIXME
   accesskey.key = "test5";
   map<string, bufferlist> obj_attrs;
  
 
   this->obj_wr->put_obj_init(this->save_dpp, accesskey, this->head_obj.get(), obj_attrs);
-  //this->obj_wr->set_send_length(this->head_obj->get_obj_size());
-  //this->obj_wr->set_send_length(9437184);
-  //ldpp_dout(this->save_dpp, 20) << __func__ << " len is: " << this->head_obj->get_obj_size() << dendl;
-
-  /*  
-  int ret = RGWHTTP::send(obj_wr);
-  if (ret < 0) {
-    delete obj_wr;
-    return ret;
-  }
-  */
 
   return 0;
 }
@@ -524,27 +440,21 @@ int S3FilterWriter::process(bufferlist&& data, uint64_t offset)
   int ret = 0; 
   bufferlist objectData = data;
   if (objectData.length() != 0){
-	ldpp_dout(this->save_dpp, 20) << __func__ << " : "<< __LINE__  << " data is: " << send_data << dendl;
     send_data.claim_append(objectData);
 	ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << "length is: " << send_data.length() << ", ofs is: " << offset << dendl;
   }
   else{
-	ldpp_dout(this->save_dpp, 20) << __func__ << " : "<< __LINE__  << " AMIN data is: " << send_data << dendl;
 	this->obj_wr->set_send_length(send_data.length());
-
-
 	ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << "length is: " << send_data.length() << dendl;
 
-  ret = RGWHTTP::send(obj_wr);
-  if (ret < 0) {
-    delete obj_wr;
-    return ret;
-  }
-
-  ldpp_dout(this->save_dpp, 20) << __func__ << " : "<< __LINE__  << " AMIN data is: " << send_data << dendl;
+    ret = RGWHTTP::send(obj_wr);
+	if (ret < 0) {
+	  delete obj_wr;
+      return ret;
+	}
   
-  ret = this->obj_wr->get_out_cb()->handle_data(send_data, 0, send_data.length());
-  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
+	ret = this->obj_wr->get_out_cb()->handle_data(send_data, 0, send_data.length());
+    ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   }
   return 0;
 
@@ -559,26 +469,21 @@ int S3FilterWriter::complete(size_t accounted_size, const std::string& etag,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y)
 {
+  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   int ret = 0;
   this->obj_wr->set_send_length(accounted_size);
-  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   ret = this->obj_wr->complete_request(null_yield);
   if (ret < 0){
 	delete obj_wr;
-	return -1;
+	return ret;
   }
-  ldpp_dout(this->save_dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
-  return 0; //FIXME
+  return 0;
 }
-
 
 std::unique_ptr<Object::ReadOp> S3FilterObject::get_read_op()
 {
-  CephContext *cct  = this->filter->_cct;
-  ldout(cct, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<Object::ReadOp> r = next->get_read_op();
-  ldout(cct, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   return std::make_unique<S3FilterObject::S3FilterReadOp>(std::move(r), this);
 }
 
@@ -597,17 +502,9 @@ int S3FilterObject::S3FilterReadOp::get_attr(const DoutPrefixProvider* dpp, cons
 	ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " NO DATA! "<< dendl;
 	return -ENODATA;
   }
-  /*
-  if (strcmp(name, RGW_ATTR_ACL) == 0)
-	return -ENODATA;
-  else if (strcmp(name, RGW_ATTR_STORAGE_CLASS) == 0) //FIXME: AMIN : we need to get bucket attributes and return storage_class
-	return 0;
-  */
 
   return 0;
-
 }
-
 
 Attrs& S3FilterObject::get_attrs()
 { 
@@ -618,7 +515,6 @@ Attrs& S3FilterObject::get_attrs()
 
 int S3FilterObject::S3FilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  //return next->prepare(y, dpp);
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   User* u = source->get_bucket()->get_owner();
  
@@ -631,12 +527,10 @@ int S3FilterObject::S3FilterReadOp::prepare(optional_yield y, const DoutPrefixPr
 
   HostStyle host_style = PathStyle;
 
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   Attrs object_attrs;
   RGWGetObjectCB cb(this->source, object_attrs, &(this->received_data));
 
 
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   list<string> endpoints;
   endpoints.push_back(url);
   
@@ -653,12 +547,11 @@ int S3FilterObject::S3FilterReadOp::prepare(optional_yield y, const DoutPrefixPr
 
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   ret = ord->complete_request(null_yield);
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (ret < 0){
 	delete ord;
 	return -1;
   }
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " received data is: "<< received_data.to_str() << dendl;
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " received data size is: "<< received_data.length() << dendl;
   source->set_obj_size(received_data.length());
 
   /*
@@ -687,14 +580,29 @@ int S3FilterObject::S3FilterReadOp::iterate(const DoutPrefixProvider* dpp, int64
 {
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << "ofs is: " << ofs << " end is: " << end << dendl;
   /*
-  int ret = next->iterate(dpp, ofs, end, cb, y);
-  if (ret < 0)
-    return ret;
+  int ret;
+  uint64_t len;
+  uint64_t chunk_size = source->get_filter()->_cct->_conf->rgw_max_chunk_size;
+  
+  if (end < 0)
+    len = 0;
+  else
+    len = end - ofs + 1;
+
+  while (ofs <= end) {
+	uint64_t read_len = std::min(len, chunk_size);
+
+	ret = cb->handle_data(received_data, ofs, read_len);
+    if (ret < 0) {
+	  return ret;
+    }
+
+    len -= read_len;
+    ofs += read_len;
+  }
   */
   cb->handle_data(received_data, ofs, end - ofs + 1);
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
-  /* Copy params out of next */
-  //params = next->params;
   return 0;
 }
 
