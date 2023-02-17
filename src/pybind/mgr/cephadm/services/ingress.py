@@ -125,6 +125,7 @@ class IngressService(CephService):
             'services/ingress/haproxy.cfg.j2',
             {
                 'spec': spec,
+                'backend_spec': backend_spec,
                 'mode': mode,
                 'servers': servers,
                 'user': spec.monitor_user or 'admin',
