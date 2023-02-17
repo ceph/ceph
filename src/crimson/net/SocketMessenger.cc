@@ -214,7 +214,7 @@ seastar::future<> SocketMessenger::start(
     ceph_assert(get_myaddr().is_msgr2());
     ceph_assert(get_myaddr().get_port() > 0);
 
-    return listener->accept([this] (SocketRef socket, entity_addr_t peer_addr) {
+    return listener->accept([this](SocketRef socket, entity_addr_t peer_addr) {
       assert(seastar::this_shard_id() == master_sid);
       assert(get_myaddr().is_msgr2());
       SocketConnectionRef conn =
