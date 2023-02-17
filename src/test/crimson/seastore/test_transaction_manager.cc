@@ -62,8 +62,8 @@ struct transaction_manager_test_t :
   std::random_device rd;
   std::mt19937 gen;
 
-  transaction_manager_test_t(std::size_t num_devices)
-    : TMTestState(num_devices), gen(rd()) {
+  transaction_manager_test_t(std::size_t num_main_devices, std::size_t num_cold_devices)
+    : TMTestState(num_main_devices, num_cold_devices), gen(rd()) {
   }
 
   laddr_t get_random_laddr(size_t block_size, laddr_t limit) {
@@ -600,21 +600,21 @@ struct transaction_manager_test_t :
     EXPECT_FALSE(success);
   }
 
-  auto allocate_sequentially(const size_t& size, int &num) {
-    return repeat_eagain([&, this] {
+  auto allocate_sequentially(const size_t size, const int num, bool run_clean = true) {
+    return repeat_eagain([this, size, num] {
       return seastar::do_with(
 	create_transaction(),
-	[&, this](auto &t) {
+	[this, size, num](auto &t) {
 	  return with_trans_intr(
 	    *t.t,
-	    [&, this](auto &) {
+	    [&t, this, size, num](auto &) {
 	      return trans_intr::do_for_each(
 		boost::make_counting_iterator(0),
 		boost::make_counting_iterator(num),
-		[&, this](auto) {
+		[&t, this, size](auto) {
 		  return tm->alloc_extent<TestBlock>(
 		    *(t.t), L_ADDR_MIN, size
-		  ).si_then([&, this](auto extent) {
+		  ).si_then([&t, this, size](auto extent) {
 		    extent->set_contents(get_random_contents());
 		    EXPECT_FALSE(
 		      test_mappings.contains(extent->get_laddr(), t.mapping_delta));
@@ -629,8 +629,12 @@ struct transaction_manager_test_t :
 	      test_mappings.consume(t.mapping_delta);
 	    });
 	});
-    }).safe_then([this]() {
-      return epm->run_background_work_until_halt();
+    }).safe_then([this, run_clean]() {
+      if (run_clean) {
+        return epm->run_background_work_until_halt();
+      } else {
+        return epm->background_process.trimmer->trim();
+      }
     }).handle_error(
       crimson::ct_error::assert_all{
 	"Invalid error in SeaStore::list_collections"
@@ -728,6 +732,194 @@ struct transaction_manager_test_t :
         writes,
         failures
       );
+    });
+  }
+
+  void test_evict() {
+    // only support segmented backend currently
+    ASSERT_EQ(epm->get_main_backend_type(), backend_type_t::SEGMENTED);
+    ASSERT_TRUE(epm->background_process.has_cold_tier());
+    constexpr size_t device_size =
+      segment_manager::DEFAULT_TEST_EPHEMERAL.size;
+    constexpr size_t block_size =
+      segment_manager::DEFAULT_TEST_EPHEMERAL.block_size;
+    constexpr size_t segment_size =
+      segment_manager::DEFAULT_TEST_EPHEMERAL.segment_size;
+    ASSERT_GE(segment_size, block_size * 20);
+
+    run_async([this] {
+      // indicates there is no available segments to reclaim
+      double stop_ratio = (double)segment_size / (double)device_size / 2;
+      // 1 segment
+      double default_ratio = stop_ratio * 2;
+      // 1.25 segment
+      double fast_ratio = stop_ratio * 2.5;
+
+      epm->background_process
+        .eviction_state
+        .init(stop_ratio, default_ratio, fast_ratio);
+
+      // these variables are described in
+      // EPM::BackgroundProcess::eviction_state_t::maybe_update_eviction_mode
+      size_t ratio_A_size = segment_size / 2 - block_size * 10;
+      size_t ratio_B_size = segment_size / 2 + block_size * 10;
+      size_t ratio_C_size = segment_size + block_size;
+      size_t ratio_D_size = segment_size * 1.25 + block_size;
+
+      auto run_until = [this](size_t size) -> seastar::future<> {
+        return seastar::repeat([this, size] {
+          size_t current_size = epm->background_process
+                                    .main_cleaner->get_stat().data_stored;
+          if (current_size >= size) {
+            return seastar::futurize_invoke([] {
+              return seastar::stop_iteration::yes;
+            });
+          } else {
+            int num = (size - current_size) / block_size;
+            return seastar::do_for_each(
+              boost::make_counting_iterator(0),
+              boost::make_counting_iterator(num),
+              [this](auto) {
+	        // don't start background process to test the behavior
+                // of generation changes during alloc new extents
+                return allocate_sequentially(block_size, 1, false);
+              }).then([] {
+                return seastar::stop_iteration::no;
+              });
+          }
+        });
+      };
+
+      std::vector<extent_types_t> all_extent_types{
+        extent_types_t::ROOT,
+        extent_types_t::LADDR_INTERNAL,
+        extent_types_t::LADDR_LEAF,
+        extent_types_t::OMAP_INNER,
+        extent_types_t::OMAP_LEAF,
+        extent_types_t::ONODE_BLOCK_STAGED,
+        extent_types_t::COLL_BLOCK,
+        extent_types_t::OBJECT_DATA_BLOCK,
+        extent_types_t::RETIRED_PLACEHOLDER,
+        extent_types_t::ALLOC_INFO,
+        extent_types_t::JOURNAL_TAIL,
+        extent_types_t::TEST_BLOCK,
+        extent_types_t::TEST_BLOCK_PHYSICAL,
+        extent_types_t::BACKREF_INTERNAL,
+        extent_types_t::BACKREF_LEAF
+      };
+
+      std::vector<rewrite_gen_t> all_generations;
+      for (auto i = INIT_GENERATION; i < REWRITE_GENERATIONS; i++) {
+        all_generations.push_back(i);
+      }
+
+      // input target-generation -> expected generation after the adjustment
+      using generation_mapping_t = std::map<rewrite_gen_t, rewrite_gen_t>;
+      std::map<extent_types_t, generation_mapping_t> expected_generations;
+
+      // this loop should be consistent with EPM::adjust_generation
+      for (auto t : all_extent_types) {
+        expected_generations[t] = {};
+        if (!is_logical_type(t)) {
+          for (auto gen : all_generations) {
+            expected_generations[t][gen] = INLINE_GENERATION;
+          }
+        } else {
+	  if (get_extent_category(t) == data_category_t::METADATA) {
+	    expected_generations[t][INIT_GENERATION] = INLINE_GENERATION;
+	  } else {
+	    expected_generations[t][INIT_GENERATION] = OOL_GENERATION;
+	  }
+
+          for (auto i = INIT_GENERATION + 1; i < REWRITE_GENERATIONS; i++) {
+	    expected_generations[t][i] = i;
+          }
+        }
+      }
+
+      auto update_data_gen_mapping = [&](std::function<rewrite_gen_t(rewrite_gen_t)> func) {
+        for (auto t : all_extent_types) {
+          if (!is_logical_type(t)) {
+            continue;
+          }
+          for (auto i = INIT_GENERATION + 1; i < REWRITE_GENERATIONS; i++) {
+            expected_generations[t][i] = func(i);
+          }
+        }
+        // since background process didn't start in allocate_sequentially
+        // we update eviction mode manually.
+        epm->background_process.maybe_update_eviction_mode();
+      };
+
+      auto test_gen = [&](const char *caller) {
+        for (auto t : all_extent_types) {
+          for (auto gen : all_generations) {
+            auto epm_gen = epm->adjust_generation(
+              get_extent_category(t),
+              t,
+              placement_hint_t::HOT,
+              gen);
+            if (expected_generations[t][gen] != epm_gen) {
+              logger().error("caller: {}, extent type: {}, input generation: {}, "
+			     "expected generation : {}, adjust result from EPM: {}",
+			     caller, t, gen, expected_generations[t][gen], epm_gen);
+            }
+            EXPECT_EQ(expected_generations[t][gen], epm_gen);
+          }
+        }
+      };
+
+      // verify that no data should go to the cold tier
+      update_data_gen_mapping([](rewrite_gen_t gen) -> rewrite_gen_t {
+        if (gen == MIN_COLD_GENERATION) {
+          return MIN_COLD_GENERATION - 1;
+        } else {
+          return gen;
+        }
+      });
+      test_gen("init");
+
+      run_until(ratio_A_size).get();
+      EXPECT_TRUE(epm->background_process.eviction_state.is_stop_mode());
+      test_gen("exceed ratio A");
+      epm->run_background_work_until_halt().get();
+
+      run_until(ratio_B_size).get();
+      EXPECT_TRUE(epm->background_process.eviction_state.is_stop_mode());
+      test_gen("exceed ratio B");
+      epm->run_background_work_until_halt().get();
+
+      // verify that data may go to the cold tier
+      run_until(ratio_C_size).get();
+      update_data_gen_mapping([](rewrite_gen_t gen) { return gen; });
+      EXPECT_TRUE(epm->background_process.eviction_state.is_default_mode());
+      test_gen("exceed ratio C");
+      epm->run_background_work_until_halt().get();
+
+      // verify that data must go to the cold tier
+      run_until(ratio_D_size).get();
+      update_data_gen_mapping([](rewrite_gen_t gen) {
+        if (gen >= MIN_REWRITE_GENERATION && gen < MIN_COLD_GENERATION) {
+          return MIN_COLD_GENERATION;
+        } else {
+          return gen;
+        }
+      });
+      EXPECT_TRUE(epm->background_process.eviction_state.is_fast_mode());
+      test_gen("exceed ratio D");
+
+      auto main_size = epm->background_process.main_cleaner->get_stat().data_stored;
+      auto cold_size = epm->background_process.cold_cleaner->get_stat().data_stored;
+      EXPECT_EQ(cold_size, 0);
+      epm->run_background_work_until_halt().get();
+      auto new_main_size = epm->background_process.main_cleaner->get_stat().data_stored;
+      auto new_cold_size = epm->background_process.cold_cleaner->get_stat().data_stored;
+      EXPECT_GE(main_size, new_main_size);
+      EXPECT_NE(new_cold_size, 0);
+
+      update_data_gen_mapping([](rewrite_gen_t gen) { return gen; });
+      EXPECT_TRUE(epm->background_process.eviction_state.is_default_mode());
+      test_gen("finish evict");
     });
   }
 
@@ -881,13 +1073,19 @@ struct transaction_manager_test_t :
 struct tm_single_device_test_t :
   public transaction_manager_test_t {
 
-  tm_single_device_test_t() : transaction_manager_test_t(1) {}
+  tm_single_device_test_t() : transaction_manager_test_t(1, 0) {}
 };
 
 struct tm_multi_device_test_t :
   public transaction_manager_test_t {
 
-  tm_multi_device_test_t() : transaction_manager_test_t(3) {}
+  tm_multi_device_test_t() : transaction_manager_test_t(3, 0) {}
+};
+
+struct tm_multi_tier_device_test_t :
+  public transaction_manager_test_t {
+
+  tm_multi_tier_device_test_t() : transaction_manager_test_t(1, 2) {}
 };
 
 TEST_P(tm_single_device_test_t, basic)
@@ -1247,6 +1445,11 @@ TEST_P(tm_multi_device_test_t, random_writes_concurrent)
   test_random_writes_concurrent();
 }
 
+TEST_P(tm_multi_tier_device_test_t, evict)
+{
+  test_evict();
+}
+
 TEST_P(tm_single_device_test_t, parallel_extent_read)
 {
   test_parallel_extent_read();
@@ -1272,6 +1475,14 @@ INSTANTIATE_TEST_SUITE_P(
 INSTANTIATE_TEST_SUITE_P(
   transaction_manager_test,
   tm_multi_device_test_t,
+  ::testing::Values (
+    "segmented"
+  )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+  transaction_manager_test,
+  tm_multi_tier_device_test_t,
   ::testing::Values (
     "segmented"
   )

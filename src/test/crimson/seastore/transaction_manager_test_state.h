@@ -40,9 +40,16 @@ using EphemeralDevicesRef = std::unique_ptr<EphemeralDevices>;
 class EphemeralSegmentedDevices : public EphemeralDevices {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   std::list<segment_manager::EphemeralSegmentManagerRef> secondary_segment_managers;
+  std::size_t num_main_device_managers;
+  std::size_t num_cold_device_managers;
 
 public:
-  EphemeralSegmentedDevices(std::size_t num_device_managers) {
+  EphemeralSegmentedDevices(std::size_t num_main_devices,
+			    std::size_t num_cold_devices)
+    : num_main_device_managers(num_main_devices),
+      num_cold_device_managers(num_cold_devices)
+  {
+    auto num_device_managers = num_main_device_managers + num_cold_device_managers;
     assert(num_device_managers > 0);
     secondary_segment_managers.resize(num_device_managers - 1);
   }
@@ -63,7 +70,8 @@ public:
       });
     }).safe_then([this] {
       return segment_manager->mkfs(
-        segment_manager::get_ephemeral_device_config(0, get_num_devices(), 0));
+        segment_manager::get_ephemeral_device_config(
+          0, num_main_device_managers, num_cold_device_managers));
     }).safe_then([this] {
       return seastar::do_with(std::size_t(0), [this](auto &cnt) {
         return crimson::do_for_each(
@@ -73,7 +81,8 @@ public:
         {
           ++cnt;
           return sec_sm->mkfs(
-            segment_manager::get_ephemeral_device_config(cnt, get_num_devices(), 0));
+            segment_manager::get_ephemeral_device_config(
+              cnt, num_main_device_managers, num_cold_device_managers));
         });
       });
     }).handle_error(
@@ -161,10 +170,14 @@ public:
 class EphemeralTestState {
 protected:
   journal_type_t journal_type;
-  size_t num_device_managers = 0;
+  size_t num_main_device_managers = 0;
+  size_t num_cold_device_managers = 0;
   EphemeralDevicesRef devices;
-  EphemeralTestState(std::size_t num_device_managers) :
-    num_device_managers(num_device_managers) {}
+  bool secondary_is_cold;
+  EphemeralTestState(std::size_t num_main_device_managers,
+                     std::size_t num_cold_device_managers) :
+    num_main_device_managers(num_main_device_managers),
+    num_cold_device_managers(num_cold_device_managers) {}
 
   virtual void _init() = 0;
 
@@ -200,11 +213,14 @@ protected:
     LOG_PREFIX(EphemeralTestState::tm_setup);
     journal_type = type;
     if (journal_type == journal_type_t::SEGMENTED) {
-      devices.reset(new EphemeralSegmentedDevices(num_device_managers));
+      devices.reset(new
+        EphemeralSegmentedDevices(
+          num_main_device_managers, num_cold_device_managers));
     } else {
       assert(journal_type == journal_type_t::RANDOM_BLOCK);
       //TODO: multiple devices
-      ceph_assert(num_device_managers == 1);
+      ceph_assert(num_main_device_managers == 1);
+      ceph_assert(num_cold_device_managers == 0);
       devices.reset(new EphemeralRandomBlockDevices(1));
     }
     SUBINFO(test, "begin with {} devices ...", devices->get_num_devices());
@@ -240,9 +256,10 @@ protected:
   ExtentPlacementManager *epm;
   uint64_t seq = 0;
 
-  TMTestState() : EphemeralTestState(1) {}
+  TMTestState() : EphemeralTestState(1, 0) {}
 
-  TMTestState(std::size_t num_devices) : EphemeralTestState(num_devices) {}
+  TMTestState(std::size_t num_main_devices, std::size_t num_cold_devices)
+    : EphemeralTestState(num_main_devices, num_cold_devices) {}
 
   virtual void _init() override {
     auto sec_devices = devices->get_secondary_devices();
@@ -388,7 +405,7 @@ class SeaStoreTestState : public EphemeralTestState {
 protected:
   std::unique_ptr<SeaStore> seastore;
 
-  SeaStoreTestState() : EphemeralTestState(1) {}
+  SeaStoreTestState() : EphemeralTestState(1, 0) {}
 
   virtual void _init() final {
     seastore = make_test_seastore(
