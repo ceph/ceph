@@ -377,7 +377,7 @@ options:
   type: float
   level: advanced
   desc: Duration to inject a delay during scrubbing
-  fmt_desc: Time to sleep before scrubbing the next group of chunks. Increasing this value will slow
+  fmt_desc: Time to sleep before scrubbing the next group of chunks (seconds). Increasing this value will slow
     down the overall rate of scrubbing so that client operations will be less impacted.
   default: 0
   flags:
@@ -387,7 +387,7 @@ options:
 - name: osd_scrub_extended_sleep
   type: float
   level: advanced
-  desc: Duration to inject a delay during scrubbing out of scrubbing hours
+  desc: Duration to inject a delay during scrubbing out of scrubbing hours (seconds)
   default: 0
   see_also:
   - osd_scrub_begin_hour
