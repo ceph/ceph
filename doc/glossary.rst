@@ -274,6 +274,12 @@
                 This is the unique identifier of an OSD. This term is used
                 interchangeably with ``fsid``
 
+        Period
+                In the context of :term:`RGW`, a period is the configuration
+                state of the :term:`Realm`. The period stores the configuration
+                state of a multi-site configuration. When the period is updated,
+                the "epoch" is said thereby to have been changed.
+
 	:ref:`Pool<rados_pools>`
 		A pool is a logical partition used to store objects.
 
