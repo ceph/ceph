@@ -9339,9 +9339,10 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
 
   //////////// verify invalid statfs ///////////
   cerr << "fix invalid statfs" << std::endl;
-  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_stats", "true");
+  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_stats", "false");
+  // disable allocation recovery - it will fix statfs too
   SetVal(g_conf(),
-    "bluestore_debug_inject_allocation_from_file_failure", "1");
+    "bluestore_debug_inject_allocation_from_file_failure", "0");
   store_statfs_t statfs0;
   store_statfs_t statfs;
   bstore->mount();
@@ -9351,7 +9352,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   statfs.data_stored += 0x10000;
   ASSERT_FALSE(statfs0 == statfs);
   // this enforces global stats usage
-  bstore->inject_statfs("bluestore_statfs", statfs);
+  bstore->inject_global_statfs(statfs);
   bstore->umount();
 
   ASSERT_GE(bstore->fsck(false), 1); // global stats mismatch might omitted when
@@ -9375,10 +9376,10 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   statfs.data_stored += 0x20000;
   ASSERT_FALSE(statfs0 == statfs);
   // this enforces global stats usage
-  bstore->inject_statfs("bluestore_statfs", statfs);
+  bstore->inject_global_statfs(statfs);
   bstore->umount();
 
-  ASSERT_EQ(bstore->fsck(false), 2);
+  ASSERT_EQ(bstore->fsck(false), 1);
   ASSERT_EQ(bstore->repair(false), 0);
   ASSERT_EQ(bstore->fsck(false), 0);
   ASSERT_EQ(bstore->mount(), 0);
