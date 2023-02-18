@@ -133,8 +133,15 @@ public:
     : RGWSimpleCoroutine(_svc->ctx()), dpp(_dpp), async_rados(_async_rados), svc(_svc),
       obj(_obj), result(_result),
       empty_on_enoent(empty_on_enoent), objv_tracker(objv_tracker) {}
+
   ~SysObjReadCR() override {
-    request_cleanup();
+    try {
+      request_cleanup();
+    } catch (const boost::container::length_error_t& e) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+	": reference counted object mismatched, \"" << e.what() <<
+	"\"" << dendl;
+    }
   }
 
   void request_cleanup() override {
@@ -209,7 +216,13 @@ public:
   }
 
   ~SysObjWriteCR() override {
-    request_cleanup();
+    try {
+      request_cleanup();
+    } catch (const boost::container::length_error_t& e) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+	": reference counted object mismatched, \"" << e.what() <<
+	"\"" << dendl;
+    }
   }
 
   void request_cleanup() override {
