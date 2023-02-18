@@ -1502,7 +1502,7 @@ int DaosObject::mark_as_latest(const DoutPrefixProvider* dpp,
 
 DaosAtomicWriter::DaosAtomicWriter(
     const DoutPrefixProvider* dpp, optional_yield y,
-    std::unique_ptr<rgw::sal::Object> _head_obj, DaosStore* _store,
+    rgw::sal::Object* obj, DaosStore* _store,
     const rgw_user& _owner, const rgw_placement_rule* _ptail_placement_rule,
     uint64_t _olh_epoch, const std::string& _unique_tag)
     : StoreWriter(dpp, y),
@@ -1511,7 +1511,7 @@ DaosAtomicWriter::DaosAtomicWriter(
       ptail_placement_rule(_ptail_placement_rule),
       olh_epoch(_olh_epoch),
       unique_tag(_unique_tag),
-      obj(_store, _head_obj->get_key(), _head_obj->get_bucket()) {}
+      obj(_store, obj->get_key(), obj->get_bucket()) {}
 
 int DaosAtomicWriter::prepare(optional_yield y) {
   ldpp_dout(dpp, 20) << "DEBUG: prepare" << dendl;
@@ -2019,13 +2019,13 @@ int DaosMultipartUpload::get_info(const DoutPrefixProvider* dpp,
 
 std::unique_ptr<Writer> DaosMultipartUpload::get_writer(
     const DoutPrefixProvider* dpp, optional_yield y,
-    std::unique_ptr<rgw::sal::Object> _head_obj, const rgw_user& owner,
+    rgw::sal::Object* obj, const rgw_user& owner,
     const rgw_placement_rule* ptail_placement_rule, uint64_t part_num,
     const std::string& part_num_str) {
   ldpp_dout(dpp, 20) << "DaosMultipartUpload::get_writer(): enter part="
                      << part_num << " head_obj=" << _head_obj << dendl;
   return std::make_unique<DaosMultipartWriter>(
-      dpp, y, this, std::move(_head_obj), store, owner, ptail_placement_rule,
+      dpp, y, this, obj, store, owner, ptail_placement_rule,
       part_num, part_num_str);
 }
 
@@ -2163,7 +2163,7 @@ std::unique_ptr<MultipartUpload> DaosBucket::get_multipart_upload(
 
 std::unique_ptr<Writer> DaosStore::get_append_writer(
     const DoutPrefixProvider* dpp, optional_yield y,
-    std::unique_ptr<rgw::sal::Object> _head_obj, const rgw_user& owner,
+    rgw::sal::Object* obj, const rgw_user& owner,
     const rgw_placement_rule* ptail_placement_rule,
     const std::string& unique_tag, uint64_t position,
     uint64_t* cur_accounted_size) {
@@ -2173,11 +2173,11 @@ std::unique_ptr<Writer> DaosStore::get_append_writer(
 
 std::unique_ptr<Writer> DaosStore::get_atomic_writer(
     const DoutPrefixProvider* dpp, optional_yield y,
-    std::unique_ptr<rgw::sal::Object> _head_obj, const rgw_user& owner,
+    rgw::sal::Object* obj, const rgw_user& owner,
     const rgw_placement_rule* ptail_placement_rule, uint64_t olh_epoch,
     const std::string& unique_tag) {
   ldpp_dout(dpp, 20) << "get_atomic_writer" << dendl;
-  return std::make_unique<DaosAtomicWriter>(dpp, y, std::move(_head_obj), this,
+  return std::make_unique<DaosAtomicWriter>(dpp, y, obj, this,
                                             owner, ptail_placement_rule,
                                             olh_epoch, unique_tag);
 }

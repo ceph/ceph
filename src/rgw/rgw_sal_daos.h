@@ -741,7 +741,7 @@ class DaosAtomicWriter : public StoreWriter {
 
  public:
   DaosAtomicWriter(const DoutPrefixProvider* dpp, optional_yield y,
-                   std::unique_ptr<rgw::sal::Object> _head_obj,
+                   rgw::sal::Object* obj,
                    DaosStore* _store, const rgw_user& _owner,
                    const rgw_placement_rule* _ptail_placement_rule,
                    uint64_t _olh_epoch, const std::string& _unique_tag);
@@ -780,7 +780,7 @@ class DaosMultipartWriter : public StoreWriter {
  public:
   DaosMultipartWriter(const DoutPrefixProvider* dpp, optional_yield y,
                       MultipartUpload* _upload,
-                      std::unique_ptr<rgw::sal::Object> _head_obj,
+                      rgw::sal::Object* obj,
                       DaosStore* _store, const rgw_user& owner,
                       const rgw_placement_rule* ptail_placement_rule,
                       uint64_t _part_num, const std::string& part_num_str)
@@ -874,7 +874,7 @@ class DaosMultipartUpload : public StoreMultipartUpload {
                        rgw::sal::Attrs* attrs = nullptr) override;
   virtual std::unique_ptr<Writer> get_writer(
       const DoutPrefixProvider* dpp, optional_yield y,
-      std::unique_ptr<rgw::sal::Object> _head_obj, const rgw_user& owner,
+      rgw::sal::Object* obj, const rgw_user& owner,
       const rgw_placement_rule* ptail_placement_rule, uint64_t part_num,
       const std::string& part_num_str) override;
   const std::string& get_bucket_name() { return bucket->get_name(); }
@@ -1027,13 +1027,13 @@ class DaosStore : public StoreDriver {
       std::vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
   virtual std::unique_ptr<Writer> get_append_writer(
       const DoutPrefixProvider* dpp, optional_yield y,
-      std::unique_ptr<rgw::sal::Object> _head_obj, const rgw_user& owner,
+      rgw::sal::Object* obj, const rgw_user& owner,
       const rgw_placement_rule* ptail_placement_rule,
       const std::string& unique_tag, uint64_t position,
       uint64_t* cur_accounted_size) override;
   virtual std::unique_ptr<Writer> get_atomic_writer(
       const DoutPrefixProvider* dpp, optional_yield y,
-      std::unique_ptr<rgw::sal::Object> _head_obj, const rgw_user& owner,
+      rgw::sal::Object* obj, const rgw_user& owner,
       const rgw_placement_rule* ptail_placement_rule, uint64_t olh_epoch,
       const std::string& unique_tag) override;
   virtual const std::string& get_compression_type(
