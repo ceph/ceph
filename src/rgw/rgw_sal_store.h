@@ -155,36 +155,17 @@ class StoreBucket : public Bucket {
 class StoreObject : public Object {
   protected:
     RGWObjState state;
-    Bucket* bucket;
-    Attrs attrs;
+    Bucket* bucket = nullptr;
     bool delete_marker{false};
 
   public:
-
-    struct StoreReadOp : ReadOp {
-      virtual ~StoreReadOp() = default;
-    };
-
-    struct StoreDeleteOp : DeleteOp {
-      virtual ~StoreDeleteOp() = default;
-    };
-
-    StoreObject()
-      : state(),
-      bucket(nullptr),
-      attrs()
-      {}
+    StoreObject() = default;
     StoreObject(const rgw_obj_key& _k)
-      : state(),
-      bucket(),
-      attrs()
-      { state.obj.key = _k; }
+    { state.obj.key = _k; }
     StoreObject(const rgw_obj_key& _k, Bucket* _b)
-      : state(),
-      bucket(_b),
-      attrs()
-      { state.obj.init(_b->get_key(), _k); }
-    StoreObject(StoreObject& _o) = default;
+      : bucket(_b)
+    { state.obj.init(_b->get_key(), _k); }
+    StoreObject(const StoreObject& _o) = default;
 
     virtual ~StoreObject() = default;
 
