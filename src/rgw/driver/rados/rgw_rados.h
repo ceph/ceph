@@ -203,7 +203,7 @@ public:
   RGWObjStateManifest *get_state(const rgw_obj& obj);
 
   void set_compressed(const rgw_obj& obj);
-  void set_atomic(rgw_obj& obj);
+  void set_atomic(const rgw_obj& obj);
   void set_prefetch_data(const rgw_obj& obj);
   void invalidate(const rgw_obj& obj);
 };
@@ -400,12 +400,12 @@ class RGWRados
   uint64_t max_bucket_id;
 
   int get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx& rctx,
-			   RGWBucketInfo& bucket_info, rgw::sal::Object* obj,
+			   RGWBucketInfo& bucket_info, const rgw_obj& obj,
 			   RGWObjState *olh_state, RGWObjState **target_state,
 			   RGWObjManifest **target_manifest, optional_yield y);
-  int get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucketInfo& bucket_info, rgw::sal::Object* obj, RGWObjState **state, RGWObjManifest** manifest,
+  int get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state, RGWObjManifest** manifest,
                          bool follow_olh, optional_yield y, bool assume_noent = false);
-  int append_atomic_test(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, rgw::sal::Object* obj,
+  int append_atomic_test(const DoutPrefixProvider *dpp, RGWObjectCtx* rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state,
 			 RGWObjManifest** pmanifest, optional_yield y);
 
@@ -660,9 +660,9 @@ public:
 
   class Object {
     RGWRados *store;
-    rgw::sal::Bucket* bucket;
+    RGWBucketInfo bucket_info;
     RGWObjectCtx& ctx;
-    rgw::sal::Object* obj;
+    rgw_obj obj;
 
     BucketShard bs;
 
@@ -684,24 +684,24 @@ public:
     int complete_atomic_modification(const DoutPrefixProvider *dpp);
 
   public:
-    Object(RGWRados *_store, rgw::sal::Bucket* _bucket, RGWObjectCtx& _ctx, rgw::sal::Object* _obj) : store(_store), bucket(_bucket),
+    Object(RGWRados *_store, const RGWBucketInfo& _bucket_info, RGWObjectCtx& _ctx, const rgw_obj& _obj) : store(_store), bucket_info(_bucket_info),
                                                                                                ctx(_ctx), obj(_obj), bs(store),
                                                                                                state(NULL), manifest(nullptr), versioning_disabled(false),
                                                                                                bs_initialized(false),
                                                                                                pmeta_placement_rule(nullptr) {}
 
     RGWRados *get_store() { return store; }
-    rgw_obj get_obj() { return obj->get_obj(); }
+    rgw_obj& get_obj() { return obj; }
     RGWObjectCtx& get_ctx() { return ctx; }
-    RGWBucketInfo& get_bucket_info() { return bucket->get_info(); }
-    const std::string& get_instance() { return obj->get_instance(); }
-    rgw::sal::Object* get_target() { return obj; }
+    RGWBucketInfo& get_bucket_info() { return bucket_info; }
+    //const std::string& get_instance() { return obj->get_instance(); }
+    //rgw::sal::Object* get_target() { return obj; }
     int get_manifest(const DoutPrefixProvider *dpp, RGWObjManifest **pmanifest, optional_yield y);
 
     int get_bucket_shard(BucketShard **pbs, const DoutPrefixProvider *dpp) {
       if (!bs_initialized) {
         int r =
-	  bs.init(bucket->get_key(), obj->get_obj(), nullptr /* no RGWBucketInfo */, dpp);
+	  bs.init(bucket_info.bucket, obj, nullptr /* no RGWBucketInfo */, dpp);
         if (r < 0) {
           return r;
         }
@@ -716,7 +716,7 @@ public:
     }
 
     bool versioning_enabled() {
-      return (!versioning_disabled && bucket->versioning_enabled());
+      return (!versioning_disabled && bucket_info.versioning_enabled());
     }
 
     void set_meta_placement_rule(const rgw_placement_rule *p) {
@@ -724,7 +724,7 @@ public:
     }
 
     const rgw_placement_rule& get_meta_placement_rule() {
-        return pmeta_placement_rule ? *pmeta_placement_rule : bucket->get_placement_rule();
+        return pmeta_placement_rule ? *pmeta_placement_rule : bucket_info.placement_rule;
     }
 
     struct Read {
@@ -1048,26 +1048,26 @@ public:
                                const std::string& obj_delim,
                                std::function<int(const rgw_bucket_dir_entry&)> handler);
 
-  bool swift_versioning_enabled(rgw::sal::Bucket* bucket) const;
+  bool swift_versioning_enabled(const RGWBucketInfo& bucket_info) const;
 
   int swift_versioning_copy(RGWObjectCtx& obj_ctx,              /* in/out */
                             const rgw_user& user,               /* in */
-                            rgw::sal::Bucket* bucket,        /* in */
-                            rgw::sal::Object* obj,           /* in */
-                            const DoutPrefixProvider *dpp,      /* in/out */
+                            RGWBucketInfo& bucket_info,         /* in */
+                            const rgw_obj& obj,                 /* in */
+                            const DoutPrefixProvider *dpp,      /* in */
                             optional_yield y);                  /* in */
   int swift_versioning_restore(RGWObjectCtx& obj_ctx,           /* in/out */
                                const rgw_user& user,            /* in */
-                               rgw::sal::Bucket* bucket,     /* in */
-                               rgw::sal::Object* obj,        /* in */
-                               bool& restored,                 /* out */
-                               const DoutPrefixProvider *dpp);     /* in/out */
+                               RGWBucketInfo& bucket_info,      /* in */
+                               rgw_obj& obj,                    /* in/out */
+                               bool& restored,                  /* out */
+                               const DoutPrefixProvider *dpp);  /* in */
   int copy_obj_to_remote_dest(const DoutPrefixProvider *dpp,
                               RGWObjState *astate,
                               std::map<std::string, bufferlist>& src_attrs,
                               RGWRados::Object::Read& read_op,
                               const rgw_user& user_id,
-                              rgw::sal::Object* dest_obj,
+                              const rgw_obj& dest_obj,
                               ceph::real_time *mtime);
 
   enum AttrsMod {
@@ -1078,7 +1078,7 @@ public:
 
   D3nDataCache* d3n_data_cache{nullptr};
 
-  int rewrite_obj(rgw::sal::Object* obj, const DoutPrefixProvider *dpp, optional_yield y);
+  int rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, const DoutPrefixProvider *dpp, optional_yield y);
   int reindex_obj(const RGWBucketInfo& dest_bucket_info,
 		  const rgw_obj& obj,
 		  const DoutPrefixProvider* dpp,
@@ -1089,7 +1089,7 @@ public:
                const rgw_user& user_id,
                req_info *info,
                const rgw_zone_id& source_zone,
-               rgw::sal::Object* src_obj,
+               const rgw_obj& src_obj,
                const RGWBucketInfo *src_bucket_info,
                real_time *src_mtime,
                uint64_t *psize,
@@ -1108,10 +1108,10 @@ public:
                        const rgw_user& user_id,
                        req_info *info,
                        const rgw_zone_id& source_zone,
-                       rgw::sal::Object* dest_obj,
-                       rgw::sal::Object* src_obj,
-		       rgw::sal::Bucket* dest_bucket,
-		       rgw::sal::Bucket* src_bucket,
+                       const rgw_obj& dest_obj,
+                       const rgw_obj& src_obj,
+                       RGWBucketInfo& dest_bucket_info,
+                       RGWBucketInfo *src_bucket_info,
 		       std::optional<rgw_placement_rule> dest_placement,
                        ceph::real_time *src_mtime,
                        ceph::real_time *mtime,
@@ -1152,10 +1152,10 @@ public:
                const rgw_user& user_id,
                req_info *info,
                const rgw_zone_id& source_zone,
-               rgw::sal::Object* dest_obj,
-               rgw::sal::Object* src_obj,
-               rgw::sal::Bucket* dest_bucket,
-               rgw::sal::Bucket* src_bucket,
+               const rgw_obj& dest_obj,
+               const rgw_obj& src_obj,
+               RGWBucketInfo& dest_bucket_info,
+               RGWBucketInfo& src_bucket_info,
                const rgw_placement_rule& dest_placement,
                ceph::real_time *src_mtime,
                ceph::real_time *mtime,
@@ -1179,10 +1179,10 @@ public:
                optional_yield y);
 
   int copy_obj_data(RGWObjectCtx& obj_ctx,
-               rgw::sal::Bucket* bucket,
+               RGWBucketInfo& dest_bucket_info,
                const rgw_placement_rule& dest_placement,
 	       RGWRados::Object::Read& read_op, off_t end,
-               rgw::sal::Object* dest_obj,
+               const rgw_obj& dest_obj,
 	       ceph::real_time *mtime,
 	       ceph::real_time set_mtime,
                std::map<std::string, bufferlist>& attrs,
@@ -1193,8 +1193,8 @@ public:
                optional_yield y);
 
   int transition_obj(RGWObjectCtx& obj_ctx,
-                     rgw::sal::Bucket* bucket,
-                     rgw::sal::Object& obj,
+                     RGWBucketInfo& bucket_info,
+                     const rgw_obj& obj,
                      const rgw_placement_rule& placement_rule,
                      const real_time& mtime,
                      uint64_t olh_epoch,
@@ -1222,17 +1222,10 @@ public:
   int bucket_suspended(const DoutPrefixProvider *dpp, rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  int delete_obj(rgw::sal::Driver* driver,
-		 const DoutPrefixProvider *dpp,
-		 const RGWBucketInfo& bucket_owner,
-		 const rgw_obj& src_obj,
-		 int versioning_status,  // versioning flags defined in enum RGWBucketFlags
-		 uint16_t bilog_flags = 0,
-		 const ceph::real_time& expiration_time = ceph::real_time(),
-		 rgw_zone_set *zones_trace = nullptr);
   int delete_obj(const DoutPrefixProvider *dpp,
-		 const RGWBucketInfo& bucket_owner,
-		 rgw::sal::Object* src_obj,
+		 RGWObjectCtx& obj_ctx,
+		 const RGWBucketInfo& bucket_info,
+		 const rgw_obj& obj,
 		 int versioning_status,  // versioning flags defined in enum RGWBucketFlags
 		 uint16_t bilog_flags = 0,
 		 const ceph::real_time& expiration_time = ceph::real_time(),
@@ -1252,16 +1245,16 @@ public:
    * bl: the contents of the attr
    * Returns: 0 on success, -ERR# otherwise.
    */
-  int set_attr(const DoutPrefixProvider *dpp, RGWObjectCtx* ctx, RGWBucketInfo& bucket_info, rgw::sal::Object* obj, const char *name, bufferlist& bl);
+  int set_attr(const DoutPrefixProvider *dpp, RGWObjectCtx* ctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, const char *name, bufferlist& bl);
 
-  int set_attrs(const DoutPrefixProvider *dpp, void *ctx, RGWBucketInfo& bucket_info, rgw::sal::Object* obj,
+  int set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* ctx, RGWBucketInfo& bucket_info, const rgw_obj& obj,
                         std::map<std::string, bufferlist>& attrs,
                         std::map<std::string, bufferlist>* rmattrs,
                         optional_yield y);
 
-  int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucketInfo& bucket_info, rgw::sal::Object* obj, RGWObjState **state, RGWObjManifest** manifest,
+  int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state, RGWObjManifest** manifest,
                     bool follow_olh, optional_yield y, bool assume_noent = false);
-  int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucketInfo& bucket_info, rgw::sal::Object* obj, RGWObjState **state, RGWObjManifest** manifest, optional_yield y) {
+  int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state, RGWObjManifest** manifest, optional_yield y) {
     return get_obj_state(dpp, rctx, bucket_info, obj, state, manifest, true, y);
   }
 
@@ -1269,7 +1262,7 @@ public:
                                  off_t, bool, RGWObjState*, void*);
 
   int iterate_obj(const DoutPrefixProvider *dpp, RGWObjectCtx& ctx, RGWBucketInfo& bucket_info,
-                  rgw::sal::Object* obj, off_t ofs, off_t end,
+                  const rgw_obj& obj, off_t ofs, off_t end,
                   uint64_t max_chunk_size, iterate_obj_cb cb, void *arg,
                   optional_yield y);
 
@@ -1326,21 +1319,21 @@ public:
                                 std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
   int bucket_index_trim_olh_log(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjState& obj_state, const rgw_obj& obj_instance, uint64_t ver);
   int bucket_index_clear_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance);
-  int apply_olh_log(const DoutPrefixProvider *dpp, RGWObjState& obj_state, RGWBucketInfo& bucket_info, const rgw::sal::Object* obj,
+  int apply_olh_log(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState& obj_state, RGWBucketInfo& bucket_info, const rgw_obj& obj,
                     bufferlist& obj_tag, std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> >& log,
                     uint64_t *plast_ver, rgw_zone_set *zones_trace = nullptr);
-  int update_olh(const DoutPrefixProvider *dpp, RGWObjState *state, RGWBucketInfo& bucket_info, const rgw::sal::Object* obj, rgw_zone_set *zones_trace = nullptr);
-  int set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw::sal::Object* target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
+  int update_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState *state, RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_zone_set *zones_trace = nullptr);
+  int set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
               uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time,
               optional_yield y, rgw_zone_set *zones_trace = nullptr, bool log_data_change = false);
   int repair_olh(const DoutPrefixProvider *dpp, RGWObjState* state, const RGWBucketInfo& bucket_info,
                  const rgw_obj& obj);
-  int unlink_obj_instance(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, rgw::sal::Object* target_obj,
+  int unlink_obj_instance(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj,
                           uint64_t olh_epoch, optional_yield y, rgw_zone_set *zones_trace = nullptr);
 
   void check_pending_olh_entries(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& pending_entries, std::map<std::string, bufferlist> *rm_pending_entries);
   int remove_olh_pending_entries(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::map<std::string, bufferlist>& pending_attrs);
-  int follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjectCtx& ctx, RGWObjState *state, rgw::sal::Object* olh_obj, rgw_obj *target);
+  int follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjectCtx& ctx, RGWObjState *state, const rgw_obj& olh_obj, rgw_obj *target);
   int get_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWOLHInfo *olh);
 
   void gen_rand_obj_instance_name(rgw_obj_key *target_key);
@@ -1350,7 +1343,7 @@ public:
   int append_async(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, size_t size, bufferlist& bl);
 
 public:
-  void set_atomic(void *ctx, rgw_obj& obj) {
+  void set_atomic(void *ctx, const rgw_obj& obj) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
     rctx->set_atomic(obj);
   }
@@ -1489,7 +1482,7 @@ public:
   int list_gc_objs(int *index, std::string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue);
   int process_gc(bool expired_only);
   bool process_expire_objects(const DoutPrefixProvider *dpp);
-  int defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx* ctx, RGWBucketInfo& bucket_info, rgw::sal::Object* obj, optional_yield y);
+  int defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx* ctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y);
 
   int process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket);
   int list_lc_progress(std::string& marker, uint32_t max_entries,

@@ -297,7 +297,7 @@ public:
 				 providers) override;
   virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule
 				  *ptail_placement_rule,
@@ -306,7 +306,7 @@ public:
 				  uint64_t *cur_accounted_size) override;
   virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
@@ -769,7 +769,7 @@ public:
 
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
-			  std::unique_ptr<rgw::sal::Object> _head_obj,
+			  rgw::sal::Object* obj,
 			  const rgw_user& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
@@ -881,10 +881,10 @@ public:
 class FilterWriter : public Writer {
 protected:
   std::unique_ptr<Writer> next;
-  std::unique_ptr<Object> head_obj;
+  Object* obj;
 public:
-  FilterWriter(std::unique_ptr<Writer> _next, std::unique_ptr<Object> _head_obj) :
-    next(std::move(_next)), head_obj(std::move(_head_obj)) {}
+  FilterWriter(std::unique_ptr<Writer> _next, Object* _obj) :
+    next(std::move(_next)), obj(_obj) {}
   virtual ~FilterWriter() = default;
 
   virtual int prepare(optional_yield y) { return next->prepare(y); }

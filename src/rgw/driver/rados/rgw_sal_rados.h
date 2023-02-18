@@ -227,7 +227,7 @@ class RadosStore : public StoreDriver {
 				   std::vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
@@ -235,7 +235,7 @@ class RadosStore : public StoreDriver {
 				  uint64_t *cur_accounted_size) override;
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
@@ -689,7 +689,7 @@ public:
   virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) override;
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
-			  std::unique_ptr<rgw::sal::Object> _head_obj,
+			  rgw::sal::Object* obj,
 			  const rgw_user& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
@@ -780,13 +780,15 @@ class RadosAtomicWriter : public StoreWriter {
 protected:
   rgw::sal::RadosStore* store;
   std::unique_ptr<Aio> aio;
-  RGWObjectCtx* obj_ctx;
+  RGWObjectCtx& obj_ctx;
   rgw::putobj::AtomicObjectProcessor processor;
 
 public:
   RadosAtomicWriter(const DoutPrefixProvider *dpp,
 		    optional_yield y,
-		    std::unique_ptr<rgw::sal::Object> _head_obj,
+		    RGWBucketInfo& bucket_info,
+		    RGWObjectCtx& obj_ctx,
+		    const rgw_obj& obj,
 		    RadosStore* _store, std::unique_ptr<Aio> _aio,
 		    const rgw_user& owner,
 		    const rgw_placement_rule *ptail_placement_rule,
@@ -795,11 +797,10 @@ public:
 			StoreWriter(dpp, y),
 			store(_store),
 			aio(std::move(_aio)),
-			obj_ctx(&dynamic_cast<RadosObject*>(_head_obj.get())->get_ctx()),
-			processor(&*aio, store,
-				  ptail_placement_rule, owner, 
-				  *obj_ctx,
-				  std::move(_head_obj), olh_epoch, unique_tag,
+			obj_ctx(obj_ctx),
+			processor(&*aio, store->getRados(), bucket_info,
+				  ptail_placement_rule, owner, obj_ctx,
+				  obj, olh_epoch, unique_tag,
 				  dpp, y)
   {}
   ~RadosAtomicWriter() = default;
@@ -825,13 +826,15 @@ class RadosAppendWriter : public StoreWriter {
 protected:
   rgw::sal::RadosStore* store;
   std::unique_ptr<Aio> aio;
-  RGWObjectCtx* obj_ctx;
+  RGWObjectCtx& obj_ctx;
   rgw::putobj::AppendObjectProcessor processor;
 
 public:
   RadosAppendWriter(const DoutPrefixProvider *dpp,
 		    optional_yield y,
-		    std::unique_ptr<rgw::sal::Object> _head_obj,
+		    RGWBucketInfo& bucket_info,
+		    RGWObjectCtx& obj_ctx,
+		    const rgw_obj& obj,
 		    RadosStore* _store, std::unique_ptr<Aio> _aio,
 		    const rgw_user& owner,
 		    const rgw_placement_rule *ptail_placement_rule,
@@ -841,11 +844,10 @@ public:
 			StoreWriter(dpp, y),
 			store(_store),
 			aio(std::move(_aio)),
-			obj_ctx(&dynamic_cast<RadosObject*>(_head_obj.get())->get_ctx()),
-			processor(&*aio, store,
-				  ptail_placement_rule, owner,
-				  *obj_ctx,
-				  std::move(_head_obj), unique_tag, position,
+			obj_ctx(obj_ctx),
+			processor(&*aio, store->getRados(), bucket_info,
+				  ptail_placement_rule, owner, obj_ctx,
+				  obj, unique_tag, position,
 				  cur_accounted_size, dpp, y)
   {}
   ~RadosAppendWriter() = default;
@@ -871,13 +873,15 @@ class RadosMultipartWriter : public StoreWriter {
 protected:
   rgw::sal::RadosStore* store;
   std::unique_ptr<Aio> aio;
-  RGWObjectCtx* obj_ctx;
+  RGWObjectCtx& obj_ctx;
   rgw::putobj::MultipartObjectProcessor processor;
 
 public:
   RadosMultipartWriter(const DoutPrefixProvider *dpp,
-		       optional_yield y, MultipartUpload* upload,
-		       std::unique_ptr<rgw::sal::Object> _head_obj,
+		       optional_yield y, const std::string& upload_id,
+		       RGWBucketInfo& bucket_info,
+		       RGWObjectCtx& obj_ctx,
+		       const rgw_obj& obj,
 		       RadosStore* _store, std::unique_ptr<Aio> _aio,
 		       const rgw_user& owner,
 		       const rgw_placement_rule *ptail_placement_rule,
@@ -885,11 +889,10 @@ public:
 			StoreWriter(dpp, y),
 			store(_store),
 			aio(std::move(_aio)),
-			obj_ctx(&dynamic_cast<RadosObject*>(_head_obj.get())->get_ctx()),
-			processor(&*aio, store,
-				  ptail_placement_rule, owner,
-				  *obj_ctx,
-				  std::move(_head_obj), upload->get_upload_id(),
+			obj_ctx(obj_ctx),
+			processor(&*aio, store->getRados(), bucket_info,
+				  ptail_placement_rule, owner, obj_ctx,
+				  obj, upload_id,
 				  part_num, part_num_str, dpp, y)
   {}
   ~RadosMultipartWriter() = default;
