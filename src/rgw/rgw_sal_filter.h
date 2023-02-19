@@ -670,6 +670,9 @@ public:
   virtual std::unique_ptr<ReadOp> get_read_op() override;
   virtual std::unique_ptr<DeleteOp> get_delete_op() override;
 
+  virtual int get_torrent_info(const DoutPrefixProvider* dpp,
+                               optional_yield y, bufferlist& bl) override;
+
   virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp,
 				    const std::string& oid,
 				    const std::set<std::string>& keys,

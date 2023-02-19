@@ -241,6 +241,16 @@ class StoreObject : public Object {
       return -1;
     }
 
+    virtual int get_torrent_info(const DoutPrefixProvider* dpp,
+                                 optional_yield y, bufferlist& bl) override {
+      const auto& attrs = get_attrs();
+      if (auto i = attrs.find(RGW_ATTR_TORRENT); i != attrs.end()) {
+        bl = i->second;
+        return 0;
+      }
+      return -ENOENT;
+    }
+
     virtual void print(std::ostream& out) const override {
       if (bucket)
 	out << bucket << ":";
