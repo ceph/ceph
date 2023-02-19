@@ -820,9 +820,6 @@ int RGWGetObj_ObjStore::get_params(optional_yield y)
     get_data &= (!rgwx_stat);
   }
 
-  if (s->info.args.exists(GET_TORRENT)) {
-    return torrent.get_params();
-  }
   return 0;
 }
 

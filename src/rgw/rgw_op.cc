@@ -52,6 +52,7 @@
 #include "rgw_notify_event_type.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
+#include "rgw_torrent.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
 
@@ -964,7 +965,7 @@ int RGWGetObj::verify_permission(optional_yield y)
     if (has_s3_existing_tag || has_s3_resource_tag)
       rgw_iam_add_objtags(this, s, has_s3_existing_tag, has_s3_resource_tag);
 
-  if (torrent.get_flag()) {
+  if (get_torrent) {
     if (s->object->get_instance().empty()) {
       action = rgw::IAM::s3GetObjectTorrent;
     } else {
@@ -2199,8 +2200,7 @@ void RGWGetObj::execute(optional_yield y)
     goto done_err;
   }
   /* start gettorrent */
-  if (torrent.get_flag())
-  {
+  if (get_torrent) {
     attr_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
     if (attr_iter != attrs.end() && attr_iter->second.to_str() == "SSE-C-AES256") {
       ldpp_dout(this, 0) << "ERROR: torrents are not supported for objects "

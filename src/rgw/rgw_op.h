@@ -47,7 +47,6 @@
 #include "rgw_log.h"
 
 #include "rgw_lc.h"
-#include "rgw_torrent.h"
 #include "rgw_tag.h"
 #include "rgw_object_lock.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -60,12 +59,11 @@
 
 #include "include/ceph_assert.h"
 
-using ceph::crypto::SHA1;
-
 struct req_state;
 class RGWOp;
 class RGWRados;
 class RGWMultiCompleteUpload;
+class RGWPutObj_Torrent;
 
 
 namespace rgw {
@@ -331,7 +329,6 @@ public:
 
 class RGWGetObj : public RGWOp {
 protected:
-  seed torrent; // get torrent
   const char *range_str;
   const char *if_mod;
   const char *if_unmod;
@@ -349,6 +346,7 @@ protected:
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
   rgw::sal::Attrs attrs;
+  bool get_torrent = false;
   bool get_data;
   bool partial_content;
   bool ignore_invalid_range;
