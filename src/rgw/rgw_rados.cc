@@ -5716,14 +5716,16 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
     it.copy(bl.length(), s->shadow_obj);
     s->shadow_obj[bl.length()] = '\0';
   }
-  s->obj_tag = s->attrset[RGW_ATTR_ID_TAG];
+  if (iter = s->attrset.find(RGW_ATTR_ID_TAG); iter != s->attrset.end()) {
+    s->obj_tag = iter->second;
+  }
   auto ttiter = s->attrset.find(RGW_ATTR_TAIL_TAG);
   if (ttiter != s->attrset.end()) {
     s->tail_tag = s->attrset[RGW_ATTR_TAIL_TAG];
   }
 
-  bufferlist manifest_bl = s->attrset[RGW_ATTR_MANIFEST];
-  if (manifest_bl.length()) {
+  if (iter = s->attrset.find(RGW_ATTR_MANIFEST); iter != s->attrset.end()) {
+    bufferlist manifest_bl = iter->second;
     auto miter = manifest_bl.cbegin();
     try {
       s->manifest.emplace();
@@ -6174,14 +6176,20 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucke
   r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, null_yield);
   if (state) {
     if (r >= 0) {
-      bufferlist acl_bl = attrs[RGW_ATTR_ACL];
-      bufferlist etag_bl = attrs[RGW_ATTR_ETAG];
-      bufferlist content_type_bl = attrs[RGW_ATTR_CONTENT_TYPE];
-      string etag = rgw_bl_str(etag_bl);
-      string content_type = rgw_bl_str(content_type_bl);
+      bufferlist acl_bl;
+      if (iter = attrs.find(RGW_ATTR_ACL); iter != attrs.end()) {
+        acl_bl = iter->second;
+      }
+      std::string etag;
+      if (iter = attrs.find(RGW_ATTR_ETAG); iter != attrs.end()) {
+        etag = rgw_bl_str(iter->second);
+      }
+      std::string content_type;
+      if (iter = attrs.find(RGW_ATTR_CONTENT_TYPE); iter != attrs.end()) {
+        content_type = rgw_bl_str(iter->second);
+      }
       string storage_class;
-      auto iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
-      if (iter != attrs.end()) {
+      if (iter = attrs.find(RGW_ATTR_STORAGE_CLASS); iter != attrs.end()) {
         storage_class = rgw_bl_str(iter->second);
       }
       uint64_t epoch = ioctx.get_last_version();
