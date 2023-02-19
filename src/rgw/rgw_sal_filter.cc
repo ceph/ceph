@@ -1007,6 +1007,12 @@ std::unique_ptr<Object::DeleteOp> FilterObject::get_delete_op()
   return std::make_unique<FilterDeleteOp>(std::move(d));
 }
 
+int FilterObject::get_torrent_info(const DoutPrefixProvider* dpp,
+                                   optional_yield y, bufferlist& bl)
+{
+  return next->get_torrent_info(dpp, y, bl);
+}
+
 int FilterObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp,
 					const std::string& oid,
 					const std::set<std::string>& keys,
