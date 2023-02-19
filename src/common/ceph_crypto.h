@@ -58,6 +58,8 @@ namespace TOPNSPC::crypto {
       public:
 	OpenSSLDigest (const EVP_MD *_type);
 	~OpenSSLDigest ();
+	OpenSSLDigest(OpenSSLDigest&& o) noexcept;
+	OpenSSLDigest& operator=(OpenSSLDigest&& o) noexcept;
 	void Restart();
 	void SetFlags(int flags);
 	void Update (const unsigned char *input, size_t length);
