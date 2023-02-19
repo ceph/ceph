@@ -7,10 +7,6 @@
 QoS support in Ceph is implemented using a queuing scheduler based on `the
 dmClock algorithm`_. See :ref:`dmclock-qos` section for more details.
 
-.. note:: The *mclock_scheduler* is supported for BlueStore OSDs. For Filestore
-          OSDs the *osd_op_queue* is set to *wpq* and is enforced even if you
-          attempt to change it.
-
 To make the usage of mclock more user-friendly and intuitive, mclock config
 profiles are introduced. The mclock profiles mask the low level details from
 users, making it easier to configure and use mclock.
