@@ -1011,7 +1011,7 @@ Making a Zonegroup the Default
 One zonegroup in the list of zonegroups must be the default zonegroup.  There
 can be only one default zonegroup. In the case that there is only one zonegroup
 which was not designated the default zonegroup when it was created, use the
-folloiwng command to make it the default zonegroup. Commands of this form can
+following command to make it the default zonegroup. Commands of this form can
 be used to change which zonegroup is the default. 
 
 #. Designate a zonegroup as the default zonegroup:
@@ -1184,8 +1184,8 @@ The zonegroup configuration looks like this:
 Setting a Zonegroup
 ~~~~~~~~~~~~~~~~~~~~
 
-The process of defining a zonegroup consists of creating a JSON object and, at
-a minimum, specifying the required settings:
+The process of defining a zonegroup consists of creating a JSON object and
+specifying the required settings. Here is a list of the required settings:
 
 1. ``name``: The name of the zonegroup. Required.
 
@@ -1223,26 +1223,26 @@ a minimum, specifying the required settings:
    object data. Set to ``default-placement`` by default. It is  also possible
    to set a per-user default placement in the user info for each user.
 
-To set a zonegroup, create a JSON object that contains the required fields,
-save the object to a file (e.g., ``zonegroup.json``), and run the following
-command:
+Setting a Zonegroup - Procedure
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. prompt:: bash #
+#. To set a zonegroup, create a JSON object that contains the required fields,
+   save the object to a file (for example, ``zonegroup.json``), and run the
+   following command:
+
+   .. prompt:: bash #
    
-   radosgw-admin zonegroup set --infile zonegroup.json
+      radosgw-admin zonegroup set --infile zonegroup.json
 
-Where ``zonegroup.json`` is the JSON file you created.
+   Where ``zonegroup.json`` is the JSON file you created.
 
-.. important:: The ``default`` zonegroup ``is_master`` setting is ``true`` by
-   default. If you create a new zonegroup and want to make it the master
-   zonegroup, you must either set the ``default`` zonegroup ``is_master``
-   setting to ``false``, or delete the ``default`` zonegroup.
+   .. important:: The ``default`` zonegroup ``is_master`` setting is ``true`` by default. If you create an additional zonegroup and want to make it the master zonegroup, you must either set the ``default`` zonegroup ``is_master`` setting to ``false`` or delete the ``default`` zonegroup.
 
-Finally, update the period:
+#. Update the period:
 
-.. prompt:: bash #
+   .. prompt:: bash #
    
-   radosgw-admin period update --commit
+      radosgw-admin period update --commit
 
 Setting a Zonegroup Map
 ~~~~~~~~~~~~~~~~~~~~~~~~
