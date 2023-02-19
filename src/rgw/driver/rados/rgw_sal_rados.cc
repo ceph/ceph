@@ -1754,27 +1754,6 @@ void RadosObject::get_raw_obj(rgw_raw_obj* raw_obj)
   store->getRados()->obj_to_raw((bucket->get_info()).placement_rule, get_obj(), raw_obj);
 }
 
-int RadosObject::omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
-				  std::map<std::string, bufferlist> *m,
-				  bool* pmore, optional_yield y)
-{
-  rgw_raw_obj raw_obj;
-  get_raw_obj(&raw_obj);
-  auto sysobj = store->svc()->sysobj->get_obj(raw_obj);
-
-  return sysobj.omap().get_vals(dpp, marker, count, m, pmore, y);
-}
-
-int RadosObject::omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *m,
-				 optional_yield y)
-{
-  rgw_raw_obj raw_obj;
-  get_raw_obj(&raw_obj);
-  auto sysobj = store->svc()->sysobj->get_obj(raw_obj);
-
-  return sysobj.omap().get_all(dpp, m, y);
-}
-
 int RadosObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
 					  const std::set<std::string>& keys,
 					  Attrs* vals)
@@ -2478,9 +2457,13 @@ int RadosMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
   map<string, bufferlist> parts_map;
   map<string, bufferlist>::iterator iter;
 
-  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(
-		      rgw_obj_key(get_meta(), std::string(), RGW_OBJ_NS_MULTIPART));
-  obj->set_in_extra_data(true);
+  rgw_obj_key key(get_meta(), std::string(), RGW_OBJ_NS_MULTIPART);
+  rgw_obj obj(bucket->get_key(), key);
+  obj.in_extra_data = true;
+
+  rgw_raw_obj raw_obj;
+  store->getRados()->obj_to_raw(bucket->get_placement_rule(), obj, &raw_obj);
+  auto sysobj = store->svc()->sysobj->get_obj(raw_obj);
 
   bool sorted_omap = is_v2_upload_id(get_upload_id()) && !assume_unsorted;
 
@@ -2495,10 +2478,10 @@ int RadosMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
     snprintf(buf, sizeof(buf), "%08d", marker);
     p.append(buf);
 
-    ret = obj->omap_get_vals(dpp, p, num_parts + 1, &parts_map,
+    ret = sysobj.omap().get_vals(dpp, p, num_parts + 1, &parts_map,
                                  nullptr, null_yield);
   } else {
-    ret = obj->omap_get_all(dpp, &parts_map, null_yield);
+    ret = sysobj.omap().get_all(dpp, &parts_map, null_yield);
   }
   if (ret < 0) {
     return ret;

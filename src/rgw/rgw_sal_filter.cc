@@ -1020,20 +1020,6 @@ std::unique_ptr<Object::DeleteOp> FilterObject::get_delete_op()
   return std::make_unique<FilterDeleteOp>(std::move(d));
 }
 
-int FilterObject::omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker,
-				uint64_t count, std::map<std::string, bufferlist> *m,
-				bool* pmore, optional_yield y)
-{
-  return next->omap_get_vals(dpp, marker, count, m, pmore, y);
-}
-
-int FilterObject::omap_get_all(const DoutPrefixProvider *dpp,
-			       std::map<std::string, bufferlist> *m,
-			       optional_yield y)
-{
-  return next->omap_get_all(dpp, m, y);
-}
-
 int FilterObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp,
 					const std::string& oid,
 					const std::set<std::string>& keys,

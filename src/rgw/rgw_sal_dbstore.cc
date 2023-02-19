@@ -686,23 +686,6 @@ namespace rgw::sal {
   }
 
 
-  int DBObject::omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
-      std::map<std::string, bufferlist> *m,
-      bool* pmore, optional_yield y)
-  {
-    DB::Object op_target(store->getDB(),
-        get_bucket()->get_info(), get_obj());
-    return op_target.obj_omap_get_vals(dpp, marker, count, m, pmore);
-  }
-
-  int DBObject::omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *m,
-      optional_yield y)
-  {
-    DB::Object op_target(store->getDB(),
-        get_bucket()->get_info(), get_obj());
-    return op_target.obj_omap_get_all(dpp, m);
-  }
-
   int DBObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
       const std::set<std::string>& keys,
       Attrs* vals)
