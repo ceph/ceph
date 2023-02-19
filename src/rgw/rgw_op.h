@@ -1189,7 +1189,6 @@ WRITE_CLASS_ENCODER(RGWSLOInfo)
 
 class RGWPutObj : public RGWOp {
 protected:
-  seed torrent;
   off_t ofs;
   const char *supplied_md5_b64;
   const char *supplied_etag;
@@ -1285,6 +1284,9 @@ public:
                                  rgw::sal::DataProcessor *cb) {
     return 0;
   }
+  // if configured, construct a filter to generate torrent metadata
+  auto get_torrent_filter(rgw::sal::DataProcessor *cb)
+      -> std::optional<RGWPutObj_Torrent>;
 
   // get lua script to run as a "put object" filter
   int get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter,
