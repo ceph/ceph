@@ -14,10 +14,10 @@
                 was designed specifically for use with Ceph. BlueStore was
                 introduced in the Ceph Kraken release. In the Ceph Luminous
                 release, BlueStore became Ceph's default storage back end,
-                supplanting FileStore. Unlike :term:`filestore`, BlueStore
-                stores objects directly on Ceph block devices without any file
-                system interface. Since Luminous (12.2), BlueStore has been
-                Ceph's default and recommended storage back end.
+                supplanting FileStore. BlueStore stores objects directly on 
+                Ceph block devices without any file system interface. 
+                Since Luminous (12.2), BlueStore has been Ceph's default 
+                and recommended storage back end.
 
         Bucket
                 In the context of :term:`RGW`, a bucket is a group of objects.
@@ -234,10 +234,6 @@
                 Another name for :term:`Dashboard`.
 
 	Dashboard Plugin
-	filestore
-                A back end for OSD daemons, where a Journal is needed and files
-                are written to the filesystem.
-
         FQDN
                 **F**\ully **Q**\ualified **D**\omain **N**\ame. A domain name
                 that is applied to a node in a network and that specifies the

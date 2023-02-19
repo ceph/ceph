@@ -14,8 +14,7 @@ clusters can be converted to a state in which they can be managed by
 Limitations
 -----------
 
-* Cephadm works only with BlueStore OSDs. FileStore OSDs that are in your
-  cluster cannot be managed with ``cephadm``.
+* Cephadm works only with BlueStore OSDs.
 
 Preparation
 -----------

@@ -12,8 +12,8 @@ same code path. All ``batch`` does is to calculate the appropriate sizes of all
 volumes and skip over already created volumes.
 
 All the features that ``ceph-volume lvm create`` supports, like ``dmcrypt``,
-avoiding ``systemd`` units from starting, defining bluestore or filestore,
-are supported.
+avoiding ``systemd`` units from starting, defining bluestore,
+is supported.
 
 
 .. _ceph-volume-lvm-batch_auto:
