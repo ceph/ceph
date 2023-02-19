@@ -2212,13 +2212,20 @@ void RGWGetObj::execute(optional_yield y)
   attr_iter = attrs.find(RGW_ATTR_MANIFEST);
   if (attr_iter != attrs.end() && get_type() == RGW_OP_GET_OBJ && get_data) {
     RGWObjManifest m;
-    decode(m, attr_iter->second);
-    if (m.get_tier_type() == "cloud-s3") {
-      /* XXX: Instead send presigned redirect or read-through */
-      op_ret = -ERR_INVALID_OBJECT_STATE;
-      ldpp_dout(this, 0) << "ERROR: Cannot get cloud tiered object. Failing with "
-		       << op_ret << dendl;
-      goto done_err;
+    try {
+      decode(m, attr_iter->second);
+      if (m.get_tier_type() == "cloud-s3") {
+        /* XXX: Instead send presigned redirect or read-through */
+        op_ret = -ERR_INVALID_OBJECT_STATE;
+        ldpp_dout(this, 0) << "ERROR: Cannot get cloud tiered object. Failing with "
+                         << op_ret << dendl;
+        goto done_err;
+      }
+    } catch (const buffer::end_of_buffer&) {
+      // ignore empty manifest; it's not cloud-tiered
+    } catch (const std::exception& e) {
+      ldpp_dout(this, 1) << "WARNING: failed to decode object manifest for "
+          << *s->object << ": " << e.what() << dendl;
     }
   }
 
@@ -4007,12 +4014,19 @@ void RGWPutObj::execute(optional_yield y)
     bufferlist bl;
     if (astate->get_attr(RGW_ATTR_MANIFEST, bl)) {
       RGWObjManifest m;
-      decode(m, bl);
-      if (m.get_tier_type() == "cloud-s3") {
-        op_ret = -ERR_INVALID_OBJECT_STATE;
-        ldpp_dout(this, 0) << "ERROR: Cannot copy cloud tiered object. Failing with "
-		       << op_ret << dendl;
-        return;
+      try{
+        decode(m, bl);
+        if (m.get_tier_type() == "cloud-s3") {
+          op_ret = -ERR_INVALID_OBJECT_STATE;
+          ldpp_dout(this, 0) << "ERROR: Cannot copy cloud tiered object. Failing with "
+                         << op_ret << dendl;
+          return;
+        }
+      } catch (const buffer::end_of_buffer&) {
+        // ignore empty manifest; it's not cloud-tiered
+      } catch (const std::exception& e) {
+        ldpp_dout(this, 1) << "WARNING: failed to decode object manifest for "
+            << *s->object << ": " << e.what() << dendl;
       }
     }
 
@@ -5459,12 +5473,19 @@ void RGWCopyObj::execute(optional_yield y)
     bufferlist bl;
     if (astate->get_attr(RGW_ATTR_MANIFEST, bl)) {
       RGWObjManifest m;
-      decode(m, bl);
-      if (m.get_tier_type() == "cloud-s3") {
-        op_ret = -ERR_INVALID_OBJECT_STATE;
-        ldpp_dout(this, 0) << "ERROR: Cannot copy cloud tiered object. Failing with "
-		       << op_ret << dendl;
-        return;
+      try{
+        decode(m, bl);
+        if (m.get_tier_type() == "cloud-s3") {
+          op_ret = -ERR_INVALID_OBJECT_STATE;
+          ldpp_dout(this, 0) << "ERROR: Cannot copy cloud tiered object. Failing with "
+                         << op_ret << dendl;
+          return;
+        }
+      } catch (const buffer::end_of_buffer&) {
+        // ignore empty manifest; it's not cloud-tiered
+      } catch (const std::exception& e) {
+        ldpp_dout(this, 1) << "WARNING: failed to decode object manifest for "
+            << *s->object << ": " << e.what() << dendl;
       }
     }
 
