@@ -8,11 +8,11 @@
 #include <map>
 #include <set>
 
+#include <fmt/format.h>
+
 #include "common/ceph_time.h"
 
 #include "rgw_common.h"
-
-using ceph::crypto::SHA1;
 
 struct req_state;
 
@@ -34,9 +34,6 @@ struct req_state;
 class TorrentBencode
 {
 public:
-  TorrentBencode() {}
-  ~TorrentBencode() {}
-
   //control characters
   void bencode_dict(bufferlist& bl) { bl.append('d'); }
   void bencode_list(bufferlist& bl) { bl.append('l'); }
@@ -53,33 +50,30 @@ public:
   }
 
   //single values
-  void bencode(const std::string& str, bufferlist& bl)
+  void bencode(std::string_view str, bufferlist& bl)
   {
     bencode_key(str, bl);
   }
 
   //dictionary elements
-  void bencode(const std::string& key, int value, bufferlist& bl)
+  void bencode(std::string_view key, int value, bufferlist& bl)
   {
     bencode_key(key, bl);
     bencode(value, bl);
   }
 
   //dictionary elements
-  void bencode(const std::string& key, const std::string& value, bufferlist& bl)
+  void bencode(std::string_view key, std::string_view value, bufferlist& bl)
   {
     bencode_key(key, bl);
     bencode(value, bl);
   }
 
   //key len
-  void bencode_key(const std::string& key, bufferlist& bl)
+  void bencode_key(std::string_view key, bufferlist& bl)
   {
-    int len = key.length();
-    char info[100] = { 0 };
-    sprintf(info, "%d:", len);
-    bl.append(info, strlen(info));
-    bl.append(key.c_str(), len);
+    bl.append(fmt::format("{}:", key.size()));
+    bl.append(key);
   }
 };
 
@@ -107,7 +101,7 @@ private:
 
   req_state *s{nullptr};
   rgw::sal::Driver* driver{nullptr};
-  SHA1 h;
+  ceph::crypto::SHA1 h;
 
   TorrentBencode dencode;
 public:
@@ -134,6 +128,6 @@ private:
   void set_announce();
   void set_exist(bool exist);
   void set_info_pieces(char *buff);
-  void sha1(SHA1 *h, bufferlist &bl, off_t bl_len);
+  void sha1(ceph::crypto::SHA1 *h, bufferlist &bl, off_t bl_len);
   int save_torrent_file(optional_yield y);
 };
