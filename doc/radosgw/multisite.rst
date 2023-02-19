@@ -751,12 +751,13 @@ Multi-Site Configuration Reference
 The following sections provide additional details and command-line
 usage for realms, periods, zonegroups and zones.
 
-For more details on every available configuration option, please check out
-``src/common/options/rgw.yaml.in`` or go to the more comfortable :ref:`mgr-dashboard`
-configuration page (found under `Cluster`) where you can view and set all
-options easily. On the page, set the level to ``advanced`` and search for RGW,
-to see all basic and advanced configuration options with a short description.
-Expand the details of an option to reveal a longer description.
+For more details on every available configuration option, see
+``src/common/options/rgw.yaml.in``.  
+
+Alternatively, go to the :ref:`mgr-dashboard` configuration page (found under
+`Cluster`), where you can view and set all of the options. While on the page,
+set the level to ``advanced`` and search for RGW to see all basic and advanced
+configuration options. 
 
 .. _rgw-realms:
 
