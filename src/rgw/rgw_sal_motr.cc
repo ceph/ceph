@@ -1540,14 +1540,6 @@ int MotrObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, b
   return del_op.delete_obj(dpp, y);
 }
 
-int MotrObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
-    Completions* aio, bool keep_index_consistent,
-    optional_yield y)
-{
-  /* XXX: Make it async */
-  return 0;
-}
-
 int MotrObject::copy_object(User* user,
     req_info* info,
     const rgw_zone_id& source_zone,
@@ -3358,11 +3350,6 @@ int MotrStore::cluster_stat(RGWClusterStat& stats)
 }
 
 std::unique_ptr<Lifecycle> MotrStore::get_lifecycle(void)
-{
-  return 0;
-}
-
-std::unique_ptr<Completions> MotrStore::get_completions(void)
 {
   return 0;
 }

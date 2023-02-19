@@ -29,14 +29,6 @@ namespace rgw { namespace sal {
 
 class RadosMultipartUpload;
 
-class RadosCompletions : public Completions {
-  public:
-    std::list<librados::AioCompletion*> handles;
-    RadosCompletions() {}
-    ~RadosCompletions() = default;
-    virtual int drain() override;
-};
-
 class RadosPlacementTier: public StorePlacementTier {
   RadosStore* store;
   RGWZoneGroupPlacementTier tier;
@@ -162,7 +154,6 @@ class RadosStore : public StoreDriver {
     virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override;
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
-    virtual std::unique_ptr<Completions> get_completions(void) override;
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s, rgw::notify::EventType event_type, optional_yield y, const std::string* object_name=nullptr) override;
     virtual std::unique_ptr<Notification> get_notification(
     const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, 
@@ -246,7 +237,6 @@ class RadosStore : public StoreDriver {
     int get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
 			   librados::IoCtx* ioctx);
     int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj);
-    int delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, Completions* aio);
     void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj);
     int get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_obj& obj, uint64_t* chunk_size);
 
@@ -393,8 +383,6 @@ class RadosObject : public StoreObject {
     }
     virtual int delete_object(const DoutPrefixProvider* dpp,
 			      optional_yield y, bool prevent_versioning) override;
-    virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate, Completions* aio,
-			       bool keep_index_consistent, optional_yield y) override;
     virtual int copy_object(User* user,
                req_info* info, const rgw_zone_id& source_zone,
                rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
