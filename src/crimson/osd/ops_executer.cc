@@ -1036,7 +1036,6 @@ std::pair<object_info_t, ObjectContextRef> OpsExecuter::prepare_clone(
     c_obc->obs.oi = static_snap_oi;
     c_obc->obs.exists = true;
     c_obc->ssc = obc->ssc;
-    c_obc->head = obc->head;
     logger().debug("clone_obc: {}", c_obc->obs.oi);
     clone_obc = std::move(c_obc);
   }
