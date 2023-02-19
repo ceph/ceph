@@ -6,6 +6,7 @@
 
 #include <ctime>
 
+#include "common/split.h"
 #include "rgw_torrent.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
@@ -41,6 +42,57 @@ void seed::init(req_state *_req, rgw::sal::Driver* _driver)
 {
   s = _req;
   driver = _driver;
+}
+
+int rgw_read_torrent_file(const DoutPrefixProvider* dpp,
+                          rgw::sal::Object* object,
+                          ceph::bufferlist &bl,
+                          optional_yield y)
+{
+  bufferlist infobl;
+  int r = object->get_torrent_info(dpp, y, infobl);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: read_torrent_info failed: " << r << dendl;
+    return r;
+  }
+
+  // add other fields from config
+  auto& conf = dpp->get_cct()->_conf;
+
+  TorrentBencode benc;
+  benc.bencode_dict(bl);
+
+  auto trackers = ceph::split(conf->rgw_torrent_tracker, ",");
+  if (auto i = trackers.begin(); i != trackers.end()) {
+    benc.bencode_key(ANNOUNCE, bl);
+    benc.bencode_key(*i, bl);
+
+    benc.bencode_key(ANNOUNCE_LIST, bl);
+    benc.bencode_list(bl);
+    for (; i != trackers.end(); ++i) {
+      benc.bencode_list(bl);
+      benc.bencode_key(*i, bl);
+      benc.bencode_end(bl);
+    }
+    benc.bencode_end(bl);
+  }
+
+  std::string_view comment = conf->rgw_torrent_comment;
+  if (!comment.empty()) {
+    benc.bencode(COMMENT, comment, bl);
+  }
+  std::string_view create_by = conf->rgw_torrent_createby;
+  if (!create_by.empty()) {
+    benc.bencode(CREATED_BY, create_by, bl);
+  }
+  std::string_view encoding = conf->rgw_torrent_encoding;
+  if (!encoding.empty()) {
+    benc.bencode(ENCODING, encoding, bl);
+  }
+
+  // append the info stored in the object
+  bl.append(std::move(infobl));
+  return 0;
 }
 
 int seed::get_torrent_file(rgw::sal::Object* object,

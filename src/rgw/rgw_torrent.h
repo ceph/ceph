@@ -133,6 +133,11 @@ private:
   int save_torrent_file(optional_yield y);
 };
 
+int rgw_read_torrent_file(const DoutPrefixProvider* dpp,
+                          rgw::sal::Object* object,
+                          ceph::bufferlist &bl,
+                          optional_yield y);
+
 class RGWPutObj_Torrent : public rgw::putobj::Pipe {
   size_t max_len = 0;
   size_t piece_len = 0;

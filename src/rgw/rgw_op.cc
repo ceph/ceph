@@ -2208,18 +2208,16 @@ void RGWGetObj::execute(optional_yield y)
       op_ret = -EINVAL;
       goto done_err;
     }
-    torrent.init(s, driver);
-    rgw_obj obj = s->object->get_obj();
-    op_ret = torrent.get_torrent_file(s->object.get(), total_len, bl, obj);
-    if (op_ret < 0)
-    {
+    // read torrent info from attr
+    bufferlist torrentbl;
+    op_ret = rgw_read_torrent_file(this, s->object.get(), torrentbl, y);
+    if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to get_torrent_file ret= " << op_ret
                        << dendl;
       goto done_err;
     }
-    op_ret = send_response_data(bl, 0, total_len);
-    if (op_ret < 0)
-    {
+    op_ret = send_response_data(torrentbl, 0, torrentbl.length());
+    if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to send_response_data ret= " << op_ret << dendl;
       goto done_err;
     }
