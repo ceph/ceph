@@ -84,7 +84,7 @@ public:
     return get_oid().get_head();
   }
 
-  const SnapSet &get_ro_ss() const {
+  const SnapSet &get_head_ss() const {
     ceph_assert(is_head());
     ceph_assert(ssc);
     return ssc->snapset;
