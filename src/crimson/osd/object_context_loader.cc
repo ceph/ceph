@@ -60,7 +60,7 @@ using crimson::common::local_conf;
                                            with_obc_func_t&& func)
   {
     LOG_PREFIX(ObjectContextLoader::with_clone_obc_only);
-    auto coid = resolve_oid(head->get_ro_ss(), oid);
+    auto coid = resolve_oid(head->get_head_ss(), oid);
     if (!coid) {
       ERRORDPP("clone {} not found", dpp, oid);
       return load_obc_iertr::future<>{
