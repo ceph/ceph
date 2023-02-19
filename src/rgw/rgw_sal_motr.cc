@@ -1296,19 +1296,6 @@ void MotrObject::gen_rand_obj_instance_name()
   state.obj.key.set_instance(buf);
 }
 
-int MotrObject::omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
-    std::map<std::string, bufferlist> *m,
-    bool* pmore, optional_yield y)
-{
-  return 0;
-}
-
-int MotrObject::omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *m,
-    optional_yield y)
-{
-  return 0;
-}
-
 int MotrObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
     const std::set<std::string>& keys,
     Attrs* vals)

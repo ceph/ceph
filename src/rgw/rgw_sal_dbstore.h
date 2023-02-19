@@ -636,11 +636,6 @@ protected:
       virtual std::unique_ptr<DeleteOp> get_delete_op() override;
 
       /* OMAP */
-      virtual int omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
-          std::map<std::string, bufferlist> *m,
-          bool* pmore, optional_yield y) override;
-      virtual int omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *m,
-          optional_yield y) override;
       virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
           const std::set<std::string>& keys,
           Attrs* vals) override;
