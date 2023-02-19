@@ -73,7 +73,6 @@ using crimson::common::local_conf;
        func=std::move(func), head=std::move(head), this]()
       -> load_obc_iertr::future<> {
       auto loaded = get_or_load_obc<State>(clone, existed);
-      clone->head = std::move(head);
       return loaded.safe_then_interruptible(
         [func = std::move(func)](auto clone) {
         return std::move(func)(std::move(clone));
