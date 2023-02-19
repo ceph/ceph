@@ -62,8 +62,8 @@ compatibility and prevent ceph-disk from breaking, ceph-volume uses the same
 naming convention *although it does not make sense for the new encryption
 workflow*.
 
-After the common steps of setting up the OSD during the "prepare stage" (either
-with :term:`filestore` or :term:`bluestore`), the logical volume is left ready
+After the common steps of setting up the OSD during the "prepare stage" (
+with :term:`bluestore`), the logical volume is left ready
 to be activated, regardless of the state of the device (encrypted or
 decrypted).
 

@@ -65,10 +65,8 @@ comes through a :term:`Ceph Block Device`, :term:`Ceph Object Storage`, the
 :term:`Ceph File System` or a custom implementation you create using
 ``librados``-- which is stored as RADOS objects. Each object is stored on an
 :term:`Object Storage Device`. Ceph OSD Daemons handle read, write, and
-replication operations on storage drives.  With the older Filestore back end,
-each RADOS object was stored as a separate file on a conventional filesystem
-(usually XFS).  With the new and default BlueStore back end, objects are
-stored in a monolithic database-like fashion.
+replication operations on storage drives. With the default BlueStore back end,
+objects are stored in a monolithic database-like fashion.
 
 .. ditaa::
 

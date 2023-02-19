@@ -1,6 +1,7 @@
 ============================
  Filestore Config Reference
 ============================
+.. warning:: Filestore has been deprecated in the Reef release and is no longer supported.
 
 The Filestore back end is no longer the default when creating new OSDs,
 though Filestore OSDs are still supported.

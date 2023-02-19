@@ -353,45 +353,6 @@ activate):
 	sudo ceph-volume lvm activate 0 a7f64266-0894-4f1e-a635-d0aeaca0e993
 
 
-filestore
-^^^^^^^^^
-#. Create the OSD. ::
-
-	ssh {osd node}
-	sudo ceph-volume lvm create --filestore --data {data-path} --journal {journal-path}
-
-   For example::
-
-	ssh osd-node1
-	sudo ceph-volume lvm create --filestore --data /dev/hdd1 --journal /dev/hdd2
-
-Alternatively, the creation process can be split in two phases (prepare, and
-activate):
-
-#. Prepare the OSD. ::
-
-	ssh {node-name}
-	sudo ceph-volume lvm prepare --filestore --data {data-path} --journal {journal-path}
-
-   For example::
-
-	ssh osd-node1
-	sudo ceph-volume lvm prepare --filestore --data /dev/hdd1 --journal /dev/hdd2
-
-   Once prepared, the ``ID`` and ``FSID`` of the prepared OSD are required for
-   activation. These can be obtained by listing OSDs in the current server::
-
-    sudo ceph-volume lvm list
-
-#. Activate the OSD::
-
-	sudo ceph-volume lvm activate --filestore {ID} {FSID}
-
-   For example::
-
-	sudo ceph-volume lvm activate --filestore 0 a7f64266-0894-4f1e-a635-d0aeaca0e993
-
-
 Long Form
 ---------
 
