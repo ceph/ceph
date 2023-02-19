@@ -4,7 +4,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
-#include <sstream>
+#include <ctime>
 
 #include "rgw_torrent.h"
 #include "rgw_sal.h"
@@ -258,4 +258,81 @@ int seed::save_torrent_file(optional_yield y)
   }
 
   return op_ret;
+}
+
+RGWPutObj_Torrent::RGWPutObj_Torrent(rgw::sal::DataProcessor* next,
+                                     size_t max_len, size_t piece_len)
+  : Pipe(next), max_len(max_len), piece_len(piece_len)
+{
+}
+
+int RGWPutObj_Torrent::process(bufferlist&& data, uint64_t logical_offset)
+{
+  if (!data.length()) { // done
+    if (piece_offset) { // hash the remainder
+      char out[SHA1::digest_size];
+      digest.Final(reinterpret_cast<unsigned char*>(out));
+      piece_hashes.append(out, sizeof(out));
+      piece_count++;
+    }
+    return Pipe::process(std::move(data), logical_offset);
+  }
+
+  len += data.length();
+  if (len >= max_len) {
+    // enforce the maximum object size; stop calculating and buffering hashes
+    piece_hashes.clear();
+    piece_offset = 0;
+    piece_count = 0;
+    return Pipe::process(std::move(data), logical_offset);
+  }
+
+  auto p = data.begin();
+  while (!p.end()) {
+    // feed each buffer segment through sha1
+    uint32_t want = piece_len - piece_offset;
+    const char* buf = nullptr;
+    size_t bytes = p.get_ptr_and_advance(want, &buf);
+    digest.Update(reinterpret_cast<const unsigned char*>(buf), bytes);
+    piece_offset += bytes;
+
+    // record the hash digest at each piece boundary
+    if (bytes == want) {
+      char out[SHA1::digest_size];
+      digest.Final(reinterpret_cast<unsigned char*>(out));
+      digest.Restart();
+      piece_hashes.append(out, sizeof(out));
+      piece_count++;
+      piece_offset = 0;
+    }
+  }
+
+  return Pipe::process(std::move(data), logical_offset);
+}
+
+bufferlist RGWPutObj_Torrent::bencode_torrent(std::string_view filename) const
+{
+  bufferlist bl;
+  if (len >= max_len) {
+    return bl;
+  }
+
+  /*Only encode create_date and sha1 info*/
+  /*Other field will be added if config is set when run get torrent*/
+  TorrentBencode benc;
+  benc.bencode(CREATION_DATE, std::time(nullptr), bl);
+
+  benc.bencode_key(INFO_PIECES, bl);
+  benc.bencode_dict(bl);
+  benc.bencode(LENGTH, len, bl);
+  benc.bencode(NAME, filename, bl);
+  benc.bencode(PIECE_LENGTH, piece_len, bl);
+
+  benc.bencode_key(PIECES, bl);
+  bl.append(std::to_string(piece_count));
+  bl.append(':');
+  bl.append(piece_hashes);
+  benc.bencode_end(bl);
+
+  return bl;
 }

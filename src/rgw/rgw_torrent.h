@@ -13,6 +13,7 @@
 #include "common/ceph_time.h"
 
 #include "rgw_common.h"
+#include "rgw_putobj.h"
 
 struct req_state;
 
@@ -130,4 +131,23 @@ private:
   void set_info_pieces(char *buff);
   void sha1(ceph::crypto::SHA1 *h, bufferlist &bl, off_t bl_len);
   int save_torrent_file(optional_yield y);
+};
+
+class RGWPutObj_Torrent : public rgw::putobj::Pipe {
+  size_t max_len = 0;
+  size_t piece_len = 0;
+  bufferlist piece_hashes;
+  size_t len = 0;
+  size_t piece_offset = 0;
+  uint32_t piece_count = 0;
+  ceph::crypto::SHA1 digest;
+
+ public:
+  RGWPutObj_Torrent(rgw::sal::DataProcessor* next,
+                    size_t max_len, size_t piece_len);
+
+  int process(bufferlist&& data, uint64_t logical_offset) override;
+
+  // after processing is complete, return the bencoded torrent info
+  bufferlist bencode_torrent(std::string_view filename) const;
 };
