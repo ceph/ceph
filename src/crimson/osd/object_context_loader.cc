@@ -47,7 +47,7 @@ using crimson::common::local_conf;
           crimson::ct_error::enoent::make()
         };
       }
-      return this->with_clone_obc_only<State>(head,
+      return this->with_clone_obc_only<State>(std::move(head),
                                               oid,
                                               std::move(func));
     });
