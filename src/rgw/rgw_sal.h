@@ -244,14 +244,6 @@ class ObjectProcessor : public DataProcessor {
                        optional_yield y) = 0;
 };
 
-/** Base class for AIO completions */
-class Completions {
-  public:
-    Completions() {}
-    virtual ~Completions() = default;
-    virtual int drain() = 0;
-};
-
 /** A list of key-value attributes */
   using Attrs = std::map<std::string, ceph::buffer::list>;
 
@@ -323,8 +315,6 @@ class Driver {
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
-    /** Get a @a Completions object.  Used for Async I/O tracking */
-    virtual std::unique_ptr<Completions> get_completions(void) = 0;
 
      /** Get a @a Notification object.  Used to communicate with non-RGW daemons, such as
       * management/tracking software */
@@ -937,9 +927,6 @@ class Object {
     virtual int delete_object(const DoutPrefixProvider* dpp,
 			      optional_yield y,
 			      bool prevent_versioning = false) = 0;
-    /** Asynchronous delete call */
-    virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate, Completions* aio,
-			       bool keep_index_consistent, optional_yield y) = 0;
     /** Copy an this object to another object. */
     virtual int copy_object(User* user,
                req_info* info, const rgw_zone_id& source_zone,

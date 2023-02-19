@@ -838,14 +838,6 @@ namespace rgw::sal {
     return del_op.delete_obj(dpp);
   }
 
-  int DBObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
-      Completions* aio, bool keep_index_consistent,
-      optional_yield y)
-  {
-    /* XXX: Make it async */
-    return 0;
-  }
-
   int DBObject::copy_object(User* user,
       req_info* info,
       const rgw_zone_id& source_zone,
@@ -1756,11 +1748,6 @@ namespace rgw::sal {
   std::unique_ptr<Lifecycle> DBStore::get_lifecycle(void)
   {
     return std::make_unique<DBLifecycle>(this);
-  }
-
-  std::unique_ptr<Completions> DBStore::get_completions(void)
-  {
-    return 0;
   }
 
   int DBLifecycle::get_entry(const std::string& oid, const std::string& marker,

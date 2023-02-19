@@ -1229,13 +1229,6 @@ int DaosObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y,
   return del_op.delete_obj(dpp, y);
 }
 
-int DaosObject::delete_obj_aio(const DoutPrefixProvider* dpp,
-                               RGWObjState* astate, Completions* aio,
-                               bool keep_index_consistent, optional_yield y) {
-  /* XXX: Make it async */
-  return DAOS_NOT_IMPLEMENTED_LOG(dpp);
-}
-
 int DaosObject::copy_object(
     User* user, req_info* info, const rgw_zone_id& source_zone,
     rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
@@ -2337,11 +2330,6 @@ int DaosStore::cluster_stat(RGWClusterStat& stats) {
 }
 
 std::unique_ptr<Lifecycle> DaosStore::get_lifecycle(void) {
-  DAOS_NOT_IMPLEMENTED_LOG(nullptr);
-  return 0;
-}
-
-std::unique_ptr<Completions> DaosStore::get_completions(void) {
   DAOS_NOT_IMPLEMENTED_LOG(nullptr);
   return 0;
 }

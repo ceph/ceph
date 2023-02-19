@@ -136,11 +136,6 @@ static int drain_aio(std::list<librados::AioCompletion*>& handles)
   return ret;
 }
 
-int RadosCompletions::drain()
-{
-  return drain_aio(handles);
-}
-
 int RadosUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
 			       const std::string& end_marker, uint64_t max, bool need_stats,
 			       BucketList &buckets, optional_yield y)
@@ -1273,11 +1268,6 @@ std::unique_ptr<Lifecycle> RadosStore::get_lifecycle(void)
   return std::make_unique<RadosLifecycle>(this);
 }
 
-std::unique_ptr<Completions> RadosStore::get_completions(void)
-{
-  return std::make_unique<RadosCompletions>();
-}
-
 std::unique_ptr<Notification> RadosStore::get_notification(
   rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s, rgw::notify::EventType event_type, optional_yield y, const std::string* object_name)
 {
@@ -1292,13 +1282,6 @@ std::unique_ptr<Notification> RadosStore::get_notification(const DoutPrefixProvi
 int RadosStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
 {
   return rados->delete_raw_obj(dpp, obj);
-}
-
-int RadosStore::delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, Completions* aio)
-{
-  RadosCompletions* raio = static_cast<RadosCompletions*>(aio);
-
-  return rados->delete_raw_obj_aio(dpp, obj, raio->handles);
 }
 
 void RadosStore::get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj)
@@ -2172,16 +2155,6 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
   del_op.params.versioning_status = prevent_versioning ? 0 : bucket->get_info().versioning_status();
 
   return del_op.delete_obj(y, dpp);
-}
-
-int RadosObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
-				   Completions* aio, bool keep_index_consistent,
-				   optional_yield y)
-{
-  RadosCompletions* raio = static_cast<RadosCompletions*>(aio);
-
-  return store->getRados()->delete_obj_aio(dpp, get_obj(), bucket->get_info(), astate,
-					   raio->handles, keep_index_consistent, y);
 }
 
 int RadosObject::copy_object(User* user,

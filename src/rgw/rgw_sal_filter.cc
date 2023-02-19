@@ -267,12 +267,6 @@ std::unique_ptr<Lifecycle> FilterDriver::get_lifecycle(void)
   return std::make_unique<FilterLifecycle>(std::move(lc));
 }
 
-std::unique_ptr<Completions> FilterDriver::get_completions(void)
-{
-  std::unique_ptr<Completions> c = next->get_completions();
-  return std::make_unique<FilterCompletions>(std::move(c));
-}
-
 std::unique_ptr<Notification> FilterDriver::get_notification(rgw::sal::Object* obj,
 				rgw::sal::Object* src_obj, req_state* s,
 				rgw::notify::EventType event_type, optional_yield y,
@@ -855,13 +849,6 @@ int FilterObject::delete_object(const DoutPrefixProvider* dpp,
 				bool prevent_versioning)
 {
   return next->delete_object(dpp, y, prevent_versioning);
-}
-
-int FilterObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
-				 Completions* aio, bool keep_index_consistent,
-				 optional_yield y)
-{
-  return next->delete_obj_aio(dpp, astate, aio, keep_index_consistent, y);
 }
 
 int FilterObject::copy_object(User* user,

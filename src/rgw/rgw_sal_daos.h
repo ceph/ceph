@@ -604,9 +604,6 @@ class DaosObject : public StoreObject {
 
   virtual int delete_object(const DoutPrefixProvider* dpp, optional_yield y,
                             bool prevent_versioning = false) override;
-  virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
-                             Completions* aio, bool keep_index_consistent,
-                             optional_yield y) override;
   virtual int copy_object(
       User* user, req_info* info, const rgw_zone_id& source_zone,
       rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
@@ -925,7 +922,6 @@ class DaosStore : public StoreDriver {
   virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
   virtual int cluster_stat(RGWClusterStat& stats) override;
   virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
-  virtual std::unique_ptr<Completions> get_completions(void) override;
   virtual std::unique_ptr<Notification> get_notification(
       rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
       rgw::notify::EventType event_type, optional_yield y,
