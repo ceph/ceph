@@ -5709,19 +5709,17 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
     }
   }
 
-  iter = s->attrset.find(RGW_ATTR_SHADOW_OBJ);
-  if (iter != s->attrset.end()) {
-    bufferlist bl = iter->second;
-    bufferlist::iterator it = bl.begin();
+  if (iter = s->attrset.find(RGW_ATTR_SHADOW_OBJ); iter != s->attrset.end()) {
+    const bufferlist& bl = iter->second;
+    auto it = bl.begin();
     it.copy(bl.length(), s->shadow_obj);
     s->shadow_obj[bl.length()] = '\0';
   }
   if (iter = s->attrset.find(RGW_ATTR_ID_TAG); iter != s->attrset.end()) {
     s->obj_tag = iter->second;
   }
-  auto ttiter = s->attrset.find(RGW_ATTR_TAIL_TAG);
-  if (ttiter != s->attrset.end()) {
-    s->tail_tag = s->attrset[RGW_ATTR_TAIL_TAG];
+  if (iter = s->attrset.find(RGW_ATTR_TAIL_TAG); iter != s->attrset.end()) {
+    s->tail_tag = iter->second;
   }
 
   if (iter = s->attrset.find(RGW_ATTR_MANIFEST); iter != s->attrset.end()) {
@@ -5757,9 +5755,8 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
       s->fake_tag = true;
     }
   }
-  map<string, bufferlist>::iterator aiter = s->attrset.find(RGW_ATTR_PG_VER);
-  if (aiter != s->attrset.end()) {
-    bufferlist& pg_ver_bl = aiter->second;
+  if (iter = s->attrset.find(RGW_ATTR_PG_VER); iter != s->attrset.end()) {
+    const bufferlist& pg_ver_bl = iter->second;
     if (pg_ver_bl.length()) {
       auto pgbl = pg_ver_bl.cbegin();
       try {
@@ -5769,9 +5766,8 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
       }
     }
   }
-  aiter = s->attrset.find(RGW_ATTR_SOURCE_ZONE);
-  if (aiter != s->attrset.end()) {
-    bufferlist& zone_short_id_bl = aiter->second;
+  if (iter = s->attrset.find(RGW_ATTR_SOURCE_ZONE); iter != s->attrset.end()) {
+    const bufferlist& zone_short_id_bl = iter->second;
     if (zone_short_id_bl.length()) {
       auto zbl = zone_short_id_bl.cbegin();
       try {
@@ -5790,8 +5786,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
   /* an object might not be olh yet, but could have olh id tag, so we should set it anyway if
    * it exist, and not only if is_olh() returns true
    */
-  iter = s->attrset.find(RGW_ATTR_OLH_ID_TAG);
-  if (iter != s->attrset.end()) {
+  if (iter = s->attrset.find(RGW_ATTR_OLH_ID_TAG); iter != s->attrset.end()) {
     s->olh_tag = iter->second;
   }
 
