@@ -1331,6 +1331,76 @@ TEST(BlueFS, test_4k_shared_alloc) {
   fs.umount();
 }
 
+void create_files(BlueFS &fs,
+		  atomic_bool& stop_creating,
+		  atomic_bool& started_creating)
+{
+  uint32_t i = 0;
+  stringstream ss;
+  string dir = "dir.";
+  ss << std::this_thread::get_id();
+  dir.append(ss.str());
+  dir.append(".");
+  dir.append(to_string(i));
+  ASSERT_EQ(0, fs.mkdir(dir));
+  while (!stop_creating.load()) {
+    string file = "file.";
+    file.append(to_string(i));
+    BlueFS::FileWriter *h;
+    ASSERT_EQ(0, fs.open_for_write(dir, file, &h, false));
+    ASSERT_NE(nullptr, h);
+    fs.close_writer(h);
+    i++;
+    started_creating = true;
+  }
+}
+
+
+TEST(BlueFS, test_concurrent_dir_link_and_compact_log_56210) {
+  uint64_t size = 1048576 * 128;
+  TempBdev bdev{size};
+  ConfSaver conf(g_ceph_context->_conf);
+
+  conf.SetVal("bluefs_alloc_size", "65536");
+  conf.SetVal("bluefs_compact_log_sync", "false");
+  // make sure fsync always trigger log compact
+  conf.SetVal("bluefs_log_compact_min_ratio", "0");
+  conf.SetVal("bluefs_log_compact_min_size", "0");
+  conf.ApplyChanges();
+
+  for (int i=0; i<10; ++i) {
+    BlueFS fs(g_ceph_context);
+    ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false, 1048576));
+    uuid_d fsid;
+    ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+    ASSERT_EQ(0, fs.mount());
+    ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+    {
+      atomic_bool stop_creating{false};
+      atomic_bool started_creating{false};
+      std::thread create_thread;
+      create_thread = std::thread(create_files,
+				  std::ref(fs),
+				  std::ref(stop_creating),
+				  std::ref(started_creating));
+      while (!started_creating.load()) {
+      }
+      BlueFS::FileWriter *h;
+      ASSERT_EQ(0, fs.mkdir("foo"));
+      ASSERT_EQ(0, fs.open_for_write("foo", "bar", &h, false));
+      fs.fsync(h);
+      fs.close_writer(h);
+
+      stop_creating = true;
+      do_join(create_thread);
+
+      fs.umount(true); //do not compact on exit!
+      ASSERT_EQ(0, fs.mount());
+      fs.umount();
+    }
+  }
+}
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   map<string,string> defaults = {
