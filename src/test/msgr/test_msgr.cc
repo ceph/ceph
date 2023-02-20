@@ -1583,6 +1583,51 @@ TEST_P(MessengerTest, MessageTest) {
   client_msgr->wait();
 }
 
+TEST_P(MessengerTest, DISABLED_MessageTestSeqOverflow) {
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  entity_addr_t bind_addr;
+  bind_addr.parse("v2:127.0.0.1");
+  Messenger::Policy p = Messenger::Policy::stateful_server(0);
+  server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
+  p = Messenger::Policy::lossless_peer(0);
+  client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
+
+  client_msgr->set_seq_init_policy([] { return ((uint64_t)-80); } );
+  server_msgr->set_seq_init_policy([] { return ((uint64_t)-80); } );
+
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+
+  // 1. A very large "front"(as well as "payload")
+  // Because a external message need to invade Messenger::decode_message,
+  // here we only use existing message class(MCommand)
+  ConnectionRef conn = client_msgr->connect_to(server_msgr->get_mytype(),
+						    server_msgr->get_myaddrs());
+  for (size_t i = 0; i < 100+79+1; i++)
+  {
+    uuid_d uuid;
+    uuid.generate_random();
+    vector<string> cmds;
+    string s("abcdefghijklmnopqrstuvwxyz");
+    cmds.push_back(s);
+    MCommand *m = new MCommand(uuid);
+    m->cmd = cmds;
+    conn->send_message(m);
+    std::unique_lock l{cli_dispatcher.lock};
+    cli_dispatcher.cond.wait_for(l, 500s, [&] { return cli_dispatcher.got_new; });
+    ASSERT_TRUE(cli_dispatcher.got_new);
+    cli_dispatcher.got_new = false;
+  }
+
+  server_msgr->shutdown();
+  client_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->wait();
+}
 
 class SyntheticWorkload;
 
