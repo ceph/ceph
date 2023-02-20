@@ -250,6 +250,7 @@ function test_dedup_object()
 
   echo "There hiHI" > foo
 
+  $CEPH_TOOL osd pool set $POOL dedup_tier $CHUNK_POOL --yes-i-really-mean-it
   $RADOS_TOOL -p $POOL put foo ./foo
 
   sleep 2
