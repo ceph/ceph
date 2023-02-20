@@ -47,6 +47,18 @@ To remove a quota, set the value of extended attribute to ``0``::
   $ getfattr dir1/ -n ceph.quota.max_files
   dir1/: ceph.quota.max_files: No such attribute
 
+Space Usage Reporting and CephFS Quotas
+---------------------------------------
+When the root directory of the CephFS mount has quota set on it, the available
+space on the CephFS reported by space usage report tools (like ``df``) is
+based on quota limit. That is, ``available space = quota limit - used space``
+instead of ``available space = total space - used space``.
+
+This behaviour can be disabled by setting following option in client section
+of ``ceph.conf``::
+
+    client quota df = false
+
 Limitations
 -----------
 
