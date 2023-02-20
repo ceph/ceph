@@ -4658,7 +4658,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   RGWObjState *astate = NULL;
   RGWObjManifest *amanifest = nullptr;
 
-  ret = get_obj_state(dpp, &obj_ctx, src_bucket_info, src_obj, &astate, &amanifest, y);
+  constexpr bool follow_olh = true;
+  ret = get_obj_state(dpp, &obj_ctx, src_bucket_info, src_obj,
+                      &astate, &amanifest, follow_olh, y);
   if (ret < 0) {
     return ret;
   }
