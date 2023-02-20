@@ -1,4 +1,5 @@
 import logging
+from enum import Enum
 from errno import EINVAL
 from typing import List, NamedTuple, Optional
 
@@ -24,6 +25,11 @@ class CephUserCaps(NamedTuple):
 class Cap(NamedTuple):
     entity: str
     cap: str
+
+
+class MethodType(Enum):
+    POST = 'post'
+    PUT = 'put'
 
 
 class CephUserEndpoints:
@@ -75,16 +81,10 @@ class CephUserEndpoints:
     def user_delete(_, user_entity: str):
         """
         Delete a ceph user and it's defined capabilities.
-        :param user_entity: Entity to dlelete
+        :param user_entity: Entity to delete
         """
         logger.debug("Sending command 'auth del' of entity '%s'", user_entity)
-        try:
-            CephUserEndpoints._run_auth_command('auth del', entity=user_entity)
-        except SendCommandError as ex:
-            msg = f'{ex} in command {ex.prefix}'
-            if ex.errno == -EINVAL:
-                raise DashboardException(msg, code=400)
-            raise DashboardException(msg, code=500)
+        CephUserEndpoints._run_auth_command('auth del', entity=user_entity)
         return f"Successfully deleted user '{user_entity}'"
 
     @staticmethod
@@ -95,8 +95,35 @@ class CephUserEndpoints:
             export_string += f'{out}\n'
         return export_string
 
+    @staticmethod
+    def user_edit(_, user_entity: str = '', capabilities: List[Cap] = None):
+        """
+        Change the ceph user capabilities.
+        Setting new capabilities will overwrite current ones.
+        :param user_entity: Entity to change
+        :param capabilities: List of updated capabilities to user_entity
+        """
+        caps = []
+        for cap in capabilities:
+            caps.append(cap['entity'])
+            caps.append(cap['cap'])
 
-create_cap_container = ArrayHorizontalContainer('Capabilities', 'capabilities', fields=[
+        logger.debug("Sending command 'auth caps' of entity '%s' with caps '%s'",
+                     user_entity, str(caps))
+        CephUserEndpoints._run_auth_command('auth caps', entity=user_entity, caps=caps)
+        return f"Successfully edited user '{user_entity}'"
+
+    @staticmethod
+    def model(user_entity: str):
+        user_data = CephUserEndpoints._run_auth_command('auth get', entity=user_entity)[0]
+        model = {'user_entity': '', 'capabilities': []}
+        model['user_entity'] = user_data['entity']
+        for entity, cap in user_data['caps'].items():
+            model['capabilities'].append({'entity': entity, 'cap': cap})
+        return model
+
+
+cap_container = ArrayHorizontalContainer('Capabilities', 'capabilities', fields=[
     FormField('Entity', 'entity',
               field_type=str),
     FormField('Entity Capabilities',
@@ -105,12 +132,19 @@ create_cap_container = ArrayHorizontalContainer('Capabilities', 'capabilities', 
 create_container = VerticalContainer('Create User', 'create_user', fields=[
     FormField('User entity', 'user_entity',
               field_type=str),
-    create_cap_container,
+    cap_container,
+])
+
+edit_container = VerticalContainer('Edit User', 'edit_user', fields=[
+    FormField('User entity', 'user_entity',
+              field_type=str, readonly=True),
+    cap_container,
 ])
 
 create_form = Form(path='/cluster/user/create',
                    root_container=create_container,
-                   task_info=FormTaskInfo("Ceph user '{user_entity}' created successfully",
+                   method_type=MethodType.POST.value,
+                   task_info=FormTaskInfo("Ceph user '{user_entity}' successfully",
                                           ['user_entity']))
 
 # pylint: disable=C0301
@@ -127,7 +161,15 @@ import_container = VerticalContainer('Import User', 'import_user', fields=[
 
 import_user_form = Form(path='/cluster/user/import',
                         root_container=import_container,
-                        task_info=FormTaskInfo("User imported successfully", []))
+                        task_info=FormTaskInfo("successfully", []),
+                        method_type=MethodType.POST.value)
+
+edit_form = Form(path='/cluster/user/edit',
+                 root_container=edit_container,
+                 method_type=MethodType.PUT.value,
+                 task_info=FormTaskInfo("Ceph user '{user_entity}' successfully",
+                                        ['user_entity']),
+                 model_callback=CephUserEndpoints.model)
 
 
 @CRUDEndpoint(
@@ -137,16 +179,18 @@ import_user_form = Form(path='/cluster/user/import',
     actions=[
         TableAction(name='Create', permission='create', icon=Icon.ADD.value,
                     routerLink='/cluster/user/create'),
+        TableAction(name='Edit', permission='update', icon=Icon.EDIT.value,
+                    click='edit'),
         TableAction(name='Delete', permission='delete', icon=Icon.DESTROY.value,
                     click='delete', disable=True),
         TableAction(name='Import', permission='create', icon=Icon.IMPORT.value,
                     routerLink='/cluster/user/import'),
         TableAction(name='Export', permission='read', icon=Icon.EXPORT.value,
-                    click='authExport', disable=True),
+                    click='authExport', disable=True)
     ],
-    column_key='entity',
     permissions=[Scope.CONFIG_OPT],
-    forms=[create_form, import_user_form],
+    forms=[create_form, edit_form, import_user_form],
+    column_key='entity',
     get_all=CRUDCollectionMethod(
         func=CephUserEndpoints.user_list,
         doc=EndpointDoc("Get Ceph Users")
@@ -154,6 +198,10 @@ import_user_form = Form(path='/cluster/user/import',
     create=CRUDCollectionMethod(
         func=CephUserEndpoints.user_create,
         doc=EndpointDoc("Create Ceph User")
+    ),
+    edit=CRUDCollectionMethod(
+        func=CephUserEndpoints.user_edit,
+        doc=EndpointDoc("Edit Ceph User")
     ),
     delete=CRUDCollectionMethod(
         func=CephUserEndpoints.user_delete,

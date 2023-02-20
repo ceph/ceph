@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { DataGatewayService } from '~/app/shared/services/data-gateway.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -9,6 +9,7 @@ import { mergeMap } from 'rxjs/operators';
 import { CrudTaskInfo, JsonFormUISchema } from './crud-form.model';
 import { Observable } from 'rxjs';
 import _ from 'lodash';
+import { CdTableSelection } from '../../models/cd-table-selection';
 
 @Component({
   selector: 'cd-crud-form',
@@ -21,22 +22,40 @@ export class CrudFormComponent implements OnInit {
   task: { message: string; id: string } = { message: '', id: '' };
   form = new FormGroup({});
   formUISchema$: Observable<JsonFormUISchema>;
+  methodType: string;
+  urlFormName: string;
+  key: string = '';
+  selected: CdTableSelection;
 
   constructor(
     private dataGatewayService: DataGatewayService,
     private activatedRoute: ActivatedRoute,
     private taskWrapper: TaskWrapperService,
-    private location: Location
+    private location: Location,
+    private router: Router
   ) {}
 
   ngOnInit(): void {
-    this.formUISchema$ = this.activatedRoute.data.pipe(
-      mergeMap((data: any) => {
-        this.resource = data.resource;
-        const url = '/' + this.activatedRoute.snapshot.url.join('/');
-        return this.dataGatewayService.form(`ui-${this.resource}`, url);
-      })
-    );
+    this.activatedRoute.queryParamMap.subscribe((paramMap) => {
+      this.formUISchema$ = this.activatedRoute.data.pipe(
+        mergeMap((data: any) => {
+          this.resource = data.resource || this.resource;
+          const url = '/' + this.activatedRoute.snapshot.url.join('/');
+          const key = paramMap.get('key') || '';
+          return this.dataGatewayService.form(`ui-${this.resource}`, url, key);
+        })
+      );
+      this.formUISchema$.subscribe((data: any) => {
+        this.methodType = data.methodType;
+        this.model = data.model;
+      });
+      this.urlFormName = this.router.url.split('/').pop();
+      // remove optional arguments
+      const paramIndex = this.urlFormName.indexOf('?');
+      if (paramIndex > 0) {
+        this.urlFormName = this.urlFormName.substring(0, paramIndex);
+      }
+    });
   }
 
   async readFileAsText(file: File): Promise<string> {
@@ -72,8 +91,8 @@ export class CrudFormComponent implements OnInit {
       await this.preSubmit(data);
       this.taskWrapper
         .wrapTaskAroundCall({
-          task: new FinishedTask('crud-component', taskMetadata),
-          call: this.dataGatewayService.create(this.resource, data)
+          task: new FinishedTask(`crud-component/${this.urlFormName}`, taskMetadata),
+          call: this.dataGatewayService.submit(this.resource, data, this.methodType)
         })
         .subscribe({
           complete: () => {

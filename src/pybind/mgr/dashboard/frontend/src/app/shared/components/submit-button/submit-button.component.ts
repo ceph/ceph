@@ -74,7 +74,7 @@ export class SubmitButtonComponent implements OnInit {
       (<FormGroupDirective>this.form).onSubmit($event);
     }
 
-    if (this.form.invalid) {
+    if (this.form?.invalid) {
       this.focusInvalid();
       return;
     }
