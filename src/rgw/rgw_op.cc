@@ -4413,7 +4413,6 @@ void RGWPostObj::execute(optional_yield y)
     // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
     hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
     ceph::buffer::list bl, aclbl;
-    int len = 0;
 
     op_ret = s->bucket->check_quota(this, quota, s->content_length, y);
     if (op_ret < 0) {
@@ -4477,7 +4476,7 @@ void RGWPostObj::execute(optional_yield y)
     bool again;
     do {
       ceph::bufferlist data;
-      len = get_data(data, again);
+      int len = get_data(data, again);
 
       if (len < 0) {
         op_ret = len;
@@ -4508,7 +4507,7 @@ void RGWPostObj::execute(optional_yield y)
       return;
     }
 
-    if (len < min_len) {
+    if (ofs < min_len) {
       op_ret = -ERR_TOO_SMALL;
       return;
     }
