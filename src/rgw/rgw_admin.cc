@@ -2864,7 +2864,7 @@ static int bucket_sync_info(rgw::sal::Driver* driver, const RGWBucketInfo& info,
 
 static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& info,
                               const rgw_zone_id& source_zone_id,
-			      std::optional<rgw_bucket>& opt_source_bucket,
+                              std::optional<rgw_bucket>& opt_source_bucket,
                               std::ostream& out)
 {
   const rgw::sal::ZoneGroup& zonegroup = driver->get_zone()->get_zonegroup();
@@ -2874,10 +2874,85 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
   out << indented{width, "realm"} << zone->get_realm_id() << " (" << zone->get_realm_name() << ")\n";
   out << indented{width, "zonegroup"} << zonegroup.get_id() << " (" << zonegroup.get_name() << ")\n";
   out << indented{width, "zone"} << zone->get_id() << " (" << zone->get_name() << ")\n";
-  out << indented{width, "bucket"} << info.bucket << "\n";
-  out << indented{width, "current time"}
-    << to_iso_8601(ceph::real_clock::now(), iso_8601_format::YMDhms) << "\n\n";
+  out << indented{width, "bucket"} << info.bucket << "\n\n";
 
+  if (!static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->bucket_imports_data(info.bucket, null_yield, dpp())) {
+    out << "Sync is disabled for bucket " << info.bucket.name << " or bucket has no sync sources" << std::endl;
+    return 0;
+  }
+
+  RGWBucketSyncPolicyHandlerRef handler;
+
+  int r = driver->get_sync_policy_handler(dpp(), std::nullopt, info.bucket, &handler, null_yield);
+  if (r < 0) {
+    ldpp_dout(dpp(), -1) << "ERROR: failed to get policy handler for bucket (" << info.bucket << "): r=" << r << ": " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  auto sources = handler->get_all_sources();
+    
+  set<rgw_zone_id> zone_ids;
+
+  const auto& rzg =
+    static_cast<const rgw::sal::RadosZoneGroup&>(zonegroup).get_group();
+
+  if (!source_zone_id.empty()) {
+    auto z = rzg.combined_zones.find(source_zone_id);
+    if (z == rzg.combined_zones.end()) {
+      ldpp_dout(dpp(), -1) << "Source zone not found in zonegroup "
+          << zonegroup.get_name() << dendl;
+      return -EINVAL;
+    }
+    auto c = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->remote->zone_conns(source_zone_id);
+    if (!c) {
+      lderr(driver->ctx()) << "No connection to zone " << z->second << dendl;
+      return -EINVAL; 
+    }
+    zone_ids.insert(source_zone_id);
+  } else {
+    for (const auto& entry : rzg.combined_zones) {
+      zone_ids.insert(entry.first);
+    }
+  } 
+
+  for (auto& zone_id : zone_ids) {
+    auto z = rzg.combined_zones.find(zone_id.id);
+    if (z == rzg.combined_zones.end()) { /* should't happen */
+      continue;
+    }
+  
+    for (auto& entry : sources) {
+      auto& pipe = entry.second;
+      if (opt_source_bucket &&
+          pipe.source.bucket != opt_source_bucket) {
+        continue;
+      }
+      if (pipe.source.zone.value_or(rgw_zone_id()) == z->first) {
+        bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone(),
+                                  z->first, z->second,
+                                  info, pipe,
+                                  width, out);
+      }
+    }
+  }
+
+  return 0;
+}
+
+#if 0
+static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& info,
+                              const rgw_zone_id& source_zone_id,
+                              std::optional<rgw_bucket>& opt_source_bucket,
+                              std::ostream& out)
+{
+  const rgw::sal::ZoneGroup& zonegroup = driver->get_zone()->get_zonegroup();
+  rgw::sal::Zone* zone = driver->get_zone();
+  constexpr int width = 15;
+
+  out << indented{width, "realm"} << zone->get_realm_id() << " (" << zone->get_realm_name() << ")\n";
+  out << indented{width, "zonegroup"} << zonegroup.get_id() << " (" << zonegroup.get_name() << ")\n";
+  out << indented{width, "zone"} << zone->get_id() << " (" << zone->get_name() << ")\n";
+  out << indented{width, "bucket"} << info.bucket << "\n\n";
 
   if (!static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->bucket_imports_data(info.bucket, null_yield, dpp())) {
     out << "Sync is disabled for bucket " << info.bucket.name << " or bucket has no sync sources" << std::endl;
@@ -2894,7 +2969,7 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
 
   auto sources = handler->get_all_sources();
 
-  auto& zone_conn_map = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone_conn_map();
+  auto& source_zones = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_data_sync_source_zones();
   set<rgw_zone_id> zone_ids;
 
   if (!source_zone_id.empty()) {
@@ -2902,12 +2977,12 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
     int ret = driver->get_zone()->get_zonegroup().get_zone_by_id(source_zone_id.id, &zone);
     if (ret < 0) {
       ldpp_dout(dpp(), -1) << "Source zone not found in zonegroup "
-          << zonegroup.get_name() << dendl;
+        << zonegroup.get_name() << dendl;
       return -EINVAL;
     }
-    auto c = zone_conn_map.find(source_zone_id);
-    if (c == zone_conn_map.end()) {
-      ldpp_dout(dpp(), -1) << "No connection to zone " << zone->get_name() << dendl;
+    auto c = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->remote->zone_conns(source_zone_id);
+    if (!c) {
+      lderr(driver->ctx()) << "No connection to zone " << zone->get_name() << dendl;
       return -EINVAL;
     }
     zone_ids.insert(source_zone_id);
@@ -2916,7 +2991,7 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
     int ret = driver->get_zone()->get_zonegroup().list_zones(ids);
     if (ret == 0) {
       for (const auto& entry : ids) {
-	zone_ids.insert(entry);
+        zone_ids.insert(entry);
       }
     }
   }
@@ -2926,28 +3001,29 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
     if (z == static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zonegroup().zones.end()) { /* should't happen */
       continue;
     }
-    auto c = zone_conn_map.find(zone_id.id);
-    if (c == zone_conn_map.end()) { /* should't happen */
+    auto c = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->remote->zone_conns(zone_id.id);
+    if (!c) { /* should't happen */
       continue;
     }
 
     for (auto& entry : sources) {
       auto& pipe = entry.second;
       if (opt_source_bucket &&
-	  pipe.source.bucket != opt_source_bucket) {
-	continue;
+          pipe.source.bucket != opt_source_bucket) {
+        continue;
       }
       if (pipe.source.zone.value_or(rgw_zone_id()) == z->second.id) {
-	bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone(), z->second,
-				  c->second,
-				  info, pipe,
-				  width, out);
+        bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone(), z->second,
+                                  c->second,
+                                  info, pipe,
+                                  width, out);
       }
     }
   }
 
   return 0;
 }
+#endif
 
 static void parse_tier_config_param(const string& s, map<string, string, ltstr_nocase>& out)
 {
@@ -3356,13 +3432,14 @@ public:
   }
 };
 
-void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_var, const string& conf_name)
-{
+template <class T>
+void init_realm_param(CephContext *cct, string& var, std::optional<T>& opt_var, const string& conf_name)
+{ 
   var = cct->_conf.get_val<string>(conf_name);
   if (!var.empty()) {
     opt_var = var;
   }
-}
+} 
 
 class SIPCRMgr : public RGWCoroutinesManager {
   CephContext *cct;
@@ -3386,9 +3463,9 @@ public:
   SIProviderCRMgr *create(std::optional<rgw_zone_id> zid) {
     if (!zid) {
       return new SIProviderCRMgr_Local(cct,
-                                       static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker,
-                                       static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr,
-                                       static_cast<rgw::sal::RadosStore*>(store)->svc()->rados->get_async_processor());
+                                       static_cast<rgw::sal::RadosStore*>(driver)->svc()->sip_marker,
+                                       static_cast<rgw::sal::RadosStore*>(driver)->ctl()->si.mgr,
+                                       static_cast<rgw::sal::RadosStore*>(driver)->svc()->rados->get_async_processor());
     }
 
     auto c = ctl.remote->zone_conns(*zid);
@@ -3543,9 +3620,9 @@ int find_sip_provider(std::optional<string> opt_sip,
   }
 
   if (opt_zone_id) {
-    sip_rest_mgr.emplace(static_cast<rgw::sal::RadosStore*>(store)->ctx(),
-                         static_cast<rgw::sal::RadosStore*>(store)->ctl()->remote,
-                         static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_cr_registry());
+    sip_rest_mgr.emplace(static_cast<rgw::sal::RadosStore*>(driver)->ctx(),
+                         static_cast<rgw::sal::RadosStore*>(driver)->ctl()->remote,
+                         static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_cr_registry());
     auto sip_type_handler = get_sip_type_handler(opt_sip, opt_sip_data_type);
     if (!sip_type_handler) {
       cerr << "ERROR: unknown sip type: " << (opt_sip ? *opt_sip : *opt_sip_data_type) << std::endl;
@@ -3559,9 +3636,9 @@ int find_sip_provider(std::optional<string> opt_sip,
                                          sip_type_handler));
   } else {
     if (opt_sip) {
-      *provider = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip(dpp(), *opt_sip, opt_sip_instance);
+      *provider = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->si.mgr->find_sip(dpp(), *opt_sip, opt_sip_instance);
     } else {
-      *provider = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip_by_type(dpp(),
+      *provider = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->si.mgr->find_sip_by_type(dpp(),
                                                          *opt_sip_data_type,
                                                          *opt_sip_stage_type,
                                                          opt_sip_instance);
@@ -6710,7 +6787,7 @@ int main(int argc, const char **argv)
         data_access_conf.secret = opt_secret;
 
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	int ret = zonegroup.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
+	int ret = zonegroup.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(driver)->svc()->sysobj, null_yield);
 	if (ret < 0) {
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -8721,8 +8798,8 @@ next:
     rgw_obj source_object(sal_source_bucket->get_key(), *opt_source_object);
     rgw_obj dest_object(sal_dest_bucket->get_key(), *opt_dest_object);
 
-    auto conn  = get_source_conn(store->ctx(),
-                                 static_cast<rgw::sal::RadosStore*>(store)->ctl()->remote,
+    auto conn  = get_source_conn(driver->ctx(),
+                                 static_cast<rgw::sal::RadosStore*>(driver)->ctl()->remote,
                                  opt_source_zone_id,
                                  opt_endpoint,
                                  opt_region,
@@ -8740,13 +8817,13 @@ next:
       }
     }
 
-    rgw::sal::RadosObject sal_source_object(static_cast<rgw::sal::RadosStore*>(store), source_object.key, sal_source_bucket.get());
-    rgw::sal::RadosObject sal_dest_object(static_cast<rgw::sal::RadosStore*>(store), dest_object.key, sal_dest_bucket.get());
+    rgw::sal::RadosObject sal_source_object(static_cast<rgw::sal::RadosStore*>(driver), source_object.key, sal_source_bucket.get());
+    rgw::sal::RadosObject sal_dest_object(static_cast<rgw::sal::RadosStore*>(driver), dest_object.key, sal_dest_bucket.get());
 
     RGWRados::FetchRemoteObjParams params;
 
-    RGWObjectCtx obj_ctx(store);
-    ret = static_cast<rgw::sal::RadosStore*>(store)->getRados()->fetch_remote_obj(dpp(), obj_ctx,
+    RGWObjectCtx obj_ctx(driver);
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->fetch_remote_obj(dpp(), obj_ctx,
                                               conn,
                                               false, /* foreign source */
                                               *opt_dest_owner,
@@ -10432,8 +10509,7 @@ next:
     }
 
     auto num_shards = g_conf()->rgw_data_log_num_shards;
-    std::vector<std::string> markers(num_shards);
-    ret = crs.run(dpp(), create_admin_data_log_trim_cr(dpp(), static_cast<rgw::sal::RadosStore*>(driver), &http, num_shards, markers));
+    ret = crs.run(dpp(), create_admin_data_log_trim_cr(dpp(), static_cast<rgw::sal::RadosStore*>(driver), &http, num_shards));
     if (ret < 0) {
       cerr << "automated datalog trim failed with " << cpp_strerror(ret) << std::endl;
       return -ret;
@@ -11058,8 +11134,8 @@ next:
 
  if (opt_cmd == OPT::SI_PROVIDER_LIST) {
    SIPCRMgr sip_cr_mgr(cct.get(),
-                       static_cast<rgw::sal::RadosStore*>(store)->ctl()->remote,
-                       static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_cr_registry());
+                       static_cast<rgw::sal::RadosStore*>(driver)->ctl()->remote,
+                       static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_cr_registry());
 
    auto mgr = sip_cr_mgr.create(opt_zone_id);
    if (!mgr) {
@@ -11311,7 +11387,7 @@ next:
        return EINVAL;
      }
    }
-   auto marker_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker->get_handler(provider);
+   auto marker_handler = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sip_marker->get_handler(provider);
    if (!marker_handler) {
      cerr << "ERROR: can't get sip marker handler" << std::endl;
      return EIO;
@@ -11385,7 +11461,7 @@ next:
        return EINVAL;
      }
    }
-   auto marker_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker->get_handler(provider);
+   auto marker_handler = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sip_marker->get_handler(provider);
    if (!marker_handler) {
      cerr << "ERROR: can't get sip marker handler" << std::endl;
      return EIO;
@@ -11452,7 +11528,7 @@ next:
        return EINVAL;
      }
    }
-   auto marker_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker->get_handler(provider);
+   auto marker_handler = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sip_marker->get_handler(provider);
    if (!marker_handler) {
      cerr << "ERROR: can't get sip marker handler" << std::endl;
      return EIO;

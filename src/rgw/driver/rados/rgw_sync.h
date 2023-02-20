@@ -341,18 +341,15 @@ class RGWSyncShardMarkerTrack {
   struct marker_entry {
     uint64_t tracker_pos;
     T marker;
-    K key;
     uint64_t pos;
     real_time timestamp;
 
     marker_entry() : pos(0) {}
     marker_entry(uint64_t _tracker_pos,
                  const T& _marker,
-                 std::optional<K> _key,
                  uint64_t _p, const
                  real_time& _ts) : tracker_pos(_tracker_pos),
                                    marker(_marker),
-                                   key(_key.value_or(K())),
                                    pos(_p),
                                    timestamp(_ts) {}
   };
@@ -374,7 +371,7 @@ class RGWSyncShardMarkerTrack {
 protected:
   typename std::set<K> need_retry_set;
 
-  virtual RGWCoroutine *store_marker(const DoutPrefixProvider *dpp, const T& new_marker, const K& key, uint64_t index_pos, const real_time& timestamp) = 0;
+  virtual RGWCoroutine *store_marker(const T& new_marker, uint64_t index_pos, const real_time& timestamp) = 0;
   virtual RGWOrderCallCR *allocate_order_control_cr() = 0;
   virtual void handle_finish(const T& marker) { }
 
@@ -388,22 +385,22 @@ public:
     }
   }
 
-  bool start(const T& marker, std::optional<K> key, int index_pos, const real_time& timestamp) {
+  bool start(const T& marker, int index_pos, const real_time& timestamp) {
     if (markers.find(marker) != markers.end()) {
       return false;
     }
     auto i = ++max_keys;
-    pending.push_back(marker_entry(i, marker, key, index_pos, timestamp));
+    pending.push_back(marker_entry(i, marker, index_pos, timestamp));
     markers[marker] = std::prev(pending.end());
     return true;
   }
 
-  void try_update_high_marker(const T& marker, std::optional<K> key, int index_pos, const real_time& timestamp) {
+  void try_update_high_marker(const T& marker, int index_pos, const real_time& timestamp) {
     auto i = ++max_keys;
-    finish_markers[i] = marker_entry(i, marker, key, index_pos, timestamp);
+    finish_markers[i] = marker_entry(i, marker, index_pos, timestamp);
   }
 
-  RGWCoroutine *finish(const DoutPrefixProvider *dpp, const T& marker) {
+  RGWCoroutine *finish(const T& marker) {
     if (pending.empty()) {
       /* can happen, due to a bug that ended up with multiple objects with the same name and version
        * -- which can happen when versioning is enabled an the version is 'null'.
@@ -437,12 +434,12 @@ public:
 
 
     if (is_first && (updates_since_flush >= window_size || pending.empty())) {
-      return flush(dpp);
+      return flush();
     }
     return nullptr;
   }
 
-  RGWCoroutine *flush(const DoutPrefixProvider *dpp) {
+  RGWCoroutine *flush() {
     if (finish_markers.empty()) {
       return NULL;
     }
@@ -463,7 +460,7 @@ public:
     --i;
     high_entry = i->second;
     high_entry_exists = true;
-    RGWCoroutine *cr = order(store_marker(dpp, high_entry.marker, high_entry.key, high_entry.pos, high_entry.timestamp));
+    RGWCoroutine *cr = order(store_marker(high_entry.marker, high_entry.pos, high_entry.timestamp));
     finish_markers.erase(finish_markers.begin(), last);
     return cr;
   }
@@ -563,7 +560,7 @@ class RGWShardCollectCR : public RGWCoroutine {
     : RGWCoroutine(_cct), max_concurrent(_max_concurrent)
   {}
 
-  virtual bool spawn_next(const DoutPrefixProvider *dpp) = 0;
+  virtual bool spawn_next() = 0;
   int operate(const DoutPrefixProvider *dpp) override;
 };
 

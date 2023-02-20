@@ -413,10 +413,10 @@ class BucketTrimShardCollectCR : public RGWShardCollectCR {
       generation(generation), markers(markers),
       sip_mgr(_sip_mgr)
   {}
-  bool spawn_next(const DoutPrefixProvider *dpp) override;
+  bool spawn_next() override;
 };
 
-bool BucketTrimShardCollectCR::spawn_next(const DoutPrefixProvider *dpp)
+bool BucketTrimShardCollectCR::spawn_next()
 {
   while (i < markers.size()) {
     const auto& opt_marker = markers[i];
@@ -472,7 +472,7 @@ class BucketCleanIndexCollectCR : public RGWShardCollectCR {
       dpp(dpp), store(store), bucket_info(bucket_info),
       index(index)
   {}
-  bool spawn_next(const DoutPrefixProvider *dpp) override {
+  bool spawn_next() override {
     if (shard < num_shards) {
       RGWRados::BucketShard bs(store->getRados());
       bs.init(dpp, bucket_info, index, shard);
@@ -926,10 +926,10 @@ class BucketTrimInstanceCollectCR : public RGWShardCollectCR {
       bucket(buckets.begin()), end(buckets.end()),
       dpp(dpp)
   {}
-  bool spawn_next(const DoutPrefixProvider *dpp) override;
+  bool spawn_next() override;
 };
 
-bool BucketTrimInstanceCollectCR::spawn_next(const DoutPrefixProvider *dpp)
+bool BucketTrimInstanceCollectCR::spawn_next()
 {
   if (bucket == end) {
     return false;
