@@ -108,7 +108,7 @@ realm enforces a globally unique namespace within itself.
 
 #. Create a new realm for the multi-site configuration by opening a command
    line interface on a host that will serve in the master zonegroup and zone.
-   Then execute the following:
+   Then run the following command:
 
    .. prompt:: bash #
 
@@ -144,7 +144,7 @@ group for the realm.
 
 #. To create a new master zonegroup for the multi-site configuration, open a
    command-line interface on a host in the master zonegroup and zone. Then
-   execute the following:
+   run the following command:
 
    .. prompt:: bash #
 
@@ -188,7 +188,7 @@ Create a Master Zone
 
 Create a new master zone for the multi-site configuration by opening a command
 line interface on a host that serves in the master zonegroup and zone. Then
-execute the following:
+run the following command:
 
 .. prompt:: bash #
 
@@ -327,7 +327,7 @@ operations on a host identified to serve the secondary zone.
    secondary zone. Be sure to specify a different zone name.
 
 .. important:: Metadata operations (for example, user creation) must be
-   executed on a host within the master zone. Bucket operations can be received
+   run on a host within the master zone. Bucket operations can be received
    by the master zone or the secondary zone, but the secondary zone will
    redirect bucket operations to the master zone. If the master zone is down,
    bucket operations will fail.
@@ -781,7 +781,7 @@ we recommend that you create realms when creating new clusters.
 Create a Realm
 ~~~~~~~~~~~~~~
 
-To create a realm, execute ``realm create`` and specify the realm name.
+To create a realm, run ``realm create`` and specify the realm name.
 If the realm is the default, specify ``--default``.
 
 .. prompt:: bash #
@@ -801,10 +801,10 @@ are explicitly provided.
 Make a Realm the Default
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-One realm in the list of realms should be the default realm. There may
-be only one default realm. If there is only one realm and it wasn’t
-specified as the default realm when it was created, make it the default
-realm. Alternatively, to change which realm is the default, execute:
+One realm in the list of realms should be the default realm. There may be only
+one default realm. If there is only one realm and it wasn’t specified as the
+default realm when it was created, make it the default realm. Alternatively, to
+change which realm is the default, run the following command:
 
 .. prompt:: bash #
 
@@ -816,7 +816,7 @@ realm. Alternatively, to change which realm is the default, execute:
 Delete a Realm
 ~~~~~~~~~~~~~~
 
-To delete a realm, execute ``realm delete`` and specify the realm name.
+To delete a realm, run ``realm rm`` and specify the realm name:
 
 .. prompt:: bash #
 
@@ -831,7 +831,7 @@ For example:
 Get a Realm
 ~~~~~~~~~~~
 
-To get a realm, execute ``realm get`` and specify the realm name.
+To get a realm, run ``realm get`` and specify the realm name:
 
 .. prompt:: bash #
 
@@ -872,7 +872,7 @@ For example:
 List Realms
 ~~~~~~~~~~~
 
-To list realms, execute ``realm list``.
+To list realms, run ``realm list``:
 
 .. prompt:: bash #
 
@@ -881,7 +881,7 @@ To list realms, execute ``realm list``.
 List Realm Periods
 ~~~~~~~~~~~~~~~~~~
 
-To list realm periods, execute ``realm list-periods``.
+To list realm periods, run ``realm list-periods``:
 
 .. prompt:: bash #
 
@@ -1025,7 +1025,7 @@ Renaming a Zonegroup
 Deleting a Zonegroup
 ~~~~~~~~~~~~~~~~~~~~
 
-#. To delete a zonegroup, execute the following:
+#. To delete a zonegroup, run the following command:
 
    .. prompt:: bash #
    
@@ -1398,7 +1398,7 @@ Then, update the period:
 Listing Zones
 ~~~~~~~~~~~~~
 
-As ``root``, to list the zones in a cluster, execute:
+As ``root``, to list the zones in a cluster, run the following command:
 
 .. prompt:: bash #
    
@@ -1407,7 +1407,7 @@ As ``root``, to list the zones in a cluster, execute:
 Getting a Zone
 ~~~~~~~~~~~~~~
 
-As ``root``, to get the configuration of a zone, execute:
+As ``root``, to get the configuration of a zone, run the following command:
 
 .. prompt:: bash #
    
@@ -1446,7 +1446,7 @@ same as the zone name. See
 for details of configuring pools.
 
 To set a zone, create a JSON object consisting of the pools, save the
-object to a file (e.g., ``zone.json``); then, execute the following
+object to a file (e.g., ``zone.json``); then, run the following
 command, replacing ``{zone-name}`` with the name of the zone:
 
 .. prompt:: bash #
