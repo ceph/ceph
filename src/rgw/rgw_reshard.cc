@@ -290,15 +290,11 @@ int RGWBucketReshard::clear_resharding(const DoutPrefixProvider *dpp,
                                        rgw::sal::RadosStore* store,
 				       const RGWBucketInfo& bucket_info)
 {
-  int ret = clear_index_shard_reshard_status(dpp, store, bucket_info);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "RGWBucketReshard::" << __func__ <<
-      " ERROR: error clearing reshard status from index shard " <<
-      cpp_strerror(-ret) << dendl;
-    return ret;
-  }
+  int ret;
 
+  // default constructed = NOT_RESHARDING
   cls_rgw_bucket_instance_entry instance_entry;
+
   ret = store->getRados()->bucket_set_reshard(dpp, bucket_info, instance_entry);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "RGWReshard::" << __func__ <<

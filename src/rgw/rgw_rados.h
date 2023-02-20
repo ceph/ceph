@@ -1268,6 +1268,10 @@ public:
   int obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectWriteOperation *op);
   int obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectReadOperation *op);
 
+  int fetch_new_bucket_id(const RGWBucketInfo& curr_bucket_info,
+			  RGWBucketInfo* save_bucket_info,
+			  std::string& new_bucket_id,
+			  const DoutPrefixProvider* dpp);
   int guard_reshard(const DoutPrefixProvider *dpp,
                     BucketShard *bs,
 		    const rgw_obj& obj_instance,
