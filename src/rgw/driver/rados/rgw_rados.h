@@ -1268,11 +1268,11 @@ public:
                         optional_yield y,
                         ceph::real_time set_mtime = ceph::real_clock::zero());
 
-  int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state, RGWObjManifest** manifest,
-                    bool follow_olh, optional_yield y, bool assume_noent = false);
-  int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state, RGWObjManifest** manifest, optional_yield y) {
-    return get_obj_state(dpp, rctx, bucket_info, obj, state, manifest, true, y);
-  }
+  int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
+                    RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                    RGWObjState** pstate, RGWObjManifest** pmanifest,
+                    bool follow_olh, optional_yield y,
+                    bool assume_noent = false);
 
   using iterate_obj_cb = int (*)(const DoutPrefixProvider*, const rgw_raw_obj&, off_t, off_t,
                                  off_t, bool, RGWObjState*, void*);
