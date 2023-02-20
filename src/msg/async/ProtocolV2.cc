@@ -3005,6 +3005,9 @@ CtPtr ProtocolV2::handle_compression_request(ceph::bufferlist &payload) {
         peer_type, auth_meta->is_mode_secure());
       mode != Compressor::COMP_NONE && request.is_compress()) {
     comp_meta.con_method = messenger->comp_registry.pick_method(peer_type, request.preferred_methods());
+    ldout(cct, 10) << __func__ << " Compressor(pick_method=" 
+                   << Compressor::get_comp_alg_name(comp_meta.get_method())
+                   << ")" << dendl;
     if (comp_meta.con_method != Compressor::COMP_ALG_NONE) {
       comp_meta.con_mode = mode;
     }
