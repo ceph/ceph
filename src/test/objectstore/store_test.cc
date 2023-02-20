@@ -10418,8 +10418,22 @@ TEST_P(StoreTestSpecificAUSize, ReproNoBlobMultiTest) {
   }
   {
     cerr << "Finalizing" << std::endl;
+    // before ExtentMap::dup blob merge refector:
+    // allocated = 9160228864
+    // l_bluestore_gc_merged = 1094856704
+    // after ExtentMap::dup change:
+    // allocated = 9127985152
+    // l_bluestore_gc_merged = 1055684096
+    // This generally shows that we should not take seriously this test.
+    // We allocated ~9GB to create sequence of 512 objects that
+    // Ai < A(i+1) < A(i+2) < ... < A(512)
+    // and size of A(512) is less then 128M.
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
     const PerfCounters* logger = store->get_perf_counters();
-    ASSERT_GE(logger->get(l_bluestore_gc_merged), 1024*1024*1024);
+    ASSERT_GE(logger->get(l_bluestore_gc_merged), 900*1024*1024);
+    ASSERT_LE(statfs.allocated, 9LL*1024*1024*1024);
   }
 }
 
