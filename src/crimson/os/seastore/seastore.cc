@@ -123,7 +123,9 @@ SeaStore::SeaStore(
     device(std::move(dev)),
     max_object_size(
       get_conf<uint64_t>("seastore_default_max_object_size")),
-    is_test(is_test)
+    is_test(is_test),
+    throttler(
+      get_conf<uint64_t>("seastore_max_concurrent_transactions"))
 {
   register_metrics();
 }
@@ -161,6 +163,19 @@ void SeaStore::register_metrics()
       }
     );
   }
+
+  metrics.add_group(
+    "seastore",
+    {
+      sm::make_gauge(
+	"concurrent_transactions",
+	[this] {
+	  return throttler.get_current();
+	},
+	sm::description("transactions that are running inside seastore")
+      )
+    }
+  );
 }
 
 seastar::future<> SeaStore::stop()
