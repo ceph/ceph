@@ -2324,6 +2324,9 @@ RGWHandler_REST* RGWREST::get_handler(
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;
   }
+
+  ldpp_dout(s, 20) << __func__ << " handler=" << typeid(*handler).name() << dendl;
+  
   *init_error = handler->init(driver, s, rio);
   if (*init_error < 0) {
     m->put_handler(handler);
