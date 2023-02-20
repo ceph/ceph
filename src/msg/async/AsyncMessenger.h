@@ -374,6 +374,13 @@ public:
 
     return ret;
   }
+
+#ifdef UNIT_TESTS_BUILT
+  uint64_t generate_seq_init_value() {
+    return seq_init_policy ? seq_init_policy() : 0;
+  }
+#endif
+
   /**
    * Get the protocol version we support for the given peer type: either
    * a peer protocol (if it matches our own), the protocol version for the

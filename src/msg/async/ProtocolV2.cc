@@ -95,6 +95,7 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
       reconnecting(false),
       replacing(false),
       can_write(false),
+      seq_init_value(messenger->generate_seq_init_value()),
       bannerExchangeCallback(nullptr),
       tx_frame_asm(&session_stream_handlers, false, cct->_conf->ms_crc_data,
                    &session_compression_handlers),
@@ -157,8 +158,8 @@ void ProtocolV2::reset_session() {
 
   connection->dispatch_queue->queue_remote_reset(connection);
 
-  out_seq = 0;
-  in_seq = 0;
+  out_seq = seq_init_value;
+  in_seq = seq_init_value;
   client_cookie = 0;
   server_cookie = 0;
   connect_seq = 0;
@@ -1988,7 +1989,7 @@ CtPtr ProtocolV2::handle_session_reset(ceph::bufferlist &payload)
   } else {
     server_cookie = 0;
     connect_seq = 0;
-    in_seq = 0;
+    in_seq = seq_init_value; // TODO
   }
 
   state = SESSION_CONNECTING;
@@ -2865,8 +2866,8 @@ CtPtr ProtocolV2::send_server_ident() {
   ldout(cct, 20) << __func__ << dendl;
 
   // this is required for the case when this connection is being replaced
-  out_seq = discard_requeued_up_to(out_seq, 0);
-  in_seq = 0;
+  out_seq = discard_requeued_up_to(out_seq, seq_init_value);
+  in_seq = seq_init_value;
 
   if (!connection->policy.lossy) {
     server_cookie = ceph::util::generate_random_number<uint64_t>(1, -1ll);

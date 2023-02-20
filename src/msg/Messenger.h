@@ -112,6 +112,11 @@ protected:
   uint32_t magic;
   int socket_priority;
 
+#ifdef UNIT_TESTS_BUILT
+  using seq_init_generator_t = std::function<uint64_t(void)>;
+  seq_init_generator_t seq_init_policy;
+#endif
+
 public:
   AuthClient *auth_client = 0;
   AuthServer *auth_server = 0;
@@ -389,6 +394,18 @@ public:
   int get_socket_priority() {
     return socket_priority;
   }
+
+#ifdef UNIT_TESTS_BUILT
+  /**
+   * set the parameter-less function used to generate the intial value of
+   * connection's sequence number.
+   *
+   * @param generator Parameter-less function returning uint64_t
+   */
+  void set_seq_init_policy(seq_init_generator_t generator) {
+    seq_init_policy = std::move(generator);
+  }
+#endif
   /**
    * Add a new Dispatcher to the front of the list. If you add
    * a Dispatcher which is already included, it will get a duplicate
