@@ -468,140 +468,52 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
   ldpp_dout(this, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
 }
 
-namespace {
-// utility classes and functions for handling parameters with the following format:
-// Attributes.entry.{N}.{key|value}={VALUE}
-// N - any unsigned number
-// VALUE - url encoded string
-
-// and Attribute is holding key and value
-// ctor and set are done according to the "type" argument
-// if type is not "key" or "value" its a no-op
-class Attribute {
-  std::string key;
-  std::string value;
-public:
-  Attribute(const std::string& type, const std::string& key_or_value) {
-    set(type, key_or_value);
-  }
-  void set(const std::string& type, const std::string& key_or_value) {
-    if (type == "key") {
-      key = key_or_value;
-    } else if (type == "value") {
-      value = key_or_value;
-    }
-  }
-  const std::string& get_key() const { return key; }
-  const std::string& get_value() const { return value; }
+using op_generator = RGWOp*(*)();
+static const std::unordered_map<std::string, op_generator> op_generators = {
+  {"CreateTopic", []() -> RGWOp* {return new RGWPSCreateTopicOp;}},
+  {"DeleteTopic", []() -> RGWOp* {return new RGWPSDeleteTopicOp;}},
+  {"ListTopics", []() -> RGWOp* {return new RGWPSListTopicsOp;}},
+  {"GetTopic", []() -> RGWOp* {return new RGWPSGetTopicOp;}},
+  {"GetTopicAttributes", []() -> RGWOp* {return new RGWPSGetTopicAttributesOp;}}
 };
 
-using AttributeMap = std::map<unsigned, Attribute>;
-
-// aggregate the attributes into a map
-// the key and value are associated by the index (N)
-// no assumptions are made on the order in which these parameters are added
-void update_attribute_map(const std::string& input, AttributeMap& map) {
-  const boost::char_separator<char> sep(".");
-  const boost::tokenizer tokens(input, sep);
-  auto token = tokens.begin();
-  if (*token != "Attributes") {
-      return;
+bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_state* s) 
+{
+  if (s->info.args.exists("Action")) {
+    const std::string action_name = s->info.args.get("Action");
+    return op_generators.contains(action_name);
   }
-  ++token;
-
-  if (*token != "entry") {
-      return;
-  }
-  ++token;
-
-  unsigned idx;
-  try {
-    idx = std::stoul(*token);
-  } catch (const std::invalid_argument&) {
-    return;
-  }
-  ++token;
-
-  std::string key_or_value = "";
-  // get the rest of the string regardless of dots
-  // this is to allow dots in the value
-  while (token != tokens.end()) {
-    key_or_value.append(*token+".");
-    ++token;
-  }
-  // remove last separator
-  key_or_value.pop_back();
-
-  auto pos = key_or_value.find("=");
-  if (pos != std::string::npos) {
-    const auto key_or_value_lhs = key_or_value.substr(0, pos);
-    const auto key_or_value_rhs = url_decode(key_or_value.substr(pos + 1, key_or_value.size() - 1));
-    const auto map_it = map.find(idx);
-    if (map_it == map.end()) {
-      // new entry
-      map.emplace(std::make_pair(idx, Attribute(key_or_value_lhs, key_or_value_rhs)));
-    } else {
-      // existing entry
-      map_it->second.set(key_or_value_lhs, key_or_value_rhs);
-    }
-  }
-}
+  return false;
 }
 
-void RGWHandler_REST_PSTopic_AWS::rgw_topic_parse_input() {
-  if (post_body.size() > 0) {
-    ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
-
-    if (post_body.find("Action") != std::string::npos) {
-      const boost::char_separator<char> sep("&");
-      const boost::tokenizer<boost::char_separator<char>> tokens(post_body, sep);
-      AttributeMap map;
-      for (const auto& t : tokens) {
-        auto pos = t.find("=");
-        if (pos != std::string::npos) {
-          const auto key = t.substr(0, pos);
-          if (key == "Action") {
-            s->info.args.append(key, t.substr(pos + 1, t.size() - 1));
-          } else if (key == "Name" || key == "TopicArn") {
-            const auto value = url_decode(t.substr(pos + 1, t.size() - 1));
-            s->info.args.append(key, value);
-          } else {
-            update_attribute_map(t, map);
-          }
-        }
-      }
-      // update the regular args with the content of the attribute map
-      for (const auto& attr : map) {
-          s->info.args.append(attr.second.get_key(), attr.second.get_value());
-      }
-    }
-    const auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(post_body);
-    s->info.args.append("PayloadHash", payload_hash);
-  }
-}
-
-RGWOp* RGWHandler_REST_PSTopic_AWS::op_post() {
-  rgw_topic_parse_input();
+RGWOp *RGWHandler_REST_PSTopic_AWS::op_post()
+{
+  s->dialect = "sns";
+  s->prot_flags = RGW_REST_STS;
 
   if (s->info.args.exists("Action")) {
-    const auto action = s->info.args.get("Action");
-    if (action.compare("CreateTopic") == 0)
-      return new RGWPSCreateTopicOp();
-    if (action.compare("DeleteTopic") == 0)
-      return new RGWPSDeleteTopicOp;
-    if (action.compare("ListTopics") == 0)
-      return new RGWPSListTopicsOp();
-    if (action.compare("GetTopic") == 0)
-      return new RGWPSGetTopicOp();
-    if (action.compare("GetTopicAttributes") == 0)
-      return new RGWPSGetTopicAttributesOp();
+    const std::string action_name = s->info.args.get("Action");
+    const auto action_it = op_generators.find(action_name);
+    if (action_it != op_generators.end()) {
+      return action_it->second();
+    }
+    ldpp_dout(s, 10) << "unknown action '" << action_name << "' for Topic handler" << dendl;
+  } else {
+    ldpp_dout(s, 10) << "missing action argument in Topic handler" << dendl;
   }
-
   return nullptr;
 }
 
 int RGWHandler_REST_PSTopic_AWS::authorize(const DoutPrefixProvider* dpp, optional_yield y) {
-  return RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
+  const auto rc = RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
+  if (rc < 0) {
+    return rc;
+  }
+  if (s->auth.identity->is_anonymous()) {
+    ldpp_dout(dpp, 1) << "anonymous user not allowed in topic operations" << dendl;
+    return -ERR_INVALID_REQUEST;
+  }
+  return 0;
 }
 
 namespace {
