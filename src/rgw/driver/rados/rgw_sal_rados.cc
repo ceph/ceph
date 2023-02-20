@@ -1955,7 +1955,7 @@ int RadosObject::RadosReadOp::prepare(optional_yield y, const DoutPrefixProvider
   if (ret < 0)
     return ret;
 
-  source->set_key(parent_op.state.obj.key);
+  source->set_instance(parent_op.state.obj.key.instance);
   source->set_obj_size(obj_size);
 
   return ret;
