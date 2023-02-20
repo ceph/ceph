@@ -2217,8 +2217,9 @@ void RGWGetObj::execute(optional_yield y)
       if (m.get_tier_type() == "cloud-s3") {
         /* XXX: Instead send presigned redirect or read-through */
         op_ret = -ERR_INVALID_OBJECT_STATE;
-        ldpp_dout(this, 0) << "ERROR: Cannot get cloud tiered object. Failing with "
-                         << op_ret << dendl;
+        s->err.message = "This object was transitioned to cloud-s3";
+        ldpp_dout(this, 4) << "Cannot get cloud tiered object. Failing with "
+            << op_ret << dendl;
         goto done_err;
       }
     } catch (const buffer::end_of_buffer&) {
@@ -4018,7 +4019,8 @@ void RGWPutObj::execute(optional_yield y)
         decode(m, bl);
         if (m.get_tier_type() == "cloud-s3") {
           op_ret = -ERR_INVALID_OBJECT_STATE;
-          ldpp_dout(this, 0) << "ERROR: Cannot copy cloud tiered object. Failing with "
+          s->err.message = "This object was transitioned to cloud-s3";
+          ldpp_dout(this, 4) << "Cannot copy cloud tiered object. Failing with "
                          << op_ret << dendl;
           return;
         }
@@ -5477,7 +5479,8 @@ void RGWCopyObj::execute(optional_yield y)
         decode(m, bl);
         if (m.get_tier_type() == "cloud-s3") {
           op_ret = -ERR_INVALID_OBJECT_STATE;
-          ldpp_dout(this, 0) << "ERROR: Cannot copy cloud tiered object. Failing with "
+          s->err.message = "This object was transitioned to cloud-s3";
+          ldpp_dout(this, 4) << "Cannot copy cloud tiered object. Failing with "
                          << op_ret << dendl;
           return;
         }
