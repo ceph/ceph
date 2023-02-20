@@ -175,6 +175,10 @@ public:
   void set_journal_size(uint64_t size) {
     super.journal_size = size;
   }
+
+  void set_block_size(size_t size) {
+    super.block_size = size;
+  }
 };
 using RBMDeviceRef = std::unique_ptr<RBMDevice>;
 
