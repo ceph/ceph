@@ -91,6 +91,7 @@ class Icon(Enum):
     DESTROY = 'fa fa-times'
     IMPORT = 'fa fa-upload'
     EXPORT = 'fa fa-download'
+    EDIT = 'fa fa-pencil'
 
 
 class Validator(Enum):
@@ -102,7 +103,7 @@ class Validator(Enum):
 
 class FormField(NamedTuple):
     """
-    The key of a FromField is then used to send the data related to that key into the
+    The key of a FormField is then used to send the data related to that key into the
     POST and PUT endpoints. It is imperative for the developer to map keys of fields and containers
     to the input of the POST and PUT endpoints.
     """
@@ -111,6 +112,7 @@ class FormField(NamedTuple):
     field_type: Any = str
     default_value: Optional[Any] = None
     optional: bool = False
+    readonly: bool = False
     help: str = ''
     validators: List[Validator] = []
 
@@ -133,11 +135,12 @@ class FormField(NamedTuple):
 
 class Container:
     def __init__(self, name: str, key: str, fields: List[Union[FormField, "Container"]],
-                 optional: bool = False, min_items=1):
+                 optional: bool = False, readonly: bool = False, min_items=1):
         self.name = name
         self.key = key
         self.fields = fields
         self.optional = optional
+        self.readonly = readonly
         self.min_items = min_items
 
     def layout_type(self):
@@ -215,6 +218,7 @@ class Container:
                 properties[field.key]['type'] = _type
                 properties[field.key]['title'] = field.name
                 field_ui_schema['key'] = field_key
+                field_ui_schema['readonly'] = field.readonly
                 field_ui_schema['help'] = f'{field.help}'
                 field_ui_schema['validators'] = [i.value for i in field.validators]
                 items.append(field_ui_schema)
@@ -272,16 +276,21 @@ class FormTaskInfo:
 
 
 class Form:
-    def __init__(self, path, root_container,
-                 task_info: FormTaskInfo = FormTaskInfo("Unknown task", [])):
+    def __init__(self, path, root_container, method_type='',
+                 task_info: FormTaskInfo = FormTaskInfo("Unknown task", []),
+                 model_callback=None):
         self.path = path
         self.root_container: Container = root_container
+        self.method_type = method_type
         self.task_info = task_info
+        self.model_callback = model_callback
 
     def to_dict(self):
         res = self.root_container.to_dict()
+        res['method_type'] = self.method_type
         res['task_info'] = self.task_info.to_dict()
         res['path'] = self.path
+        res['ask'] = self.path
         return res
 
 
@@ -319,9 +328,10 @@ class CRUDEndpoint:
                  meta: CRUDMeta = CRUDMeta(), get_all: Optional[CRUDCollectionMethod] = None,
                  create: Optional[CRUDCollectionMethod] = None,
                  delete: Optional[CRUDCollectionMethod] = None,
-                 detail_columns: Optional[List[str]] = None,
                  selection_type: SelectionType = SelectionType.SINGLE,
-                 extra_endpoints: Optional[List[Tuple[str, CRUDCollectionMethod]]] = None):
+                 extra_endpoints: Optional[List[Tuple[str, CRUDCollectionMethod]]] = None,
+                 edit: Optional[CRUDCollectionMethod] = None,
+                 detail_columns: Optional[List[str]] = None):
         self.router = router
         self.doc = doc
         self.set_column = set_column
@@ -331,6 +341,7 @@ class CRUDEndpoint:
         self.get_all = get_all
         self.create = create
         self.delete = delete
+        self.edit = edit
         self.permissions = permissions if permissions is not None else []
         self.column_key = column_key if column_key is not None else ''
         self.detail_columns = detail_columns if detail_columns is not None else []
@@ -372,6 +383,13 @@ class CRUDEndpoint:
                 return outer_self.delete.func(self, *args, **kwargs)  # type: ignore
             funcs['delete'] = delete
 
+        if self.edit:
+            @self.edit.doc
+            @wraps(self.edit.func)
+            def singleton_set(self, *args, **kwargs):
+                return outer_self.edit.func(self, *args, **kwargs)  # type: ignore
+            funcs['singleton_set'] = singleton_set
+
         for extra_endpoint in self.extra_endpoints:
             funcs[extra_endpoint[0]] = extra_endpoint[1].doc(extra_endpoint[1].func)
 
@@ -386,10 +404,10 @@ class CRUDEndpoint:
         cls.CRUDClass = crud_class
 
     def create_meta_class(self, cls):
-        def _list(self):
+        def _list(self, model_key: str = ''):
             self.update_columns()
             self.generate_actions()
-            self.generate_forms()
+            self.generate_forms(model_key)
             self.set_permissions()
             self.set_column_key()
             self.get_detail_columns()
@@ -424,13 +442,20 @@ class CRUDEndpoint:
             for action in self.__class__.outer_self.actions:
                 self.__class__.outer_self.meta.actions.append(action._asdict())
 
-        def generate_forms(self):
+        def generate_forms(self, model_key):
             self.__class__.outer_self.meta.forms.clear()
 
             for form in self.__class__.outer_self.forms:
-                self.__class__.outer_self.meta.forms.append(form.to_dict())
+                form_as_dict = form.to_dict()
+                model = {}
+                if form.model_callback and model_key:
+                    model = form.model_callback(model_key)
+                    form_as_dict['model'] = model
+                self.__class__.outer_self.meta.forms.append(form_as_dict)
 
         def set_permissions(self):
+            self.__class__.outer_self.meta.permissions.clear()
+
             if self.__class__.outer_self.permissions:
                 self.outer_self.meta.permissions.extend(self.__class__.outer_self.permissions)
 
