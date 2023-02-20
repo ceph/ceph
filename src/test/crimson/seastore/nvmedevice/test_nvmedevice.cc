@@ -57,6 +57,7 @@ TEST_F(nvdev_test_t, write_and_verify_test)
   run_async([this] {
     device.reset(new random_block_device::nvme::NVMeBlockDevice(""));
     device->open(dev_path, seastar::open_flags::rw).unsafe_get();
+    device->set_block_size(BLK_SIZE);
     nvdev_test_block_t original_data;
     std::minstd_rand0 generator;
     uint8_t value = generator();
