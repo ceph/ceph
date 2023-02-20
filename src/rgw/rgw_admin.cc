@@ -8179,7 +8179,7 @@ next:
 	RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(driver),
 			    bucket->get_info(), bucket->get_attrs(),
 			    nullptr /* no callback */);
-      int ret = br.cancel(dpp());
+      int ret = br.cancel(dpp(), null_yield);
       if (ret < 0) {
         if (ret == -EBUSY) {
           cerr << "There is ongoing resharding, please retry after " <<

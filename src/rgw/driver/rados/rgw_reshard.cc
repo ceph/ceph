@@ -275,11 +275,11 @@ static int set_resharding_status(const DoutPrefixProvider *dpp,
 
 static int remove_old_reshard_instance(rgw::sal::RadosStore* store,
                                        const rgw_bucket& bucket,
-                                       const DoutPrefixProvider* dpp)
+                                       const DoutPrefixProvider* dpp, optional_yield y)
 {
   RGWBucketInfo info;
   int r = store->getRados()->get_bucket_instance_info(bucket, info, nullptr,
-                                                      nullptr, null_yield, dpp);
+                                                      nullptr, y, dpp);
   if (r < 0) {
     return r;
   }
@@ -287,7 +287,7 @@ static int remove_old_reshard_instance(rgw::sal::RadosStore* store,
   // delete its shard objects (ignore errors)
   store->svc()->bi->clean_index(dpp, info, info.layout.current_index);
   // delete the bucket instance metadata
-  return store->ctl()->bucket->remove_bucket_instance_info(bucket, info, null_yield, dpp);
+  return store->ctl()->bucket->remove_bucket_instance_info(bucket, info, y, dpp);
 }
 
 // initialize the new bucket index shard objects
@@ -326,7 +326,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
 			      std::map<std::string, bufferlist>& bucket_attrs,
                               ReshardFaultInjector& fault,
                               uint32_t new_num_shards,
-                              const DoutPrefixProvider* dpp)
+                              const DoutPrefixProvider* dpp, optional_yield y)
 {
   auto prev = bucket_info.layout; // make a copy for cleanup
   const auto current = prev.current_index;
@@ -346,7 +346,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
       ldout(store->ctx(), 10) << __func__ << " removing target bucket instance "
           "from a previous reshard attempt" << dendl;
       // ignore errors
-      remove_old_reshard_instance(store, new_bucket, dpp);
+      remove_old_reshard_instance(store, new_bucket, dpp, y);
     }
     bucket_info.reshard_status = cls_rgw_reshard_status::NOT_RESHARDING;
   }
@@ -379,7 +379,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
     if (ret = fault.check("set_target_layout");
         ret == 0) { // no fault injected, write the bucket instance metadata
       ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
-                                                        real_time(), &bucket_attrs, dpp, null_yield);
+                                                        real_time(), &bucket_attrs, dpp, y);
     } else if (ret == -ECANCELED) {
       fault.clear(); // clear the fault so a retry can succeed
     }
@@ -388,7 +388,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
       // racing write detected, read the latest bucket info and try again
       int ret2 = store->getRados()->get_bucket_instance_info(
           bucket_info.bucket, bucket_info,
-          nullptr, &bucket_attrs, null_yield, dpp);
+          nullptr, &bucket_attrs, y, dpp);
       if (ret2 < 0) {
         ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to read "
             "bucket info: " << cpp_strerror(ret2) << dendl;
@@ -428,7 +428,7 @@ static int revert_target_layout(rgw::sal::RadosStore* store,
                                 RGWBucketInfo& bucket_info,
 				std::map<std::string, bufferlist>& bucket_attrs,
                                 ReshardFaultInjector& fault,
-                                const DoutPrefixProvider* dpp)
+                                const DoutPrefixProvider* dpp, optional_yield y)
 {
   auto prev = bucket_info.layout; // make a copy for cleanup
 
@@ -452,7 +452,7 @@ static int revert_target_layout(rgw::sal::RadosStore* store,
         ret == 0) { // no fault injected, revert the bucket instance metadata
       ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
                                                         real_time(),
-                                                        &bucket_attrs, dpp, null_yield);
+                                                        &bucket_attrs, dpp, y);
     } else if (ret == -ECANCELED) {
       fault.clear(); // clear the fault so a retry can succeed
     }
@@ -461,7 +461,7 @@ static int revert_target_layout(rgw::sal::RadosStore* store,
       // racing write detected, read the latest bucket info and try again
       int ret2 = store->getRados()->get_bucket_instance_info(
           bucket_info.bucket, bucket_info,
-          nullptr, &bucket_attrs, null_yield, dpp);
+          nullptr, &bucket_attrs, y, dpp);
       if (ret2 < 0) {
         ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to read "
             "bucket info: " << cpp_strerror(ret2) << dendl;
@@ -502,14 +502,14 @@ static int init_reshard(rgw::sal::RadosStore* store,
 			std::map<std::string, bufferlist>& bucket_attrs,
                         ReshardFaultInjector& fault,
                         uint32_t new_num_shards,
-                        const DoutPrefixProvider *dpp)
+                        const DoutPrefixProvider *dpp, optional_yield y)
 {
   if (new_num_shards == 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " got invalid new_num_shards=0" << dendl;
     return -EINVAL;
   }
 
-  int ret = init_target_layout(store, bucket_info, bucket_attrs, fault, new_num_shards, dpp);
+  int ret = init_target_layout(store, bucket_info, bucket_attrs, fault, new_num_shards, dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -524,7 +524,7 @@ static int init_reshard(rgw::sal::RadosStore* store,
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to pause "
         "writes to the current index: " << cpp_strerror(ret) << dendl;
     // clean up the target layout (ignore errors)
-    revert_target_layout(store, bucket_info, bucket_attrs, fault, dpp);
+    revert_target_layout(store, bucket_info, bucket_attrs, fault, dpp, y);
     return ret;
   }
   return 0;
@@ -534,7 +534,7 @@ static int cancel_reshard(rgw::sal::RadosStore* store,
                           RGWBucketInfo& bucket_info,
 			  std::map<std::string, bufferlist>& bucket_attrs,
                           ReshardFaultInjector& fault,
-                          const DoutPrefixProvider *dpp)
+                          const DoutPrefixProvider *dpp, optional_yield y)
 {
   // unblock writes to the current index shard objects
   int ret = set_resharding_status(dpp, store, bucket_info,
@@ -546,7 +546,7 @@ static int cancel_reshard(rgw::sal::RadosStore* store,
   }
 
   if (bucket_info.layout.target_index) {
-    return revert_target_layout(store, bucket_info, bucket_attrs, fault, dpp);
+    return revert_target_layout(store, bucket_info, bucket_attrs, fault, dpp, y);
   }
   // there is nothing to revert
   return 0;
@@ -556,7 +556,7 @@ static int commit_target_layout(rgw::sal::RadosStore* store,
                                 RGWBucketInfo& bucket_info,
                                 std::map<std::string, bufferlist>& bucket_attrs,
                                 ReshardFaultInjector& fault,
-                                const DoutPrefixProvider *dpp)
+                                const DoutPrefixProvider *dpp, optional_yield y)
 {
   auto& layout = bucket_info.layout;
   const auto next_log_gen = layout.logs.empty() ? 1 :
@@ -578,7 +578,7 @@ static int commit_target_layout(rgw::sal::RadosStore* store,
   int ret = fault.check("commit_target_layout");
   if (ret == 0) { // no fault injected, write the bucket instance metadata
     ret = store->getRados()->put_bucket_instance_info(
-        bucket_info, false, real_time(), &bucket_attrs, dpp, null_yield);
+        bucket_info, false, real_time(), &bucket_attrs, dpp, y);
   } else if (ret == -ECANCELED) {
     fault.clear(); // clear the fault so a retry can succeed
   }
@@ -589,7 +589,7 @@ static int commit_reshard(rgw::sal::RadosStore* store,
                           RGWBucketInfo& bucket_info,
 			  std::map<std::string, bufferlist>& bucket_attrs,
                           ReshardFaultInjector& fault,
-                          const DoutPrefixProvider *dpp)
+                          const DoutPrefixProvider *dpp, optional_yield y)
 {
   auto prev = bucket_info.layout; // make a copy for cleanup
 
@@ -598,12 +598,12 @@ static int commit_reshard(rgw::sal::RadosStore* store,
   int tries = 0;
   int ret = 0;
   do {
-    ret = commit_target_layout(store, bucket_info, bucket_attrs, fault, dpp);
+    ret = commit_target_layout(store, bucket_info, bucket_attrs, fault, dpp, y);
     if (ret == -ECANCELED) {
       // racing write detected, read the latest bucket info and try again
       int ret2 = store->getRados()->get_bucket_instance_info(
           bucket_info.bucket, bucket_info,
-          nullptr, &bucket_attrs, null_yield, dpp);
+          nullptr, &bucket_attrs, y, dpp);
       if (ret2 < 0) {
         ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to read "
             "bucket info: " << cpp_strerror(ret2) << dendl;
@@ -681,13 +681,13 @@ static int commit_reshard(rgw::sal::RadosStore* store,
 int RGWBucketReshard::clear_resharding(rgw::sal::RadosStore* store,
                                        RGWBucketInfo& bucket_info,
 				       std::map<std::string, bufferlist>& bucket_attrs,
-                                       const DoutPrefixProvider* dpp)
+                                       const DoutPrefixProvider* dpp, optional_yield y)
 {
   ReshardFaultInjector no_fault;
-  return cancel_reshard(store, bucket_info, bucket_attrs, no_fault, dpp);
+  return cancel_reshard(store, bucket_info, bucket_attrs, no_fault, dpp, y);
 }
 
-int RGWBucketReshard::cancel(const DoutPrefixProvider* dpp)
+int RGWBucketReshard::cancel(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret = reshard_lock.lock(dpp);
   if (ret < 0) {
@@ -698,7 +698,7 @@ int RGWBucketReshard::cancel(const DoutPrefixProvider* dpp)
     ldpp_dout(dpp, -1) << "ERROR: bucket is not resharding" << dendl;
     ret = -EINVAL;
   } else {
-    ret = clear_resharding(store, bucket_info, bucket_attrs, dpp);
+    ret = clear_resharding(store, bucket_info, bucket_attrs, dpp, y);
   }
 
   reshard_lock.unlock();
@@ -964,7 +964,7 @@ int RGWBucketReshard::execute(int num_shards,
   }
 
   // prepare the target index and add its layout the bucket info
-  ret = init_reshard(store, bucket_info, bucket_attrs, fault, num_shards, dpp);
+  ret = init_reshard(store, bucket_info, bucket_attrs, fault, num_shards, dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -977,14 +977,14 @@ int RGWBucketReshard::execute(int num_shards,
   }
 
   if (ret < 0) {
-    cancel_reshard(store, bucket_info, bucket_attrs, fault, dpp);
+    cancel_reshard(store, bucket_info, bucket_attrs, fault, dpp, y);
 
     ldpp_dout(dpp, 1) << __func__ << " INFO: reshard of bucket \""
         << bucket_info.bucket.name << "\" canceled due to errors" << dendl;
     return ret;
   }
 
-  ret = commit_reshard(store, bucket_info, bucket_attrs, fault, dpp);
+  ret = commit_reshard(store, bucket_info, bucket_attrs, fault, dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -1204,7 +1204,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
                                                entry.tenant,
 					       entry.bucket_name,
                                                bucket_info, nullptr,
-                                               null_yield, dpp,
+                                               y, dpp,
 					       &bucket_attrs);
   if (ret < 0 || bucket_info.bucket.bucket_id != entry.bucket_id) {
     if (ret < 0) {
