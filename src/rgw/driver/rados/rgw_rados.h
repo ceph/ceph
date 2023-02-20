@@ -414,10 +414,12 @@ class RGWRados
 
   int get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx& rctx,
 			   RGWBucketInfo& bucket_info, const rgw_obj& obj,
-			   RGWObjState *olh_state, RGWObjState **target_state,
-			   RGWObjManifest **target_manifest, optional_yield y);
-  int get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state, RGWObjManifest** manifest,
-                         bool follow_olh, optional_yield y, bool assume_noent = false);
+			   RGWObjState *olh_state, RGWObjStateManifest **psm,
+			   optional_yield y);
+  int get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
+                         RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                         RGWObjStateManifest** psm, bool follow_olh,
+                         optional_yield y, bool assume_noent = false);
   int append_atomic_test(const DoutPrefixProvider *dpp, RGWObjectCtx* rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state,
 			 RGWObjManifest** pmanifest, optional_yield y);
@@ -1267,6 +1269,11 @@ public:
                         std::map<std::string, bufferlist>* rmattrs,
                         optional_yield y,
                         ceph::real_time set_mtime = ceph::real_clock::zero());
+
+  int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
+                    RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                    RGWObjStateManifest** psm, bool follow_olh,
+                    optional_yield y, bool assume_noent = false);
 
   int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
                     RGWBucketInfo& bucket_info, const rgw_obj& obj,
