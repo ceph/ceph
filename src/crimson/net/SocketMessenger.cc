@@ -255,7 +255,7 @@ seastar::future<> SocketMessenger::shutdown()
     if (listener) {
       auto d_listener = listener;
       listener = nullptr;
-      return d_listener->destroy();
+      return d_listener->shutdown_destroy();
     } else {
       return seastar::now();
     }
