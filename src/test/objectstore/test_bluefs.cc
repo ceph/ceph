@@ -354,6 +354,34 @@ void create_single_file(BlueFS &fs)
     fs.close_writer(h);
 }
 
+atomic_bool sync_done = false;
+atomic_bool file_created = false;
+
+void create_files(BlueFS &fs, uint32_t per_thread_files)
+{
+    uint32_t i = 0;
+    stringstream ss;
+    string dir = "dir.";
+    ss << std::this_thread::get_id();
+    dir.append(ss.str());
+    dir.append(".");
+    dir.append(to_string(i));
+    ASSERT_EQ(0, fs.mkdir(dir));
+    while (i < per_thread_files) {
+      if (sync_done)
+         break;
+      if (!file_created)
+        file_created = true;
+      string file = "file.";
+      file.append(to_string(i));
+      BlueFS::FileWriter *h;
+      ASSERT_EQ(0, fs.open_for_write(dir, file, &h, false));
+      ASSERT_NE(nullptr, h);
+      fs.close_writer(h);
+      i++;
+    }
+}
+
 void write_single_file(BlueFS &fs, uint64_t rationed_bytes)
 {
     stringstream ss;
@@ -1329,6 +1357,55 @@ TEST(BlueFS, test_4k_shared_alloc) {
   fs.mount();
   ASSERT_EQ(num_files, logger->get(l_bluefs_num_files));
   fs.umount();
+}
+
+#define NUM_CREATORS 3
+TEST(BlueFS, test_concurrent_dir_link_and_compact_log_56210) {
+  uint64_t size = 1048576 * 128;
+  TempBdev bdev{size};
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_alloc_size", "65536");
+  conf.SetVal("bluefs_compact_log_sync", "false");
+  // make sure fsync always trigger log compact
+  conf.SetVal("bluefs_log_compact_min_ratio", "0");
+  conf.SetVal("bluefs_log_compact_min_size", "0");
+  conf.ApplyChanges();
+
+  for (int i=0; i<10; ++i) {
+    BlueFS fs(g_ceph_context);
+    ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false, 1048576));
+    uuid_d fsid;
+    ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+    ASSERT_EQ(0, fs.mount());
+    ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+    {
+      sync_done = false;
+      file_created = false;
+      std::vector<std::thread> create_threads;
+      uint64_t effective_size = size - (32 * 1048576); // leaving the last 32 MB for log compaction
+      uint64_t per_thread_files = (effective_size/(NUM_WRITERS)/(ALLOC_SIZE));
+      for (int j=0; j<NUM_CREATORS; ++j) {
+        create_threads.push_back(std::thread(create_files, std::ref(fs), per_thread_files));
+      }
+
+      while (1) {
+        if (file_created)
+          break;
+        sleep(1);
+      }
+      BlueFS::FileWriter *h;
+      ASSERT_EQ(0, fs.mkdir("foo"));
+      ASSERT_EQ(0, fs.open_for_write("foo", "bar", &h, false));
+      fs.fsync(h);
+      fs.close_writer(h);
+      sync_done = true;
+
+      join_all(create_threads);
+      fs.umount(true); //do not compact on exit!
+      ASSERT_EQ(0, fs.mount());
+      fs.umount();
+    }
+  }
 }
 
 int main(int argc, char **argv) {
