@@ -1,7 +1,7 @@
 """
 NOTE: For running this tests locally (using vstart_runner.py), export the
-path to src/tools/cephfs/cephfs-shell module to $PATH. Running
-"export PATH=$PATH:$(cd ../src/tools/cephfs && pwd)" from the build dir
+path to src/tools/cephfs/shell/cephfs-shell module to $PATH. Running
+"export PATH=$PATH:$(cd ../src/tools/cephfs/shell && pwd)" from the build dir
 will update the environment without hassles of typing the path correctly.
 """
 from io import StringIO
