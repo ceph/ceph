@@ -173,6 +173,14 @@ void SeaStore::register_metrics()
 	  return throttler.get_current();
 	},
 	sm::description("transactions that are running inside seastore")
+      ),
+      sm::make_gauge(
+	"pending_transactions",
+	[this] {
+	  return throttler.get_pending();
+	},
+	sm::description("transactions waiting to get "
+		        "through seastore's throttler")
       )
     }
   );
