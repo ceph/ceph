@@ -7029,7 +7029,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
           continue; // try again
         }
 
-	ret = RGWBucketReshard::clear_resharding(this->driver, bucket_info, bucket_attrs, dpp);
+	ret = RGWBucketReshard::clear_resharding(this->driver, bucket_info, bucket_attrs, dpp, y);
 	reshard_lock.unlock();
 	if (ret == -ENOENT) {
 	  ldpp_dout(dpp, 5) << __func__ <<

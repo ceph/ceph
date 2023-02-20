@@ -103,12 +103,12 @@ public:
               ceph::Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
   int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
-  int cancel(const DoutPrefixProvider* dpp);
+  int cancel(const DoutPrefixProvider* dpp, optional_yield y);
 
   static int clear_resharding(rgw::sal::RadosStore* store,
 			      RGWBucketInfo& bucket_info,
 			      std::map<std::string, bufferlist>& bucket_attrs,
-                              const DoutPrefixProvider* dpp);
+                              const DoutPrefixProvider* dpp, optional_yield y);
 
   static uint32_t get_max_prime_shards() {
     return *std::crbegin(reshard_primes);
