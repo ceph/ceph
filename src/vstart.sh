@@ -67,7 +67,7 @@ if [ -n "$CEPH_BUILD_ROOT" ]; then
     [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
     # make install should install python extensions into PYTHONPATH
 elif [ -n "$CEPH_ROOT" ]; then
-    [ -z "$CEPHFS_SHELL" ] && CEPHFS_SHELL=$CEPH_ROOT/src/tools/cephfs/cephfs-shell
+    [ -z "$CEPHFS_SHELL" ] && CEPHFS_SHELL=$CEPH_ROOT/src/tools/cephfs/shell/cephfs-shell
     [ -z "$PYBIND" ] && PYBIND=$CEPH_ROOT/src/pybind
     [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_DIR/bin
     [ -z "$CEPH_ADM" ] && CEPH_ADM=$CEPH_BIN/ceph
