@@ -11258,6 +11258,9 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   // enabled
   ceph_assert(cct->_conf.get_val<bool>("client_quota") == false || quota_root != nullptr);
 
+  /* If bytes quota is set on a directory and conf option "client quota df"
+   * is also set, available space = quota limit - used space. Else,
+   * available space = total space - used space. */
   if (quota_root && cct->_conf->client_quota_df && quota_root->quota.max_bytes) {
 
     // Skip the getattr if any sessions are stale, as we don't want to
