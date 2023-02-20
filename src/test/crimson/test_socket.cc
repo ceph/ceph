@@ -93,7 +93,7 @@ future<> test_bind_same() {
           // runtime error: member access within null pointer of type 'struct promise_base'
           return seastar::now();
         })).then([pss2] {
-          return pss2->destroy();
+          return pss2->shutdown_destroy();
         });
       });
     }, listen_ertr::all_same_way(
@@ -102,7 +102,7 @@ future<> test_bind_same() {
                    saddr);
       ceph_abort();
     })).then([pss1] {
-      return pss1->destroy();
+      return pss1->shutdown_destroy();
     }).handle_exception([] (auto eptr) {
       logger.error("test_bind_same() got unexpeted exception {}", eptr);
       ceph_abort();
@@ -143,7 +143,7 @@ future<> test_accept() {
     }).then([] {
       logger.info("test_accept() ok\n");
     }).then([pss] {
-      return pss->destroy();
+      return pss->shutdown_destroy();
     }).handle_exception([] (auto eptr) {
       logger.error("test_accept() got unexpeted exception {}", eptr);
       ceph_abort();
@@ -199,7 +199,7 @@ class SocketFactory {
     }).then([psf] {
       if (psf->pss) {
         return seastar::smp::submit_to(1u, [psf] {
-          return psf->pss->destroy();
+          return psf->pss->shutdown_destroy();
         });
       }
       return seastar::now();
