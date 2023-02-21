@@ -355,7 +355,7 @@ class CephString(CephArgtype):
     """
     String; pretty generic.  goodchars is a RE char class of valid chars
     """
-    def __init__(self, goodchars=''):
+    def __init__(self, goodchars='', allowempty=True):
         from string import printable
         try:
             re.compile(goodchars)
@@ -366,8 +366,12 @@ class CephString(CephArgtype):
         self.goodset = frozenset(
             [c for c in printable if re.match(goodchars, c)]
         )
+        self.allowempty = allowempty in (True, 'True', 'true')
 
     def valid(self, s: str, partial: bool = False) -> None:
+        if not self.allowempty and s == "":
+            raise ArgumentFormat("argument can't be an empty string")
+
         sset = set(s)
         if self.goodset and not sset <= self.goodset:
             raise ArgumentFormat("invalid chars {0} in {1}".
@@ -378,6 +382,7 @@ class CephString(CephArgtype):
         b = ''
         if self.goodchars:
             b += '(goodchars {0})'.format(self.goodchars)
+        b += f'(allowempty {self.allowempty})'
         return '<string{0}>'.format(b)
 
     def complete(self, s) -> List[str]:
@@ -389,6 +394,7 @@ class CephString(CephArgtype):
     def argdesc(self, attrs):
         if self.goodchars:
             attrs['goodchars'] = self.goodchars
+        attrs['allowempty'] = repr(self.allowempty)
         return super().argdesc(attrs)
 
 
