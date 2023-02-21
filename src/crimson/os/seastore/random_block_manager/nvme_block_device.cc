@@ -86,6 +86,7 @@ read_ertr::future<rbm_metadata_header_t> RBMDevice::read_rbm_header(
   rbm_abs_addr addr)
 {
   LOG_PREFIX(RBMDevice::read_rbm_header);
+  assert(super.block_size > 0);
   return seastar::do_with(
     bufferptr(ceph::buffer::create_page_aligned(super.block_size)),
     [this, addr, FNAME](auto &bptr) {
@@ -203,9 +204,17 @@ NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
   logger().debug(" mount ");
   return open(device_path, seastar::open_flags::rw | seastar::open_flags::dsync
   ).safe_then([this] {
-    return read_rbm_header(RBM_START_ADDRESS
-    ).safe_then([](auto s) {
-      return seastar::now();
+    return stat_device(
+    ).handle_error(
+      mount_ertr::pass_further{},
+      crimson::ct_error::assert_all{
+      "Invalid error stat_device in RBMDevice::mount"}
+    ).safe_then([this](auto st) {
+      super.block_size = st.block_size;
+      return read_rbm_header(RBM_START_ADDRESS
+      ).safe_then([](auto s) {
+	return seastar::now();
+      });
     });
   }).handle_error(
     mount_ertr::pass_further{},

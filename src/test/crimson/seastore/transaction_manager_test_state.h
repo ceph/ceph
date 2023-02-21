@@ -126,11 +126,8 @@ public:
   
   seastar::future<> setup() final {
     rb_device = random_block_device::create_test_ephemeral();
-    return rb_device->mount().handle_error(crimson::ct_error::assert_all{}
-    ).then([this]() {
-      device_config_t config = get_rbm_ephemeral_device_config(0, 1);
-      return rb_device->mkfs(config).handle_error(crimson::ct_error::assert_all{});
-    });
+    device_config_t config = get_rbm_ephemeral_device_config(0, 1);
+    return rb_device->mkfs(config).handle_error(crimson::ct_error::assert_all{});
   }
 
   void remount() final {}

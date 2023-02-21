@@ -204,8 +204,12 @@ public:
 
   mount_ret mount() final {
     return open("", seastar::open_flags::rw
-    ).safe_then([]() {
-      return mount_ertr::now();
+    ).safe_then([this]() {
+      super.block_size = TEST_BLOCK_SIZE;
+      return read_rbm_header(RBM_START_ADDRESS
+      ).safe_then([](auto s) {
+	return seastar::now();
+      });
     }).handle_error(
       mount_ertr::pass_further{},
       crimson::ct_error::assert_all{

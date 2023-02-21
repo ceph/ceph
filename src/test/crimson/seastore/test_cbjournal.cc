@@ -246,10 +246,10 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   }
 
   auto mkfs() {
-    return device->mount(
+    device_config_t config = get_rbm_ephemeral_device_config(0, 1);
+    return device->mkfs(config
     ).safe_then([this]() {
-      device_config_t config = get_rbm_ephemeral_device_config(0, 1);
-      return device->mkfs(config
+      return device->mount(
       ).safe_then([this]() {
 	return cbj->open_for_mkfs(
 	).safe_then([](auto q) {
