@@ -10320,17 +10320,28 @@ bool OSD::maybe_override_options_for_qos(const std::set<std::string> *changed)
         }
       }
     } else { // if (changed != nullptr) (osd boot-up)
-      // Override the default recovery max active and max backfills to
-      // higher values based on the type of backing device (hdd/ssd).
-      // This section is executed only during osd boot-up.
+      /**
+       * This section is executed only during osd boot-up.
+       * Override the default recovery max active (hdd & ssd) and max backfills
+       * config options to either the mClock defaults or retain their respective
+       * overridden values before the osd was restarted.
+       */
       for (auto opt : recovery_qos_defaults) {
+        /**
+         * Note: set_val_default doesn't overwrite an option if it was earlier
+         * set at a config level greater than CONF_DEFAULT. It doesn't return
+         * a status. With get_val(), the config subsystem is guaranteed to
+         * either return the overridden value (if any) or the default value.
+         */
         cct->_conf.set_val_default(opt.first, std::to_string(opt.second));
+        auto opt_val = cct->_conf.get_val<uint64_t>(opt.first);
+        dout(1) << __func__ << " "
+                << opt.first << " set to " << opt_val
+                << dendl;
         if (opt.first == "osd_max_backfills") {
-          service.local_reserver.set_max(opt.second);
-          service.remote_reserver.set_max(opt.second);
+          service.local_reserver.set_max(opt_val);
+          service.remote_reserver.set_max(opt_val);
         }
-        dout(1) << __func__ << " Set default value for " << opt.first
-                << " to " << opt.second << dendl;
       }
     }
     return true;
