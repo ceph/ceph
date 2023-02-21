@@ -14,8 +14,8 @@ jobs:
           sync-labels: ''
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Assign to Dashboard project
-        # https://github.com/marketplace/actions/add-to-github-projects?version=v0.3.0
-        uses: actions/add-to-project@a9f041ddd462ed185893ea1024cec954f50dbe42
+        # https://github.com/marketplace/actions/add-to-github-projects?version=v0.4.0
+        uses: actions/add-to-project@960fbad431afda394cfcf8743445e741acd19e85
         with:
           project-url: https://github.com/orgs/ceph/projects/2
           github-token: ${{ secrets.GITHUB_TOKEN }}
