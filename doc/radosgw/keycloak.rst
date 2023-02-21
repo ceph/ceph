@@ -1,3 +1,5 @@
+.. _radosgw_keycloak:
+
 =================================
 Keycloak integration with RadosGW
 =================================
