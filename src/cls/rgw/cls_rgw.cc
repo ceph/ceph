@@ -2762,7 +2762,9 @@ static int list_instance_entries(cls_method_context_t hctx,
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
-  bool found_first = (ret == 0);
+  // we need to include the exact match if a filter (name) is
+  // specified and the marker has not yet advanced (i.e., been set)
+  bool found_first = (ret == 0) && (start_after_key != marker);
   if (found_first) {
     --max;
   }
@@ -2852,7 +2854,9 @@ static int list_olh_entries(cls_method_context_t hctx,
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
-  bool found_first = (ret == 0);
+    // we need to include the exact match if a filter (name) is
+   // specified and the marker has not yet advanced (i.e., been set)
+  bool found_first = (ret == 0) && (start_after_key != marker);
   if (found_first) {
     --max;
   }
