@@ -171,10 +171,6 @@ public:
   }
 
   // interfaces for test
-  void set_device_id(device_id_t id) {
-    super.config.spec.id = id;
-  }
-
   void set_block_size(size_t size) {
     super.block_size = size;
   }
