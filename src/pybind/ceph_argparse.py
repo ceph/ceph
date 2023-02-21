@@ -332,18 +332,23 @@ class CephString(CephArgtype):
         try:
             re.compile(goodchars)
         except re.error:
-            raise ValueError('CephString(): "{0}" is not a valid RE'.
-                             format(goodchars))
+            raise ArgumentFormat('CephString(): "{0}" is not a valid RE'.
+                                 format(goodchars))
         self.goodchars = goodchars
         self.goodset = frozenset(
             [c for c in printable if re.match(goodchars, c)]
         )
 
     def valid(self, s: str, partial: bool = False) -> None:
+        # If a strict format rule (like goodchars) is defined on a subvolume name,
+        # an empty string input is inherently an invalid format structure.
+        if self.goodchars and s == "":
+            raise ArgumentFormat("argument can't be an empty string")
+
         sset = set(s)
         if self.goodset and not sset <= self.goodset:
-            raise ArgumentFormat("invalid chars {0} in {1}".
-                                 format(''.join(sset - self.goodset), s))
+            raise ArgumentFormat("invalid chars '{0}' in input string '{1}'".
+                                 format(''.join(sorted(list(sset - self.goodset))), s))
         self.val = s
 
     def __str__(self) -> str:
