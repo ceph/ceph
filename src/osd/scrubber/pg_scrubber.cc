@@ -860,8 +860,6 @@ bool PgScrubber::range_intersects_scrub(const hobject_t& start,
  */
 void PgScrubber::add_delayed_scheduling()
 {
-  m_end = m_start;  // not blocking any range now
-
   milliseconds sleep_time{0ms};
     sleep_time = m_osds->get_scrub_services().scrub_sleep_time(
       m_flags.required);
