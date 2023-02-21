@@ -43,6 +43,8 @@
 #include "driver/daos/rgw_sal_daos.h"
 #endif
 
+#include "rgw_sal_d3n.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 extern "C" {
@@ -63,6 +65,7 @@ extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
 #ifdef WITH_RADOSGW_D4N
 extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next);
 #endif
+extern rgw::sal::Driver* newD3NFilter(rgw::sal::Driver* next);
 }
 
 RGWObjState::RGWObjState() {
@@ -120,8 +123,13 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     driver = newRadosStore(&io_context);
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
 
+    bool use_data_cache = false;
+    if (cfg.filter_name.compare("d3n") == 0) {
+      use_data_cache = true;
+    }
+
     if ((*rados).set_use_cache(use_cache)
-                .set_use_datacache(false)
+                .set_use_datacache(use_data_cache)
                 .set_use_gc(use_gc)
                 .set_run_gc_thread(use_gc_thread)
                 .set_run_lc_thread(use_lc_thread)
@@ -141,46 +149,6 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
       delete driver;
       return nullptr;
     }
-  }
-  else if (cfg.store_name.compare("d3n") == 0) {
-    driver = new rgw::sal::RadosStore(io_context);
-    RGWRados* rados = new D3nRGWDataCache<RGWRados>;
-    dynamic_cast<rgw::sal::RadosStore*>(driver)->setRados(rados);
-    rados->set_store(static_cast<rgw::sal::RadosStore* >(driver));
-
-    if ((*rados).set_use_cache(use_cache)
-                .set_use_datacache(true)
-                .set_run_gc_thread(use_gc_thread)
-                .set_run_lc_thread(use_lc_thread)
-                .set_run_quota_threads(quota_threads)
-                .set_run_sync_thread(run_sync_thread)
-                .set_run_reshard_thread(run_reshard_thread)
-                .set_run_notification_thread(run_notification_thread)
-                .init_begin(cct, dpp, site_config) < 0) {
-      delete driver;
-      return nullptr;
-    }
-    if (driver->initialize(cct, dpp) < 0) {
-      delete driver;
-      return nullptr;
-    }
-    if (rados->init_complete(dpp, y) < 0) {
-      delete driver;
-      return nullptr;
-    }
-
-    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_local_datacache_enabled=" <<
-      cct->_conf->rgw_d3n_l1_local_datacache_enabled << dendl;
-    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_datacache_persistent_path='" <<
-      cct->_conf->rgw_d3n_l1_datacache_persistent_path << "'" << dendl;
-    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_datacache_size=" <<
-      cct->_conf->rgw_d3n_l1_datacache_size << dendl;
-    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_evict_cache_on_start=" <<
-      cct->_conf->rgw_d3n_l1_evict_cache_on_start << dendl;
-    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_fadvise=" <<
-      cct->_conf->rgw_d3n_l1_fadvise << dendl;
-    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_eviction_policy=" <<
-      cct->_conf->rgw_d3n_l1_eviction_policy << dendl;
   }
 #ifdef WITH_RADOSGW_DBSTORE
   else if (cfg.store_name.compare("dbstore") == 0) {
@@ -244,7 +212,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
       delete next;
       return nullptr;
     }
-  }
+  } 
 #endif
 #ifdef WITH_RADOSGW_POSIX
   else if (cfg.filter_name.compare("posix") == 0) {
@@ -259,7 +227,30 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     }
   }
 #endif
+  else if (cfg.filter_name.compare("d3n") == 0) {
+    rgw::sal::Driver* next = driver;
+    driver = newD3NFilter(next);
 
+    if (driver->initialize(cct, dpp) < 0) {
+      ldpp_dout(dpp, 0) << "Failed to initialize newD3NFilter" << dendl;
+      delete driver;
+      delete next;
+      return nullptr;
+    }
+
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_local_datacache_enabled=" <<
+      cct->_conf->rgw_d3n_l1_local_datacache_enabled << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_datacache_persistent_path='" <<
+      cct->_conf->rgw_d3n_l1_datacache_persistent_path << "'" << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_datacache_size=" <<
+      cct->_conf->rgw_d3n_l1_datacache_size << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_evict_cache_on_start=" <<
+      cct->_conf->rgw_d3n_l1_evict_cache_on_start << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_fadvise=" <<
+      cct->_conf->rgw_d3n_l1_fadvise << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_eviction_policy=" <<
+      cct->_conf->rgw_d3n_l1_eviction_policy << dendl;
+  }
   return driver;
 }
 
@@ -352,19 +343,6 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
   const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
   if (config_store == "rados") {
     cfg.store_name = "rados";
-
-    /* Check to see if d3n is configured, but only for non-admin */
-    const auto& d3n = g_conf().get_val<bool>("rgw_d3n_l1_local_datacache_enabled");
-    if (!admin && d3n) {
-      if (g_conf().get_val<Option::size_t>("rgw_max_chunk_size") !=
-	  g_conf().get_val<Option::size_t>("rgw_obj_stripe_size")) {
-	lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires that the chunk_size equals stripe_size)" << dendl;
-      } else if (!g_conf().get_val<bool>("rgw_beast_enable_async")) {
-	lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires yield context - rgw_beast_enable_async=true)" << dendl;
-      } else {
-	cfg.store_name = "d3n";
-      }
-    }
   }
 #ifdef WITH_RADOSGW_DBSTORE
   else if (config_store == "dbstore") {
@@ -389,6 +367,19 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
     cfg.filter_name = "base";
   } else if (config_filter == "posix") {
     cfg.filter_name = "posix";
+  } else if (config_filter == "d3n") {
+    /* Check to see if d3n is configured, but only for non-admin */
+    const auto& d3n = g_conf().get_val<bool>("rgw_d3n_l1_local_datacache_enabled");
+    if (!admin && d3n) {
+      if (g_conf().get_val<Option::size_t>("rgw_max_chunk_size") !=
+        g_conf().get_val<Option::size_t>("rgw_obj_stripe_size")) {
+        lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires that the chunk_size equals stripe_size)" << dendl;
+      } else if (!g_conf().get_val<bool>("rgw_beast_enable_async")) {
+	      lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires yield context - rgw_beast_enable_async=true)" << dendl;
+      } else {
+        cfg.filter_name = "d3n";
+      }
+    }
   }
 #ifdef WITH_RADOSGW_D4N
   else if (config_filter == "d4n") {
