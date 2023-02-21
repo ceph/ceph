@@ -359,10 +359,10 @@ class FSTop(object):
                 endwhile = True
             elif key == ord('q'):
                 self.stdscr.erase()
-                if isinstance(current_states['last_fs'], list):
-                    self.run_all_display()
-                else:
+                if fs_list and self.current_screen == FS_TOP_FS_SELECTED_APP:
                     self.run_display()
+                else:
+                    self.run_all_display()
                 endwhile = True
 
             try:
