@@ -43,10 +43,13 @@ An example of the session tags that are passed in by the IDP in the web token is
         "active": true
     }
 
-Steps to configure Keycloak to pass tags in the web token are described here:doc:`keycloak`.
+Steps to configure Keycloak to pass tags in the web token are described here:
+:ref:`radosgw_keycloak`.
 
-The trust policy must have 'sts:TagSession' permission if the web token passed in by the federated user contains session tags, otherwise
-the AssumeRoleWithWebIdentity action will fail. An example of the trust policy with sts:TagSession is as follows:
+The trust policy must have 'sts:TagSession' permission if the web token passed
+in by the federated user contains session tags, otherwise the
+AssumeRoleWithWebIdentity action will fail. An example of the trust policy with
+sts:TagSession is as follows:
 
 .. code-block:: python
 
