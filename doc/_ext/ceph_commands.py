@@ -83,7 +83,7 @@ class CmdParam(object):
 
     def __init__(self, type, name,
                  who=None, n=None, req=True, range=None, strings=None,
-                 goodchars=None, positional=True):
+                 goodchars=None, positional=True, **kwargs):
         self.type = type
         self.name = name
         self.who = who
@@ -93,6 +93,7 @@ class CmdParam(object):
         self.strings = strings.split('|') if strings else []
         self.goodchars = goodchars
         self.positional = positional != 'false'
+        self.allowempty = kwargs.pop('allowempty', True) in (True, 'True', 'true')
 
         assert who == None
 
@@ -108,6 +109,8 @@ class CmdParam(object):
             advanced.append('goodchars= ``{}`` '.format(self.goodchars))
         if self.n:
             advanced.append('(can be repeated)')
+        if self.allowempty:
+            advanced.append('(can be empty string)')
 
         advanced = advanced or ["(string)"]
         return ' '.join(advanced)
