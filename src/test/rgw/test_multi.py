@@ -402,7 +402,7 @@ def init(parse_args):
                     arg += admin_creds.credential_args()
                     admin_user.create(zone, arg)
                     # create test user
-                    arg = ['--display-name', '"Test User"']
+                    arg = ['--display-name', '"Test User"', '--caps', 'roles=*']
                     arg += user_creds.credential_args()
                     user.create(zone, arg)
                 else:

@@ -1515,6 +1515,12 @@ namespace rgw::sal {
     return std::unique_ptr<RGWRole>(p);
   }
 
+  std::unique_ptr<RGWRole> DBStore::get_role(const RGWRoleInfo& info)
+  {
+    RGWRole* p = nullptr;
+    return std::unique_ptr<RGWRole>(p);
+  }
+
   int DBStore::get_roles(const DoutPrefixProvider *dpp,
       optional_yield y,
       const std::string& path_prefix,
@@ -1678,6 +1684,14 @@ namespace rgw::sal {
       optional_yield y)
   {
     return 0;
+  }
+
+  int DBStore::forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
+					     bufferlist& in_data,
+					     RGWXMLDecoder::XMLParser* parser, req_info& info,
+					     optional_yield y)
+  {
+      return 0;
   }
 
   std::string DBStore::zone_unique_id(uint64_t unique_num)

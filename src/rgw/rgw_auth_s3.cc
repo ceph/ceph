@@ -610,11 +610,12 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
 }
 
 static void add_v4_canonical_params_from_map(const map<string, string>& m,
-                                        std::map<string, string> *result)
+                                        std::map<string, string> *result,
+                                        bool is_non_s3_op)
 {
   for (auto& entry : m) {
     const auto& key = entry.first;
-    if (key.empty()) {
+    if (key.empty() || (is_non_s3_op && key == "PayloadHash")) {
       continue;
     }
 
@@ -622,12 +623,12 @@ static void add_v4_canonical_params_from_map(const map<string, string>& m,
   }
 }
 
-std::string gen_v4_canonical_qs(const req_info& info)
+std::string gen_v4_canonical_qs(const req_info& info, bool is_non_s3_op)
 {
   std::map<std::string, std::string> canonical_qs_map;
 
-  add_v4_canonical_params_from_map(info.args.get_params(), &canonical_qs_map);
-  add_v4_canonical_params_from_map(info.args.get_sys_params(), &canonical_qs_map);
+  add_v4_canonical_params_from_map(info.args.get_params(), &canonical_qs_map, is_non_s3_op);
+  add_v4_canonical_params_from_map(info.args.get_sys_params(), &canonical_qs_map, false);
 
   if (canonical_qs_map.empty()) {
     return string();
