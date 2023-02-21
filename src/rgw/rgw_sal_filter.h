@@ -283,7 +283,7 @@ public:
   virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
 				 const std::string& tenant,
 				 std::vector<std::unique_ptr<RGWOIDCProvider>>&
-				 providers) override;
+				 providers, optional_yield y) override;
   virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
@@ -441,7 +441,7 @@ public:
   virtual int chown(const DoutPrefixProvider* dpp, User& new_user,
 		    optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
-		       ceph::real_time mtime) override;
+		       ceph::real_time mtime, optional_yield y) override;
   virtual bool is_owner(User* user) override;
   virtual User* get_owner(void) override { return user; }
   virtual ACLOwner get_acl_owner(void) override { return next->get_acl_owner(); }
@@ -505,7 +505,7 @@ public:
 			      const int& max_uploads,
 			      std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 			      std::map<std::string, bool> *common_prefixes,
-			      bool *is_truncated) override;
+			      bool *is_truncated, optional_yield y) override;
   virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 			       CephContext* cct, optional_yield y) override;
 
@@ -738,7 +738,7 @@ public:
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) override;
   virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			 int num_parts, int marker,
-			 int* next_marker, bool* truncated,
+			 int* next_marker, bool* truncated, optional_yield y,
 			 bool assume_unsorted = false) override;
   virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y) override;
   virtual int complete(const DoutPrefixProvider* dpp,

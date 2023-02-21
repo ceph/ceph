@@ -768,10 +768,10 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_y
   return this->link(dpp, &new_user, y);
 }
 
-int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime)
+int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
 {
   mtime = _mtime;
-  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, null_yield);
+  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, y);
 }
 
 /* Make sure to call get_bucket_info() if you need it first */
@@ -935,7 +935,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				 const int& max_uploads,
 				 vector<std::unique_ptr<MultipartUpload>>& uploads,
 				 map<string, bool> *common_prefixes,
-				 bool *is_truncated)
+				 bool *is_truncated, optional_yield y)
 {
   rgw::sal::Bucket::ListParams params;
   rgw::sal::Bucket::ListResults results;
@@ -947,7 +947,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
   params.ns = RGW_OBJ_NS_MULTIPART;
   params.access_list_filter = &mp_filter;
 
-  int ret = list(dpp, params, max_uploads, results, null_yield);
+  int ret = list(dpp, params, max_uploads, results, y);
 
   if (ret < 0)
     return ret;
@@ -984,7 +984,7 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
 
   do {
     ret = list_multiparts(dpp, empty_prefix, marker, empty_delim,
-			  max, uploads, nullptr, &is_truncated);
+			  max, uploads, nullptr, &is_truncated, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ <<
 	" ERROR : calling list_bucket_multiparts; ret=" << ret <<
@@ -1635,7 +1635,7 @@ std::unique_ptr<RGWOIDCProvider> RadosStore::get_oidc_provider()
 
 int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
 				   const std::string& tenant,
-				   vector<std::unique_ptr<RGWOIDCProvider>>& providers)
+				   vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y)
 {
   std::string prefix = tenant + RGWOIDCProvider::oidc_url_oid_prefix;
   auto pool = svc()->zone->get_zone_params().oidc_pool;
@@ -1656,7 +1656,7 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
       std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = get_oidc_provider();
       bufferlist bl;
 
-      r = rgw_get_system_obj(svc()->sysobj, pool, iter, bl, nullptr, nullptr, null_yield, dpp);
+      r = rgw_get_system_obj(svc()->sysobj, pool, iter, bl, nullptr, nullptr, y, dpp);
       if (r < 0) {
         return r;
       }
@@ -2447,7 +2447,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   uint64_t parts_accounted_size = 0;
 
   do {
-    ret = list_parts(dpp, cct, 1000, marker, &marker, &truncated);
+    ret = list_parts(dpp, cct, 1000, marker, &marker, &truncated, y);
     if (ret < 0) {
       ldpp_dout(dpp, 20) << __func__ << ": RadosMultipartUpload::list_parts returned " <<
 	ret << dendl;
@@ -2462,7 +2462,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
 	std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(
 				    rgw_obj_key(obj_part->oid, std::string(), RGW_OBJ_NS_MULTIPART));
 	obj->set_hash_source(mp_obj.get_key());
-	ret = obj->delete_object(dpp, null_yield);
+	ret = obj->delete_object(dpp, y);
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {
@@ -2512,7 +2512,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   del_op->params.parts_accounted_size = parts_accounted_size;
 
   // and also remove the metadata obj
-  ret = del_op->delete_obj(dpp, null_yield);
+  ret = del_op->delete_obj(dpp, y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << __func__ << ": del_op.delete_obj returned " <<
       ret << dendl;
@@ -2573,7 +2573,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
 
 int RadosMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *cct,
 				     int num_parts, int marker,
-				     int *next_marker, bool *truncated,
+				     int *next_marker, bool *truncated, optional_yield y,
 				     bool assume_unsorted)
 {
   map<string, bufferlist> parts_map;
@@ -2601,9 +2601,9 @@ int RadosMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
     p.append(buf);
 
     ret = sysobj.omap().get_vals(dpp, p, num_parts + 1, &parts_map,
-                                 nullptr, null_yield);
+                                 nullptr, y);
   } else {
-    ret = sysobj.omap().get_all(dpp, &parts_map, null_yield);
+    ret = sysobj.omap().get_all(dpp, &parts_map, y);
   }
   if (ret < 0) {
     return ret;
@@ -2635,7 +2635,7 @@ int RadosMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
          * where one gateway doesn't support correctly sorted omap
          * keys for multipart upload just assume data is unsorted.
          */
-        return list_parts(dpp, cct, num_parts, marker, next_marker, truncated, true);
+        return list_parts(dpp, cct, num_parts, marker, next_marker, truncated, y, true);
       }
       expected_next++;
     }
@@ -2704,7 +2704,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   rgw::sal::Attrs attrs = target_obj->get_attrs();
 
   do {
-    ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated);
+    ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated, y);
     if (ret == -ENOENT) {
       ret = -ERR_NO_SUCH_UPLOAD;
     }
@@ -3493,14 +3493,14 @@ int RadosOIDCProvider::store_url(const DoutPrefixProvider *dpp, const std::strin
   return rgw_put_system_obj(dpp, sysobj, store->svc()->zone->get_zone_params().oidc_pool, oid, bl, exclusive, nullptr, real_time(), y);
 }
 
-int RadosOIDCProvider::read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant)
+int RadosOIDCProvider::read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant, optional_yield y)
 {
   auto sysobj = store->svc()->sysobj;
   auto& pool = store->svc()->zone->get_zone_params().oidc_pool;
   std::string oid = tenant + get_url_oid_prefix() + url;
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(sysobj, pool, oid, bl, nullptr, nullptr, null_yield, dpp);
+  int ret = rgw_get_system_obj(sysobj, pool, oid, bl, nullptr, nullptr, y, dpp);
   if (ret < 0) {
     return ret;
   }

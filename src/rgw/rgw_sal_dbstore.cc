@@ -329,7 +329,7 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBBucket::put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time _mtime)
+  int DBBucket::put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
   {
     int ret;
 
@@ -499,7 +499,7 @@ namespace rgw::sal {
 				const int& max_uploads,
 				vector<std::unique_ptr<MultipartUpload>>& uploads,
 				map<string, bool> *common_prefixes,
-				bool *is_truncated) {
+				bool *is_truncated, optional_yield y) {
     return 0;
   }
 
@@ -955,7 +955,7 @@ namespace rgw::sal {
 
   int DBMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *cct,
 				     int num_parts, int marker,
-				     int *next_marker, bool *truncated,
+				     int *next_marker, bool *truncated, optional_yield y,
 				     bool assume_unsorted)
   {
     std::list<RGWUploadPartInfo> parts_map;
@@ -1038,7 +1038,7 @@ namespace rgw::sal {
     ofs = 0;
     accounted_size = 0;
     do {
-      ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated);
+      ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated, y);
       if (ret == -ENOENT) {
         ret = -ERR_NO_SUCH_UPLOAD;
       }
@@ -1546,7 +1546,7 @@ namespace rgw::sal {
 
   int DBStore::get_oidc_providers(const DoutPrefixProvider *dpp,
       const std::string& tenant,
-      vector<std::unique_ptr<RGWOIDCProvider>>& providers)
+      vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y)
   {
     return 0;
   }

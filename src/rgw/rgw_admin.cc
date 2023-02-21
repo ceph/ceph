@@ -1404,7 +1404,7 @@ int set_bucket_quota(rgw::sal::Driver* driver, OPT opt_cmd,
 
   set_quota_info(bucket->get_info().quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
-  r = bucket->put_info(dpp(), false, real_time());
+  r = bucket->put_info(dpp(), false, real_time(), null_yield);
   if (r < 0) {
     cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -3183,7 +3183,7 @@ public:
       return 0;
     }
 
-    int ret = bucket->put_info(dpp(), false, real_time());
+    int ret = bucket->put_info(dpp(), false, real_time(), null_yield);
     if (ret < 0) {
       cerr << "failed to driver bucket info: " << cpp_strerror(-ret) << std::endl;
       return -ret;

@@ -254,12 +254,12 @@ int RGWBucket::chown(RGWBucketAdminOpState& op_state, const string& marker,
   return rgw_chown_bucket_and_objects(driver, bucket.get(), user.get(), marker, err_msg, dpp, y);
 }
 
-int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg)
+int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg)
 {
   bucket = op_state.get_bucket()->clone();
 
   bucket->get_info().quota = op_state.quota;
-  int r = bucket->put_info(dpp, false, real_time());
+  int r = bucket->put_info(dpp, false, real_time(), y);
   if (r < 0) {
     set_err_msg(err_msg, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
     return r;
@@ -489,7 +489,7 @@ int RGWBucket::check_index(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg)
+int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg)
 {
   if (!driver->is_meta_master()) {
     set_err_msg(err_msg, "ERROR: failed to update bucket sync: only allowed on meta master zone");
@@ -504,7 +504,7 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
 
   // when writing this metadata, RGWSI_BucketIndex_RADOS::handle_overwrite()
   // will write the corresponding datalog and bilog entries
-  int r = bucket->put_info(dpp, false, real_time());
+  int r = bucket->put_info(dpp, false, real_time(), y);
   if (r < 0) {
     set_err_msg(err_msg, "ERROR: failed writing bucket instance info:" + cpp_strerror(-r));
     return r;
@@ -726,7 +726,7 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
     exclusive = true;
   }
 
-  r = loc_bucket->put_info(dpp, exclusive, ceph::real_time());
+  r = loc_bucket->put_info(dpp, exclusive, ceph::real_time(), y);
   if (r < 0) {
     set_err_msg(err, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
     return r;
@@ -858,7 +858,7 @@ int RGWBucketAdminOp::sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpStat
   {
     return ret;
   }
-  return bucket.sync(op_state, dpp, err_msg);
+  return bucket.sync(op_state, dpp, y, err_msg);
 }
 
 static int bucket_stats(rgw::sal::Driver* driver,
@@ -1157,7 +1157,7 @@ int RGWBucketAdminOp::set_quota(rgw::sal::Driver* driver, RGWBucketAdminOpState&
   int ret = bucket.init(driver, op_state, y, dpp);
   if (ret < 0)
     return ret;
-  return bucket.set_quota(op_state, dpp);
+  return bucket.set_quota(op_state, dpp, y);
 }
 
 inline auto split_tenant(const std::string& bucket_name){
