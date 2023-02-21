@@ -20,6 +20,7 @@ using namespace std;
 
 void RGWHandler_REST_IAM::rgw_iam_parse_input()
 {
+  std::string post_body = bl_post_body.to_str();
   if (post_body.size() > 0) {
     ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
 
@@ -52,7 +53,7 @@ RGWOp *RGWHandler_REST_IAM::op_post()
     if (action.compare("GetRole") == 0)
       return new RGWGetRole;
     if (action.compare("UpdateAssumeRolePolicy") == 0)
-      return new RGWModifyRole;
+      return new RGWModifyRoleTrustPolicy(this->bl_post_body);
     if (action.compare("ListRoles") == 0)
       return new RGWListRoles;
     if (action.compare("PutRolePolicy") == 0)
@@ -157,5 +158,6 @@ RGWRESTMgr_IAM::get_handler(rgw::sal::Store* store,
 			    const rgw::auth::StrategyRegistry& auth_registry,
 			    const std::string& frontend_prefix)
 {
-  return new RGWHandler_REST_IAM(auth_registry);
+  bufferlist bl;
+  return new RGWHandler_REST_IAM(auth_registry, bl);
 }

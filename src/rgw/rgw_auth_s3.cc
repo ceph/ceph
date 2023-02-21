@@ -459,7 +459,7 @@ bool is_non_s3_op(RGWOpType op_type)
       op_type == RGW_OP_CREATE_ROLE ||
       op_type == RGW_OP_DELETE_ROLE ||
       op_type == RGW_OP_GET_ROLE ||
-      op_type == RGW_OP_MODIFY_ROLE ||
+      op_type == RGW_OP_MODIFY_ROLE_TRUST_POLICY ||
       op_type == RGW_OP_LIST_ROLES ||
       op_type == RGW_OP_PUT_ROLE_POLICY ||
       op_type == RGW_OP_GET_ROLE_POLICY ||
