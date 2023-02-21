@@ -215,7 +215,7 @@ class RadosStore : public StoreDriver {
     virtual std::unique_ptr<RGWOIDCProvider> get_oidc_provider() override;
     virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
 				   const std::string& tenant,
-				   std::vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
+				   std::vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y) override;
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
@@ -570,7 +570,7 @@ class RadosBucket : public StoreBucket {
     virtual int update_container_stats(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y) override;
-    virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime) override;
+    virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) override;
     virtual bool is_owner(User* user) override;
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
@@ -599,7 +599,7 @@ class RadosBucket : public StoreBucket {
 				const int& max_uploads,
 				std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				std::map<std::string, bool> *common_prefixes,
-				bool *is_truncated) override;
+				bool *is_truncated, optional_yield y) override;
     virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 				 CephContext* cct, optional_yield y) override;
     int read_topics(rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* objv_tracker, 
@@ -660,7 +660,7 @@ public:
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) override;
   virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			 int num_parts, int marker,
-			 int* next_marker, bool* truncated,
+			 int* next_marker, bool* truncated, optional_yield y,
 			 bool assume_unsorted = false) override;
   virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y) override;
   virtual int complete(const DoutPrefixProvider* dpp,
@@ -923,7 +923,7 @@ public:
   ~RadosOIDCProvider() = default;
 
   virtual int store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y) override;
-  virtual int read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant) override;
+  virtual int read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant, optional_yield y) override;
   virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) override;
   void encode(bufferlist& bl) const {
     RGWOIDCProvider::encode(bl);

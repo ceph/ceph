@@ -475,9 +475,9 @@ std::unique_ptr<RGWOIDCProvider> FilterDriver::get_oidc_provider()
 
 int FilterDriver::get_oidc_providers(const DoutPrefixProvider *dpp,
 				    const std::string& tenant,
-				    std::vector<std::unique_ptr<RGWOIDCProvider>>& providers)
+				    std::vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y)
 {
-  return next->get_oidc_providers(dpp, tenant, providers);
+  return next->get_oidc_providers(dpp, tenant, providers, y);
 }
 
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
@@ -727,9 +727,9 @@ int FilterBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_
 }
 
 int FilterBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive,
-			   ceph::real_time _mtime)
+			   ceph::real_time _mtime, optional_yield y)
 {
-  return next->put_info(dpp, exclusive, _mtime);
+  return next->put_info(dpp, exclusive, _mtime, y);
 }
 
 bool FilterBucket::is_owner(User* user)
@@ -822,13 +822,13 @@ int FilterBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				  const int& max_uploads,
 				  std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				  std::map<std::string, bool> *common_prefixes,
-				  bool *is_truncated)
+				  bool *is_truncated, optional_yield y)
 {
   std::vector<std::unique_ptr<MultipartUpload>> nup;
   int ret;
 
   ret = next->list_multiparts(dpp, prefix, marker, delim, max_uploads, nup,
-			      common_prefixes, is_truncated);
+			      common_prefixes, is_truncated, y);
   if (ret < 0)
     return ret;
 
@@ -1096,12 +1096,12 @@ int FilterMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
 int FilterMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *cct,
 				      int num_parts, int marker,
-				      int *next_marker, bool *truncated,
+				      int *next_marker, bool *truncated, optional_yield y,
 				      bool assume_unsorted)
 {
   int ret;
 
-  ret = next->list_parts(dpp, cct, num_parts, marker, next_marker, truncated,
+  ret = next->list_parts(dpp, cct, num_parts, marker, next_marker, truncated, y,
 			 assume_unsorted);
   if (ret < 0)
     return ret;
