@@ -112,13 +112,12 @@ class TestNFS(MgrTestCase):
         :param expected_status: Status to be verified
         :param fail_msg: Message to be printed if test failed
         '''
-        # Wait for two minutes as ganesha daemon takes some time to be deleted/created
-        wait_time = 10
-        while wait_time <= 120:
-            time.sleep(wait_time)
-            if expected_status in self._fetch_nfs_daemons_details():
-                return
-            wait_time += 10
+        # Wait for a minute as ganesha daemon takes some time to be
+        # deleted/created
+        with contextutil.safe_while(sleep=6, tries=10, _raise=False) as proceed:
+            while proceed():
+                if expected_status in self._fetch_nfs_daemons_details():
+                    return
         self.fail(fail_msg)
 
     def _check_auth_ls(self, export_id=1, check_in=False):
