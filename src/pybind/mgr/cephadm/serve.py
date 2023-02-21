@@ -1115,9 +1115,9 @@ class CephadmServe:
                 pspec = PlacementSpec.from_string(self.mgr.manage_etc_ceph_ceph_conf_hosts)
                 ha = HostAssignment(
                     spec=ServiceSpec('mon', placement=pspec),
-                    hosts=self.mgr.cache.get_schedulable_hosts(),
+                    hosts=self.mgr.cache.get_conf_keyring_available_hosts(),
                     unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
-                    draining_hosts=self.mgr.cache.get_draining_hosts(),
+                    draining_hosts=self.mgr.cache.get_conf_keyring_draining_hosts(),
                     daemons=[],
                     networks=self.mgr.cache.networks,
                 )
@@ -1146,9 +1146,9 @@ class CephadmServe:
                     keyring.encode('utf-8')).digest())
                 ha = HostAssignment(
                     spec=ServiceSpec('mon', placement=ks.placement),
-                    hosts=self.mgr.cache.get_schedulable_hosts(),
+                    hosts=self.mgr.cache.get_conf_keyring_available_hosts(),
                     unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
-                    draining_hosts=self.mgr.cache.get_draining_hosts(),
+                    draining_hosts=self.mgr.cache.get_conf_keyring_draining_hosts(),
                     daemons=[],
                     networks=self.mgr.cache.networks,
                 )
