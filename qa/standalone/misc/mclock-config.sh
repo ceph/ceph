@@ -247,9 +247,9 @@ function TEST_backfill_limit_adjustment_mclock() {
 
     run_osd $dir 0 --osd_op_queue=mclock_scheduler || return 1
     local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
-        config get osd_max_backfills)
+        config get osd_max_backfills | jq .osd_max_backfills | bc)
     # Get default value
-    echo "$backfills" | grep --quiet 'osd_max_backfills' || return 1
+    echo "osd_max_backfills: $backfills" || return 1
 
     # Change the backfill limit without setting
     # osd_mclock_override_recovery_settings option. Verify that the backfill
@@ -257,8 +257,16 @@ function TEST_backfill_limit_adjustment_mclock() {
     ceph config set osd.0 osd_max_backfills 20 || return 1
     sleep 2 # Allow time for change to take effect
     local max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
-        config get osd_max_backfills)
-    test "$max_backfills" = "$backfills" || return 1
+        config get osd_max_backfills | jq .osd_max_backfills | bc)
+    test $max_backfills = $backfills || return 1
+
+    # Verify local and async reserver settings are not changed
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+        dump_recovery_reservations | jq .local_reservations.max_allowed | bc)
+    test $max_backfills = $backfills || return 1
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+        dump_recovery_reservations | jq .remote_reservations.max_allowed | bc)
+    test $max_backfills = $backfills || return 1
 
     # Change backfills limit after setting osd_mclock_override_recovery_settings.
     # Verify that the backfills limit is modified.
@@ -266,8 +274,35 @@ function TEST_backfill_limit_adjustment_mclock() {
     ceph config set osd.0 osd_max_backfills 20 || return 1
     sleep 2 # Allow time for change to take effect
     max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
-        config get osd_max_backfills)
-    test "$max_backfills" =  '{"osd_max_backfills":"20"}' || return 1
+        config get osd_max_backfills | jq .osd_max_backfills | bc)
+    test $max_backfills = 20 || return 1
+
+    # Verify local and async reserver settings are changed
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+        dump_recovery_reservations | jq .local_reservations.max_allowed | bc)
+    test $max_backfills = 20 || return 1
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+        dump_recovery_reservations | jq .remote_reservations.max_allowed | bc)
+    test $max_backfills = 20 || return 1
+
+    # Kill osd and bring it back up.
+    # Confirm that the backfill settings are retained.
+    kill_daemons $dir TERM osd || return 1
+    ceph osd down 0 || return 1
+    wait_for_osd down 0 || return 1
+    activate_osd $dir 0 --osd-op-queue=mclock_scheduler || return 1
+
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+        config get osd_max_backfills | jq .osd_max_backfills | bc)
+    test $max_backfills = 20 || return 1
+
+    # Verify local and async reserver settings are changed
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+        dump_recovery_reservations | jq .local_reservations.max_allowed | bc)
+    test $max_backfills = 20 || return 1
+    max_backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+        dump_recovery_reservations | jq .remote_reservations.max_allowed | bc)
+    test $max_backfills = 20 || return 1
 
     teardown $dir || return 1
 }
