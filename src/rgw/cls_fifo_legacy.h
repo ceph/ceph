@@ -127,8 +127,6 @@ class FIFO {
        std::string oid)
     : ioctx(std::move(ioc)), oid(oid) {}
 
-  std::string generate_tag() const;
-
   int apply_update(const DoutPrefixProvider *dpp,
                    fifo::info* info,
 		   const fifo::objv& objv,
@@ -140,26 +138,25 @@ class FIFO {
   void _update_meta(const DoutPrefixProvider *dpp, const fifo::update& update,
 		    fifo::objv version, bool* pcanceled,
 		    std::uint64_t tid, lr::AioCompletion* c);
-  int create_part(const DoutPrefixProvider *dpp, int64_t part_num, std::string_view tag, std::uint64_t tid,
+  int create_part(const DoutPrefixProvider *dpp, int64_t part_num, std::uint64_t tid,
 		  optional_yield y);
-  int remove_part(const DoutPrefixProvider *dpp, int64_t part_num, std::string_view tag, std::uint64_t tid,
+  int remove_part(const DoutPrefixProvider *dpp, int64_t part_num, std::uint64_t tid,
 		  optional_yield y);
   int process_journal(const DoutPrefixProvider *dpp, std::uint64_t tid, optional_yield y);
   void process_journal(const DoutPrefixProvider *dpp, std::uint64_t tid, lr::AioCompletion* c);
-  int _prepare_new_part(const DoutPrefixProvider *dpp, bool is_head, std::uint64_t tid, optional_yield y);
-  void _prepare_new_part(const DoutPrefixProvider *dpp, bool is_head, std::uint64_t tid, lr::AioCompletion* c);
-  int _prepare_new_head(const DoutPrefixProvider *dpp, std::uint64_t tid, optional_yield y);
-  void _prepare_new_head(const DoutPrefixProvider *dpp, std::uint64_t tid, lr::AioCompletion* c);
+  int _prepare_new_part(const DoutPrefixProvider *dpp, std::int64_t new_part_num, bool is_head, std::uint64_t tid, optional_yield y);
+  void _prepare_new_part(const DoutPrefixProvider *dpp, std::int64_t new_part_num, bool is_head, std::uint64_t tid, lr::AioCompletion* c);
+  int _prepare_new_head(const DoutPrefixProvider *dpp, std::int64_t new_head_part_num,
+			std::uint64_t tid, optional_yield y);
+  void _prepare_new_head(const DoutPrefixProvider *dpp, std::int64_t new_head_part_num, std::uint64_t tid, lr::AioCompletion* c);
   int push_entries(const DoutPrefixProvider *dpp, const std::deque<cb::list>& data_bufs,
 		   std::uint64_t tid, optional_yield y);
   void push_entries(const std::deque<cb::list>& data_bufs,
 		    std::uint64_t tid, lr::AioCompletion* c);
   int trim_part(const DoutPrefixProvider *dpp, int64_t part_num, uint64_t ofs,
-		std::optional<std::string_view> tag, bool exclusive,
-		std::uint64_t tid, optional_yield y);
+		bool exclusive, std::uint64_t tid, optional_yield y);
   void trim_part(const DoutPrefixProvider *dpp, int64_t part_num, uint64_t ofs,
-		 std::optional<std::string_view> tag, bool exclusive,
-		 std::uint64_t tid, lr::AioCompletion* c);
+		 bool exclusive, std::uint64_t tid, lr::AioCompletion* c);
 
   /// Force refresh of metadata, yielding/blocking style
   int read_meta(const DoutPrefixProvider *dpp, std::uint64_t tid, optional_yield y);

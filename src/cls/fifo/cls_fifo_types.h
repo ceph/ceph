@@ -15,12 +15,15 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <map>
 #include <optional>
 #include <ostream>
 #include <string>
 #include <vector>
+
+#include <boost/container/flat_set.hpp>
 
 #undef FMT_HEADER_ONLY
 #define FMT_HEADER_ONLY 1
@@ -63,7 +66,7 @@ struct objv {
 	    ver != rhs.ver);
   }
   bool same_or_later(const objv& rhs) const {
-    return (instance == rhs.instance ||
+    return (instance == rhs.instance &&
 	    ver >= rhs.ver);
   }
 
@@ -118,19 +121,36 @@ inline std::ostream& operator <<(std::ostream& m, const data_params& d) {
 
 struct journal_entry {
   enum class Op {
-    unknown  = 0,
+    unknown  = -1,
     create   = 1,
     set_head = 2,
     remove   = 3,
   } op{Op::unknown};
 
-  std::int64_t part_num{0};
-  std::string part_tag;
+  std::int64_t part_num{-1};
+
+  bool valid() const {
+    switch (op) {
+    case fifo::journal_entry::Op::create: [[fallthrough]];
+    case fifo::journal_entry::Op::set_head: [[fallthrough]];
+    case fifo::journal_entry::Op::remove:
+      return part_num >= 0;
+
+    default:
+      return false;
+    }
+  }
+
+  journal_entry() = default;
+  journal_entry(Op op, std::int64_t part_num)
+    : op(op), part_num(part_num) {}
 
   void encode(ceph::buffer::list& bl) const {
+    ceph_assert(valid());
     ENCODE_START(1, 1, bl);
     encode((int)op, bl);
     encode(part_num, bl);
+    std::string part_tag;
     encode(part_tag, bl);
     ENCODE_FINISH(bl);
   }
@@ -140,15 +160,24 @@ struct journal_entry {
     decode(i, bl);
     op = static_cast<Op>(i);
     decode(part_num, bl);
+    std::string part_tag;
     decode(part_tag, bl);
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter* f) const;
 
-  bool operator ==(const journal_entry& e) {
-    return (op == e.op &&
-	    part_num == e.part_num &&
-	    part_tag == e.part_tag);
+  friend bool operator ==(const journal_entry& lhs, const journal_entry& rhs) {
+    return (lhs.op == rhs.op &&
+	    lhs.part_num == rhs.part_num);
+  }
+  friend bool operator <(const journal_entry& lhs, const journal_entry& rhs) {
+    if (lhs.op < rhs.op) {
+      return true;
+    } else if (lhs.op == rhs.op) {
+      return lhs.part_num < rhs.part_num;
+    } else {
+      return false;
+    }
   }
 };
 WRITE_CLASS_ENCODER(journal_entry)
@@ -167,23 +196,22 @@ inline std::ostream& operator <<(std::ostream& m, const journal_entry::Op& o) {
 }
 inline std::ostream& operator <<(std::ostream& m, const journal_entry& j) {
   return m << "op: " << j.op << ", "
-	   << "part_num: " << j.part_num <<  ", "
-	   << "part_tag: " << j.part_tag;
+	   << "part_num: " << j.part_num;
 }
 
 // This is actually a useful builder, since otherwise we end up with
 // four uint64_ts in a row and only care about a subset at a time.
 class update {
-  std::optional<std::uint64_t> tail_part_num_;
-  std::optional<std::uint64_t> head_part_num_;
-  std::optional<std::uint64_t> min_push_part_num_;
-  std::optional<std::uint64_t> max_push_part_num_;
+  std::optional<std::int64_t> tail_part_num_;
+  std::optional<std::int64_t> head_part_num_;
+  std::optional<std::int64_t> min_push_part_num_;
+  std::optional<std::int64_t> max_push_part_num_;
   std::vector<fifo::journal_entry> journal_entries_add_;
   std::vector<fifo::journal_entry> journal_entries_rm_;
 
 public:
 
-  update&& tail_part_num(std::optional<std::uint64_t> num) noexcept {
+  update&& tail_part_num(std::optional<std::int64_t> num) noexcept {
     tail_part_num_ = num;
     return std::move(*this);
   }
@@ -191,7 +219,7 @@ public:
     return tail_part_num_;
   }
 
-  update&& head_part_num(std::optional<std::uint64_t> num) noexcept {
+  update&& head_part_num(std::optional<std::int64_t> num) noexcept {
     head_part_num_ = num;
     return std::move(*this);
   }
@@ -199,7 +227,7 @@ public:
     return head_part_num_;
   }
 
-  update&& min_push_part_num(std::optional<std::uint64_t> num)
+  update&& min_push_part_num(std::optional<std::int64_t> num)
     noexcept {
     min_push_part_num_ = num;
     return std::move(*this);
@@ -208,7 +236,7 @@ public:
     return min_push_part_num_;
   }
 
-  update&& max_push_part_num(std::optional<std::uint64_t> num) noexcept {
+  update&& max_push_part_num(std::optional<std::int64_t> num) noexcept {
     max_push_part_num_ = num;
     return std::move(*this);
   }
@@ -309,11 +337,38 @@ struct info {
   std::int64_t min_push_part_num{0};
   std::int64_t max_push_part_num{-1};
 
-  std::string head_tag;
-  std::map<int64_t, std::string> tags;
+  boost::container::flat_set<journal_entry> journal;
+  static_assert(journal_entry::Op::create < journal_entry::Op::set_head);
 
-  std::multimap<int64_t, journal_entry> journal;
+  // So we can get rid of the multimap without breaking compatibility
+  void encode_journal(bufferlist& bl) const {
+    using ceph::encode;
+    assert(journal.size() <= std::numeric_limits<uint32_t>::max());
+    uint32_t n = static_cast<uint32_t>(journal.size());
+    encode(n, bl);
+    for (const auto& entry : journal) {
+      encode(entry.part_num, bl);
+      encode(entry, bl);
+    }
+  }
 
+  void decode_journal( bufferlist::const_iterator& p) {
+    using ceph::decode;
+    uint32_t n;
+    decode(n, p);
+    journal.clear();
+    while (n--) {
+      decltype(journal_entry::part_num) dummy;
+      decode(dummy, p);
+      journal_entry e;
+      decode(e, p);
+      if (!e.valid()) {
+	throw ceph::buffer::malformed_input();
+      } else {
+	journal.insert(std::move(e));
+      }
+    }
+  }
   bool need_new_head() const {
     return (head_part_num < min_push_part_num);
   }
@@ -332,9 +387,11 @@ struct info {
     encode(head_part_num, bl);
     encode(min_push_part_num, bl);
     encode(max_push_part_num, bl);
+    std::string head_tag;
+    std::map<int64_t, std::string> tags;
     encode(tags, bl);
     encode(head_tag, bl);
-    encode(journal, bl);
+    encode_journal(bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
@@ -347,9 +404,11 @@ struct info {
     decode(head_part_num, bl);
     decode(min_push_part_num, bl);
     decode(max_push_part_num, bl);
+    std::string head_tag;
+    std::map<int64_t, std::string> tags;
     decode(tags, bl);
     decode(head_tag, bl);
-    decode(journal, bl);
+    decode_journal(bl);
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter* f) const;
@@ -359,61 +418,47 @@ struct info {
     return fmt::format("{}.{}", oid_prefix, part_num);
   }
 
-  journal_entry next_journal_entry(std::string tag) const {
-    journal_entry entry;
-    entry.op = journal_entry::Op::create;
-    entry.part_num = max_push_part_num + 1;
-    entry.part_tag = std::move(tag);
-    return entry;
-  }
-
-  std::optional<std::string>
-  apply_update(const update& update) {
-    if (update.tail_part_num()) {
+  bool apply_update(const update& update) {
+    bool changed = false;
+    if (update.tail_part_num() && (tail_part_num != *update.tail_part_num())) {
       tail_part_num = *update.tail_part_num();
+      changed = true;
     }
 
-    if (update.min_push_part_num()) {
+    if (update.min_push_part_num() &&
+	(min_push_part_num !=  *update.min_push_part_num())) {
       min_push_part_num = *update.min_push_part_num();
+      changed = true;
     }
 
-    if (update.max_push_part_num()) {
+    if (update.max_push_part_num() &&
+	(max_push_part_num != *update.max_push_part_num())) {
       max_push_part_num = *update.max_push_part_num();
+      changed = true;
     }
 
     for (const auto& entry : update.journal_entries_add()) {
-      auto iter = journal.find(entry.part_num);
-      if (iter != journal.end() &&
-	  iter->second.op == entry.op) {
-	/* don't allow multiple concurrent (same) operations on the same part,
-	   racing clients should use objv to avoid races anyway */
-	return fmt::format("multiple concurrent operations on same part are not "
-			   "allowed, part num={}", entry.part_num);
+      auto [iter, inserted] = journal.insert(entry);
+      if (inserted) {
+	changed = true;
       }
-
-      if (entry.op == journal_entry::Op::create) {
-	tags[entry.part_num] = entry.part_tag;
-      }
-
-      journal.emplace(entry.part_num, entry);
     }
 
     for (const auto& entry : update.journal_entries_rm()) {
-      journal.erase(entry.part_num);
-    }
-
-    if (update.head_part_num()) {
-      tags.erase(head_part_num);
-      head_part_num = *update.head_part_num();
-      auto iter = tags.find(head_part_num);
-      if (iter != tags.end()) {
-	head_tag = iter->second;
-      } else {
-	head_tag.erase();
+      auto count = journal.erase(entry);
+      if (count > 0) {
+	changed = true;
       }
     }
 
-    return std::nullopt;
+    if (update.head_part_num() && (head_part_num != *update.head_part_num())) {
+      head_part_num = *update.head_part_num();
+      changed = true;
+    }
+    if (changed) {
+      ++version.ver;
+    }
+    return changed;
   }
 };
 WRITE_CLASS_ENCODER(info)
@@ -426,8 +471,6 @@ inline std::ostream& operator <<(std::ostream& m, const info& i) {
 	   << "head_part_num: " << i.head_part_num << ", "
 	   << "min_push_part_num: " << i.min_push_part_num << ", "
 	   << "max_push_part_num: " << i.max_push_part_num << ", "
-	   << "head_tag: " << i.head_tag << ", "
-	   << "tags: {" << i.tags << "}, "
 	   << "journal: {" << i.journal;
 }
 
@@ -468,8 +511,6 @@ inline std::ostream& operator <<(std::ostream& m,
 }
 
 struct part_header {
-  std::string tag;
-
   data_params params;
 
   std::uint64_t magic{0};
@@ -483,6 +524,7 @@ struct part_header {
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
+    std::string tag;
     encode(tag, bl);
     encode(params, bl);
     encode(magic, bl);
@@ -496,6 +538,7 @@ struct part_header {
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
+    std::string tag;
     decode(tag, bl);
     decode(params, bl);
     decode(magic, bl);
@@ -511,8 +554,7 @@ struct part_header {
 WRITE_CLASS_ENCODER(part_header)
 inline std::ostream& operator <<(std::ostream& m, const part_header& p) {
   using ceph::operator <<;
-  return m << "tag: " << p.tag << ", "
-	   << "params: {" << p.params << "}, "
+  return m << "params: {" << p.params << "}, "
 	   << "magic: " << p.magic << ", "
 	   << "min_ofs: " << p.min_ofs << ", "
 	   << "last_ofs: " << p.last_ofs << ", "
