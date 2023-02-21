@@ -118,11 +118,11 @@ struct ScrubMachineListener {
   /// services (thus can be called from FSM reactions)
   virtual void clear_pgscrub_state() = 0;
 
-  /*
-   * Send an 'InternalSchedScrub' FSM event either immediately, or - if
-   * 'm_need_sleep' is asserted - after a configuration-dependent timeout.
-   */
-  virtual void add_delayed_scheduling() = 0;
+  /// Get time to sleep before next scrub
+  virtual std::chrono::milliseconds get_scrub_sleep_time() const = 0;
+
+  /// Queues InternalSchedScrub for later
+  virtual void queue_for_scrub_resched(Scrub::scrub_prio_t prio) = 0;
 
   /**
    * Ask all replicas for their scrub maps for the current chunk.

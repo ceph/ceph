@@ -537,11 +537,9 @@ class PgScrubber : public ScrubPgIF,
   /// services (thus can be called from FSM reactions)
   void clear_pgscrub_state() final;
 
-  /*
-   * Send an 'InternalSchedScrub' FSM event either immediately, or - if
-   * 'm_need_sleep' is asserted - after a configuration-dependent timeout.
-   */
-  void add_delayed_scheduling() final;
+
+  std::chrono::milliseconds get_scrub_sleep_time() const final;
+  void queue_for_scrub_resched(Scrub::scrub_prio_t prio) final;
 
   void get_replicas_maps(bool replica_can_preempt) final;
 
@@ -732,9 +730,6 @@ class PgScrubber : public ScrubPgIF,
   [[nodiscard]] bool check_interval(epoch_t epoch_to_verify);
 
   epoch_t m_last_aborted{};  // last time we've noticed a request to abort
-
-  utime_t m_sleep_started_at;
-
 
   // 'optional', as 'ReplicaReservations' & 'LocalReservation' are
   // 'RAII-designed' to guarantee un-reserving when deleted.

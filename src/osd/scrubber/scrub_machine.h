@@ -82,6 +82,8 @@ MEV(InternalSchedScrub)
 
 MEV(RangeBlockedAlarm)
 
+MEV(SleepComplete)
+
 MEV(SelectedChunkFree)
 
 MEV(ChunkIsBusy)
@@ -382,11 +384,25 @@ struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing>, NamedSimply {
   sc::result react(const RangeBlockedAlarm &);
 };
 
+/**
+ * PendingTimer
+ *
+ * Represents period between chunks.  Waits get_scrub_sleep_time() (if non-zero)
+ * by scheduling a SleepComplete event and then queues an InternalSchedScrub
+ * to start the next chunk.
+ */
 struct PendingTimer : sc::state<PendingTimer, ActiveScrubbing>, NamedSimply {
 
   explicit PendingTimer(my_context ctx);
 
-  using reactions = mpl::list<sc::transition<InternalSchedScrub, NewChunk>>;
+  using reactions = mpl::list<
+    sc::transition<InternalSchedScrub, NewChunk>,
+    sc::custom_reaction<SleepComplete>>;
+
+  ceph::coarse_real_clock::time_point entered_at =
+    ceph::coarse_real_clock::now();
+  ScrubMachine::timer_event_token_t m_sleep_timer;
+  sc::result react(const SleepComplete&);
 };
 
 struct NewChunk : sc::state<NewChunk, ActiveScrubbing>, NamedSimply {

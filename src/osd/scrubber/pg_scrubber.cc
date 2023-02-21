@@ -877,62 +877,6 @@ bool PgScrubber::range_intersects_scrub(const hobject_t& start,
   return (start < m_max_end && end >= m_start);
 }
 
-/**
- *  if we are required to sleep:
- *	arrange a callback sometimes later.
- *	be sure to be able to identify a stale callback.
- *  Otherwise: perform a requeue (i.e. - rescheduling thru the OSD queue)
- *    anyway.
- */
-void PgScrubber::add_delayed_scheduling()
-{
-  m_end = m_start;  // not blocking any range now
-
-  milliseconds sleep_time{0ms};
-    sleep_time = m_osds->get_scrub_services().scrub_sleep_time(
-      m_flags.required);
-  dout(15) << __func__ << " sleep: " << sleep_time.count() << "ms." << dendl;
-
-  if (sleep_time.count()) {
-    // schedule a transition for some 'sleep_time' ms in the future
-
-    m_sleep_started_at = ceph_clock_now();
-
-    // the following log line is used by osd-scrub-test.sh
-    dout(20) << __func__ << " scrub state is PendingTimer, sleeping" << dendl;
-
-    // the 'delayer' for crimson is different. Will be factored out.
-
-    spg_t pgid = m_pg->get_pgid();
-    auto callbk = new LambdaContext([osds = m_osds, pgid, scrbr = this](
-				      [[maybe_unused]] int r) mutable {
-      PGRef pg = osds->osd->lookup_lock_pg(pgid);
-      if (!pg) {
-	lgeneric_subdout(g_ceph_context, osd, 10)
-	  << "scrub_requeue_callback: Could not find "
-	  << "PG " << pgid << " can't complete scrub requeue after sleep"
-	  << dendl;
-	return;
-      }
-      lgeneric_dout(scrbr->get_pg_cct(), 7)
-	<< "scrub_requeue_callback: slept for "
-	<< ceph_clock_now() - scrbr->m_sleep_started_at << ", re-queuing scrub"
-	<< dendl;
-
-      scrbr->m_sleep_started_at = utime_t{};
-      osds->queue_for_scrub_resched(&(*pg), Scrub::scrub_prio_t::low_priority);
-      pg->unlock();
-    });
-
-    std::lock_guard l(m_osds->sleep_lock);
-    m_osds->sleep_timer.add_event_after(sleep_time.count() / 1000.0f, callbk);
-
-  } else {
-    // just a requeue
-    m_osds->queue_for_scrub_resched(m_pg, Scrub::scrub_prio_t::high_priority);
-  }
-}
-
 eversion_t PgScrubber::search_log_for_updates() const
 {
   auto& projected = m_pg->projected_log.log;
@@ -2410,6 +2354,17 @@ void PgScrubber::replica_handling_done()
   reset_internal_state();
 }
 
+std::chrono::milliseconds PgScrubber::get_scrub_sleep_time() const
+{
+  return m_osds->get_scrub_services().scrub_sleep_time(
+    m_flags.required);
+}
+
+void PgScrubber::queue_for_scrub_resched(Scrub::scrub_prio_t prio)
+{
+  m_osds->queue_for_scrub_resched(m_pg, prio);
+}
+
 /*
  * note: performs run_callbacks()
  * note: reservations-related variables are not reset here
@@ -2435,7 +2390,6 @@ void PgScrubber::reset_internal_state()
   m_primary_scrubmap_pos.reset();
   replica_scrubmap = ScrubMap{};
   replica_scrubmap_pos.reset();
-  m_sleep_started_at = utime_t{};
 
   m_active = false;
   clear_queued_or_active();
