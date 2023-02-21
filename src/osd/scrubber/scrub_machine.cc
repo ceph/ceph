@@ -288,7 +288,31 @@ PendingTimer::PendingTimer(my_context ctx)
   dout(10) << "-- state -->> Act/PendingTimer" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
-  scrbr->add_delayed_scheduling();
+  auto sleep_time = scrbr->get_scrub_sleep_time();
+  if (sleep_time.count()) {
+    // the following log line is used by osd-scrub-test.sh
+    dout(20) << __func__ << " scrub state is PendingTimer, sleeping" << dendl;
+
+    dout(20) << "PgScrubber: " << scrbr->get_spgid()
+	     << " sleeping for " << sleep_time << dendl;
+    m_sleep_timer = machine.schedule_timer_event_after<SleepComplete>(
+      sleep_time);
+  } else {
+    scrbr->queue_for_scrub_resched(Scrub::scrub_prio_t::high_priority);
+  }
+}
+
+sc::result PendingTimer::react(const SleepComplete&)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "PendingTimer::react(const SleepComplete&)" << dendl;
+
+  auto slept_for = ceph::coarse_real_clock::now() - entered_at;
+  dout(20) << "PgScrubber: " << scrbr->get_spgid()
+	   << " slept for " << slept_for << dendl;
+
+  scrbr->queue_for_scrub_resched(Scrub::scrub_prio_t::low_priority);
+  return discard_event();
 }
 
 // ----------------------- NewChunk -----------------------------------
