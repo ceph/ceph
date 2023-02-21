@@ -1007,6 +1007,24 @@ class HostCache():
             )
         ]
 
+    def get_conf_keyring_available_hosts(self) -> List[HostSpec]:
+        """
+        Returns all hosts without _no_conf_keyring label that
+        have had a refresh
+
+        Any host without that label is considered fair game for
+        a client keyring spec to match. We want to still wait
+        for refresh here so that we know what keyrings we've
+        already deployed here
+        """
+        return [
+            h for h in self.mgr.inventory.all_specs()
+            if (
+                self.host_had_daemon_refresh(h.hostname)
+                and '_no_conf_keyring' not in h.labels
+            )
+        ]
+
     def get_non_draining_hosts(self) -> List[HostSpec]:
         """
         Returns all hosts that do not have _no_schedule label.
@@ -1026,6 +1044,15 @@ class HostCache():
         """
         return [
             h for h in self.mgr.inventory.all_specs() if '_no_schedule' in h.labels
+        ]
+
+    def get_conf_keyring_draining_hosts(self) -> List[HostSpec]:
+        """
+        Returns all hosts that have _no_conf_keyring label and therefore should have
+        no config files or client keyring placed on them, but are potentially still reachable
+        """
+        return [
+            h for h in self.mgr.inventory.all_specs() if '_no_conf_keyring' in h.labels
         ]
 
     def get_unreachable_hosts(self) -> List[HostSpec]:
