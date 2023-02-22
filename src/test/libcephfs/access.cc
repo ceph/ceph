@@ -17,6 +17,7 @@
 #include "include/buffer.h"
 #include "include/stringify.h"
 #include "include/cephfs/libcephfs.h"
+#include "include/fs_types.h"
 #include "include/rados/librados.h"
 #include <errno.h>
 #include <fcntl.h>
