@@ -806,10 +806,7 @@ public:
     op_context_t<node_key_t> c,
     CachedExtentRef e) {
     LOG_PREFIX(FixedKVBtree::rewrite_extent);
-    assert(e->get_type() == extent_types_t::LADDR_INTERNAL ||
-           e->get_type() == extent_types_t::LADDR_LEAF ||
-           e->get_type() == extent_types_t::BACKREF_INTERNAL ||
-           e->get_type() == extent_types_t::BACKREF_LEAF);
+    assert(is_lba_backref_node(e->get_type()));
     
     auto do_rewrite = [&](auto &fixed_kv_extent) {
       auto n_fixed_kv_extent = c.cache.template alloc_new_extent<
@@ -836,9 +833,13 @@ public:
        * Upon commit, these now block relative addresses will be interpretted
        * against the real final address.
        */
-      n_fixed_kv_extent->resolve_relative_addrs(
-        make_record_relative_paddr(0).block_relative_to(
-          n_fixed_kv_extent->get_paddr()));
+      if (!n_fixed_kv_extent->get_paddr().is_absolute()) {
+	// backend_type_t::SEGMENTED
+	assert(n_fixed_kv_extent->get_paddr().is_record_relative());
+	n_fixed_kv_extent->resolve_relative_addrs(
+	  make_record_relative_paddr(0).block_relative_to(
+	    n_fixed_kv_extent->get_paddr()));
+      } // else: backend_type_t::RANDOM_BLOCK
       
       SUBTRACET(
         seastore_fixedkv_tree,
