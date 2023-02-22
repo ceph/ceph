@@ -3098,18 +3098,18 @@ void BlueStore::ExtentMap::reblob_extents(uint32_t blob_start, uint32_t blob_end
   }
   auto prev = extent_map.end();
   for (auto ep = seek_lextent(blob_start); ep != extent_map.end();) {
-    auto& e = *ep;
-    if (e.logical_offset > blob_end) break;
-    if (e.blob == from_blob) {
-      e.blob = to_blob;
+    Extent* e = &(*ep);
+    if (e->logical_offset > blob_end) break;
+    if (e->blob == from_blob) {
+      e->blob = to_blob;
     }
     if (prev != extent_map.end()) {
-      if (prev->blob == e.blob &&
-	  prev->blob_offset + prev->length == e.blob_offset &&
-	  prev->logical_offset + prev->length == e.logical_offset) {
-	prev->length += e.length;
-	e.blob = nullptr;	
+      if (prev->blob == e->blob &&
+	  prev->blob_offset + prev->length == e->blob_offset &&
+	  prev->logical_offset + prev->length == e->logical_offset) {
+	prev->length += e->length;
 	ep = extent_map.erase(ep);
+	delete e;
 	// prev still the same
 	continue;
       }
