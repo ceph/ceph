@@ -24,6 +24,7 @@ import {
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helper';
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 
 @Component({
   selector: 'cd-dashboard',
@@ -53,8 +54,6 @@ export class DashboardComponent extends PrometheusListHelper implements OnInit, 
   borderClass: string;
   alertType: string;
   alerts: AlertmanagerAlert[];
-  crticialActiveAlerts: number;
-  warningActiveAlerts: number;
   healthData: any;
   categoryPgAmount: Record<string, number> = {};
   totalPgs = 0;
@@ -86,7 +85,8 @@ export class DashboardComponent extends PrometheusListHelper implements OnInit, 
     private featureToggles: FeatureTogglesService,
     private healthService: HealthService,
     public prometheusService: PrometheusService,
-    private refreshIntervalService: RefreshIntervalService
+    private refreshIntervalService: RefreshIntervalService,
+    public prometheusAlertService: PrometheusAlertService
   ) {
     super(prometheusService);
     this.permissions = this.authStorageService.getPermissions();
@@ -97,7 +97,6 @@ export class DashboardComponent extends PrometheusListHelper implements OnInit, 
     super.ngOnInit();
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.getHealth();
-      this.triggerPrometheusAlerts();
       this.getCapacityCardData();
     });
     this.getPrometheusData(this.lastHourDateObject);
@@ -115,6 +114,7 @@ export class DashboardComponent extends PrometheusListHelper implements OnInit, 
   }
 
   toggleAlertsWindow(type: string, isToggleButton: boolean = false) {
+    this.triggerPrometheusAlerts();
     if (isToggleButton) {
       this.showAlerts = !this.showAlerts;
       this.flexHeight = !this.flexHeight;
@@ -163,14 +163,6 @@ export class DashboardComponent extends PrometheusListHelper implements OnInit, 
     this.prometheusService.ifAlertmanagerConfigured(() => {
       this.prometheusService.getAlerts().subscribe((alerts) => {
         this.alerts = alerts;
-        this.crticialActiveAlerts = alerts.filter(
-          (alert: AlertmanagerAlert) =>
-            alert.status.state === 'active' && alert.labels.severity === 'critical'
-        ).length;
-        this.warningActiveAlerts = alerts.filter(
-          (alert: AlertmanagerAlert) =>
-            alert.status.state === 'active' && alert.labels.severity === 'warning'
-        ).length;
       });
     });
   }
