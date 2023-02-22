@@ -1700,7 +1700,9 @@ class CallVerbosity(Enum):
         return _verbosity_level_to_log_level[self]  # type: ignore
 
 
-if sys.version_info < (3, 8):
+# disable coverage for the next block. this is copy-n-paste
+# from other code for compatibilty on older python versions
+if sys.version_info < (3, 8):  # pragma: no cover
     import itertools
     import threading
     import warnings
@@ -1805,7 +1807,9 @@ if sys.version_info < (3, 8):
 
 try:
     from asyncio import run as async_run   # type: ignore[attr-defined]
-except ImportError:
+except ImportError:  # pragma: no cover
+    # disable coverage for this block. it should be a copy-n-paste from
+    # from newer libs for compatibilty on older python versions
     def async_run(coro):  # type: ignore
         loop = asyncio.new_event_loop()
         try:
