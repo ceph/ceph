@@ -26,7 +26,7 @@ from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
 from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
-    CephadmNoImage, CEPH_TYPES, ContainerInspectInfo
+    CephadmNoImage, CEPH_TYPES, ContainerInspectInfo, SpecialHostLabels
 from mgr_module import MonCommandFailed
 from mgr_util import format_bytes
 
@@ -266,7 +266,7 @@ class CephadmServe:
 
             if (
                     self.mgr.cache.host_needs_autotune_memory(host)
-                    and not self.mgr.inventory.has_label(host, '_no_autotune_memory')
+                    and not self.mgr.inventory.has_label(host, SpecialHostLabels.NO_MEMORY_AUTOTUNE)
             ):
                 self.log.debug(f"autotuning memory for {host}")
                 self._autotune_host_memory(host)

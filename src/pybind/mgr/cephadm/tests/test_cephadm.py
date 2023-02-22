@@ -10,6 +10,7 @@ from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
 from cephadm.inventory import HostCacheStatus, ClientKeyringSpec
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
+from cephadm.utils import SpecialHostLabels
 
 try:
     from typing import List
@@ -2003,8 +2004,8 @@ osd_k2 = osd_v2
 
     def test_client_keyrings_special_host_labels(self, cephadm_module):
         cephadm_module.inventory.add_host(HostSpec('host1', labels=['keyring1']))
-        cephadm_module.inventory.add_host(HostSpec('host2', labels=['keyring1', '_no_schedule']))
-        cephadm_module.inventory.add_host(HostSpec('host3', labels=['keyring1', '_no_schedule', '_no_conf_keyring']))
+        cephadm_module.inventory.add_host(HostSpec('host2', labels=['keyring1', SpecialHostLabels.DRAIN_DAEMONS]))
+        cephadm_module.inventory.add_host(HostSpec('host3', labels=['keyring1', SpecialHostLabels.DRAIN_DAEMONS, SpecialHostLabels.DRAIN_CONF_KEYRING]))
         # hosts need to be marked as having had refresh to be available for placement
         # so "refresh" with empty daemon list
         cephadm_module.cache.update_host_daemons('host1', {})
@@ -2231,12 +2232,12 @@ Traceback (most recent call last):
     def test_host_rm_last_admin(self, cephadm_module: CephadmOrchestrator):
         with pytest.raises(OrchestratorError):
             with with_host(cephadm_module, 'test', refresh_hosts=False, rm_with_force=False):
-                cephadm_module.inventory.add_label('test', '_admin')
+                cephadm_module.inventory.add_label('test', SpecialHostLabels.ADMIN)
                 pass
             assert False
         with with_host(cephadm_module, 'test1', refresh_hosts=False, rm_with_force=True):
             with with_host(cephadm_module, 'test2', refresh_hosts=False, rm_with_force=False):
-                cephadm_module.inventory.add_label('test2', '_admin')
+                cephadm_module.inventory.add_label('test2', SpecialHostLabels.ADMIN)
 
     @pytest.mark.parametrize("facts, settings, expected_value",
                              [

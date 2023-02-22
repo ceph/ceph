@@ -17,7 +17,7 @@ from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
-from .utils import resolve_ip
+from .utils import resolve_ip, SpecialHostLabels
 from .migrations import queue_migrate_nfs_spec, queue_migrate_rgw_spec
 
 if TYPE_CHECKING:
@@ -1003,56 +1003,60 @@ class HostCache():
             h for h in self.mgr.inventory.all_specs()
             if (
                 self.host_had_daemon_refresh(h.hostname)
-                and '_no_schedule' not in h.labels
+                and SpecialHostLabels.DRAIN_DAEMONS not in h.labels
             )
         ]
 
     def get_conf_keyring_available_hosts(self) -> List[HostSpec]:
         """
-        Returns all hosts without _no_conf_keyring label that
-        have had a refresh
+        Returns all hosts without the drain conf and keyrings
+        label (SpecialHostLabels.DRAIN_CONF_KEYRING) that have
+        had a refresh. That is equivalent to all hosts we
+        consider eligible for deployment of conf and keyring files
 
         Any host without that label is considered fair game for
-        a client keyring spec to match. We want to still wait
-        for refresh here so that we know what keyrings we've
+        a client keyring spec to match. However, we want to still
+        wait for refresh here so that we know what keyrings we've
         already deployed here
         """
         return [
             h for h in self.mgr.inventory.all_specs()
             if (
                 self.host_had_daemon_refresh(h.hostname)
-                and '_no_conf_keyring' not in h.labels
+                and SpecialHostLabels.DRAIN_CONF_KEYRING not in h.labels
             )
         ]
 
     def get_non_draining_hosts(self) -> List[HostSpec]:
         """
-        Returns all hosts that do not have _no_schedule label.
+        Returns all hosts that do not have drain daemon label
+        (SpecialHostLabels.DRAIN_DAEMONS).
 
         Useful for the agent who needs this specific list rather than the
         schedulable_hosts since the agent needs to be deployed on hosts with
         no daemon refresh
         """
         return [
-            h for h in self.mgr.inventory.all_specs() if '_no_schedule' not in h.labels
+            h for h in self.mgr.inventory.all_specs() if SpecialHostLabels.DRAIN_DAEMONS not in h.labels
         ]
 
     def get_draining_hosts(self) -> List[HostSpec]:
         """
-        Returns all hosts that have _no_schedule label and therefore should have
-        no daemons placed on them, but are potentially still reachable
+        Returns all hosts that have the drain daemons label (SpecialHostLabels.DRAIN_DAEMONS)
+        and therefore should have no daemons placed on them, but are potentially still reachable
         """
         return [
-            h for h in self.mgr.inventory.all_specs() if '_no_schedule' in h.labels
+            h for h in self.mgr.inventory.all_specs() if SpecialHostLabels.DRAIN_DAEMONS in h.labels
         ]
 
     def get_conf_keyring_draining_hosts(self) -> List[HostSpec]:
         """
-        Returns all hosts that have _no_conf_keyring label and therefore should have
-        no config files or client keyring placed on them, but are potentially still reachable
+        Returns all hosts that have drain conf and keyrings label (SpecialHostLabels.DRAIN_CONF_KEYRING)
+        and therefore should have no config files or client keyring placed on them, but are
+        potentially still reachable
         """
         return [
-            h for h in self.mgr.inventory.all_specs() if '_no_conf_keyring' in h.labels
+            h for h in self.mgr.inventory.all_specs() if SpecialHostLabels.DRAIN_CONF_KEYRING in h.labels
         ]
 
     def get_unreachable_hosts(self) -> List[HostSpec]:
