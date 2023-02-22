@@ -9117,3 +9117,48 @@ class TestPerModuleFinsherThread(TestVolumesHelper):
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
+
+class TestEmptyStringForCreates(CephFSTestCase):
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 1
+
+    def setUp(self):
+        super().setUp()
+        result = json.loads(self.get_ceph_cmd_stdout("fs", "volume", "ls"))
+        self.assertTrue(len(result) > 0)
+        self.volname = result[0]['name']
+
+    def tearDown(self):
+        # clean up
+        super().tearDown()
+
+    def test_empty_name_string_for_subvolumegroup_name(self):
+        """
+        To test that an empty string is unacceptable for a subvolumegroup name
+        """
+        with self.assertRaises(CommandFailedError):
+            self.run_ceph_cmd("fs", "subvolumegroup", "create", self.volname, "")
+
+        with self.assertRaises(CommandFailedError):
+            self.run_ceph_cmd("fs", "subvolumegroup", "create", self.volname, "''")
+
+    def test_empty_name_string_for_subvolume_name(self):
+        """
+        To test that an empty string is unacceptable for a subvolume name
+        """
+        with self.assertRaises(CommandFailedError):
+            self.run_ceph_cmd("fs", "subvolume", "create", "")
+
+        with self.assertRaises(CommandFailedError):
+            self.run_ceph_cmd("fs", "subvolume", "create", "''")
+
+    def test_empty_name_string_for_subvolumegroup_name_argument(self):
+        """
+        To test that an empty string is unacceptable for a subvolumegroup name
+        argument when creating a subvolume
+        """
+        with self.assertRaises(CommandFailedError):
+            self.run_ceph_cmd("fs", "subvolume", "create", self.volname, "sv1", "--group_name")
+
+        with self.assertRaises(CommandFailedError):
+            self.run_ceph_cmd("fs", "subvolume", "create", self.volname, "sv1", "--group_name", "''")
