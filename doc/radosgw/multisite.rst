@@ -4,38 +4,59 @@
 Multi-Site
 ==========
 
-.. versionadded:: Jewel
+Single-zone Configurations and Multi-site Configurations
+========================================================
 
-A single-zone configuration typically consists of (1) one "zonegroup", which
-contains one zone and (2) one or more `ceph-radosgw` instances between which
-gateway client requests are load-balanced. In a typical single-zone
-configuration, multiple gateway instances make use of a single Ceph storage
-cluster.  
+Single-zone Configurations
+--------------------------
+
+A single-zone configuration typically consists of two things:
+
+#. One "zonegroup", which contains one zone. 
+#. One or more `ceph-radosgw` instances that have `ceph-radosgw` client
+   requests load-balanced between them. 
+
+In a typical single-zone configuration, there are multiple `ceph-radosgw`
+instances that make use of a single Ceph storage cluster.  
+
+Varieties of Multi-site Configuration
+-------------------------------------
+
+.. versionadded:: Jewel
 
 Beginning with the Kraken release, Ceph supports several multi-site
 configurations for the Ceph Object Gateway:
 
 - **Multi-zone:** A more advanced topology, the "multi-zone" configuration, is
-  possible. This multi-zone configuration consists of one zonegroup and
-  multiple zones, with each zone comprising one or more `ceph-radosgw`
-  instances. Each zone is backed by its own Ceph Storage Cluster. The presence
-  of multiple zones in a given zonegroup provides disaster recovery for that
-  zonegroup in the event that one of the zones experiences a significant
-  failure. Beginning with Kraken, each zone is active and can receive write
-  operations. A multi-zone configuration with multiple active zones enhances
-  disaster recovery and can also be used as a foundation for content delivery
-  networks. 
+  possible. A multi-zone configuration consists of one zonegroup and
+  multiple zones, with each zone consisting of one or more `ceph-radosgw`
+  instances. **Each zone is backed by its own Ceph Storage Cluster.**
+  
+  The presence of multiple zones in a given zonegroup provides disaster
+  recovery for that zonegroup in the event that one of the zones experiences a
+  significant failure. Beginning with the Kraken release, each zone is active
+  and can receive write operations. A multi-zone configuration that contains
+  multiple active zones enhances disaster recovery and can also be used as a
+  foundation for content delivery networks. 
 
-- **Multi-zone-groups:** Formerly called 'regions'. Ceph Object Gateway
-  supports multiple zonegroups, with each zonegroup containing one or more
-  zones. Objects that are stored to zones in one zonegroup within the same
-  realm as another zonegroup share a global object namespace, which ensures
-  unique object IDs across zonegroups and zones.
+- **Multi-zonegroups:** Ceph Object Gateway supports multiple zonegroups (which
+  were formerly called "regions"). Each zonegroup contains one or more zones.
+  If two zones are in the same zonegroup, and if that zonegroup is in the same
+  realm as a second zonegroup, then the objects stored in the two zones share
+  a global object namespace. This global object namespace ensures unique
+  object IDs across zonegroups and zones.
 
-- **Multiple Realms:** Beginning with the Kraken Ceph release, the Ceph Object
-  Gateway supports something called "realms". Realms have a globally unique
-  namespace and can be a either a single-zonegroup or multiple-zonegroups.
-  Multiple realms provide support for multiple configurations and namespaces.
+- **Multiple Realms:** Beginning with the Kraken release, the Ceph Object
+  Gateway supports "realms", which are containers for zonegroups. Realms make
+  it possible to set policies that apply to multiple zonegroups. Realms have a
+  globally unique namespace and can contain either a single zonegroup or
+  multiple zonegroups. If you choose to make use of multiple realms, you can
+  define multiple namespaces and multiple configurations (this means that each
+  realm can have a configuration that is distinct from the configuration of
+  other realms).
+
+Diagram - Replication of Object Data Between Zones
+--------------------------------------------------
 
 The replication of object data between zones within a zonegroup looks
 something like this:
