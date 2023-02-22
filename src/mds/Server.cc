@@ -8135,6 +8135,11 @@ void Server::handle_client_unlink(const MDRequestRef& mdr)
     if (!straydn)
       return;
     dout(10) << " straydn is " << *straydn << dendl;
+  } else if (dnl->is_referent()) {
+    straydn = prepare_stray_dentry(mdr, dnl->get_ref_inode());
+    if (!straydn)
+      return;
+    dout(10) << " referent straydn is " << *straydn << dendl;
   } else if (mdr->straydn) {
     mdr->unpin(mdr->straydn);
     mdr->straydn = NULL;
@@ -8247,6 +8252,7 @@ void Server::_unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *strayd
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   CInode *in = dnl->get_inode();
+  CInode *ref_in = dnl->get_ref_inode();
 
 
   // ok, let's do it.
@@ -8263,8 +8269,12 @@ void Server::_unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *strayd
   }
 
   if (straydn) {
-    ceph_assert(dnl->is_primary());
-    straydn->push_projected_linkage(in);
+    ceph_assert(dnl->is_primary() || dnl->is_referent());
+    if (dnl->is_primary())
+      straydn->push_projected_linkage(in);
+    else {
+      straydn->push_projected_linkage(ref_in);
+    }
   }
 
   // the unlinked dentry
@@ -8296,11 +8306,33 @@ void Server::_unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *strayd
     // will manually pop projected inode
 
     // primary link.  add stray dentry.
-    mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
-    mdcache->predirty_journal_parents(mdr, &le->metablob, in, straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+    if (dnl->is_primary()) {
+      mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
+      mdcache->predirty_journal_parents(mdr, &le->metablob, in, straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
 
-    pi.inode->update_backtrace();
-    le->metablob.add_primary_dentry(straydn, in, true, true);
+      pi.inode->update_backtrace();
+      le->metablob.add_primary_dentry(straydn, in, true, true);
+    } else {
+      // referent remote link - to purge the referent inode created
+      auto pri = ref_in->project_inode(mdr);
+      {
+        std::string t;
+        dn->make_path_string(t, true);
+        pri.inode->stray_prior_path = std::move(t);
+      }
+      pri.inode->version = ref_in->pre_dirty();
+      // Purge enqueue requires inode to be primary and nlink to be 0
+      pri.inode->nlink--;
+      if (pri.inode->nlink == 0)
+        ref_in->state_set(CInode::STATE_ORPHAN);
+      mdcache->predirty_journal_parents(mdr, &le->metablob, ref_in, straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+      pri.inode->update_backtrace();
+      le->metablob.add_primary_dentry(straydn, ref_in, true, true);
+
+      mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_DIR, -1);
+      mdcache->predirty_journal_parents(mdr, &le->metablob, in, 0, PREDIRTY_PRIMARY);
+      mdcache->journal_dirty_inode(mdr.get(), &le->metablob, in);
+    }
   } else {
     // remote link.  update remote inode.
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_DIR, -1);
@@ -8345,7 +8377,10 @@ void Server::_unlink_local_finish(const MDRequestRef& mdr,
   if (straydn) {
     // if there is newly created snaprealm, need to split old snaprealm's
     // inodes_with_caps. So pop snaprealm before linkage changes.
-    strayin = dn->get_linkage()->get_inode();
+    if (dn->get_linkage()->is_primary())
+      strayin = dn->get_linkage()->get_inode();
+    else
+      strayin = dn->get_linkage()->get_ref_inode();
     hadrealm = strayin->snaprealm ? true : false;
     strayin->early_pop_projected_snaprealm();
   }
