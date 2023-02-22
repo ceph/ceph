@@ -355,10 +355,10 @@ existing data should be deleted in order to free up space.
 OSD_BACKFILLFULL
 ________________
 
-One or more OSDs has exceeded the `backfillfull` threshold, which will
-prevent data from being allowed to rebalance to this device.  This is
-an early warning that rebalancing may not be able to complete and that
-the cluster is approaching full.
+One or more OSDs has exceeded the `backfillfull` threshold or *would* exceed
+when the currently mapped backfills finish, which will prevent data from being
+allowed to rebalance to this device.  This is an early warning that rebalancing
+may not be able to complete and that the cluster is approaching full.
 
 Utilization by pool can be checked with:
 
