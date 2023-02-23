@@ -606,6 +606,51 @@ ScrubMachine::~ScrubMachine() = default;
 
 // -------- for replicas -----------------------------------------------------
 
+// ----------------------- ReservedReplica --------------------------------
+
+ReservedReplica::ReservedReplica(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "ReservedReplica")
+{
+  dout(10) << "-- state -->> ReservedReplica" << dendl;
+}
+
+ReservedReplica::~ReservedReplica()
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  scrbr->dec_scrubs_remote();
+  scrbr->advance_token();
+}
+
+// ----------------------- ReplicaIdle --------------------------------
+
+ReplicaIdle::ReplicaIdle(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "ReplicaIdle")
+{
+  dout(10) << "-- state -->> ReplicaIdle" << dendl;
+}
+
+ReplicaIdle::~ReplicaIdle()
+{
+}
+
+
+// ----------------------- ReplicaActiveOp --------------------------------
+
+ReplicaActiveOp::ReplicaActiveOp(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "ReplicaActiveOp")
+{
+  dout(10) << "-- state -->> ReplicaActiveOp" << dendl;
+}
+
+ReplicaActiveOp::~ReplicaActiveOp()
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  scrbr->replica_handling_done();
+}
+
 // ----------------------- ReplicaWaitUpdates --------------------------------
 
 ReplicaWaitUpdates::ReplicaWaitUpdates(my_context ctx)
@@ -635,15 +680,6 @@ sc::result ReplicaWaitUpdates::react(const ReplicaPushesUpd&)
   return discard_event();
 }
 
-/**
- * the event poster is handling the scrubber reset
- */
-sc::result ReplicaWaitUpdates::react(const FullReset&)
-{
-  dout(10) << "ReplicaWaitUpdates::react(const FullReset&)" << dendl;
-  return transit<NotActive>();
-}
-
 // ----------------------- ReplicaBuildingMap -----------------------------------
 
 ReplicaBuildingMap::ReplicaBuildingMap(my_context ctx)
@@ -668,25 +704,16 @@ sc::result ReplicaBuildingMap::react(const SchedReplica&)
 
     scrbr->send_preempted_replica();
     scrbr->replica_handling_done();
-    return transit<NotActive>();
+    return transit<ReplicaIdle>();
   }
 
   // start or check progress of build_replica_map_chunk()
   auto ret_init = scrbr->build_replica_map_chunk();
   if (ret_init != -EINPROGRESS) {
-    return transit<NotActive>();
+    return transit<ReplicaIdle>();
   }
 
   return discard_event();
-}
-
-/**
- * the event poster is handling the scrubber reset
- */
-sc::result ReplicaBuildingMap::react(const FullReset&)
-{
-  dout(10) << "ReplicaBuildingMap::react(const FullReset&)" << dendl;
-  return transit<NotActive>();
 }
 
 }  // namespace Scrub

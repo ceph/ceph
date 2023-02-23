@@ -190,33 +190,6 @@ class LocalReservation {
 };
 
 /**
- *  wraps the OSD resource we are using when reserved as a replica by a
- *  scrubbing primary.
- */
-class ReservedByRemotePrimary {
-  const PgScrubber* m_scrubber;	 ///< we will be using its gen_prefix()
-  PG* m_pg;
-  OSDService* m_osds;
-  bool m_reserved_by_remote_primary{false};
-  const epoch_t m_reserved_at;
-
- public:
-  ReservedByRemotePrimary(const PgScrubber* scrubber,
-			  PG* pg,
-			  OSDService* osds,
-			  epoch_t epoch);
-  ~ReservedByRemotePrimary();
-  [[nodiscard]] bool is_reserved() const
-  {
-    return m_reserved_by_remote_primary;
-  }
-
-  epoch_t get_reservation_epoch() const { return m_reserved_at; }
-
-  std::ostream& gen_prefix(std::ostream& out) const;
-};
-
-/**
  * Once all replicas' scrub maps are received, we go on to compare the maps.
  * That is - unless we we have not yet completed building our own scrub map.
  * MapsCollectionStatus combines the status of waiting for both the local map
@@ -585,6 +558,10 @@ class PgScrubber : public ScrubPgIF,
   /// Clears `m_queued_or_active` and restarts snaptrimming
   void clear_queued_or_active() final;
 
+  void dec_scrubs_remote() final;
+
+  void advance_token() final;
+
   void mark_local_map_ready() final;
 
   [[nodiscard]] bool are_all_maps_available() const final;
@@ -665,12 +642,6 @@ class PgScrubber : public ScrubPgIF,
  private:
   void reset_internal_state();
 
-  /**
-   *  the current scrubbing operation is done. We should mark that fact, so that
-   *  all events related to the previous operation can be discarded.
-   */
-  void reset_replica_state();
-
   bool is_token_current(Scrub::act_token_t received_token);
 
   void requeue_waiting() const { m_pg->requeue_ops(m_pg->waiting_for_scrub); }
@@ -744,10 +715,6 @@ class PgScrubber : public ScrubPgIF,
   // 'RAII-designed' to guarantee un-reserving when deleted.
   std::optional<Scrub::ReplicaReservations> m_reservations;
   std::optional<Scrub::LocalReservation> m_local_osd_resource;
-
-  /// the 'remote' resource we, as a replica, grant our Primary when it is
-  /// scrubbing
-  std::optional<Scrub::ReservedByRemotePrimary> m_remote_osd_resource;
 
   void cleanup_on_finish();  // scrub_clear_state() as called for a Primary when
 			     // Active->NotActive
