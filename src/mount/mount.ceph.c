@@ -164,7 +164,9 @@ static int remove_opt(struct ceph_mount_info *cmi, const char *key, char **value
 		memmove(key_start, value_end, len2);
 	} else {
                 /* last kv pair - swallow the comma */
-		--key_start;
+		if (*(key_start - 1) == ',') {
+			--key_start;
+		}
 		*key_start = '\0';
 	}
 
