@@ -730,6 +730,18 @@ seastar::future<> OSDSingletonState::send_incremental_map(
   }
 }
 
-
+seastar::future<> OSDSingletonState::send_incremental_map_to_osd(
+  int osd,
+  epoch_t first)
+{
+  if (osdmap->is_down(osd)) {
+    logger().info("{}: osd.{} is_down", __func__, osd);
+    return seastar::now();
+  } else {
+    auto conn = cluster_msgr.connect(
+      osdmap->get_cluster_addrs(osd).front(), CEPH_ENTITY_TYPE_OSD);
+    return send_incremental_map(*conn, first);
+  }
+}
 
 };
