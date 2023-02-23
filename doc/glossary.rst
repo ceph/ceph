@@ -14,6 +14,16 @@
                 system interface. Since Luminous (12.2), BlueStore has been
                 Ceph's default and recommended storage back end.
 
+        Bucket
+                In the context of :term:`RGW`, a bucket is a group of objects.
+                Buckets are grouped into zones, and zones are grouped into
+                zonegroups. In an filesystem-based analogy in which objects are
+                the counterpart of files, buckets are the counterpart of
+                directories. :ref:`Multisite sync
+                policies<radosgw-multisite-sync-policy>` can be set on buckets,
+                to provide fine-grained control of data movement from one zone
+                to another zone.
+                
 	Ceph
                 Ceph is a distributed network storage and file system with
                 distributed metadata management and POSIX semantics.
