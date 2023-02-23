@@ -188,7 +188,7 @@ int RGWObjExpStore::objexp_hint_trim(const DoutPrefixProvider *dpp,
   }
   auto& ref = obj.get_ref();
   int ret = cls_timeindex_trim_repeat(dpp, ref, oid, utime_t(start_time), utime_t(end_time),
-          from_marker, to_marker, null_yield);
+          from_marker, to_marker, y);
   if ((ret < 0 ) && (ret != -ENOENT)) {
     return ret;
   }
@@ -273,7 +273,7 @@ void RGWObjectExpirer::trim_chunk(const DoutPrefixProvider *dpp,
   real_time rt_to = to.to_real_time();
 
   int ret = exp_store.objexp_hint_trim(dpp, shard, rt_from, rt_to,
-                                       from_marker, to_marker, null_yield);
+                                       from_marker, to_marker, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR during trim: " << ret << dendl;
   }
@@ -327,7 +327,7 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
     garbage_chunk(dpp, entries, need_trim);
 
     if (need_trim) {
-      trim_chunk(dpp, shard, last_run, round_start, marker, out_marker, null_yield);
+      trim_chunk(dpp, shard, last_run, round_start, marker, out_marker, y);
     }
 
     utime_t now = ceph_clock_now();
@@ -358,7 +358,7 @@ bool RGWObjectExpirer::inspect_all_shards(const DoutPrefixProvider *dpp,
 
     ldpp_dout(dpp, 20) << "processing shard = " << shard << dendl;
 
-    if (! process_single_shard(dpp, shard, last_run, round_start, null_yield)) {
+    if (! process_single_shard(dpp, shard, last_run, round_start, y)) {
       all_done = false;
     }
   }

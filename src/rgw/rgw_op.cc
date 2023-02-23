@@ -1303,7 +1303,7 @@ void RGWPutBucketReplication::execute(optional_yield y) {
     return;
   }
 
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
     auto sync_policy = (s->bucket->get_info().sync_policy ? *s->bucket->get_info().sync_policy : rgw_sync_policy_info());
 
     for (auto& group : sync_policy_groups) {
@@ -1312,7 +1312,7 @@ void RGWPutBucketReplication::execute(optional_yield y) {
 
     s->bucket->get_info().set_sync_policy(std::move(sync_policy));
 
-    int ret = s->bucket->put_info(this, false, real_time(), null_yield);
+    int ret = s->bucket->put_info(this, false, real_time(), y);
     if (ret < 0) {
       ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket << ") returned ret=" << ret << dendl;
       return ret;
@@ -1345,7 +1345,7 @@ void RGWDeleteBucketReplication::execute(optional_yield y)
     return;
   }
 
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
     if (!s->bucket->get_info().sync_policy) {
       return 0;
     }
@@ -1356,7 +1356,7 @@ void RGWDeleteBucketReplication::execute(optional_yield y)
 
     s->bucket->get_info().set_sync_policy(std::move(sync_policy));
 
-    int ret = s->bucket->put_info(this, false, real_time(), null_yield);
+    int ret = s->bucket->put_info(this, false, real_time(), y);
     if (ret < 0) {
       ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket << ") returned ret=" << ret << dendl;
       return ret;
@@ -2880,10 +2880,10 @@ void RGWSetBucketWebsite::execute(optional_yield y)
     return;
   }
 
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
       s->bucket->get_info().has_website = true;
       s->bucket->get_info().website_conf = website_conf;
-      op_ret = s->bucket->put_info(this, false, real_time(), null_yield);
+      op_ret = s->bucket->put_info(this, false, real_time(), y);
       return op_ret;
     }, y);
 
@@ -2923,10 +2923,10 @@ void RGWDeleteBucketWebsite::execute(optional_yield y)
       << "returned err=" << op_ret << dendl;
     return;
   }
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
       s->bucket->get_info().has_website = false;
       s->bucket->get_info().website_conf = RGWBucketWebsiteConf();
-      op_ret = s->bucket->put_info(this, false, real_time(), null_yield);
+      op_ret = s->bucket->put_info(this, false, real_time(), y);
       return op_ret;
     }, y);
   if (op_ret < 0) {
@@ -8400,9 +8400,9 @@ void RGWPutBucketObjectLock::execute(optional_yield y)
     return;
   }
 
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
     s->bucket->get_info().obj_lock = obj_lock;
-    op_ret = s->bucket->put_info(this, false, real_time(), null_yield);
+    op_ret = s->bucket->put_info(this, false, real_time(), y);
     return op_ret;
   }, y);
   return;

@@ -328,8 +328,8 @@ int main(int argc, const char **argv)
 			      false,
 			      false,
 			      false,
-			      false, null_yield,
-			      true,
+			      false,
+			      true, null_yield, 
 			      false));
   if (!store) {
     std::cerr << "couldn't init storage provider" << std::endl;

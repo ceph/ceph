@@ -792,7 +792,7 @@ static inline bool notification_match(reservation_t& res,
   const RGWPubSub ps(res.store, res.user_tenant);
   const RGWPubSub::Bucket ps_bucket(ps, res.bucket);
   rgw_pubsub_bucket_topics bucket_topics;
-  auto rc = ps_bucket.get_topics(res.dpp, bucket_topics, res.s->yield);
+  auto rc = ps_bucket.get_topics(res.dpp, bucket_topics, res.yield);
   if (rc < 0) {
     // failed to fetch bucket topics
     return rc;
