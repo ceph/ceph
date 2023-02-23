@@ -15,7 +15,7 @@
 #include <iostream>
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
-#include "os/filestore/FileStore.h"
+#include "os/bluestore/BlueStore.h"
 #include "global/global_init.h"
 #include "include/ceph_assert.h"
 
@@ -52,7 +52,7 @@ int main(int argc, const char **argv)
   cout << "#dev " << filename << std::endl;
   cout << "#mb " << mb << std::endl;
 
-  ObjectStore *fs = new FileStore(cct.get(), filename, NULL);
+  ObjectStore *fs = new BlueStore(cct.get(), filename);
   if (fs->mount() < 0) {
     cout << "mount failed" << std::endl;
     return -1;

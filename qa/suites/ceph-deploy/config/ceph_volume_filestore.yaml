@@ -1,4 +1,0 @@
-overrides:
-   ceph-deploy:
-      use-ceph-volume: True
-      filestore: True
