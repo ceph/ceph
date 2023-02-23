@@ -1887,7 +1887,6 @@ class SyntheticWorkload {
 
     pair<Messenger*, Messenger*> p;
     {
-      boost::uniform_int<> choose(0, available_servers.size() - 1);
       if (server->get_default_policy().server) {
         p = make_pair(client, server);
 	ConnectionRef conn = client->connect_to(server->get_mytype(),
@@ -2029,7 +2028,9 @@ TEST_P(MessengerTest, SyntheticStressTest) {
                              Messenger::Policy::stateful_server(0),
                              Messenger::Policy::lossless_client(0));
   for (int i = 0; i < 100; ++i) {
-    if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
+    if (!(i % 10)) {
+      lderr(g_ceph_context) << "seeding connection " << i << dendl;
+    }
     test_msg.generate_connection();
   }
   gen_type rng(time(NULL));
@@ -2058,7 +2059,9 @@ TEST_P(MessengerTest, SyntheticStressTest1) {
                              Messenger::Policy::lossless_peer_reuse(0),
                              Messenger::Policy::lossless_peer_reuse(0));
   for (int i = 0; i < 10; ++i) {
-    if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
+    if (!(i % 10)) {
+      lderr(g_ceph_context) << "seeding connection " << i << dendl;
+    }
     test_msg.generate_connection();
   }
   gen_type rng(time(NULL));
