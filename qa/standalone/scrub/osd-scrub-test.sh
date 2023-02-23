@@ -29,9 +29,13 @@ function run() {
     export -n CEPH_CLI_TEST_DUP_COMMAND
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
+        echo "-------------- Prepare Test $func -------------------"
         setup $dir || return 1
+        echo "-------------- Run Test $func -----------------------"
         $func $dir || return 1
+        echo "-------------- Teardown Test $func ------------------"
         teardown $dir || return 1
+        echo "-------------- Complete Test $func ------------------"
     done
 }
 
