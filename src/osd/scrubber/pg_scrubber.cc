@@ -215,6 +215,16 @@ void PgScrubber::initiate_regular_scrub(epoch_t epoch_queued)
   }
 }
 
+void PgScrubber::dec_scrubs_remote()
+{
+  m_osds->get_scrub_services().dec_scrubs_remote();
+}
+
+void PgScrubber::advance_token()
+{
+  m_current_token++;
+}
+
 void PgScrubber::initiate_scrub_after_repair(epoch_t epoch_queued)
 {
   dout(15) << __func__ << " epoch: " << epoch_queued << dendl;
@@ -1392,27 +1402,6 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
     return;
   }
 
-  if (is_queued_or_active()) {
-    // this is bug!
-    // Somehow, we have received a new scrub request from our Primary, before
-    // having finished with the previous one. Did we go through an interval
-    // change without reseting the FSM? Possible responses:
-    // - crashing (the original assert_not_active() implemented that one), or
-    // - trying to recover:
-    //  - (logging enough information to debug this scenario)
-    //  - reset the FSM.
-    m_osds->clog->warn() << fmt::format(
-      "{}: error: a second scrub-op received while handling the previous one",
-      __func__);
-
-    scrub_clear_state();
-    m_osds->clog->warn() << fmt::format(
-      "{}: after a reset. Now handling the new OP",
-      __func__);
-  }
-  // make sure the FSM is at NotActive
-  m_fsm->assert_not_active();
-
   replica_scrubmap = ScrubMap{};
   replica_scrubmap_pos = ScrubMapBuilder{};
 
@@ -1587,29 +1576,19 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
     return;
   }
 
-  // Purely a debug check, PgScrubber::on_new_interval should have cleared this
-  if (m_remote_osd_resource.has_value()) {
-    epoch_t e = m_remote_osd_resource->get_reservation_epoch();
-    if (!check_interval(e)) {
-      derr << __func__ << ": BUG: stale remote osd resource from epoch " << e
-	   << dendl;
-    }
-  }
-
   /* The primary may unilaterally restart the scrub process without notifying
    * replicas.  Unconditionally clear any existing state prior to handling
    * the new reservation. */
-  reset_replica_state();
+  m_fsm->process_event(FullReset{});
   
   bool granted{false};
   if (m_pg->cct->_conf->osd_scrub_during_recovery ||
       !m_osds->is_recovery_active()) {
-    m_remote_osd_resource.emplace(this, m_pg, m_osds, request_ep);
-    // OSD resources allocated?
-    granted = m_remote_osd_resource->is_reserved();
-    if (!granted) {
-      // just forget it
-      m_remote_osd_resource.reset();
+
+    granted = m_osds->get_scrub_services().inc_scrubs_remote();
+    if (granted) {
+      m_fsm->process_event(ReplicaGrantReservation{});
+    } else {
       dout(20) << __func__ << ": failed to reserve remotely" << dendl;
     }
   } else {
@@ -1660,7 +1639,7 @@ void PgScrubber::handle_scrub_reserve_release(OpRequestRef op)
    * this specific scrub session has terminated. All incoming events carrying
    *  the old tag will be discarded.
    */
-  reset_replica_state();
+  m_fsm->process_event(FullReset{});
 }
 
 void PgScrubber::discard_replica_reservations()
@@ -1676,7 +1655,6 @@ void PgScrubber::clear_scrub_reservations()
   dout(10) << __func__ << dendl;
   m_reservations.reset();	  // the remote reservations
   m_local_osd_resource.reset();	  // the local reservation
-  m_remote_osd_resource.reset();  // we as replica reserved for a Primary
 }
 
 void PgScrubber::message_all_replicas(int32_t opcode, std::string_view op_text)
@@ -2337,17 +2315,6 @@ void PgScrubber::reset_internal_state()
   m_be.reset();
 }
 
-void PgScrubber::reset_replica_state()
-{
-  dout(10) << fmt::format("{}: prev. token:{}", __func__, m_current_token)
-	   << dendl;
-
-  m_current_token++;
-  m_remote_osd_resource.reset();
-  replica_handling_done();
-  m_fsm->process_event(FullReset{});
-}
-
 bool PgScrubber::is_token_current(Scrub::act_token_t received_token)
 {
   if (received_token == 0 || received_token == m_current_token) {
@@ -2743,41 +2710,6 @@ LocalReservation::~LocalReservation()
     m_holding_local_reservation = false;
     m_osds->get_scrub_services().dec_scrubs_local();
   }
-}
-
-// ///////////////////// ReservedByRemotePrimary ///////////////////////////////
-
-ReservedByRemotePrimary::ReservedByRemotePrimary(const PgScrubber* scrubber,
-						 PG* pg,
-						 OSDService* osds,
-						 epoch_t epoch)
-    : m_scrubber{scrubber}
-    , m_pg{pg}
-    , m_osds{osds}
-    , m_reserved_at{epoch}
-{
-  if (!m_osds->get_scrub_services().inc_scrubs_remote()) {
-    dout(10) << __func__ << ": failed to reserve at Primary request" << dendl;
-    // the failure is signalled by not having m_reserved_by_remote_primary set
-    return;
-  }
-
-  dout(20) << __func__ << ": scrub resources reserved at Primary request"
-	   << dendl;
-  m_reserved_by_remote_primary = true;
-}
-
-ReservedByRemotePrimary::~ReservedByRemotePrimary()
-{
-  if (m_reserved_by_remote_primary) {
-    m_reserved_by_remote_primary = false;
-    m_osds->get_scrub_services().dec_scrubs_remote();
-  }
-}
-
-std::ostream& ReservedByRemotePrimary::gen_prefix(std::ostream& out) const
-{
-  return m_scrubber->gen_prefix(out);
 }
 
 // ///////////////////// MapsCollectionStatus ////////////////////////////////

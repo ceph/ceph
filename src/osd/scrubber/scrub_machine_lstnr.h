@@ -200,6 +200,12 @@ struct ScrubMachineListener {
   virtual void set_queued_or_active() = 0;
   virtual void clear_queued_or_active() = 0;
 
+  /// Release remote scrub reservation
+  virtual void dec_scrubs_remote() = 0;
+
+  /// Advance replica token
+  virtual void advance_token() = 0;
+
   /**
    * Our scrubbing is blocked, waiting for an excessive length of time for
    * our target chunk to be unlocked. We will set the corresponding flags,
