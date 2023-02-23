@@ -19,9 +19,13 @@ namespace rgw { namespace sal {
 class RGWOp;
 
 struct delete_multi_obj_entry {
-  std::string key, version_id, error_message, marker_version_id;
-  uint32_t http_status;
-  bool error, delete_marker;
+  std::string key;
+  std::string version_id;
+  std::string error_message;
+  std::string marker_version_id;
+  uint32_t http_status = 0;
+  bool error = false;
+  bool delete_marker = false;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
@@ -50,7 +54,8 @@ struct delete_multi_obj_entry {
 WRITE_CLASS_ENCODER(delete_multi_obj_entry)
 
 struct delete_multi_obj_op_meta {
-  uint32_t num_ok, num_err;
+  uint32_t num_ok = 0;
+  uint32_t num_err = 0;
   std::vector<delete_multi_obj_entry> objects;
 
   void encode(bufferlist &bl) const {
@@ -97,7 +102,7 @@ struct rgw_log_entry {
   headers_map x_headers;
   std::string trans_id;
   std::vector<std::string> token_claims;
-  uint32_t identity_type;
+  uint32_t identity_type = TYPE_NONE;
   std::string access_key_id;
   std::string subuser;
   bool temp_url {false};
