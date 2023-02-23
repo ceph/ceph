@@ -303,9 +303,9 @@ form the monmap by following these steps:
 
 Manually deploying a MGR daemon
 -------------------------------
-cephadm requires a MGR daemon in order to manage the cluster. In case the cluster
-the last MGR of a cluster was removed, follow these steps in order to deploy 
-a MGR ``mgr.hostname.smfvfd`` on a random host of your cluster manually. 
+cephadm requires a MGR daemon in order to manage the cluster. In case the last
+MGR of a cluster was removed, follow these steps in order to deploy a MGR
+``mgr.hostname.smfvfd`` on a random host of your cluster manually. 
 
 Disable the cephadm scheduler, in order to prevent cephadm from removing the new 
 MGR. See :ref:`cephadm-enable-cli`::
