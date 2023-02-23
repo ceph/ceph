@@ -386,7 +386,7 @@ public:
   static int clear_stale_instances(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
 				   RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, optional_yield y);
   static int fix_lc_shards(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
-                           RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
+                           RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, optional_yield y);
   static int fix_obj_expiry(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
 			    RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, optional_yield y, bool dry_run = false);
 

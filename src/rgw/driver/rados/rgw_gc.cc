@@ -51,7 +51,7 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store, optional_yield y) {
     op.create(false);
     const uint64_t queue_size = cct->_conf->rgw_gc_max_queue_size, num_deferred_entries = cct->_conf->rgw_gc_max_deferred;
     gc_log_init2(op, queue_size, num_deferred_entries);
-    store->gc_operate(this, obj_names[i], &op, null_yield);
+    store->gc_operate(this, obj_names[i], &op, y);
   }
 }
 
@@ -88,7 +88,7 @@ std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const 
         broken_chain.objs.pop_back();
         --it;
         ldpp_dout(this, 20) << "RGWGC::send_split_chain - more than, dont add to broken chain and send chain" << dendl;
-        auto ret = send_chain(broken_chain, tag, null_yield);
+        auto ret = send_chain(broken_chain, tag, y);
         if (ret < 0) {
           broken_chain.objs.insert(broken_chain.objs.end(), it, chain.objs.end()); // add all the remainder objs to the list to be deleted inline
           ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
@@ -99,14 +99,14 @@ std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const 
     }
     if (!broken_chain.objs.empty()) { //when the chain is smaller than or equal to rgw_max_chunk_size
       ldpp_dout(this, 20) << "RGWGC::send_split_chain - sending leftover objects" << dendl;
-      auto ret = send_chain(broken_chain, tag, null_yield);
+      auto ret = send_chain(broken_chain, tag, y);
       if (ret < 0) {
         ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
         return {ret, {broken_chain}};
       }
     }
   } else {
-    auto ret = send_chain(chain, tag, null_yield);
+    auto ret = send_chain(chain, tag, y);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
       return {ret, {std::move(chain)}};
@@ -127,13 +127,13 @@ int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag, optiona
 
   ldpp_dout(this, 20) << "RGWGC::send_chain - on object name: " << obj_names[i] << "tag is: " << tag << dendl;
 
-  auto ret = store->gc_operate(this, obj_names[i], &op, null_yield);
+  auto ret = store->gc_operate(this, obj_names[i], &op, y);
   if (ret != -ECANCELED && ret != -EPERM) {
     return ret;
   }
   ObjectWriteOperation set_entry_op;
   cls_rgw_gc_set_entry(set_entry_op, cct->_conf->rgw_gc_obj_min_wait, info);
-  return store->gc_operate(this, obj_names[i], &set_entry_op, null_yield);
+  return store->gc_operate(this, obj_names[i], &set_entry_op, y);
 }
 
 struct defer_chain_state {
@@ -240,7 +240,7 @@ int RGWGC::remove(int index, int num_entries, optional_yield y)
   ObjectWriteOperation op;
   cls_rgw_gc_queue_remove_entries(op, num_entries);
 
-  return store->gc_operate(this, obj_names[index], &op, null_yield);
+  return store->gc_operate(this, obj_names[index], &op, y);
 }
 
 int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue)
@@ -733,7 +733,7 @@ int RGWGC::process(bool expired_only, optional_yield y)
 
   for (int i = 0; i < max_objs; i++) {
     int index = (i + start) % max_objs;
-    int ret = process(index, max_secs, expired_only, io_manager, null_yield);
+    int ret = process(index, max_secs, expired_only, io_manager, y);
     if (ret < 0)
       return ret;
   }

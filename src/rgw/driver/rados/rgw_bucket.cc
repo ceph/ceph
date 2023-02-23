@@ -1333,16 +1333,16 @@ int RGWBucketAdminOp::clear_stale_instances(rgw::sal::Driver* driver,
                                             RGWFormatterFlusher& flusher,
                                             const DoutPrefixProvider *dpp, optional_yield y)
 {
-  auto process_f = [dpp](const bucket_instance_ls& lst,
+  auto process_f = [dpp, y](const bucket_instance_ls& lst,
                       Formatter *formatter,
                       rgw::sal::Driver* driver){
                      for (const auto &binfo: lst) {
 		       std::unique_ptr<rgw::sal::Bucket> bucket;
 		       driver->get_bucket(nullptr, binfo, &bucket);
-		       int ret = bucket->purge_instance(dpp, null_yield);
+		       int ret = bucket->purge_instance(dpp, y);
                        if (ret == 0){
                          auto md_key = "bucket.instance:" + binfo.bucket.get_key();
-                         ret = driver->meta_remove(dpp, md_key, null_yield);
+                         ret = driver->meta_remove(dpp, md_key, y);
                        }
                        formatter->open_object_section("delete_status");
                        formatter->dump_string("bucket_instance", binfo.bucket.get_key());
@@ -1386,16 +1386,16 @@ static void process_single_lc_entry(rgw::sal::Driver* driver,
 				    Formatter *formatter,
                                     const std::string& tenant_name,
                                     const std::string& bucket_name,
-                                    const DoutPrefixProvider *dpp)
+                                    const DoutPrefixProvider *dpp, optional_yield y)
 {
-  int ret = fix_single_bucket_lc(driver, tenant_name, bucket_name, dpp, null_yield);
+  int ret = fix_single_bucket_lc(driver, tenant_name, bucket_name, dpp, y);
   format_lc_status(formatter, tenant_name, bucket_name, -ret);
 }
 
 int RGWBucketAdminOp::fix_lc_shards(rgw::sal::Driver* driver,
                                     RGWBucketAdminOpState& op_state,
                                     RGWFormatterFlusher& flusher,
-                                    const DoutPrefixProvider *dpp)
+                                    const DoutPrefixProvider *dpp, optional_yield y)
 {
   std::string marker;
   void *handle;
@@ -1406,7 +1406,7 @@ int RGWBucketAdminOp::fix_lc_shards(rgw::sal::Driver* driver,
   if (const std::string& bucket_name = op_state.get_bucket_name();
       ! bucket_name.empty()) {
     const rgw_user user_id = op_state.get_user_id();
-    process_single_lc_entry(driver, formatter, user_id.tenant, bucket_name, dpp);
+    process_single_lc_entry(driver, formatter, user_id.tenant, bucket_name, dpp, y);
     formatter->flush(cout);
   } else {
     int ret = driver->meta_list_keys_init(dpp, "bucket", marker, &handle);
@@ -1431,7 +1431,7 @@ int RGWBucketAdminOp::fix_lc_shards(rgw::sal::Driver* driver,
         } if (ret != -ENOENT) {
           for (const auto &key:keys) {
             auto [tenant_name, bucket_name] = split_tenant(key);
-            process_single_lc_entry(driver, formatter, tenant_name, bucket_name, dpp);
+            process_single_lc_entry(driver, formatter, tenant_name, bucket_name, dpp, y);
           }
         }
         formatter->flush(cout); // regularly flush every 1k entries

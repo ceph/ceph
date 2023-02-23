@@ -3993,7 +3993,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   if (copy_if_newer) {
     /* need to get mtime for destination */
-    ret = get_obj_state(dpp, &obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, y, stat_follow_olh, null_yield);
+    ret = get_obj_state(dpp, &obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, y);
     if (ret < 0)
       goto set_err_state;
 
@@ -4182,7 +4182,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     if (copy_if_newer && canceled) {
       ldpp_dout(dpp, 20) << "raced with another write of obj: " << dest_obj << dendl;
       obj_ctx.invalidate(dest_obj); /* object was overwritten */
-      ret = get_obj_state(dpp, &obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, y, stat_follow_olh, null_yield);
+      ret = get_obj_state(dpp, &obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, y);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": get_err_state() returned ret=" << ret << dendl;
         goto set_err_state;

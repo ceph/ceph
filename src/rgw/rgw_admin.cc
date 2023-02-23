@@ -8368,7 +8368,7 @@ next:
     }
     RGWRados* store = rados_store->getRados();
 
-    int ret = store->process_gc(!include_all);
+    int ret = store->process_gc(!include_all, null_yield);
     if (ret < 0) {
       cerr << "ERROR: gc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
@@ -8465,7 +8465,7 @@ next:
   }
 
   if (opt_cmd == OPT::LC_RESHARD_FIX) {
-    ret = RGWBucketAdminOp::fix_lc_shards(driver, bucket_op, stream_flusher, dpp());
+    ret = RGWBucketAdminOp::fix_lc_shards(driver, bucket_op, stream_flusher, dpp(), null_yield);
     if (ret < 0) {
       cerr << "ERROR: fixing lc shards: " << cpp_strerror(-ret) << std::endl;
     }
