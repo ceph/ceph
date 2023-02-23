@@ -80,7 +80,7 @@
     "zone.js": "0.11.8"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "13.3.9",
+    "@angular-devkit/build-angular": "13.3.10",
     "@angular-eslint/builder": "13.5.0",
     "@angular-eslint/eslint-plugin": "13.5.0",
     "@angular-eslint/eslint-plugin-template": "13.5.0",
@@ -89,11 +89,11 @@
     "@angular/cli": "13.3.9",
     "@angular/compiler-cli": "13.3.11",
     "@angular/language-service": "13.3.11",
-    "@applitools/eyes-cypress": "3.22.5",
+    "@applitools/eyes-cypress": "3.29.1",
     "@apteco/ngth": "1.5.0",
     "@compodoc/compodoc": "1.1.18",
     "@cypress/browserify-preprocessor": "3.0.2",
-    "@grafana/e2e": "8.4.5",
+    "@grafana/e2e": "9.3.6",
     "@types/brace-expansion": "1.1.0",
     "@types/cypress-cucumber-preprocessor": "4.0.1",
     "@types/jest": "28.1.3",
