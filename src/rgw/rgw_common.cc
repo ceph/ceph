@@ -2106,6 +2106,7 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "user-policy",
                                     "amz-cache",
                                     "oidc-provider",
+                                    "keys",
 				                            "ratelimit"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {

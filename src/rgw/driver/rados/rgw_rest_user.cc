@@ -83,6 +83,7 @@ void RGWOp_User_Info::execute(optional_yield y)
   std::string uid_str, access_key_str;
   bool fetch_stats;
   bool sync_stats;
+  bool dump_keys = true;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "access-key", access_key_str, &access_key_str);
@@ -105,8 +106,12 @@ void RGWOp_User_Info::execute(optional_yield y)
   op_state.set_access_key(access_key_str);
   op_state.set_fetch_stats(fetch_stats);
   op_state.set_sync_stats(sync_stats);
+  int keys_perm = s->user->get_info().caps.check_cap("keys", RGW_CAP_READ);
+  if (keys_perm < 0) {
+    dump_keys = false;
+  }
 
-  op_ret = RGWUserAdminOp_User::info(s, driver, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_User::info(s, driver, op_state, flusher, dump_keys, y);
 }
 
 class RGWOp_User_Create : public RGWRESTOp {
@@ -115,7 +120,11 @@ public:
   RGWOp_User_Create() {}
 
   int check_caps(const RGWUserCaps& caps) override {
-    return caps.check_cap("users", RGW_CAP_WRITE);
+    int r = caps.check_cap("users", RGW_CAP_WRITE);
+    if (r < 0) {
+      return r;
+    }
+    return caps.check_cap("keys", RGW_CAP_WRITE);
   }
 
   void execute(optional_yield y) override;
@@ -141,6 +150,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   bool suspended;
   bool system;
   bool exclusive;
+  bool dump_keys = true;
 
   int32_t max_buckets;
   const int32_t default_max_buckets =
@@ -253,7 +263,12 @@ void RGWOp_User_Create::execute(optional_yield y)
     op_state.set_generate_key();
   }
 
-  op_ret = RGWUserAdminOp_User::create(s, driver, op_state, flusher, y);
+  int keys_perm = s->user->get_info().caps.check_cap("keys", RGW_CAP_READ);
+  if (keys_perm < 0) {
+    dump_keys = false;
+  }
+
+  op_ret = RGWUserAdminOp_User::create(s, driver, op_state, flusher, dump_keys, y);
 }
 
 class RGWOp_User_Modify : public RGWRESTOp {
@@ -287,6 +302,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   bool system;
   bool email_set;
   bool quota_set;
+  bool dump_keys = true;
   int32_t max_buckets;
 
   RGWUserAdminOpState op_state(driver);
@@ -307,6 +323,15 @@ void RGWOp_User_Modify::execute(optional_yield y)
   RESTArgs::get_string(s, "op-mask", op_mask_str, &op_mask_str);
   RESTArgs::get_string(s, "default-placement", default_placement_str, &default_placement_str);
   RESTArgs::get_string(s, "placement-tags", placement_tags_str, &placement_tags_str);
+
+  // if keys cap is not set to write a keys cannot be generated
+  if (gen_key || !access_key.empty() || !secret_key.empty()) {
+    ldpp_dout(this, 0) << "ALI: in conditional check for user modify for keys" << dendl;
+    op_ret = s->user->get_info().caps.check_cap("keys", RGW_CAP_WRITE);
+    if (op_ret < 0) {
+      return;
+    }
+  }
 
   if (!s->user->get_info().system && system) {
     ldpp_dout(this, 0) << "cannot set system flag by non-system user" << dendl;
@@ -399,7 +424,12 @@ void RGWOp_User_Modify::execute(optional_yield y)
     op_state.set_generate_key();
   }
 
-  op_ret = RGWUserAdminOp_User::modify(s, driver, op_state, flusher, y);
+  int keys_perm = s->user->get_info().caps.check_cap("keys", RGW_CAP_READ);
+  if (keys_perm < 0) {
+    dump_keys = false;
+  }
+
+  op_ret = RGWUserAdminOp_User::modify(s, driver, op_state, flusher, dump_keys, y);
 }
 
 class RGWOp_User_Remove : public RGWRESTOp {
@@ -449,7 +479,11 @@ public:
   RGWOp_Subuser_Create() {}
 
   int check_caps(const RGWUserCaps& caps) override {
-    return caps.check_cap("users", RGW_CAP_WRITE);
+    int r = caps.check_cap("users", RGW_CAP_WRITE);
+    if (r < 0) {
+      return r;
+    }
+    return caps.check_cap("keys", RGW_CAP_WRITE);
   }
 
   void execute(optional_yield y) override;
@@ -551,10 +585,22 @@ void RGWOp_Subuser_Modify::execute(optional_yield y)
   rgw_user uid(uid_str);
 
   RESTArgs::get_string(s, "subuser", subuser, &subuser);
-  RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
+  RESTArgs::get_string(s, "secret", secret_key, &secret_key);
+  // "secret-key" is checked because it was checked pre-Reef
+  if (secret_key.empty()) {
+    RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
+  }
   RESTArgs::get_string(s, "access", perm_str, &perm_str);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
   RESTArgs::get_bool(s, "generate-secret", false, &gen_secret);
+
+  // if keys cap is not set to write a keys cannot be generated or set
+  if (gen_secret || !secret_key.empty()) {
+    op_ret = s->user->get_info().caps.check_cap("keys", RGW_CAP_WRITE);
+    if (op_ret < 0) {
+      return;
+    }
+  }
 
   perm_mask = rgw_str_to_perm(perm_str.c_str());
   op_state.set_perm(perm_mask);
@@ -613,6 +659,13 @@ void RGWOp_Subuser_Remove::execute(optional_yield y)
   RESTArgs::get_string(s, "subuser", subuser, &subuser);
   RESTArgs::get_bool(s, "purge-keys", true, &purge_keys);
 
+  if (purge_keys) {
+    op_ret = s->user->get_info().caps.check_cap("keys", RGW_CAP_WRITE);
+    if (op_ret < 0) {
+      return;
+    }
+  }
+
   op_state.set_user_id(uid);
   op_state.set_subuser(subuser);
 
@@ -634,7 +687,11 @@ public:
   RGWOp_Key_Create() {}
 
   int check_caps(const RGWUserCaps& caps) override {
-    return caps.check_cap("users", RGW_CAP_WRITE);
+    int r = caps.check_cap("users", RGW_CAP_WRITE);
+    if (r < 0) {
+      return r;
+    }
+    return caps.check_cap("keys", RGW_CAP_WRITE);
   }
 
   void execute(optional_yield y) override;
@@ -651,6 +708,7 @@ void RGWOp_Key_Create::execute(optional_yield y)
   std::string key_type_str;
 
   bool gen_key;
+  bool dump_keys = true;
 
   RGWUserAdminOpState op_state(driver);
 
@@ -681,7 +739,13 @@ void RGWOp_Key_Create::execute(optional_yield y)
     op_state.set_key_type(key_type);
   }
 
-  op_ret = RGWUserAdminOp_Key::create(s, driver, op_state, flusher, y);
+  int keys_perm = s->user->get_info().caps.check_cap("keys", RGW_CAP_READ);
+  if (keys_perm < 0) {
+    dump_keys = false;
+  }
+
+
+  op_ret = RGWUserAdminOp_Key::create(s, driver, op_state, flusher, dump_keys, y);
 }
 
 class RGWOp_Key_Remove : public RGWRESTOp {
@@ -690,7 +754,11 @@ public:
   RGWOp_Key_Remove() {}
 
   int check_caps(const RGWUserCaps& caps) override {
-    return caps.check_cap("users", RGW_CAP_WRITE);
+    int r = caps.check_cap("users", RGW_CAP_WRITE);
+    if (r < 0) {
+      return r;
+    }
+    return caps.check_cap("keys", RGW_CAP_WRITE);
   }
 
   void execute(optional_yield y) override;

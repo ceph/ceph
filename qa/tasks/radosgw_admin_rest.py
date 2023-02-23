@@ -23,6 +23,331 @@ from tasks.util.rgw import get_user_summary, get_user_successful_ops, rgwadmin
 
 log = logging.getLogger(__name__)
 
+KEYS_CAP_READ_WRITE = 'keys=read,write;'
+KEYS_CAP_READ = 'keys=read;'
+KEYS_CAP_WRITE = 'keys=write;'
+KEYS_CAP_NONE = None
+
+def check_key(output, key):
+    key_exists = False
+    if type(output) == dict:
+        users = output['keys']
+    else:
+        users = output
+
+    for user in users:
+        if user['access_key'] == key:
+            key_exists = True
+        elif user['secret_key'] == key:
+            key_exists = True
+
+    return key_exists
+
+def test_cap_keys(keys_cap, ctx, client, admin_conn, admin_user):
+    keys_user = 'keys_user'
+    keys_user2 = 'keys_user2'
+    keys_user_read = 'keys_user_read'
+    keys_user_display_name = 'keys_user'
+    keys_user_display_name2 = 'keys_user2'
+    keys_user_email = 'keysuser@foo.com'
+    keys_user_email2 = 'keysuser2@foo.com'
+    keys_user_access_key = 'dgagEgas03FFapijfaBA'
+    keys_user_secret_key = 'dakg;dgjoagAeoqi04jakdGFSFPVAlkdgqlkjaGa'
+    keys_user_access_key2 = 'keys_user_akey2'
+    keys_user_secret_key2 = 'keys_user_skey2'
+    keys_user_access_key3 = 'keys_user_akey3'
+    keys_user_secret_key3 = 'keys_user_skey3'
+    keys_user_access_key4 = 'keys_user_akey4'
+    keys_user_secret_key4 = 'keys_user_skey4'
+    keys_subuser = 'keys_user:foo3'
+    keys_subuser_secret = 'agpS2G9RREMrnbqlp29PP2D36kgPR1tm72n5fPYf'
+    swift_key_prev = None
+    keys_user2_create = False
+    admin_caps_rm_keys = KEYS_CAP_READ_WRITE
+
+    # create user for this set of tests
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'create',
+            '--uid', keys_user,
+            '--display-name',  keys_user_display_name,
+            '--email',  keys_user_email,
+            '--access-key', keys_user_access_key,
+            '--secret-key', keys_user_secret_key,
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+
+    # clean up keys cap for this set of tests
+    (err, out) = rgwadmin(ctx, client, [
+            'caps', 'rm',
+            '--uid', admin_user,
+            '--caps', admin_caps_rm_keys,
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+
+    if keys_cap != None:
+        # clean up keys user for this set of tests
+        (err, out) = rgwadmin(ctx, client, [
+                'caps', 'add',
+                '--uid', admin_user,
+                '--caps', keys_cap,
+                ])
+        logging.error(out)
+        logging.error(err)
+        assert not err
+
+    # CAP KEYS TEST 1: user info
+    (ret, out) = rgwadmin_rest(admin_conn,
+        ['user', 'info'],
+        {'uid' : keys_user,
+        })
+
+    assert ret == 200
+    if keys_cap == KEYS_CAP_READ_WRITE or keys_cap == KEYS_CAP_READ:
+        assert 'keys' in out
+    elif keys_cap == KEYS_CAP_WRITE or keys_cap == KEYS_CAP_NONE:
+        assert 'keys' not in out
+
+    # CAP KEYS TEST 2A: user modify with generate-key
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['user', 'modify'],
+            {'uid' : keys_user,
+             'generate-key' : True,
+             'key-type' : 's3',
+            })
+
+    if keys_cap == KEYS_CAP_READ_WRITE:
+        assert ret == 200
+        assert len(out['keys']) == 2
+    elif keys_cap == KEYS_CAP_READ or keys_cap == KEYS_CAP_NONE:
+        assert ret == 403
+    elif keys_cap == KEYS_CAP_WRITE:
+        assert ret == 200
+        assert 'keys' not in out
+
+    # CAP KEYS TEST 2B: user modify with access key and secret key
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['user', 'modify'],
+            {'uid' : keys_user,
+             'access-key' : keys_user_access_key3,
+             'secret-key' : keys_user_secret_key3,
+             'key-type' : 's3',
+            })
+    if keys_cap == KEYS_CAP_READ_WRITE:
+        assert ret == 200
+        assert check_key(out, keys_user_access_key3 ) == True
+        assert check_key(out, keys_user_secret_key3) == True
+        assert len(out['keys']) == 3
+    elif keys_cap == KEYS_CAP_READ or keys_cap == KEYS_CAP_NONE:
+        assert ret == 403
+    elif keys_cap == KEYS_CAP_WRITE:
+        assert ret == 200
+        assert 'keys' not in out
+
+    # CAP KEYS TEST 3: key remove
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['key', 'rm'],
+            {'uid' : keys_user,
+             'access-key' : keys_user_access_key3,
+             'key-type' : 's3',
+            })
+    if keys_cap == KEYS_CAP_READ_WRITE or keys_cap == KEYS_CAP_WRITE:
+        assert ret == 200
+        assert out == None
+    elif keys_cap == KEYS_CAP_READ or keys_cap == KEYS_CAP_NONE:
+        assert ret == 403
+
+    # CAP KEYS TEST 4A: key create only access key
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['key', 'create'],
+            {'uid' : keys_user,
+             'access-key' : keys_user_access_key2,
+            })
+    if keys_cap == KEYS_CAP_READ_WRITE:
+        assert ret == 200
+        assert check_key(out, keys_user_access_key2) == True
+        assert len(out) == 3
+    elif keys_cap == KEYS_CAP_WRITE:
+        assert ret == 200
+        assert out == None
+    elif keys_cap == KEYS_CAP_NONE or keys_cap == KEYS_CAP_READ:
+        assert ret == 403
+
+    # CAP KEYS TEST 4B: key create only secret key
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['key', 'create'],
+            {'uid' : keys_user,
+             'secret-key' : keys_user_secret_key2,
+            })
+    if keys_cap == KEYS_CAP_READ_WRITE:
+        assert ret == 200
+        assert check_key(out, keys_user_secret_key2) == True
+        assert len(out) == 4
+    elif keys_cap == KEYS_CAP_READ or keys_cap == KEYS_CAP_NONE:
+        assert ret == 403
+    elif keys_cap == KEYS_CAP_WRITE:
+        assert ret == 200
+        assert out == None
+
+    # CAP KEYS TEST 5: user create
+    (ret, out) = rgwadmin_rest(admin_conn,
+        ['user', 'create'],
+        {'uid' : keys_user2,
+         'display-name' :  keys_user_display_name2,
+         'email' : keys_user_email2,
+         'access-key' : keys_user_access_key4,
+         'secret-key' : keys_user_secret_key4,
+        })
+    if keys_cap == KEYS_CAP_READ_WRITE:
+        assert ret == 200
+        assert 'keys' in out
+        keys_user2_create = True
+    elif keys_cap == KEYS_CAP_READ or keys_cap == KEYS_CAP_NONE:
+        assert ret == 403
+    elif keys_cap == KEYS_CAP_WRITE:
+        assert ret == 200
+        assert 'keys' not in out
+        keys_user2_create = True
+
+    # CAP KEYS TEST 6: subuser create
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['subuser', 'create'],
+            {'uid' : keys_user,
+             'subuser' : keys_subuser,
+             'generate-key' : True,
+             'key-type' : 'swift'
+            })
+
+    if keys_cap == KEYS_CAP_READ_WRITE or keys_cap == KEYS_CAP_WRITE:
+        assert ret == 200
+    elif keys_cap == KEYS_CAP_READ or keys_cap == KEYS_CAP_NONE:
+        assert ret == 403
+
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'info',
+            '--uid', keys_user,
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+
+    if keys_cap == KEYS_CAP_READ_WRITE or keys_cap == KEYS_CAP_WRITE:
+        assert len(out['subusers']) == 1
+        assert len(out['swift_keys']) == 1
+    elif keys_cap == KEYS_CAP_READ or keys_cap == KEYS_CAP_NONE:
+        assert len(out['subusers']) == 0
+        assert len(out['swift_keys']) == 0
+
+    # CAP KEYS TEST 7A: subuser modify with secret key
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['subuser', 'modify'],
+            {'uid' : keys_user,
+             'subuser' : keys_subuser,
+             'secret' : keys_subuser_secret,
+             'key-type' : 'swift'
+            })
+    if keys_cap == KEYS_CAP_READ_WRITE or keys_cap == KEYS_CAP_WRITE:
+        assert ret == 200
+    elif keys_cap == KEYS_CAP_READ or keys_cap == KEYS_CAP_NONE:
+        assert ret == 403
+
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'info',
+            '--uid', keys_user,
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+
+    if keys_cap == KEYS_CAP_READ_WRITE or keys_cap == KEYS_CAP_WRITE:
+        # get new swift-key
+        # compare it with keys_subuser_secret
+        # reassign old swift key
+        assert out['swift_keys'][0]['secret_key'] == keys_subuser_secret
+        swift_key_prev = out['swift_keys'][0]['secret_key']
+    elif keys_cap == KEYS_CAP_READ or keys_cap == KEYS_CAP_NONE:
+        assert len(out['subusers']) == 0
+        assert len(out['swift_keys']) == 0
+
+    # CAP KEYS TEST 7B: subuser modify with generate-secret
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['subuser', 'modify'],
+            {'uid' : keys_user,
+             'subuser' : keys_subuser,
+             'generate-secret' : True,
+             'key-type' : 'swift'
+            })
+    if keys_cap == KEYS_CAP_READ_WRITE or keys_cap == KEYS_CAP_WRITE:
+        assert ret == 200
+    elif keys_cap == KEYS_CAP_READ or keys_cap == KEYS_CAP_NONE:
+        assert ret == 403
+
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'info',
+            '--uid', keys_user,
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+    # get new swift-key
+    # compare it with old swift key
+    if keys_cap == KEYS_CAP_READ_WRITE or keys_cap == KEYS_CAP_WRITE:
+        assert swift_key_prev != out['swift_keys'][0]['secret_key']
+    elif keys_cap == KEYS_CAP_READ or keys_cap == KEYS_CAP_NONE:
+        assert len(out['subusers']) == 0
+        assert len(out['swift_keys']) == 0
+
+    # CAP KEYS TEST 8: subuser remove
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['subuser', 'rm'],
+            {'uid' : keys_user,
+             'subuser' : keys_subuser,
+             'purge-keys' : True,
+            })
+    if keys_cap == KEYS_CAP_READ_WRITE or keys_cap == KEYS_CAP_WRITE:
+        assert ret == 200
+        assert out == None
+    elif keys_cap == KEYS_CAP_READ or keys_cap == KEYS_CAP_NONE:
+        assert ret == 403
+
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'info',
+            '--uid', keys_user,
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+
+    # subusers size is 0 in all scenarios
+    # swift-key should not exist in all scenarios
+    assert len(out['subusers']) == 0
+    assert len(out['swift_keys']) == 0
+
+    # CAP KEYS TEST CLEAN UP
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'rm',
+            '--uid', keys_user,
+            '--purge-data',
+            '--purge-keys',
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+
+    if keys_user2_create:
+        (err, out) = rgwadmin(ctx, client, [
+                'user', 'rm',
+                '--uid', keys_user2,
+                '--purge-data',
+                '--purge-keys',
+                ])
+        logging.error(out)
+        logging.error(err)
+        assert not err
+
 def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
     """
     perform a rest command
@@ -141,7 +466,7 @@ def task(ctx, config):
     admin_display_name = 'Ms. Admin User'
     admin_access_key = 'MH1WC2XQ1S8UISFDZC8W'
     admin_secret_key = 'dQyrTPA0s248YeN5bBv4ukvKU0kh54LWWywkrpoG'
-    admin_caps = 'users=read, write; usage=read, write; buckets=read, write; zone=read, write; info=read;ratelimit=read, write'
+    admin_caps = 'users=read, write; usage=read, write; buckets=read, write; zone=read, write; info=read;ratelimit=read, write; keys=read, write;'
 
     user1 = 'foo'
     user2 = 'fud'
@@ -736,7 +1061,7 @@ def task(ctx, config):
     assert len(name) > 0
     # fsid is a uuid, but I'm not going to try to parse it
     assert len(fsid) > 0
-    
+
     # TESTCASE 'ratelimit' 'user' 'info' 'succeeds'
     (ret, out) = rgwadmin_rest(admin_conn,
         ['user', 'create'],
@@ -783,7 +1108,7 @@ def task(ctx, config):
     # TESTCASE 'ratelimit' 'user' 'modify'  'uid not specified' 'fails'
     (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'user'})
     assert ret == 400
-    
+
     # TESTCASE 'ratelimit' 'bucket' 'modify'  'not existing bucket' 'fails'
     (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket + 'string', 'enabled' : 'true'})
     assert ret == 404
@@ -813,3 +1138,12 @@ def task(ctx, config):
     # TESTCASE 'ratelimit' 'global' 'modify' 'anonymous' 'enabled' 'succeeds'
     (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'global': 'true', 'enabled' : 'true'})
     assert ret == 200
+
+    log.info('Keys Cap tests for: KEYS_CAP_READ_WRITE')
+    test_cap_keys(KEYS_CAP_READ_WRITE, ctx, client, admin_conn, admin_user)
+    log.info('Keys Cap tests for: KEYS_CAP_READ')
+    test_cap_keys(KEYS_CAP_READ, ctx, client, admin_conn, admin_user)
+    log.info('Keys Cap tests for: KEYS_CAP_WRITE')
+    test_cap_keys(KEYS_CAP_WRITE, ctx, client, admin_conn, admin_user)
+    log.info('Keys Cap tests for: KEYS_CAP_NONE')
+    test_cap_keys(KEYS_CAP_NONE, ctx, client, admin_conn, admin_user)

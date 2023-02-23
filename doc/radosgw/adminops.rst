@@ -275,7 +275,7 @@ Get User Info
 
 Get user information.
 
-:caps: users=read
+:caps: users=read; keys=read
 
 
 Syntax
@@ -340,13 +340,13 @@ If successful, the response contains the user information.
 
 ``keys``
 
-:Description: S3 keys associated with this user account.
+:Description: S3 keys associated with this user account. This content can only be viewed if the user has the cap ``keys=read``.
 :Type: Container
 :Parent: ``user``
 
 ``swift_keys``
 
-:Description: Swift keys associated with this user account.
+:Description: Swift keys associated with this user account. This content can only be viewed if the user has the cap ``keys=read``.
 :Type: Container
 :Parent: ``user``
 
@@ -376,7 +376,7 @@ then it will be modified.
 A ``tenant`` may either be specified as a part of uid or as an additional
 request param.
 
-:caps: users=write
+:caps: users=write; keys=write
 
 Syntax
 ~~~~~~
@@ -588,7 +588,7 @@ Modify User
 
 Modify a user.
 
-:caps: users=write
+:caps: users=write; keys=write
 
 Syntax
 ~~~~~~
@@ -625,21 +625,21 @@ Request Parameters
 
 ``generate-key``
 
-:Description: Generate a new key pair and add to the existing keyring.
+:Description: Generate a new key pair and add to the existing keyring. Generating keys requires the cap ``keys=write``.
 :Type: Boolean
 :Example: True [False]
 :Required: No
 
 ``access-key``
 
-:Description: Specify access key.
+:Description: Specify access key. Specifying the access key requires the cap ``keys=write``. A ``secret-key`` must also be a parameter in the request. 
 :Type: String
 :Example: ``ABCD0EF12GHIJ2K34LMN``
 :Required: No
 
 ``secret-key``
 
-:Description: Specify secret key.
+:Description: Specify secret key. Specifying the access key requires the cap ``keys=write``. An ``access-key`` must also be a parameter in the request.
 :Type: String
 :Example: ``0AbCDEFg1h2i34JklM5nop6QrSTUV+WxyzaBC7D8``
 :Required: No
@@ -718,14 +718,14 @@ If successful, the response contains the user information.
 
 ``keys``
 
-:Description: S3 keys associated with this user account.
+:Description: S3 keys associated with this user account. S3 keys will not be visible without the cap ``keys=read``.
 :Type: Container
 :Parent: ``user``
 
 
 ``swift_keys``
 
-:Description: Swift keys associated with this user account.
+:Description: Swift keys associated with this user account. Swift keys will not be visible without the cap ``keys=read``.
 :Type: Container
 :Parent: ``user``
 
@@ -932,7 +932,7 @@ Modify Subuser
 
 Modify an existing subuser
 
-:caps: users=write
+:caps: users=write; keys=write
 
 Syntax
 ~~~~~~
@@ -963,14 +963,16 @@ Request Parameters
 ``generate-secret``
 
 :Description: Generate a new secret key for the subuser,
-              replacing the existing key.
+              replacing the existing key. To generate a new secret
+              key the cap ``keys=write`` must be set.
 :Type: Boolean
 :Example: True [False]
 :Required: No
 
 ``secret``
 
-:Description: Specify secret key.
+:Description: Specify secret key. To specify a secret key the cap
+              ``keys=write`` must be set.
 :Type: String
 :Example: ``0AbCDEFg1h2i34JklM5nop6QrSTUV+WxyzaBC7D8``
 :Required: No
@@ -1037,7 +1039,7 @@ Remove Subuser
 
 Remove an existing subuser
 
-:caps: users=write
+:caps: users=write; keys=write
 
 Syntax
 ~~~~~~
@@ -1069,6 +1071,7 @@ Request Parameters
 ``purge-keys``
 
 :Description: Remove keys belonging to the subuser.
+              To purge keys the cap ``keys=write`` must be set.
 :Type: Boolean
 :Example: True [True]
 :Required: No
@@ -1096,7 +1099,7 @@ type as the key created. Note that when creating a swift key, specifying the opt
 ``access-key`` will have no effect. Additionally, only one swift key may be held by
 each user or subuser.
 
-:caps: users=write
+:caps: users=write; keys=read, write
 
 
 Syntax
@@ -1214,7 +1217,7 @@ Remove Key
 
 Remove an existing key.
 
-:caps: users=write
+:caps: users=write; keys=write
 
 Syntax
 ~~~~~~

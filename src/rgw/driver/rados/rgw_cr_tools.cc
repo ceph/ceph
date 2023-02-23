@@ -88,7 +88,12 @@ int RGWUserCreateCR::Request::_send_request(const DoutPrefixProvider *dpp)
   }
 
   RGWNullFlusher flusher;
-  return RGWUserAdminOp_User::create(dpp, store, op_state, flusher, null_yield);
+  bool dump_keys = true;
+  int keys_perm = op_state.get_caps_obj()->check_cap("keys", RGW_CAP_READ);
+  if(keys_perm < 0) {
+    dump_keys = false;
+  }
+  return RGWUserAdminOp_User::create(dpp, store, op_state, flusher, dump_keys, null_yield);
 }
 
 template<>

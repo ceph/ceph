@@ -184,6 +184,10 @@
   than the number mentioned against the config tunable `mds_max_snaps_per_dir`
   so that a new snapshot can be created and retained during the next schedule
   run.
+* RGW: A new "keys" capability was added to the /admin/user REST APIs.
+  The "keys=write" capability is now required to create users or modify a users
+  keys or a subusers keys. The "keys=read" is required to read them.
+
 
 >=17.2.1
 

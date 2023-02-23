@@ -635,16 +635,17 @@ public:
   static int info(const DoutPrefixProvider *dpp,
 		  rgw::sal::Driver* driver,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
-		  optional_yield y);
+                  bool dump_keys, optional_yield y);
 
   static int create(const DoutPrefixProvider *dpp,
 		    rgw::sal::Driver* driver,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
-		    optional_yield y);
+		    bool dump_keys, optional_yield y);
 
   static int modify(const DoutPrefixProvider *dpp,
 		    rgw::sal::Driver* driver,
-		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
+		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
+		    bool dump_keys, optional_yield y);
 
   static int remove(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
@@ -674,6 +675,7 @@ class RGWUserAdminOp_Key
 public:
   static int create(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
+		    bool dump_keys,
 		    optional_yield y);
 
   static int remove(const DoutPrefixProvider *dpp,

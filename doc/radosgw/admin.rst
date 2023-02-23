@@ -311,7 +311,7 @@ To add administrative capabilities to a user, execute the following::
 You can add read, write or all capabilities to users, buckets, metadata and 
 usage (utilization). For example::
 
-	--caps="[users|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles|ratelimit]=[*|read|write|read, write]"
+	--caps="[users|keys|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles|ratelimit]=[*|read|write|read, write]"
 
 For example::
 
