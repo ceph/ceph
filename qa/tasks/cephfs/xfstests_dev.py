@@ -129,6 +129,10 @@ class XFSTestsDev(CephFSTestCase):
         remoteurl = 'https://git.ceph.com/xfstests-dev.git'
         self.xfstests_repo_path = self.mount_a.client_remote.mkdtemp(suffix=
                                                             'xfstests-dev')
+        # Make the xfstests_repo_path to be readable and excutable for other
+        # users at all places, this will allow the xfstests to run the user
+        # namespace test cases, such as the generic/317.
+        self.mount_a.run_shell(['sudo', 'chmod', 'a+rx', self.xfstests_repo_path])
         self.mount_a.run_shell(['git', 'clone', remoteurl, '--depth', '1',
                                 self.xfstests_repo_path])
 
@@ -136,6 +140,10 @@ class XFSTestsDev(CephFSTestCase):
             remoteurl = 'https://git.ceph.com/xfsprogs-dev.git'
             self.xfsprogs_repo_path = self.mount_a.client_remote.mkdtemp(suffix=
                                                                 'xfsprogs-dev')
+            # Make the xfsprogs_repo_path to be readable and excutable for other
+            # users at all places, this will allow the xfstests to run the user
+            # namespace test cases.
+            self.mount_a.run_shell(['sudo', 'chmod', 'a+rx', self.xfsprogs_repo_path])
             self.mount_a.run_shell(['git', 'clone', remoteurl, '--depth', '1',
                                     self.xfsprogs_repo_path])
 
