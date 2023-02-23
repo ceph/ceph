@@ -1562,7 +1562,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :rtype: dict, or None if no metadata found
         """
         metadata = self._ceph_get_metadata(svc_type, svc_id)
-        if metadata is None:
+        if not metadata:
             return default
         return metadata
 
