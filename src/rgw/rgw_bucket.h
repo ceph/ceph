@@ -51,6 +51,14 @@ extern void rgw_parse_url_bucket(const std::string& bucket,
                                  const std::string& auth_tenant,
                                  std::string &tenant_name, std::string &bucket_name);
 
+extern int rgw_chown_bucket_and_objects(rgw::sal::Store* store,
+					rgw::sal::Bucket* bucket,
+					rgw::sal::User* new_user,
+					const std::string& marker,
+					std::string *err_msg,
+					const DoutPrefixProvider *dpp,
+					optional_yield y);
+
 // this is used as a filter to RGWRados::cls_bucket_list_ordered; it
 // conforms to the type RGWBucketListNameFilter
 extern bool rgw_bucket_object_check_filter(const std::string& oid);
@@ -225,7 +233,7 @@ extern int rgw_object_get_attr(rgw::sal::Store* store, rgw::sal::Object* obj,
 			       const char* attr_name, bufferlist& out_bl,
 			       optional_yield y);
 
-extern void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User* user, bool fix, optional_yield y, const DoutPrefixProvider *dpp);
+extern void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User& user, bool fix, optional_yield y, const DoutPrefixProvider *dpp);
 
 struct RGWBucketAdminOpState {
   rgw_user uid;
@@ -687,10 +695,6 @@ public:
 		    optional_yield y,
                     const DoutPrefixProvider *dpp,
                     bool update_entrypoint = true);
-
-  int chown(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
-            const rgw_user& user_id, const std::string& display_name,
-            const std::string& marker, optional_yield y, const DoutPrefixProvider *dpp);
 
   int read_buckets_stats(std::map<std::string, RGWBucketEnt>& m,
                          optional_yield y,

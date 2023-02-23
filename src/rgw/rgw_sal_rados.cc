@@ -27,6 +27,7 @@
 #include "rgw_sal_rados.h"
 #include "rgw_bucket.h"
 #include "rgw_multi.h"
+#include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_aio.h"
 #include "rgw_aio_throttle.h"
@@ -696,23 +697,22 @@ int RadosBucket::unlink(const DoutPrefixProvider* dpp, User* new_user, optional_
   return store->ctl()->bucket->unlink_bucket(new_user->get_id(), info.bucket, y, dpp, update_entrypoint);
 }
 
-int RadosBucket::chown(const DoutPrefixProvider* dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker)
+int RadosBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y)
 {
   std::string obj_marker;
+  int r;
 
-  if (marker == nullptr)
-    marker = &obj_marker;
+  if (!owner) {
+      ldpp_dout(dpp, 0) << __func__ << " Cannot chown without an owner " << dendl;
+      return -EINVAL;
+  }
 
-  int r = this->link(dpp, new_user, y);
+  r = this->unlink(dpp, owner, y);
   if (r < 0) {
     return r;
   }
-  if (!old_user) {
-    return r;
-  }
 
-  return store->ctl()->bucket->chown(store, this, new_user->get_id(),
-			   old_user->get_display_name(), *marker, y, dpp);
+  return this->link(dpp, &new_user, y);
 }
 
 int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime)
@@ -1694,6 +1694,65 @@ int RadosObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::s
   auto sysobj = obj_ctx.get_obj(raw_meta_obj);
 
   return sysobj.omap().set_must_exist(must_exist).set(dpp, key, val, y);
+}
+
+int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+{
+  RGWObjectCtx obj_ctx(store);
+  int r = get_obj_attrs(&obj_ctx, y, dpp);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to read object attrs " << get_name() << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  const auto& aiter = get_attrs().find(RGW_ATTR_ACL);
+  if (aiter == get_attrs().end()) {
+    ldpp_dout(dpp, 0) << "ERROR: no acls found for object " << get_name() << dendl;
+    return -EINVAL;
+  }
+
+  bufferlist& bl = aiter->second;
+  RGWAccessControlPolicy policy(store->ctx());
+  ACLOwner owner;
+  auto bliter = bl.cbegin();
+  try {
+    policy.decode(bliter);
+    owner = policy.get_owner();
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: decode policy failed" << err.what()
+      << dendl;
+    return -EIO;
+  }
+
+  //Get the ACL from the policy
+  RGWAccessControlList& acl = policy.get_acl();
+
+  //Remove grant that is set to old owner
+  acl.remove_canon_user_grant(owner.get_id());
+
+  //Create a grant and add grant
+  ACLGrant grant;
+  grant.set_canon(new_user.get_id(), new_user.get_display_name(), RGW_PERM_FULL_CONTROL);
+  acl.add_grant(&grant);
+
+  //Update the ACL owner to the new user
+  owner.set_id(new_user.get_id());
+  owner.set_name(new_user.get_display_name());
+  policy.set_owner(owner);
+
+  bl.clear();
+  encode(policy, bl);
+
+  set_atomic(&obj_ctx);
+  map<string, bufferlist> attrs;
+  attrs[RGW_ATTR_ACL] = bl;
+  r = set_obj_attrs(dpp, &obj_ctx, &attrs, nullptr, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: modify attr failed " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  return 0;
 }
 
 MPSerializer* RadosObject::get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name)
