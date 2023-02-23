@@ -32,8 +32,8 @@ class TestFscrypt(XFSTestsDev):
         # failure on our own (since this command doesn't set right error code
         # and error message in some cases) and print custom log messages
         # accordingly.
-        proc = self.mount_a.client_remote.run(args=['sudo', './check',
-            '-g', 'encrypt'], cwd=self.xfstests_repo_path, stdout=StringIO(),
+        proc = self.mount_a.client_remote.run(args=['sudo', 'env', 'DIFF_LENGTH=0',
+            './check', '-g', 'encrypt'], cwd=self.xfstests_repo_path, stdout=StringIO(),
             stderr=StringIO(), timeout=900, check_status=False, omit_sudo=False,
             label='running tests for encrypt from xfstests-dev')
 
@@ -59,8 +59,8 @@ class TestFscrypt(XFSTestsDev):
         # failure on our own (since this command doesn't set right error code
         # and error message in some cases) and print custom log messages
         # accordingly. This will take a long time and set the timeout to 3 hours.
-        proc = self.mount_a.client_remote.run(args=['sudo', './check',
-            '-g', 'quick', '-E', './ceph.exclude'], cwd=self.xfstests_repo_path,
+        proc = self.mount_a.client_remote.run(args=['sudo', 'env', 'DIFF_LENGTH=0',
+            './check', '-g', 'quick', '-E', './ceph.exclude'], cwd=self.xfstests_repo_path,
             stdout=StringIO(), stderr=StringIO(), timeout=10800, check_status=False,
             omit_sudo=False, label='running tests for dummy_encryption from xfstests-dev')
 

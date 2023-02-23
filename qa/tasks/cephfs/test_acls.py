@@ -27,8 +27,8 @@ class TestACLs(XFSTestsDev):
         # failure on our own (since this command doesn't set right error code
         # and error message in some cases) and print custom log messages
         # accordingly.
-        proc = self.mount_a.client_remote.run(args=['sudo', './check',
-            'generic/099'], cwd=self.xfstests_repo_path, stdout=StringIO(),
+        proc = self.mount_a.client_remote.run(args=['sudo', 'env', 'DIFF_LENGTH=0',
+            './check', 'generic/099'], cwd=self.xfstests_repo_path, stdout=StringIO(),
             stderr=StringIO(), timeout=30, check_status=False,omit_sudo=False,
             label='running tests for ACLs from xfstests-dev')
 
