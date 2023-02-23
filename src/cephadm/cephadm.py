@@ -3512,8 +3512,15 @@ def deploy_daemon_units(
                         '--no-systemd',
                     ]
                 else:
+                    osd_type = 'bluestore'
+                    config_file = '/etc/ceph/ceph.conf'
+                    if os.path.exists(config_file):
+                        config = read_config(config_file)
+                        if config.has_section('osd') and config.has_option('osd', 'osd_objectstore'):
+                            osd_type = config.get('osd', 'osd_objectstore')
                     cmd = [
                         'activate',
+                        '--'+ osd_type,
                         '--osd-id', str(daemon_id),
                         '--osd-uuid', osd_fsid,
                         '--no-systemd',
