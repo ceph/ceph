@@ -99,32 +99,11 @@ expected to be disabled on the volume.
 
 Fetch the information of a CephFS volume using::
 
-    $ ceph fs volume info vol_name
-    {
-        "mon_addrs": [
-            "192.168.1.7:40977"
-        ],
-        "pending_subvolume_deletions": 0,
-        "pools": {
-            "data": [
-                {
-                    "avail": 106288709632,
-                    "name": "cephfs.vol_name.data",
-                    "used": 4096
-                }
-            ],
-            "metadata": [
-                {
-                    "avail": 106288709632,
-                    "name": "cephfs.vol_name.meta",
-                    "used": 155648
-                }
-            ]
-        },
-        "used_size": 0
-    }
+    $ ceph fs volume info vol_name [--human_readable]
 
-The output format is json and contains fields as follows.
+The ``--human_readable`` flag shows used and available pool capacities in KB/MB/GB.
+
+The output format is JSON and contains fields as follows:
 
 * pools: Attributes of data and metadata pools
         * avail: The amount of free space available in bytes
@@ -133,6 +112,33 @@ The output format is json and contains fields as follows.
 * mon_addrs: List of monitor addresses
 * used_size: Current used size of the CephFS volume in bytes
 * pending_subvolume_deletions: Number of subvolumes pending deletion
+
+Sample output of volume info command::
+
+  $ ceph fs volume info vol_name
+  {
+      "mon_addrs": [
+          "192.168.1.7:40977"
+      ],
+      "pending_subvolume_deletions": 0,
+      "pools": {
+          "data": [
+              {
+                  "avail": 106288709632,
+                  "name": "cephfs.vol_name.data",
+                  "used": 4096
+              }
+          ],
+          "metadata": [
+              {
+                  "avail": 106288709632,
+                  "name": "cephfs.vol_name.meta",
+                  "used": 155648
+              }
+          ]
+      },
+      "used_size": 0
+  }
 
 FS Subvolume groups
 -------------------
@@ -194,8 +200,9 @@ Check the presence of any subvolume group using::
     $ ceph fs subvolumegroup exist <vol_name>
 
 The strings returned by the 'exist' command:
-    * "subvolumegroup exists": if any subvolumegroup is present
-    * "no subvolumegroup exists": if no subvolumegroup is present
+
+* "subvolumegroup exists": if any subvolumegroup is present
+* "no subvolumegroup exists": if no subvolumegroup is present
 
 .. note:: It checks for the presence of custom groups and not the default one. To validate the emptiness of the volume, subvolumegroup existence check alone is not sufficient. The subvolume existence also needs to be checked as there might be subvolumes in the default group.
 
@@ -344,8 +351,9 @@ Check the presence of any subvolume using::
     $ ceph fs subvolume exist <vol_name> [--group_name <subvol_group_name>]
 
 The strings returned by the 'exist' command:
-    * "subvolume exists": if any subvolume of given group_name is present
-    * "no subvolume exists": if no subvolume of given group_name is present
+
+* "subvolume exists": if any subvolume of given group_name is present
+* "no subvolume exists": if no subvolume of given group_name is present
 
 Set custom metadata on the subvolume as a key-value pair using::
 
