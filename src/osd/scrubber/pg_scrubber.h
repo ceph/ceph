@@ -181,7 +181,8 @@ class ReplicaReservations {
   ReplicaReservations(PG* pg,
                       pg_shard_t whoami,
                       ScrubQueue::ScrubJobRef scrubjob,
-                      const ConfigProxy& conf); 
+                      const ConfigProxy& conf,
+                      bool is_urgent);
 
   ~ReplicaReservations();
 

@@ -2301,7 +2301,7 @@ void PgScrubber::reserve_replicas()
 {
   dout(10) << __func__ << dendl;
   m_reservations.emplace(
-    m_pg, m_pg_whoami, m_scrub_job, m_pg->get_cct()->_conf);
+    m_pg, m_pg_whoami, m_scrub_job, m_pg->get_cct()->_conf, m_flags.required);
 }
 
 void PgScrubber::cleanup_on_finish()
@@ -2584,7 +2584,8 @@ ReplicaReservations::ReplicaReservations(
   PG* pg,
   pg_shard_t whoami,
   ScrubQueue::ScrubJobRef scrubjob,
-  const ConfigProxy& conf)
+  const ConfigProxy& conf,
+  bool is_urgent)
     : m_pg{pg}
     , m_acting_set{pg->get_actingset()}
     , m_osds{m_pg->get_pg_osd(ScrubberPasskey())}
@@ -2614,9 +2615,11 @@ ReplicaReservations::ReplicaReservations(
     for (auto p : m_acting_set) {
       if (p == whoami)
 	continue;
+      // note that for now we only use 2 urgency values: 0 and 0x8.
+      // A planned scheduling change will allow for more granularity.
       auto m = new MOSDScrubReserve(
 	spg_t(m_pg_info.pgid.pgid, p.shard), epoch, MOSDScrubReserve::REQUEST,
-	m_pg->pg_whoami);
+	m_pg->pg_whoami, (is_urgent? 0x8UL : 0UL));
       m_osds->send_message_osd_cluster(p.osd, m, epoch);
       m_waited_for_peers.push_back(p);
       dout(10) << __func__ << ": reserve " << p.osd << dendl;
