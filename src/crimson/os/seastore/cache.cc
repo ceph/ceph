@@ -1891,7 +1891,7 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
     DEBUGT("root not on t -- {}", t, *root);
     t.root = root;
     t.add_to_read_set(root);
-    return root->wait_io().then([this] {
+    return root->wait_io().then([root=root] {
       return get_root_iertr::make_ready_future<RootBlockRef>(
 	root);
     });
