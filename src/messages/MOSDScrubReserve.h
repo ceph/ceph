@@ -19,7 +19,7 @@
 
 class MOSDScrubReserve : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 public:
   spg_t pgid;
@@ -32,6 +32,9 @@ public:
   };
   int32_t type;
   pg_shard_t from;
+  /// Urgency of the scrub session itself. 0 for periodic scrubs.
+  /// Higher for user-initiated and other 'must' scrubs.
+  uint32_t urgency = 0;
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -50,6 +53,14 @@ public:
     : MOSDFastDispatchOp{MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid), map_epoch(map_epoch),
       type(type), from(from) {}
+  MOSDScrubReserve(spg_t pgid,
+		   epoch_t map_epoch,
+		   int type,
+		   pg_shard_t from,
+		   uint32_t urgency)
+    : MOSDFastDispatchOp{MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION},
+      pgid(pgid), map_epoch(map_epoch),
+      type(type), from(from), urgency(urgency) {}
 
   std::string_view get_type_name() const {
     return "MOSDScrubReserve";
@@ -71,8 +82,8 @@ public:
       out << "RELEASE ";
       break;
     }
+    out << ((urgency > 0) ? "urgent " : "periodic ");
     out << "e" << map_epoch << ")";
-    return;
   }
 
   void decode_payload() {
@@ -82,6 +93,9 @@ public:
     decode(map_epoch, p);
     decode(type, p);
     decode(from, p);
+    if (header.version >= 2) {
+      decode(urgency, p);
+    }
   }
 
   void encode_payload(uint64_t features) {
@@ -90,6 +104,7 @@ public:
     encode(map_epoch, payload);
     encode(type, payload);
     encode(from, payload);
+    encode(urgency, payload);
   }
 private:
   template<class T, typename... Args>
