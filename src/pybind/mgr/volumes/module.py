@@ -84,7 +84,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'fs subvolumegroup create '
                    'name=vol_name,type=CephString '
-                   f'name=group_name,type=CephString,goodchars={goodchars} '
+                   f'name=group_name,type=CephString,goodchars={goodchars},allowempty=false '
                    'name=size,type=CephInt,req=false '
                    'name=pool_layout,type=CephString,req=false '
                    'name=uid,type=CephInt,req=false '
@@ -134,9 +134,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'fs subvolume create '
                    'name=vol_name,type=CephString '
-                   f'name=sub_name,type=CephString,goodchars={goodchars} '
+                   f'name=sub_name,type=CephString,goodchars={goodchars},allowempty=false '
                    'name=size,type=CephInt,req=false '
-                   'name=group_name,type=CephString,req=false '
+                   f'name=group_name,type=CephString,req=false,goodchars={goodchars},allowempty=false '
                    'name=pool_layout,type=CephString,req=false '
                    'name=uid,type=CephInt,req=false '
                    'name=gid,type=CephInt,req=false '
