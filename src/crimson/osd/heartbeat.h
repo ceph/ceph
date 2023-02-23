@@ -27,7 +27,7 @@ public:
   using osd_id_t = int;
 
   Heartbeat(osd_id_t whoami,
-            const crimson::osd::ShardServices& service,
+	    crimson::osd::ShardServices& service,
 	    crimson::mon::Client& monc,
 	    crimson::net::Messenger &front_msgr,
 	    crimson::net::Messenger &back_msgr);
@@ -73,9 +73,11 @@ private:
 
   seastar::future<> start_messenger(crimson::net::Messenger& msgr,
 				    const entity_addrvec_t& addrs);
+  seastar::future<> maybe_share_osdmap(crimson::net::ConnectionRef,
+                                       Ref<MOSDPing> m);
 private:
   const osd_id_t whoami;
-  const crimson::osd::ShardServices& service;
+  crimson::osd::ShardServices& service;
   crimson::mon::Client& monc;
   crimson::net::Messenger &front_msgr;
   crimson::net::Messenger &back_msgr;
