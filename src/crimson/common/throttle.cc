@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "throttle.h"
 
 namespace crimson::common {
@@ -29,9 +32,11 @@ seastar::future<> Throttle::get(size_t c)
   if (max == 0u) {
     return seastar::make_ready_future<>();
   }
+  pending++;
   return on_free_slots.wait([this, c] {
     return !_should_wait(c);
   }).then([this, c] {
+    pending--;
     count += c;
     return seastar::make_ready_future<>();
   });
