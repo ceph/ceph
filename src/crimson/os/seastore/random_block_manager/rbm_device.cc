@@ -129,6 +129,30 @@ read_ertr::future<rbm_metadata_header_t> RBMDevice::read_rbm_header(
   });
 }
 
+RBMDevice::mount_ret RBMDevice::do_mount()
+{
+  return open(get_device_path(),
+    seastar::open_flags::rw | seastar::open_flags::dsync
+  ).safe_then([this] {
+    return stat_device(
+    ).handle_error(
+      mount_ertr::pass_further{},
+      crimson::ct_error::assert_all{
+      "Invalid error stat_device in RBMDevice::mount"}
+    ).safe_then([this](auto st) {
+      super.block_size = st.block_size;
+      return read_rbm_header(RBM_START_ADDRESS
+      ).safe_then([](auto s) {
+	return seastar::now();
+      });
+    });
+  }).handle_error(
+    mount_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+    "Invalid error mount in NVMeBlockDevice::mount"}
+  );
+}
+
 EphemeralRBMDeviceRef create_test_ephemeral(uint64_t journal_size, uint64_t data_size) {
   return EphemeralRBMDeviceRef(
     new EphemeralRBMDevice(journal_size + data_size + 
