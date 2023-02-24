@@ -469,7 +469,7 @@ RecordSubmitter::roll_segment()
   assert(is_available());
   // #1 block concurrent submissions due to rolling
   wait_available_promise = seastar::shared_promise<>();
-  assert(!wait_unfull_flush_promise.has_value());
+  ceph_assert(!wait_unfull_flush_promise.has_value());
   return [FNAME, this] {
     if (p_current_batch->is_pending()) {
       if (state == state_t::FULL) {
@@ -575,7 +575,7 @@ RecordSubmitter::submit(record_t&& record)
             p_current_batch->get_num_records(),
             num_outstanding_io);
       wait_available_promise = seastar::shared_promise<>();
-      assert(!wait_unfull_flush_promise.has_value());
+      ceph_assert(!wait_unfull_flush_promise.has_value());
       wait_unfull_flush_promise = seastar::promise<>();
       // flush and mark available in background
       std::ignore = wait_unfull_flush_promise->get_future(
@@ -664,14 +664,14 @@ RecordSubmitter::open(bool is_mkfs)
 RecordSubmitter::close_ertr::future<>
 RecordSubmitter::close()
 {
-  assert(state == state_t::IDLE);
-  assert(num_outstanding_io == 0);
+  ceph_assert(state == state_t::IDLE);
+  ceph_assert(num_outstanding_io == 0);
   committed_to = JOURNAL_SEQ_NULL;
-  assert(p_current_batch != nullptr);
-  assert(p_current_batch->is_empty());
-  assert(!wait_available_promise.has_value());
+  ceph_assert(p_current_batch != nullptr);
+  ceph_assert(p_current_batch->is_empty());
+  ceph_assert(!wait_available_promise.has_value());
   has_io_error = false;
-  assert(!wait_unfull_flush_promise.has_value());
+  ceph_assert(!wait_unfull_flush_promise.has_value());
   metrics.clear();
   return segment_allocator.close();
 }
@@ -708,7 +708,7 @@ void RecordSubmitter::decrement_io_with_flush()
       return;
     }
   } else {
-    assert(!wait_unfull_flush_promise.has_value());
+    ceph_assert(!wait_unfull_flush_promise.has_value());
   }
 
   auto needs_flush = (
