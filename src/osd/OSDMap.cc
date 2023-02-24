@@ -656,7 +656,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
   }
 
   {
-    uint8_t target_v = 9; // if bumping this, be aware of range_blocklist 11
+    uint8_t target_v = 9; // if bumping this, be aware of allow_crimson 12
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -668,6 +668,9 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     if (!new_range_blocklist.empty() ||
 	!old_range_blocklist.empty()) {
       target_v = std::max((uint8_t)11, target_v);
+    }
+    if (mutate_allow_crimson != mutate_allow_crimson_t::NONE) {
+      target_v = std::max((uint8_t)12, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -721,6 +724,9 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     if (target_v >= 11) {
       encode(new_range_blocklist, bl, features);
       encode(old_range_blocklist, bl, features);
+    }
+    if (target_v >= 12) {
+      encode(mutate_allow_crimson, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -1000,6 +1006,9 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
       decode(new_range_blocklist, bl);
       decode(old_range_blocklist, bl);
     }
+    if (struct_v >= 12) {
+      decode(mutate_allow_crimson, bl);
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -1048,6 +1057,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->dump_float("new_backfillfull_ratio", new_backfillfull_ratio);
   f->dump_int("new_require_min_compat_client", to_integer<int>(new_require_min_compat_client));
   f->dump_int("new_require_osd_release", to_integer<int>(new_require_osd_release));
+  f->dump_unsigned("mutate_allow_crimson", static_cast<unsigned>(mutate_allow_crimson));
 
   if (fullmap.length()) {
     f->open_object_section("full_map");
@@ -2527,6 +2537,17 @@ int OSDMap::apply_incremental(const Incremental &inc)
     stretch_mode_bucket = inc.new_stretch_mode_bucket;
   }
 
+  switch (inc.mutate_allow_crimson) {
+  case Incremental::mutate_allow_crimson_t::NONE:
+    break;
+  case Incremental::mutate_allow_crimson_t::SET:
+    allow_crimson = true;
+    break;
+  case Incremental::mutate_allow_crimson_t::CLEAR:
+    allow_crimson = false;
+    break;
+  }
+
   calc_num_osds();
   _calc_up_osd_features();
   return 0;
@@ -3223,7 +3244,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 9; // when bumping this, be aware of range blocklist
+    uint8_t target_v = 9; // when bumping this, be aware of allow_crimson
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -3236,6 +3257,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (!range_blocklist.empty()) {
       target_v = std::max((uint8_t)11, target_v);
+    }
+    if (allow_crimson) {
+      target_v = std::max((uint8_t)12, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -3294,6 +3318,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (target_v >= 11) {
       ::encode(range_blocklist, bl, features);
+    }
+    if (target_v >= 12) {
+      ::encode(allow_crimson, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -3646,6 +3673,9 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
 	calculated_ranges.emplace(i.first, i.first);
       }
     }
+    if (struct_v >= 12) {
+      decode(allow_crimson, bl);
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -3840,6 +3870,7 @@ void OSDMap::dump(Formatter *f, CephContext *cct) const
   f->dump_string("require_osd_release",
 		 to_string(require_osd_release));
 
+  f->dump_bool("allow_crimson", allow_crimson);
   f->open_array_section("pools");
   for (const auto &[pid, pdata] : pools) {
     dump_pool(cct, pid, pdata, f);
@@ -4179,6 +4210,9 @@ void OSDMap::print(CephContext *cct, ostream& out) const
   }
   if (get_cluster_snapshot().length())
     out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
+  if (allow_crimson) {
+    out << "allow_crimson=true\n";
+  }
   out << "\n";
 
   print_pools(cct, out);

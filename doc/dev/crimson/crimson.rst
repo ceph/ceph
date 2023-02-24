@@ -24,44 +24,45 @@ cloned using git.
 
 .. _ASan: https://github.com/google/sanitizers/wiki/AddressSanitizer
 
-Installing Crimson with ready-to-use images
-===========================================
+Testing crimson with cephadm
+===============================
 
-An alternative to building Crimson from source is to use container images built
-by Ceph CI/CD and deploy them with one of the orchestrators: ``cephadm`` or ``Rook``.
-In this chapter documents the ``cephadm`` way.
+The Ceph CI/CD pipeline includes ceph container builds with
+crimson-osd subsitituted for ceph-osd.
 
-NOTE: We know that this procedure is suboptimal, but it has passed internal
-external quality assurance.::
+Once a branch at commit <sha1> has been built and is available in
+shaman, you can deploy it using the cephadm instructions outlined
+in :ref:`cephadm` with the following adaptations.
 
+First, while performing the initial bootstrap, use the --image flag to
+use a crimson build rather than a default build:
 
-  $ curl -L https://raw.githubusercontent.com/ceph/ceph-ci/wip-bharat-crimson/src/cephadm/cephadm -o cephadm
-  $ cp cephadm /usr/sbin
-  $ vi /usr/sbin/cephadm
+.. prompt:: bash #
 
-In the file change ``DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:master'``
-to ``DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:<sha1>-crimson`` where ``<sha1>``
-is the commit ID built by the Ceph CI/CD. You may use
-https://shaman.ceph.com/builds/ceph/ to monitor branches built by Ceph's Jenkins
-and to also discover those IDs.
+   cephadm --image quay.ceph.io/ceph-ci/ceph:<sha1>-crimson --allow-mismatched-release bootstrap ...
 
-An example::
+You'll likely need to include the --allow-mismatched-release flag to
+use a non-release branch.
 
-  DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:1647216bf4ebac6bcf5ad7739e02b38569736cfd-crimson
+Additionally, prior to deploying the osds, you'll need enable crimson
+and default pools to be created as crimson pools (from cephadm shell):
 
-When the edition is finished::
+.. prompt:: bash #
 
-  chmod 777 cephadm
-  podman pull quay.ceph.io/ceph-ci/ceph:<sha1>-crimson
-  cephadm bootstrap --mon-ip 10.1.172.208 --allow-fqdn-hostname
-  # Set "PermitRootLogin yes" for other nodes you want to use
-  echo 'PermitRootLogin yes' >>  /etc/ssh/sshd_config
-  systemctl restart sshd
+   ceph config set global 'enable_experimental_unrecoverable_data_corrupting_features' crimson
+   ceph osd set-allow-crimson --yes-i-really-mean-it
+   ceph config set mon osd_pool_default_crimson true
 
-  ssh-copy-id -f -i /etc/ceph/ceph.pub root@<nodename>
-  cephadm shell
-  ceph orch host add <nodename>
-  ceph orch apply osd --all-available-devices
+The first command enables the crimson experimental feature.  Crimson
+is highly experimental, and malfunctions up to and including crashes
+and data loss are to be expected.
+
+The second enables the allow_crimson OSDMap flag.  The monitor will
+not allow crimson-osd to boot without that flag.
+
+The last causes pools to be created by default with the crimson flag.
+crimson pools are restricted to operations supported by crimson.
+crimson-osd won't instantiate pgs from non-crimson pools.
 
 Running Crimson
 ===============
