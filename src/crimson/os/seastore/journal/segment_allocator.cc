@@ -446,6 +446,22 @@ RecordSubmitter::wait_available()
   });
 }
 
+void RecordSubmitter::set_unavailable() {
+  if (!unavailable_sources++) {
+    ceph_assert(!wait_available_promise.has_value());
+    wait_available_promise = seastar::shared_promise<>();
+  } else {
+    ceph_assert(wait_available_promise.has_value());
+  }
+}
+
+void RecordSubmitter::set_available() {
+  if (!(--unavailable_sources)) {
+    wait_available_promise->set_value();
+    wait_available_promise.reset();
+  }
+}
+
 RecordSubmitter::action_t
 RecordSubmitter::check_action(
   const record_size_t& rsize) const
@@ -468,14 +484,15 @@ RecordSubmitter::roll_segment()
   LOG_PREFIX(RecordSubmitter::roll_segment);
   assert(is_available());
   // #1 block concurrent submissions due to rolling
-  wait_available_promise = seastar::shared_promise<>();
-  ceph_assert(!wait_unfull_flush_promise.has_value());
+  set_unavailable();
   return [FNAME, this] {
     if (p_current_batch->is_pending()) {
       if (state == state_t::FULL) {
         DEBUG("{} wait flush ...", get_name());
-        wait_unfull_flush_promise = seastar::promise<>();
-        return wait_unfull_flush_promise->get_future();
+        if (!wait_unfull_flush_promise.has_value()) {
+          wait_unfull_flush_promise = seastar::shared_promise<>();
+        }
+        return wait_unfull_flush_promise->get_shared_future();
       } else { // IDLE/PENDING
         DEBUG("{} flush", get_name());
         flush_current_batch();
@@ -488,9 +505,8 @@ RecordSubmitter::roll_segment()
   }().then_wrapped([FNAME, this](auto fut) {
     if (fut.failed()) {
       ERROR("{} rolling is skipped unexpectedly, available", get_name());
+      set_available();
       has_io_error = true;
-      wait_available_promise->set_value();
-      wait_available_promise.reset();
       return roll_segment_ertr::now();
     } else {
       // start rolling in background
@@ -499,20 +515,16 @@ RecordSubmitter::roll_segment()
         // good
         DEBUG("{} rolling done, available", get_name());
         assert(!has_io_error);
-        wait_available_promise->set_value();
-        wait_available_promise.reset();
       }).handle_error(
         crimson::ct_error::all_same_way([FNAME, this](auto e) {
           ERROR("{} got error {}, available", get_name(), e);
           has_io_error = true;
-          wait_available_promise->set_value();
-          wait_available_promise.reset();
         })
       ).handle_exception([FNAME, this](auto e) {
         ERROR("{} got exception {}, available", get_name(), e);
         has_io_error = true;
-        wait_available_promise->set_value();
-        wait_available_promise.reset();
+      }).finally([this] {
+        set_available();
       });
       // wait for background rolling
       return wait_available();
@@ -574,15 +586,14 @@ RecordSubmitter::submit(record_t&& record)
             get_name(),
             p_current_batch->get_num_records(),
             num_outstanding_io);
-      wait_available_promise = seastar::shared_promise<>();
+      set_unavailable();
       ceph_assert(!wait_unfull_flush_promise.has_value());
-      wait_unfull_flush_promise = seastar::promise<>();
+      wait_unfull_flush_promise = seastar::shared_promise<>();
       // flush and mark available in background
-      std::ignore = wait_unfull_flush_promise->get_future(
+      std::ignore = wait_unfull_flush_promise->get_shared_future(
       ).finally([FNAME, this] {
         DEBUG("{} flush done, available", get_name());
-        wait_available_promise->set_value();
-        wait_available_promise.reset();
+        set_available();
       });
     } else {
       DEBUG("{} added pending, flush", get_name());

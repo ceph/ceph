@@ -331,6 +331,8 @@ public:
   // when the future is resolved.
   using wa_ertr = base_ertr;
   wa_ertr::future<> wait_available();
+  void set_unavailable();
+  void set_available();
 
   // when available, check for the submit action
   // according to the pending record size
@@ -408,10 +410,15 @@ private:
 
   // blocked for rolling or lack of resource
   std::optional<seastar::shared_promise<> > wait_available_promise;
+  // For the time being, there are only two possible sources for the
+  // record submitter to be unavailable:
+  //    1. RecordSubmitter is "FULL" and the current batch needs flush
+  //    2. Segment of the underlying segment allocator is being rolled
+  size_t unavailable_sources = 0;
   bool has_io_error = false;
   // when needs flush but io depth is full,
   // wait for decrement_io_with_flush()
-  std::optional<seastar::promise<> > wait_unfull_flush_promise;
+  std::optional<seastar::shared_promise<> > wait_unfull_flush_promise;
 
   struct {
     grouped_io_stats record_batch_stats;
