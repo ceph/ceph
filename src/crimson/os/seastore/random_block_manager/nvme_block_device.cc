@@ -32,18 +32,15 @@ open_ertr::future<> NVMeBlockDevice::open(
         logger().debug("open");
         // Get SSD's features from identify_controller and namespace command.
         // Do identify_controller first, and then identify_namespace.
-        return identify_controller().safe_then([this, in_path, mode](
+        return identify_controller(device).safe_then([this, in_path, mode](
           auto id_controller_data) {
           support_multistream = id_controller_data.oacs.support_directives;
           if (support_multistream) {
             stream_id_count = WRITE_LIFE_MAX;
           }
           awupf = id_controller_data.awupf + 1;
-          return identify_namespace().safe_then([this, in_path, mode] (
+          return identify_namespace(device).safe_then([this, in_path, mode] (
             auto id_namespace_data) {
-            // LBA format provides LBA size which is power of 2. LBA is the
-            // minimum size of read and write.
-            super.block_size = (1 << id_namespace_data.lbaf0.lbads);
             atomic_write_unit = awupf * super.block_size;
             data_protection_type = id_namespace_data.dps.protection_type;
             data_protection_enabled = (data_protection_type > 0);
@@ -220,17 +217,17 @@ Device::close_ertr::future<> NVMeBlockDevice::close() {
 }
 
 nvme_command_ertr::future<nvme_identify_controller_data_t>
-NVMeBlockDevice::identify_controller() {
+NVMeBlockDevice::identify_controller(seastar::file f) {
   return seastar::do_with(
     nvme_admin_command_t(),
     nvme_identify_controller_data_t(),
-    [this](auto &admin_command, auto &data) {
+    [this, f](auto &admin_command, auto &data) {
     admin_command.common.opcode = nvme_admin_command_t::OPCODE_IDENTIFY;
     admin_command.common.addr = (uint64_t)&data;
     admin_command.common.data_len = sizeof(data);
     admin_command.identify.cns = nvme_identify_command_t::CNS_CONTROLLER;
 
-    return pass_admin(admin_command).safe_then([&data](auto status) {
+    return pass_admin(admin_command, f).safe_then([&data](auto status) {
       return seastar::make_ready_future<nvme_identify_controller_data_t>(
         std::move(data));
       });
@@ -242,19 +239,19 @@ discard_ertr::future<> NVMeBlockDevice::discard(uint64_t offset, uint64_t len) {
 }
 
 nvme_command_ertr::future<nvme_identify_namespace_data_t>
-NVMeBlockDevice::identify_namespace() {
-  return get_nsid().safe_then([this](auto nsid) {
+NVMeBlockDevice::identify_namespace(seastar::file f) {
+  return get_nsid(f).safe_then([this, f](auto nsid) {
     return seastar::do_with(
       nvme_admin_command_t(),
       nvme_identify_namespace_data_t(),
-      [this, nsid](auto &admin_command, auto &data) {
+      [this, nsid, f](auto &admin_command, auto &data) {
       admin_command.common.opcode = nvme_admin_command_t::OPCODE_IDENTIFY;
       admin_command.common.addr = (uint64_t)&data;
       admin_command.common.data_len = sizeof(data);
       admin_command.common.nsid = nsid;
       admin_command.identify.cns = nvme_identify_command_t::CNS_NAMESPACE;
 
-      return pass_admin(admin_command).safe_then([&data](auto status){
+      return pass_admin(admin_command, f).safe_then([&data](auto status){
         return seastar::make_ready_future<nvme_identify_namespace_data_t>(
           std::move(data));
       });
@@ -262,13 +259,17 @@ NVMeBlockDevice::identify_namespace() {
   });
 }
 
-nvme_command_ertr::future<int> NVMeBlockDevice::get_nsid() {
-  return device.ioctl(NVME_IOCTL_ID, nullptr);
+nvme_command_ertr::future<int> NVMeBlockDevice::get_nsid(seastar::file f) {
+  return f.ioctl(NVME_IOCTL_ID, nullptr).handle_exception(
+    [](auto e)->nvme_command_ertr::future<int> {
+      logger().error("pass_admin: ioctl failed");
+      return crimson::ct_error::input_output_error::make();
+    });
 }
 
 nvme_command_ertr::future<int> NVMeBlockDevice::pass_admin(
-  nvme_admin_command_t& admin_cmd) {
-  return device.ioctl(NVME_IOCTL_ADMIN_CMD, &admin_cmd).handle_exception(
+  nvme_admin_command_t& admin_cmd, seastar::file f) {
+  return f.ioctl(NVME_IOCTL_ADMIN_CMD, &admin_cmd).handle_exception(
     [](auto e)->nvme_command_ertr::future<int> {
       logger().error("pass_admin: ioctl failed");
       return crimson::ct_error::input_output_error::make();

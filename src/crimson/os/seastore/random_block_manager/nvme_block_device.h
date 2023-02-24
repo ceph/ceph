@@ -228,14 +228,34 @@ public:
       return seastar::open_file_dma(
 	device_path,
 	seastar::open_flags::rw | seastar::open_flags::dsync
-      ).then([stat](auto file) mutable {
-	return file.size().then([stat, file](auto size) mutable {
+      ).then([this, stat](auto file) mutable {
+	return file.size().then([this, stat, file](auto size) mutable {
 	  stat.size = size;
-	  return file.close(
-	  ).then([stat] {
+	  return identify_namespace(file
+	  ).safe_then([stat] (auto id_namespace_data) mutable {
+	    // LBA format provides LBA size which is power of 2. LBA is the
+	    // minimum size of read and write.
+	    stat.block_size = (1 << id_namespace_data.lbaf0.lbads);
+	    if (stat.block_size < RBM_SUPERBLOCK_SIZE) {
+	      stat.block_size = RBM_SUPERBLOCK_SIZE;
+	    } 
 	    return stat_device_ret(
 	      read_ertr::ready_future_marker{},
 	      stat
+	    );
+	  }).handle_error(crimson::ct_error::input_output_error::handle(
+	    [stat]{
+	    return stat_device_ret(
+	      read_ertr::ready_future_marker{},
+	      stat
+	    );
+	  }), crimson::ct_error::pass_further_all{});
+	}).safe_then([file](auto st) mutable {
+	  return file.close(
+	  ).then([st] {
+	    return stat_device_ret(
+	      read_ertr::ready_future_marker{},
+	      st
 	    );
 	  });
 	});
@@ -288,7 +308,7 @@ public:
    * Caller can construct and execute its own nvme command
    */
   nvme_command_ertr::future<int> pass_admin(
-    nvme_admin_command_t& admin_cmd);
+    nvme_admin_command_t& admin_cmd, seastar::file f);
   nvme_command_ertr::future<int> pass_through_io(
     nvme_io_command_t& io_cmd);
 
@@ -305,9 +325,11 @@ public:
 private:
   // identify_controller/namespace are used to get SSD internal information such
   // as supported features, NPWG and NPWA
-  nvme_command_ertr::future<nvme_identify_controller_data_t> identify_controller();
-  nvme_command_ertr::future<nvme_identify_namespace_data_t> identify_namespace();
-  nvme_command_ertr::future<int> get_nsid();
+  nvme_command_ertr::future<nvme_identify_controller_data_t> 
+    identify_controller(seastar::file f);
+  nvme_command_ertr::future<nvme_identify_namespace_data_t>
+    identify_namespace(seastar::file f);
+  nvme_command_ertr::future<int> get_nsid(seastar::file f);
   open_ertr::future<> open_for_io(
     const std::string& in_path,
     seastar::open_flags mode);
