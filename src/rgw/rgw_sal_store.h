@@ -27,6 +27,13 @@ class StoreDriver : public Driver {
     virtual uint64_t get_new_req_id() override {
       return ceph::util::generate_random_number<uint64_t>();
     }
+
+    int read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) override {return -EOPNOTSUPP;}
+    int write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+	optional_yield y, const DoutPrefixProvider *dpp) override {return -ENOENT;}
+    int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) override {return -ENOENT;}
 };
 
 class StoreUser : public User {
@@ -146,6 +153,13 @@ class StoreBucket : public Bucket {
 	     (info.bucket.name != sb.info.bucket.name) ||
 	     (info.bucket.bucket_id != sb.info.bucket.bucket_id);
     }
+
+    int read_topics(rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* objv_tracker, 
+        optional_yield y, const DoutPrefixProvider *dpp) override {return 0;}
+    int write_topics(const rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* objv_tracker, 
+        optional_yield y, const DoutPrefixProvider *dpp) override {return 0;}
+    int remove_topics(RGWObjVersionTracker* objv_tracker, 
+        optional_yield y, const DoutPrefixProvider *dpp) override {return 0;}
 
     friend class BucketList;
   protected:

@@ -94,6 +94,7 @@ set(librgw_common_srcs
   rgw_notify_event_type.cc
   rgw_period_history.cc
   rgw_period_puller.cc
+  rgw_pubsub.cc
   rgw_coroutine.cc
   rgw_cr_rest.cc
   rgw_op.cc
@@ -110,6 +111,7 @@ set(librgw_common_srcs
   rgw_rest_ratelimit.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
+  rgw_rest_pubsub.cc
   rgw_s3select.cc
   rgw_role.cc
   rgw_sal.cc
@@ -165,14 +167,12 @@ set(librgw_common_srcs
   driver/rados/rgw_object_expirer_core.cc
   driver/rados/rgw_otp.cc
   driver/rados/rgw_period.cc
-  driver/rados/rgw_pubsub.cc
   driver/rados/rgw_pubsub_push.cc
   driver/rados/rgw_putobj_processor.cc
   driver/rados/rgw_rados.cc
   driver/rados/rgw_reshard.cc
   driver/rados/rgw_rest_bucket.cc
   driver/rados/rgw_rest_log.cc
-  driver/rados/rgw_rest_pubsub.cc
   driver/rados/rgw_rest_realm.cc
   driver/rados/rgw_rest_user.cc
   driver/rados/rgw_sal_rados.cc
