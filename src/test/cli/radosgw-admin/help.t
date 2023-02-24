@@ -261,6 +261,9 @@
      --data-extra-pool=<pool>  placement target data extra (non-ec) pool
      --placement-index-type=<type>
                                placement target index type (normal, indexless, or #id)
+     --placement-inline-data=<true>
+                               set whether the placement target is configured to store a data
+                               chunk inline in head objects
      --compression=<type>      placement target compression type (plugin name or empty/none)
      --tier-type=<type>        zone tier type
      --tier-config=<k>=<v>[,...]

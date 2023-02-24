@@ -275,11 +275,12 @@ struct RGWZonePlacementInfo {
   rgw_pool data_extra_pool; /* if not set we should use data_pool */
   RGWZoneStorageClasses storage_classes;
   rgw::BucketIndexType index_type;
+  bool inline_data;
 
-  RGWZonePlacementInfo() : index_type(rgw::BucketIndexType::Normal) {}
+  RGWZonePlacementInfo() : index_type(rgw::BucketIndexType::Normal), inline_data(true) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     encode(index_pool.to_str(), bl);
     rgw_pool standard_data_pool = get_data_pool(RGW_STORAGE_CLASS_STANDARD);
     encode(standard_data_pool.to_str(), bl);
@@ -288,11 +289,12 @@ struct RGWZonePlacementInfo {
     std::string standard_compression_type = get_compression_type(RGW_STORAGE_CLASS_STANDARD);
     encode(standard_compression_type, bl);
     encode(storage_classes, bl);
+    encode(inline_data, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(7, bl);
+    DECODE_START(8, bl);
     std::string index_pool_str;
     std::string data_pool_str;
     decode(index_pool_str, bl);
@@ -318,6 +320,9 @@ struct RGWZonePlacementInfo {
     } else {
       storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &standard_data_pool,
                                         (!standard_compression_type.empty() ? &standard_compression_type : nullptr));
+    }
+    if (struct_v >= 8) {
+      decode(inline_data, bl);
     }
     DECODE_FINISH(bl);
   }
