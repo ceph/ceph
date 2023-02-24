@@ -16,13 +16,19 @@
 
         Bucket
                 In the context of :term:`RGW`, a bucket is a group of objects.
-                Buckets are grouped into zones, and zones are grouped into
-                zonegroups. In an filesystem-based analogy in which objects are
-                the counterpart of files, buckets are the counterpart of
+                In a filesystem-based analogy in which objects are the
+                counterpart of files, buckets are the counterpart of
                 directories. :ref:`Multisite sync
                 policies<radosgw-multisite-sync-policy>` can be set on buckets,
                 to provide fine-grained control of data movement from one zone
-                to another zone.
+                to another zone. 
+                
+                The concept of the bucket has been taken from AWS S3. See also
+                `the AWS S3 page on creating buckets <https://docs.aws.amazon.com/AmazonS3/latest/userguide/creating-buckets-s3.html>`_
+                and `the AWS S3 'Buckets Overview' page <https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingBucket.html>`_.
+
+                OpenStack Swift uses the term "containers" for what RGW and AWS call "buckets". 
+                See `the OpenStack Storage API overview page <https://docs.openstack.org/swift/latest/api/object_api_v1_overview.html>`_.
                 
 	Ceph
                 Ceph is a distributed network storage and file system with
