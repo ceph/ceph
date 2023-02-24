@@ -300,9 +300,20 @@ class TestNFS(MgrTestCase):
         '''
         Return port and ip for a cluster
         '''
-        #{'test': {'backend': [{'hostname': 'smithi068', 'ip': '172.21.15.68', 'port': 2049}]}}
-        info_output = json.loads(self._nfs_cmd('cluster', 'info', self.cluster_id))['test']['backend'][0]
-        return info_output["port"], info_output["ip"]
+        #{'test': {'backend': [{'hostname': 'smithi068', 'ip': '172.21.15.68',
+        #'port': 2049}]}}
+        with contextutil.safe_while(sleep=5, tries=6) as proceed:
+            while proceed():
+                try:
+                    info_output = json.loads(
+                        self._nfs_cmd('cluster', 'info',
+                                      self.cluster_id))['test']['backend'][0]
+                    return info_output["port"], info_output["ip"]
+                except (IndexError, CommandFailedError) as e:
+                    if 'list index out of range' in str(e):
+                        log.warning('no port and/or ip found, retrying')
+                    else:
+                        log.warning(f'{e}, retrying')
 
     def _test_mnt(self, pseudo_path, port, ip, check=True):
         '''
