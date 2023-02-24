@@ -167,6 +167,7 @@ class to_ceph_volume(object):
                     # for lvm batch we can just do all devices in one command
 
                     cmd = "lvm batch --no-auto {}".format(" ".join(data_devices))
+                    cmd += " --bluestore"
 
                     if db_devices:
                         cmd += " --db-devices {}".format(" ".join(db_devices))
@@ -182,6 +183,11 @@ class to_ceph_volume(object):
 
                     if d in self._supported_device_classes:
                         cmd += " --crush-device-class {}".format(d)
+                    cmds.append(cmd)
+
+                elif self.spec.objectstore == 'seastore':
+                    cmd = "lvm batch --no-auto {}".format(" ".join(data_devices))
+                    cmd += " --seastore"
                     cmds.append(cmd)
 
         for i in range(len(cmds)):
