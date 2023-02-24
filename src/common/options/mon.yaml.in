@@ -27,6 +27,15 @@ options:
   default: 4_K
   services:
   - mon
+- name: osd_pool_default_crimson
+  type: bool
+  level: advanced
+  desc: Create pools by default with FLAG_CRIMSON
+  default: false
+  services :
+  - mon
+  flags:
+  - runtime
 - name: mon_max_pool_pg_num
   type: uint
   level: advanced

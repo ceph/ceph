@@ -531,6 +531,10 @@ seastar::future<> OSD::_send_boot()
                                   cluster_addrs,
                                   CEPH_FEATURES_ALL);
   collect_sys_info(&m->metadata, NULL);
+
+  // See OSDMonitor::preprocess_boot, prevents boot without allow_crimson
+  // OSDMap flag
+  m->metadata["osd_type"] = "crimson";
   return monc->send_message(std::move(m));
 }
 

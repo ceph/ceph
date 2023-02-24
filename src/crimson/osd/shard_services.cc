@@ -510,6 +510,15 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	      return seastar::make_ready_future<
 		std::tuple<Ref<PG>, OSDMapService::cached_map_t>
 		>(std::make_tuple(Ref<PG>(), startmap));
+	    } else if (!pool->is_crimson()) {
+	      logger().debug(
+		"{} ignoring pgid {}, pool lacks crimson flag",
+		__func__,
+		pgid);
+	      local_state.pg_map.pg_creation_canceled(pgid);
+	      return seastar::make_ready_future<
+		std::tuple<Ref<PG>, OSDMapService::cached_map_t>
+		>(std::make_tuple(Ref<PG>(), startmap));
 	    }
 	    ceph_assert(get_map()->require_osd_release >=
 			ceph_release_t::octopus);
