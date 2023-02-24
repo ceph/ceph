@@ -152,6 +152,8 @@ public:
 
   mkfs_ret do_mkfs(device_config_t);
 
+  mount_ret do_mount();
+
   write_ertr::future<> write_rbm_header();
 
   read_ertr::future<rbm_metadata_header_t> read_rbm_header(rbm_abs_addr addr);
@@ -199,19 +201,7 @@ public:
   extent_len_t get_block_size() const final { return block_size; }
 
   mount_ret mount() final {
-    return open("", seastar::open_flags::rw
-    ).safe_then([this]() {
-      super.block_size = TEST_BLOCK_SIZE;
-      return read_rbm_header(RBM_START_ADDRESS
-      ).safe_then([](auto s) {
-	return seastar::now();
-      });
-    }).handle_error(
-      mount_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-	"Invalid error mount"
-      }
-    );
+    return do_mount();
   }
 
   mkfs_ret mkfs(device_config_t config) final {
