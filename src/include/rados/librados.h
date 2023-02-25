@@ -88,6 +88,14 @@ enum {
   LIBRADOS_OP_FLAG_FADVISE_FUA        = 0x80,
 };
 
+/*
+ * Flags for rados_create2.
+ */
+enum {
+  // don't initialize/shutdown crypto library
+  LIBRADOS_CREATE_FLAG_NO_CRYPTO_INIT  = 0x1
+};
+
 #define CEPH_RADOS_API
 
 /**
@@ -440,7 +448,7 @@ CEPH_RADOS_API int rados_create(rados_t *cluster, const char * const id);
  * Like rados_create, but 
  * 1) don't assume 'client\.'+id; allow full specification of name
  * 2) allow specification of cluster name
- * 3) flags for future expansion
+ * 3) flags for (see librados.h constants beginning with LIBRADOS_CREATE_FLAG)
  */
 CEPH_RADOS_API int rados_create2(rados_t *pcluster,
                                  const char *const clustername,

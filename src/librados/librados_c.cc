@@ -120,11 +120,12 @@ static TracepointProvider::Traits tracepoint_traits("librados_tp.so", "rados_tra
 
 static CephContext *rados_create_cct(
   const char * const clustername,
-  CephInitParameters *iparams)
+  CephInitParameters *iparams,
+  int init_flags)
 {
   // missing things compared to global_init:
   // g_ceph_context, g_conf, g_lockdep, signal handlers
-  CephContext *cct = common_preinit(*iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+  CephContext *cct = common_preinit(*iparams, CODE_ENVIRONMENT_LIBRARY, init_flags);
   if (clustername)
     cct->_conf->cluster = clustername;
   cct->_conf.parse_env(cct->get_module_type()); // environment variables override
@@ -142,7 +143,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_create)(
   if (id) {
     iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
   }
-  CephContext *cct = rados_create_cct("", &iparams);
+  CephContext *cct = rados_create_cct("", &iparams, 0);
 
   tracepoint(librados, rados_create_enter, id);
   *pcluster = reinterpret_cast<rados_t>(new librados::RadosClient(cct));
@@ -172,7 +173,12 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_create2)(
     retval = -EINVAL;
   }
 
-  CephContext *cct = rados_create_cct(clustername, &iparams);
+  int init_flags = 0;
+  if ((flags & LIBRADOS_CREATE_FLAG_NO_CRYPTO_INIT) != 0) {
+    init_flags |= CINIT_FLAG_NO_CRYPTO_INIT;
+  }
+
+  CephContext *cct = rados_create_cct(clustername, &iparams, init_flags);
   tracepoint(librados, rados_create2_enter, clustername, name, flags);
   if (retval == 0) {
     *pcluster = reinterpret_cast<rados_t>(new librados::RadosClient(cct));
