@@ -171,11 +171,6 @@ public:
   static rbm_abs_addr get_journal_start() {
     return RBM_SUPERBLOCK_SIZE;
   }
-
-  // interfaces for test
-  void set_block_size(size_t size) {
-    super.block_size = size;
-  }
 };
 using RBMDeviceRef = std::unique_ptr<RBMDevice>;
 
