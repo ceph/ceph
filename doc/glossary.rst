@@ -5,7 +5,7 @@
 .. glossary::
 
         Application
-                More properly called a "client", an application is any program
+                More properly called a :term:`client`, an application is any program
                 external to Ceph that uses a Ceph Cluster to store and
                 replicate data.
 
@@ -191,6 +191,10 @@
                 The Ceph authentication protocol. CephX operates like Kerberos,
                 but it has no single point of failure. See the :ref:`CephX
                 Configuration Reference<rados-cephx-config-ref>`.
+
+	Client
+                A client is any program external to Ceph that uses a Ceph
+                Cluster to store and replicate data. 
 
 	Cloud Platforms
 	Cloud Stacks
