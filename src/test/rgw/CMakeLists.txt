@@ -85,6 +85,11 @@ add_executable(unittest_http_manager test_http_manager.cc)
 add_ceph_unittest(unittest_http_manager)
 target_link_libraries(unittest_http_manager ${rgw_libs})
 
+# unittest_rgw_curl_client
+add_executable(unittest_rgw_curl_client test_rgw_curl_client.cc)
+add_ceph_unittest(unittest_rgw_curl_client)
+target_link_libraries(unittest_rgw_curl_client ${rgw_libs})
+
 # unittest_rgw_reshard_wait
 add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
 add_ceph_unittest(unittest_rgw_reshard_wait)

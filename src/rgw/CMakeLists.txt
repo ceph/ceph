@@ -77,6 +77,7 @@ set(librgw_common_srcs
   rgw_es_query.cc
   rgw_formats.cc
   rgw_http_client.cc
+  curl/client.cc
   rgw_keystone.cc
   rgw_ldap.cc
   rgw_lc.cc
