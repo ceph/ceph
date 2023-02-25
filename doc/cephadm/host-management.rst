@@ -247,9 +247,10 @@ Many hosts can be added at once using
     hostname: node-02
     addr: 192.168.0.12
 
-This can be combined with service specifications (below) to create a cluster spec
-file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec``
-also to do this during bootstrap. Cluster SSH Keys must be copied to hosts prior to adding them.
+This can be combined with :ref:`service specifications<orchestrator-cli-service-spec>`
+to create a cluster spec file to deploy a whole cluster in one command.  see
+``cephadm bootstrap --apply-spec`` also to do this during bootstrap. Cluster
+SSH Keys must be copied to hosts prior to adding them.
 
 Setting the initial CRUSH location of host
 ==========================================
