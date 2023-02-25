@@ -4,6 +4,11 @@
 
 .. glossary::
 
+        Application
+                More properly called a "client", an application is any program
+                external to Ceph that uses a Ceph Cluster to store and
+                replicate data.
+
 	:ref:`BlueStore<rados_config_storage_devices_bluestore>`
                 OSD BlueStore is a storage back end used by OSD daemons, and
                 was designed specifically for use with Ceph. BlueStore was
