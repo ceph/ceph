@@ -839,6 +839,9 @@ void CephContext::put() {
 
 void CephContext::init_crypto()
 {
+  if (get_init_flags() & CINIT_FLAG_NO_CRYPTO_INIT)
+    return;
+
   if (_crypto_inited++ == 0) {
     TOPNSPC::crypto::init();
   }

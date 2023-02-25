@@ -41,6 +41,9 @@ enum common_init_flags_t {
 
   // don't expose default cct perf counters
   CINIT_FLAG_NO_CCT_PERF_COUNTERS = 0x40,
+
+  // don't initialize crypto
+  CINIT_FLAG_NO_CRYPTO_INIT = 0x80
 };
 
 #ifndef WITH_SEASTAR
