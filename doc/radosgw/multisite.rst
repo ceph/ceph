@@ -71,15 +71,17 @@ Functional Changes from Infernalis
 ==================================
 
 Beginning with Kraken, each Ceph Object Gateway can be configured to work in an
-active-active zone configuration, allowing for writes to non-master zones.
+active-active zone mode. This makes it possible to write to non-master zones.
 
 The multi-site configuration is stored within a container called a "realm". The
-realm stores zonegroups, zones, and a time "period" with multiple epochs for
-tracking changes to the configuration. Beginning with Kraken, the
-``ceph-radosgw`` daemons handle the synchronization, which eliminates the need
-for a separate synchronization agent. Additionally, the new approach to
-synchronization allows the Ceph Object Gateway to operate with an
-"active-active" configuration instead of "active-passive".
+realm stores zonegroups, zones, and a time "period" with multiple epochs (which
+(the epochs) are used for tracking changes to the configuration). 
+
+Beginning with Kraken, the ``ceph-radosgw`` daemons handle the synchronization
+of data across zones, which eliminates the need for a separate synchronization
+agent. This new approach to synchronization allows the Ceph Object Gateway to
+operate with an "active-active" configuration instead of with an
+"active-passive" configuration.
 
 Requirements and Assumptions
 ============================
