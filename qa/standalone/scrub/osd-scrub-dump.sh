@@ -18,7 +18,7 @@
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 MAX_SCRUBS=4
-SCRUB_SLEEP=2
+SCRUB_SLEEP=3
 POOL_SIZE=3
 
 function run() {
@@ -31,7 +31,7 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--osd_max_scrubs=$MAX_SCRUBS "
-    CEPH_ARGS+="--osd_scrub_chunk_max=$CHUNK_MAX "
+    CEPH_ARGS+="--osd_shallow_scrub_chunk_max=$CHUNK_MAX "
     CEPH_ARGS+="--osd_scrub_sleep=$SCRUB_SLEEP "
     CEPH_ARGS+="--osd_pool_default_size=$POOL_SIZE "
     # Set scheduler to "wpq" until there's a reliable way to query scrub states
@@ -138,7 +138,13 @@ function TEST_recover_unexpected() {
 	    break
 	fi
 	total=$(expr $total + $pass)
-	sleep $(expr $SCRUB_SLEEP \* 2)
+	if [ $total -gt 0 ]; then
+	    # already saw some reservations, so wait longer to avoid excessive over-counting.
+	    # Note the loop itself takes about 2-3 seconds
+	    sleep $(expr $SCRUB_SLEEP - 2)
+	else
+	    sleep 0.5
+	fi
     done
 
     # Check that there are no more scrubs
