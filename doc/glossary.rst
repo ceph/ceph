@@ -390,5 +390,11 @@
 	Teuthology
 		The collection of software that performs scripted tests on Ceph.
 
+        Zone
+                In the context of :term:`RGW`, a zone is a logical group that
+                consists of one or more :term:`RGW` instances.  A zone's
+                configuration state is stored in the :term:`period`. See
+                :ref:`Zones<radosgw-zones>`.
+
 .. _https://github.com/ceph: https://github.com/ceph
 .. _Cluster Map: ../architecture#cluster-map   
