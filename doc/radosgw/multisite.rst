@@ -1307,6 +1307,8 @@ The following JSON object is an example of a default zonegroup map:
    
       radosgw-admin period update --commit
 
+.. _radosgw-zones:
+
 Zones
 -----
 
