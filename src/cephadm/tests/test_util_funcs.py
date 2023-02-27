@@ -639,7 +639,6 @@ def _has_values_somewhere(clog, values, non_zero=True):
             {"timeout": 1},
             None,
             id="long-sleep",
-            marks=pytest.mark.xfail,
         ),
         pytest.param(
             "import time\nfor i in range(100):\n\tprint(i, flush=True); time.sleep(0.01)",
@@ -647,7 +646,6 @@ def _has_values_somewhere(clog, values, non_zero=True):
             {"timeout": 0.5},
             None,
             id="slow-print-timeout",
-            marks=pytest.mark.xfail,
         ),
         # Commands that time out collect no logs, return empty std{out,err} strings
     ],
