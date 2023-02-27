@@ -251,6 +251,17 @@ openSUSE Tumbleweed
 The newest major release of Ceph is already available through the normal Tumbleweed repositories.
 There's no need to add another package repository manually.
 
+openEuler
+^^^^^^^^^
+
+There are two major versions supported in normal openEuler repositories. They are ceph 12.2.8 in openEuler-20.03-LTS series and ceph 16.2.7 in openEuler-22.03-LTS series. There’s no need to add another package repository manually.
+You can install ceph just by executing the following:
+
+.. prompt:: bash $
+
+    sudo yum -y install ceph
+
+Also you can download packages manually from https://repo.openeuler.org/openEuler-{release}/everything/{arch}/Packages/.
 
 Ceph Development Packages
 -------------------------
