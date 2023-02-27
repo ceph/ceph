@@ -108,7 +108,9 @@ public:
 protected:
   // cons
   MClientRequest()
-    : MMDSOp(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
+    : MMDSOp(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
+    memset(&head, 0, sizeof(head));
+  }
   MClientRequest(int op, bool over=true)
     : MMDSOp(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
