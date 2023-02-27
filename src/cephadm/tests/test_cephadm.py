@@ -2162,9 +2162,7 @@ class TestPull:
 
 
 class TestApplySpec:
-
-    def test_extract_host_info_from_applied_spec(self, cephadm_fs):
-        yaml = '''---
+    yaml = '''---
 service_type: host
 hostname: vm-00
 addr: 192.168.122.44
@@ -2204,14 +2202,24 @@ spec:
 ---  
 '''
 
-        cephadm_fs.create_file('spec.yml', contents=yaml)
-        retdic = [{'hostname': 'vm-00', 'addr': '192.168.122.44'},
-                  {'hostname': 'vm-01', 'addr': '192.168.122.247'},
-                  {'hostname': 'vm-02',}]
+    parsed = [
+        {'service_type': 'host', 'hostname': 'vm-00', 'addr': '192.168.122.44', 'labels': ['example1', 'example2']},
+        {'service_type': 'host', 'hostname': 'vm-01', 'addr': '192.168.122.247', 'labels': ['grafana']},
+        {'service_type': 'host', 'hostname': 'vm-02'},
+		{
+			'service_type': 'rgw',
+			'service_id': 'myrgw',
+			'spec': {
+				'rgw_frontend_ssl_certificate': '-----BEGIN PRIVATE KEY-----\nV2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt\nZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15\nIGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu\nYSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg\nZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=\n-----END PRIVATE KEY-----\n-----BEGIN CERTIFICATE-----\nV2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt\nZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15\nIGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu\nYSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg\nZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=\n-----END CERTIFICATE-----\n',
+				'ssl': True
+			}
+		}
+    ]
 
-        with open('spec.yml') as f:
-            dic = _cephadm._extract_host_info_from_applied_spec(f)
-            assert dic == retdic
+    def test_parse_spec_yaml(self, cephadm_fs):
+        cephadm_fs.create_file('spec.yml', contents=self.yaml)
+        dic = _cephadm._parse_spec_yaml('spec.yml')
+        assert dic == self.parsed
 
     @mock.patch('cephadm.call', return_value=('', '', 0))
     @mock.patch('cephadm.logger')

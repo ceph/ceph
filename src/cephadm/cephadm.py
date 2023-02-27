@@ -22,6 +22,7 @@ from typing import Dict, List, Tuple, Optional, Union, Any, Callable, IO, Sequen
 
 import re
 import uuid
+import yaml
 
 from contextlib import redirect_stdout
 from functools import wraps
@@ -4587,105 +4588,40 @@ def finish_bootstrap_config(
     pass
 
 
-def _extract_host_info_from_applied_spec(f: Iterable[str]) -> List[Dict[str, str]]:
-    # overall goal of this function is to go through an applied spec and find
-    # the hostname (and addr is provided) for each host spec in the applied spec.
-    # Generally, we should be able to just pass the spec to the mgr module where
-    # proper yaml parsing can happen, but for host specs in particular we want to
-    # be able to distribute ssh keys, which requires finding the hostname (and addr
-    # if possible) for each potential host spec in the applied spec.
-
-    specs: List[List[str]] = []
-    current_spec: List[str] = []
-    for line in f:
-        if re.search(r'^---\s+', line):
-            if current_spec:
-                specs.append(current_spec)
-            current_spec = []
-        else:
-            line = line.strip()
-            if line:
-                current_spec.append(line)
-    if current_spec:
-        specs.append(current_spec)
-
-    host_specs: List[List[str]] = []
-    for spec in specs:
-        for line in spec:
-            if 'service_type' in line:
-                try:
-                    _, type = line.split(':')
-                    type = type.strip()
-                    if type == 'host':
-                        host_specs.append(spec)
-                except ValueError as e:
-                    spec_str = '\n'.join(spec)
-                    logger.error(f'Failed to pull service_type from spec:\n{spec_str}. Got error: {e}')
-                break
-            spec_str = '\n'.join(spec)
-            logger.error(f'Failed to find service_type within spec:\n{spec_str}')
-
-    host_dicts = []
-    for s in host_specs:
-        host_dict = _extract_host_info_from_spec(s)
-        # if host_dict is empty here, we failed to pull the hostname
-        # for the host from the spec. This should have already been logged
-        # so at this point we just don't want to include it in our output
-        if host_dict:
-            host_dicts.append(host_dict)
-
-    return host_dicts
+def _parse_spec_yaml(spec_path: str) -> List[Dict[str, Any]]:
+    specs = []
+    with open(spec_path, "r") as f:
+        try:
+            specs = yaml.safe_load_all(f)
+        except yaml.YAMLError:
+            logger.error(f'Failed to parse YAML file: {spec_path}')
+    # Filter out empty specs
+    return [s for s in specs if s != None]
 
 
-def _extract_host_info_from_spec(host_spec: List[str]) -> Dict[str, str]:
-    # note:for our purposes here, we only really want the hostname
-    # and address of the host from each of these specs in order to
-    # be able to distribute ssh keys. We will later apply the spec
-    # through the mgr module where proper yaml parsing can be done
-    # The returned dicts from this function should only contain
-    # one or two entries, one (required) for hostname, one (optional) for addr
-    # {
-    #   hostname: <hostname>
-    #   addr: <ip-addr>
-    # }
-    # if we fail to find the hostname, an empty dict is returned
-
-    host_dict = {}  # type: Dict[str, str]
-    for line in host_spec:
-        for field in ['hostname', 'addr']:
-            if field in line:
-                try:
-                    _, field_value = line.split(':')
-                    field_value = field_value.strip()
-                    host_dict[field] = field_value
-                except ValueError as e:
-                    spec_str = '\n'.join(host_spec)
-                    logger.error(f'Error trying to pull {field} from host spec:\n{spec_str}. Got error: {e}')
-
-    if 'hostname' not in host_dict:
-        spec_str = '\n'.join(host_spec)
-        logger.error(f'Could not find hostname in host spec:\n{spec_str}')
-        return {}
-    return host_dict
-
-
-def _distribute_ssh_keys(ctx: CephadmContext, host_info: Dict[str, str], bootstrap_hostname: str) -> int:
+def _distribute_ssh_keys(ctx: CephadmContext, host_spec: Dict[str, Any], bootstrap_hostname: str) -> int:
     # copy ssh key to hosts in host spec (used for apply spec)
     ssh_key = CEPH_DEFAULT_PUBKEY
     if ctx.ssh_public_key:
         ssh_key = ctx.ssh_public_key.name
 
-    if bootstrap_hostname != host_info['hostname']:
+    if host_spec.get('hostname') == None:
+        logger.error(f'Could not find hostname in host spec:\n{host_spec}')
+        return 1
+
+    hostname = host_spec['hostname']
+
+    if bootstrap_hostname != hostname:
         if 'addr' in host_info:
-            addr = host_info['addr']
+            addr = host_spec['addr']
         else:
-            addr = host_info['hostname']
+            addr = hostname
         out, err, code = call(ctx, ['sudo', '-u', ctx.ssh_user, 'ssh-copy-id', '-f', '-i', ssh_key, '-o StrictHostKeyChecking=no', '%s@%s' % (ctx.ssh_user, addr)])
         if code:
-            logger.error('\nCopying ssh key to host %s at address %s failed!\n' % (host_info['hostname'], addr))
+            logger.error('\nCopying ssh key to host %s at address %s failed!\n' % (hostname, addr))
             return 1
         else:
-            logger.info('Added ssh key to host %s at address %s' % (host_info['hostname'], addr))
+            logger.info('Added ssh key to host %s at address %s' % (hostname, addr))
     return 0
 
 
@@ -4972,14 +4908,14 @@ def command_bootstrap(ctx):
     if ctx.apply_spec:
         logger.info('Applying %s to cluster' % ctx.apply_spec)
         # copy ssh key to hosts in spec file
-        with open(ctx.apply_spec) as f:
-            host_dicts = _extract_host_info_from_applied_spec(f)
-            for h in host_dicts:
-                if ctx.ssh_signed_cert:
-                    logger.info('Key distribution is not supported for signed CA key setups. Skipping ...')
-                else:
-                    _distribute_ssh_keys(ctx, h, hostname)
-
+        specs = _parse_spec_yaml(ctx.apply_spec)
+        host_specs = [s for s in specs if s.get('service_type') == 'host']
+        for h in host_specs:
+            if ctx.ssh_signed_cert:
+                logger.info('Key distribution is not supported for signed CA key setups. Skipping ...')
+            else:
+                _distribute_ssh_keys(ctx, h, hostname)
+        # apply the spec file
         mounts = {}
         mounts[pathify(ctx.apply_spec)] = '/tmp/spec.yml:ro'
         try:
