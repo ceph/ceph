@@ -71,11 +71,15 @@ def mock_device():
     dev.lvs = []
     return dev
 
-@pytest.fixture(params=range(1,3))
+@pytest.fixture(params=range(1,4))
 def mock_devices_available(request):
     ret = []
-    for _ in range(request.param):
-        ret.append(mock_device())
+    for n in range(request.param):
+        dev = mock_device()
+        # after v15.2.8, a single VG is created for each PV
+        dev.vg_name = f'vg_foo_{n}'
+        dev.vgs = [lvm.VolumeGroup(vg_name=dev.vg_name, lv_name=dev.lv_name)]
+        ret.append(dev)
     return ret
 
 @pytest.fixture
