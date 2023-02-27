@@ -1060,6 +1060,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                                                              error_ok=True, no_fsid=True))
             if code:
                 return 1, '', ('check-host failed:\n' + '\n'.join(err))
+        except ssh.HostConnectionError as e:
+            self.log.exception(f"check-host failed for '{host}' at addr ({e.addr}) due to connection failure: {str(e)}")
+            return 1, '', ('check-host failed:\n'
+                           + f"Failed to connect to {host} at address ({e.addr}): {str(e)}")
         except OrchestratorError:
             self.log.exception(f"check-host failed for '{host}'")
             return 1, '', ('check-host failed:\n'
@@ -1532,6 +1536,7 @@ Then run the following:
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
         self.ssh.reset_con(host)
+        self.offline_hosts_remove(host)  # if host was in offline host list, we should remove it now.
         self.event.set()  # refresh stray health check
         self.log.info('Removed host %s' % host)
         return "Removed {} host '{}'".format('offline' if offline else '', host)
@@ -2930,7 +2935,9 @@ Then run the following:
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None, host_placement: Optional[str] = None,
                       services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
         if self.inventory.get_host_with_state("maintenance"):
-            raise OrchestratorError("upgrade aborted - you have host(s) in maintenance state")
+            raise OrchestratorError("Upgrade aborted - you have host(s) in maintenance state")
+        if self.offline_hosts:
+            raise OrchestratorError(f"Upgrade aborted - Some host(s) are currently offline: {self.offline_hosts}")
         if daemon_types is not None and services is not None:
             raise OrchestratorError('--daemon-types and --services are mutually exclusive')
         if daemon_types is not None:

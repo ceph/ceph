@@ -26,6 +26,14 @@ logger = logging.getLogger(__name__)
 asyncssh_logger = logging.getLogger('asyncssh')
 asyncssh_logger.propagate = False
 
+
+class HostConnectionError(OrchestratorError):
+    def __init__(self, message: str, hostname: str, addr: str) -> None:
+        super().__init__(message)
+        self.hostname = hostname
+        self.addr = addr
+
+
 DEFAULT_SSH_CONFIG = """
 Host *
   User root
@@ -106,19 +114,19 @@ class SSHManager:
             log_content = log_string.getvalue()
             msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there. {str(e)}"
             logger.exception(msg)
-            raise OrchestratorError(msg)
+            raise HostConnectionError(msg, host, addr)
         except asyncssh.Error as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
             msg = f'Failed to connect to {host} ({addr}). {str(e)}' + '\n' + f'Log: {log_content}'
             logger.debug(msg)
-            raise OrchestratorError(msg)
+            raise HostConnectionError(msg, host, addr)
         except Exception as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
             logger.exception(str(e))
-            raise OrchestratorError(
-                f'Failed to connect to {host} ({addr}): {repr(e)}' + '\n' f'Log: {log_content}')
+            raise HostConnectionError(
+                f'Failed to connect to {host} ({addr}): {repr(e)}' + '\n' f'Log: {log_content}', host, addr)
         finally:
             log_string.flush()
             asyncssh_logger.removeHandler(ch)
@@ -148,7 +156,12 @@ class SSHManager:
             logger.debug(f'Connection to {host} failed. {str(e)}')
             await self._reset_con(host)
             self.mgr.offline_hosts.add(host)
-            raise OrchestratorError(f'Unable to reach remote host {host}. {str(e)}')
+            if not addr:
+                try:
+                    addr = self.mgr.inventory.get_addr(host)
+                except Exception:
+                    addr = host
+            raise HostConnectionError(f'Unable to reach remote host {host}. {str(e)}', host, addr)
 
         def _rstrip(v: Union[bytes, str, None]) -> str:
             if not v:
