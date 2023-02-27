@@ -1469,6 +1469,18 @@ public:
     std::vector<int> *orig,
     std::vector<int> *out);             ///< resulting alternative mapping
 
+  int balance_primaries(
+    CephContext *cct,
+    int64_t pid,
+    Incremental *pending_inc,
+    OSDMap& tmp_osd_map) const;
+
+  int calc_desired_primary_distribution(
+    CephContext *cct,
+    int64_t pid, // pool id
+    const std::vector<uint64_t> &osds,
+    std::map<uint64_t, float>& desired_primary_distribution) const; // vector of osd ids
+
   int calc_pg_upmaps(
     CephContext *cct,
     uint32_t max_deviation, ///< max deviation from target (value >= 1)
@@ -1478,8 +1490,6 @@ public:
     std::random_device::result_type *p_seed = nullptr  ///< [optional] for regression tests
     );
 
-private: // Bunch of internal functions used only by calc_pg_upmaps (result of code refactoring)
-
   std::map<uint64_t,std::set<pg_t>> get_pgs_by_osd(
     CephContext *cct,
     int64_t pid,
@@ -1487,7 +1497,8 @@ private: // Bunch of internal functions used only by calc_pg_upmaps (result of c
     std::map<uint64_t, std::set<pg_t>> *p_acting_primaries_by_osd = nullptr
   ) const; // used in calc_desired_primary_distribution()
 
-private:
+private: // Bunch of internal functions used only by calc_pg_upmaps (result of code refactoring)
+
   float get_osds_weight(
     CephContext *cct,
     const OSDMap& tmp_osd_map,
