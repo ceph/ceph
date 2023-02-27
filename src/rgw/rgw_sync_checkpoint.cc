@@ -49,8 +49,9 @@ bool operator<(const std::vector<rgw_bucket_shard_sync_info>& lhs,
 
 bool empty(const BucketIndexShardsManager& markers, int size)
 {
+  static const std::string empty_string;
   for (int i = 0; i < size; ++i) {
-    const auto& m = markers.get(i, "");
+    const auto& m = markers.get(i, empty_string);
     if (!m.empty()) {
       return false;
     }
