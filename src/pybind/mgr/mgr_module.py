@@ -1165,7 +1165,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         if version <= 0:
             self.log.info(f"creating main.db for {self.module_name}")
             assert self.SCHEMA is not None
-            cur = db.executescript(self.SCHEMA)
+            db.executescript(self.SCHEMA)
             self.update_schema_version(db, 1)
         else:
             assert self.SCHEMA_VERSIONED is not None
