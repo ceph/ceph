@@ -540,7 +540,7 @@ class RGWPubSub
   rgw::sal::Driver* const driver;
   const std::string tenant;
 
-  int read_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics *result, 
+  int read_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result, 
       RGWObjVersionTracker* objv_tracker, optional_yield y) const;
   int write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_topics& topics,
 			RGWObjVersionTracker* objv_tracker, optional_yield y) const;
@@ -556,7 +556,7 @@ public:
     // read the list of topics associated with a bucket and populate into result
     // use version tacker to enforce atomicity between read/write
     // return 0 on success or if no topic was associated with the bucket, error code otherwise
-    int read_topics(const DoutPrefixProvider *dpp, rgw_pubsub_bucket_topics *result, 
+    int read_topics(const DoutPrefixProvider *dpp, rgw_pubsub_bucket_topics& result, 
         RGWObjVersionTracker* objv_tracker, optional_yield y) const;
     // set the list of topics associated with a bucket
     // use version tacker to enforce atomicity between read/write
@@ -570,7 +570,7 @@ public:
 
     // get the list of topics associated with a bucket and populate into result
     // return 0 on success or if no topic was associated with the bucket, error code otherwise
-    int get_topics(const DoutPrefixProvider *dpp, rgw_pubsub_bucket_topics *result, optional_yield y) const {
+    int get_topics(const DoutPrefixProvider *dpp, rgw_pubsub_bucket_topics& result, optional_yield y) const {
       return read_topics(dpp, result, nullptr, y);
     }
     // adds a topic + filter (event list, and possibly name metadata or tags filters) to a bucket
@@ -595,13 +595,13 @@ public:
 
   // get the list of topics
   // return 0 on success or if no topic was associated with the bucket, error code otherwise
-  int get_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics *result, optional_yield y) const {
+  int get_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result, optional_yield y) const {
     return read_topics(dpp, result, nullptr, y);
   }
   // get a topic with by its name and populate it into "result"
   // return -ENOENT if the topic does not exists 
   // return 0 on success, error code otherwise
-  int get_topic(const DoutPrefixProvider *dpp, const std::string& name, rgw_pubsub_topic *result, optional_yield y) const;
+  int get_topic(const DoutPrefixProvider *dpp, const std::string& name, rgw_pubsub_topic& result, optional_yield y) const;
   // create a topic with a name only
   // if the topic already exists it is a no-op (considered success)
   // return 0 on success, error code otherwise

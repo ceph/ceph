@@ -220,7 +220,7 @@ public:
 
 void RGWPSListTopicsOp::execute(optional_yield y) {
   const RGWPubSub ps(driver, s->owner.get_id().tenant);
-  op_ret = ps.get_topics(this, &result, y);
+  op_ret = ps.get_topics(this, result, y);
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
   if (op_ret < 0) {
@@ -298,7 +298,7 @@ void RGWPSGetTopicOp::execute(optional_yield y) {
     return;
   }
   const RGWPubSub ps(driver, s->owner.get_id().tenant);
-  op_ret = ps.get_topic(this, topic_name, &result, y);
+  op_ret = ps.get_topic(this, topic_name, result, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
@@ -374,7 +374,7 @@ void RGWPSGetTopicAttributesOp::execute(optional_yield y) {
     return;
   }
   const RGWPubSub ps(driver, s->owner.get_id().tenant);
-  op_ret = ps.get_topic(this, topic_name, &result, y);
+  op_ret = ps.get_topic(this, topic_name, result, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
@@ -651,7 +651,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
   if(configurations.list.empty()) {
     // get all topics on a bucket
     rgw_pubsub_bucket_topics bucket_topics;
-    op_ret = b.get_topics(this, &bucket_topics, y);
+    op_ret = b.get_topics(this, bucket_topics, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << bucket_name << "', ret=" << op_ret << dendl;
       return;
@@ -691,7 +691,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
 
     // get topic information. destination information is stored in the topic
     rgw_pubsub_topic topic_info;  
-    op_ret = ps.get_topic(this, topic_name, &topic_info, y);
+    op_ret = ps.get_topic(this, topic_name, topic_info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
       return;
@@ -794,7 +794,7 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
 
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
-  op_ret = b.get_topics(this, &bucket_topics, y);
+  op_ret = b.get_topics(this, bucket_topics, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << bucket_name << "', ret=" << op_ret << dendl;
     return;
@@ -891,7 +891,7 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
   
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
-  op_ret = b.get_topics(this, &bucket_topics, y);
+  op_ret = b.get_topics(this, bucket_topics, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << bucket_name << "', ret=" << op_ret << dendl;
     return;
