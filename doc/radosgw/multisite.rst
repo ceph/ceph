@@ -346,8 +346,11 @@ Zones that are within a zonegroup replicate all data in order to ensure that
 every zone has the same data. When creating a secondary zone, run the following
 operations on a host identified to serve the secondary zone.
 
-.. note:: To add a tertiary zone, follow the same procedures used for adding a
-   secondary zone. Be sure to specify a different zone name.
+.. note:: To add a second secondary zone (that is, a second non-master zone
+   within a zonegroup that already contains a secondary zone), follow :ref:`the
+   same procedures that are used for adding a secondary
+   zone<radosgw-multisite-secondary-zone-creating>`. Be sure to specify a
+   different zone name than the name of the first secondary zone.
 
 .. important:: Metadata operations (for example, user creation) must be
    run on a host within the master zone. Bucket operations can be received
@@ -377,6 +380,8 @@ default realm:
 .. prompt:: bash #
 
    radosgw-admin realm default --rgw-realm={realm-name}
+
+.. _radosgw-multisite-secondary-zone-creating:
 
 Creating a Secondary Zone
 -------------------------
