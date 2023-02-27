@@ -5,6 +5,7 @@ import random
 from argparse import ArgumentError
 from mock import MagicMock, patch
 
+from ceph_volume.api import lvm
 from ceph_volume.devices.lvm import batch
 from ceph_volume.util import arg_validators
 
@@ -234,6 +235,47 @@ class TestBatch(object):
                                               'block_db', 2, 2, args)
         for fast, dev in zip(fasts, mock_devices_available):
             assert fast[2] == int(dev.vg_size[0] / 2)
+
+    def test_get_physical_fast_allocs_abs_size_unused_devs(self, factory,
+                                               conf_ceph_stub,
+                                               mock_devices_available):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        args = factory(block_db_slots=None, get_block_db_size=None)
+        dev_size = 21474836480
+        vg_size = dev_size
+        for dev in mock_devices_available:
+            dev.vg_name = None
+            dev.vg_size = [vg_size]
+            dev.vg_free = dev.vg_size
+            dev.vgs = []
+        slots_per_device = 2
+        fasts = batch.get_physical_fast_allocs(mock_devices_available,
+                                              'block_db', slots_per_device, 2, args)
+        expected_slot_size = int(dev_size / slots_per_device)
+        for (_, _, slot_size, _) in fasts:
+            assert slot_size == expected_slot_size
+
+    def test_get_physical_fast_allocs_abs_size_multi_pvs_per_vg(self, factory,
+                                               conf_ceph_stub,
+                                               mock_devices_available):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        args = factory(block_db_slots=None, get_block_db_size=None)
+        dev_size = 21474836480
+        num_devices = len(mock_devices_available)
+        vg_size = dev_size * num_devices
+        vg_name = 'vg_foo'
+        for dev in mock_devices_available:
+            dev.vg_name = vg_name
+            dev.vg_size = [vg_size]
+            dev.vg_free = dev.vg_size
+            dev.vgs = [lvm.VolumeGroup(vg_name=dev.vg_name, lv_name=dev.lv_name)]
+        slots_per_device = 2
+        slots_per_vg = slots_per_device * num_devices
+        fasts = batch.get_physical_fast_allocs(mock_devices_available,
+                                              'block_db', slots_per_device, 2, args)
+        expected_slot_size = int(vg_size / slots_per_vg)
+        for (_, _, slot_size, _) in fasts:
+            assert slot_size == expected_slot_size
 
     def test_batch_fast_allocations_one_block_db_length(self, factory, conf_ceph_stub,
                                                   mock_lv_device_generator):
