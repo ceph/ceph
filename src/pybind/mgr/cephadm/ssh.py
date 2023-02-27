@@ -299,13 +299,12 @@ class SSHManager:
 
         # identity
         ssh_key = self.mgr.get_store("ssh_identity_key")
-        ssh_pub = self.mgr.get_store("ssh_identity_pub")
-        self.mgr.ssh_pub = ssh_pub
+        self.mgr.ssh_pub = self.mgr.get_store("ssh_identity_pub")
         self.mgr.ssh_key = ssh_key
-        if ssh_key and ssh_pub:
+        if ssh_key:
             self.mgr.tkey = NamedTemporaryFile(prefix='cephadm-identity-')
-            self.mgr.tkey.write(ssh_key.encode('utf-8'))
             os.fchmod(self.mgr.tkey.fileno(), 0o600)
+            self.mgr.tkey.write(ssh_key.encode('utf-8'))
             self.mgr.tkey.flush()  # make visible to other processes
             temp_files += [self.mgr.tkey]
             ssh_options += ['-i', self.mgr.tkey.name]

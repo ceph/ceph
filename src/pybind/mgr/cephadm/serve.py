@@ -95,7 +95,7 @@ class CephadmServe:
 
                     self._check_daemons()
 
-                    self._check_certificates()
+                    self._check_keys_and_certificates()
 
                     self._purge_deleted_services()
 
@@ -116,13 +116,15 @@ class CephadmServe:
             self.log.debug("serve loop wake")
         self.log.debug("serve exit")
 
-    def _check_certificates(self) -> None:
+    def _check_keys_and_certificates(self) -> None:
+        if not self.mgr.check_keys_and_certs:
+            return
         for d in self.mgr.cache.get_daemons_by_type('grafana'):
             cert = self.mgr.get_store(f'{d.hostname}/grafana_crt')
             key = self.mgr.get_store(f'{d.hostname}/grafana_key')
             if (not cert or not cert.strip()) and (not key or not key.strip()):
                 # certificate/key are empty... nothing to check
-                return
+                break
 
             try:
                 get_cert_issuer_info(cert)
@@ -148,6 +150,85 @@ class CephadmServe:
                                             f'Invalid grafana certificate on host {d.hostname}: {e}',
                                             1, [err_msg])
                 break
+
+        # check ssh priv and pub key match up
+        self.mgr.ssh_key = self.mgr.get_store("ssh_identity_key")
+        self.mgr.ssh_pub = self.mgr.get_store("ssh_identity_pub")
+
+        if not self.mgr.ssh_pub:
+            self.mgr.set_health_warning('CEPHADM_NO_SSH_PUB_KEY',
+                                        'Cephadm has no ssh pub key set.',
+                                        1, ['Set a pub key corresponding to the current ssh private key being used by cephadm',
+                                            '(which can be found with "ceph config-key get mgr/cephadm/ssh_identity_key")',
+                                            'using the "ceph cephadm set-pub-key" function'])
+        else:
+            self.mgr.remove_health_warning('CEPHADM_NO_SSH_PUB_KEY')
+
+        host = ''
+        if not self.mgr.ssh_key:
+            self.mgr.set_health_warning('CEPHADM_NO_SSH_PRIVATE_KEY',
+                                        'Cephadm has no ssh private key set.',
+                                        1, ['Cephadm needs an ssh key in order to connect to hosts under its control.',
+                                            'If you already have an ssh key pair, set the private key with "ceph cephadm set-priv-key".'
+                                            'If you have no key pair, either generate a key pair yourself or have cephadm generate',
+                                            'a key pair using "ceph cephadm generate-key". The pub key created can be grabbed with',
+                                            '"ceph cephadm get-pub-key" in the same fashion. In both cases, make sure to install',
+                                            'the pub key as an authorized key on all hosts before trying to set the private key'])
+        else:
+            self.mgr.remove_health_warning('CEPHADM_NO_SSH_PRIVATE_KEY')
+            # the private key exists. Check a connection.
+            # First make sure the current priv key var was already
+            # written to file for asynssh to use
+            if (
+                not self.mgr.tkey
+                or not self.mgr.tkey.name
+                or not os.path.isfile(self.mgr.tkey.name)
+                or open(self.mgr.tkey.name, 'r').read() != self.mgr.ssh_key
+            ):
+                self.mgr.ssh._reconfig_ssh()
+            # now make sure an ssh connection to a random online host works
+            r, host = self.mgr._check_ssh_connection()
+            if r is not None:
+                self.mgr.set_health_warning('CEPHADM_SSH_CONNECTION_FAILURE',
+                                            f'Cephadm failed to establish connection to {host} using private key',
+                                            1, ['Cephadm uses a private ssh key, found using "ceph config-key get mgr/cephadm/ssh_identity_key"',
+                                                'in order to establish ssh connections with managed hosts. While attempting to test this key',
+                                                f'by connecting to host {host} an error occurred: {r}',
+                                                'You can change the private key cephadm should use for connections using "ceph cephadm set-priv-key" command'])
+                return
+            else:
+                self.mgr.remove_health_warning('CEPHADM_SSH_CONNECTION_FAILURE')
+
+        if self.mgr.ssh_key and self.mgr.ssh_pub and host:
+            # if we've gotten this far, connection with the private key alone works
+            # let's see if our pub key matches the priv key
+            pub_key_path = self.mgr.tkey.name + '.pub'
+            pub_key_file = open(pub_key_path, 'w')
+            os.fchmod(pub_key_file.fileno(), 0o600)
+            pub_key_file.write(self.mgr.ssh_pub)
+            pub_key_file.flush()  # make visible to other processes
+            self.mgr.ssh.reset_con(host)
+            # use direct _check_host call so we can test the connection on the same host
+            # that _check_ssh_connection randomly selected when testing just the priv key
+            # since we know connecting to that host with just the priv key works
+            r = self._check_host(host)
+            if r is not None and 'Public key mismatch' in r:
+                self.mgr.set_health_warning('CEPHADM_SSH_PUB_KEY_MISMATCH',
+                                            'Mismatch between private and public ssh key known to cephadm',
+                                            1, ['Cephadm uses a private ssh key, found using "ceph config-key get mgr/cephadm/ssh_identity_key"',
+                                                'in order to establish ssh connections with managed hosts. Additionally, it holds',
+                                                f'a public ssh key found using "ceph cephadm get-pub-key". While testing connections to host {host}',
+                                                'it was found that these keys do not match up. The public key can be updated to match the',
+                                                'private key using "ceph cephadm set-pub-key"'])
+                os.unlink(pub_key_path)
+                pub_key_file.close()
+                self.mgr.ssh.reset_con(host)
+                # in case host got marked offline, do another connection with the pub key now removed
+                r = self._check_host(host)
+            else:
+                self.mgr.remove_health_warning('CEPHADM_SSH_PUB_KEY_MISMATCH')
+                os.unlink(pub_key_file.name)
+                pub_key_file.close()
 
     def _serve_sleep(self) -> None:
         sleep_interval = max(
@@ -339,7 +420,7 @@ class CephadmServe:
             else:
                 self.log.debug(' host %s (%s) ok' % (host, addr))
         except Exception as e:
-            self.log.debug(' host %s (%s) failed check' % (host, addr))
+            self.log.debug(' host %s (%s) failed check: %s' % (host, addr, e))
             return 'host %s (%s) failed check: %s' % (host, addr, e)
         return None
 

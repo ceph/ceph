@@ -472,6 +472,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=False,
             desc='Enable TLS security for all the monitoring stack daemons'
         ),
+        Option(
+            'check_keys_and_certs',
+            type='bool',
+            default=True,
+            desc='Whether or not cephadm should attempt checks on some of the keys and certs it manages'
+        )
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -554,6 +560,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.device_enhanced_scan = False
             self.cgroups_split = True
             self.log_refresh_metadata = False
+            self.check_keys_and_certs = True
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -936,23 +943,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _validate_and_set_ssh_val(self, what: str, new: Optional[str], old: Optional[str]) -> None:
         self.set_store(what, new)
         self.ssh._reconfig_ssh()
+        r, host = self._check_ssh_connection()
+        if r is not None:
+            # connection failed reset user
+            self.set_store(what, old)
+            self.ssh._reconfig_ssh()
+            # recheck the host with the old ssh settings
+            # to make sure it is marked back online (or kept
+            # offline if it's actually unreachable even with
+            # the old settings)
+            r = CephadmServe(self)._check_host(host)
+            raise OrchestratorError('ssh connection %s@%s failed' % (self.ssh_user, host))
+        self.log.info(f'Set ssh {what}')
+
+    def _check_ssh_connection(self) -> Tuple[Optional[str], str]:
         unreachable_hosts = [uh.hostname for uh in self.cache.get_unreachable_hosts()]
         reachable_hosts = [h for h in self.cache.get_hosts() if h not in unreachable_hosts]
         if reachable_hosts:
             # Can't check anything without hosts
             host = reachable_hosts[0]
             r = CephadmServe(self)._check_host(host)
-            if r is not None:
-                # connection failed reset user
-                self.set_store(what, old)
-                self.ssh._reconfig_ssh()
-                # recheck the host with the old ssh settings
-                # to make sure it is marked back online (or kept
-                # offline if it's actually unreachable even with
-                # the old settings)
-                r = CephadmServe(self)._check_host(host)
-                raise OrchestratorError('ssh connection %s@%s failed' % (self.ssh_user, host))
-        self.log.info(f'Set ssh {what}')
+            return r, host
+        return 'No reachable hosts to check connection', ''
 
     @orchestrator._cli_write_command(
         prefix='cephadm set-ssh-config')
