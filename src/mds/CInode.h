@@ -1156,7 +1156,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   int64_t get_backtrace_pool() const;
   inodeno_t get_subvolume_id() const;
 
-  uint32_t snap_update_ref = 0;
+  std::unordered_set<mds_rank_t> snap_update_ref_set;
 
 protected:
   ceph_lock_state_t *get_fcntl_lock_state() {
