@@ -104,6 +104,12 @@
   `client_max_retries_on_remount_failure` and move it from mds.yaml.in to
   mds-client.yaml.in because this option was only used by MDS client from its
   birth.
+* The `perf dump` and `perf schema` commands are deprecated in favor of new
+  `counter dump` and `counter schema` commands. These new commands add support
+  for labeled perf counters and also emit existing unlabeled perf counters. Some
+  unlabeled perf counters may become labeled in future releases
+  and as such will no longer be emitted by the `perf dump` and `perf schema`
+  commands.
 
 >=17.2.1
 
