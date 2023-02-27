@@ -148,8 +148,6 @@ public:
   }
 
   int get_nodeid() const final { return whoami; }
-
-  std::atomic<epoch_t> max_oldest_map;
 private:
   OSDMapRef osdmap;
 
