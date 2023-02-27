@@ -1118,7 +1118,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   // client caps
   client_t loner_cap = -1, want_loner_cap = -1;
 
-  uint32_t snap_update_ref = 0;
+  std::unordered_set<mds_rank_t> snap_update_ref_set;
 
 protected:
   ceph_lock_state_t *get_fcntl_lock_state() {

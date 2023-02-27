@@ -416,6 +416,8 @@ class MDSRank {
     PerfCounters *logger = nullptr, *mlogger = nullptr;
     OpTracker op_tracker;
 
+    std::set<inodeno_t> snap_update_inos;
+
     // The last different state I held before current
     MDSMap::DaemonState last_state = MDSMap::STATE_BOOT;
     // The state assigned to me by the MDSMap
