@@ -13,13 +13,8 @@ class TestACLs(XFSTestsDev):
         from tasks.cephfs.fuse_mount import FuseMount
         from tasks.cephfs.kernel_mount import KernelMount
 
-        # TODO: make xfstests-dev compatible with ceph-fuse. xfstests-dev
-        # remounts CephFS before running tests using kernel, so ceph-fuse
-        # mounts are never actually testsed.
         if isinstance(self.mount_a, FuseMount):
             log.info('client is fuse mounted')
-            self.skipTest('Requires kernel client; xfstests-dev not '\
-                          'compatible with ceph-fuse ATM.')
         elif isinstance(self.mount_a, KernelMount):
             log.info('client is kernel mounted')
 
