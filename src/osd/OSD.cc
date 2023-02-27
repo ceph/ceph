@@ -3945,6 +3945,7 @@ int OSD::init()
 
   // Override a few options if mclock scheduler is enabled.
   maybe_override_sleep_options_for_qos();
+  maybe_override_cost_for_qos();
   maybe_override_options_for_qos();
   maybe_override_max_osd_capacity_for_qos();
 
@@ -9732,6 +9733,9 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_recovery_sleep_hybrid")) {
     maybe_override_sleep_options_for_qos();
   }
+  if (changed.count("osd_pg_delete_cost")) {
+    maybe_override_cost_for_qos();
+  }
   if (changed.count("osd_min_recovery_priority")) {
     service.local_reserver.set_min_priority(cct->_conf->osd_min_recovery_priority);
     service.remote_reserver.set_min_priority(cct->_conf->osd_min_recovery_priority);
@@ -10041,6 +10045,17 @@ void OSD::maybe_override_sleep_options_for_qos()
 
     // Disable scrub sleep
     cct->_conf.set_val("osd_scrub_sleep", std::to_string(0));
+  }
+}
+
+void OSD::maybe_override_cost_for_qos()
+{
+  // If the scheduler enabled is mclock, override the default PG deletion cost
+  // so that mclock can meet the QoS goals.
+  if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler" &&
+      !unsupported_objstore_for_qos()) {
+    uint64_t pg_delete_cost = 15728640;
+    cct->_conf.set_val("osd_pg_delete_cost", std::to_string(pg_delete_cost));
   }
 }
 
