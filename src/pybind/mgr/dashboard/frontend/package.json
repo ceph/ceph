@@ -135,8 +135,5 @@
   },
   "cypress-cucumber-preprocessor": {
     "nonGlobalStepDefinitions": true
-  },
-  "overrides": {
-    "autoprefixer": "10.4.5"
   }
 }
