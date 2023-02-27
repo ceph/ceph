@@ -484,6 +484,69 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
                 raise RuntimeError('Command failed with exit code %s: %s' % (returncode, ' '.join(command)))
 
 
+def osd_mkfs_seastore(osd_id, fsid, keyring=None):
+    """
+    Create the files for the OSD to function. A normal call will look like:
+
+          ceph-osd --cluster ceph --mkfs --mkkey -i 0 \
+                   --monmap /var/lib/ceph/osd/ceph-0/activate.monmap \
+                   --osd-data /var/lib/ceph/osd/ceph-0 \
+                   --osd-uuid 8d208665-89ae-4733-8888-5d3bfbeeec6c \
+                   --keyring /var/lib/ceph/osd/ceph-0/keyring \
+                   --setuser ceph --setgroup ceph
+
+    In some cases it is required to use the keyring, when it is passed in as
+    a keyword argument it is used as part of the ceph-osd command
+    """
+    path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
+    monmap = os.path.join(path, 'activate.monmap')
+
+    system.chown(path)
+
+    base_command = [
+        'ceph-osd',
+        '--cluster', conf.cluster,
+        '--osd-objectstore', 'seastore',
+        '--mkfs',
+        '--key', "/var/lib/ceph/osd/ceph-%s/keyring" % osd_id,
+        '-i', osd_id,
+        '--monmap', monmap,
+    ]
+
+    supplementary_command = [
+        '--osd-data', path,
+        '--osd-uuid', fsid,
+        '--setuser', 'ceph',
+        '--setgroup', 'ceph'
+    ]
+
+    if keyring is not None:
+        base_command.extend(['--keyfile', '-'])
+
+    if get_osdspec_affinity():
+        base_command.extend(['--osdspec-affinity', get_osdspec_affinity()])
+
+    command = base_command + supplementary_command
+
+    """
+    When running in containers the --mkfs on raw device sometimes fails
+    to acquire a lock through flock() on the device because systemd-udevd holds one temporarily.
+    See KernelDevice.cc and _lock() to understand how ceph-osd acquires the lock.
+    Because this is really transient, we retry up to 5 times and wait for 1 sec in-between
+    """
+    for retry in range(5):
+        _, _, returncode = process.call(command, stdin=keyring, terminal_verbose=True, show_command=True)
+        if returncode == 0:
+            break
+        else:
+            if returncode == errno.EWOULDBLOCK:
+                    time.sleep(1)
+                    logger.info('disk is held by another process, trying to mkfs again... (%s/5 attempt)' % retry)
+                    continue
+            else:
+                raise RuntimeError('Command failed with exit code %s: %s' % (returncode, ' '.join(command)))
+
+
 def osd_mkfs_filestore(osd_id, fsid, keyring):
     """
     Create the files for the OSD to function. A normal call will look like:
