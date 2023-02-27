@@ -1511,13 +1511,13 @@ void ActivePyModules::cluster_log(const std::string &channel, clog_type prio,
   cl->do_log(prio, message);
 }
 
-void ActivePyModules::register_client(std::string_view name, std::string addrs)
+void ActivePyModules::register_client(std::string_view name, std::string addrs, bool replace)
 {
   entity_addrvec_t addrv;
   addrv.parse(addrs.data());
 
-  dout(7) << "registering msgr client handle " << addrv << dendl;
-  py_module_registry.register_client(name, std::move(addrv));
+  dout(7) << "registering msgr client handle " << addrv << " (replace=" << replace << ")" << dendl;
+  py_module_registry.register_client(name, std::move(addrv), replace);
 }
 
 void ActivePyModules::unregister_client(std::string_view name, std::string addrs)
