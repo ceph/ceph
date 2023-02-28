@@ -230,4 +230,12 @@ json-schema-form {
   .ng-touched.ng-valid {
     @extend .is-valid;
   }
+
+  .close {
+    @extend .btn-close;
+
+    span {
+      display: none;
+    }
+  }
 }
