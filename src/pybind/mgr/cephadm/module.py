@@ -442,6 +442,36 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=False,
             desc='Log all refresh metadata. Includes daemon, device, and host info collected regularly. Only has effect if logging at debug level'
         ),
+        Option(
+            'prometheus_web_user',
+            type='str',
+            default='admin',
+            desc='Prometheus web user'
+        ),
+        Option(
+            'prometheus_web_password',
+            type='str',
+            default='admin',
+            desc='Prometheus web password'
+        ),
+        Option(
+            'alertmanager_web_user',
+            type='str',
+            default='admin',
+            desc='Alertmanager web user'
+        ),
+        Option(
+            'alertmanager_web_password',
+            type='str',
+            default='admin',
+            desc='Alertmanager web password'
+        ),
+        Option(
+            'secure_monitoring_stack',
+            type='bool',
+            default=False,
+            desc='Enable TLS security for all the monitoring stack daemons'
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -514,6 +544,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
             self.service_discovery_port = 0
+            self.secure_monitoring_stack = False
+            self.prometheus_web_password: Optional[str] = None
+            self.prometheus_web_user: Optional[str] = None
+            self.alertmanager_web_password: Optional[str] = None
+            self.alertmanager_web_user: Optional[str] = None
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
             self.device_enhanced_scan = False
@@ -2464,6 +2499,14 @@ Then run the following:
                           spec: Optional[ServiceSpec],
                           daemon_type: str,
                           daemon_id: str) -> List[str]:
+
+        def get_daemon_names(daemons: List[str]) -> List[str]:
+            daemon_names = []
+            for daemon_type in daemons:
+                for dd in self.cache.get_daemons_by_type(daemon_type):
+                    daemon_names.append(dd.name())
+            return daemon_names
+
         deps = []
         if daemon_type == 'haproxy':
             # because cephadm creates new daemon instances whenever
@@ -2516,15 +2559,28 @@ Then run the following:
                 deps.append('ingress')
             # add dependency on ceph-exporter daemons
             deps += [d.name() for d in self.cache.get_daemons_by_service('ceph-exporter')]
+            if self.secure_monitoring_stack:
+                if self.prometheus_web_user and self.prometheus_web_password:
+                    deps.append(f'{hash(self.prometheus_web_user + self.prometheus_web_password)}')
+                if self.alertmanager_web_user and self.alertmanager_web_password:
+                    deps.append(f'{hash(self.alertmanager_web_user + self.alertmanager_web_password)}')
+        elif daemon_type == 'grafana':
+            deps += get_daemon_names(['prometheus', 'loki'])
+            if self.secure_monitoring_stack and self.prometheus_web_user and self.prometheus_web_password:
+                deps.append(f'{hash(self.prometheus_web_user + self.prometheus_web_password)}')
+        elif daemon_type == 'alertmanager':
+            deps += get_daemon_names(['mgr', 'alertmanager', 'snmp-gateway'])
+            if self.secure_monitoring_stack and self.alertmanager_web_user and self.alertmanager_web_password:
+                deps.append(f'{hash(self.alertmanager_web_user + self.alertmanager_web_password)}')
+        elif daemon_type == 'promtail':
+            deps += get_daemon_names(['loki'])
         else:
-            need = {
-                'grafana': ['prometheus', 'loki'],
-                'alertmanager': ['mgr', 'alertmanager', 'snmp-gateway'],
-                'promtail': ['loki'],
-            }
-            for dep_type in need.get(daemon_type, []):
-                for dd in self.cache.get_daemons_by_type(dep_type):
-                    deps.append(dd.name())
+            # TODO(redo): some error message!
+            pass
+
+        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana']:
+            deps.append(f'secure_monitoring_stack:{self.secure_monitoring_stack}')
+
         return sorted(deps)
 
     @forall_hosts
@@ -2614,6 +2670,18 @@ Then run the following:
         except OrchestratorError as e:
             self.events.from_orch_error(e)
             raise
+
+    @handle_orch_error
+    def get_prometheus_access_info(self) -> Dict[str, str]:
+        return {'user': self.prometheus_web_user or '',
+                'password': self.prometheus_web_password or '',
+                'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
+
+    @handle_orch_error
+    def get_alertmanager_access_info(self) -> Dict[str, str]:
+        return {'user': self.alertmanager_web_user or '',
+                'password': self.alertmanager_web_password or '',
+                'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
 
     @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:

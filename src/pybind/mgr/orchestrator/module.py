@@ -869,6 +869,18 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
             return HandleCommandResult(stdout=table.get_string())
 
+    @_cli_write_command('orch prometheus access info')
+    def _get_prometheus_access_info(self) -> HandleCommandResult:
+        completion = self.get_prometheus_access_info()
+        access_info = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(access_info))
+
+    @_cli_write_command('orch alertmanager access info')
+    def _get_alertmanager_access_info(self) -> HandleCommandResult:
+        completion = self.get_alertmanager_access_info()
+        access_info = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(access_info))
+
     @_cli_write_command('orch apply osd')
     def _apply_osd(self,
                    all_available_devices: bool = False,
