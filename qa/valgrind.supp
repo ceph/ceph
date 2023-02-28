@@ -388,6 +388,20 @@
 	...
 }
 {
+	rocksdb config parsing
+	Memcheck:Leak
+	...
+	fun:*rocksdb*Configurable*ParseOption*
+	...
+}
+{
+	rocksdb config parsing
+	Memcheck:Leak
+	...
+	fun:*RocksDBStore*ParseOptionsFromString*
+	...
+}
+{
 	rocksdb BGThreadWrapper
 	Memcheck:Leak
 	...
