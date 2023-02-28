@@ -1539,12 +1539,13 @@ class CephadmServe:
             await self._registry_login(host, json.loads(str(self.mgr.get_store('registry_credentials'))))
 
         j = None
-        try:
-            j = await self._run_cephadm_json(host, '', 'inspect-image', [],
-                                             image=image_name, no_fsid=True,
-                                             error_ok=True)
-        except OrchestratorError:
-            pass
+        if not self.mgr.use_repo_digest:
+            try:
+                j = await self._run_cephadm_json(host, '', 'inspect-image', [],
+                                                 image=image_name, no_fsid=True,
+                                                 error_ok=True)
+            except OrchestratorError:
+                pass
 
         if not j:
             pullargs: List[str] = []
