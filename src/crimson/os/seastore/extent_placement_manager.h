@@ -84,7 +84,8 @@ private:
   alloc_write_ertr::future<> write_record(
     Transaction& t,
     record_t&& record,
-    std::list<LogicalCachedExtentRef> &&extents);
+    std::list<LogicalCachedExtentRef> &&extents,
+    bool with_atomic_roll_segment=false);
 
   journal::SegmentAllocator segment_allocator;
   journal::RecordSubmitter record_submitter;
