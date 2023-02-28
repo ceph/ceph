@@ -404,13 +404,21 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
           });
         }
         return fut.then([this, &sds, new_osd_fsid] {
+	  device_id_t id = 0;
+	  device_type_t d_type = device->get_device_type();
+	  assert(d_type == device_type_t::SSD ||
+		 d_type == device_type_t::RANDOM_BLOCK_SSD);
+	  if (d_type == device_type_t::RANDOM_BLOCK_SSD) {
+	    id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN);
+	  } 
+
           return device->mkfs(
             device_config_t{
               true,
               device_spec_t{
                 (magic_t)std::rand(),
-                device_type_t::SSD,
-                0},
+		d_type,
+		id},
               seastore_meta_t{new_osd_fsid},
               sds}
           );
@@ -1898,8 +1906,14 @@ seastar::future<std::unique_ptr<SeaStore>> make_seastore(
   const std::string &device,
   const ConfigValues &config)
 {
+  using crimson::common::get_conf;
+  std::string type = get_conf<std::string>("seastore_main_device_type");
+  device_type_t d_type = string_to_device_type(type);
+  assert(d_type == device_type_t::SSD ||
+	 d_type == device_type_t::RANDOM_BLOCK_SSD);
+
   return Device::make_device(
-    device, device_type_t::SSD
+    device, d_type
   ).then([&device](DeviceRef device_obj) {
 #ifndef NDEBUG
     bool is_test = true;
