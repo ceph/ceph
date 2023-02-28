@@ -61,7 +61,7 @@ class CephUserEndpoints:
 create_cap_container = ArrayHorizontalContainer('Capabilities', 'capabilities',
                                                 label_html_class='hidden cd-header mt-1', fields=[
                                                     FormField('Entity', 'entity',
-                                                              field_type=str, html_class='mr-3'),
+                                                              field_type=str, html_class='me-3'),
                                                     FormField('Entity Capabilities',
                                                               'cap', field_type=str)
                                                 ])
