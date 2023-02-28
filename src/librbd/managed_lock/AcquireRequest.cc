@@ -112,7 +112,7 @@ void AcquireRequest<I>::send_lock() {
   librados::ObjectWriteOperation op;
   rados::cls::lock::lock(&op, RBD_LOCK_NAME,
                          m_exclusive ? ClsLockType::EXCLUSIVE : ClsLockType::SHARED, m_cookie,
-                         util::get_watcher_lock_tag(), "", utime_t(), 0);
+                         util::get_watcher_lock_tag(), "", {}, 0);
 
   using klass = AcquireRequest;
   librados::AioCompletion *rados_completion =

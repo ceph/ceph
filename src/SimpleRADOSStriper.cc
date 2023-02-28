@@ -45,6 +45,7 @@
 #include "SimpleRADOSStriper.h"
 
 using ceph::bufferlist;
+using namespace std::literals;
 
 #define dout_subsys ceph_subsys_cephsqlite
 #undef dout_prefix
@@ -687,8 +688,7 @@ int SimpleRADOSStriper::lock(uint64_t timeoutms)
 
     auto op = librados::ObjectWriteOperation();
     auto tv = ceph::to_timeval(lock_keeper_timeout);
-    utime_t duration;
-    duration.set_from_timeval(&tv);
+    auto duration = tv.tv_sec * 1s + tv.tv_usec * 1us;
     rados::cls::lock::lock(&op, biglock, ClsLockType::EXCLUSIVE, cookie.to_string(), "", lockdesc, duration, 0);
     op.cmpxattr(XATTR_EXCL, LIBRADOS_CMPXATTR_OP_EQ, bufferlist());
     op.setxattr(XATTR_EXCL, str2bl(myaddrs));

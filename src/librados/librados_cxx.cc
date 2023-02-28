@@ -1765,12 +1765,14 @@ int librados::IoCtx::lock_exclusive(const std::string &oid, const std::string &n
 				    const std::string &description,
 				    struct timeval * duration, uint8_t flags)
 {
-  utime_t dur = utime_t();
-  if (duration)
-    dur.set_from_timeval(duration);
+  using namespace std::literals;
+  ceph::timespan dur;
+  if (duration) {
+    dur = duration->tv_sec * 1s + duration->tv_usec * 1us;
+  }
 
   return rados::cls::lock::lock(this, oid, name, ClsLockType::EXCLUSIVE, cookie, "",
-		  		description, dur, flags);
+				description, dur, flags);
 }
 
 int librados::IoCtx::lock_shared(const std::string &oid, const std::string &name,
@@ -1778,9 +1780,11 @@ int librados::IoCtx::lock_shared(const std::string &oid, const std::string &name
 				 const std::string &description,
 				 struct timeval * duration, uint8_t flags)
 {
-  utime_t dur = utime_t();
-  if (duration)
-    dur.set_from_timeval(duration);
+  using namespace std::literals;
+  ceph::timespan dur;
+  if (duration) {
+    dur = duration->tv_sec * 1s + duration->tv_usec * 1us;
+  }
 
   return rados::cls::lock::lock(this, oid, name, ClsLockType::SHARED, cookie, tag,
 		  		description, dur, flags);

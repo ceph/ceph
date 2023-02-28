@@ -6,7 +6,9 @@
 
 #include "include/encoding.h"
 #include "include/types.h"
-#include "include/utime.h"
+
+#include "common/ceph_time.h"
+
 #include "msg/msg_types.h"
 
 /* lock flags */
@@ -96,12 +98,12 @@ namespace rados {
 
       struct locker_info_t
       {
-        utime_t expiration;  // expiration: non-zero means epoch of locker expiration
+	ceph::real_time expiration;  // expiration: non-zero means epoch of locker expiration
         entity_addr_t addr;  // addr: locker address
 	std::string description;  // description: locker description, may be empty
 
         locker_info_t() {}
-        locker_info_t(const utime_t& _e, const entity_addr_t& _a,
+        locker_info_t(ceph::real_time _e, const entity_addr_t& _a,
                       const std::string& _d) :  expiration(_e), addr(_a), description(_d) {}
 
         void encode(ceph::buffer::list &bl, uint64_t features) const {
@@ -125,10 +127,10 @@ namespace rados {
 	  out << "{addr:" << data.addr << ", exp:";
 
 	  const auto& exp = data.expiration;
-	  if (exp.is_zero()) {
+	  if (ceph::real_clock::is_zero(exp)) {
 	    out << "never}";
 	  } else {
-	    out << exp.to_real_time() << "}";
+	    out << exp << "}";
 	  }
 
 	  return out;

@@ -57,7 +57,7 @@ class Manager : public DoutPrefixProvider {
   const uint32_t queues_update_period_ms;
   const uint32_t queues_update_retry_ms;
   const uint32_t queue_idle_sleep_us;
-  const utime_t failover_time;
+  const ceph::timespan failover_time;
   CephContext* const cct;
   librados::IoCtx& rados_ioctx;
   static constexpr auto COOKIE_LEN = 16;

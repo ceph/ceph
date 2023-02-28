@@ -15,7 +15,7 @@
 #include "include/types.h"
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
-#include "include/utime.h"
+#include "common/ceph_time.h"
 
 #include "cls/lock/cls_lock_ops.h"
 #include "cls/lock/cls_lock_client.h"
@@ -33,7 +33,7 @@ namespace rados {
                 const std::string& name, ClsLockType type,
                 const std::string& cookie, const std::string& tag,
                 const std::string& description,
-                const utime_t& duration, uint8_t flags)
+                ceph::timespan duration, uint8_t flags)
       {
         cls_lock_lock_op op;
         op.name = name;
@@ -52,7 +52,7 @@ namespace rados {
                const std::string& oid,
                const std::string& name, ClsLockType type,
                const std::string& cookie, const std::string& tag,
-               const std::string& description, const utime_t& duration,
+               const std::string& description, ceph::timespan duration,
 	       uint8_t flags)
       {
         ObjectWriteOperation op;

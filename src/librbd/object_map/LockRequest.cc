@@ -36,7 +36,7 @@ void LockRequest<I>::send_lock() {
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::lock(&op, RBD_LOCK_NAME, ClsLockType::EXCLUSIVE, "", "", "",
-                           utime_t(), 0);
+			 {}, 0);
 
   using klass = LockRequest<I>;
   librados::AioCompletion *rados_completion =

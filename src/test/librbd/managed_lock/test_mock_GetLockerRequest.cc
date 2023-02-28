@@ -64,7 +64,7 @@ public:
       if (r != -ENOENT) {
         reply.lockers.emplace(
           rados::cls::lock::locker_id_t(entity, locker_cookie),
-          rados::cls::lock::locker_info_t(utime_t(), entity_addr, ""));
+          rados::cls::lock::locker_info_t({}, entity_addr, ""));
         reply.tag = lock_tag;
         reply.lock_type = lock_type;
       }

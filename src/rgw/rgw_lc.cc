@@ -1702,7 +1702,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
 			  rgw::sal::Lifecycle::LCEntry& entry, int& result,
 			  LCWorker* worker)
 {
-  utime_t lock_duration(cct->_conf->rgw_lc_lock_max_time, 0);
+  auto lock_duration = cct->_conf->rgw_lc_lock_max_time * 1s;
 
   std::unique_ptr<rgw::sal::LCSerializer> lock =
     sal_lc->get_serializer(lc_index_lock_name, obj_names[index], cookie);
@@ -1905,8 +1905,7 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
     return -EAGAIN;
   }
 
-  utime_t time(max_lock_secs, 0);
-  ret = serializer->try_lock(this, time, null_yield);
+  ret = serializer->try_lock(this, max_lock_secs * 1s, null_yield);
   if (ret == -EBUSY || ret == -EEXIST) {
     /* already locked by another lc processor */
     ldpp_dout(this, 0) << "RGWLC::process() failed to acquire lock on "
@@ -2052,9 +2051,8 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
   std::unique_ptr<rgw::sal::LCSerializer> lock =
     sal_lc->get_serializer(lc_index_lock_name, lc_shard, worker->thr_name());
 
-  utime_t lock_for_s(max_lock_secs, 0);
   const auto& lock_lambda = [&]() {
-    ret = lock->try_lock(this, lock_for_s, null_yield);
+    ret = lock->try_lock(this, max_lock_secs * 1s, null_yield);
     if (ret == 0) {
       return true;
     }
@@ -2411,14 +2409,13 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
 
   std::unique_ptr<rgw::sal::LCSerializer> lock =
     sal_lc->get_serializer(lc_index_lock_name, oid, cookie);
-  utime_t time(max_lock_secs, 0);
 
   int ret;
   uint16_t retries{0};
 
   // due to reports of starvation trying to save lifecycle policy, try hard
   do {
-    ret = lock->try_lock(dpp, time, null_yield);
+    ret = lock->try_lock(dpp, max_lock_secs * 1s, null_yield);
     if (ret == -EBUSY || ret == -EEXIST) {
       ldpp_dout(dpp, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
 			<< oid << ", retry in 100ms, ret=" << ret << dendl;

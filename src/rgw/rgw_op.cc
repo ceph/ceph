@@ -6456,10 +6456,9 @@ void RGWCompleteMultipart::execute(optional_yield y)
     from deleting the parts*/
   int max_lock_secs_mp =
     s->cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
-  utime_t dur(max_lock_secs_mp, 0);
 
   serializer = meta_obj->get_serializer(this, "RGWCompleteMultipart");
-  op_ret = serializer->try_lock(this, dur, y);
+  op_ret = serializer->try_lock(this, max_lock_secs_mp * 1s, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "failed to acquire lock" << dendl;
     if (op_ret == -ENOENT && check_previously_completed(parts)) {

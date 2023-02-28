@@ -59,8 +59,9 @@ static void generate_test_addr(entity_addr_t& a, int nonce, int port)
 
 void locker_info_t::generate_test_instances(std::list<locker_info_t*>& o)
 {
+  using namespace std::literals;
   locker_info_t *i = new locker_info_t;
-  i->expiration = utime_t(5, 0);
+  i->expiration = ceph::real_time(5s);
   generate_test_addr(i->addr, 1, 2);
   i->description = "description";
   o.push_back(i);
@@ -83,11 +84,12 @@ void lock_info_t::dump(ceph::Formatter *f) const
 
 void lock_info_t::generate_test_instances(std::list<lock_info_t *>& o)
 {
+  using namespace std::literals;
   lock_info_t *i = new lock_info_t;
   locker_id_t id;
   locker_info_t info;
   generate_lock_id(id, 1, "cookie");
-  info.expiration = utime_t(5, 0);
+  info.expiration = ceph::real_time(5s);
   generate_test_addr(info.addr, 1, 2);
   info.description = "description";
   i->lockers[id] = info;

@@ -437,15 +437,12 @@ int RGWSI_Cls::Lock::lock_exclusive(const DoutPrefixProvider *dpp,
     return r;
   }
 
-  uint64_t msec = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-  utime_t ut(msec / 1000, msec % 1000);
-  
   rados::cls::lock::Lock l(lock_name.value_or(log_lock_name));
-  l.set_duration(ut);
+  l.set_duration(duration);
   l.set_cookie(owner_id);
   l.set_tag(zone_id);
   l.set_may_renew(true);
-  
+
   return l.lock_exclusive(&p.ioctx(), oid);
 }
 

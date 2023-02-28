@@ -1300,7 +1300,7 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
     rados::cls::lock::Lock l(lock_name);
     l.set_cookie(lock_cookie);
     l.set_tag(lock_tag);
-    l.set_duration(utime_t(lock_duration, 0));
+    l.set_duration(lock_duration * 1s);
     l.set_description(lock_description);
     int ret;
     switch (lock_type) {

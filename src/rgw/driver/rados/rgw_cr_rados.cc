@@ -229,8 +229,7 @@ int RGWAsyncLockSystemObj::_send_request(const DoutPrefixProvider *dpp)
   }
 
   rados::cls::lock::Lock l(lock_name);
-  utime_t duration(duration_secs, 0);
-  l.set_duration(duration);
+  l.set_duration(duration_secs * 1s);
   l.set_cookie(cookie);
   l.set_may_renew(true);
 

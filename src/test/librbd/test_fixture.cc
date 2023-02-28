@@ -118,8 +118,8 @@ void TestFixture::close_image(librbd::ImageCtx *ictx) {
 int TestFixture::lock_image(librbd::ImageCtx &ictx, ClsLockType lock_type,
 			    const std::string &cookie) {
   int r = rados::cls::lock::lock(&ictx.md_ctx, ictx.header_oid, RBD_LOCK_NAME,
-      			   lock_type, cookie, "internal", "", utime_t(),
-      			   0);
+				 lock_type, cookie, "internal", "", {},
+				 0);
   if (r == 0) {
     m_lock_object = ictx.header_oid;
     m_lock_cookie = cookie;
