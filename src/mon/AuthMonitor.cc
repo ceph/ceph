@@ -1358,7 +1358,7 @@ bool AuthMonitor::valid_caps(
     }
   } else if (type == "mds") {
     MDSAuthCaps mdscap;
-    if (!mdscap.parse(g_ceph_context, caps, out)) {
+    if (!mdscap.parse(caps, out)) {
       dout(20) << "Parsing MDS caps failed. MDS cap: " << caps << dendl;
       return false;
     }
