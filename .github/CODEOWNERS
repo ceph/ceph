@@ -110,6 +110,7 @@ README*                                         @ceph/doc-writers
 /qa/workunits/cls/test_cls_lock.sh              @ceph/rbd
 /qa/workunits/cls/test_cls_rbd.sh               @ceph/rbd
 /qa/workunits/rbd                               @ceph/rbd
+/qa/workunits/windows                           @ceph/rbd
 /src/ceph-rbdnamer                              @ceph/rbd
 /src/cls/journal                                @ceph/rbd
 /src/cls/lock                                   @ceph/rbd
