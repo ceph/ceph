@@ -175,8 +175,8 @@ realm enforces a globally unique namespace within itself.
 Create a Master Zonegroup
 --------------------------
 
-A realm must have at least one zonegroup which serves as the master zone
-group for the realm.
+A realm must have at least one zonegroup which serves as the master zonegroup
+for the realm.
 
 #. To create a new master zonegroup for the multi-site configuration, open a
    command-line interface on a host in the master zonegroup and zone. Then
@@ -194,8 +194,8 @@ group for the realm.
 
    .. note:: If the realm will have only a single zonegroup, specify the ``--default`` flag. If ``--default`` is specified, ``radosgw-admin`` uses this zonegroup by default when adding new zones. If ``--default`` is not specified, you must use either the ``--rgw-zonegroup`` flag or the ``--zonegroup-id`` flag to identify the zonegroup when adding or modifying zones.
 
-#. After creating the master zonegroup, ``radosgw-admin`` echoes back the zone
-   group configuration. For example:
+#. After creating the master zonegroup, ``radosgw-admin`` echoes back the
+   zonegroup configuration. For example:
 
    ::
    
@@ -254,8 +254,8 @@ For example:
 Delete Default Zonegroup and Zone
 ----------------------------------
 
-#. Delete the ``default`` zone if it exists. Remove it from the default zone
-   group first.
+#. Delete the ``default`` zone if it exists. Remove it from the default
+   zonegroup first.
 
    .. prompt:: bash #
 
@@ -1183,10 +1183,10 @@ a minimum, specifying the required settings:
 3. ``is_master``: Determines whether the zonegroup is the master zonegroup.
    Required. **note:** You can only have one master zonegroup.
 
-4. ``endpoints``: A list of all the endpoints in the zonegroup. For
-   example, you may use multiple domain names to refer to the same zone
-   group. Remember to escape the forward slashes (``\/``). You may also
-   specify a port (``fqdn:port``) for each endpoint. Optional.
+4. ``endpoints``: A list of all the endpoints in the zonegroup. For example,
+   you may use multiple domain names to refer to the same zonegroup. Remember
+   to escape the forward slashes (``\/``). You may also specify a port
+   (``fqdn:port``) for each endpoint. Optional.
 
 5. ``hostnames``: A list of all the hostnames in the zonegroup. For example,
    you may use multiple domain names to refer to the same zonegroup. Optional.
@@ -1337,7 +1337,9 @@ instances. Ceph Object Gateway supports zones.
 
 The procedure for configuring zones differs from typical configuration
 procedures, because not all of the settings end up in a Ceph configuration
-file. Zones can be listed. You can "get" a zone configuration and "set" a zone
+file. 
+
+Zones can be listed. You can "get" a zone configuration and "set" a zone
 configuration.
 
 Creating a Zone
