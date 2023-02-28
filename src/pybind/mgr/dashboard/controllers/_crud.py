@@ -275,7 +275,7 @@ class Form:
                     'displayFlex': True,
                     'htmlClass': 'd-flex justify-content-end mb-0',
                     'items': [
-                        {"type": "cancel", "style": self.cancel_style, 'htmlClass': 'mr-2'},
+                        {"type": "cancel", "style": self.cancel_style, 'htmlClass': 'me-2'},
                         {"type": "submit", "style": self.submit_style, "title": self.action},
                     ]
                 }
