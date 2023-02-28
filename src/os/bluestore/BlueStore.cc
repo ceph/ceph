@@ -5602,24 +5602,18 @@ void BlueStore::_close_bdev()
   bdev = NULL;
 }
 
-int BlueStore::_open_fm(KeyValueDB::Transaction t,
-                        bool read_only,
-                        bool db_avail,
-                        bool fm_restore)
+int BlueStore::_create_fm(KeyValueDB::Transaction t,
+			  bool fm_restore)
 {
   int r;
-
   dout(5) << __func__ << "::NCB::freelist_type=" << freelist_type << dendl;
   ceph_assert(fm == NULL);
   // fm_restore means we are transitioning from null-fm to bitmap-fm
   ceph_assert(!fm_restore || (freelist_type != "null"));
-  // fm restore must pass in a valid transaction
-  ceph_assert(!fm_restore || (t != nullptr));
+  ceph_assert(t != nullptr);
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()
   bool can_have_null_fm = !is_db_rotational() &&
-                          !read_only &&
-                          db_avail &&
                           cct->_conf->bluestore_allocation_from_file &&
                           !bdev->is_smr();
 
@@ -5674,21 +5668,34 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t,
     }
     r = _write_out_fm_meta(0);
     ceph_assert(r == 0);
-  } else {
-    if (can_have_null_fm) {
-      commit_to_null_manager();
-    }
-    r = fm->init(db, read_only,
-      [&](const std::string& key, std::string* result) {
-        return read_meta(key, result);
-    });
-    if (r < 0) {
-      derr << __func__ << " failed: " << cpp_strerror(r) << dendl;
-      delete fm;
-      fm = NULL;
-      return r;
-    }
   }
+  return 0;
+}
+
+int BlueStore::_open_fm(bool read_only,
+                        bool db_avail)
+{
+  bool can_have_null_fm = !is_db_rotational() &&
+                          !read_only &&
+                          db_avail &&
+                          cct->_conf->bluestore_allocation_from_file &&
+                          !bdev->is_smr();
+
+  if (can_have_null_fm) {
+    commit_to_null_manager();
+    need_to_destage_allocation_file = true;
+  }
+  int r = fm->init(db, read_only,
+	       [&](const std::string& key, std::string* result) {
+		 return read_meta(key, result);
+	       });
+  if (r < 0) {
+    derr << __func__ << " failed: " << cpp_strerror(r) << dendl;
+    delete fm;
+    fm = NULL;
+    return r;
+  }
+
   // if space size tracked by free list manager is that higher than actual
   // dev size one can hit out-of-space allocation which will result
   // in data loss and/or assertions
@@ -6384,7 +6391,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
     goto out_db;
   }
 
-  r = _open_fm(nullptr, true, false);
+  r = _open_fm(true, false);
   if (r < 0)
     goto out_db;
 
@@ -7186,7 +7193,7 @@ int BlueStore::mkfs()
 
   {
     KeyValueDB::Transaction t = db->get_transaction();
-    r = _open_fm(t, false, true);
+    r = _create_fm(t, false);
     if (r < 0)
       goto out_close_db;
     {
@@ -19383,11 +19390,11 @@ int BlueStore::reset_fm_for_restore()
   fm = nullptr;
   freelist_type = "bitmap";
   KeyValueDB::Transaction t = db->get_transaction();
-  // call _open_fm() with fm_restore set to TRUE
+  // call _create_fm() with fm_restore set to TRUE
   // this will mark the full device space as allocated (and not just the reserved space)
-  _open_fm(t, true, true, true);
+  _create_fm(t, true);
   if (fm == nullptr) {
-    derr << "Failed _open_fm()" << dendl;
+    derr << "Failed _create_fm()" << dendl;
     return -1;
   }
   db->submit_transaction_sync(t);
