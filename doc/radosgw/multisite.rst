@@ -41,10 +41,10 @@ configurations for the Ceph Object Gateway:
 
 - **Multi-zonegroups:** Ceph Object Gateway supports multiple zonegroups (which
   were formerly called "regions"). Each zonegroup contains one or more zones.
-  If two zones are in the same zonegroup, and if that zonegroup is in the same
-  realm as a second zonegroup, then the objects stored in the two zones share
-  a global object namespace. This global object namespace ensures unique
-  object IDs across zonegroups and zones.
+  **WHAT?** If two zones are in the same zonegroup, and if that zonegroup is in
+  the same realm as a second zonegroup, then the objects stored in the two
+  zones share a global object namespace. **WHAT?** This global object namespace
+  ensures unique object IDs across zonegroups and zones.
 
 - **Multiple Realms:** Beginning with the Kraken release, the Ceph Object
   Gateway supports "realms", which are containers for zonegroups. Realms make
