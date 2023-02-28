@@ -183,9 +183,8 @@ class MDSAuthCaps
 {
 public:
   MDSAuthCaps() = default;
-  explicit MDSAuthCaps(CephContext *cct_) : cct(cct_) {}
 
-  // this ctor is used by spirit/phoenix; doesn't need cct.
+  // this ctor is used by spirit/phoenix
   explicit MDSAuthCaps(const std::vector<MDSCapGrant>& grants_) : grants(grants_) {}
 
   void clear() {
@@ -193,7 +192,7 @@ public:
   }
 
   void set_allow_all();
-  bool parse(CephContext *cct, std::string_view str, std::ostream *err);
+  bool parse(std::string_view str, std::ostream *err);
 
   bool allow_all() const;
   bool is_capable(std::string_view inode_path,
@@ -226,7 +225,6 @@ public:
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 private:
-  CephContext *cct = nullptr;
   std::vector<MDSCapGrant> grants;
 };
 
