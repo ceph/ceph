@@ -402,6 +402,13 @@
 	...
 }
 {
+	rocksdb config parsing
+	Memcheck:Leak
+	...
+	fun:*RocksDBStore*do_open*
+	...
+}
+{
 	rocksdb BGThreadWrapper
 	Memcheck:Leak
 	...
