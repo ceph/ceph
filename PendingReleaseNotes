@@ -110,6 +110,9 @@
   unlabeled perf counters may become labeled in future releases
   and as such will no longer be emitted by the `perf dump` and `perf schema`
   commands.
+* `ceph mgr dump` command now outputs `last_failure_osd_epoch` and
+  `active_clients` fields at the top level.  Previously, these fields were
+  output under `always_on_modules` field.
 
 >=17.2.1
 
