@@ -64,6 +64,19 @@ something like this:
 .. image:: ../images/zone-sync2.png
    :align: center
 
+At the top of this diagram, we see two applications (also known as "clients").
+The application on the right is both writing and reading data from the Ceph
+Cluster, by means of the RADOS Gateway (RGW).
+
+In the middle of this diagram, we see two zones, each of which contains an
+instance of a RADOS Gateway (RGW). These instances of RGW are handling the
+movement of data from the applications to the zonegroup. The arrow from the
+master zone (US-EAST) to the secondary zone (US-WEST) represents an act of data
+synchronization.
+
+At the bottom of this diagram, we see the master zonegroup that contains the
+master zone and the secondary zone.
+
 For additional details on setting up a cluster, see `Ceph Object Gateway for
 Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/3/html/ceph_object_gateway_for_production/index/>`__.
 
