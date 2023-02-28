@@ -983,11 +983,15 @@ class CephadmServe:
                     dd.name()))
                 action = 'reconfig'
             elif last_deps != deps:
-                self.log.debug('%s deps %s -> %s' % (dd.name(), last_deps,
-                                                     deps))
-                self.log.info('Reconfiguring %s (dependencies changed)...' % (
-                    dd.name()))
+                self.log.debug(f'{dd.name()} deps {last_deps} -> {deps}')
+                self.log.info(f'Reconfiguring {dd.name()} (dependencies changed)...')
                 action = 'reconfig'
+                # we need only redeploy if secure_monitoring_stack value has changed:
+                if dd.daemon_type in ['prometheus', 'node-exporter', 'alertmanager']:
+                    diff = list(set(last_deps) - set(deps))
+                    if any('secure_monitoring_stack' in e for e in diff):
+                        action = 'redeploy'
+
             elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
                 self.log.debug(
                     f'{dd.name()} container cli args {dd.extra_container_args} -> {spec.extra_container_args}')
