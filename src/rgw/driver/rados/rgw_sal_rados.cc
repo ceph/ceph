@@ -74,6 +74,7 @@ namespace rgw::sal {
 // default number of entries to list with each bucket listing call
 // (use marker to bridge between calls)
 static constexpr size_t listing_max_entries = 1000;
+static std::string pubsub_oid_prefix = "pubsub.";
 
 static int decode_policy(CephContext* cct,
                          bufferlist& bl,
@@ -471,7 +472,7 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
   // if bucket has notification definitions associated with it
   // they should be removed (note that any pending notifications on the bucket are still going to be sent)
   const RGWPubSub ps(store, info.owner.tenant);
-  const RGWPubSub::Bucket ps_bucket(ps, info.bucket);
+  const RGWPubSub::Bucket ps_bucket(ps, this);
   const auto ps_ret = ps_bucket.remove_notifications(dpp, y);
   if (ps_ret < 0 && ps_ret != -ENOENT) {
     ldpp_dout(dpp, -1) << "ERROR: unable to remove notifications from bucket. ret=" << ps_ret << dendl;
@@ -1024,6 +1025,55 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+std::string RadosBucket::topics_oid() const {
+  return pubsub_oid_prefix + get_tenant() + ".bucket." + get_name() + "/" + get_marker();
+}
+
+int RadosBucket::read_topics(rgw_pubsub_bucket_topics& notifications, 
+    RGWObjVersionTracker* objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) 
+{
+  bufferlist bl;
+  const int ret = rgw_get_system_obj(store->svc()->sysobj,
+                               store->svc()->zone->get_zone_params().log_pool,
+                               topics_oid(),
+                               bl,
+                               objv_tracker,
+                               nullptr, y, dpp, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto iter = bl.cbegin();
+  try {
+    decode(notifications, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 20) << " failed to decode bucket notifications from oid: " << topics_oid() << ". for bucket: " 
+      << get_name() << ". error: " << err.what() << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RadosBucket::write_topics(const rgw_pubsub_bucket_topics& notifications,
+    RGWObjVersionTracker* objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) {
+  bufferlist bl;
+  encode(notifications, bl);
+
+  return rgw_put_system_obj(dpp, store->svc()->sysobj,
+      store->svc()->zone->get_zone_params().log_pool, 
+      topics_oid(),
+      bl, false, objv_tracker, real_time(), y);
+}
+
+int RadosBucket::remove_topics(RGWObjVersionTracker* objv_tracker, 
+    optional_yield y, const DoutPrefixProvider *dpp) {
+  return rgw_delete_system_obj(dpp, store->svc()->sysobj, 
+      store->svc()->zone->get_zone_params().log_pool,
+      topics_oid(),
+      objv_tracker, y);
+}
+
 std::unique_ptr<User> RadosStore::get_user(const rgw_user &u)
 {
   return std::make_unique<RadosUser>(this, u);
@@ -1281,6 +1331,54 @@ std::unique_ptr<Notification> RadosStore::get_notification(
 std::unique_ptr<Notification> RadosStore::get_notification(const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y)
 {
   return std::make_unique<RadosNotification>(dpp, this, obj, src_obj, event_type, _bucket, _user_id, _user_tenant, _req_id, y);
+}
+
+std::string RadosStore::topics_oid(const std::string& tenant) const {
+  return pubsub_oid_prefix + tenant;
+}
+
+int RadosStore::read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) {
+  bufferlist bl;
+  const int ret = rgw_get_system_obj(svc()->sysobj,
+                               svc()->zone->get_zone_params().log_pool,
+                               topics_oid(tenant),
+                               bl,
+                               objv_tracker,
+                               nullptr, y, dpp, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto iter = bl.cbegin();
+  try {
+    decode(topics, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 20) << " failed to decode topics from oid: " << topics_oid(tenant) << 
+      ". error: " << err.what() << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RadosStore::write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+	optional_yield y, const DoutPrefixProvider *dpp) {
+  bufferlist bl;
+  encode(topics, bl);
+
+  return rgw_put_system_obj(dpp, svc()->sysobj,
+      svc()->zone->get_zone_params().log_pool, 
+      topics_oid(tenant),
+      bl, false, objv_tracker, real_time(), y);
+}
+
+int RadosStore::remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) {
+  return rgw_delete_system_obj(dpp, svc()->sysobj, 
+      svc()->zone->get_zone_params().log_pool,
+      topics_oid(tenant),
+      objv_tracker, y);
 }
 
 int RadosStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
