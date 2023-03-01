@@ -598,6 +598,9 @@ class Filesystem(MDSCluster):
     def set_bal_rank_mask(self, bal_rank_mask):
         self.set_var("bal_rank_mask", bal_rank_mask)
 
+    def set_refuse_client_session(self, yes):
+        self.set_var("refuse_client_session", yes)
+
     def compat(self, *args):
         a = map(lambda x: str(x).lower(), args)
         self.mon_manager.raw_cluster_cmd("fs", "compat", self.name, *a)

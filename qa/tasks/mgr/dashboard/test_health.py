@@ -56,7 +56,8 @@ class HealthTest(DashboardTestCase):
             'joinable': bool,
             'allow_snaps': bool,
             'allow_multimds_snaps': bool,
-            'allow_standby_replay': bool
+            'allow_standby_replay': bool,
+            'refuse_client_session': bool
         }),
         'ever_allowed_features': int,
         'root': int

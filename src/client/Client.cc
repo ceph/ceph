@@ -6360,6 +6360,12 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
     }
   }
 
+  if(mdsmap->test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION)) {
+    lderr(cct) << "connections cannot be made while" 
+                  " the flag refuse_client_session is set" << dendl;
+    return -CEPHFS_EACCES;
+  }
+
   populate_metadata(mount_root.empty() ? "/" : mount_root);
 
   filepath fp(CEPH_INO_ROOT);

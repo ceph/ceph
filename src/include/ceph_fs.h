@@ -288,7 +288,8 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS	     (1<<4)  /* cluster alllowed to enable MULTIMDS
                                                             and SNAPS at the same time */
 #define CEPH_MDSMAP_ALLOW_STANDBY_REPLAY         (1<<5)  /* cluster alllowed to enable MULTIMDS */
-
+#define CEPH_MDSMAP_REFUSE_CLIENT_SESSION        (1<<6)  /* cluster allowed to refuse client session
+                                                            request */
 #define CEPH_MDSMAP_DEFAULTS (CEPH_MDSMAP_ALLOW_SNAPS | \
 			      CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS)
 
