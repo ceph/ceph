@@ -127,11 +127,11 @@ TEST(ClsLock, TestMultiLocking) {
   ASSERT_EQ(-EBUSY, l2.lock_exclusive(&ioctx2, oid));
   ASSERT_EQ(-EBUSY, l2.lock_shared(&ioctx2, oid));
 
-  list<string> locks;
+  vector<string> locks;
   ASSERT_EQ(0, list_locks(&ioctx, oid, &locks));
 
   ASSERT_EQ(1, (int)locks.size());
-  list<string>::iterator iter = locks.begin();
+  auto iter = locks.begin();
   map<locker_id_t, locker_info_t> lockers;
   lock_info(&ioctx, oid, *iter, lockers, &lock_type_exclusive, NULL);
 
@@ -289,7 +289,7 @@ TEST(ClsLock, TestMultipleLocks) {
   Lock l2("lock2");
   ASSERT_EQ(0, l2.lock_exclusive(&ioctx, oid));
 
-  list<string> locks;
+  vector<string> locks;
   ASSERT_EQ(0, list_locks(&ioctx, oid, &locks));
 
   ASSERT_EQ(2, (int)locks.size());

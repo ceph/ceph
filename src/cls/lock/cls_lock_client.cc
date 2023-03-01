@@ -111,7 +111,7 @@ namespace rados {
         return ioctx->operate(oid, &op);
       }
 
-      int list_locks(IoCtx *ioctx, const std::string& oid, std::list<std::string> *locks)
+      int list_locks(IoCtx *ioctx, const std::string& oid, std::vector<std::string> *locks)
       {
         bufferlist in, out;
         int r = ioctx->exec(oid, "lock", "list_locks", in, out);

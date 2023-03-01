@@ -154,7 +154,7 @@ WRITE_CLASS_ENCODER_FEATURES(cls_lock_get_info_reply)
 
 struct cls_lock_list_locks_reply
 {
-  std::list<std::string> locks;
+  std::vector<std::string> locks;
 
   cls_lock_list_locks_reply() {}
 

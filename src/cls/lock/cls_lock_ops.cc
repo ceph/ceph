@@ -152,9 +152,8 @@ void cls_lock_get_info_reply::generate_test_instances(list<cls_lock_get_info_rep
 
 void cls_lock_list_locks_reply::dump(Formatter *f) const
 {
-  list<string>::const_iterator iter;
   f->open_array_section("locks");
-  for (iter = locks.begin(); iter != locks.end(); ++iter) {
+  for (auto iter = locks.begin(); iter != locks.end(); ++iter) {
     f->open_array_section("object");
     f->dump_string("lock", *iter);
     f->close_section();
