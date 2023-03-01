@@ -5720,6 +5720,7 @@ int BlueStore::_write_out_fm_meta(uint64_t target_size)
 
   std::vector<std::pair<string, string>> fm_meta;
   fm->get_meta(target_size, &fm_meta);
+  fm_meta.emplace_back("freelist_type", freelist_type);
 
   for (auto& m : fm_meta) {
     r = write_meta(m.first, m.second);
@@ -12274,12 +12275,19 @@ int BlueStore::_open_super_meta()
 
   // freelist
   {
-    bufferlist bl;
-    db->get(PREFIX_SUPER, "freelist_type", &bl);
-    if (bl.length()) {
-      freelist_type = std::string(bl.c_str(), bl.length());
-    } else {
-      ceph_abort_msg("Not Support extent freelist manager");
+    // first try meta
+    int r = read_meta("freelist_type", &freelist_type);
+    if (r < 0) {
+      derr << __func__ << " no 'freelist_type' meta, fallback to DB" << dendl;
+      bufferlist bl;
+      db->get(PREFIX_SUPER, "freelist_type", &bl);
+      if (bl.length()) {
+	freelist_type = std::string(bl.c_str(), bl.length());
+      } else {
+	ceph_abort_msg("Not Support extent freelist manager");
+      }
+      write_meta("freelist_type", freelist_type);
+      dout(10) << __func__ << " stored 'freelist_type' to meta" << dendl;
     }
     dout(5) << __func__ << "::NCB::freelist_type=" << freelist_type << dendl;
   }
