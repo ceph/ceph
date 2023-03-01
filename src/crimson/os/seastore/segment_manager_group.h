@@ -35,6 +35,11 @@ public:
   void add_segment_manager(SegmentManager* segment_manager) {
     auto device_id = segment_manager->get_device_id();
     ceph_assert(!has_device(device_id));
+    if (!device_ids.empty()) {
+      auto existing_id = *device_ids.begin();
+      ceph_assert(segment_managers[existing_id]->get_device_type()
+                  == segment_manager->get_device_type());
+    }
     segment_managers[device_id] = segment_manager;
     device_ids.insert(device_id);
   }
