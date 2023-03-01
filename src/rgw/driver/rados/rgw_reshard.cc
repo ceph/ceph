@@ -837,7 +837,12 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
     while (is_truncated) {
       entries.clear();
       int ret = store->getRados()->bi_list(dpp, bucket_info, i, null_object_filter, marker, max_entries, &entries, &is_truncated);
-      if (ret < 0 && ret != -ENOENT) {
+      if (ret == -ENOENT) {
+        ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to find shard "
+            << i << ", skipping" << dendl;
+        // break out of the is_truncated loop and move on to the next shard
+        break;
+      } else if (ret < 0) {
         derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
         return ret;
       }
