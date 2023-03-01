@@ -352,6 +352,8 @@ struct Connection : boost::intrusive::list_base_hook<>,
   void close(boost::system::error_code& ec) {
     socket.close(ec);
   }
+
+  tcp_socket& get_socket() { return socket; }
 };
 
 class ConnectionList {
