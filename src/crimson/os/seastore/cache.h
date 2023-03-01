@@ -1097,7 +1097,7 @@ private:
       assert(extent.is_clean() && !extent.is_placeholder());
       
       if (!extent.primary_ref_list_hook.is_linked()) {
-	contents += extent.get_length();
+	contents += extent.get_valid_length();
 	intrusive_ptr_add_ref(&extent);
 	lru.push_back(extent);
       }
@@ -1124,8 +1124,8 @@ private:
 
       if (extent.primary_ref_list_hook.is_linked()) {
 	lru.erase(lru.s_iterator_to(extent));
-	assert(contents >= extent.get_length());
-	contents -= extent.get_length();
+	assert(contents >= extent.get_valid_length());
+	contents -= extent.get_valid_length();
 	intrusive_ptr_release(&extent);
       }
     }
@@ -1136,11 +1136,20 @@ private:
       if (extent.primary_ref_list_hook.is_linked()) {
 	lru.erase(lru.s_iterator_to(extent));
 	intrusive_ptr_release(&extent);
-	assert(contents >= extent.get_length());
-	contents -= extent.get_length();
+	assert(contents >= extent.get_valid_length());
+	contents -= extent.get_valid_length();
       }
       add_to_lru(extent);
     }
+
+    void update_size_when_extent_increase(
+      CachedExtent &extent,
+      size_t len) {
+        if (extent.primary_ref_list_hook.is_linked()) {
+          contents += len;
+        }
+        trim_to_capacity();
+      }
 
     void clear() {
       LOG_PREFIX(Cache::LRU::clear);
@@ -1315,6 +1324,10 @@ private:
     }
   }
 
+  void update_lru_size(CachedExtent &ext, size_t len) {
+    lru.update_size_when_extent_increase(ext, len);
+  }
+
   void backref_batch_update(
     std::vector<backref_entry_ref> &&,
     const journal_seq_t &);
@@ -1391,6 +1404,7 @@ private:
     }
     assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING);
     extent->set_io_wait();
+    auto old_length = extent->get_valid_length();
     return seastar::do_with(
       extent->read_buffer(offset, length),
       [extent, this](auto &read_regions) {
@@ -1417,12 +1431,15 @@ private:
               });
           });
     }).safe_then(
-        [extent=std::move(extent), offset, length]() mutable {
+        [this, extent=std::move(extent),
+          offset, length, old_length]() mutable {
         LOG_PREFIX(Cache::read_extent);
         extent->state = CachedExtent::extent_state_t::CLEAN;
         /* TODO: crc should be checked against LBA manager */
         extent->last_committed_crc = extent->get_crc32c();
 
+        update_lru_size(*extent,
+          extent->get_valid_length() - old_length);
         extent->on_clean_read();
         extent->check_and_rebuild();
         extent->complete_io();
