@@ -66,10 +66,13 @@ something like this:
 
 At the top of this diagram, we see two applications (also known as "clients").
 The application on the right is both writing and reading data from the Ceph
-Cluster, by means of the RADOS Gateway (RGW).
+Cluster, by means of the RADOS Gateway (RGW). The application on the left is
+only *reading* data from the Ceph Cluster, by means of an instance of RADOS
+Gateway (RGW). In both cases (read-and-write and read-only), the transmssion of
+data is handled RESTfully.
 
 In the middle of this diagram, we see two zones, each of which contains an
-instance of a RADOS Gateway (RGW). These instances of RGW are handling the
+instance of RADOS Gateway (RGW). These instances of RGW are handling the
 movement of data from the applications to the zonegroup. The arrow from the
 master zone (US-EAST) to the secondary zone (US-WEST) represents an act of data
 synchronization.
