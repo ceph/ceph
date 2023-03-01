@@ -211,6 +211,19 @@ public:
     std::string& _user_id, std::string& _user_tenant,
     std::string& _req_id, optional_yield y) override;
 
+  int read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+      optional_yield y, const DoutPrefixProvider *dpp) override {
+    return next->read_topics(tenant, topics, objv_tracker, y, dpp);
+  }
+  int write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+      optional_yield y, const DoutPrefixProvider *dpp) override {
+    return next->write_topics(tenant, topics, objv_tracker, y, dpp);
+  }
+  int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker, 
+      optional_yield y, const DoutPrefixProvider *dpp) override {
+    return next->remove_topics(tenant, objv_tracker, y, dpp);
+  }
+
   virtual RGWLC* get_rgwlc(void) override;
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override;
 
@@ -502,6 +515,19 @@ public:
 			      bool *is_truncated) override;
   virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 			       CephContext* cct) override;
+
+  int read_topics(rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* objv_tracker, 
+      optional_yield y, const DoutPrefixProvider *dpp) override { 
+    return next->read_topics(notifications, objv_tracker, y, dpp); 
+  }
+  int write_topics(const rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* obj_tracker, 
+      optional_yield y, const DoutPrefixProvider *dpp) override { 
+    return next->write_topics(notifications, obj_tracker, y, dpp); 
+  }
+  int remove_topics(RGWObjVersionTracker* objv_tracker, 
+      optional_yield y, const DoutPrefixProvider *dpp) override {
+    return next->remove_topics(objv_tracker, y, dpp);
+  }
 
   virtual rgw_bucket& get_key() override { return next->get_key(); }
   virtual RGWBucketInfo& get_info() override { return next->get_info(); }

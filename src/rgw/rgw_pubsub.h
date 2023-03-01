@@ -3,13 +3,11 @@
 
 #pragma once
 
-#include "services/svc_sys_obj.h"
+#include "rgw_sal.h"
 #include "rgw_tools.h"
 #include "rgw_zone.h"
 #include "rgw_notify_event_type.h"
 #include <boost/container/flat_map.hpp>
-
-namespace rgw::sal { class RadosStore; }
 
 class XMLObj;
 
@@ -535,66 +533,46 @@ struct rgw_pubsub_topics {
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_topics)
 
-static std::string pubsub_oid_prefix = "pubsub.";
-
 class RGWPubSub
 {
   friend class Bucket;
 
-  rgw::sal::RadosStore* const store;
+  rgw::sal::Driver* const driver;
   const std::string tenant;
-  RGWSI_SysObj* const svc_sysobj;
 
-  rgw_raw_obj meta_obj;
-
-  std::string meta_oid() const {
-    return pubsub_oid_prefix + tenant;
-  }
-
-  std::string bucket_meta_oid(const rgw_bucket& bucket) const {
-    return pubsub_oid_prefix + tenant + ".bucket." + bucket.name + "/" + bucket.marker;
-  }
-
-  template <class T>
-  int read(const rgw_raw_obj& obj, T* data, RGWObjVersionTracker* objv_tracker) const;
-
-  template <class T>
-  int write(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const T& info,
-	    RGWObjVersionTracker* obj_tracker, optional_yield y) const;
-
-  int remove(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, RGWObjVersionTracker* objv_tracker,
-	     optional_yield y) const;
-
-  int read_topics(rgw_pubsub_topics *result, RGWObjVersionTracker* objv_tracker) const;
+  int read_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result, 
+      RGWObjVersionTracker* objv_tracker, optional_yield y) const;
   int write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_topics& topics,
 			RGWObjVersionTracker* objv_tracker, optional_yield y) const;
 
 public:
-  RGWPubSub(rgw::sal::RadosStore* _store, const std::string& tenant);
+  RGWPubSub(rgw::sal::Driver* _driver, const std::string& tenant);
 
   class Bucket {
     friend class RGWPubSub;
     const RGWPubSub& ps;
-    const rgw_bucket& bucket;
-    rgw_raw_obj bucket_meta_obj;
+    rgw::sal::Bucket* const bucket;
 
     // read the list of topics associated with a bucket and populate into result
     // use version tacker to enforce atomicity between read/write
     // return 0 on success or if no topic was associated with the bucket, error code otherwise
-    int read_topics(rgw_pubsub_bucket_topics *result, RGWObjVersionTracker* objv_tracker) const;
+    int read_topics(const DoutPrefixProvider *dpp, rgw_pubsub_bucket_topics& result, 
+        RGWObjVersionTracker* objv_tracker, optional_yield y) const;
     // set the list of topics associated with a bucket
     // use version tacker to enforce atomicity between read/write
     // return 0 on success, error code otherwise
     int write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_bucket_topics& topics,
 		     RGWObjVersionTracker* objv_tracker, optional_yield y) const;
   public:
-    Bucket(const RGWPubSub& _ps, const rgw_bucket& _bucket) : ps(_ps), bucket(_bucket) {
-      ps.get_bucket_meta_obj(bucket, &bucket_meta_obj);
-    }
+    Bucket(const RGWPubSub& _ps, rgw::sal::Bucket* _bucket) : 
+      ps(_ps), bucket(_bucket)
+    {}
 
-    // read the list of topics associated with a bucket and populate into result
+    // get the list of topics associated with a bucket and populate into result
     // return 0 on success or if no topic was associated with the bucket, error code otherwise
-    int get_topics(rgw_pubsub_bucket_topics *result) const;
+    int get_topics(const DoutPrefixProvider *dpp, rgw_pubsub_bucket_topics& result, optional_yield y) const {
+      return read_topics(dpp, result, nullptr, y);
+    }
     // adds a topic + filter (event list, and possibly name metadata or tags filters) to a bucket
     // assigning a notification name is optional (needed for S3 compatible notifications)
     // if the topic already exist on the bucket, the filter event list may be updated
@@ -615,16 +593,15 @@ public:
     int remove_notifications(const DoutPrefixProvider *dpp, optional_yield y) const;
   };
 
-  void get_meta_obj(rgw_raw_obj *obj) const;
-  void get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const;
-
-  // get all topics (per tenant, if used)) and populate them into "result"
-  // return 0 on success or if no topics exist, error code otherwise
-  int get_topics(rgw_pubsub_topics *result) const;
+  // get the list of topics
+  // return 0 on success or if no topic was associated with the bucket, error code otherwise
+  int get_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result, optional_yield y) const {
+    return read_topics(dpp, result, nullptr, y);
+  }
   // get a topic with by its name and populate it into "result"
   // return -ENOENT if the topic does not exists 
   // return 0 on success, error code otherwise
-  int get_topic(const std::string& name, rgw_pubsub_topic *result) const;
+  int get_topic(const DoutPrefixProvider *dpp, const std::string& name, rgw_pubsub_topic& result, optional_yield y) const;
   // create a topic with a name only
   // if the topic already exists it is a no-op (considered success)
   // return 0 on success, error code otherwise
@@ -639,38 +616,4 @@ public:
   // return 0 on success, error code otherwise
   int remove_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y) const;
 };
-
-template <class T>
-int RGWPubSub::read(const rgw_raw_obj& obj, T* result, RGWObjVersionTracker* objv_tracker) const
-{
-  bufferlist bl;
-  int ret = rgw_get_system_obj(svc_sysobj,
-                               obj.pool, obj.oid,
-                               bl,
-                               objv_tracker,
-                               nullptr, null_yield, nullptr, nullptr);
-  if (ret < 0) {
-    return ret;
-  }
-
-  auto iter = bl.cbegin();
-  try {
-    decode(*result, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
-  }
-
-  return 0;
-}
-
-template <class T>
-int RGWPubSub::write(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const T& info,
-			 RGWObjVersionTracker* objv_tracker, optional_yield y) const
-{
-  bufferlist bl;
-  encode(info, bl);
-
-  return rgw_put_system_obj(dpp, svc_sysobj, obj.pool, obj.oid,
-                            bl, false, objv_tracker, real_time(), y);
-}
 

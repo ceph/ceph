@@ -35,6 +35,8 @@ class RGWDataSyncStatusManager;
 class RGWSyncModuleInstance;
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
 class RGWCompressionInfo;
+struct rgw_pubsub_topics;
+struct rgw_pubsub_bucket_topics;
 
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
@@ -336,7 +338,15 @@ class Driver {
     const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj,
     rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant,
     std::string& _req_id, optional_yield y) = 0;
-
+    /** Read the topic config entry into @a data and (optionally) @a objv_tracker */
+    virtual int read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Write @a info and (optionally) @a objv_tracker into the config */
+    virtual int write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Remove the topic config, optionally a specific version */
+    virtual int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
+        optional_yield y,const DoutPrefixProvider *dpp) = 0;
     /** Get access to the lifecycle management thread */
     virtual RGWLC* get_rgwlc(void) = 0;
     /** Get access to the coroutine registry.  Used to create new coroutine managers */
@@ -769,6 +779,16 @@ class Bucket {
     /** Abort multipart uploads in a bucket */
     virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 				 CephContext* cct) = 0;
+
+    /** Read the bucket notification config into @a notifications with and (optionally) @a objv_tracker */
+    virtual int read_topics(rgw_pubsub_bucket_topics& notifications, 
+        RGWObjVersionTracker* objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Write @a notifications with (optionally) @a objv_tracker into the bucket notification config */
+    virtual int write_topics(const rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Remove the bucket notification config with (optionally) @a objv_tracker */
+    virtual int remove_topics(RGWObjVersionTracker* objv_tracker, 
+        optional_yield y, const DoutPrefixProvider *dpp) = 0;
 
     /* dang - This is temporary, until the API is completed */
     virtual rgw_bucket& get_key() = 0;
