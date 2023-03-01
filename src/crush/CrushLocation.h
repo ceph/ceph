@@ -37,8 +37,9 @@ private:
 
 std::ostream& operator<<(std::ostream& os, const CrushLocation& loc);
 }
-#endif
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<TOPNSPC::crush::CrushLocation> : fmt::ostream_formatter {};
+#endif
+
 #endif

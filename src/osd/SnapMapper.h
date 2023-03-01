@@ -22,6 +22,10 @@
 
 #include "common/hobject.h"
 #include "common/map_cacher.hpp"
+#ifdef WITH_SEASTAR
+#  include "crimson/os/futurized_store.h"
+#  include "crimson/os/futurized_collection.h"
+#endif
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/object.h"
@@ -30,8 +34,16 @@
 #include "osd/SnapMapReaderI.h"
 
 class OSDriver : public MapCacher::StoreDriver<std::string, ceph::buffer::list> {
-  ObjectStore *os;
-  ObjectStore::CollectionHandle ch;
+#ifdef WITH_SEASTAR
+  using ObjectStoreT = crimson::os::FuturizedStore;
+  using CollectionHandleT = ObjectStoreT::CollectionRef;
+#else
+  using ObjectStoreT = ObjectStore;
+  using CollectionHandleT = ObjectStoreT::CollectionHandle;
+#endif
+
+  ObjectStoreT *os;
+  CollectionHandleT ch;
   ghobject_t hoid;
 
 public:
@@ -39,11 +51,11 @@ public:
     friend class OSDriver;
     coll_t cid;
     ghobject_t hoid;
-    ObjectStore::Transaction *t;
+    ceph::os::Transaction *t;
     OSTransaction(
       const coll_t &cid,
       const ghobject_t &hoid,
-      ObjectStore::Transaction *t)
+      ceph::os::Transaction *t)
       : cid(cid), hoid(hoid), t(t) {}
   public:
     void set_keys(
@@ -61,21 +73,28 @@ public:
   };
 
   OSTransaction get_transaction(
-    ObjectStore::Transaction *t) const {
-    return OSTransaction(ch->cid, hoid, t);
+    ceph::os::Transaction *t) const {
+    return OSTransaction(ch->get_cid(), hoid, t);
   }
 
-  OSDriver(ObjectStore *os, const coll_t& cid, const ghobject_t &hoid) :
+#ifndef WITH_SEASTAR
+  OSDriver(ObjectStoreT *os, const coll_t& cid, const ghobject_t &hoid) :
+    OSDriver(os, os->open_collection(cid), hoid) {}
+#endif
+  OSDriver(ObjectStoreT *os, CollectionHandleT ch, const ghobject_t &hoid) :
     os(os),
-    hoid(hoid) {
-    ch = os->open_collection(cid);
-  }
+    ch(ch),
+    hoid(hoid) {}
+
   int get_keys(
     const std::set<std::string> &keys,
     std::map<std::string, ceph::buffer::list> *out) override;
   int get_next(
     const std::string &key,
     std::pair<std::string, ceph::buffer::list> *next) override;
+  int get_next_or_current(
+    const std::string &key,
+    std::pair<std::string, ceph::buffer::list> *next_or_current) override;
 };
 
 /**
@@ -141,6 +160,7 @@ public:
   static const char *PURGED_SNAP_EPOCH_PREFIX;
   static const char *PURGED_SNAP_PREFIX;
 
+#ifndef WITH_SEASTAR
   struct Scrubber {
     CephContext *cct;
     ObjectStore *store;
@@ -187,27 +207,18 @@ public:
     ObjectStore::CollectionHandle& ch,
     ghobject_t hoid,
     unsigned max);
+#endif
 
   static void record_purged_snaps(
     CephContext *cct,
-    ObjectStore *store,
-    ObjectStore::CollectionHandle& ch,
-    ghobject_t hoid,
-    ObjectStore::Transaction *t,
+    OSDriver& backend,
+    OSDriver::OSTransaction&& txn,
     std::map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps);
-  static void scrub_purged_snaps(
-    CephContext *cct,
-    ObjectStore *store,
-    ObjectStore::CollectionHandle& ch,
-    ghobject_t mapper_hoid,
-    ghobject_t purged_snaps_hoid);
 
 private:
   static int _lookup_purged_snap(
     CephContext *cct,
-    ObjectStore *store,
-    ObjectStore::CollectionHandle& ch,
-    const ghobject_t& hoid,
+    OSDriver& backend,
     int64_t pool, snapid_t snap,
     snapid_t *begin, snapid_t *end);
   static void make_purged_snap_key_value(
