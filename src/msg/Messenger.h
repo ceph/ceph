@@ -168,7 +168,6 @@ public:
                            uint64_t nonce);
 
   static uint64_t get_random_nonce();
-  static uint64_t get_pid_nonce();
 
   /**
    * create a new messenger
