@@ -31,7 +31,7 @@ bool init(CephContext* cct);
 void shutdown();
 
 // connect to a kafka endpoint
-connection_ptr_t connect(const std::string& url, bool use_ssl, bool verify_ssl, boost::optional<const std::string&> ca_location);
+connection_ptr_t connect(const std::string& url, bool use_ssl, bool verify_ssl, boost::optional<const std::string&> ca_location, boost::optional<const std::string&> mechanism);
 
 // publish a message over a connection that was already created
 int publish(connection_ptr_t& conn,

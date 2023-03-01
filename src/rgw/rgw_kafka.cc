@@ -73,6 +73,7 @@ struct connection_t {
   const boost::optional<std::string> ca_location;
   const std::string user;
   const std::string password;
+  const boost::optional<std::string> mechanism;
   utime_t timestamp = ceph_clock_now();
 
   // cleanup of all internal connection resource
@@ -107,8 +108,8 @@ struct connection_t {
   // ctor for setting immutable values
   connection_t(CephContext* _cct, const std::string& _broker, bool _use_ssl, bool _verify_ssl, 
           const boost::optional<const std::string&>& _ca_location,
-          const std::string& _user, const std::string& _password) :
-      cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), user(_user), password(_password) {}
+          const std::string& _user, const std::string& _password, const boost::optional<const std::string&>& _mechanism) :
+      cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), user(_user), password(_password), mechanism(_mechanism) {}                                                                                                                                                        
 
   // dtor also destroys the internals
   ~connection_t() {
@@ -124,6 +125,7 @@ std::string to_string(const connection_ptr_t& conn) {
     str += "\nBroker: " + conn->broker; 
     str += conn->use_ssl ? "\nUse SSL" : ""; 
     str += conn->ca_location ? "\nCA Location: " + *(conn->ca_location) : "";
+    str += conn->mechanism ? "\nSASL Mechanism: " + *(conn->mechanism) : "";
     return str;
 }
 // these are required interfaces so that connection_t could be used inside boost::intrusive_ptr
@@ -220,10 +222,18 @@ connection_ptr_t& create_connection(connection_ptr_t& conn) {
     if (!conn->user.empty()) {
       // use SSL+SASL
       if (rd_kafka_conf_set(conn->temp_conf, "security.protocol", "SASL_SSL", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
-              rd_kafka_conf_set(conn->temp_conf, "sasl.mechanism", "PLAIN", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
               rd_kafka_conf_set(conn->temp_conf, "sasl.username", conn->user.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
               rd_kafka_conf_set(conn->temp_conf, "sasl.password", conn->password.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
       ldout(conn->cct, 20) << "Kafka connect: successfully configured SSL+SASL security" << dendl;
+
+      if (conn->mechanism) {
+        if (rd_kafka_conf_set(conn->temp_conf, "sasl.mechanism", conn->mechanism->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+        ldout(conn->cct, 20) << "Kafka connect: successfully configured SASL mechanism" << dendl;
+      } else {
+        if (rd_kafka_conf_set(conn->temp_conf, "sasl.mechanism", "PLAIN", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+        ldout(conn->cct, 20) << "Kafka connect: using default SASL mechanism" << dendl;
+      }
+
     } else {
       // use only SSL
       if (rd_kafka_conf_set(conn->temp_conf, "security.protocol", "SSL", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
@@ -239,6 +249,20 @@ connection_ptr_t& create_connection(connection_ptr_t& conn) {
     // if (rd_kafka_conf_set(conn->temp_conf, "enable.ssl.certificate.verification", "0", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
     ldout(conn->cct, 20) << "Kafka connect: successfully configured security" << dendl;
+  } else if (!conn->user.empty()) {
+      // use SASL+PLAINTEXT
+      if (rd_kafka_conf_set(conn->temp_conf, "security.protocol", "SASL_PLAINTEXT", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+              rd_kafka_conf_set(conn->temp_conf, "sasl.username", conn->user.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+              rd_kafka_conf_set(conn->temp_conf, "sasl.password", conn->password.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: successfully configured SASL_PLAINTEXT" << dendl;
+
+      if (conn->mechanism) {
+        if (rd_kafka_conf_set(conn->temp_conf, "sasl.mechanism", conn->mechanism->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+        ldout(conn->cct, 20) << "Kafka connect: successfully configured SASL mechanism" << dendl;
+      } else {
+        if (rd_kafka_conf_set(conn->temp_conf, "sasl.mechanism", "PLAIN", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+        ldout(conn->cct, 20) << "Kafka connect: using default SASL mechanism" << dendl;
+      }
   }
 
   // set the global callback for delivery success/fail
@@ -286,9 +310,10 @@ connection_ptr_t create_new_connection(const std::string& broker, CephContext* c
         bool verify_ssl,
         boost::optional<const std::string&> ca_location, 
         const std::string& user, 
-        const std::string& password) { 
+        const std::string& password,
+        boost::optional<const std::string&> mechanism) { 
   // create connection state
-  connection_ptr_t conn(new connection_t(cct, broker, use_ssl, verify_ssl, ca_location, user, password));
+  connection_ptr_t conn(new connection_t(cct, broker, use_ssl, verify_ssl, ca_location, user, password, mechanism));
   return create_connection(conn);
 }
 
@@ -529,7 +554,8 @@ public:
   connection_ptr_t connect(const std::string& url, 
           bool use_ssl,
           bool verify_ssl,
-          boost::optional<const std::string&> ca_location) {
+          boost::optional<const std::string&> ca_location,
+          boost::optional<const std::string&> mechanism) {
     if (stopped) {
       // TODO: increment counter
       ldout(cct, 1) << "Kafka connect: manager is stopped" << dendl;
@@ -548,7 +574,7 @@ public:
     // this should be validated by the regex in parse_url()
     ceph_assert(user.empty() == password.empty());
 
-	if (!user.empty() && !use_ssl) {
+	if (!user.empty() && !use_ssl && !g_conf().get_val<bool>("rgw_allow_notification_secrets_in_cleartext")) {
       ldout(cct, 1) << "Kafka connect: user/password are only allowed over secure connection" << dendl;
       return nullptr;
 	}
@@ -568,7 +594,7 @@ public:
       ldout(cct, 1) << "Kafka connect: max connections exceeded" << dendl;
       return nullptr;
     }
-    const auto conn = create_new_connection(broker, cct, use_ssl, verify_ssl, ca_location, user, password);
+    const auto conn = create_new_connection(broker, cct, use_ssl, verify_ssl, ca_location, user, password, mechanism);
     // create_new_connection must always return a connection object
     // even if error occurred during creation. 
     // in such a case the creation will be retried in the main thread
@@ -671,9 +697,10 @@ void shutdown() {
 }
 
 connection_ptr_t connect(const std::string& url, bool use_ssl, bool verify_ssl,
-        boost::optional<const std::string&> ca_location) {
+        boost::optional<const std::string&> ca_location,
+        boost::optional<const std::string&> mechanism) {
   if (!s_manager) return nullptr;
-  return s_manager->connect(url, use_ssl, verify_ssl, ca_location);
+  return s_manager->connect(url, use_ssl, verify_ssl, ca_location, mechanism);
 }
 
 int publish(connection_ptr_t& conn, 
