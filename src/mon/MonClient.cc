@@ -968,10 +968,7 @@ void MonClient::tick()
   _check_auth_tickets();
   _check_tell_commands();
   
-  if (_hunting()) {
-    ldout(cct, 1) << "continuing hunt" << dendl;
-    return _reopen_session();
-  } else if (active_con) {
+  if (active_con) {
     // just renew as needed
     auto cur_con = active_con->get_con();
     if (!cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
