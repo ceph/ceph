@@ -2237,10 +2237,14 @@ void RGWGetObj::execute(optional_yield y)
   }
 
 #ifdef WITH_ARROW_FLIGHT
-  if (ofs == 0) {
-    // insert a GetObj_Filter to monitor and create flight
-    flight_filter.emplace(s, filter);
-    filter = &*flight_filter;
+  if (s->penv.flight_store) {
+    if (ofs == 0) {
+      // insert a GetObj_Filter to monitor and create flight
+      flight_filter.emplace(s, filter);
+      filter = &*flight_filter;
+    }
+  } else {
+    ldpp_dout(this, 0) << "ERROR: flight_store not created in " << __func__ << dendl;
   }
 #endif
 
@@ -2396,7 +2400,7 @@ int RGWListBuckets::verify_permission(optional_yield y)
     tenant = s->user->get_tenant();
   }
 
-  if (!verify_user_permission(this, s, ARN(partition, service, "", tenant, "*"), rgw::IAM::s3ListAllMyBuckets)) {
+  if (!verify_user_permission(this, s, ARN(partition, service, "", tenant, "*"), rgw::IAM::s3ListAllMyBuckets, false)) {
     return -EACCES;
   }
 
@@ -3015,7 +3019,7 @@ int RGWCreateBucket::verify_permission(optional_yield y)
   bucket.name = s->bucket_name;
   bucket.tenant = s->bucket_tenant;
   ARN arn = ARN(bucket);
-  if (!verify_user_permission(this, s, arn, rgw::IAM::s3CreateBucket)) {
+  if (!verify_user_permission(this, s, arn, rgw::IAM::s3CreateBucket, false)) {
     return -EACCES;
   }
 
@@ -4409,7 +4413,6 @@ void RGWPostObj::execute(optional_yield y)
     // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
     hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
     ceph::buffer::list bl, aclbl;
-    int len = 0;
 
     op_ret = s->bucket->check_quota(this, quota, s->content_length, y);
     if (op_ret < 0) {
@@ -4473,7 +4476,7 @@ void RGWPostObj::execute(optional_yield y)
     bool again;
     do {
       ceph::bufferlist data;
-      len = get_data(data, again);
+      int len = get_data(data, again);
 
       if (len < 0) {
         op_ret = len;
@@ -4504,7 +4507,7 @@ void RGWPostObj::execute(optional_yield y)
       return;
     }
 
-    if (len < min_len) {
+    if (ofs < min_len) {
       op_ret = -ERR_TOO_SMALL;
       return;
     }

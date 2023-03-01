@@ -35,7 +35,7 @@ void ClientRequest::Orderer::clear_and_cancel()
 {
   for (auto i = list.begin(); i != list.end(); ) {
     logger().debug(
-      "{}: ClientRequest::Orderer::clear_and_cancel {}",
+      "ClientRequest::Orderer::clear_and_cancel: {}",
       *i);
     i->complete_request();
     remove_request(*(i++));
@@ -87,7 +87,7 @@ ConnectionPipeline &ClientRequest::cp()
 
 ClientRequest::PGPipeline &ClientRequest::pp(PG &pg)
 {
-  return pg.client_request_pg_pipeline;
+  return pg.request_pg_pipeline;
 }
 
 bool ClientRequest::same_session_and_pg(const ClientRequest& other_op) const

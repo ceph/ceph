@@ -125,6 +125,7 @@ class RadosStore : public StoreDriver {
     RGWRados* rados;
     RGWUserCtl* user_ctl;
     std::unique_ptr<RadosZone> zone;
+    std::string topics_oid(const std::string& tenant) const;
 
   public:
     RadosStore()
@@ -168,6 +169,12 @@ class RadosStore : public StoreDriver {
     const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, 
     rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant,
     std::string& _req_id, optional_yield y) override;
+    int read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) override;
+    int write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+	optional_yield y, const DoutPrefixProvider *dpp) override;
+    int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) override;
     virtual RGWLC* get_rgwlc(void) override { return rados->get_lc(); }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return rados->get_cr_registry(); }
 
@@ -503,6 +510,7 @@ class RadosBucket : public StoreBucket {
   private:
     RadosStore* store;
     RGWAccessControlPolicy acls;
+    std::string topics_oid() const;
 
   public:
     RadosBucket(RadosStore *_st)
@@ -608,6 +616,12 @@ class RadosBucket : public StoreBucket {
 				bool *is_truncated) override;
     virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 				 CephContext* cct) override;
+    int read_topics(rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* objv_tracker, 
+        optional_yield y, const DoutPrefixProvider *dpp) override;
+    int write_topics(const rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* objv_tracker, 
+        optional_yield y, const DoutPrefixProvider *dpp) override;
+    int remove_topics(RGWObjVersionTracker* objv_tracker, 
+        optional_yield y, const DoutPrefixProvider *dpp) override;
 
   private:
     int link(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
@@ -630,6 +644,7 @@ public:
 
   /* For RadosStore code */
   RGWObjManifest& get_manifest() { return info.manifest; }
+  const std::set<std::string>& get_past_prefixes() const { return info.past_prefixes; }
 
   friend class RadosMultipartUpload;
 };
@@ -679,6 +694,11 @@ public:
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;
+protected:
+  int cleanup_part_history(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           RadosMultipartPart* part,
+                           std::list<rgw_obj_index_key>& remove_objs);
 };
 
 class MPRadosSerializer : public StoreMPSerializer {

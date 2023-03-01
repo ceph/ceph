@@ -207,8 +207,18 @@ function TEST_scrub_snaps() {
     do
       activate_osd $dir $osd || return 1
     done
+    ceph tell osd.* config set osd_shallow_scrub_chunk_max 25
+    ceph tell osd.* config set osd_shallow_scrub_chunk_min 5
+    ceph tell osd.* config set osd_pg_stat_report_interval_max 1
+
 
     wait_for_clean || return 1
+
+    ceph tell osd.* config get osd_shallow_scrub_chunk_max
+    ceph tell osd.* config get osd_shallow_scrub_chunk_min
+    ceph tell osd.* config get osd_pg_stat_report_interval_max
+    ceph tell osd.* config get osd_scrub_chunk_max
+    ceph tell osd.* config get osd_scrub_chunk_min
 
     local pgid="${poolid}.0"
     if ! pg_scrub "$pgid" ; then
@@ -759,6 +769,10 @@ function _scrub_snaps_multi() {
       activate_osd $dir $osd || return 1
     done
 
+    ceph tell osd.* config set osd_shallow_scrub_chunk_max 3
+    ceph tell osd.* config set osd_shallow_scrub_chunk_min 3
+    ceph tell osd.* config set osd_scrub_chunk_min 3
+    ceph tell osd.* config set osd_pg_stat_report_interval_max 1
     wait_for_clean || return 1
 
     local pgid="${poolid}.0"
@@ -1149,7 +1163,7 @@ fi
 function TEST_scrub_snaps_replica() {
     local dir=$1
     ORIG_ARGS=$CEPH_ARGS
-    CEPH_ARGS+=" --osd_scrub_chunk_min=3 --osd_scrub_chunk_max=3"
+    CEPH_ARGS+=" --osd_scrub_chunk_min=3 --osd_scrub_chunk_max=20 --osd_shallow_scrub_chunk_min=3 --osd_shallow_scrub_chunk_max=3 --osd_pg_stat_report_interval_max=1"
     _scrub_snaps_multi $dir replica
     err=$?
     CEPH_ARGS=$ORIG_ARGS
@@ -1159,7 +1173,7 @@ function TEST_scrub_snaps_replica() {
 function TEST_scrub_snaps_primary() {
     local dir=$1
     ORIG_ARGS=$CEPH_ARGS
-    CEPH_ARGS+=" --osd_scrub_chunk_min=3 --osd_scrub_chunk_max=3"
+    CEPH_ARGS+=" --osd_scrub_chunk_min=3 --osd_scrub_chunk_max=20 --osd_shallow_scrub_chunk_min=3 --osd_shallow_scrub_chunk_max=3 --osd_pg_stat_report_interval_max=1"
     _scrub_snaps_multi $dir primary
     err=$?
     CEPH_ARGS=$ORIG_ARGS

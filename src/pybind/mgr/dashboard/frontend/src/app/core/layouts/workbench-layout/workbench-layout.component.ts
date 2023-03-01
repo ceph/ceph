@@ -17,7 +17,7 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
 
   constructor(
-    private router: Router,
+    public router: Router,
     private summaryService: SummaryService,
     private taskManagerService: TaskManagerService,
     private faviconService: FaviconService
@@ -31,9 +31,5 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.subs.unsubscribe();
-  }
-
-  isDashboardPage() {
-    return this.router.url === '/dashboard';
   }
 }

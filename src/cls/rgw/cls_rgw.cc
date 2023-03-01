@@ -83,7 +83,7 @@ static bool bi_is_plain_entry(const std::string& s) {
   return (s.empty() || (unsigned char)s[0] != BI_PREFIX_CHAR);
 }
 
-int bi_entry_type(const string& s)
+static int bi_entry_type(const string& s)
 {
   if (bi_is_plain_entry(s)) {
     return BI_BUCKET_OBJS_INDEX;
@@ -1172,18 +1172,32 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   if (op.op == CLS_RGW_OP_CANCEL) {
     log_op = false; // don't log cancelation
     if (op.tag.size()) {
-      // we removed this tag from pending_map so need to write the changes
-      CLS_LOG_BITX(bitx_inst, 20,
-		   "INFO: %s: setting map entry at key=%s",
-		   __func__, escape_str(idx).c_str());
-      bufferlist new_key_bl;
-      encode(entry, new_key_bl);
-      rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
-      if (rc < 0) {
-	CLS_LOG_BITX(bitx_inst, 1,
-		     "ERROR: %s: unable to set map val, key=%s, rc=%d",
-		     __func__, escape_str(idx).c_str(), rc);
-        return rc;
+      if (!entry.exists && entry.pending_map.empty()) {
+        // a racing delete succeeded, and we canceled the last pending op
+        CLS_LOG_BITX(bitx_inst, 20,
+                     "INFO: %s: removing map entry with key=%s",
+                     __func__, escape_str(idx).c_str());
+        rc = cls_cxx_map_remove_key(hctx, idx);
+        if (rc < 0) {
+          CLS_LOG_BITX(bitx_inst, 1,
+                       "ERROR: %s: unable to remove map key, key=%s, rc=%d",
+                       __func__, escape_str(idx).c_str(), rc);
+          return rc;
+        }
+      } else {
+        // we removed this tag from pending_map so need to write the changes
+        CLS_LOG_BITX(bitx_inst, 20,
+                     "INFO: %s: setting map entry at key=%s",
+                     __func__, escape_str(idx).c_str());
+        bufferlist new_key_bl;
+        encode(entry, new_key_bl);
+        rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
+        if (rc < 0) {
+          CLS_LOG_BITX(bitx_inst, 1,
+                       "ERROR: %s: unable to set map val, key=%s, rc=%d",
+                       __func__, escape_str(idx).c_str(), rc);
+          return rc;
+        }
       }
     }
   } // CLS_RGW_OP_CANCEL
@@ -3538,7 +3552,7 @@ static int usage_record_decode(bufferlist& record_bl, rgw_usage_log_entry& e)
   return 0;
 }
 
-int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+static int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
 
@@ -4335,6 +4349,49 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
   return 0;
 }
 
+static int rgw_mp_upload_part_info_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(10, "entered %s", __func__);
+  cls_rgw_mp_upload_part_info_update_op op;
+  auto in_iter = in->cbegin();
+  try {
+    decode(op, in_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_cls_mp_upload_part_info_update(): failed to decode op\n");
+    return -EINVAL;
+  }
+
+  RGWUploadPartInfo stored_info;
+
+  int ret = read_omap_entry(hctx, op.part_key, &stored_info);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+
+  /* merge all the prior (stored) manifest prefixes to carry forward */
+  if (!stored_info.manifest.empty()) {
+    op.info.past_prefixes.insert(stored_info.manifest.get_prefix());
+  }
+  op.info.past_prefixes.merge(stored_info.past_prefixes);
+
+  if (op.info.past_prefixes.contains(op.info.manifest.get_prefix())) {
+    // Somehow the current chosen prefix collides with one of previous ones.
+    // Better fail this part upload so it can pick a different one in the next.
+    const object_info_t& oi = cls_get_object_info(hctx);
+    CLS_LOG(1, "ERROR: oid [%s]: Current prefix %s is also a past prefix for part %s", 
+            oi.soid.oid.name.c_str(),
+            op.info.manifest.get_prefix().c_str(),
+            op.part_key.c_str());
+    return -EEXIST;
+  }
+
+  bufferlist bl;
+  encode(op.info, bl);
+  ret = cls_cxx_map_set_val(hctx, op.part_key, &bl);
+  CLS_LOG(10, "part info update on key [%s]: %zu past prefixes, ret %d", op.part_key.c_str(), op.info.past_prefixes.size(), ret);
+  return ret;
+}
+
 static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
@@ -4608,6 +4665,7 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_lc_put_head;
   cls_method_handle_t h_rgw_lc_get_head;
   cls_method_handle_t h_rgw_lc_list_entries;
+  cls_method_handle_t h_rgw_mp_upload_part_info_update;
   cls_method_handle_t h_rgw_reshard_add;
   cls_method_handle_t h_rgw_reshard_list;
   cls_method_handle_t h_rgw_reshard_get;
@@ -4670,6 +4728,9 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_LC_PUT_HEAD, CLS_METHOD_RD| CLS_METHOD_WR, rgw_cls_lc_put_head, &h_rgw_lc_put_head);
   cls_register_cxx_method(h_class, RGW_LC_GET_HEAD, CLS_METHOD_RD, rgw_cls_lc_get_head, &h_rgw_lc_get_head);
   cls_register_cxx_method(h_class, RGW_LC_LIST_ENTRIES, CLS_METHOD_RD, rgw_cls_lc_list_entries, &h_rgw_lc_list_entries);
+
+  /* multipart */
+  cls_register_cxx_method(h_class, RGW_MP_UPLOAD_PART_INFO_UPDATE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_mp_upload_part_info_update, &h_rgw_mp_upload_part_info_update);
 
   /* resharding */
   cls_register_cxx_method(h_class, RGW_RESHARD_ADD, CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_add, &h_rgw_reshard_add);

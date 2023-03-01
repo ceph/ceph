@@ -3,49 +3,67 @@
 
 #pragma once
 
+#include <seastar/core/shared_future.hh>
 #include <seastar/core/sleep.hh>
 
-#include "Protocol.h"
-#include "msg/async/frames_v2.h"
-#include "msg/async/crypto_onwire.h"
-#include "msg/async/compression_onwire.h"
+#include "io_handler.h"
 
 namespace crimson::net {
 
-class ProtocolV2 final : public Protocol {
+class ProtocolV2 final : public HandshakeListener {
   using AuthConnectionMetaRef = seastar::lw_shared_ptr<AuthConnectionMeta>;
 
- public:
-  ProtocolV2(ChainedDispatchers& dispatchers,
-             SocketConnection& conn,
-             SocketMessenger& messenger);
-  ~ProtocolV2() override;
-  void print(std::ostream&) const final;
- private:
-  void on_closed() override;
-  bool is_connected() const override;
+public:
+  ProtocolV2(SocketConnection &,
+             IOHandler &);
 
+  ~ProtocolV2() final;
+
+  ProtocolV2(const ProtocolV2 &) = delete;
+  ProtocolV2(ProtocolV2 &&) = delete;
+  ProtocolV2 &operator=(const ProtocolV2 &) = delete;
+  ProtocolV2 &operator=(ProtocolV2 &&) = delete;
+
+/**
+ * as HandshakeListener
+ */
+private:
+  void notify_out() final;
+
+  void notify_out_fault(const char *, std::exception_ptr) final;
+
+  void notify_mark_down() final;
+
+/*
+* as ProtocolV2 to be called by SocketConnection
+*/
+public:
   void start_connect(const entity_addr_t& peer_addr,
-                     const entity_name_t& peer_name) override;
+                     const entity_name_t& peer_name);
 
   void start_accept(SocketRef&& socket,
-                    const entity_addr_t& peer_addr) override;
+                    const entity_addr_t& peer_addr);
 
-  void trigger_close() override;
+  seastar::future<> close_clean_yielded();
 
-  ceph::bufferlist do_sweep_messages(
-      const std::deque<MessageURef>& msgs,
-      size_t num_msgs,
-      bool require_keepalive,
-      std::optional<utime_t> keepalive_ack,
-      bool require_ack) override;
+#ifdef UNIT_TESTS_BUILT
+  bool is_closed_clean() const {
+    return closed_clean;
+  }
 
-  void notify_write() override;
+  bool is_closed() const {
+    return closed;
+  }
 
- private:
-  SocketMessenger &messenger;
-
-  AuthConnectionMetaRef auth_meta;
+#endif
+private:
+  seastar::future<> wait_exit_io() {
+    if (exit_io.has_value()) {
+      return exit_io->get_shared_future();
+    } else {
+      return seastar::now();
+    }
+  }
 
   enum class state_t {
     NONE = 0,
@@ -59,7 +77,6 @@ class ProtocolV2 final : public Protocol {
     REPLACING,
     CLOSING
   };
-  state_t state = state_t::NONE;
 
   static const char *get_state_name(state_t state) {
     const char *const statenames[] = {"NONE",
@@ -75,76 +92,35 @@ class ProtocolV2 final : public Protocol {
     return statenames[static_cast<int>(state)];
   }
 
-  void trigger_state(state_t state, write_state_t write_state, bool reentrant);
+  void trigger_state(state_t state, IOHandler::io_state_t io_state, bool reentrant);
 
-  uint64_t peer_supported_features = 0;
-
-  uint64_t client_cookie = 0;
-  uint64_t server_cookie = 0;
-  uint64_t global_seq = 0;
-  uint64_t peer_global_seq = 0;
-  uint64_t connect_seq = 0;
-
-  seastar::shared_future<> execution_done = seastar::now();
-
-  template <typename Func>
-  void gated_execute(const char* what, Func&& func) {
-    gate.dispatch_in_background(what, *this, [this, &func] {
-      execution_done = seastar::futurize_invoke(std::forward<Func>(func));
-      return execution_done.get_future();
+  template <typename Func, typename T>
+  void gated_execute(const char *what, T &who, Func &&func) {
+    gate.dispatch_in_background(what, who, [this, &who, &func] {
+      if (!execution_done.available()) {
+        // discard the unready future
+        gate.dispatch_in_background(
+          "gated_execute_abandon",
+          who,
+          [fut=std::move(execution_done)]() mutable {
+            return std::move(fut);
+          }
+        );
+      }
+      seastar::promise<> pr;
+      execution_done = pr.get_future();
+      return seastar::futurize_invoke(std::forward<Func>(func)
+      ).finally([pr=std::move(pr)]() mutable {
+        pr.set_value();
+      });
     });
   }
 
-  class Timer {
-    double last_dur_ = 0.0;
-    const SocketConnection& conn;
-    std::optional<seastar::abort_source> as;
-   public:
-    Timer(SocketConnection& conn) : conn(conn) {}
-    double last_dur() const { return last_dur_; }
-    seastar::future<> backoff(double seconds);
-    void cancel() {
-      last_dur_ = 0.0;
-      if (as) {
-        as->request_abort();
-        as = std::nullopt;
-      }
-    }
-  };
-  Timer protocol_timer;
+  void fault(state_t expected_state,
+             const char *where,
+             std::exception_ptr eptr);
 
- // TODO: Frame related implementations, probably to a separate class.
- private:
-  bool record_io = false;
-  ceph::bufferlist rxbuf;
-  ceph::bufferlist txbuf;
-
-  void enable_recording();
-  seastar::future<Socket::tmp_buf> read_exactly(size_t bytes);
-  seastar::future<bufferlist> read(size_t bytes);
-  seastar::future<> write(bufferlist&& buf);
-  seastar::future<> write_flush(bufferlist&& buf);
-
-  ceph::crypto::onwire::rxtx_t session_stream_handlers;
-  ceph::compression::onwire::rxtx_t session_comp_handlers;
-  ceph::msgr::v2::FrameAssembler tx_frame_asm{
-    &session_stream_handlers, false, common::local_conf()->ms_crc_data,
-    &session_comp_handlers};
-  ceph::msgr::v2::FrameAssembler rx_frame_asm{
-    &session_stream_handlers, false, common::local_conf()->ms_crc_data,
-    &session_comp_handlers};
-  ceph::bufferlist rx_preamble;
-  ceph::msgr::v2::segment_bls_t rx_segments_data;
-
-  size_t get_current_msg_size() const;
-  seastar::future<ceph::msgr::v2::Tag> read_main_preamble();
-  seastar::future<> read_frame_payload();
-  template <class F>
-  seastar::future<> write_frame(F &frame, bool flush=true);
-
- private:
-  void fault(bool backoff, const char* func_name, std::exception_ptr eptr);
-  void reset_session(bool full);
+  void reset_session(bool is_full);
   seastar::future<std::tuple<entity_type_t, entity_addr_t>>
   banner_exchange(bool is_connect);
 
@@ -203,9 +179,8 @@ class ProtocolV2 final : public Protocol {
   // REPLACING (server)
   void trigger_replacing(bool reconnect,
                          bool do_reset,
-                         SocketRef&& new_socket,
+                         FrameAssemblerV2::mover_t &&mover,
                          AuthConnectionMetaRef&& new_auth_meta,
-                         ceph::crypto::onwire::rxtx_t new_rxtx,
                          uint64_t new_peer_global_seq,
                          // !reconnect
                          uint64_t new_client_cookie,
@@ -217,8 +192,7 @@ class ProtocolV2 final : public Protocol {
                          uint64_t new_msg_seq);
 
   // READY
-  seastar::future<> read_message(utime_t throttle_stamp);
-  void execute_ready(bool dispatch_connect);
+  void execute_ready();
 
   // STANDBY
   void execute_standby();
@@ -228,7 +202,83 @@ class ProtocolV2 final : public Protocol {
 
   // SERVER_WAIT
   void execute_server_wait();
+
+  // CLOSING
+  // reentrant
+  void do_close(bool is_dispatch_reset,
+                std::optional<std::function<void()>> f_accept_new=std::nullopt);
+
+private:
+  SocketConnection &conn;
+
+  SocketMessenger &messenger;
+
+  IOHandler &io_handler;
+
+  bool has_socket = false;
+
+  // the socket exists and it is not shutdown
+  bool is_socket_valid = false;
+
+  FrameAssemblerV2Ref frame_assembler;
+
+  std::optional<seastar::shared_promise<>> exit_io;
+
+  AuthConnectionMetaRef auth_meta;
+
+  crimson::common::Gated gate;
+
+  bool closed = false;
+
+  // become valid only after closed == true
+  seastar::shared_future<> closed_clean_fut;
+
+#ifdef UNIT_TESTS_BUILT
+  bool closed_clean = false;
+
+#endif
+  state_t state = state_t::NONE;
+
+  uint64_t peer_supported_features = 0;
+
+  uint64_t client_cookie = 0;
+  uint64_t server_cookie = 0;
+  uint64_t global_seq = 0;
+  uint64_t peer_global_seq = 0;
+  uint64_t connect_seq = 0;
+
+  seastar::future<> execution_done = seastar::now();
+
+  class Timer {
+    double last_dur_ = 0.0;
+    const SocketConnection& conn;
+    std::optional<seastar::abort_source> as;
+   public:
+    Timer(SocketConnection& conn) : conn(conn) {}
+    double last_dur() const { return last_dur_; }
+    seastar::future<> backoff(double seconds);
+    void cancel() {
+      last_dur_ = 0.0;
+      if (as) {
+        as->request_abort();
+        as = std::nullopt;
+      }
+    }
+  };
+  Timer protocol_timer;
 };
+
+struct create_handlers_ret {
+  std::unique_ptr<ConnectionHandler> io_handler;
+  std::unique_ptr<ProtocolV2> protocol;
+};
+inline create_handlers_ret create_handlers(ChainedDispatchers &dispatchers, SocketConnection &conn) {
+  std::unique_ptr<ConnectionHandler> io_handler = std::make_unique<IOHandler>(dispatchers, conn);
+  IOHandler &io_handler_concrete = static_cast<IOHandler&>(*io_handler);
+  auto protocol = std::make_unique<ProtocolV2>(conn, io_handler_concrete);
+  io_handler_concrete.set_handshake_listener(*protocol);
+  return {std::move(io_handler), std::move(protocol)};
+}
 
 } // namespace crimson::net
 

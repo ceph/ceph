@@ -19,6 +19,7 @@
 #include "crimson/osd/pg.h"
 #include "crimson/osd/watch.h"
 #include "osd/ClassHandler.h"
+#include "osd/SnapMapper.h"
 
 namespace {
   seastar::logger& logger() {
@@ -806,6 +807,9 @@ void OpsExecuter::fill_op_params_bump_pg_version()
 std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
   const std::vector<OSDOp>& ops)
 {
+  // let's ensure we don't need to inform SnapMapper about this particular
+  // entry.
+  assert(obc->obs.oi.soid.snap >= CEPH_MAXSNAP);
   std::vector<pg_log_entry_t> log_entries;
   log_entries.emplace_back(
     obc->obs.exists ?
@@ -825,6 +829,57 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
   }
   log_entries.back().clean_regions = std::move(osd_op_params->clean_regions);
   return log_entries;
+}
+
+OpsExecuter::interruptible_future<> OpsExecuter::snap_map_remove(
+  const hobject_t& soid,
+  SnapMapper& snap_mapper,
+  OSDriver& osdriver,
+  ceph::os::Transaction& txn)
+{
+  logger().debug("{}: soid {}", __func__, soid);
+  return interruptor::async([soid, &snap_mapper,
+                             _t=osdriver.get_transaction(&txn)]() mutable {
+    const auto r = snap_mapper.remove_oid(soid, &_t);
+    if (r) {
+      logger().error("{}: remove_oid {} failed with {}",
+                     __func__, soid, r);
+    }
+    // On removal tolerate missing key corruption
+    assert(r == 0 || r == -ENOENT);
+  });
+}
+
+OpsExecuter::interruptible_future<> OpsExecuter::snap_map_modify(
+  const hobject_t& soid,
+  const std::set<snapid_t>& snaps,
+  SnapMapper& snap_mapper,
+  OSDriver& osdriver,
+  ceph::os::Transaction& txn)
+{
+  logger().debug("{}: soid {}, snaps {}", __func__, soid, snaps);
+  return interruptor::async([soid, snaps, &snap_mapper,
+                             _t=osdriver.get_transaction(&txn)]() mutable {
+    assert(std::size(snaps) > 0);
+    [[maybe_unused]] const auto r = snap_mapper.update_snaps(
+      soid, snaps, 0, &_t);
+    assert(r == 0);
+  });
+}
+
+OpsExecuter::interruptible_future<> OpsExecuter::snap_map_clone(
+  const hobject_t& soid,
+  const std::set<snapid_t>& snaps,
+  SnapMapper& snap_mapper,
+  OSDriver& osdriver,
+  ceph::os::Transaction& txn)
+{
+  logger().debug("{}: soid {}, snaps {}", __func__, soid, snaps);
+  return interruptor::async([soid, snaps, &snap_mapper,
+                             _t=osdriver.get_transaction(&txn)]() mutable {
+    assert(std::size(snaps) > 0);
+    snap_mapper.add_oid(soid, snaps, &_t);
+  });
 }
 
 // Defined here because there is a circular dependency between OpsExecuter and PG
@@ -920,15 +975,29 @@ void OpsExecuter::CloningContext::apply_to(
   processed_obc.ssc->snapset = std::move(new_snapset);
 }
 
-void OpsExecuter::flush_clone_metadata(
-  std::vector<pg_log_entry_t>& log_entries)
+OpsExecuter::interruptible_future<std::vector<pg_log_entry_t>>
+OpsExecuter::flush_clone_metadata(
+  std::vector<pg_log_entry_t>&& log_entries,
+  SnapMapper& snap_mapper,
+  OSDriver& osdriver,
+  ceph::os::Transaction& txn)
 {
   assert(!txn.empty());
+  auto maybe_snap_mapped = interruptor::now();
   if (cloning_ctx) {
     osd_op_params->at_version = pg->next_version();
-    std::move(*cloning_ctx).apply_to(osd_op_params->at_version,
-                                     log_entries,
-                                     *obc);
+    std::move(*cloning_ctx).apply_to(
+      osd_op_params->at_version,
+      log_entries,
+      *obc);
+    const auto& coid = log_entries.back().soid;
+    const auto& cloned_snaps = obc->ssc->snapset.clone_snaps[coid.snap];
+    maybe_snap_mapped = snap_map_clone(
+      coid,
+      std::set<snapid_t>{std::begin(cloned_snaps), std::end(cloned_snaps)},
+      snap_mapper,
+      osdriver,
+      txn);
   }
   if (snapc.seq > obc->ssc->snapset.seq) {
      // update snapset with latest snap context
@@ -937,6 +1006,12 @@ void OpsExecuter::flush_clone_metadata(
   }
   logger().debug("{} done, initial snapset={}, new snapset={}",
     __func__, obc->obs.oi.soid, obc->ssc->snapset);
+  return std::move(
+    maybe_snap_mapped
+  ).then_interruptible([log_entries=std::move(log_entries)]() mutable {
+    return interruptor::make_ready_future<std::vector<pg_log_entry_t>>(
+      std::move(log_entries));
+  });
 }
 
 // TODO: make this static
@@ -956,8 +1031,7 @@ std::pair<object_info_t, ObjectContextRef> OpsExecuter::prepare_clone(
   if (pg->is_primary()) {
     // lookup_or_create
     auto [c_obc, existed] =
-      pg->get_shard_services().get_cached_obc(
-        std::move(coid));
+      pg->obc_registry.get_cached_obc(std::move(coid));
     assert(!existed);
     c_obc->obs.oi = static_snap_oi;
     c_obc->obs.exists = true;

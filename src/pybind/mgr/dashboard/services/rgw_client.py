@@ -787,6 +787,15 @@ class RgwClient(RestClient):
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
 
+    def list_roles(self) -> List[Dict[str, Any]]:
+        rgw_list_roles_command = ['role', 'list']
+        code, roles, err = mgr.send_rgwadmin_command(rgw_list_roles_command)
+        if code < 0:
+            logger.warning('Error listing roles with code %d: %s', code, err)
+            return []
+
+        return roles
+
     def perform_validations(self, retention_period_days, retention_period_years, mode):
         try:
             retention_period_days = int(retention_period_days) if retention_period_days else 0

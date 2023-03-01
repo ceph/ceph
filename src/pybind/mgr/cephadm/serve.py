@@ -934,6 +934,12 @@ class CephadmServe:
             assert dd.hostname is not None
             assert dd.daemon_type is not None
             assert dd.daemon_id is not None
+
+            # any action we can try will fail for a daemon on an offline host,
+            # including removing the daemon
+            if dd.hostname in self.mgr.offline_hosts:
+                continue
+
             if not spec and dd.daemon_type not in ['mon', 'mgr', 'osd']:
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
@@ -977,11 +983,15 @@ class CephadmServe:
                     dd.name()))
                 action = 'reconfig'
             elif last_deps != deps:
-                self.log.debug('%s deps %s -> %s' % (dd.name(), last_deps,
-                                                     deps))
-                self.log.info('Reconfiguring %s (dependencies changed)...' % (
-                    dd.name()))
+                self.log.debug(f'{dd.name()} deps {last_deps} -> {deps}')
+                self.log.info(f'Reconfiguring {dd.name()} (dependencies changed)...')
                 action = 'reconfig'
+                # we need only redeploy if secure_monitoring_stack value has changed:
+                if dd.daemon_type in ['prometheus', 'node-exporter', 'alertmanager']:
+                    diff = list(set(last_deps) - set(deps))
+                    if any('secure_monitoring_stack' in e for e in diff):
+                        action = 'redeploy'
+
             elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
                 self.log.debug(
                     f'{dd.name()} container cli args {dd.extra_container_args} -> {spec.extra_container_args}')
@@ -1380,12 +1390,14 @@ class CephadmServe:
                                 command: str,
                                 args: List[str],
                                 no_fsid: Optional[bool] = False,
+                                error_ok: Optional[bool] = False,
                                 image: Optional[str] = "",
                                 log_output: Optional[bool] = True,
                                 ) -> Any:
         try:
             out, err, code = await self._run_cephadm(
-                host, entity, command, args, no_fsid=no_fsid, image=image, log_output=log_output)
+                host, entity, command, args, no_fsid=no_fsid, error_ok=error_ok,
+                image=image, log_output=log_output)
             if code:
                 raise OrchestratorError(f'host {host} `cephadm {command}` returned {code}: {err}')
         except Exception as e:
@@ -1526,12 +1538,21 @@ class CephadmServe:
         if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
             await self._registry_login(host, json.loads(str(self.mgr.get_store('registry_credentials'))))
 
-        pullargs: List[str] = []
-        if self.mgr.registry_insecure:
-            pullargs.append("--insecure")
+        j = None
+        try:
+            j = await self._run_cephadm_json(host, '', 'inspect-image', [],
+                                             image=image_name, no_fsid=True,
+                                             error_ok=True)
+        except OrchestratorError:
+            pass
 
-        j = await self._run_cephadm_json(host, '', 'pull', pullargs, image=image_name, no_fsid=True)
+        if not j:
+            pullargs: List[str] = []
+            if self.mgr.registry_insecure:
+                pullargs.append("--insecure")
 
+            j = await self._run_cephadm_json(host, '', 'pull', pullargs,
+                                             image=image_name, no_fsid=True)
         r = ContainerInspectInfo(
             j['image_id'],
             j.get('ceph_version'),

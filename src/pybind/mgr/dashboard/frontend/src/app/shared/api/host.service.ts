@@ -29,7 +29,7 @@ export class HostService extends ApiClient {
 
   list(facts: string): Observable<object[]> {
     return this.http.get<object[]>(this.baseURL, {
-      headers: { Accept: 'application/vnd.ceph.api.v1.1+json' },
+      headers: { Accept: this.getVersionHeaderValue(1, 2) },
       params: { facts: facts }
     });
   }

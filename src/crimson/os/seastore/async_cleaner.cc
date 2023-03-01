@@ -1160,31 +1160,41 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
   // Backref-tree doesn't support tree-read during tree-updates with parallel
   // transactions.  So, concurrent transactions between trim and reclaim are
   // not allowed right now.
-  return extent_callback->with_transaction_weak(
-      "retrieve_from_backref_tree",
-      [this](auto &t) {
-    return backref_manager.get_mappings(
-      t,
-      reclaim_state->start_pos,
-      reclaim_state->end_pos
-    ).si_then([this, &t](auto pin_list) {
-      if (!pin_list.empty()) {
-	auto it = pin_list.begin();
-	auto &first_pin = *it;
-	if (first_pin->get_key() < reclaim_state->start_pos) {
-	  // BackrefManager::get_mappings may include a entry before
-	  // reclaim_state->start_pos, which is semantically inconsistent
-	  // with the requirements of the cleaner
-	  pin_list.erase(it);
-	}
-      }
-      return backref_manager.retrieve_backref_extents_in_range(
-        t,
-        reclaim_state->start_pos,
-        reclaim_state->end_pos
-      ).si_then([pin_list=std::move(pin_list)](auto extents) mutable {
-        return std::make_pair(std::move(extents), std::move(pin_list));
+  return seastar::do_with(
+    std::pair<std::vector<CachedExtentRef>, backref_pin_list_t>(),
+    [this](auto &weak_read_ret) {
+    return repeat_eagain([this, &weak_read_ret] {
+      return extent_callback->with_transaction_intr(
+	  Transaction::src_t::READ,
+	  "retrieve_from_backref_tree",
+	  [this, &weak_read_ret](auto &t) {
+	return backref_manager.get_mappings(
+	  t,
+	  reclaim_state->start_pos,
+	  reclaim_state->end_pos
+	).si_then([this, &t, &weak_read_ret](auto pin_list) {
+	  if (!pin_list.empty()) {
+	    auto it = pin_list.begin();
+	    auto &first_pin = *it;
+	    if (first_pin->get_key() < reclaim_state->start_pos) {
+	      // BackrefManager::get_mappings may include a entry before
+	      // reclaim_state->start_pos, which is semantically inconsistent
+	      // with the requirements of the cleaner
+	      pin_list.erase(it);
+	    }
+	  }
+	  return backref_manager.retrieve_backref_extents_in_range(
+	    t,
+	    reclaim_state->start_pos,
+	    reclaim_state->end_pos
+	  ).si_then([pin_list=std::move(pin_list),
+		    &weak_read_ret](auto extents) mutable {
+	    weak_read_ret = std::make_pair(std::move(extents), std::move(pin_list));
+	  });
+	});
       });
+    }).safe_then([&weak_read_ret] {
+      return std::move(weak_read_ret);
     });
   }).safe_then([this, FNAME, pavail_ratio, start](auto weak_read_ret) {
     return seastar::do_with(

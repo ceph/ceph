@@ -31,6 +31,8 @@ export class OsdPgScrubModalOptions {
     'osd_scrub_interval_randomize_ratio',
     'osd_scrub_invalid_stats',
     'osd_scrub_load_threshold',
-    'osd_scrub_max_preemptions'
+    'osd_scrub_max_preemptions',
+    'osd_shallow_scrub_chunk_max',
+    'osd_shallow_scrub_chunk_min'
   ];
 }

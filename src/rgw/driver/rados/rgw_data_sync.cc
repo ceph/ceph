@@ -5624,7 +5624,7 @@ class RGWSyncBucketCR : public RGWCoroutine {
   rgw_raw_obj error_repo;
   rgw_bucket_shard source_bs;
   rgw_pool pool;
-  uint64_t current_gen;
+  uint64_t current_gen = 0;
 
   RGWSyncTraceNodeRef tn;
 

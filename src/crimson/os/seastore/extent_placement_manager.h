@@ -84,7 +84,8 @@ private:
   alloc_write_ertr::future<> write_record(
     Transaction& t,
     record_t&& record,
-    std::list<LogicalCachedExtentRef> &&extents);
+    std::list<LogicalCachedExtentRef> &&extents,
+    bool with_atomic_roll_segment=false);
 
   journal::SegmentAllocator segment_allocator;
   journal::RecordSubmitter record_submitter;
@@ -220,9 +221,13 @@ public:
 	      gen};
     };
 
-    if (!is_logical_type(type)) {
-      // TODO: implement out-of-line strategy for physical extent.
-      assert(get_extent_category(type) == data_category_t::METADATA);
+    if (type == extent_types_t::ROOT) {
+      return alloc_paddr(INLINE_GENERATION, data_category_t::METADATA, length);
+    }
+
+    if (get_backend_type() == backend_type_t::SEGMENTED &&
+	is_lba_backref_node(type)) {
+      // with SEGMENTED, lba-backref extents must be INLINE
       return alloc_paddr(INLINE_GENERATION, data_category_t::METADATA, length);
     }
 
@@ -233,12 +238,16 @@ public:
 
     if (get_extent_category(type) == data_category_t::METADATA &&
         gen == INIT_GENERATION) {
-      if (prefer_ool) {
-	return alloc_paddr(OOL_GENERATION, get_extent_category(type), length);
-      } else {
-        // default not to ool metadata extents to reduce padding overhead.
-        // TODO: improve padding so we can default to the prefer_ool path.
+      if (get_backend_type() == backend_type_t::SEGMENTED) {
+	// with SEGMENTED, default not to ool metadata extents to reduce 
+	// padding overhead.
+	// TODO: improve padding so we can default to the ool path.
 	return alloc_paddr(INLINE_GENERATION, get_extent_category(type), length);
+      } else {
+	 // with RBM, all extents must be OOL
+	assert(get_backend_type() ==
+	       backend_type_t::RANDOM_BLOCK);
+	return alloc_paddr(OOL_GENERATION, get_extent_category(type), length);
       }
     } else {
       assert(get_extent_category(type) == data_category_t::DATA ||
@@ -334,6 +343,15 @@ public:
 
   void release_projected_usage(projected_usage_t usage) {
     background_process.release_projected_usage(usage);
+  }
+
+  backend_type_t get_backend_type() const {
+    if (!background_process.is_no_background()) {
+      return background_process.get_backend_type();
+    } 
+    // for test
+    assert(primary_device);
+    return primary_device->get_backend_type();
   }
 
   // Testing interfaces
@@ -470,6 +488,9 @@ private:
     }
 
     seastar::future<> stop_background();
+    backend_type_t get_backend_type() const {
+      return get_journal_type();
+    }
 
     // Testing interfaces
 
@@ -478,6 +499,10 @@ private:
     }
 
     seastar::future<> run_until_halt();
+    
+    bool is_no_background() const {
+      return !trimmer || !cleaner;
+    }
 
   protected:
     state_t get_state() const final {
@@ -573,7 +598,6 @@ private:
     state_t state = state_t::STOP;
   };
 
-  bool prefer_ool;
   std::vector<ExtentOolWriterRef> writer_refs;
   std::vector<ExtentOolWriter*> data_writers_by_gen;
   // gen 0 METADATA writer is the journal writer

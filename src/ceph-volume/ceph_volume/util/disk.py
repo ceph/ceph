@@ -238,11 +238,14 @@ def _udevadm_info(device):
 
 
 def lsblk(device, columns=None, abspath=False):
-    result = lsblk_all(device=device,
-                       columns=columns,
-                       abspath=abspath)
+    result = []
+    if not os.path.isdir(device):
+        result = lsblk_all(device=device,
+                           columns=columns,
+                           abspath=abspath)
     if not result:
-        raise RuntimeError(f"{device} not found is lsblk report")
+        logger.debug(f"{device} not found is lsblk report")
+        return {}
 
     return result[0]
 

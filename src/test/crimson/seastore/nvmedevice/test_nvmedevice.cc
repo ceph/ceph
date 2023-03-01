@@ -52,11 +52,23 @@ WRITE_CLASS_DENC_BOUNDED(
   nvdev_test_block_t
 )
 
+using crimson::common::local_conf;
 TEST_F(nvdev_test_t, write_and_verify_test)
 {
   run_async([this] {
-    device.reset(new random_block_device::nvme::NVMeBlockDevice(""));
-    device->open(dev_path, seastar::open_flags::rw).unsafe_get();
+    device.reset(new random_block_device::nvme::NVMeBlockDevice(dev_path));
+    local_conf().set_val("seastore_cbjournal_size", "1000000").get();
+    device->mkfs(
+      device_config_t{
+	true,
+	device_spec_t{
+	(magic_t)std::rand(),
+	device_type_t::RANDOM_BLOCK_SSD,
+	static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN)},
+	seastore_meta_t{uuid_d()},
+	secondary_device_set_t()}
+    ).unsafe_get();
+    device->mount().unsafe_get();
     nvdev_test_block_t original_data;
     std::minstd_rand0 generator;
     uint8_t value = generator();
@@ -68,7 +80,7 @@ TEST_F(nvdev_test_t, write_and_verify_test)
       bl_length = bl.length();
       auto write_buf = ceph::bufferptr(buffer::create_page_aligned(BLK_SIZE));
       bl.begin().copy(bl_length, write_buf.c_str());
-      device->write(0, write_buf).unsafe_get();
+      device->write(0, std::move(write_buf)).unsafe_get();
     }
 
     nvdev_test_block_t read_data;

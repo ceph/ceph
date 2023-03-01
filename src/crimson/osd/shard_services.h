@@ -92,8 +92,6 @@ class PerShardState {
     up_epoch = epoch;
   }
 
-  crimson::osd::ObjectContextRegistry obc_registry;
-
   // prevent creating new osd operations when system is shutting down,
   // this is necessary because there are chances that a new operation
   // is created, after the interruption of all ongoing operations, and
@@ -134,7 +132,7 @@ class PerShardState {
     auto op = registry.create_operation<T>(std::forward<Args>(args)...);
     crimson::get_logger(ceph_subsys_osd).info(
       "PerShardState::{}, {}", __func__, *op);
-    auto fut = op->start().then([op /* by copy */] {
+    auto fut = op->start().finally([op /* by copy */] {
       // ensure the op's lifetime is appropriate. It is not enough to
       // guarantee it's alive at the scheduling stages (i.e. `then()`
       // calling) but also during the actual execution (i.e. when passed
@@ -271,6 +269,7 @@ private:
   } finisher;
   AsyncReserver<spg_t, DirectFinisher> local_reserver;
   AsyncReserver<spg_t, DirectFinisher> remote_reserver;
+  AsyncReserver<spg_t, DirectFinisher> snap_reserver;
 
   epoch_t up_thru_wanted = 0;
   seastar::future<> send_alive(epoch_t want);
@@ -351,6 +350,14 @@ public:
 
   crimson::os::FuturizedStore &get_store() {
     return local_state.store;
+  }
+
+  auto remove_pg(spg_t pgid) {
+    local_state.pg_map.remove_pg(pgid);
+    return with_singleton(
+      [pgid](auto &osstate) {
+      osstate.pg_to_shard_mapping.remove_pg(pgid);
+    });
   }
 
   crimson::common::CephContext *get_cct() {
@@ -457,11 +464,6 @@ public:
 
   FORWARD(pg_created, pg_created, local_state.pg_map)
 
-  FORWARD(
-    maybe_get_cached_obc, maybe_get_cached_obc, local_state.obc_registry)
-  FORWARD(
-    get_cached_obc, get_cached_obc, local_state.obc_registry)
-
   FORWARD_TO_OSD_SINGLETON_TARGET(
     local_update_priority,
     local_reserver.update_priority)
@@ -477,6 +479,12 @@ public:
   FORWARD_TO_OSD_SINGLETON_TARGET(
     remote_dump_reservations,
     remote_reserver.dump)
+  FORWARD_TO_OSD_SINGLETON_TARGET(
+    snap_cancel_reservation,
+    snap_reserver.cancel_reservation)
+  FORWARD_TO_OSD_SINGLETON_TARGET(
+    snap_dump_reservations,
+    snap_reserver.dump)
 
   Context *invoke_context_on_core(core_id_t core, Context *c) {
     if (!c) return nullptr;
@@ -521,6 +529,20 @@ public:
       },
       invoke_context_on_core(seastar::this_shard_id(), on_reserved),
       invoke_context_on_core(seastar::this_shard_id(), on_preempt));
+  }
+  seastar::future<> snap_request_reservation(
+    spg_t item,
+    Context *on_reserved,
+    unsigned prio) {
+    return with_singleton(
+      [item, prio](OSDSingletonState &singleton,
+		   Context *wrapped_on_reserved) {
+	return singleton.snap_reserver.request_reservation(
+	  item,
+	  wrapped_on_reserved,
+	  prio);
+      },
+      invoke_context_on_core(seastar::this_shard_id(), on_reserved));
   }
 
 #undef FORWARD_CONST

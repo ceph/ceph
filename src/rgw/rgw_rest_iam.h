@@ -11,10 +11,10 @@ class RGWHandler_REST_IAM : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
   bufferlist bl_post_body;
   RGWOp *op_post() override;
-  void rgw_iam_parse_input();
+
 public:
 
-  static int init_from_header(req_state *s, RGWFormat default_formatter, bool configurable_format);
+  static bool action_exists(const req_state* s);
 
   RGWHandler_REST_IAM(const rgw::auth::StrategyRegistry& auth_registry,
 		      bufferlist& bl_post_body)

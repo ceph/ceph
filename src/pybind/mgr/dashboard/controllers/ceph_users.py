@@ -6,7 +6,8 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
 from . import APIDoc, APIRouter, CRUDCollectionMethod, CRUDEndpoint, EndpointDoc, SecretStr
-from ._crud import ArrayHorizontalContainer, Form, FormField, Icon, TableAction, VerticalContainer
+from ._crud import ArrayHorizontalContainer, CRUDMeta, Form, FormField, Icon, \
+    TableAction, VerticalContainer
 
 logger = logging.getLogger("controllers.ceph_users")
 
@@ -60,7 +61,7 @@ class CephUserEndpoints:
 create_cap_container = ArrayHorizontalContainer('Capabilities', 'capabilities',
                                                 label_html_class='hidden cd-header mt-1', fields=[
                                                     FormField('Entity', 'entity',
-                                                              field_type=str, html_class='mr-3'),
+                                                              field_type=str, html_class='me-3'),
                                                     FormField('Entity Capabilities',
                                                               'cap', field_type=str)
                                                 ])
@@ -92,7 +93,8 @@ create_form = Form(path='/cluster/user/create',
     create=CRUDCollectionMethod(
         func=CephUserEndpoints.user_create,
         doc=EndpointDoc("Create Ceph User")
-    )
+    ),
+    meta=CRUDMeta()
 )
 class CephUser(NamedTuple):
     entity: str

@@ -182,6 +182,7 @@ protected:
   RGWQuota quota;
   int op_ret;
   int do_aws4_auth_completion();
+  bool init_called = false;
 
   virtual int init_quota();
 
@@ -233,7 +234,9 @@ public:
   }
 
   virtual void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *dialect_handler) {
+    if (init_called) return;
     this->driver = driver;
+    init_called = true;
     this->s = s;
     this->dialect_handler = dialect_handler;
   }

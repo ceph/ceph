@@ -1422,10 +1422,21 @@ int RGWRados::log_list_init(const DoutPrefixProvider *dpp, const string& prefix,
     delete state;
     return r;
   }
-  state->prefix = prefix;
-  state->obit = state->io_ctx.nobjects_begin();
-  *handle = (RGWAccessHandle)state;
-  return 0;
+  try {
+    state->prefix = prefix;
+    state->obit = state->io_ctx.nobjects_begin();
+    *handle = (RGWAccessHandle)state;
+    return 0;
+  } catch (const std::system_error& e) {
+    r = -e.code().value();
+    ldpp_dout(dpp, 10) << "nobjects_begin threw " << e.what()
+       << ", returning " << r << dendl;
+    return r;
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 10) << "nobjects_begin threw " << e.what()
+       << ", returning -5" << dendl;
+    return -EIO;
+  }
 }
 
 int RGWRados::log_list_next(RGWAccessHandle handle, string *name)

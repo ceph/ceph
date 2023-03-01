@@ -104,6 +104,15 @@
   `client_max_retries_on_remount_failure` and move it from mds.yaml.in to
   mds-client.yaml.in because this option was only used by MDS client from its
   birth.
+* The `perf dump` and `perf schema` commands are deprecated in favor of new
+  `counter dump` and `counter schema` commands. These new commands add support
+  for labeled perf counters and also emit existing unlabeled perf counters. Some
+  unlabeled perf counters may become labeled in future releases
+  and as such will no longer be emitted by the `perf dump` and `perf schema`
+  commands.
+* `ceph mgr dump` command now outputs `last_failure_osd_epoch` and
+  `active_clients` fields at the top level.  Previously, these fields were
+  output under `always_on_modules` field.
 
 >=17.2.1
 
@@ -164,3 +173,8 @@ of the feature, refer this link on how to perform it:
 https://docs.ceph.com/en/quincy/cephadm/upgrade/#staggered-upgrade
 Relevant tracker: https://tracker.ceph.com/issues/55715
 
+* Introduced a new file system flag `refuse_client_session` that can be set using the
+`fs set` command. This flag allows blocking any incoming session
+request from client(s). This can be useful during some recovery situations
+where it's desirable to bring MDS up but have no client workload.
+Relevant tracker: https://tracker.ceph.com/issues/57090

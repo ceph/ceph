@@ -74,6 +74,7 @@ namespace rgw::sal {
 // default number of entries to list with each bucket listing call
 // (use marker to bridge between calls)
 static constexpr size_t listing_max_entries = 1000;
+static std::string pubsub_oid_prefix = "pubsub.";
 
 static int decode_policy(CephContext* cct,
                          bufferlist& bl,
@@ -471,7 +472,7 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
   // if bucket has notification definitions associated with it
   // they should be removed (note that any pending notifications on the bucket are still going to be sent)
   const RGWPubSub ps(store, info.owner.tenant);
-  const RGWPubSub::Bucket ps_bucket(ps, info.bucket);
+  const RGWPubSub::Bucket ps_bucket(ps, this);
   const auto ps_ret = ps_bucket.remove_notifications(dpp, y);
   if (ps_ret < 0 && ps_ret != -ENOENT) {
     ldpp_dout(dpp, -1) << "ERROR: unable to remove notifications from bucket. ret=" << ps_ret << dendl;
@@ -1024,6 +1025,55 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+std::string RadosBucket::topics_oid() const {
+  return pubsub_oid_prefix + get_tenant() + ".bucket." + get_name() + "/" + get_marker();
+}
+
+int RadosBucket::read_topics(rgw_pubsub_bucket_topics& notifications, 
+    RGWObjVersionTracker* objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) 
+{
+  bufferlist bl;
+  const int ret = rgw_get_system_obj(store->svc()->sysobj,
+                               store->svc()->zone->get_zone_params().log_pool,
+                               topics_oid(),
+                               bl,
+                               objv_tracker,
+                               nullptr, y, dpp, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto iter = bl.cbegin();
+  try {
+    decode(notifications, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 20) << " failed to decode bucket notifications from oid: " << topics_oid() << ". for bucket: " 
+      << get_name() << ". error: " << err.what() << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RadosBucket::write_topics(const rgw_pubsub_bucket_topics& notifications,
+    RGWObjVersionTracker* objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) {
+  bufferlist bl;
+  encode(notifications, bl);
+
+  return rgw_put_system_obj(dpp, store->svc()->sysobj,
+      store->svc()->zone->get_zone_params().log_pool, 
+      topics_oid(),
+      bl, false, objv_tracker, real_time(), y);
+}
+
+int RadosBucket::remove_topics(RGWObjVersionTracker* objv_tracker, 
+    optional_yield y, const DoutPrefixProvider *dpp) {
+  return rgw_delete_system_obj(dpp, store->svc()->sysobj, 
+      store->svc()->zone->get_zone_params().log_pool,
+      topics_oid(),
+      objv_tracker, y);
+}
+
 std::unique_ptr<User> RadosStore::get_user(const rgw_user &u)
 {
   return std::make_unique<RadosUser>(this, u);
@@ -1281,6 +1331,54 @@ std::unique_ptr<Notification> RadosStore::get_notification(
 std::unique_ptr<Notification> RadosStore::get_notification(const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y)
 {
   return std::make_unique<RadosNotification>(dpp, this, obj, src_obj, event_type, _bucket, _user_id, _user_tenant, _req_id, y);
+}
+
+std::string RadosStore::topics_oid(const std::string& tenant) const {
+  return pubsub_oid_prefix + tenant;
+}
+
+int RadosStore::read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) {
+  bufferlist bl;
+  const int ret = rgw_get_system_obj(svc()->sysobj,
+                               svc()->zone->get_zone_params().log_pool,
+                               topics_oid(tenant),
+                               bl,
+                               objv_tracker,
+                               nullptr, y, dpp, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto iter = bl.cbegin();
+  try {
+    decode(topics, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 20) << " failed to decode topics from oid: " << topics_oid(tenant) << 
+      ". error: " << err.what() << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RadosStore::write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+	optional_yield y, const DoutPrefixProvider *dpp) {
+  bufferlist bl;
+  encode(topics, bl);
+
+  return rgw_put_system_obj(dpp, svc()->sysobj,
+      svc()->zone->get_zone_params().log_pool, 
+      topics_oid(tenant),
+      bl, false, objv_tracker, real_time(), y);
+}
+
+int RadosStore::remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) {
+  return rgw_delete_system_obj(dpp, svc()->sysobj, 
+      svc()->zone->get_zone_params().log_pool,
+      topics_oid(tenant),
+      objv_tracker, y);
 }
 
 int RadosStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
@@ -2283,6 +2381,48 @@ int RadosObject::swift_versioning_copy(const DoutPrefixProvider* dpp, optional_y
                                         y);
 }
 
+int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
+                                               optional_yield y,
+                                               RadosMultipartPart *part,
+                                               list<rgw_obj_index_key>& remove_objs)
+{
+  cls_rgw_obj_chain chain;
+  for (auto& ppfx : part->get_past_prefixes()) {
+    rgw_obj past_obj;
+    past_obj.init_ns(bucket->get_key(), ppfx + "." + std::to_string(part->info.num), mp_ns);
+    rgw_obj_index_key past_key;
+    past_obj.key.get_index_key(&past_key);
+    // Remove past upload part objects from index, too.
+    remove_objs.push_back(past_key);
+
+    RGWObjManifest manifest = part->get_manifest();
+    manifest.set_prefix(ppfx);
+    RGWObjManifest::obj_iterator miter = manifest.obj_begin(dpp);
+    for (; miter != manifest.obj_end(dpp); ++miter) {
+      rgw_raw_obj raw_part_obj = miter.get_location().get_raw_obj(store);
+      cls_rgw_obj_key part_key(raw_part_obj.oid);
+      chain.push_obj(raw_part_obj.pool.to_str(), part_key, raw_part_obj.loc);
+    }
+  }
+  if (store->getRados()->get_gc() == nullptr) {
+    // Delete objects inline if gc hasn't been initialised (in case when bypass gc is specified)
+    store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id());
+  } else {
+    // use upload id as tag and do it synchronously
+    auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id());
+    if (ret < 0 && leftover_chain) {
+      ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
+      if (ret == -ENOENT) {
+        return -ERR_NO_SUCH_UPLOAD;
+      }
+      // Delete objects inline if send chain to gc fails
+      store->getRados()->delete_objs_inline(dpp, *leftover_chain, mp_obj.get_upload_id());
+    }
+  }
+  return 0;
+}
+
+
 int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
 {
   std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
@@ -2326,6 +2466,8 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
           rgw_obj_index_key key;
           head->get_key().get_index_key(&key);
           remove_objs.push_back(key);
+
+          cleanup_part_history(dpp, null_yield, obj_part, remove_objs);
         }
       }
       parts_accounted_size += obj_part->info.accounted_size;
@@ -2605,6 +2747,11 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
         return ret;
       } else {
         manifest.append(dpp, obj_part.manifest, store->svc()->zone->get_zonegroup(), store->svc()->zone->get_zone_params());
+        auto manifest_prefix = part->info.manifest.get_prefix();
+        if (not manifest_prefix.empty()) {
+          // It has an explicit prefix. Override the default one.
+          src_obj.init_ns(bucket->get_key(), manifest_prefix + "." + std::to_string(part->info.num), mp_ns);
+        }
       }
 
       bool part_compressed = (obj_part.cs_info.compression_type != "none");
@@ -2641,6 +2788,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
       src_obj.key.get_index_key(&remove_key);
 
       remove_objs.push_back(remove_key);
+
+      cleanup_part_history(dpp, y, part, remove_objs);
 
       ofs += obj_part.size;
       accounted_size += obj_part.accounted_size;

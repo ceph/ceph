@@ -770,8 +770,10 @@ class OSDStub : public TestStub
     if (first > osdmap.get_epoch() + 1) {
       dout(5) << __func__
 	      << osdmap.get_epoch() + 1 << ".." << (first-1) << dendl;
-      if ((m->oldest_map < first && osdmap.get_epoch() == 0) ||
-	  m->oldest_map <= osdmap.get_epoch()) {
+      if ((m->cluster_osdmap_trim_lower_bound <
+           first && osdmap.get_epoch() == 0) ||
+	  m->cluster_osdmap_trim_lower_bound <=
+          osdmap.get_epoch()) {
 	monc.sub_want("osdmap", osdmap.get_epoch()+1,
 		       CEPH_SUBSCRIBE_ONETIME);
 	monc.renew_subs();
