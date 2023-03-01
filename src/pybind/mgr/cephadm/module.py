@@ -1905,7 +1905,7 @@ Then run the following:
         })
         extra = self.extra_ceph_conf().conf
         if extra:
-            config += '\n\n' + extra.strip() + '\n'
+            config += extra.strip().replace('[global]','') + '\n'
         return config
 
     def _invalidate_daemons_and_kick_serve(self, filter_host: Optional[str] = None) -> None:
