@@ -375,8 +375,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.log.info('Starting usage trim loop')
         while self.run:
             if self.usage_trim_older_than_days <= 0:
-                self.log.info('Skipping usage trim because usage_trim_older_than_days is not > 0')
-                self.event.sleep(self.usage_trim_interval)
+                self.log.debug('Skipping usage trim because usage_trim_older_than_days is not > 0')
+                self.event.sleep(60)
                 continue
             startDate = '1970-01-01'
             endDate = (datetime.today() - timedelta(days=self.usage_trim_older_than_days)).strftime('%Y-%m-%d')
