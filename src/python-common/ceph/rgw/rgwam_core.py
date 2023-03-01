@@ -12,6 +12,7 @@ import socket
 import base64
 import logging
 import errno
+from typing import Optional
 
 from .types import RGWAMException, RGWAMCmdRunException, RGWPeriod, RGWUser, RealmToken
 from .diff import RealmsEPs
