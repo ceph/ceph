@@ -429,7 +429,7 @@ class UsageOp:
              endDate: Optional[str] = None):
         ze = ZoneEnv(self.env, realm=realm)
 
-        params = ['trim']
+        params = ['usage', 'trim']
 
         if startDate is not None:
             params += ['--start-date=%s' % startDate]

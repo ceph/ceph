@@ -374,20 +374,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         self.log.info('Starting usage trim loop')
         while self.run:
-            if self.usage_trim_older_than_days <= 0:
+            usage_trim_older_than_days = cast(int, self.get_module_option('usage_trim_older_than_days'))
+            if usage_trim_older_than_days <= 0:
                 self.log.debug('Skipping usage trim because usage_trim_older_than_days is not > 0')
-                self.event.sleep(60)
+                self.event.wait(60)
                 continue
             startDate = '1970-01-01'
-            endDate = (datetime.today() - timedelta(days=self.usage_trim_older_than_days)).strftime('%Y-%m-%d')
-            realms = cast(str, self.usage_trim_realms, default='').split(',')
+            endDate = (datetime.today() - timedelta(days=usage_trim_older_than_days)).strftime('%Y-%m-%d')
+            usage_trim_realms = cast(str, self.get_module_option('usage_trim_realms'))
+            realms = usage_trim_realms.split(',')
             for realm in realms:
                 self.log.info(f'Running usage trim for realm {realm} with startDate={startDate} and endDate={endDate}')
                 try:
                     RGWAM(self.env).usage_op().trim(realm=realm, startDate=startDate, endDate=endDate)
                 except Exception:
                     self.log.exception("Failed to usage trim:")
-            self.event.sleep(self.usage_trim_interval)
+            usage_trim_interval = cast(int, self.get_module_option('usage_trim_interval'))
+            self.event.wait(usage_trim_interval)
 
     def shutdown(self) -> None:
         """
