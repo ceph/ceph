@@ -137,10 +137,20 @@ ceph osd pool set bulk0 target_size_bytes 1000
 ceph osd pool set meta0 target_size_ratio 1
 wait_for 60 "ceph health detail | grep POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO"
 
+# test autoscale warn
+
+ceph osd pool create warn0 1 --autoscale-mode=warn
+wait_for 120 "ceph health detail | grep POOL_TOO_FEW_PGS"
+
+ceph osd pool create warn1 256 --autoscale-mode=warn
+wait_for 120 "ceph health detail | grep POOL_TOO_MANY_PGS"
+
 ceph osd pool rm meta0 meta0 --yes-i-really-really-mean-it
 ceph osd pool rm bulk0 bulk0 --yes-i-really-really-mean-it
 ceph osd pool rm bulk1 bulk1 --yes-i-really-really-mean-it
 ceph osd pool rm bulk2 bulk2 --yes-i-really-really-mean-it
+ceph osd pool rm warn0 warn0 --yes-i-really-really-mean-it
+ceph osd pool rm warn1 warn1 --yes-i-really-really-mean-it
 
 echo OK
 
