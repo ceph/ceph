@@ -60,6 +60,11 @@ public:
     std::pair<K, V> *next    ///< [out] first key after key
     ) = 0; ///< @return 0 on success, -ENOENT if there is no next
 
+  virtual int get_next_or_current(
+    const K &key,       ///< [in] key at-which-or-after to get
+    std::pair<K, V> *next_or_current
+    ) = 0; ///< @return 0 on success, -ENOENT if there is no next
+
   virtual ~StoreDriver() {}
 };
 
