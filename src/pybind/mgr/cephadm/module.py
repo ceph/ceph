@@ -1752,7 +1752,7 @@ Then run the following:
 
     @handle_orch_error
     @host_exists()
-    def enter_host_maintenance(self, hostname: str, force: bool = False) -> str:
+    def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> str:
         """ Attempt to place a cluster host in maintenance
 
         Placing a host into maintenance disables the cluster's ceph target in systemd
@@ -1764,11 +1764,14 @@ Then run the following:
 
         :raises OrchestratorError: Hostname is invalid, host is already in maintenance
         """
-        if len(self.cache.get_hosts()) == 1:
+        if yes_i_really_mean_it and not force:
+            raise OrchestratorError("--force must be passed with --yes-i-really-mean-it")
+
+        if len(self.cache.get_hosts()) == 1 and not yes_i_really_mean_it:
             raise OrchestratorError("Maintenance feature is not supported on single node clusters")
 
         # if upgrade is active, deny
-        if self.upgrade.upgrade_state:
+        if self.upgrade.upgrade_state and not yes_i_really_mean_it:
             raise OrchestratorError(
                 f"Unable to place {hostname} in maintenance with upgrade active/paused")
 
@@ -1782,7 +1785,7 @@ Then run the following:
             # daemons on this host, so check the daemons can be stopped
             # and if so, place the host into maintenance by disabling the target
             rc, msg = self._host_ok_to_stop(hostname, force)
-            if rc:
+            if rc and not yes_i_really_mean_it:
                 raise OrchestratorError(
                     msg + '\nNote: Warnings can be bypassed with the --force flag', errno=rc)
 
@@ -1791,7 +1794,7 @@ Then run the following:
                                                                                 ["enter"],
                                                                                 error_ok=True))
             returned_msg = _err[0].split('\n')[-1]
-            if returned_msg.startswith('failed') or returned_msg.startswith('ERROR'):
+            if (returned_msg.startswith('failed') or returned_msg.startswith('ERROR')) and not yes_i_really_mean_it:
                 raise OrchestratorError(
                     f"Failed to place {hostname} into maintenance for cluster {self._cluster_fsid}")
 
@@ -1803,12 +1806,12 @@ Then run the following:
                     'who': [crush_node],
                     'format': 'json'
                 })
-                if rc:
+                if rc and not yes_i_really_mean_it:
                     self.log.warning(
                         f"maintenance mode request for {hostname} failed to SET the noout group (rc={rc})")
                     raise OrchestratorError(
                         f"Unable to set the osds on {hostname} to noout (rc={rc})")
-                else:
+                elif not rc:
                     self.log.info(
                         f"maintenance mode request for {hostname} has SET the noout group")
 
