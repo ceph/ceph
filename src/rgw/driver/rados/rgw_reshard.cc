@@ -194,9 +194,9 @@ public:
                        const rgw::bucket_index_layout_generation& target)
     : store(_store)
   {
-    const int num_shards = target.layout.normal.num_shards;
+    const uint32_t num_shards = rgw::num_shards(target.layout.normal);
     target_shards.reserve(num_shards);
-    for (int i = 0; i < num_shards; ++i) {
+    for (uint32_t i = 0; i < num_shards; ++i) {
       target_shards.emplace_back(dpp, store, bucket_info, target, i, completions);
     }
   }
@@ -647,7 +647,7 @@ static int commit_reshard(rgw::sal::RadosStore* store,
     // sync on the old shards will force them to detect the end-of-log for that
     // generation, and eventually transition to the next
     // TODO: use a log layout to support types other than BucketLogType::InIndex
-    for (uint32_t shard_id = 0; shard_id < prev.current_index.layout.normal.num_shards; ++shard_id) {
+    for (uint32_t shard_id = 0; shard_id < rgw::num_shards(prev.current_index.layout.normal); ++shard_id) {
       // This null_yield can stay, for now, since we're in our own thread
       ret = store->svc()->datalog_rados->add_entry(dpp, bucket_info, prev.logs.back(), shard_id,
 						   null_yield);
@@ -823,9 +823,9 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
     (*out) << "total entries:";
   }
 
-  const int num_source_shards = current.layout.normal.num_shards;
+  const uint32_t num_source_shards = rgw::num_shards(current.layout.normal);
   string marker;
-  for (int i = 0; i < num_source_shards; ++i) {
+  for (uint32_t i = 0; i < num_source_shards; ++i) {
     bool is_truncated = true;
     marker.clear();
     const std::string null_object_filter; // empty string since we're not filtering by object
