@@ -1435,13 +1435,14 @@ private:
           offset, length, old_length]() mutable {
         LOG_PREFIX(Cache::read_extent);
         extent->state = CachedExtent::extent_state_t::CLEAN;
-        /* TODO: crc should be checked against LBA manager */
-        extent->last_committed_crc = extent->get_crc32c();
 
         update_lru_size(*extent,
           extent->get_valid_length() - old_length);
         extent->on_clean_read();
         extent->check_and_rebuild();
+        if(extent->is_ptr()) {
+          extent->last_committed_crc = extent->get_crc32c();
+        }
         extent->complete_io();
         SUBDEBUG(seastore_cache, "read extent interval {} ~ {} done -- {}",
           offset, length, *extent);
