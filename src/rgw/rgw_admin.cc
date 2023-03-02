@@ -72,6 +72,7 @@ extern "C" {
 #include "services/svc_zone.h"
 
 #include "driver/rados/rgw_bucket.h"
+#include "driver/rados/rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
 
@@ -171,6 +172,7 @@ void usage()
   cout << "  object stat                stat an object for its metadata\n";
   cout << "  object unlink              unlink object from bucket index\n";
   cout << "  object rewrite             rewrite the specified object\n";
+  cout << "  object reindex             reindex the object(s) indicated by --bucket and either --object or --objects-file\n";
   cout << "  objects expire             run expired objects cleanup\n";
   cout << "  objects expire-stale list  list stale expired objects (caused by reshard)\n";
   cout << "  objects expire-stale rm    remove stale expired objects\n";
@@ -340,6 +342,7 @@ void usage()
   cout << "   --bucket=<bucket>         Specify the bucket name. Also used by the quota command.\n";
   cout << "   --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.\n";
   cout << "   --object=<object>         object name\n";
+  cout << "   --objects-file=<file>     file containing a list of object names to process\n";
   cout << "   --object-version=<version>         object version\n";
   cout << "   --date=<date>             date in the format yyyy-mm-dd\n";
   cout << "   --start-date=<date>       start date in the format yyyy-mm-dd\n";
@@ -425,7 +428,7 @@ void usage()
   cout << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   cout << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
   cout << "                             in one of the numeric field\n";
-  cout << "   --infile=<file>           specify a file to read in when setting data\n";
+  cout << "   --infile=<file>           file to read in when setting data\n";
   cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
   cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\")\n";
   cout << "   --op-mask=<op-mask>       permission of user's operations (e.g., \"read, write, delete, *\")\n";
@@ -682,6 +685,7 @@ enum class OPT {
   OBJECT_UNLINK,
   OBJECT_STAT,
   OBJECT_REWRITE,
+  OBJECT_REINDEX,
   OBJECTS_EXPIRE,
   OBJECTS_EXPIRE_STALE_LIST,
   OBJECTS_EXPIRE_STALE_RM,
@@ -898,6 +902,7 @@ static SimpleCmd::Commands all_cmds = {
   { "object unlink", OPT::OBJECT_UNLINK },
   { "object stat", OPT::OBJECT_STAT },
   { "object rewrite", OPT::OBJECT_REWRITE },
+  { "object reindex", OPT::OBJECT_REINDEX },
   { "objects expire", OPT::OBJECTS_EXPIRE },
   { "objects expire-stale list", OPT::OBJECTS_EXPIRE_STALE_LIST },
   { "objects expire-stale rm", OPT::OBJECTS_EXPIRE_STALE_RM },
@@ -3402,6 +3407,7 @@ int main(int argc, const char **argv)
   string op_mask_str;
   string quota_scope;
   string ratelimit_scope;
+  std::string objects_file;
   string object_version;
   string placement_id;
   std::optional<string> opt_storage_class;
@@ -3579,6 +3585,8 @@ int main(int argc, const char **argv)
       pool = rgw_pool(pool_name);
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*)NULL)) {
       object = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--objects-file", (char*)NULL)) {
+      objects_file = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--object-version", (char*)NULL)) {
       object_version = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--client-id", (char*)NULL)) {
@@ -7772,7 +7780,81 @@ next:
     } else {
       ldpp_dout(dpp(), 20) << "skipped object" << dendl;
     }
-  }
+  } // OPT::OBJECT_REWRITE
+
+  if (opt_cmd == OPT::OBJECT_REINDEX) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: --bucket not specified." << std::endl;
+      return EINVAL;
+    }
+    if (object.empty() && objects_file.empty()) {
+      cerr << "ERROR: neither --object nor --objects-file specified." << std::endl;
+      return EINVAL;
+    } else if (!object.empty() && !objects_file.empty()) {
+      cerr << "ERROR: both --object and --objects-file specified and only one is allowed." << std::endl;
+      return EINVAL;
+    } else if (!objects_file.empty() && !object_version.empty()) {
+      cerr << "ERROR: cannot specify --object_version when --objects-file specified." << std::endl;
+      return EINVAL;
+    }
+
+    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) <<
+	"." << std::endl;
+      return -ret;
+    }
+
+    rgw::sal::RadosStore* rados_store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!rados_store) {
+      cerr <<
+	"ERROR: this command can only work when the cluster has a RADOS backing store." <<
+	std::endl;
+      return EPERM;
+    }
+    RGWRados* store = rados_store->getRados();
+
+    auto process = [&](const std::string& p_object, const std::string& p_object_version) -> int {
+      std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(p_object);
+      obj->set_instance(p_object_version);
+      ret = store->reindex_obj(bucket->get_info(), obj->get_obj(), dpp(), null_yield);
+      if (ret < 0) {
+	return ret;
+      }
+      return 0;
+    };
+
+    if (!object.empty()) {
+      ret = process(object, object_version);
+      if (ret < 0) {
+	return -ret;
+      }
+    } else {
+      std::ifstream file;
+      file.open(objects_file);
+      if (!file.is_open()) {
+	std::cerr << "ERROR: unable to open objects-file \"" <<
+	  objects_file << "\"." << std::endl;
+	return ENOENT;
+      }
+
+      std::string obj_name;
+      const std::string empty_version;
+      while (std::getline(file, obj_name)) {
+	ret = process(obj_name, empty_version);
+	if (ret < 0) {
+	  std::cerr << "ERROR: while processing \"" << obj_name <<
+	    "\", received " << cpp_strerror(-ret) << "." << std::endl;
+	  if (!yes_i_really_mean_it) {
+	    std::cerr <<
+	      "NOTE: with *caution* you can use --yes-i-really-mean-it to push through errors and continue processing." <<
+	      std::endl;
+	    return -ret;
+	  }
+	}
+      } // while
+    }
+  } // OPT::OBJECT_REINDEX
 
   if (opt_cmd == OPT::OBJECTS_EXPIRE) {
     if (!static_cast<rgw::sal::RadosStore*>(driver)->getRados()->process_expire_objects(dpp())) {

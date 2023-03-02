@@ -1079,6 +1079,10 @@ public:
   D3nDataCache* d3n_data_cache{nullptr};
 
   int rewrite_obj(rgw::sal::Object* obj, const DoutPrefixProvider *dpp, optional_yield y);
+  int reindex_obj(const RGWBucketInfo& dest_bucket_info,
+		  const rgw_obj& obj,
+		  const DoutPrefixProvider* dpp,
+		  optional_yield y);
 
   int stat_remote_obj(const DoutPrefixProvider *dpp,
                RGWObjectCtx& obj_ctx,

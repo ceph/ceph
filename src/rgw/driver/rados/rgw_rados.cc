@@ -3595,6 +3595,34 @@ int RGWRados::rewrite_obj(rgw::sal::Object* obj, const DoutPrefixProvider *dpp, 
 			     attrset, 0, real_time(), NULL, dpp, y);
 }
 
+int RGWRados::reindex_obj(const RGWBucketInfo& bucket_info,
+			  const rgw_obj& obj,
+			  const DoutPrefixProvider* dpp,
+			  optional_yield y)
+{
+  if (bucket_info.versioned()) {
+    ldpp_dout(dpp, 10) << "WARNING: " << __func__ <<
+      ": cannot process versioned bucket \"" <<
+      bucket_info.bucket.get_key() << "\"" <<
+      dendl;
+    return -ENOTSUP;
+  }
+
+  Bucket target(this, bucket_info);
+  RGWRados::Bucket::UpdateIndex update_idx(&target, obj);
+  const std::string* no_write_tag = nullptr;
+
+  int ret = update_idx.prepare(dpp, RGWModifyOp::CLS_RGW_OP_ADD, no_write_tag, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+      ": update index prepare for \"" << obj << "\" returned: " <<
+      cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
 struct obj_time_weight {
   real_time mtime;
   uint32_t zone_short_id;
