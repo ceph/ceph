@@ -5529,21 +5529,21 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
     }
   }
 
-  iter = s->attrset.find(RGW_ATTR_SHADOW_OBJ);
-  if (iter != s->attrset.end()) {
-    bufferlist bl = iter->second;
-    bufferlist::iterator it = bl.begin();
+  if (iter = s->attrset.find(RGW_ATTR_SHADOW_OBJ); iter != s->attrset.end()) {
+    const bufferlist& bl = iter->second;
+    auto it = bl.begin();
     it.copy(bl.length(), s->shadow_obj);
     s->shadow_obj[bl.length()] = '\0';
   }
-  s->obj_tag = s->attrset[RGW_ATTR_ID_TAG];
-  auto ttiter = s->attrset.find(RGW_ATTR_TAIL_TAG);
-  if (ttiter != s->attrset.end()) {
-    s->tail_tag = s->attrset[RGW_ATTR_TAIL_TAG];
+  if (iter = s->attrset.find(RGW_ATTR_ID_TAG); iter != s->attrset.end()) {
+    s->obj_tag = iter->second;
+  }
+  if (iter = s->attrset.find(RGW_ATTR_TAIL_TAG); iter != s->attrset.end()) {
+    s->tail_tag = iter->second;
   }
 
-  bufferlist manifest_bl = s->attrset[RGW_ATTR_MANIFEST];
-  if (manifest_bl.length()) {
+  if (iter = s->attrset.find(RGW_ATTR_MANIFEST); iter != s->attrset.end()) {
+    bufferlist manifest_bl = iter->second;
     auto miter = manifest_bl.cbegin();
     try {
       sm->manifest.emplace();
@@ -5576,9 +5576,8 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
       s->fake_tag = true;
     }
   }
-  map<string, bufferlist>::iterator aiter = s->attrset.find(RGW_ATTR_PG_VER);
-  if (aiter != s->attrset.end()) {
-    bufferlist& pg_ver_bl = aiter->second;
+  if (iter = s->attrset.find(RGW_ATTR_PG_VER); iter != s->attrset.end()) {
+    const bufferlist& pg_ver_bl = iter->second;
     if (pg_ver_bl.length()) {
       auto pgbl = pg_ver_bl.cbegin();
       try {
@@ -5588,9 +5587,8 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
       }
     }
   }
-  aiter = s->attrset.find(RGW_ATTR_SOURCE_ZONE);
-  if (aiter != s->attrset.end()) {
-    bufferlist& zone_short_id_bl = aiter->second;
+  if (iter = s->attrset.find(RGW_ATTR_SOURCE_ZONE); iter != s->attrset.end()) {
+    const bufferlist& zone_short_id_bl = iter->second;
     if (zone_short_id_bl.length()) {
       auto zbl = zone_short_id_bl.cbegin();
       try {
@@ -5609,8 +5607,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
   /* an object might not be olh yet, but could have olh id tag, so we should set it anyway if
    * it exist, and not only if is_olh() returns true
    */
-  iter = s->attrset.find(RGW_ATTR_OLH_ID_TAG);
-  if (iter != s->attrset.end()) {
+  if (iter = s->attrset.find(RGW_ATTR_OLH_ID_TAG); iter != s->attrset.end()) {
     s->olh_tag = iter->second;
   }
 
@@ -5989,14 +5986,20 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* rctx, RGWBu
   r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, null_yield);
   if (state) {
     if (r >= 0) {
-      bufferlist acl_bl = attrs[RGW_ATTR_ACL];
-      bufferlist etag_bl = attrs[RGW_ATTR_ETAG];
-      bufferlist content_type_bl = attrs[RGW_ATTR_CONTENT_TYPE];
-      string etag = rgw_bl_str(etag_bl);
-      string content_type = rgw_bl_str(content_type_bl);
+      bufferlist acl_bl;
+      if (iter = attrs.find(RGW_ATTR_ACL); iter != attrs.end()) {
+        acl_bl = iter->second;
+      }
+      std::string etag;
+      if (iter = attrs.find(RGW_ATTR_ETAG); iter != attrs.end()) {
+        etag = rgw_bl_str(iter->second);
+      }
+      std::string content_type;
+      if (iter = attrs.find(RGW_ATTR_CONTENT_TYPE); iter != attrs.end()) {
+        content_type = rgw_bl_str(iter->second);
+      }
       string storage_class;
-      auto iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
-      if (iter != attrs.end()) {
+      if (iter = attrs.find(RGW_ATTR_STORAGE_CLASS); iter != attrs.end()) {
         storage_class = rgw_bl_str(iter->second);
       }
       uint64_t epoch = ioctx.get_last_version();
