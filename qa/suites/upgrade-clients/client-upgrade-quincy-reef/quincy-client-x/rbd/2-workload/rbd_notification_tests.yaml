@@ -1,0 +1,34 @@
+tasks:
+- parallel:
+  - workunit:
+      branch: quincy
+      clients:
+        client.0:
+          - rbd/notify_master.sh
+      env:
+        RBD_FEATURES: "61"
+  - workunit:
+      branch: reef
+      clients:
+        client.1:
+          - rbd/notify_slave.sh
+      env:
+        RBD_FEATURES: "61"
+        RBD_DISABLE_UPDATE_FEATURES: "1"
+- print: "**** done rbd: old librbd -> new librbd"
+- parallel:
+  - workunit:
+      branch: quincy
+      clients:
+        client.0:
+          - rbd/notify_slave.sh
+      env:
+        RBD_FEATURES: "61"
+  - workunit:
+      branch: reef
+      clients:
+        client.1:
+          - rbd/notify_master.sh
+      env:
+        RBD_FEATURES: "61"
+- print: "**** done rbd: new librbd -> old librbd"
