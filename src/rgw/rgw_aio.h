@@ -23,8 +23,6 @@
 #include "include/rados/librados_fwd.hpp"
 #include "common/async/yield_context.h"
 
-#include "services/svc_rados.h" // cant forward declare RGWSI_RADOS::Obj
-
 #include "rgw_common.h"
 
 #include "include/function2.hpp"
@@ -34,7 +32,7 @@ struct D3nGetObjData;
 namespace rgw {
 
 struct AioResult {
-  RGWSI_RADOS::Obj obj;
+  rgw_raw_obj obj;
   uint64_t id = 0; // id allows caller to associate a result with its request
   bufferlist data; // result buffer for reads
   int result = 0;
@@ -79,7 +77,7 @@ class Aio {
 
   virtual ~Aio() {}
 
-  virtual AioResultList get(const RGWSI_RADOS::Obj& obj,
+  virtual AioResultList get(rgw_raw_obj obj,
 			    OpFunc&& f,
 			    uint64_t cost, uint64_t id) = 0;
   virtual void put(AioResult& r) = 0;
