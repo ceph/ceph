@@ -1108,6 +1108,9 @@ create_mgr_restful_secret() {
 start_mgr() {
     local mgr=0
     local ssl=${DASHBOARD_SSL:-1}
+
+    sudo apt-get install python3-bcrypt
+
     # avoid monitors on nearby ports (which test/*.sh use extensively)
     MGR_PORT=$(($CEPH_PORT + 1000))
     PROMETHEUS_PORT=9283
@@ -1253,8 +1256,15 @@ EOF
                 ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
             fi
 
-	    # wait for volume module to load
-	    while ! ceph_adm fs volume ls ; do sleep 1 ; done
+            # wait for volume module to load
+            while ! ceph_adm fs volume ls ; do
+                debug echo "Waiting for volume module to load"
+                sleep 1 ;
+                ceph_adm status
+                ceph_adm mgr module ls --format=json-pretty
+                # ceph_adm mgr module enable volumes
+            done
+
             local fs=0
             for name in a b c d e f g h i j k l m n o p
             do
