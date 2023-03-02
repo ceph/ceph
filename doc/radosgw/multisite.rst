@@ -61,7 +61,7 @@ Diagram - Replication of Object Data Between Zones
 The replication of object data between zones within a zonegroup looks
 something like this:
 
-.. image:: ../images/zone-sync2.png
+.. image:: ../images/zone-sync.svg
    :align: center
 
 At the top of this diagram, we see two applications (also known as "clients").
