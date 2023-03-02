@@ -6,8 +6,8 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
 from . import APIDoc, APIRouter, CRUDCollectionMethod, CRUDEndpoint, EndpointDoc, SecretStr
-from ._crud import ArrayHorizontalContainer, CRUDMeta, Form, FormField, Icon, \
-    TableAction, VerticalContainer
+from ._crud import ArrayHorizontalContainer, CRUDMeta, Form, FormField, \
+    FormTaskInfo, Icon, TableAction, VerticalContainer
 
 logger = logging.getLogger("controllers.ceph_users")
 
@@ -70,7 +70,9 @@ create_container = VerticalContainer('Create User', 'create_user', fields=[
 ])
 
 create_form = Form(path='/cluster/user/create',
-                   root_container=create_container)
+                   root_container=create_container,
+                   task_info=FormTaskInfo("Ceph user '{user_entity}' created successfully",
+                                          ['user_entity']))
 
 
 @CRUDEndpoint(

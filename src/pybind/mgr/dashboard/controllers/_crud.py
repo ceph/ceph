@@ -78,6 +78,12 @@ class Icon(Enum):
     add = 'fa fa-plus'
 
 
+class Validator(Enum):
+    JSON = 'json'
+    RGW_ROLE_NAME = 'rgwRoleName'
+    RGW_ROLE_PATH = 'rgwRolePath'
+
+
 class FormField(NamedTuple):
     """
     The key of a FromField is then used to send the data related to that key into the
@@ -89,6 +95,8 @@ class FormField(NamedTuple):
     field_type: Any = str
     default_value: Optional[Any] = None
     optional: bool = False
+    help: str = ''
+    validators: List[Validator] = []
 
     def get_type(self):
         _type = ''
@@ -98,6 +106,8 @@ class FormField(NamedTuple):
             _type = 'int'
         elif self.field_type == bool:
             _type = 'boolean'
+        elif self.field_type == 'textarea':
+            _type = 'textarea'
         else:
             raise NotImplementedError(f'Unimplemented type {self.field_type}')
         return _type
@@ -173,7 +183,7 @@ class Container:
 
         # include fields in this container's schema
         for field in self.fields:
-            field_ui_schema = {}
+            field_ui_schema: Dict[str, Any] = {}
             properties[field.key] = {}
             field_key = field.key
             if key:
@@ -187,6 +197,8 @@ class Container:
                 properties[field.key]['type'] = _type
                 properties[field.key]['title'] = field.name
                 field_ui_schema['key'] = field_key
+                field_ui_schema['help'] = f'{field.help}'
+                field_ui_schema['validators'] = [i.value for i in field.validators]
                 items.append(field_ui_schema)
             elif isinstance(field, Container):
                 container_schema = field.to_dict(key+'.'+field.key if key else field.key)
@@ -232,13 +244,26 @@ class ArrayHorizontalContainer(Container):
         return 'array'
 
 
-class Form:
-    def __init__(self, path, root_container):
-        self.path = path
-        self.root_container = root_container
+class FormTaskInfo:
+    def __init__(self, message: str, metadata_fields: List[str]) -> None:
+        self.message = message
+        self.metadata_fields = metadata_fields
 
     def to_dict(self):
-        return self.root_container.to_dict()
+        return {'message': self.message, 'metadataFields': self.metadata_fields}
+
+
+class Form:
+    def __init__(self, path, root_container,
+                 task_info: FormTaskInfo = FormTaskInfo("Unknown task", [])):
+        self.path = path
+        self.root_container: Container = root_container
+        self.task_info = task_info
+
+    def to_dict(self):
+        res = self.root_container.to_dict()
+        res['task_info'] = self.task_info.to_dict()
+        return res
 
 
 class CRUDMeta(SerializableClass):
@@ -247,6 +272,7 @@ class CRUDMeta(SerializableClass):
         self.permissions = []
         self.actions = []
         self.forms = []
+        self.detail_columns = []
 
 
 class CRUDCollectionMethod(NamedTuple):
@@ -270,26 +296,18 @@ class CRUDEndpoint:
                  actions: Optional[List[TableAction]] = None,
                  permissions: Optional[List[str]] = None, forms: Optional[List[Form]] = None,
                  meta: CRUDMeta = CRUDMeta(), get_all: Optional[CRUDCollectionMethod] = None,
-                 create: Optional[CRUDCollectionMethod] = None):
+                 create: Optional[CRUDCollectionMethod] = None,
+                 detail_columns: Optional[List[str]] = None):
         self.router = router
         self.doc = doc
         self.set_column = set_column
-        if actions:
-            self.actions = actions
-        else:
-            self.actions = []
-
-        if forms:
-            self.forms = forms
-        else:
-            self.forms = []
+        self.actions = actions if actions is not None else []
+        self.forms = forms if forms is not None else []
         self.meta = meta
         self.get_all = get_all
         self.create = create
-        if permissions:
-            self.permissions = permissions
-        else:
-            self.permissions = []
+        self.permissions = permissions if permissions is not None else []
+        self.detail_columns = detail_columns if detail_columns is not None else []
 
     def __call__(self, cls: Any):
         self.create_crud_class(cls)
@@ -328,7 +346,12 @@ class CRUDEndpoint:
             self.generate_actions()
             self.generate_forms()
             self.set_permissions()
+            self.get_detail_columns()
             return serialize(self.__class__.outer_self.meta)
+
+        def get_detail_columns(self):
+            columns = self.__class__.outer_self.detail_columns
+            self.__class__.outer_self.meta.detail_columns = columns
 
         def update_columns(self):
             if self.__class__.outer_self.set_column:
@@ -371,6 +394,7 @@ class CRUDEndpoint:
                               'generate_actions': generate_actions,
                               'generate_forms': generate_forms,
                               'set_permissions': set_permissions,
+                              'get_detail_columns': get_detail_columns,
                               'outer_self': self,
                           })
         UIRouter(self.router.path, self.router.security_scope)(meta_class)

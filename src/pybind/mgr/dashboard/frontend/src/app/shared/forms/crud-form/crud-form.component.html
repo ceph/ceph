@@ -5,16 +5,16 @@
          class="card-header">{{ formUISchema.title }}</div>
     <form *ngIf="formUISchema.uiSchema"
           [formGroup]="form"
-          (ngSubmit)="submit(model)">
+          (ngSubmit)="submit(model, formUISchema.taskInfo)">
 
       <div class="card-body position-relative">
         <formly-form [form]="form"
                      [fields]="formUISchema.controlSchema"
                      [model]="model"
-                     [options]="options"></formly-form>
+                     [options]="{formState: formUISchema.uiSchema}"></formly-form>
       </div>
       <div class="card-footer">
-        <cd-form-button-panel (submitActionEvent)="submit(model)"
+        <cd-form-button-panel (submitActionEvent)="submit(model, formUISchema.taskInfo)"
                               [form]="formDir"
                               [submitText]="formUISchema.title"
                               [disabled]="!form.valid"

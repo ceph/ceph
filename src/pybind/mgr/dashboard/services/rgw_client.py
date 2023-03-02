@@ -3,6 +3,7 @@
 import ipaddress
 import json
 import logging
+import os
 import re
 import xml.etree.ElementTree as ET  # noqa: N814
 from distutils.util import strtobool
@@ -815,6 +816,50 @@ class RgwClient(RestClient):
             return []
 
         return roles
+
+    def create_role(self, role_name: str, role_path: str, role_assume_policy_doc: str) -> None:
+        try:
+            json.loads(role_assume_policy_doc)
+        except:  # noqa: E722
+            raise DashboardException('Assume role policy document is not a valid json')
+
+        # valid values:
+        # pylint: disable=C0301
+        # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html#cfn-iam-role-path # noqa: E501
+        if len(role_name) > 64:
+            raise DashboardException(
+                f'Role name "{role_name}" is invalid. Should be 64 characters or less')
+
+        role_name_regex = '[0-9a-zA-Z_+=,.@-]+'
+        if not re.fullmatch(role_name_regex, role_name):
+            raise DashboardException(
+                f'Role name "{role_name}" is invalid. Valid characters are "{role_name_regex}"')
+
+        if not os.path.isabs(role_path):
+            raise DashboardException(
+                f'Role path "{role_path}" is invalid. It should be an absolute path')
+        if role_path[-1] != '/':
+            raise DashboardException(
+                f'Role path "{role_path}" is invalid. It should start and end with a slash')
+        path_regex = '(\u002F)|(\u002F[\u0021-\u007E]+\u002F)'
+        if not re.fullmatch(path_regex, role_path):
+            raise DashboardException(
+                (f'Role path "{role_path}" is invalid.'
+                 f'Role path should follow the pattern "{path_regex}"'))
+
+        rgw_create_role_command = ['role', 'create', '--role-name', role_name, '--path', role_path]
+        if role_assume_policy_doc:
+            rgw_create_role_command += ['--assume-role-policy-doc', f"{role_assume_policy_doc}"]
+
+        code, _roles, _err = mgr.send_rgwadmin_command(rgw_create_role_command,
+                                                       stdout_as_json=False)
+        if code != 0:
+            # pylint: disable=C0301
+            link = 'https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html#cfn-iam-role-path'  # noqa: E501
+            msg = (f'Error creating role with code {code}: '
+                   'Looks like the document has a wrong format.'
+                   f' For more information about the format look at {link}')
+            raise DashboardException(msg=msg, component='rgw')
 
     def perform_validations(self, retention_period_days, retention_period_years, mode):
         try:
