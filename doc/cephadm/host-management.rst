@@ -327,10 +327,9 @@ added to is also added to the default bucket), for example:
 
 .. note:: 
 
-  The ``location`` attribute will be only affect the initial CRUSH location.
-  Subsequent changes of the ``location`` property will be ignored. Also,
-  removing a host will not remove an associated CRUSH bucket unless the
-  ``--rm-crush-entry`` flag is provided to the ``orch host rm`` command
+  The ``location`` attribute will affect only the initial CRUSH location.
+  Subsequent changes to the ``location`` property will be ignored. Removing a
+  host will not remove any CRUSH buckets.
 
 See also :ref:`crush_map_default_types`.
 
