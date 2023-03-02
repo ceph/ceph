@@ -4528,7 +4528,7 @@ void Client::remove_session_caps(MetaSession *s, int err)
 
 std::pair<int, bool> Client::_do_remount(bool retry_on_error)
 {
-  uint64_t max_retries = cct->_conf.get_val<uint64_t>("mds_max_retries_on_remount_failure");
+  uint64_t max_retries = cct->_conf.get_val<uint64_t>("client_max_retries_on_remount_failure");
   bool abort_on_failure = false;
 
   errno = 0;
@@ -11618,6 +11618,17 @@ std::pair<int, bool> Client::test_dentry_handling(bool can_invalidate)
     return std::make_pair(-CEPHFS_ENOTCONN, false);
 
   can_invalidate_dentries = can_invalidate;
+
+  /*
+   * Force to use the old and slow method to invalidate the dcache
+   * if the euid is non-root, or the remount may fail with return
+   * code 1 or 32.
+   */
+  uid_t euid = geteuid();
+  ldout(cct, 10) << "euid: " << euid << dendl;
+  if (euid != 0) {
+    can_invalidate_dentries = true;
+  }
 
   if (can_invalidate_dentries) {
     ceph_assert(dentry_invalidate_cb);
