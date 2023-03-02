@@ -230,7 +230,8 @@ formly-form {
   .form-label {
     @extend .cd-col-form-label;
     text-align: start;
-    width: 50%;
+    white-space: nowrap;
+    width: fit-content;
 
     span[aria-hidden='true'] {
       color: $danger;

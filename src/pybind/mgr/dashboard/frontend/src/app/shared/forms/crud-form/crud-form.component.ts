@@ -5,10 +5,10 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Location } from '@angular/common';
 import { FormGroup } from '@angular/forms';
-import { FormlyFormOptions } from '@ngx-formly/core';
 import { mergeMap } from 'rxjs/operators';
-import { JsonFormUISchema } from './crud-form.model';
+import { CrudTaskInfo, JsonFormUISchema } from './crud-form.model';
 import { Observable } from 'rxjs';
+import _ from 'lodash';
 
 @Component({
   selector: 'cd-crud-form',
@@ -17,8 +17,8 @@ import { Observable } from 'rxjs';
 })
 export class CrudFormComponent implements OnInit {
   model: any = {};
-  options: FormlyFormOptions = {};
   resource: string;
+  task: { message: string; id: string } = { message: '', id: '' };
   form = new FormGroup({});
   formUISchema$: Observable<JsonFormUISchema>;
 
@@ -38,13 +38,16 @@ export class CrudFormComponent implements OnInit {
     );
   }
 
-  submit(data: any) {
+  submit(data: any, taskInfo: CrudTaskInfo) {
     if (data) {
+      let taskMetadata = {};
+      _.forEach(taskInfo.metadataFields, (field) => {
+        taskMetadata[field] = data[field];
+      });
+      taskMetadata['__message'] = taskInfo.message;
       this.taskWrapper
         .wrapTaskAroundCall({
-          task: new FinishedTask('ceph-user/create', {
-            user_entity: data.user_entity
-          }),
+          task: new FinishedTask('crud-component', taskMetadata),
           call: this.dataGatewayService.create(this.resource, data)
         })
         .subscribe({

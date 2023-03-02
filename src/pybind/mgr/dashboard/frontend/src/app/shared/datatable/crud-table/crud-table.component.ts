@@ -30,6 +30,7 @@ export class CRUDTableComponent implements OnInit {
   permissions: Permissions;
   permission: Permission;
   selection = new CdTableSelection();
+  expandedRow: any = null;
   tabs = {};
 
   constructor(
@@ -85,5 +86,12 @@ export class CRUDTableComponent implements OnInit {
       return !col['isHidden'];
     });
     this.meta = meta;
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
+  }
+  setExpandedRow(event: any) {
+    this.expandedRow = event;
   }
 }

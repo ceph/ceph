@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { FormlyJsonschema } from '@ngx-formly/core/json-schema';
-import { JsonFormUISchema } from '../forms/crud-form/crud-form.model';
+import { CrudTaskInfo, JsonFormUISchema } from '../forms/crud-form/crud-form.model';
+import { setupValidators } from '../forms/crud-form/helpers';
 
 @Injectable({
   providedIn: 'root'
@@ -16,11 +17,15 @@ export class CrudFormAdapterService {
     for (let i = 0; i < controlSchema.length; i++) {
       for (let j = 0; j < uiSchema.length; j++) {
         if (controlSchema[i].key == uiSchema[j].key) {
-          controlSchema[i].className = uiSchema[j].className;
           controlSchema[i].props.templateOptions = uiSchema[j].templateOptions;
+          setupValidators(controlSchema[i], uiSchema);
         }
       }
     }
-    return { title, uiSchema, controlSchema };
+    let taskInfo: CrudTaskInfo = {
+      metadataFields: response.forms[0].task_info.metadataFields,
+      message: response.forms[0].task_info.message
+    };
+    return { title, uiSchema, controlSchema, taskInfo };
   }
 }
