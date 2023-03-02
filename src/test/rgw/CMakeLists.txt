@@ -147,12 +147,9 @@ add_executable(unittest_rgw_putobj test_rgw_putobj.cc)
 add_ceph_unittest(unittest_rgw_putobj)
 target_link_libraries(unittest_rgw_putobj ${rgw_libs} ${UNITTEST_LIBS})
 
-add_executable(ceph_test_rgw_throttle
-  test_rgw_throttle.cc
-  $<TARGET_OBJECTS:unit-main>)
-target_link_libraries(ceph_test_rgw_throttle ${rgw_libs}
-  librados global ${UNITTEST_LIBS})
-install(TARGETS ceph_test_rgw_throttle DESTINATION ${CMAKE_INSTALL_BINDIR})
+add_executable(unittest_rgw_throttle test_rgw_throttle.cc)
+add_ceph_unittest(unittest_rgw_throttle)
+target_link_libraries(unittest_rgw_throttle ${rgw_libs} ${UNITTEST_LIBS})
 
 add_executable(unittest_rgw_iam_policy test_rgw_iam_policy.cc)
 add_ceph_unittest(unittest_rgw_iam_policy)
