@@ -14015,6 +14015,16 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
 
   const pg_pool_t *pool = osdmap.get_pg_pool(m->pool);
 
+  if (m->op == POOL_OP_CREATE_SNAP ||
+      m->op == POOL_OP_CREATE_UNMANAGED_SNAP) {
+    if (const auto& fsmap = mon.mdsmon()->get_fsmap(); fsmap.pool_in_use(m->pool)) {
+      dout(20) << "monitor-managed snapshots have been disabled for pools "
+		  " attached to an fs - pool:" << m->pool << dendl;
+      _pool_op_reply(op, -EOPNOTSUPP, osdmap.get_epoch());
+      return false;
+    }
+  }
+
   switch (m->op) {
     case POOL_OP_CREATE_SNAP:
       if (pool->is_tier()) {

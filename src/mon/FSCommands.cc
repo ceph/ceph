@@ -1524,6 +1524,12 @@ int FileSystemCommandHandler::_check_pool(
     return -ENOENT;
   }
 
+  if (pool->has_snaps()) {
+    *ss << "pool(" << pool_id <<") already has mon-managed snaps; "
+	   "can't attach pool to fs";
+    return -EOPNOTSUPP;
+  }
+
   const string& pool_name = osd_map.get_pool_name(pool_id);
 
   if (pool->is_erasure()) {
