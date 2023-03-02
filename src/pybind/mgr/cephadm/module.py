@@ -2104,6 +2104,7 @@ Then run the following:
             raise OrchestratorError(
                 f'Unable to schedule redeploy for {daemon_name}: No standby MGRs')
         self.cache.schedule_daemon_action(dd.hostname, dd.name(), action)
+        self.cache.save_host(dd.hostname)
         msg = "Scheduled to {} {} on host '{}'".format(action, daemon_name, dd.hostname)
         self._kick_serve_loop()
         return msg
