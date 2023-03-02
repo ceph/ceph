@@ -4561,7 +4561,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
       static constexpr uint64_t cost = 1; // 1 throttle unit per request
       static constexpr uint64_t id = 0; // ids unused
-      rgw::AioResultList completed = aio->get(obj, rgw::Aio::librados_op(std::move(op), y), cost, id);
+      auto& ref = obj.get_ref();
+      rgw::AioResultList completed = aio->get(ref.obj, rgw::Aio::librados_op(ref.pool.ioctx(), std::move(op), y), cost, id);
       ret = rgw::check_for_errors(completed);
       all_results.splice(all_results.end(), completed);
       if (ret < 0) {
@@ -4628,12 +4629,19 @@ done_ret:
       if (r.result < 0) {
         continue; // skip errors
       }
+      auto obj = svc.rados->obj(r.obj);
+      ret2 = obj.open(dpp);
+      if (ret2 < 0) {
+        continue;
+      }
+      auto& ref = obj.get_ref();
+
       ObjectWriteOperation op;
       cls_refcount_put(op, ref_tag, true);
 
       static constexpr uint64_t cost = 1; // 1 throttle unit per request
       static constexpr uint64_t id = 0; // ids unused
-      rgw::AioResultList completed = aio->get(r.obj, rgw::Aio::librados_op(std::move(op), y), cost, id);
+      rgw::AioResultList completed = aio->get(ref.obj, rgw::Aio::librados_op(ref.pool.ioctx(), std::move(op), y), cost, id);
       ret2 = rgw::check_for_errors(completed);
       if (ret2 < 0) {
         ldpp_dout(dpp, 0) << "ERROR: cleanup after error failed to drop reference on obj=" << r.obj << dendl;
@@ -6758,7 +6766,7 @@ int get_obj_data::flush(rgw::AioResultList&& results) {
 
     if (rgwrados->get_use_datacache()) {
       const std::lock_guard l(d3n_get_data.d3n_lock);
-      auto oid = completed.front().obj.get_ref().obj.oid;
+      auto oid = completed.front().obj.oid;
       if (bl.length() <= g_conf()->rgw_get_obj_max_req_size && !d3n_bypass_cache_write) {
         lsubdout(g_ceph_context, rgw_datacache, 10) << "D3nDataCache: " << __func__ << "(): bl.length <= rgw_get_obj_max_req_size (default 4MB) - write to datacache, bl.length=" << bl.length() << dendl;
         rgwrados->d3n_data_cache->put(bl, bl.length(), oid);
@@ -6826,7 +6834,8 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
   const uint64_t cost = len;
   const uint64_t id = obj_ofs; // use logical object offset for sorting replies
 
-  auto completed = d->aio->get(obj, rgw::Aio::librados_op(std::move(op), d->yield), cost, id);
+  auto& ref = obj.get_ref();
+  auto completed = d->aio->get(ref.obj, rgw::Aio::librados_op(ref.pool.ioctx(), std::move(op), d->yield), cost, id);
 
   return d->flush(std::move(completed));
 }
