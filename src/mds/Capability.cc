@@ -18,6 +18,11 @@
 
 #include "common/Formatter.h"
 
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mds
+#undef dout_prefix
+#define dout_prefix *_dout << "Capability "
+
 
 /*
  * Capability::Export
@@ -183,6 +188,16 @@ int Capability::confirm_receipt(ceph_seq_t seq, unsigned caps) {
     _issued = caps;
     // don't add bits
     _pending &= caps;
+
+    // if the revoking is not totally finished just add the
+    // new revoking caps back.
+    if (was_revoking && revoking()) {
+      CInode *in = get_inode();
+      dout(10) << "revocation is not totally finished yet on " << *in
+               << ", the session " << *session << dendl;
+      _revokes.emplace_back(_pending, last_sent, last_issue);
+      calc_issued();
+    }
   } else {
     // can i forget any revocations?
     while (!_revokes.empty() && _revokes.front().seq < seq)
