@@ -15,6 +15,7 @@ import { FormatterService } from './services/formatter.service';
 import { FormlyArrayTypeComponent } from './forms/crud-form/formly-array-type/formly-array-type.component';
 import { FormlyObjectTypeComponent } from './forms/crud-form/formly-object-type/formly-object-type.component';
 import { FormlyInputTypeComponent } from './forms/crud-form/formly-input-type/formly-input-type.component';
+import { FormlyTextareaTypeComponent } from './forms/crud-form/formly-textarea-type/formly-textarea-type.component';
 
 @NgModule({
   imports: [
@@ -35,7 +36,7 @@ import { FormlyInputTypeComponent } from './forms/crud-form/formly-input-type/fo
     }),
     FormlyBootstrapModule
   ],
-  declarations: [],
+  declarations: [FormlyTextareaTypeComponent],
   exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule],
   providers: [AuthStorageService, AuthGuardService, FormatterService, CssHelper]
 })
