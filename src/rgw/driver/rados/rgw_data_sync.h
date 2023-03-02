@@ -823,8 +823,8 @@ public:
 				    uint64_t gen);
   // specific source obj sync status, can be used by sync modules
   static std::string obj_status_oid(const rgw_bucket_sync_pipe& sync_pipe,
-				    const rgw_zone_id& source_zone, const rgw::sal::Object* obj); /* specific source obj sync status,
-										       can be used by sync modules */
+				    const rgw_zone_id& source_zone,
+				    const rgw_obj& obj);
 
   // implements DoutPrefixProvider
   CephContext *get_cct() const override;
