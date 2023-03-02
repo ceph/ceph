@@ -1083,8 +1083,6 @@ void RGWRados::finalize()
   delete binfo_cache;
   delete obj_tombstone_cache;
   delete topic_cache;
-  if (d3n_data_cache)
-    delete d3n_data_cache;
 
   if (reshard_wait.get()) {
     reshard_wait->stop();
@@ -1127,11 +1125,6 @@ int RGWRados::init_rados()
   }
 
   cr_registry = crs.release();
-
-  if (use_datacache) {
-    d3n_data_cache = new D3nDataCache();
-    d3n_data_cache->init(cct);
-  }
 
   return ret;
 }
@@ -7180,17 +7173,6 @@ int get_obj_data::flush(rgw::AioResultList&& results) {
     int r = client_cb->handle_data(bl, 0, bl.length());
     if (r < 0) {
       return r;
-    }
-
-    if (rgwrados->get_use_datacache()) {
-      const std::lock_guard l(d3n_get_data.d3n_lock);
-      auto oid = completed.front().obj.oid;
-      if (bl.length() <= g_conf()->rgw_get_obj_max_req_size && !d3n_bypass_cache_write) {
-        lsubdout(g_ceph_context, rgw_datacache, 10) << "D3nDataCache: " << __func__ << "(): bl.length <= rgw_get_obj_max_req_size (default 4MB) - write to datacache, bl.length=" << bl.length() << dendl;
-        rgwrados->d3n_data_cache->put(bl, bl.length(), oid);
-      } else {
-        lsubdout(g_ceph_context, rgw_datacache, 10) << "D3nDataCache: " << __func__ << "(): not writing to datacache - bl.length > rgw_get_obj_max_req_size (default 4MB), bl.length=" << bl.length() << " or d3n_bypass_cache_write=" << d3n_bypass_cache_write << dendl;
-      }
     }
     completed.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
   }

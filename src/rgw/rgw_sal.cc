@@ -123,13 +123,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     driver = newRadosStore(&io_context);
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
 
-    bool use_data_cache = false;
-    if (cfg.filter_name.compare("d3n") == 0) {
-      use_data_cache = true;
-    }
-
     if ((*rados).set_use_cache(use_cache)
-                .set_use_datacache(use_data_cache)
                 .set_use_gc(use_gc)
                 .set_run_gc_thread(use_gc_thread)
                 .set_run_lc_thread(use_lc_thread)

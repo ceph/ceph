@@ -55,29 +55,49 @@ private:
 
 public:
   struct D3NFilterReadOp : FilterReadOp {
+
+    class D3NFilterGetCB: public RGWGetDataCB {
+    public:
+      D3NFilterGetCB(D3NFilterDriver* filter, std::string& oid) : filter(filter), oid(oid) {};
+      int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
+      void set_client_cb(RGWGetDataCB* client_cb) { this->client_cb = client_cb;}
+      void set_ofs(uint64_t ofs) { this->ofs = ofs; }
+      int flush_last_part();
+      void bypass_cache_write() { this->write_to_cache = false; }
+    private:
+      D3NFilterDriver* filter;
+      std::string oid;
+      RGWGetDataCB* client_cb;
+      uint64_t ofs = 0, len = 0;
+      bufferlist bl_rem;
+      bool last_part{false};
+      D3nGetObjData d3n_get_data;
+      bool write_to_cache{true};
+    };
+  
     D3NFilterObject* source;
     D3NFilterDriver* filter;
     std::unique_ptr<RGWObjectCtx> rctx;
 
     D3NFilterReadOp(std::unique_ptr<ReadOp> next, D3NFilterObject* source, D3NFilterDriver* filter) : FilterReadOp(std::move(next)),
 										 source(source),
-                     filter(filter) {}
+                     filter(filter) { std::string oid = source->get_bucket()->get_marker() + "_" + source->get_key().get_oid();
+                                      cb = std::make_unique<D3NFilterGetCB>(filter, oid); }
     virtual ~D3NFilterReadOp() = default;
     virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
 			RGWGetDataCB* cb, optional_yield y) override;
     virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
 
   private:
-    struct get_obj_priv_data {
-      get_obj_data* data;
-      D3NFilterDriver* filter;
-    
-      get_obj_priv_data(get_obj_data* data, D3NFilterDriver* filter) : data(data), filter(filter) {}
-    };
+    RGWGetDataCB* client_cb;
+    std::unique_ptr<D3NFilterGetCB> cb;
+    std::unique_ptr<rgw::Aio> aio;
+    uint64_t offset = 0; // next offset to write to client
+    rgw::AioResultList completed; // completed read results, sorted by offset
 
-    static int get_obj_iterate_cb(const DoutPrefixProvider *dpp, const rgw_raw_obj& read_obj, off_t obj_ofs,
-                                 off_t read_ofs, off_t len, bool is_head_obj,
-                                 RGWObjState *astate, void *arg);
+    int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results);
+    void cancel();
+    int drain(const DoutPrefixProvider* dpp);
   };
   D3NFilterObject(std::unique_ptr<Object> next, D3NFilterDriver* filter) : FilterObject(std::move(next)),
 									                                                          filter(filter) {}
