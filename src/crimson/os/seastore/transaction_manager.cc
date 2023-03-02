@@ -551,7 +551,7 @@ TransactionManager::get_extents_if_live(
   return cache->get_extent_if_cached(t, paddr, type
   ).si_then([=, this, &t](auto extent)
 	    -> get_extents_if_live_ret {
-    if (extent && extent->get_length() == len) {
+    if (extent && extent->get_valid_length() == len) {
       DEBUGT("{} {}~{} {} is live in cache -- {}",
              t, type, laddr, len, paddr, *extent);
       std::list<CachedExtentRef> res;

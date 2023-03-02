@@ -572,6 +572,16 @@ private:
       return ret->wait_io().then([ret] {
 	return seastar::make_ready_future<CachedExtentRef>(ret);
       });
+      return ret->wait_io().then([this, ret]() mutable
+      -> get_extent_by_type_ret {
+        if (ret->is_ptr()) {
+	  return seastar::make_ready_future<CachedExtentRef>(ret);
+        } else {
+          touch_extent(*ret);
+          return trans_intr::make_interruptible(
+            read_extent<CachedExtent>(std::move(ret), 0, ret->get_length()));
+        }
+      });
     } else {
       SUBTRACET(seastore_cache, "{} {}~{} {} is absent on t, query cache ...",
                 t, type, offset, length, laddr);
