@@ -1962,6 +1962,82 @@ public:
   }
 };
 
+class RGWMetaSyncShardNotifyCR : public RGWCoroutine {
+  RGWMetaSyncEnv *sync_env;
+  const utime_t interval;
+
+public:
+  RGWMetaSyncShardNotifyCR(RGWMetaSyncEnv *_sync_env,
+                          const utime_t interval)
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+      interval(interval) {}
+
+  int operate(const DoutPrefixProvider* dpp) override
+  {
+    reenter(this) {
+      for (;;) {
+        set_status('sync lock notification');
+        yield call(sync_env.bid_manager->notify_cr());
+        if (retcode < 0) {
+          tn->log(5, SSTR("ERROR: failed to notify bidding information" << retcode));
+          return set_cr_error(retcode);
+        }
+
+        set_status('sleeping');
+        yield wait(interval);
+      }
+
+/*
+      if (sync_env->bid_manager->is_highest_bidder(shard_id, current_time)) {
+        yield {
+          uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
+          string lock_name = "sync_lock";
+          rgw::sal::RadosStore* store = sync_env->store;
+
+          lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
+                                                  rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
+                                                  lock_name, lock_duration, this, nullptr));
+          lease_stack.reset(spawn(lease_cr.get(), false));
+          lost_lock = false;
+        }
+        while (!lease_cr->is_locked()) {
+          if (lease_cr->is_done()) {
+            drain_all();
+            tn->log(5, "failed to take lease");
+            return lease_cr->get_ret_status();
+          }
+          set_sleeping(true);
+          yield;
+        }
+      } else {
+          yield {
+            set_status("writing sync status");
+            rgw::sal::RadosStore* store = sync_env->store;
+            call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(dpp, store,
+                                                              rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env->status_oid()),
+                                                              sync_status));
+          }
+
+          if (retcode < 0) {
+            set_status("failed to write sync status");
+            ldpp_dout(dpp, 0) << "ERROR: failed to write sync status, retcode=" << retcode << dendl;
+            yield lease_cr->go_down();
+            return set_cr_error(retcode);
+          }
+
+          yield lease_cr->go_down();
+
+          lease_cr.reset();
+
+          drain_all();
+
+      }
+*/
+    }
+    return 0;
+  }
+};
+
 class RGWMetaSyncCR : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
   const rgw_pool& pool;
