@@ -21,43 +21,10 @@
 #include <spawn/spawn.hpp>
 #include <gtest/gtest.h>
 
-struct RadosEnv : public ::testing::Environment {
- public:
-  static constexpr auto poolname = "ceph_test_rgw_throttle";
-
-  static std::optional<RGWSI_RADOS> rados;
-
-  void SetUp() override {
-    rados.emplace(g_ceph_context);
-    const NoDoutPrefix no_dpp(g_ceph_context, 1);
-    ASSERT_EQ(0, rados->start(null_yield, &no_dpp));
-    int r = rados->pool({poolname}).create(&no_dpp);
-    if (r == -EEXIST)
-      r = 0;
-    ASSERT_EQ(0, r);
-  }
-  void TearDown() override {
-    ASSERT_EQ(0, rados->get_rados_handle()->pool_delete(poolname));
-    rados->shutdown();
-    rados.reset();
-  }
-};
-std::optional<RGWSI_RADOS> RadosEnv::rados;
-
-auto *const rados_env = ::testing::AddGlobalTestEnvironment(new RadosEnv);
-
-// test fixture for global setup/teardown
-class RadosFixture : public ::testing::Test {
- protected:
-  RGWSI_RADOS::Obj make_obj(const std::string& oid) {
-    auto obj = RadosEnv::rados->obj({{RadosEnv::poolname}, oid});
-    const NoDoutPrefix no_dpp(g_ceph_context, 1);
-    ceph_assert_always(0 == obj.open(&no_dpp));
-    return obj;
-  }
-};
-
-using Aio_Throttle = RadosFixture;
+static rgw_raw_obj make_obj(const std::string& oid)
+{
+  return {{"testpool"}, oid};
+}
 
 namespace rgw {
 
@@ -90,7 +57,7 @@ auto wait_for(boost::asio::io_context& context, ceph::timespan duration) {
   };
 }
 
-TEST_F(Aio_Throttle, NoThrottleUpToMax)
+TEST(Aio_Throttle, NoThrottleUpToMax)
 {
   BlockingAioThrottle throttle(4);
   auto obj = make_obj(__PRETTY_FUNCTION__);
@@ -118,7 +85,7 @@ TEST_F(Aio_Throttle, NoThrottleUpToMax)
   }
 }
 
-TEST_F(Aio_Throttle, CostOverWindow)
+TEST(Aio_Throttle, CostOverWindow)
 {
   BlockingAioThrottle throttle(4);
   auto obj = make_obj(__PRETTY_FUNCTION__);
@@ -129,7 +96,7 @@ TEST_F(Aio_Throttle, CostOverWindow)
   EXPECT_EQ(-EDEADLK, c.front().result);
 }
 
-TEST_F(Aio_Throttle, ThrottleOverMax)
+TEST(Aio_Throttle, ThrottleOverMax)
 {
   constexpr uint64_t window = 4;
   BlockingAioThrottle throttle(window);
@@ -167,7 +134,7 @@ TEST_F(Aio_Throttle, ThrottleOverMax)
   EXPECT_EQ(window, max_outstanding);
 }
 
-TEST_F(Aio_Throttle, YieldCostOverWindow)
+TEST(Aio_Throttle, YieldCostOverWindow)
 {
   auto obj = make_obj(__PRETTY_FUNCTION__);
 
@@ -183,7 +150,7 @@ TEST_F(Aio_Throttle, YieldCostOverWindow)
   context.run();
 }
 
-TEST_F(Aio_Throttle, YieldingThrottleOverMax)
+TEST(Aio_Throttle, YieldingThrottleOverMax)
 {
   constexpr uint64_t window = 4;
 
