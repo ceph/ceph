@@ -176,6 +176,35 @@ client_t Capability::get_client() const
   return session ? session->get_client() : client_t(-1);
 }
 
+int Capability::confirm_receipt(ceph_seq_t seq, unsigned caps) {
+  int was_revoking = (_issued & ~_pending);
+  if (seq == last_sent) {
+    _revokes.clear();
+    _issued = caps;
+    // don't add bits
+    _pending &= caps;
+  } else {
+    // can i forget any revocations?
+    while (!_revokes.empty() && _revokes.front().seq < seq)
+      _revokes.pop_front();
+    if (!_revokes.empty()) {
+      if (_revokes.front().seq == seq)
+        _revokes.begin()->before = caps;
+      calc_issued();
+    } else {
+      // seq < last_sent
+      _issued = caps | _pending;
+    }
+  }
+
+  if (was_revoking && _issued == _pending) {
+    item_revoking_caps.remove_myself();
+    item_client_revoking_caps.remove_myself();
+    maybe_clear_notable();
+  }
+  return was_revoking & ~_issued; // return revoked
+}
+
 bool Capability::is_stale() const
 {
   return session ? session->is_stale() : false;
