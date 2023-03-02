@@ -159,7 +159,11 @@ realm enforces a globally unique namespace within itself.
 
       radosgw-admin realm create --rgw-realm=movies --default
 
-   .. note:: If you intend the cluster to have a single realm, specify the ``--default`` flag.  If ``--default`` is specified, ``radosgw-admin`` uses this realm by default. If ``--default`` is not specified, you must specify either the ``--rgw-realm`` flag or the ``--realm-id`` flag to identify the realm when adding zonegroups and zones.
+   .. note:: If you intend the cluster to have a single realm, specify the ``--default`` flag.  
+
+      If ``--default`` is specified, ``radosgw-admin`` uses this realm by default. 
+      
+      If ``--default`` is not specified, you must specify either the ``--rgw-realm`` flag or the ``--realm-id`` flag to identify the realm when adding zonegroups and zones.
 
 #. After the realm has been created, ``radosgw-admin`` echoes back the realm
    configuration. For example:
@@ -195,7 +199,11 @@ for the realm.
 
       radosgw-admin zonegroup create --rgw-zonegroup=us --endpoints=http://rgw1:80 --rgw-realm=movies --master --default
 
-   .. note:: If the realm will have only a single zonegroup, specify the ``--default`` flag. If ``--default`` is specified, ``radosgw-admin`` uses this zonegroup by default when adding new zones. If ``--default`` is not specified, you must use either the ``--rgw-zonegroup`` flag or the ``--zonegroup-id`` flag to identify the zonegroup when adding or modifying zones.
+   .. note:: If the realm will have only a single zonegroup, specify the ``--default`` flag. 
+
+      If ``--default`` is specified, ``radosgw-admin`` uses this zonegroup by default when adding new zones. 
+      
+      If ``--default`` is not specified, you must use either the ``--rgw-zonegroup`` flag or the ``--zonegroup-id`` flag to identify the zonegroup when adding or modifying zones.
 
 #. After creating the master zonegroup, ``radosgw-admin`` echoes back the
    zonegroup configuration. For example:
