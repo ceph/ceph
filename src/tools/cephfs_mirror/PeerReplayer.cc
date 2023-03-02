@@ -299,6 +299,9 @@ boost::optional<std::string> PeerReplayer::pick_directory() {
 
   boost::optional<std::string> candidate;
   for (auto &dir_root : m_directories) {
+    if (m_directories.find(dir_root) == m_directories.end()) {
+      continue;
+    }
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     if (sync_stat.failed) {
       std::chrono::duration<double> d = now - *sync_stat.last_failed;
