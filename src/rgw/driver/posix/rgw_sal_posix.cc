@@ -110,7 +110,7 @@ int POSIXDriver::get_user_by_access_key(const DoutPrefixProvider* dpp, const std
   if (ret != 0)
     return ret;
 
-  User* u = new FilterUser(std::move(nu));
+  User* u = new POSIXUser(std::move(nu), this);
   user->reset(u);
   return 0;
 }
@@ -124,7 +124,7 @@ int POSIXDriver::get_user_by_email(const DoutPrefixProvider* dpp, const std::str
   if (ret != 0)
     return ret;
 
-  User* u = new FilterUser(std::move(nu));
+  User* u = new POSIXUser(std::move(nu), this);
   user->reset(u);
   return 0;
 }
@@ -138,7 +138,7 @@ int POSIXDriver::get_user_by_swift(const DoutPrefixProvider* dpp, const std::str
   if (ret != 0)
     return ret;
 
-  User* u = new FilterUser(std::move(nu));
+  User* u = new POSIXUser(std::move(nu), this);
   user->reset(u);
   return 0;
 }
@@ -863,7 +863,13 @@ int POSIXObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
   for (auto& it : *setattrs) {
 	  state.attrset[it.first] = it.second;
   }
-  /* TODO Write out attrs */
+
+  for (auto& it : state.attrset) {
+	  int ret = write_attr(dpp, y, it.first, it.second);
+	  if (ret < 0) {
+	    return ret;
+	  }
+  }
   return 0;
 }
 
@@ -891,6 +897,7 @@ int POSIXObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
   while (buflen > 0) {
     std::string value;
     ssize_t vallen, keylen;
+    char* vp;
 
     keylen = strlen(keyptr) + 1;
     std::string key(keyptr);
@@ -909,8 +916,7 @@ int POSIXObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
     vallen = fgetxattr(obj_fd, keyptr, nullptr, 0);
     if (vallen < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for object " << get_name() << ": "
-	<< cpp_strerror(ret) << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for object " << get_name() << ": " << cpp_strerror(ret) << dendl;
       return -ret;
     } else if (vallen == 0) {
       /* No attribute value for this name */
@@ -920,17 +926,17 @@ int POSIXObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
     }
 
     value.reserve(vallen + 1);
+    vp = &value[0];
 
-    vallen = fgetxattr(obj_fd, keyptr, &value[0], vallen);
+    vallen = fgetxattr(obj_fd, keyptr, vp, vallen);
     if (vallen < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for object " << get_name() << ": "
-	<< cpp_strerror(ret) << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for object " << get_name() << ": " << cpp_strerror(ret) << dendl;
       return -ret;
     }
 
     bufferlist bl;
-    bl.append(value);
+    bl.append(vp, vallen);
     state.attrset.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
 
     buflen -= keylen;
@@ -1088,7 +1094,7 @@ int POSIXObject::stat(const DoutPrefixProvider* dpp)
 		  STATX_ALL, &stx);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not stat bucket " << get_name() << ": "
+    ldpp_dout(dpp, 0) << "ERROR: could not stat object " << get_name() << ": "
                   << cpp_strerror(ret) << dendl;
     return -ret;
   }
@@ -1137,7 +1143,7 @@ int POSIXObject::open(const DoutPrefixProvider* dpp)
   return 0;
 }
 
-int POSIXObject::close(const DoutPrefixProvider* dpp)
+int POSIXObject::close()
 {
   if (obj_fd < 0) {
     return 0;
@@ -1151,39 +1157,145 @@ int POSIXObject::close(const DoutPrefixProvider* dpp)
 int POSIXObject::read(int64_t ofs, int64_t end, bufferlist& bl,
 		      const DoutPrefixProvider* dpp, optional_yield y)
 {
-  int64_t len = std::min(end - ofs, READ_SIZE);
+  int64_t len = std::min(end - ofs + 1, READ_SIZE);
+  ssize_t ret;
 
-  return ::read(obj_fd, read_buf, len);
+  ret = lseek(obj_fd, ofs, SEEK_SET);
+  if (ret < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
+      << ofs << " :" << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  ret = ::read(obj_fd, read_buf, len);
+  if (ret < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not read object " << get_name() << ": "
+                  << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  bl.append(read_buf, ret);
+
+  return ret;
+}
+
+int POSIXObject::write_attr(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& value)
+{
+  int ret;
+  std::string attrname;
+
+  ret = open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  attrname = ATTR_PREFIX + key;
+
+  ret = fsetxattr(obj_fd, attrname.c_str(), value.c_str(), value.length(), 0);
+  if (ret < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not write attribute " << attrname << " for object " << get_name() << ": " << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  return 0;
 }
 
 int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  return source->open(dpp);
+  int ret = source->open(dpp);
+  if (ret < 0)
+    return ret;
+
+  ret = source->stat(dpp);
+  if (ret < 0)
+    return ret;
+
+  ret = source->get_obj_attrs(y, dpp);
+  if (ret < 0)
+    return ret;
+
+  auto iter = source->get_attrs().find(RGW_ATTR_ETAG);
+  if (iter == source->get_attrs().end()) {
+    /* Sideloaded file.  Generate necessary attributes. Only done once. */
+    int ret = source->generate_attrs(dpp, y);
+    if (ret < 0) {
+	ldpp_dout(dpp, 0) << " ERROR: could not generate attrs for " << source->get_name() << " error: " << cpp_strerror(ret) << dendl;
+	return ret;
+    }
+  }
+
+  return 0;
 }
 
 int POSIXObject::POSIXReadOp::read(int64_t ofs, int64_t end, bufferlist& bl,
 				     optional_yield y, const DoutPrefixProvider* dpp)
 {
-  return source->read(ofs, end, bl, dpp, y);
+  return source->read(ofs, end + 1, bl, dpp, y);
+}
+
+int POSIXObject::generate_attrs(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  int64_t left = get_obj_size();
+  int64_t cur_ofs = 0;
+  MD5 hash;
+  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  bufferlist etag_bl;
+
+  while (left > 0) {
+    bufferlist bl;
+    int len = read(cur_ofs, left, bl, dpp, y);
+    if (len < 0) {
+	ldpp_dout(dpp, 0) << " ERROR: could not read " << get_name() <<
+	  " ofs: " << cur_ofs << " error: " << cpp_strerror(len) << dendl;
+	return len;
+    } else if (len == 0) {
+      /* Done */
+      break;
+    }
+    hash.Update((const unsigned char *)bl.c_str(), bl.length());
+
+    left -= len;
+    cur_ofs += len;
+  }
+
+  hash.Final(m);
+  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+  etag_bl.append(calc_md5, sizeof(calc_md5));
+  (void)write_attr(dpp, y, RGW_ATTR_ETAG, etag_bl);
+  get_attrs().emplace(std::move(RGW_ATTR_ETAG), std::move(etag_bl));
+
+  return 0;
 }
 
 int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
-  int64_t left = end - ofs;
+  int64_t left;
   int64_t cur_ofs = ofs;
+
+  if (end < 0)
+    left = 0;
+  else
+    left = end - ofs + 1;
 
   while (left > 0) {
     bufferlist bl;
-    int len = source->read(cur_ofs, end, bl, dpp, y);
+    int len = source->read(cur_ofs, left, bl, dpp, y);
     if (len < 0) {
 	ldpp_dout(dpp, 0) << " ERROR: could not read " << source->get_name() <<
-	  " ofs: " << ofs << " error: " << cpp_strerror(len) << dendl;
+	  " ofs: " << cur_ofs << " error: " << cpp_strerror(len) << dendl;
 	return len;
     } else if (len == 0) {
       /* Done */
-      return 0;
+      break;
     }
+
     /* Read some */
     int ret = cb->handle_data(bl, cur_ofs, cur_ofs + len);
     if (ret < 0) {
