@@ -4868,7 +4868,6 @@ void RGWPutMetadataObject::pre_exec()
 
 void RGWPutMetadataObject::execute(optional_yield y)
 {
-  rgw_obj target_obj;
   rgw::sal::Attrs attrs, rmattrs;
 
   s->object->set_atomic();
@@ -4884,7 +4883,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
   }
 
   /* check if obj exists, read orig attrs */
-  op_ret = s->object->get_obj_attrs(s->yield, s, &target_obj);
+  op_ret = s->object->get_obj_attrs(s->yield, s);
   if (op_ret < 0) {
     return;
   }
