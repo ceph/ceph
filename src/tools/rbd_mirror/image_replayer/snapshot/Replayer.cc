@@ -290,6 +290,9 @@ bool Replayer<I>::get_replay_status(std::string* description,
     m_bytes_per_snapshot);
   root_obj["bytes_per_snapshot"] = round_to_two_places(bytes_per_snapshot);
 
+  root_obj["last_snapshot_sync_seconds"] = m_last_snapshot_sync_seconds;
+  root_obj["last_snapshot_bytes"] = m_last_snapshot_bytes;
+
   auto pending_bytes = bytes_per_snapshot * m_pending_snapshots;
   if (bytes_per_second > 0 && m_pending_snapshots > 0) {
     std::uint64_t seconds_until_synced = round_to_two_places(
@@ -1102,21 +1105,23 @@ void Replayer<I>::handle_copy_image(int r) {
 
   {
     std::unique_lock locker{m_lock};
+    m_last_snapshot_bytes = m_snapshot_bytes;
     m_bytes_per_snapshot(m_snapshot_bytes);
-    auto time = ceph_clock_now() - m_snapshot_replay_start;
+    utime_t duration = ceph_clock_now() - m_snapshot_replay_start;
+    m_last_snapshot_sync_seconds = duration.sec();
+
     if (g_snapshot_perf_counters) {
       g_snapshot_perf_counters->inc(l_rbd_mirror_snapshot_replay_bytes,
                                     m_snapshot_bytes);
       g_snapshot_perf_counters->inc(l_rbd_mirror_snapshot_replay_snapshots);
       g_snapshot_perf_counters->tinc(
-        l_rbd_mirror_snapshot_replay_snapshots_time, time);
+        l_rbd_mirror_snapshot_replay_snapshots_time, duration);
     }
     if (m_perf_counters) {
       m_perf_counters->inc(l_rbd_mirror_snapshot_replay_bytes, m_snapshot_bytes);
       m_perf_counters->inc(l_rbd_mirror_snapshot_replay_snapshots);
-      m_perf_counters->tinc(l_rbd_mirror_snapshot_replay_snapshots_time, time);
+      m_perf_counters->tinc(l_rbd_mirror_snapshot_replay_snapshots_time, duration);
     }
-    m_snapshot_bytes = 0;
   }
 
   apply_image_state();
