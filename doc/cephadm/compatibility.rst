@@ -11,7 +11,7 @@ Compatibility with Podman Versions
 Podman and Ceph have different end-of-life strategies. This means that care
 must be taken in finding a version of Podman that is compatible with Ceph.
 
-These versions are expected to work:
+This table shows which version pairs are expected to work or not work together:
 
 
 +-----------+-----------------------------------------------+
@@ -31,8 +31,8 @@ These versions are expected to work:
 .. note::
 
   While not all podman versions have been actively tested against
-  all ceph versions, there are no known issues with using podman
-  of a version 3.0 or greater with ceph on quincy release or later.
+  all Ceph versions, there are no known issues with using podman
+  version 3.0 or greater with Ceph Quincy and later releases.
 
 .. warning:: 
 
@@ -49,9 +49,9 @@ These versions are expected to work:
 Stability
 ---------
 
-Cephadm is relatively stable nowadays, but new functionality is still being
-added and bugs are occasionally discovered. If any issues are found, please
-open a tracker issue under the orchestrator component (https://tracker.ceph.com/projects/orchestrator/issues)
+Cephadm is relatively stable but new functionality is still being
+added and bugs are occasionally discovered. If issues are found, please
+open a tracker issue under the Orchestrator component (https://tracker.ceph.com/projects/orchestrator/issues)
 
 Cephadm support remains under development for the following features:
 
