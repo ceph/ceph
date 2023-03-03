@@ -2107,11 +2107,11 @@ int64_t BlueFS::_read_random(
   logger->inc(l_bluefs_read_random_count, 1);
   logger->inc(l_bluefs_read_random_bytes, len);
 
-  std::shared_lock s_lock(h->lock);
+  std::unique_lock u_lock(h->lock);
   buf->bl.reassign_to_mempool(mempool::mempool_bluefs_file_reader);
   while (len > 0) {
     if (off < buf->bl_off || off >= buf->get_buf_end()) {
-      s_lock.unlock();
+      u_lock.unlock();
       uint64_t x_off = 0;
       auto p = h->file->fnode.seek(off, &x_off);
       ceph_assert(p != h->file->fnode.extents.end());
@@ -2138,7 +2138,7 @@ int64_t BlueFS::_read_random(
       logger->inc(l_bluefs_read_random_disk_count, 1);
       logger->inc(l_bluefs_read_random_disk_bytes, l);
       if (len > 0) {
-	s_lock.lock();
+	u_lock.lock();
       }
     } else {
       auto left = buf->get_buf_remaining(off);
@@ -2149,10 +2149,13 @@ int64_t BlueFS::_read_random(
 	      << " 0x" << off << "~" << len << std::dec
 	      << dendl;
 
-      auto p = buf->bl.begin();
-      p.seek(off - buf->bl_off);
+      auto p0 = buf->bl.begin();
+      auto p = p0;
+      auto o = off - buf->bl_off;
+      p.seek(o);
       p.copy(r, out);
       out += r;
+      o += r;
 
       dout(30) << __func__ << " result chunk (0x"
 	       << std::hex << r << std::dec << " bytes):\n";
@@ -2161,6 +2164,26 @@ int64_t BlueFS::_read_random(
       t.hexdump(*_dout);
       *_dout << dendl;
 
+      // Trim cache buffer's head if we've passed it.
+      if (p.end()) {
+        buf->bl.clear();
+        buf->bl_off = 0;
+      } else {
+        auto ptr = p.get_current_ptr();
+        // do cheap trimming which requires no data copying only.
+        if(!p0.is_pointing_same_raw(ptr)) {
+          ceph_assert(o >= ptr.offset());
+          o -= ptr.offset();
+          auto remaining = p.get_remaining() + ptr.offset();
+
+          bufferlist bl_tmp;
+          buf->bl.splice(o, remaining, &bl_tmp);
+          ceph_assert(bl_tmp.length());
+          bl_tmp.reassign_to_mempool(mempool::mempool_bluefs_file_reader);
+          buf->bl.swap(bl_tmp);
+          buf->bl_off += o;
+        }
+      }
       off += r;
       len -= r;
       ret += r;
