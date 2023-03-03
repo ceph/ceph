@@ -206,7 +206,7 @@ block_sm_superblock_t make_superblock(
   using crimson::common::get_conf;
 
   auto config_size = get_conf<Option::size_t>(
-    "seastore_device_size");
+    "seastore_device_size")/seastar::smp::count;
 
   size_t size = (data.size == 0) ? config_size : data.size;
 
@@ -530,7 +530,8 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(
     check_create_device_ret maybe_create = check_create_device_ertr::now();
     using crimson::common::get_conf;
     if (get_conf<bool>("seastore_block_create")) {
-      auto size = get_conf<Option::size_t>("seastore_device_size");
+      auto size =
+        get_conf<Option::size_t>("seastore_device_size")/seastar::smp::count;
       maybe_create = check_create_device(device_path, size);
     }
 

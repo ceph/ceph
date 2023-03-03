@@ -158,25 +158,25 @@ CompatSet get_osd_initial_compat_set()
 
 seastar::future<> OSD::open_meta_coll()
 {
-  return store.open_collection(
+  return store.get_sharded_store().open_collection(
     coll_t::meta()
   ).then([this](auto ch) {
-    pg_shard_manager.init_meta_coll(ch, store);
+    pg_shard_manager.init_meta_coll(ch, store.get_sharded_store());
     return seastar::now();
   });
 }
 
 seastar::future<OSDMeta> OSD::open_or_create_meta_coll(FuturizedStore &store)
 {
-  return store.open_collection(coll_t::meta()).then([&store](auto ch) {
+  return store.get_sharded_store().open_collection(coll_t::meta()).then([&store](auto ch) {
     if (!ch) {
-      return store.create_new_collection(
+      return store.get_sharded_store().create_new_collection(
 	coll_t::meta()
       ).then([&store](auto ch) {
-	return OSDMeta(ch, store);
+	return OSDMeta(ch, store.get_sharded_store());
       });
     } else {
-      return seastar::make_ready_future<OSDMeta>(ch, store);
+      return seastar::make_ready_future<OSDMeta>(ch, store.get_sharded_store());
     }
   });
 }
@@ -269,7 +269,7 @@ seastar::future<> OSD::_write_superblock(
 	  meta_coll.create(t);
 	  meta_coll.store_superblock(t, superblock);
 	  logger().debug("OSD::_write_superblock: do_transaction...");
-	  return store.do_transaction(
+	  return store.get_sharded_store().do_transaction(
 	    meta_coll.collection(),
 	    std::move(t));
 	}),
@@ -354,15 +354,14 @@ seastar::future<> OSD::start()
 
   startup_time = ceph::mono_clock::now();
 
-  return pg_shard_manager.start(
+  return store.start().then([this] {
+    return pg_shard_manager.start(
     whoami, *cluster_msgr,
-    *public_msgr, *monc, *mgrc, store
-  ).then([this] {
+    *public_msgr, *monc, *mgrc, store);
+  }).then([this] {
     heartbeat.reset(new Heartbeat{
 	whoami, get_shard_services(),
 	*monc, *hb_front_msgr, *hb_back_msgr});
-    return store.start();
-  }).then([this] {
     return store.mount().handle_error(
       crimson::stateful_ec::handle([] (const auto& ec) {
         logger().error("error mounting object store in {}: ({}) {}",
@@ -387,7 +386,7 @@ seastar::future<> OSD::start()
   }).then([this] {
     pg_shard_manager.got_map(osdmap->get_epoch());
     bind_epoch = osdmap->get_epoch();
-    return pg_shard_manager.load_pgs();
+    return pg_shard_manager.load_pgs(store);
   }).then([this] {
 
     uint64_t osd_required =
@@ -910,7 +909,7 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
       pg_shard_manager.get_meta_coll().store_superblock(t, superblock);
       pg_shard_manager.set_superblock(superblock);
       logger().debug("OSD::handle_osd_map: do_transaction...");
-      return store.do_transaction(
+      return store.get_sharded_store().do_transaction(
 	pg_shard_manager.get_meta_coll().collection(),
 	std::move(t));
     });

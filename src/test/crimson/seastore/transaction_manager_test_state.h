@@ -179,7 +179,7 @@ protected:
     num_main_device_managers(num_main_device_managers),
     num_cold_device_managers(num_cold_device_managers) {}
 
-  virtual void _init() = 0;
+  virtual seastar::future<> _init() = 0;
 
   virtual void _destroy() = 0;
   virtual seastar::future<> _teardown() = 0;
@@ -197,8 +197,9 @@ protected:
     SUBINFO(test, "begin ...");
     return teardown().then([this] {
       devices->remount();
-      _init();
-      return _mount().handle_error(crimson::ct_error::assert_all{});
+      return _init().then([this] {
+        return _mount().handle_error(crimson::ct_error::assert_all{});
+      });
     }).then([FNAME] {
       SUBINFO(test, "finish");
     });
@@ -225,16 +226,17 @@ protected:
     }
     SUBINFO(test, "begin with {} devices ...", devices->get_num_devices());
     return devices->setup(
-    ).then([this, FNAME]() {                                                               
-      _init();
-      return _mkfs(
+    ).then([this]() {
+      return _init();
+    }).then([this, FNAME] {
+        return _mkfs(
       ).safe_then([this] {
-	return restart_fut();                                                               
+	return restart_fut();
       }).handle_error(
-	crimson::ct_error::assert_all{}                                                     
+	crimson::ct_error::assert_all{}
       ).then([FNAME] {
-	SUBINFO(test, "finish");                                                            
-      });                                                                                   
+	SUBINFO(test, "finish");
+      });
     });   
   }
 
@@ -261,13 +263,14 @@ protected:
   TMTestState(std::size_t num_main_devices, std::size_t num_cold_devices)
     : EphemeralTestState(num_main_devices, num_cold_devices) {}
 
-  virtual void _init() override {
+  virtual seastar::future<> _init() override {
     auto sec_devices = devices->get_secondary_devices();
     auto p_dev = devices->get_primary_device();
     tm = make_transaction_manager(p_dev, sec_devices, true);
     epm = tm->get_epm();
     lba_manager = tm->get_lba_manager();
     cache = tm->get_cache();
+    return seastar::now();
   }
 
   virtual void _destroy() override {
@@ -407,10 +410,10 @@ protected:
 
   SeaStoreTestState() : EphemeralTestState(1, 0) {}
 
-  virtual void _init() final {
+  virtual seastar::future<> _init() final {
     seastore = make_test_seastore(
-      devices->get_primary_device_ref(),
       std::make_unique<TestMDStoreState::Store>(mdstore_state.get_mdstore()));
+    return seastore->test_start(devices->get_primary_device_ref());
   }
 
   virtual void _destroy() final {
