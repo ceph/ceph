@@ -2748,9 +2748,8 @@ int RGWRados::BucketShard::init(const DoutPrefixProvider *dpp,
   bucket = bucket_info.bucket;
   shard_id = sid;
 
-  int ret = store->svc.bi_rados->open_bucket_index_shard(dpp, bucket_info, shard_id,
-                                                         num_shards(index), index.gen,
-                                                         &bucket_obj);
+  int ret = store->svc.bi_rados->open_bucket_index_shard(dpp, bucket_info, index,
+                                                         shard_id, &bucket_obj);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
     return ret;

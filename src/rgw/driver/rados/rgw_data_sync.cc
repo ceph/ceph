@@ -3621,8 +3621,8 @@ public:
 	  }
 	  if (!no_zero) {
 	    yield {
-	      const int num_shards0 =
-		source_info.layout.logs.front().layout.in_index.layout.num_shards;
+	      const int num_shards0 = rgw::num_shards(
+		source_info.layout.logs.front().layout.in_index.layout);
 	      call(new CheckAllBucketShardStatusIsIncremental(sc, sync_pair,
 							      num_shards0,
 							      &all_incremental));
