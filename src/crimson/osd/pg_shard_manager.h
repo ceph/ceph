@@ -10,8 +10,11 @@
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/pg_map.h"
 
-namespace crimson::osd {
+namespace crimson::os {
+  class FuturizedStore;
+}
 
+namespace crimson::osd {
 /**
  * PGShardManager
  *
@@ -264,7 +267,7 @@ public:
       });
   }
 
-  seastar::future<> load_pgs();
+  seastar::future<> load_pgs(crimson::os::FuturizedStore& store);
   seastar::future<> stop_pgs();
 
   seastar::future<std::map<pg_t, pg_stat_t>> get_pg_stats() const;

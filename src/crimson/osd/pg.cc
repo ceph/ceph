@@ -591,7 +591,7 @@ void PG::init(
     new_acting_primary, history, pi, t);
 }
 
-seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
+seastar::future<> PG::read_state(crimson::os::FuturizedStore::Shard* store)
 {
   if (__builtin_expect(stopping, false)) {
     return seastar::make_exception_future<>(
