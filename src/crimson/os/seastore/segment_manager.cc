@@ -52,7 +52,7 @@ LOG_PREFIX(SegmentManager::get_segment_manager);
     static_cast<size_t>(0),
     [&](auto &nr_zones) {
       return seastar::open_file_dma(
-	device + "/block",
+	device + "/block" + std::to_string(seastar::this_shard_id()),
 	seastar::open_flags::rw
       ).then([&](auto file) {
 	return seastar::do_with(
@@ -67,11 +67,11 @@ LOG_PREFIX(SegmentManager::get_segment_manager);
 	if (nr_zones != 0) {
 	  return std::make_unique<
 	    segment_manager::zns::ZNSSegmentManager
-	    >(device + "/block");
+	    >(device + "/block" + std::to_string(seastar::this_shard_id()));
 	} else {
 	  return std::make_unique<
 	    segment_manager::block::BlockSegmentManager
-	    >(device + "/block", dtype);
+	    >(device + "/block" + std::to_string(seastar::this_shard_id()), dtype);
 	}
       });
     });
@@ -79,7 +79,7 @@ LOG_PREFIX(SegmentManager::get_segment_manager);
   return seastar::make_ready_future<crimson::os::seastore::SegmentManagerRef>(
     std::make_unique<
       segment_manager::block::BlockSegmentManager
-    >(device + "/block", dtype));
+    >(device + "/block" + std::to_string(seastar::this_shard_id()), dtype));
 #endif
 }
 

@@ -45,10 +45,10 @@ seastar::future<> PGShardManager::stop()
   });
 }
 
-seastar::future<> PGShardManager::load_pgs()
+seastar::future<> PGShardManager::load_pgs(crimson::os::FuturizedStore& store)
 {
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
-  return get_local_state().store.list_collections(
+  return store.list_collections(
   ).then([this](auto colls_cores) {
     return seastar::parallel_for_each(
       colls_cores,

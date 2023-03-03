@@ -65,7 +65,7 @@ class PerShardState {
 #define assert_core() ceph_assert(seastar::this_shard_id() == core);
 
   const int whoami;
-  crimson::os::FuturizedStore &store;
+  crimson::os::FuturizedStore::Shard &store;
   crimson::common::CephContext cct;
 
   PerfCounters *perf = nullptr;
@@ -374,7 +374,7 @@ public:
 
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
 
-  crimson::os::FuturizedStore &get_store() {
+  crimson::os::FuturizedStore::Shard &get_store() {
     return local_state.store;
   }
 
