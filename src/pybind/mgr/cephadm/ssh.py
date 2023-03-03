@@ -142,11 +142,13 @@ class SSHManager:
                                cmd: List[str],
                                stdin: Optional[str] = None,
                                addr: Optional[str] = None,
+                               log_command: Optional[bool] = True,
                                ) -> Tuple[str, str, int]:
         conn = await self._remote_connection(host, addr)
         sudo_prefix = "sudo " if self.mgr.ssh_user != 'root' else ""
         cmd = sudo_prefix + " ".join(quote(x) for x in cmd)
-        logger.debug(f'Running command: {cmd}')
+        if log_command:
+            logger.debug(f'Running command: {cmd}')
         try:
             r = await conn.run(f'{sudo_prefix}true', check=True, timeout=5)
             r = await conn.run(cmd, input=stdin)
@@ -184,16 +186,18 @@ class SSHManager:
                         cmd: List[str],
                         stdin: Optional[str] = None,
                         addr: Optional[str] = None,
+                        log_command: Optional[bool] = True
                         ) -> Tuple[str, str, int]:
-        return self.mgr.wait_async(self._execute_command(host, cmd, stdin, addr))
+        return self.mgr.wait_async(self._execute_command(host, cmd, stdin, addr, log_command))
 
     async def _check_execute_command(self,
                                      host: str,
                                      cmd: List[str],
                                      stdin: Optional[str] = None,
                                      addr: Optional[str] = None,
+                                     log_command: Optional[bool] = True
                                      ) -> str:
-        out, err, code = await self._execute_command(host, cmd, stdin, addr)
+        out, err, code = await self._execute_command(host, cmd, stdin, addr, log_command)
         if code != 0:
             msg = f'Command {cmd} failed. {err}'
             logger.debug(msg)
@@ -205,8 +209,9 @@ class SSHManager:
                               cmd: List[str],
                               stdin: Optional[str] = None,
                               addr: Optional[str] = None,
+                              log_command: Optional[bool] = True,
                               ) -> str:
-        return self.mgr.wait_async(self._check_execute_command(host, cmd, stdin, addr))
+        return self.mgr.wait_async(self._check_execute_command(host, cmd, stdin, addr, log_command))
 
     async def _write_remote_file(self,
                                  host: str,

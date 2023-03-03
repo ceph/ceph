@@ -402,6 +402,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=True,
             desc='Pass --cgroups=split when cephadm creates containers (currently podman only)'
         ),
+        Option(
+            'log_refresh_metadata',
+            type='bool',
+            default=False,
+            desc='Log all refresh metadata. Includes daemon, device, and host info collected regularly. Only has effect if logging at debug level'
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -473,6 +479,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.max_osd_draining_count = 10
             self.device_enhanced_scan = False
             self.cgroups_split = True
+            self.log_refresh_metadata = False
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
