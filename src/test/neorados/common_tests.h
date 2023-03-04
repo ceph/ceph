@@ -111,6 +111,24 @@ auto create_obj(neorados::RADOS& r, std::string_view oid,
 		   std::forward<CompletionToken>(token));
 }
 
+/// \brief Expect a error from a coroutine
+///
+/// \param coro Awaitable coroutine
+/// \param ec Code to compare against
+template<typename Coro, typename Code>
+boost::asio::awaitable<void> expect_error_code(Coro&& coro,
+					       const Code ec) {
+  bool failed = false;
+  try {
+    co_await std::forward<Coro>(coro);
+  } catch (const boost::system::system_error& e) {
+    failed = true;
+    EXPECT_EQ(ec, e.code());
+  }
+  EXPECT_TRUE(failed);
+  co_return;
+}
+
 /// \brief Test harness for C++20 Coroutines
 ///
 /// C++20 coroutines are better than what we had before, but don't
