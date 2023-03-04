@@ -1384,7 +1384,7 @@ static inline int hexdigit(char c)
   return -EINVAL;
 }
 
-static inline int hex_to_buf(const char *hex, char *buf, int len)
+static inline int hex_to_buf(const char *hex, unsigned char *buf, int len)
 {
   int i = 0;
   const char *p = hex;
