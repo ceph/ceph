@@ -5879,6 +5879,8 @@ def get_deployment_container(ctx: CephadmContext,
     c = get_container(ctx, fsid, daemon_type, daemon_id, privileged, ptrace, container_args)
     if 'extra_container_args' in ctx and ctx.extra_container_args:
         c.container_args.extend(ctx.extra_container_args)
+    if 'extra_entrypoint_args' in ctx and ctx.extra_entrypoint_args:
+        c.args.extend(ctx.extra_entrypoint_args)
     if 'config_json' in ctx and ctx.config_json:
         conf_files = get_custom_config_files(ctx.config_json)
         mandatory_keys = ['mount_path', 'content']
@@ -9400,6 +9402,12 @@ def _get_parser():
         action='append',
         default=[],
         help='Additional container arguments to apply to deamon'
+    )
+    parser_deploy.add_argument(
+        '--extra-entrypoint-args',
+        action='append',
+        default=[],
+        help='Additional entrypoint arguments to apply to deamon'
     )
 
     parser_check_host = subparsers.add_parser(
