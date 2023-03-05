@@ -20,7 +20,7 @@ Overview
 
     | **The bigger the object, and the more accurate the query, the better the performance**.
  
-Basic workflow
+Basic Workflow
 --------------
     
     | S3-select query is sent to RGW via `AWS-CLI <https://docs.aws.amazon.com/cli/latest/reference/s3api/select-object-content.html>`_
@@ -38,7 +38,7 @@ Basic workflow
     | For aggregation queries the last chunk should be identified as the end of input, following that the s3-select-engine initiates end-of-process and produces an aggregated result.  
 
         
-Basic functionalities
+Basic Functionalities
 ~~~~~~~~~~~~~~~~~~~~~
 
     | **S3select** has a definite set of functionalities compliant with AWS.
@@ -263,10 +263,10 @@ NULL
 | A and A                         |  NULL                       |
 +---------------------------------+-----------------------------+
 
-s3-select function interfaces
+S3-select Function Interfaces
 -----------------------------
 
-Timestamp functions
+Timestamp Functions
 ~~~~~~~~~~~~~~~~~~~
     | The timestamp functionalities as described in `AWS-specs <https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-glacier-select-sql-reference-date.html>`_  is fully implemented.
 
@@ -356,7 +356,7 @@ to_string parameters
 +--------------+-----------------+-----------------------------------------------------------------------------------+
 
 
-Aggregation functions
+Aggregation Functions
 ~~~~~~~~~~~~~~~~~~~~~
 
     | ``count()`` : return integer according to number of rows matching condition(if such exist).
@@ -369,7 +369,7 @@ Aggregation functions
 
     | ``min(expression)`` : return the minimal result for all expressions matching condition(if such exist).
 
-String functions
+String Functions
 ~~~~~~~~~~~~~~~~
 
     | ``substring(string,from,to)`` : substring( string ``from`` start [ ``for`` length ] )
@@ -384,7 +384,7 @@ String functions
 
     | ``upper\lower`` : converts characters into lowercase/uppercase.
 
-SQL limit operator
+SQL Limit Operator
 ~~~~~~~~~~~~~~~~~~
 
     | The SQL LIMIT operator is used to limit the number of rows processed by the query.
@@ -399,32 +399,32 @@ Alias
 
     | There is a risk that self(or cyclic) reference may occur causing stack-overflow(endless-loop), for that concern upon evaluating an alias, it is validated for cyclic reference.
     
-    | Alias also maintains result-cache, meaning upon using the same alias more than once, it’s not evaluating the same expression again(it will return the same result),instead it uses the result from cache.
+    | Alias also maintains a result cache, meaning that successive uses of a given alias do not evaluate the expression again.  The result is instead returned from the cache.
 
-    | Of Course, per each new row the cache is invalidated.
+    | With each new row the cache is invalidated as the results may then differ.
 
 Testing
 ~~~~~~~
     
-    | s3select contains several testing frameworks which provide a large coverage for its functionalities.
+    | ``s3select`` contains several testing frameworks which provide a large coverage for its functionalities.
 
-    | (1) tests comparison against a trusted engine, meaning,  C/C++ compiler is a trusted expression evaluator, 
+    | (1) Tests comparison against a trusted engine, meaning,  C/C++ compiler is a trusted expression evaluator, 
     | since the syntax for arithmetical and logical expressions are identical (s3select compare to C) 
     | the framework runs equal expressions and validates their results.
     | A dedicated expression generator produces different sets of expressions per each new test session. 
 
-    | (2) compare results of queries whose syntax is different but semantically they are equal.
-    | this kind of test validates that different runtime flows produce an identical result, 
-    | on each run with a different dataset(random).
+    | (2) Compares results of queries whose syntax is different but which are semantically equivalent.
+    | This kind of test validates that different runtime flows produce an identical result 
+    | on each run with a different, random dataset.
 
-    | For one example, on a dataset which contains a random numbers(1-1000)
+    | For example, on a dataset which contains a random numbers(1-1000)
     | the following queries will produce identical results.
     | ``select count(*) from s3object where char_length(_3)=3;``
     | ``select count(*) from s3object where cast(_3 as int)>99 and cast(_3 as int)<1000;``
 
-    | (3) constant dataset, the conventional way of testing. A query is processing a constant dataset, its result is validated against constant results.   
+    | (3) Constant dataset, the conventional way of testing. A query is processing a constant dataset, its result is validated against constant results.   
 
-Additional syntax support
+Additional Syntax Support
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
     | S3select syntax supports table-alias ``select s._1 from s3object s where s._2 = ‘4’;``
@@ -437,12 +437,12 @@ Additional syntax support
 Sending Query to RGW
 --------------------
 
-   | Any http-client can send an s3-select request to RGW, it must be compliant with `AWS Request syntax <https://docs.aws.amazon.com/AmazonS3/latest/API/API_SelectObjectContent.html#API_SelectObjectContent_RequestSyntax>`_.
+   | Any HTTP client can send an ``s3-select`` request to RGW, which must be compliant with `AWS Request syntax <https://docs.aws.amazon.com/AmazonS3/latest/API/API_SelectObjectContent.html#API_SelectObjectContent_RequestSyntax>`_.
 
 
 
-   | Sending s3-select request to RGW using AWS CLI, should follow `AWS command reference <https://docs.aws.amazon.com/cli/latest/reference/s3api/select-object-content.html>`_.
-   | below is an example of it.
+   | When sending an ``s3-select`` request to RGW using AWS CLI, clients must follow `AWS command reference <https://docs.aws.amazon.com/cli/latest/reference/s3api/select-object-content.html>`_.
+   | Below is an example:
 
 ::
 
@@ -503,21 +503,21 @@ Output Serialization
    | **FieldDelimiter** -> (string)
    | The value used to separate individual fields in a record. You can specify an arbitrary delimiter.
 
-scan range option
+Scan Range Option
 ~~~~~~~~~~~~~~~~~
 
-   | The scan range option is a part of AWS-CLI syntax, it enables to scan and process only the selected part of the object. 
-   | This option reduces the amount of IO operations (by skipping).
+   | The scan range option to AWS-CLI enables the client to scan and process only a selected part of the object. 
+   | This option reduces input/output operations and bandwidth by skipping parts of the object that are not of interest.
    | TODO : different data-sources (CSV, JSON, Parquet)
 
-CSV parsing behavior
+CSV Parsing Behavior
 --------------------
 
-    | s3-select engine contains a CSV parser, which parses s3-objects as follows.   
-    | - each row ends with row-delimiter.
-    | - field-separator separates between adjacent columns, successive field separator defines NULL column.
-    | - quote-character overrides field separator, meaning, field separator becomes as any character between quotes.
-    | - escape character disables any special characters, except for row delimiter.
+    | The ``s3-select`` engine contains a CSV parser, which parses s3-objects as follows.   
+    | - Each row ends with ``row-delimiter``.
+    | - ``field-separator`` separates adjacent columns, successive instances of ``field separator`` define a NULL column.
+    | - ``quote-character`` overrides ``field separator``, meaning that ``field separator`` is treated like any character between quotes.
+    | - ``escape character`` disables interpretation of special characters, except for ``row delimiter``.
     
     | Below are examples of CSV parsing rules.
 
@@ -547,23 +547,22 @@ CSV parsing behavior
 JSON
 --------------------
 
-         | a JSON reader has been integrated with the s3select-engine, which allows the client to use SQL statements to scan and extract information from JSON documents. 
+         | A JSON reader has been integrated with the ``s3select-engine``, which allows the client to use SQL statements to scan and extract information from JSON documents. 
          | It should be noted that the data readers and parsers for CSV, Parquet, and JSON documents are separated from the SQL engine itself, so all of these readers use the same SQL engine.
 
          | It's important to note that values in a JSON document can be nested in various ways, such as within objects or arrays.
          | These objects and arrays can be nested within each other without any limitations.
-         | upon using SQL to query a specific value in a JSON document, the user needs to use a specific syntax to describe the location of the value.
-         | This is because the standard "select column from object" syntax will not work.
-         | Instead, the user must use a path in the SELECT statement to tell the JSON reader where the value is located.
+         | When using SQL to query a specific value in a JSON document, the client must specify the location of the value
+         | via a path in the SELECT statement.
 
          | The SQL engine processes the SELECT statement in a row-based fashion.
          | It uses the columns specified in the statement to perform its projection calculation, and each row contains values for these columns.
-         | In other words, the SQL engine processes each row one at a time(and aggregates results), using the values in the columns to perform its SQL calculations.
+         | In other words, the SQL engine processes each row one at a time (and aggregates results), using the values in the columns to perform SQL calculations.
          | However, the generic structure of a JSON document does not have a row-and-column structure like CSV or Parquet.
          | Instead, it is the SQL statement itself that defines the rows and columns when querying a JSON document.
 
-         | Upon querying JSON documents using SQL, the FROM clause in the SELECT statement defines the row boundaries.
-         | a row in a JSON document should be similar to how the row delimiter is used to define rows when querying CSV objects, and how row groups are used to define rows when querying Parquet objects.
+         | When querying JSON documents using SQL, the FROM clause in the SELECT statement defines the row boundaries.
+         | A row in a JSON document should be similar to how the row delimiter is used to define rows when querying CSV objects, and how row groups are used to define rows when querying Parquet objects.
          | The statement "SELECT ... FROM s3object[*].aaa.bb.cc" instructs the reader to search for the path "aaa.bb.cc" and defines the row boundaries based on the occurrence of this path.
          | A row begins when the reader encounters the path, and it ends when the reader exits the innermost part of the path, which in this case is the object "cc".
 
@@ -571,7 +570,7 @@ JSON
 
          | TODO : relevant example for object and array values.
 
-a JSON query example
+A JSON Query Example
 --------------------
 
 ::
