@@ -32,6 +32,9 @@ public:
   using with_obc_func_t =
     std::function<load_obc_iertr::future<> (ObjectContextRef)>;
 
+  using with_both_obc_func_t =
+    std::function<load_obc_iertr::future<> (ObjectContextRef, ObjectContextRef)>;
+
   template<RWState::State State>
   load_obc_iertr::future<> with_obc(hobject_t oid,
                                     with_obc_func_t&& func);
@@ -47,6 +50,14 @@ public:
   load_obc_iertr::future<> with_clone_obc_only(ObjectContextRef head,
                                                hobject_t oid,
                                                with_obc_func_t&& func);
+
+  // Use this variant in the case where both the head
+  // object *and* the matching clone object are being used
+  // in func.
+  template<RWState::State State>
+  load_obc_iertr::future<> with_head_and_clone_obc(
+    hobject_t oid,
+    with_both_obc_func_t&& func);
 
   template<RWState::State State>
   load_obc_iertr::future<> with_head_obc(ObjectContextRef obc,
