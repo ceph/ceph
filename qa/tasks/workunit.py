@@ -388,6 +388,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                 raise RuntimeError('Spec did not match any workunits: {spec!r}'.format(spec=spec))
             for workunit in to_run:
                 log.info('Running workunit %s...', workunit)
+                output_xml = f'{testdir}/archive/'
                 args = [
                     'mkdir', '-p', '--', scratch_tmp,
                     run.Raw('&&'),
@@ -421,10 +422,11 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                         workunit=workunit,
                     ),
                 ])
-                remote.run(
+                remote.run_unit_test(
                     logger=log.getChild(role),
                     args=args + optional_args,
-                    label="workunit test {workunit}".format(workunit=workunit)
+                    label="workunit test {workunit}".format(workunit=workunit),
+                    unittest_xml=output_xml
                 )
                 if cleanup:
                     args=['sudo', 'rm', '-rf', '--', scratch_tmp]

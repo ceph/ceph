@@ -42,9 +42,9 @@ TEST_F(LibRadosMiscPP, LongNamePP) {
   bufferlist bl;
   bl.append("content");
   int maxlen = g_conf()->osd_max_object_name_len;
-  ASSERT_EQ(0, ioctx.write(string(maxlen/2, 'a').c_str(), bl, bl.length(), 0));
-  ASSERT_EQ(0, ioctx.write(string(maxlen-1, 'a').c_str(), bl, bl.length(), 0));
-  ASSERT_EQ(0, ioctx.write(string(maxlen, 'a').c_str(), bl, bl.length(), 0));
+  ASSERT_EQ(10, ioctx.write(string(maxlen/2, 'a').c_str(), bl, bl.length(), 0));
+  ASSERT_EQ(10, ioctx.write(string(maxlen-1, 'a').c_str(), bl, bl.length(), 0));
+  ASSERT_EQ(10, ioctx.write(string(maxlen, 'a').c_str(), bl, bl.length(), 0));
   ASSERT_EQ(-ENAMETOOLONG, ioctx.write(string(maxlen+1, 'a').c_str(), bl, bl.length(), 0));
   ASSERT_EQ(-ENAMETOOLONG, ioctx.write(string(maxlen*2, 'a').c_str(), bl, bl.length(), 0));
 }
@@ -135,9 +135,9 @@ TEST_F(LibRadosMiscPP, LongAttrNamePP) {
   bufferlist bl;
   bl.append("content");
   int maxlen = g_conf()->osd_max_attr_name_len;
-  ASSERT_EQ(0, ioctx.setxattr("bigattrobj", string(maxlen/2, 'a').c_str(), bl));
-  ASSERT_EQ(0, ioctx.setxattr("bigattrobj", string(maxlen-1, 'a').c_str(), bl));
-  ASSERT_EQ(0, ioctx.setxattr("bigattrobj", string(maxlen, 'a').c_str(), bl));
+  ASSERT_EQ(10, ioctx.setxattr("bigattrobj", string(maxlen/2, 'a').c_str(), bl));
+  ASSERT_EQ(10, ioctx.setxattr("bigattrobj", string(maxlen-1, 'a').c_str(), bl));
+  ASSERT_EQ(10, ioctx.setxattr("bigattrobj", string(maxlen, 'a').c_str(), bl));
   ASSERT_EQ(-ENAMETOOLONG, ioctx.setxattr("bigattrobj", string(maxlen+1, 'a').c_str(), bl));
   ASSERT_EQ(-ENAMETOOLONG, ioctx.setxattr("bigattrobj", string(maxlen*2, 'a').c_str(), bl));
 }
@@ -289,8 +289,8 @@ TEST_F(LibRadosMiscPP, AioOperatePP) {
     bl2.append(buf2, sizeof(buf2));
     o.append(bl2);
   }
-  ASSERT_EQ(0, ioctx.aio_operate("foo", my_completion, &o));
-  ASSERT_EQ(0, my_completion->wait_for_complete_and_cb());
+  ASSERT_EQ(10, ioctx.aio_operate("foo", my_completion, &o));
+  ASSERT_EQ(10, my_completion->wait_for_complete_and_cb());
   ASSERT_EQ(my_aio_complete, true);
   my_completion->release();
 
