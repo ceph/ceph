@@ -82,6 +82,45 @@ using crimson::common::local_conf;
 
   template<RWState::State State>
   ObjectContextLoader::load_obc_iertr::future<>
+  ObjectContextLoader::with_head_and_clone_obc(
+    hobject_t oid,
+    with_both_obc_func_t&& func)
+  {
+    LOG_PREFIX(ObjectContextLoader::with_head_and_clone_obc);
+    assert(!oid.is_head());
+    return with_obc<RWState::RWREAD>(
+      oid.get_head(),
+      [FNAME, oid, func=std::move(func), this](auto head) mutable
+      -> load_obc_iertr::future<> {
+      if (!head->obs.exists) {
+        ERRORDPP("head doesn't exist for object {}", dpp, head->obs.oi.soid);
+        return load_obc_iertr::future<>{
+          crimson::ct_error::enoent::make()
+        };
+      }
+      auto coid = resolve_oid(head->get_head_ss(), oid);
+      if (!coid) {
+        ERRORDPP("clone {} not found", dpp, oid);
+        return load_obc_iertr::future<>{
+          crimson::ct_error::enoent::make()
+        };
+      }
+      auto [clone, existed] = obc_registry.get_cached_obc(*coid);
+      return clone->template with_lock<State, IOInterruptCondition>(
+        [existed=existed, clone=std::move(clone),
+         func=std::move(func), head=std::move(head), this]()
+        -> load_obc_iertr::future<> {
+        auto loaded = get_or_load_obc<State>(clone, existed);
+        return loaded.safe_then_interruptible(
+          [func = std::move(func), head=std::move(head)](auto clone) {
+          return std::move(func)(std::move(head), std::move(clone));
+        });
+      });
+    });
+  }
+
+  template<RWState::State State>
+  ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::with_obc(hobject_t oid,
                                 with_obc_func_t&& func)
   {
@@ -186,4 +225,9 @@ using crimson::common::local_conf;
   template ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::with_obc<RWState::RWEXCL>(hobject_t,
                                                  with_obc_func_t&&);
+
+  template ObjectContextLoader::load_obc_iertr::future<>
+  ObjectContextLoader::with_head_and_clone_obc<RWState::RWWRITE>(
+    hobject_t,
+    with_both_obc_func_t&&);
 }
