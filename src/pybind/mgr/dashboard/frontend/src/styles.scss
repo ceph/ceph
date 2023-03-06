@@ -218,11 +218,7 @@ a.btn-light {
   @extend .badge, .bg-dark;
 }
 
-json-schema-form {
-  .help-block {
-    @extend .invalid-feedback;
-  }
-
+formly-form {
   .ng-touched.ng-invalid {
     @extend .is-invalid;
   }
@@ -231,11 +227,13 @@ json-schema-form {
     @extend .is-valid;
   }
 
-  .close {
-    @extend .btn-close;
+  .form-label {
+    @extend .cd-col-form-label;
+    text-align: start;
+    width: 50%;
 
-    span {
-      display: none;
+    span[aria-hidden='true'] {
+      color: $danger;
     }
   }
 }
