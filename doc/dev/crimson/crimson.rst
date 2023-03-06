@@ -173,7 +173,7 @@ using ``vstart.sh``,
     for more Seastar specific command line options.
 
 ``--cyanstore``
-    use the CyanStore as the object store backend.
+    use CyanStore as the object store backend.
 
 ``--bluestore``
     use the alienized BlueStore as the object store backend. This is the default
@@ -181,6 +181,9 @@ using ``vstart.sh``,
 
 ``--memstore``
     use the alienized MemStore as the object store backend.
+
+``--seastore``
+    use SeaStore as the object store backend.
 
 So, a typical command to start a single-crimson-node cluster is::
 
