@@ -47,12 +47,13 @@ export class RgwZonegroupService {
   getZonegroupTree(zonegroup: RgwZonegroup, defaultZonegroupId: string, realm?: RgwRealm) {
     let nodes = {};
     nodes['id'] = zonegroup.id;
-    nodes['name'] = zonegroup.name + ' (zonegroup)';
+    nodes['name'] = zonegroup.name;
     nodes['info'] = zonegroup;
     nodes['icon'] = Icons.cubes;
     nodes['is_master'] = zonegroup.is_master;
     nodes['parent'] = realm ? realm.name : '';
     nodes['is_default'] = zonegroup.id === defaultZonegroupId ? true : false;
+    nodes['type'] = 'zonegroup';
     return nodes;
   }
 }

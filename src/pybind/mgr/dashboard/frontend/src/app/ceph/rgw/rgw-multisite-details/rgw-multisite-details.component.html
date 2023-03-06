@@ -26,6 +26,10 @@
                   <i [ngClass]="node.data.icon"></i>
                     {{ node.data.name }}
                 </span>
+                <span *ngIf="node.data.type"
+                      class="badge badge-info me-3">
+                    {{ node.data.type }}
+                </span>
                 <span class="badge badge-success me-2"
                       *ngIf="node.data.is_default">
                   default
@@ -34,6 +38,17 @@
                       *ngIf="node.data.is_master">
                   master
                 </span>
+                <div class="btn-group align-inline-btns"
+                     *ngIf="node.isFocused && node.data.type === 'realm'"
+                     role="group">
+                  <button type="button"
+                          [title]="title"
+                          class="btn btn-light dropdown-toggle-split ms-1"
+                          (click)="openModal(node, true)"
+                          ngbDropdownToggle>
+                    <i [ngClass]="[icons.edit]"></i>
+                  </button>
+                </div>
               </ng-template>
             </tree-root>
           </div>
