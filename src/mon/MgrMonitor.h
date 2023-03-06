@@ -45,7 +45,13 @@ class MgrMonitor: public PaxosService
    * @return true if a standby was promoted
    */
   bool promote_standby();
-  void drop_active();
+
+  /**
+   * Drop the active daemon from the MgrMap. No promotion is performed.
+   *
+   * @return whether PAXOS was plugged by this method
+   */
+  bool drop_active();
 
   /**
    * Remove this gid from the list of standbys.  By default,
