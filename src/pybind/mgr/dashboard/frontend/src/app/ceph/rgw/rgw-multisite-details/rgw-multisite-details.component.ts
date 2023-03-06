@@ -103,7 +103,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   }
 
   openModal(entity: any, edit = false) {
-    const entityName = edit ? entity.data.name : entity;
+    const entityName = edit ? entity.data.type : entity;
     const action = edit ? 'edit' : 'create';
     const initialState = {
       resource: entityName,

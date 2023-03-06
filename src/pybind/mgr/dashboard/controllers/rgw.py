@@ -746,6 +746,16 @@ class RgwRealm(RESTController):
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
 
+    @allow_empty_body
+    # pylint: disable=W0613
+    def set(self, realm_name, default, new_realm_name, daemon_name=None):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.edit_realm(realm_name, default, new_realm_name)
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
 
 @APIRouter('/rgw/zonegroup', Scope.RGW)
 class RgwZonegroup(RESTController):
