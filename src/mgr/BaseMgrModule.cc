@@ -1392,6 +1392,14 @@ ceph_register_client(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "s:ceph_register_client", &addrs)) {
     return nullptr;
   }
+  C
+    auto c = new LambdaContext([command_c, self](int command_r){
+      self->py_modules->get_objecter().wait_for_latest_osdmap(
+	[command_c, command_r](boost::system::error_code) {
+	  command_c->complete(command_r);
+	});
+    });
+
   without_gil([&] {
     self->py_modules->register_client(self->this_module->get_name(), addrs);
   });

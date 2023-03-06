@@ -151,12 +151,20 @@ public:
     return std::forward<Callback>(cb)(mon_status_json, std::forward<Args>(args)...);
   }
 
+  void wait_for_mgrmap(Context* c) {
+    std::lock_guard l(lock);
+    waiting_for_mgrmap.push_back(c);
+  }
+
   void final_init();
   void shutdown();
   bool asok_command(std::string_view admin_command,
 		    const cmdmap_t& cmdmap,
 		    Formatter *f,
 		    std::ostream& ss);
+
+private:
+  std::vector<Context*> waiting_for_mgrmap;
 };
 
 #endif
