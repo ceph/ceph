@@ -36,7 +36,7 @@ seastar::future<DeviceRef>
 Device::make_device(const std::string& device, device_type_t dtype)
 {
   if (get_default_backend_of_device(dtype) == backend_type_t::SEGMENTED) {
-    return SegmentManager::get_segment_manager(device
+    return SegmentManager::get_segment_manager(device, dtype
     ).then([](DeviceRef ret) {
       return ret;
     });
