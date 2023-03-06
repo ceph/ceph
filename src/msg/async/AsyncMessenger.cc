@@ -324,7 +324,7 @@ void AsyncMessenger::ready()
 
   stack->ready();
   if (pending_bind) {
-    int err = bindv(pending_bind_addrs);
+    int err = bindv(pending_bind_addrs, saved_public_addrs);
     if (err) {
       lderr(cct) << __func__ << " postponed bind failed" << dendl;
       ceph_abort();
@@ -357,9 +357,11 @@ int AsyncMessenger::shutdown()
   return 0;
 }
 
-int AsyncMessenger::bind(const entity_addr_t &bind_addr)
+int AsyncMessenger::bind(const entity_addr_t &bind_addr,
+                         std::optional<entity_addrvec_t> public_addrs)
 {
-  ldout(cct,10) << __func__ << " " << bind_addr << dendl;
+  ldout(cct, 10) << __func__ << " " << bind_addr
+                 << " public " << public_addrs << dendl;
   // old bind() can take entity_addr_t(). new bindv() can take a
   // 0.0.0.0-like address but needs type and family to be set.
   auto a = bind_addr;
@@ -371,10 +373,11 @@ int AsyncMessenger::bind(const entity_addr_t &bind_addr)
       a.set_family(AF_INET);
     }
   }
-  return bindv(entity_addrvec_t(a));
+  return bindv(entity_addrvec_t(a), public_addrs);
 }
 
-int AsyncMessenger::bindv(const entity_addrvec_t &bind_addrs)
+int AsyncMessenger::bindv(const entity_addrvec_t &bind_addrs,
+                          std::optional<entity_addrvec_t> public_addrs)
 {
   lock.lock();
 
@@ -384,7 +387,14 @@ int AsyncMessenger::bindv(const entity_addrvec_t &bind_addrs)
     return -1;
   }
 
-  ldout(cct,10) << __func__ << " " << bind_addrs << dendl;
+  ldout(cct, 10) << __func__ << " " << bind_addrs
+                 << " public " << public_addrs << dendl;
+  if (public_addrs && bind_addrs != public_addrs) {
+    // for the sake of rebind() and the is-not-ready case let's
+    // store public_addrs. there is no point in that if public
+    // addrs are indifferent from bind_addrs.
+    saved_public_addrs = std::move(public_addrs);
+  }
 
   if (!stack->is_ready()) {
     ldout(cct, 10) << __func__ << " Network Stack is not ready for bind yet - postponed" << dendl;
@@ -494,6 +504,20 @@ void AsyncMessenger::_finish_bind(const entity_addrvec_t& bind_addrs,
   entity_addrvec_t newaddrs = *my_addrs;
   for (auto& a : newaddrs.v) {
     a.set_nonce(nonce);
+    if (saved_public_addrs) {
+      // transplantate network layer addresses while keeping ports
+      // (as they can be figured out by msgr from the allowed range [1])
+      // unless they are explicitly specified (NATing both IP/port?)
+      //
+      // [1]: the low-level `Processor::bind` scans for free ports in
+      // a range controlled by ms_bind_port_min and ms_bind_port_max
+      const auto& public_addr =
+        saved_public_addrs->addr_of_type(a.get_type());
+      const auto public_port = public_addr.get_port();
+      const auto bound_port = a.get_port();
+      a.set_sockaddr(public_addr.get_sockaddr());
+      a.set_port(public_port == 0 ? bound_port : public_port);
+    }
   }
   set_myaddrs(newaddrs);
 
@@ -763,17 +787,6 @@ bool AsyncMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
   }
   ldout(cct,1) << __func__ << " now " << *my_addrs << dendl;
   return ret;
-}
-
-void AsyncMessenger::set_addrs(const entity_addrvec_t &addrs)
-{
-  std::lock_guard l{lock};
-  auto t = addrs;
-  for (auto& a : t.v) {
-    a.set_nonce(nonce);
-  }
-  set_myaddrs(t);
-  _init_local_connection();
 }
 
 void AsyncMessenger::shutdown_connections(bool queue_reset)
