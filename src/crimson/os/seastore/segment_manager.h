@@ -180,7 +180,8 @@ public:
 
   virtual ~SegmentManager() {}
 
-  static seastar::future<SegmentManagerRef> get_segment_manager(const std::string &device);
+  static seastar::future<SegmentManagerRef>
+  get_segment_manager(const std::string &device, device_type_t dtype);
 };
 
 }
