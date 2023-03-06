@@ -118,8 +118,12 @@ public:
   close_ertr::future<> close();
 
   BlockSegmentManager(
-    const std::string &path)
-  : device_path(path) {}
+    const std::string &path,
+    device_type_t dtype)
+  : device_path(path) {
+    ceph_assert(get_device_type() == device_type_t::NONE);
+    superblock.config.spec.dtype = dtype;
+  }
 
   ~BlockSegmentManager();
 
