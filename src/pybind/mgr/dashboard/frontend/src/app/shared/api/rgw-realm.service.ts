@@ -23,6 +23,17 @@ export class RgwRealmService {
     });
   }
 
+  update(realm: RgwRealm, defaultRealm: boolean, newRealmName: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        realm_name: realm.name,
+        default: defaultRealm,
+        new_realm_name: newRealmName
+      });
+      return this.http.put(`${this.url}/${realm.name}`, null, { params: params });
+    });
+  }
+
   list(): Observable<object> {
     return this.rgwDaemonService.request(() => {
       return this.http.get<object>(`${this.url}`);
@@ -46,10 +57,11 @@ export class RgwRealmService {
     let realmIds = [];
     nodes['id'] = realm.id;
     realmIds.push(realm.id);
-    nodes['name'] = realm.name + ' (realm)';
+    nodes['name'] = realm.name;
     nodes['info'] = realm;
     nodes['is_default'] = realm.id === defaultRealmId ? true : false;
     nodes['icon'] = Icons.reweight;
+    nodes['type'] = 'realm';
     return {
       nodes: nodes,
       realmIds: realmIds
