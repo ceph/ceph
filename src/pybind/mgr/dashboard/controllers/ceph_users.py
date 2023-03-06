@@ -58,22 +58,20 @@ class CephUserEndpoints:
         return f"Successfully created user '{user_entity}'"
 
 
-create_cap_container = ArrayHorizontalContainer('Capabilities', 'capabilities',
-                                                label_html_class='hidden cd-header mt-1', fields=[
-                                                    FormField('Entity', 'entity',
-                                                              field_type=str, html_class='me-3'),
-                                                    FormField('Entity Capabilities',
-                                                              'cap', field_type=str)
-                                                ])
-create_container = VerticalContainer('Create User', 'create_user',
-                                     html_class='d-none', fields=[
-                                         FormField('User entity', 'user_entity',
-                                                   field_type=str),
-                                         create_cap_container,
-                                     ])
+create_cap_container = ArrayHorizontalContainer('Capabilities', 'capabilities', fields=[
+    FormField('Entity', 'entity',
+              field_type=str),
+    FormField('Entity Capabilities',
+              'cap', field_type=str)
+], min_items=1)
+create_container = VerticalContainer('Create User', 'create_user', fields=[
+    FormField('User entity', 'user_entity',
+              field_type=str),
+    create_cap_container,
+])
 
 create_form = Form(path='/cluster/user/create',
-                   root_container=create_container, action='Create User')
+                   root_container=create_container)
 
 
 @CRUDEndpoint(
