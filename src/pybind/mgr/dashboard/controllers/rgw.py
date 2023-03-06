@@ -683,3 +683,146 @@ class RgwUserRole(NamedTuple):
     CreateDate: str
     MaxSessionDuration: int
     AssumeRolePolicyDocument: str
+
+
+@APIRouter('/rgw/realm', Scope.RGW)
+class RgwRealm(RESTController):
+    @allow_empty_body
+    # pylint: disable=W0613
+    def create(self, realm_name, default, daemon_name=None):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.create_realm(realm_name, default)
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+    @allow_empty_body
+    # pylint: disable=W0613
+    def list(self, daemon_name=None):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.list_realms()
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+    @allow_empty_body
+    # pylint: disable=W0613
+    def get(self, realm_name, daemon_name=None):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.get_realm(realm_name)
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+    @Endpoint()
+    @ReadPermission
+    def get_all_realms_info(self):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.get_all_realms_info()
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+    @allow_empty_body
+    # pylint: disable=W0613
+    def set(self, realm_name, default, new_realm_name, daemon_name=None):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.edit_realm(realm_name, default, new_realm_name)
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+
+@APIRouter('/rgw/zonegroup', Scope.RGW)
+class RgwZonegroup(RESTController):
+    @allow_empty_body
+    # pylint: disable=W0613
+    def create(self, realm_name, zonegroup_name, default=None, master=None,
+               zonegroup_endpoints=None, daemon_name=None):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.create_zonegroup(realm_name, zonegroup_name, default,
+                                               master, zonegroup_endpoints)
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+    @allow_empty_body
+    # pylint: disable=W0613
+    def list(self, daemon_name=None):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.list_zonegroups()
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+    @allow_empty_body
+    # pylint: disable=W0613
+    def get(self, zonegroup_name, daemon_name=None):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.get_zonegroup(zonegroup_name)
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+    @Endpoint()
+    @ReadPermission
+    def get_all_zonegroups_info(self):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.get_all_zonegroups_info()
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+
+@APIRouter('/rgw/zone', Scope.RGW)
+class RgwZone(RESTController):
+    @allow_empty_body
+    # pylint: disable=W0613
+    def create(self, zone_name, zonegroup_name=None, default=False, master=False,
+               zone_endpoints=None, user=None, daemon_name=None):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.create_zone(zone_name, zonegroup_name, default,
+                                          master, zone_endpoints, user)
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+    @allow_empty_body
+    # pylint: disable=W0613
+    def list(self, daemon_name=None):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.list_zones()
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+    @allow_empty_body
+    # pylint: disable=W0613
+    def get(self, zone_name, daemon_name=None):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.get_zone(zone_name)
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+    @Endpoint()
+    @ReadPermission
+    def get_all_zones_info(self):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.get_all_zones_info()
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
