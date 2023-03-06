@@ -12,7 +12,8 @@ from mgr_module import NFS_GANESHA_SUPPORTED_FSALS
 from .. import mgr
 from ..security import Scope
 from ..services.cephfs import CephFS
-from ..services.exception import DashboardException, serialize_dashboard_exception
+from ..services.exception import DashboardException, handle_cephfs_error, \
+    serialize_dashboard_exception
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
     ReadPermission, RESTController, Task, UIRouter
 from ._version import APIVersion
@@ -81,31 +82,8 @@ def NfsTask(name, metadata, wait_for):  # noqa: N802
     return composed_decorator
 
 
-@APIRouter('/nfs-ganesha', Scope.NFS_GANESHA)
-@APIDoc("NFS-Ganesha Cluster Management API", "NFS-Ganesha")
-class NFSGanesha(RESTController):
-
-    @EndpointDoc("Status of NFS-Ganesha management feature",
-                 responses={200: {
-                     'available': (bool, "Is API available?"),
-                     'message': (str, "Error message")
-                 }})
-    @Endpoint()
-    @ReadPermission
-    def status(self):
-        status = {'available': True, 'message': None}
-        try:
-            mgr.remote('nfs', 'cluster_ls')
-        except (ImportError, RuntimeError) as error:
-            logger.exception(error)
-            status['available'] = False
-            status['message'] = str(error)  # type: ignore
-
-        return status
-
-
 @APIRouter('/nfs-ganesha/cluster', Scope.NFS_GANESHA)
-@APIDoc(group="NFS-Ganesha")
+@APIDoc("NFS-Ganesha Cluster Management API", "NFS-Ganesha")
 class NFSGaneshaCluster(RESTController):
     @ReadPermission
     @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
@@ -140,6 +118,7 @@ class NFSGaneshaExports(RESTController):
 
         return exports
 
+    @handle_cephfs_error()
     @NfsTask('create', {'path': '{path}', 'fsal': '{fsal.name}',
                         'cluster_id': '{cluster_id}'}, 2.0)
     @EndpointDoc("Creates a new NFS-Ganesha export",
@@ -166,11 +145,11 @@ class NFSGaneshaExports(RESTController):
             'fsal': fsal,
             'clients': clients
         }
-        ret, _, err = export_mgr.apply_export(cluster_id, json.dumps(raw_ex))
-        if ret == 0:
+        applied_exports = export_mgr.apply_export(cluster_id, json.dumps(raw_ex))
+        if not applied_exports.has_error:
             return self._get_schema_export(
                 export_mgr.get_export_by_pseudo(cluster_id, pseudo))
-        raise NFSException(f"Export creation failed {err}")
+        raise NFSException(f"Export creation failed {applied_exports.changes[0].msg}")
 
     @EndpointDoc("Get an NFS-Ganesha export",
                  parameters={
@@ -213,11 +192,11 @@ class NFSGaneshaExports(RESTController):
         }
 
         export_mgr = mgr.remote('nfs', 'fetch_nfs_export_obj')
-        ret, _, err = export_mgr.apply_export(cluster_id, json.dumps(raw_ex))
-        if ret == 0:
+        applied_exports = export_mgr.apply_export(cluster_id, json.dumps(raw_ex))
+        if not applied_exports.has_error:
             return self._get_schema_export(
                 export_mgr.get_export_by_pseudo(cluster_id, pseudo))
-        raise NFSException(f"Failed to update export: {err}")
+        raise NFSException(f"Export creation failed {applied_exports.changes[0].msg}")
 
     @NfsTask('delete', {'cluster_id': '{cluster_id}',
                         'export_id': '{export_id}'}, 2.0)
@@ -285,3 +264,16 @@ class NFSGaneshaUi(BaseController):
     @ReadPermission
     def filesystems(self):
         return CephFS.list_filesystems()
+
+    @Endpoint()
+    @ReadPermission
+    def status(self):
+        status = {'available': True, 'message': None}
+        try:
+            mgr.remote('nfs', 'cluster_ls')
+        except (ImportError, RuntimeError) as error:
+            logger.exception(error)
+            status['available'] = False
+            status['message'] = str(error)  # type: ignore
+
+        return status

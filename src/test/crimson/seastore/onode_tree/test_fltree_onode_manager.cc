@@ -84,27 +84,24 @@ struct fltree_onode_manager_test_t
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() final {
     return TMTestState::_mkfs(
     ).safe_then([this] {
-      tm->add_device(segment_manager.get(), true);
-      return tm->mount(
-      ).safe_then([this] {
-	return repeat_eagain([this] {
-	  return seastar::do_with(
-	    create_mutate_transaction(),
-	    [this](auto &ref_t) {
-	      return with_trans_intr(*ref_t, [&](auto &t) {
-		return manager->mkfs(t
-		).si_then([this, &t] {
-		  return submit_transaction_fut2(t);
-		});
-	      });
-	  });
-	});
-      }).safe_then([this] {
-	return tm->close();
-      }).handle_error(
-	crimson::ct_error::assert_all{"Invalid error in _mkfs"}
-      );
-    });
+      return restart_fut();
+    }).safe_then([this] {
+      return repeat_eagain([this] {
+        return seastar::do_with(
+          create_mutate_transaction(),
+          [this](auto &ref_t)
+        {
+          return with_trans_intr(*ref_t, [&](auto &t) {
+            return manager->mkfs(t
+            ).si_then([this, &t] {
+              return submit_transaction_fut2(t);
+            });
+          });
+        });
+      });
+    }).handle_error(
+      crimson::ct_error::assert_all{"Invalid error in _mkfs"}
+    );
   }
 
   template <typename F>
@@ -112,7 +109,6 @@ struct fltree_onode_manager_test_t
     auto t = create_mutate_transaction();
     std::invoke(f, *t);
     submit_transaction(std::move(t));
-    segment_cleaner->run_until_halt().get0();
   }
 
   template <typename F>

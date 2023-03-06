@@ -3,6 +3,7 @@
 
 #include "AvlAllocator.h"
 
+#include <bit>
 #include <limits>
 
 #include "common/config_proxy.h"
@@ -372,7 +373,7 @@ int64_t AvlAllocator::allocate(
                  << " max_alloc_size 0x" << max_alloc_size
                  << " hint 0x" << hint
                  << std::dec << dendl;
-  ceph_assert(isp2(unit));
+  ceph_assert(std::has_single_bit(unit));
   ceph_assert(want % unit == 0);
 
   if (max_alloc_size == 0) {
@@ -444,27 +445,27 @@ void AvlAllocator::_foreach(
 
 void AvlAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
-  if (!length)
-    return;
-  std::lock_guard l(lock);
-  ceph_assert(offset + length <= uint64_t(device_size));
   ldout(cct, 10) << __func__ << std::hex
                  << " offset 0x" << offset
                  << " length 0x" << length
                  << std::dec << dendl;
+  if (!length)
+    return;
+  std::lock_guard l(lock);
+  ceph_assert(offset + length <= uint64_t(device_size));
   _add_to_tree(offset, length);
 }
 
 void AvlAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
-  if (!length)
-    return;
-  std::lock_guard l(lock);
-  ceph_assert(offset + length <= uint64_t(device_size));
   ldout(cct, 10) << __func__ << std::hex
                  << " offset 0x" << offset
                  << " length 0x" << length
                  << std::dec << dendl;
+  if (!length)
+    return;
+  std::lock_guard l(lock);
+  ceph_assert(offset + length <= uint64_t(device_size));
   _remove_from_tree(offset, length);
 }
 

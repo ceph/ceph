@@ -22,6 +22,7 @@ set(crimson_common_srcs
   common/logclient.cc
   common/operation.cc
   common/throttle.cc
+  common/tmap_helpers.cc
   common/tri_mutex.cc)
 
 # the specialized version of ceph-common, where
@@ -62,6 +63,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/mempool.cc
   ${PROJECT_SOURCE_DIR}/src/common/options.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_counters.cc
+  ${PROJECT_SOURCE_DIR}/src/common/perf_counters_key.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_histogram.cc
   ${PROJECT_SOURCE_DIR}/src/common/page.cc
   ${PROJECT_SOURCE_DIR}/src/common/pick_address.cc
@@ -101,7 +103,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/io/IoOperations.cc
-  ${PROJECT_SOURCE_DIR}/src/log/Log.cc
   ${PROJECT_SOURCE_DIR}/src/mgr/ServiceMap.cc
   ${PROJECT_SOURCE_DIR}/src/mds/inode_backtrace.cc
   ${PROJECT_SOURCE_DIR}/src/mds/mdstypes.cc
@@ -134,9 +135,9 @@ set(crimson_common_deps
   Boost::random
   json_spirit)
 
+set(crimson_common_public_deps crimson::cflags)
 if(WITH_JAEGER)
-  include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
-  list(APPEND crimson_common_deps ${jaeger_base})
+  list(APPEND crimson_common_public_deps jaeger_base)
 endif()
 
 if(NOT WITH_SYSTEM_BOOST)
@@ -145,7 +146,7 @@ endif()
 
 target_link_libraries(crimson-common
   PUBLIC
-    crimson::cflags
+    ${crimson_common_public_deps}
   PRIVATE
     crc32
     ${crimson_common_deps}
@@ -175,11 +176,12 @@ set(crimson_net_srcs
   ${PROJECT_SOURCE_DIR}/src/msg/async/compression_onwire.cc
   ${PROJECT_SOURCE_DIR}/src/msg/async/frames_v2.cc
   net/Errors.cc
+  net/FrameAssemblerV2.cc
+  net/io_handler.cc
   net/Messenger.cc
   net/SocketConnection.cc
   net/SocketMessenger.cc
   net/Socket.cc
-  net/Protocol.cc
   net/ProtocolV2.cc
   net/chained_dispatchers.cc)
 add_library(crimson STATIC

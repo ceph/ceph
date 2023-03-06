@@ -27,6 +27,7 @@
 #include "MonMap.h"
 #include "MonSub.h"
 
+#include "common/admin_socket.h"
 #include "common/async/completion.h"
 #include "common/Timer.h"
 #include "common/config.h"
@@ -158,7 +159,7 @@ struct MonClientPinger : public Dispatcher,
   int wait_for_reply(double timeout = 0.0) {
     std::unique_lock locker{lock};
     if (timeout <= 0) {
-      timeout = cct->_conf->client_mount_timeout;
+      timeout = std::chrono::duration<double>(cct->_conf.get_val<std::chrono::seconds>("client_mount_timeout")).count();
     }
     done = false;
     if (ping_recvd_cond.wait_for(locker,
@@ -269,7 +270,8 @@ const boost::system::error_category& monc_category() noexcept;
 
 class MonClient : public Dispatcher,
 		  public AuthClient,
-		  public AuthServer /* for mgr, osd, mds */ {
+		  public AuthServer, /* for mgr, osd, mds */
+		  public AdminSocketHook {
   static constexpr auto dout_subsys = ceph_subsys_monc;
 public:
   // Error, Newest, Oldest
@@ -315,6 +317,14 @@ private:
 
   void handle_auth(MAuthReply *m);
 
+  int call(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    const ceph::buffer::list &inbl,
+    ceph::Formatter *f,
+    std::ostream& errss,
+    ceph::buffer::list& out) override;
+  
   // monitor session
   utime_t last_keepalive;
   utime_t last_send_log;

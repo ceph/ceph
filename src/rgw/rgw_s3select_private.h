@@ -32,7 +32,14 @@
 #include <liboath/oath.h>
 
 
+#pragma GCC diagnostic push
+#pragma clang diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated"
+#pragma clang diagnostic ignored "-Wdeprecated"
 #include <s3select/include/s3select.h>
+#pragma GCC diagnostic pop
+#pragma clang diagnostic pop
+
 #include "rgw_rest_s3.h"
 #include "rgw_s3select.h"
 
@@ -41,7 +48,7 @@ class aws_response_handler
 
 private:
   std::string sql_result;
-  struct req_state* s;
+  req_state* s;
   uint32_t header_size;
   // the parameters are according to CRC-32 algorithm and its aligned with AWS-cli checksum
   boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true> crc32;
@@ -82,7 +89,7 @@ private:
   int create_message(u_int32_t header_len);
 
 public:
-  aws_response_handler(struct req_state* ps, RGWOp* rgwop) : s(ps), m_rgwop(rgwop), total_bytes_returned{0}, processed_size{0}
+  aws_response_handler(req_state* ps, RGWOp* rgwop) : s(ps), m_rgwop(rgwop), total_bytes_returned{0}, processed_size{0}
   {}
 
   aws_response_handler() : s(nullptr), m_rgwop(nullptr), total_bytes_returned{0}, processed_size{0}
@@ -96,7 +103,7 @@ public:
     return true;
   }
 
-  void set(struct req_state* ps, RGWOp* rgwop)
+  void set(req_state* ps, RGWOp* rgwop)
   {
     s = ps;
     m_rgwop = rgwop;
@@ -162,6 +169,7 @@ private:
 #ifdef _ARROW_EXIST
   s3selectEngine::parquet_object m_s3_parquet_object;
 #endif
+  s3selectEngine::json_object m_s3_json_object;
   std::string m_column_delimiter;
   std::string m_quot;
   std::string m_row_delimiter;
@@ -176,11 +184,20 @@ private:
   std::string output_escape_char;
   std::string output_quote_fields;
   std::string output_row_delimiter;
+  std::string m_start_scan;
+  std::string m_end_scan;
+  bool m_scan_range_ind;
+  int64_t m_start_scan_sz;
+  int64_t m_end_scan_sz;
+  int64_t m_object_size_for_processing;
   aws_response_handler m_aws_response_handler;
   bool enable_progress;
 
   //parquet request
   bool m_parquet_type;
+  //json request
+  std::string m_json_datatype;
+  bool m_json_type;
 #ifdef _ARROW_EXIST
   s3selectEngine::rgw_s3select_api m_rgw_api;
 #endif
@@ -190,6 +207,8 @@ private:
   std::string range_req_str;
   std::function<int(std::string&)> fp_result_header_format;
   std::function<int(std::string&)> fp_s3select_result_format;
+  std::function<void(const char*)> fp_debug_mesg;
+  std::function<void(void)> fp_chunked_transfer_encoding;
   int m_header_size;
 
 public:
@@ -210,9 +229,13 @@ private:
 
   int parquet_processing(bufferlist& bl, off_t ofs, off_t len);
 
-  int run_s3select(const char* query, const char* input, size_t input_length);
+  int json_processing(bufferlist& bl, off_t ofs, off_t len);
+
+  int run_s3select_on_csv(const char* query, const char* input, size_t input_length);
 
   int run_s3select_on_parquet(const char* query);
+
+  int run_s3select_on_json(const char* query, const char* input, size_t input_length);
 
   int extract_by_tag(std::string input, std::string tag_name, std::string& result);
 

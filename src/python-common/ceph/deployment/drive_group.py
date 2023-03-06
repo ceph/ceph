@@ -2,7 +2,7 @@ import enum
 import yaml
 
 from ceph.deployment.inventory import Device
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, CustomConfig
 from ceph.deployment.hostspec import SpecValidationError
 
 try:
@@ -26,11 +26,12 @@ class DeviceSelection(object):
     """
 
     _supported_filters = [
-            "paths", "size", "vendor", "model", "rotational", "limit", "all"
+            "actuators", "paths", "size", "vendor", "model", "rotational", "limit", "all"
     ]
 
     def __init__(self,
-                 paths=None,  # type: Optional[List[str]]
+                 actuators=None,  # type: Optional[int]
+                 paths=None,  # type: Optional[List[Dict[str, str]]]
                  model=None,  # type: Optional[str]
                  size=None,  # type: Optional[str]
                  rotational=None,  # type: Optional[bool]
@@ -41,8 +42,19 @@ class DeviceSelection(object):
         """
         ephemeral drive group device specification
         """
+        self.actuators = actuators
+
         #: List of Device objects for devices paths.
-        self.paths = [] if paths is None else [Device(path) for path in paths]  # type: List[Device]
+
+        self.paths = []
+
+        if paths is not None:
+            for device in paths:
+                if isinstance(device, dict):
+                    path: str = device.get("path", '')
+                    self.paths.append(Device(path, crush_device_class=device.get("crush_device_class", None)))  # noqa E501
+                else:
+                    self.paths.append(Device(str(device)))
 
         #: A wildcard string. e.g: "SDD*" or "SanDisk SD8SN8U5"
         self.model = model
@@ -66,7 +78,8 @@ class DeviceSelection(object):
         self.all = all
 
     def validate(self, name: str) -> None:
-        props = [self.model, self.vendor, self.size, self.rotational]  # type: List[Any]
+        props = [self.actuators, self.model, self.vendor, self.size,
+                 self.rotational]  # type: List[Any]
         if self.paths and any(p is not None for p in props):
             raise DriveGroupValidationError(
                 name,
@@ -150,7 +163,7 @@ class DriveGroupSpec(ServiceSpec):
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
         "journal_size", "unmanaged", "filter_logic", "preview_only", "extra_container_args",
-        "data_allocate_fraction", "method"
+        "extra_entrypoint_args", "data_allocate_fraction", "method", "crush_device_class", "config",
     ]
 
     def __init__(self,
@@ -175,15 +188,22 @@ class DriveGroupSpec(ServiceSpec):
                  filter_logic='AND',  # type: str
                  preview_only=False,  # type: bool
                  extra_container_args=None,  # type: Optional[List[str]]
+                 extra_entrypoint_args: Optional[List[str]] = None,
                  data_allocate_fraction=None,  # type: Optional[float]
                  method=None,  # type: Optional[OSDMethod]
+                 config=None,  # type: Optional[Dict[str, str]]
+                 custom_configs=None,  # type: Optional[List[CustomConfig]]
+                 crush_device_class=None,  # type: Optional[str]
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
                                              placement=placement,
+                                             config=config,
                                              unmanaged=unmanaged,
                                              preview_only=preview_only,
-                                             extra_container_args=extra_container_args)
+                                             extra_container_args=extra_container_args,
+                                             extra_entrypoint_args=extra_entrypoint_args,
+                                             custom_configs=custom_configs)
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
         self.data_devices = data_devices
@@ -241,6 +261,9 @@ class DriveGroupSpec(ServiceSpec):
         self.data_allocate_fraction = data_allocate_fraction
 
         self.method = method
+
+        #: Crush device class to assign to OSDs
+        self.crush_device_class = crush_device_class
 
     @classmethod
     def _from_json_impl(cls, json_drive_group):
@@ -344,6 +367,11 @@ class DriveGroupSpec(ServiceSpec):
             raise DriveGroupValidationError(
                 self.service_id,
                 'method raw only supports bluestore')
+
+        if self.data_devices.paths is not None:
+            for device in list(self.data_devices.paths):
+                if not device.path:
+                    raise DriveGroupValidationError(self.service_id, 'Device path cannot be empty')  # noqa E501
 
 
 yaml.add_representer(DriveGroupSpec, DriveGroupSpec.yaml_representer)

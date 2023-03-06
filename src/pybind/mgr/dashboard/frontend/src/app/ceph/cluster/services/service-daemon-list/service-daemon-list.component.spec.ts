@@ -1,3 +1,4 @@
+import { HttpHeaders } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
@@ -10,6 +11,7 @@ import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { HostService } from '~/app/shared/api/host.service';
+import { PaginateObservable } from '~/app/shared/api/paginate.model';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -18,6 +20,7 @@ import { ServiceDaemonListComponent } from './service-daemon-list.component';
 describe('ServiceDaemonListComponent', () => {
   let component: ServiceDaemonListComponent;
   let fixture: ComponentFixture<ServiceDaemonListComponent>;
+  let headers: HttpHeaders;
 
   const daemons = [
     {
@@ -29,6 +32,8 @@ describe('ServiceDaemonListComponent', () => {
       daemon_type: 'osd',
       daemon_name: 'osd.3',
       version: '15.1.0-1174-g16a11f7',
+      memory_usage: '17.7',
+      cpu_percentage: '3.54%',
       status: 1,
       status_desc: 'running',
       last_refresh: '2020-02-25T04:33:26.465699',
@@ -47,6 +52,8 @@ describe('ServiceDaemonListComponent', () => {
       daemon_type: 'osd',
       daemon_name: 'osd.4',
       version: '15.1.0-1174-g16a11f7',
+      memory_usage: '17.7',
+      cpu_percentage: '3.54%',
       status: 1,
       status_desc: 'running',
       last_refresh: '2020-02-25T04:33:26.465822',
@@ -61,6 +68,8 @@ describe('ServiceDaemonListComponent', () => {
       daemon_type: 'osd',
       daemon_name: 'osd.5',
       version: '15.1.0-1174-g16a11f7',
+      memory_usage: '17.7',
+      cpu_percentage: '3.54%',
       status: 1,
       status_desc: 'running',
       last_refresh: '2020-02-25T04:33:26.465886',
@@ -75,6 +84,8 @@ describe('ServiceDaemonListComponent', () => {
       daemon_name: 'mon.a',
       daemon_type: 'mon',
       version: '15.1.0-1174-g16a11f7',
+      memory_usage: '17.7',
+      cpu_percentage: '3.54%',
       status: 1,
       status_desc: 'running',
       last_refresh: '2020-02-25T04:33:26.465886',
@@ -109,6 +120,8 @@ describe('ServiceDaemonListComponent', () => {
     }
   ];
 
+  const context = new CdTableFetchDataContext(() => undefined);
+
   const getDaemonsByHostname = (hostname?: string) => {
     return hostname ? _.filter(daemons, { hostname: hostname }) : daemons;
   };
@@ -139,7 +152,13 @@ describe('ServiceDaemonListComponent', () => {
     spyOn(cephServiceService, 'getDaemons').and.callFake(() =>
       of(getDaemonsByServiceName(component.serviceName))
     );
-    spyOn(cephServiceService, 'list').and.returnValue(of(services));
+
+    headers = new HttpHeaders().set('X-Total-Count', '2');
+    const paginate_obs = new PaginateObservable<any>(of({ body: services, headers: headers }));
+    spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
+    context.pageInfo.offset = 0;
+    context.pageInfo.limit = -1;
+
     fixture.detectChanges();
   });
 
@@ -149,18 +168,18 @@ describe('ServiceDaemonListComponent', () => {
 
   it('should list daemons by host', () => {
     component.hostname = 'mon0';
-    component.getDaemons(new CdTableFetchDataContext(() => undefined));
+    component.getDaemons(context);
     expect(component.daemons.length).toBe(1);
   });
 
   it('should list daemons by service', () => {
     component.serviceName = 'osd';
-    component.getDaemons(new CdTableFetchDataContext(() => undefined));
+    component.getDaemons(context);
     expect(component.daemons.length).toBe(3);
   });
 
   it('should list services', () => {
-    component.getServices(new CdTableFetchDataContext(() => undefined));
+    component.getServices(context);
     expect(component.services.length).toBe(2);
   });
 

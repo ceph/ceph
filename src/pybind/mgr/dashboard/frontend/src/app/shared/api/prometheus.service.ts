@@ -24,6 +24,10 @@ export class PrometheusService {
 
   constructor(private http: HttpClient, private settingsService: SettingsService) {}
 
+  getPrometheusData(params: any): any {
+    return this.http.get<any>(`${this.baseURL}/data`, { params });
+  }
+
   ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
     this.settingsService.ifSettingConfigured(this.settingsKey.alertmanager, fn, elseFn);
   }

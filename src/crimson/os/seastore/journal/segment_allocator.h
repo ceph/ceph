@@ -16,6 +16,7 @@
 
 namespace crimson::os::seastore {
   class SegmentProvider;
+  class JournalTrimmer;
 }
 
 namespace crimson::os::seastore::journal {
@@ -30,8 +31,9 @@ class SegmentAllocator {
       crimson::ct_error::input_output_error>;
 
  public:
-  SegmentAllocator(std::string name,
-                   segment_type_t type,
+  SegmentAllocator(JournalTrimmer *trimmer,
+                   data_category_t category,
+                   rewrite_gen_t gen,
                    SegmentProvider &sp,
                    SegmentSeqAllocator &ssa);
 
@@ -39,7 +41,11 @@ class SegmentAllocator {
     return print_name;
   }
 
-  seastore_off_t get_block_size() const {
+  SegmentProvider &get_provider() {
+    return segment_provider;
+  }
+
+  extent_len_t get_block_size() const {
     return sm_group.get_block_size();
   }
 
@@ -63,7 +69,7 @@ class SegmentAllocator {
     return current_segment_nonce;
   }
 
-  seastore_off_t get_written_to() const {
+  segment_off_t get_written_to() const {
     assert(can_write());
     return written_to;
   }
@@ -81,7 +87,7 @@ class SegmentAllocator {
   // open for write and generate the correct print name
   using open_ertr = base_ertr;
   using open_ret = open_ertr::future<journal_seq_t>;
-  open_ret open();
+  open_ret open(bool is_mkfs);
 
   // close the current segment and initialize next one
   using roll_ertr = base_ertr;
@@ -93,13 +99,13 @@ class SegmentAllocator {
   // If rolling/opening, no write is allowed.
   using write_ertr = base_ertr;
   using write_ret = write_ertr::future<write_result_t>;
-  write_ret write(ceph::bufferlist to_write);
+  write_ret write(ceph::bufferlist&& to_write);
 
   using close_ertr = base_ertr;
   close_ertr::future<> close();
 
  private:
-  open_ret do_open();
+  open_ret do_open(bool is_mkfs);
 
   void reset() {
     current_segment.reset();
@@ -108,22 +114,22 @@ class SegmentAllocator {
     current_segment_nonce = 0;
   }
 
-  // FIXME: remove the unnecessary is_rolling
   using close_segment_ertr = base_ertr;
-  close_segment_ertr::future<> close_segment(bool is_rolling);
+  close_segment_ertr::future<> close_segment();
 
-  const std::string name;
   // device id is not available during construction,
   // so generate the print_name later.
   std::string print_name;
   const segment_type_t type; // JOURNAL or OOL
+  const data_category_t category;
+  const rewrite_gen_t gen;
   SegmentProvider &segment_provider;
   SegmentManagerGroup &sm_group;
   SegmentRef current_segment;
-  seastore_off_t written_to;
+  segment_off_t written_to;
   SegmentSeqAllocator &segment_seq_allocator;
   segment_nonce_t current_segment_nonce;
-  //3. journal tail written to both segment_header_t and segment_tail_t
+  JournalTrimmer *trimmer;
 };
 
 /**
@@ -259,12 +265,12 @@ private:
 
   record_group_t pending;
   std::size_t submitting_size = 0;
-  seastore_off_t submitting_length = 0;
-  seastore_off_t submitting_mdlength = 0;
+  extent_len_t submitting_length = 0;
+  extent_len_t submitting_mdlength = 0;
 
   struct promise_result_t {
     write_result_t write_result;
-    seastore_off_t mdlength;
+    extent_len_t mdlength;
   };
   using maybe_promise_result_t = std::optional<promise_result_t>;
   std::optional<seastar::shared_promise<maybe_promise_result_t> > io_promise;
@@ -342,7 +348,7 @@ public:
   // when available, submit the record if possible
   using submit_ertr = base_ertr;
   using submit_ret = submit_ertr::future<record_locator_t>;
-  submit_ret submit(record_t&&);
+  submit_ret submit(record_t&&, bool with_atomic_roll_segment=false);
 
   void update_committed_to(const journal_seq_t& new_committed_to) {
     assert(new_committed_to != JOURNAL_SEQ_NULL);
@@ -354,7 +360,7 @@ public:
   // open for write, generate the correct print name, and register metrics
   using open_ertr = base_ertr;
   using open_ret = open_ertr::future<journal_seq_t>;
-  open_ret open();
+  open_ret open(bool is_mkfs);
 
   using close_ertr = base_ertr;
   close_ertr::future<> close();

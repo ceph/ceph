@@ -102,3 +102,11 @@ mark {
 .border-success {
   border-left: 4px solid vv.$success;
 }
+
+.vertical-line {
+  border-left: 1px solid vv.$gray-400;
+}
+
+a.nav-link {
+  color: vv.$primary;
+}

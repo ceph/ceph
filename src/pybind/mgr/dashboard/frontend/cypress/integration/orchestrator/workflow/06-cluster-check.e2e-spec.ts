@@ -36,6 +36,16 @@ describe('when cluster creation is completed', () => {
       hosts.checkExist(hostnames[3], true);
     });
 
+    it('should check if monitoring stacks are running on the root host', { retries: 2 }, () => {
+      const monitoringStack = ['alertmanager', 'grafana', 'node-exporter', 'prometheus'];
+      hosts.clickTab('cd-host-details', 'ceph-node-00', 'Daemons');
+      for (const daemon of monitoringStack) {
+        cy.get('cd-host-details').within(() => {
+          services.checkServiceStatus(daemon);
+        });
+      }
+    });
+
     it('should have removed "_no_schedule" label', () => {
       for (const hostname of hostnames) {
         hosts.checkLabelExists(hostname, ['_no_schedule'], false);

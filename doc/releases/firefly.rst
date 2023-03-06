@@ -766,7 +766,7 @@ Upgrading from v0.72 Emperor
 * The 'osd pool create ...' syntax has changed for erasure pools.
 
 * The default CRUSH rules and layouts are now using the 'bobtail'
-  tunables and defaults.  Upgaded clusters using the old values will
+  tunables and defaults.  Upgraded clusters using the old values will
   now present with a health WARN state.  This can be disabled by
   adding 'mon warn on legacy crush tunables = false' to ceph.conf and
   restarting the monitors.  Alternatively, you can switch to the new
@@ -1374,7 +1374,7 @@ Upgrading
   increased from 4 MB to 128 MB.  This will increase the memory
   footprint of that process but tends to increase performance of omap
   (key/value) objects (used for CephFS and the radosgw).  If memory in your
-  deployment is tight, you can preserve the old behavio by adding::
+  deployment is tight, you can preserve the old behavior by adding::
 
     leveldb write buffer size = 0
     leveldb cache size = 0

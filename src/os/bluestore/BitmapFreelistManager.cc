@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "BitmapFreelistManager.h"
+
+#include <bit>
 #include "kv/KeyValueDB.h"
 #include "os/kv.h"
 #include "include/stringify.h"
@@ -69,7 +71,7 @@ int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
 				  KeyValueDB::Transaction txn)
 {
   bytes_per_block = granularity;
-  ceph_assert(isp2(bytes_per_block));
+  ceph_assert(std::has_single_bit(bytes_per_block));
   size = p2align(new_size, bytes_per_block);
   blocks_per_key = cct->_conf->bluestore_freelist_blocks_per_key;
 
@@ -115,7 +117,7 @@ int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
 int BitmapFreelistManager::_expand(uint64_t old_size, KeyValueDB* db)
 {
   assert(old_size < size);
-  ceph_assert(isp2(bytes_per_block));
+  ceph_assert(std::has_single_bit(bytes_per_block));
 
   KeyValueDB::Transaction txn;
   txn = db->get_transaction();

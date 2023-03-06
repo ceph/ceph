@@ -11,6 +11,7 @@
 #include "rgw_http_client.h"
 #include "rgw_keystone.h"
 #include "rgw_sal.h"
+#include "rgw_log.h"
 
 #include "include/str_list.h"
 
@@ -368,13 +369,13 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
                                               const string& display_name,
                                               RGWUserInfo& user_info) const      /* out */
 {
-  std::unique_ptr<rgw::sal::User> user = store->get_user(acct_user);
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(acct_user);
   user->get_info().display_name = display_name;
   user->get_info().type = TYPE_WEB;
   user->get_info().max_buckets =
     cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
-  rgw_apply_default_bucket_quota(user->get_info().bucket_quota, cct->_conf);
-  rgw_apply_default_user_quota(user->get_info().user_quota, cct->_conf);
+  rgw_apply_default_bucket_quota(user->get_info().quota.bucket_quota, cct->_conf);
+  rgw_apply_default_user_quota(user->get_info().quota.user_quota, cct->_conf);
 
   int ret = user->store_user(dpp, null_yield, true);
   if (ret < 0) {
@@ -391,7 +392,7 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   federated_user.tenant = role_tenant;
   federated_user.ns = "oidc";
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(federated_user);
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(federated_user);
 
   //Check in oidc namespace
   if (user->load_user(dpp, null_yield) >= 0) {
@@ -512,6 +513,9 @@ bool rgw::auth::WebIdentityApplier::is_identity(const idset_t& ids) const
   }
     return false;
 }
+
+const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;
+const std::string rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY;
 
 /* rgw::auth::RemoteAuthApplier */
 uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
@@ -642,7 +646,7 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
     new_acct_user.tenant = new_acct_user.id;
   }
 
-  std::unique_ptr<rgw::sal::User> user = store->get_user(new_acct_user);
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(new_acct_user);
   user->get_info().display_name = info.acct_name;
   if (info.acct_type) {
     //ldap/keystone for s3 users
@@ -650,8 +654,8 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
   }
   user->get_info().max_buckets =
     cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
-  rgw_apply_default_bucket_quota(user->get_info().bucket_quota, cct->_conf);
-  rgw_apply_default_user_quota(user->get_info().user_quota, cct->_conf);
+  rgw_apply_default_bucket_quota(user->get_info().quota.bucket_quota, cct->_conf);
+  rgw_apply_default_user_quota(user->get_info().quota.user_quota, cct->_conf);
   user_info = user->get_info();
 
   int ret = user->store_user(dpp, null_yield, true);
@@ -660,6 +664,12 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
                   << user << " ret=" << ret << dendl;
     throw ret;
   }
+}
+
+void rgw::auth::RemoteApplier::write_ops_log_entry(rgw_log_entry& entry) const
+{
+  entry.access_key_id = info.access_key_id;
+  entry.subuser = info.subuser;
 }
 
 /* TODO(rzarzynski): we need to handle display_name changes. */
@@ -695,7 +705,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
 	;	/* suppress lookup for id used by "other" protocol */
   else if (acct_user.tenant.empty()) {
     const rgw_user tenanted_uid(acct_user.id, acct_user.id);
-    user = store->get_user(tenanted_uid);
+    user = driver->get_user(tenanted_uid);
 
     if (user->load_user(dpp, null_yield) >= 0) {
       /* Succeeded. */
@@ -704,7 +714,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
     }
   }
 
-  user = store->get_user(acct_user);
+  user = driver->get_user(acct_user);
 
   if (split_mode && implicit_tenant)
 	;	/* suppress lookup for id used by "other" protocol */
@@ -723,6 +733,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
 /* rgw::auth::LocalApplier */
 /* static declaration */
 const std::string rgw::auth::LocalApplier::NO_SUBUSER;
+const std::string rgw::auth::LocalApplier::NO_ACCESS_KEY;
 
 uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
 {
@@ -801,6 +812,12 @@ void rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWU
   user_info = this->user_info;
 }
 
+void rgw::auth::LocalApplier::write_ops_log_entry(rgw_log_entry& entry) const
+{
+  entry.access_key_id = access_key_id;
+  entry.subuser = subuser;
+}
+
 void rgw::auth::RoleApplier::to_str(std::ostream& out) const {
   out << "rgw::auth::RoleApplier(role name =" << role.name;
   for (auto& policy: role.role_policies) {
@@ -854,7 +871,7 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
   for (auto it: role.role_policies) {
     try {
       bufferlist bl = bufferlist::static_from_string(it);
-      const rgw::IAM::Policy p(s->cct, role.tenant, bl);
+      const rgw::IAM::Policy p(s->cct, role.tenant, bl, false);
       s->iam_user_policies.push_back(std::move(p));
     } catch (rgw::IAM::PolicyParseException& e) {
       //Control shouldn't reach here as the policy has already been
@@ -867,7 +884,7 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
     try {
       string policy = this->token_attrs.token_policy;
       bufferlist bl = bufferlist::static_from_string(policy);
-      const rgw::IAM::Policy p(s->cct, role.tenant, bl);
+      const rgw::IAM::Policy p(s->cct, role.tenant, bl, false);
       s->session_policies.push_back(std::move(p));
     } catch (rgw::IAM::PolicyParseException& e) {
       //Control shouldn't reach here as the policy has already been
@@ -911,7 +928,7 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
     auto apl = \
       apl_factory->create_apl_local(cct, s, user_info,
                                     rgw::auth::LocalApplier::NO_SUBUSER,
-                                    std::nullopt);
+                                    std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
     return result_t::grant(std::move(apl));
   }
 }

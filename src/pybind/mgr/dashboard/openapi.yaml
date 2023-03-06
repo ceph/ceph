@@ -154,19 +154,38 @@ paths:
         name: pool_name
         schema:
           type: string
+      - default: 0
+        description: offset
+        in: query
+        name: offset
+        schema:
+          type: integer
+      - default: 5
+        description: limit
+        in: query
+        name: limit
+        schema:
+          type: integer
+      - default: ''
+        in: query
+        name: search
+        schema:
+          type: string
+      - default: ''
+        in: query
+        name: sort
+        schema:
+          type: string
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               schema:
                 items:
                   properties:
                     pool_name:
                       description: pool name
                       type: string
-                    status:
-                      description: Status of the image
-                      type: integer
                     value:
                       description: ''
                       items:
@@ -174,7 +193,6 @@ paths:
                       type: array
                   type: object
                 required:
-                - status
                 - value
                 - pool_name
                 type: array
@@ -206,6 +224,10 @@ paths:
                   type: string
                 features:
                   type: string
+                metadata:
+                  type: string
+                mirror_mode:
+                  type: string
                 name:
                   type: string
                 namespace:
@@ -213,6 +235,9 @@ paths:
                 obj_size:
                   type: integer
                 pool_name:
+                  type: string
+                schedule_interval:
+                  default: ''
                   type: string
                 size:
                   type: integer
@@ -539,9 +564,26 @@ paths:
               properties:
                 configuration:
                   type: string
+                enable_mirror:
+                  type: string
                 features:
                   type: string
+                metadata:
+                  type: string
+                mirror_mode:
+                  type: string
                 name:
+                  type: string
+                primary:
+                  type: string
+                remove_scheduling:
+                  default: false
+                  type: boolean
+                resync:
+                  default: false
+                  type: boolean
+                schedule_interval:
+                  default: ''
                   type: string
                 size:
                   type: integer
@@ -594,6 +636,8 @@ paths:
                 dest_pool_name:
                   type: string
                 features:
+                  type: string
+                metadata:
                   type: string
                 obj_size:
                   type: integer
@@ -863,6 +907,8 @@ paths:
                 data_pool:
                   type: string
                 features:
+                  type: string
+                metadata:
                   type: string
                 obj_size:
                   type: integer
@@ -2097,6 +2143,96 @@ paths:
       security:
       - jwt: []
       summary: Update the cluster status
+      tags:
+      - Cluster
+  /api/cluster/capacity:
+    get:
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Cluster
+  /api/cluster/user:
+    get:
+      description: "\n        Get list of ceph users and its respective data\n   \
+        \     "
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get Ceph Users
+      tags:
+      - Cluster
+    post:
+      description: "\n        Add a ceph user with its defined capabilities.\n   \
+        \     :param user_entity: Entity to change\n        :param capabilities: List\
+        \ of capabilities to add to user_entity\n        "
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                capabilities:
+                  type: string
+                user_entity:
+                  type: string
+              required:
+              - user_entity
+              - capabilities
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Create Ceph User
       tags:
       - Cluster
   /api/cluster_conf:
@@ -3428,7 +3564,7 @@ paths:
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.1+json:
+            application/vnd.ceph.api.v1.2+json:
               schema:
                 properties:
                   addr:
@@ -3444,6 +3580,21 @@ paths:
                     description: Labels related to the host
                     items:
                       type: string
+                    type: array
+                  service_instances:
+                    description: Service instances related to the host
+                    items:
+                      properties:
+                        count:
+                          description: Number of instances of the service
+                          type: integer
+                        type:
+                          description: type of service
+                          type: string
+                      required:
+                      - type
+                      - count
+                      type: object
                     type: array
                   service_type:
                     description: ''
@@ -3482,6 +3633,7 @@ paths:
                 required:
                 - hostname
                 - services
+                - service_instances
                 - ceph_version
                 - addr
                 - labels
@@ -5850,74 +6002,6 @@ paths:
       summary: Updates an NFS-Ganesha export
       tags:
       - NFS-Ganesha
-  /api/nfs-ganesha/status:
-    get:
-      parameters: []
-      responses:
-        '200':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              schema:
-                properties:
-                  available:
-                    description: Is API available?
-                    type: boolean
-                  message:
-                    description: Error message
-                    type: string
-                required:
-                - available
-                - message
-                type: object
-          description: OK
-        '400':
-          description: Operation exception. Please check the response body for details.
-        '401':
-          description: Unauthenticated access. Please login first.
-        '403':
-          description: Unauthorized access. Please check your permissions.
-        '500':
-          description: Unexpected error. Please check the response body for the stack
-            trace.
-      security:
-      - jwt: []
-      summary: Status of NFS-Ganesha management feature
-      tags:
-      - NFS-Ganesha
-  /api/orchestrator/status:
-    get:
-      parameters: []
-      responses:
-        '200':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              schema:
-                properties:
-                  available:
-                    description: Orchestrator status
-                    type: boolean
-                  message:
-                    description: Error message
-                    type: string
-                required:
-                - available
-                - message
-                type: object
-          description: OK
-        '400':
-          description: Operation exception. Please check the response body for details.
-        '401':
-          description: Unauthenticated access. Please login first.
-        '403':
-          description: Unauthorized access. Please check your permissions.
-        '500':
-          description: Unexpected error. Please check the response body for the stack
-            trace.
-      security:
-      - jwt: []
-      summary: Display Orchestrator Status
-      tags:
-      - Orchestrator
   /api/osd:
     get:
       parameters: []
@@ -7276,26 +7360,9 @@ paths:
           application/json:
             schema:
               properties:
-                application_metadata:
-                  type: string
-                configuration:
-                  type: string
-                erasure_code_profile:
-                  type: string
-                flags:
-                  type: string
-                pg_num:
-                  type: integer
                 pool:
+                  default: rbd-mirror
                   type: string
-                pool_type:
-                  type: string
-                rule_name:
-                  type: string
-              required:
-              - pool
-              - pg_num
-              - pool_type
               type: object
       responses:
         '201':
@@ -7460,6 +7527,28 @@ paths:
       tags:
       - Pool
   /api/prometheus:
+    get:
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Prometheus
+  /api/prometheus/data:
     get:
       parameters: []
       responses:
@@ -7654,6 +7743,13 @@ paths:
                   type: string
                 daemon_name:
                   type: string
+                encryption_state:
+                  default: 'false'
+                  type: string
+                encryption_type:
+                  type: string
+                key_id:
+                  type: string
                 lock_enabled:
                   default: 'false'
                   type: string
@@ -7679,6 +7775,178 @@ paths:
             application/vnd.ceph.api.v1.0+json:
               type: object
           description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - RgwBucket
+  /api/rgw/bucket/deleteEncryption:
+    delete:
+      parameters:
+      - in: query
+        name: bucket_name
+        required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: owner
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - RgwBucket
+  /api/rgw/bucket/getEncryption:
+    get:
+      parameters:
+      - in: query
+        name: bucket_name
+        required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: owner
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - RgwBucket
+  /api/rgw/bucket/getEncryptionConfig:
+    get:
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: owner
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - RgwBucket
+  /api/rgw/bucket/setEncryptionConfig:
+    put:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                address:
+                  type: string
+                auth_method:
+                  type: string
+                client_cert:
+                  type: string
+                client_key:
+                  type: string
+                daemon_name:
+                  type: string
+                encryption_type:
+                  type: string
+                kms_provider:
+                  type: string
+                namespace:
+                  default: ''
+                  type: string
+                owner:
+                  type: string
+                secret_engine:
+                  type: string
+                secret_path:
+                  default: ''
+                  type: string
+                ssl_cert:
+                  type: string
+                token:
+                  type: string
+              type: object
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource updated.
         '202':
           content:
             application/vnd.ceph.api.v1.0+json:
@@ -7785,6 +8053,13 @@ paths:
                 bucket_id:
                   type: string
                 daemon_name:
+                  type: string
+                encryption_state:
+                  default: 'false'
+                  type: string
+                encryption_type:
+                  type: string
+                key_id:
                   type: string
                 lock_mode:
                   type: string
@@ -7937,40 +8212,6 @@ paths:
       - jwt: []
       tags:
       - RgwSite
-  /api/rgw/status:
-    get:
-      parameters: []
-      responses:
-        '200':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              schema:
-                properties:
-                  available:
-                    description: Is RGW available?
-                    type: boolean
-                  message:
-                    description: Descriptions
-                    type: string
-                required:
-                - available
-                - message
-                type: object
-          description: OK
-        '400':
-          description: Operation exception. Please check the response body for details.
-        '401':
-          description: Unauthenticated access. Please login first.
-        '403':
-          description: Unauthorized access. Please check your permissions.
-        '500':
-          description: Unexpected error. Please check the response body for the stack
-            trace.
-      security:
-      - jwt: []
-      summary: Display RGW Status
-      tags:
-      - Rgw
   /api/rgw/user:
     get:
       parameters:
@@ -8088,6 +8329,29 @@ paths:
       - jwt: []
       tags:
       - RgwUser
+  /api/rgw/user/roles:
+    get:
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List RGW roles
+      tags:
+      - RGW
   /api/rgw/user/{uid}:
     delete:
       parameters:
@@ -8834,10 +9098,30 @@ paths:
         name: service_name
         schema:
           type: string
+      - default: 0
+        in: query
+        name: offset
+        schema:
+          type: integer
+      - default: 5
+        in: query
+        name: limit
+        schema:
+          type: integer
+      - default: ''
+        in: query
+        name: search
+        schema:
+          type: string
+      - default: +service_name
+        in: query
+        name: sort
+        schema:
+          type: string
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               type: object
           description: OK
         '400':
@@ -8966,6 +9250,50 @@ paths:
             application/vnd.ceph.api.v1.0+json:
               type: object
           description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Service
+    put:
+      description: "\n        :param service_spec: The service specification as JSON.\n\
+        \        :param service_name: The service name, e.g. 'alertmanager'.\n   \
+        \     :return: None\n        "
+      parameters:
+      - in: path
+        name: service_name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                service_spec:
+                  type: string
+              required:
+              - service_spec
+              type: object
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
         '401':
@@ -10494,7 +10822,7 @@ tags:
   name: Auth
 - description: Cephfs Management API
   name: Cephfs
-- description: Get Cluster Details
+- description: Get Ceph Users
   name: Cluster
 - description: Manage Cluster Configurations
   name: ClusterConfiguration
@@ -10532,8 +10860,6 @@ tags:
   name: NFS-Ganesha
 - description: OSD management API
   name: OSD
-- description: Orchestrator Management API
-  name: Orchestrator
 - description: OSD Perf Counters Management API
   name: OsdPerfCounter
 - description: Perf Counters Management API
@@ -10544,6 +10870,8 @@ tags:
   name: Prometheus
 - description: Prometheus Notifications Management API
   name: PrometheusNotifications
+- description: List of RGW roles
+  name: RGW
 - description: RBD Management API
   name: Rbd
 - description: RBD Mirroring Management API
@@ -10564,8 +10892,6 @@ tags:
   name: RbdTrash
 - description: Feedback API
   name: Report
-- description: RGW Management API
-  name: Rgw
 - description: RGW Bucket Management API
   name: RgwBucket
 - description: RGW Daemon Management API

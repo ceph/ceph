@@ -327,7 +327,7 @@ class BinnedLRUCache : public ShardedCache {
   virtual size_t GetCharge(Handle* handle) const override;
   virtual uint32_t GetHash(Handle* handle) const override;
   virtual void DisownData() override;
-#if (ROCKSDB_MAJOR >= 6 && ROCKSDB_MINOR >= 22)
+#if (ROCKSDB_MAJOR >= 7 || (ROCKSDB_MAJOR == 6 && ROCKSDB_MINOR >= 22))
   virtual DeleterFn GetDeleter(Handle* handle) const override;
 #endif
   //  Retrieves number of elements in LRU, for unit test purpose only

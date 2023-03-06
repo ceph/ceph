@@ -43,6 +43,7 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_curl_wait_timeout_ms
 .. confval:: rgw_copy_obj_progress
 .. confval:: rgw_copy_obj_progress_every_bytes
+.. confval:: rgw_max_copy_obj_concurrent_io
 .. confval:: rgw_admin_entry
 .. confval:: rgw_content_length_compat
 .. confval:: rgw_bucket_quota_ttl
@@ -146,6 +147,11 @@ file under each ``[client.radosgw.{instance-name}]`` instance.
 .. confval:: rgw_data_log_obj_prefix
 .. confval:: rgw_data_log_num_shards
 .. confval:: rgw_md_log_max_shards
+.. confval:: rgw_data_sync_poll_interval
+.. confval:: rgw_meta_sync_poll_interval
+.. confval:: rgw_bucket_sync_spawn_window
+.. confval:: rgw_data_sync_spawn_window
+.. confval:: rgw_meta_sync_spawn_window
 
 .. important:: The values of :confval:`rgw_data_log_num_shards` and
    :confval:`rgw_md_log_max_shards` should not be changed after sync has
@@ -203,6 +209,9 @@ Keystone Settings
 .. confval:: rgw_keystone_accepted_roles
 .. confval:: rgw_keystone_token_cache_size
 .. confval:: rgw_keystone_verify_ssl
+.. confval:: rgw_keystone_service_token_enabled
+.. confval:: rgw_keystone_service_token_accepted_roles
+.. confval:: rgw_keystone_expired_token_cache_expiration
 
 Server-side encryption Settings
 ===============================
@@ -228,6 +237,22 @@ HashiCorp Vault Settings
 .. confval:: rgw_crypt_vault_prefix
 .. confval:: rgw_crypt_vault_secret_engine
 .. confval:: rgw_crypt_vault_namespace
+
+SSE-S3 Settings
+===============
+
+.. confval:: rgw_crypt_sse_s3_backend
+.. confval:: rgw_crypt_sse_s3_vault_secret_engine
+.. confval:: rgw_crypt_sse_s3_key_template
+.. confval:: rgw_crypt_sse_s3_vault_auth
+.. confval:: rgw_crypt_sse_s3_vault_token_file
+.. confval:: rgw_crypt_sse_s3_vault_addr
+.. confval:: rgw_crypt_sse_s3_vault_prefix
+.. confval:: rgw_crypt_sse_s3_vault_namespace
+.. confval:: rgw_crypt_sse_s3_vault_verify_ssl
+.. confval:: rgw_crypt_sse_s3_vault_ssl_cacert
+.. confval:: rgw_crypt_sse_s3_vault_ssl_clientcert
+.. confval:: rgw_crypt_sse_s3_vault_ssl_clientkey
 
 
 QoS settings

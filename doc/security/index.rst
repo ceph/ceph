@@ -36,4 +36,7 @@ the following GPG key:
 Supported versions
 ==================
 
-Security updates are applied only to the current :ref:`active-releases`.
+Security updates are applied only to the current `Active Releases`_.
+
+
+.. _Active Releases: https://docs.ceph.com/en/latest/releases/#active-releases

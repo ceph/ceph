@@ -7,7 +7,8 @@ import { HostService } from '~/app/shared/api/host.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import {
-  HddSmartDataV1,
+  AtaSmartDataV1,
+  IscsiSmartDataV1,
   NvmeSmartDataV1,
   SmartDataResult,
   SmartError,
@@ -35,6 +36,7 @@ export class SmartListComponent implements OnInit, OnChanges {
   data: { [deviceId: string]: SmartDataResult | SmartErrorResult } = {};
 
   smartDataColumns: CdTableColumn[];
+  scsiSmartDataColumns: CdTableColumn[];
 
   isEmpty = _.isEmpty;
 
@@ -48,8 +50,12 @@ export class SmartListComponent implements OnInit, OnChanges {
     return _.get(data, 'device.protocol', '').toLowerCase() === 'nvme';
   }
 
-  isHddSmartData(data: any): data is HddSmartDataV1 {
+  isAtaSmartData(data: any): data is AtaSmartDataV1 {
     return _.get(data, 'device.protocol', '').toLowerCase() === 'ata';
+  }
+
+  isIscsiSmartData(data: any): data is IscsiSmartDataV1 {
+    return _.get(data, 'device.protocol', '').toLowerCase() === 'scsi';
   }
 
   private fetchData(data: any) {
@@ -76,12 +82,13 @@ smartmontools is required to successfully retrieve data.`;
         result[deviceId] = _result;
         return;
       }
-
       // Prepare S.M.A.R.T data
       if (smartData.json_format_version[0] === 1) {
         // Version 1.x
-        if (this.isHddSmartData(smartData)) {
-          result[deviceId] = this.extractHddData(smartData);
+        if (this.isAtaSmartData(smartData)) {
+          result[deviceId] = this.extractAtaData(smartData);
+        } else if (this.isIscsiSmartData(smartData)) {
+          result[deviceId] = this.extractIscsiData(smartData);
         } else if (this.isNvmeSmartData(smartData)) {
           result[deviceId] = this.extractNvmeData(smartData);
         }
@@ -95,7 +102,7 @@ smartmontools is required to successfully retrieve data.`;
   }
 
   private extractNvmeData(smartData: NvmeSmartDataV1): SmartDataResult {
-    const info = _.omitBy(smartData, (_value, key) =>
+    const info = _.omitBy(smartData, (_value: string, key: string) =>
       ['nvme_smart_health_information_log'].includes(key)
     );
     return {
@@ -108,8 +115,23 @@ smartmontools is required to successfully retrieve data.`;
     };
   }
 
-  private extractHddData(smartData: HddSmartDataV1): SmartDataResult {
-    const info = _.omitBy(smartData, (_value, key) =>
+  private extractIscsiData(smartData: IscsiSmartDataV1): SmartDataResult {
+    const info = _.omitBy(smartData, (_value: string, key: string) =>
+      ['scsi_error_counter_log', 'scsi_grown_defect_list'].includes(key)
+    );
+    return {
+      info: info,
+      smart: {
+        scsi_error_counter_log: smartData.scsi_error_counter_log,
+        scsi_grown_defect_list: smartData.scsi_grown_defect_list
+      },
+      device: info.device.name,
+      identifier: info.serial_number
+    };
+  }
+
+  private extractAtaData(smartData: AtaSmartDataV1): SmartDataResult {
+    const info = _.omitBy(smartData, (_value: string, key: string) =>
       ['ata_smart_attributes', 'ata_smart_selective_self_test_log', 'ata_smart_data'].includes(key)
     );
     return {
@@ -156,6 +178,25 @@ smartmontools is required to successfully retrieve data.`;
       { prop: 'value', name: $localize`Value` },
       { prop: 'when_failed', name: $localize`When Failed` },
       { prop: 'worst', name: $localize`Worst` }
+    ];
+
+    this.scsiSmartDataColumns = [
+      {
+        prop: 'correction_algorithm_invocations',
+        name: $localize`Correction Algorithm Invocations`
+      },
+      {
+        prop: 'errors_corrected_by_eccdelayed',
+        name: $localize`Errors Corrected by ECC (Delayed)`
+      },
+      { prop: 'errors_corrected_by_eccfast', name: $localize`Errors Corrected by ECC (Fast)` },
+      {
+        prop: 'errors_corrected_by_rereads_rewrites',
+        name: $localize`Errors Corrected by Rereads/Rewrites`
+      },
+      { prop: 'gigabytes_processed', name: $localize`Gigabyes Processed` },
+      { prop: 'total_errors_corrected', name: $localize`Total Errors Corrected` },
+      { prop: 'total_uncorrected_errors', name: $localize`Total Errors Uncorrected` }
     ];
   }
 

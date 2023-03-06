@@ -33,8 +33,8 @@ Scenario: "Test AVG Disk Utilization"
     | node_disk_io_time_seconds_total{device="sda",instance="localhost:9100"} | 10+60x1 |
     | node_disk_io_time_seconds_total{device="sdb",instance="localhost:9100"} | 10+60x1 |
     | node_disk_io_time_seconds_total{device="sdc",instance="localhost:9100"} | 10 2000 |
-    | ceph_disk_occupation_human{ceph_daemon="osd.0",device="sda",instance="localhost:9283"} | 1.0 |
-    | ceph_disk_occupation_human{ceph_daemon="osd.1",device="/dev/sdb",instance="localhost:9283"} | 1.0 |
+    | ceph_disk_occupation_human{job="ceph",ceph_daemon="osd.0",device="sda",instance="localhost:9283"} | 1.0 |
+    | ceph_disk_occupation_human{job="ceph",ceph_daemon="osd.1",device="/dev/sdb",instance="localhost:9283"} | 1.0 |
   When variable `osd_hosts` is `localhost`
   Then Grafana panel `AVG Disk Utilization` with legend `EMPTY` shows:
     | metrics | values |

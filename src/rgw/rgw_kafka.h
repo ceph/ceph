@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #pragma once
@@ -31,7 +31,7 @@ bool init(CephContext* cct);
 void shutdown();
 
 // connect to a kafka endpoint
-connection_ptr_t connect(const std::string& url, bool use_ssl, bool verify_ssl, boost::optional<const std::string&> ca_location);
+connection_ptr_t connect(const std::string& url, bool use_ssl, bool verify_ssl, boost::optional<const std::string&> ca_location, boost::optional<const std::string&> mechanism);
 
 // publish a message over a connection that was already created
 int publish(connection_ptr_t& conn,
@@ -41,7 +41,7 @@ int publish(connection_ptr_t& conn,
 // publish a message over a connection that was already created
 // and pass a callback that will be invoked (async) when broker confirms
 // receiving the message
-int publish_with_confirm(connection_ptr_t& conn, 
+int publish_with_confirm(connection_ptr_t& conn,
     const std::string& topic,
     const std::string& message,
     reply_callback_t cb);
@@ -51,7 +51,7 @@ std::string status_to_string(int s);
 
 // number of connections
 size_t get_connection_count();
-  
+
 // return the number of messages that were sent
 // to broker, but were not yet acked/nacked/timedout
 size_t get_inflight();

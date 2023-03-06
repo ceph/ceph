@@ -27,6 +27,15 @@ options:
   default: 4_K
   services:
   - mon
+- name: osd_pool_default_crimson
+  type: bool
+  level: advanced
+  desc: Create pools by default with FLAG_CRIMSON
+  default: false
+  services :
+  - mon
+  flags:
+  - runtime
 - name: mon_max_pool_pg_num
   type: uint
   level: advanced
@@ -1321,3 +1330,11 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_use_min_delay_socket
+  type: bool
+  level: advanced
+  default: false
+  desc: priority packets between mons
+  with_legacy: true
+  see_also:
+  - osd_heartbeat_use_min_delay_socket

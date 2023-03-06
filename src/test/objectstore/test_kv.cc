@@ -1278,7 +1278,7 @@ TEST_F(RocksDBResharding, change_reshard) {
 INSTANTIATE_TEST_SUITE_P(
   KeyValueDB,
   KVTest,
-  ::testing::Values("rocksdb", "memdb"));
+  ::testing::Values("rocksdb"));
 
 INSTANTIATE_TEST_SUITE_P(
   KeyValueDB,
@@ -1296,7 +1296,7 @@ int main(int argc, char **argv) {
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf.set_val(
     "enable_experimental_unrecoverable_data_corrupting_features",
-    "rocksdb, memdb");
+    "rocksdb");
   g_ceph_context->_conf.apply_changes(nullptr);
 
   ::testing::InitGoogleTest(&argc, argv);

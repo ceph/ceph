@@ -149,8 +149,8 @@ errors.
 
 ::
 
-    cephfs-data-scan scan_extents <data pool>
-    cephfs-data-scan scan_inodes <data pool>
+    cephfs-data-scan scan_extents [<data pool> [<extra data pool> ...]]
+    cephfs-data-scan scan_inodes [<data pool>]
     cephfs-data-scan scan_links
 
 'scan_extents' and 'scan_inodes' commands may take a *very long* time
@@ -166,22 +166,22 @@ The example below shows how to run 4 workers simultaneously:
 ::
 
     # Worker 0
-    cephfs-data-scan scan_extents --worker_n 0 --worker_m 4 <data pool>
+    cephfs-data-scan scan_extents --worker_n 0 --worker_m 4
     # Worker 1
-    cephfs-data-scan scan_extents --worker_n 1 --worker_m 4 <data pool>
+    cephfs-data-scan scan_extents --worker_n 1 --worker_m 4
     # Worker 2
-    cephfs-data-scan scan_extents --worker_n 2 --worker_m 4 <data pool>
+    cephfs-data-scan scan_extents --worker_n 2 --worker_m 4
     # Worker 3
-    cephfs-data-scan scan_extents --worker_n 3 --worker_m 4 <data pool>
+    cephfs-data-scan scan_extents --worker_n 3 --worker_m 4
 
     # Worker 0
-    cephfs-data-scan scan_inodes --worker_n 0 --worker_m 4 <data pool>
+    cephfs-data-scan scan_inodes --worker_n 0 --worker_m 4
     # Worker 1
-    cephfs-data-scan scan_inodes --worker_n 1 --worker_m 4 <data pool>
+    cephfs-data-scan scan_inodes --worker_n 1 --worker_m 4
     # Worker 2
-    cephfs-data-scan scan_inodes --worker_n 2 --worker_m 4 <data pool>
+    cephfs-data-scan scan_inodes --worker_n 2 --worker_m 4
     # Worker 3
-    cephfs-data-scan scan_inodes --worker_n 3 --worker_m 4 <data pool>
+    cephfs-data-scan scan_inodes --worker_n 3 --worker_m 4
 
 It is **important** to ensure that all workers have completed the
 scan_extents phase before any workers enter the scan_inodes phase.
@@ -191,8 +191,13 @@ operation to delete ancillary data generated during recovery.
 
 ::
 
-    cephfs-data-scan cleanup <data pool>
+    cephfs-data-scan cleanup [<data pool>]
 
+Note, the data pool parameters for 'scan_extents', 'scan_inodes' and
+'cleanup' commands are optional, and usually the tool will be able to
+detect the pools automatically. Still you may override this. The
+'scan_extents' command needs all data pools to be specified, while
+'scan_inodes' and 'cleanup' commands need only the main data pool.
 
 
 Using an alternate metadata pool for recovery
@@ -224,40 +229,39 @@ mark the file system failed:
 
     ceph fs fail <fs_name>
 
+.. note::
+
+   <fs_name> here and below indicates the original, damaged file system.
+
 Next, create a recovery file system in which we will populate a new metadata pool
 backed by the original data pool.
 
 ::
 
-    ceph fs flag set enable_multiple true --yes-i-really-mean-it
     ceph osd pool create cephfs_recovery_meta
-    ceph fs new cephfs_recovery recovery <data_pool> --allow-dangerous-metadata-overlay
+    ceph fs new cephfs_recovery cephfs_recovery_meta <data_pool> --recover --allow-dangerous-metadata-overlay
 
+.. note::
 
-The recovery file system starts with an MDS rank that will initialize the new
-metadata pool with some metadata. This is necessary to bootstrap recovery.
-However, now we will take the MDS down as we do not want it interacting with
-the metadata pool further.
+   You may rename the recovery metadata pool and file system at a future time.
+   The ``--recover`` flag prevents any MDS from joining the new file system.
 
-::
-
-    ceph fs fail cephfs_recovery
-
-Next, we will reset the initial metadata the MDS created:
+Next, we will create the intial metadata for the fs:
 
 ::
 
-    cephfs-table-tool cephfs_recovery:all reset session
-    cephfs-table-tool cephfs_recovery:all reset snap
-    cephfs-table-tool cephfs_recovery:all reset inode
+    cephfs-table-tool cephfs_recovery:0 reset session
+    cephfs-table-tool cephfs_recovery:0 reset snap
+    cephfs-table-tool cephfs_recovery:0 reset inode
+    cephfs-journal-tool --rank cephfs_recovery:0 journal reset --force
 
 Now perform the recovery of the metadata pool from the data pool:
 
 ::
 
     cephfs-data-scan init --force-init --filesystem cephfs_recovery --alternate-pool cephfs_recovery_meta
-    cephfs-data-scan scan_extents --alternate-pool cephfs_recovery_meta --filesystem <fs_name> <data_pool>
-    cephfs-data-scan scan_inodes --alternate-pool cephfs_recovery_meta --filesystem <fs_name> --force-corrupt <data_pool>
+    cephfs-data-scan scan_extents --alternate-pool cephfs_recovery_meta --filesystem <fs_name>
+    cephfs-data-scan scan_inodes --alternate-pool cephfs_recovery_meta --filesystem <fs_name> --force-corrupt
     cephfs-data-scan scan_links --filesystem cephfs_recovery
 
 .. note::
@@ -272,7 +276,6 @@ with:
 ::
 
     cephfs-journal-tool --rank=<fs_name>:0 event recover_dentries list --alternate-pool cephfs_recovery_meta
-    cephfs-journal-tool --rank cephfs_recovery:0 journal reset --force
 
 After recovery, some recovered directories will have incorrect statistics.
 Ensure the parameters ``mds_verify_scatter`` and ``mds_debug_scatterstat`` are
@@ -283,26 +286,27 @@ set to false (the default) to prevent the MDS from checking the statistics:
     ceph config rm mds mds_verify_scatter
     ceph config rm mds mds_debug_scatterstat
 
-(Note, the config may also have been set globally or via a ceph.conf file.)
+.. note::
+
+    Also verify the config has not been set globally or with a local ceph.conf file.
+
 Now, allow an MDS to join the recovery file system:
 
 ::
 
     ceph fs set cephfs_recovery joinable true
 
-Finally, run a forward :doc:`scrub </cephfs/scrub>` to repair the statistics.
+Finally, run a forward :doc:`scrub </cephfs/scrub>` to repair recursive statistics.
 Ensure you have an MDS running and issue:
 
 ::
 
-    ceph fs status # get active MDS
-    ceph tell mds.<id> scrub start / recursive repair
+    ceph tell mds.cephfs_recovery:0 scrub start / recursive,repair,force
 
 .. note::
 
-   Symbolic links are recovered as empty regular files. `Symbolic link recovery
-   <https://tracker.ceph.com/issues/46166>`_ is scheduled to be supported in
-   Pacific.
+   The `Symbolic link recovery <https://tracker.ceph.com/issues/46166>`_ is supported from Quincy.
+   Symbolic links were recovered as empty regular files before.
 
 It is recommended to migrate any data from the recovery file system as soon as
 possible. Do not restore the old file system while the recovery file system is

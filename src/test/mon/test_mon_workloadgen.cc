@@ -57,7 +57,6 @@
 
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
-#include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDMap.h"
 #include "messages/MPGStats.h"
@@ -743,33 +742,6 @@ class OSDStub : public TestStub
     }
   }
 
-  void handle_pg_create(MOSDPGCreate *m) {
-    ceph_assert(m != NULL);
-    if (m->epoch < osdmap.get_epoch()) {
-      std::cout << __func__ << " epoch " << m->epoch << " < "
-	       << osdmap.get_epoch() << "; dropping" << std::endl;
-      m->put();
-      return;
-    }
-
-    for (map<pg_t,pg_create_t>::iterator it = m->mkpg.begin();
-	 it != m->mkpg.end(); ++it) {
-      pg_create_t &c = it->second;
-      std::cout << __func__ << " pg " << it->first
-	      << " created " << c.created
-	      << " parent " << c.parent << std::endl;
-      if (pgs.count(it->first)) {
-	std::cout << __func__ << " pg " << it->first
-		 << " exists; skipping" << std::endl;
-	continue;
-      }
-
-      pg_t pgid = it->first;
-      add_pg(pgid, c.created, c.parent);
-    }
-    send_pg_stats();
-  }
-
   void handle_osd_map(MOSDMap *m) {
     dout(1) << __func__ << dendl;
     if (m->fsid != monc.get_fsid()) {
@@ -798,8 +770,10 @@ class OSDStub : public TestStub
     if (first > osdmap.get_epoch() + 1) {
       dout(5) << __func__
 	      << osdmap.get_epoch() + 1 << ".." << (first-1) << dendl;
-      if ((m->oldest_map < first && osdmap.get_epoch() == 0) ||
-	  m->oldest_map <= osdmap.get_epoch()) {
+      if ((m->cluster_osdmap_trim_lower_bound <
+           first && osdmap.get_epoch() == 0) ||
+	  m->cluster_osdmap_trim_lower_bound <=
+          osdmap.get_epoch()) {
 	monc.sub_want("osdmap", osdmap.get_epoch()+1,
 		       CEPH_SUBSCRIBE_ONETIME);
 	monc.renew_subs();
@@ -872,9 +846,6 @@ class OSDStub : public TestStub
     dout(1) << __func__ << " " << *m << dendl;
 
     switch (m->get_type()) {
-    case MSG_OSD_PG_CREATE:
-      handle_pg_create((MOSDPGCreate*)m);
-      break;
     case CEPH_MSG_OSD_MAP:
       handle_osd_map((MOSDMap*)m);
       break;

@@ -41,7 +41,7 @@ SegmentManagerGroup::read_segment_tail(segment_id_t segment)
       decode(tail, bp);
     } catch (ceph::buffer::error &e) {
       DEBUG("segment {} unable to decode tail, skipping -- {}",
-            segment, e);
+            segment, e.what());
       return crimson::ct_error::enodata::make();
     }
     DEBUG("segment {} tail {}", segment, tail);
@@ -81,75 +81,13 @@ SegmentManagerGroup::read_segment_header(segment_id_t segment)
       decode(header, bp);
     } catch (ceph::buffer::error &e) {
       DEBUG("segment {} unable to decode header, skipping -- {}",
-            segment, e);
+            segment, e.what());
       return crimson::ct_error::enodata::make();
     }
     DEBUG("segment {} header {}", segment, header);
     return read_segment_header_ret(
       read_segment_header_ertr::ready_future_marker{},
       header);
-  });
-}
-
-SegmentManagerGroup::scan_extents_ret
-SegmentManagerGroup::scan_extents(
-  scan_extents_cursor &cursor,
-  extent_len_t bytes_to_read)
-{
-  auto ret = std::make_unique<scan_extents_ret_bare>();
-  auto* extents = ret.get();
-  return read_segment_header(cursor.get_segment_id()
-  ).handle_error(
-    scan_extents_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in SegmentManagerGroup::scan_extents"
-    }
-  ).safe_then([bytes_to_read, extents, &cursor, this](auto segment_header) {
-    auto segment_nonce = segment_header.segment_nonce;
-    return seastar::do_with(
-      found_record_handler_t([extents](
-        record_locator_t locator,
-        const record_group_header_t& header,
-        const bufferlist& mdbuf) mutable -> scan_valid_records_ertr::future<>
-      {
-        LOG_PREFIX(SegmentManagerGroup::scan_extents);
-        DEBUG("decoding {} records", header.records);
-        auto maybe_record_extent_infos = try_decode_extent_infos(header, mdbuf);
-        if (!maybe_record_extent_infos) {
-          // This should be impossible, we did check the crc on the mdbuf
-          ERROR("unable to decode extents for record {}",
-                locator.record_block_base);
-          return crimson::ct_error::input_output_error::make();
-        }
-
-        paddr_t extent_offset = locator.record_block_base;
-        for (auto& r: *maybe_record_extent_infos) {
-          DEBUG("decoded {} extents", r.extent_infos.size());
-          for (const auto &i : r.extent_infos) {
-            extents->emplace_back(
-              extent_offset,
-              std::pair<commit_info_t, extent_info_t>(
-                {r.header.commit_time,
-                r.header.commit_type},
-                i));
-            auto& seg_addr = extent_offset.as_seg_paddr();
-            seg_addr.set_segment_off(
-              seg_addr.get_segment_off() + i.len);
-          }
-        }
-        return scan_extents_ertr::now();
-      }),
-      [bytes_to_read, segment_nonce, &cursor, this](auto &dhandler) {
-        return scan_valid_records(
-          cursor,
-          segment_nonce,
-          bytes_to_read,
-          dhandler
-        ).discard_result();
-      }
-    );
-  }).safe_then([ret=std::move(ret)] {
-    return std::move(*ret);
   });
 }
 
@@ -172,9 +110,9 @@ SegmentManagerGroup::scan_valid_records(
   auto retref = std::make_unique<size_t>(0);
   auto &budget_used = *retref;
   return crimson::repeat(
-    [=, &cursor, &budget_used, &handler]() mutable
+    [=, &cursor, &budget_used, &handler, this]() mutable
     -> scan_valid_records_ertr::future<seastar::stop_iteration> {
-      return [=, &handler, &cursor, &budget_used] {
+      return [=, &handler, &cursor, &budget_used, this] {
 	if (!cursor.last_valid_header_found) {
 	  return read_validate_record_metadata(cursor.seq.offset, nonce
 	  ).safe_then([=, &cursor](auto md) {
@@ -196,12 +134,12 @@ SegmentManagerGroup::scan_valid_records(
 	      cursor.emplace_record_group(header, std::move(md_bl));
 	      return scan_valid_records_ertr::now();
 	    }
-	  }).safe_then([=, &cursor, &budget_used, &handler] {
+	  }).safe_then([=, &cursor, &budget_used, &handler, this] {
 	    DEBUG("processing committed record groups until {}, {} pending",
 		  cursor.last_committed,
 		  cursor.pending_record_groups.size());
 	    return crimson::repeat(
-	      [=, &budget_used, &cursor, &handler] {
+	      [=, &budget_used, &cursor, &handler, this] {
 		if (cursor.pending_record_groups.empty()) {
 		  /* This is only possible if the segment is empty.
 		   * A record's last_commited must be prior to its own
@@ -276,8 +214,7 @@ SegmentManagerGroup::read_validate_record_metadata(
   return segment_manager.read(start, block_size
   ).safe_then([=, &segment_manager](bufferptr bptr) mutable
               -> read_validate_record_metadata_ret {
-    auto block_size = static_cast<extent_len_t>(
-        segment_manager.get_block_size());
+    auto block_size = segment_manager.get_block_size();
     bufferlist bl;
     bl.append(bptr);
     auto maybe_header = try_decode_records_header(bl, nonce);
@@ -306,7 +243,7 @@ SegmentManagerGroup::read_validate_record_metadata(
 
     auto rest_start = paddr_t::make_seg_paddr(
         seg_addr.get_segment_id(),
-        seg_addr.get_segment_off() + (seastore_off_t)block_size
+        seg_addr.get_segment_off() + block_size
     );
     auto rest_len = header.mdlength - block_size;
     TRACE("reading record group header rest {}~{}", rest_start, rest_len);
@@ -369,7 +306,7 @@ SegmentManagerGroup::consume_next_records(
         cursor.seq.segment_seq,
         next.offset
       },
-      static_cast<seastore_off_t>(total_length)
+      total_length
     }
   };
   DEBUG("processing {} at {}, budget_used={}",
@@ -400,8 +337,8 @@ SegmentManagerGroup::find_journal_segment_headers()
       LOG_PREFIX(SegmentManagerGroup::find_journal_segment_headers);
       auto device_id = sm->get_device_id();
       auto num_segments = sm->get_num_segments();
-      INFO("processing {} with {} segments",
-           device_id_printer_t{device_id}, num_segments);
+      DEBUG("processing {} with {} segments",
+            device_id_printer_t{device_id}, num_segments);
       return crimson::do_for_each(
         boost::counting_iterator<device_segment_id_t>(0),
         boost::counting_iterator<device_segment_id_t>(num_segments),

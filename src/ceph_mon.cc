@@ -886,16 +886,10 @@ int main(int argc, const char **argv)
   }
 
   // bind
-  err = msgr->bindv(bind_addrs);
+  err = msgr->bindv(bind_addrs, public_addrs);
   if (err < 0) {
     derr << "unable to bind monitor to " << bind_addrs << dendl;
     prefork.exit(1);
-  }
-
-  // if the public and bind addr are different set the msgr addr
-  // to the public one, now that the bind is complete.
-  if (public_addrs != bind_addrs) {
-    msgr->set_addrs(public_addrs);
   }
 
   if (g_conf()->daemonize) {

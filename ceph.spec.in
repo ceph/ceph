@@ -36,13 +36,16 @@
 %bcond_with rbd_rwl_cache
 %endif
 %if 0%{?fedora} || 0%{?rhel}
+%if 0%{?rhel} < 9
 %bcond_with system_pmdk
-%bcond_without selinux
-%if 0%{?rhel} >= 8
-%bcond_with cephfs_java
 %else
-%bcond_without cephfs_java
+%ifarch s390x aarch64
+%bcond_with system_pmdk
+%else
+%bcond_without system_pmdk
 %endif
+%endif
+%bcond_without selinux
 %bcond_without amqp_endpoint
 %bcond_without kafka_endpoint
 %bcond_without lttng
@@ -53,7 +56,11 @@
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
+%ifarch s390x
+%bcond_with system_pmdk
+%else
 %bcond_without system_pmdk
+%endif
 %bcond_with amqp_endpoint
 %bcond_with cephfs_java
 %bcond_with kafka_endpoint
@@ -86,7 +93,11 @@
 %endif
 %endif
 %bcond_with seastar
+%if 0%{?suse_version}
 %bcond_with jaeger
+%else
+%bcond_without jaeger
+%endif
 %if 0%{?fedora} || 0%{?suse_version} >= 1500
 # distros that ship cmd2 and/or colorama
 %bcond_without cephfs_shell
@@ -94,8 +105,13 @@
 # distros that do _not_ ship cmd2/colorama
 %bcond_with cephfs_shell
 %endif
+%if 0%{?fedora} || 0%{?rhel} >= 9
+%bcond_without system_arrow
+%else
+# for centos 8, utf8proc-devel comes from the subversion-devel module which isn't available in EPEL8
+# this is tracked in https://bugzilla.redhat.com/2152265
 %bcond_with system_arrow
-%bcond_with system_utf8proc
+%endif
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8
 %global weak_deps 1
 %endif
@@ -114,6 +130,7 @@
 %{!?python3_pkgversion: %global python3_pkgversion 3}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
+%{!?gts_prefix: %global gts_prefix gcc-toolset-11}
 
 %if ! 0%{?suse_version}
 # use multi-threaded xz compression: xz level 7 using ncpus threads
@@ -139,6 +156,14 @@
 # number.
 %global _smp_ncpus_max %{smp_limit_mem_per_job 3000000}
 %endif
+%endif
+
+# disable -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1, as gcc-toolset-{10,11}-annobin
+# do not provide gcc-annobin.so anymore, despite that they provide annobin.so. but
+# redhat-rpm-config still passes -fplugin=gcc-annobin to the compiler.
+%undefine _annotated_build
+%if 0%{?rhel} == 8 && 0%{?enable_devtoolset11:1}
+%enable_devtoolset11
 %endif
 
 #################################################################################
@@ -176,6 +201,7 @@ Requires:       ceph-mon = %{_epoch_prefix}%{version}-%{release}
 Requires(post):	binutils
 %if 0%{with cephfs_java}
 BuildRequires:	java-devel
+BuildRequires:	jpackage-utils
 BuildRequires:	sharutils
 %endif
 %if 0%{with selinux}
@@ -185,10 +211,19 @@ BuildRequires:	selinux-policy-devel
 BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
-%if 0%{with seastar} && 0%{?rhel}
-BuildRequires:	gcc-toolset-10-gcc-c++ >= 10.3.1-1.2
-%else
-BuildRequires:	gcc-c++
+%if 0%{?fedora} || 0%{?suse_version} > 1500 || 0%{?rhel} == 9
+BuildRequires:	gcc-c++ >= 11
+%endif
+%if 0%{?suse_version} == 1500
+BuildRequires: gcc11-c++
+%endif
+%if 0%{?rhel} == 8
+BuildRequires:	%{gts_prefix}-gcc-c++
+BuildRequires:	%{gts_prefix}-build
+BuildRequires:	%{gts_prefix}-libatomic-devel
+%endif
+%if 0%{?fedora} || 0%{?rhel} == 9
+BuildRequires:  libatomic
 %endif
 %if 0%{with tcmalloc}
 # libprofiler did not build on ppc64le until 2.7.90
@@ -206,6 +241,7 @@ BuildRequires:	libaio-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	cryptsetup-devel
 BuildRequires:	libcurl-devel
+BuildRequires:	libcap-devel
 BuildRequires:	libcap-ng-devel
 BuildRequires:	fmt-devel >= 6.2.1
 BuildRequires:	pkgconfig(libudev)
@@ -251,13 +287,14 @@ BuildRequires:  hostname
 BuildRequires:  jq
 BuildRequires:	libuuid-devel
 BuildRequires:	python%{python3_pkgversion}-bcrypt
-BuildRequires:	python%{python3_pkgversion}-nose
 BuildRequires:	python%{python3_pkgversion}-pecan
 BuildRequires:	python%{python3_pkgversion}-requests
 BuildRequires:	python%{python3_pkgversion}-dateutil
 BuildRequires:	python%{python3_pkgversion}-coverage
 BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 BuildRequires:	socat
+BuildRequires:	python%{python3_pkgversion}-asyncssh
+BuildRequires:	python%{python3_pkgversion}-natsort
 %endif
 %if 0%{with zbd}
 BuildRequires:  libzbd-devel
@@ -280,14 +317,18 @@ BuildRequires:  nlohmann_json-devel
 BuildRequires:  libevent-devel
 %endif
 %if 0%{with system_pmdk}
+%if 0%{?suse_version}
+BuildRequires:  libndctl-devel >= 63
+%else
+BuildRequires:  ndctl-devel >= 63
+BuildRequires:  daxctl-devel >= 63
+%endif
 BuildRequires:  libpmem-devel
-BuildRequires:  libpmemobj-devel
+BuildRequires:  libpmemobj-devel >= 1.8
 %endif
 %if 0%{with system_arrow}
-BuildRequires:  arrow-devel
-BuildRequires:  parquet-devel
-%endif
-%if 0%{with system_utf8proc}
+BuildRequires:  libarrow-devel
+BuildRequires:  parquet-libs-devel
 BuildRequires:  utf8proc-devel
 %endif
 %if 0%{with seastar}
@@ -301,13 +342,12 @@ BuildRequires:  systemtap-sdt-devel
 %if 0%{?fedora}
 BuildRequires:  libubsan
 BuildRequires:  libasan
-BuildRequires:  libatomic
 %endif
-%if 0%{?rhel}
-BuildRequires:  gcc-toolset-10-annobin
-BuildRequires:  gcc-toolset-10-libubsan-devel
-BuildRequires:  gcc-toolset-10-libasan-devel
-BuildRequires:  gcc-toolset-10-libatomic-devel
+%if 0%{?rhel} == 8
+BuildRequires:  %{gts_prefix}-annobin
+BuildRequires:  %{gts_prefix}-annobin-plugin-gcc
+BuildRequires:  %{gts_prefix}-libubsan-devel
+BuildRequires:  %{gts_prefix}-libasan-devel
 %endif
 %endif
 #################################################################################
@@ -337,12 +377,14 @@ BuildRequires:  rdma-core-devel
 BuildRequires:	liblz4-devel >= 1.7
 # for prometheus-alerts
 BuildRequires:  golang-github-prometheus-prometheus
+BuildRequires:	jsonnet
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	systemd
 BuildRequires:  boost-random
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
+BuildRequires:  libatomic
 BuildRequires:	libibverbs-devel
 BuildRequires:  librdmacm-devel
 BuildRequires:  ninja-build
@@ -378,6 +420,7 @@ BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 %endif
 %if 0%{?suse_version}
 BuildRequires:	golang-github-prometheus-prometheus
+BuildRequires:	jsonnet
 BuildRequires:	libxmlsec1-1
 BuildRequires:	libxmlsec1-nss1
 BuildRequires:	libxmlsec1-openssl1
@@ -571,6 +614,7 @@ Group:          System/Filesystems
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-grafana-dashboards = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-prometheus-alerts = %{_epoch_prefix}%{version}-%{release}
+Requires:       python%{python3_pkgversion}-setuptools
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-jwt
@@ -620,6 +664,7 @@ Requires:       python%{python3_pkgversion}-pecan
 Requires:       python%{python3_pkgversion}-pyOpenSSL
 Requires:       python%{python3_pkgversion}-requests
 Requires:       python%{python3_pkgversion}-dateutil
+Requires:       python%{python3_pkgversion}-setuptools
 %if 0%{?fedora} || 0%{?rhel} >= 8
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-pyyaml
@@ -706,6 +751,15 @@ Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 %description -n cephfs-mirror
 Daemon for mirroring CephFS snapshots between Ceph clusters.
+
+%package -n ceph-exporter
+Summary: Daemon for exposing perf counters as Prometheus metrics
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
+%description -n ceph-exporter
+Daemon for exposing perf counters as Prometheus metrics
 
 %package -n rbd-fuse
 Summary:	Ceph fuse-based client
@@ -1225,6 +1279,15 @@ Group:          System/Monitoring
 %description prometheus-alerts
 This package provides Ceph default alerts for Prometheus.
 
+%package mib
+Summary:        MIB for SNMP alerts
+BuildArch:      noarch
+%if 0%{?suse_version}
+Group:          System/Monitoring
+%endif
+%description mib
+This package provides a Ceph MIB for SNMP traps.
+
 #################################################################################
 # common
 #################################################################################
@@ -1236,10 +1299,6 @@ This package provides Ceph default alerts for Prometheus.
 # See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200 for details
 %if ( 0%{?rhel} && 0%{?rhel} < 9 ) || ( 0%{?suse_version} && 0%{?suse_version} <= 1500 )
 %define _lto_cflags %{nil}
-%endif
-
-%if 0%{with seastar} && 0%{?rhel}
-. /opt/rh/gcc-toolset-10/enable
 %endif
 
 %if 0%{with cephfs_java}
@@ -1274,6 +1333,10 @@ env | sort
 mkdir -p %{_vpath_builddir}
 pushd %{_vpath_builddir}
 cmake .. \
+%if 0%{?suse_version} == 1500
+    -DCMAKE_C_COMPILER=gcc-11 \
+    -DCMAKE_CXX_COMPILER=g++-11 \
+%endif
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
     -DCMAKE_INSTALL_LIBEXECDIR:PATH=%{_libexecdir} \
@@ -1286,10 +1349,15 @@ cmake .. \
     -DWITH_MANPAGE:BOOL=ON \
     -DWITH_PYTHON3:STRING=%{python3_version} \
     -DWITH_MGR_DASHBOARD_FRONTEND:BOOL=OFF \
+%if 0%{?suse_version}
+    -DWITH_RADOSGW_SELECT_PARQUET:BOOL=OFF \
+%endif
 %if 0%{without ceph_test_package}
     -DWITH_TESTS:BOOL=OFF \
 %endif
 %if 0%{with cephfs_java}
+    -DJAVA_HOME=%{java_home} \
+    -DJAVA_LIB_INSTALL_DIR=%{_jnidir} \
     -DWITH_CEPHFS_JAVA:BOOL=ON \
 %endif
 %if 0%{with selinux}
@@ -1342,8 +1410,8 @@ cmake .. \
 %if 0%{with system_pmdk}
     -DWITH_SYSTEM_PMDK:BOOL=ON \
 %endif
-%if 0%{with jaeger}
-    -DWITH_JAEGER:BOOL=ON \
+%if 0%{without jaeger}
+    -DWITH_JAEGER:BOOL=OFF \
 %endif
 %if 0%{?suse_version}
     -DBOOST_J:STRING=%{jobs} \
@@ -1355,9 +1423,11 @@ cmake .. \
 %endif
 %if 0%{with system_arrow}
     -DWITH_SYSTEM_ARROW:BOOL=ON \
-%endif
-%if 0%{with system_utf8proc}
     -DWITH_SYSTEM_UTF8PROC:BOOL=ON \
+%endif
+%if 0%{with seastar}
+    -DWITH_SEASTAR:BOOL=ON \
+    -DWITH_JAEGER:BOOL=OFF \
 %endif
     -DWITH_GRAFANA:BOOL=ON
 
@@ -1384,6 +1454,7 @@ popd
 
 
 %install
+
 pushd %{_vpath_builddir}
 %make_install
 # we have dropped sysvinit bits
@@ -1411,7 +1482,6 @@ install -m 0644 -D COPYING %{buildroot}%{_docdir}/ceph/COPYING
 install -m 0644 -D etc/sysctl/90-ceph-osd.conf %{buildroot}%{_sysctldir}/90-ceph-osd.conf
 install -m 0755 -D src/tools/rbd_nbd/rbd-nbd_quiesce %{buildroot}%{_libexecdir}/rbd-nbd/rbd-nbd_quiesce
 
-install -m 0755 src/cephadm/cephadm %{buildroot}%{_sbindir}/cephadm
 mkdir -p %{buildroot}%{_sharedstatedir}/cephadm
 chmod 0700 %{buildroot}%{_sharedstatedir}/cephadm
 mkdir -p %{buildroot}%{_sharedstatedir}/cephadm/.ssh
@@ -1420,7 +1490,7 @@ touch %{buildroot}%{_sharedstatedir}/cephadm/.ssh/authorized_keys
 chmod 0600 %{buildroot}%{_sharedstatedir}/cephadm/.ssh/authorized_keys
 
 # firewall templates and /sbin/mount.ceph symlink
-%if 0%{?suse_version} && !0%{?usrmerged}
+%if 0%{?suse_version} && 0%{?suse_version} < 1550
 mkdir -p %{buildroot}/sbin
 ln -sf %{_sbindir}/mount.ceph %{buildroot}/sbin/mount.ceph
 %endif
@@ -1457,6 +1527,9 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
 
 # prometheus alerts
 install -m 644 -D monitoring/ceph-mixin/prometheus_alerts.yml %{buildroot}/etc/prometheus/ceph/ceph_default_alerts.yml
+
+# SNMP MIB
+install -m 644 -D -t %{buildroot}%{_datadir}/snmp/mibs monitoring/snmp/CEPH-MIB.txt
 
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
@@ -1496,6 +1569,8 @@ rm -rf %{_vpath_builddir}
 %dir %{_libdir}/ceph
 %dir %{_libdir}/ceph/erasure-code
 %{_libdir}/ceph/erasure-code/libec_*.so*
+%dir %{_libdir}/ceph/extblkdev
+%{_libdir}/ceph/extblkdev/libceph_*.so*
 %dir %{_libdir}/ceph/compressor
 %{_libdir}/ceph/compressor/libceph_*.so*
 %{_unitdir}/ceph-crash.service
@@ -1565,8 +1640,7 @@ exit 0
 
 %if ! 0%{?suse_version}
 %postun -n cephadm
-userdel -r cephadm || true
-exit 0
+[ $1 -ne 0 ] || userdel cephadm || :
 %endif
 
 %files -n cephadm
@@ -1597,7 +1671,7 @@ exit 0
 %{_bindir}/rbd-replay-many
 %{_bindir}/rbdmap
 %{_sbindir}/mount.ceph
-%if 0%{?suse_version} && !0%{?usrmerged}
+%if 0%{?suse_version} && 0%{?suse_version} < 1550
 /sbin/mount.ceph
 %endif
 %if %{with lttng}
@@ -1724,6 +1798,7 @@ fi
 %dir %{_datadir}/ceph/mgr
 %{_datadir}/ceph/mgr/mgr_module.*
 %{_datadir}/ceph/mgr/mgr_util.*
+%{_datadir}/ceph/mgr/object_format.*
 %{_unitdir}/ceph-mgr@.service
 %{_unitdir}/ceph-mgr.target
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mgr
@@ -1951,6 +2026,9 @@ if [ $1 -ge 1 ] ; then
   fi
 fi
 
+%files -n ceph-exporter
+%{_bindir}/ceph-exporter
+
 %files -n rbd-fuse
 %{_bindir}/rbd-fuse
 %{_mandir}/man8/rbd-fuse.8*
@@ -2052,14 +2130,14 @@ fi
 %{_bindir}/rgw-gap-list
 %{_bindir}/rgw-gap-list-comparator
 %{_bindir}/rgw-orphan-list
-%{_libdir}/libradosgw.so*
+%{_bindir}/rgw-policy-check
 %{_mandir}/man8/radosgw.8*
+%{_mandir}/man8/rgw-policy-check.8*
 %dir %{_localstatedir}/lib/ceph/radosgw
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-radosgw.target
 
 %post radosgw
-/sbin/ldconfig
 %if 0%{?suse_version}
 if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-radosgw@\*.service ceph-radosgw.target >/dev/null 2>&1 || :
@@ -2081,7 +2159,6 @@ fi
 %endif
 
 %postun radosgw
-/sbin/ldconfig
 %systemd_postun ceph-radosgw@\*.service ceph-radosgw.target
 if [ $1 -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
@@ -2335,6 +2412,7 @@ fi
 %dir %{_includedir}/cephfs
 %{_includedir}/cephfs/libcephfs.h
 %{_includedir}/cephfs/ceph_ll_client.h
+%{_includedir}/cephfs/types.h
 %dir %{_includedir}/cephfs/metrics
 %{_includedir}/cephfs/metrics/Types.h
 %{_libdir}/libcephfs.so
@@ -2535,5 +2613,9 @@ exit 0
 %endif
 %attr(0755,root,root) %dir %{_sysconfdir}/prometheus/ceph
 %config %{_sysconfdir}/prometheus/ceph/ceph_default_alerts.yml
+
+%files mib
+%attr(0755,root,root) %dir %{_datadir}/snmp
+%{_datadir}/snmp/mibs
 
 %changelog

@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
-import { map, mergeMap } from 'rxjs/operators';
+import { mergeMap } from 'rxjs/operators';
 
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
@@ -61,10 +61,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   hiddenColumns: string[] = [];
 
   @Input()
-  hideTitle = false;
-
-  @Input()
-  hideSubmitBtn = false;
+  hideMaintenance = false;
 
   @Input()
   hasTableDetails = true;
@@ -129,7 +126,9 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         click: () =>
           this.router.url.includes('/hosts')
             ? this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.ADD] } }])
-            : (this.bsModalRef = this.modalService.show(HostFormComponent)),
+            : (this.bsModalRef = this.modalService.show(HostFormComponent, {
+                hideMaintenance: this.hideMaintenance
+              })),
         disable: (selection: CdTableSelection) => this.getDisable('add', selection)
       },
       {
@@ -197,9 +196,9 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         flexGrow: 1
       },
       {
-        name: $localize`Services`,
-        prop: 'services',
-        flexGrow: 2,
+        name: $localize`Service Instances`,
+        prop: 'service_instances',
+        flexGrow: 1.5,
         cellTemplate: this.servicesTpl
       },
       {
@@ -214,7 +213,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: $localize`Status`,
         prop: 'status',
-        flexGrow: 1,
+        flexGrow: 0.8,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
@@ -483,15 +482,6 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
     if (this.isLoadingHosts) {
       return;
     }
-    const typeToPermissionKey = {
-      mds: 'cephfs',
-      mon: 'monitor',
-      osd: 'osd',
-      rgw: 'rgw',
-      'rbd-mirror': 'rbdMirroring',
-      mgr: 'manager',
-      'tcmu-runner': 'iscsi'
-    };
     this.isLoadingHosts = true;
     this.sub = this.orchService
       .status()
@@ -500,18 +490,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
           this.orchStatus = orchStatus;
           const factsAvailable = this.checkHostsFactsAvailable();
           return this.hostService.list(`${factsAvailable}`);
-        }),
-        map((hostList: object[]) =>
-          hostList.map((host) => {
-            host['services'].map((service: any) => {
-              service.cdLink = `/perf_counters/${service.type}/${encodeURIComponent(service.id)}`;
-              const permission = this.permissions[typeToPermissionKey[service.type]];
-              service.canRead = permission ? permission.read : false;
-              return service;
-            });
-            return host;
-          })
-        )
+        })
       )
       .subscribe(
         (hostList) => {

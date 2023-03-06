@@ -22,7 +22,7 @@ iSCSI Initiator for Microsoft Windows
 #. On the “Connect To Target” window, select the “Enable multi-path” option, and
    click the “Advanced” button.
 
-#. Under the "Connet using" section, select a “Target portal IP” . Select the
+#. Under the "Connect using" section, select a “Target portal IP” . Select the
    “Enable CHAP login on” and enter the "Name" and "Target secret" values from the
    Ceph iSCSI Ansible client credentials section, and click OK.
 

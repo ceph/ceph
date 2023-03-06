@@ -7,8 +7,9 @@
  */
 #include "common/version.h"
 #include "include/Context.h"
-
 #include "osd/osd_types.h"
+
+struct ScrubMachineListener;
 
 namespace Scrub {
 
@@ -47,11 +48,23 @@ struct preemption_t {
 /// an aux used when blocking on a busy object.
 /// Issues a log warning if still blocked after 'waittime'.
 struct blocked_range_t {
-  blocked_range_t(OSDService* osds, ceph::timespan waittime, spg_t pg_id);
+  blocked_range_t(OSDService* osds,
+		  ceph::timespan waittime,
+		  ScrubMachineListener& scrubber,
+		  spg_t pg_id);
   ~blocked_range_t();
 
   OSDService* m_osds;
+  ScrubMachineListener& m_scrubber;
+
+  /// used to identify ourselves to the PG, when no longer blocked
+  spg_t m_pgid;
   Context* m_callbk;
+
+  // once timed-out, we flag the OSD's scrub-queue as having
+  // a problem. 'm_warning_issued' signals the need to clear
+  // that OSD-wide flag.
+  bool m_warning_issued{false};
 };
 
 using BlockedRangeWarning = std::unique_ptr<blocked_range_t>;
@@ -66,6 +79,10 @@ struct ScrubMachineListener {
   };
 
   virtual ~ScrubMachineListener() = default;
+
+  /// set the string we'd use in logs to convey the current state-machine
+  /// state.
+  virtual void set_state_name(const char* name) = 0;
 
   [[nodiscard]] virtual bool is_primary() const = 0;
 
@@ -90,13 +107,13 @@ struct ScrubMachineListener {
 
   virtual void replica_handling_done() = 0;
 
-  /// the version of 'scrub_clear_state()' that does not try to invoke FSM services
-  /// (thus can be called from FSM reactions)
+  /// the version of 'scrub_clear_state()' that does not try to invoke FSM
+  /// services (thus can be called from FSM reactions)
   virtual void clear_pgscrub_state() = 0;
 
   /*
-   * Send an 'InternalSchedScrub' FSM event either immediately, or - if 'm_need_sleep'
-   * is asserted - after a configuration-dependent timeout.
+   * Send an 'InternalSchedScrub' FSM event either immediately, or - if
+   * 'm_need_sleep' is asserted - after a configuration-dependent timeout.
    */
   virtual void add_delayed_scheduling() = 0;
 
@@ -113,8 +130,8 @@ struct ScrubMachineListener {
   /**
    * Prepare a MOSDRepScrubMap message carrying the requested scrub map
    * @param was_preempted - were we preempted?
-   * @return the message, and the current value of 'm_replica_min_epoch' (which is
-   *     used when sending the message, but will be overwritten before that).
+   * @return the message, and the current value of 'm_replica_min_epoch' (which
+   * is used when sending the message, but will be overwritten before that).
    */
   [[nodiscard]] virtual MsgAndEpoch prep_replica_map_msg(
     Scrub::PreemptionNoted was_preempted) = 0;
@@ -173,6 +190,16 @@ struct ScrubMachineListener {
    */
   virtual void set_queued_or_active() = 0;
   virtual void clear_queued_or_active() = 0;
+
+  /**
+   * Our scrubbing is blocked, waiting for an excessive length of time for
+   * our target chunk to be unlocked. We will set the corresponding flags,
+   * both in the OSD_wide scrub-queue object, and in our own scrub-job object.
+   * Both flags are used to report the unhealthy state in the log and in
+   * response to scrub-queue queries.
+   */
+  virtual void set_scrub_blocked(utime_t since) = 0;
+  virtual void clear_scrub_blocked() = 0;
 
   /**
    * the FSM interface into the "are we waiting for maps, either our own or from

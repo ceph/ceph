@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# SHELL_TRACE=true ./run-backend-api-tests.sh to enable debugging
+[ -v SHELL_TRACE ] && set -x
+
 # cross shell: Are we sourced?
 # Source: https://stackoverflow.com/a/28776166/3185053
 ([[ -n $ZSH_EVAL_CONTEXT && $ZSH_EVAL_CONTEXT =~ :file$ ]] ||
@@ -44,7 +47,7 @@ setup_teuthology() {
     ${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python3} -m venv venv
     source venv/bin/activate
     pip install -U pip 'setuptools>=12,<60'
-    pip install "git+https://github.com/ceph/teuthology@7039075#egg=teuthology[test]"
+    pip install "git+https://github.com/ceph/teuthology@9e4bf63#egg=teuthology[test]"
     pushd $CURR_DIR
     pip install -r requirements.txt -c constraints.txt
     popd
@@ -128,6 +131,7 @@ run_teuthology_tests() {
 
     export COVERAGE_ENABLED=true
     export COVERAGE_FILE=.coverage.mgr.dashboard
+    export CEPH_OUT_CLIENT_DIR=${LOCAL_BUILD_DIR}/out/client
     find . -iname "*${COVERAGE_FILE}*" -type f -delete
 
     python ../qa/tasks/vstart_runner.py --ignore-missing-binaries --no-verbose $OPTIONS $(echo $TEST_CASES) ||

@@ -128,7 +128,7 @@ Major Changes from Hammer
     associated with individual images.
   * The new deep-flatten features allows flattening of a clone and all
     of its snapshots.  (Previously snapshots could not be flattened.)
-  * The export-diff command command is now faster (it uses aio).  There is also
+  * The export-diff command is now faster (it uses aio).  There is also
     a new fast-diff feature.
   * The --size argument can be specified with a suffix for units
     (e.g., ``--size 64G``).
@@ -382,7 +382,7 @@ Notable Changes since Hammer
 * doc: fix sphinx issues (Kefu Chai)
 * doc: man page updates (Kefu Chai)
 * doc: mds data structure docs (Yan, Zheng)
-* doc: misc updates (Fracois Lafont, Ken Dreyer, Kefu Chai, Owen Synge, Gael Fenet-Garde, Loic Dachary, Yannick Atchy-Dalama, Jiaying Ren, Kevin Caradant, Robert Maxime, Nicolas Yong, Germain Chipaux, Arthur Gorjux, Gabriel Sentucq, Clement Lebrun, Jean-Remi Deveaux, Clair Massot, Robin Tang, Thomas Laumondais, Jordan Dorne, Yuan Zhou, Valentin Thomas, Pierre Chaumont, Benjamin Troquereau, Benjamin Sesia, Vikhyat Umrao, Nilamdyuti Goswami, Vartika Rai, Florian Haas, Loic Dachary, Simon Guinot, Andy Allan, Alistair Israel, Ken Dreyer, Robin Rehu, Lee Revell, Florian Marsylle, Thomas Johnson, Bosse Klykken, Travis Rhoden, Ian Kelling)
+* doc: misc updates (Francois Lafont, Ken Dreyer, Kefu Chai, Owen Synge, Gael Fenet-Garde, Loic Dachary, Yannick Atchy-Dalama, Jiaying Ren, Kevin Caradant, Robert Maxime, Nicolas Yong, Germain Chipaux, Arthur Gorjux, Gabriel Sentucq, Clement Lebrun, Jean-Remi Deveaux, Clair Massot, Robin Tang, Thomas Laumondais, Jordan Dorne, Yuan Zhou, Valentin Thomas, Pierre Chaumont, Benjamin Troquereau, Benjamin Sesia, Vikhyat Umrao, Nilamdyuti Goswami, Vartika Rai, Florian Haas, Loic Dachary, Simon Guinot, Andy Allan, Alistair Israel, Ken Dreyer, Robin Rehu, Lee Revell, Florian Marsylle, Thomas Johnson, Bosse Klykken, Travis Rhoden, Ian Kelling)
 * doc: swift tempurls (#10184 Abhishek Lekshmanan)
 * doc: switch doxygen integration back to breathe (#6115 Kefu Chai)
 * doc: update release schedule docs (Loic Dachary)
@@ -831,7 +831,7 @@ Major Changes from Hammer
     associated with individual images.
   * The new deep-flatten features allows flattening of a clone and all
     of its snapshots.  (Previously snapshots could not be flattened.)
-  * The export-diff command command is now faster (it uses aio).  There is also
+  * The export-diff command is now faster (it uses aio).  There is also
     a new fast-diff feature.
   * The --size argument can be specified with a suffix for units
     (e.g., ``--size 64G``).
@@ -1200,7 +1200,7 @@ Notable Changes
 * crush: respect default replicated ruleset config on map creation (Ilya Dryomov)
 * deb, rpm: move ceph-objectstore-tool to ceph (Ken Dreyer)
 * doc: man page updates (Kefu Chai)
-* doc: misc updates (#11396 Nilamdyuti, Fracois Lafont, Ken Dreyer, Kefu Chai)
+* doc: misc updates (#11396 Nilamdyuti, Francois Lafont, Ken Dreyer, Kefu Chai)
 * init-radosgw: merge with sysv version; fix enumeration (Sage Weil)
 * librados: add config observer (Alistair Strachan)
 * librbd: add const for single-client-only features (Josh Durgin)

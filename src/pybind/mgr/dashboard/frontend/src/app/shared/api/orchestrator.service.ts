@@ -11,7 +11,7 @@ import { OrchestratorStatus } from '../models/orchestrator.interface';
   providedIn: 'root'
 })
 export class OrchestratorService {
-  private url = 'api/orchestrator';
+  private url = 'ui-api/orchestrator';
 
   disableMessages = {
     noOrchestrator: $localize`The feature is disabled because Orchestrator is not available.`,

@@ -218,7 +218,7 @@ void CreatePrimaryRequest<I>::unlink_peer() {
         continue;
       }
       count++;
-      if (count == 3) {
+      if (count == max_snapshots) {
         unlink_snap_id = snap_it.first;
       }
       if (count > max_snapshots) {

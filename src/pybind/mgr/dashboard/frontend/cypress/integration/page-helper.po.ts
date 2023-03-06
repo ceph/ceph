@@ -72,11 +72,11 @@ export abstract class PageHelper {
   }
 
   getTabs() {
-    return cy.get('.nav.nav-tabs li');
+    return cy.get('.nav.nav-tabs a');
   }
 
   getTab(tabName: string) {
-    return cy.contains('.nav.nav-tabs li', tabName);
+    return cy.contains('.nav.nav-tabs a', tabName);
   }
 
   getTabText(index: number) {
@@ -261,7 +261,7 @@ export abstract class PageHelper {
     this.waitDataTableToLoad();
 
     this.setPageSize('10');
-    cy.get('cd-table .search input').first().clear().type(text);
+    cy.get('[aria-label=search]').first().clear({ force: true }).type(text);
   }
 
   clearTableSearchInput() {

@@ -116,7 +116,7 @@ Configuration
 
    .. note::
      The section name of the QAT configuration files must be ``CEPH`` since 
-     the section name is set as "CEPH" in Ceph cropto source code.
+     the section name is set as "CEPH" in Ceph crypto source code.
   
    Then, edit the Ceph configuration file to make use of QAT based crypto plugin::
 

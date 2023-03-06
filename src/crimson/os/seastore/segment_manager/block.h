@@ -88,15 +88,16 @@ class BlockSegment final : public Segment {
   friend class BlockSegmentManager;
   BlockSegmentManager &manager;
   const segment_id_t id;
-  seastore_off_t write_pointer = 0;
+  segment_off_t write_pointer = 0;
 public:
   BlockSegment(BlockSegmentManager &manager, segment_id_t id);
 
   segment_id_t get_segment_id() const final { return id; }
-  seastore_off_t get_write_capacity() const final;
-  seastore_off_t get_write_ptr() const final { return write_pointer; }
+  segment_off_t get_write_capacity() const final;
+  segment_off_t get_write_ptr() const final { return write_pointer; }
   close_ertr::future<> close() final;
-  write_ertr::future<> write(seastore_off_t offset, ceph::bufferlist bl) final;
+  write_ertr::future<> write(segment_off_t offset, ceph::bufferlist bl) final;
+  write_ertr::future<> advance_wp(segment_off_t offset) final;
 
   ~BlockSegment() {}
 };
@@ -131,13 +132,13 @@ public:
     size_t len,
     ceph::bufferptr &out) final;
 
-  size_t get_size() const final {
+  size_t get_available_size() const final {
     return superblock.size;
   }
-  seastore_off_t get_block_size() const {
+  extent_len_t get_block_size() const {
     return superblock.block_size;
   }
-  seastore_off_t get_segment_size() const {
+  segment_off_t get_segment_size() const {
     return superblock.segment_size;
   }
 
@@ -224,7 +225,7 @@ private:
   char *buffer = nullptr;
 
   Segment::close_ertr::future<> segment_close(
-      segment_id_t id, seastore_off_t write_pointer);
+      segment_id_t id, segment_off_t write_pointer);
 };
 
 }

@@ -297,7 +297,6 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual bool check_failsafe_full() = 0;
 
-     virtual bool pg_is_repair() = 0;
      virtual void inc_osd_stat_repaired() = 0;
      virtual bool pg_is_remote_backfilling() = 0;
      virtual void pg_add_local_num_bytes(int64_t num_bytes) = 0;
@@ -586,7 +585,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      ScrubMapBuilder &pos);
 
    virtual uint64_t be_get_ondisk_size(
-     uint64_t logical_size) = 0;
+     uint64_t logical_size) const = 0;
+
    virtual int be_deep_scrub(
      const hobject_t &oid,
      ScrubMap &map,

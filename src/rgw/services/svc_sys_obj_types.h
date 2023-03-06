@@ -5,7 +5,7 @@
 #pragma once
 
 
-#include "rgw/rgw_service.h"
+#include "rgw_service.h"
 
 
 struct RGWSI_SysObj_Obj_GetObjState {

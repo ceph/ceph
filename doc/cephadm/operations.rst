@@ -40,6 +40,68 @@ monitor hosts as well as to the monitor daemons' stderr.
 
 .. _cephadm-logs:
 
+
+Ceph daemon control
+===================
+
+Starting and stopping daemons
+-----------------------------
+
+You can stop, start, or restart a daemon with:
+
+.. prompt:: bash #
+
+   ceph orch daemon stop <name>
+   ceph orch daemon start <name>
+   ceph orch daemon restart <name>
+
+You can also do the same for all daemons for a service with:   
+
+.. prompt:: bash #
+
+   ceph orch stop <name>
+   ceph orch start <name>
+   ceph orch restart <name>
+
+
+Redeploying or reconfiguring a daemon
+-------------------------------------
+
+The container for a daemon can be stopped, recreated, and restarted with
+the ``redeploy`` command:
+
+.. prompt:: bash #
+
+   ceph orch daemon redeploy <name> [--image <image>]
+
+A container image name can optionally be provided to force a
+particular image to be used (instead of the image specified by the
+``container_image`` config value).
+
+If only the ceph configuration needs to be regenerated, you can also
+issue a ``reconfig`` command, which will rewrite the ``ceph.conf``
+file but will not trigger a restart of the daemon.
+
+.. prompt:: bash #
+
+   ceph orch daemon reconfig <name>
+
+
+Rotating a daemon's authenticate key
+------------------------------------
+
+All Ceph and gateway daemons in the cluster have a secret key that is used to connect
+to and authenticate with the cluster.  This key can be rotated (i.e., replaced with a
+new key) with the following command:
+
+.. prompt:: bash #
+
+   ceph orch daemon rotate-key <name>
+
+For MDS, OSD, and MGR daemons, this does not require a daemon restart.  For other
+daemons, however (e.g., RGW), the daemon may be restarted to switch to the new key.
+
+
 Ceph daemon logs
 ================
 
@@ -348,7 +410,7 @@ CEPHADM_CHECK_KERNEL_LSM
 Each host within the cluster is expected to operate within the same Linux
 Security Module (LSM) state. For example, if the majority of the hosts are
 running with SELINUX in enforcing mode, any host not running in this mode is
-flagged as an anomaly and a healtcheck (WARNING) state raised.
+flagged as an anomaly and a healthcheck (WARNING) state raised.
 
 CEPHADM_CHECK_SUBSCRIPTION
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -395,25 +457,34 @@ process is active within the cluster.*
 CEPHADM_CHECK_KERNEL_VERSION
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The OS kernel version (maj.min) is checked for consistency across the hosts.
-The kernel version of the majority of the hosts is used as the basis for 
+The kernel version of the majority of the hosts is used as the basis for
 identifying anomalies.
 
 .. _client_keyrings_and_configs:
 
 Client keyrings and configs
 ===========================
-
 Cephadm can distribute copies of the ``ceph.conf`` file and client keyring
-files to hosts. It is usually a good idea to store a copy of the config and
-``client.admin`` keyring on any host used to administer the cluster via the
-CLI.  By default, cephadm does this for any nodes that have the ``_admin``
-label (which normally includes the bootstrap host).
+files to hosts. Starting from versions 16.2.10 (Pacific) and 17.2.1 (Quincy),
+in addition to the default location ``/etc/ceph/`` cephadm also stores config
+and keyring files in the ``/var/lib/ceph/<fsid>/config`` directory. It is usually
+a good idea to store a copy of the config and ``client.admin`` keyring on any host
+used to administer the cluster via the CLI. By default, cephadm does this for any
+nodes that have the ``_admin`` label (which normally includes the bootstrap host).
+
+.. note:: Ceph daemons will still use files on ``/etc/ceph/``. The new configuration
+   location ``/var/lib/ceph/<fsid>/config`` is used by cephadm only. Having this config
+   directory under the fsid helps cephadm to load the configuration associated with
+   the cluster.
+
 
 When a client keyring is placed under management, cephadm will:
 
   - build a list of target hosts based on the specified placement spec (see
     :ref:`orchestrator-cli-placement-spec`)
   - store a copy of the ``/etc/ceph/ceph.conf`` file on the specified host(s)
+  - store a copy of the ``ceph.conf`` file at ``/var/lib/ceph/<fsid>/config/ceph.conf`` on the specified host(s)
+  - store a copy of the ``ceph.client.admin.keyring`` file at ``/var/lib/ceph/<fsid>/config/ceph.client.admin.keyring`` on the specified host(s)
   - store a copy of the keyring file on the specified host(s)
   - update the ``ceph.conf`` file as needed (e.g., due to a change in the cluster monitors)
   - update the keyring file if the entity's key is changed (e.g., via ``ceph

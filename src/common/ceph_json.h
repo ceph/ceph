@@ -220,8 +220,8 @@ void decode_json_obj(std::set<T>& l, JSONObj *obj)
   }
 }
 
-template<class T>
-void decode_json_obj(boost::container::flat_set<T>& l, JSONObj *obj)
+template<class T, class Compare, class Alloc>
+void decode_json_obj(boost::container::flat_set<T, Compare, Alloc>& l, JSONObj *obj)
 {
   l.clear();
 
@@ -339,7 +339,9 @@ bool JSONDecoder::decode_json(const char *name, T& val, JSONObj *obj, bool manda
       std::string s = "missing mandatory field " + std::string(name);
       throw err(s);
     }
-    val = T();
+    if constexpr (std::is_default_constructible_v<T>) {
+      val = T();
+    }
     return false;
   }
 
@@ -512,6 +514,7 @@ static void encode_json(const char *name, const T& val, ceph::Formatter *f)
 
 class utime_t;
 
+void encode_json(const char *name, std::string_view val, ceph::Formatter *f);
 void encode_json(const char *name, const std::string& val, ceph::Formatter *f);
 void encode_json(const char *name, const char *val, ceph::Formatter *f);
 void encode_json(const char *name, bool val, ceph::Formatter *f);
@@ -557,9 +560,9 @@ static void encode_json(const char *name, const std::set<T, Compare>& l, ceph::F
   f->close_section();
 }
 
-template<class T, class Compare = std::less<T> >
+template<class T, class Compare, class Alloc>
 static void encode_json(const char *name,
-                        const boost::container::flat_set<T, Compare>& l,
+                        const boost::container::flat_set<T, Compare, Alloc>& l,
                         ceph::Formatter *f)
 {
   f->open_array_section(name);

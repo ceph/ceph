@@ -113,10 +113,10 @@ function get_pid()
 
 unmap_device()
 {
-    local dev=$1
+    local args=$1
     local pid=$2
 
-    _sudo rbd device --device-type nbd unmap ${dev}
+    _sudo rbd device --device-type nbd unmap ${args}
     rbd device --device-type nbd list | expect_false grep "^${pid}\\b" || return 1
     ps -C rbd-nbd | expect_false grep "^ *${pid}\\b" || return 1
 
@@ -253,11 +253,34 @@ get_pid ${POOL}
 unmap_device "${IMAGE}@snap" ${PID}
 DEV=
 
+# map/unmap snap test with --snap-id
+SNAPID=`rbd snap ls ${POOL}/${IMAGE} | awk '$2 == "snap" {print $1}'`
+DEV=`_sudo rbd device --device-type nbd map --snap-id ${SNAPID} ${POOL}/${IMAGE}`
+get_pid ${POOL}
+unmap_device "--snap-id ${SNAPID} ${IMAGE}" ${PID}
+DEV=
+
 # map/unmap namespace test
 rbd snap create ${POOL}/${NS}/${IMAGE}@snap
 DEV=`_sudo rbd device --device-type nbd map ${POOL}/${NS}/${IMAGE}@snap`
 get_pid ${POOL} ${NS}
 unmap_device "${POOL}/${NS}/${IMAGE}@snap" ${PID}
+DEV=
+
+# map/unmap namespace test with --snap-id
+SNAPID=`rbd snap ls ${POOL}/${NS}/${IMAGE} | awk '$2 == "snap" {print $1}'`
+DEV=`_sudo rbd device --device-type nbd map --snap-id ${SNAPID} ${POOL}/${NS}/${IMAGE}`
+get_pid ${POOL} ${NS}
+unmap_device "--snap-id ${SNAPID} ${POOL}/${NS}/${IMAGE}" ${PID}
+DEV=
+
+# map/unmap namespace using options test
+DEV=`_sudo rbd device --device-type nbd map --pool ${POOL} --namespace ${NS} --image ${IMAGE}`
+get_pid ${POOL} ${NS}
+unmap_device "--pool ${POOL} --namespace ${NS} --image ${IMAGE}" ${PID}
+DEV=`_sudo rbd device --device-type nbd map --pool ${POOL} --namespace ${NS} --image ${IMAGE} --snap snap`
+get_pid ${POOL} ${NS}
+unmap_device "--pool ${POOL} --namespace ${NS} --image ${IMAGE} --snap snap" ${PID}
 DEV=
 
 # unmap by image name test 2
@@ -399,5 +422,69 @@ if [ -n "${COOKIE}" ]; then
     test "${ANOTHER_COOKIE}" = "abc de"
     unmap_device ${DEV} ${PID}
 fi
+DEV=
+
+# test detach/attach with --snap-id
+SNAPID=`rbd snap ls ${POOL}/${IMAGE} | awk '$2 == "snap" {print $1}'`
+OUT=`_sudo rbd device --device-type nbd --options try-netlink,show-cookie map --snap-id ${SNAPID} ${POOL}/${IMAGE}`
+read DEV COOKIE <<< "${OUT}"
+get_pid ${POOL}
+_sudo rbd device detach ${POOL}/${IMAGE} --snap-id ${SNAPID} --device-type nbd
+expect_false get_pid ${POOL}
+expect_false _sudo rbd device attach --device ${DEV} --snap-id ${SNAPID} ${POOL}/${IMAGE} --device-type nbd
+if [ -n "${COOKIE}" ]; then
+    _sudo rbd device attach --device ${DEV} --cookie ${COOKIE} --snap-id ${SNAPID} ${POOL}/${IMAGE} --device-type nbd
+else
+    _sudo rbd device attach --device ${DEV} --snap-id ${SNAPID} ${POOL}/${IMAGE} --device-type nbd --force
+fi
+get_pid ${POOL}
+_sudo rbd device detach ${DEV} --device-type nbd
+expect_false get_pid ${POOL}
+DEV=
+
+# test discard granularity with journaling
+rbd config image set ${POOL}/${IMAGE} rbd_discard_granularity_bytes 4096
+rbd feature enable ${POOL}/${IMAGE} journaling
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
+get_pid ${POOL}
+# since a discard will now be pruned to only whole blocks (0..4095, 4096..8191)
+# let us test all the cases around those alignments. 512 is the smallest
+# possible block blkdiscard allows us to use. Thus the test checks
+# 512 before, on the alignment, 512 after.
+_sudo blkdiscard --offset 0 --length $((4096-512)) ${DEV}
+_sudo blkdiscard --offset 0 --length 4096 ${DEV}
+_sudo blkdiscard --offset 0 --length $((4096+512)) ${DEV}
+_sudo blkdiscard --offset 512 --length $((8192-1024)) ${DEV}
+_sudo blkdiscard --offset 512 --length $((8192-512)) ${DEV}
+_sudo blkdiscard --offset 512 --length 8192 ${DEV}
+# wait for commit log to be empty, 10 seconds should be well enough
+tries=0
+queue_length=`rbd journal inspect --pool ${POOL} --image ${IMAGE} | awk '/entries inspected/ {print $1}'`
+while [ ${tries} -lt 10 ] && [ ${queue_length} -gt 0 ]; do
+    rbd journal inspect --pool ${POOL} --image ${IMAGE} --verbose
+    sleep 1
+    queue_length=`rbd journal inspect --pool ${POOL} --image ${IMAGE} | awk '/entries inspected/ {print $1}'`
+    tries=$((tries+1))
+done
+[ ${queue_length} -eq 0 ]
+unmap_device ${DEV} ${PID}
+DEV=
+rbd feature disable ${POOL}/${IMAGE} journaling
+rbd config image rm ${POOL}/${IMAGE} rbd_discard_granularity_bytes
+
+# test that rbd_op_threads setting takes effect
+EXPECTED=`ceph-conf --show-config-value librados_thread_count`
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
+get_pid ${POOL}
+ACTUAL=`ps -p ${PID} -T | grep -c io_context_pool`
+[ ${ACTUAL} -eq ${EXPECTED} ]
+unmap_device ${DEV} ${PID}
+EXPECTED=$((EXPECTED * 3 + 1))
+DEV=`_sudo rbd device --device-type nbd --rbd-op-threads ${EXPECTED} map ${POOL}/${IMAGE}`
+get_pid ${POOL}
+ACTUAL=`ps -p ${PID} -T | grep -c io_context_pool`
+[ ${ACTUAL} -eq ${EXPECTED} ]
+unmap_device ${DEV} ${PID}
+DEV=
 
 echo OK

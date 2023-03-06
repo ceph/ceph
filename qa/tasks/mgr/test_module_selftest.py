@@ -54,7 +54,7 @@ class TestModuleSelftest(MgrTestCase):
         self._load_module("selftest")
         python_version = self.mgr_cluster.mon_manager.raw_cluster_cmd(
             "mgr", "self-test", "python-version")
-        if tuple(int(v) for v in python_version.split('.')) >= (3, 8):
+        if tuple(int(v) for v in python_version.split('.')) == (3, 8):
             # https://tracker.ceph.com/issues/45147
             self.skipTest(f'python {python_version} not compatible with '
                           'diskprediction_local')

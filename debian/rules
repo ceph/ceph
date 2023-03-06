@@ -3,7 +3,9 @@
 export DH_VERBOSE=1
 export DESTDIR=$(CURDIR)/debian/tmp
 
-export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+include /usr/share/dpkg/default.mk
+
+extraopts += -DCMAKE_C_COMPILER=gcc-11 -DCMAKE_CXX_COMPILER=g++-11
 ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
   # dh_auto_build sets LDFLAGS with `dpkg-buildflags --get LDFLAGS` on ubuntu,
   # which makes the application aborts when the shared library throws
@@ -16,15 +18,11 @@ ifeq (,$(findstring WITH_SEASTAR,$(CEPH_EXTRA_CMAKE_ARGS)))
 else
   export CEPH_OSD_BASENAME = crimson-osd
 endif
-ifeq ($(filter pkg.ceph.jaeger,$(DEB_BUILD_PROFILES)),)
-  extraopts += -DWITH_JAEGER=OFF
-else
-  extraopts += -DWITH_JAEGER=ON
-endif
 ifneq ($(filter pkg.ceph.arrow,$(DEB_BUILD_PROFILES)),)
   extraopts += -DWITH_SYSTEM_ARROW=ON
 endif
 
+extraopts += -DWITH_JAEGER=ON
 extraopts += -DWITH_SYSTEM_UTF8PROC=ON
 extraopts += -DWITH_OCF=ON -DWITH_LTTNG=ON
 extraopts += -DWITH_MGR_DASHBOARD_FRONTEND=OFF
@@ -52,6 +50,14 @@ ifneq (,$(filter with_system_libs,$(DEB_BUILD_OPTIONS)))
   extraopts += -DWITH_SYSTEM_PMDK=ON
 endif
 
+# for python3-${pkg} packages
+py3_bindings := rados cephfs rbd rgw ceph-argparse ceph-common
+# for packages with its own py3dist-overrides files, those file should be named
+# like ${pkg}.requires
+py3_overrides_packages := $(basename $(notdir $(wildcard debian/*.requires)))
+# for python3 applications, the package name is used as it is
+py3_packages := cephfs-shell cephfs-top cephadm
+
 %:
 	dh $@ --buildsystem=cmake --with javahelper,python3,systemd --parallel
 
@@ -74,8 +80,6 @@ override_dh_auto_install:
 	install -D -m 644 etc/sysctl/90-ceph-osd.conf $(DESTDIR)/etc/sysctl.d/30-ceph-osd.conf
 	install -D -m 440 sudoers.d/ceph-smartctl $(DESTDIR)/etc/sudoers.d/ceph-smartctl
 	install -D -m 755 src/tools/rbd_nbd/rbd-nbd_quiesce $(DESTDIR)/usr/libexec/rbd-nbd/rbd-nbd_quiesce
-
-	install -m 755 src/cephadm/cephadm $(DESTDIR)/usr/sbin/cephadm
 
 	install -m 644 -D monitoring/ceph-mixin/prometheus_alerts.yml $(DESTDIR)/etc/prometheus/ceph/ceph_default_alerts.yml
 
@@ -139,14 +143,15 @@ override_dh_shlibdeps:
 	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor --exclude=ceph_crypto
 
 override_dh_python3:
-	for binding in rados cephfs rbd rgw; do \
-	  dh_python3 -p python3-$$binding;      \
+	@for binding in $(py3_bindings); do \
+	  dh_python3 -p python3-$$binding;  \
 	done
-	dh_python3 -p python3-ceph-argparse
-	dh_python3 -p python3-ceph-common
-	dh_python3 -p cephfs-shell
-	dh_python3 -p cephfs-top
-	dh_python3 -p cephadm
+	@for pkg in $(py3_overrides_packages); do               \
+	  dh_python3 -p $$pkg --requires=debian/$$pkg.requires; \
+	done
+	@for pkg in $(py3_packages); do \
+	  dh_python3 -p $$pkg;          \
+	done
 
 # do not run tests
 override_dh_auto_test:

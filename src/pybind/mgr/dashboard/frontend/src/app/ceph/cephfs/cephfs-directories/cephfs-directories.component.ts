@@ -1,5 +1,5 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { Validators } from '@angular/forms';
+import { AbstractControl, Validators } from '@angular/forms';
 
 import {
   ITreeOptions,
@@ -103,6 +103,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     updateSelection: Function;
   };
   nodes: any[];
+  alreadyExists: boolean;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -546,20 +547,32 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
           type: 'text',
           name: 'name',
           value: `${moment().toISOString(true)}`,
-          required: true
+          required: true,
+          validators: [this.validateValue.bind(this)]
         }
       ],
       submitButtonText: $localize`Create Snapshot`,
       onSubmit: (values: CephfsSnapshot) => {
-        this.cephfsService.mkSnapshot(this.id, path, values.name).subscribe((name) => {
+        if (!this.alreadyExists) {
+          this.cephfsService.mkSnapshot(this.id, path, values.name).subscribe((name) => {
+            this.notificationService.show(
+              NotificationType.success,
+              $localize`Created snapshot '${name}' for '${path}'`
+            );
+            this.forceDirRefresh();
+          });
+        } else {
           this.notificationService.show(
-            NotificationType.success,
-            $localize`Created snapshot '${name}' for '${path}'`
+            NotificationType.error,
+            $localize`Snapshot name '${values.name}' is already in use. Please use another name.`
           );
-          this.forceDirRefresh();
-        });
+        }
       }
     });
+  }
+
+  validateValue(control: AbstractControl) {
+    this.alreadyExists = this.selectedDir.snapshots.some((s) => s.name === control.value);
   }
 
   /**

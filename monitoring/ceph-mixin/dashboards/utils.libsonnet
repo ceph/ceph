@@ -1,6 +1,8 @@
 local g = import 'grafonnet/grafana.libsonnet';
 
 {
+  _config:: error 'must provide _config',
+
   dashboardSchema(title,
                   description,
                   uid,
@@ -8,8 +10,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                   refresh,
                   schemaVersion,
                   tags,
-                  timezone,
-                  timepicker)::
+                  timezone)::
     g.dashboard.new(title=title,
                     description=description,
                     uid=uid,
@@ -17,8 +18,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                     refresh=refresh,
                     schemaVersion=schemaVersion,
                     tags=tags,
-                    timezone=timezone,
-                    timepicker=timepicker),
+                    timezone=timezone),
 
   graphPanelSchema(aliasColors,
                    title,
@@ -72,7 +72,10 @@ local g = import 'grafonnet/grafana.libsonnet';
                     includeAll,
                     sort,
                     label,
-                    regex)::
+                    regex,
+                    hide='',
+                    multi=false,
+                    allValues=null)::
     g.template.new(name=name,
                    datasource=datasource,
                    query=query,
@@ -80,7 +83,10 @@ local g = import 'grafonnet/grafana.libsonnet';
                    includeAll=includeAll,
                    sort=sort,
                    label=label,
-                   regex=regex),
+                   regex=regex,
+                   hide=hide,
+                   multi=multi,
+                   allValues=allValues),
 
   addAnnotationSchema(builtIn,
                       datasource,
@@ -170,4 +176,158 @@ local g = import 'grafonnet/grafana.libsonnet';
       unit: unit,
       valueMaps: valueMaps,
     },
+
+  matchers()::
+    local jobMatcher = 'job=~"$job"';
+    local clusterMatcher = '%s=~"$cluster"' % $._config.clusterLabel;
+    {
+      // Common labels
+      jobMatcher: jobMatcher,
+      clusterMatcher: (if $._config.showMultiCluster then clusterMatcher else ''),
+      matchers: jobMatcher +
+                (if $._config.showMultiCluster then ', ' + clusterMatcher else ''),
+    },
+
+  addClusterTemplate()::
+    $.addTemplateSchema(
+      'cluster',
+      '$datasource',
+      'label_values(ceph_osd_metadata, %s)' % $._config.clusterLabel,
+      1,
+      true,
+      1,
+      'cluster',
+      '(.*)',
+      if !$._config.showMultiCluster then 'variable' else '',
+      multi=true,
+      allValues='.+',
+    ),
+
+  addJobTemplate()::
+    $.addTemplateSchema(
+      'job',
+      '$datasource',
+      'label_values(ceph_osd_metadata{%(clusterMatcher)s}, job)' % $.matchers(),
+      1,
+      true,
+      1,
+      'job',
+      '(.*)',
+      multi=true,
+      allValues='.+',
+    ),
+
+  overviewStyle(alias,
+                pattern,
+                type,
+                unit,
+                colorMode=null,
+                thresholds=[],
+                valueMaps=[])::
+    $.addStyle(alias,
+               colorMode,
+               [
+                 'rgba(245, 54, 54, 0.9)',
+                 'rgba(237, 129, 40, 0.89)',
+                 'rgba(50, 172, 45, 0.97)',
+               ],
+               'YYYY-MM-DD HH:mm:ss',
+               2,
+               1,
+               pattern,
+               thresholds,
+               type,
+               unit,
+               valueMaps),
+
+  simpleGraphPanel(alias,
+                   title,
+                   description,
+                   formatY1,
+                   labelY1,
+                   min,
+                   expr,
+                   legendFormat,
+                   x,
+                   y,
+                   w,
+                   h)::
+    $.graphPanelSchema(alias,
+                       title,
+                       description,
+                       'null',
+                       false,
+                       formatY1,
+                       'short',
+                       labelY1,
+                       null,
+                       min,
+                       1,
+                       '$datasource')
+    .addTargets(
+      [$.addTargetSchema(expr, legendFormat)]
+    ) + { gridPos: { x: x, y: y, w: w, h: h } },
+
+  simpleSingleStatPanel(format,
+                        title,
+                        description,
+                        valueName,
+                        expr,
+                        instant,
+                        targetFormat,
+                        x,
+                        y,
+                        w,
+                        h)::
+    $.addSingleStatSchema(['#299c46', 'rgba(237, 129, 40, 0.89)', '#d44a3a'],
+                          '$datasource',
+                          format,
+                          title,
+                          description,
+                          valueName,
+                          false,
+                          100,
+                          false,
+                          false,
+                          '')
+    .addTarget($.addTargetSchema(expr, '', targetFormat, 1, instant)) + {
+      gridPos: { x: x, y: y, w: w, h: h },
+    },
+  gaugeSingleStatPanel(format,
+                       title,
+                       description,
+                       valueName,
+                       colorValue,
+                       gaugeMaxValue,
+                       gaugeShow,
+                       sparkLineShow,
+                       thresholds,
+                       expr,
+                       targetFormat,
+                       x,
+                       y,
+                       w,
+                       h)::
+    $.addSingleStatSchema(['#299c46', 'rgba(237, 129, 40, 0.89)', '#d44a3a'],
+                          '$datasource',
+                          format,
+                          title,
+                          description,
+                          valueName,
+                          colorValue,
+                          gaugeMaxValue,
+                          gaugeShow,
+                          sparkLineShow,
+                          thresholds)
+    .addTarget($.addTargetSchema(expr, '', targetFormat)) + { gridPos: { x:
+      x, y: y, w: w, h: h } },
+
+  simplePieChart(alias, description, title)::
+    $.addPieChartSchema(alias,
+                        '$datasource',
+                        description,
+                        'Under graph',
+                        'pie',
+                        title,
+                        'current'),
 }

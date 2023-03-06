@@ -17,18 +17,29 @@
 
 SET_SUBSYS(seastore_onode);
 
+namespace fmt {
+template <typename T>
+const void* ptr(const ::boost::intrusive_ptr<T>& p) {
+  return p.get();
+}
+}
+
 namespace crimson::os::seastore::onode {
 /*
  * tree_cursor_t
  */
 
+// create from insert
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node, const search_position_t& pos)
       : ref_leaf_node{node}, position{pos}, cache{ref_leaf_node}
 {
   assert(is_tracked());
   ref_leaf_node->do_track_cursor<true>(*this);
+  // do not account updates for the inserted values
+  is_mutated = true;
 }
 
+// create from lookup
 tree_cursor_t::tree_cursor_t(
     Ref<LeafNode> node, const search_position_t& pos,
     const key_view_t& key_view, const value_header_t* p_value_header)
@@ -39,6 +50,7 @@ tree_cursor_t::tree_cursor_t(
   ref_leaf_node->do_track_cursor<true>(*this);
 }
 
+// lookup reaches the end, contain leaf node for further insert
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node)
       : ref_leaf_node{node}, position{search_position_t::end()}, cache{ref_leaf_node}
 {
@@ -46,6 +58,7 @@ tree_cursor_t::tree_cursor_t(Ref<LeafNode> node)
   assert(ref_leaf_node->is_level_tail());
 }
 
+// create an invalid tree_cursor_t
 tree_cursor_t::~tree_cursor_t()
 {
   if (is_tracked()) {
@@ -71,7 +84,7 @@ void tree_cursor_t::assert_next_to(
   } else if (is_tracked()) {
     auto key = get_key_view(magic);
     auto prv_key = prv.get_key_view(magic);
-    assert(key.compare_to(prv_key) == MatchKindCMP::GT);
+    assert(key > prv_key);
     if (ref_leaf_node == prv.ref_leaf_node) {
       position.assert_next_to(prv.position);
     } else {
@@ -97,32 +110,32 @@ tree_cursor_t::erase<true>(context_t, bool);
 template eagain_ifuture<Ref<tree_cursor_t>>
 tree_cursor_t::erase<false>(context_t, bool);
 
-MatchKindCMP tree_cursor_t::compare_to(
+std::strong_ordering tree_cursor_t::compare_to(
     const tree_cursor_t& o, value_magic_t magic) const
 {
   if (!is_tracked() && !o.is_tracked()) {
-    return MatchKindCMP::EQ;
+    return std::strong_ordering::equal;
   } else if (!is_tracked()) {
-    return MatchKindCMP::GT;
+    return std::strong_ordering::greater;
   } else if (!o.is_tracked()) {
-    return MatchKindCMP::LT;
+    return std::strong_ordering::less;
   }
 
   assert(is_tracked() && o.is_tracked());
   // all tracked cursors are singletons
   if (this == &o) {
-    return MatchKindCMP::EQ;
+    return std::strong_ordering::equal;
   }
 
-  MatchKindCMP ret;
+  std::strong_ordering ret = std::strong_ordering::equal;
   if (ref_leaf_node == o.ref_leaf_node) {
-    ret = position.compare_to(o.position);
+    ret = position <=> o.position;
   } else {
     auto key = get_key_view(magic);
     auto o_key = o.get_key_view(magic);
-    ret = key.compare_to(o_key);
+    ret = key <=> o_key;
   }
-  assert(ret != MatchKindCMP::EQ);
+  assert(ret != 0);
   return ret;
 }
 
@@ -253,7 +266,7 @@ void tree_cursor_t::Cache::validate_is_latest(const search_position_t& pos) cons
 
   auto [_key_view, _p_value_header] = ref_leaf_node->get_kv(pos);
   assert(p_node_base == ref_leaf_node->read());
-  assert(key_view->compare_to(_key_view) == MatchKindCMP::EQ);
+  assert(key_view ==_key_view);
   assert(p_value_header == _p_value_header);
 #endif
 }
@@ -404,6 +417,7 @@ eagain_ifuture<> Node::mkfs(context_t c, RootNodeTracker& root_tracker)
   LOG_PREFIX(OTree::Node::mkfs);
   return LeafNode::allocate_root(c, root_tracker
   ).si_then([c, FNAME](auto ret) {
+    c.t.get_onode_tree_stats().extents_num_delta++;
     INFOT("allocated root {}", c.t, ret->get_name());
   });
 }
@@ -621,6 +635,7 @@ Node::try_merge_adjacent(
           search_position_t left_last_pos = left_for_merge->impl->merge(
               left_mut, *right_for_merge->impl, merge_stage, merge_size);
           left_for_merge->track_merge(right_for_merge, merge_stage, left_last_pos);
+	  --(c.t.get_onode_tree_stats().extents_num_delta);
           return left_for_merge->parent_info().ptr->apply_children_merge(
               c, std::move(left_for_merge), left_addr,
               std::move(right_for_merge), update_index_after_merge);
@@ -709,13 +724,13 @@ eagain_ifuture<Ref<Node>> Node::load(
     if (!field_type) {
       ERRORT("load addr={:x}, is_level_tail={} error, "
              "got invalid header -- {}",
-             c.t, addr, expect_is_level_tail, extent);
+             c.t, addr, expect_is_level_tail, fmt::ptr(extent));
       ceph_abort("fatal error");
     }
     if (header.get_is_level_tail() != expect_is_level_tail) {
       ERRORT("load addr={:x}, is_level_tail={} error, "
              "is_level_tail mismatch -- {}",
-             c.t, addr, expect_is_level_tail, extent);
+             c.t, addr, expect_is_level_tail, fmt::ptr(extent));
       ceph_abort("fatal error");
     }
 
@@ -724,22 +739,24 @@ eagain_ifuture<Ref<Node>> Node::load(
       if (extent->get_length() != c.vb.get_leaf_node_size()) {
         ERRORT("load addr={:x}, is_level_tail={} error, "
                "leaf length mismatch -- {}",
-               c.t, addr, expect_is_level_tail, extent);
+               c.t, addr, expect_is_level_tail, fmt::ptr(extent));
         ceph_abort("fatal error");
       }
       auto impl = LeafNodeImpl::load(extent, *field_type);
+      auto *derived_ptr = impl.get();
       return eagain_iertr::make_ready_future<Ref<Node>>(
-	new LeafNode(impl.get(), std::move(impl)));
+	new LeafNode(derived_ptr, std::move(impl)));
     } else if (node_type == node_type_t::INTERNAL) {
       if (extent->get_length() != c.vb.get_internal_node_size()) {
         ERRORT("load addr={:x}, is_level_tail={} error, "
                "internal length mismatch -- {}",
-               c.t, addr, expect_is_level_tail, extent);
+               c.t, addr, expect_is_level_tail, fmt::ptr(extent));
         ceph_abort("fatal error");
       }
       auto impl = InternalNodeImpl::load(extent, *field_type);
+      auto *derived_ptr = impl.get();
       return eagain_iertr::make_ready_future<Ref<Node>>(
-	new InternalNode(impl.get(), std::move(impl)));
+	new InternalNode(derived_ptr, std::move(impl)));
     } else {
       ceph_abort("impossible path");
     }
@@ -1231,6 +1248,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::allocate_root(
     fresh_node.mut.copy_in_absolute(
         const_cast<laddr_packed_t*>(p_value), old_root_addr);
     root->make_root_from(c, std::move(super), old_root_addr);
+    ++(c.t.get_onode_tree_stats().extents_num_delta);
     return root;
   });
 }
@@ -1440,6 +1458,7 @@ eagain_ifuture<> InternalNode::try_downgrade_root(
     child->deref_parent();
     auto super_to_move = deref_super();
     child->make_root_from(c, std::move(super_to_move), impl->laddr());
+    --(c.t.get_onode_tree_stats().extents_num_delta);
     return retire(c, std::move(this_ref));
   });
 }
@@ -1455,7 +1474,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
   // XXX: check the insert_child is unlinked from this node
 #ifndef NDEBUG
   auto _insert_key = *insert_child->impl->get_pivot_index();
-  assert(insert_key.compare_to(_insert_key) == MatchKindCMP::EQ);
+  assert(insert_key == _insert_key);
 #endif
   auto insert_value = insert_child->impl->laddr();
   auto insert_pos = pos;
@@ -1545,6 +1564,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
       validate_tracked_children();
       right_node->validate_tracked_children();
     }
+    ++(c.t.get_onode_tree_stats().extents_num_delta);
     return right_node;
   });
 }
@@ -1719,7 +1739,7 @@ void InternalNode::validate_child(const Node& child) const
     key_view_t index_key;
     const laddr_packed_t* p_child_addr;
     impl->get_slot(child_pos, &index_key, &p_child_addr);
-    assert(index_key.compare_to(*child.impl->get_pivot_index()) == MatchKindCMP::EQ);
+    assert(index_key == *child.impl->get_pivot_index());
     assert(p_child_addr->value == child.impl->laddr());
   }
   // XXX(multi-type)
@@ -1741,7 +1761,7 @@ void InternalNode::validate_child_inconsistent(const Node& child) const
   const laddr_packed_t* p_value;
   impl->get_slot(child_pos, &current_key, &p_value);
   key_view_t new_key = *child.impl->get_pivot_index();
-  assert(current_key.compare_to(new_key) != MatchKindCMP::EQ);
+  assert(current_key != new_key);
   assert(p_value->value == child.impl->laddr());
 #endif
 }
@@ -1751,8 +1771,9 @@ eagain_ifuture<InternalNode::fresh_node_t> InternalNode::allocate(
 {
   return InternalNodeImpl::allocate(c, hint, field_type, is_level_tail, level
   ).si_then([](auto&& fresh_impl) {
+    auto *derived_ptr = fresh_impl.impl.get();
     auto node = Ref<InternalNode>(new InternalNode(
-          fresh_impl.impl.get(), std::move(fresh_impl.impl)));
+          derived_ptr, std::move(fresh_impl.impl)));
     return fresh_node_t{node, fresh_impl.mut};
   });
 }
@@ -2108,6 +2129,7 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
     validate_tracked_cursors();
     right_node->validate_tracked_cursors();
 
+    ++(c.t.get_onode_tree_stats().extents_num_delta);
     return apply_split_to_parent(
         c, std::move(this_ref), std::move(right_node), false
     ).si_then([ret] {
@@ -2149,7 +2171,8 @@ Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
   Ref<tree_cursor_t> p_cursor;
   auto found = tracked_cursors.find(position);
   if (found == tracked_cursors.end()) {
-    p_cursor = tree_cursor_t::create(this, position, key, p_value_header);
+    p_cursor = tree_cursor_t::create_tracked(
+        this, position, key, p_value_header);
   } else {
     p_cursor = found->second;
     assert(p_cursor->get_leaf_node() == this);
@@ -2171,7 +2194,7 @@ void LeafNode::validate_cursor(const tree_cursor_t& cursor) const
   // behaviors.
   auto [key, p_value_header] = get_kv(cursor.get_position());
   auto magic = p_value_header->magic;
-  assert(key.compare_to(cursor.get_key_view(magic)) == MatchKindCMP::EQ);
+  assert(key == cursor.get_key_view(magic));
   assert(p_value_header == cursor.read_value_header(magic));
 #endif
 }
@@ -2199,7 +2222,8 @@ Ref<tree_cursor_t> LeafNode::track_insert(
   // track insert
   // TODO: getting key_view_t from stage::proceed_insert() and
   // stage::append_insert() has not supported yet
-  return tree_cursor_t::create(this, insert_pos);
+  return tree_cursor_t::create_inserted(
+      this, insert_pos);
 }
 
 void LeafNode::track_split(
@@ -2248,8 +2272,9 @@ eagain_ifuture<LeafNode::fresh_node_t> LeafNode::allocate(
 {
   return LeafNodeImpl::allocate(c, hint, field_type, is_level_tail
   ).si_then([](auto&& fresh_impl) {
+    auto *derived_ptr = fresh_impl.impl.get();
     auto node = Ref<LeafNode>(new LeafNode(
-          fresh_impl.impl.get(), std::move(fresh_impl.impl)));
+          derived_ptr, std::move(fresh_impl.impl)));
     return fresh_node_t{node, fresh_impl.mut};
   });
 }

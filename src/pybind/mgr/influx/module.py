@@ -233,11 +233,16 @@ class Module(MgrModule):
     def get_pg_summary_pool(self, pool_info: Dict[str, str], now: str) -> Iterator[Dict[str, Any]]:
         pool_sum = self.get('pg_summary')['by_pool']
         for pool_id, stats in pool_sum.items():
+            try:
+                pool_name = pool_info[pool_id]
+            except KeyError:
+                self.log.error('Unable to find pool name for pool {}'.format(pool_id))
+                continue
             for stat in stats:
                 yield {
                     "measurement": "ceph_pg_summary_pool",
                     "tags": {
-                        "pool_name" : pool_info[pool_id],
+                        "pool_name" : pool_name,
                         "pool_id" : pool_id,
                         "type_instance" : stat,
                     },

@@ -17,7 +17,7 @@ and caching-out on subsequent GET requests, passing thru transparently PUT,POST,
 
 The feature introduces 2 new APIs: Auth and Cache.
 
-    NOTE: The `D3N RGW Data Cache`_ is an alternative data caching mechanism implemented natively in the Rados Gatewey.
+    NOTE: The `D3N RGW Data Cache`_ is an alternative data caching mechanism implemented natively in the Rados Gateway.
 
 New APIs
 -------------------------
@@ -90,7 +90,7 @@ $ sudo ln -sf /usr/local/openresty/bin/openresty /usr/bin/nginx
 
 Put in-place your Nginx configuration files and edit them according to your environment:
 
-All Nginx conf files are under: https://github.com/ceph/ceph/tree/master/examples/rgw-cache
+All Nginx conf files are under: https://github.com/ceph/ceph/tree/main/examples/rgw/rgw-cache
 
 `nginx.conf` should go to `/etc/nginx/nginx.conf`
 

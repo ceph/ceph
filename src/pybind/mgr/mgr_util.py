@@ -3,6 +3,7 @@ import os
 if 'UNITTEST' in os.environ:
     import tests
 
+import bcrypt
 import cephfs
 import contextlib
 import datetime
@@ -12,7 +13,7 @@ import time
 import logging
 import sys
 from threading import Lock, Condition, Event
-from typing import no_type_check
+from typing import no_type_check, NewType
 import urllib
 from functools import wraps
 if sys.version_info >= (3, 3):
@@ -28,6 +29,8 @@ T = TypeVar('T')
 
 if TYPE_CHECKING:
     from mgr_module import MgrModule
+
+ConfEntity = NewType('ConfEntity', str)
 
 Module_T = TypeVar('Module_T', bound="MgrModule")
 
@@ -49,6 +52,10 @@ BOLD_SEQ = "\033[1m"
 UNDERLINE_SEQ = "\033[4m"
 
 logger = logging.getLogger(__name__)
+
+
+class PortAlreadyInUse(Exception):
+    pass
 
 
 class CephfsConnectionException(Exception):
@@ -154,6 +161,7 @@ class CephfsConnectionPool(object):
             self.fs.conf_set("client_mount_uid", "0")
             self.fs.conf_set("client_mount_gid", "0")
             self.fs.conf_set("client_check_pool_perm", "false")
+            self.fs.conf_set("client_quota", "false")
             logger.debug("CephFS initializing...")
             self.fs.init()
             logger.debug("CephFS mounting...")
@@ -408,6 +416,23 @@ def format_bytes(n: int, width: int, colored: bool = False) -> str:
     return format_units(n, width, colored, decimal=False)
 
 
+def test_port_allocation(addr: str, port: int) -> None:
+    """Checks if the port is available
+    :raises PortAlreadyInUse: in case port is already in use
+    :raises Exception: any generic error other than port already in use
+    If no exception is raised, the port can be assumed available
+    """
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind((addr, port))
+        sock.close()
+    except socket.error as e:
+        if e.errno == errno.EADDRINUSE:
+            raise PortAlreadyInUse
+        else:
+            raise e
+
+
 def merge_dicts(*args: Dict[T, Any]) -> Dict[T, Any]:
     """
     >>> merge_dicts({1:2}, {3:4})
@@ -491,7 +516,7 @@ def create_self_signed_cert(organisation: str = 'Ceph',
                             common_name: str = 'mgr',
                             dname: Optional[Dict[str, str]] = None) -> Tuple[str, str]:
     """Returns self-signed PEM certificates valid for 10 years.
-    
+
     The optional dname parameter provides complete control of the cert/key
     creation by supporting all valid RDNs via a dictionary. However, if dname
     is not provided the default O and CN settings will be applied.
@@ -551,12 +576,19 @@ def verify_cacrt_content(crt):
     # type: (str) -> None
     from OpenSSL import crypto
     try:
-        x509 = crypto.load_certificate(crypto.FILETYPE_PEM, crt)
+        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
+        x509 = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
         if x509.has_expired():
-            logger.warning('Certificate has expired: {}'.format(crt))
+            org, cn = get_cert_issuer_info(crt)
+            no_after = x509.get_notAfter()
+            end_date = None
+            if no_after is not None:
+                end_date = datetime.datetime.strptime(no_after.decode('ascii'), '%Y%m%d%H%M%SZ')
+            msg = f'Certificate issued by "{org}/{cn}" expired on {end_date}'
+            logger.warning(msg)
+            raise ServerConfigException(msg)
     except (ValueError, crypto.Error) as e:
-        raise ServerConfigException(
-            'Invalid certificate: {}'.format(str(e)))
+        raise ServerConfigException(f'Invalid certificate: {e}')
 
 
 def verify_cacrt(cert_fname):
@@ -575,6 +607,23 @@ def verify_cacrt(cert_fname):
         raise ServerConfigException(
             'Invalid certificate {}: {}'.format(cert_fname, str(e)))
 
+def get_cert_issuer_info(crt: str) -> Tuple[Optional[str],Optional[str]]:
+    """Basic validation of a ca cert"""
+
+    from OpenSSL import crypto, SSL
+    try:
+        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
+        (org_name, cn) = (None, None)
+        cert = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
+        components = cert.get_issuer().get_components()
+        for c in components:
+            if c[0].decode() == 'O':  # org comp
+                org_name = c[1].decode()
+            elif c[0].decode() == 'CN':  # common name comp
+                cn = c[1].decode()
+        return (org_name, cn)
+    except (ValueError, crypto.Error) as e:
+        raise ServerConfigException(f'Invalid certificate key: {e}')
 
 def verify_tls(crt, key):
     # type: (str, str) -> None
@@ -588,7 +637,8 @@ def verify_tls(crt, key):
         raise ServerConfigException(
             'Invalid private key: {}'.format(str(e)))
     try:
-        _crt = crypto.load_certificate(crypto.FILETYPE_PEM, crt)
+        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
+        _crt = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
     except ValueError as e:
         raise ServerConfigException(
             'Invalid certificate key: {}'.format(str(e))
@@ -600,8 +650,10 @@ def verify_tls(crt, key):
         context.use_privatekey(_key)
         context.check_privatekey()
     except crypto.Error as e:
-        logger.warning(
-            'Private key and certificate do not match up: {}'.format(str(e)))
+        logger.warning('Private key and certificate do not match up: {}'.format(str(e)))
+    except SSL.Error as e:
+        raise ServerConfigException(f'Invalid cert/key pair: {e}')
+
 
 
 def verify_tls_files(cert_fname, pkey_fname):
@@ -698,6 +750,18 @@ def get_time_series_rates(data: List[Tuple[float, float]]) -> List[Tuple[float, 
         return []
     return [(data2[0], _derivative(data1, data2) if data1 is not None else 0.0) for data1, data2 in
             _pairwise(data)]
+
+def name_to_config_section(name: str) -> ConfEntity:
+    """
+    Map from daemon names to ceph entity names (as seen in config)
+    """
+    daemon_type = name.split('.', 1)[0]
+    if daemon_type in ['rgw', 'rbd-mirror', 'nfs', 'crash', 'iscsi']:
+        return ConfEntity('client.' + name)
+    elif daemon_type in ['mon', 'osd', 'mds', 'mgr', 'client']:
+        return ConfEntity(name)
+    else:
+        return ConfEntity('mon')
 
 
 def _filter_time_series(data: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
@@ -810,3 +874,13 @@ def profile_method(skip_attribute: bool = False) -> Callable[[Callable[..., T]],
             return result
         return wrapper
     return outer
+
+
+def password_hash(password: Optional[str], salt_password: Optional[str] = None) -> Optional[str]:
+    if not password:
+        return None
+    if not salt_password:
+        salt = bcrypt.gensalt()
+    else:
+        salt = salt_password.encode('utf8')
+    return bcrypt.hashpw(password.encode('utf8'), salt).decode('utf8')

@@ -19,7 +19,7 @@ seastar::future<> TMDriver::write(
 {
   logger().debug("Writing offset {}", offset);
   assert(offset % device->get_block_size() == 0);
-  assert((ptr.length() % (size_t)device->get_block_size()) == 0);
+  assert((ptr.length() % device->get_block_size()) == 0);
   return seastar::do_with(ptr, [this, offset](auto& ptr) {
     return repeat_eagain([this, offset, &ptr] {
       return tm->with_transaction_intr(
@@ -69,7 +69,7 @@ TMDriver::read_extents_ret TMDriver::read_extents(
 	  [this, &t, &ret](auto &&pin) {
 	    logger().debug(
 	      "read_extents: get_extent {}~{}",
-	      pin->get_paddr(),
+	      pin->get_val(),
 	      pin->get_length());
 	    return tm->pin_to_extent<TestBlock>(
 	      t,
@@ -94,14 +94,14 @@ seastar::future<bufferlist> TMDriver::read(
 {
   logger().debug("Reading offset {}", offset);
   assert(offset % device->get_block_size() == 0);
-  assert(size % (size_t)device->get_block_size() == 0);
+  assert(size % device->get_block_size() == 0);
   auto blptrret = std::make_unique<bufferlist>();
   auto &blret = *blptrret;
-  return repeat_eagain([=, &blret] {
+  return repeat_eagain([=, &blret, this] {
     return tm->with_transaction_intr(
       Transaction::src_t::READ,
       "read",
-      [=, &blret](auto& t)
+      [=, &blret, this](auto& t)
     {
       return read_extents(t, offset, size
       ).si_then([=, &blret](auto ext_list) {
@@ -131,8 +131,12 @@ seastar::future<bufferlist> TMDriver::read(
 
 void TMDriver::init()
 {
-  tm = make_transaction_manager(false /* detailed */);
-  tm->add_device(device.get(), true);
+  std::vector<Device*> sec_devices;
+#ifndef NDEBUG
+  tm = make_transaction_manager(device.get(), sec_devices, true);
+#else
+  tm = make_transaction_manager(device.get(), sec_devices, false);
+#endif
 }
 
 void TMDriver::clear()
@@ -142,14 +146,14 @@ void TMDriver::clear()
 
 size_t TMDriver::get_size() const
 {
-  return device->get_size() * .5;
+  return device->get_available_size() * .5;
 }
 
 seastar::future<> TMDriver::mkfs()
 {
   assert(config.path);
   logger().debug("mkfs");
-  return Device::make_device(*config.path
+  return Device::make_device(*config.path, device_type_t::SSD
   ).then([this](DeviceRef dev) {
     device = std::move(dev);
     seastore_meta_t meta;
@@ -158,7 +162,7 @@ seastar::future<> TMDriver::mkfs()
       device_config_t{
         true,
         (magic_t)std::rand(),
-        device_type_t::SEGMENTED,
+        device_type_t::SSD,
         0,
         meta,
         secondary_device_set_t()});
@@ -191,7 +195,7 @@ seastar::future<> TMDriver::mount()
 {
   return (config.mkfs ? mkfs() : seastar::now()
   ).then([this] {
-    return Device::make_device(*config.path);
+    return Device::make_device(*config.path, device_type_t::SSD);
   }).then([this](DeviceRef dev) {
     device = std::move(dev);
     return device->mount();

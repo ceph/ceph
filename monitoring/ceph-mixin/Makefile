@@ -8,7 +8,7 @@ generate: dashboards_out
 vendor: jsonnetfile.lock.json
 	tox -ejsonnet-bundler-install
 
-dashboards_out: vendor $(JSONNETS_FILES)
+dashboards_out: vendor dashboards
 	tox -ejsonnet-fix
 
 lint:

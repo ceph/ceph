@@ -1,26 +1,17 @@
 <div class="row">
-  <div class="info-group-title"
-       [ngbPopover]="popInfoTemplate"
-       #popInfo="ngbPopover"
-       triggers="">
+  <div class="info-group-title">
     <span>{{ groupTitle }}</span>
-    <button type="button"
-            class="popover-icon btn btn-link p-0"
-            (click)="popInfo.toggle()">
-      <i [ngClass]="[icons.infoCircle, icons.large]"></i>
-    </button>
+    <cd-helper iconClass="fa fa-info-circle fa-2xs">
+      <div class="text-center"
+           i18n>For an overview of {{ groupTitle|lowercase }} widgets click
+        <cd-doc section="dashboard-landing-page-{{ groupTitle|lowercase }}"
+                docText="here"
+                i18n-docText></cd-doc>
+      </div>
+    </cd-helper>
   </div>
 </div>
 
 <div class="row">
   <ng-content></ng-content>
 </div>
-
-<ng-template #popInfoTemplate>
-  <div class="text-center"
-       i18n>For an overview of {{ groupTitle|lowercase }} widgets click
-    <cd-doc section="dashboard-landing-page-{{ groupTitle|lowercase }}"
-            docText="here"
-            i18n-docText></cd-doc>
-  </div>
-</ng-template>

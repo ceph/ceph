@@ -281,7 +281,7 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(submit_mutex));
   ceph_assert(!mds->is_any_replay());
-  ceph_assert(!capped);
+  ceph_assert(!mds_is_shutting_down);
 
   ceph_assert(le == cur_event);
   cur_event = NULL;
@@ -482,9 +482,9 @@ void MDLog::kick_submitter()
 }
 
 void MDLog::cap()
-{ 
-  dout(5) << "cap" << dendl;
-  capped = true;
+{
+  dout(5) << "mark mds is shutting down" << dendl;
+  mds_is_shutting_down = true;
 }
 
 void MDLog::shutdown()
@@ -503,7 +503,7 @@ void MDLog::shutdown()
       mds->mds_lock.unlock();
       // Because MDS::stopping is true, it's safe to drop mds_lock: nobody else
       // picking it up will do anything with it.
-   
+
       submit_mutex.lock();
       submit_cond.notify_all();
       submit_mutex.unlock();
@@ -580,6 +580,26 @@ public:
     mdlog->trim_expired_segments();
   }
 };
+
+void MDLog::try_to_commit_open_file_table(uint64_t last_seq)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(submit_mutex));
+
+  if (mds_is_shutting_down) // shutting down the MDS
+    return;
+
+  if (mds->mdcache->open_file_table.is_any_committing())
+    return;
+
+  // when there have dirty items, maybe there has no any new log event
+  if (mds->mdcache->open_file_table.is_any_dirty() ||
+      last_seq > mds->mdcache->open_file_table.get_committed_log_seq()) {
+    submit_mutex.unlock();
+    mds->mdcache->open_file_table.commit(new C_OFT_Committed(this, last_seq),
+                                         last_seq, CEPH_MSG_PRIO_HIGH);
+    submit_mutex.lock();
+  }
+}
 
 void MDLog::trim(int m)
 {
@@ -684,17 +704,7 @@ void MDLog::trim(int m)
     }
   }
 
-  if (!capped &&
-      !mds->mdcache->open_file_table.is_any_committing()) {
-    uint64_t last_seq = get_last_segment_seq();
-    if (mds->mdcache->open_file_table.is_any_dirty() ||
-	last_seq > mds->mdcache->open_file_table.get_committed_log_seq()) {
-      submit_mutex.unlock();
-      mds->mdcache->open_file_table.commit(new C_OFT_Committed(this, last_seq),
-					   last_seq, CEPH_MSG_PRIO_HIGH);
-      submit_mutex.lock();
-    }
-  }
+  try_to_commit_open_file_table(get_last_segment_seq());
 
   // discard expired segments and unlock submit_mutex
   _trim_expired_segments();
@@ -730,14 +740,7 @@ int MDLog::trim_all()
   uint64_t last_seq = 0;
   if (!segments.empty()) {
     last_seq = get_last_segment_seq();
-    if (!capped &&
-	!mds->mdcache->open_file_table.is_any_committing() &&
-	last_seq > mds->mdcache->open_file_table.get_committing_log_seq()) {
-      submit_mutex.unlock();
-      mds->mdcache->open_file_table.commit(new C_OFT_Committed(this, last_seq),
-					   last_seq, CEPH_MSG_PRIO_DEFAULT);
-      submit_mutex.lock();
-    }
+    try_to_commit_open_file_table(last_seq);
   }
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
@@ -831,7 +834,7 @@ void MDLog::_trim_expired_segments()
       break;
     }
 
-    if (!capped && ls->seq >= oft_committed_seq) {
+    if (!mds_is_shutting_down && ls->seq >= oft_committed_seq) {
       dout(10) << "_trim_expired_segments open file table committedseq " << oft_committed_seq
 	       << " <= " << ls->seq << "/" << ls->offset << dendl;
       break;
@@ -880,9 +883,9 @@ void MDLog::_expired(LogSegment *ls)
   dout(5) << "_expired segment " << ls->seq << "/" << ls->offset
 	  << ", " << ls->num_events << " events" << dendl;
 
-  if (!capped && ls == peek_current_segment()) {
+  if (!mds_is_shutting_down && ls == peek_current_segment()) {
     dout(5) << "_expired not expiring " << ls->seq << "/" << ls->offset
-	    << ", last one and !capped" << dendl;
+	    << ", last one and !mds_is_shutting_down" << dendl;
   } else {
     // expired.
     expired_segments.insert(ls);
@@ -1156,17 +1159,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   // state doesn't change in between.
   uint32_t events_transcribed = 0;
   while (1) {
-    while (!old_journal->is_readable() &&
-	   old_journal->get_read_pos() < old_journal->get_write_pos() &&
-	   !old_journal->get_error()) {
-
-      // Issue a journal prefetch
-      C_SaferCond readable_waiter;
-      old_journal->wait_for_readable(&readable_waiter);
-
-      // Wait for a journal prefetch to complete
-      readable_waiter.wait();
-    }
+    old_journal->check_isreadable();
     if (old_journal->get_error()) {
       r = old_journal->get_error();
       dout(0) << "_replay journaler got error " << r << ", aborting" << dendl;
@@ -1306,13 +1299,7 @@ void MDLog::_replay_thread()
   int r = 0;
   while (1) {
     // wait for read?
-    while (!journaler->is_readable() &&
-	   journaler->get_read_pos() < journaler->get_write_pos() &&
-	   !journaler->get_error()) {
-      C_SaferCond readable_waiter;
-      journaler->wait_for_readable(&readable_waiter);
-      r = readable_waiter.wait();
-    }
+    journaler->check_isreadable(); 
     if (journaler->get_error()) {
       r = journaler->get_error();
       dout(0) << "_replay journaler got error " << r << ", aborting" << dendl;

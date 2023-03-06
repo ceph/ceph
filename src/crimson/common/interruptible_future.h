@@ -96,6 +96,11 @@ struct interrupt_cond_t {
   uint64_t ref_count = 0;
   void set(
     InterruptCondRef<InterruptCond>& ic) {
+    INTR_FUT_DEBUG(
+      "{}: going to set interrupt_cond: {}, ic: {}",
+      __func__,
+      (void*)interrupt_cond.get(),
+      (void*)ic.get());
     if (!interrupt_cond) {
       interrupt_cond = ic;
     }
@@ -110,13 +115,15 @@ struct interrupt_cond_t {
   void reset() {
     if (--ref_count == 0) {
       INTR_FUT_DEBUG(
-	"call_with_interruption_impl clearing interrupt_cond: {},{}",
+	"{}: clearing interrupt_cond: {},{}",
+        __func__,
 	(void*)interrupt_cond.get(),
 	typeid(InterruptCond).name());
       interrupt_cond.release();
     } else {
       INTR_FUT_DEBUG(
-	"call_with_interruption_impl end without clearing interrupt_cond: {},{}, ref_count: {}",
+	"{}: end without clearing interrupt_cond: {},{}, ref_count: {}",
+        __func__,
 	(void*)interrupt_cond.get(),
 	typeid(InterruptCond).name(),
 	ref_count);
@@ -142,6 +149,11 @@ struct is_interruptible_future<
     InterruptCond,
     FutureType>>
   : public std::true_type {};
+template <typename FutureType>
+concept IsInterruptibleFuture = is_interruptible_future<FutureType>::value;
+template <typename Func, typename... Args>
+concept InvokeReturnsInterruptibleFuture =
+  IsInterruptibleFuture<std::invoke_result_t<Func, Args...>>;
 
 namespace internal {
 
@@ -170,17 +182,17 @@ auto call_with_interruption_impl(
   // global "interrupt_cond" with the interruption condition, and go ahead
   // executing the Func.
   assert(interrupt_condition);
-  auto [interrupt, fut] = interrupt_condition->template may_interrupt<
+  auto fut = interrupt_condition->template may_interrupt<
     typename futurator_t::type>();
   INTR_FUT_DEBUG(
     "call_with_interruption_impl: may_interrupt: {}, "
-    "local interrupt_condintion: {}, "
+    "local interrupt_condition: {}, "
     "global interrupt_cond: {},{}",
-    interrupt,
+    (bool)fut,
     (void*)interrupt_condition.get(),
     (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
     typeid(InterruptCond).name());
-  if (interrupt) {
+  if (fut) {
     return std::move(*fut);
   }
   interrupt_cond<InterruptCond>.set(interrupt_condition);
@@ -196,14 +208,13 @@ auto call_with_interruption_impl(
 
 }
 
-template <typename InterruptCond, typename Func, typename Ret,
-	  typename Result = std::invoke_result_t<Func, Ret>,
-	  std::enable_if_t<!InterruptCond::template is_interruption_v<Ret> &&
-	    seastar::is_future<Ret>::value, int> = 0>
+template <typename InterruptCond, typename Func, seastar::Future Ret>
+requires (!InterruptCond::template is_interruption_v<Ret>)
 auto call_with_interruption(
   InterruptCondRef<InterruptCond> interrupt_condition,
   Func&& func, Ret&& fut)
 {
+  using Result = std::invoke_result_t<Func, Ret>;
   // if "T" is already an interrupt exception, return it directly;
   // otherwise, upper layer application may encounter errors executing
   // the "Func" body.
@@ -224,13 +235,13 @@ auto call_with_interruption(
 	    std::move(fut));
 }
 
-template <typename InterruptCond, typename Func, typename T,
-	  typename Result = std::invoke_result_t<Func, T>,
-	  std::enable_if_t<InterruptCond::template is_interruption_v<T>, int> = 0>
+template <typename InterruptCond, typename Func, typename T>
+requires (InterruptCond::template is_interruption_v<T>)
 auto call_with_interruption(
   InterruptCondRef<InterruptCond> interrupt_condition,
   Func&& func, T&& arg)
 {
+  using Result = std::invoke_result_t<Func, T>;
   // if "T" is already an interrupt exception, return it directly;
   // otherwise, upper layer application may encounter errors executing
   // the "Func" body.
@@ -238,11 +249,8 @@ auto call_with_interruption(
       std::get<0>(std::tuple(std::forward<T>(arg))));
 }
 
-template <typename InterruptCond, typename Func, typename T,
-	  typename Result = std::invoke_result_t<Func, T>,
-	  std::enable_if_t<
-	    !InterruptCond::template is_interruption_v<T> &&
-	      !seastar::is_future<T>::value, int> = 0>
+template <typename InterruptCond, typename Func, typename T>
+requires (!InterruptCond::template is_interruption_v<T>) && (!seastar::Future<T>)
 auto call_with_interruption(
   InterruptCondRef<InterruptCond> interrupt_condition,
   Func&& func, T&& arg)
@@ -271,15 +279,15 @@ Result non_futurized_call_with_interruption(
   Func&& func, T&&... args)
 {
   assert(interrupt_condition);
-  auto [interrupt, fut] = interrupt_condition->template may_interrupt<seastar::future<>>();
+  auto fut = interrupt_condition->template may_interrupt<seastar::future<>>();
   INTR_FUT_DEBUG(
     "non_futurized_call_with_interruption may_interrupt: {}, "
     "interrupt_condition: {}, interrupt_cond: {},{}",
-    interrupt,
+    (bool)fut,
     (void*)interrupt_condition.get(),
     (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
     typeid(InterruptCond).name());
-  if (interrupt) {
+  if (fut) {
     std::rethrow_exception(fut->get_exception());
   }
   interrupt_cond<InterruptCond>.set(interrupt_condition);
@@ -309,7 +317,7 @@ struct interruptible_errorator;
 
 template <typename T>
 struct parallel_for_each_ret {
-  static_assert(seastar::is_future<T>::value);
+  static_assert(seastar::Future<T>);
   using type = seastar::future<>;
 };
 
@@ -323,7 +331,7 @@ struct parallel_for_each_ret<
 template <typename InterruptCond, typename FutureType>
 class parallel_for_each_state final : private seastar::continuation_base<> {
   using elem_ret_t = std::conditional_t<
-    is_interruptible_future<FutureType>::value,
+    IsInterruptibleFuture<FutureType>,
     typename FutureType::core_type,
     FutureType>;
   using future_t = interruptible_future_detail<
@@ -1157,12 +1165,12 @@ public:
 	    };
   }
 
-  template <typename Iterator, typename AsyncAction,
-	    typename Result = std::invoke_result_t<AsyncAction, typename Iterator::reference>,
-	    std::enable_if_t<is_interruptible_future<Result>::value, int> = 0>
+  template <typename Iterator,
+	    InvokeReturnsInterruptibleFuture<typename Iterator::reference> AsyncAction>
   [[gnu::always_inline]]
   static auto do_for_each(Iterator begin, Iterator end, AsyncAction&& action) {
-    if constexpr (seastar::is_future<typename Result::core_type>::value) {
+    using Result = std::invoke_result_t<AsyncAction, typename Iterator::reference>;
+    if constexpr (seastar::Future<typename Result::core_type>) {
       return make_interruptible(
 	  ::seastar::do_for_each(begin, end,
 	    [action=std::move(action),
@@ -1189,12 +1197,11 @@ public:
     }
   }
 
-  template <typename Iterator, typename AsyncAction,
-	    typename Result = std::invoke_result_t<AsyncAction, typename Iterator::reference>,
-	    std::enable_if_t<!is_interruptible_future<Result>::value, int> = 0>
+  template <typename Iterator, typename AsyncAction>
+  requires (!InvokeReturnsInterruptibleFuture<AsyncAction, typename Iterator::reference>)
   [[gnu::always_inline]]
   static auto do_for_each(Iterator begin, Iterator end, AsyncAction&& action) {
-    if constexpr (seastar::is_future<Result>::value) {
+    if constexpr (seastar::InvokeReturnsAnyFuture<AsyncAction, typename Iterator::reference>) {
       return make_interruptible(
 	  ::seastar::do_for_each(begin, end,
 	    [action=std::move(action),
@@ -1221,12 +1228,11 @@ public:
     }
   }
 
-  template <typename AsyncAction,
-	    typename Result = std::invoke_result_t<AsyncAction>,
-	    std::enable_if_t<is_interruptible_future<Result>::value, int> = 0>
+  template <InvokeReturnsInterruptibleFuture AsyncAction>
   [[gnu::always_inline]]
   static auto repeat(AsyncAction&& action) {
-    if constexpr (seastar::is_future<typename Result::core_type>::value) {
+    using Result = std::invoke_result_t<AsyncAction>;
+    if constexpr (seastar::Future<typename Result::core_type>) {
       return make_interruptible(
 	  ::seastar::repeat(
 	    [action=std::move(action),
@@ -1248,13 +1254,11 @@ public:
       );
     }
   }
-  template <typename AsyncAction,
-	    typename Result = std::invoke_result_t<AsyncAction>,
-	    std::enable_if_t<
-	      !is_interruptible_future<Result>::value, int> = 0>
+  template <typename AsyncAction>
+  requires (!InvokeReturnsInterruptibleFuture<AsyncAction>)
   [[gnu::always_inline]]
   static auto repeat(AsyncAction&& action) {
-    if constexpr (seastar::is_future<Result>::value) {
+    if constexpr (seastar::InvokeReturnsAnyFuture<AsyncAction>) {
       return make_interruptible(
 	  ::seastar::repeat(
 	    [action=std::move(action),
@@ -1321,7 +1325,7 @@ public:
   }
 
   template <typename Container, typename Func>
-  static inline auto parallel_for_each(Container&& container, Func&& func) noexcept {
+  static inline auto parallel_for_each(Container& container, Func&& func) noexcept {
     return parallel_for_each(
 	    std::begin(container),
 	    std::end(container),
@@ -1362,18 +1366,14 @@ public:
 		      std::move(initial), std::move(reduce));
   }
 
-  template<typename Fut, 
-	   std::enable_if_t<
-	     seastar::is_future<Fut>::value
-	     || is_interruptible_future<Fut>::value, int> = 0>
+  template<typename Fut>
+  requires seastar::Future<Fut> || IsInterruptibleFuture<Fut>
   static auto futurize_invoke_if_func(Fut&& fut) noexcept {
 	return std::forward<Fut>(fut);
   }
 
-  template<typename Func,
-	   std::enable_if_t<
-	     !seastar::is_future<Func>::value
-	     && !is_interruptible_future<Func>::value, int> = 0>
+  template<typename Func>
+  requires (!seastar::Future<Func>) && (!IsInterruptibleFuture<Func>)
   static auto futurize_invoke_if_func(Func&& func) noexcept {
 	return seastar::futurize_invoke(std::forward<Func>(func));
   }
@@ -1393,12 +1393,46 @@ public:
   template <typename Func,
 	    typename Result = futurize_t<std::invoke_result_t<Func>>>
   static inline Result async(Func&& func) {
-    return seastar::async([func=std::forward<Func>(func),
-			   interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]
-			  () mutable {
+    auto interruption_condition = interrupt_cond<InterruptCond>.interrupt_cond;
+    INTR_FUT_DEBUG(
+      "interruptible_future_detail::async() yielding out, "
+      "interrupt_cond {},{} cleared",
+      (void*)interruption_condition.get(),
+      typeid(InterruptCond).name());
+    interrupt_cond<InterruptCond>.reset();
+    auto ret = seastar::async([func=std::forward<Func>(func),
+			       interruption_condition] () mutable {
       return non_futurized_call_with_interruption(
-	  interrupt_condition, std::forward<Func>(func));
+	  interruption_condition, std::forward<Func>(func));
     });
+    interrupt_cond<InterruptCond>.set(interruption_condition);
+    INTR_FUT_DEBUG(
+      "interruptible_future_detail::async() yield back, interrupt_cond: {},{}",
+      (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+      typeid(InterruptCond).name());
+    return ret;
+  }
+
+  template <class FutureT>
+  static decltype(auto) green_get(FutureT&& fut) {
+    if (fut.available()) {
+      return fut.get();
+    } else {
+      // destined to wait!
+      auto interruption_condition = interrupt_cond<InterruptCond>.interrupt_cond;
+      INTR_FUT_DEBUG(
+        "green_get() waiting, interrupt_cond: {},{}",
+        (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+        typeid(InterruptCond).name());
+      interrupt_cond<InterruptCond>.reset();
+      auto&& value = fut.get();
+      interrupt_cond<InterruptCond>.set(interruption_condition);
+      INTR_FUT_DEBUG(
+        "green_get() got, interrupt_cond: {},{}",
+        (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+        typeid(InterruptCond).name());
+      return std::move(value);
+    }
   }
 
   static void yield() {

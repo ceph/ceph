@@ -7,17 +7,14 @@
 #include "common/ceph_json.h"
 #include "common/RefCountedObj.h"
 #include "include/common_fwd.h"
+#include "rgw_sal_fwd.h"
 
 #include <atomic>
 
-namespace rgw { namespace sal {
-  class Store;
-} }
-
 class RGWSI_Zone;
 
-template <class T>
-static int parse_decode_json(T& t, bufferlist& bl)
+template<class T>
+inline int parse_decode_json(T& t, bufferlist& bl)
 {
   JSONParser p;
   if (!p.parse(bl.c_str(), bl.length())) {
@@ -82,31 +79,18 @@ class RGWRESTConn
 public:
 
   RGWRESTConn(CephContext *_cct,
-              RGWSI_Zone *zone_svc,
+              rgw::sal::Driver* driver,
               const std::string& _remote_id,
               const std::list<std::string>& endpoints,
               std::optional<std::string> _api_name,
               HostStyle _host_style = PathStyle);
   RGWRESTConn(CephContext *_cct,
-              rgw::sal::Store* store,
-              const std::string& _remote_id,
-              const std::list<std::string>& endpoints,
-              std::optional<std::string> _api_name,
-              HostStyle _host_style = PathStyle);
-  RGWRESTConn(CephContext *_cct,
-              RGWSI_Zone *zone_svc,
-              const std::string& _remote_id,
-              const std::list<std::string>& endpoints,
-              RGWAccessKey _cred,
-              std::optional<std::string> _api_name,
-              HostStyle _host_style = PathStyle);
-  RGWRESTConn(CephContext *_cct,
-              rgw::sal::Store* store,
-              const std::string& _remote_id,
-              const std::list<std::string>& endpoints,
-              RGWAccessKey _cred,
-              std::optional<std::string> _api_name,
-              HostStyle _host_style = PathStyle);
+	      const std::string& _remote_id,
+	      const std::list<std::string>& endpoints,
+	      RGWAccessKey _cred,
+	      std::string _zone_group,
+	      std::optional<std::string> _api_name,
+	      HostStyle _host_style = PathStyle);
 
   // custom move needed for atomic
   RGWRESTConn(RGWRESTConn&& other);
@@ -143,10 +127,13 @@ public:
   /* sync request */
   int forward(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
 
+  /* sync request */
+  int forward_iam_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
+
 
   /* async requests */
-  int put_obj_send_init(rgw::sal::Object* obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
-  int put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_user& uid, rgw::sal::Object* obj,
+  int put_obj_send_init(const rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
+  int put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_user& uid, const rgw_obj& obj,
                          std::map<std::string, bufferlist>& attrs, RGWRESTStreamS3PutObj **req);
   int complete_request(RGWRESTStreamS3PutObj *req, std::string& etag,
                        ceph::real_time *mtime, optional_yield y);
@@ -176,9 +163,9 @@ public:
     uint64_t range_end{0};
   };
 
-  int get_obj(const DoutPrefixProvider *dpp, const rgw::sal::Object* obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
+  int get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
 
-  int get_obj(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info *info /* optional */, const rgw::sal::Object* obj,
+  int get_obj(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info *info /* optional */, const rgw_obj& obj,
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
@@ -240,17 +227,10 @@ class S3RESTConn : public RGWRESTConn {
 
 public:
 
-  S3RESTConn(CephContext *_cct, RGWSI_Zone *svc_zone, const std::string& _remote_id, const std::list<std::string>& endpoints, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle) :
-    RGWRESTConn(_cct, svc_zone, _remote_id, endpoints, _api_name, _host_style) {}
-
-  S3RESTConn(CephContext *_cct, rgw::sal::Store* store, const std::string& _remote_id, const std::list<std::string>& endpoints, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle) :
-    RGWRESTConn(_cct, store, _remote_id, endpoints, _api_name, _host_style) {}
-
-  S3RESTConn(CephContext *_cct, RGWSI_Zone *svc_zone, const std::string& _remote_id, const std::list<std::string>& endpoints, RGWAccessKey _cred, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle):
-    RGWRESTConn(_cct, svc_zone, _remote_id, endpoints, _cred, _api_name, _host_style) {}
-
-  S3RESTConn(CephContext *_cct, rgw::sal::Store* store, const std::string& _remote_id, const std::list<std::string>& endpoints, RGWAccessKey _cred, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle):
-    RGWRESTConn(_cct, store, _remote_id, endpoints, _cred, _api_name, _host_style) {}
+  S3RESTConn(CephContext *_cct, rgw::sal::Driver* driver, const std::string& _remote_id, const std::list<std::string>& endpoints, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle) :
+    RGWRESTConn(_cct, driver, _remote_id, endpoints, _api_name, _host_style) {}
+  S3RESTConn(CephContext *_cct, const std::string& _remote_id, const std::list<std::string>& endpoints, RGWAccessKey _cred, std::string _zone_group, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle):
+    RGWRESTConn(_cct, _remote_id, endpoints, _cred, _zone_group, _api_name, _host_style) {}
   ~S3RESTConn() override = default;
 
   void populate_params(param_vec_t& params, const rgw_user *uid, const std::string& zonegroup) override {

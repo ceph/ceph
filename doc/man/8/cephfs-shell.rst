@@ -57,10 +57,27 @@ Options
 .. code:: bash
 
     [build]$ python3 -m venv venv && source venv/bin/activate && pip3 install cmd2
-    [build]$ source vstart_environment.sh && source venv/bin/activate && python3 ../src/tools/cephfs/cephfs-shell
+    [build]$ source vstart_environment.sh && source venv/bin/activate && python3 ../src/tools/cephfs/shell/cephfs-shell
 
 Commands
 ========
+
+.. note::
+
+    Apart from Ceph File System, CephFS Shell commands can also interact
+    directly with the local file system. To achieve this, ``!`` (an
+    exclamation point) must precede the CephFS Shell command.
+
+    Usage :
+
+        !<cephfs_shell_command>
+
+    For example,
+
+    .. code:: bash
+
+        CephFS:~/>>> !ls # Lists the local file system directory contents.
+        CephFS:~/>>> ls  # Lists the Ceph File System directory contents.
 
 mkdir
 -----
@@ -84,7 +101,7 @@ Copy a file/directory to Ceph File System from Local File System.
 
 Usage : 
     
-        put [options] <source_path> [target_path]
+        put [options] <source_path> <target_path>
 
 * source_path - local file/directory path to be copied to cephfs.
     * if `.` copies all the file/directories in the local working directory.
@@ -104,7 +121,7 @@ Copy a file from Ceph File System to Local File System.
 
 Usage : 
 
-    get [options] <source_path> [target_path]
+    get [options] <source_path> <target_path>
 
 * source_path - remote file/directory path which is to be copied to local file system.
     * if `.` copies all the file/directories in the remote working directory.
@@ -146,6 +163,24 @@ Usage :
     cat  <file>....
 
 * file - name of the file
+
+ln
+--
+
+Add a hard link to an existing file or create a symbolic link to an existing
+file or directory.
+
+Usage:
+
+    ln [options] <target> [link_name]
+
+* target - file/directory to which a link is to be created
+* link_name - link to target with the name link_name
+
+Options:
+  -s, --symbolic  Create symbolic link
+  -v, --verbose   Print name of each linked file
+  -f, --force     Force create link/symbolic link
 
 cd
 --

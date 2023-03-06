@@ -24,6 +24,46 @@ cloned using git.
 
 .. _ASan: https://github.com/google/sanitizers/wiki/AddressSanitizer
 
+Testing crimson with cephadm
+===============================
+
+The Ceph CI/CD pipeline includes ceph container builds with
+crimson-osd subsitituted for ceph-osd.
+
+Once a branch at commit <sha1> has been built and is available in
+shaman, you can deploy it using the cephadm instructions outlined
+in :ref:`cephadm` with the following adaptations.
+
+First, while performing the initial bootstrap, use the --image flag to
+use a crimson build rather than a default build:
+
+.. prompt:: bash #
+
+   cephadm --image quay.ceph.io/ceph-ci/ceph:<sha1>-crimson --allow-mismatched-release bootstrap ...
+
+You'll likely need to include the --allow-mismatched-release flag to
+use a non-release branch.
+
+Additionally, prior to deploying the osds, you'll need enable crimson
+and default pools to be created as crimson pools (from cephadm shell):
+
+.. prompt:: bash #
+
+   ceph config set global 'enable_experimental_unrecoverable_data_corrupting_features' crimson
+   ceph osd set-allow-crimson --yes-i-really-mean-it
+   ceph config set mon osd_pool_default_crimson true
+
+The first command enables the crimson experimental feature.  Crimson
+is highly experimental, and malfunctions up to and including crashes
+and data loss are to be expected.
+
+The second enables the allow_crimson OSDMap flag.  The monitor will
+not allow crimson-osd to boot without that flag.
+
+The last causes pools to be created by default with the crimson flag.
+crimson pools are restricted to operations supported by crimson.
+crimson-osd won't instantiate pgs from non-crimson pools.
+
 Running Crimson
 ===============
 
@@ -335,7 +375,7 @@ Debugging with GDB
 
 The `tips`_ for debugging Scylla also apply to Crimson.
 
-.. _tips: https://github.com/scylladb/scylla/blob/master/docs/guides/debugging.md#tips-and-tricks
+.. _tips: https://github.com/scylladb/scylla/blob/master/docs/dev/debugging.md#tips-and-tricks
 
 Human-readable backtraces with addr2line
 ----------------------------------------

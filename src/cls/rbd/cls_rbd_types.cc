@@ -1005,12 +1005,16 @@ std::ostream& operator<<(std::ostream& os, const MirrorSnapshotNamespace& ns) {
   os << "[" << SNAPSHOT_NAMESPACE_TYPE_MIRROR << " "
      << "state=" << ns.state << ", "
      << "complete=" << ns.complete << ", "
-     << "mirror_peer_uuids=" << ns.mirror_peer_uuids << ", "
-     << "primary_mirror_uuid=" << ns.primary_mirror_uuid << ", "
-     << "primary_snap_id=" << ns.primary_snap_id << ", "
-     << "last_copied_object_number=" << ns.last_copied_object_number << ", "
-     << "snap_seqs=" << ns.snap_seqs
-     << "]";
+     << "mirror_peer_uuids=" << ns.mirror_peer_uuids << ", ";
+  if (ns.is_primary()) {
+     os << "clean_since_snap_id=" << ns.clean_since_snap_id;
+  } else {
+     os << "primary_mirror_uuid=" << ns.primary_mirror_uuid << ", "
+        << "primary_snap_id=" << ns.primary_snap_id << ", "
+        << "last_copied_object_number=" << ns.last_copied_object_number << ", "
+        << "snap_seqs=" << ns.snap_seqs;
+  }
+  os << "]";
   return os;
 }
 

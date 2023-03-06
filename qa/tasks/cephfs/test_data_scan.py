@@ -92,7 +92,7 @@ class SimpleWorkload(Workload):
         self._initial_state = self._mount.stat("subdir/sixmegs")
 
     def validate(self):
-        self._mount.run_shell(["ls", "subdir"], sudo=True)
+        self._mount.run_shell(["sudo", "ls", "subdir"], omit_sudo=False)
         st = self._mount.stat("subdir/sixmegs", sudo=True)
         self.assert_equal(st['st_size'], self._initial_state['st_size'])
         return self._errors
@@ -109,7 +109,7 @@ class SymlinkWorkload(Workload):
         self._mount.run_shell(["ln", "-s", "symdir/onemegs", "symlink1_onemegs"])
 
     def validate(self):
-        self._mount.run_shell(["ls", "symdir"], sudo=True)
+        self._mount.run_shell(["sudo", "ls", "symdir"], omit_sudo=False)
         st = self._mount.lstat("symdir/symlink_onemegs")
         self.assert_true(stat.S_ISLNK(st['st_mode']))
         target = self._mount.readlink("symdir/symlink_onemegs")
@@ -169,13 +169,14 @@ class BacktracelessFile(Workload):
 
 
 class StripedStashedLayout(Workload):
-    def __init__(self, fs, m):
+    def __init__(self, fs, m, pool=None):
         super(StripedStashedLayout, self).__init__(fs, m)
 
         # Nice small stripes so we can quickly do our writes+validates
         self.sc = 4
         self.ss = 65536
         self.os = 262144
+        self.pool = pool and pool or self._filesystem.get_data_pool_name()
 
         self.interesting_sizes = [
             # Exactly stripe_count objects will exist
@@ -196,8 +197,7 @@ class StripedStashedLayout(Workload):
 
         self._mount.setfattr("./stripey", "ceph.dir.layout",
              "stripe_unit={ss} stripe_count={sc} object_size={os} pool={pool}".format(
-                 ss=self.ss, os=self.os, sc=self.sc,
-                 pool=self._filesystem.get_data_pool_name()
+                 ss=self.ss, os=self.os, sc=self.sc, pool=self.pool
              ))
 
         # Write files, then flush metadata so that its layout gets written into an xattr
@@ -400,8 +400,8 @@ class TestDataScan(CephFSTestCase):
 
         self.fs.journal_tool(["journal", "reset", "--force"], 0)
         self.fs.data_scan(["init"])
-        self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()], worker_count=workers)
-        self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()], worker_count=workers)
+        self.fs.data_scan(["scan_extents"], worker_count=workers)
+        self.fs.data_scan(["scan_inodes"], worker_count=workers)
 
         # Mark the MDS repaired
         self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
@@ -517,8 +517,8 @@ class TestDataScan(CephFSTestCase):
 
         # Run data-scan, observe that it inserts our dentry back into the correct fragment
         # by checking the omap now has the dentry's key again
-        self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()])
-        self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()])
+        self.fs.data_scan(["scan_extents"])
+        self.fs.data_scan(["scan_inodes"])
         self.fs.data_scan(["scan_links"])
         self.assertIn(victim_key, self._dirfrag_keys(frag_obj_id))
 
@@ -529,7 +529,7 @@ class TestDataScan(CephFSTestCase):
         self.mount_a.mount_wait()
         self.mount_a.run_shell(["ls", "-l", "subdir/"]) # debugging
         # Use sudo because cephfs-data-scan will reinsert the dentry with root ownership, it can't know the real owner.
-        out = self.mount_a.run_shell_payload(f"cat subdir/{victim_dentry}", sudo=True).stdout.getvalue().strip()
+        out = self.mount_a.run_shell_payload(f"sudo cat subdir/{victim_dentry}", omit_sudo=False).stdout.getvalue().strip()
         self.assertEqual(out, victim_dentry)
 
         # Finally, close the loop by checking our injected dentry survives a merge
@@ -723,3 +723,28 @@ class TestDataScan(CephFSTestCase):
             new_snaptable['snapserver']['last_snap'], old_snaptable['snapserver']['last_snap'])
         self.assertEqual(
             new_snaptable['snapserver']['snaps'], old_snaptable['snapserver']['snaps'])
+
+    def _prepare_extra_data_pool(self, set_root_layout=True):
+        extra_data_pool_name = self.fs.get_data_pool_name() + '_extra'
+        self.fs.add_data_pool(extra_data_pool_name)
+        if set_root_layout:
+            self.mount_a.setfattr(".", "ceph.dir.layout.pool",
+                                  extra_data_pool_name)
+        return extra_data_pool_name
+
+    def test_extra_data_pool_rebuild_simple(self):
+        self._prepare_extra_data_pool()
+        self._rebuild_metadata(SimpleWorkload(self.fs, self.mount_a))
+
+    def test_extra_data_pool_rebuild_few_files(self):
+        self._prepare_extra_data_pool()
+        self._rebuild_metadata(ManyFilesWorkload(self.fs, self.mount_a, 5), workers=1)
+
+    @for_teuthology
+    def test_extra_data_pool_rebuild_many_files_many_workers(self):
+        self._prepare_extra_data_pool()
+        self._rebuild_metadata(ManyFilesWorkload(self.fs, self.mount_a, 25), workers=7)
+
+    def test_extra_data_pool_stashed_layout(self):
+        pool_name = self._prepare_extra_data_pool(False)
+        self._rebuild_metadata(StripedStashedLayout(self.fs, self.mount_a, pool_name))

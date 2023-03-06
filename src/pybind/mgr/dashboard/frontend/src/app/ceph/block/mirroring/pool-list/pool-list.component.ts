@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subscriber, Subscription } from 'rxjs';
@@ -6,6 +7,7 @@ import { Observable, Subscriber, Subscription } from 'rxjs';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -14,9 +16,9 @@ import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { PoolEditModeModalComponent } from '../pool-edit-mode-modal/pool-edit-mode-modal.component';
 import { PoolEditPeerModalComponent } from '../pool-edit-peer-modal/pool-edit-peer-modal.component';
 
+const BASE_URL = '/block/mirroring';
 @Component({
   selector: 'cd-mirroring-pools',
   templateUrl: './pool-list.component.html',
@@ -25,6 +27,10 @@ import { PoolEditPeerModalComponent } from '../pool-edit-peer-modal/pool-edit-pe
 export class PoolListComponent implements OnInit, OnDestroy {
   @ViewChild('healthTmpl', { static: true })
   healthTmpl: TemplateRef<any>;
+  @ViewChild('localTmpl', { static: true })
+  localTmpl: TemplateRef<any>;
+  @ViewChild('remoteTmpl', { static: true })
+  remoteTmpl: TemplateRef<any>;
 
   subs: Subscription;
 
@@ -43,7 +49,8 @@ export class PoolListComponent implements OnInit, OnDestroy {
     private authStorageService: AuthStorageService,
     private rbdMirroringService: RbdMirroringService,
     private modalService: ModalService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private router: Router
   ) {
     this.data = [];
     this.permission = this.authStorageService.getPermissions().rbdMirroring;
@@ -86,8 +93,18 @@ export class PoolListComponent implements OnInit, OnDestroy {
       { prop: 'name', name: $localize`Name`, flexGrow: 2 },
       { prop: 'mirror_mode', name: $localize`Mode`, flexGrow: 2 },
       { prop: 'leader_id', name: $localize`Leader`, flexGrow: 2 },
-      { prop: 'image_local_count', name: $localize`# Local`, flexGrow: 2 },
-      { prop: 'image_remote_count', name: $localize`# Remote`, flexGrow: 2 },
+      {
+        prop: 'image_local_count',
+        name: $localize`# Local`,
+        headerTemplate: this.localTmpl,
+        flexGrow: 2
+      },
+      {
+        prop: 'image_remote_count',
+        name: $localize`# Remote`,
+        headerTemplate: this.remoteTmpl,
+        flexGrow: 2
+      },
       {
         prop: 'health',
         name: $localize`Health`,
@@ -111,10 +128,10 @@ export class PoolListComponent implements OnInit, OnDestroy {
   }
 
   editModeModal() {
-    const initialState = {
-      poolName: this.selection.first().name
-    };
-    this.modalRef = this.modalService.show(PoolEditModeModalComponent, initialState);
+    this.router.navigate([
+      BASE_URL,
+      { outlets: { modal: [URLVerbs.EDIT, this.selection.first().name] } }
+    ]);
   }
 
   editPeersModal(mode: string) {

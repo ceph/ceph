@@ -4,7 +4,7 @@ from functools import wraps
 
 from ..exceptions import DashboardException
 from ..services.orchestrator import OrchClient
-from . import APIDoc, APIRouter, Endpoint, EndpointDoc, ReadPermission, RESTController
+from . import APIDoc, Endpoint, EndpointDoc, ReadPermission, RESTController, UIRouter
 
 STATUS_SCHEMA = {
     "available": (bool, "Orchestrator status"),
@@ -35,7 +35,7 @@ def raise_if_no_orchestrator(features=None):
     return inner
 
 
-@APIRouter('/orchestrator')
+@UIRouter('/orchestrator')
 @APIDoc("Orchestrator Management API", "Orchestrator")
 class Orchestrator(RESTController):
 

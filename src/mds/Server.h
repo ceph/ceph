@@ -187,6 +187,7 @@ public:
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
   void apply_allocated_inos(MDRequestRef& mdr, Session *session);
 
+  void _try_open_ino(MDRequestRef& mdr, int r, inodeno_t ino);
   CInode* rdlock_path_pin_ref(MDRequestRef& mdr, bool want_auth,
 			      bool no_want_auth=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, bool create,
@@ -232,6 +233,9 @@ public:
   void handle_client_removexattr(MDRequestRef& mdr);
 
   void handle_client_fsync(MDRequestRef& mdr);
+
+  bool is_unlink_pending(CDentry *dn);
+  void wait_for_pending_unlink(CDentry *dn, MDRequestRef& mdr);
 
   // open
   void handle_client_open(MDRequestRef& mdr);
@@ -494,6 +498,8 @@ private:
   bool replay_unsafe_with_closed_session = false;
   double cap_revoke_eviction_timeout = 0;
   uint64_t max_snaps_per_dir = 100;
+  // long snapshot names have the following format: "_<SNAPSHOT-NAME>_<INODE-NUMBER>"
+  uint64_t snapshot_name_max = NAME_MAX - 1 - 1 - 13;
   unsigned delegate_inos_pct = 0;
   uint64_t dir_max_entries = 0;
   int64_t bal_fragment_size_max = 0;

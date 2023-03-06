@@ -1,11 +1,12 @@
 {
-  "baseUrl": "http://localhost:4200/",
+  "baseUrl": "https://localhost:4200/",
   "ignoreTestFiles": [
     "*.po.ts",
     "**/orchestrator/**"
   ],
   "supportFile": "cypress/support/index.ts",
-  "video": false,
+  "video": true,
+  "videoUploadOnPasses": false,
   "defaultCommandTimeout": 120000,
   "responseTimeout": 45000,
   "viewportHeight": 1080,
@@ -21,6 +22,9 @@
   "retries": 1,
   "env": {
     "LOGIN_USER": "admin",
-    "LOGIN_PWD": "admin"
-  }
+    "LOGIN_PWD": "admin",
+    "CEPH2_URL": "http://localhost:4202/"
+  },
+  "experimentalSessionAndOrigin": true,
+  "chromeWebSecurity": false
 }

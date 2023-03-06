@@ -14,8 +14,10 @@
 
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
+#include <boost/algorithm/string.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <boost/optional.hpp>
+#include <fstream>
 
 #include <stdlib.h>
 
@@ -27,8 +29,6 @@
 #include "global/global_init.h"
 
 #include "os/ObjectStore.h"
-#include "os/filestore/FileJournal.h"
-#include "os/filestore/FileStore.h"
 #ifdef HAVE_LIBFUSE
 #include "os/FuseStore.h"
 #endif
@@ -435,7 +435,7 @@ static int get_fd_data(int fd, bufferlist &bl)
   return 0;
 }
 
-int get_log(ObjectStore *fs, __u8 struct_ver,
+int get_log(CephContext *cct, ObjectStore *fs, __u8 struct_ver,
 	    spg_t pgid, const pg_info_t &info,
 	    PGLog::IndexedLog &log, pg_missing_t &missing)
 {
@@ -447,7 +447,7 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
     ostringstream oss;
     ceph_assert(struct_ver > 0);
     PGLog::read_log_and_missing(
-      fs, ch,
+      cct, fs, ch,
       pgid.make_pgmeta_oid(),
       info, log, missing,
       oss,
@@ -736,6 +736,82 @@ int do_trim_pg_log(ObjectStore *store, const coll_t &coll,
   return 0;
 }
 
+int do_trim_pg_log_dups(ObjectStore *store, const coll_t &coll,
+		   pg_info_t &info, const spg_t &pgid,
+		   epoch_t map_epoch,
+		   PastIntervals &past_intervals)
+{
+  ghobject_t oid = pgid.make_pgmeta_oid();
+  struct stat st;
+  auto ch = store->open_collection(coll);
+  int r = store->stat(ch, oid, &st);
+  ceph_assert(r == 0);
+  ceph_assert(st.st_size == 0);
+
+  const size_t max_dup_entries = g_ceph_context->_conf->osd_pg_log_dups_tracked;
+  ceph_assert(max_dup_entries > 0);
+  const size_t max_chunk_size = g_ceph_context->_conf->osd_pg_log_trim_max;
+  ceph_assert(max_chunk_size > 0);
+
+  cout << "max_dup_entries=" << max_dup_entries
+       << " max_chunk_size=" << max_chunk_size << std::endl;
+  if (dry_run) {
+    cout << "Dry run enabled, so when many chunks are needed,"
+	 << " the trimming will never stop!" << std::endl;
+  }
+
+  set<string> keys_to_keep;
+  size_t num_removed = 0;
+  do {
+    set<string> keys_to_trim;
+    {
+    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(ch, oid);
+    if (!p)
+      break;
+    for (p->seek_to_first(); p->valid(); p->next()) {
+      if (p->key()[0] == '_')
+	continue;
+      if (p->key() == "can_rollback_to")
+	continue;
+      if (p->key() == "divergent_priors")
+	continue;
+      if (p->key() == "rollback_info_trimmed_to")
+	continue;
+      if (p->key() == "may_include_deletes_in_missing")
+	continue;
+      if (p->key().substr(0, 7) == string("missing"))
+	continue;
+      if (p->key().substr(0, 4) != string("dup_"))
+	continue;
+      keys_to_keep.insert(p->key());
+      if (keys_to_keep.size() > max_dup_entries) {
+	auto oldest_to_keep = keys_to_keep.begin();
+      	keys_to_trim.emplace(*oldest_to_keep);
+	keys_to_keep.erase(oldest_to_keep);
+      }
+      if (keys_to_trim.size() >= max_chunk_size) {
+	break;
+      }
+    }
+    } // deconstruct ObjectMapIterator
+    // delete the keys
+    num_removed = keys_to_trim.size();
+    if (!dry_run && !keys_to_trim.empty()) {
+      cout << "Removing keys " << *keys_to_trim.begin() << " - " << *keys_to_trim.rbegin() << std::endl;
+      ObjectStore::Transaction t;
+      t.omap_rmkeys(coll, oid, keys_to_trim);
+      store->queue_transaction(ch, std::move(t));
+      ch->flush();
+    }
+  } while (num_removed == max_chunk_size);
+
+  // compact the db since we just removed a bunch of data
+  cerr << "Finished trimming, now compacting..." << std::endl;
+  if (!dry_run)
+    store->compact();
+  return 0;
+}
+
 const int OMAP_BATCH_SIZE = 25;
 void get_omap_batch(ObjectMap::ObjectMapIterator &iter, map<string, bufferlist> &oset)
 {
@@ -1000,7 +1076,8 @@ int add_osdmap(ObjectStore *store, metadata_section &ms)
   return get_osdmap(store, ms.map_epoch, ms.osdmap, ms.osdmap_bl);
 }
 
-int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
+int ObjectStoreTool::do_export(
+    CephContext *cct, ObjectStore *fs, coll_t coll, spg_t pgid,
     pg_info_t &info, epoch_t map_epoch, __u8 struct_ver,
     const OSDSuperblock& superblock,
     PastIntervals &past_intervals)
@@ -1010,7 +1087,7 @@ int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
 
   cerr << "Exporting " << pgid << " info " << info << std::endl;
 
-  int ret = get_log(fs, struct_ver, pgid, info, log, missing);
+  int ret = get_log(cct, fs, struct_ver, pgid, info, log, missing);
   if (ret > 0)
       return ret;
 
@@ -1747,7 +1824,11 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
       && pgb.superblock.cluster_fsid != sb.cluster_fsid) {
     cerr << "Export came from different cluster with fsid "
          << pgb.superblock.cluster_fsid << std::endl;
-    return -EINVAL;
+    if (force) {
+      cerr << "Ignoring this problem due to --force" << std::endl;
+    } else {
+      return -EINVAL;
+    }
   }
 
   if (debug) {
@@ -3079,6 +3160,136 @@ int dup(string srcpath, ObjectStore *src, string dstpath, ObjectStore *dst)
   return r;
 }
 
+
+const int ceph_entity_name_type(const string name)
+{
+  if (name == "mds") return CEPH_ENTITY_TYPE_MDS;
+  if (name == "osd") return CEPH_ENTITY_TYPE_OSD;
+  if (name == "mon") return CEPH_ENTITY_TYPE_MON;
+  if (name == "client") return CEPH_ENTITY_TYPE_CLIENT;
+  if (name == "mgr") return CEPH_ENTITY_TYPE_MGR;
+  if (name == "auth") return CEPH_ENTITY_TYPE_AUTH;
+  return -1;
+}
+
+eversion_t get_eversion_from_str(const string& s) {
+  eversion_t e;
+  vector<string> result;
+  boost::split(result, s, boost::is_any_of("'"));
+  if (result.size() != 2) {
+    cerr << "eversion_t: invalid format: '" << s << "'" << std::endl;
+    return e;
+  }
+  e.epoch   = atoi(result[0].c_str());
+  e.version = atoi(result[1].c_str());
+  return e;
+}
+
+osd_reqid_t get_reqid_from_str(const string& s) {
+  osd_reqid_t reqid;
+
+  vector<string> result;
+  boost::split(result, s, boost::is_any_of(".:"));
+  if (result.size() != 4) {
+    cerr << "reqid: invalid format " << s << std::endl;
+    return osd_reqid_t();
+  }
+  reqid.name._type = ceph_entity_name_type(result[0]);
+  reqid.name._num = atoi(result[1].c_str());
+
+  reqid.inc = atoi(result[2].c_str());
+  reqid.tid = atoi(result[3].c_str());
+  return reqid;
+}
+
+void do_dups_inject_transction(ObjectStore *store, spg_t r_pgid, map<string,bufferlist> *new_dups)
+{
+  ObjectStore::Transaction t;
+  coll_t coll(r_pgid);
+  cerr << "injecting dups into pgid:" << r_pgid << " num of dups:" << new_dups->size() << std::endl;
+  t.omap_setkeys(coll, r_pgid.make_pgmeta_oid(), (*new_dups));
+  auto ch = store->open_collection(coll);
+  store->queue_transaction(ch, std::move(t));
+  new_dups->clear();
+}
+
+int do_dups_inject_object(ObjectStore *store, spg_t r_pgid, json_spirit::mObject &in_json_obj,
+                          map<string,bufferlist> *new_dups, bool debug) {
+  std::map<std::string, json_spirit::mValue>::const_iterator it = in_json_obj.find("generate");
+  int32_t generate = 0;
+  if (it != in_json_obj.end()) {
+    generate = atoi(it->second.get_str().c_str());
+  }
+
+  it = in_json_obj.find("reqid");
+  if (it == in_json_obj.end()) {
+    return 1;
+  }
+  osd_reqid_t reqid(get_reqid_from_str(it->second.get_str()));
+  it = in_json_obj.find("version");
+  if (it == in_json_obj.end()) {
+    return 1;
+  }
+  eversion_t version(get_eversion_from_str(it->second.get_str()));
+  it = in_json_obj.find("user_version");
+  if (it == in_json_obj.end()) {
+    return 1;
+  }
+  version_t user_version = atoi(it->second.get_str().c_str());
+  it = in_json_obj.find("return_code");
+  if (it == in_json_obj.end()) {
+    return 1;
+  }
+  int32_t return_code = atoi(it->second.get_str().c_str());
+  if (generate) {
+    for(auto i = 0; i < generate; ++i) {
+      version.version++;
+      if (debug) {
+        cout << "generate dups reqid " << reqid << " v=" << version << std::endl;
+      }
+      pg_log_dup_t tmp(version, user_version, reqid, return_code);
+      bufferlist bl;
+      encode(tmp, bl);
+      (*new_dups)[tmp.get_key_name()] = std::move(bl);
+      if ( new_dups->size() > 50000 ) {
+        do_dups_inject_transction(store, r_pgid, new_dups);
+	cout << "inject of " << i << " dups into pgid:" << r_pgid << " done..." << std::endl;
+      }
+    }
+    return 0;
+  } else {
+    pg_log_dup_t tmp(version, user_version, reqid, return_code);
+    if (debug) {
+      cout << "adding dup: " << tmp << "into key:" << tmp.get_key_name() << std::endl;
+    }
+    bufferlist bl;
+    encode(tmp, bl);
+    (*new_dups)[tmp.get_key_name()] = std::move(bl);
+  }
+  return 0;
+}
+
+void do_dups_inject_from_json(ObjectStore *store, spg_t r_pgid, json_spirit::mValue &inJson, bool debug)
+{
+  map<string,bufferlist> new_dups;
+  const vector<json_spirit::mValue>& o = inJson.get_array();
+  for (const auto& obj : o) {
+    if (obj.type() == json_spirit::obj_type) {
+      json_spirit::mObject Mobj = obj.get_obj();
+      do_dups_inject_object(store, r_pgid, Mobj, &new_dups, debug);
+    } else {
+      throw std::runtime_error("JSON array/object not allowed type:" + std::to_string(obj.type()));
+      return;
+    }
+  }
+  if (new_dups.size() > 0) {
+    do_dups_inject_transction(store, r_pgid, &new_dups);
+  }
+
+
+  return ;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -3115,86 +3326,6 @@ bool ends_with(const string& check, const string& ending)
     return check.size() >= ending.size() && check.rfind(ending) == (check.size() - ending.size());
 }
 
-// Based on FileStore::dump_journal(), set-up enough to only dump
-int mydump_journal(Formatter *f, string journalpath, bool m_journal_dio)
-{
-  int r;
-
-  if (!journalpath.length())
-    return -EINVAL;
-
-  FileJournal *journal = new FileJournal(g_ceph_context, uuid_d(), NULL, NULL,
-					 journalpath.c_str(), m_journal_dio);
-  r = journal->_fdump(*f, false);
-  delete journal;
-  return r;
-}
-
-int apply_layout_settings(ObjectStore *os, const OSDSuperblock &superblock,
-			  const string &pool_name, const spg_t &pgid, bool dry_run,
-                          int target_level)
-{
-  int r = 0;
-
-  FileStore *fs = dynamic_cast<FileStore*>(os);
-  if (!fs) {
-    cerr << "Nothing to do for non-filestore backend" << std::endl;
-    return 0; // making this return success makes testing easier
-  }
-
-  OSDMap curmap;
-  bufferlist bl;
-  r = get_osdmap(os, superblock.current_epoch, curmap, bl);
-  if (r) {
-    cerr << "Can't find local OSDMap: " << cpp_strerror(r) << std::endl;
-    return r;
-  }
-
-  int64_t poolid = -1;
-  if (pool_name.length()) {
-    poolid = curmap.lookup_pg_pool_name(pool_name);
-    if (poolid < 0) {
-      cerr << "Couldn't find pool " << pool_name << ": " << cpp_strerror(poolid)
-	   << std::endl;
-      return poolid;
-    }
-  }
-
-  vector<coll_t> collections, filtered_colls;
-  r = os->list_collections(collections);
-  if (r < 0) {
-    cerr << "Error listing collections: " << cpp_strerror(r) << std::endl;
-    return r;
-  }
-
-  for (auto const &coll : collections) {
-    spg_t coll_pgid;
-    if (coll.is_pg(&coll_pgid) &&
-	((poolid >= 0 && coll_pgid.pool() == (uint64_t)poolid) ||
-	 coll_pgid == pgid)) {
-      filtered_colls.push_back(coll);
-    }
-  }
-
-  size_t done = 0, total = filtered_colls.size();
-  for (auto const &coll : filtered_colls) {
-    if (dry_run) {
-      cerr << "Would apply layout settings to " << coll << std::endl;
-    } else {
-      cerr << "Finished " << done << "/" << total << " collections" << "\r";
-      r = fs->apply_layout_settings(coll, target_level);
-      if (r < 0) {
-	cerr << "Error applying layout settings to " << coll << std::endl;
-	return r;
-      }
-    }
-    ++done;
-  }
-
-  cerr << "Finished " << total << "/" << total << " collections" << "\r" << std::endl;
-  return r;
-}
-
 int main(int argc, char **argv)
 {
   string dpath, jpath, pgidstr, op, file, mountpoint, mon_store_path, object;
@@ -3213,18 +3344,18 @@ int main(int argc, char **argv)
   desc.add_options()
     ("help", "produce help message")
     ("type", po::value<string>(&type),
-     "Arg is one of [bluestore (default), filestore, memstore]")
+     "Arg is one of [bluestore (default), memstore]")
     ("data-path", po::value<string>(&dpath),
      "path to object store, mandatory")
     ("journal-path", po::value<string>(&jpath),
      "path to journal, use if tool can't find it")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory for info, log, remove, export, export-remove, mark-complete, trim-pg-log, and mandatory for apply-layout-settings if --pool is not specified")
+     "PG id, mandatory for info, log, remove, export, export-remove, mark-complete, trim-pg-log, trim-pg-log-dups")
     ("pool", po::value<string>(&pool),
-     "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
+     "Pool name")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, list-slow-omap, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
-     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, apply-layout-settings, update-mon-db, dump-export, trim-pg-log, statfs]")
+     "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, list-slow-omap, fix-lost, list-pgs, dump-super, meta-list, "
+     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, update-mon-db, dump-export, trim-pg-log, trim-pg-log-dups statfs]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
@@ -3358,39 +3489,17 @@ int main(int argc, char **argv)
     }
     ::close(fd);
   }
-
   if (!vm.count("type") && type == "") {
     type = "bluestore";
   }
   if (!vm.count("data-path") &&
-     op != "dump-export" &&
-     !(op == "dump-journal" && type == "filestore")) {
+     op != "dump-export") {
     cerr << "Must provide --data-path" << std::endl;
     usage(desc);
     return 1;
   }
-  if (type == "filestore" && !vm.count("journal-path")) {
-    jpath = dpath + "/journal";
-  }
   if (!vm.count("op") && !vm.count("object")) {
     cerr << "Must provide --op or object command..." << std::endl;
-    usage(desc);
-    return 1;
-  }
-  if (op != "list" && op != "apply-layout-settings" &&
-      vm.count("op") && vm.count("object")) {
-    cerr << "Can't specify both --op and object command syntax" << std::endl;
-    usage(desc);
-    return 1;
-  }
-  if (op == "apply-layout-settings" && !(vm.count("pool") ^ vm.count("pgid"))) {
-    cerr << "apply-layout-settings requires either --pool or --pgid"
-	 << std::endl;
-    usage(desc);
-    return 1;
-  }
-  if (op != "list" && op != "apply-layout-settings" && vm.count("object") && !vm.count("objcmd")) {
-    cerr << "Invalid syntax, missing command" << std::endl;
     usage(desc);
     return 1;
   }
@@ -3412,7 +3521,7 @@ int main(int argc, char **argv)
     } else {
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
-  } else if (op == "import" || op == "dump-export" || op == "set-osdmap" || op == "set-inc-osdmap") {
+  } else if (op == "import" || op == "dump-export" || op == "set-osdmap" || op == "set-inc-osdmap" || op == "pg-log-inject-dups") {
     if (!vm.count("file") || file == "-") {
       if (isatty(STDIN_FILENO)) {
         cerr << "stdin is a tty and no --file filename specified" << std::endl;
@@ -3468,18 +3577,6 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  // Special handling for filestore journal, so we can dump it without mounting
-  if (op == "dump-journal" && type == "filestore") {
-    int ret = mydump_journal(formatter, jpath, g_conf()->journal_dio);
-    if (ret < 0) {
-      cerr << "journal-path: " << jpath << ": "
-	   << cpp_strerror(ret) << std::endl;
-      return 1;
-    }
-    formatter->flush(cout);
-    return 0;
-  }
-
   if (op == "dump-export") {
     int ret = tool.dump_export(formatter);
     if (ret < 0) {
@@ -3501,20 +3598,6 @@ int main(int argc, char **argv)
   if (pgidstr.length() && pgidstr != "meta" && !pgid.parse(pgidstr.c_str())) {
     cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
     return 1;
-  }
-
-  //Verify that the journal-path really exists
-  if (type == "filestore") {
-    if (::stat(jpath.c_str(), &st) == -1) {
-      string err = string("journal-path: ") + jpath;
-      perror(err.c_str());
-      return 1;
-    }
-    if (S_ISDIR(st.st_mode)) {
-      cerr << "journal-path: " << jpath << ": "
-	   << cpp_strerror(EISDIR) << std::endl;
-      return 1;
-    }
   }
 
   std::unique_ptr<ObjectStore> fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
@@ -3664,23 +3747,6 @@ int main(int argc, char **argv)
     }
   }
 
-  if (op == "apply-layout-settings") {
-    int target_level = 0;
-    // Single positional argument with apply-layout-settings
-    // for target_level.
-    if (vm.count("object") && isdigit(object[0])) {
-      target_level = atoi(object.c_str());
-    // This requires --arg1 to be specified since
-    // this is the third positional argument and normally
-    // used with object operations.
-    } else if (vm.count("arg1") && isdigit(arg1[0])) {
-      target_level = atoi(arg1.c_str());
-    }
-    ceph_assert(superblock != nullptr);
-    ret = apply_layout_settings(fs.get(), *superblock, pool, pgid, dry_run, target_level);
-    goto out;
-  }
-
   if (op != "list" && vm.count("object")) {
     // Special case: Create pgmeta_oid if empty string specified
     // This can't conflict with any actual object names.
@@ -3793,7 +3859,8 @@ int main(int argc, char **argv)
   if ((op == "info" || op == "log" || op == "remove" || op == "export"
       || op == "export-remove" || op == "mark-complete"
       || op == "reset-last-complete"
-      || op == "trim-pg-log") &&
+      || op == "trim-pg-log"
+      || op == "pg-log-inject-dups") &&
       pgidstr.length() == 0) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
@@ -4020,9 +4087,9 @@ int main(int argc, char **argv)
 
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
-  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log") {
-    cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
-      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-export, trim-pg-log, statfs)"
+  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log" && op != "trim-pg-log-dups" && op != "pg-log-inject-dups") {
+    cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-super, meta-list, "
+      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-export, trim-pg-log, trim-pg-log-dups statfs)"
 	 << std::endl;
     usage(desc);
     ret = 1;
@@ -4312,7 +4379,7 @@ int main(int argc, char **argv)
 
     if (op == "export" || op == "export-remove") {
       ceph_assert(superblock != nullptr);
-      ret = tool.do_export(fs.get(), coll, pgid, info, map_epoch, struct_ver, *superblock, past_intervals);
+      ret = tool.do_export(cct.get(), fs.get(), coll, pgid, info, map_epoch, struct_ver, *superblock, past_intervals);
       if (ret == 0) {
         cerr << "Export successful" << std::endl;
         if (op == "export-remove") {
@@ -4331,7 +4398,7 @@ int main(int argc, char **argv)
     } else if (op == "log") {
       PGLog::IndexedLog log;
       pg_missing_t missing;
-      ret = get_log(fs.get(), struct_ver, pgid, info, log, missing);
+      ret = get_log(cct.get(), fs.get(), struct_ver, pgid, info, log, missing);
       if (ret < 0)
           goto out;
 
@@ -4375,6 +4442,15 @@ int main(int argc, char **argv)
       }
       cout << "Finished trimming pg log" << std::endl;
       goto out;
+    } else if (op == "trim-pg-log-dups") {
+      ret = do_trim_pg_log_dups(fs.get(), coll, info, pgid,
+			   map_epoch, past_intervals);
+      if (ret < 0) {
+	cerr << "Error trimming pg log dups: " << cpp_strerror(ret) << std::endl;
+	goto out;
+      }
+      cout << "Finished trimming pg log dups" << std::endl;
+      goto out;
     } else if (op == "reset-last-complete") {
       if (!force) {
         std::cerr << "WARNING: reset-last-complete is extremely dangerous and almost "
@@ -4407,6 +4483,34 @@ int main(int argc, char **argv)
       }
       cout << "Reseting last_complete succeeded" << std::endl;
    
+    } else if (op == "pg-log-inject-dups") {
+        if (!vm.count("file") || file == "-") {
+          cerr << "Must provide file containing JSON dups entries" << std::endl;
+          ret = 1;
+          goto out;
+        }
+        if (debug)
+          cerr << "opening file " << file << std::endl;
+
+        ifstream json_file_stream(file , std::ifstream::in);
+        if (!json_file_stream.is_open()) {
+          cerr << "unable to open file " << file << std::endl;
+          ret = -1;
+          goto out;
+        }
+        json_spirit::mValue result;
+        try {
+          if (!json_spirit::read(json_file_stream, result))
+            throw std::runtime_error("unparseable JSON " + file);
+          if (result.type() != json_spirit::array_type) {
+            cerr << "result is not an array_type - type=" << result.type() << std::endl;
+            throw std::runtime_error("not JSON array_type " + file);
+          }
+          do_dups_inject_from_json(fs.get(), pgid, result, debug);
+        } catch (const std::runtime_error &e) {
+          cerr << e.what() << std::endl;;
+          return -1;
+        }
     } else {
       ceph_assert(!"Should have already checked for valid --op");
     }
@@ -4419,7 +4523,7 @@ out:
   if (debug) {
     ostringstream ostr;
     Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
-    cct->get_perfcounters_collection()->dump_formatted(f, false);
+    cct->get_perfcounters_collection()->dump_formatted(f, false, false);
     ostr << "ceph-objectstore-tool ";
     f->flush(ostr);
     delete f;

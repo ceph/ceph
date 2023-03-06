@@ -838,6 +838,12 @@ struct cls_rgw_gc_set_entry_op {
 
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<cls_rgw_gc_set_entry_op*>& ls);
+
+  size_t estimate_encoded_size() const {
+    constexpr size_t start_overhead = sizeof(__u8) + sizeof(__u8) + sizeof(ceph_le32); // version and length prefix
+    constexpr size_t expr_secs_overhead = sizeof(__u32); // expiration_seconds_overhead
+    return start_overhead + expr_secs_overhead + info.estimate_encoded_size();
+  }
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_set_entry_op)
 
@@ -1280,6 +1286,31 @@ cls_rgw_lc_list_entries_ret(uint8_t compat_v = 3)
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_ret)
+
+struct cls_rgw_mp_upload_part_info_update_op {
+  std::string part_key;
+  RGWUploadPartInfo info;
+
+  cls_rgw_mp_upload_part_info_update_op() {}
+
+  void encode(buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(part_key, bl);
+    encode(info, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(part_key, bl);
+    decode(info, bl);
+    DECODE_FINISH(bl);
+  }
+
+  static void generate_test_instances(std::list<cls_rgw_mp_upload_part_info_update_op*>& ls);
+  void dump(Formatter* f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_mp_upload_part_info_update_op)
 
 struct cls_rgw_reshard_add_op {
  cls_rgw_reshard_entry entry;

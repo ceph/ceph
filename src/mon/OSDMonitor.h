@@ -24,6 +24,7 @@
 #include <map>
 #include <set>
 #include <utility>
+#include <sstream>
 
 #include "include/types.h"
 #include "include/encoding.h"
@@ -515,6 +516,7 @@ private:
 				const std::string &erasure_code_profile,
 				unsigned *stripe_width,
 				std::ostream *ss);
+  uint32_t get_osd_num_by_crush(int crush_rule);
   int check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, std::ostream* ss);
   int prepare_new_pool(std::string& name,
 		       int crush_rule,
@@ -529,8 +531,9 @@ private:
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
                        FastReadType fast_read,
-		       const std::string& pg_autoscale_mode,
+		       std::string pg_autoscale_mode,
 		       bool bulk,
+		       bool crimson,
 		       std::ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 
@@ -674,6 +677,8 @@ protected:
   bool grace_interval_threshold_exceeded(int last_failed);
   void set_default_laggy_params(int target_osd);
 
+  int parse_pgid(const cmdmap_t& cmdmap, std::stringstream &ss,
+		 pg_t &pgid, std::optional<std::string> pgidstr = std::nullopt);
 public:
   OSDMonitor(CephContext *cct, Monitor &mn, Paxos &p, const std::string& service_name);
 

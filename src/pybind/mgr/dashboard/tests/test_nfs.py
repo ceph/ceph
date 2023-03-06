@@ -4,9 +4,11 @@ from copy import deepcopy
 from unittest.mock import Mock, patch
 from urllib.parse import urlencode
 
+from nfs.export import AppliedExportResults
+
 from .. import mgr
 from ..controllers._version import APIVersion
-from ..controllers.nfs import NFSGanesha, NFSGaneshaExports, NFSGaneshaUi
+from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi
 from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
 
@@ -35,6 +37,8 @@ class NFSGaneshaExportsTest(ControllerTestCase):
         },
         "clients": []
     }
+
+    _applied_export = AppliedExportResults()
 
     @classmethod
     def setUpClass(cls):
@@ -71,23 +75,24 @@ class NFSGaneshaExportsTest(ControllerTestCase):
     def test_create_export(self):
         export_mgr = Mock()
         created_nfs_export = deepcopy(self._nfs_module_export)
+        applied_nfs_export = deepcopy(self._applied_export)
         created_nfs_export['pseudo'] = 'new-pseudo'
         created_nfs_export['export_id'] = 2
         export_mgr.get_export_by_pseudo.side_effect = [None, created_nfs_export]
-        export_mgr.apply_export.return_value = (0, '', '')
+        export_mgr.apply_export.return_value = applied_nfs_export
         mgr.remote.return_value = export_mgr
 
         export_create_body = deepcopy(self._expected_export)
         del export_create_body['export_id']
         export_create_body['pseudo'] = created_nfs_export['pseudo']
+        applied_nfs_export.append(export_create_body)
 
         self._post('/api/nfs-ganesha/export',
                    export_create_body,
                    version=APIVersion(2, 0))
         self.assertStatus(201)
-        expected_body = export_create_body
-        expected_body['export_id'] = created_nfs_export['export_id']
-        self.assertJsonBody(export_create_body)
+        applied_nfs_export.changes[0]['export_id'] = created_nfs_export['export_id']
+        self.assertJsonBody(applied_nfs_export.changes[0])
 
     def test_create_export_with_existing_pseudo_fails(self):
         export_mgr = Mock()
@@ -108,19 +113,21 @@ class NFSGaneshaExportsTest(ControllerTestCase):
     def test_set_export(self):
         export_mgr = Mock()
         updated_nfs_export = deepcopy(self._nfs_module_export)
+        applied_nfs_export = deepcopy(self._applied_export)
         updated_nfs_export['pseudo'] = 'updated-pseudo'
         export_mgr.get_export_by_pseudo.return_value = updated_nfs_export
-        export_mgr.apply_export.return_value = (0, '', '')
+        export_mgr.apply_export.return_value = applied_nfs_export
         mgr.remote.return_value = export_mgr
 
         updated_export_body = deepcopy(self._expected_export)
         updated_export_body['pseudo'] = updated_nfs_export['pseudo']
+        applied_nfs_export.append(updated_export_body)
 
         self._put('/api/nfs-ganesha/export/myc/2',
                   updated_export_body,
                   version=APIVersion(2, 0))
         self.assertStatus(200)
-        self.assertJsonBody(updated_export_body)
+        self.assertJsonBody(applied_nfs_export.changes[0])
 
     def test_delete_export(self):
         mgr.remote = Mock(side_effect=[self._nfs_module_export, None])
@@ -228,19 +235,13 @@ class NFSGaneshaUiControllerTest(ControllerTestCase):
         self.assertStatus(200)
         self.assertJsonBody({'paths': []})
 
-
-class NFSGaneshaControllerTest(ControllerTestCase):
-    @classmethod
-    def setup_server(cls):
-        cls.setup_controllers([NFSGanesha])
-
     def test_status_available(self):
-        self._get('/api/nfs-ganesha/status')
+        self._get('/ui-api/nfs-ganesha/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': True, 'message': None})
 
     def test_status_not_available(self):
         mgr.remote = Mock(side_effect=RuntimeError('Test'))
-        self._get('/api/nfs-ganesha/status')
+        self._get('/ui-api/nfs-ganesha/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': False, 'message': 'Test'})

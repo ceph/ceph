@@ -1,9 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-
-#ifndef CEPH_RGW_AUTH_H
-#define CEPH_RGW_AUTH_H
+#pragma once
 
 #include <functional>
 #include <optional>
@@ -18,6 +16,8 @@
 #define RGW_USER_ANON_ID "anonymous"
 
 class RGWCtl;
+struct rgw_log_entry;
+struct req_state;
 
 namespace rgw {
 namespace auth {
@@ -82,6 +82,9 @@ public:
   virtual std::string get_subuser() const = 0;
 
   virtual std::string get_role_tenant() const { return ""; }
+
+  /* write any auth-specific fields that are safe to expose in the ops log */
+  virtual void write_ops_log_entry(rgw_log_entry& entry) const {};
 };
 
 inline std::ostream& operator<<(std::ostream& out,
@@ -372,7 +375,7 @@ class WebIdentityApplier : public IdentityApplier {
   std::string user_name;
 protected:
   CephContext* const cct;
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
   std::string role_session;
   std::string role_tenant;
   std::unordered_multimap<std::string, std::string> token_claims;
@@ -387,14 +390,14 @@ protected:
                       RGWUserInfo& user_info) const;     /* out */
 public:
   WebIdentityApplier( CephContext* const cct,
-                      rgw::sal::Store* store,
+                      rgw::sal::Driver* driver,
                       const std::string& role_session,
                       const std::string& role_tenant,
                       const std::unordered_multimap<std::string, std::string>& token_claims,
                       boost::optional<std::multimap<std::string,std::string>> role_tags,
                       boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags)
       : cct(cct),
-      store(store),
+      driver(driver),
       role_session(role_session),
       role_tenant(role_tenant),
       token_claims(token_claims),
@@ -513,7 +516,7 @@ private:
   };
 public:
   ImplicitTenants(const ConfigProxy& c) { recompute_value(c);}
-  ImplicitTenantValue get_value() {
+  ImplicitTenantValue get_value() const {
     return ImplicitTenantValue(saved);
   }
 private:
@@ -542,6 +545,8 @@ public:
     const uint32_t perm_mask;
     const bool is_admin;
     const uint32_t acct_type;
+    const std::string access_key_id;
+    const std::string subuser;
 
   public:
     enum class acct_privilege_t {
@@ -549,16 +554,23 @@ public:
       IS_PLAIN_ACCT
     };
 
+    static const std::string NO_SUBUSER;
+    static const std::string NO_ACCESS_KEY;
+
     AuthInfo(const rgw_user& acct_user,
              const std::string& acct_name,
              const uint32_t perm_mask,
              const acct_privilege_t level,
+             const std::string access_key_id,
+             const std::string subuser,
              const uint32_t acct_type=TYPE_NONE)
     : acct_user(acct_user),
       acct_name(acct_name),
       perm_mask(perm_mask),
       is_admin(acct_privilege_t::IS_ADMIN_ACCT == level),
-      acct_type(acct_type) {
+      acct_type(acct_type),
+      access_key_id(access_key_id),
+      subuser(subuser) {
     }
   };
 
@@ -569,7 +581,7 @@ protected:
   CephContext* const cct;
 
   /* Read-write is intensional here due to RGWUserInfo creation process. */
-  rgw::sal::Store* store;
+  rgw::sal::Driver* driver;
 
   /* Supplemental strategy for extracting permissions from ACLs. Its results
    * will be combined (ORed) with a default strategy that is responsible for
@@ -577,7 +589,7 @@ protected:
   const acl_strategy_t extra_acl_strategy;
 
   const AuthInfo info;
-  rgw::auth::ImplicitTenants& implicit_tenant_context;
+  const rgw::auth::ImplicitTenants& implicit_tenant_context;
   const rgw::auth::ImplicitTenants::implicit_tenant_flag_bits implicit_tenant_bit;
 
   virtual void create_account(const DoutPrefixProvider* dpp,
@@ -587,13 +599,13 @@ protected:
 
 public:
   RemoteApplier(CephContext* const cct,
-                rgw::sal::Store* store,
+                rgw::sal::Driver* driver,
                 acl_strategy_t&& extra_acl_strategy,
                 const AuthInfo& info,
-		rgw::auth::ImplicitTenants& implicit_tenant_context,
+		const rgw::auth::ImplicitTenants& implicit_tenant_context,
                 rgw::auth::ImplicitTenants::implicit_tenant_flag_bits implicit_tenant_bit)
     : cct(cct),
-      store(store),
+      driver(driver),
       extra_acl_strategy(std::move(extra_acl_strategy)),
       info(info),
       implicit_tenant_context(implicit_tenant_context),
@@ -608,6 +620,7 @@ public:
   uint32_t get_perm_mask() const override { return info.perm_mask; }
   void to_str(std::ostream& out) const override;
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
+  void write_ops_log_entry(rgw_log_entry& entry) const override;
   uint32_t get_identity_type() const override { return info.acct_type; }
   std::string get_acct_name() const override { return info.acct_name; }
   std::string get_subuser() const override { return {}; }
@@ -636,20 +649,24 @@ protected:
   const RGWUserInfo user_info;
   const std::string subuser;
   uint32_t perm_mask;
+  const std::string access_key_id;
 
   uint32_t get_perm_mask(const std::string& subuser_name,
                          const RGWUserInfo &uinfo) const;
 
 public:
   static const std::string NO_SUBUSER;
+  static const std::string NO_ACCESS_KEY;
 
   LocalApplier(CephContext* const cct,
                const RGWUserInfo& user_info,
                std::string subuser,
-               const std::optional<uint32_t>& perm_mask)
+               const std::optional<uint32_t>& perm_mask,
+               const std::string access_key_id)
     : user_info(user_info),
       subuser(std::move(subuser)),
-      perm_mask(perm_mask.value_or(RGW_PERM_INVALID)) {
+      perm_mask(perm_mask.value_or(RGW_PERM_INVALID)),
+      access_key_id(access_key_id) {
   }
 
 
@@ -669,6 +686,7 @@ public:
   uint32_t get_identity_type() const override { return TYPE_RGW; }
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return subuser; }
+  void write_ops_log_entry(rgw_log_entry& entry) const override;
 
   struct Factory {
     virtual ~Factory() {}
@@ -676,7 +694,8 @@ public:
                                       const req_state* s,
                                       const RGWUserInfo& user_info,
                                       const std::string& subuser,
-                                      const std::optional<uint32_t>& perm_mask) const = 0;
+                                      const std::optional<uint32_t>& perm_mask,
+                                      const std::string& access_key_id) const = 0;
     };
 };
 
@@ -770,5 +789,3 @@ uint32_t rgw_perms_from_aclspec_default_strategy(
   const rgw_user& uid,
   const rgw::auth::Identity::aclspec_t& aclspec,
   const DoutPrefixProvider *dpp);
-
-#endif /* CEPH_RGW_AUTH_H */

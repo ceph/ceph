@@ -9,3 +9,4 @@ tasks:
       all:
         - fs/misc/acl.sh
         - fs/misc/chmod.sh
+        - fs/misc/dac_override.sh

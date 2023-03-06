@@ -381,8 +381,8 @@ static int FileSize(sqlite3_file *file, sqlite_int64 *osize)
 
 static bool parsepath(std::string_view path, struct cephsqlite_fileloc* fileloc)
 {
-  static const std::regex re1{"^/*(\\*[[:digit:]]+):([[:alnum:]-_.]*)/([[:alnum:]-._]+)$"};
-  static const std::regex re2{"^/*([[:alnum:]-_.]+):([[:alnum:]-_.]*)/([[:alnum:]-._]+)$"};
+  static const std::regex re1{"^/*(\\*[[:digit:]]+):([[:alnum:]\\-_.]*)/([[:alnum:]\\-._]+)$"};
+  static const std::regex re2{"^/*([[:alnum:]\\-_.]+):([[:alnum:]\\-_.]*)/([[:alnum:]\\-._]+)$"};
 
   std::cmatch cm;
   if (!std::regex_match(path.data(), cm, re1)) {
@@ -741,8 +741,8 @@ static void f_perf(sqlite3_context* ctx, int argc, sqlite3_value** argv)
   auto&& appd = getdata(vfs);
   JSONFormatter f(false);
   f.open_object_section("ceph_perf");
-  appd.logger->dump_formatted(&f, false);
-  appd.striper_logger->dump_formatted(&f, false);
+  appd.logger->dump_formatted(&f, false, false);
+  appd.striper_logger->dump_formatted(&f, false, false);
   f.close_section();
   {
     CachedStackStringStream css;

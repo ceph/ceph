@@ -5,10 +5,11 @@ from typing import Any, Dict, List, Optional
 from unittest import mock
 
 from ceph.deployment.drive_group import DeviceSelection, DriveGroupSpec  # type: ignore
-from ceph.deployment.service_spec import PlacementSpec  # type: ignore
+from ceph.deployment.service_spec import PlacementSpec
 
 from .. import mgr
-from ..controllers.osd import Osd
+from ..controllers.osd import Osd, OsdUi
+from ..services.osd import OsdDeploymentOptions
 from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
 from .helper import update_dict  # pylint: disable=import-error
@@ -187,11 +188,35 @@ class OsdHelper(object):
     def gen_mgr_get_counter(cls) -> List[List[int]]:
         return [[1551973855, 35], [1551973860, 35], [1551973865, 35], [1551973870, 35]]
 
+    @staticmethod
+    def mock_inventory_host(orch_client_mock, devices_data: Dict[str, str]) -> None:
+        class MockDevice:
+            def __init__(self, human_readable_type, path, available=True):
+                self.human_readable_type = human_readable_type
+                self.available = available
+                self.path = path
+
+        def create_invetory_host(host, devices_data):
+            inventory_host = mock.Mock()
+            inventory_host.devices.devices = []
+            for data in devices_data:
+                if data['host'] != host:
+                    continue
+                inventory_host.devices.devices.append(MockDevice(data['type'], data['path']))
+            return inventory_host
+
+        hosts = set()
+        for device in devices_data:
+            hosts.add(device['host'])
+
+        inventory = [create_invetory_host(host, devices_data) for host in hosts]
+        orch_client_mock.inventory.list.return_value = inventory
+
 
 class OsdTest(ControllerTestCase):
     @classmethod
     def setup_server(cls):
-        cls.setup_controllers([Osd])
+        cls.setup_controllers([Osd, OsdUi])
         NotificationQueue.start_queue()
         TaskManager.init()
 
@@ -374,3 +399,94 @@ class OsdTest(ControllerTestCase):
         self._task_post('/api/osd/1/reweight', {'weight': '1'})
         instance.send_command.assert_called_with('mon', 'osd reweight', id=1, weight=1.0)
         self.assertStatus(200)
+
+    def _get_deployment_options(self, fake_client, devices_data: Dict[str, str]) -> Dict[str, Any]:
+        OsdHelper.mock_inventory_host(fake_client, devices_data)
+        self._get('/ui-api/osd/deployment_options')
+        self.assertStatus(200)
+        res = self.json_body()
+        return res
+
+    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    def test_deployment_options(self, instance):
+        fake_client = mock.Mock()
+        instance.return_value = fake_client
+        fake_client.get_missing_features.return_value = []
+
+        devices_data = [
+            {'type': 'hdd', 'path': '/dev/sda', 'host': 'host1'},
+            {'type': 'hdd', 'path': '/dev/sdc', 'host': 'host1'},
+            {'type': 'hdd', 'path': '/dev/sdb', 'host': 'host2'},
+            {'type': 'hdd', 'path': '/dev/sde', 'host': 'host1'},
+            {'type': 'hdd', 'path': '/dev/sdd', 'host': 'host2'},
+        ]
+
+        res = self._get_deployment_options(fake_client, devices_data)
+        self.assertTrue(res['options'][OsdDeploymentOptions.COST_CAPACITY]['available'])
+        assert res['recommended_option'] == OsdDeploymentOptions.COST_CAPACITY
+
+        # we don't want cost_capacity enabled without hdds
+        for data in devices_data:
+            data['type'] = 'ssd'
+
+        res = self._get_deployment_options(fake_client, devices_data)
+        self.assertFalse(res['options'][OsdDeploymentOptions.COST_CAPACITY]['available'])
+        self.assertFalse(res['options'][OsdDeploymentOptions.THROUGHPUT]['available'])
+        self.assertEqual(res['recommended_option'], None)
+
+    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    def test_deployment_options_throughput(self, instance):
+        fake_client = mock.Mock()
+        instance.return_value = fake_client
+        fake_client.get_missing_features.return_value = []
+
+        devices_data = [
+            {'type': 'ssd', 'path': '/dev/sda', 'host': 'host1'},
+            {'type': 'ssd', 'path': '/dev/sdc', 'host': 'host1'},
+            {'type': 'ssd', 'path': '/dev/sdb', 'host': 'host2'},
+            {'type': 'hdd', 'path': '/dev/sde', 'host': 'host1'},
+            {'type': 'hdd', 'path': '/dev/sdd', 'host': 'host2'},
+        ]
+
+        res = self._get_deployment_options(fake_client, devices_data)
+        self.assertTrue(res['options'][OsdDeploymentOptions.COST_CAPACITY]['available'])
+        self.assertTrue(res['options'][OsdDeploymentOptions.THROUGHPUT]['available'])
+        self.assertFalse(res['options'][OsdDeploymentOptions.IOPS]['available'])
+        assert res['recommended_option'] == OsdDeploymentOptions.THROUGHPUT
+
+    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    def test_deployment_options_with_hdds_and_nvmes(self, instance):
+        fake_client = mock.Mock()
+        instance.return_value = fake_client
+        fake_client.get_missing_features.return_value = []
+
+        devices_data = [
+            {'type': 'ssd', 'path': '/dev/nvme01', 'host': 'host1'},
+            {'type': 'ssd', 'path': '/dev/nvme02', 'host': 'host1'},
+            {'type': 'ssd', 'path': '/dev/nvme03', 'host': 'host2'},
+            {'type': 'hdd', 'path': '/dev/sde', 'host': 'host1'},
+            {'type': 'hdd', 'path': '/dev/sdd', 'host': 'host2'},
+        ]
+
+        res = self._get_deployment_options(fake_client, devices_data)
+        self.assertTrue(res['options'][OsdDeploymentOptions.COST_CAPACITY]['available'])
+        self.assertFalse(res['options'][OsdDeploymentOptions.THROUGHPUT]['available'])
+        self.assertTrue(res['options'][OsdDeploymentOptions.IOPS]['available'])
+        assert res['recommended_option'] == OsdDeploymentOptions.COST_CAPACITY
+
+    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    def test_deployment_options_iops(self, instance):
+        fake_client = mock.Mock()
+        instance.return_value = fake_client
+        fake_client.get_missing_features.return_value = []
+
+        devices_data = [
+            {'type': 'ssd', 'path': '/dev/nvme01', 'host': 'host1'},
+            {'type': 'ssd', 'path': '/dev/nvme02', 'host': 'host1'},
+            {'type': 'ssd', 'path': '/dev/nvme03', 'host': 'host2'}
+        ]
+
+        res = self._get_deployment_options(fake_client, devices_data)
+        self.assertFalse(res['options'][OsdDeploymentOptions.COST_CAPACITY]['available'])
+        self.assertFalse(res['options'][OsdDeploymentOptions.THROUGHPUT]['available'])
+        self.assertTrue(res['options'][OsdDeploymentOptions.IOPS]['available'])

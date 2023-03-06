@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+
 // vim: ts=2 sw=2 expandtab ft=cpp
 
 /*
@@ -26,7 +26,7 @@ extern "C" {
 #pragma clang diagnostic pop
 }
 
-#include "rgw_sal.h"
+#include "rgw_sal_store.h"
 #include "rgw_rados.h"
 #include "rgw_notify.h"
 #include "rgw_oidc_provider.h"
@@ -42,6 +42,9 @@ class MotrStore;
 #define RGW_MOTR_USERS_IDX_NAME       "motr.rgw.users"
 #define RGW_MOTR_BUCKET_INST_IDX_NAME "motr.rgw.bucket.instances"
 #define RGW_MOTR_BUCKET_HD_IDX_NAME   "motr.rgw.bucket.headers"
+#define RGW_IAM_MOTR_ACCESS_KEY       "motr.rgw.accesskeys"
+#define RGW_IAM_MOTR_EMAIL_KEY        "motr.rgw.emails"
+
 //#define RGW_MOTR_BUCKET_ACL_IDX_NAME  "motr.rgw.bucket.acls"
 
 // A simplified metadata cache implementation.
@@ -135,10 +138,61 @@ struct MotrUserInfo {
 };
 WRITE_CLASS_ENCODER(MotrUserInfo);
 
-class MotrNotification : public Notification {
+struct MotrEmailInfo {
+  std::string user_id;
+  std::string email_id;
+
+  MotrEmailInfo() {}
+  MotrEmailInfo(std::string _user_id, std::string _email_id )
+    : user_id(std::move(_user_id)), email_id(std::move(_email_id)) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(2, 2, bl);
+    encode(user_id, bl);
+    encode(email_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+     DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
+     decode(user_id, bl);
+     decode(email_id, bl);
+      DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(MotrEmailInfo);
+
+struct MotrAccessKey {
+  std::string id; // AccessKey
+  std::string key; // SecretKey
+  std::string user_id; // UserID
+  
+  MotrAccessKey() {}
+  MotrAccessKey(std::string _id, std::string _key, std::string _user_id)
+    : id(std::move(_id)), key(std::move(_key)), user_id(std::move(_user_id)) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(2, 2, bl);
+    encode(id, bl);
+    encode(key, bl);
+    encode(user_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+     DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
+     decode(id, bl);
+     decode(key, bl);
+     decode(user_id, bl);
+     DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(MotrAccessKey);
+
+class MotrNotification : public StoreNotification {
   public:
     MotrNotification(Object* _obj, Object* _src_obj, rgw::notify::EventType _type) :
-        Notification(_obj, _src_obj, _type) {}
+        StoreNotification(_obj, _src_obj, _type) {}
     ~MotrNotification() = default;
 
     virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override { return 0;}
@@ -146,15 +200,16 @@ class MotrNotification : public Notification {
 			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) override { return 0; }
 };
 
-class MotrUser : public User {
+class MotrUser : public StoreUser {
   private:
     MotrStore         *store;
     struct m0_uint128  idxID = {0xe5ecb53640d4ecce, 0x6a156cd5a74aa3b8}; // MD5 of “motr.rgw.users“
     struct m0_idx      idx;
 
   public:
-    MotrUser(MotrStore *_st, const rgw_user& _u) : User(_u), store(_st) { }
-    MotrUser(MotrStore *_st, const RGWUserInfo& _i) : User(_i), store(_st) { }
+    std::set<std::string> access_key_tracker;
+    MotrUser(MotrStore *_st, const rgw_user& _u) : StoreUser(_u), store(_st) { }
+    MotrUser(MotrStore *_st, const RGWUserInfo& _i) : StoreUser(_i), store(_st) { }
     MotrUser(MotrStore *_st) : store(_st) { }
     MotrUser(MotrUser& _o) = default;
     MotrUser() {}
@@ -196,13 +251,16 @@ class MotrUser : public User {
     virtual int load_user(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info = nullptr) override;
     virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override;
+    virtual int verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider* dpp, optional_yield y) override;
 
     int create_user_info_idx();
+    int load_user_from_idx(const DoutPrefixProvider *dpp, MotrStore *store, RGWUserInfo& info, std::map<std::string, 
+                              bufferlist> *attrs, RGWObjVersionTracker *objv_tr);
 
     friend class MotrBucket;
 };
 
-class MotrBucket : public Bucket {
+class MotrBucket : public StoreBucket {
   private:
     MotrStore *store;
     RGWAccessControlPolicy acls;
@@ -249,43 +307,43 @@ class MotrBucket : public Bucket {
       }
 
     MotrBucket(MotrStore *_st, User* _u)
-      : Bucket(_u),
+      : StoreBucket(_u),
       store(_st),
       acls() {
       }
 
     MotrBucket(MotrStore *_st, const rgw_bucket& _b)
-      : Bucket(_b),
+      : StoreBucket(_b),
       store(_st),
       acls() {
       }
 
     MotrBucket(MotrStore *_st, const RGWBucketEnt& _e)
-      : Bucket(_e),
+      : StoreBucket(_e),
       store(_st),
       acls() {
       }
 
     MotrBucket(MotrStore *_st, const RGWBucketInfo& _i)
-      : Bucket(_i),
+      : StoreBucket(_i),
       store(_st),
       acls() {
       }
 
     MotrBucket(MotrStore *_st, const rgw_bucket& _b, User* _u)
-      : Bucket(_b, _u),
+      : StoreBucket(_b, _u),
       store(_st),
       acls() {
       }
 
     MotrBucket(MotrStore *_st, const RGWBucketEnt& _e, User* _u)
-      : Bucket(_e, _u),
+      : StoreBucket(_e, _u),
       store(_st),
       acls() {
       }
 
     MotrBucket(MotrStore *_st, const RGWBucketInfo& _i, User* _u)
-      : Bucket(_i, _u),
+      : StoreBucket(_i, _u),
       store(_st),
       acls() {
       }
@@ -306,20 +364,23 @@ class MotrBucket : public Bucket {
     int unlink_user(const DoutPrefixProvider* dpp, User* new_user, optional_yield y);
     int create_bucket_index();
     int create_multipart_indices();
-    virtual int read_stats(const DoutPrefixProvider *dpp, int shard_id,
+    virtual int read_stats(const DoutPrefixProvider *dpp,
+        const bucket_index_layout_generation& idx_layout, int shard_id,
         std::string *bucket_ver, std::string *master_ver,
         std::map<RGWObjCategory, RGWStorageStats>& stats,
         std::string *max_marker = nullptr,
         bool *syncstopped = nullptr) override;
-    virtual int read_stats_async(const DoutPrefixProvider *dpp, int shard_id, RGWGetBucketStats_CB* ctx) override;
+    virtual int read_stats_async(const DoutPrefixProvider *dpp,
+                                 const bucket_index_layout_generation& idx_layout,
+                                 int shard_id, RGWGetBucketStats_CB* ctx) override;
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual int update_container_stats(const DoutPrefixProvider *dpp) override;
     virtual int check_bucket_shards(const DoutPrefixProvider *dpp) override;
-    virtual int chown(const DoutPrefixProvider *dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker = nullptr) override;
+    virtual int chown(const DoutPrefixProvider *dpp, User& new_user, optional_yield y) override;
     virtual int put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time mtime) override;
     virtual bool is_owner(User* user) override;
     virtual int check_empty(const DoutPrefixProvider *dpp, optional_yield y) override;
-    virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
+    virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
     virtual int merge_and_store_attrs(const DoutPrefixProvider *dpp, Attrs& attrs, optional_yield y) override;
     virtual int try_refresh_info(const DoutPrefixProvider *dpp, ceph::real_time *pmtime) override;
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
@@ -350,24 +411,102 @@ class MotrBucket : public Bucket {
     friend class MotrStore;
 };
 
-class MotrZone : public Zone {
+class MotrPlacementTier: public StorePlacementTier {
+  MotrStore* store;
+  RGWZoneGroupPlacementTier tier;
+public:
+  MotrPlacementTier(MotrStore* _store, const RGWZoneGroupPlacementTier& _tier) : store(_store), tier(_tier) {}
+  virtual ~MotrPlacementTier() = default;
+
+  virtual const std::string& get_tier_type() { return tier.tier_type; }
+  virtual const std::string& get_storage_class() { return tier.storage_class; }
+  virtual bool retain_head_object() { return tier.retain_head_object; }
+  RGWZoneGroupPlacementTier& get_rt() { return tier; }
+};
+
+class MotrZoneGroup : public StoreZoneGroup {
+  MotrStore* store;
+  const RGWZoneGroup group;
+  std::string empty;
+public:
+  MotrZoneGroup(MotrStore* _store) : store(_store), group() {}
+  MotrZoneGroup(MotrStore* _store, const RGWZoneGroup& _group) : store(_store), group(_group) {}
+  virtual ~MotrZoneGroup() = default;
+
+  virtual const std::string& get_id() const override { return group.get_id(); };
+  virtual const std::string& get_name() const override { return group.get_name(); };
+  virtual int equals(const std::string& other_zonegroup) const override {
+    return group.equals(other_zonegroup);
+  };
+  /** Get the endpoint from zonegroup, or from master zone if not set */
+  virtual const std::string& get_endpoint() const override;
+  virtual bool placement_target_exists(std::string& target) const override;
+  virtual bool is_master_zonegroup() const override {
+    return group.is_master_zonegroup();
+  };
+  virtual const std::string& get_api_name() const override { return group.api_name; };
+  virtual int get_placement_target_names(std::set<std::string>& names) const override;
+  virtual const std::string& get_default_placement_name() const override {
+    return group.default_placement.name; };
+  virtual int get_hostnames(std::list<std::string>& names) const override {
+    names = group.hostnames;
+    return 0;
+  };
+  virtual int get_s3website_hostnames(std::list<std::string>& names) const override {
+   names = group.hostnames_s3website;
+    return 0;
+  };
+  virtual int get_zone_count() const override {
+    return group.zones.size();
+  }
+  virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier);
+  virtual int get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone) override {
+    return -1;
+  }
+  virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) override {
+    return -1;
+  }
+  virtual int list_zones(std::list<std::string>& zone_ids) override {
+    zone_ids.clear();
+    return 0;
+  }
+  const RGWZoneGroup& get_group() { return group; }
+  virtual std::unique_ptr<ZoneGroup> clone() override {
+    return std::make_unique<MotrZoneGroup>(store, group);
+  }
+};
+
+class MotrZone : public StoreZone {
   protected:
     MotrStore* store;
     RGWRealm *realm{nullptr};
-    RGWZoneGroup *zonegroup{nullptr};
+    MotrZoneGroup zonegroup;
     RGWZone *zone_public_config{nullptr}; /* external zone params, e.g., entrypoints, log flags, etc. */
     RGWZoneParams *zone_params{nullptr}; /* internal zone params, e.g., rados pools */
     RGWPeriod *current_period{nullptr};
-    rgw_zone_id cur_zone_id;
 
   public:
-    MotrZone(MotrStore* _store) : store(_store) {
+    MotrZone(MotrStore* _store) : store(_store), zonegroup(_store) {
       realm = new RGWRealm();
-      zonegroup = new RGWZoneGroup();
       zone_public_config = new RGWZone();
       zone_params = new RGWZoneParams();
       current_period = new RGWPeriod();
-      cur_zone_id = rgw_zone_id(zone_params->get_id());
+
+      // XXX: only default and STANDARD supported for now
+      RGWZonePlacementInfo info;
+      RGWZoneStorageClasses sc;
+      sc.set_storage_class("STANDARD", nullptr, nullptr);
+      info.storage_classes = sc;
+      zone_params->placement_pools["default"] = info;
+    }
+    MotrZone(MotrStore* _store, MotrZoneGroup _zg) : store(_store), zonegroup(_zg) {
+      realm = new RGWRealm();
+      // TODO: fetch zonegroup params (eg. id) from provisioner config.
+      zonegroup.set_id("0956b174-fe14-4f97-8b50-bb7ec5e1cf62");
+      zonegroup.api_name = "default";
+      zone_public_config = new RGWZone();
+      zone_params = new RGWZoneParams();
+      current_period = new RGWPeriod();
 
       // XXX: only default and STANDARD supported for now
       RGWZonePlacementInfo info;
@@ -378,30 +517,45 @@ class MotrZone : public Zone {
     }
     ~MotrZone() = default;
 
-    virtual const RGWZoneGroup& get_zonegroup() override;
-    virtual int get_zonegroup(const std::string& id, RGWZoneGroup& zonegroup) override;
-    virtual const RGWZoneParams& get_params() override;
-    virtual const rgw_zone_id& get_id() override;
-    virtual const RGWRealm& get_realm() override;
+    virtual std::unique_ptr<Zone> clone() override {
+      return std::make_unique<MotrZone>(store);
+    }
+    virtual ZoneGroup& get_zonegroup() override;
+    virtual const std::string& get_id() override;
     virtual const std::string& get_name() const override;
     virtual bool is_writeable() override;
     virtual bool get_redirect_endpoint(std::string* endpoint) override;
     virtual bool has_zonegroup_api(const std::string& api) const override;
     virtual const std::string& get_current_period_id() override;
+    virtual const RGWAccessKey& get_system_key() { return zone_params->system_key; }
+    virtual const std::string& get_realm_name() { return realm->get_name(); }
+    virtual const std::string& get_realm_id() { return realm->get_id(); }
+    virtual const std::string_view get_tier_type() { return "rgw"; }
+    virtual RGWBucketSyncPolicyHandlerRef get_sync_policy_handler() { return nullptr; }
+    friend class MotrStore;
 };
 
-class MotrLuaScriptManager : public LuaScriptManager {
+class MotrLuaManager : public StoreLuaManager {
   MotrStore* store;
 
   public:
-  MotrLuaScriptManager(MotrStore* _s) : store(_s)
+  MotrLuaManager(MotrStore* _s) : store(_s)
   {
   }
-  virtual ~MotrLuaScriptManager() = default;
+  virtual ~MotrLuaManager() = default;
 
-  virtual int get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override { return -ENOENT; }
-  virtual int put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override { return -ENOENT; }
-  virtual int del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override { return -ENOENT; }
+  /** Get a script named with the given key from the backing store */
+  virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  /** Put a script named with the given key to the backing store */
+  virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
+  /** Delete a script named with the given key from the backing store */
+  virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
+  /** Add a lua package */
+  virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
+  /** Remove a lua package */
+  virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
+  /** List lua packages */
+  virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) override;
 };
 
 class MotrOIDCProvider : public RGWOIDCProvider {
@@ -422,7 +576,7 @@ class MotrOIDCProvider : public RGWOIDCProvider {
   }
 };
 
-class MotrObject : public Object {
+class MotrObject : public StoreObject {
   private:
     MotrStore *store;
     RGWAccessControlPolicy acls;
@@ -480,8 +634,19 @@ class MotrObject : public Object {
         MotrReadOp(MotrObject *_source);
 
         virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
-        virtual int read(int64_t off, int64_t end, bufferlist& bl, optional_yield y, const DoutPrefixProvider* dpp) override;
-        virtual int iterate(const DoutPrefixProvider* dpp, int64_t off, int64_t end, RGWGetDataCB* cb, optional_yield y) override;
+
+        /*
+         * Both `read` and `iterate` read up through index `end`
+         * *inclusive*. The number of bytes that could be returned is
+         * `end - ofs + 1`.
+         */
+        virtual int read(int64_t off, int64_t end, bufferlist& bl,
+                         optional_yield y,
+                         const DoutPrefixProvider* dpp) override;
+        virtual int iterate(const DoutPrefixProvider* dpp, int64_t off,
+                            int64_t end, RGWGetDataCB* cb,
+                            optional_yield y) override;
+
         virtual int get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y) override;
     };
 
@@ -498,9 +663,9 @@ class MotrObject : public Object {
     MotrObject() = default;
 
     MotrObject(MotrStore *_st, const rgw_obj_key& _k)
-      : Object(_k), store(_st), acls() {}
+      : StoreObject(_k), store(_st), acls() {}
     MotrObject(MotrStore *_st, const rgw_obj_key& _k, Bucket* _b)
-      : Object(_k, _b), store(_st), acls() {}
+      : StoreObject(_k, _b), store(_st), acls() {}
 
     MotrObject(MotrObject& _o) = default;
 
@@ -509,8 +674,6 @@ class MotrObject : public Object {
     virtual int delete_object(const DoutPrefixProvider* dpp,
         optional_yield y,
         bool prevent_versioning = false) override;
-    virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate, Completions* aio,
-        bool keep_index_consistent, optional_yield y) override;
     virtual int copy_object(User* user,
         req_info* info, const rgw_zone_id& source_zone,
         rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
@@ -538,7 +701,7 @@ class MotrObject : public Object {
     virtual std::unique_ptr<Object> clone() override {
       return std::unique_ptr<Object>(new MotrObject(*this));
     }
-    virtual MPSerializer* get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name) override;
+    virtual std::unique_ptr<MPSerializer> get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name) override;
     virtual int transition(Bucket* bucket,
         const rgw_placement_rule& placement_rule,
         const real_time& mtime,
@@ -559,16 +722,12 @@ class MotrObject : public Object {
     virtual std::unique_ptr<DeleteOp> get_delete_op() override;
 
     /* OMAP */
-    virtual int omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
-        std::map<std::string, bufferlist> *m,
-        bool* pmore, optional_yield y) override;
-    virtual int omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *m,
-        optional_yield y) override;
     virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
         const std::set<std::string>& keys,
         Attrs* vals) override;
     virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
         bool must_exist, optional_yield y) override;
+    virtual int chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y) override;
   private:
     //int read_attrs(const DoutPrefixProvider* dpp, Motr::Object::Read &read_op, optional_yield y, rgw_obj* target_obj = nullptr);
 
@@ -597,7 +756,7 @@ class MotrObject : public Object {
 
 // A placeholder locking class for multipart upload.
 // TODO: implement it using Motr object locks.
-class MPMotrSerializer : public MPSerializer {
+class MPMotrSerializer : public StoreMPSerializer {
 
   public:
     MPMotrSerializer(const DoutPrefixProvider *dpp, MotrStore* store, MotrObject* obj, const std::string& lock_name) {}
@@ -606,7 +765,7 @@ class MPMotrSerializer : public MPSerializer {
     virtual int unlock() override { return 0;}
 };
 
-class MotrAtomicWriter : public Writer {
+class MotrAtomicWriter : public StoreWriter {
   protected:
   rgw::sal::MotrStore* store;
   const rgw_user& owner;
@@ -614,6 +773,7 @@ class MotrAtomicWriter : public Writer {
   uint64_t olh_epoch;
   const std::string& unique_tag;
   MotrObject obj;
+  MotrObject old_obj;
   uint64_t total_data_size; // for total data being uploaded
   bufferlist acc_data;  // accumulated data
   uint64_t   acc_off; // accumulated data offset
@@ -625,7 +785,7 @@ class MotrAtomicWriter : public Writer {
   public:
   MotrAtomicWriter(const DoutPrefixProvider *dpp,
           optional_yield y,
-          std::unique_ptr<rgw::sal::Object> _head_obj,
+          rgw::sal::Object* obj,
           MotrStore* _store,
           const rgw_user& _owner,
           const rgw_placement_rule *_ptail_placement_rule,
@@ -655,12 +815,12 @@ class MotrAtomicWriter : public Writer {
   void cleanup();
 };
 
-class MotrMultipartWriter : public Writer {
+class MotrMultipartWriter : public StoreWriter {
 protected:
   rgw::sal::MotrStore* store;
 
   // Head object.
-  std::unique_ptr<rgw::sal::Object> head_obj;
+  rgw::sal::Object* head_obj;
 
   // Part parameters.
   const uint64_t part_num;
@@ -671,12 +831,12 @@ protected:
 public:
   MotrMultipartWriter(const DoutPrefixProvider *dpp,
 		       optional_yield y, MultipartUpload* upload,
-		       std::unique_ptr<rgw::sal::Object> _head_obj,
+		       rgw::sal::Object* obj,
 		       MotrStore* _store,
 		       const rgw_user& owner,
 		       const rgw_placement_rule *ptail_placement_rule,
 		       uint64_t _part_num, const std::string& part_num_str) :
-				  Writer(dpp, y), store(_store), head_obj(std::move(_head_obj)),
+				  StoreWriter(dpp, y), store(_store), head_obj(obj),
 				  part_num(_part_num), part_num_str(part_num_str)
   {
   }
@@ -725,7 +885,7 @@ public:
 //
 //
 
-class MotrMultipartPart : public MultipartPart {
+class MotrMultipartPart : public StoreMultipartPart {
 protected:
   RGWUploadPartInfo info;
 
@@ -746,7 +906,7 @@ public:
   friend class MotrMultipartUpload;
 };
 
-class MotrMultipartUpload : public MultipartUpload {
+class MotrMultipartUpload : public StoreMultipartUpload {
   MotrStore* store;
   RGWMPObj mp_obj;
   ACLOwner owner;
@@ -757,7 +917,7 @@ class MotrMultipartUpload : public MultipartUpload {
 public:
   MotrMultipartUpload(MotrStore* _store, Bucket* _bucket, const std::string& oid,
                       std::optional<std::string> upload_id, ACLOwner _owner, ceph::real_time _mtime) :
-       MultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), owner(_owner), mtime(_mtime) {}
+       StoreMultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), owner(_owner), mtime(_mtime) {}
   virtual ~MotrMultipartUpload() = default;
 
   virtual const std::string& get_meta() const { return mp_obj.get_meta(); }
@@ -784,7 +944,7 @@ public:
   virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) override;
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
-			  std::unique_ptr<rgw::sal::Object> _head_obj,
+			  rgw::sal::Object* obj,
 			  const rgw_user& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
@@ -792,9 +952,8 @@ public:
   int delete_parts(const DoutPrefixProvider *dpp);
 };
 
-class MotrStore : public Store {
+class MotrStore : public StoreDriver {
   private:
-    std::string luarocks_path;
     MotrZone zone;
     RGWSyncModuleInstanceRef sync_module;
 
@@ -817,7 +976,8 @@ class MotrStore : public Store {
       delete bucket_inst_cache;
     }
 
-    virtual const char* get_name() const override {
+    virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) { return 0; }
+    virtual const std::string get_name() const override {
       return "motr";
     }
 
@@ -834,14 +994,19 @@ class MotrStore : public Store {
     virtual int forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version* objv,
         bufferlist& in_data, JSONParser *jp, req_info& info,
         optional_yield y) override;
+    virtual int forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
+					     bufferlist& in_data,
+					     RGWXMLDecoder::XMLParser* parser, req_info& info,
+					     optional_yield y) override;
     virtual Zone* get_zone() { return &zone; }
     virtual std::string zone_unique_id(uint64_t unique_num) override;
     virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
+    virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
+    virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override;
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
-    virtual std::unique_ptr<Completions> get_completions(void) override;
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj,
-        struct req_state* s, rgw::notify::EventType event_type, const std::string* object_name=nullptr) override;
+        req_state* s, rgw::notify::EventType event_type, optional_yield y, const std::string* object_name=nullptr) override;
     virtual std::unique_ptr<Notification> get_notification(const DoutPrefixProvider* dpp, rgw::sal::Object* obj,
         rgw::sal::Object* src_obj, rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
         std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y) override;
@@ -853,9 +1018,8 @@ class MotrStore : public Store {
     virtual int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
         const std::map<std::string, std::string>& meta) override;
     virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) override;
-    virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) override;
+    virtual void get_quota(RGWQuota& quota) override;
     virtual int set_buckets_enabled(const DoutPrefixProvider *dpp, std::vector<rgw_bucket>& buckets, bool enabled) override;
-    virtual uint64_t get_new_req_id() override { return 0; }
     virtual int get_sync_policy_handler(const DoutPrefixProvider *dpp,
         std::optional<rgw_zone_id> zone,
         std::optional<rgw_bucket> bucket,
@@ -863,7 +1027,7 @@ class MotrStore : public Store {
         optional_yield y) override;
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) override;
     virtual void wakeup_meta_sync_shards(std::set<int>& shard_ids) override { return; }
-    virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, std::map<int, std::set<std::string> >& shard_ids) override { return; }
+    virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, boost::container::flat_map<int, boost::container::flat_set<rgw_data_notify_entry>>& shard_ids) override {}
     virtual int clear_usage(const DoutPrefixProvider *dpp) override { return 0; }
     virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
         uint32_t max_entries, bool *is_truncated,
@@ -880,13 +1044,14 @@ class MotrStore : public Store {
     virtual const RGWSyncModuleInstanceRef& get_sync_module() { return sync_module; }
     virtual std::string get_host_id() { return ""; }
 
-    virtual std::unique_ptr<LuaScriptManager> get_lua_script_manager() override;
+    virtual std::unique_ptr<LuaManager> get_lua_manager() override;
     virtual std::unique_ptr<RGWRole> get_role(std::string name,
         std::string tenant,
         std::string path="",
         std::string trust_policy="",
         std::string max_session_duration_str="",
         std::multimap<std::string, std::string> tags={}) override;
+    virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) override;
     virtual std::unique_ptr<RGWRole> get_role(std::string id) override;
     virtual int get_roles(const DoutPrefixProvider *dpp,
         optional_yield y,
@@ -899,7 +1064,7 @@ class MotrStore : public Store {
         std::vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
-        std::unique_ptr<rgw::sal::Object> _head_obj,
+        rgw::sal::Object* obj,
         const rgw_user& owner,
         const rgw_placement_rule *ptail_placement_rule,
         const std::string& unique_tag,
@@ -907,11 +1072,13 @@ class MotrStore : public Store {
         uint64_t *cur_accounted_size) override;
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
-        std::unique_ptr<rgw::sal::Object> _head_obj,
+        rgw::sal::Object* obj,
         const rgw_user& owner,
         const rgw_placement_rule *ptail_placement_rule,
         uint64_t olh_epoch,
         const std::string& unique_tag) override;
+    virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
+    virtual bool valid_placement(const rgw_placement_rule& rule) override;
 
     virtual void finalize(void) override;
 
@@ -919,13 +1086,7 @@ class MotrStore : public Store {
       return cctx;
     }
 
-    virtual const std::string& get_luarocks_path() const override {
-      return luarocks_path;
-    }
-
-    virtual void set_luarocks_path(const std::string& path) override {
-      luarocks_path = path;
-    }
+    virtual void register_admin_apis(RGWRESTMgr* mgr) override { };
 
     int open_idx(struct m0_uint128 *id, bool create, struct m0_idx *out);
     void close_idx(struct m0_idx *idx) { m0_idx_fini(idx); }
@@ -946,11 +1107,87 @@ class MotrStore : public Store {
     int do_idx_op_by_name(std::string idx_name, enum m0_idx_opcode opcode,
                           std::string key_str, bufferlist &bl, bool update=true);
     int check_n_create_global_indices();
+    int store_access_key(const DoutPrefixProvider *dpp, optional_yield y, MotrAccessKey access_key);
+    int delete_access_key(const DoutPrefixProvider *dpp, optional_yield y, std::string access_key);
+    int store_email_info(const DoutPrefixProvider *dpp, optional_yield y, MotrEmailInfo& email_info);
 
     int init_metadata_cache(const DoutPrefixProvider *dpp, CephContext *cct);
     MotrMetaCache* get_obj_meta_cache() {return obj_meta_cache;}
     MotrMetaCache* get_user_cache() {return user_cache;}
     MotrMetaCache* get_bucket_inst_cache() {return bucket_inst_cache;}
 };
+
+struct obj_time_weight {
+  real_time mtime;
+  uint32_t zone_short_id;
+  uint64_t pg_ver;
+  bool high_precision;
+
+  obj_time_weight() : zone_short_id(0), pg_ver(0), high_precision(false) {}
+
+  bool compare_low_precision(const obj_time_weight& rhs) {
+    struct timespec l = ceph::real_clock::to_timespec(mtime);
+    struct timespec r = ceph::real_clock::to_timespec(rhs.mtime);
+    l.tv_nsec = 0;
+    r.tv_nsec = 0;
+    if (l > r) {
+      return false;
+    }
+    if (l < r) {
+      return true;
+    }
+    if (!zone_short_id || !rhs.zone_short_id) {
+      /* don't compare zone ids, if one wasn't provided */
+      return false;
+    }
+    if (zone_short_id != rhs.zone_short_id) {
+      return (zone_short_id < rhs.zone_short_id);
+    }
+    return (pg_ver < rhs.pg_ver);
+
+  }
+
+  bool operator<(const obj_time_weight& rhs) {
+    if (!high_precision || !rhs.high_precision) {
+      return compare_low_precision(rhs);
+    }
+    if (mtime > rhs.mtime) {
+      return false;
+    }
+    if (mtime < rhs.mtime) {
+      return true;
+    }
+    if (!zone_short_id || !rhs.zone_short_id) {
+      /* don't compare zone ids, if one wasn't provided */
+      return false;
+    }
+    if (zone_short_id != rhs.zone_short_id) {
+      return (zone_short_id < rhs.zone_short_id);
+    }
+    return (pg_ver < rhs.pg_ver);
+  }
+
+  void init(const real_time& _mtime, uint32_t _short_id, uint64_t _pg_ver) {
+    mtime = _mtime;
+    zone_short_id = _short_id;
+    pg_ver = _pg_ver;
+  }
+
+  void init(RGWObjState *state) {
+    mtime = state->mtime;
+    zone_short_id = state->zone_short_id;
+    pg_ver = state->pg_ver;
+  }
+};
+
+inline std::ostream& operator<<(std::ostream& out, const obj_time_weight &o) {
+  out << o.mtime;
+
+  if (o.zone_short_id != 0 || o.pg_ver != 0) {
+    out << "[zid=" << o.zone_short_id << ", pgv=" << o.pg_ver << "]";
+  }
+
+  return out;
+}
 
 } // namespace rgw::sal

@@ -7,6 +7,7 @@
 #include "common/ceph_context.h"
 #include "common/ceph_releases.h"
 #include "common/config.h"
+#include "crimson/common/config_proxy.h"
 #include "common/debug.h"
 
 #include "crimson/osd/exceptions.h"
@@ -443,6 +444,17 @@ int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key)
 int cls_cxx_list_watchers(cls_method_context_t hctx,
                           obj_list_watch_response_t *watchers)
 {
+  OSDOp op{CEPH_OSD_OP_LIST_WATCHERS};
+  if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
+    return ret;
+  }
+
+  try {
+    auto iter = op.outdata.cbegin();
+    decode(*watchers, iter);
+  } catch (buffer::error&) {
+    return -EIO;
+  }
   return 0;
 }
 
@@ -498,20 +510,24 @@ ceph_release_t cls_get_min_compatible_client(cls_method_context_t hctx)
 
 const ConfigProxy& cls_get_config(cls_method_context_t hctx)
 {
-  // FIXME ; segfault if ever called
-  static ConfigProxy* dummy = nullptr;
-  return *dummy;
+  return crimson::common::local_conf();
 }
 
 const object_info_t& cls_get_object_info(cls_method_context_t hctx)
 {
-  // FIXME ; segfault if ever called
-  static object_info_t* dummy = nullptr;
-  return *dummy;
+  return reinterpret_cast<crimson::osd::OpsExecuter*>(hctx)->get_object_info();
 }
 
 int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq)
 {
+  auto* ox = reinterpret_cast<crimson::osd::OpsExecuter*>(hctx);
+  auto obc = ox->get_obc();
+  if (!obc->obs.exists ||
+      (obc->obs.oi.is_whiteout() &&
+       obc->ssc->snapset.clones.empty())) {
+    return -ENOENT;
+  }
+  *snap_seq = obc->ssc->snapset.seq;
   return 0;
 }
 

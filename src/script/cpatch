@@ -9,7 +9,7 @@ if [ ! -e Makefile ] && [ ! -e build.ninja ] || [ ! -e ../do_cmake.sh ]; then
     exit 1
 fi
 
-base="quay.ceph.io/ceph-ci/ceph:master"
+base="quay.ceph.io/ceph-ci/ceph:main"
 target=""
 push=0
 strip=1
@@ -146,7 +146,7 @@ if [ $py -eq 1 ] || [ $all -eq 1 ]; then
 
     # cephadm
     pushd ../src/cephadm > /dev/null
-    cp cephadm $TMP/cephadm
+    build.sh $TMP/cephadm
     dockerfile+=$'ADD cephadm /usr/sbin/cephadm\n'
     popd > /dev/null
 fi

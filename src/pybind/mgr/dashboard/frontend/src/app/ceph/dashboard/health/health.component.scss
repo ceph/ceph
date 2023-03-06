@@ -24,6 +24,10 @@ cd-info-card {
 
 .logs-link {
   text-align: center;
+
+  a {
+    color: vv.$primary;
+  }
 }
 
 .card-text-error {

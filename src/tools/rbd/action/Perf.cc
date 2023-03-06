@@ -584,7 +584,7 @@ int execute_iostat(const po::variables_map &vm,
   std::string pool;
   std::string pool_namespace;
   size_t arg_index = 0;
-  int r = utils::get_pool_and_namespace_names(vm, false, false, &pool,
+  int r = utils::get_pool_and_namespace_names(vm, false, &pool,
                                               &pool_namespace, &arg_index);
   if (r < 0) {
     return r;
@@ -621,7 +621,11 @@ int execute_iostat(const po::variables_map &vm,
     return r;
   }
 
-  utils::normalize_pool_name(&pool);
+  if (!pool_namespace.empty()) {
+    // default empty pool name only if namespace is specified to allow
+    // for an empty pool_spec (-> GLOBAL_POOL_KEY)
+    utils::normalize_pool_name(&pool);
+  }
   std::string pool_spec = format_pool_spec(pool, pool_namespace);
 
   // no point to refreshing faster than the stats period
@@ -667,7 +671,7 @@ int execute_iotop(const po::variables_map &vm,
   std::string pool;
   std::string pool_namespace;
   size_t arg_index = 0;
-  int r = utils::get_pool_and_namespace_names(vm, false, false, &pool,
+  int r = utils::get_pool_and_namespace_names(vm, false, &pool,
                                               &pool_namespace, &arg_index);
   if (r < 0) {
     return r;
@@ -685,7 +689,11 @@ int execute_iotop(const po::variables_map &vm,
     return r;
   }
 
-  utils::normalize_pool_name(&pool);
+  if (!pool_namespace.empty()) {
+    // default empty pool name only if namespace is specified to allow
+    // for an empty pool_spec (-> GLOBAL_POOL_KEY)
+    utils::normalize_pool_name(&pool);
+  }
   iotop::MainWindow mainWindow(rados, format_pool_spec(pool, pool_namespace));
   r = mainWindow.run();
   if (r < 0) {

@@ -3,8 +3,10 @@
 # vim: ts=4 sw=4 smarttab expandtab
 
 import argparse
+import grp
 import logging
 import os
+import pwd
 import signal
 import socket
 import subprocess
@@ -18,6 +20,7 @@ auth_names = ['client.crash.%s' % socket.gethostname(),
               'client.crash',
               'client.admin']
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -29,7 +32,8 @@ def parse_args():
     )
     parser.add_argument(
         '--name', '-n',
-        help='ceph name to authenticate as (default: try client.crash, client.admin)')
+        help='ceph name to authenticate as '
+             '(default: try client.crash, client.admin)')
     parser.add_argument(
         '--log-level', '-l',
         help='log level output (default: INFO), support INFO or DEBUG')
@@ -48,7 +52,8 @@ def post_crash(path):
             stderr=subprocess.PIPE,
         )
         f = open(os.path.join(path, 'meta'), 'rb')
-        stderr = pr.communicate(input=f.read())
+        (_, stderr) = pr.communicate(input=f.read())
+        stderr = stderr.decode()
         rc = pr.wait()
         f.close()
         if rc != 0 or stderr != "":
@@ -61,6 +66,9 @@ def post_crash(path):
 def scrape_path(path):
     for p in os.listdir(path):
         crashpath = os.path.join(path, p)
+        if not os.access(crashpath, os.R_OK):
+            log.warning('unable to read crash path %s' % (crashpath))
+            continue
         metapath = os.path.join(crashpath, 'meta')
         donepath = os.path.join(crashpath, 'done')
         if os.path.isfile(metapath):
@@ -79,12 +87,31 @@ def scrape_path(path):
                     (metapath, p, os.path.join('posted/', p))
                 )
 
-def handler(signum):
+
+def handler(signum, frame):
     print('*** Interrupted with signal %d ***' % signum)
     sys.exit(0)
 
+
+def drop_privs():
+    if os.getuid() == 0:
+        try:
+            ceph_uid = pwd.getpwnam("ceph").pw_uid
+            ceph_gid = grp.getgrnam("ceph").gr_gid
+            os.setgroups([])
+            os.setgid(ceph_gid)
+            os.setuid(ceph_uid)
+        except Exception as e:
+            log.error(f"Unable to drop privileges: {e}")
+            sys.exit(1)
+
+
 def main():
     global auth_names
+
+    # run as unprivileged ceph user
+    drop_privs()
+
     # exit code 0 on SIGINT, SIGTERM
     signal.signal(signal.SIGINT, handler)
     signal.signal(signal.SIGTERM, handler)
@@ -101,9 +128,16 @@ def main():
         log.error("directory %s does not exist; please create" % postdir)
         time.sleep(30)
 
+    log.info("pinging cluster to exercise our key")
+    pr = subprocess.Popen(args=['timeout', '30', 'ceph', '-s'])
+    pr.wait()
+
     log.info("monitoring path %s, delay %ds" % (args.path, args.delay * 60.0))
     while True:
-        scrape_path(args.path)
+        try:
+            scrape_path(args.path)
+        except Exception as e:
+            log.error(f"Error scraping {args.path}: {e}")
         if args.delay == 0:
             sys.exit(0)
         time.sleep(args.delay * 60)

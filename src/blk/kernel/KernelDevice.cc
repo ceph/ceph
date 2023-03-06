@@ -133,8 +133,25 @@ int KernelDevice::open(const string& p)
   int r = 0, i = 0;
   dout(1) << __func__ << " path " << path << dendl;
 
+  struct stat statbuf;
+  bool is_block;
+  r = stat(path.c_str(), &statbuf);
+  if (r != 0) {
+    derr << __func__ << " stat got: " << cpp_strerror(r) << dendl;
+    goto out_fail;
+  }
+  is_block = (statbuf.st_mode & S_IFMT) == S_IFBLK;
   for (i = 0; i < WRITE_LIFE_MAX; i++) {
-    int fd = ::open(path.c_str(), O_RDWR | O_DIRECT);
+    int flags = 0;
+    if (lock_exclusive && is_block && (i == 0)) {
+      // If opening block device use O_EXCL flag. It gives us best protection,
+      // as no other process can overwrite the data for as long as we are running.
+      // For block devices ::flock is not enough,
+      // since 2 different inodes with same major/minor can be locked.
+      // Exclusion by O_EXCL works in containers too.
+      flags |= O_EXCL;
+    }
+    int fd = ::open(path.c_str(), O_RDWR | O_DIRECT | flags);
     if (fd  < 0) {
       r = -errno;
       break;
@@ -187,6 +204,10 @@ int KernelDevice::open(const string& p)
   }
 
   if (lock_exclusive) {
+    // We need to keep soft locking (via flock()) because O_EXCL does not work for regular files.
+    // This is as good as we can get. Other processes can still overwrite the data,
+    // but at least we are protected from mounting same device twice in ceph processes.
+    // We also apply soft locking for block devices, as it populates /proc/locks. (see lslocks)
     r = _lock();
     if (r < 0) {
       derr << __func__ << " failed to lock " << path << ": " << cpp_strerror(r)
@@ -242,7 +263,12 @@ int KernelDevice::open(const string& p)
       support_discard = blkdev_buffered.support_discard();
       optimal_io_size = blkdev_buffered.get_optimal_io_size();
       this->devname = devname;
-      _detect_vdo();
+      // check if any extended block device plugin recognizes this device
+      // detect_vdo has moved into the VDO plugin
+      int rc = extblkdev::detect_device(cct, devname, ebd_impl);
+      if (rc != 0) {
+	dout(20) << __func__ << " no plugin volume maps to " << devname << dendl;
+      }
     }
   }
 
@@ -255,7 +281,9 @@ int KernelDevice::open(const string& p)
   if (r < 0) {
     goto out_fail;
   }
-  _discard_start();
+  if (support_discard && cct->_conf->bdev_enable_discard && cct->_conf->bdev_async_discard) {
+    _discard_start();
+  }
 
   // round size down to an even block
   size &= ~(block_size - 1);
@@ -266,7 +294,7 @@ int KernelDevice::open(const string& p)
 	  << byte_u_t(size) << ")"
 	  << " block_size " << block_size
 	  << " (" << byte_u_t(block_size) << ")"
-	  << " " << (rotational ? "rotational" : "non-rotational")
+	  << " " << (rotational ? "rotational device," : "non-rotational device,")
       << " discard " << (support_discard ? "supported" : "not supported")
 	  << dendl;
   return 0;
@@ -302,13 +330,12 @@ void KernelDevice::close()
 {
   dout(1) << __func__ << dendl;
   _aio_stop();
-  _discard_stop();
+  if (discard_thread.is_started()) {
+    _discard_stop();
+  }
   _pre_close();
 
-  if (vdo_fd >= 0) {
-    VOID_TEMP_FAILURE_RETRY(::close(vdo_fd));
-    vdo_fd = -1;
-  }
+  extblkdev::release_device(ebd_impl);
 
   for (int i = 0; i < WRITE_LIFE_MAX; i++) {
     assert(fd_directs[i] >= 0);
@@ -335,11 +362,10 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   } else {
     (*pm)[prefix + "type"] = "ssd";
   }
-  if (vdo_fd >= 0) {
-    (*pm)[prefix + "vdo"] = "true";
-    uint64_t total, avail;
-    get_vdo_utilization(vdo_fd, &total, &avail);
-    (*pm)[prefix + "vdo_physical_size"] = stringify(total);
+  // if compression device detected, collect meta data for device
+  // VDO specific meta data has moved into VDO plugin
+  if (ebd_impl) {
+    ebd_impl->collect_metadata(prefix, pm);
   }
 
   {
@@ -407,24 +433,14 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   return 0;
 }
 
-void KernelDevice::_detect_vdo()
+int KernelDevice::get_ebd_state(ExtBlkDevState &state) const
 {
-  vdo_fd = get_vdo_stats_handle(devname.c_str(), &vdo_name);
-  if (vdo_fd >= 0) {
-    dout(1) << __func__ << " VDO volume " << vdo_name
-	    << " maps to " << devname << dendl;
-  } else {
-    dout(20) << __func__ << " no VDO volume maps to " << devname << dendl;
+  // use compression driver plugin to determine physical size and availability
+  // VDO specific get_thin_utilization has moved into VDO plugin
+  if (ebd_impl) {
+    return ebd_impl->get_state(state);
   }
-  return;
-}
-
-bool KernelDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
-{
-  if (vdo_fd < 0) {
-    return false;
-  }
-  return get_vdo_utilization(vdo_fd, total, avail);
+  return -ENOENT;
 }
 
 int KernelDevice::choose_fd(bool buffered, int write_hint) const
@@ -514,10 +530,9 @@ void KernelDevice::_aio_stop()
   }
 }
 
-int KernelDevice::_discard_start()
+void KernelDevice::_discard_start()
 {
     discard_thread.create("bstore_discard");
-    return 0;
 }
 
 void KernelDevice::_discard_stop()
@@ -704,7 +719,7 @@ void KernelDevice::_discard_thread()
       l.unlock();
       dout(20) << __func__ << " finishing" << dendl;
       for (auto p = discard_finishing.begin();p != discard_finishing.end(); ++p) {
-	discard(p.get_start(), p.get_len());
+	_discard(p.get_start(), p.get_len());
       }
 
       discard_callback(discard_callback_priv, static_cast<void*>(&discard_finishing));
@@ -717,9 +732,10 @@ void KernelDevice::_discard_thread()
   discard_started = false;
 }
 
-int KernelDevice::queue_discard(interval_set<uint64_t> &to_release)
+int KernelDevice::_queue_discard(interval_set<uint64_t> &to_release)
 {
-  if (!support_discard)
+  // if bdev_async_discard enabled on the fly, discard_thread is not started here, fallback to sync discard
+  if (!discard_thread.is_started())
     return -1;
 
   if (to_release.empty())
@@ -729,6 +745,23 @@ int KernelDevice::queue_discard(interval_set<uint64_t> &to_release)
   discard_queued.insert(to_release);
   discard_cond.notify_all();
   return 0;
+}
+
+// return true only if _queue_discard succeeded, so caller won't have to do alloc->release
+// otherwise false
+bool KernelDevice::try_discard(interval_set<uint64_t> &to_release, bool async)
+{
+  if (!support_discard || !cct->_conf->bdev_enable_discard)
+    return false;
+
+  if (async && discard_thread.is_started()) {
+    return 0 == _queue_discard(to_release);
+  } else {
+    for (auto p = to_release.begin(); p != to_release.end(); ++p) {
+      _discard(p.get_start(), p.get_len());
+    }
+  }
+  return false;
 }
 
 void KernelDevice::_aio_log_start(
@@ -1030,7 +1063,7 @@ int KernelDevice::aio_write(
   return 0;
 }
 
-int KernelDevice::discard(uint64_t offset, uint64_t len)
+int KernelDevice::_discard(uint64_t offset, uint64_t len)
 {
   int r = 0;
   if (cct->_conf->objectstore_blackhole) {
@@ -1038,13 +1071,10 @@ int KernelDevice::discard(uint64_t offset, uint64_t len)
 	       << dendl;
     return 0;
   }
-  if (support_discard) {
-      dout(10) << __func__
-	       << " 0x" << std::hex << offset << "~" << len << std::dec
-	       << dendl;
-
-      r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
-  }
+  dout(10) << __func__
+	   << " 0x" << std::hex << offset << "~" << len << std::dec
+	   << dendl;
+  r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
   return r;
 }
 
@@ -1064,11 +1094,6 @@ struct ExplicitHugePagePool {
     ~mmaped_buffer_raw() override {
       // don't delete nor unmmap; recycle the region instead
       region_q.push(data);
-    }
-    raw* clone_empty() override {
-      // the entire cloning facility is used solely by the dev-only MemDB.
-      // see: https://github.com/ceph/ceph/pull/36282
-      ceph_abort_msg("this should be never called on this path!");
     }
   };
 
@@ -1243,7 +1268,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 	 << "s" << dendl;
   }
   if (r < 0) {
-    if (ioc->allow_eio && is_expected_ioerr(r)) {
+    if (ioc->allow_eio && is_expected_ioerr(-errno)) {
       r = -EIO;
     } else {
       r = -errno;

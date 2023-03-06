@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import logging
 import os
 from collections import defaultdict
 
@@ -18,6 +19,8 @@ GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),
     'max_files': (int, '')
 }
+
+logger = logging.getLogger("controllers.rgw")
 
 
 @APIRouter('/cephfs', Scope.CEPHFS)
@@ -470,6 +473,14 @@ class CephFS(RESTController):
         :rtype: str
         """
         cfs = self._cephfs_instance(fs_id)
+        list_snaps = cfs.ls_snapshots(path)
+        for snap in list_snaps:
+            if name == snap['name']:
+                raise DashboardException(code='Snapshot name already in use',
+                                         msg='Snapshot name {} is already in use.'
+                                         'Please use another name'.format(name),
+                                         component='cephfs')
+
         return cfs.mk_snapshot(path, name)
 
     @RESTController.Resource('DELETE', path='/snapshot')

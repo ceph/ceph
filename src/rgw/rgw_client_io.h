@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_CLIENT_IO_H
-#define CEPH_RGW_CLIENT_IO_H
+#pragma once
 
 #include <exception>
 #include <string>
@@ -352,13 +351,13 @@ public:
 
 /* Type conversions to work around lack of req_state type hierarchy matching
  * (e.g.) REST backends (may be replaced w/dynamic typed req_state). */
-static inline rgw::io::RestfulClient* RESTFUL_IO(struct req_state* s) {
+static inline rgw::io::RestfulClient* RESTFUL_IO(req_state* s) {
   ceph_assert(dynamic_cast<rgw::io::RestfulClient*>(s->cio) != nullptr);
 
   return static_cast<rgw::io::RestfulClient*>(s->cio);
 }
 
-static inline rgw::io::Accounter* ACCOUNTING_IO(struct req_state* s) {
+static inline rgw::io::Accounter* ACCOUNTING_IO(req_state* s) {
   auto ptr = dynamic_cast<rgw::io::Accounter*>(s->cio);
   ceph_assert(ptr != nullptr);
 
@@ -434,5 +433,3 @@ public:
       std::istream(static_cast<RGWClientIOStreamBuf *>(this)) {
   }
 };
-
-#endif /* CEPH_RGW_CLIENT_IO_H */

@@ -18,6 +18,7 @@ for details on individual services:
     custom-container
     monitoring
     snmp-gateway
+    tracing
 
 Service Status
 ==============
@@ -80,13 +81,35 @@ system name:
 
     ceph orch ps --daemon_type osd --daemon_id 0
 
+.. note::
+   The output of the command ``ceph orch ps`` may not reflect the current status of the daemons. By default,
+   the status is updated every 10 minutes. This interval can be shortened by modifying the ``mgr/cephadm/daemon_cache_timeout``
+   configuration variable (in seconds) e.g: ``ceph config set mgr mgr/cephadm/daemon_cache_timeout 60`` would reduce the refresh
+   interval to one minute. The information is updated every ``daemon_cache_timeout`` seconds unless the ``--refresh`` option
+   is used. This option would trigger a request to refresh the information, which may take some time depending on the size of
+   the cluster. In general ``REFRESHED`` value indicates how recent the information displayed by ``ceph orch ps`` and similar
+   commands is.
+
 .. _orchestrator-cli-service-spec:
 
 Service Specification
 =====================
 
 A *Service Specification* is a data structure that is used to specify the
-deployment of services.  Here is an example of a service specification in YAML:
+deployment of services. In addition to parameters such as `placement` or
+`networks`, the user can set initial values of service configuration parameters
+by means of the `config` section. For each param/value configuration pair,
+cephadm calls the following command to set its value:
+
+   .. prompt:: bash #
+
+    ceph config set <service-name> <param> <value>
+
+cephadm raises health warnings in case invalid configuration parameters are
+found in the spec (`CEPHADM_INVALID_CONFIG_OPTION`) or if any error while
+trying to apply the new configuration option(s) (`CEPHADM_FAILED_SET_OPTION`).
+
+Here is an example of a service specification in YAML:
 
 .. code-block:: yaml
 
@@ -97,6 +120,10 @@ deployment of services.  Here is an example of a service specification in YAML:
         - host1
         - host2
         - host3
+    config:
+      param_1: val_1
+      ...
+      param_N: val_N
     unmanaged: false
     networks:
     - 192.169.142.0/24
@@ -252,7 +279,7 @@ Daemons can be explicitly placed on hosts by simply specifying them:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement="host1 host2 host3"
+    ceph orch apply prometheus --placement="host1 host2 host3"
 
 Or in YAML:
 
@@ -269,7 +296,7 @@ MONs and other services may require some enhanced network specifications:
 
    .. prompt:: bash #
 
-    orch daemon add mon --placement="myhost:[v2:1.2.3.4:3300,v1:1.2.3.4:6789]=name"
+    ceph orch daemon add mon --placement="myhost:[v2:1.2.3.4:3300,v1:1.2.3.4:6789]=name"
 
 where ``[v2:1.2.3.4:3300,v1:1.2.3.4:6789]`` is the network address of the monitor
 and ``=name`` specifies the name of the new monitor.
@@ -315,7 +342,7 @@ this command:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement="label:mylabel"
+    ceph orch apply prometheus --placement="label:mylabel"
 
 Or in YAML:
 
@@ -334,7 +361,7 @@ Daemons can be placed on hosts as well:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement='myhost[1-3]'
+    ceph orch apply prometheus --placement='myhost[1-3]'
 
 Or in YAML:
 
@@ -348,7 +375,7 @@ To place a service on *all* hosts, use ``"*"``:
 
    .. prompt:: bash #
 
-    orch apply node-exporter --placement='*'
+    ceph orch apply node-exporter --placement='*'
 
 Or in YAML:
 
@@ -366,19 +393,19 @@ By specifying ``count``, only the number of daemons specified will be created:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement=3
+    ceph orch apply prometheus --placement=3
 
 To deploy *daemons* on a subset of hosts, specify the count:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement="2 host1 host2 host3"
+    ceph orch apply prometheus --placement="2 host1 host2 host3"
 
 If the count is bigger than the amount of hosts, cephadm deploys one per host:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement="3 host1 host2"
+    ceph orch apply prometheus --placement="3 host1 host2"
 
 The command immediately above results in two Prometheus daemons.
 
@@ -414,7 +441,7 @@ Cephadm supports the deployment of multiple daemons on the same host:
     service_type: rgw
     placement:
       label: rgw
-      count-per-host: 2
+      count_per_host: 2
 
 The main reason for deploying multiple daemons per host is an additional
 performance benefit for running multiple RGW and MDS daemons on the same host.
@@ -479,11 +506,20 @@ candidate hosts.
    If there are fewer hosts selected by the placement specification than
    demanded by ``count``, cephadm will deploy only on the selected hosts.
 
+.. _cephadm-extra-container-args:
+
 Extra Container Arguments
 =========================
 
 .. warning:: 
-  The arguments provided for extra container args are limited to whatever arguments are available for a `run` command from whichever container engine you are using. Providing any arguments the `run` command does not support (or invalid values for arguments) will cause the daemon to fail to start.
+  The arguments provided for extra container args are limited to whatever arguments are available for
+  a `run` command from whichever container engine you are using. Providing any arguments the `run`
+  command does not support (or invalid values for arguments) will cause the daemon to fail to start.
+
+.. note::
+
+  For arguments passed to the process running inside the container rather than the for
+  the container runtime itself, see :ref:`cephadm-extra-entrypoint-args`
 
 
 Cephadm supports providing extra miscellaneous container arguments for
@@ -501,9 +537,106 @@ a spec like
         - host2
         - host3
     extra_container_args:
-      -  "--cpus=2"
+      - "--cpus=2"
 
 which would cause each mon daemon to be deployed with `--cpus=2`.
+
+Mounting Files with Extra Container Arguments
+---------------------------------------------
+
+A common use case for extra container arguments is to mount additional
+files within the container. However, some intuitive formats for doing
+so can cause deployment to fail (see https://tracker.ceph.com/issues/57338).
+The recommended syntax for mounting a file with extra container arguments is:
+
+.. code-block:: yaml
+
+    extra_container_args:
+      - "-v"
+      - "/absolute/file/path/on/host:/absolute/file/path/in/container"
+
+For example:
+
+.. code-block:: yaml
+
+    extra_container_args:
+      - "-v"
+      - "/opt/ceph_cert/host.cert:/etc/grafana/certs/cert_file:ro"
+
+.. _cephadm-extra-entrypoint-args:
+
+Extra Entrypoint Arguments
+==========================
+
+.. note::
+
+  For arguments intended for the container runtime rather than the process inside
+  it, see :ref:`cephadm-extra-container-args`
+
+Similar to extra container args for the container runtime, Cephadm supports
+appending to args passed to the entrypoint process running
+within a container. For example, to set the collector textfile directory for
+the node-exporter service , one could apply a service spec like
+
+.. code-block:: yaml
+
+  service_type: node-exporter
+  service_name: node-exporter
+  placement:
+    host_pattern: '*'
+  extra_entrypoint_args:
+    - "--collector.textfile.directory=/var/lib/node_exporter/textfile_collector2"
+
+Custom Config Files
+===================
+
+Cephadm supports specifying miscellaneous config files for daemons.
+To do so, users must provide both the content of the config file and the
+location within the daemon's container at which it should be mounted. After
+applying a YAML spec with custom config files specified and having cephadm
+redeploy the daemons for which the config files are specified, these files will
+be mounted within the daemon's container at the specified location.
+
+Example service spec:
+
+.. code-block:: yaml
+
+    service_type: grafana
+    service_name: grafana
+    custom_configs:
+      - mount_path: /etc/example.conf
+        content: |
+          setting1 = value1
+          setting2 = value2
+      - mount_path: /usr/share/grafana/example.cert
+        content: |
+          -----BEGIN PRIVATE KEY-----
+          V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
+          ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
+          IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
+          YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
+          ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
+          -----END PRIVATE KEY-----
+          -----BEGIN CERTIFICATE-----
+          V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
+          ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
+          IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
+          YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
+          ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
+          -----END CERTIFICATE-----
+
+To make these new config files actually get mounted within the
+containers for the daemons
+
+.. prompt:: bash
+
+  ceph orch redeploy <service-name>
+
+For example:
+
+.. prompt:: bash
+
+  ceph orch redeploy grafana
 
 .. _orch-rm:
 

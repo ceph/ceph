@@ -28,9 +28,21 @@ function distro_version() {
 }
 
 function install() {
+    if [ $(distro_id) = "ubuntu" ]; then
+        sudo apt-get purge -y gcc
+        sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+    fi
     for package in "$@" ; do
         install_one $package
     done
+    if [ $(distro_id) = "ubuntu" ]; then
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 11
+        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 11
+        sudo update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 11
+        sudo update-alternatives --set cc /usr/bin/gcc
+        sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 11
+        sudo update-alternatives --set c++ /usr/bin/g++
+    fi
 }
 
 function install_one() {

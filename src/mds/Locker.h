@@ -187,7 +187,7 @@ public:
   // -- client leases --
   void handle_client_lease(const cref_t<MClientLease> &m);
 
-  void issue_client_lease(CDentry *dn, MDRequestRef &mdr, int mask, utime_t now, bufferlist &bl);
+  void issue_client_lease(CDentry *dn, CInode *in, MDRequestRef &mdr, utime_t now, bufferlist &bl);
   void revoke_client_leases(SimpleLock *lock);
   static void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
 

@@ -25,9 +25,14 @@ The list of features that can be enabled/disabled is:
 
 By default all features come enabled.
 
-To retrieve a list of features and their current statuses::
+To retrieve a list of features and their current statuses:
 
-  $ ceph dashboard feature status
+.. prompt:: bash $
+
+   ceph dashboard feature status
+
+::
+
   Feature 'cephfs': 'enabled'
   Feature 'iscsi': 'enabled'
   Feature 'mirroring': 'enabled'
@@ -35,9 +40,14 @@ To retrieve a list of features and their current statuses::
   Feature 'rgw': 'enabled'
   Feature 'nfs': 'enabled'
 
-To enable or disable the status of a single or multiple features::
+To enable or disable the status of a single or multiple features:
 
-  $ ceph dashboard feature disable iscsi mirroring
+.. prompt:: bash $
+
+   ceph dashboard feature disable iscsi mirroring
+
+:: 
+
   Feature 'iscsi': disabled
   Feature 'mirroring': disabled
 

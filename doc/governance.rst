@@ -6,56 +6,81 @@
 
 The Ceph open source community is guided by a few different groups.
 
-Project Leader
---------------
+Key principles
+==============
 
-The Ceph project is currently led by Sage Weil <sage@redhat.com>.  The
-project leader is responsible for guiding the overall direction of the
-project and ensuring that the developer and user communities are
-healthy.
+ * Decision-making is consensus-driven by those who participate.
+ * Leadership roles are defined primarily by responsibility, not prestige or seniority.
+ * It is normal and healthy for these roles to be passed on to others
+ * Everyone's role is ultimately to serve the users and participation
+   is voluntary.
 
+Bodies
+------
 
-Committers
+Ceph Executive Council
+======================
+
+Responsibilities
+----------------
+
+ * Arbiter in cases where decisions cannot be reached by consensus
+ * Distribute key responsibilities amongst themselves or others
+ * Point of contact for the project
+ * Representatives for Ceph foundation board meetings
+ * Ensure things get done
+
+Membership
 ----------
 
-Committers are project contributors who have write access to the central
-Ceph code repositories, currently hosted on GitHub.  This group of developers
-is collectively empowered to make changes to the Ceph source code.
+ * 3 people
+ * Elected by the steering committee
+ * Candidates self-nominate or are nominated by other members
+ * Discussion of how roles/responsibilities may be delegated
+ * Ranked-choice vote by the steering committee
+ * 2 year terms, with one member being elected in even years, and the
+   other two in odd years
+ * Members may resign at any time, and the steering committee may vote
+   to appoint a replacement for the rest of their term
+ * members must involve >1 employer
 
-Generally speaking, no individual should make a change in isolation:
-all code contributions go through a collaborative review process (and
-undergo testing) before being merged.  The specifics of this process
-are dynamic and evolving over time.
+Current Members
+^^^^^^^^^^^^^^^
 
-New committers are added to the project (or committers removed from
-the project) at the discretion of the Ceph Leadership Team (below).
-The criteria for becoming a contributor include a consistent level of
-quality and engagement in the project over time.
+* Dan van der Ster <daniel.vanderster@cern.ch>
+* Josh Durgin <jdurgin@redhat.com>
+* Neha Ojha <nojha@redhat.com>
 
+.. _csc:
 
-.. _clt:
+Ceph Steering Committee
+=======================
 
-Ceph Leadership Team
---------------------
+Responsibilities
+----------------
 
-The Ceph Leadership Team (CLT) is a collection of component leads and
-other core developers who collectively make technical decisions for
-the project.  These decisions are generally made by consensus,
-although voting may be used if necessary.
+ * Elect executive council
+ * Amend governance model (by majority vote)
+ * Meet regularly to discuss and decide on tactical and strategic projects
+   and improvements
 
-The CLT meets weekly via video chat to discuss any pending issues or
-decisions.  Minutes for the CLT meetings are published at
-`https://pad.ceph.com/p/clt-weekly-minutes <https://pad.ceph.com/p/clt-weekly-minutes>`_.
+Membership
+----------
 
-Committers are added to or removed from the CLT at the discretion of
-the CLT itself.
+ * Developers, users, community members
+ * Voting members can be nominated and added/removed by existing
+   members (2/3 majority)
+ * Anyone may attend steering committee meetings as a non-voting participant
+ * Existing Ceph Leadership Team members are grandfathered in
+ * Membership reflected by an email list and on the Ceph website and
+   docs
 
-Current CLT members are:
+Current Members
+^^^^^^^^^^^^^^^
 
  * Adam King <adking@redhat.com>
  * Casey Bodley <cbodley@redhat.com>
  * Dan van der Ster <daniel.vanderster@cern.ch>
- * David Galloway <dgallowa@redhat.com>
  * David Orman <ormandj@iland.com>
  * Ernesto Puerta <epuerta@redhat.com>
  * Gregory Farnum <gfarnum@redhat.com>
@@ -72,32 +97,32 @@ Current CLT members are:
  * Myoungwon Oh <myoungwon.oh@samsung.com>
  * Neha Ojha <nojha@redhat.com>
  * Patrick Donnelly <pdonnell@redhat.com>
- * Sage Weil <sage@redhat.com>
  * Sam Just <sjust@redhat.com>
+ * Vikhyat Umrao <vikhyat@redhat.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
  * Yehuda Sadeh <yehuda@redhat.com>
+ * Yingxin Cheng <yingxin.cheng@intel.com>
  * Yuri Weinstein <yweinste@redhat.com>
  * Zac Dover <zac.dover@gmail.com>
 
-Component Leads
----------------
+.. _ctl:
 
-Each major subcomponent of the Ceph project has a lead engineer who is
-responsible for guiding and coordinating development.  The leads are
-nominated or appointed at the discretion of the project leader or the
-CLT.  Leads responsibilities include:
+Component Team Leads
+====================
 
- * guiding the (usually) daily "stand-up" coordination calls over video chat
- * building the development roadmap for each release cycle
- * coordinating development activity between contributors
- * ensuring that contributions are reviewed
- * ensuring that different proposed changes do not conflict
- * ensuring that testing remains robust (new features include tests, changes do not break tests, etc.)
+Responsibilities
+----------------
 
-All component leads are included on the CLT.  They are expected to
-report progress and status updates to the rest of the leadership team
-and to help facilitate any cross-component coordination of
-development.
+ * Manage a `component team`_ in Ceph
+ * Ensure PRs are reviewed and merged
+ * Ensure severe bug fixes are backported
+ * Run standups
+ * Bug triage, scrubs
+ * etc.
+
+Team leads are selected by the executive council, generally based on
+the recommendation by team members and outgoing lead.  Periodic
+rotation of lead responsibility among team members is encouraged.
 
 The Ceph Foundation
 -------------------
@@ -110,3 +135,4 @@ into the collaborative development process.
 
 For more information, see :ref:`foundation`.
 
+.. _component team: https://ceph.io/en/community/team/

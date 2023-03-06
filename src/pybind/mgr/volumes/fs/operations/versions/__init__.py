@@ -95,7 +95,10 @@ class SubvolumeLoader(object):
             subvolume.discover()
             self.upgrade_to_v2_subvolume(subvolume)
             version = int(subvolume.metadata_mgr.get_global_option('version'))
-            return self._get_subvolume_version(version)(mgr, fs, vol_spec, group, subvolname, legacy=subvolume.legacy_mode)
+            subvolume_version_object = self._get_subvolume_version(version)(mgr, fs, vol_spec, group, subvolname, legacy=subvolume.legacy_mode)
+            subvolume_version_object.metadata_mgr.refresh()
+            subvolume_version_object.clean_stale_snapshot_metadata()
+            return subvolume_version_object
         except MetadataMgrException as me:
             if me.errno == -errno.ENOENT and upgrade:
                 self.upgrade_legacy_subvolume(fs, subvolume)

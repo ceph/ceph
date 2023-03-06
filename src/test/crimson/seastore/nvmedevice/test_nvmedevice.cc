@@ -2,17 +2,19 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/buffer.h"
-#include "crimson/os/seastore/random_block_manager/nvmedevice.h"
+#include "crimson/os/seastore/random_block_manager/rbm_device.h"
+#include "crimson/os/seastore/random_block_manager/nvme_block_device.h"
 #include "test/crimson/gtest_seastar.h"
 #include "include/stringify.h"
 
 using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
-using namespace nvme_device;
+using namespace random_block_device;
+using namespace random_block_device::nvme;
 
 struct nvdev_test_t : seastar_test_suite_t {
-  std::unique_ptr<NVMeBlockDevice> device;
+  std::unique_ptr<RBMDevice> device;
   std::string dev_path;
 
   static const uint64_t DEV_SIZE = 1024 * 1024 * 1024;
@@ -50,11 +52,23 @@ WRITE_CLASS_DENC_BOUNDED(
   nvdev_test_block_t
 )
 
+using crimson::common::local_conf;
 TEST_F(nvdev_test_t, write_and_verify_test)
 {
   run_async([this] {
-    device = NVMeBlockDevice::create<PosixNVMeDevice>();
-    device->open(dev_path, seastar::open_flags::rw).unsafe_get();
+    device.reset(new random_block_device::nvme::NVMeBlockDevice(dev_path));
+    local_conf().set_val("seastore_cbjournal_size", "1000000").get();
+    device->mkfs(
+      device_config_t{
+	true,
+	device_spec_t{
+	(magic_t)std::rand(),
+	device_type_t::RANDOM_BLOCK_SSD,
+	static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN)},
+	seastore_meta_t{uuid_d()},
+	secondary_device_set_t()}
+    ).unsafe_get();
+    device->mount().unsafe_get();
     nvdev_test_block_t original_data;
     std::minstd_rand0 generator;
     uint8_t value = generator();
@@ -66,7 +80,7 @@ TEST_F(nvdev_test_t, write_and_verify_test)
       bl_length = bl.length();
       auto write_buf = ceph::bufferptr(buffer::create_page_aligned(BLK_SIZE));
       bl.begin().copy(bl_length, write_buf.c_str());
-      device->write(0, write_buf).unsafe_get();
+      device->write(0, std::move(write_buf)).unsafe_get();
     }
 
     nvdev_test_block_t read_data;
@@ -80,7 +94,7 @@ TEST_F(nvdev_test_t, write_and_verify_test)
     }
 
     int ret = memcmp(original_data.data, read_data.data, BUF_SIZE);
-    device->close().wait();
+    device->close().unsafe_get();
     ASSERT_TRUE(ret == 0);
     device.reset(nullptr);
   });

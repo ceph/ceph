@@ -247,6 +247,7 @@ public:
   void reset_fnode(fnode_const_ptr&& ptr) {
     fnode = std::move(ptr);
   }
+  void set_fresh_fnode(fnode_const_ptr&& ptr);
 
   const fnode_const_ptr& get_fnode() const {
     return fnode;
@@ -321,6 +322,11 @@ public:
    * @returns true if the rstats and directory contents match, false otherwise.
    */
   bool scrub_local();
+
+  /**
+   * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)
+   */
+  void go_bad_dentry(snapid_t last, std::string_view dname);
 
   const scrub_info_t *scrub_info() const {
     if (!scrub_infop)
@@ -398,7 +404,7 @@ public:
 
   bool should_split() const {
     return g_conf()->mds_bal_split_size > 0 &&
-           (int)get_frag_size() > g_conf()->mds_bal_split_size;
+      ((int)get_frag_size() + (int)get_num_snap_items()) > g_conf()->mds_bal_split_size;
   }
   bool should_split_fast() const;
   bool should_merge() const;
@@ -661,11 +667,6 @@ protected:
       bool *force_dirty);
 
   /**
-   * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)
-   */
-  void go_bad_dentry(snapid_t last, std::string_view dname);
-
-  /**
    * Go bad due to a damaged header (register with damagetable and go BADFRAG)
    */
   void go_bad(bool complete);
@@ -737,8 +738,6 @@ protected:
 
   ceph::coarse_mono_time last_popularity_sample = ceph::coarse_mono_clock::zero();
 
-  load_spread_t pop_spread;
-
   elist<CInode*> pop_lru_subdirs;
 
   std::unique_ptr<bloom_filter> bloom; // XXX not part of mempool::mds_co
@@ -767,7 +766,6 @@ private:
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );
   void remove_null_dentries();
-  void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 
   void prepare_new_fragment(bool replay);
   void prepare_old_fragment(std::map<string_snap_t, MDSContext::vec >& dentry_waiters, bool replay);

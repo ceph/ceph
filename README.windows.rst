@@ -103,8 +103,7 @@ In order to mount Ceph filesystems, you will have to install Dokany.
 You may fetch the installer as well as the source code from the Dokany
 Github repository: https://github.com/dokan-dev/dokany/releases
 
-The minimum supported Dokany version is 1.3.1. At the time of the writing,
-Dokany 2.0 is in Beta stage and is unsupported.
+Make sure to install Dokany 2.0.5 or later.
 
 In order to map RBD images, the ``WNBD`` driver must be installed. Please
 check out this page for more details about ``WNBD`` and the install process:

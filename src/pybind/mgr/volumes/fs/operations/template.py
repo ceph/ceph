@@ -60,10 +60,14 @@ class SubvolumeOpType(Enum):
     DENY_ACCESS           = 'deny-access'
     AUTH_LIST             = 'auth-list'
     EVICT                 = 'evict'
-    USER_METADATA_SET     = 'metadata-set'
-    USER_METADATA_GET     = 'metadata-get'
-    USER_METADATA_LIST    = 'metadata-ls'
-    USER_METADATA_REMOVE  = 'metadata-rm'
+    USER_METADATA_SET     = 'user-metadata-set'
+    USER_METADATA_GET     = 'user-metadata-get'
+    USER_METADATA_LIST    = 'user-metadata-ls'
+    USER_METADATA_REMOVE  = 'user-metadata-rm'
+    SNAP_METADATA_SET     = 'snap-metadata-set'
+    SNAP_METADATA_GET     = 'snap-metadata-get'
+    SNAP_METADATA_LIST    = 'snap-metadata-ls'
+    SNAP_METADATA_REMOVE  = 'snap-metadata-rm'
 
 class SubvolumeTemplate(object):
     VERSION = None # type: int

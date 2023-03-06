@@ -120,10 +120,13 @@ TEST_F(TestMockCacheSSDWriteLog, init_state_write) {
 
   image_cache_state.empty = false;
   image_cache_state.clean = false;
+  ceph::mutex lock = ceph::make_mutex("MockImageCacheStateSSD lock");
   MockContextSSD finish_ctx;
   expect_metadata_set(mock_image_ctx);
   expect_context_complete(finish_ctx, 0);
-  image_cache_state.write_image_cache_state(&finish_ctx);
+  std::unique_lock locker(lock);
+  image_cache_state.write_image_cache_state(locker, &finish_ctx);
+  ASSERT_FALSE(locker.owns_lock());
   ASSERT_EQ(0, finish_ctx.wait());
 }
 

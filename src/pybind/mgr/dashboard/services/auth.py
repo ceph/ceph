@@ -178,7 +178,6 @@ class AuthManagerTool(cherrypy.Tool):
     def _check_authentication(self):
         JwtManager.reset_user()
         token = JwtManager.get_token_from_header()
-        self.logger.debug("token: %s", token)
         if token:
             user = JwtManager.get_user(token)
             if user:

@@ -5,14 +5,14 @@
   <cd-notifications-sidebar></cd-notifications-sidebar>
   <div class="cd-navbar-top">
     <nav class="navbar navbar-expand-md navbar-dark cd-navbar-brand">
-      <button class="btn btn-link py-0"
+      <button class="btn btn-link py-0 ms-3"
               (click)="showMenuSidebar = !showMenuSidebar"
               aria-label="toggle sidebar visibility">
         <i class="fa fa-bars fa-2x"
            aria-hidden="true"></i>
       </button>
 
-      <a class="navbar-brand ml-2"
+      <a class="navbar-brand ms-2"
          href="#">
         <img src="assets/Ceph_Ceph_Logo_with_text_white.svg"
              alt="Ceph" />
@@ -95,11 +95,13 @@
           permissions.log.read || permissions.prometheus.read">
         <a (click)="toggleSubMenu('cluster')"
            class="nav-link dropdown-toggle"
-           [attr.aria-expanded]="displayedSubMenu == 'cluster'"
-           aria-controls="collapseBasic">
+           [attr.aria-expanded]="displayedSubMenu === 'cluster'"
+           aria-controls="cluster-nav"
+           role="button">
           <ng-container i18n>Cluster</ng-container>
         </a>
         <ul class="list-unstyled"
+            id="cluster-nav"
             [ngbCollapse]="displayedSubMenu !== 'cluster'">
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_hosts"
@@ -150,6 +152,12 @@
                routerLink="/mgr-modules">Manager Modules</a>
           </li>
           <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_users"
+              *ngIf="permissions.configOpt.read">
+            <a i18n
+               routerLink="/ceph-users">Users</a>
+          </li>
+          <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_log"
               *ngIf="permissions.log.read">
             <a i18n
@@ -160,8 +168,10 @@
               *ngIf="permissions.prometheus.read">
             <a routerLink="/monitoring">
               <ng-container i18n>Monitoring</ng-container>
-              <small *ngIf="prometheusAlertService.activeAlerts > 0"
-                     class="badge badge-danger">{{ prometheusAlertService.activeAlerts }}</small>
+              <small *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
+                     class="badge badge-danger ms-1">{{ prometheusAlertService.activeCriticalAlerts }}</small>
+              <small *ngIf="prometheusAlertService.activeWarningAlerts > 0"
+                     class="badge badge-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</small>
             </a>
           </li>
         </ul>
@@ -183,13 +193,15 @@
           (enabledFeature.rbd || enabledFeature.mirroring || enabledFeature.iscsi)">
         <a class="nav-link dropdown-toggle"
            (click)="toggleSubMenu('block')"
-           [attr.aria-expanded]="displayedSubMenu == 'block'"
-           aria-controls="collapseBasic"
+           [attr.aria-expanded]="displayedSubMenu === 'block'"
+           aria-controls="block-nav"
+           role="button"
            [ngStyle]="blockHealthColor()">
           <ng-container i18n>Block</ng-container>
         </a>
 
         <ul class="list-unstyled"
+            id="block-nav"
             [ngbCollapse]="displayedSubMenu !== 'block'">
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_block_images"
@@ -243,11 +255,13 @@
           *ngIf="permissions.rgw.read && enabledFeature.rgw">
         <a class="nav-link dropdown-toggle"
            (click)="toggleSubMenu('rgw')"
-           [attr.aria-expanded]="displayedSubMenu == 'rgw'"
-           aria-controls="collapseBasic">
+           [attr.aria-expanded]="displayedSubMenu === 'rgw'"
+           aria-controls="gateway-nav"
+           role="button">
           <ng-container i18n>Object Gateway</ng-container>
         </a>
         <ul class="list-unstyled"
+            id="gateway-nav"
             [ngbCollapse]="displayedSubMenu !== 'rgw'">
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_rgw_daemons">

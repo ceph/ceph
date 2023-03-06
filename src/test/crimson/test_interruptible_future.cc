@@ -19,12 +19,12 @@ public:
     : interrupt(interrupt) {}
 
   template <typename T>
-  std::pair<bool, std::optional<T>> may_interrupt() {
-    if (interrupt)
-      return std::pair<bool, std::optional<T>>(
-	  true, seastar::futurize<T>::make_exception_future(test_interruption()));
-    else
-      return std::pair<bool, std::optional<T>>(false, std::optional<T>());
+  std::optional<T> may_interrupt() {
+    if (interrupt) {
+      return seastar::futurize<T>::make_exception_future(test_interruption());
+    } else {
+      return std::optional<T>();
+    }
   }
 
   template <typename T>
@@ -151,7 +151,11 @@ TEST_F(seastar_test_suite_t, loops)
 	  });
 	}).then_interruptible([] {
 	  std::cout << "test errorated future do_for_each" << std::endl;
-	  std::vector<int> vec = {1, 2};
+	  std::vector<int> vec;
+	  // set a big enough iteration times to test if there is stack overflow in do_for_each
+	  for (int i = 0; i < 1000000; i++) {
+	    vec.push_back(i);
+	  }
 	  return seastar::do_with(std::move(vec), [](auto& vec) {
 	    using namespace std::chrono_literals;
 	    return interruptor::make_interruptible(seastar::now()).then_interruptible([&vec] {
@@ -254,6 +258,24 @@ TEST_F(seastar_test_suite_t, interruptible_async)
 	TestInterruptCondition>.ref_count == 1);
       return fut;
     }, [](std::exception_ptr) {}, false).get0();
+  });
+}
+
+TEST_F(seastar_test_suite_t, DISABLED_nested_interruptors)
+{
+  run_async([] {
+    base_ertr::future<> ret = with_intr(
+      []() {
+	return base_iertr::now().safe_then_interruptible([]() {
+          return with_intr(
+            []() {
+              return base_iertr::now();
+            }
+          );
+        });
+      }
+    );
+    ret.unsafe_get0();
   });
 }
 

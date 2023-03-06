@@ -50,7 +50,7 @@ static PyObject *osdmap_get_crush_version(BasePyOSDMap* self, PyObject *obj)
 static PyObject *osdmap_dump(BasePyOSDMap* self, PyObject *obj)
 {
   PyFormatter f;
-  self->osdmap->dump(&f);
+  self->osdmap->dump(&f, g_ceph_context);
   return f.get();
 }
 

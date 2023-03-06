@@ -112,6 +112,8 @@ build_with_rtd = os.environ.get('READTHEDOCS') == 'True'
 
 sys.path.insert(0, os.path.abspath('_ext'))
 
+smartquotes_action = "qe"
+
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.graphviz',
@@ -124,6 +126,7 @@ extensions = [
     'ceph_commands',
     'ceph_releases',
     'ceph_confval',
+    'sphinxcontrib.mermaid',
     'sphinxcontrib.openapi',
     'sphinxcontrib.seqdiag',
     ]

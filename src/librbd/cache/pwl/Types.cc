@@ -60,12 +60,12 @@ void WriteLogCacheEntry::dump(Formatter *f) const {
   f->dump_unsigned("image_offset_bytes", image_offset_bytes);
   f->dump_unsigned("write_bytes", write_bytes);
   f->dump_unsigned("write_data_pos", write_data_pos);
-  f->dump_unsigned("entry_valid", entry_valid);
-  f->dump_unsigned("sync_point", sync_point);
-  f->dump_unsigned("sequenced", sequenced);
-  f->dump_unsigned("has_data", has_data);
-  f->dump_unsigned("discard", discard);
-  f->dump_unsigned("writesame", writesame);
+  f->dump_bool("entry_valid", is_entry_valid());
+  f->dump_bool("sync_point", is_sync_point());
+  f->dump_bool("sequenced", is_sequenced());
+  f->dump_bool("has_data", has_data());
+  f->dump_bool("discard", is_discard());
+  f->dump_bool("writesame", is_writesame());
   f->dump_unsigned("ws_datalen", ws_datalen);
   f->dump_unsigned("entry_index", entry_index);
 }
@@ -78,12 +78,12 @@ void WriteLogCacheEntry::generate_test_instances(std::list<WriteLogCacheEntry*>&
   ls.back()->image_offset_bytes = 1;
   ls.back()->write_bytes = 1;
   ls.back()->write_data_pos = 1;
-  ls.back()->entry_valid = 1;
-  ls.back()->sync_point = 1;
-  ls.back()->sequenced = 1;
-  ls.back()->has_data = 1;
-  ls.back()->discard = 1;
-  ls.back()->writesame = 1;
+  ls.back()->set_entry_valid(true);
+  ls.back()->set_sync_point(true);
+  ls.back()->set_sequenced(true);
+  ls.back()->set_has_data(true);
+  ls.back()->set_discard(true);
+  ls.back()->set_writesame(true);
   ls.back()->ws_datalen = 1;
   ls.back()->entry_index = 1;
 }
@@ -115,12 +115,12 @@ void WriteLogPoolRoot::generate_test_instances(std::list<WriteLogPoolRoot*>& ls)
 
 std::ostream& operator<<(std::ostream& os,
                          const WriteLogCacheEntry &entry) {
-  os << "entry_valid=" << (bool)entry.entry_valid
-     << ", sync_point=" << (bool)entry.sync_point
-     << ", sequenced=" << (bool)entry.sequenced
-     << ", has_data=" << (bool)entry.has_data
-     << ", discard=" << (bool)entry.discard
-     << ", writesame=" << (bool)entry.writesame
+  os << "entry_valid=" << entry.is_entry_valid()
+     << ", sync_point=" << entry.is_sync_point()
+     << ", sequenced=" << entry.is_sequenced()
+     << ", has_data=" << entry.has_data()
+     << ", discard=" << entry.is_discard()
+     << ", writesame=" << entry.is_writesame()
      << ", sync_gen_number=" << entry.sync_gen_number
      << ", write_sequence_number=" << entry.write_sequence_number
      << ", image_offset_bytes=" << entry.image_offset_bytes

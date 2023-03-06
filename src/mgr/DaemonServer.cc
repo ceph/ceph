@@ -36,7 +36,6 @@
 #include "messages/MMgrCommand.h"
 #include "messages/MMgrCommandReply.h"
 #include "messages/MPGStats.h"
-#include "messages/MOSDScrub.h"
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDForceRecovery.h"
 #include "common/errno.h"
@@ -567,7 +566,7 @@ bool DaemonServer::handle_update(const ref_t<MMgrUpdate>& m)
       dout(20) << "updating existing DaemonState for " << key << dendl;
 
       daemon = daemon_state.get(key);
-      if (m->need_metadata_update == true &&
+      if (m->need_metadata_update &&
           !m->daemon_metadata.empty()) {
         daemon_state.update_metadata(daemon, m->daemon_metadata);
       }
@@ -647,9 +646,8 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
 
     DaemonStatePtr daemon;
     // Look up the DaemonState
-    if (daemon_state.exists(key)) {
+    if (daemon = daemon_state.get(key); daemon != nullptr) {
       dout(20) << "updating existing DaemonState for " << key << dendl;
-      daemon = daemon_state.get(key);
     } else {
       locker.unlock();
 
@@ -1360,20 +1358,14 @@ bool DaemonServer::_handle_command(
       if (p == osd_cons.end()) {
 	failed_osds.insert(osd);
       } else {
-	sent_osds.insert(osd);
-	for (auto& con : p->second) {
-	  if (HAVE_FEATURE(con->get_features(), SERVER_MIMIC)) {
-	    con->send_message(new MOSDScrub2(monc->get_fsid(),
-					     epoch,
-					     spgs,
-					     pvec.back() == "repair",
-					     pvec.back() == "deep-scrub"));
-	  } else {
-	    con->send_message(new MOSDScrub(monc->get_fsid(),
-					    pvec.back() == "repair",
-					    pvec.back() == "deep-scrub"));
-	  }
-	}
+        sent_osds.insert(osd);
+        for (auto& con : p->second) {
+	  con->send_message(new MOSDScrub2(monc->get_fsid(),
+                                           epoch,
+                                           spgs,
+                                           pvec.back() == "repair",
+                                           pvec.back() == "deep-scrub"));
+        }
       }
     }
     if (failed_osds.size() == osds.size()) {
@@ -1437,21 +1429,11 @@ bool DaemonServer::_handle_command(
         return true;
       }
       for (auto& con : p->second) {
-        if (HAVE_FEATURE(con->get_features(), SERVER_MIMIC)) {
-          con->send_message(new MOSDScrub2(monc->get_fsid(),
-                                           epoch,
-                                           it.second,
-                                           prefix == "osd pool repair",
-                                           prefix == "osd pool deep-scrub"));
-        } else {
-          // legacy
-          auto q = pgs_by_primary.find(primary);
-          ceph_assert(q != pgs_by_primary.end());
-          con->send_message(new MOSDScrub(monc->get_fsid(),
-                                          q->second,
-                                          prefix == "osd pool repair",
-                                          prefix == "osd pool deep-scrub"));
-        }
+        con->send_message(new MOSDScrub2(monc->get_fsid(),
+                                         epoch,
+                                         it.second,
+                                         prefix == "osd pool repair",
+                                         prefix == "osd pool deep-scrub"));
       }
     }
     cmdctx->reply(0, "");
@@ -2640,8 +2622,6 @@ void DaemonServer::send_report()
 		 << std::dec << dendl;
             continue;
           }
-	  dout(20) << " + " << state->key << " "
-		   << metric << dendl;
           tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
               std::move(collector));
         }
@@ -2826,7 +2806,7 @@ void DaemonServer::adjust_pgs()
 	      dout(10) << "pool " << i.first
 		       << " pg_num " << p.get_pg_num()
 		       << " - pgp_num " << p.get_pgp_num()
-		       << " gap > max_pg_num_change " << max_jump
+		       << " gap >= max_pg_num_change " << max_jump
 		       << " - must scale pgp_num first"
 		       << dendl;
 	    } else {
@@ -2983,13 +2963,19 @@ void DaemonServer::got_service_map()
       if (pending_service_map.epoch == 0) {
 	// we just started up
 	dout(10) << "got initial map e" << service_map.epoch << dendl;
+	ceph_assert(pending_service_map_dirty == 0);
+	pending_service_map = service_map;
+	pending_service_map.epoch = service_map.epoch + 1;
+      } else if (pending_service_map.epoch <= service_map.epoch) {
+	// we just started up but got one more not our own map
+	dout(10) << "got newer initial map e" << service_map.epoch << dendl;
+	ceph_assert(pending_service_map_dirty == 0);
 	pending_service_map = service_map;
 	pending_service_map.epoch = service_map.epoch + 1;
       } else {
-	// we we already active and therefore must have persisted it,
+	// we already active and therefore must have persisted it,
 	// which means ours is the same or newer.
 	dout(10) << "got updated map e" << service_map.epoch << dendl;
-	ceph_assert(pending_service_map.epoch > service_map.epoch);
       }
     });
 

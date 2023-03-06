@@ -80,7 +80,8 @@ struct ceph_msgr_reply_io {
 
 static void *str_to_ptr(const std::string &str)
 {
-  return (void *)strtoul(str.c_str(), NULL, 16);
+  // str is assumed to be a valid ptr string
+  return reinterpret_cast<void*>(ceph::parse<uintptr_t>(str, 16).value());
 }
 
 static std::string ptr_to_str(void *ptr)
@@ -131,7 +132,7 @@ static void put_ceph_context(void)
     Formatter* f;
 
     f = Formatter::create("json-pretty");
-    g_ceph_context->get_perfcounters_collection()->dump_formatted(f, false);
+    g_ceph_context->get_perfcounters_collection()->dump_formatted(f, false, false);
     ostr << ">>>>>>>>>>>>> PERFCOUNTERS BEGIN <<<<<<<<<<<<" << std::endl;
     f->flush(ostr);
     ostr << ">>>>>>>>>>>>>  PERFCOUNTERS END  <<<<<<<<<<<<" << std::endl;

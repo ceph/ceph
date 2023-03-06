@@ -7,7 +7,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 
 namespace crimson::os::seastore {
-class SegmentCleaner;
+class AsyncCleaner;
 }
 
 namespace crimson::os::seastore::journal {
@@ -26,9 +26,9 @@ public:
 private:
   void set_next_segment_seq(segment_seq_t seq) {
     LOG_PREFIX(SegmentSeqAllocator::set_next_segment_seq);
-    SUBINFO(
+    SUBDEBUG(
       seastore_journal,
-      "type {}, next_segment_seq={}, cur_segment_seq={}",
+      "{}, next={}, cur={}",
       type,
       segment_seq_printer_t{seq},
       segment_seq_printer_t{next_segment_seq});

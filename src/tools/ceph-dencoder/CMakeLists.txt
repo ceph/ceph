@@ -49,12 +49,16 @@ add_denc_mod(denc-mod-osd
 target_link_libraries(denc-mod-osd
   os
   osd
-  mon)
+  mon
+  erasure_code
+  global)
 
 if(WITH_RADOSGW)
   add_denc_mod(denc-mod-rgw
     rgw_types.cc
     ${CMAKE_SOURCE_DIR}/src/rgw/rgw_dencoder.cc)
+  target_include_directories(denc-mod-rgw
+    SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
   target_link_libraries(denc-mod-rgw
     rgw_a
     cls_rgw_client

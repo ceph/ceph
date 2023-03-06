@@ -2007,7 +2007,7 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool qu
     return;
 
   const auto& pi = in->get_projected_inode();
-  if (!pi->quota.is_enable() && !quota_change)
+  if (!pi->quota.is_enabled() && !quota_change)
     return;
 
   // creaete snaprealm for quota inode (quota was set before mimic)
@@ -2162,7 +2162,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       if (do_parent_mtime) {
 	pf->fragstat.mtime = mut->get_op_stamp();
 	pf->fragstat.change_attr++;
-	dout(10) << "predirty_journal_parents bumping change_attr to " << pf->fragstat.change_attr << " on " << parent << dendl;
+	dout(10) << "predirty_journal_parents bumping fragstat change_attr to " << pf->fragstat.change_attr << " on " << parent << dendl;
 	if (pf->fragstat.mtime > pf->rstat.rctime) {
 	  dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
 	  pf->rstat.rctime = pf->fragstat.mtime;
@@ -2288,7 +2288,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       if (touched_mtime)
 	pi.inode->mtime = pi.inode->ctime = pi.inode->dirstat.mtime;
       if (touched_chattr)
-	pi.inode->change_attr = pi.inode->dirstat.change_attr;
+	pi.inode->change_attr++;
       dout(20) << "predirty_journal_parents     gives " << pi.inode->dirstat << " on " << *pin << dendl;
 
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
@@ -5975,7 +5975,7 @@ bool MDCache::open_undef_inodes_dirfrags()
       } else if (!p.first) {
         p.second.push_back(dn->key());
       }
-         }
+    }
   }
 
   if (fetch_queue.empty())
@@ -5997,10 +5997,11 @@ bool MDCache::open_undef_inodes_dirfrags()
       continue;
     if (dir->state_test(CDir::STATE_REJOINUNDEF))
       ceph_assert(diri->dirfragtree.is_leaf(dir->get_frag()));
-    if (p.second.first)
+    if (p.second.first || p.second.second.empty()) {
       dir->fetch(gather.new_sub());
-    else
+    } else {
       dir->fetch_keys(p.second.second, gather.new_sub());
+    }
   }
   ceph_assert(gather.has_subs());
   gather.activate();
@@ -6326,6 +6327,11 @@ void MDCache::identify_files_to_recover()
 {
   dout(10) << "identify_files_to_recover" << dendl;
   int count = 0;
+
+  // Clear the recover and check queues in case the monitor sends rejoin mdsmap twice.
+  rejoin_recover_q.clear();
+  rejoin_check_q.clear();
+
   for (auto &p : inode_map) {
     CInode *in = p.second;
     if (!in->is_auth())
@@ -8004,7 +8010,7 @@ bool MDCache::shutdown_pass()
 
   // (only do this once!)
   if (!mds->mdlog->is_capped()) {
-    dout(7) << "capping the log" << dendl;
+    dout(7) << "capping the mdlog" << dendl;
     mds->mdlog->cap();
   }
   
@@ -8227,6 +8233,10 @@ void MDCache::dispatch(const cref_t<Message> &m)
   case MSG_MDS_DENTRYUNLINK:
     handle_dentry_unlink(ref_cast<MDentryUnlink>(m));
     break;
+  case MSG_MDS_DENTRYUNLINK_ACK:
+    handle_dentry_unlink_ack(ref_cast<MDentryUnlinkAck>(m));
+    break;
+
 
   case MSG_MDS_FRAGMENTNOTIFY:
     handle_fragment_notify(ref_cast<MMDSFragmentNotify>(m));
@@ -9484,6 +9494,19 @@ void MDCache::handle_find_ino(const cref_t<MMDSFindIno> &m)
   if (in) {
     in->make_path(r->path);
     dout(10) << " have " << r->path << " " << *in << dendl;
+
+    /*
+     * If the the CInode was just created by using openc in current
+     * auth MDS, but the client just sends a getattr request to another
+     * replica MDS. Then here it will make a path of '#INODE-NUMBER'
+     * only because the CInode hasn't been linked yet, and the replica
+     * MDS will keep retrying until the auth MDS flushes the mdlog and
+     * the C_MDS_openc_finish and link_primary_inode are called at most
+     * 5 seconds later.
+     */
+    if (!in->get_parent_dn() && in->is_auth()) {
+      mds->mdlog->flush();
+    }
   }
   mds->send_message_mds(r, mds_rank_t(m->get_source().num()));
 }
@@ -9633,9 +9656,14 @@ MDRequestRef MDCache::request_start_internal(int op)
   MDRequestRef mdr =
       mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params*>(&params);
 
-  ceph_assert(active_requests.count(mdr->reqid) == 0);
+  if (active_requests.count(mdr->reqid)) {
+    auto& _mdr = active_requests[mdr->reqid];
+    dout(0) << __func__ << " existing " << *_mdr << " op " << _mdr->internal_op << dendl;
+    dout(0) << __func__ << " new " << *mdr << " op " << op << dendl;
+    ceph_abort();
+  }
   active_requests[mdr->reqid] = mdr;
-  dout(7) << "request_start_internal " << *mdr << " op " << op << dendl;
+  dout(7) << __func__ << " " << *mdr << " op " << op << dendl;
   return mdr;
 }
 
@@ -10092,6 +10120,7 @@ void MDCache::scan_stray_dir(dirfrag_t next)
 	}
       }
     }
+    next.frag = frag_t();
   }
 }
 
@@ -10122,6 +10151,7 @@ void MDCache::_send_discover(discover_info_t& d)
 {
   auto dis = make_message<MDiscover>(d.ino, d.frag, d.snap, d.want_path,
 				     d.want_base_dir, d.path_locked);
+  logger->inc(l_mdc_dir_send_discover);
   dis->set_tid(d.tid);
   mds->send_message_mds(dis, d.mds);
 }
@@ -10311,6 +10341,8 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
   auto reply = make_message<MDiscoverReply>(*dis);
 
   snapid_t snapid = dis->get_snapid();
+
+  logger->inc(l_mdc_dir_handle_discover);
 
   // get started.
   if (MDS_INO_IS_BASE(dis->get_base_ino()) &&
@@ -11022,6 +11054,7 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
     //if (*it == except) continue;
     dout(7) << "sending dir_update on " << *dir << " to " << *it << dendl;
 
+    logger->inc(l_mdc_dir_update);
     mds->send_message_mds(make_message<MDirUpdate>(mds->get_nodeid(), dir->dirfrag(), dir->dir_rep, dir_rep_set, path, bcast), *it);
   }
 
@@ -11032,6 +11065,7 @@ void MDCache::handle_dir_update(const cref_t<MDirUpdate> &m)
 {
   dirfrag_t df = m->get_dirfrag();
   CDir *dir = get_dirfrag(df);
+  logger->inc(l_mdc_dir_update_receipt);
   if (!dir) {
     dout(5) << "dir_update on " << df << ", don't have it" << dendl;
 
@@ -11044,6 +11078,7 @@ void MDCache::handle_dir_update(const cref_t<MDirUpdate> &m)
       CInode *in;
       filepath path = m->get_path();
       dout(5) << "trying discover on dir_update for " << path << dendl;
+      logger->inc(l_mdc_dir_try_discover);
       CF_MDS_RetryMessageFactory cf(mds, m);
       MDRequestRef null_ref;
       int r = path_traverse(null_ref, cf, path, MDS_TRAVERSE_DISCOVER, &trace, &in);
@@ -11169,7 +11204,8 @@ void MDCache::handle_dentry_link(const cref_t<MDentryLink> &m)
 
 // UNLINK
 
-void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr)
+void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn,
+                                 MDRequestRef& mdr, bool unlinking)
 {
   dout(10) << __func__ << " " << *dn << dendl;
   // share unlink news with replicas
@@ -11180,6 +11216,11 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
     straydn->list_replicas(replicas);
     CInode *strayin = straydn->get_linkage()->get_inode();
     strayin->encode_snap_blob(snapbl);
+  }
+
+  if (unlinking) {
+    ceph_assert(!straydn);
+    dn->replica_unlinking_ref = 0;
   }
   for (set<mds_rank_t>::iterator it = replicas.begin();
        it != replicas.end();
@@ -11193,12 +11234,21 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
 	 rejoin_gather.count(*it)))
       continue;
 
-    auto unlink = make_message<MDentryUnlink>(dn->get_dir()->dirfrag(), dn->get_name());
+    auto unlink = make_message<MDentryUnlink>(dn->get_dir()->dirfrag(),
+                                              dn->get_name(), unlinking);
     if (straydn) {
       encode_replica_stray(straydn, *it, unlink->straybl);
       unlink->snapbl = snapbl;
     }
     mds->send_message_mds(unlink, *it);
+    if (unlinking) {
+      dn->replica_unlinking_ref++;
+      dn->get(CDentry::PIN_WAITUNLINKSTATE);
+    }
+  }
+
+  if (unlinking && dn->replica_unlinking_ref) {
+    dn->add_waiter(CDentry::WAIT_UNLINK_STATE, new C_MDS_RetryRequest(this, mdr));
   }
 }
 
@@ -11207,23 +11257,40 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
   // straydn
   CDentry *straydn = nullptr;
   CInode *strayin = nullptr;
+
   if (m->straybl.length())
     decode_replica_stray(straydn, &strayin, m->straybl, mds_rank_t(m->get_source().num()));
+
+  boost::intrusive_ptr<MDentryUnlinkAck> ack;
+  CDentry::linkage_t *dnl;
+  CDentry *dn;
+  CInode *in;
+  bool hadrealm;
 
   CDir *dir = get_dirfrag(m->get_dirfrag());
   if (!dir) {
     dout(7) << __func__ << " don't have dirfrag " << m->get_dirfrag() << dendl;
+    if (m->is_unlinking())
+      goto ack;
   } else {
-    CDentry *dn = dir->lookup(m->get_dn());
+    dn = dir->lookup(m->get_dn());
     if (!dn) {
       dout(7) << __func__ << " don't have dentry " << *dir << " dn " << m->get_dn() << dendl;
+      if (m->is_unlinking())
+        goto ack;
     } else {
       dout(7) << __func__ << " on " << *dn << dendl;
-      CDentry::linkage_t *dnl = dn->get_linkage();
+
+      if (m->is_unlinking()) {
+        dn->state_set(CDentry::STATE_UNLINKING);
+        goto ack;
+      }
+
+      dnl = dn->get_linkage();
 
       // open inode?
       if (dnl->is_primary()) {
-	CInode *in = dnl->get_inode();
+	in = dnl->get_inode();
 	dn->dir->unlink_inode(dn);
 	ceph_assert(straydn);
 	straydn->dir->link_primary_inode(straydn, in);
@@ -11234,11 +11301,12 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	in->first = straydn->first;
 
 	// update subtree map?
-	if (in->is_dir()) 
+	if (in->is_dir()) {
 	  adjust_subtree_after_rename(in, dir, false);
+	}
 
 	if (m->snapbl.length()) {
-	  bool hadrealm = (in->snaprealm ? true : false);
+	  hadrealm = (in->snaprealm ? true : false);
 	  in->decode_snap_blob(m->snapbl);
 	  ceph_assert(in->snaprealm);
 	  if (!hadrealm)
@@ -11249,7 +11317,7 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	if (in->is_any_caps() &&
 	    !in->state_test(CInode::STATE_EXPORTINGCAPS))
 	  migrator->export_caps(in);
-	
+
 	straydn = NULL;
       } else {
 	ceph_assert(!straydn);
@@ -11257,6 +11325,7 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	dn->dir->unlink_inode(dn);
       }
       ceph_assert(dnl->is_null());
+      dn->state_clear(CDentry::STATE_UNLINKING);
     }
   }
 
@@ -11268,8 +11337,36 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
     trim_dentry(straydn, ex);
     send_expire_messages(ex);
   }
+  return;
+
+ack:
+  ack = make_message<MDentryUnlinkAck>(m->get_dirfrag(), m->get_dn());
+  mds->send_message(ack, m->get_connection());
 }
 
+void MDCache::handle_dentry_unlink_ack(const cref_t<MDentryUnlinkAck> &m)
+{
+  CDir *dir = get_dirfrag(m->get_dirfrag());
+  if (!dir) {
+    dout(7) << __func__ << " don't have dirfrag " << m->get_dirfrag() << dendl;
+  } else {
+    CDentry *dn = dir->lookup(m->get_dn());
+    if (!dn) {
+      dout(7) << __func__ << " don't have dentry " << *dir << " dn " << m->get_dn() << dendl;
+    } else {
+      dout(7) << __func__ << " on " << *dn << " ref "
+	      << dn->replica_unlinking_ref << " -> "
+	      << dn->replica_unlinking_ref - 1 << dendl;
+      dn->replica_unlinking_ref--;
+      if (!dn->replica_unlinking_ref) {
+        MDSContext::vec finished;
+        dn->take_waiting(CDentry::WAIT_UNLINK_STATE, finished);
+        mds->queue_waiters(finished);
+      }
+      dn->put(CDentry::PIN_WAITUNLINKSTATE);
+    }
+  }
+}
 
 
 
@@ -13267,6 +13364,17 @@ void MDCache::register_perfcounters()
 {
     PerfCountersBuilder pcb(g_ceph_context, "mds_cache", l_mdc_first, l_mdc_last);
 
+    pcb.add_u64_counter(l_mdc_dir_update, "dir_update",
+                        "Directory replication directives");
+    pcb.add_u64_counter(l_mdc_dir_update_receipt, "dir_update_receipt",
+                        "Directory replication directives received");
+    pcb.add_u64_counter(l_mdc_dir_try_discover, "dir_try_discover",
+                        "Directory replication attempt to discover");
+    pcb.add_u64_counter(l_mdc_dir_send_discover, "dir_send_discover",
+                        "Directory replication discovery message sent");
+    pcb.add_u64_counter(l_mdc_dir_handle_discover, "dir_handle_discover",
+                        "Directory replication discovery message handled");
+
     // Stray/purge statistics
     pcb.add_u64(l_mdc_num_strays, "num_strays", "Stray dentries", "stry",
                 PerfCountersBuilder::PRIO_INTERESTING);
@@ -13378,6 +13486,12 @@ bool MDCache::dump_inode(Formatter *f, uint64_t number) {
   in->dump(f, CInode::DUMP_DEFAULT | CInode::DUMP_PATH);
   f->close_section();
   return true;
+}
+
+void MDCache::dump_dir(Formatter *f, CDir *dir, bool dentry_dump) {
+  f->open_object_section("dir");
+  dir->dump(f, dentry_dump ? CDir::DUMP_ALL : CDir::DUMP_DEFAULT);
+  f->close_section();
 }
 
 void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {

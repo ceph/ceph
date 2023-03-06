@@ -109,6 +109,8 @@ enum {
   l_osdc_op_send_bytes,
   l_osdc_op_resend,
   l_osdc_op_reply,
+  l_osdc_op_latency,
+  l_osdc_op_inflight,
   l_osdc_oplen_avg,
 
   l_osdc_op,
@@ -193,6 +195,7 @@ class Objecter::RequestStateHook : public AdminSocketHook {
 public:
   explicit RequestStateHook(Objecter *objecter);
   int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist&,
 	   Formatter *f,
 	   std::ostream& ss,
 	   cb::list& out) override;
@@ -261,6 +264,8 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_op_send_bytes, "op_send_bytes", "Sent data", NULL, 0, unit_t(UNIT_BYTES));
     pcb.add_u64_counter(l_osdc_op_resend, "op_resend", "Resent operations");
     pcb.add_u64_counter(l_osdc_op_reply, "op_reply", "Operation reply");
+    pcb.add_time_avg(l_osdc_op_latency, "op_latency", "Operation latency");
+    pcb.add_u64(l_osdc_op_inflight, "op_inflight", "Operations in flight");
     pcb.add_u64_avg(l_osdc_oplen_avg, "oplen_avg", "Average length of operation vector");
 
     pcb.add_u64_counter(l_osdc_op, "op", "Operations");
@@ -1219,7 +1224,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  logger->inc(l_osdc_map_full);
 	}
 	else {
-	  if (e >= m->get_oldest()) {
+	  if (e >= m->cluster_osdmap_trim_lower_bound) {
 	    ldout(cct, 3) << "handle_osd_map requesting missing epoch "
 			  << osdmap->get_epoch()+1 << dendl;
 	    _maybe_request_map();
@@ -1227,8 +1232,9 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  }
 	  ldout(cct, 3) << "handle_osd_map missing epoch "
 			<< osdmap->get_epoch()+1
-			<< ", jumping to " << m->get_oldest() << dendl;
-	  e = m->get_oldest() - 1;
+			<< ", jumping to "
+			<< m->cluster_osdmap_trim_lower_bound << dendl;
+	  e = m->cluster_osdmap_trim_lower_bound - 1;
 	  skipped_map = true;
 	  continue;
 	}
@@ -3562,6 +3568,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->onfinish = nullptr;
   }
   logger->inc(l_osdc_op_reply);
+  logger->tinc(l_osdc_op_latency, ceph::coarse_mono_time::clock::now() - op->stamp);
+  logger->set(l_osdc_op_inflight, num_in_flight);
 
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);
@@ -4707,6 +4715,7 @@ Objecter::RequestStateHook::RequestStateHook(Objecter *objecter) :
 
 int Objecter::RequestStateHook::call(std::string_view command,
 				     const cmdmap_t& cmdmap,
+				     const bufferlist&,
 				     Formatter *f,
 				     std::ostream& ss,
 				     cb::list& out)

@@ -91,9 +91,9 @@ void NODE_T::update_is_level_tail(
 }
 
 template <typename FieldType, node_type_t NODE_TYPE>
-template <KeyT KT>
+template <IsFullKey Key>
 memory_range_t NODE_T::insert_prefix_at(
-    NodeExtentMutable& mut, const node_extent_t& node, const full_key_t<KT>& key,
+    NodeExtentMutable& mut, const node_extent_t& node, const Key& key,
     index_t index, node_offset_t size, const char* p_left_bound)
 {
   assert(mut.get_length() == node.node_size);
@@ -107,7 +107,7 @@ memory_range_t NODE_T::insert_prefix_at(
     const char* p_insert = node.p_start() +
                            node.fields().get_item_end_offset(index, mut.get_length());
     const char* p_insert_front = p_insert - size_right;
-    FieldType::template insert_at<KT>(mut, key, node.fields(), index, size_right);
+    FieldType::insert_at(mut, key, node.fields(), index, size_right);
     mut.shift_absolute(p_left_bound,
                        p_insert - p_left_bound,
                        -(int)size_right);
@@ -118,22 +118,22 @@ memory_range_t NODE_T::insert_prefix_at(
     ceph_abort("impossible");
   }
 }
-#define IPA_TEMPLATE(FT, NT, KT)                                         \
-  template memory_range_t NODE_INST(FT, NT)::insert_prefix_at<KT>(       \
-      NodeExtentMutable&, const node_extent_t&, const full_key_t<KT>&, \
+#define IPA_TEMPLATE(FT, NT, Key)                                         \
+  template memory_range_t NODE_INST(FT, NT)::insert_prefix_at<Key>(       \
+      NodeExtentMutable&, const node_extent_t&, const Key&, \
       index_t, node_offset_t, const char*)
-IPA_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL, KeyT::VIEW);
-IPA_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL, KeyT::VIEW);
-IPA_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL, KeyT::VIEW);
-IPA_TEMPLATE(node_fields_0_t, node_type_t::LEAF, KeyT::VIEW);
-IPA_TEMPLATE(node_fields_1_t, node_type_t::LEAF, KeyT::VIEW);
-IPA_TEMPLATE(node_fields_2_t, node_type_t::LEAF, KeyT::VIEW);
-IPA_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL, KeyT::HOBJ);
-IPA_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL, KeyT::HOBJ);
-IPA_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL, KeyT::HOBJ);
-IPA_TEMPLATE(node_fields_0_t, node_type_t::LEAF, KeyT::HOBJ);
-IPA_TEMPLATE(node_fields_1_t, node_type_t::LEAF, KeyT::HOBJ);
-IPA_TEMPLATE(node_fields_2_t, node_type_t::LEAF, KeyT::HOBJ);
+IPA_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL, key_view_t);
+IPA_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL, key_view_t);
+IPA_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL, key_view_t);
+IPA_TEMPLATE(node_fields_0_t, node_type_t::LEAF, key_view_t);
+IPA_TEMPLATE(node_fields_1_t, node_type_t::LEAF, key_view_t);
+IPA_TEMPLATE(node_fields_2_t, node_type_t::LEAF, key_view_t);
+IPA_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL, key_hobj_t);
+IPA_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL, key_hobj_t);
+IPA_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL, key_hobj_t);
+IPA_TEMPLATE(node_fields_0_t, node_type_t::LEAF, key_hobj_t);
+IPA_TEMPLATE(node_fields_1_t, node_type_t::LEAF, key_hobj_t);
+IPA_TEMPLATE(node_fields_2_t, node_type_t::LEAF, key_hobj_t);
 
 template <typename FieldType, node_type_t NODE_TYPE>
 void NODE_T::update_size_at(
@@ -372,9 +372,9 @@ APPEND_T::open_nxt(const full_key_t<KT>& key)
 {
   if constexpr (FIELD_TYPE == field_type_t::N0 ||
                 FIELD_TYPE == field_type_t::N1) {
-    FieldType::template append_key<KT>(*p_mut, key, p_append_left);
+    FieldType::append_key(*p_mut, key, p_append_left);
   } else if constexpr (FIELD_TYPE == field_type_t::N2) {
-    FieldType::template append_key<KT>(*p_mut, key, p_append_right);
+    FieldType::append_key(*p_mut, key, p_append_right);
   } else {
     ceph_abort("impossible path");
   }

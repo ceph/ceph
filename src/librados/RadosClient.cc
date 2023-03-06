@@ -283,7 +283,7 @@ int librados::RadosClient::connect()
     goto out;
   }
 
-  err = monclient.authenticate(conf->client_mount_timeout);
+  err = monclient.authenticate(std::chrono::duration<double>(conf.get_val<std::chrono::seconds>("client_mount_timeout")).count());
   if (err) {
     ldout(cct, 0) << conf->name << " authentication error " << cpp_strerror(-err) << dendl;
     shutdown();

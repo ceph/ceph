@@ -12,10 +12,9 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDRepScrubMap.h"
-#include "messages/MOSDScrub.h"
 #include "messages/MOSDScrubReserve.h"
-
 #include "osd/OSD.h"
+
 #include "scrub_machine.h"
 
 class PrimaryLogPG;
@@ -42,7 +41,8 @@ class PrimaryLogScrub : public PgScrubber {
   void submit_digest_fixes(const digests_fixes_t& fixes) final;
 
  private:
-  // we know our PG is actually a PrimaryLogPG. Let's alias the pointer to that object:
+  // we know our PG is actually a PrimaryLogPG. Let's alias the pointer to that
+  // object:
   PrimaryLogPG* const m_pl_pg;
 
   // handle our part in stats collection

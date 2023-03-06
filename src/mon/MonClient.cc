@@ -154,7 +154,7 @@ int MonClient::get_monmap_and_config()
     if (r < 0) {
       return r;
     }
-    r = authenticate(cct->_conf->client_mount_timeout);
+    r = authenticate(std::chrono::duration<double>(cct->_conf.get_val<std::chrono::seconds>("client_mount_timeout")).count());
     if (r == -ETIMEDOUT) {
       shutdown();
       continue;
@@ -517,12 +517,20 @@ int MonClient::init()
   timer.init();
   schedule_tick();
 
+  cct->get_admin_socket()->register_command(
+    "rotate-key",
+    this,
+    "rotate live authentication key");
+
   return 0;
 }
 
 void MonClient::shutdown()
 {
   ldout(cct, 10) << __func__ << dendl;
+
+  cct->get_admin_socket()->unregister_commands(this);
+  
   monc_lock.lock();
   stopping = true;
   while (!version_requests.empty()) {
@@ -601,6 +609,33 @@ int MonClient::authenticate(double timeout)
   }
 
   return authenticate_err;
+}
+
+int MonClient::call(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    const ceph::buffer::list &inbl,
+    ceph::Formatter *f,
+    std::ostream& errss,
+    ceph::buffer::list& out)
+{
+  if (command == "rotate-key") {
+    CryptoKey key;
+    try {
+      key.decode_base64(inbl.to_str());
+    } catch (buffer::error& e) {
+      errss << "error decoding key: " << e.what();
+      return -EINVAL;
+    }
+    if (keyring) {
+      ldout(cct, 1) << "rotate live key for " << entity_name << dendl;
+      keyring->add(entity_name, key);
+    } else {
+      errss << "cephx not enabled; no key to rotate";
+      return -EINVAL;
+    }
+  }
+  return 0;
 }
 
 void MonClient::handle_auth(MAuthReply *m)
@@ -1025,6 +1060,7 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 
 int MonClient::_check_auth_tickets()
 {
+  ldout(cct, 10) << __func__ << dendl;
   ceph_assert(ceph_mutex_is_locked(monc_lock));
   if (active_con && auth) {
     if (auth->need_tickets()) {
@@ -1830,6 +1866,7 @@ int MonConnection::_negotiate(MAuthReply *m,
 			      uint32_t want_keys,
 			      RotatingKeyRing* keyring)
 {
+  ldout(cct, 10) << __func__ << dendl;
   int r = _init_auth(m->protocol, entity_name, want_keys, keyring, false);
   if (r == -ENOTSUP) {
     if (m->result == -ENOTSUP) {

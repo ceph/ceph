@@ -26,6 +26,14 @@ logger = logging.getLogger(__name__)
 asyncssh_logger = logging.getLogger('asyncssh')
 asyncssh_logger.propagate = False
 
+
+class HostConnectionError(OrchestratorError):
+    def __init__(self, message: str, hostname: str, addr: str) -> None:
+        super().__init__(message)
+        self.hostname = hostname
+        self.addr = addr
+
+
 DEFAULT_SSH_CONFIG = """
 Host *
   User root
@@ -58,7 +66,7 @@ class SSHManager:
                                  host: str,
                                  addr: Optional[str] = None,
                                  ) -> "SSHClientConnection":
-        if not self.cons.get(host):
+        if not self.cons.get(host) or host not in self.mgr.inventory:
             if not addr and host in self.mgr.inventory:
                 addr = self.mgr.inventory.get_addr(host)
 
@@ -104,21 +112,21 @@ class SSHManager:
         except OSError as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
-            msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there. {str(e)}"
+            msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there or you are missing NOPASSWD in sudoers. {str(e)}"
             logger.exception(msg)
-            raise OrchestratorError(msg)
+            raise HostConnectionError(msg, host, addr)
         except asyncssh.Error as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
             msg = f'Failed to connect to {host} ({addr}). {str(e)}' + '\n' + f'Log: {log_content}'
             logger.debug(msg)
-            raise OrchestratorError(msg)
+            raise HostConnectionError(msg, host, addr)
         except Exception as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
             logger.exception(str(e))
-            raise OrchestratorError(
-                f'Failed to connect to {host} ({addr}): {repr(e)}' + '\n' f'Log: {log_content}')
+            raise HostConnectionError(
+                f'Failed to connect to {host} ({addr}): {repr(e)}' + '\n' f'Log: {log_content}', host, addr)
         finally:
             log_string.flush()
             asyncssh_logger.removeHandler(ch)
@@ -134,12 +142,15 @@ class SSHManager:
                                cmd: List[str],
                                stdin: Optional[str] = None,
                                addr: Optional[str] = None,
+                               log_command: Optional[bool] = True,
                                ) -> Tuple[str, str, int]:
         conn = await self._remote_connection(host, addr)
-        cmd = "sudo " + " ".join(quote(x) for x in cmd)
-        logger.debug(f'Running command: {cmd}')
+        sudo_prefix = "sudo " if self.mgr.ssh_user != 'root' else ""
+        cmd = sudo_prefix + " ".join(quote(x) for x in cmd)
+        if log_command:
+            logger.debug(f'Running command: {cmd}')
         try:
-            r = await conn.run('sudo true', check=True, timeout=5)
+            r = await conn.run(f'{sudo_prefix}true', check=True, timeout=5)
             r = await conn.run(cmd, input=stdin)
         # handle these Exceptions otherwise you might get a weird error like TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
         except (asyncssh.ChannelOpenError, asyncssh.ProcessError, Exception) as e:
@@ -147,7 +158,12 @@ class SSHManager:
             logger.debug(f'Connection to {host} failed. {str(e)}')
             await self._reset_con(host)
             self.mgr.offline_hosts.add(host)
-            raise OrchestratorError(f'Unable to reach remote host {host}. {str(e)}')
+            if not addr:
+                try:
+                    addr = self.mgr.inventory.get_addr(host)
+                except Exception:
+                    addr = host
+            raise HostConnectionError(f'Unable to reach remote host {host}. {str(e)}', host, addr)
 
         def _rstrip(v: Union[bytes, str, None]) -> str:
             if not v:
@@ -170,16 +186,18 @@ class SSHManager:
                         cmd: List[str],
                         stdin: Optional[str] = None,
                         addr: Optional[str] = None,
+                        log_command: Optional[bool] = True
                         ) -> Tuple[str, str, int]:
-        return self.mgr.wait_async(self._execute_command(host, cmd, stdin, addr))
+        return self.mgr.wait_async(self._execute_command(host, cmd, stdin, addr, log_command))
 
     async def _check_execute_command(self,
                                      host: str,
                                      cmd: List[str],
                                      stdin: Optional[str] = None,
                                      addr: Optional[str] = None,
+                                     log_command: Optional[bool] = True
                                      ) -> str:
-        out, err, code = await self._execute_command(host, cmd, stdin, addr)
+        out, err, code = await self._execute_command(host, cmd, stdin, addr, log_command)
         if code != 0:
             msg = f'Command {cmd} failed. {err}'
             logger.debug(msg)
@@ -191,8 +209,9 @@ class SSHManager:
                               cmd: List[str],
                               stdin: Optional[str] = None,
                               addr: Optional[str] = None,
+                              log_command: Optional[bool] = True,
                               ) -> str:
-        return self.mgr.wait_async(self._check_execute_command(host, cmd, stdin, addr))
+        return self.mgr.wait_async(self._check_execute_command(host, cmd, stdin, addr, log_command))
 
     async def _write_remote_file(self,
                                  host: str,

@@ -32,10 +32,9 @@ Dokany
 
 In order to mount Ceph filesystems, ``ceph-dokan`` requires Dokany to be
 installed. You may fetch the installer as well as the source code from the
-Dokany Github repository: https://github.com/dokan-dev/dokany/releases
+Dokany GitHub repository: https://github.com/dokan-dev/dokany/releases
 
-The minimum supported Dokany version is 1.3.1. At the time of the writing,
-Dokany 2.0 is in Beta stage and is unsupported.
+Make sure to install Dokany 2.0.5 or later.
 
 Unlike ``WNBD``, Dokany isn't included in the Ceph MSI installer.
 

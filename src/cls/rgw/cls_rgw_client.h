@@ -219,7 +219,7 @@ public:
    * 2. One or more shards, shard id specified for each shard, e.g., 0#00002.12,1#00003.23.2
    *
    */
-  int from_string(const std::string& composed_marker, int shard_id) {
+  int from_string(std::string_view composed_marker, int shard_id) {
     value_by_shards.clear();
     std::vector<std::string> shards;
     get_str_vec(composed_marker, SHARDS_SEPARATOR.c_str(), shards);
@@ -609,7 +609,7 @@ int cls_rgw_gc_list(librados::IoCtx& io_ctx, std::string& oid, std::string& mark
 #ifndef CLS_CLIENT_HIDE_IOCTX
 int cls_rgw_lc_get_head(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw_lc_obj_head& head);
 int cls_rgw_lc_put_head(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw_lc_obj_head& head);
-int cls_rgw_lc_get_next_entry(librados::IoCtx& io_ctx, const std::string& oid, std::string& marker, cls_rgw_lc_entry& entry);
+int cls_rgw_lc_get_next_entry(librados::IoCtx& io_ctx, const std::string& oid, const std::string& marker, cls_rgw_lc_entry& entry);
 int cls_rgw_lc_rm_entry(librados::IoCtx& io_ctx, const std::string& oid, const cls_rgw_lc_entry& entry);
 int cls_rgw_lc_set_entry(librados::IoCtx& io_ctx, const std::string& oid, const cls_rgw_lc_entry& entry);
 int cls_rgw_lc_get_entry(librados::IoCtx& io_ctx, const std::string& oid, const std::string& marker, cls_rgw_lc_entry& entry);
@@ -617,6 +617,9 @@ int cls_rgw_lc_list(librados::IoCtx& io_ctx, const std::string& oid,
 		    const std::string& marker, uint32_t max_entries,
                     std::vector<cls_rgw_lc_entry>& entries);
 #endif
+
+/* multipart */
+void cls_rgw_mp_upload_part_info_update(librados::ObjectWriteOperation& op, const std::string& part_key, const RGWUploadPartInfo& info);
 
 /* resharding */
 void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry);

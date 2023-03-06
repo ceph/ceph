@@ -364,8 +364,11 @@ class PgAutoscaler(MgrModule):
                     if prev_root_id != root_id:
                         overlapped_roots.add(prev_root_id)
                         overlapped_roots.add(root_id)
-                        self.log.error('pool %d has overlapping roots: %s',
-                                       pool_id, overlapped_roots)
+                        self.log.warning("pool %s won't scale due to overlapping roots: %s",
+                                       pool['pool_name'], overlapped_roots)
+                        self.log.warning("Please See: https://docs.ceph.com/en/"
+                                         "latest/rados/operations/placement-groups"
+                                         "/#automated-scaling")
                     break
             if not s:
                 s = CrushSubtreeResourceStatus()
@@ -553,7 +556,7 @@ class PgAutoscaler(MgrModule):
             capacity = root_map[root_id].capacity
             assert capacity is not None
             if capacity == 0:
-                self.log.debug('skipping empty subtree %s', cr_name)
+                self.log.debug("skipping empty subtree {0}".format(cr_name))
                 continue
 
             raw_used_rate = osdmap.pool_raw_used_rate(pool_id)
@@ -602,7 +605,8 @@ class PgAutoscaler(MgrModule):
             if (final_pg_target > p['pg_num_target'] * threshold or
                     final_pg_target < p['pg_num_target'] / threshold) and \
                     final_ratio >= 0.0 and \
-                    final_ratio <= 1.0:
+                    final_ratio <= 1.0 and \
+                    p['pg_autoscale_mode'] == 'on':
                 adjust = True
 
             assert pool_pg_target is not None

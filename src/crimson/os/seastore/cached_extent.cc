@@ -35,6 +35,12 @@ void intrusive_ptr_release(CachedExtent *ptr)
 
 #endif
 
+bool is_backref_mapped_extent_node(const CachedExtentRef &extent) {
+  return extent->is_logical()
+    || is_lba_node(extent->get_type())
+    || extent->get_type() == extent_types_t::TEST_BLOCK_PHYSICAL;
+}
+
 std::ostream &operator<<(std::ostream &out, CachedExtent::extent_state_t state)
 {
   switch (state) {
@@ -48,6 +54,10 @@ std::ostream &operator<<(std::ostream &out, CachedExtent::extent_state_t state)
     return out << "CLEAN";
   case CachedExtent::extent_state_t::DIRTY:
     return out << "DIRTY";
+  case CachedExtent::extent_state_t::EXIST_CLEAN:
+    return out << "EXIST_CLEAN";
+  case CachedExtent::extent_state_t::EXIST_MUTATION_PENDING:
+    return out << "EXIST_MUTATION_PENDING";
   case CachedExtent::extent_state_t::INVALID:
     return out << "INVALID";
   default:
@@ -82,7 +92,7 @@ std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
 std::ostream &operator<<(std::ostream &out, const LBAPin &rhs)
 {
   return out << "LBAPin(" << rhs.get_key() << "~" << rhs.get_length()
-	     << "->" << rhs.get_paddr();
+	     << "->" << rhs.get_val();
 }
 
 std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs)

@@ -1,9 +1,9 @@
 <ng-container *ngIf="selection">
-  <ul ngbNav
-      #nav="ngbNav"
-      class="nav-tabs"
-      cdStatefulTab="rgw-user-details">
-    <li ngbNavItem="details">
+  <nav ngbNav
+       #nav="ngbNav"
+       class="nav-tabs"
+       cdStatefulTab="rgw-user-details">
+    <ng-container ngbNavItem="details">
       <a ngbNavLink
          i18n>Details</a>
       <ng-template ngbNavContent>
@@ -145,9 +145,9 @@
           </div>
         </div>
       </ng-template>
-    </li>
-    <li ngbNavItem="keys"
-        *ngIf="keys.length">
+    </ng-container>
+    <ng-container ngbNavItem="keys"
+                  *ngIf="keys.length">
       <a ngbNavLink
          i18n>Keys</a>
       <ng-template ngbNavContent>
@@ -171,8 +171,8 @@
           </div>
         </cd-table>
       </ng-template>
-    </li>
-  </ul>
+    </ng-container>
+  </nav>
 
   <div [ngbNavOutlet]="nav"></div>
 </ng-container>

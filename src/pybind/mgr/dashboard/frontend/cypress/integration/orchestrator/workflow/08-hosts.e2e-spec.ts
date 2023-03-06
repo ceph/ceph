@@ -18,7 +18,7 @@ describe('Host Page', () => {
   // rgw is needed for testing the force maintenance
   it('should create rgw services', () => {
     services.navigateTo('create');
-    services.addService('rgw', false, '4');
+    services.addService('rgw', false, 4);
     services.checkExist('rgw.foo', true);
   });
 
@@ -31,7 +31,7 @@ describe('Host Page', () => {
     }
   });
 
-  it('should force maintenance and exit', { retries: 2 }, () => {
+  it('should force maintenance and exit', () => {
     hosts.maintenance(hostnames[3], true, true);
   });
 
@@ -41,5 +41,9 @@ describe('Host Page', () => {
     hosts.navigateTo('add');
     hosts.add(hostnames[3]);
     hosts.checkExist(hostnames[3], true);
+  });
+
+  it('should show the exact count of daemons', () => {
+    hosts.checkServiceInstancesExist(hostnames[0], ['mgr: 1', 'prometheus: 1']);
   });
 });

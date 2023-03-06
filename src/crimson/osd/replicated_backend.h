@@ -21,10 +21,11 @@ class ReplicatedBackend : public PGBackend
 public:
   ReplicatedBackend(pg_t pgid, pg_shard_t whoami,
 		    CollectionRef coll,
-		    crimson::osd::ShardServices& shard_services);
+		    crimson::osd::ShardServices& shard_services,
+		    DoutPrefixProvider &dpp);
   void got_rep_op_reply(const MOSDRepOpReply& reply) final;
   seastar::future<> stop() final;
-  void on_actingset_changed(peering_info_t pi) final;
+  void on_actingset_changed(bool same_primary) final;
 private:
   ll_read_ierrorator::future<ceph::bufferlist>
     _read(const hobject_t& hoid, uint64_t off,
@@ -37,8 +38,6 @@ private:
     std::vector<pg_log_entry_t>&& log_entries) final;
   const pg_t pgid;
   const pg_shard_t whoami;
-  crimson::osd::ShardServices& shard_services;
-  ceph_tid_t next_txn_id = 0;
   class pending_on_t : public seastar::weakly_referencable<pending_on_t> {
   public:
     pending_on_t(size_t pending, const eversion_t& at_version)

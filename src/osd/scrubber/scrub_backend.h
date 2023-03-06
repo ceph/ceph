@@ -46,15 +46,17 @@
 #include <string_view>
 
 #include "common/LogClient.h"
-#include "common/scrub_types.h"
+#include "osd/OSDMap.h"
+#include "osd/osd_types_fmt.h"
+#include "osd/scrubber_common.h"
+#include "osd/SnapMapReaderI.h"
 
 struct ScrubMap;
 
 class PG;
 class PgScrubber;
-class PGBackend;
-class PGPool;
-
+struct PGPool;
+using Scrub::PgScrubBeListener;
 
 using data_omap_digests_t =
   std::pair<std::optional<uint32_t>, std::optional<uint32_t>>;
@@ -83,41 +85,25 @@ struct error_counters_t {
   int deep_errors{0};
 };
 
-/*
- * snaps-related aux structures:
- * the scrub-backend scans the snaps associated with each scrubbed object, and
- * fixes corrupted snap-sets.
- * The actual access to the PG's snap_mapper, and the actual I/O transactions,
- * are performed by the main PgScrubber object.
- * the following aux structures are used to facilitate the required exchanges:
- * - pre-fix snap-sets are accessed by the scrub-backend, and:
- * - a list of fix-orders (either insert or replace operations) are returned
- */
-
-struct SnapMapperAccessor {
-  virtual int get_snaps(const hobject_t& hoid,
-                        std::set<snapid_t>* snaps_set) const = 0;
-  virtual ~SnapMapperAccessor() = default;
+// the PgScrubber services used by the backend
+struct ScrubBeListener {
+  virtual std::ostream& gen_prefix(std::ostream& out) const = 0;
+  virtual CephContext* get_pg_cct() const = 0;
+  virtual LoggerSinkSet& get_logger() const = 0;
+  virtual bool is_primary() const = 0;
+  virtual spg_t get_pgid() const = 0;
+  virtual const OSDMapRef& get_osdmap() const = 0;
+  virtual void add_to_stats(const object_stat_sum_t& stat) = 0;
+  virtual void submit_digest_fixes(const digests_fixes_t& fixes) = 0;
+  virtual ~ScrubBeListener() = default;
 };
 
-enum class snap_mapper_op_t {
-  add,
-  update,
-};
-
-struct snap_mapper_fix_t {
-  snap_mapper_op_t op;
-  hobject_t hoid;
-  std::set<snapid_t> snaps;
-  std::set<snapid_t> wrong_snaps;  // only collected & returned for logging sake
-};
-
-// and - as the main scrub-backend entry point - scrub_compare_maps() - must
+// As the main scrub-backend entry point - scrub_compare_maps() - must
 // be able to return both a list of snap fixes and a list of inconsistent
 // objects:
 struct objs_fix_list_t {
   inconsistent_objs_t inconsistent_objs;
-  std::vector<snap_mapper_fix_t> snap_fix_list;
+  std::vector<Scrub::snap_mapper_fix_t> snap_fix_list;
 };
 
 /**
@@ -301,23 +287,22 @@ struct scrub_chunk_t {
 class ScrubBackend {
  public:
   // Primary constructor
-  ScrubBackend(PgScrubber& scrubber,
-               PGBackend& backend,
-               PG& pg,
+  ScrubBackend(ScrubBeListener& scrubber,
+               PgScrubBeListener& pg,
                pg_shard_t i_am,
                bool repair,
                scrub_level_t shallow_or_deep,
                const std::set<pg_shard_t>& acting);
 
   // Replica constructor: no primary map
-  ScrubBackend(PgScrubber& scrubber,
-               PGBackend& backend,
-               PG& pg,
+  ScrubBackend(ScrubBeListener& scrubber,
+               PgScrubBeListener& pg,
                pg_shard_t i_am,
                bool repair,
                scrub_level_t shallow_or_deep);
 
   friend class PgScrubber;
+  friend class TestScrubBackend;
 
   /**
    * reset the per-chunk data structure (scrub_chunk_t).
@@ -336,11 +321,11 @@ class ScrubBackend {
    */
   void update_repair_status(bool should_repair);
 
-  std::vector<snap_mapper_fix_t> replica_clean_meta(
+  std::vector<Scrub::snap_mapper_fix_t> replica_clean_meta(
     ScrubMap& smap,
     bool max_reached,
     const hobject_t& start,
-    SnapMapperAccessor& snaps_getter);
+    Scrub::SnapMapReaderI& snaps_getter);
 
   /**
    * decode the arriving MOSDRepScrubMap message, placing the replica's
@@ -351,11 +336,9 @@ class ScrubBackend {
   void decode_received_map(pg_shard_t from, const MOSDRepScrubMap& msg);
 
   objs_fix_list_t scrub_compare_maps(bool max_reached,
-                                     SnapMapperAccessor& snaps_getter);
+				     Scrub::SnapMapReaderI& snaps_getter);
 
   int scrub_process_inconsistent();
-
-  void repair_oinfo_oid(ScrubMap& smap);
 
   const omap_stat_t& this_scrub_omapstats() const { return m_omap_stats; }
 
@@ -365,9 +348,8 @@ class ScrubBackend {
 
  private:
   // set/constructed at the ctor():
-  PgScrubber& m_scrubber;
-  PGBackend& m_pgbe;
-  PG& m_pg;
+  ScrubBeListener& m_scrubber;
+  Scrub::PgScrubBeListener& m_pg;
   const pg_shard_t m_pg_whoami;
   bool m_repair;
   const scrub_level_t m_depth;
@@ -387,7 +369,7 @@ class ScrubBackend {
 
   // shorthands:
   ConfigProxy& m_conf;
-  LogChannelRef clog;
+  LoggerSinkSet& clog;
 
  private:
 
@@ -518,19 +500,55 @@ class ScrubBackend {
   /**
    * returns a list of snaps "fix orders"
    */
-  std::vector<snap_mapper_fix_t> scan_snaps(
+  std::vector<Scrub::snap_mapper_fix_t> scan_snaps(
     ScrubMap& smap,
-    SnapMapperAccessor& snaps_getter);
+    Scrub::SnapMapReaderI& snaps_getter);
 
   /**
    * an aux used by scan_snaps(), possibly returning a fix-order
    * for a specific hobject.
    */
-  std::optional<snap_mapper_fix_t> scan_object_snaps(
+  std::optional<Scrub::snap_mapper_fix_t> scan_object_snaps(
     const hobject_t& hoid,
     const SnapSet& snapset,
-    SnapMapperAccessor& snaps_getter);
+    Scrub::SnapMapReaderI& snaps_getter);
 
   // accessing the PG backend for this translation service
   uint64_t logical_to_ondisk_size(uint64_t logical_size) const;
+};
+
+template <>
+struct fmt::formatter<data_omap_digests_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const data_omap_digests_t& dg, FormatContext& ctx)
+  {
+    // can't use value_or() due to different output types
+    if (std::get<0>(dg).has_value()) {
+      fmt::format_to(ctx.out(), "[{:#x}/", std::get<0>(dg).value());
+    } else {
+      fmt::format_to(ctx.out(), "[---/");
+    }
+    if (std::get<1>(dg).has_value()) {
+      return fmt::format_to(ctx.out(), "{:#x}]", std::get<1>(dg).value());
+    } else {
+      return fmt::format_to(ctx.out(), "---]");
+    }
+  }
+};
+
+template <>
+struct fmt::formatter<std::pair<hobject_t, data_omap_digests_t>> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const std::pair<hobject_t, data_omap_digests_t>& x,
+	      FormatContext& ctx) const
+  {
+    return fmt::format_to(ctx.out(),
+			  "{{ {} - {} }}",
+			  std::get<0>(x),
+			  std::get<1>(x));
+  }
 };

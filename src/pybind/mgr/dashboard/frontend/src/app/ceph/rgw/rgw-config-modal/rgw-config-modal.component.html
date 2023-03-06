@@ -1,0 +1,237 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">Update RGW Encryption Configurations</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="configForm"
+          #frm="ngForm"
+          [formGroup]="configForm">
+    <div class="modal-body">
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="encryptionType"
+               i18n>Encryption Type</label>
+        <div class="col-md-auto custom-checkbox form-check-inline ms-3">
+          <input class="form-check-input"
+                 formControlName="encryptionType"
+                 id="s3Enabled"
+                 type="radio"
+                 name="encryptionType"
+                 value="AES256">
+          <label class="custom-check-label"
+                 for="s3Enabled"
+                 i18n>SSE-S3 Encryption</label>
+        </div>
+
+        <div class="col-md-auto custom-checkbox form-check-inline">
+          <input class="form-check-input"
+                 formControlName="encryptionType"
+                 id="kmsEnabled"
+                 name="encryptionType"
+                 value="aws:kms"
+                 type="radio">
+          <label class="custom-check-label"
+                 for="kmsEnabled"
+                 i18n>SSE-KMS Encryption</label>
+        </div>
+      </div>
+
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="kms_provider"
+                 i18n>Key management service provider</label>
+          <div class="cd-col-form-input">
+            <select id="kms_provider"
+                    name="kms_provider"
+                    class="form-select"
+                    formControlName="kms_provider">
+              <option i18n
+                      *ngIf="kmsProviders !== null"
+                      [ngValue]="null">-- Select a provider --</option>
+              <option *ngFor="let provider of kmsProviders"
+                      [value]="provider">{{ provider }}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="configForm.showError('kms_provider', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="auth_method"
+                 i18n>Authentication Method</label>
+          <div class="cd-col-form-input">
+            <select id="auth_method"
+                    name="auth_method"
+                    class="form-select"
+                    formControlName="auth_method">
+              <option i18n
+                      *ngIf="authMethods !== null"
+                      [ngValue]="null">-- Select a method --</option>
+              <option *ngFor="let auth_method of authMethods"
+                      [value]="auth_method">{{ auth_method }}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="configForm.showError('auth_method', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="secret_engine"
+                 i18n>Secret Engine</label>
+          <div class="cd-col-form-input">
+            <select id="secret_engine"
+                    name="secret_engine"
+                    class="form-select"
+                    formControlName="secret_engine">
+              <option i18n
+                      *ngIf="secretEngines !== null"
+                      [ngValue]="null">-- Select a method --</option>
+              <option *ngFor="let secret_engine of secretEngines"
+                      [value]="secret_engine">{{ secret_engine }}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="configForm.showError('secret_engine', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="secret_path"
+                 i18n>Secret Path
+          </label>
+          <div class="cd-col-form-input">
+            <input id="secret_path"
+                   name="secret_path"
+                   class="form-control"
+                   type="text"
+                   formControlName="secret_path">
+            <span class="invalid-feedback"
+                  *ngIf="configForm.showError('secret_path', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="namespace"
+                 i18n>Namespace
+          </label>
+          <div class="cd-col-form-input">
+            <input id="namespace"
+                   name="namespace"
+                   class="form-control"
+                   type="text"
+                   formControlName="namespace">
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="address"
+                 i18n>Vault Address
+          </label>
+          <div class="cd-col-form-input">
+            <input id="address"
+                   name="address"
+                   class="form-control"
+                   formControlName="address">
+            <span class="invalid-feedback"
+                  *ngIf="configForm.showError('address', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="configForm.getValue('auth_method') === 'token'"
+           class="form-group row">
+        <label class="cd-col-form-label required"
+               for="token">
+        <span i18n>Token</span>
+        </label>
+        <div class="cd-col-form-input">
+          <input type="file"
+                 formControlName="token"
+                 (change)="fileUpload($event.target.files, 'token')">
+          <span class="invalid-feedback"
+                *ngIf="configForm.showError('token', frm, 'required')"
+                i18n>This field is required.</span>
+        </div>
+      </div>
+
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="ssl_cert">
+          <span i18n>CA Certificate</span>
+          <cd-helper i18n>The SSL certificate in PEM format.</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="file"
+                   formControlName="ssl_cert"
+                   (change)="fileUpload($event.target.files, 'ssl_cert')">
+            <span class="invalid-feedback"
+                  *ngIf="configForm.showError('ssl_cert', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="client_cert">
+          <span i18n>Client Certificate</span>
+          <cd-helper i18n>The Client certificate in PEM format.</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="file"
+                   formControlName="client_cert"
+                   (change)="fileUpload($event.target.files, 'client_cert')">
+            <span class="invalid-feedback"
+                  *ngIf="configForm.showError('client_cert', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="client_key">
+          <span i18n>Client Private Key</span>
+          <cd-helper i18n>The Client Private Key in PEM format.</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="file"
+                   (change)="fileUpload($event.target.files, 'client_key')">
+            <span class="invalid-feedback"
+                  *ngIf="configForm.showError('client_key', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                            [submitText]="actionLabels.SUBMIT"
+                            [form]="configForm"></cd-form-button-panel>
+    </div>
+    </form>
+  </ng-container>
+</cd-modal>

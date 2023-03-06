@@ -16,11 +16,12 @@ class TestOSDPath(object):
         with pytest.raises(exceptions.SuperUserError):
             self.validator('')
 
-    def test_path_is_not_a_directory(self, is_root, tmpfile, monkeypatch):
+    def test_path_is_not_a_directory(self, is_root, monkeypatch, fake_filesystem):
+        fake_file = fake_filesystem.create_file('/tmp/foo')
         monkeypatch.setattr(arg_validators.disk, 'is_partition', lambda x: False)
         validator = arg_validators.OSDPath()
         with pytest.raises(argparse.ArgumentError):
-            validator(tmpfile())
+            validator(fake_file.path)
 
     def test_files_are_missing(self, is_root, tmpdir, monkeypatch):
         tmppath = str(tmpdir)
@@ -78,16 +79,25 @@ class TestExcludeGroupOptions(object):
 
 class TestValidDevice(object):
 
-    def setup(self):
+    def setup(self, fake_filesystem):
         self.validator = arg_validators.ValidDevice()
 
     @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
-    def test_path_is_valid(self, m_has_bs_label, fake_call, patch_bluestore_label):
-        result = self.validator('/')
-        assert result.abspath == '/'
+    def test_path_is_valid(self, m_has_bs_label,
+                           fake_call, patch_bluestore_label,
+                           device_info, monkeypatch):
+        monkeypatch.setattr('ceph_volume.util.device.Device.exists', lambda: True)
+        lsblk = {"TYPE": "disk", "NAME": "sda"}
+        device_info(lsblk=lsblk)
+        result = self.validator('/dev/sda')
+        assert result.path == '/dev/sda'
 
     @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
-    def test_path_is_invalid(self, m_has_bs_label, fake_call, patch_bluestore_label):
+    def test_path_is_invalid(self, m_has_bs_label,
+                             fake_call, patch_bluestore_label,
+                             device_info):
+        lsblk = {"TYPE": "disk", "NAME": "sda"}
+        device_info(lsblk=lsblk)
         with pytest.raises(argparse.ArgumentError):
             self.validator('/device/does/not/exist')
 

@@ -52,6 +52,14 @@ public:
   virtual ~DoutPrefixProvider() {}
 };
 
+inline std::ostream &operator<<(
+  std::ostream &lhs, const DoutPrefixProvider &dpp) {
+  return dpp.gen_prefix(lhs);
+}
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<DoutPrefixProvider> : fmt::ostream_formatter {};
+#endif
+
 // a prefix provider with empty prefix
 class NoDoutPrefix : public DoutPrefixProvider {
   CephContext *const cct;
@@ -132,16 +140,6 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
       _logger.log(crimson::to_log_level(_lv),   \
                   "{}", _out.str().c_str());    \
     }                                           \
-  } while (0)
-#elif defined(WITH_SEASTAR) && defined(WITH_ALIEN)
-#define dout_impl(cct, sub, v)						\
-  do {									\
-  if (0) {							\
-    ceph::logging::MutableEntry _dout_e(v, sub);                        \
-    std::ostream* _dout = &_dout_e.get_ostream();
-
-#define dendl_impl std::flush;                                          \
-  }                                                                     \
   } while (0)
 #else
 #define dout_impl(cct, sub, v)						\

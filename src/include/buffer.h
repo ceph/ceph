@@ -127,7 +127,6 @@ struct error_code;
   class raw_static;
   class raw_posix_aligned;
   class raw_hack_aligned;
-  class raw_char;
   class raw_claimed_char;
   class raw_unshareable; // diagnostic, unshareable char buffer
   class raw_combined;
@@ -154,11 +153,11 @@ struct error_code;
 #ifdef HAVE_SEASTAR
   /// create a raw buffer to wrap seastar cpu-local memory, using foreign_ptr to
   /// make it safe to share between cpus
-  ceph::unique_leakable_ptr<buffer::raw> create_foreign(seastar::temporary_buffer<char>&& buf);
+  ceph::unique_leakable_ptr<buffer::raw> create(seastar::temporary_buffer<char>&& buf);
   /// create a raw buffer to wrap seastar cpu-local memory, without the safety
   /// of foreign_ptr. the caller must otherwise guarantee that the buffer ptr is
   /// destructed on this cpu
-  ceph::unique_leakable_ptr<buffer::raw> create(seastar::temporary_buffer<char>&& buf);
+  ceph::unique_leakable_ptr<buffer::raw> create_local(seastar::temporary_buffer<char>&& buf);
 #endif
 
   /*
@@ -250,7 +249,6 @@ struct error_code;
 
     bool have_raw() const { return _raw ? true:false; }
 
-    ceph::unique_leakable_ptr<raw> clone();
     void swap(ptr& other) noexcept;
 
     iterator begin(size_t offset=0) {
@@ -596,13 +594,13 @@ struct error_code;
 	}
       }
       void clear_and_dispose() {
-	for (auto it = begin(); it != end(); /* nop */) {
-	  auto& node = *it;
-	  it = it->next;
-	  ptr_node::disposer()(&node);
-	}
-	_root.next = &_root;
-	_tail = &_root;
+        ptr_node::disposer dispose;
+        for (auto it = begin(), e = end(); it != e; /* nop */) {
+          auto& node = *it++;
+          dispose(&node);
+        }
+        _tail = &_root;
+        _root.next = _tail;
       }
       iterator erase_after_and_dispose(iterator it) {
 	auto* to_dispose = &*std::next(it);

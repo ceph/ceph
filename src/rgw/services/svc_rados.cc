@@ -6,8 +6,8 @@
 #include "include/rados/librados.hpp"
 #include "common/errno.h"
 #include "osd/osd_types.h"
-#include "rgw/rgw_tools.h"
-#include "rgw/rgw_cr_rados.h"
+#include "rgw_tools.h"
+#include "rgw_cr_rados.h"
 
 #include "auth/AuthRegistry.h"
 
@@ -41,6 +41,14 @@ int RGWSI_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)
 }
 
 void RGWSI_RADOS::shutdown()
+{
+  if (async_processor) {
+    async_processor->stop();
+  }
+  rados.shutdown();
+}
+
+void RGWSI_RADOS::stop_processor()
 {
   if (async_processor) {
     async_processor->stop();
@@ -322,11 +330,21 @@ int RGWSI_RADOS::Pool::List::init(const DoutPrefixProvider *dpp, const string& m
     return -EINVAL;
   }
 
-  ctx.iter = ctx.ioctx.nobjects_begin(oc);
-  ctx.filter = filter;
-  ctx.initialized = true;
-
-  return 0;
+  try {
+    ctx.iter = ctx.ioctx.nobjects_begin(oc);
+    ctx.filter = filter;
+    ctx.initialized = true;
+    return 0;
+  } catch (const std::system_error& e) {
+    r = -e.code().value();
+    ldpp_dout(dpp, 10) << "nobjects_begin threw " << e.what()
+       << ", returning " << r << dendl;
+    return r;
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 10) << "nobjects_begin threw " << e.what()
+       << ", returning -5" << dendl;
+    return -EIO;
+  }
 }
 
 int RGWSI_RADOS::Pool::List::get_next(const DoutPrefixProvider *dpp,

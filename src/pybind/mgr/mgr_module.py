@@ -329,6 +329,26 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 
 HandlerFuncType = Callable[..., Tuple[int, str, str]]
 
+def _extract_target_func(
+    f: HandlerFuncType
+) -> Tuple[HandlerFuncType, Dict[str, Any]]:
+    """In order to interoperate with other decorated functions,
+    we need to find the original function which will provide
+    the main set of arguments. While we descend through the
+    stack of wrapped functions, gather additional arguments
+    the decorators may want to provide.
+    """
+    # use getattr to keep mypy happy
+    wrapped = getattr(f, "__wrapped__", None)
+    if not wrapped:
+        return f, {}
+    extra_args = {}
+    while wrapped is not None:
+        extra_args.update(getattr(f, "extra_args", {}))
+        f = wrapped
+        wrapped = getattr(f, "__wrapped__", None)
+    return f, extra_args
+
 
 class CLICommand(object):
     COMMANDS = {}  # type: Dict[str, CLICommand]
@@ -346,8 +366,9 @@ class CLICommand(object):
 
     KNOWN_ARGS = '_', 'self', 'mgr', 'inbuf', 'return'
 
-    @staticmethod
-    def load_func_metadata(f: HandlerFuncType) -> Tuple[str, Dict[str, Any], int, str]:
+    @classmethod
+    def _load_func_metadata(cls: Any, f: HandlerFuncType) -> Tuple[str, Dict[str, Any], int, str]:
+        f, extra_args = _extract_target_func(f)
         desc = (inspect.getdoc(f) or '').replace('\n', ' ')
         full_argspec = inspect.getfullargspec(f)
         arg_spec = full_argspec.annotations
@@ -357,7 +378,7 @@ class CLICommand(object):
         args = []
         positional = True
         for index, arg in enumerate(full_argspec.args):
-            if arg in CLICommand.KNOWN_ARGS:
+            if arg in cls.KNOWN_ARGS:
                 continue
             if arg == '_end_positional_':
                 positional = False
@@ -377,11 +398,19 @@ class CLICommand(object):
                                                dict(name=arg),
                                                has_default,
                                                positional))
+        for argname, argtype in extra_args.items():
+            # avoid shadowing args from the function
+            if argname in arg_spec:
+                continue
+            arg_spec[argname] = argtype
+            args.append(CephArgtype.to_argdesc(
+                argtype, dict(name=argname), has_default=True, positional=False
+            ))
         return desc, arg_spec, first_default, ' '.join(args)
 
     def store_func_metadata(self, f: HandlerFuncType) -> None:
         self.desc, self.arg_spec, self.first_default, self.args = \
-            self.load_func_metadata(f)
+            self._load_func_metadata(f)
 
     def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
         self.store_func_metadata(func)
@@ -856,6 +885,9 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
             return socket.gethostname()
         return ips[0]
 
+    def get_hostname(self) -> str:
+        return socket.gethostname()
+
     def get_localized_module_option(self, key: str, default: OptionValue = None) -> OptionValue:
         r = self._ceph_get_module_option(key, self.get_mgr_id())
         if r is None:
@@ -1170,6 +1202,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         db.execute('PRAGMA JOURNAL_MODE = PERSIST')
         db.execute('PRAGMA PAGE_SIZE = 65536')
         db.execute('PRAGMA CACHE_SIZE = 64')
+        db.execute('PRAGMA TEMP_STORE = memory')
         db.row_factory = sqlite3.Row
         self.load_schema(db)
 
@@ -1535,7 +1568,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :rtype: dict, or None if no metadata found
         """
         metadata = self._ceph_get_metadata(svc_type, svc_id)
-        if metadata is None:
+        if not metadata:
             return default
         return metadata
 
@@ -1607,6 +1640,31 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         self.log.debug("osd_command: '{0}' -> {1} in {2:.3f}s".format(
             cmd_dict['prefix'], r[0], t2 - t1
+        ))
+
+        return r
+
+    def tell_command(self, daemon_type: str, daemon_id: str, cmd_dict: dict, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
+        """
+        Helper for `ceph tell` command execution.
+
+        See send_command for general case.
+
+        :param dict cmd_dict: expects a prefix i.e.:
+            cmd_dict = {
+                'prefix': 'heap',
+                'heapcmd': 'stats',
+            }
+        :return: status int, out std, err str
+        """
+        t1 = time.time()
+        result = CommandResult()
+        self.send_command(result, daemon_type, daemon_id, json.dumps(cmd_dict), "", inbuf)
+        r = result.wait()
+        t2 = time.time()
+
+        self.log.debug("tell_command on {0}.{1}: '{2}' -> {3} in {4:.5f}s".format(
+            daemon_type, daemon_id, cmd_dict['prefix'], r[0], t2 - t1
         ))
 
         return r
@@ -1750,6 +1808,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self._mgr_ips = ips[0]
         assert self._mgr_ips is not None
         return self._mgr_ips
+
+    @API.expose
+    def get_hostname(self) -> str:
+        return socket.gethostname()
 
     @API.expose
     def get_ceph_option(self, key: str) -> OptionValue:
@@ -2220,6 +2282,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param int query_id: query ID
         """
         return self._ceph_get_mds_perf_counters(query_id)
+
+    def get_daemon_health_metrics(self) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get the list of health metrics per daemon. This includes SLOW_OPS health metrics
+        in MON and OSD daemons, and PENDING_CREATING_PGS health metrics for OSDs.
+        """
+        return self._ceph_get_daemon_health_metrics()
 
     def is_authorized(self, arguments: Dict[str, str]) -> bool:
         """

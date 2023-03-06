@@ -23,6 +23,7 @@ class HealthTest(DashboardTestCase):
     __mdsmap_schema = JObj({
         'session_autoclose': int,
         'balancer': str,
+        'bal_rank_mask': str,
         'up': JObj({}, allow_unknown=True),
         'last_failure_osd_epoch': int,
         'in': JList(int),
@@ -55,7 +56,8 @@ class HealthTest(DashboardTestCase):
             'joinable': bool,
             'allow_snaps': bool,
             'allow_multimds_snaps': bool,
-            'allow_standby_replay': bool
+            'allow_standby_replay': bool,
+            'refuse_client_session': bool
         }),
         'ever_allowed_features': int,
         'root': int

@@ -18,6 +18,7 @@
 #include "rocksdb/cache.h"
 #include "rocksdb/filter_policy.h"
 #include "rocksdb/utilities/convenience.h"
+#include "rocksdb/utilities/table_properties_collectors.h"
 #include "rocksdb/merge_operator.h"
 
 #include "common/perf_counters.h"
@@ -934,6 +935,14 @@ int RocksDBStore::update_column_family_options(const std::string& base_name,
       return r;
     }
   }
+
+  // Set Compact on Deletion Factory
+  if (cct->_conf->rocksdb_cf_compact_on_deletion) {
+    size_t sliding_window = cct->_conf->rocksdb_cf_compact_on_deletion_sliding_window;
+    size_t trigger = cct->_conf->rocksdb_cf_compact_on_deletion_trigger;
+    cf_opt->table_properties_collector_factories.emplace_back(
+        rocksdb::NewCompactOnDeletionCollectorFactory(sliding_window, trigger));
+  }
   return 0;
 }
 
@@ -1385,9 +1394,6 @@ int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
 					   const string& key_prefix)
 {
   uint64_t size = 0;
-  uint8_t flags =
-    //rocksdb::DB::INCLUDE_MEMTABLES |  // do not include memtables...
-    rocksdb::DB::INCLUDE_FILES;
   auto p_iter = cf_handles.find(prefix);
   if (p_iter != cf_handles.end()) {
     for (auto cf : p_iter->second.handles) {
@@ -1395,14 +1401,14 @@ int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
       string start = key_prefix + string(1, '\x00');
       string limit = key_prefix + string("\xff\xff\xff\xff");
       rocksdb::Range r(start, limit);
-      db->GetApproximateSizes(cf, &r, 1, &s, flags);
+      db->GetApproximateSizes(cf, &r, 1, &s);
       size += s;
     }
   } else {
     string start = combine_strings(prefix , key_prefix);
     string limit = combine_strings(prefix , key_prefix + "\xff\xff\xff\xff");
     rocksdb::Range r(start, limit);
-    db->GetApproximateSizes(default_cf, &r, 1, &size, flags);
+    db->GetApproximateSizes(default_cf, &r, 1, &size);
   }
   return size;
 }
@@ -1442,7 +1448,7 @@ void RocksDBStore::get_statistics(Formatter *f)
       f->close_section();
     }
     f->open_object_section("rocksdbstore_perf_counters");
-    logger->dump_formatted(f,0);
+    logger->dump_formatted(f, false, false);
     f->close_section();
   }
   if (cct->_conf->rocksdb_collect_memory_stats) {
@@ -1742,6 +1748,8 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
                                                          const string &start,
                                                          const string &end)
 {
+  ldout(db->cct, 10) << __func__ << " enter start=" << start
+		     << " end=" << end << dendl;
   auto p_iter = db->cf_handles.find(prefix);
   if (p_iter == db->cf_handles.end()) {
     uint64_t cnt = db->delete_range_threshold;
@@ -1753,6 +1761,8 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
       bat.Delete(db->default_cf, combine_strings(prefix, it->key()));
     }
     if (cnt == 0) {
+      ldout(db->cct, 10) << __func__ << " p_iter == end(), resorting to DeleteRange"
+			 << dendl;
       bat.RollbackToSavePoint();
       bat.DeleteRange(db->default_cf,
 		      rocksdb::Slice(combine_strings(prefix, start)),
@@ -1773,6 +1783,8 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
 	bat.Delete(cf, it->key());
       }
       if (cnt == 0) {
+        ldout(db->cct, 10) << __func__ << " p_iter != end(), resorting to DeleteRange"
+			   << dendl;
 	bat.RollbackToSavePoint();
 	bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
       } else {
@@ -1781,6 +1793,7 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
       delete it;
     }
   }
+  ldout(db->cct, 10) << __func__ << " end" << dendl;
 }
 
 void RocksDBStore::RocksDBTransactionImpl::merge(
@@ -2999,7 +3012,7 @@ KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix, Itera
         std::move(bounds));
     }
   } else {
-    return KeyValueDB::get_iterator(prefix, opts, std::move(bounds));
+    return KeyValueDB::get_iterator(prefix, opts);
   }
 }
 
@@ -3008,11 +3021,11 @@ rocksdb::Iterator* RocksDBStore::new_shard_iterator(rocksdb::ColumnFamilyHandle*
   return db->NewIterator(rocksdb::ReadOptions(), cf);
 }
 
-RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator(IteratorOpts opts, IteratorBounds bounds)
+RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator(IteratorOpts opts)
 {
   if (cf_handles.size() == 0) {
     return std::make_shared<RocksDBWholeSpaceIteratorImpl>(
-      this, default_cf, opts, std::move(bounds));
+      this, default_cf, opts);
   } else {
     return std::make_shared<WholeMergeIteratorImpl>(this);
   }
@@ -3020,7 +3033,7 @@ RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator(IteratorO
 
 RocksDBStore::WholeSpaceIterator RocksDBStore::get_default_cf_iterator()
 {
-  return std::make_shared<RocksDBWholeSpaceIteratorImpl>(this, default_cf, 0, IteratorBounds());
+  return std::make_shared<RocksDBWholeSpaceIteratorImpl>(this, default_cf, 0);
 }
 
 int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,

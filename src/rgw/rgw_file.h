@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_FILE_H
-#define RGW_FILE_H
+#pragma once
 
 #include "include/rados/rgw_file.h"
 
@@ -869,7 +868,7 @@ namespace rgw {
 
     RGWFileHandle::FHCache fh_cache;
     RGWFileHandle::FhLRU fh_lru;
-    
+
     std::string uid; // should match user.user_id, iiuc
 
     std::unique_ptr<rgw::sal::User> user;
@@ -1000,8 +999,8 @@ namespace rgw {
       (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
     }
 
-    int authorize(const DoutPrefixProvider *dpp, rgw::sal::Store* store) {
-      int ret = store->get_user_by_access_key(dpp, key.id, null_yield, &user);
+    int authorize(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver) {
+      int ret = driver->get_user_by_access_key(dpp, key.id, null_yield, &user);
       if (ret == 0) {
 	RGWAccessKey* k = user->get_info().get_key(key.id);
 	if (!k || (k->key != key.key))
@@ -1010,7 +1009,7 @@ namespace rgw {
 	  return -ERR_USER_SUSPENDED;
       } else {
 	/* try external authenticators (ldap for now) */
-	rgw::LDAPHelper* ldh = rgwlib.get_ldh(); /* !nullptr */
+	rgw::LDAPHelper* ldh = g_rgwlib->get_ldh(); /* !nullptr */
 	RGWToken token;
 	/* boost filters and/or string_ref may throw on invalid input */
 	try {
@@ -1019,12 +1018,12 @@ namespace rgw {
 	  token = std::string("");
 	}
 	if (token.valid() && (ldh->auth(token.id, token.key) == 0)) {
-	  /* try to store user if it doesn't already exist */
+	  /* try to driver user if it doesn't already exist */
 	  if (user->load_user(dpp, null_yield) < 0) {
 	    int ret = user->store_user(dpp, null_yield, true);
 	    if (ret < 0) {
 	      lsubdout(get_context(), rgw, 10)
-		<< "NOTICE: failed to store new user's info: ret=" << ret
+		<< "NOTICE: failed to driver new user's info: ret=" << ret
 		<< dendl;
 	    }
 	  }
@@ -1044,7 +1043,7 @@ namespace rgw {
 			     const uint32_t flags = RGWFileHandle::FLAG_NONE) {
       using std::get;
 
-      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang 
+      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang
       // the cast transfers a lvalue into a rvalue  in the ctor
       // check the commit message for the full details
       LookupFHResult fhr { nullptr, uint32_t(RGWFileHandle::FLAG_NONE) };
@@ -1087,7 +1086,7 @@ namespace rgw {
 			     const uint32_t flags = RGWFileHandle::FLAG_NONE) {
       using std::get;
 
-      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang 
+      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang
       // the cast transfers a lvalue into a rvalue  in the ctor
       // check the commit message for the full details
       LookupFHResult fhr { nullptr, uint32_t(RGWFileHandle::FLAG_NONE) };
@@ -1237,8 +1236,8 @@ namespace rgw {
 
     MkObjResult create(RGWFileHandle* parent, const char *name, struct stat *st,
 		      uint32_t mask, uint32_t flags);
-    
-    MkObjResult symlink(RGWFileHandle* parent, const char *name, 
+
+    MkObjResult symlink(RGWFileHandle* parent, const char *name,
                const char *link_path, struct stat *st, uint32_t mask, uint32_t flags);
 
     MkObjResult mkdir(RGWFileHandle* parent, const char *name, struct stat *st,
@@ -1314,7 +1313,7 @@ namespace rgw {
     RGWUserInfo* get_user() { return &user->get_info(); }
 
     void update_user(const DoutPrefixProvider *dpp) {
-      (void) rgwlib.get_store()->get_user_by_access_key(dpp, key.id, null_yield, &user);
+      (void) g_rgwlib->get_driver()->get_user_by_access_key(dpp, key.id, null_yield, &user);
     }
 
     void close();
@@ -1375,15 +1374,15 @@ public:
   bool only_bucket() override { return false; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   int header_init() override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -1510,15 +1509,15 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   int header_init() override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -1578,7 +1577,7 @@ public:
   }
 
   void send_response() override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     auto cnow = real_clock::now();
 
     /* enumerate objs and common_prefixes in parallel,
@@ -1811,15 +1810,15 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   int header_init() override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -1890,16 +1889,16 @@ public:
   }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "PUT";
     state->op = OP_PUT;
 
@@ -1915,7 +1914,7 @@ public:
   }
 
   int get_params(optional_yield) override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
     int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
@@ -1947,16 +1946,16 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "DELETE";
     state->op = OP_DELETE;
 
@@ -1998,9 +1997,9 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
 
     int rc = valid_s3_object_name(obj_name);
@@ -2012,7 +2011,7 @@ public:
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "PUT";
     state->op = OP_PUT;
 
@@ -2031,7 +2030,7 @@ public:
   }
 
   int get_params(optional_yield) override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
     int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
@@ -2094,16 +2093,16 @@ public:
   bool only_bucket() override { return false; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -2175,16 +2174,16 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "DELETE";
     state->op = OP_DELETE;
 
@@ -2250,16 +2249,16 @@ public:
   bool only_bucket() override { return false; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -2324,16 +2323,16 @@ public:
   bool only_bucket() override { return false; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -2387,16 +2386,16 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -2423,7 +2422,7 @@ public:
   }
 
   void send_response() override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     // try objects
     for (const auto& iter : objs) {
       auto& name = iter.key.name;
@@ -2489,11 +2488,11 @@ public:
   size_t bytes_written;
   bool eio;
 
-  RGWWriteRequest(rgw::sal::Store* store,
+  RGWWriteRequest(rgw::sal::Driver* driver, const RGWProcessEnv& penv,
 		  std::unique_ptr<rgw::sal::User> _user,
 		  RGWFileHandle* _fh, const std::string& _bname,
 		  const std::string& _oname)
-    : RGWLibContinuedReq(store->ctx(), std::move(_user)),
+    : RGWLibContinuedReq(driver->ctx(), penv, std::move(_user)),
       bucket_name(_bname), obj_name(_oname),
       rgw_fh(_fh), filter(nullptr), timer_id(0), real_ofs(0),
       bytes_written(0), eio(false) {
@@ -2509,16 +2508,16 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "PUT";
     state->op = OP_PUT;
 
@@ -2534,7 +2533,7 @@ public:
   }
 
   int get_params(optional_yield) override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
     int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
@@ -2597,9 +2596,9 @@ public:
   bool only_bucket() override { return true; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
 
     return 0;
@@ -2607,7 +2606,7 @@ public:
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "PUT"; // XXX check
     state->op = OP_PUT;
 
@@ -2640,7 +2639,7 @@ public:
   }
 
   int get_params(optional_yield) override {
-    struct req_state* s = get_state();
+    req_state* s = get_state();
     RGWAccessControlPolicy_S3 s3policy(s->cct);
     /* we don't have (any) headers, so just create canned ACLs */
     int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
@@ -2679,16 +2678,16 @@ public:
   virtual bool only_bucket() { return false; }
 
   virtual int op_init() {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   virtual int header_init() {
 
-    struct req_state* s = get_state();
+    req_state* s = get_state();
     s->info.method = "GET";
     s->op = OP_GET;
 
@@ -2730,16 +2729,16 @@ public:
   bool only_bucket() override { return false; }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "PUT";
     state->op = OP_PUT;
 
@@ -2784,16 +2783,16 @@ public:
   virtual bool only_bucket() { return false; }
 
   virtual int op_init() {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   virtual int header_init() {
 
-    struct req_state* s = get_state();
+    req_state* s = get_state();
     s->info.method = "DELETE";
     s->op = OP_PUT;
 
@@ -2829,15 +2828,15 @@ public:
   }
 
   int op_init() override {
-    // assign store, s, and dialect_handler
+    // assign driver, s, and dialect_handler
     // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::store, get_state(), this);
+    RGWOp::init(RGWHandler::driver, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
   }
 
   int header_init() override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
     return 0;
@@ -2855,5 +2854,3 @@ public:
 
 
 } /* namespace rgw */
-
-#endif /* RGW_FILE_H */
