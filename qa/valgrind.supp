@@ -450,6 +450,13 @@
 	...
 }
 {
+        rocksdb version builder
+        Memcheck:Leak
+        ...
+        fun:*rocksdb*VersionBuilder*Rep*LoadTableHandlers*
+        ...
+}
+{
 	libstdc++ leak on xenial
 	Memcheck:Leak
 	fun:malloc
