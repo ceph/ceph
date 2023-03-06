@@ -367,6 +367,7 @@ class RGWRados
   bool quota_threads;
   bool run_sync_thread;
   bool run_reshard_thread;
+  bool run_notification_thread;
 
   RGWMetaNotifier *meta_notifier;
   RGWDataNotifier *data_notifier;
@@ -450,7 +451,7 @@ protected:
 public:
   RGWRados(): timer(NULL),
                gc(NULL), lc(NULL), obj_expirer(NULL), use_gc_thread(false), use_lc_thread(false), quota_threads(false),
-               run_sync_thread(false), run_reshard_thread(false), meta_notifier(NULL),
+               run_sync_thread(false), run_reshard_thread(false), run_notification_thread(false), meta_notifier(NULL),
                data_notifier(NULL), meta_sync_processor_thread(NULL),
                bucket_index_max_shards(0),
                max_bucket_id(0), cct(NULL),
@@ -510,6 +511,11 @@ public:
 
   RGWRados& set_run_reshard_thread(bool _run_reshard_thread) {
     run_reshard_thread = _run_reshard_thread;
+    return *this;
+  }
+  
+  RGWRados& set_run_notification_thread(bool _run_notification_thread) {
+    run_notification_thread = _run_notification_thread;
     return *this;
   }
 

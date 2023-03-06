@@ -4242,6 +4242,7 @@ int main(int argc, const char **argv)
 					false,
 					false,
 					false,
+                                        false,
 					need_cache && g_conf()->rgw_cache_enabled,
 					need_gc);
     }

@@ -1576,6 +1576,7 @@ public:
 				      bool quota_threads,
 				      bool run_sync_thread,
 				      bool run_reshard_thread,
+				      bool run_notification_thread,
 				      bool use_cache = true,
 				      bool use_gc = true) {
     rgw::sal::Driver* driver = init_storage_provider(dpp, cct, cfg, use_gc_thread,
@@ -1583,6 +1584,7 @@ public:
 						   quota_threads,
 						   run_sync_thread,
 						   run_reshard_thread,
+                                                   run_notification_thread,
 						   use_cache, use_gc);
     return driver;
   }
@@ -1601,6 +1603,7 @@ public:
 						bool quota_threads,
 						bool run_sync_thread,
 						bool run_reshard_thread,
+                                                bool run_notification_thread,
 						bool use_metadata_cache,
 						bool use_gc);
   /** Initialize a new raw Driver */
