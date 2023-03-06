@@ -222,6 +222,7 @@ void rgw::AppMain::init_storage()
           run_quota,
           run_sync,
           g_conf().get_val<bool>("rgw_dynamic_resharding"),
+          true, // run notification thread
           g_conf()->rgw_cache_enabled);
 
 } /* init_storage */
