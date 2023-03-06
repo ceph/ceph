@@ -87,7 +87,7 @@ The procedure for making changes to the Ceph repository is as follows:
    
    #. :ref:`Push the changes in your local working copy to your fork<push_changes>`.
 
-#. Create a Pull Request to push the change upstream
+#. Create a Pull Request to push the change upstream.
 
    #. Create a Pull Request that asks for your changes to be added into the
       "upstream Ceph" repository.
