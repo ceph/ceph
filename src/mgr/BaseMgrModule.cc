@@ -1392,17 +1392,14 @@ ceph_register_client(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "s:ceph_register_client", &addrs)) {
     return nullptr;
   }
-  C
-    auto c = new LambdaContext([command_c, self](int command_r){
-      self->py_modules->get_objecter().wait_for_latest_osdmap(
-	[command_c, command_r](boost::system::error_code) {
-	  command_c->complete(command_r);
-	});
-    });
-
+  /* TODO the waiter should be in the final register_client? it should wait for MgrMap to contain the addrvec. But then it should call post to this completion: */
+  ca::waiter<bs::error_code> w;
   without_gil([&] {
-    self->py_modules->register_client(self->this_module->get_name(), addrs);
+    auto opc = OpCompletion::create(service.get_executor(), w.ref());
+    auto opce = OpCompletionError(std::move(opc), bs::error_code{});
+    self->py_modules->register_client(self->this_module->get_name(), addrs, std::move(opce));
   });
+  w.wait();
   Py_RETURN_NONE;
 }
 

@@ -53,6 +53,13 @@ protected:
   class ClusterSocketHook *asok_hook;
 
 public:
+  using bs = boost::system;
+  using ca = ceph::async;
+  using boost::system::error_code;
+  using OpSignature = void(error_code);
+  using OpCompletion = ca::Completion<OpSignature>;;
+  using OpCompletionError = std::pair<std::unique_ptr<OpCompletion>,error_code>;
+  using OpCompletionErrorVector = std::vector<OpCompletionError>;
 
   void load_digest(MMgrDigest *m);
   void ingest_pgstats(ceph::ref_t<MPGStats> stats);
@@ -151,9 +158,9 @@ public:
     return std::forward<Callback>(cb)(mon_status_json, std::forward<Args>(args)...);
   }
 
-  void wait_for_mgrmap(Context* c) {
+  void wait_for_mgrmap(OpCompletionError opc) {
     std::lock_guard l(lock);
-    waiting_for_mgrmap.push_back(c);
+    waiting_for_mgrmap.push_back(opc);
   }
 
   void final_init();
@@ -164,7 +171,7 @@ public:
 		    std::ostream& ss);
 
 private:
-  std::vector<Context*> waiting_for_mgrmap;
+  OpCompletionErrorVector waiting_for_mgrmap;
 };
 
 #endif

@@ -55,13 +55,15 @@ void ClusterState::set_fsmap(FSMap const &new_fsmap)
 
 void ClusterState::set_mgr_map(MgrMap const &new_mgrmap)
 {
-  std::vector<Context*> v;
+  OpCompletionErrorVector v;
   {
     std::lock_guard l(lock);
     mgr_map = new_mgrmap;
     std::swap(v, waiting_for_mgrmap);
   }
-  finish_contexts(g_ceph_context, waiting_for_mgrmap);
+  for (auto& [c, ec] : v) {
+    ca::post(std::move(c), ec);
+  }
 }
 
 void ClusterState::set_service_map(ServiceMap const &new_service_map)
