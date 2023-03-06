@@ -277,9 +277,17 @@ bool Replayer<I>::get_replay_status(std::string* description,
       matching_remote_snap_it !=
         m_state_builder->remote_image_ctx->snap_info.end()) {
     root_obj["syncing_snapshot_timestamp"] = remote_snap_info->timestamp.sec();
-    root_obj["syncing_percent"] = static_cast<uint64_t>(
-        100 * m_local_mirror_snap_ns.last_copied_object_number /
-        static_cast<float>(std::max<uint64_t>(1U, m_local_object_count)));
+
+    if (m_local_object_count > 0) {
+      root_obj["syncing_percent"] =
+	100 * m_local_mirror_snap_ns.last_copied_object_number /
+	m_local_object_count;
+    } else {
+      // Set syncing_percent to 0 if m_local_object_count has
+      // not yet been set (last_copied_object_number may be > 0
+      // if the sync is being resumed).
+      root_obj["syncing_percent"] = 0;
+    }
   }
 
   m_bytes_per_second(0);
