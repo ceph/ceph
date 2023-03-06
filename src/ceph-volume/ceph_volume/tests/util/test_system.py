@@ -90,6 +90,7 @@ def fake_proc(tmpdir, monkeypatch):
             /dev/sda1 /far/lib/ceph/osd/ceph-0 xfs rw,seclabel,noatime,attr2,inode64,noquota 0 0
             tmpfs /run/user/1000 tmpfs rw,seclabel,nosuid,nodev,relatime,size=50040k,mode=700,uid=1000,gid=1000 0 0
             /dev/sdc2 /boot xfs rw,seclabel,relatime,attr2,inode64,noquota 0 0
+            rpool/data /rpool/data zfs rw,relatime,xattr,noacl 0 0
             tmpfs /run/user/1000 tmpfs rw,seclabel,mode=700,uid=1000,gid=1000 0 0"""))
     monkeypatch.setattr(system, 'PROCDIR', PROCDIR)
     monkeypatch.setattr(os.path, 'exists', lambda x: True)
@@ -109,8 +110,8 @@ class TestPathIsMounted(object):
     def test_is_mounted_at_destination(self, fake_proc):
         assert system.path_is_mounted('/boot', destination='/dev/sdc2') is True
 
-    # def test_zfs_is_mounted_at_destination(self, fake_proc):
-    #     assert system.path_is_mounted('/var/lib/docker/zfs/graph/edfg') is True
+    def test_zfs_is_mounted_at_destination(self, fake_proc):
+        assert system.path_is_mounted('/rpool/data') is True
 
 
 class TestDeviceIsMounted(object):
@@ -139,11 +140,11 @@ class TestDeviceIsMounted(object):
         result = system.device_is_mounted('/dev/sda1', destination='/symlink/lib/ceph/osd/ceph-0')
         assert result is True
 
-    # def test_zfs_is_mounted(self, fake_proc):
-    #     assert system.device_is_mounted('rpool/var/lib/docker/abcd') is True
+    def test_zfs_is_mounted(self, fake_proc):
+        assert system.device_is_mounted('rpool/data') is True
 
-    # def test_zfs_is_mounted_at_destination(self, fake_proc):
-    #     assert system.device_is_mounted('rpool/var/lib/docker/abcd', destination='/var/lib/docker/zfs/graph/edfg') is True
+    def test_zfs_is_mounted_at_destination(self, fake_proc):
+        assert system.device_is_mounted('rpool/data', destination='/rpool/data') is True
 
 
 class TestGetMounts(object):
