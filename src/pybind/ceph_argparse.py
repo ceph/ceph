@@ -386,10 +386,20 @@ class CephIPAddr(CephArgtype):
         # parse off port, use socket to validate addr
         type = 6
         p: Optional[str] = None
-        if s.startswith('['):
+        if s.startswith('v1:'):
+            s = s[3:]
+            type = 4
+        elif s.startswith('v2:'):
+            s = s[3:]
+            type = 6
+        elif s.startswith('any:'):
+            s = s[4:]
+            type = 4
+        elif s.startswith('['):
             type = 6
         elif s.find('.') != -1:
             type = 4
+
         if type == 4:
             port = s.find(':')
             if port != -1:
@@ -441,6 +451,9 @@ class CephEntityAddr(CephIPAddr):
         nonce = None
         if '/' in s:
             ip, nonce = s.split('/')
+            if nonce.endswith(']'):
+                nonce = nonce[:-1]
+                ip += ']'
         else:
             ip = s
         super(self.__class__, self).valid(ip)
