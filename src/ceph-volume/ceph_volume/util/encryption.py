@@ -106,19 +106,19 @@ def luks_open(key, device, mapping):
     process.call(command, stdin=key, terminal_verbose=True, show_command=True)
 
 
-def dmcrypt_close(mapping):
+def dmcrypt_close(mapping, skip_path_check=False):
     """
     Encrypt (close) a device, previously decrypted with cryptsetup
 
-    :param mapping:
+    :param mapping: mapping name or path used to correlate device.
+    :param skip_path_check: whether we need path presence validation.
     """
-    if not os.path.exists(mapping):
+    if not skip_path_check and not os.path.exists(mapping):
         logger.debug('device mapper path does not exist %s' % mapping)
         logger.debug('will skip cryptsetup removal')
         return
     # don't be strict about the remove call, but still warn on the terminal if it fails
     process.run(['cryptsetup', 'remove', mapping], stop_on_error=False)
-
 
 def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
     """
@@ -278,3 +278,22 @@ def legacy_encrypted(device):
             metadata['lockbox'] = d.path
             break
     return metadata
+
+def prepare_dmcrypt(key, device, mapping):
+    """
+    Helper for devices that are encrypted. The operations needed for
+    block, db, wal, or data/journal devices are all the same
+    """
+    if not device:
+        return ''
+    # format data device
+    luks_format(
+        key,
+        device
+    )
+    luks_open(
+        key,
+        device,
+        mapping
+    )
+    return '/dev/mapper/%s' % mapping
