@@ -5,6 +5,7 @@ from ceph_volume.api import lvm as api
 from ceph_volume.devices.lvm import migrate
 from ceph_volume.util.device import Device
 from ceph_volume.util import system
+from ceph_volume.util import encryption as encryption_utils
 
 class TestGetClusterName(object):
 
@@ -520,6 +521,9 @@ class TestNew(object):
     def mock_get_lvs(self, *args, **kwargs):
         return self.mock_volumes.pop(0)
 
+    def mock_prepare_dmcrypt(self, *args, **kwargs):
+        return '/dev/mapper/' + kwargs['mapping']
+
     def test_newdb_non_root(self):
         with pytest.raises(Exception) as error:
             migrate.NewDB(argv=[
@@ -988,6 +992,74 @@ class TestNew(object):
             'ceph-bluestore-tool',
             '--path', '/var/lib/ceph/osd/cluster-2',
             '--dev-target', '/dev/VolGroup/target_volume',
+            '--command', 'bluefs-bdev-new-wal']
+
+    @patch('os.getuid')
+    def test_newwal_encrypted(self, m_getuid, monkeypatch, capsys):
+        m_getuid.return_value = 0
+
+        source_tags = \
+        'ceph.osd_id=0,ceph.type=data,ceph.osd_fsid=1234,ceph.encrypted=1'
+
+        data_vol = api.Volume(lv_name='volume1', lv_uuid='datauuid', vg_name='vg',
+                         lv_path='/dev/VolGroup/lv1', lv_tags=source_tags)
+
+        self.mock_single_volumes = {'/dev/VolGroup/lv1': data_vol}
+
+        monkeypatch.setattr(migrate.api, 'get_single_lv', self.mock_get_single_lv)
+
+        self.mock_process_input = []
+        monkeypatch.setattr(process, 'call', self.mock_process)
+
+        self.mock_volume = api.Volume(lv_name='target_volume1', lv_uuid='target_uuid', vg_name='vg',
+                                      lv_path='/dev/VolGroup/target_volume',
+                                      lv_tags='')
+        monkeypatch.setattr(api, 'get_lv_by_fullname', self.mock_get_lv_by_fullname)
+
+        monkeypatch.setattr("ceph_volume.systemd.systemctl.osd_is_active", lambda id: False)
+
+        #find_associated_devices will call get_lvs() 4 times
+        # and this needs results to be arranged that way
+        self.mock_volumes = []
+        self.mock_volumes.append([data_vol])
+        self.mock_volumes.append([data_vol])
+        self.mock_volumes.append([])
+        self.mock_volumes.append([])
+
+        monkeypatch.setattr(migrate.api, 'get_lvs', self.mock_get_lvs)
+
+        monkeypatch.setattr(migrate, 'get_cluster_name', lambda osd_id, osd_fsid: 'cluster')
+        monkeypatch.setattr(system, 'chown', lambda path: 0)
+
+        monkeypatch.setattr(encryption_utils, 'prepare_dmcrypt', self.mock_prepare_dmcrypt)
+
+        migrate.NewWAL(argv=[
+            '--osd-id', '2',
+            '--osd-fsid', '55BD4219-16A7-4037-BC20-0F158EFCC83D',
+            '--target', 'vgname/new_wal']).main()
+
+        n = len(self.mock_process_input)
+        assert n >= 3
+
+        assert self.mock_process_input[n - 3] == [
+            'lvchange',
+            '--addtag', 'ceph.wal_uuid=target_uuid',
+            '--addtag', 'ceph.wal_device=/dev/VolGroup/target_volume',
+            '/dev/VolGroup/lv1']
+
+        assert self.mock_process_input[n - 2].sort() == [
+            'lvchange',
+            '--addtag', 'ceph.osd_id=0',
+            '--addtag', 'ceph.type=wal',
+            '--addtag', 'ceph.osd_fsid=1234',
+            '--addtag', 'ceph.wal_uuid=target_uuid',
+            '--addtag', 'ceph.wal_device=/dev/VolGroup/target_volume',
+            '/dev/VolGroup/target_volume'].sort()
+
+        assert self.mock_process_input[n - 1] == [
+            'ceph-bluestore-tool',
+            '--path', '/var/lib/ceph/osd/cluster-2',
+            '--dev-target', '/dev/mapper/target_uuid',
             '--command', 'bluefs-bdev-new-wal']
 
 class TestMigrate(object):
