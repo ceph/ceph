@@ -23,19 +23,7 @@ def prepare_dmcrypt(key, device, device_type, tags):
         return ''
     tag_name = 'ceph.%s_uuid' % device_type
     uuid = tags[tag_name]
-    # format data device
-    encryption_utils.luks_format(
-        key,
-        device
-    )
-    encryption_utils.luks_open(
-        key,
-        device,
-        uuid
-    )
-
-    return '/dev/mapper/%s' % uuid
-
+    return encryption_utils.prepare_dmcrypt(key, device, uuid)
 
 def prepare_filestore(device, journal, secrets, tags, osd_id, fsid):
     """
