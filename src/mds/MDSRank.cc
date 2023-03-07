@@ -39,7 +39,7 @@
 #include "common/HeartbeatMap.h"
 #include "ScrubStack.h"
 #include "events/ESubtreeMap.h"
-#include "events/ESegment.h"
+#include "events/ELid.h"
 
 
 #include "MDSRank.h"
@@ -2164,8 +2164,7 @@ void MDSRank::boot_create()
   mdlog->create(fin.new_sub());
 
   // open new journal segment, but do not journal subtree map (yet)
-  // N.B. this singular event will be skipped during replay
-  auto le = new ESegment();
+  auto le = new ELid();
   mdlog->submit_entry(le);
 
   if (whoami == mdsmap->get_root()) {
@@ -3827,6 +3826,8 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_log_max_events",
     "mds_log_max_segments",
     "mds_log_pause",
+    "mds_log_skip_corrupt_events",
+    "mds_log_skip_unbounded_events",
     "mds_max_caps_per_client",
     "mds_max_export_size",
     "mds_max_purge_files",

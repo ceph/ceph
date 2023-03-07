@@ -40,6 +40,7 @@
 #include "events/ENoOp.h"
 
 #include "events/ESegment.h"
+#include "events/ELid.h"
 
 #define dout_context g_ceph_context
 
@@ -92,6 +93,7 @@ std::string_view LogEvent::get_type_str() const
   case EVENT_TABLESERVER: return "TABLESERVER";
   case EVENT_NOOP: return "NOOP";
   case EVENT_SEGMENT: return "SEGMENT";
+  case EVENT_LID: return "LID";
 
   default:
     generic_dout(0) << "get_type_str: unknown type " << _type << dendl;
@@ -118,7 +120,8 @@ const std::map<std::string, LogEvent::EventType> LogEvent::types = {
   {"TABLECLIENT", EVENT_TABLECLIENT},
   {"TABLESERVER", EVENT_TABLESERVER},
   {"NOOP", EVENT_NOOP},
-  {"SEGMENT", EVENT_SEGMENT}
+  {"SEGMENT", EVENT_SEGMENT},
+  {"LID", EVENT_LID}
 };
 
 /*
@@ -201,6 +204,9 @@ std::unique_ptr<LogEvent> LogEvent::decode_event(bufferlist::const_iterator& p, 
     break;
   case EVENT_SEGMENT:
     le = std::make_unique<ESegment>();
+    break;
+  case EVENT_LID:
+    le = std::make_unique<ELid>();
     break;
   default:
     generic_dout(0) << "uh oh, unknown log event type " << type << " length " << length << dendl;

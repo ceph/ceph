@@ -294,6 +294,8 @@ private:
   int64_t max_events;
   uint64_t max_segments;
   bool pause;
+  bool skip_corrupt_events;
+  bool skip_unbounded_events;
 
   std::set<uint64_t> major_segments;
   std::set<LogSegment*> expired_segments;

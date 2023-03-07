@@ -54,6 +54,7 @@
 #include "osdc/Filer.h"
 
 #include "events/ESubtreeMap.h"
+#include "events/ELid.h"
 #include "events/EUpdate.h"
 #include "events/EPeerUpdate.h"
 #include "events/EImportFinish.h"
@@ -7958,7 +7959,7 @@ bool MDCache::shutdown_pass()
   // Fully trim the log so that all objects in cache are clean and may be
   // trimmed by a future MDCache::trim. Note that MDSRank::tick does not
   // trim the log such that the cache eventually becomes clean.
-  if (mds->mdlog->get_num_segments() > 0) {
+  if (mds->mdlog->get_num_segments() > 0 && !mds->mdlog->is_capped()) {
     auto ls = mds->mdlog->get_current_segment();
     if (ls->num_events > 1 || !ls->dirty_dirfrags.empty()) {
       // Current segment contains events other than subtreemap or
@@ -8019,26 +8020,10 @@ bool MDCache::shutdown_pass()
   // (only do this once!)
   if (!mds->mdlog->is_capped()) {
     dout(7) << "capping the mdlog" << dendl;
+    mds->mdlog->submit_entry(new ELid());
+    mds->mdlog->flush();
     mds->mdlog->cap();
-  }
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_LOGCAP);
-  
-  if (!mds->mdlog->empty())
-    mds->mdlog->trim(0);
-
-  if (!mds->mdlog->empty()) {
-    dout(7) << "waiting for log to flush.. " << mds->mdlog->get_num_events() 
-	    << " in " << mds->mdlog->get_num_segments() << " segments" << dendl;
-    return false;
-  }
-  
-  if (!did_shutdown_log_cap) {
-    // flush journal header
-    dout(7) << "writing header for (now-empty) journal" << dendl;
-    ceph_assert(mds->mdlog->empty());
-    mds->mdlog->write_head(0);  
-    // NOTE: filer active checker below will block us until this completes.
-    did_shutdown_log_cap = true;
+    ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_LOGCAP);
     return false;
   }
 

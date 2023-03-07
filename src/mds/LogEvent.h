@@ -43,6 +43,7 @@
 #define EVENT_NOOP        51
 
 #define EVENT_SEGMENT      100
+#define EVENT_LID          101
 
 
 #include "include/buffer_fwd.h"
