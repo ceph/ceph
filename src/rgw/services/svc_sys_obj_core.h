@@ -44,6 +44,7 @@ protected:
                    RGWObjVersionTracker *objv_tracker,
                    const rgw_raw_obj& obj,
                    bufferlist *bl, off_t ofs, off_t end,
+                   ceph::real_time* pmtime, uint64_t* psize,
                    std::map<std::string, bufferlist> *attrs,
 		   bool raw_attrs,
                    rgw_cache_entry_info *cache_info,
