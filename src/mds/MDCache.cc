@@ -139,6 +139,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
 
   symlink_recovery = g_conf().get_val<bool>("mds_symlink_recovery");
 
+  kill_shutdown_at = g_conf().get_val<uint64_t>("mds_kill_shutdown_at");
+
   lru.lru_set_midpoint(g_conf().get_val<double>("mds_cache_mid"));
 
   bottom_lru.lru_set_midpoint(0);
@@ -198,6 +200,9 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
   if (changed.count("mds_symlink_recovery")) {
     symlink_recovery = g_conf().get_val<bool>("mds_symlink_recovery");
     dout(10) << "Storing symlink targets on file object's head " << symlink_recovery << dendl;
+  }
+  if (changed.count("mds_kill_shutdown_at")) {
+    kill_shutdown_at = g_conf().get_val<uint64_t>("mds_kill_shutdown_at");
   }
 
   migrator->handle_conf_change(changed, mdsmap);
@@ -7878,6 +7883,7 @@ void MDCache::shutdown_start()
 bool MDCache::shutdown_pass()
 {
   dout(7) << "shutdown_pass" << dendl;
+  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_START);
 
   if (mds->is_stopped()) {
     dout(7) << " already shut down" << dendl;
@@ -7892,6 +7898,7 @@ bool MDCache::shutdown_pass()
   // trim cache
   trim(UINT64_MAX);
   dout(5) << "lru size now " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size() << dendl;
+  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTTRIM);
 
   // Export all subtrees to another active (usually rank 0) if not rank 0
   int num_auth_subtree = 0;
@@ -7922,8 +7929,11 @@ bool MDCache::shutdown_pass()
 	dest = 0;
       dout(7) << "sending " << *dir << " back to mds." << dest << dendl;
       migrator->export_dir_nicely(dir, dest);
+      ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTONEEXPORT);
     }
   }
+
+  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTALLEXPORTS);
 
   if (!strays_all_exported) {
     dout(7) << "waiting for strays to migrate" << dendl;
@@ -7943,6 +7953,7 @@ bool MDCache::shutdown_pass()
       mds->server->terminate_sessions();
     return false;
   }
+  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_SESSIONTERMINATE);
 
   // Fully trim the log so that all objects in cache are clean and may be
   // trimmed by a future MDCache::trim. Note that MDSRank::tick does not
@@ -7955,6 +7966,7 @@ bool MDCache::shutdown_pass()
       auto sle = create_subtree_map();
       mds->mdlog->submit_entry(sle);
       mds->mdlog->flush();
+      ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_SUBTREEMAP);
     }
   }
   mds->mdlog->trim_all();
@@ -7962,6 +7974,7 @@ bool MDCache::shutdown_pass()
     dout(7) << "still >1 segments, waiting for log to trim" << dendl;
     return false;
   }
+  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_TRIMALL);
 
   // drop our reference to our stray dir inode
   for (int i = 0; i < NUM_STRAY; ++i) {
@@ -7972,6 +7985,7 @@ bool MDCache::shutdown_pass()
       strays[i]->put_stickydirs();
     }
   }
+  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_STRAYPUT);
 
   CDir *mydir = myin ? myin->get_dirfrag(frag_t()) : NULL;
   if (mydir && !mydir->is_subtree_root())
@@ -8007,6 +8021,7 @@ bool MDCache::shutdown_pass()
     dout(7) << "capping the mdlog" << dendl;
     mds->mdlog->cap();
   }
+  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_LOGCAP);
   
   if (!mds->mdlog->empty())
     mds->mdlog->trim(0);
@@ -8054,16 +8069,19 @@ bool MDCache::shutdown_pass()
     myin->close_dirfrag(mydir->get_frag());
   }
   ceph_assert(subtrees.empty());
+  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_EMPTYSUBTREES);
 
   if (myin) {
     remove_inode(myin);
     ceph_assert(!myin);
   }
+  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_MYINREMOVAL);
 
   if (global_snaprealm) {
     remove_inode(global_snaprealm->inode);
     global_snaprealm = nullptr;
   }
+  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_GLOBALSNAPREALMREMOVAL);
   
   // done!
   dout(5) << "shutdown done." << dendl;

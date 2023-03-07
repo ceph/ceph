@@ -999,6 +999,12 @@ options:
   services:
   - mds
   fmt_desc: probabilistically inject corrupt CDentry::first at journal load
+- name: mds_kill_shutdown_at
+  type: uint
+  level: dev
+  default: 0
+  services:
+  - mds
   flags:
   - runtime
 - name: mds_kill_mdstable_at

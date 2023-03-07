@@ -3820,6 +3820,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_inject_journal_corrupt_dentry_first",
     "mds_inject_migrator_session_race",
     "mds_inject_rename_corrupt_dentry_first",
+    "mds_kill_shutdown_at",
     "mds_log_event_large_threshold",
     "mds_log_events_per_segment",
     "mds_log_major_segment_event_ratio",
