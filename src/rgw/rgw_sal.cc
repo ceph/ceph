@@ -100,6 +100,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						     bool quota_threads,
 						     bool run_sync_thread,
 						     bool run_reshard_thread,
+                                                     bool run_notification_thread,
 						     bool use_cache,
 						     bool use_gc)
 {
@@ -117,6 +118,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
                 .set_run_quota_threads(quota_threads)
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
+                .set_run_notification_thread(run_notification_thread)
                 .init_begin(cct, dpp) < 0) {
       delete driver;
       return nullptr;
@@ -143,6 +145,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
                 .set_run_quota_threads(quota_threads)
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
+                .set_run_notification_thread(run_notification_thread)
                 .init_begin(cct, dpp) < 0) {
       delete driver;
       return nullptr;

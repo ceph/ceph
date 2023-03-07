@@ -355,49 +355,50 @@ class RGWRados
 		    bool mostly_omap);
 
 
-  ceph::mutex lock = ceph::make_mutex("rados_timer_lock");
-  SafeTimer *timer;
+  ceph::mutex lock{ceph::make_mutex("rados_timer_lock")};
+  SafeTimer* timer{nullptr};
 
-  rgw::sal::RadosStore* driver = nullptr;
-  RGWGC *gc = nullptr;
-  RGWLC *lc;
-  RGWObjectExpirer *obj_expirer;
-  bool use_gc_thread;
-  bool use_lc_thread;
-  bool quota_threads;
-  bool run_sync_thread;
-  bool run_reshard_thread;
+  rgw::sal::RadosStore* driver{nullptr};
+  RGWGC* gc{nullptr};
+  RGWLC* lc{nullptr};
+  RGWObjectExpirer* obj_expirer{nullptr};
+  bool use_gc_thread{false};
+  bool use_lc_thread{false};
+  bool quota_threads{false};
+  bool run_sync_thread{false};
+  bool run_reshard_thread{false};
+  bool run_notification_thread{false};
 
-  RGWMetaNotifier *meta_notifier;
-  RGWDataNotifier *data_notifier;
-  RGWMetaSyncProcessorThread *meta_sync_processor_thread;
-  RGWSyncTraceManager *sync_tracer = nullptr;
+  RGWMetaNotifier* meta_notifier{nullptr};
+  RGWDataNotifier* data_notifier{nullptr};
+  RGWMetaSyncProcessorThread* meta_sync_processor_thread{nullptr};
+  RGWSyncTraceManager* sync_tracer{nullptr};
   std::map<rgw_zone_id, RGWDataSyncProcessorThread *> data_sync_processor_threads;
 
   boost::optional<rgw::BucketTrimManager> bucket_trim;
-  RGWSyncLogTrimThread *sync_log_trimmer{nullptr};
+  RGWSyncLogTrimThread* sync_log_trimmer{nullptr};
 
-  ceph::mutex meta_sync_thread_lock = ceph::make_mutex("meta_sync_thread_lock");
-  ceph::mutex data_sync_thread_lock = ceph::make_mutex("data_sync_thread_lock");
+  ceph::mutex meta_sync_thread_lock{ceph::make_mutex("meta_sync_thread_lock")};
+  ceph::mutex data_sync_thread_lock{ceph::make_mutex("data_sync_thread_lock")};
 
   librados::IoCtx root_pool_ctx;      // .rgw
 
-  double inject_notify_timeout_probability = 0;
-  unsigned max_notify_retries = 0;
+  double inject_notify_timeout_probability{0.0};
+  unsigned max_notify_retries{0};
 
   friend class RGWWatcher;
 
-  ceph::mutex bucket_id_lock = ceph::make_mutex("rados_bucket_id");
+  ceph::mutex bucket_id_lock{ceph::make_mutex("rados_bucket_id")};
 
   // This field represents the number of bucket index object shards
-  uint32_t bucket_index_max_shards;
+  uint32_t bucket_index_max_shards{0};
 
   std::string get_cluster_fsid(const DoutPrefixProvider *dpp, optional_yield y);
 
   int get_obj_head_ref(const DoutPrefixProvider *dpp, const rgw_placement_rule& target_placement_rule, const rgw_obj& obj, rgw_rados_ref *ref);
   int get_obj_head_ref(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref);
   int get_system_obj_ref(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, rgw_rados_ref *ref);
-  uint64_t max_bucket_id;
+  uint64_t max_bucket_id{0};
 
   int get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx& rctx,
 			   RGWBucketInfo& bucket_info, const rgw_obj& obj,
@@ -416,14 +417,14 @@ class RGWRados
   void cls_obj_check_prefix_exist(librados::ObjectOperation& op, const std::string& prefix, bool fail_if_exist);
   void cls_obj_check_mtime(librados::ObjectOperation& op, const real_time& mtime, bool high_precision_time, RGWCheckMTimeType type);
 protected:
-  CephContext *cct;
+  CephContext* cct{nullptr};
 
   librados::Rados rados;
 
   using RGWChainedCacheImpl_bucket_info_entry = RGWChainedCacheImpl<bucket_info_entry>;
-  RGWChainedCacheImpl_bucket_info_entry *binfo_cache;
+  RGWChainedCacheImpl_bucket_info_entry* binfo_cache{nullptr};
 
-  tombstone_cache_t *obj_tombstone_cache;
+  tombstone_cache_t* obj_tombstone_cache{nullptr};
 
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
   librados::IoCtx lc_pool_ctx;        // .rgw.lc
@@ -431,11 +432,11 @@ protected:
   librados::IoCtx reshard_pool_ctx;
   librados::IoCtx notif_pool_ctx;     // .rgw.notif
 
-  bool pools_initialized;
+  bool pools_initialized{false};
 
-  RGWQuotaHandler *quota_handler;
+  RGWQuotaHandler* quota_handler{nullptr};
 
-  RGWCoroutinesManagerRegistry *cr_registry;
+  RGWCoroutinesManagerRegistry* cr_registry{nullptr};
 
   RGWSyncModuleInstanceRef sync_module;
   bool writeable_zone{false};
@@ -447,19 +448,9 @@ protected:
   bool use_datacache{false};
 
   int get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx);
+
 public:
-  RGWRados(): timer(NULL),
-               gc(NULL), lc(NULL), obj_expirer(NULL), use_gc_thread(false), use_lc_thread(false), quota_threads(false),
-               run_sync_thread(false), run_reshard_thread(false), meta_notifier(NULL),
-               data_notifier(NULL), meta_sync_processor_thread(NULL),
-               bucket_index_max_shards(0),
-               max_bucket_id(0), cct(NULL),
-               binfo_cache(NULL), obj_tombstone_cache(nullptr),
-               pools_initialized(false),
-               quota_handler(NULL),
-               cr_registry(NULL),
-               pctl(&ctl),
-               reshard(NULL) {}
+  RGWRados() = default;
 
   RGWRados& set_use_cache(bool status) {
     use_cache = status;
@@ -512,6 +503,11 @@ public:
     run_reshard_thread = _run_reshard_thread;
     return *this;
   }
+  
+  RGWRados& set_run_notification_thread(bool _run_notification_thread) {
+    run_notification_thread = _run_notification_thread;
+    return *this;
+  }
 
   librados::IoCtx* get_lc_pool_ctx() {
     return &lc_pool_ctx;
@@ -531,7 +527,7 @@ public:
   RGWServices svc;
   RGWCtl ctl;
 
-  RGWCtl *pctl{nullptr};
+  RGWCtl* const pctl{&ctl};
 
   /**
    * AmazonS3 errors contain a HostId string, but is an opaque base64 blob; we
@@ -539,7 +535,7 @@ public:
    */
   std::string host_id;
 
-  RGWReshard *reshard;
+  RGWReshard* reshard{nullptr};
   std::shared_ptr<RGWReshardWait> reshard_wait;
 
   virtual ~RGWRados() = default;

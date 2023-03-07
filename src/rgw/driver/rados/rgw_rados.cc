@@ -1065,7 +1065,9 @@ void RGWRados::finalize()
   delete reshard;
   delete index_completion_manager;
 
-  rgw::notify::shutdown();
+  if (run_notification_thread) {
+    rgw::notify::shutdown();
+  }
 }
 
 /** 
@@ -1314,9 +1316,12 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp)
   }
 
   index_completion_manager = new RGWIndexCompletionManager(this);
-  ret = rgw::notify::init(cct, driver, dpp);
-  if (ret < 0 ) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to initialize notification manager" << dendl;
+
+  if (run_notification_thread) {
+    ret = rgw::notify::init(cct, driver, dpp);
+    if (ret < 0 ) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to initialize notification manager" << dendl;
+    }
   }
 
   return ret;
