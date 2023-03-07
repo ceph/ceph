@@ -4915,19 +4915,38 @@ void BlueStore::Collection::split_cache(
       // may not be faulted in)
       vector<Blob*> bvec;
       for (auto& e : o->extent_map.extent_map) {
-	bvec.push_back(e.blob.get());
+	e.blob->last_encoded_id = -1;
       }
       for (auto& b : o->extent_map.spanning_blob_map) {
-	bvec.push_back(b.second.get());
+	b.second->last_encoded_id = -1;
       }
+      for (auto& e : o->extent_map.extent_map) {
+	Blob* tb = e.blob.get();
+	if (tb->last_encoded_id == -1) {
+	  bvec.push_back(tb);
+	  tb->last_encoded_id = 0;
+	}
+      }
+      for (auto& b : o->extent_map.spanning_blob_map) {
+	Blob* tb = b.second.get();
+	if (tb->last_encoded_id == -1) {
+	  // Having blob in spanning but not mapped is an error.
+	  // It will be dropped during encode_some(),
+	  // but in the meantime we want cache to be consistent.
+	  bvec.push_back(tb);
+	  tb->last_encoded_id = 0;
+	}
+      }
+
       for (auto b : bvec) {
-	if (dest->cache != cache) {
-	  for (auto& i : b->bc.buffer_map) {
-	    if (!i.second->is_writing()) {
-	      ldout(store->cct, 20) << __func__ << "   moving " << *i.second
-				    << dendl;
-	      dest->cache->_move(cache, i.second.get());
-	    }
+	for (auto& i : b->bc.buffer_map) {
+	  if (!i.second->is_writing()) {
+	    ldout(store->cct, 1) << __func__ << "   moving " << *i.second
+				 << dendl;
+	    dest->cache->_move(cache, i.second.get());
+	  } else {
+	    ldout(store->cct, 1) << __func__ << "   not moving " << *i.second
+				 << dendl;
 	  }
 	}
 	SharedBlob* sb = b->shared_blob.get();
