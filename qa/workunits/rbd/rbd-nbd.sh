@@ -387,4 +387,34 @@ if [ -n "${COOKIE}" ]; then
     unmap_device ${DEV} ${PID}
 fi
 
+# test discard granularity with journaling
+rbd config image set ${POOL}/${IMAGE} rbd_discard_granularity_bytes 4096
+rbd feature enable ${POOL}/${IMAGE} journaling
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
+get_pid ${POOL}
+# since a discard will now be pruned to only whole blocks (0..4095, 4096..8191)
+# let us test all the cases around those alignments. 512 is the smallest
+# possible block blkdiscard allows us to use. Thus the test checks
+# 512 before, on the alignment, 512 after.
+_sudo blkdiscard --offset 0 --length $((4096-512)) ${DEV}
+_sudo blkdiscard --offset 0 --length 4096 ${DEV}
+_sudo blkdiscard --offset 0 --length $((4096+512)) ${DEV}
+_sudo blkdiscard --offset 512 --length $((8192-1024)) ${DEV}
+_sudo blkdiscard --offset 512 --length $((8192-512)) ${DEV}
+_sudo blkdiscard --offset 512 --length 8192 ${DEV}
+# wait for commit log to be empty, 10 seconds should be well enough
+tries=0
+queue_length=`rbd journal inspect --pool ${POOL} --image ${IMAGE} | awk '/entries inspected/ {print $1}'`
+while [ ${tries} -lt 10 ] && [ ${queue_length} -gt 0 ]; do
+    rbd journal inspect --pool ${POOL} --image ${IMAGE} --verbose
+    sleep 1
+    queue_length=`rbd journal inspect --pool ${POOL} --image ${IMAGE} | awk '/entries inspected/ {print $1}'`
+    tries=$((tries+1))
+done
+[ ${queue_length} -eq 0 ]
+unmap_device ${DEV} ${PID}
+DEV=
+rbd feature disable ${POOL}/${IMAGE} journaling
+rbd config image rm ${POOL}/${IMAGE} rbd_discard_granularity_bytes
+
 echo OK
