@@ -36,6 +36,7 @@
 #include "events/ETableClient.h"
 #include "events/ETableServer.h"
 #include "events/ESegment.h"
+#include "events/ELid.h"
 
 #include "include/stringify.h"
 
@@ -3296,6 +3297,34 @@ void ESegment::generate_test_instances(std::list<ESegment*>& ls)
   ls.push_back(new ESegment);
 }
 
+void ELid::encode(bufferlist &bl, uint64_t features) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(seq, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ELid::decode(bufferlist::const_iterator &bl)
+{
+  DECODE_START(1, bl);
+  decode(seq, bl);
+  DECODE_FINISH(bl);
+}
+
+void ELid::replay(MDSRank *mds)
+{
+  dout(4) << "ELid::replay, seq " << seq << dendl;
+}
+
+void ELid::dump(Formatter *f) const
+{
+  f->dump_int("seq", seq);
+}
+
+void ELid::generate_test_instances(std::list<ELid*>& ls)
+{
+  ls.push_back(new ELid);
+}
 
 void ENoOp::encode(bufferlist &bl, uint64_t features) const
 {

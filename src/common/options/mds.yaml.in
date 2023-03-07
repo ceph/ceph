@@ -512,7 +512,19 @@ options:
   - mds
   fmt_desc: Determines whether the MDS should try to skip corrupt journal
     events during journal replay.
-  with_legacy: true
+  flags:
+  - runtime
+- name: mds_log_skip_unbounded_events
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+  fmt_desc: Determines whether the MDS should try to skip journal
+    events during journal replay that wrongly exist before
+    a major segment boundary.
+  flags:
+  - runtime
 - name: mds_log_max_events
   type: int
   level: advanced

@@ -27,6 +27,7 @@
 
 #include "events/ESubtreeMap.h"
 #include "events/ESegment.h"
+#include "events/ELid.h"
 
 #include "common/config.h"
 #include "common/errno.h"
@@ -53,6 +54,8 @@ MDLog::MDLog(MDSRank* m)
   major_segment_event_ratio = g_conf().get_val<uint64_t>("mds_log_major_segment_event_ratio");
   max_segments = g_conf().get_val<uint64_t>("mds_log_max_segments");
   max_events = g_conf().get_val<int64_t>("mds_log_max_events");
+  skip_corrupt_events = g_conf().get_val<bool>("mds_log_skip_corrupt_events");
+  skip_unbounded_events = g_conf().get_val<bool>("mds_log_skip_unbounded_events");
 }
 
 MDLog::~MDLog()
@@ -1400,22 +1403,23 @@ void MDLog::_replay_thread()
       mds->clog->error() << "corrupt journal event at " << pos << "~"
                          << bl.length() << " / "
                          << journaler->get_write_pos();
-      if (g_conf()->mds_log_skip_corrupt_events) {
+      if (skip_corrupt_events) {
         continue;
       } else {
         mds->damaged_unlocked();
         ceph_abort();  // Should be unreachable because damaged() calls
                     // respawn()
       }
-    }
-    le->set_start_off(pos);
-
-    // have we seen an import map yet?
-    if (segments.empty() && !dynamic_cast<ESubtreeMap*>(le.get())) {
-      dout(1) << "_replay " << pos << "~" << bl.length() << " / " << journaler->get_write_pos()
-              << " " << le->get_stamp() << " -- waiting for ESubtreeMap.  (skipping " << *le << ")" << dendl;
+    } else if (!segments.empty() && dynamic_cast<ELid*>(le.get())) {
+      /* This can reasonably happen when a up:stopping MDS restarts after
+       * writing ELid. We will merge with the previous segment.
+       * We are enforcing the constraint that ESubtreeMap should begin
+       * the journal.
+       */
+      dout(20) << "found ELid not at the start of the journal" << dendl;
       continue;
     }
+    le->set_start_off(pos);
 
     events_since_last_major_segment++;
     if (auto sb = dynamic_cast<SegmentBoundary*>(le.get()); sb) {
@@ -1434,6 +1438,22 @@ void MDLog::_replay_thread()
       }
     } else {
       event_seq++;
+    }
+
+    if (major_segments.empty()) {
+      dout(0) << __func__ << " " << pos << "~" << bl.length() << " / "
+              << journaler->get_write_pos() << " " << le->get_stamp()
+              << " -- waiting for major segment."
+              << dendl;
+      dout(0) << " Log event is " << *le << dendl;
+      if (skip_unbounded_events) {
+        dout(5) << __func__ << " skipping!" << dendl;
+        continue;
+      } else {
+        mds->damaged_unlocked();
+        ceph_abort();  // Should be unreachable because damaged() calls
+                       // respawn()
+      }
     }
 
     dout(10) << "_replay " << pos << "~" << bl.length() << " / " << journaler->get_write_pos()
@@ -1557,5 +1577,11 @@ void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMa
     if (!pause) {
       kick_submitter();
     }
+  }
+  if (changed.count("mds_log_skip_corrupt_events")) {
+    skip_corrupt_events = g_conf().get_val<bool>("mds_log_skip_corrupt_events");
+  }
+  if (changed.count("mds_log_skip_unbounded_events")) {
+    skip_unbounded_events = g_conf().get_val<bool>("mds_log_skip_unbounded_events");
   }
 }
