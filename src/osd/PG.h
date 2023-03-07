@@ -538,8 +538,6 @@ public:
   void on_pool_change() override;
   virtual void plpg_on_pool_change() = 0;
 
-  void on_info_history_change() override;
-
   void reschedule_scrub() override;
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;

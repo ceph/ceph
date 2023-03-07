@@ -1679,21 +1679,6 @@ std::optional<requested_scrub_t> PG::validate_scrub_mode() const
   return upd_flags;
 }
 
-/*
- * Note: on_info_history_change() is used in those two cases where we're not sure
- * whether the role of the PG was changed, and if so - was this change relayed to the
- * scrub-queue.
- */
-void PG::on_info_history_change()
-{
-  ceph_assert(m_scrubber);
-  dout(20) << fmt::format(
-		  "{} for a {}", __func__,
-		  (is_primary() ? "Primary" : "non-primary"))
-	   << dendl;
-  reschedule_scrub();
-}
-
 void PG::reschedule_scrub()
 {
   dout(20) << fmt::format(
