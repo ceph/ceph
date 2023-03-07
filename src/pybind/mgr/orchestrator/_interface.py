@@ -31,7 +31,8 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    IscsiServiceSpec, IngressSpec, SNMPGatewaySpec, MDSSpec, TunedProfileSpec
+    IscsiServiceSpec, IngressSpec, SNMPGatewaySpec, MDSSpec, TunedProfileSpec, \
+    NvmeofServiceSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.utils import datetime_to_str, str_to_datetime
@@ -478,6 +479,7 @@ class Orchestrator(object):
             'crash': self.apply_crash,
             'grafana': self.apply_grafana,
             'iscsi': self.apply_iscsi,
+            'nvmeof': self.apply_nvmeof,
             'mds': self.apply_mds,
             'mgr': self.apply_mgr,
             'mon': self.apply_mon,
@@ -666,6 +668,10 @@ class Orchestrator(object):
         """Update iscsi cluster"""
         raise NotImplementedError()
 
+    def apply_nvmeof(self, spec: NvmeofServiceSpec) -> OrchResult[str]:
+        """Update nvmeof cluster"""
+        raise NotImplementedError()
+
     def apply_prometheus(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update prometheus cluster"""
         raise NotImplementedError()
@@ -788,6 +794,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'haproxy': 'ingress',
         'keepalived': 'ingress',
         'iscsi': 'iscsi',
+        'nvmeof': 'nvmeof',
         'rbd-mirror': 'rbd-mirror',
         'cephfs-mirror': 'cephfs-mirror',
         'nfs': 'nfs',
@@ -820,6 +827,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'osd': ['osd'],
         'ingress': ['haproxy', 'keepalived'],
         'iscsi': ['iscsi'],
+        'nvmeof': ['nvmeof'],
         'rbd-mirror': ['rbd-mirror'],
         'cephfs-mirror': ['cephfs-mirror'],
         'nfs': ['nfs'],
