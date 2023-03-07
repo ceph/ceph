@@ -338,16 +338,10 @@ class Schedules:
         self.level_specs = {}
         self.schedules = {}
 
-    def __len__(self):
-        return len(self.schedules)
-
-    def load(self, namespace_validator=None, image_validator=None):
-
-        schedule_cfg = self.handler.module.get_module_option(
-            self.handler.MODULE_OPTION_NAME, '')
-
         # Previous versions incorrectly stored the global config in
         # the localized module option. Check the config is here and fix it.
+        schedule_cfg = self.handler.module.get_module_option(
+            self.handler.MODULE_OPTION_NAME, '')
         if not schedule_cfg:
             schedule_cfg = self.handler.module.get_localized_module_option(
                 self.handler.MODULE_OPTION_NAME, '')
@@ -357,6 +351,15 @@ class Schedules:
         self.handler.module.set_localized_module_option(
             self.handler.MODULE_OPTION_NAME, None)
 
+    def __len__(self):
+        return len(self.schedules)
+
+    def load(self, namespace_validator=None, image_validator=None):
+        self.level_specs = {}
+        self.schedules = {}
+
+        schedule_cfg = self.handler.module.get_module_option(
+            self.handler.MODULE_OPTION_NAME, '')
         if schedule_cfg:
             try:
                 level_spec = LevelSpec.make_global()
