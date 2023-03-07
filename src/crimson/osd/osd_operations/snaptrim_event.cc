@@ -494,15 +494,18 @@ SnapTrimObjSubEvent::with_pg(
   }).then_interruptible([this] {
     logger().debug("{}: getting obc for {}", *this, coid);
     // end of commonality
-    // with_cone_obc lock both clone's and head's obcs
-    return pg->obc_loader.with_clone_obc<RWState::RWWRITE>(coid, [this](auto clone_obc) {
+    // with_head_and_clone_obc lock both clone's and head's obcs
+    return pg->obc_loader.with_head_and_clone_obc<RWState::RWWRITE>(
+      coid,
+      [this](auto head_obc, auto clone_obc) {
       logger().debug("{}: got clone_obc={}", *this, fmt::ptr(clone_obc.get()));
       return enter_stage<interruptor>(
         pp().process
-      ).then_interruptible([this, clone_obc=std::move(clone_obc)]() mutable {
+      ).then_interruptible(
+        [this,clone_obc=std::move(clone_obc), head_obc=std::move(head_obc)]() mutable {
         logger().debug("{}: processing clone_obc={}", *this, fmt::ptr(clone_obc.get()));
         return remove_or_update(
-          clone_obc, clone_obc->head
+          clone_obc, head_obc
         ).safe_then_unpack_interruptible([clone_obc, this]
                                          (auto&& txn, auto&& log_entries) mutable {
           auto [submitted, all_completed] = pg->submit_transaction(

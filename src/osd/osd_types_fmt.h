@@ -334,5 +334,6 @@ template <> struct fmt::formatter<ObjectRecoveryProgress> : fmt::ostream_formatt
 template <> struct fmt::formatter<PastIntervals> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<pg_log_op_return_item_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<watch_info_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<pg_log_entry_t> : fmt::ostream_formatter {};
 template <bool TrackChanges> struct fmt::formatter<pg_missing_set<TrackChanges>> : fmt::ostream_formatter {};
 #endif
