@@ -25,6 +25,10 @@ class EResetJournal : public LogEvent, public SegmentBoundary {
   EResetJournal() : LogEvent(EVENT_RESETJOURNAL) { }
   ~EResetJournal() override {}
 
+  bool is_major_segment_boundary() const override {
+    return true;
+  }
+
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
