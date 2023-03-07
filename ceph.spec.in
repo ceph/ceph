@@ -1885,6 +1885,7 @@ fi
 %{_datadir}/ceph/mgr/prometheus
 %{_datadir}/ceph/mgr/rbd_support
 %{_datadir}/ceph/mgr/restful
+%{_datadir}/ceph/mgr/rgw
 %{_datadir}/ceph/mgr/selftest
 %{_datadir}/ceph/mgr/snap_schedule
 %{_datadir}/ceph/mgr/stats
