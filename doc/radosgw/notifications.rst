@@ -212,12 +212,9 @@ Request parameters:
  - ``ca-location``: If this is provided and a secure connection is used, the
    specified CA will be used instead of the default CA to authenticate the
    broker. 
- - user/password may be provided over HTTPS. If not, the config parameter
-   `rgw_allow_notification_secrets_in_cleartext` must be `true` in order to create topic
- - user/password may be provided along with ``use-ssl``.
-   The broker credentials will otherwise be sent over insecure transport
- - ``mechanism`` may be provided together with user/password (default: ``PLAIN``).
-   The supported SASL mechanisms are:
+ - user/password: This should be provided over HTTPS. If not, the config parameter `rgw_allow_notification_secrets_in_cleartext` must be `true` in order to create topics.
+ - user/password: This should be provided together with ``use-ssl``. If not, the broker credentials will be sent over insecure transport.
+ - mechanism: may be provided together with user/password (default: ``PLAIN``). The supported SASL mechanisms are:
 
   - PLAIN
   - SCRAM-SHA-256
