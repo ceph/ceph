@@ -1,0 +1,43 @@
+roles:
+- - host.1
+  - osd.0
+  - osd.1
+  - mon.a
+  - mgr.a
+  - client.0
+- - host.2
+  - osd.2
+  - osd.3
+  - mon.b
+  - mgr.b
+  - client.1
+- - host.3
+  - osd.4
+  - osd.5
+  - mon.c
+  - mgr.c
+  - client.2
+- - host.4
+  - osd.6
+  - osd.7
+  - mon.d
+  - mgr.d
+  - client.3
+- - host.arbiter
+  - mon.e
+openstack:
+- volumes: # attached to each instance
+    count: 4
+    size: 10 # GB
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.1:
+      - ceph orch apply mds a
+- print: "**** starting mon-stretch ..."
+- workunit:
+    clients:
+      all:
+        - mon/mon-stretch.sh
+- print: "**** done end mon-stretch..."
