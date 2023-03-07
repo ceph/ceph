@@ -12,6 +12,12 @@ namespace ceph::common {
 /**
  * intrusive_lru: lru implementation with embedded map and list hook
  *
+ * Elements will be stored in an intrusive set. Once an element is no longer
+ * referenced it will remain in the set. The unreferenced elements will be
+ * evicted from the set once the set size exceeds the `lru_target_size`.
+ * Referenced elements will not be evicted as this is a registery with
+ * extra caching capabilities.
+ *
  * Note, this implementation currently is entirely thread-unsafe.
  */
 
@@ -39,10 +45,18 @@ template <typename Config>
 class intrusive_lru_base {
   unsigned use_count = 0;
 
-  // null if unreferenced
+  // lru points to the corresponding intrusive_lru
+  // which will be set to null if its use_count
+  // is zero (aka unreferenced).
   intrusive_lru<Config> *lru = nullptr;
 
 public:
+  bool is_referenced() const {
+    return static_cast<bool>(lru);
+  }
+  bool is_unreferenced() const {
+    return !is_referenced();
+  }
   boost::intrusive::set_member_hook<> set_hook;
   boost::intrusive::list_member_hook<> list_hook;
 
@@ -92,35 +106,43 @@ class intrusive_lru {
 
   size_t lru_target_size = 0;
 
+  // when the lru_set exceeds its target size, evict
+  // only unreferenced elements from it (if any).
   void evict() {
     while (!unreferenced_list.empty() &&
 	   lru_set.size() > lru_target_size) {
-      auto &b = unreferenced_list.front();
-      assert(!b.lru);
+      auto &evict_target = unreferenced_list.front();
+      assert(evict_target.is_unreferenced());
       unreferenced_list.pop_front();
       lru_set.erase_and_dispose(
-	lru_set.iterator_to(b),
+	lru_set.iterator_to(evict_target),
 	[](auto *p) { delete p; }
       );
     }
   }
 
+  // access an existing element in the lru_set.
+  // mark as referenced if necessary.
   void access(base_t &b) {
-    if (b.lru)
+    if (b.is_referenced())
       return;
     unreferenced_list.erase(lru_list_t::s_iterator_to(b));
     b.lru = this;
   }
 
+  // insert a new element to the lru_set.
+  // attempt to evict if possible.
   void insert(base_t &b) {
-    assert(!b.lru);
+    assert(b.is_unreferenced());
     lru_set.insert(b);
     b.lru = this;
     evict();
   }
 
-  void unreferenced(base_t &b) {
-    assert(b.lru);
+  // an element in the lru_set has no users,
+  // mark it as unreferenced and try to evict.
+  void mark_as_unreferenced(base_t &b) {
+    assert(b.is_referenced());
     unreferenced_list.push_back(b);
     b.lru = nullptr;
     evict();
@@ -187,7 +209,7 @@ void intrusive_ptr_release(intrusive_lru_base<Config> *p) {
   assert(p->use_count > 0);
   --p->use_count;
   if (p->use_count == 0) {
-    p->lru->unreferenced(*p);
+    p->lru->mark_as_unreferenced(*p);
   }
 }
 
