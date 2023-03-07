@@ -73,7 +73,8 @@ public:
                        off_t in_ofs,
                        size_t size,
                        bufferlist& output,
-                       off_t stream_offset) override
+                       off_t stream_offset,
+                       optional_yield y) override
   {
     output.clear();
     output.append(input.c_str(), input.length());
@@ -83,7 +84,8 @@ public:
                        off_t in_ofs,
                        size_t size,
                        bufferlist& output,
-                       off_t stream_offset) override
+                       off_t stream_offset,
+                       optional_yield y) override
   {
     output.clear();
     output.append(input.c_str(), input.length());
@@ -132,9 +134,9 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity)
       ASSERT_EQ(offset % block_size, 0u);
 
       bufferlist encrypted;
-      ASSERT_TRUE(aes->encrypt(input, begin, end - begin, encrypted, offset));
+      ASSERT_TRUE(aes->encrypt(input, begin, end - begin, encrypted, offset, null_yield));
       bufferlist decrypted;
-      ASSERT_TRUE(aes->decrypt(encrypted, 0, end - begin, decrypted, offset));
+      ASSERT_TRUE(aes->decrypt(encrypted, 0, end - begin, decrypted, offset, null_yield));
 
       ASSERT_EQ(decrypted.length(), end - begin);
       ASSERT_EQ(std::string_view(input.c_str() + begin, end - begin),
@@ -181,9 +183,9 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_2)
       ASSERT_EQ(offset % block_size, 0u);
 
       bufferlist encrypted;
-      ASSERT_TRUE(aes->encrypt(input, begin, end, encrypted, offset));
+      ASSERT_TRUE(aes->encrypt(input, begin, end, encrypted, offset, null_yield));
       bufferlist decrypted;
-      ASSERT_TRUE(aes->decrypt(encrypted, 0, end, decrypted, offset));
+      ASSERT_TRUE(aes->decrypt(encrypted, 0, end, decrypted, offset, null_yield));
 
       ASSERT_EQ(decrypted.length(), end);
       ASSERT_EQ(std::string_view(input.c_str(), end),
@@ -244,7 +246,7 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_3)
         if (pos + chunk > end)
           chunk = end - pos;
         bufferlist tmp;
-        ASSERT_TRUE(aes->encrypt(input, pos, chunk, tmp, offset + pos));
+        ASSERT_TRUE(aes->encrypt(input, pos, chunk, tmp, offset + pos, null_yield));
         encrypted1.append(tmp);
         pos += chunk;
         rr++;
@@ -257,7 +259,7 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_3)
         if (pos + chunk > end)
           chunk = end - pos;
         bufferlist tmp;
-        ASSERT_TRUE(aes->encrypt(input, pos, chunk, tmp, offset + pos));
+        ASSERT_TRUE(aes->encrypt(input, pos, chunk, tmp, offset + pos, null_yield));
         encrypted2.append(tmp);
         pos += chunk;
         rr++;
@@ -310,8 +312,8 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_size_0_15)
 
       bufferlist encrypted;
       bufferlist decrypted;
-      ASSERT_TRUE(aes->encrypt(input, 0, end, encrypted, offset));
-      ASSERT_TRUE(aes->encrypt(encrypted, 0, end, decrypted, offset));
+      ASSERT_TRUE(aes->encrypt(input, 0, end, encrypted, offset, null_yield));
+      ASSERT_TRUE(aes->encrypt(encrypted, 0, end, decrypted, offset, null_yield));
       ASSERT_EQ(encrypted.length(), end);
       ASSERT_EQ(decrypted.length(), end);
       ASSERT_EQ(std::string_view(input.c_str(), end),
@@ -372,7 +374,7 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_last_block)
         if (pos + chunk > end)
           chunk = end - pos;
         bufferlist tmp;
-        ASSERT_TRUE(aes->encrypt(input, pos, chunk, tmp, offset + pos));
+        ASSERT_TRUE(aes->encrypt(input, pos, chunk, tmp, offset + pos, null_yield));
         encrypted1.append(tmp);
         pos += chunk;
         rr++;
@@ -384,7 +386,7 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_last_block)
         if (pos + chunk > end)
           chunk = end - pos;
         bufferlist tmp;
-        ASSERT_TRUE(aes->encrypt(input, pos, chunk, tmp, offset + pos));
+        ASSERT_TRUE(aes->encrypt(input, pos, chunk, tmp, offset + pos, null_yield));
         encrypted2.append(tmp);
         pos += chunk;
         rr++;
@@ -418,7 +420,7 @@ TEST(TestRGWCrypto, verify_RGWGetObj_BlockDecrypt_ranges)
   auto cbc = AES_256_CBC_create(&no_dpp, g_ceph_context, &key[0], 32);
   ASSERT_NE(cbc.get(), nullptr);
   bufferlist encrypted;
-  ASSERT_TRUE(cbc->encrypt(input, 0, test_range, encrypted, 0));
+  ASSERT_TRUE(cbc->encrypt(input, 0, test_range, encrypted, 0, null_yield));
 
 
   for (off_t r = 93; r < 150; r++ )
@@ -426,7 +428,7 @@ TEST(TestRGWCrypto, verify_RGWGetObj_BlockDecrypt_ranges)
     ut_get_sink get_sink;
     auto cbc = AES_256_CBC_create(&no_dpp, g_ceph_context, &key[0], 32);
     ASSERT_NE(cbc.get(), nullptr);
-    RGWGetObj_BlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink, std::move(cbc));
+    RGWGetObj_BlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink, std::move(cbc), null_yield);
 
     //random ranges
     off_t begin = (r/3)*r*(r+13)*(r+23)*(r+53)*(r+71) % test_range;
@@ -465,14 +467,14 @@ TEST(TestRGWCrypto, verify_RGWGetObj_BlockDecrypt_chunks)
   auto cbc = AES_256_CBC_create(&no_dpp, g_ceph_context, &key[0], 32);
   ASSERT_NE(cbc.get(), nullptr);
   bufferlist encrypted;
-  ASSERT_TRUE(cbc->encrypt(input, 0, test_range, encrypted, 0));
+  ASSERT_TRUE(cbc->encrypt(input, 0, test_range, encrypted, 0, null_yield));
 
   for (off_t r = 93; r < 150; r++ )
   {
     ut_get_sink get_sink;
     auto cbc = AES_256_CBC_create(&no_dpp, g_ceph_context, &key[0], 32);
     ASSERT_NE(cbc.get(), nullptr);
-    RGWGetObj_BlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink, std::move(cbc));
+    RGWGetObj_BlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink, std::move(cbc), null_yield);
 
     //random
     off_t begin = (r/3)*r*(r+13)*(r+23)*(r+53)*(r+71) % test_range;
@@ -518,7 +520,7 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup)
   ut_get_sink get_sink;
   auto nonecrypt = std::unique_ptr<BlockCrypt>(new BlockCryptNone);
   RGWGetObj_BlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink,
-                                 std::move(nonecrypt));
+                                 std::move(nonecrypt), null_yield);
   ASSERT_EQ(fixup_range(&decrypt,0,0),     range_t(0,255));
   ASSERT_EQ(fixup_range(&decrypt,1,256),   range_t(0,511));
   ASSERT_EQ(fixup_range(&decrypt,0,255),   range_t(0,255));
@@ -560,7 +562,7 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_simple)
   ut_get_sink get_sink;
   auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
   TestRGWGetObj_BlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink,
-				     std::move(nonecrypt));
+				     std::move(nonecrypt), null_yield);
   decrypt.set_parts_len(create_mp_parts(obj_size, part_size));
   ASSERT_EQ(fixup_range(&decrypt,0,0),     range_t(0,4095));
   ASSERT_EQ(fixup_range(&decrypt,1,4096),   range_t(0,8191));
@@ -591,7 +593,7 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_non_aligned_obj_size)
   ut_get_sink get_sink;
   auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
   TestRGWGetObj_BlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink,
-				     std::move(nonecrypt));
+				     std::move(nonecrypt), null_yield);
   auto na_obj_size = obj_size + 1;
   decrypt.set_parts_len(create_mp_parts(na_obj_size, part_size));
 
@@ -619,7 +621,7 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_non_aligned_part_size)
   ut_get_sink get_sink;
   auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
   TestRGWGetObj_BlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink,
-				     std::move(nonecrypt));
+				     std::move(nonecrypt), null_yield);
   auto na_part_size = part_size + 1;
   decrypt.set_parts_len(create_mp_parts(obj_size, na_part_size));
 
@@ -653,7 +655,7 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_non_aligned)
   ut_get_sink get_sink;
   auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
   TestRGWGetObj_BlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink,
-				     std::move(nonecrypt));
+				     std::move(nonecrypt), null_yield);
   auto na_part_size = part_size + 1;
   auto na_obj_size = obj_size + 7; // (6*(5MiB + 1) + 1) for the last 1B overflow
   decrypt.set_parts_len(create_mp_parts(na_obj_size, na_part_size));
@@ -683,7 +685,7 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_invalid_ranges)
   ut_get_sink get_sink;
   auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
   TestRGWGetObj_BlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink,
-				     std::move(nonecrypt));
+				     std::move(nonecrypt), null_yield);
 
   decrypt.set_parts_len(create_mp_parts(obj_size, part_size));
 
@@ -722,7 +724,7 @@ TEST(TestRGWCrypto, verify_RGWPutObj_BlockEncrypt_chunks)
     auto cbc = AES_256_CBC_create(&no_dpp, g_ceph_context, &key[0], 32);
     ASSERT_NE(cbc.get(), nullptr);
     RGWPutObj_BlockEncrypt encrypt(&no_dpp, g_ceph_context, &put_sink,
-                                   std::move(cbc));
+                                   std::move(cbc), null_yield);
 
     off_t test_size = (r/5)*(r+7)*(r+13)*(r+101)*(r*103) % (test_range - 1) + 1;
     off_t pos = 0;
@@ -749,7 +751,7 @@ TEST(TestRGWCrypto, verify_RGWPutObj_BlockEncrypt_chunks)
     bufferlist encrypted;
     bufferlist decrypted;
     encrypted.append(put_sink.get_sink());
-    ASSERT_TRUE(cbc->decrypt(encrypted, 0, test_size, decrypted, 0));
+    ASSERT_TRUE(cbc->decrypt(encrypted, 0, test_size, decrypted, 0, null_yield));
 
     ASSERT_EQ(decrypted.length(), test_size);
     ASSERT_EQ(std::string_view(decrypted.c_str(), test_size),
@@ -783,7 +785,8 @@ TEST(TestRGWCrypto, verify_Encrypt_Decrypt)
 
     ut_put_sink put_sink;
     RGWPutObj_BlockEncrypt encrypt(&no_dpp, g_ceph_context, &put_sink,
-				   AES_256_CBC_create(&no_dpp, g_ceph_context, &key[0], 32));
+				   AES_256_CBC_create(&no_dpp, g_ceph_context, &key[0], 32),
+                                   null_yield);
     bufferlist bl;
     bl.append((char*)test_in, test_size);
     encrypt.process(std::move(bl), 0);
@@ -795,7 +798,8 @@ TEST(TestRGWCrypto, verify_Encrypt_Decrypt)
 
     ut_get_sink get_sink;
     RGWGetObj_BlockDecrypt decrypt(&no_dpp, g_ceph_context, &get_sink,
-                                   AES_256_CBC_create(&no_dpp, g_ceph_context, &key[0], 32));
+                                   AES_256_CBC_create(&no_dpp, g_ceph_context, &key[0], 32),
+                                   null_yield);
 
     off_t bl_ofs = 0;
     off_t bl_end = test_size - 1;
