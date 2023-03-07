@@ -1691,7 +1691,23 @@ std::optional<requested_scrub_t> PG::validate_scrub_mode() const
   return upd_flags;
 }
 
-void PG::on_scrub_schedule_input_change()
+void PG::reschedule_scrub()
+{
+  dout(20) << fmt::format(
+		  "{} for a {}", __func__,
+		  (is_primary() ? "Primary" : "non-primary"))
+	   << dendl;
+
+  // we are assuming no change in primary status
+  if (is_primary()) {
+    ceph_assert(m_scrubber);
+    m_scrubber->update_scrub_job(m_planned_scrub);
+  } else {
+    dout(20) << __func__ << ": inactive or non-primary" << dendl;
+  }
+}
+
+oid PG::on_scrub_schedule_input_change()
 {
   if (is_active() && is_primary()) {
     dout(20) << __func__ << ": active/primary" << dendl;
@@ -1701,6 +1717,7 @@ void PG::on_scrub_schedule_input_change()
     dout(20) << __func__ << ": inactive or non-primary" << dendl;
   }
 }
+
 
 void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
 {

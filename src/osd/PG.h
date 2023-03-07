@@ -535,6 +535,8 @@ public:
   void on_pool_change() override;
   virtual void plpg_on_pool_change() = 0;
 
+  /* Sam's ?*/ void on_info_history_change() override;
+
   /**
    * on_scrub_schedule_input_change
    *
@@ -546,7 +548,7 @@ public:
    * - pg stat scrub timestamps
    * - etc
    */
-  void on_scrub_schedule_input_change();
+  /* mine? */void on_scrub_schedule_input_change();
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;
 
