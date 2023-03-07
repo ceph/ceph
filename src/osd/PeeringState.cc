@@ -226,7 +226,6 @@ void PeeringState::update_history(const pg_history_t& new_history)
 	       << info.history.prior_readable_until_ub << ")" << dendl;
     }
   }
-  pl->on_info_history_change();
 }
 
 hobject_t PeeringState::earliest_backfill() const
@@ -667,7 +666,6 @@ void PeeringState::start_peering_interval(
   }
 
   on_new_interval();
-  pl->on_info_history_change();
 
   psdout(1) << "up " << oldup << " -> " << up
 	    << ", acting " << oldacting << " -> " << acting
@@ -6570,7 +6568,6 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
     ps->info = msg->info;
-    pl->on_info_history_change();
     ps->dirty_info = true;
     ps->dirty_big_info = true;  // maybe.
 

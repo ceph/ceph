@@ -159,10 +159,6 @@ public:
     bool need_write_epoch,
     ceph::os::Transaction &t) final;
 
-  void on_info_history_change() final {
-    // Not needed yet -- mainly for scrub scheduling
-  }
-
   /// Need to reschedule next scrub. Assuming no change in role
   void reschedule_scrub() final {
   }

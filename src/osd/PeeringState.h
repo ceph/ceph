@@ -279,9 +279,6 @@ public:
       bool need_write_epoch,
       ObjectStore::Transaction &t) = 0;
 
-    /// Notify that info/history changed (generally to update scrub registration)
-    virtual void on_info_history_change() = 0;
-
     /// Need to reschedule next scrub. Assuming no change in role
     virtual void reschedule_scrub() = 0;
 
