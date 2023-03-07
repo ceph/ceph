@@ -121,6 +121,7 @@ void RGWRealmReloader::reload()
 				   cct->_conf->rgw_enable_quota_threads,
 				   cct->_conf->rgw_run_sync_thread,
 				   cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
+                                   true, // run notification thread
 				   cct->_conf->rgw_cache_enabled);
 
     ldpp_dout(&dp, 1) << "Creating new driver" << dendl;
