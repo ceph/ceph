@@ -1679,17 +1679,14 @@ std::optional<requested_scrub_t> PG::validate_scrub_mode() const
   return upd_flags;
 }
 
-void PG::reschedule_scrub()
+void PG::on_scrub_schedule_input_change()
 {
-  dout(20) << fmt::format(
-		  "{} for a {}", __func__,
-		  (is_primary() ? "Primary" : "non-primary"))
-	   << dendl;
-
-  // we are assuming no change in primary status
-  if (is_primary()) {
+  if (is_active() && is_primary()) {
+    dout(20) << __func__ << ": active/primary" << dendl;
     ceph_assert(m_scrubber);
     m_scrubber->update_scrub_job(m_planned_scrub);
+  } else {
+    dout(20) << __func__ << ": inactive or non-primary" << dendl;
   }
 }
 
@@ -2562,6 +2559,9 @@ void PG::handle_activate_map(PeeringCtx &rctx)
   recovery_state.activate_map(rctx);
 
   requeue_map_waiters();
+
+  // pool options affecting scrub may have changed
+  on_scrub_schedule_input_change();
 }
 
 void PG::handle_initialize(PeeringCtx &rctx)

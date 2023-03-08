@@ -1935,6 +1935,7 @@ void PgScrubber::scrub_finish()
     int tr = m_osds->store->queue_transaction(m_pg->ch, std::move(t), nullptr);
     ceph_assert(tr == 0);
   }
+  update_scrub_job(m_planned_scrub);
 
   if (has_error) {
     m_pg->queue_peering_event(PGPeeringEventRef(
