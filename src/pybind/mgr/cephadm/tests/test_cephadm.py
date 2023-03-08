@@ -1846,9 +1846,11 @@ global_k3 = global_v3
 global_k1 = global_v1
 global_k2 = global_v2
 global_k3 = global_v3
+
 [mon]
 mon_k1 = mon_v1
 mon_k2 = mon_v2
+
 [osd]
 osd_k1 = osd_v1
 osd_k2 = osd_v2
