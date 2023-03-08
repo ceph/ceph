@@ -14,21 +14,21 @@ clients understand the new *pg-upmap* structure in the OSDMap.
 Enabling
 --------
 
-New clusters will have this module on by default. The cluster must only
-have luminous (and newer) clients. You can the turn the balancer off with:
+New clusters will by default enable the `balancer module`. The cluster must only
+have Luminous (and newer) clients. You can turn the balancer off with:
 
 .. prompt:: bash $
 
    ceph balancer off
 
 To allow use of the feature on existing clusters, you must tell the
-cluster that it only needs to support luminous (and newer) clients with:
+cluster that it only needs to support Luminous (and newer) clients with:
 
 .. prompt:: bash $
 
    ceph osd set-require-min-compat-client luminous
 
-This command will fail if any pre-luminous clients or daemons are
+This command will fail if any pre-Luminous clients or daemons are
 connected to the monitors.  You can see what client versions are in
 use with:
 
