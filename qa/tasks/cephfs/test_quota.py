@@ -104,3 +104,59 @@ class TestQuota(CephFSTestCase):
         with self.assertRaises(CommandFailedError):
             self.mount_b.write_n_mb("subdir_data/file", 40)
 
+    def test_human_readable_quota_values(self):
+        """
+        test human-readable values for setting ceph.quota.max_bytes
+        """
+        self.mount_a.run_shell(["mkdir", "subdir"])
+
+        self.assertEqual(self.mount_a.getfattr("./subdir",
+                                               "ceph.quota.max_bytes"), None)
+
+        readable_values = {"10K": "10240",
+                           "100Ki": "102400",
+                           "10M": "10485760",
+                           "100Mi": "104857600",
+                           "2G": "2147483648",
+                           "4Gi": "4294967296",
+                           "1T": "1099511627776",
+                           "2Ti": "2199023255552"}
+        for readable_value in readable_values:
+            self.mount_a.setfattr("./subdir", "ceph.quota.max_bytes",
+                                  readable_value)
+            self.assertEqual(self.mount_a.getfattr(
+                "./subdir", "ceph.quota.max_bytes"),
+                readable_values.get(readable_value))
+
+    def test_human_readable_quota_invalid_values(self):
+        """
+        test invalid values for ceph.quota.max_bytes
+        """
+
+        self.mount_a.run_shell(["mkdir", "subdir"])
+
+        invalid_values = ["10A", "1y00Ki", "af00", "G", "", " ", "-1t", "-1"]
+        for invalid_value in invalid_values:
+            with self.assertRaises(CommandFailedError):
+                self.mount_a.setfattr("./subdir", "ceph.quota.max_bytes",
+                                      invalid_value)
+
+    def test_disable_enable_human_readable_quota_values(self):
+        """
+        test:
+        1) disabling ceph.quota.max_bytes using byte value.
+        2) enabling it again using human readable value.
+        3) disabling it again but using human readable value.
+        """
+
+        self.mount_a.run_shell(["mkdir", "subdir"])
+
+        self.mount_a.setfattr("./subdir", "ceph.quota.max_bytes", "0")
+        self.assertEqual(self.mount_a.getfattr("./subdir",
+                                               "ceph.quota.max_bytes"), None)
+        self.mount_a.setfattr("./subdir", "ceph.quota.max_bytes", "1K")
+        self.assertEqual(self.mount_a.getfattr("./subdir",
+                                               "ceph.quota.max_bytes"), "1024")
+        self.mount_a.setfattr("./subdir", "ceph.quota.max_bytes", "0M")
+        self.assertEqual(self.mount_a.getfattr("./subdir",
+                                               "ceph.quota.max_bytes"), None)
