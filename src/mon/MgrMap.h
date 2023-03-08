@@ -257,6 +257,13 @@ public:
   // running modules on the active mgr daemon.
   std::map<std::string, std::string> services;
 
+  static MgrMap create_null_mgrmap() {
+    MgrMap null_map;
+    /* Use the largest epoch so it's always bigger than whatever the mgr has. */
+    null_map.epoch = std::numeric_limits<decltype(epoch)>::max();
+    return null_map;
+  }
+
   epoch_t get_epoch() const { return epoch; }
   epoch_t get_last_failure_osd_epoch() const { return last_failure_osd_epoch; }
   const entity_addrvec_t& get_active_addrs() const { return active_addrs; }
