@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*
 // vim: ts=8 sw=2 smarttab
 
+#include <cstdint>
+
 #include "include/rados/librados.hpp"
 
 constexpr int to_create = 10'000'000;
