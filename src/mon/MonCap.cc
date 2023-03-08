@@ -32,6 +32,11 @@
 
 #include "include/ceph_assert.h"
 
+#define dout_subsys ceph_subsys_mon
+
+#undef dout_prefix
+#define dout_prefix *_dout << "MonCap "
+
 using std::list;
 using std::map;
 using std::ostream;
