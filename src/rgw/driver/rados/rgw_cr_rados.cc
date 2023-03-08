@@ -237,18 +237,15 @@ int RGWAsyncLockSystemObj::_send_request(const DoutPrefixProvider *dpp)
   return l.lock_exclusive(&ref.pool.ioctx(), ref.obj.oid);
 }
 
-RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(
-  RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore *_store,
-  RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-  const string& _name,
-  const string& _cookie,
-  uint32_t _duration_secs) : RGWAsyncRadosRequest(caller, cn),
-				 store(_store),
+RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
+                      RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
+                       const string& _name, const string& _cookie, uint32_t _duration_secs) : RGWAsyncRadosRequest(caller, cn), store(_store),
 				 obj(_obj),
 				 lock_name(_name),
 				 cookie(_cookie),
 				 duration_secs(_duration_secs)
-         {}
+{
+}
 
 int RGWAsyncUnlockSystemObj::_send_request(const DoutPrefixProvider *dpp)
 {
@@ -521,22 +518,20 @@ int RGWRadosRemoveOidCR::request_complete()
   return r;
 }
 
-RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(
-  RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore *_store,
+RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
   const rgw_raw_obj& _obj,
   const string& _lock_name,
   const string& _cookie,
-  uint32_t _duration_secs) : RGWSimpleCoroutine(_store->ctx()),
+                      uint32_t _duration) : RGWSimpleCoroutine(_store->ctx()),
 			     async_rados(_async_rados),
 			     store(_store),
 			     lock_name(_lock_name),
 			     cookie(_cookie),
-			     duration_secs(_duration_secs),
+           duration(_duration),
 			     obj(_obj),
 			     req(nullptr)
 {
-  set_description() << "rados lock dest=" << obj << " lock=" <<
-    lock_name << " cookie=" << cookie << " duration_secs=" << duration_secs;
+  set_description() << "rados lock dest=" << obj << " lock=" << lock_name << " cookie=" << cookie << " duration=" << duration;
 }
 
 void RGWSimpleRadosLockCR::request_cleanup()
@@ -551,8 +546,7 @@ int RGWSimpleRadosLockCR::send_request(const DoutPrefixProvider *dpp)
 {
   set_status() << "sending request";
   req = new RGWAsyncLockSystemObj(this, stack->create_completion_notifier(),
-  				                        store, NULL, obj, lock_name, cookie,
-  			                          duration_secs);
+                                 store, NULL, obj, lock_name, cookie, duration);
   async_rados->queue(req);
   return 0;
 }
@@ -936,7 +930,6 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
 
 int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
 {
-  bool renew = false;
   if (aborted) {
     caller->set_sleeping(false);
     return set_cr_done();
@@ -945,19 +938,11 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
     last_renew_try_time = ceph::coarse_mono_clock::now();
     while (!going_down) {
       current_time = ceph::coarse_mono_clock::now();
-      if (bid_mgr) {
-        if(renew || bid_mgr->is_highest_bidder(shard_id)) {
-          yield call(new RGWSimpleRadosLockCR(async_rados, store, obj, lock_name, cookie, lock_duration_secs));
-        }
-        else {
-          retcode = -EBUSY;
-        } 
-      } else {
-        yield call(new RGWSimpleRadosLockCR(async_rados, store, obj, lock_name, cookie, lock_duration_secs));
-      }
+      yield call(new RGWSimpleRadosLockCR(async_rados, store, obj, lock_name, cookie, interval));
       if (latency) {
 	      latency->add_latency(ceph::coarse_mono_clock::now() - current_time);
       }
+      current_time = ceph::coarse_mono_clock::now();
       if (current_time - last_renew_try_time > interval_tolerance) {
         // renewal should happen between 50%-90% of interval
         ldout(store->ctx(), 1) << *this << ": WARNING: did not renew lock " << obj << ":" << lock_name << ": within 90\% of interval. " << 
@@ -971,16 +956,9 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
         ldout(store->ctx(), 20) << *this << ": couldn't lock " << obj << ":" << lock_name << ": retcode=" << retcode << dendl;
         return set_state(RGWCoroutine_Error, retcode);
       }
-      renew = true;
       ldout(store->ctx(), 20) << *this << ": successfully locked " << obj << ":" << lock_name << dendl;
       set_locked(true);
-      yield wait(utime_t(lock_duration_secs / 2, 0));
-      if (releasing_lock) {
-        set_locked(false);
-        yield call(new RGWSimpleRadosUnlockCR(async_rados, store, obj, lock_name, cookie));
-        releasing_lock = false;
-        renew = false;
-      }
+      yield wait(utime_t(interval / 2, 0));
     }
     set_locked(false); /* moot at this point anyway */
     current_time = ceph::coarse_mono_clock::now();

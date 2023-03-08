@@ -1433,12 +1433,6 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
   boost::intrusive_ptr<RGWCoroutinesStack> lease_stack;
 
-  ceph::coarse_mono_clock::duration work_duration;
-  bool work_period_done = false;
-  static constexpr ceph::coarse_mono_clock::time_point work_period_end_unset =
-    ceph::coarse_mono_clock::time_point::min();
-  ceph::coarse_mono_clock::time_point work_period_end = work_period_end_unset;
-  
   bool lost_lock = false;
 
   bool *reset_backoff;
@@ -1454,8 +1448,6 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   int total_entries = 0;
 
   RGWSyncTraceNodeRef tn;
-
-
 public:
   RGWMetaSyncShardCR(RGWMetaSyncEnv *_sync_env, const rgw_pool& _pool,
                      const std::string& period, epoch_t realm_epoch,
@@ -1467,11 +1459,7 @@ public:
       period(period), realm_epoch(realm_epoch), mdlog(mdlog),
       shard_id(_shard_id), sync_marker(_marker),
             period_marker(period_marker),
-      work_duration(std::chrono::seconds(
-		      cct->_conf.get_val<uint64_t>("rgw_sync_work_period"))),
-      reset_backoff(_reset_backoff),
-      tn(_tn)
-  {
+      reset_backoff(_reset_backoff), tn(_tn) {
     *reset_backoff = false;
   }
 
@@ -1586,7 +1574,6 @@ public:
         yield;
       }
       tn->log(10, "took lease");
-      //work_period_end = ceph::coarse_mono_clock::now() + work_duration;
 
       /* lock succeeded, a retry now should avoid previous backoff status */
       *reset_backoff = true;
@@ -1601,7 +1588,6 @@ public:
       total_entries = sync_marker.pos;
 
       /* sync! */
-      work_period_end = ceph::coarse_mono_clock::now() + work_duration;
       do {
         if (!lease_cr->is_locked()) {
           if (sync_env->bid_manager->is_highest_bidder(shard_id, ceph::coarse_mono_clock::now())) {
@@ -1699,11 +1685,6 @@ public:
           }
         }
         collect_children();
-  if(ceph::coarse_mono_clock::now() >= work_period_end)
-  {
-    ldpp_dout(sync_env->dpp, 20) << "metadata sync work period end releasing lock" << dendl;
-    yield lease_cr->release_lock();
-  }
       } while (omapkeys->more && can_adjust_marker);
 
       tn->unset_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
@@ -1804,11 +1785,6 @@ public:
       }
       tn->log(10, "took lease");
       // if the period has advanced, we can't use the existing marker
-/*
-      if (work_period_end_unset == work_period_end) {
-	work_period_end = ceph::coarse_mono_clock::now() + work_duration;
-	tn->log(10, SSTR(*this << "took lease until " << work_period_end));
-      }      // if the period has advanced, we can't use the existing marker
       if (sync_marker.realm_epoch < realm_epoch) {
         ldpp_dout(sync_env->dpp, 4) << "clearing marker=" << sync_marker.marker
             << " from old realm_epoch=" << sync_marker.realm_epoch
@@ -1816,8 +1792,6 @@ public:
         sync_marker.realm_epoch = realm_epoch;
         sync_marker.marker.clear();
       }
-      */
-
       mdlog_marker = sync_marker.marker;
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(sync_env,
                                                          sync_env->shard_obj_name(shard_id),
@@ -1832,7 +1806,6 @@ public:
        */
       marker = max_marker = sync_marker.marker;
       /* inc sync */
-      work_period_end = ceph::coarse_mono_clock::now() + work_duration;
       do {
         if (!lease_cr->is_locked()) {
           if (sync_env->bid_manager->is_highest_bidder(shard_id, ceph::coarse_mono_clock::now())) {
@@ -1971,11 +1944,6 @@ public:
           tn->log(10, SSTR(*this << ": done with period"));
           break;
         }
-  if(ceph::coarse_mono_clock::now() >= work_period_end)
-  {
-    ldpp_dout(sync_env->dpp, 20) << "metadata sync work period end releasing lock" << dendl;
-    yield lease_cr->release_lock();
-  }
 	if (mdlog_marker == max_marker && can_adjust_marker) {
           tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 	  yield wait(utime_t(cct->_conf->rgw_meta_sync_poll_interval, 0));
@@ -1990,6 +1958,7 @@ public:
       }
 
       yield lease_cr->go_down();
+
       drain_all();
 
       if (lost_lock) {
@@ -2002,6 +1971,7 @@ public:
 
       return set_cr_done();
     }
+    /* TODO */
     return 0;
   }
 };
@@ -2031,16 +2001,14 @@ public:
     : RGWBackoffControlCR(_sync_env->cct, exit_on_error), sync_env(_sync_env),
       pool(_pool), period(period), realm_epoch(realm_epoch), mdlog(mdlog),
       shard_id(_shard_id), sync_marker(_marker),
-      period_marker(std::move(period_marker))
-     {
+      period_marker(std::move(period_marker)) {
     tn = sync_env->sync_tracer->add_node(_tn_parent, "shard",
                                          std::to_string(shard_id));
-  };
+  }
 
   RGWCoroutine *alloc_cr() override {
     return new RGWMetaSyncShardCR(sync_env, pool, period, realm_epoch, mdlog,
-                                  shard_id, sync_marker, period_marker,
-                                  backoff_ptr(), tn);
+                                  shard_id, sync_marker, period_marker, backoff_ptr(), tn);
   }
 
   RGWCoroutine *alloc_finisher_cr() override {
@@ -2101,8 +2069,7 @@ class RGWMetaSyncCR : public RGWCoroutine {
 
 public:
   RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, const RGWPeriodHistory::Cursor &cursor,
-                const rgw_meta_sync_status& _sync_status, 
-                RGWSyncTraceNodeRef& _tn)
+                const rgw_meta_sync_status& _sync_status, RGWSyncTraceNodeRef& _tn)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       pool(sync_env->store->svc()->zone->get_zone_params().log_pool),
       cursor(cursor), sync_status(_sync_status), tn(_tn) {}
@@ -2462,13 +2429,11 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
         if (r < 0) {
           return r;
         }
-        {
           meta_sync_cr = new RGWMetaSyncCR(&sync_env, cursor, sync_status, tn);
           r = run(dpp, meta_sync_cr);
 	        if (r < 0) {
 	          tn->log(0, "ERROR: failed to fetch all metadata keys");
 	          return r;
-	        }
         }
         break;
       default:
