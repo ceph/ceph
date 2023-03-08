@@ -75,7 +75,8 @@ class TestClientLimits(CephFSTestCase):
         # When the client closes the files, it should retain only as many caps as allowed
         # under the SESSION_RECALL policy
         log.info("Terminating process holding files open")
-        self.mount_a._kill_background(open_proc)
+        open_proc.stdin.close()
+        open_proc.wait()
 
         # The remaining caps should comply with the numbers sent from MDS in SESSION_RECALL message,
         # which depend on the caps outstanding, cache size and overall ratio
@@ -124,7 +125,7 @@ class TestClientLimits(CephFSTestCase):
         self.assertGreaterEqual(open_files, mds_min_caps_per_client)
 
         mount_a_client_id = self.mount_a.get_global_id()
-        self.mount_a.open_n_background("subdir", open_files)
+        p = self.mount_a.open_n_background("subdir", open_files)
 
         # Client should now hold:
         # `open_files` caps for the open files
@@ -148,6 +149,8 @@ class TestClientLimits(CephFSTestCase):
             pass
         else:
             raise RuntimeError("expected no client recall warning")
+        p.stdin.close()
+        p.wait()
 
     def test_cap_acquisition_throttle_readdir(self):
         """
