@@ -58,9 +58,9 @@ function above_margin() {
     return $(( $check >= $target && $check <= $target + $margin ? 0 : 1 ))
 }
 
-FIND_UPACT='grep "pg[[]${PG}.*recovering.*update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/"'
-FIND_FIRST='grep "pg[[]${PG}.*recovering.*update_calc_stats $which " $log | grep -F " ${UPACT}${addp}" | grep -v est | head -1 | sed "s/.* \([0-9]*\)$/\1/"'
-FIND_LAST='grep "pg[[]${PG}.*recovering.*update_calc_stats $which " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/"'
+FIND_UPACT='grep "pg[[]${PG}.*recovering.*PeeringState::update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/"'
+FIND_FIRST='grep "pg[[]${PG}.*recovering.*PeeringState::update_calc_stats $which " $log | grep -F " ${UPACT}${addp}" | grep -v est | head -1 | sed "s/.* \([0-9]*\)$/\1/"'
+FIND_LAST='grep "pg[[]${PG}.*recovering.*PeeringState::update_calc_stats $which " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/"'
 
 function check() {
     local dir=$1
