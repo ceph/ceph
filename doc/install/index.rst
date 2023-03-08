@@ -4,8 +4,7 @@
 Installing Ceph
 ===============
 
-There are several different ways to install Ceph.  Choose the
-method that best suits your needs.
+There are multiple ways to install Ceph.  
 
 Recommended methods
 ~~~~~~~~~~~~~~~~~~~
