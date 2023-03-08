@@ -4058,6 +4058,7 @@ void RGWPutObj::execute(optional_yield y)
   rgw_placement_rule *pdest_placement = &s->dest_placement;
 
   if (multipart) {
+    ldpp_dout(this, 0) << "Leia put upload " << multipart_upload_id << " part " << multipart_part_num << dendl;
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = s->bucket->get_multipart_upload(s->object->get_name(),
 					 multipart_upload_id);
@@ -6340,6 +6341,7 @@ void RGWInitMultipart::execute(optional_yield y)
   }
 
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
+  ldpp_dout(this, 0) << "Leia init upload " << upload_id << dendl;
   upload = s->bucket->get_multipart_upload(s->object->get_name(),
 				       upload_id);
   op_ret = upload->init(this, s->yield, s->owner, s->dest_placement, attrs);
@@ -6347,6 +6349,7 @@ void RGWInitMultipart::execute(optional_yield y)
   if (op_ret == 0) {
     upload_id = upload->get_upload_id();
   }
+  ldpp_dout(this, 0) << "Leia init final upload id " << upload_id << dendl;
   s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
   multipart_trace->UpdateName(tracing::rgw::MULTIPART + upload_id);
 

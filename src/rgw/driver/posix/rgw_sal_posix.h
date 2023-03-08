@@ -21,6 +21,8 @@
 
 namespace rgw { namespace sal {
 
+class POSIXBucket;
+
 class POSIXDriver : public FilterDriver {
 private:
   std::string base_path;
@@ -137,27 +139,33 @@ public:
 class POSIXBucket : public StoreBucket {
 private:
   POSIXDriver* driver;
+  int parent_fd{-1};
   int dir_fd{-1};
   struct statx stx;
   bool stat_done{false};
   RGWAccessControlPolicy acls;
+  std::optional<std::string> ns;
 
 public:
-  POSIXBucket(POSIXDriver *_dr, const rgw_bucket& _b, User* _u)
+  POSIXBucket(POSIXDriver *_dr, int _p_fd, const rgw_bucket& _b, User* _u, std::optional<std::string> _ns = std::nullopt)
     : StoreBucket(_b, _u),
     driver(_dr),
-    acls()
+    parent_fd(_p_fd),
+    acls(),
+    ns(_ns)
     { }
 
-  POSIXBucket(POSIXDriver *_dr, const RGWBucketEnt& _e, User* _u)
+  POSIXBucket(POSIXDriver *_dr, int _p_fd, const RGWBucketEnt& _e, User* _u)
     : StoreBucket(_e, _u),
     driver(_dr),
+    parent_fd(_p_fd),
     acls()
     { }
 
-  POSIXBucket(POSIXDriver *_dr, const RGWBucketInfo& _i, User* _u)
+  POSIXBucket(POSIXDriver *_dr, int _p_fd, const RGWBucketInfo& _i, User* _u)
     : StoreBucket(_i, _u),
     driver(_dr),
+    parent_fd(_p_fd),
     acls()
     { }
 
@@ -236,10 +244,17 @@ public:
   void set_stat(struct statx _stx) { stx = _stx; stat_done = true; }
   int get_dir_fd(const DoutPrefixProvider *dpp) { open(dpp); return dir_fd; }
   /* TODO dang Escape the bucket name for file use */
-  const std::string& get_fname() { return get_name(); }
-private:
+  std::string get_fname();
+  int get_shadow_bucket(const DoutPrefixProvider* dpp, optional_yield y,
+			const std::string& ns, const std::string& tenant,
+			const std::string& name, bool create,
+			std::unique_ptr<POSIXBucket>* shadow);
+  template <typename F>
+    int for_each(const DoutPrefixProvider* dpp, const F func);
   int open(const DoutPrefixProvider *dpp);
   int close();
+  int rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj);
+private:
   int stat(const DoutPrefixProvider *dpp);
 };
 
@@ -250,7 +265,9 @@ private:
   int obj_fd{-1};
   struct statx stx;
   bool stat_done{false};
+  std::unique_ptr<rgw::sal::POSIXBucket> shadow;
   std::string temp_fname;
+  std::map<std::string, int64_t> parts;
 
 public:
   struct POSIXReadOp : StoreReadOp {
@@ -261,7 +278,7 @@ public:
     virtual ~POSIXReadOp() = default;
 
     virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
-    virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y,
+    virtual int read(int64_t ofs, int64_t left, bufferlist& bl, optional_yield y,
 		     const DoutPrefixProvider* dpp) override;
     virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
 			RGWGetDataCB* cb, optional_yield y) override;
@@ -372,29 +389,151 @@ public:
   int close();
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
   int write_attr(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& value);
-  int write_temp_file(const DoutPrefixProvider* dpp);
+  int link_temp_file(const DoutPrefixProvider* dpp);
   void gen_temp_fname();
+  /* TODO dang Escape the object name for file use */
+  const std::string get_fname();
 protected:
   int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
   int generate_attrs(const DoutPrefixProvider* dpp, optional_yield y);
 private:
-  /* TODO dang Escape the object name for file use */
-  const std::string get_fname();
   const std::string get_temp_fname();
   int stat(const DoutPrefixProvider *dpp);
+  int generate_mp_etag(const DoutPrefixProvider* dpp, optional_yield y);
+  int generate_etag(const DoutPrefixProvider* dpp, optional_yield y);
 };
 
-class POSIXMultipartUpload : public FilterMultipartUpload {
+struct POSIXMPObj {
+  std::string oid;
+  std::string upload_id;
+  ACLOwner owner;
+  multipart_upload_info upload_info;
+  std::string meta;
+
+  POSIXMPObj(POSIXDriver* driver, const std::string& _oid,
+	     std::optional<std::string> _upload_id, ACLOwner& _owner) {
+    if (_upload_id && !_upload_id->empty()) {
+      init(_oid, *_upload_id, _owner);
+    } else if (!from_meta(_oid, _owner)) {
+      init_gen(driver, _oid, _owner);
+    }
+  }
+  void init(const std::string& _oid, const std::string& _upload_id, ACLOwner& _owner) {
+    if (_oid.empty()) {
+      clear();
+      return;
+    }
+    oid = _oid;
+    upload_id = _upload_id;
+    owner = _owner;
+    meta = oid;
+    if (!upload_id.empty())
+      meta += "." + upload_id;
+  }
+  void init_gen(POSIXDriver* driver, const std::string& _oid, ACLOwner& _owner);
+  bool from_meta(const std::string& meta, ACLOwner& _owner) {
+    int end_pos = meta.length();
+    int mid_pos = meta.rfind('.', end_pos - 1); // <key>.<upload_id>
+    if (mid_pos < 0)
+      return false;
+    oid = meta.substr(0, mid_pos);
+    upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
+    init(oid, upload_id, _owner);
+    return true;
+  }
+  void clear() {
+    oid = "";
+    meta = "";
+    upload_id = "";
+  }
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(oid, bl);
+    encode(upload_id, bl);
+    encode(owner, bl);
+    encode(upload_info, bl);
+    encode(meta, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(oid, bl);
+    decode(upload_id, bl);
+    decode(owner, bl);
+    decode(upload_info, bl);
+    decode(meta, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(POSIXMPObj)
+
+struct POSIXUploadPartInfo {
+  uint32_t num{0};
+  std::string etag;
+  ceph::real_time mtime;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(num, bl);
+    encode(etag, bl);
+    encode(mtime, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(num, bl);
+    decode(etag, bl);
+    decode(mtime, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(POSIXUploadPartInfo)
+
+class POSIXMultipartUpload;
+
+class POSIXMultipartPart : public StoreMultipartPart {
 protected:
-  POSIXDriver* driver;
+  POSIXUploadPartInfo info;
+  POSIXMultipartUpload* upload;
+  std::unique_ptr<rgw::sal::POSIXObject> shadow;
 
 public:
-  POSIXMultipartUpload(std::unique_ptr<MultipartUpload> _next,
-		       Bucket* _b,
-		       POSIXDriver* _driver) :
-    FilterMultipartUpload(std::move(_next), _b),
-    driver(_driver) {}
+  POSIXMultipartPart(POSIXMultipartUpload* _upload) :
+    upload(_upload) {}
+  virtual ~POSIXMultipartPart() = default;
+
+  virtual uint32_t get_num() { return info.num; }
+  virtual uint64_t get_size() { return shadow->get_obj_size(); }
+  virtual const std::string& get_etag() { return info.etag; }
+  virtual ceph::real_time& get_mtime() { return info.mtime; }
+
+  int load(const DoutPrefixProvider* dpp, optional_yield y, POSIXDriver* driver, rgw_obj_key& key);
+
+  friend class POSIXMultipartUpload;
+};
+
+class POSIXMultipartUpload : public StoreMultipartUpload {
+protected:
+  POSIXDriver* driver;
+  POSIXMPObj mp_obj;
+  ceph::real_time mtime;
+  std::unique_ptr<rgw::sal::POSIXBucket> shadow;
+
+public:
+  POSIXMultipartUpload(POSIXDriver* _driver, Bucket* _bucket, const std::string& _oid,
+		       std::optional<std::string> _upload_id, ACLOwner _owner,
+		       ceph::real_time _mtime) :
+    StoreMultipartUpload(_bucket), driver(_driver),
+    mp_obj(driver, _oid, _upload_id, _owner), mtime(_mtime) {}
   virtual ~POSIXMultipartUpload() = default;
+
+  virtual const std::string& get_meta() const { return mp_obj.meta; }
+  virtual const std::string& get_key() const { return mp_obj.oid; }
+  virtual const std::string& get_upload_id() const { return mp_obj.upload_id; }
+  virtual const ACLOwner& get_owner() const override { return mp_obj.owner; }
+  virtual ceph::real_time& get_mtime() { return mtime; }
+  virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
 
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) override;
   virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
@@ -411,6 +550,8 @@ public:
 		       std::string& tag, ACLOwner& owner,
 		       uint64_t olh_epoch,
 		       rgw::sal::Object* target_obj) override;
+  virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y,
+		       rgw_placement_rule** rule, rgw::sal::Attrs* attrs) override;
 
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
@@ -419,6 +560,10 @@ public:
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;
+
+  POSIXBucket* get_shadow() { return shadow.get(); }
+private:
+  int load(bool create=false);
 };
 
 class POSIXAtomicWriter : public StoreWriter {
@@ -458,6 +603,46 @@ public:
 		       const std::string *user_data,
 		       rgw_zone_set *zones_trace, bool *canceled,
 		       optional_yield y) override;
+};
+
+class POSIXMultipartWriter : public StoreWriter {
+private:
+  POSIXDriver* driver;
+  const rgw_user& owner;
+  const rgw_placement_rule *ptail_placement_rule;
+  uint64_t part_num;
+  std::unique_ptr<Bucket> shadow_bucket;
+  std::unique_ptr<POSIXObject> obj;
+
+public:
+  POSIXMultipartWriter(const DoutPrefixProvider *dpp,
+                    optional_yield y,
+		    std::unique_ptr<Bucket> _shadow_bucket,
+                    rgw_obj_key& _key,
+                    POSIXDriver* _driver,
+                    const rgw_user& _owner,
+                    const rgw_placement_rule *_ptail_placement_rule,
+                    uint64_t _part_num) :
+    StoreWriter(dpp, y),
+    driver(_driver),
+    owner(_owner),
+    ptail_placement_rule(_ptail_placement_rule),
+    part_num(_part_num),
+    shadow_bucket(std::move(_shadow_bucket)),
+    obj(std::make_unique<POSIXObject>(_driver, _key, shadow_bucket.get())) {}
+  virtual ~POSIXMultipartWriter() = default;
+
+  virtual int prepare(optional_yield y);
+  virtual int process(bufferlist&& data, uint64_t offset) override;
+  virtual int complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+		       std::map<std::string, bufferlist>& attrs,
+		       ceph::real_time delete_at,
+		       const char *if_match, const char *if_nomatch,
+		       const std::string *user_data,
+		       rgw_zone_set *zones_trace, bool *canceled,
+		       optional_yield y) override;
+
 };
 
 class POSIXWriter : public FilterWriter {
