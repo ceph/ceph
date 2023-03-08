@@ -100,7 +100,6 @@ bool PaxosService::dispatch(MonOpRequestRef op)
 
   if (need_immediate_propose) {
     dout(10) << __func__ << " forced immediate propose" << dendl;
-    need_immediate_propose = false;
     propose_pending();
     return true;
   }
@@ -224,6 +223,7 @@ void PaxosService::propose_pending()
 
   // apply to paxos
   proposing = true;
+  need_immediate_propose = false; /* reset whenever we propose */
   /**
    * Callback class used to mark us as active once a proposal finishes going
    * through Paxos.
