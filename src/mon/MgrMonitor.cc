@@ -569,6 +569,11 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       pending_map.clients = clients;
       updated = true;
     }
+  } else if (m->get_available()) {
+    dout(4) << "mgr thinks it is active but it is not, dropping!" << dendl;
+    auto m = make_message<MMgrMap>(MgrMap::create_null_mgrmap());
+    mon.send_reply(op, m.detach());
+    return true;
   } else if (pending_map.active_gid == 0) {
     // There is no currently active daemon, select this one.
     if (pending_map.standbys.count(m->get_gid())) {
@@ -909,6 +914,12 @@ void MgrMonitor::drop_active()
   pending_map.clients.clear();
   pending_map.last_failure_osd_epoch = blocklist_epoch;
 
+  /* If we are dropping the active, we need to notify clients immediately.
+   * Additionally, avoid logical races with ::prepare_beacon which cannot
+   * accurately determine if a mgr is a standby or an old active.
+   */
+  force_immediate_propose();
+
   // So that when new active mgr subscribes to mgrdigest, it will
   // get an immediate response instead of waiting for next timer
   cancel_timer();
@@ -1232,22 +1243,15 @@ out:
   getline(ss, rs);
 
   if (r >= 0) {
-    bool do_update = false;
-    if (prefix == "mgr fail" && is_writeable()) {
-      propose_pending();
-      do_update = false;
-    } else {
-      do_update = true;
-    }
     // success.. delay reply
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
 					      get_last_committed() + 1));
-    return do_update;
   } else {
     // reply immediately
     mon.reply_command(op, r, rs, rdata, get_last_committed());
-    return false;
   }
+
+  return r >= 0;
 }
 
 void MgrMonitor::init()
