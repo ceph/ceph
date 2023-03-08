@@ -1,0 +1,65 @@
+{
+	'@odata.context': '/redfish/v1/$metadata#Systems/Members/1/Memory',
+	'@odata.id': '/redfish/v1/Systems/1/Memory/',
+	'@odata.type': '#HpMemoryCollection.HpMemoryCollection',
+	'Description': 'Memory DIMM Collection',
+	'Members': [{
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc1dimm1/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc1dimm2/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc1dimm3/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc1dimm4/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc1dimm5/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc1dimm6/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc1dimm7/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc1dimm8/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc1dimm9/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc1dimm10/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc1dimm11/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc1dimm12/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc2dimm1/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc2dimm2/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc2dimm3/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc2dimm4/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc2dimm5/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc2dimm6/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc2dimm7/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc2dimm8/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc2dimm9/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc2dimm10/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc2dimm11/'
+	}, {
+		'@odata.id': '/redfish/v1/Systems/1/Memory/proc2dimm12/'
+	}],
+	'Members@odata.count': 24,
+	'Name': 'Memory DIMM Collection',
+	'Oem': {
+		'Hp': {
+			'@odata.type': '#HpAdvancedMemoryProtection.1.0.0.HpAdvancedMemoryProtection',
+			'AmpModeActive': 'AdvancedECC',
+			'AmpModeStatus': 'AdvancedECC',
+			'AmpModeSupported': ['AdvancedECC', 'OnlineSpareRank']
+		}
+	}
+}
