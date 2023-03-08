@@ -1,0 +1,144 @@
+{
+	'@odata.context': '/redfish/v1/$metadata#Systems/Members/$entity',
+	'@odata.id': '/redfish/v1/Systems/1/',
+	'@odata.type': '#ComputerSystem.1.0.1.ComputerSystem',
+	'Actions': {
+		'#ComputerSystem.Reset': {
+			'ResetType@Redfish.AllowableValues': ['On', 'ForceOff', 'ForceRestart', 'Nmi', 'PushPowerButton'],
+			'target': '/redfish/v1/Systems/1/Actions/ComputerSystem.Reset/'
+		}
+	},
+	'AssetTag': '                                ',
+	'BiosVersion': 'P71 01/22/2018',
+	'Boot': {
+		'BootSourceOverrideEnabled': 'Disabled',
+		'BootSourceOverrideSupported': ['None', 'Floppy', 'Cd', 'Hdd', 'Usb', 'Utilities', 'BiosSetup', 'Pxe'],
+		'BootSourceOverrideTarget': 'None'
+	},
+	'Description': 'Computer System View',
+	'EthernetInterfaces': {
+		'@odata.id': '/redfish/v1/Systems/1/EthernetInterfaces/'
+	},
+	'HostName': 'hive1',
+	'Id': '1',
+	'IndicatorLED': 'Off',
+	'Links': {
+		'Chassis': [{
+			'@odata.id': '/redfish/v1/Chassis/1/'
+		}],
+		'ManagedBy': [{
+			'@odata.id': '/redfish/v1/Managers/1/'
+		}]
+	},
+	'LogServices': {
+		'@odata.id': '/redfish/v1/Systems/1/LogServices/'
+	},
+	'Manufacturer': 'HPE',
+	'MemorySummary': {
+		'Status': {
+			'HealthRollup': 'OK'
+		},
+		'TotalSystemMemoryGiB': 384
+	},
+	'Model': 'ProLiant DL360p Gen8',
+	'Name': 'Computer System',
+	'Oem': {
+		'Hp': {
+			'@odata.type': '#HpComputerSystemExt.1.2.2.HpComputerSystemExt',
+			'Actions': {
+				'#HpComputerSystemExt.PowerButton': {
+					'PushType@Redfish.AllowableValues': ['Press', 'PressAndHold'],
+					'target': '/redfish/v1/Systems/1/Actions/Oem/Hp/ComputerSystemExt.PowerButton/'
+				},
+				'#HpComputerSystemExt.SystemReset': {
+					'ResetType@Redfish.AllowableValues': ['ColdBoot', 'AuxCycle'],
+					'target': '/redfish/v1/Systems/1/Actions/Oem/Hp/ComputerSystemExt.SystemReset/'
+				}
+			},
+			'Bios': {
+				'Backup': {
+					'Date': '07/01/2015',
+					'Family': 'P71',
+					'VersionString': 'P71 07/01/2015'
+				},
+				'Bootblock': {
+					'Date': '03/05/2013',
+					'Family': 'P71',
+					'VersionString': 'P71 03/05/2013'
+				},
+				'Current': {
+					'Date': '01/22/2018',
+					'Family': 'P71',
+					'VersionString': 'P71 01/22/2018'
+				},
+				'UefiClass': 0
+			},
+			'DeviceDiscoveryComplete': {
+				'AMSDeviceDiscovery': 'NoAMS',
+				'DeviceDiscovery': 'vMainDeviceDiscoveryComplete',
+				'SmartArrayDiscovery': 'Complete'
+			},
+			'IntelligentProvisioningIndex': 3,
+			'IntelligentProvisioningLocation': 'System Board',
+			'IntelligentProvisioningVersion': 'N/A',
+			'Links': {
+				'BIOS': {
+					'@odata.id': '/redfish/v1/Systems/1/Bios/'
+				},
+				'EthernetInterfaces': {
+					'@odata.id': '/redfish/v1/Systems/1/EthernetInterfaces/'
+				},
+				'FirmwareInventory': {
+					'@odata.id': '/redfish/v1/Systems/1/FirmwareInventory/'
+				},
+				'Memory': {
+					'@odata.id': '/redfish/v1/Systems/1/Memory/'
+				},
+				'NetworkAdapters': {
+				'@odata.id': '/redfish/v1/Systems/1/NetworkAdapters/'
+				},
+				'PCIDevices': {
+					'@odata.id': '/redfish/v1/Systems/1/PCIDevices/'
+				},
+				'PCISlots': {
+					'@odata.id': '/redfish/v1/Systems/1/PCISlots/'
+				},
+				'SmartStorage': {
+					'@odata.id': '/redfish/v1/Systems/1/SmartStorage/'
+				},
+				'SoftwareInventory': {
+					'@odata.id': '/redfish/v1/Systems/1/SoftwareInventory/'
+				}
+			},
+			'PostState': 'FinishedPost',
+			'PowerAllocationLimit': 1500,
+			'PowerAutoOn': 'Restore',
+			'PowerOnDelay': 'Minimum',
+			'PowerRegulatorMode': 'Dynamic',
+			'PowerRegulatorModesSupported': ['OSControl', 'Dynamic', 'Max', 'Min'],
+			'TrustedModules': [{
+				'Status': 'NotPresent'
+			}],
+			'VirtualProfile': 'Inactive'
+		}
+	},
+	'PowerState': 'On',
+	'ProcessorSummary': {
+		'Count': 2,
+		'Model': ' Intel(R) Xeon(R) CPU E5-2640 v2 @ 2.00GHz      ',
+		'Status': {
+			'HealthRollup': 'OK'
+		}
+	},
+	'Processors': {
+		'@odata.id': '/redfish/v1/Systems/1/Processors/'
+	},
+	'SKU': '654081-B21      ',
+	'SerialNumber': 'CZJ4320228      ',
+	'Status': {
+		'Health': 'Warning',
+		'State': 'Enabled'
+	},
+	'SystemType': 'Physical',
+	'UUID': '30343536-3138-5A43-4A34-333230323238'
+}

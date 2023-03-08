@@ -1,0 +1,19 @@
+{
+	'@odata.context': '/redfish/v1/$metadata#Systems/Members/1/EthernetInterfaces/Members/$entity',
+	'@odata.id': '/redfish/v1/Systems/1/EthernetInterfaces/1/',
+	'@odata.type': '#EthernetInterface.1.0.0.EthernetInterface',
+	'Id': '1',
+	'Name': 'System Ethernet Interface',
+	'Oem': {
+		'Hp': {
+			'@odata.type': '#HpiLOEthernetNetworkInterface.1.0.0.HpiLOEthernetNetworkInterface',
+			'DHCPv4': None,
+			'DHCPv6': None,
+			'IPv4': None,
+			'IPv6': None,
+			'SharedNetworkPortOptions': None
+		}
+	},
+	'SettingsResult': None,
+	'Status': None
+}
