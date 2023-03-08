@@ -15,7 +15,7 @@ Enabling
 --------
 
 New clusters will have this module on by default. The cluster must only
-have luminous (and newer) clients. You can the turn the balancer off with:
+have luminous (and newer) clients. You can turn the balancer off with:
 
 .. prompt:: bash $
 
