@@ -29,7 +29,7 @@ import { Directive, EventEmitter, HostListener, Input, Output } from '@angular/c
 import { AbstractControl, FormArray, FormControl, FormGroup } from '@angular/forms';
 
 @Directive({
-  // tslint:disable-next-line:directive-selector
+  // eslint-disable-next-line
   selector: '[formGroup]'
 })
 export class CdFormValidationDirective {

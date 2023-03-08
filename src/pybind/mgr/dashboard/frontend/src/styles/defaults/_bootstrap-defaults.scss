@@ -32,7 +32,7 @@ $info: $primary !default;
 $warning: $yellow !default;
 $danger: $red !default;
 $light: $gray-100 !default;
-$dark: #777 !default;
+$dark: $gray-800 !default;
 
 //badges colors
 $green-300: #6ec664;
@@ -51,7 +51,15 @@ $fg-hover-color-over-dark-bg: $gray-500 !default;
 
 $theme-colors: (
   'accent': $accent,
-  'warning-dark': $warning-dark
+  'warning-dark': $warning-dark,
+  'primary': $accent,
+  'secondary': $secondary,
+  'success': $success,
+  'info': $info,
+  'warning': $warning,
+  'danger': $danger,
+  'light': $light,
+  'dark': $dark
 ) !default;
 
 // Body

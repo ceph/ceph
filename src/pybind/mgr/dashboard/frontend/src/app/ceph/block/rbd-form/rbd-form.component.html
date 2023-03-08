@@ -66,7 +66,7 @@
                    *ngIf="mode === 'editing' || !poolPermission.read">
             <select id="pool"
                     name="pool"
-                    class="form-control"
+                    class="form-select"
                     formControlName="pool"
                     *ngIf="mode !== 'editing' && poolPermission.read"
                     (change)="setPoolMirrorMode()">
@@ -111,7 +111,7 @@
                    *ngIf="mode === 'editing' || !poolPermission.read">
             <select id="namespace"
                     name="namespace"
-                    class="form-control"
+                    class="form-select"
                     formControlName="namespace"
                     *ngIf="mode !== 'editing' && poolPermission.read">
               <option *ngIf="pools === null"
@@ -170,7 +170,7 @@
                    *ngIf="mode === 'editing' || !poolPermission.read">
             <select id="dataPool"
                     name="dataPool"
-                    class="form-control"
+                    class="form-select"
                     formControlName="dataPool"
                     (change)="onDataPoolChange($event.target.value)"
                     *ngIf="mode !== 'editing' && poolPermission.read">
@@ -256,17 +256,17 @@
               </cd-helper>
             </div>
             <div *ngIf="mirroring">
-              <div class="custom-control custom-radio ml-2"
+              <div class="custom-control custom-radio ms-2"
                    *ngFor="let option of mirroringOptions">
                 <input type="radio"
-                       class="custom-control-input"
+                       class="form-check-input"
                        [id]="option"
                        [value]="option"
                        name="mirroringMode"
                        (change)="setExclusiveLock()"
                        formControlName="mirroringMode"
                        [attr.disabled]="(poolMirrorMode === 'pool' && option === 'snapshot') ? true : null">
-                <label class="custom-control-label"
+                <label class="form-check-label"
                        [for]="option">{{ option | titlecase }}</label>
                 <cd-helper *ngIf="poolMirrorMode === 'pool' && option === 'snapshot'">
                   <span i18n>You need to enable <b>image mirror mode</b> in the selected pool. Please <a [routerLink]="['/block/mirroring', {outlets: {modal: ['edit', currentPoolName]}}]">click here to select a mode and enable it in this pool.</a></span>
@@ -298,7 +298,7 @@
         <!-- Advanced -->
         <div class="row">
           <div class="col-sm-12">
-            <a class="float-right margin-right-md"
+            <a class="float-end margin-right-md"
                (click)="advancedEnabled = true; false"
                *ngIf="!advancedEnabled"
                href=""
@@ -323,7 +323,7 @@
               <div class="cd-col-form-input">
                 <select id="obj_size"
                         name="obj_size"
-                        class="form-control"
+                        class="form-select"
                         formControlName="obj_size">
                   <option *ngFor="let objectSize of objectSizes"
                           [value]="objectSize">{{ objectSize }}</option>
@@ -340,7 +340,7 @@
               <div class="cd-col-form-input">
                 <select id="stripingUnit"
                         name="stripingUnit"
-                        class="form-control"
+                        class="form-select"
                         formControlName="stripingUnit">
                   <option i18n
                           [ngValue]="null">-- Select stripe unit --</option>

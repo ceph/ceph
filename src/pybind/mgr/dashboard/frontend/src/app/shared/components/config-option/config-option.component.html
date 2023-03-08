@@ -44,18 +44,16 @@
                  [placeholder]="option.additionalTypeInfo.humanReadable"
                  [formControlName]="option.name"
                  [step]="getStep(option.type, optionsForm.getValue(option.name))">
-          <div class="input-group-append"
-               *ngIf="optionsFormShowReset">
-            <button class="btn btn-light"
-                    type="button"
-                    data-toggle="button"
-                    title="Remove the custom configuration value. The default configuration will be inherited and used instead."
-                    (click)="resetValue(option.name)"
-                    i18n-title>
-              <i [ngClass]="[icons.erase]"
-                 aria-hidden="true"></i>
-            </button>
-          </div>
+          <button class="btn btn-light"
+                  type="button"
+                  data-toggle="button"
+                  title="Remove the custom configuration value. The default configuration will be inherited and used instead."
+                  (click)="resetValue(option.name)"
+                  i18n-title
+                  *ngIf="optionsFormShowReset">
+            <i [ngClass]="[icons.erase]"
+               aria-hidden="true"></i>
+          </button>
         </div>
         <span class="invalid-feedback"
               *ngIf="optionsForm.showError(option.name, optionsFormDir, 'pattern')">
