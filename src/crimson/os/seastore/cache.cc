@@ -37,17 +37,40 @@ std::ostream &operator<<(std::ostream &out, const backref_entry_t &ent) {
 	     << "}";
 }
 
+void promotion_state_t::maybe_promote(CachedExtent &extent) {
+  assert(!extent.primary_ref_list_hook.is_linked());
+  assert(!extent.is_pending_promotion);
+  assert(extent.is_clean());
+  assert(cache->support_extents_promotion());
+
+  auto id = extent.get_paddr().get_device_id();
+  if (contents < capacity && cache->epm.is_cold_device(id)) {
+    extent.is_pending_promotion = true;
+    pending_list.push_back(extent);
+    intrusive_ptr_add_ref(&extent);
+    contents += extent.get_length();
+  }
+}
+
 Cache::Cache(
   ExtentPlacementManager &epm)
   : epm(epm),
     extents_in_memory(std::make_unique<LRUCachePolicy>(
+	this,
 	crimson::common::get_conf<Option::size_t>(
-	  "seastore_cache_lru_size")))
+	  "seastore_cache_lru_size"))),
+    promotion_state(nullptr)
 {
   LOG_PREFIX(Cache::Cache);
   INFO("created, cache_size={}", extents_in_memory->get_capacity());
   register_metrics();
   segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
+  if (epm.has_cold_tier()) {
+    promotion_state = std::make_unique<promotion_state_t>(
+        this,
+        crimson::common::get_conf<Option::size_t>(
+            "seastore_cache_pending_promote_size"));
+  }
 }
 
 Cache::~Cache()
@@ -719,9 +742,11 @@ void Cache::mark_dirty(CachedExtentRef ref)
 {
   if (ref->is_dirty()) {
     assert(ref->primary_ref_list_hook.is_linked());
+    assert(!ref->is_pending_promotion);
     return;
   }
 
+  assert(!ref->is_pending_promotion);
   extents_in_memory->remove_from_cache(*ref);
   ref->state = CachedExtent::extent_state_t::DIRTY;
   add_to_dirty(ref);
@@ -731,6 +756,7 @@ void Cache::add_to_dirty(CachedExtentRef ref)
 {
   assert(ref->is_dirty());
   assert(!ref->primary_ref_list_hook.is_linked());
+  assert(!ref->is_pending_promotion);
   ceph_assert(ref->get_modify_time() != NULL_TIME);
   intrusive_ptr_add_ref(&*ref);
   dirty.push_back(*ref);
@@ -739,6 +765,7 @@ void Cache::add_to_dirty(CachedExtentRef ref)
 
 void Cache::remove_from_dirty(CachedExtentRef ref)
 {
+  assert(!ref->is_pending_promotion);
   if (ref->is_dirty()) {
     ceph_assert(ref->primary_ref_list_hook.is_linked());
     stats.dirty_bytes -= ref->get_length();
@@ -754,9 +781,13 @@ void Cache::remove_extent(CachedExtentRef ref)
   assert(ref->is_valid());
   if (ref->is_dirty()) {
     remove_from_dirty(ref);
+  } else if (ref->is_pending_promotion) {
+    assert(support_extents_promotion());
+    promotion_state->remove(*ref);
   } else if (!ref->is_placeholder()) {
     extents_in_memory->remove_from_cache(*ref);
   }
+  assert(!ref->is_pending_promotion);
   extents.erase(*ref);
 }
 
@@ -778,6 +809,8 @@ void Cache::commit_replace_extent(
   assert(next->is_dirty());
   assert(next->get_paddr() == prev->get_paddr());
   assert(next->version == prev->version + 1);
+  assert(!prev->is_pending_promotion);
+  assert(!next->is_pending_promotion);
   extents.replace(*next, *prev);
 
   if (prev->get_type() == extent_types_t::ROOT) {
@@ -809,6 +842,7 @@ void Cache::invalidate_extent(
     Transaction& t,
     CachedExtent& extent)
 {
+  assert(!extent.is_pending_promotion);
   if (!extent.may_conflict()) {
     assert(extent.transactions.empty());
     extent.state = CachedExtent::extent_state_t::INVALID;

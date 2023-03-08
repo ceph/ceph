@@ -364,6 +364,14 @@ public:
     return primary_device->get_backend_type();
   }
 
+  bool has_cold_tier() const {
+    return background_process.has_cold_tier();
+  }
+
+  bool is_cold_device(device_id_t id) const {
+    return background_process.is_cold_device(id);
+  }
+
   // Testing interfaces
 
   void test_init_no_background(Device *test_device) {
@@ -506,6 +514,12 @@ private:
 
     bool has_cold_tier() const {
       return cold_cleaner.get() != nullptr;
+    }
+
+    bool is_cold_device(device_id_t id) const {
+      return has_cold_tier() &&
+        (cleaners_by_device_id[id] &&
+         cleaners_by_device_id[id] != main_cleaner.get());
     }
 
     void set_extent_callback(ExtentCallbackInterface *cb) {

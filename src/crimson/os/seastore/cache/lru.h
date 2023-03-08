@@ -8,6 +8,8 @@
 
 namespace crimson::os::seastore {
 
+class Cache;
+
 struct CachePolicy {
   virtual ~CachePolicy() {}
   virtual std::size_t get_capacity() const = 0;
@@ -34,11 +36,12 @@ class LRUCachePolicy : public CachePolicy {
   size_t contents = 0;
 
   CachedExtent::list lru;
+  Cache *cache;
 
   void trim_to_capacity() {
     while (contents > capacity) {
       assert(lru.size() > 0);
-      remove_from_cache(lru.front());
+      remove(lru.front(), true);
     }
   }
 
@@ -53,8 +56,11 @@ class LRUCachePolicy : public CachePolicy {
     trim_to_capacity();
   }
 
+  void remove(CachedExtent &extent, bool need_promote);
+
 public:
-  LRUCachePolicy(size_t capacity) : capacity(capacity) {}
+  LRUCachePolicy(Cache *cache, size_t capacity)
+    : capacity(capacity), cache(cache) {}
 
   size_t get_capacity() const final {
     return capacity;
@@ -69,14 +75,7 @@ public:
   }
 
   void remove_from_cache(CachedExtent &extent) final {
-    assert(extent.is_clean() && !extent.is_placeholder());
-
-    if (extent.primary_ref_list_hook.is_linked()) {
-      lru.erase(lru.s_iterator_to(extent));
-      assert(contents >= extent.get_length());
-      contents -= extent.get_length();
-      intrusive_ptr_release(&extent);
-    }
+    remove(extent, false);
   }
 
   void move_to_top(CachedExtent &extent) final {

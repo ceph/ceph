@@ -24,6 +24,7 @@ class SegmentedAllocator;
 class TransactionManager;
 class ExtentPlacementManager;
 class LRUCachePolicy;
+class promotion_state_t;
 
 // #define DEBUG_CACHED_EXTENT_REF
 #ifdef DEBUG_CACHED_EXTENT_REF
@@ -447,6 +448,7 @@ private:
   using index = boost::intrusive::set<CachedExtent, index_member_options>;
   friend class ExtentIndex;
   friend class Transaction;
+  friend class promotion_state_t;
 
   bool is_linked() {
     return extent_index_hook.is_linked();
@@ -509,6 +511,8 @@ private:
   // the target rewrite generation for the followup rewrite
   // or the rewrite generation for the fresh write
   rewrite_gen_t rewrite_generation = NULL_GENERATION;
+
+  bool is_pending_promotion = false;
 
 protected:
   CachedExtent(CachedExtent &&other) = delete;

@@ -29,6 +29,7 @@ namespace crimson::os::seastore {
 class BackrefManager;
 class SegmentProvider;
 class AsyncCleaner;
+class Cache;
 
 struct backref_entry_t {
   backref_entry_t(
@@ -109,6 +110,38 @@ using backref_entry_refs_t = std::vector<backref_entry_ref>;
 using backref_entryrefs_by_seq_t = std::map<journal_seq_t, backref_entry_refs_t>;
 using backref_entry_query_set_t = std::set<
     backref_entry_t, backref_entry_t::cmp_t>;
+
+class promotion_state_t {
+public:
+  Cache *cache;
+  const std::size_t capacity;
+  std::size_t contents = 0;
+  CachedExtent::list pending_list;
+
+  promotion_state_t(Cache *cache, std::size_t capacity)
+    : cache(cache), capacity(capacity) {}
+
+  ~promotion_state_t() {
+    for (auto iter = pending_list.begin(); iter != pending_list.end();) {
+      remove(*(iter++));
+    }
+  }
+
+  bool should_purge() const {
+    return contents >= capacity / 2;
+  }
+
+  void maybe_promote(CachedExtent &extent);
+
+  void remove(CachedExtent &extent) {
+    ceph_assert(extent.is_pending_promotion);
+    ceph_assert(extent.primary_ref_list_hook.is_linked());
+    extent.is_pending_promotion = false;
+    pending_list.erase(pending_list.s_iterator_to(extent));
+    contents -= extent.get_length();
+    intrusive_ptr_release(&extent);
+  }
+};
 
 /**
  * Cache
@@ -318,6 +351,7 @@ public:
         t->replace_placeholder(*cached, *ret);
       }
 
+      assert(!cached->is_pending_promotion);
       cached->state = CachedExtent::extent_state_t::INVALID;
       extent_init_func(*ret);
       return read_extent<T>(
@@ -1028,12 +1062,20 @@ private:
 
   friend class crimson::os::seastore::backref::BtreeBackrefManager;
   friend class crimson::os::seastore::BackrefManager;
+  friend class crimson::os::seastore::LRUCachePolicy;
+  friend class crimson::os::seastore::promotion_state_t;
   /**
    * lru
    *
    * holds references to recently used extents
    */
   CachePolicyRef extents_in_memory;
+
+  std::unique_ptr<promotion_state_t> promotion_state;
+
+  bool support_extents_promotion() const {
+    return epm.has_cold_tier() && promotion_state.get() != nullptr;
+  }
 
   struct query_counters_t {
     uint64_t access = 0;
@@ -1193,6 +1235,10 @@ private:
     if (p_src && is_background_transaction(*p_src))
       return;
     if (ext.is_clean() && !ext.is_placeholder()) {
+      if (ext.is_pending_promotion) {
+        assert(support_extents_promotion());
+        promotion_state->remove(ext);
+      }
       extents_in_memory->move_to_top(ext);
     }
   }
