@@ -262,6 +262,10 @@ private:
 
   bool any_late_revoking_caps(xlist<Capability*> const &revoking, double timeout) const;
   uint64_t calc_new_max_size(const CInode::inode_const_ptr& pi, uint64_t size);
+  __u32 get_xattr_total_length(CInode::mempool_xattr_map &xattr);
+  void decode_new_xattrs(CInode::mempool_inode *inode,
+			 CInode::mempool_xattr_map *px,
+			 const cref_t<MClientCaps> &m);
 
   MDSRank *mds;
   MDCache *mdcache;

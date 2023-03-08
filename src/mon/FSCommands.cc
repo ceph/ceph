@@ -461,6 +461,17 @@ public:
       {
         fs->mds_map.set_max_filesize(n);
       });
+    } else if (var == "max_xattr_size") {
+      if (interr.length()) {
+	ss << var << " requires an integer value";
+	return -EINVAL;
+      }
+      fsmap.modify_filesystem(
+          fs->fscid,
+          [n](std::shared_ptr<Filesystem> fs)
+      {
+        fs->mds_map.set_max_xattr_size(n);
+      });
     } else if (var == "allow_new_snaps") {
       bool enable_snaps = false;
       int r = parse_bool(val, &enable_snaps, ss);
