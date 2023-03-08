@@ -1168,6 +1168,7 @@ private:
 
     version_stat_t committed_dirty_version;
     version_stat_t committed_reclaim_version;
+    version_stat_t committed_promotion_version;
   } stats;
 
   template <typename CounterT>
@@ -1203,6 +1204,8 @@ private:
 	     src2 == Transaction::src_t::CLEANER_MAIN));
     assert(!(src1 == Transaction::src_t::CLEANER_COLD &&
 	     src2 == Transaction::src_t::CLEANER_COLD));
+    assert(!(src1 == Transaction::src_t::PROMOTE_COLD &&
+	     src2 == Transaction::src_t::PROMOTE_COLD));
     assert(!(src1 == Transaction::src_t::TRIM_ALLOC &&
              src2 == Transaction::src_t::TRIM_ALLOC));
 

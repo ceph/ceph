@@ -162,6 +162,7 @@ void Cache::register_metrics()
     {src_t::TRIM_ALLOC, sm::label_instance("src", "TRIM_ALLOC")},
     {src_t::CLEANER_MAIN, sm::label_instance("src", "CLEANER_MAIN")},
     {src_t::CLEANER_COLD, sm::label_instance("src", "CLEANER_COLD")},
+    {src_t::PROMOTE_COLD, sm::label_instance("src", "PROMOTE_COLD")},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
@@ -654,6 +655,8 @@ void Cache::register_metrics()
            src2 == Transaction::src_t::CLEANER_MAIN) ||
           (src1 == Transaction::src_t::CLEANER_COLD &&
            src2 == Transaction::src_t::CLEANER_COLD) ||
+          (src1 == Transaction::src_t::PROMOTE_COLD &&
+           src2 == Transaction::src_t::PROMOTE_COLD) ||
           (src1 == Transaction::src_t::TRIM_ALLOC &&
            src2 == Transaction::src_t::TRIM_ALLOC)) {
         continue;
@@ -718,6 +721,16 @@ void Cache::register_metrics()
         "version_sum_reclaim",
         stats.committed_reclaim_version.version,
         sm::description("sum of the version from rewrite-reclaim extents")
+      ),
+      sm::make_counter(
+        "version_count_promotion",
+        stats.committed_promotion_version.num,
+        sm::description("total number of rewrite-promotion extents")
+      ),
+      sm::make_counter(
+        "version_sum_promotion",
+        stats.committed_promotion_version.version,
+        sm::description("sum of the version from rewrite-promotion extents")
       ),
     }
   );
@@ -1441,6 +1454,8 @@ record_t Cache::prepare_record(
   } else if (trans_src == Transaction::src_t::CLEANER_MAIN ||
              trans_src == Transaction::src_t::CLEANER_COLD) {
     stats.committed_reclaim_version.increment_stat(rewrite_version_stats);
+  } else if (trans_src == Transaction::src_t::PROMOTE_COLD){
+    stats.committed_promotion_version.increment_stat(rewrite_version_stats);
   } else {
     assert(rewrite_version_stats.is_clear());
   }
