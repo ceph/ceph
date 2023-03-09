@@ -74,6 +74,7 @@ export enum Icons {
   exit = 'fa fa-sign-out', // Exit
   restart = 'fa fa-history', // Restart
   deploy = 'fa fa-cube', // Deploy, Redeploy
+  cubes = 'fa fa-cubes',
 
   /* Icons for special effect */
   large = 'fa fa-lg', // icon becomes 33% larger

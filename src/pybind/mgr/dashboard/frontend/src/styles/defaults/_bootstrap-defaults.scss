@@ -127,6 +127,7 @@ $screen-sm-min: 576px !default;
 $screen-md-min: 768px !default;
 $screen-lg-min: 992px !default;
 $screen-xl-min: 1200px !default;
+$tree-container-height: 200px !default;
 
 $screen-xs-max: calc(#{$screen-sm-min} - 1px) !default;
 $screen-sm-max: calc(#{$screen-md-min} - 1px) !default;

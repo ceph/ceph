@@ -1,0 +1,49 @@
+<div class="row">
+  <div class="col-sm-12 col-lg-12">
+    <div>
+      <cd-table-actions class="btn-group mb-4"
+                        [permission]="permission"
+                        [selection]="selection"
+                        [tableActions]="createTableActions">
+      </cd-table-actions>
+    </div>
+    <div class="card">
+      <div class="card-header"
+           i18n>Multi-site Topology viewer</div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-sm-6 col-lg-6 tree-container">
+            <i *ngIf="loadingIndicator"
+               [ngClass]="[icons.large, icons.spinner, icons.spin]"></i>
+            <tree-root #tree
+                       [nodes]="nodes"
+                       [options]="treeOptions"
+                       (updateData)="onUpdateData()">
+              <ng-template #treeNodeTemplate
+                           let-node>
+                <span *ngIf="node.data.name"
+                      class="me-3">
+                  <i [ngClass]="node.data.icon"></i>
+                    {{ node.data.name }}
+                </span>
+                <span class="badge badge-success me-2"
+                      *ngIf="node.data.is_default">
+                  default
+                </span>
+                <span class="badge badge-info me-2"
+                      *ngIf="node.data.is_master">
+                  master
+                </span>
+              </ng-template>
+            </tree-root>
+          </div>
+          <div class="col-sm-6 col-lg-6 metadata"
+               *ngIf="metadata">
+            <legend>{{ metadataTitle }}</legend>
+            <cd-table-key-value [data]="metadata"></cd-table-key-value>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
