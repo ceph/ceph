@@ -2460,6 +2460,7 @@ void RGWListBuckets::execute(optional_yield y)
       read_count = max_buckets;
     }
 
+    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << " marker is: " << marker << " end_marker: " << end_marker << dendl;
     op_ret = s->user->list_buckets(this, marker, end_marker, read_count, should_get_stats(), buckets, y);
 
     if (op_ret < 0) {
@@ -2964,11 +2965,13 @@ void RGWListBucket::pre_exec()
 
 void RGWListBucket::execute(optional_yield y)
 {
+    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << dendl;
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
     return;
   }
 
+    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << dendl;
   if (allow_unordered && !delimiter.empty()) {
     ldpp_dout(this, 0) <<
       "ERROR: unordered bucket listing requested with a delimiter" << dendl;
@@ -2976,10 +2979,12 @@ void RGWListBucket::execute(optional_yield y)
     return;
   }
 
+    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << dendl;
   if (need_container_stats()) {
     op_ret = s->bucket->update_container_stats(s);
   }
 
+    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << " marker is: " << marker << " end_marker: " << end_marker << dendl;
   rgw::sal::Bucket::ListParams params;
   params.prefix = prefix;
   params.delim = delimiter;
@@ -2989,9 +2994,12 @@ void RGWListBucket::execute(optional_yield y)
   params.allow_unordered = allow_unordered;
   params.shard_id = shard_id;
 
+    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << dendl;
   rgw::sal::Bucket::ListResults results;
 
+    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << dendl;
   op_ret = s->bucket->list(this, params, max, results, y);
+    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << dendl;
   if (op_ret >= 0) {
     next_marker = results.next_marker;
     is_truncated = results.is_truncated;
@@ -3242,12 +3250,15 @@ void RGWCreateBucket::execute(optional_yield y)
 {
   buffer::list aclbl;
   buffer::list corsbl;
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   string bucket_name = rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name);
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   op_ret = get_params(y);
   if (op_ret < 0)
     return;
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (!relaxed_region_enforcement &&
       !location_constraint.empty() &&
       !store->get_zone()->has_zonegroup_api(location_constraint)) {
@@ -3258,6 +3269,7 @@ void RGWCreateBucket::execute(optional_yield y)
       return;
   }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (!relaxed_region_enforcement && !store->get_zone()->get_zonegroup().is_master_zonegroup() && !location_constraint.empty() &&
       store->get_zone()->get_zonegroup().get_api_name() != location_constraint) {
     ldpp_dout(this, 0) << "location constraint (" << location_constraint << ")"
@@ -3267,9 +3279,11 @@ void RGWCreateBucket::execute(optional_yield y)
     s->err.message = "The specified location-constraint is not valid";
     return;
   }
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   std::set<std::string> names;
   store->get_zone()->get_zonegroup().get_placement_target_names(names);
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (!placement_rule.name.empty() &&
       !names.count(placement_rule.name)) {
     ldpp_dout(this, 0) << "placement target (" << placement_rule.name << ")"
@@ -3280,30 +3294,39 @@ void RGWCreateBucket::execute(optional_yield y)
     return;
   }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
   {
     std::unique_ptr<rgw::sal::Bucket> tmp_bucket;
     op_ret = store->get_bucket(this, s->user.get(), s->bucket_tenant,
 			       s->bucket_name, &tmp_bucket, y);
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " op_ret is: " << op_ret << dendl;
     if (op_ret < 0 && op_ret != -ENOENT)
       return;
     s->bucket_exists = (op_ret != -ENOENT);
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
     if (s->bucket_exists) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       if (!s->system_request &&
 	  store->get_zone()->get_zonegroup().get_id() !=
 	  tmp_bucket->get_info().zonegroup) {
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 	op_ret = -EEXIST;
 	return;
       }
       /* Initialize info from req_state */
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       info = tmp_bucket->get_info();
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     }
   }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   s->bucket_owner.set_id(s->user->get_id()); /* XXX dang use s->bucket->owner */
   s->bucket_owner.set_name(s->user->get_display_name());
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   string zonegroup_id;
 
@@ -3316,17 +3339,20 @@ void RGWCreateBucket::execute(optional_yield y)
     zonegroup_id = store->get_zone()->get_zonegroup().get_id();
   }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   /* Encode special metadata first as we're using std::map::emplace under
    * the hood. This method will add the new items only if the map doesn't
    * contain such keys yet. */
   policy.encode(aclbl);
   emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (has_cors) {
     cors_config.encode(corsbl);
     emplace_attr(RGW_ATTR_CORS, std::move(corsbl));
   }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   RGWQuotaInfo quota_info;
   const RGWQuotaInfo * pquota_info = nullptr;
   if (need_metadata_upload()) {
@@ -3336,9 +3362,11 @@ void RGWCreateBucket::execute(optional_yield y)
     if (op_ret < 0) {
       return;
     }
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
     populate_with_generic_attrs(s, attrs);
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     op_ret = filter_out_quota_info(attrs, rmattr_names, quota_info);
     if (op_ret < 0) {
       return;
@@ -3346,11 +3374,13 @@ void RGWCreateBucket::execute(optional_yield y)
       pquota_info = &quota_info;
     }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     /* Web site of Swift API. */
     filter_out_website(attrs, rmattr_names, info.website_conf);
     info.has_website = !info.website_conf.is_empty();
   }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   rgw_bucket tmp_bucket;
   tmp_bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
   tmp_bucket.name = s->bucket_name;
@@ -3361,6 +3391,7 @@ void RGWCreateBucket::execute(optional_yield y)
     info.swift_versioning = (! swift_ver_location->empty());
   }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   /* We're replacing bucket with the newly created one */
   ldpp_dout(this, 10) << "user=" << s->user << " bucket=" << tmp_bucket << dendl;
   op_ret = s->user->create_bucket(this, tmp_bucket, zonegroup_id,
@@ -3370,22 +3401,27 @@ void RGWCreateBucket::execute(optional_yield y)
 				true, obj_lock_enabled, &s->bucket_exists, s->info,
 				&s->bucket, y);
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
   ldpp_dout(this, 20) << "rgw_create_bucket returned ret=" << op_ret << " bucket=" << s->bucket.get() << dendl;
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (op_ret)
     return;
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   const bool existed = s->bucket_exists;
   if (need_metadata_upload() && existed) {
     /* OK, it looks we lost race with another request. As it's required to
      * handle metadata fusion and upload, the whole operation becomes very
      * similar in nature to PutMetadataBucket. However, as the attrs may
      * changed in the meantime, we have to refresh. */
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     short tries = 0;
     do {
       map<string, bufferlist> battrs;
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
       op_ret = s->bucket->load_bucket(this, y);
       if (op_ret < 0) {
@@ -3398,6 +3434,7 @@ void RGWCreateBucket::execute(optional_yield y)
         s->bucket_attrs = s->bucket->get_attrs();
       }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       attrs.clear();
 
       op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs, false);
@@ -3410,6 +3447,7 @@ void RGWCreateBucket::execute(optional_yield y)
       if (op_ret < 0) {
         return;
       }
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
       /* Handle updates of the metadata for Swift's object versioning. */
       if (swift_ver_location) {
@@ -3417,19 +3455,24 @@ void RGWCreateBucket::execute(optional_yield y)
         s->bucket->get_info().swift_versioning = (! swift_ver_location->empty());
       }
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       /* Web site of Swift API. */
       filter_out_website(attrs, rmattr_names, s->bucket->get_info().website_conf);
       s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       /* This will also set the quota on the bucket. */
       op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
     } while (op_ret == -ECANCELED && tries++ < 20);
 
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     /* Restore the proper return code. */
     if (op_ret >= 0) {
       op_ret = -ERR_BUCKET_EXISTS;
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     }
   }
+	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 }
 
 int RGWDeleteBucket::verify_permission(optional_yield y)

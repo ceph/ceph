@@ -46,22 +46,40 @@ class S3InternalFilterWriter;
 
 class RGWGetBucketCB : public RGWHTTPStreamRWRequest::ReceiveCB {
 public:
-  S3FilterBucket *bucket;
-  vector<string> *remote_bucket_list;
-  vector<rgw_bucket_dir_entry> *remote_bucket;
+  //S3FilterBucket *bucket;
+  Attrs attrs;
+  //vector<string> *remote_bucket_list;
+  //vector<rgw_bucket_dir_entry> *remote_bucket;
 
-  RGWGetBucketCB(S3FilterBucket *_bucket, vector<string> *_remote_bucket_list, vector<rgw_bucket_dir_entry> *_remote_bucket): bucket(_bucket), remote_bucket_list(_remote_bucket_list), remote_bucket(_remote_bucket) {}
+  //RGWGetBucketCB(S3FilterBucket *_bucket, vector<string> *_remote_bucket_list, vector<rgw_bucket_dir_entry> *_remote_bucket): bucket(_bucket), remote_bucket_list(_remote_bucket_list), remote_bucket(_remote_bucket) {}
 
+  //RGWGetBucketCB(Attrs attrs, vector<string> *_remote_bucket_list, vector<rgw_bucket_dir_entry> *_remote_bucket): remote_bucket_list(_remote_bucket_list), remote_bucket(_remote_bucket) {}
+  RGWGetBucketCB(Attrs _attrs): attrs(_attrs) {}
   int handle_data(bufferlist& bl, bool *pause) override;
 };
+
+class RGWListBucketCB : public RGWHTTPStreamRWRequest::ReceiveCB {
+public:
+  S3FilterBucket *bucket;
+  Attrs attrs;
+  vector<string> *remote_bucket_obj_list;
+  vector<rgw_bucket_dir_entry> *remote_bucket_obj_details;
+  bool is_truncated;
+
+  RGWListBucketCB(S3FilterBucket *_bucket, vector<string> *_remote_bucket_obj_list, vector<rgw_bucket_dir_entry> *_remote_bucket_obj_details, bool _is_truncated): bucket(_bucket), remote_bucket_obj_list(_remote_bucket_obj_list), remote_bucket_obj_details(_remote_bucket_obj_details), is_truncated(_is_truncated) {}
+
+  //RGWGetBucketCB(Attrs attrs, vector<string> *_remote_bucket_list, vector<rgw_bucket_dir_entry> *_remote_bucket): remote_bucket_list(_remote_bucket_list), remote_bucket(_remote_bucket) {}
+  int handle_data(bufferlist& bl, bool *pause) override;
+};
+
 
 class RGWGetObjectCB : public RGWHTTPStreamRWRequest::ReceiveCB {
 public:
   S3FilterObject *object;
   Attrs attrs;
   bufferlist *rc_bl;
-
-  RGWGetObjectCB(S3FilterObject *_object, Attrs _attrs, bufferlist* _bl): object(_object), attrs(_attrs), rc_bl(_bl) {}
+  const DoutPrefixProvider* dpp; 
+  RGWGetObjectCB(const DoutPrefixProvider* _dpp, S3FilterObject *_object, Attrs _attrs, bufferlist* _bl): dpp(_dpp), object(_object), attrs(_attrs), rc_bl(_bl) {}
 
   int handle_data(bufferlist& bl, bool *pause) override;
 };
@@ -82,7 +100,8 @@ class S3FilterStore : public FilterStore {
   private:
 
   public:
-	CephContext *_cct;
+    CephContext *_cct;
+    const DoutPrefixProvider* _dpp;
     S3FilterStore(Store* _next) : FilterStore(_next) 
     {
       //d4n_cache = new RGWD4NCache();
@@ -96,8 +115,10 @@ class S3FilterStore : public FilterStore {
 	
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
 	int get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y);
+	int get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket_out, optional_yield y, RGWHTTPStreamRWRequest::ReceiveCB *cb);
 	int get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket);
 	int get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y);
+	int send_get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, optional_yield y, RGWHTTPStreamRWRequest::ReceiveCB *cb);
 	
     std::unique_ptr<S3InternalFilterWriter> get_s3_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
@@ -183,6 +204,8 @@ class S3FilterBucket : public FilterBucket {
 	//virtual Attrs& get_attrs(void) override { return attrs; }
 	//virtual int set_attrs(string field, bufferlist bl) { attrs[field] = bl; return 0;}
 	virtual int set_attrs(Attrs attrVal) override { return next->set_attrs(attrVal);}
+	virtual int list(const DoutPrefixProvider* dpp, ListParams& params, int max,
+		       ListResults& results, optional_yield y) override;
 	/*
 	virtual rgw_bucket& get_key() override { return ent.bucket; }
     virtual RGWBucketInfo& get_info() override { return info; }
