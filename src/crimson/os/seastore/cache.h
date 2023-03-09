@@ -30,6 +30,7 @@ class BackrefManager;
 class SegmentProvider;
 class AsyncCleaner;
 class Cache;
+struct BackgroundListener;
 
 struct backref_entry_t {
   backref_entry_t(
@@ -1072,6 +1073,7 @@ private:
   CachePolicyRef extents_in_memory;
 
   std::unique_ptr<promotion_state_t> promotion_state;
+  BackgroundListener *listener;
 
   bool support_extents_promotion() const {
     return epm.has_cold_tier() && promotion_state.get() != nullptr;

@@ -16,6 +16,7 @@
 class transaction_manager_test_t;
 
 namespace crimson::os::seastore {
+class promotion_state_t;
 
 /**
  * ExtentOolWriter
@@ -198,6 +199,10 @@ public:
     background_process.set_extent_callback(cb);
   }
 
+  void set_promotion_state(promotion_state_t *state) {
+    background_process.set_promotion_state(state);
+  }
+
   journal_type_t get_journal_type() const {
     return background_process.get_journal_type();
   }
@@ -372,6 +377,10 @@ public:
     return background_process.is_cold_device(id);
   }
 
+  BackgroundListener *get_background_listener() {
+    return &background_process;
+  }
+
   // Testing interfaces
 
   void test_init_no_background(Device *test_device) {
@@ -523,11 +532,16 @@ private:
     }
 
     void set_extent_callback(ExtentCallbackInterface *cb) {
+      ecb = cb;
       trimmer->set_extent_callback(cb);
       main_cleaner->set_extent_callback(cb);
       if (has_cold_tier()) {
         cold_cleaner->set_extent_callback(cb);
       }
+    }
+
+    void set_promotion_state(promotion_state_t *state) {
+      promotion_state = state;
     }
 
     store_statfs_t get_stat() const {
@@ -674,6 +688,17 @@ private:
       }
     }
 
+    void maybe_wake_promotion() final {
+      if (!is_ready()) {
+        return;
+      }
+      assert(has_cold_tier());
+      if (should_do_promote() && blocking_promotion) {
+        blocking_promotion->set_value();
+        blocking_promotion = std::nullopt;
+      }
+    }
+
   private:
     // reserve helpers
     bool try_reserve_cold(std::size_t usage);
@@ -738,6 +763,15 @@ private:
              main_cleaner->should_block_io_on_clean() ||
              (has_cold_tier() &&
               cold_cleaner->should_block_io_on_clean());
+    }
+
+    bool should_do_promote() const;
+
+    void do_wake_promote() {
+      if (blocking_promotion) {
+        blocking_promotion->set_value();
+        blocking_promotion = std::nullopt;
+      }
     }
 
     void maybe_update_eviction_mode() {
@@ -859,6 +893,9 @@ private:
 
     seastar::future<> do_background_cycle();
 
+    seastar::future<> run_promote();
+    seastar::future<> do_promote();
+
     void register_metrics();
 
     struct {
@@ -880,9 +917,16 @@ private:
     AsyncCleanerRef cold_cleaner;
     std::vector<AsyncCleaner*> cleaners_by_device_id;
 
+    promotion_state_t *promotion_state = nullptr;
+    ExtentCallbackInterface *ecb;
+
     std::optional<seastar::future<>> process_join;
     std::optional<seastar::promise<>> blocking_background;
     std::optional<seastar::promise<>> blocking_io;
+
+    std::optional<seastar::future<>> promote_process_join;
+    std::optional<seastar::promise<>> blocking_promotion;
+
     bool is_running_until_halt = false;
     state_t state = state_t::STOP;
     eviction_state_t eviction_state;

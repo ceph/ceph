@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 smarttab expandtab
 
 #include "crimson/os/seastore/extent_placement_manager.h"
+#include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/transaction_manager.h"
 
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/logging.h"
@@ -414,24 +416,34 @@ void ExtentPlacementManager::BackgroundProcess::start_background()
   state = state_t::RUNNING;
   assert(is_running());
   process_join = run();
+  if (has_cold_tier() && promotion_state != nullptr) {
+    promote_process_join = run_promote();
+  }
 }
 
 seastar::future<>
 ExtentPlacementManager::BackgroundProcess::stop_background()
 {
-  return seastar::futurize_invoke([this] {
+  return seastar::do_with(std::vector<seastar::future<>>(),
+                          [this](auto &futures) {
     if (!is_running()) {
       if (state != state_t::HALT) {
         state = state_t::STOP;
       }
       return seastar::now();
     }
-    auto ret = std::move(*process_join);
+    futures.emplace_back(std::move(*process_join));
     process_join.reset();
+    if (has_cold_tier() && promotion_state != nullptr) {
+      futures.emplace_back(std::move(*promote_process_join));
+      promote_process_join.reset();
+    }
     state = state_t::HALT;
     assert(!is_running());
     do_wake_background();
-    return ret;
+    do_wake_promote();
+    return seastar::when_all(futures.begin(), futures.end()
+    ).discard_result();
   }).then([this] {
     LOG_PREFIX(BackgroundProcess::stop_background);
     INFO("done, {}, {}",
@@ -641,6 +653,69 @@ void ExtentPlacementManager::BackgroundProcess::abort_io_usage(
     trimmer->release_inline_usage(usage.inline_usage);
   }
   abort_cleaner_usage(usage.cleaner_usage, result.cleaner_result);
+}
+
+bool ExtentPlacementManager::BackgroundProcess::should_do_promote() const
+{
+  return promotion_state->should_purge();
+}
+
+seastar::future<> ExtentPlacementManager::BackgroundProcess::run_promote()
+{
+  assert(is_running());
+  return seastar::repeat([this] {
+    if (!is_running()) {
+      return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::yes);
+    }
+
+    return seastar::futurize_invoke([this] {
+      if (promotion_state && promotion_state->should_purge()) {
+        auto promote_size = crimson::common::get_conf<Option::size_t>(
+          "seastore_cache_pending_promote_size");
+        if (main_cleaner->try_reserve_projected_usage(promote_size)) {
+          return do_promote(
+          ).finally([this, promote_size] {
+            main_cleaner->release_projected_usage(promote_size);
+          });
+        } else {
+          return seastar::now();
+        }
+      } else {
+        ceph_assert(!blocking_promotion);
+        blocking_promotion = seastar::promise<>();
+        return blocking_promotion->get_future();
+      }
+    }).then([] {
+      return seastar::stop_iteration::no;
+    });
+  });
+}
+
+seastar::future<> ExtentPlacementManager::BackgroundProcess::do_promote() {
+  return repeat_eagain([this] {
+    return ecb->with_transaction_intr(
+      Transaction::src_t::PROMOTE_COLD,
+      "purge",
+      [this](auto &t) {
+        std::list<CachedExtentRef> extents;
+        for (auto &e : promotion_state->pending_list) {
+          t.add_to_read_set(&e);
+          extents.emplace_back(&e);
+        }
+        return seastar::do_with(
+          std::move(extents),
+          seastar::lowres_system_clock::now(),
+          [this, &t](auto &extents, auto &mtime) {
+            return trans_intr::do_for_each(extents, [this, &t, &mtime](auto &extent) {
+              ceph_assert(extent->is_clean());
+              return ecb->rewrite_extent(t, extent, INIT_GENERATION, mtime);
+            }).si_then([this, &t] {
+              return ecb->submit_transaction_direct(t);
+            });
+          });
+      });
+  }).handle_error(crimson::ct_error::assert_all{"error occupied during promotion"});
 }
 
 seastar::future<>

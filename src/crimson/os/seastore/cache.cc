@@ -50,6 +50,11 @@ void promotion_state_t::maybe_promote(CachedExtent &extent) {
     intrusive_ptr_add_ref(&extent);
     contents += extent.get_length();
   }
+
+  if (should_purge()) {
+    assert(cache->listener);
+    cache->listener->maybe_wake_promotion();
+  }
 }
 
 Cache::Cache(
@@ -59,7 +64,8 @@ Cache::Cache(
 	this,
 	crimson::common::get_conf<Option::size_t>(
 	  "seastore_cache_lru_size"))),
-    promotion_state(nullptr)
+    promotion_state(nullptr),
+    listener(nullptr)
 {
   LOG_PREFIX(Cache::Cache);
   INFO("created, cache_size={}", extents_in_memory->get_capacity());
@@ -70,6 +76,8 @@ Cache::Cache(
         this,
         crimson::common::get_conf<Option::size_t>(
             "seastore_cache_pending_promote_size"));
+    listener = epm.get_background_listener();
+    epm.set_promotion_state(promotion_state.get());
   }
 }
 
