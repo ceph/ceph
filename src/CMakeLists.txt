@@ -276,27 +276,6 @@ if(WITH_CEPHFS_JAVA)
   add_subdirectory(java)
 endif()
 
-# sort out which allocator to use
-if(ALLOCATOR STREQUAL "tcmalloc")
-  set(ALLOC_LIBS gperftools::tcmalloc)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-malloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-calloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-realloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-free>)
-elseif(ALLOCATOR STREQUAL "tcmalloc_minimal")
-  set(ALLOC_LIBS gperftools::tcmalloc_minimal)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-malloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-calloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-realloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-free>)
-elseif(ALLOCATOR STREQUAL "jemalloc")
-  set(ALLOC_LIBS JeMalloc::JeMalloc)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-malloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-calloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-realloc>)
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-free>)
-endif()
-
 if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
 endif(WITH_BLKIN)
@@ -627,8 +606,10 @@ add_executable(ceph-mon ${ceph_mon_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 add_dependencies(ceph-mon erasure_code_plugins)
 target_link_libraries(ceph-mon mon os global-static ceph-common
+  ${ALLOC_LIBS}
   ${EXTRALIBS}
-  ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
+  ${CMAKE_DL_LIBS}
+  ${GSSAPI_LIBRARIES})
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD/ObjectStore
@@ -656,6 +637,7 @@ set(ceph_osd_srcs
 add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global-static common
+  ${ALLOC_LIBS}
   ${BLKID_LIBRARIES})
 if(WITH_FUSE)
   target_link_libraries(ceph-osd FUSE::FUSE)
@@ -673,7 +655,8 @@ if (WITH_CEPHFS)
     ceph_mds.cc)
   add_executable(ceph-mds ${ceph_mds_srcs})
   target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static ceph-common
-    Boost::thread)
+    Boost::thread
+    ${ALLOC_LIBS})
   install(TARGETS ceph-mds DESTINATION bin)
 endif()
 
