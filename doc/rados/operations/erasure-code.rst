@@ -173,13 +173,13 @@ data in an erasure coded pool:
 
     ceph osd pool set ec_pool allow_ec_overwrites true
 
-This can only be enabled on a pool residing on bluestore OSDs, since
-bluestore's checksumming is used to detect bitrot or other corruption
-during deep-scrub. In addition to being unsafe, using filestore with
-ec overwrites yields low performance compared to bluestore.
+This can be enabled only on a pool residing on BlueStore OSDs, since
+BlueStore's checksumming is used during deep scrubs to detect bitrot
+or other corruption. In addition to being unsafe, using Filestore with
+EC overwrites results in lower performance compared to BlueStore.
 
 Erasure coded pools do not support omap, so to use them with RBD and
-CephFS you must instruct them to store their data in an ec pool, and
+CephFS you must instruct them to store their data in an EC pool, and
 their metadata in a replicated pool. For RBD, this means using the
 erasure coded pool as the ``--data-pool`` during image creation:
 
@@ -195,7 +195,7 @@ Erasure coded pool and cache tiering
 ------------------------------------
 
 Erasure coded pools require more resources than replicated pools and
-lack some functionalities such as omap. To overcome these
+lack some functionality such as omap. To overcome these
 limitations, one can set up a `cache tier <../cache-tiering>`_
 before the erasure coded pool.
 
@@ -212,22 +212,24 @@ mode so that every write and read to the *ecpool* are actually using
 the *hot-storage* and benefit from its flexibility and speed.
 
 More information can be found in the `cache tiering
-<../cache-tiering>`_ documentation.
+<../cache-tiering>`_ documentation.  Note however that cache tiering
+is deprecated and may be removed completely in a future release.
 
 Erasure coded pool recovery
 ---------------------------
-If an erasure coded pool loses some shards, it must recover them from the others.
-This generally involves reading from the remaining shards, reconstructing the data, and
-writing it to the new peer.
-In Octopus, erasure coded pools can recover as long as there are at least *K* shards
+If an erasure coded pool loses some data shards, it must recover them from others.
+This involves reading from the remaining shards, reconstructing the data, and
+writing new shards.
+In Octopus and later releases, erasure-coded pools can recover as long as there are at least *K* shards
 available. (With fewer than *K* shards, you have actually lost data!)
 
-Prior to Octopus, erasure coded pools required at least *min_size* shards to be
-available, even if *min_size* is greater than *K*. (We generally recommend min_size
-be *K+2* or more to prevent loss of writes and data.)
-This conservative decision was made out of an abundance of caution when designing the new pool
-mode but also meant pools with lost OSDs but no data loss were unable to recover and go active
-without manual intervention to change the *min_size*.
+Prior to Octopus, erasure coded pools required at least ``min_size`` shards to be
+available, even if ``min_size`` is greater than ``K``. We recommend ``min_size``
+be ``K+2`` or more to prevent loss of writes and data.
+This conservative decision was made out of an abundance of caution when
+designing the new pool mode.  As a result pools with lost OSDs but without
+complete loss of any data were unable to recover and go active
+without manual intervention to temporarily change the ``min_size`` setting.
 
 Glossary
 --------
