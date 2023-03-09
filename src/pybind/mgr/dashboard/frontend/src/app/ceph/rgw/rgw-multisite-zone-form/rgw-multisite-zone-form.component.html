@@ -1,0 +1,112 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="multisiteZoneForm"
+          #formDir="ngForm"
+          [formGroup]="multisiteZoneForm"
+          novalidate>
+    <div class="modal-body">
+      <div class="form-group row">
+        <label class="cd-col-form-label"
+               for="selectedZonegroup"
+               i18n>Select Zonegroup</label>
+        <div class="cd-col-form-input">
+          <select class="form-select"
+                  id="selectedZonegroup"
+                  formControlName="selectedZonegroup"
+                  name="selectedZonegroup">
+            <option *ngFor="let zonegroupName of zonegroupList"
+                    [value]="zonegroupName.name"
+                    [selected]="zonegroupName.name === multisiteZoneForm.getValue('selectedZonegroup')">
+            {{ zonegroupName.name }}
+            </option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zonegroupName"
+               i18n>ZoneName</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="Zone name..."
+                 id="zoneName"
+                 name="zoneName"
+                 formControlName="zoneName">
+          <span class="invalid-feedback"
+                *ngIf="multisiteZoneForm.showError('zoneName', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="multisiteZoneForm.showError('zoneName', formDir, 'uniqueName')"
+                i18n>The chosen zone name is already in use.</span>
+          <div class="custom-control custom-checkbox">
+            <input class="form-check-input"
+                   id="default_zone"
+                   name="default_zone"
+                   formControlName="default_zone"
+                   type="checkbox">
+            <label class="form-check-label"
+                   for="default_zone"
+                   i18n>Default</label><br>
+            <input class="form-check-input"
+                   id="master_zone"
+                   name="master_zone"
+                   formControlName="master_zone"
+                   type="checkbox">
+            <label class="form-check-label"
+                   for="master_zone"
+                   i18n>Master</label>
+          </div>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zone_endpoints"
+               i18n>Endpoints</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="e.g, http://ceph-node-00.com:80"
+                 id="zone_endpoints"
+                 name="zone_endpoints"
+                 formControlName="zone_endpoints">
+          <span class="invalid-feedback"
+                *ngIf="multisiteZoneForm.showError('zone_endpoints', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="multisiteZoneForm.showError('zone_endpoints', formDir, 'endpoint')"
+                i18n>Please enter a valid IP address.</span>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label"
+               for="users"
+               i18n>System User</label>
+        <div class="cd-col-form-input">
+          <select id="users"
+                  name="users"
+                  class="form-select"
+                  formControlName="users">
+          <option i18n
+                  *ngIf="users === null"
+                  [ngValue]="null">Loading...</option>
+          <option i18n
+                  *ngIf="users !== null"
+                  [ngValue]="null">-- Select a user --</option>
+          <option *ngFor="let user of users"
+                  [value]="user.user_id">{{ user.user_id }}</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <cd-form-button-panel (submitActionEvent)="submit()"
+                            [form]="multisiteZoneForm"
+                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+    </div>
+    </form>
+  </ng-container>
+</cd-modal>
