@@ -487,7 +487,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
   getServiceIds(selectedServiceType: string) {
     this.serviceIds = this.serviceList
-      .filter((service) => service['service_type'] === selectedServiceType)
+      ?.filter((service) => service['service_type'] === selectedServiceType)
       .map((service) => service['service_id']);
   }
 

@@ -31,14 +31,18 @@ describe('Services page', () => {
     services.checkServiceStatus(mdsDaemonName);
 
     services.daemonAction('mds', 'stop');
-    services.checkServiceStatus(mdsDaemonName, 'stopped');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus(mdsDaemonName, 'stopped');
+    });
   });
 
   it('should restart a daemon', () => {
     services.checkExist(mdsDaemonName, true);
     services.clickServiceTab(mdsDaemonName, 'Details');
     services.daemonAction('mds', 'restart');
-    services.checkServiceStatus(mdsDaemonName, 'running');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus(mdsDaemonName, 'running');
+    });
   });
 
   it('should redeploy a daemon', () => {
@@ -46,9 +50,13 @@ describe('Services page', () => {
     services.clickServiceTab(mdsDaemonName, 'Details');
 
     services.daemonAction('mds', 'stop');
-    services.checkServiceStatus(mdsDaemonName, 'stopped');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus(mdsDaemonName, 'stopped');
+    });
     services.daemonAction('mds', 'redeploy');
-    services.checkServiceStatus(mdsDaemonName, 'running');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus(mdsDaemonName, 'running');
+    });
   });
 
   it('should start a daemon', () => {
@@ -56,9 +64,13 @@ describe('Services page', () => {
     services.clickServiceTab(mdsDaemonName, 'Details');
 
     services.daemonAction('mds', 'stop');
-    services.checkServiceStatus(mdsDaemonName, 'stopped');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus(mdsDaemonName, 'stopped');
+    });
     services.daemonAction('mds', 'start');
-    services.checkServiceStatus(mdsDaemonName, 'running');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus(mdsDaemonName, 'running');
+    });
   });
 
   it('should delete an mds service', () => {
