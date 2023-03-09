@@ -4790,38 +4790,78 @@ int OSD::update_crush_device_class()
 
 int OSD::read_superblock()
 {
+  // Read superblock from both object data and omap metadata
+  // for better robustness.
+  // Use the most recent superblock replica if obtained versions
+  // mismatch.
   bufferlist bl;
-  
+
   set<string> keys;
   keys.insert(OSD_SUPERBLOCK_OMAP_KEY);
   map<string, bufferlist> vals;
-  // Let's read from OMAP first to be able to better handle
-  // "recover-after-an-error' case when main OSD volume data
-  // is partially corrupted (csums don't match for a bunch of onodes).
-  // As a result we might want to set bluestore_ignore_csum_error option which
-  // will silent disk read errors.
-  // Clearly such a reading from corrupted superblock will miss an error as well
-  // and it wouldn't attempt to use still valid OMAP's replica.
-  // Hence preferring omap reading over disk one.
-  int r = store->omap_get_values(
+  OSDSuperblock super_omap;
+  OSDSuperblock super_disk;
+  int r_omap = store->omap_get_values(
     service.meta_ch, OSD_SUPERBLOCK_GOBJECT, keys, &vals);
-  if (r < 0 || vals.size() == 0) {
-    dout(10) << __func__ << " attempt reading from disk replica" << dendl;
-
-    r = store->read(service.meta_ch, OSD_SUPERBLOCK_GOBJECT, 0, 0, bl);
-    if (r < 0) {
-      return -ENOENT;
+  if (r_omap >= 0 && vals.size() > 0) {
+    try {
+      auto p = vals.begin()->second.cbegin();
+      decode(super_omap, p);
+    } catch(...) {
+      derr << __func__ << " omap replica is corrupted."
+            << dendl;
+      r_omap = -EFAULT;
     }
-    dout(10) << __func__ << " got disk replica" << dendl;
   } else {
-    std::swap(bl, vals.begin()->second);
+    derr << __func__ << " omap replica is missing."
+         << dendl;
+    r_omap = -ENOENT;
+  }
+  int r_disk = store->read(service.meta_ch, OSD_SUPERBLOCK_GOBJECT, 0, 0, bl);
+  if (r_disk >= 0) {
+    try {
+      auto p = bl.cbegin();
+      decode(super_disk, p);
+    } catch(...) {
+      derr << __func__ << " disk replica is corrupted."
+            << dendl;
+      r_disk = -EFAULT;
+    }
+  } else {
+    derr << __func__ << " disk replica is missing."
+         << dendl;
+    r_disk = -ENOENT;
   }
 
-  auto p = bl.cbegin();
-  decode(superblock, p);
+  if (r_omap >= 0 && r_disk < 0) {
+    std::swap(superblock, super_omap);
+    dout(1) << __func__ << " got omap replica but failed to get disk one."
+            << dendl;
+  } else if (r_omap < 0 && r_disk >= 0) {
+    std::swap(superblock, super_disk);
+    dout(1) << __func__ << " got disk replica but failed to get omap one."
+            << dendl;
+  } else if (r_omap < 0 && r_disk < 0) {
+    // error to be logged by the caller
+    return -ENOENT;
+  } else {
+    std::swap(superblock, super_omap); // let omap be the primary source
+    if (superblock.current_epoch != super_disk.current_epoch) {
+      derr << __func__ << " got mismatching superblocks, omap:"
+           << superblock << " vs. disk:" << super_disk
+           << dendl;
+      if (superblock.current_epoch < super_disk.current_epoch) {
+        std::swap(superblock, super_disk);
+        dout(0) << __func__ << " using disk superblock"
+                << dendl;
+      } else {
+        dout(0) << __func__ << " using omap superblock"
+                << dendl;
+      }
+    }
+  }
 
   dout(10) << "read_superblock " << superblock << dendl;
-
   return 0;
 }
 
