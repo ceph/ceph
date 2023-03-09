@@ -349,7 +349,7 @@ protected:
   int generate_attrs(const DoutPrefixProvider* dpp, optional_yield y);
 private:
   /* TODO dang Escape the object name for file use */
-  const std::string& get_fname() { return get_name(); }
+  const std::string get_fname();
   int stat(const DoutPrefixProvider *dpp);
   int write_attr(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& value);
 };

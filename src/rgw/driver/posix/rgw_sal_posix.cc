@@ -1273,6 +1273,18 @@ int POSIXObject::generate_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   return 0;
 }
 
+const std::string POSIXObject::get_fname()
+{
+  std::string fname = get_obj().get_oid();
+
+  if (!get_obj().key.get_ns().empty()) {
+    /* Namespaced objects are hidden */
+    fname.insert(0, 1, '.');
+  }
+
+  return fname;
+}
+
 int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
