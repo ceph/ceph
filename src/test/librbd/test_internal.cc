@@ -29,6 +29,7 @@
 #include <boost/assign/list_of.hpp>
 #include <utility>
 #include <vector>
+#include "test/librados/crimson_utils.h"
 
 using namespace std;
 
@@ -267,6 +268,7 @@ TEST_F(TestInternal, SnapCreateFailsToLockImage) {
 }
 
 TEST_F(TestInternal, SnapRollbackLocksImage) {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   ASSERT_EQ(0, create_snapshot("snap1", false));
@@ -378,6 +380,7 @@ TEST_F(TestInternal, FlattenFailsToLockImage) {
 }
 
 TEST_F(TestInternal, WriteFailsToLockImageBlocklisted) {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::Rados blocklist_rados;
@@ -411,6 +414,7 @@ TEST_F(TestInternal, WriteFailsToLockImageBlocklisted) {
 }
 
 TEST_F(TestInternal, WriteFailsToLockImageBlocklistedWatch) {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::Rados blocklist_rados;
@@ -654,6 +658,9 @@ TEST_F(TestInternal, MetadataConfApply) {
 
 TEST_F(TestInternal, SnapshotCopyup)
 {
+  //https://tracker.ceph.com/issues/58263
+  // Clone overlap is WIP
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   librbd::ImageCtx *ictx;
@@ -1175,6 +1182,7 @@ TEST_F(TestInternal, ImageOptions) {
 }
 
 TEST_F(TestInternal, WriteFullCopyup) {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   librbd::ImageCtx *ictx;
@@ -1729,6 +1737,7 @@ TEST_F(TestInternal, Sparsify) {
 
 
 TEST_F(TestInternal, SparsifyClone) {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   librbd::ImageCtx *ictx;
