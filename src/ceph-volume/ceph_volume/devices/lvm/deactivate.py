@@ -28,7 +28,7 @@ def deactivate_osd(osd_id=None, osd_uuid=None):
 
     for lv in lvs:
         if lv.tags.get('ceph.encrypted', '0') == '1':
-            encryption.dmcrypt_close(lv.lv_uuid)
+            encryption.dmcrypt_close(mapping=lv.lv_uuid, skip_path_check=True)
 
 
 class Deactivate(object):
