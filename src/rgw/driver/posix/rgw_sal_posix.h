@@ -354,6 +354,7 @@ protected:
   int open(const DoutPrefixProvider *dpp);
   int close();
   int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
+  int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
   int generate_attrs(const DoutPrefixProvider* dpp, optional_yield y);
 private:
   /* TODO dang Escape the object name for file use */

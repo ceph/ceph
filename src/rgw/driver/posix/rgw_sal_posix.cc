@@ -1208,6 +1208,37 @@ int POSIXObject::read(int64_t ofs, int64_t end, bufferlist& bl,
   return ret;
 }
 
+int POSIXObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
+		       optional_yield y)
+{
+  int64_t left = bl.length();
+  char* curp = bl.c_str();
+  ssize_t ret;
+
+  ret = lseek(obj_fd, ofs, SEEK_SET);
+  if (ret < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
+      << ofs << " :" << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  while (left > 0) {
+    ret = ::write(obj_fd, curp, left);
+    if (ret < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not read object " << get_name() << ": "
+	<< cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+
+    curp += ret;
+    left -= ret;
+  }
+
+  return 0;
+}
+
 int POSIXObject::write_attr(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& value)
 {
   int ret;
