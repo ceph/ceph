@@ -13,7 +13,7 @@
 class Checksummer {
 public:
   enum CSumType {
-    CSUM_NONE = 1,	//intentionally set to 1 to be aligned with OSDMnitor's pool_opts_t handling - it treats 0 as unset while we need to distinguish none and unset cases
+    CSUM_NONE = 1, //intentionally set to 1 to be aligned with OSDMnitor's pool_opts_t handling - it treats 0 as unset while we need to distinguish none and unset cases
     CSUM_XXHASH32 = 2,
     CSUM_XXHASH64 = 3,
     CSUM_CRC32C = 4,
@@ -154,10 +154,10 @@ public:
       ) {
       XXH32_reset(state, init_value);
       while (len > 0) {
-	const char *data;
-	size_t l = p.get_ptr_and_advance(len, &data);
-	XXH32_update(state, data, l);
-	len -= l;
+        const char *data;
+        size_t l = p.get_ptr_and_advance(len, &data);
+        XXH32_update(state, data, l);
+        len -= l;
       }
       return XXH32_digest(state);
     }
@@ -183,10 +183,10 @@ public:
       ) {
       XXH64_reset(state, init_value);
       while (len > 0) {
-	const char *data;
-	size_t l = p.get_ptr_and_advance(len, &data);
-	XXH64_update(state, data, l);
-	len -= l;
+        const char *data;
+        size_t l = p.get_ptr_and_advance(len, &data);
+        XXH64_update(state, data, l);
+        len -= l;
       }
       return XXH64_digest(state);
     }
@@ -220,7 +220,7 @@ public:
     Alg::init(&state);
 
     ceph_assert(csum_data->length() >= (offset + length) / csum_block_size *
-	   sizeof(typename Alg::value_t));
+    sizeof(typename Alg::value_t));
 
     typename Alg::value_t *pv =
       reinterpret_cast<typename Alg::value_t*>(csum_data->c_str());
@@ -256,11 +256,11 @@ public:
     while (length > 0) {
       typename Alg::init_value_t v = Alg::calc(state, -1, csum_block_size, p);
       if (*pv != v) {
-	if (bad_csum) {
-	  *bad_csum = v;
-	}
-	Alg::fini(&state);
-	return pos;
+        if (bad_csum) {
+          *bad_csum = v;
+        }
+        Alg::fini(&state);
+        return pos;
       }
       ++pv;
       pos += csum_block_size;
