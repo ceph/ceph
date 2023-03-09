@@ -758,6 +758,7 @@ function test_mon_misc()
 
   ceph mgr stat
   ceph mgr dump
+  ceph mgr dump | jq -e '.active_clients[0].name'
   ceph mgr module ls
   ceph mgr module enable restful
   expect_false ceph mgr module enable foodne
