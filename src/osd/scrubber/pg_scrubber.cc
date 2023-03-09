@@ -537,6 +537,16 @@ void PgScrubber::on_primary_change(
     << dendl;
 }
 
+/*
+ * A note re the call to publish_stats_to_osd() below:
+ * - we are called from either request_rescrubbing() or scrub_requested().
+ * - in both cases - the schedule was modified, and needs to be published;
+ * - we are a Primary.
+ * - in the 1st case - the call is made as part of scrub_finish(), which
+ *   guarantees that the PG is locked and the interval is still the same.
+ * - in the 2nd case - we know the PG state and we know we are only called
+ *   for a Primary.
+*/
 void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
 {
   dout(10) << fmt::format("{}: flags:<{}>", __func__, request_flags) << dendl;
@@ -1039,9 +1049,7 @@ void PgScrubber::on_init()
   ceph_assert(!is_scrub_active());
   m_pg->reset_objects_scrubbed();
   preemption_data.reset();
-  m_pg->publish_stats_to_osd();
   m_interval_start = m_pg->get_history().same_interval_since;
-
   dout(10) << __func__ << " start same_interval:" << m_interval_start << dendl;
 
   m_be = std::make_unique<ScrubBackend>(
@@ -1064,6 +1072,7 @@ void PgScrubber::on_init()
   m_start = m_pg->info.pgid.pgid.get_hobj_start();
   m_active = true;
   ++m_sessions_counter;
+  // publish the session counter and the fact the we are scrubbing.
   m_pg->publish_stats_to_osd();
 }
 
@@ -1401,6 +1410,8 @@ void PgScrubber::maps_compare_n_cleanup()
 
   m_start = m_end;
   run_callbacks();
+
+  // requeue the writes from the chunk that just finished
   requeue_waiting();
   m_osds->queue_scrub_maps_compared(m_pg, Scrub::scrub_prio_t::low_priority);
 }
@@ -1529,7 +1540,8 @@ void PgScrubber::set_op_parameters(const requested_scrub_t& request)
     update_op_mode_text();
   }
 
-  // the publishing here is required for tests synchronization
+  // The publishing here is required for tests synchronization.
+  // The PG state flags were modified.
   m_pg->publish_stats_to_osd();
   m_flags.deep_scrub_on_error = request.deep_scrub_on_error;
 }
@@ -2311,19 +2323,17 @@ void PgScrubber::cleanup_on_finish()
 
   state_clear(PG_STATE_SCRUBBING);
   state_clear(PG_STATE_DEEP_SCRUB);
-  m_pg->publish_stats_to_osd();
 
   clear_scrub_reservations();
-  m_pg->publish_stats_to_osd();
-
   requeue_waiting();
 
   reset_internal_state();
-  m_pg->publish_stats_to_osd();
   m_flags = scrub_flags_t{};
 
   // type-specific state clear
   _scrub_clear_state();
+  // PG state flags changed:
+  m_pg->publish_stats_to_osd();
 }
 
 // uses process_event(), so must be invoked externally
@@ -2349,8 +2359,6 @@ void PgScrubber::clear_pgscrub_state()
   state_clear(PG_STATE_REPAIR);
 
   clear_scrub_reservations();
-  m_pg->publish_stats_to_osd();
-
   requeue_waiting();
 
   reset_internal_state();
@@ -2358,7 +2366,6 @@ void PgScrubber::clear_pgscrub_state()
 
   // type-specific state clear
   _scrub_clear_state();
-  m_pg->publish_stats_to_osd();
 }
 
 void PgScrubber::replica_handling_done()
