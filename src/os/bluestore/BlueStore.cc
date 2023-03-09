@@ -8483,7 +8483,7 @@ public:
       void* item = wq->_void_dequeue();
       if (item) {
         processing++;
-        TPHandle tp_handle(cct, nullptr, wq->timeout_interval, wq->suicide_interval);
+        TPHandle tp_handle(cct, nullptr, wq->timeout_interval.load(), wq->suicide_interval.load());
         wq->_void_process(item, tp_handle);
         processing--;
       }
@@ -8685,8 +8685,8 @@ public:
         if (batch.entry_count) {
           TPHandle tp_handle(store->cct,
             nullptr,
-            timeout_interval,
-            suicide_interval);
+            timeout_interval.load(),
+            suicide_interval.load());
           ceph_assert(batch.running == 0);
 
           batch.running++; // just to be on-par with the regular call
