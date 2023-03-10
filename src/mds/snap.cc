@@ -25,24 +25,28 @@ using namespace std;
 
 void SnapInfo::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(4, 2, bl);
   encode(snapid, bl);
   encode(ino, bl);
   encode(stamp, bl);
   encode(name, bl);
   encode(metadata, bl);
+  encode(alternate_name, bl);
   ENCODE_FINISH(bl);
 }
 
 void SnapInfo::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   decode(snapid, bl);
   decode(ino, bl);
   decode(stamp, bl);
   decode(name, bl);
   if (struct_v >= 3) {
     decode(metadata, bl);
+  }
+  if (struct_v >= 4) {
+    decode(alternate_name, bl);
   }
   DECODE_FINISH(bl);
 }

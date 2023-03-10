@@ -38,6 +38,7 @@ struct SnapInfo {
   inodeno_t ino;
   utime_t stamp;
   std::string name;
+  std::string alternate_name;
 
   mutable std::string long_name; ///< cached _$ino_$name
   std::map<std::string,std::string> metadata;
