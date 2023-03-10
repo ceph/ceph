@@ -341,7 +341,8 @@ class Connection {
           } else {
             return socket->read_exactly(DATA_SIZE * sizeof(uint64_t)
             ).then([this](auto buf) {
-              auto read_data = reinterpret_cast<const uint64_t*>(buf.get());
+              uint64_t read_data[DATA_SIZE];
+              std::memcpy(read_data, buf.get(), DATA_SIZE * sizeof(uint64_t));
               verify_data_read(read_data);
             });
           }
