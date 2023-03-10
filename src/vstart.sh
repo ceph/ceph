@@ -708,6 +708,8 @@ prepare_conf() {
         enable experimental unrecoverable data corrupting features = *
         osd_crush_chooseleaf_type = 0
         debug asok assert abort = true
+	rgw_filter = s3
+	backend_url = 127.0.0.1:8000
         $(format_conf "${msgr_conf}")
         $(format_conf "${extra_conf}")
         $AUTOSCALER_OPTS
