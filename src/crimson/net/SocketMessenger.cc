@@ -91,7 +91,8 @@ SocketMessenger::do_listen(const entity_addrvec_t& addrs)
   set_myaddrs(addrs);
   return seastar::futurize_invoke([this] {
     if (!listener) {
-      return FixedCPUServerSocket::create().then([this] (auto _listener) {
+      return ShardedServerSocket<true>::create(
+      ).then([this] (auto _listener) {
         listener = _listener;
       });
     } else {

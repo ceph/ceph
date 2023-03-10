@@ -29,7 +29,8 @@
 
 namespace crimson::net {
 
-class FixedCPUServerSocket;
+template <bool IS_FIXED_CPU>
+class ShardedServerSocket;
 
 class SocketMessenger final : public Messenger {
   const seastar::shard_id master_sid;
@@ -42,7 +43,7 @@ class SocketMessenger final : public Messenger {
   crimson::auth::AuthClient* auth_client = nullptr;
   crimson::auth::AuthServer* auth_server = nullptr;
 
-  FixedCPUServerSocket* listener = nullptr;
+  ShardedServerSocket<true> *listener = nullptr;
   ChainedDispatchers dispatchers;
   std::map<entity_addr_t, SocketConnectionRef> connections;
   std::set<SocketConnectionRef> accepting_conns;
