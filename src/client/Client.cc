@@ -10702,8 +10702,10 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
     put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
     r = __setattrx(in, &stx, CEPH_SETATTR_KILL_SGUID, f->actor_perms);
-    if (r < 0)
+    if (r < 0) {
+      put_cap_ref(in, CEPH_CAP_FILE_WR);
       return r;
+    }
   } else {
     put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
   }
