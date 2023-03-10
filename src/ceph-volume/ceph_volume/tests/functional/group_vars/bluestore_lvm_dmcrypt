@@ -31,3 +31,5 @@ ceph_conf_overrides:
   global:
     osd_pool_default_pg_num: 8
     osd_pool_default_size: 1
+  osd:
+    bluefs_buffered_io: false
