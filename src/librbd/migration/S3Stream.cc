@@ -17,8 +17,6 @@
 #include "librbd/migration/HttpProcessorInterface.h"
 #include <boost/beast/http.hpp>
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 
