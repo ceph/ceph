@@ -121,6 +121,7 @@
 %else # not x86_64
 %bcond_with system_qat
 %endif
+%bcond_without quiche
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8 || 0%{?openEuler}
 %global weak_deps 1
 %endif
@@ -376,6 +377,9 @@ BuildRequires:  utf8proc-devel
 %if 0%{with system_qat}
 BuildRequires:  qatlib-devel
 BuildRequires:  qatzip-devel
+%endif
+%if 0%{with quiche}
+BuildRequires:  cargo
 %endif
 %if 0%{with seastar}
 BuildRequires:  c-ares-devel
