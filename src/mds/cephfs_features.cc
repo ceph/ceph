@@ -5,8 +5,6 @@
 #include "cephfs_features.h"
 #include "mdstypes.h"
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
 
 static const std::array feature_names
