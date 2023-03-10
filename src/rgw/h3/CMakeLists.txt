@@ -18,4 +18,5 @@ target_include_directories(rgw_h3_quiche_headers INTERFACE "include")
 # XXX: only required for common/ceph_time.h
 target_include_directories(rgw_h3_quiche_headers INTERFACE "../..")
 
+add_subdirectory(examples)
 add_subdirectory(src)
