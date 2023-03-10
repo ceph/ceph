@@ -14120,11 +14120,13 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     else
       return -CEPHFS_EROFS;
   }
+
+  // don't allow cross-quota renames
   if (cct->_conf.get_val<bool>("client_quota") && fromdir != todir) {
     Inode *fromdir_root =
-      fromdir->quota.is_enabled(QUOTA_MAX_FILES) ? fromdir : get_quota_root(fromdir, perm, QUOTA_MAX_FILES);
+      fromdir->quota.is_enabled() ? fromdir : get_quota_root(fromdir, perm);
     Inode *todir_root =
-      todir->quota.is_enabled(QUOTA_MAX_FILES) ? todir : get_quota_root(todir, perm, QUOTA_MAX_FILES);
+      todir->quota.is_enabled() ? todir : get_quota_root(todir, perm);
     if (fromdir_root != todir_root) {
       return -CEPHFS_EXDEV;
     }
