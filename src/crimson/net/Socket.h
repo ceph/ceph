@@ -139,7 +139,7 @@ private:
   socket_blocker* blocker = nullptr;
 
 #endif
-  friend class FixedCPUServerSocket;
+  friend class ShardedServerSocket;
 };
 
 using listen_ertr = crimson::errorator<
@@ -147,18 +147,19 @@ using listen_ertr = crimson::errorator<
   crimson::ct_error::address_not_available // https://techoverflow.net/2021/08/06/how-i-fixed-python-oserror-errno-99-cannot-assign-requested-address/
   >;
 
-class FixedCPUServerSocket
-    : public seastar::peering_sharded_service<FixedCPUServerSocket> {
+template <bool IS_FIXED_CPU>
+class ShardedServerSocket
+    : public seastar::peering_sharded_service<ShardedServerSocket<IS_FIXED_CPU> > {
   struct construct_tag {};
 
 public:
-  FixedCPUServerSocket(seastar::shard_id cpu, construct_tag);
+  ShardedServerSocket(seastar::shard_id sid, construct_tag);
 
-  ~FixedCPUServerSocket();
+  ~ShardedServerSocket();
 
-  FixedCPUServerSocket(FixedCPUServerSocket&&) = delete;
-  FixedCPUServerSocket(const FixedCPUServerSocket&) = delete;
-  FixedCPUServerSocket& operator=(const FixedCPUServerSocket&) = delete;
+  ShardedServerSocket(ShardedServerSocket&&) = delete;
+  ShardedServerSocket(const ShardedServerSocket&) = delete;
+  ShardedServerSocket& operator=(const ShardedServerSocket&) = delete;
 
   listen_ertr::future<> listen(entity_addr_t addr);
 
@@ -168,16 +169,17 @@ public:
 
   seastar::future<> shutdown_destroy();
 
-  static seastar::future<FixedCPUServerSocket*> create();
+  static seastar::future<ShardedServerSocket*> create();
 
 private:
-  const seastar::shard_id fixed_cpu;
+  // the fixed CPU if IS_FIXED_CPU is true
+  const seastar::shard_id primary_sid;
   entity_addr_t listen_addr;
   std::optional<seastar::server_socket> listener;
   seastar::gate shutdown_gate;
   accept_func_t fn_accept;
 
-  using sharded_service_t = seastar::sharded<FixedCPUServerSocket>;
+  using sharded_service_t = seastar::sharded<ShardedServerSocket>;
   std::unique_ptr<sharded_service_t> service;
 };
 

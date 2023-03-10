@@ -241,7 +241,7 @@ close_and_handle_errors(seastar::output_stream<char>& out)
 seastar::future<>
 Socket::close() {
 #ifndef NDEBUG
-  ceph_assert(!closed);
+  ceph_assert_always(!closed);
   closed = true;
 #endif
   return seastar::when_all_succeed(
@@ -282,14 +282,14 @@ Socket::connect(const entity_addr_t &peer_addr)
 void Socket::set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocker_) {
   blocker = blocker_;
   if (type == bp_type_t::READ) {
-    ceph_assert(next_trap_read == bp_action_t::CONTINUE);
+    ceph_assert_always(next_trap_read == bp_action_t::CONTINUE);
     next_trap_read = action;
   } else { // type == bp_type_t::WRITE
     if (next_trap_write == bp_action_t::CONTINUE) {
       next_trap_write = action;
     } else if (next_trap_write == bp_action_t::FAULT) {
       // do_sweep_messages() may combine multiple write events into one socket write
-      ceph_assert(action == bp_action_t::FAULT || action == bp_action_t::CONTINUE);
+      ceph_assert_always(action == bp_action_t::FAULT || action == bp_action_t::CONTINUE);
     } else {
       ceph_abort();
     }
@@ -336,67 +336,77 @@ Socket::try_trap_post(bp_action_t& trap) {
 }
 #endif
 
-FixedCPUServerSocket::FixedCPUServerSocket(
-    seastar::shard_id cpu,
+#define SERVER_SOCKET ShardedServerSocket<IS_FIXED_CPU>
+
+template <bool IS_FIXED_CPU>
+SERVER_SOCKET::ShardedServerSocket(
+    seastar::shard_id sid,
     construct_tag)
-  : fixed_cpu{cpu}
+  : primary_sid{sid}
 {
 }
 
-FixedCPUServerSocket::~FixedCPUServerSocket()
+template <bool IS_FIXED_CPU>
+SERVER_SOCKET::~ShardedServerSocket()
 {
   assert(!listener);
   // detect whether user have called destroy() properly
-  ceph_assert(!service);
+  ceph_assert_always(!service);
 }
 
+template <bool IS_FIXED_CPU>
 listen_ertr::future<>
-FixedCPUServerSocket::listen(entity_addr_t addr)
+SERVER_SOCKET::listen(entity_addr_t addr)
 {
-  assert(seastar::this_shard_id() == fixed_cpu);
-  logger().debug("FixedCPUServerSocket({})::listen()...", addr);
-  return container().invoke_on_all([addr](auto& ss) {
+  ceph_assert_always(seastar::this_shard_id() == primary_sid);
+  logger().debug("ShardedServerSocket({})::listen()...", addr);
+  return this->container().invoke_on_all([addr](auto& ss) {
     ss.listen_addr = addr;
     seastar::socket_address s_addr(addr.in4_addr());
     seastar::listen_options lo;
     lo.reuse_address = true;
-    lo.set_fixed_cpu(ss.fixed_cpu);
+    if constexpr (IS_FIXED_CPU) {
+      lo.set_fixed_cpu(ss.primary_sid);
+    }
     ss.listener = seastar::listen(s_addr, lo);
   }).then([] {
     return listen_ertr::now();
   }).handle_exception_type(
     [addr](const std::system_error& e) -> listen_ertr::future<> {
     if (e.code() == std::errc::address_in_use) {
-      logger().debug("FixedCPUServerSocket({})::listen(): address in use", addr);
+      logger().debug("ShardedServerSocket({})::listen(): address in use", addr);
       return crimson::ct_error::address_in_use::make();
     } else if (e.code() == std::errc::address_not_available) {
-      logger().debug("FixedCPUServerSocket({})::listen(): address not available",
+      logger().debug("ShardedServerSocket({})::listen(): address not available",
                      addr);
       return crimson::ct_error::address_not_available::make();
     }
-    logger().error("FixedCPUServerSocket({})::listen(): "
+    logger().error("ShardedServerSocket({})::listen(): "
                    "got unexpeted error {}", addr, e.what());
     ceph_abort();
   });
 }
 
+template <bool IS_FIXED_CPU>
 seastar::future<>
-FixedCPUServerSocket::accept(accept_func_t &&_fn_accept)
+SERVER_SOCKET::accept(accept_func_t &&_fn_accept)
 {
-  assert(seastar::this_shard_id() == fixed_cpu);
-  logger().debug("FixedCPUServerSocket({})::accept()...", listen_addr);
-  return container().invoke_on_all([_fn_accept](auto &ss) {
+  ceph_assert_always(seastar::this_shard_id() == primary_sid);
+  logger().debug("ShardedServerSocket({})::accept()...", listen_addr);
+  return this->container().invoke_on_all([_fn_accept](auto &ss) {
     assert(ss.listener);
     ss.fn_accept = _fn_accept;
     // gate accepting
-    // FixedCPUServerSocket::shutdown() will drain the continuations in the gate
+    // ShardedServerSocket::shutdown() will drain the continuations in the gate
     // so ignore the returned future
     std::ignore = seastar::with_gate(ss.shutdown_gate, [&ss] {
       return seastar::keep_doing([&ss] {
         return ss.listener->accept(
         ).then([&ss](seastar::accept_result accept_result) {
-          // assert seastar::listen_options::set_fixed_cpu() works
-          assert(seastar::this_shard_id() == ss.fixed_cpu);
+          if constexpr (IS_FIXED_CPU) {
+            // see seastar::listen_options::set_fixed_cpu()
+            ceph_assert_always(seastar::this_shard_id() == ss.primary_sid);
+          }
           auto [socket, paddr] = std::move(accept_result);
           entity_addr_t peer_addr;
           peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
@@ -404,7 +414,7 @@ FixedCPUServerSocket::accept(accept_func_t &&_fn_accept)
           SocketRef _socket = std::make_unique<Socket>(
               std::move(socket), Socket::side_t::acceptor,
               peer_addr.get_port(), Socket::construct_tag{});
-          logger().debug("FixedCPUServerSocket({})::accept(): "
+          logger().debug("ShardedServerSocket({})::accept(): "
                          "accepted peer {}, socket {}",
                          ss.listen_addr, peer_addr, fmt::ptr(_socket));
           std::ignore = seastar::with_gate(
@@ -418,7 +428,7 @@ FixedCPUServerSocket::accept(accept_func_t &&_fn_accept)
               } catch (std::exception &e) {
                 e_what = e.what();
               }
-              logger().error("FixedCPUServerSocket({})::accept(): "
+              logger().error("ShardedServerSocket({})::accept(): "
                              "fn_accept(s, {}) got unexpected exception {}",
                              ss.listen_addr, peer_addr, e_what);
               ceph_abort();
@@ -428,7 +438,7 @@ FixedCPUServerSocket::accept(accept_func_t &&_fn_accept)
       }).handle_exception_type([&ss](const std::system_error& e) {
         if (e.code() == std::errc::connection_aborted ||
             e.code() == std::errc::invalid_argument) {
-          logger().debug("FixedCPUServerSocket({})::accept(): stopped ({})",
+          logger().debug("ShardedServerSocket({})::accept(): stopped ({})",
                          ss.listen_addr, e.what());
         } else {
           throw;
@@ -440,7 +450,7 @@ FixedCPUServerSocket::accept(accept_func_t &&_fn_accept)
         } catch (std::exception &e) {
           e_what = e.what();
         }
-        logger().error("FixedCPUServerSocket({})::accept(): "
+        logger().error("ShardedServerSocket({})::accept(): "
                        "got unexpected exception {}", ss.listen_addr, e_what);
         ceph_abort();
       });
@@ -448,41 +458,43 @@ FixedCPUServerSocket::accept(accept_func_t &&_fn_accept)
   });
 }
 
+template <bool IS_FIXED_CPU>
 seastar::future<>
-FixedCPUServerSocket::shutdown_destroy()
+SERVER_SOCKET::shutdown_destroy()
 {
-  assert(seastar::this_shard_id() == fixed_cpu);
-  logger().debug("FixedCPUServerSocket({})::shutdown_destroy()...", listen_addr);
+  assert(seastar::this_shard_id() == primary_sid);
+  logger().debug("ShardedServerSocket({})::shutdown_destroy()...", listen_addr);
   // shutdown shards
-  return container().invoke_on_all([](auto& ss) {
+  return this->container().invoke_on_all([](auto& ss) {
     if (ss.listener) {
       ss.listener->abort_accept();
     }
     return ss.shutdown_gate.close();
   }).then([this] {
     // destroy shards
-    return container().invoke_on_all([](auto& ss) {
+    return this->container().invoke_on_all([](auto& ss) {
       assert(ss.shutdown_gate.is_closed());
       ss.listen_addr = entity_addr_t();
       ss.listener.reset();
     });
   }).then([this] {
     // stop the sharded service: we should only construct/stop shards on #0
-    return container().invoke_on(0, [](auto& ss) {
+    return this->container().invoke_on(0, [](auto& ss) {
       assert(ss.service);
       return ss.service->stop().finally([cleanup = std::move(ss.service)] {});
     });
   });
 }
 
-seastar::future<FixedCPUServerSocket*>
-FixedCPUServerSocket::create()
+template <bool IS_FIXED_CPU>
+seastar::future<SERVER_SOCKET*>
+SERVER_SOCKET::create()
 {
-  auto fixed_cpu = seastar::this_shard_id();
+  auto primary_sid = seastar::this_shard_id();
   // start the sharded service: we should only construct/stop shards on #0
-  return seastar::smp::submit_to(0, [fixed_cpu] {
+  return seastar::smp::submit_to(0, [primary_sid] {
     auto service = std::make_unique<sharded_service_t>();
-    return service->start(fixed_cpu, construct_tag{}
+    return service->start(primary_sid, construct_tag{}
     ).then([service = std::move(service)]() mutable {
       auto p_shard = service.get();
       p_shard->local().service = std::move(service);
@@ -492,5 +504,8 @@ FixedCPUServerSocket::create()
     return &p_shard->local();
   });
 }
+
+template class ShardedServerSocket<true>;
+template class ShardedServerSocket<false>;
 
 } // namespace crimson::net
