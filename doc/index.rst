@@ -2,8 +2,7 @@
  Welcome to Ceph
 =================
 
-Ceph uniquely delivers **object, block, and file storage in one unified
-system**.
+Ceph delivers **object, block, and file storage in one unified system**.
 
 .. warning:: 
 
