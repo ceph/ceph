@@ -11,6 +11,7 @@
 #include <limits>
 #include <string>
 #include <string_view>
+#include <algorithm>
 
 namespace rgw {
 
@@ -51,10 +52,8 @@ namespace rgw {
     std::string outstr(b64_iter(sview.data()),
 		       b64_iter(sview.data() + sview.size()));
 
-    // pad outstr with '=' to a length that is a multiple of 3
-    for (size_t ix = 0; ix < (psize-sview.size()); ++ix)
-      outstr.push_back('=');
-
+    std::replace(outstr.begin(), outstr.end(), '+', '-');
+    std::replace(outstr.begin(), outstr.end(), '/', '_');
     return outstr;
   }
 
@@ -73,11 +72,20 @@ namespace rgw {
       ,8,6
       > b64_iter;
 
-    while (sview.back() == '=')
-      sview.remove_suffix(1);
+    std::string deal_str = sview.data();
+    std::replace(deal_str.begin(), deal_str.end(), '-', '+');
+    std::replace(deal_str.begin(), deal_str.end(), '_', '/');
+    auto psize = sview.size();
+    while ((psize % 4) != 0) {
+      --psize;
+      deal_str.push_back('=');
+    }
+    std::string_view new_sview(deal_str);
+    while (new_sview.back() == '=')
+      new_sview.remove_suffix(1);
 
-    std::string outstr(b64_iter(sview.data()),
-		      b64_iter(sview.data() + sview.size()));
+    std::string outstr(b64_iter(new_sview.data()),
+		      b64_iter(new_sview.data() + new_sview.size()));
 
     return outstr;
   }
