@@ -70,7 +70,7 @@ describe('Mirroring page', () => {
           cy.get('.table-actions button.dropdown-toggle').first().click();
           cy.get('[aria-label="Import Bootstrap Token"]').click();
           cy.get('cd-bootstrap-import-modal').within(() => {
-            cy.get(`label[for=${name}]`).click();
+            cy.get(`label[for=${name}]`).wait(100).click();
             cy.get('textarea[id=token]').wait(100).type(token);
             cy.get('button[type=submit]').click();
           });

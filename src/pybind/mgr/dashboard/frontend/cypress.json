@@ -1,5 +1,5 @@
 {
-  "baseUrl": "https://localhost:4200/",
+  "baseUrl": "https://localhost:11000/",
   "ignoreTestFiles": [
     "*.po.ts",
     "**/orchestrator/**"
@@ -23,7 +23,7 @@
   "env": {
     "LOGIN_USER": "admin",
     "LOGIN_PWD": "admin",
-    "CEPH2_URL": "http://localhost:4202/"
+    "CEPH2_URL": "https://localhost:11002/"
   },
   "experimentalSessionAndOrigin": true,
   "chromeWebSecurity": false
