@@ -7902,31 +7902,74 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
   return 0;
 }
 
-int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
+/*
+* Get the number of 'in' osds according to the crush_rule,
+*/
+uint32_t OSDMonitor::get_osd_num_by_crush(int crush_rule)
+{
+  set<int> out_osds;
+  set<int> crush_in_osds;
+  set<int> roots;
+  CrushWrapper newcrush = _get_pending_crush();
+  newcrush.find_takes_by_rule(crush_rule, &roots);
+  for (auto root : roots) {
+    const char *rootname = newcrush.get_item_name(root);
+    set<int> crush_all_osds;
+    newcrush.get_leaves(rootname, &crush_all_osds);
+    std::set_difference(crush_all_osds.begin(), crush_all_osds.end(),
+                        out_osds.begin(), out_osds.end(),
+                        std::inserter(crush_in_osds, crush_in_osds.end()));
+  }
+  return crush_in_osds.size();
+}
+
+int OSDMonitor::check_pg_num(int64_t pool,
+                             int pg_num,
+                             int size,
+                             int crush_rule,
+                             ostream *ss)
 {
   auto max_pgs_per_osd = g_conf().get_val<uint64_t>("mon_max_pg_per_osd");
-  auto num_osds = std::max(osdmap.get_num_in_osds(), 3u);   // assume min cluster size 3
-  auto max_pgs = max_pgs_per_osd * num_osds;
   uint64_t projected = 0;
+  uint32_t osd_num_by_crush = 0;
+  set<int64_t> crush_pool_ids;
   if (pool < 0) {
+    // a new pool
     projected += pg_num * size;
   }
-  for (const auto& i : osdmap.get_pools()) {
-    if (i.first == pool) {
-      projected += pg_num * size;
-    } else {
-      projected += i.second.get_pg_num_target() * i.second.get_size();
+
+  osd_num_by_crush = get_osd_num_by_crush(crush_rule);
+  osdmap.get_pool_ids_by_rule(crush_rule, &crush_pool_ids);
+
+  for (const auto& [pool_id, pool_info] : osdmap.get_pools()) {
+    // Check only for pools affected by crush rule
+    if (crush_pool_ids.count(pool_id)) {
+      if (pool_id == pool) {
+        // Specified pool, use given pg_num and size values.
+        projected += pg_num * size;
+      } else {
+        // Use pg_num_target for evaluating the projected pg num
+        projected += pool_info.get_pg_num_target() * pool_info.get_size();
+      }
     }
   }
-  if (projected > max_pgs) {
+  // assume min cluster size 3
+  osd_num_by_crush = std::max(osd_num_by_crush, 3u);
+  auto projected_pgs_per_osd = projected / osd_num_by_crush;
+
+  if (projected_pgs_per_osd > max_pgs_per_osd) {
     if (pool >= 0) {
       *ss << "pool id " << pool;
     }
-    *ss << " pg_num " << pg_num << " size " << size
-	<< " would mean " << projected
-	<< " total pgs, which exceeds max " << max_pgs
-	<< " (mon_max_pg_per_osd " << max_pgs_per_osd
-	<< " * num_in_osds " << num_osds << ")";
+    *ss << " pg_num " << pg_num
+        << " size " << size
+        << " for this pool would result in "
+        << projected_pgs_per_osd
+        << " cumulative PGs per OSD (" << projected
+        << " total PG replicas on " << osd_num_by_crush
+        << " 'in' root OSDs by crush rule) "
+        << "which exceeds the mon_max_pg_per_osd "
+        << "value of " << max_pgs_per_osd;
     return -ERANGE;
   }
   return 0;
@@ -8033,7 +8076,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     dout(10) << __func__ << " crush smoke test duration: "
              << duration << dendl;
   }
-  r = check_pg_num(-1, pg_num, size, ss);
+  r = check_pg_num(-1, pg_num, size, crush_rule, ss);
   if (r) {
     dout(10) << "check_pg_num returns " << r << dendl;
     return r;
@@ -8311,9 +8354,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "crush rule " << p.get_crush_rule() << " type does not match pool";
       return -EINVAL;
     }
-    int r = check_pg_num(pool, p.get_pg_num(), n, &ss);
-    if (r < 0) {
-      return r;
+    if (n > p.size) {
+      // only when increasing pool size
+      int r = check_pg_num(pool, p.get_pg_num(), n, p.get_crush_rule(), &ss);
+      if (r < 0) {
+        return r;
+      }
     }
     p.size = n;
     p.min_size = g_conf().get_osd_pool_default_min_size(p.size);
@@ -8417,7 +8463,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -ERANGE;
     }
     if (n > (int)p.get_pg_num_target()) {
-      int r = check_pg_num(pool, n, p.get_size(), &ss);
+      int r = check_pg_num(pool, n, p.get_size(), p.get_crush_rule(), &ss);
       if (r) {
 	return r;
       }
