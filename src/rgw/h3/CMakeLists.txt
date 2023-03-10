@@ -20,4 +20,5 @@ target_include_directories(rgw_h3_quiche_headers INTERFACE "../..")
 # TODO: update for system fmt
 target_include_directories(rgw_h3_quiche_headers INTERFACE "../../fmt/include")
 
+add_subdirectory(examples)
 add_subdirectory(src)
