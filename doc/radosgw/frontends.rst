@@ -150,5 +150,15 @@ Some frontend options are generic and supported by all frontends:
 :Type: String
 :Default: None
 
+``alt_svc``
+
+:Description: Adds an optional `Alt-Svc`_ reponse header to advertise other
+              endpoints that serve the same content. For example, to advertise
+              both an https port and an http/3 port:
+              ``HTTP/1.1=":443", h3=":443"``
+
+:Type: String
+:Default: None
 
 .. _Config Reference: ../config-ref
+.. _Alt-Svc: https://www.rfc-editor.org/rfc/rfc7838.html
