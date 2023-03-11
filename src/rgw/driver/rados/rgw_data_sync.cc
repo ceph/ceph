@@ -1524,7 +1524,13 @@ public:
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, source_bs.bucket, &remote_info));
-      if (retcode < 0) {
+      if (retcode == -ENOENT) {
+        // don't retry if bucket instance does not exist
+        tn->log(10, SSTR("bucket instance or log layout does not exist on source for bucket " << source_bs.bucket));
+        yield call(rgw::error_repo::remove_cr(sync_env->driver->svc()->rados, error_repo,
+                                            error_marker, timestamp));
+        return set_cr_done();
+      } else if (retcode < 0) {
         return set_cr_error(retcode);
       }
 
