@@ -252,13 +252,29 @@ struct lba_btree_test : btree_test_base {
     return lba_map_val_t{0, P_ADDR_NULL, len, 0};
   }
 
+  device_off_t next_off = 0;
+  paddr_t get_paddr() {
+    next_off += block_size;
+    return make_fake_paddr(next_off);
+  }
+
   void insert(laddr_t addr, extent_len_t len) {
     ceph_assert(check.count(addr) == 0);
     check.emplace(addr, get_map_val(len));
     lba_btree_update([=, this](auto &btree, auto &t) {
+      auto extent = cache->alloc_new_extent<TestBlock>(
+	  t,
+	  TestBlock::SIZE,
+	  placement_hint_t::HOT,
+	  0,
+	  get_paddr());
       return btree.insert(
-	get_op_context(t), addr, get_map_val(len), nullptr
-      ).si_then([](auto){});
+	get_op_context(t), addr, get_map_val(len), extent.get()
+      ).si_then([addr, extent](auto p){
+	auto& [iter, inserted] = p;
+	assert(inserted);
+	extent->set_laddr(addr);
+      });
     });
   }
 
@@ -405,12 +421,18 @@ struct btree_lba_manager_test : btree_test_base {
   auto alloc_mapping(
     test_transaction_t &t,
     laddr_t hint,
-    size_t len,
-    paddr_t paddr) {
+    size_t len) {
     auto ret = with_trans_intr(
       *t.t,
       [=, this](auto &t) {
-	return lba_manager->alloc_extent(t, hint, len, paddr, nullptr);
+	auto extent = cache->alloc_new_extent<TestBlock>(
+	    t,
+	    TestBlock::SIZE,
+	    placement_hint_t::HOT,
+	    0,
+	    get_paddr());
+	return lba_manager->alloc_extent(
+	  t, hint, len, extent->get_paddr(), extent.get());
       }).unsafe_get0();
     logger().debug("alloc'd: {}", *ret);
     EXPECT_EQ(len, ret->get_length());
@@ -441,14 +463,20 @@ struct btree_lba_manager_test : btree_test_base {
     ceph_assert(target->second.refcount > 0);
     target->second.refcount--;
 
-    auto refcnt = with_trans_intr(
+    (void) with_trans_intr(
       *t.t,
       [=, this](auto &t) {
 	return lba_manager->decref_extent(
 	  t,
-	  target->first);
-      }).unsafe_get0().refcount;
-    EXPECT_EQ(refcnt, target->second.refcount);
+	  target->first
+	).si_then([this, &t, target](auto result) {
+	  EXPECT_EQ(result.refcount, target->second.refcount);
+	  if (result.refcount == 0) {
+	    return cache->retire_extent_addr(t, result.addr, result.length);
+	  }
+	  return Cache::retire_extent_iertr::now();
+	});
+      }).unsafe_get0();
     if (target->second.refcount == 0) {
       t.mappings.erase(target);
     }
@@ -557,7 +585,7 @@ TEST_F(btree_lba_manager_test, basic)
       auto t = create_transaction();
       check_mappings(t);  // check in progress transaction sees mapping
       check_mappings();   // check concurrent does not
-      auto ret = alloc_mapping(t, laddr, block_size, get_paddr());
+      auto ret = alloc_mapping(t, laddr, block_size);
       submit_test_transaction(std::move(t));
     }
     check_mappings();     // check new transaction post commit sees it
@@ -571,7 +599,7 @@ TEST_F(btree_lba_manager_test, force_split)
       auto t = create_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 5; ++j) {
-	auto ret = alloc_mapping(t, 0, block_size, get_paddr());
+	auto ret = alloc_mapping(t, 0, block_size);
 	if ((i % 10 == 0) && (j == 3)) {
 	  check_mappings(t);
 	  check_mappings();
@@ -591,7 +619,7 @@ TEST_F(btree_lba_manager_test, force_split_merge)
       auto t = create_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 5; ++j) {
-	auto ret = alloc_mapping(t, 0, block_size, get_paddr());
+	auto ret = alloc_mapping(t, 0, block_size);
 	// just to speed things up a bit
 	if ((i % 100 == 0) && (j == 3)) {
 	  check_mappings(t);
@@ -648,7 +676,7 @@ TEST_F(btree_lba_manager_test, single_transaction_split_merge)
     {
       auto t = create_transaction();
       for (unsigned i = 0; i < 400; ++i) {
-	alloc_mapping(t, 0, block_size, get_paddr());
+	alloc_mapping(t, 0, block_size);
       }
       check_mappings(t);
       submit_test_transaction(std::move(t));
@@ -671,7 +699,7 @@ TEST_F(btree_lba_manager_test, single_transaction_split_merge)
     {
       auto t = create_transaction();
       for (unsigned i = 0; i < 600; ++i) {
-	alloc_mapping(t, 0, block_size, get_paddr());
+	alloc_mapping(t, 0, block_size);
       }
       auto addresses = get_mapped_addresses(t);
       for (unsigned i = 0; i != addresses.size(); ++i) {
@@ -699,7 +727,7 @@ TEST_F(btree_lba_manager_test, split_merge_multi)
       }
     };
     iterate([&](auto &t, auto idx) {
-      alloc_mapping(t, idx * block_size, block_size, get_paddr());
+      alloc_mapping(t, idx * block_size, block_size);
     });
     check_mappings();
     iterate([&](auto &t, auto idx) {
@@ -710,7 +738,7 @@ TEST_F(btree_lba_manager_test, split_merge_multi)
     check_mappings();
     iterate([&](auto &t, auto idx) {
       if ((idx % 32) > 0) {
-	alloc_mapping(t, idx * block_size, block_size, get_paddr());
+	alloc_mapping(t, idx * block_size, block_size);
       }
     });
     check_mappings();
