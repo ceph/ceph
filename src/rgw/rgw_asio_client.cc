@@ -14,10 +14,12 @@ using namespace rgw::asio;
 
 ClientIO::ClientIO(parser_type& parser, bool is_ssl,
                    const endpoint_type& local_endpoint,
-                   const endpoint_type& remote_endpoint)
+                   const endpoint_type& remote_endpoint,
+                   std::string_view extra_response_headers)
   : parser(parser), is_ssl(is_ssl),
     local_endpoint(local_endpoint),
     remote_endpoint(remote_endpoint),
+    extra_response_headers(extra_response_headers),
     txbuf(*this)
 {
 }
@@ -147,6 +149,11 @@ size_t ClientIO::complete_header()
   char timestr[TIME_BUF_SIZE];
   if (dump_date_header(timestr)) {
     sent += txbuf.sputn(timestr, strlen(timestr));
+  }
+
+  if (extra_response_headers.size()) {
+    sent += txbuf.sputn(extra_response_headers.data(),
+                        extra_response_headers.size());
   }
 
   if (parser.keep_alive()) {
