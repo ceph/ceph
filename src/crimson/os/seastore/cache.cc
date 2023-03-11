@@ -1196,7 +1196,7 @@ record_t Cache::prepare_record(
     fresh_stat.increment(i->get_length());
     get_by_ext(efforts.fresh_inline_by_ext,
                i->get_type()).increment(i->get_length());
-    assert(i->is_inline());
+    assert(i->is_inline() || i->get_paddr().is_fake());
 
     bufferlist bl;
     i->prepare_write();

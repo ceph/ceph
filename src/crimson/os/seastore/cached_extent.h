@@ -16,6 +16,8 @@
 #include "crimson/common/interruptible_future.h"
 #include "crimson/os/seastore/seastore_types.h"
 
+struct btree_lba_manager_test;
+
 namespace crimson::os::seastore {
 
 class Transaction;

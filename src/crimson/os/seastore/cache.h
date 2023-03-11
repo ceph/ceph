@@ -804,19 +804,29 @@ public:
   /**
    * alloc_new_extent
    *
-   * Allocates a fresh extent. if delayed is true, addr will be alloc'd later
+   * Allocates a fresh extent. if delayed is true, addr will be alloc'd later.
+   * Note that epaddr can only be fed by the btree lba unittest for now
    */
   template <typename T>
   TCachedExtentRef<T> alloc_new_extent(
     Transaction &t,         ///< [in, out] current transaction
     extent_len_t length,    ///< [in] length
     placement_hint_t hint,  ///< [in] user hint
-    rewrite_gen_t gen       ///< [in] rewrite generation
+#ifdef UNIT_TESTS_BUILT
+    rewrite_gen_t gen,      ///< [in] rewrite generation
+    std::optional<paddr_t> epaddr = std::nullopt ///< [in] paddr fed by callers
+#else
+    rewrite_gen_t gen
+#endif
   ) {
     LOG_PREFIX(Cache::alloc_new_extent);
     SUBTRACET(seastore_cache, "allocate {} {}B, hint={}, gen={}",
               t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
+#ifdef UNIT_TESTS_BUILT
+    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen, epaddr);
+#else
     auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen);
+#endif
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
     ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
               result.paddr,
