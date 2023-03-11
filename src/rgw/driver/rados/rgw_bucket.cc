@@ -870,7 +870,6 @@ static int bucket_stats(rgw::sal::Driver* driver,
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
 
-  real_time mtime;
   int ret = driver->get_bucket(dpp, nullptr, tenant_name, bucket_name, &bucket, null_yield);
   if (ret < 0) {
     return ret;
@@ -891,7 +890,7 @@ static int bucket_stats(rgw::sal::Driver* driver,
     return ret;
   }
 
-  utime_t ut(mtime);
+  utime_t ut(bucket->get_modification_time());
   utime_t ctime_ut(bucket->get_creation_time());
 
   formatter->open_object_section("stats");

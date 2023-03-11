@@ -134,6 +134,7 @@ int RGWSI_SysObj_Core::read(const DoutPrefixProvider *dpp,
                             RGWObjVersionTracker *objv_tracker,
                             const rgw_raw_obj& obj,
                             bufferlist *bl, off_t ofs, off_t end,
+                            ceph::real_time* pmtime, uint64_t* psize,
                             map<string, bufferlist> *attrs,
 			    bool raw_attrs,
                             rgw_cache_entry_info *cache_info,
@@ -143,6 +144,7 @@ int RGWSI_SysObj_Core::read(const DoutPrefixProvider *dpp,
   auto& read_state = static_cast<GetObjState&>(_read_state);
 
   uint64_t len;
+  struct timespec mtime_ts;
   librados::ObjectReadOperation op;
 
   if (end < 0)
@@ -152,6 +154,9 @@ int RGWSI_SysObj_Core::read(const DoutPrefixProvider *dpp,
 
   if (objv_tracker) {
     objv_tracker->prepare_op_for_read(&op);
+  }
+  if (psize || pmtime) {
+    op.stat2(psize, &mtime_ts, nullptr);
   }
 
   ldpp_dout(dpp, 20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
@@ -188,6 +193,9 @@ int RGWSI_SysObj_Core::read(const DoutPrefixProvider *dpp,
     return -ECANCELED;
   }
 
+  if (pmtime) {
+    *pmtime = ceph::real_clock::from_timespec(mtime_ts);
+  }
   if (attrs && !raw_attrs) {
     rgw_filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, attrs);
   }
