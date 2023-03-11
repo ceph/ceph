@@ -91,6 +91,7 @@ static void dump_account_metadata(req_state * const s,
                                   const std::map<std::string, RGWUsageStats> &policies_stats,
                                   /* const */map<string, bufferlist>& attrs,
                                   const RGWQuotaInfo& quota,
+                                  int32_t max_buckets,
                                   const RGWAccessControlPolicy_SWIFTAcct &policy)
 {
   /* Adding X-Timestamp to keep align with Swift API */
@@ -141,6 +142,12 @@ static void dump_account_metadata(req_state * const s,
     }
   }
 
+  /* Limit on the number of containers in a given account is a RadosGW's
+   * extension. Swift's account quota WSGI filter doesn't support it. */
+  if (max_buckets >= 0) {
+    dump_header(s, "X-Account-Meta-Quota-Containers", max_buckets);
+  }
+
   /* Dump user-defined metadata items and generic attrs. */
   const size_t PREFIX_LEN = sizeof(RGW_ATTR_META_PREFIX) - 1;
   map<string, bufferlist>::iterator iter;
@@ -180,6 +187,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             policies_stats,
             s->user->get_attrs(),
             s->user->get_info().quota.user_quota,
+            s->user->get_max_buckets(),
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     dump_header(s, "Accept-Ranges", "bytes");
@@ -286,6 +294,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             policies_stats,
             s->user->get_attrs(),
             s->user->get_info().quota.user_quota,
+            s->user->get_max_buckets(),
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     end_header(s, nullptr, nullptr, s->formatter->get_len(), true);
@@ -561,6 +570,7 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
             policies_stats,
             attrs,
             s->user->get_info().quota.user_quota,
+            s->user->get_max_buckets(),
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
   }
 
