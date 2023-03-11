@@ -625,6 +625,10 @@ public:
     return get_addr_type() != paddr_types_t::RESERVED;
   }
 
+  bool is_fake() const {
+    return get_device_id() == DEVICE_ID_FAKE;
+  }
+
   auto operator<=>(const paddr_t &) const = default;
 
   DENC(paddr_t, v, p) {
