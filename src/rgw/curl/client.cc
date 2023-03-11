@@ -7,8 +7,8 @@
 #include <boost/asio/append.hpp>
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/dispatch.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/ip/udp.hpp>
+#include <boost/asio/generic/datagram_protocol.hpp>
+#include <boost/asio/generic/stream_protocol.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/intrusive_ptr.hpp>
@@ -161,8 +161,6 @@ static int socket_callback(CURL* easy, curl_socket_t fd, int what,
 static int timer_callback(CURLM* multi, long timeout_ms, void* user);
 
 
-namespace ip = boost::asio::ip;
-
 // This implementation uses the 'multi_socket' flavor of the libcurl multi API:
 // https://curl.se/libcurl/c/libcurl-multi.html
 //
@@ -252,7 +250,10 @@ class Client::Impl :
   boost::asio::steady_timer timer;
   multi_ptr multi;
 
-  using client_socket = std::variant<ip::tcp::socket, ip::udp::socket>;
+  // holds either a tcp or udp socket
+  using client_socket = std::variant<
+      boost::asio::generic::stream_protocol::socket,
+      boost::asio::generic::datagram_protocol::socket>;
   using client_socket_map = std::unordered_map<curl_socket_t, client_socket>;
   client_socket_map sockets;
 
@@ -366,12 +367,14 @@ class Client::Impl :
     auto impl = static_cast<Impl*>(user);
 
     if (address->socktype == SOCK_STREAM) {
-      auto proto = address->family == AF_INET ? ip::tcp::v4() : ip::tcp::v6();
-      return impl->open_socket(proto);
+      using protocol_type = boost::asio::generic::stream_protocol;
+      return impl->open_socket(protocol_type{address->family,
+                                             address->protocol});
     }
     if (address->socktype == SOCK_DGRAM) {
-      auto proto = address->family == AF_INET ? ip::udp::v4() : ip::udp::v6();
-      return impl->open_socket(proto);
+      using protocol_type = boost::asio::generic::datagram_protocol;
+      return impl->open_socket(protocol_type{address->family,
+                                             address->protocol});
     }
     return CURL_SOCKET_BAD;
   }
