@@ -1850,6 +1850,42 @@ void RadosObject::get_raw_obj(rgw_raw_obj* raw_obj)
   store->getRados()->obj_to_raw((bucket->get_info()).placement_rule, get_obj(), raw_obj);
 }
 
+int RadosObject::get_torrent_info(const DoutPrefixProvider* dpp,
+                                  optional_yield y, bufferlist& bl)
+{
+  // try to read torrent info from attr
+  int ret = StoreObject::get_torrent_info(dpp, y, bl);
+  if (ret >= 0) {
+    return ret;
+  }
+
+  // try falling back to old torrent info stored in omap
+  rgw_raw_obj raw_obj;
+  get_raw_obj(&raw_obj);
+
+  rgw_rados_ref ref;
+  ret = store->getRados()->get_raw_obj_ref(dpp, raw_obj, &ref);
+  if (ret < 0) {
+    return ret;
+  }
+
+  const std::set<std::string> keys = {"rgw.torrent"};
+  std::map<std::string, bufferlist> result;
+
+  librados::ObjectReadOperation op;
+  op.omap_get_vals_by_keys(keys, &result, nullptr);
+
+  ret = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+  if (result.empty()) { // omap key not found
+    return -ENOENT;
+  }
+  bl = std::move(result.begin()->second);
+  return 0;
+}
+
 int RadosObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
 					  const std::set<std::string>& keys,
 					  Attrs* vals)

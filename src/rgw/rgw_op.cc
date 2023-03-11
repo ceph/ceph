@@ -52,6 +52,7 @@
 #include "rgw_notify_event_type.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
+#include "rgw_torrent.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
 
@@ -964,7 +965,7 @@ int RGWGetObj::verify_permission(optional_yield y)
     if (has_s3_existing_tag || has_s3_resource_tag)
       rgw_iam_add_objtags(this, s, has_s3_existing_tag, has_s3_resource_tag);
 
-  if (torrent.get_flag()) {
+  if (get_torrent) {
     if (s->object->get_instance().empty()) {
       action = rgw::IAM::s3GetObjectTorrent;
     } else {
@@ -2199,8 +2200,7 @@ void RGWGetObj::execute(optional_yield y)
     goto done_err;
   }
   /* start gettorrent */
-  if (torrent.get_flag())
-  {
+  if (get_torrent) {
     attr_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
     if (attr_iter != attrs.end() && attr_iter->second.to_str() == "SSE-C-AES256") {
       ldpp_dout(this, 0) << "ERROR: torrents are not supported for objects "
@@ -2208,18 +2208,16 @@ void RGWGetObj::execute(optional_yield y)
       op_ret = -EINVAL;
       goto done_err;
     }
-    torrent.init(s, driver);
-    rgw_obj obj = s->object->get_obj();
-    op_ret = torrent.get_torrent_file(s->object.get(), total_len, bl, obj);
-    if (op_ret < 0)
-    {
+    // read torrent info from attr
+    bufferlist torrentbl;
+    op_ret = rgw_read_torrent_file(this, s->object.get(), torrentbl, y);
+    if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to get_torrent_file ret= " << op_ret
                        << dendl;
       goto done_err;
     }
-    op_ret = send_response_data(bl, 0, total_len);
-    if (op_ret < 0)
-    {
+    op_ret = send_response_data(torrentbl, 0, torrentbl.length());
+    if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to send_response_data ret= " << op_ret << dendl;
       goto done_err;
     }
@@ -3901,6 +3899,24 @@ static CompressorRef get_compressor_plugin(const req_state *s,
   return Compressor::create(s->cct, alg);
 }
 
+auto RGWPutObj::get_torrent_filter(rgw::sal::DataProcessor* cb)
+    -> std::optional<RGWPutObj_Torrent>
+{
+  auto& conf = get_cct()->_conf;
+  if (!conf->rgw_torrent_flag) {
+    return std::nullopt; // torrent generation disabled
+  }
+  const auto max_len = conf->rgw_torrent_max_size;
+  const auto piece_len = conf->rgw_torrent_sha_unit;
+  if (!max_len || !piece_len) {
+    return std::nullopt; // invalid configuration
+  }
+  if (crypt_http_responses.count("x-amz-server-side-encryption-customer-algorithm")) {
+    return std::nullopt; // downloading the torrent would require customer keys
+  }
+  return RGWPutObj_Torrent{cb, max_len, piece_len};
+}
+
 int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, rgw::sal::DataProcessor* cb) {
   std::string script;
   const auto rc = rgw::lua::read_script(s, s->penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::putData, script);
@@ -4115,7 +4131,8 @@ void RGWPutObj::execute(optional_yield y)
 
   const auto& compression_type = driver->get_compression_type(*pdest_placement);
   CompressorRef plugin;
-  boost::optional<RGWPutObj_Compress> compressor;
+  std::optional<RGWPutObj_Compress> compressor;
+  std::optional<RGWPutObj_Torrent> torrent;
 
   std::unique_ptr<rgw::sal::DataProcessor> encrypt;
   std::unique_ptr<rgw::sal::DataProcessor> run_lua;
@@ -4139,6 +4156,9 @@ void RGWPutObj::execute(optional_yield y)
         // always send incompressible hint when rgw is itself doing compression
         s->object->set_compressed();
       }
+    }
+    if (torrent = get_torrent_filter(filter); torrent) {
+      filter = &*torrent;
     }
     // run lua script before data is compressed and encrypted - last filter runs first
     op_ret = get_lua_filter(&run_lua, filter);
@@ -4176,9 +4196,6 @@ void RGWPutObj::execute(optional_yield y)
     if (need_calc_md5) {
       hash.Update((const unsigned char *)data.c_str(), data.length());
     }
-
-    /* update torrrent */
-    torrent.update(data);
 
     op_ret = filter->process(std::move(data), ofs);
     if (op_ret < 0) {
@@ -4232,6 +4249,14 @@ void RGWPutObj::execute(optional_yield y)
         << " with type=" << cs_info.compression_type
         << ", orig_size=" << cs_info.orig_size
         << ", blocks=" << cs_info.blocks.size() << dendl;
+  }
+  if (torrent) {
+    auto bl = torrent->bencode_torrent(s->object->get_name());
+    if (bl.length()) {
+      ldpp_dout(this, 20) << "storing " << bl.length()
+         << " bytes of torrent info in " << RGW_ATTR_TORRENT << dendl;
+      attrs[RGW_ATTR_TORRENT] = std::move(bl);
+    }
   }
 
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
@@ -4301,19 +4326,6 @@ void RGWPutObj::execute(optional_yield y)
                                (user_data.empty() ? nullptr : &user_data), nullptr, nullptr,
                                s->yield);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
-
-  /* produce torrent */
-  if (s->cct->_conf->rgw_torrent_flag && (ofs == torrent.get_data_len()))
-  {
-    torrent.init(s, driver);
-    torrent.set_create_date(mtime);
-    op_ret =  torrent.complete(y);
-    if (0 != op_ret)
-    {
-      ldpp_dout(this, 0) << "ERROR: torrent.handle_data() returned " << op_ret << dendl;
-      return;
-    }
-  }
 
   // send request to notification manager
   int ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
