@@ -133,6 +133,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OLH_PENDING_PREFIX RGW_ATTR_OLH_PREFIX "pending."
 
 #define RGW_ATTR_COMPRESSION    RGW_ATTR_PREFIX "compression"
+#define RGW_ATTR_TORRENT        RGW_ATTR_PREFIX "torrent"
 
 #define RGW_ATTR_APPEND_PART_NUM    RGW_ATTR_PREFIX "append_part_num"
 

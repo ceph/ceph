@@ -8279,6 +8279,11 @@ next:
         handled = decode_dump<RGWCompressionInfo>("compression", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_DELETE_AT) {
         handled = decode_dump<utime_t>("delete_at", bl, formatter.get());
+      } else if (iter->first == RGW_ATTR_TORRENT) {
+        // contains bencoded binary data which shouldn't be output directly
+        // TODO: decode torrent info for display as json?
+        formatter->dump_string("torrent", "<contains binary data>");
+        handled = true;
       }
 
       if (!handled)

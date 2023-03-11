@@ -13,6 +13,7 @@
  */
 
 #include <vector>
+#include <utility>
 
 #include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
@@ -201,6 +202,21 @@ ssl::OpenSSLDigest::~OpenSSLDigest() {
     EVP_MD_free(mpType_FIPS);
 #endif  // OPENSSL_VERSION_NUMBER >= 0x30000000L
   }
+}
+
+ssl::OpenSSLDigest::OpenSSLDigest(OpenSSLDigest&& o) noexcept
+  : mpContext(std::exchange(o.mpContext, nullptr)),
+    mpType(std::exchange(o.mpType, nullptr)),
+    mpType_FIPS(std::exchange(o.mpType_FIPS, nullptr))
+{
+}
+
+ssl::OpenSSLDigest& ssl::OpenSSLDigest::operator=(OpenSSLDigest&& o) noexcept
+{
+  std::swap(mpContext, o.mpContext);
+  std::swap(mpType, o.mpType);
+  std::swap(mpType_FIPS, o.mpType_FIPS);
+  return *this;
 }
 
 void ssl::OpenSSLDigest::Restart() {
