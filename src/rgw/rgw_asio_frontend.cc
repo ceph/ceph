@@ -16,6 +16,7 @@
 #include "common/async/shared_mutex.h"
 #include "common/errno.h"
 #include "common/strtol.h"
+#include "ceph_ver.h"
 
 #include "rgw_asio_client.h"
 #include "rgw_asio_frontend.h"
@@ -78,8 +79,10 @@ class StreamIO : public rgw::asio::ClientIO {
            rgw::asio::parser_type& parser, yield_context yield,
            parse_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
-           const tcp::endpoint& remote_endpoint)
-      : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
+           const tcp::endpoint& remote_endpoint,
+           std::string_view extra_response_headers)
+      : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint,
+                 extra_response_headers),
         cct(cct), stream(stream), timeout(timeout), yield(yield),
         buffer(buffer)
   {}
@@ -193,6 +196,7 @@ void handle_connection(boost::asio::io_context& context,
                        SharedMutex& pause_mutex,
                        rgw::dmclock::Scheduler *scheduler,
                        const std::string& uri_prefix,
+                       std::string_view extra_response_headers,
                        boost::system::error_code& ec,
                        yield_context yield)
 {
@@ -265,7 +269,8 @@ void handle_connection(boost::asio::io_context& context,
       }
 
       StreamIO real_client{cct, stream, timeout, parser, yield, buffer,
-                           is_ssl, local_endpoint, remote_endpoint};
+                           is_ssl, local_endpoint, remote_endpoint,
+                           extra_response_headers};
 
       auto real_client_io = rgw::io::add_reordering(
                               rgw::io::add_buffering(cct,
@@ -437,6 +442,8 @@ class AsioFrontend {
   std::unique_ptr<dmc::ClientConfig> client_config;
   void accept(Listener& listener, boost::system::error_code ec);
 
+  std::string extra_response_headers;
+
  public:
   AsioFrontend(RGWProcessEnv& env, RGWFrontendConfig* conf,
 	       dmc::SchedulerCtx& sched_ctx)
@@ -557,6 +564,9 @@ int AsioFrontend::init()
 {
   boost::system::error_code ec;
   auto& config = conf->get_config_map();
+
+  // format the Server response header
+  extra_response_headers = "Server: Ceph Object Gateway (" CEPH_RELEASE_NAME ")\r\n";
 
   if (auto i = config.find("prefix"); i != config.end()) {
     uri_prefix = i->second;
@@ -1035,7 +1045,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         conn->buffer.consume(bytes);
         handle_connection(context, env, stream, timeout, header_limit,
                           conn->buffer, true, pause_mutex, scheduler.get(),
-                          uri_prefix, ec, yield);
+                          uri_prefix, extra_response_headers, ec, yield);
         if (!ec) {
           // ssl shutdown (ignoring errors)
           stream.async_shutdown(yield[ec]);
@@ -1054,7 +1064,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         boost::system::error_code ec;
         handle_connection(context, env, conn->socket, timeout, header_limit,
                           conn->buffer, false, pause_mutex, scheduler.get(),
-                          uri_prefix, ec, yield);
+                          uri_prefix, extra_response_headers, ec, yield);
         conn->socket.shutdown(tcp_socket::shutdown_both, ec);
       }, make_stack_allocator());
   }
