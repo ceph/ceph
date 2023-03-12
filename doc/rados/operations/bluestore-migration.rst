@@ -2,68 +2,67 @@
  BlueStore Migration
 =====================
 
-Each OSD can run either BlueStore or Filestore, and a single Ceph
-cluster can contain a mix of both.  Users who have previously deployed
-Filestore OSDs should transition to BlueStore in order to
-take advantage of the improved performance and robustness.  Moreover,
-Ceph releases beginning with Reef do not support Filestore. There are
-several strategies for making such a transition.
+Each OSD must be formatted as either a Filestore OSD or a BlueStore OSD.
+However, an individual Ceph cluster can operate with a mixture of both
+Filestore OSDs and BlueStore OSDs. Because BlueStore is superior to Filestore
+in performance and robustness, and because Filestore is not supported by Ceph
+releases beginning with Reef, users deploying Filestore OSDs should transition
+to BlueStore. There are several strategies for making the transition to
+BlueStore.
 
-An individual OSD cannot be converted in place;
-BlueStore and Filestore are simply too different for that to be
-feasible.  The conversion process uses either the cluster's normal
-replication and healing support or tools and strategies that copy OSD
-content from an old (Filestore) device to a new (BlueStore) one.
+BlueStore is so different from Filestore that an individual OSD cannot
+be converted in place. Instead, the conversion process must use either
+(1) the cluster's normal replication and healing support, or (2) tools
+and strategies that copy OSD content from an old (Filestore) device to
+a new (BlueStore) one.
 
+Deploying new OSDs with BlueStore
+=================================
 
-Deploy new OSDs with BlueStore
-==============================
+Use BlueStore when deploying new OSDs (for example, when the cluster is
+expanded). Because this is the default behavior, no specific change is
+needed.
 
-New OSDs (e.g., when the cluster is expanded) should be deployed
-using BlueStore.  This is the default behavior so no specific change
-is needed.
+Similarly, use BlueStore for any OSDs that have been reprovisioned after
+a failed drive was replaced.
 
-Similarly, any OSDs that are reprovisioned after replacing a failed drive
-should use BlueStore.
+Converting existing OSDs
+========================
 
-Convert existing OSDs
-=====================
+Mark-``out`` replacement
+------------------------
 
-Mark out and replace
---------------------
-
-The simplest approach is to ensure that the cluster is healthy,
-then mark ``out`` each device in turn, wait for
-data to replicate across the cluster, reprovision the OSD, and mark
-it back ``in`` again.  Proceed to the next OSD when recovery is complete.
-This is easy to automate but results in more data migration than
-is strictly necessary, which in turn presents additional wear to SSDs and takes
-longer to complete.
+The simplest approach is to verify that the cluster is healthy and
+then follow these steps for each Filestore OSD in succession: mark the OSD
+``out``, wait for the data to replicate across the cluster, reprovision the OSD, 
+mark the OSD back ``in``, and wait for recovery to complete before proceeding
+to the next OSD. This approach is easy to automate, but it entails unnecessary
+data migration that carries costs in time and SSD wear.
 
 #. Identify a Filestore OSD to replace::
 
      ID=<osd-id-number>
      DEVICE=<disk-device>
 
-   You can tell whether a given OSD is Filestore or BlueStore with:
+   #. Determine whether a given OSD is Filestore or BlueStore:
 
-   .. prompt:: bash $
+      .. prompt:: bash $
 
-      ceph osd metadata $ID | grep osd_objectstore
+         ceph osd metadata $ID | grep osd_objectstore
 
-   You can get a current count of Filestore and BlueStore OSDs with:
+   #. Get a current count of Filestore and BlueStore OSDs:
 
-   .. prompt:: bash $
+      .. prompt:: bash $
 
-      ceph osd count-metadata osd_objectstore
+         ceph osd count-metadata osd_objectstore
 
-#. Mark the Filestore OSD ``out``:
+#. Mark a Filestore OSD ``out``:
 
    .. prompt:: bash $
 
       ceph osd out $ID
 
-#. Wait for the data to migrate off the OSD in question:
+#. Wait for the data to migrate off this OSD:
 
    .. prompt:: bash $
 
@@ -75,7 +74,7 @@ longer to complete.
 
       systemctl kill ceph-osd@$ID
 
-#. Note which device this OSD is using:
+#. Note which device the OSD is using:
 
    .. prompt:: bash $
 
@@ -87,25 +86,27 @@ longer to complete.
 
       umount /var/lib/ceph/osd/ceph-$ID
 
-#. Destroy the OSD data. Be *EXTREMELY CAREFUL* as this will destroy
-   the contents of the device; be certain the data on the device is
-   not needed (i.e., that the cluster is healthy) before proceeding:
+#. Destroy the OSD's data. Be *EXTREMELY CAREFUL*! These commands will destroy
+   the contents of the device; you must be certain that the data on the device is
+   not needed (in other words, that the cluster is healthy) before proceeding:
 
    .. prompt:: bash $
 
       ceph-volume lvm zap $DEVICE
 
-#. Tell the cluster the OSD has been destroyed (and a new OSD can be
-   reprovisioned with the same ID):
+#. Tell the cluster that the OSD has been destroyed (and that a new OSD can be
+   reprovisioned with the same OSD ID):
 
    .. prompt:: bash $
 
       ceph osd destroy $ID --yes-i-really-mean-it
 
-#. Provision a BlueStore OSD in its place with the same OSD ID.
-   This requires you do identify which device to wipe based on what you saw
-   mounted above. BE CAREFUL! Also note that hybrid OSDs may require
-   adjustments to these commands:
+#. Provision a BlueStore OSD in place by using the same OSD ID.  This requires
+   you to identify which device to wipe, and to make certain that you target
+   the correct and intended device, using the information that was retrieved
+   when we directed you to "[N]ote which device the OSD is using".  BE CAREFUL!
+   Note that you may need to modify these commands when dealing with hybrid
+   OSDs:
 
    .. prompt:: bash $
 
@@ -113,15 +114,15 @@ longer to complete.
 
 #. Repeat.
 
-You can allow balancing of the replacement OSD to happen
-concurrently with the draining of the next OSD, or follow the same
-procedure for multiple OSDs in parallel, as long as you ensure the
-cluster is fully clean (all data has all replicas) before destroying
-any OSDs.  If you reprovision multiple OSDs in parallel, be **very** careful to
-only zap / destroy OSDs within a single CRUSH failure domain, e.g. ``host`` or
-``rack``.  Failure to do so will reduce the redundancy and availability of
-your data and increase the risk of (or even cause) data loss.
-
+You may opt to (1) have the balancing of the replacement BlueStore OSD take
+place concurrently with the draining of the next Filestore OSD, or instead
+(2) follow the same procedure for multiple OSDs in parallel. In either case,
+however, you must ensure that the cluster is fully clean (in other words, that
+all data has all replicas) before destroying any OSDs. If you opt to reprovision
+multiple OSDs in parallel, be **very** careful to destroy OSDs only within a
+single CRUSH failure domain (for example, ``host`` or ``rack``). Failure to
+satisfy this requirement will reduce the redundancy and availability of your
+data and increase the risk of data loss (or even guarantee data loss).
 
 Advantages:
 
@@ -131,10 +132,9 @@ Advantages:
 
 Disadvantages:
 
-* Data is copied over the network twice: once to some other OSD in the
-  cluster (to maintain the desired number of replicas), and then again
+* Data is copied over the network twice: once to another OSD in the
+  cluster (to maintain the specified number of replicas), and again
   back to the reprovisioned BlueStore OSD.
-
 
 Whole host replacement
 ----------------------
