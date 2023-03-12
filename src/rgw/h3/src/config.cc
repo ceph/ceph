@@ -84,6 +84,17 @@ int alpn_select_cb(SSL* ssl, const unsigned char** out, unsigned char* outlen,
   }
 }
 
+enum ExDataIndex {
+  ExDataKeylog,
+};
+
+void keylog_cb(const SSL* ssl, const char* line)
+{
+  SSL_CTX* ctx = ::SSL_get_SSL_CTX(ssl);
+  auto fp = reinterpret_cast<FILE*>(::SSL_CTX_get_ex_data(ctx, ExDataKeylog));
+  std::fprintf(fp, "%s\n", line);
+}
+
 auto init_ssl(const Options& o)
     -> boost::intrusive_ptr<SSL_CTX>
 {
@@ -113,7 +124,6 @@ auto init_ssl(const Options& o)
     }
   }
 
-  // SSL_CTX_set_keylog_callback if SSLKEYLOGFILE is in environment?
   // SSL_CTX_set_early_data_enabled for 0RTT? consider security implications
 
   return ctx;
@@ -165,12 +175,27 @@ auto create_h3_config(const rgw::h3::Options& options)
 {
   auto ssl_context = rgw::h3::init_ssl(options);
 
+  rgw::h3::file_ptr keylog_file;
+  if (options.ssl_keylog_path) {
+    // open the keylog file for the lifetime of ConfigImpl
+    keylog_file.reset(std::fopen(options.ssl_keylog_path, "a"));
+    if (!keylog_file) {
+      throw boost::system::system_error(errno, boost::system::system_category());
+    }
+    // stash the FILE pointer with the SSL_CTX
+    if (!::SSL_CTX_set_ex_data(ssl_context.get(), rgw::h3::ExDataKeylog,
+                               keylog_file.get())) {
+      throw boost::system::system_error(rgw::h3::ssl::get_error());
+    }
+  }
+
   rgw::h3::config_ptr config{::quiche_config_new(QUICHE_PROTOCOL_VERSION)};
   rgw::h3::h3_config_ptr h3config{::quiche_h3_config_new()};
   rgw::h3::configure(options, config.get(), h3config.get());
 
   return std::make_unique<rgw::h3::ConfigImpl>(
-      std::move(ssl_context), std::move(config), std::move(h3config));
+      std::move(ssl_context), std::move(config),
+      std::move(h3config), std::move(keylog_file));
 }
 
 } // extern "C"

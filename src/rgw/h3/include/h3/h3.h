@@ -51,6 +51,7 @@ struct Options {
   pem_file ssl_certificate;
   pem_file ssl_private_key;
   const char* ssl_ciphers = nullptr;
+  const char* ssl_keylog_path = nullptr;
 
   std::chrono::milliseconds conn_idle_timeout{5000};
   size_t conn_max_streams_bidi = 100;

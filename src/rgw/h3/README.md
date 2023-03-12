@@ -41,3 +41,16 @@ Because the ssl certificate is self-signed, you either need to disable curl's ve
 	dd if=/dev/zero of=128m.iso bs=1M count=128
 	~/ceph/build $ bin/curl {options} https://localhost:8000/testbucket/128m.iso -T 128m.iso -v
 	~/ceph/build $ bin/curl {options} https://localhost:8000/testbucket/128m.iso --output 128m.iso -v
+
+## Wireshark
+
+Wireshark can be used to inspect QUIC/HTTP3 traffic, but extra configuration is necessary to view packets encrypted with TLS.
+
+First, set the `SSLKEYLOGFILE` environment variable to enable the logging of keys on the client and server:
+
+	export SSLKEYLOGFILE=/path/to/sslkeys.log
+
+Then in Wireshark, make the following changes in the `Edit -> Preferences -> Protocols` menu:
+
+* QUIC: uncheck `Reassemble out-of-order CRYPTO frames`
+* TLS: set `(Pre)-Master-Secret log filename` to `/path/to/sslkeys.log`

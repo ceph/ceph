@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstdio>
 #include <memory>
 #include <boost/intrusive_ptr.hpp>
 #include <h3/h3.h>
@@ -30,16 +31,21 @@ using config_ptr = std::unique_ptr<quiche_config, config_deleter>;
 struct h3_config_deleter { void operator()(quiche_h3_config* h3); };
 using h3_config_ptr = std::unique_ptr<quiche_h3_config, h3_config_deleter>;
 
+struct file_closer { void operator()(std::FILE* fp) { std::fclose(fp); }; };
+using file_ptr = std::unique_ptr<std::FILE, file_closer>;
 
 class ConfigImpl : public Config {
   boost::intrusive_ptr<SSL_CTX> ssl_context;
   config_ptr config;
   h3_config_ptr h3_config;
+  file_ptr keylog_file;
  public:
   explicit ConfigImpl(boost::intrusive_ptr<SSL_CTX> ssl_context,
-                      config_ptr config, h3_config_ptr h3_config) noexcept
+                      config_ptr config, h3_config_ptr h3_config,
+                      file_ptr keylog_file) noexcept
     : ssl_context(std::move(ssl_context)),
-      config(std::move(config)), h3_config(std::move(h3_config))
+      config(std::move(config)), h3_config(std::move(h3_config)),
+      keylog_file(std::move(keylog_file))
   {}
 
   SSL_CTX* get_ssl_context() const { return ssl_context.get(); }
