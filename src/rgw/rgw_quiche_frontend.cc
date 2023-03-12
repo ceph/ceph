@@ -483,6 +483,9 @@ int Frontend::init()
   opts.ssl_certificate = cert->c_str();
   opts.ssl_private_key = key->c_str();
 
+  // enable ssl key logging if SSLKEYLOGFILE is in the environment
+  opts.ssl_keylog_path = ::getenv("SSLKEYLOGFILE");
+
   try {
     config = create_config(opts);
   } catch (const std::exception& e) {
