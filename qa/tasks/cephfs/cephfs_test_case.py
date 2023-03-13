@@ -55,7 +55,7 @@ class MountDetails():
         mntobj.hostfs_mntpt = self.hostfs_mntpt
 
 
-class CephFSTestCase(CephTestCase):
+class CephFSTestCase(CephTestCase, RunCephCmd):
     """
     Test case for Ceph FS, requires caller to populate Filesystem and Mounts,
     into the fs, mount_a, mount_b class attributes (setting mount_b is optional)
@@ -113,8 +113,20 @@ class CephFSTestCase(CephTestCase):
                 for addr, blocklisted_at in blacklist.items():
                     self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blacklist", "rm", addr)
 
+    def _init_mon_manager(self):
+        # if vstart_runner.py has invoked this code
+        if 'Local' in str(type(self.ceph_cluster)):
+            from tasks.vstart_runner import LocalCephManager
+            self.mon_manager = LocalCephManager(ctx=self.ctx)
+        # else teuthology has invoked this code
+        else:
+            from tasks.ceph_manager import CephManager
+            self.mon_manager = CephManager(self.ceph_cluster.admin_remote,
+                ctx=self.ctx, logger=log.getChild('ceph_manager'))
+
     def setUp(self):
         super(CephFSTestCase, self).setUp()
+        self._init_mon_manager()
 
         self.config_set('mon', 'mon_allow_pool_delete', True)
 
