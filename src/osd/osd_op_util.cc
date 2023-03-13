@@ -111,10 +111,6 @@ int OpInfo::set_from_op(
     if (ceph_osd_op_mode_read(iter->op.op))
       set_read();
 
-    // set READ flag if there are src_oids
-    if (iter->soid.oid.name.length())
-      set_read();
-
     // set PGOP flag if there are PG ops
     if (ceph_osd_op_type_pg(iter->op.op))
       set_pg_op();
