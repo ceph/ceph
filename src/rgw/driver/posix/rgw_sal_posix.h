@@ -72,6 +72,22 @@ public:
   virtual void finalize(void) override;
   virtual void register_admin_apis(RGWRESTMgr* mgr) override;
 
+  virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj,
+				 rgw::sal::Object* src_obj, struct req_state* s,
+				 rgw::notify::EventType event_type, optional_yield y,
+				 const std::string* object_name=nullptr) override;
+
+  virtual std::unique_ptr<Notification> get_notification(
+                                  const DoutPrefixProvider* dpp,
+                                  rgw::sal::Object* obj,
+                                  rgw::sal::Object* src_obj,
+                                  rgw::notify::EventType event_type,
+                                  rgw::sal::Bucket* _bucket,
+                                  std::string& _user_id,
+                                  std::string& _user_tenant,
+                                  std::string& _req_id,
+                                  optional_yield y) override;
+
   /* Internal APIs */
   int get_root_fd() { return root_fd; }
 };
@@ -342,17 +358,17 @@ public:
     return std::unique_ptr<Object>(new POSIXObject(*this));
   }
 
-protected:
   int open(const DoutPrefixProvider *dpp);
   int close();
-  int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
+  int write_attr(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& value);
+protected:
+  int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
   int generate_attrs(const DoutPrefixProvider* dpp, optional_yield y);
 private:
   /* TODO dang Escape the object name for file use */
   const std::string get_fname();
   int stat(const DoutPrefixProvider *dpp);
-  int write_attr(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& value);
 };
 
 class POSIXMultipartUpload : public FilterMultipartUpload {
@@ -390,6 +406,45 @@ public:
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;
+};
+
+class POSIXAtomicWriter : public StoreWriter {
+private:
+  POSIXDriver* driver;
+  const rgw_user& owner;
+  const rgw_placement_rule *ptail_placement_rule;
+  uint64_t olh_epoch;
+  const std::string& unique_tag;
+  POSIXObject obj;
+
+public:
+  POSIXAtomicWriter(const DoutPrefixProvider *dpp,
+                    optional_yield y,
+                    rgw::sal::Object* obj,
+                    POSIXDriver* _driver,
+                    const rgw_user& _owner,
+                    const rgw_placement_rule *_ptail_placement_rule,
+                    uint64_t _olh_epoch,
+                    const std::string& _unique_tag) :
+    StoreWriter(dpp, y),
+    driver(_driver),
+    owner(_owner),
+    ptail_placement_rule(_ptail_placement_rule),
+    olh_epoch(_olh_epoch),
+    unique_tag(_unique_tag),
+    obj(_driver, obj->get_key(), obj->get_bucket()) {}
+  virtual ~POSIXAtomicWriter() = default;
+
+  virtual int prepare(optional_yield y);
+  virtual int process(bufferlist&& data, uint64_t offset) override;
+  virtual int complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+		       std::map<std::string, bufferlist>& attrs,
+		       ceph::real_time delete_at,
+		       const char *if_match, const char *if_nomatch,
+		       const std::string *user_data,
+		       rgw_zone_set *zones_trace, bool *canceled,
+		       optional_yield y) override;
 };
 
 class POSIXWriter : public FilterWriter {

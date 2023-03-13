@@ -210,11 +210,7 @@ std::unique_ptr<Writer> POSIXDriver::get_atomic_writer(const DoutPrefixProvider 
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
 {
-  std::unique_ptr<Writer> writer = next->get_atomic_writer(dpp, y, nullptr,
-							   owner, ptail_placement_rule,
-							   olh_epoch, unique_tag);
-
-  return std::make_unique<POSIXWriter>(std::move(writer), obj, this);
+  return std::make_unique<POSIXAtomicWriter>(dpp, y, obj, this, owner, ptail_placement_rule, olh_epoch, unique_tag);
 }
 
 void POSIXDriver::finalize(void)
@@ -225,6 +221,24 @@ void POSIXDriver::finalize(void)
 void POSIXDriver::register_admin_apis(RGWRESTMgr* mgr)
 {
   return next->register_admin_apis(mgr);
+}
+
+std::unique_ptr<Notification> POSIXDriver::get_notification(rgw::sal::Object* obj,
+			      rgw::sal::Object* src_obj, struct req_state* s,
+			      rgw::notify::EventType event_type, optional_yield y,
+			      const std::string* object_name)
+{
+  return next->get_notification(obj, src_obj, s, event_type, y, object_name);
+}
+
+std::unique_ptr<Notification> POSIXDriver::get_notification(const DoutPrefixProvider* dpp,
+                              rgw::sal::Object* obj, rgw::sal::Object* src_obj,
+                              rgw::notify::EventType event_type,
+                              rgw::sal::Bucket* _bucket,
+                              std::string& _user_id, std::string& _user_tenant,
+                              std::string& _req_id, optional_yield y)
+{
+  return next->get_notification(dpp, obj, src_obj, event_type, _bucket, _user_id, _user_tenant, _req_id, y);
 }
 
 int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
@@ -1130,7 +1144,7 @@ int POSIXObject::open(const DoutPrefixProvider* dpp)
       return -EINVAL;
   }
 
-  int ret = openat(b->get_dir_fd(dpp), get_fname().c_str(), O_RDWR | O_NOFOLLOW);
+  int ret = openat(b->get_dir_fd(dpp), get_fname().c_str(), O_CREAT | O_RDWR | O_NOFOLLOW);
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open object " << get_name() << ": "
@@ -1149,7 +1163,15 @@ int POSIXObject::close()
     return 0;
   }
 
-  ::close(obj_fd);
+  int ret = ::fsync(obj_fd);
+  if(ret < 0) {
+    return ret;
+  }
+
+  ret = ::close(obj_fd);
+  if(ret < 0) {
+    return ret;
+  }
 
   return 0;
 }
@@ -1188,6 +1210,14 @@ int POSIXObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dp
   char* curp = bl.c_str();
   ssize_t ret;
 
+  ret = fchmod(obj_fd, S_IRUSR|S_IWUSR);
+  if(ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not change permissions on object " << get_name() << ": "
+                  << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+
   ret = lseek(obj_fd, ofs, SEEK_SET);
   if (ret < 0) {
     ret = errno;
@@ -1200,7 +1230,7 @@ int POSIXObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dp
     ret = ::write(obj_fd, curp, left);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not read object " << get_name() << ": "
+      ldpp_dout(dpp, 0) << "ERROR: could not write object " << get_name() << ": "
 	<< cpp_strerror(ret) << dendl;
       return -ret;
     }
@@ -1458,6 +1488,44 @@ int POSIXWriter::complete(size_t accounted_size, const std::string& etag,
   return next->complete(accounted_size, etag, mtime, set_mtime, attrs,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
 			canceled, y);
+}
+
+
+int POSIXAtomicWriter::prepare(optional_yield y)
+{
+  return obj.open(dpp);
+}
+
+int POSIXAtomicWriter::process(bufferlist&& data, uint64_t offset)
+{
+  return obj.write(offset, data, dpp, null_yield);
+}
+
+int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+                       std::map<std::string, bufferlist>& attrs,
+                       ceph::real_time delete_at,
+                       const char *if_match, const char *if_nomatch,
+                       const std::string *user_data,
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y)
+{
+  int ret;
+  for (auto attr : attrs) {
+    ret = obj.write_attr(dpp, y, attr.first, attr.second);
+    if (ret < 0) {
+      ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter::complete() failed writing attr " << attr.first << dendl;
+      return ret;
+    }
+  }
+
+  ret = obj.close();
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter::complete() close() failed" << dendl;
+    return ret;
+  }
+
+  return 0;
 }
 
 } } // namespace rgw::sal
